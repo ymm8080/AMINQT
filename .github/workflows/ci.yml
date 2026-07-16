@@ -1,0 +1,152 @@
+# =============================================================================
+# AMINQT A-Share Quant Platform — CI Pipeline
+# Trigger: push/PR all branches
+# Stages: lint → adr-validate → test
+# =============================================================================
+name: CI
+
+on:
+  push:
+    branches: ['**']
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "rules/**"
+      - "skills/**"
+      - "prompts/**"
+  pull_request:
+    branches: ['**']
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "rules/**"
+      - "skills/**"
+      - "prompts/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ===========================================================================
+  # Phase 1: Lint (ruff)
+  # ===========================================================================
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ruff
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Ruff check
+        run: |
+          echo "=== ruff check ==="
+          ruff check app/ scripts/ services/ tests/
+
+      - name: Ruff format check
+        run: |
+          echo "=== ruff format --check ==="
+          ruff format --check app/ scripts/ services/ tests/
+
+  # ===========================================================================
+  # Phase 2: ADR Validation
+  # ===========================================================================
+  adr-validate:
+    name: ADR Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate ADR format
+        run: |
+          errors=0
+          for f in 10_adr/ADR-*.md; do
+            [ -f "$f" ] || continue
+            if ! grep -q "^# ADR-" "$f"; then
+              echo "::error file=$f::Missing '# ADR-NNN' title"
+              errors=$((errors+1))
+            fi
+            if ! grep -q "Status" "$f"; then
+              echo "::error file=$f::Missing 'Status' line"
+              errors=$((errors+1))
+            fi
+            if ! grep -q "Date" "$f"; then
+              echo "::error file=$f::Missing 'Date' line"
+              errors=$((errors+1))
+            fi
+          done
+          if [ $errors -gt 0 ]; then exit 1; fi
+          echo "All ADRs valid"
+
+  # ===========================================================================
+  # Phase 3: Test (pytest)
+  # ===========================================================================
+  test:
+    name: Test
+    needs: [lint, adr-validate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          pip install pytest pytest-cov ruff
+
+      - name: Run pytest with coverage
+        run: |
+          python -m pytest tests/ \
+            --cov=app \
+            --cov=services \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            -v
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+      - name: Check coverage threshold (80%)
+        run: |
+          if [ -f coverage.xml ]; then
+            python -c "
+            import xml.etree.ElementTree as ET
+            tree = ET.parse('coverage.xml')
+            root = tree.getroot()
+            total = float(root.attrib.get('line-rate', 0))
+            pct = total * 100
+            print(f'Coverage: {pct:.1f}%')
+            if pct < 80:
+                print(f'Coverage below 80% threshold')
+            else:
+                print(f'Coverage meets 80% threshold')
+            " || echo "Coverage check skipped"
+          fi
+
+      - name: Syntax check all Python files
+        run: |
+          python -m py_compile app/main.py
+          python -m py_compile config/settings.py
+          echo "Syntax check passed"

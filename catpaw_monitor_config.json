@@ -1,0 +1,53 @@
+{
+  "processes": [
+    {
+      "name": "aminqt_api",
+      "command": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+      "working_dir": "D:\\AMINQT\\AMINQT CODES",
+      "health_check_url": "http://localhost:8000/docs",
+      "health_check_timeout": 5,
+      "restart_delay": 10,
+      "max_restarts_per_hour": 5,
+      "environment": {
+        "PYTHONPATH": "D:\\AMINQT\\AMINQT CODES",
+        "AMINQT_DATA_SOURCE": "akshare",
+        "AMINQT_EXEC_MODE": "manual",
+        "AMINQT_BROKER": "sim"
+      }
+    },
+    {
+      "name": "aminqt_streamlit",
+      "command": "streamlit run app/streamlit_app.py --server.port 8501",
+      "working_dir": "D:\\AMINQT\\AMINQT CODES",
+      "health_check_url": "http://localhost:8501",
+      "health_check_timeout": 5,
+      "restart_delay": 15,
+      "max_restarts_per_hour": 3,
+      "environment": {
+        "PYTHONPATH": "D:\\AMINQT\\AMINQT CODES"
+      }
+    }
+  ],
+  "monitoring": {
+    "check_interval": 30,
+    "log_level": "INFO",
+    "log_file": "catpaw_monitor.log",
+    "max_log_size_mb": 10,
+    "backup_count": 3,
+    "enable_http_check": true,
+    "enable_process_check": true,
+    "alert_on_critical": true,
+    "critical_restart_threshold": 10
+  },
+  "notifications": {
+    "enable_console_alerts": true,
+    "enable_file_alerts": true,
+    "alert_file": "catpaw_alerts.log"
+  },
+  "advanced": {
+    "heartbeat_interval": 60,
+    "heartbeat_file": "catpaw_heartbeat.txt",
+    "enable_metrics": false,
+    "enable_web_interface": false
+  }
+}

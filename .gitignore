@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Data (keep dir structure, ignore large files)
+data/raw/*.csv
+data/intraday/*.csv
+data/processed/*.parquet
+!data/raw/.gitkeep
+!data/intraday/.gitkeep
+!data/processed/.gitkeep
+
+# Trained models
+*.pth
+*.pkl
+!app/models/trained/.gitkeep
+
+# Secrets / env
+.env
+config/.env
+
+# iFinD / xtquant local installs
+iFinDPy/
+xtquant/
+
+# IDE / notebooks
+.idea/
+.vscode/
+.ipynb_checkpoints/
