@@ -12,9 +12,9 @@ Environment variables (set by the workflow):
     DEEPSEEK_MODEL: Model name (e.g. "deepseek-v4-flash")
     DEEPSEEK_BASE_URL: API base URL (e.g. "https://api.deepseek.com")
 """
+
 import json
 import os
-import subprocess
 import sys
 import urllib.request
 
@@ -22,10 +22,13 @@ import urllib.request
 def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
     """Fetch PR diff via GitHub API."""
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
-    req = urllib.request.Request(url, headers={
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3.diff",
-    })
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3.diff",
+        },
+    )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             diff = resp.read().decode("utf-8", errors="replace")
@@ -106,14 +109,16 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
 {summary}
 
 ---
-*Automated review by DeepSeek ({os.environ.get('DEEPSEEK_MODEL', 'unknown')})*"""
+*Automated review by DeepSeek ({os.environ.get("DEEPSEEK_MODEL", "unknown")})*"""
     else:
         critical = [i for i in issues if i.get("severity") == "critical"]
         warnings = [i for i in issues if i.get("severity") == "warning"]
         info = [i for i in issues if i.get("severity") == "info"]
 
         lines = ["## DeepSeek PR Review", ""]
-        lines.append(f"**Critical:** {len(critical)} | **Warnings:** {len(warnings)} | **Info:** {len(info)}")
+        lines.append(
+            f"**Critical:** {len(critical)} | **Warnings:** {len(warnings)} | **Info:** {len(info)}"
+        )
         lines.append("")
         lines.append(f"> {summary}")
         lines.append("")
@@ -121,39 +126,55 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
         if critical:
             lines.append("### Critical Issues")
             for i in critical:
-                lines.append(f"- ``{i.get('file', '?')}`` L{i.get('line', '?')}: {i.get('message', '')}")
+                lines.append(
+                    f"- ``{i.get('file', '?')}`` L{i.get('line', '?')}: {i.get('message', '')}"
+                )
             lines.append("")
 
         if warnings:
             lines.append("### Warnings")
             for i in warnings:
-                lines.append(f"- ``{i.get('file', '?')}`` L{i.get('line', '?')}: {i.get('message', '')}")
+                lines.append(
+                    f"- ``{i.get('file', '?')}`` L{i.get('line', '?')}: {i.get('message', '')}"
+                )
             lines.append("")
 
         if info:
             lines.append("### Info")
             for i in info:
-                lines.append(f"- ``{i.get('file', '?')}`` L{i.get('line', '?')}: {i.get('message', '')}")
+                lines.append(
+                    f"- ``{i.get('file', '?')}`` L{i.get('line', '?')}: {i.get('message', '')}"
+                )
             lines.append("")
 
-        marker = "<!--AUTOFIX:HAS_ISSUES-->" if critical or warnings else "<!--AUTOFIX:CLEAN-->"
+        marker = (
+            "<!--AUTOFIX:HAS_ISSUES-->"
+            if critical or warnings
+            else "<!--AUTOFIX:CLEAN-->"
+        )
         lines.append(marker)
         lines.append("")
         lines.append("---")
-        lines.append(f"*Automated review by DeepSeek ({os.environ.get('DEEPSEEK_MODEL', 'unknown')})*")
+        lines.append(
+            f"*Automated review by DeepSeek ({os.environ.get('DEEPSEEK_MODEL', 'unknown')})*"
+        )
 
         body = "\n".join(lines)
 
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
     data = json.dumps({"body": body}).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "Content-Type": "application/json",
-    })
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json",
+        },
+    )
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30):
             print(f"Comment posted on PR #{pr_number}")
             return True
     except Exception as e:

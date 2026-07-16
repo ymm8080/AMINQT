@@ -5,6 +5,7 @@ Uses the configured data adapter (akshare by default; iFinD if creds set).
 Saves one CSV per symbol. Raw Chinese columns are preserved; data_loader
 canonicalizes them on read (PROMPT_CONTENT §1).
 """
+
 import logging
 import os
 import sys
@@ -31,8 +32,13 @@ def main() -> int:
     start = settings.DATA_START.isoformat()
     end = settings.DATA_END.isoformat()
     adapter = get_adapter()
-    logger.info("Downloading %d symbols [%s → %s] via %s",
-                len(settings.STOCK_LIST), start, end, type(adapter).__name__)
+    logger.info(
+        "Downloading %d symbols [%s → %s] via %s",
+        len(settings.STOCK_LIST),
+        start,
+        end,
+        type(adapter).__name__,
+    )
 
     ok = 0
     for sym in settings.STOCK_LIST:
@@ -45,8 +51,12 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             logger.error("Failed %s: %s", sym, exc)
 
-    logger.info("Done: %d/%d symbols downloaded into %s",
-                ok, len(settings.STOCK_LIST), settings.RAW_DIR)
+    logger.info(
+        "Done: %d/%d symbols downloaded into %s",
+        ok,
+        len(settings.STOCK_LIST),
+        settings.RAW_DIR,
+    )
     return 0 if ok else 1
 
 

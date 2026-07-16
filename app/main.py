@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """FastAPI app entrypoint + APScheduler (daily 14:50 auto-select)."""
+
 import logging
 
 from fastapi import FastAPI
 
 from app.api.routes import router
-from config import settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,8 +25,13 @@ def _startup() -> None:
 
         sched = BackgroundScheduler()
         # TODO(Phase 4): replace stub with real select() call.
-        sched.add_job(lambda: logger.info("scheduled select tick"),
-                      "cron", hour=14, minute=50, timezone="Asia/Shanghai")
+        sched.add_job(
+            lambda: logger.info("scheduled select tick"),
+            "cron",
+            hour=14,
+            minute=50,
+            timezone="Asia/Shanghai",
+        )
         sched.start()
         logger.info("Scheduler started (daily 14:50 Asia/Shanghai)")
     except Exception as exc:  # noqa: BLE001

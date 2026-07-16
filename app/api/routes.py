@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """FastAPI routes — stock selection + execution control (Phase 4)."""
+
 import logging
 
 from fastapi import APIRouter
@@ -13,9 +14,12 @@ router = APIRouter(prefix="/api/v1", tags=["quant"])
 @router.get("/health")
 def health() -> dict:
     """Liveness + current config snapshot."""
-    return {"status": "ok", "data_source": settings.DATA_SOURCE,
-            "exec_mode": settings.EXECUTION_MODE.value,
-            "broker": settings.EXECUTION_BROKER}
+    return {
+        "status": "ok",
+        "data_source": settings.DATA_SOURCE,
+        "exec_mode": settings.EXECUTION_MODE.value,
+        "broker": settings.EXECUTION_BROKER,
+    }
 
 
 @router.post("/select")

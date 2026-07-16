@@ -6,6 +6,7 @@ applies them in the trading system (entry/exit/stop conditions). Rules
 produced by app/pattern/intraday_learner are loaded here and evaluated
 against live market context.
 """
+
 import logging
 from typing import List
 

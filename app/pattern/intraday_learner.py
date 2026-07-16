@@ -9,6 +9,7 @@ trading rules for the trading system.
 TODO(M2): implement clustering / sequence model over intraday bars to
 discover valid patterns → rule candidates with entry/exit/stop + confidence.
 """
+
 import logging
 from typing import List
 

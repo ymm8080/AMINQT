@@ -8,6 +8,7 @@ the 防坑 rules it MUST obey (PROMPT_CONTENT §2):
   * Divide-by-zero: (close - DIF) / DIF → 0 when DIF == 0 (use safe_divide).
   * NaN → 0 before model input: np.nan_to_num(X).
 """
+
 import logging
 from typing import Tuple
 

@@ -3,6 +3,7 @@
 
 Contract: input (batch, 20, F) → output (batch,) predicted 5-day return.
 """
+
 import logging
 
 import torch
@@ -21,11 +22,17 @@ class LSTMModel(nn.Module):
         dropout: Dropout between LSTM layers.
     """
 
-    def __init__(self, input_size: int = 30, hidden_size: int = 64,
-                 num_layers: int = 2, dropout: float = 0.2) -> None:
+    def __init__(
+        self,
+        input_size: int = 30,
+        hidden_size: int = 64,
+        num_layers: int = 2,
+        dropout: float = 0.2,
+    ) -> None:
         super().__init__()
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers,
-                            batch_first=True, dropout=dropout)
+        self.lstm = nn.LSTM(
+            input_size, hidden_size, num_layers, batch_first=True, dropout=dropout
+        )
         self.fc = nn.Linear(hidden_size, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

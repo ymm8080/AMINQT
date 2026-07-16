@@ -5,6 +5,7 @@ Requires the miniQMT client + xtquant (NOT pip-installable). Enforces
 A-share T+1: shares bought today cannot be sold today. Module imports
 safely without xtquant; construction raises until the client is available.
 """
+
 import logging
 from datetime import date
 
@@ -19,10 +20,11 @@ class XtExecutor(Executor):
     def __init__(self) -> None:
         try:
             from xtquant import xttrader  # noqa: F401
+
             self._xt = __import__("xtquant")
         except ImportError as exc:
             raise RuntimeError("xtquant not installed (needs miniQMT client).") from exc
-        self._today_bought: set = set()   # T+1 enforcement
+        self._today_bought: set = set()  # T+1 enforcement
         self._today: date = date.today()
 
     def _place(self, order: Order) -> dict:

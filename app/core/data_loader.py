@@ -6,6 +6,7 @@ akshare/iFinD columns to the canonical English schema used everywhere
 downstream (factor_engine, models). Per PROMPT_CONTENT §1, renaming MUST
 happen here on read.
 """
+
 import logging
 import os
 from typing import Dict, Iterable, Optional

@@ -4,6 +4,7 @@
 Ensures `from config import settings`, `from app...`, `from data...`,
 `from services...` resolve when running `pytest` from the project root.
 """
+
 import os
 import sys
 
