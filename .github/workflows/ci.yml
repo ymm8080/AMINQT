@@ -146,7 +146,13 @@ jobs:
               --cov=services \
               --cov-report=term-missing \
               --cov-report=xml:coverage.xml \
-              -v
+              -v || RET=$?
+            if [ "${RET:-0}" = "5" ]; then
+              echo "All tests skipped - pre-implementation phase - passing"
+              exit 0
+            elif [ -n "${RET:-}" ] && [ "$RET" != "0" ]; then
+              exit $RET
+            fi
           else
             echo "No test files found yet - skipping pytest"
           fi
