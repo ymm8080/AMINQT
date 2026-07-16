@@ -1,6 +1,6 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # ============================================================================
-# auto-implement-and-pr.sh — Implement an IMPLEMENTATION PLAN phase → single PR
+# auto-implement-and-pr.sh â€” Implement an IMPLEMENTATION PLAN phase â†’ single PR
 #
 # Adapted from EWM Robot project for AMINQT A-Share Quant Platform.
 # Prompt-script: echoes instructions for the CatPaw/Claude agent.
@@ -9,7 +9,7 @@
 #   cat auto-implement-and-pr.sh | claude
 #
 # NOTE: This is the IMPLEMENTATION stage ONLY. auto-fix.sh runs AFTER the PR
-# is created and CI/AI-review have run — do not invoke it during implementation.
+# is created and CI/AI-review have run â€” do not invoke it during implementation.
 # ============================================================================
 
 PROJECT_ROOT="D:/AMINQT/AMINQT CODES"
@@ -17,7 +17,7 @@ PLAN_FILE="D:/AMINQT/IMPLEMENTATION PLAN"
 PHASE_HINT="${1:-}"
 
 echo "================================================================"
-echo "  auto-implement-and-pr.sh — implement plan phase → PR (no merge)"
+echo "  auto-implement-and-pr.sh â€” implement plan phase â†’ PR (no merge)"
 echo "================================================================"
 echo "  Project root: ${PROJECT_ROOT}"
 echo "  Plan file:    ${PLAN_FILE}"
@@ -57,7 +57,7 @@ echo "      - \"${PLAN_FILE}\""
 echo "      - D:/AMINQT/ARCHITECTURE"
 echo "      - D:/AMINQT/PROMPT_CONTENT"
 echo "      - ${PROJECT_ROOT}/AGENTS.md"
-echo "      - ${PROJECT_ROOT}/rules/000-global-iron-rules.md (铁律)"
+echo "      - ${PROJECT_ROOT}/rules/000-global-iron-rules.md (é“å¾‹)"
 [ -n "$PHASE_HINT" ] && echo "    Target phase hint: ${PHASE_HINT}" \
   || echo "    Pick the next un-built phase per the plan's stated build order."
 echo ""
@@ -67,7 +67,7 @@ echo ""
 echo "  STEP 2: CONFIRM MASTER STATE + OPEN PRs (avoid superseding)"
 echo "    cd \"${PROJECT_ROOT}\""
 echo "    git fetch origin --prune"
-echo "    git checkout master && git pull --ff-only"
+echo "    git checkout main && git pull --ff-only"
 echo "    gh pr list --state open --json number,title,headRefName"
 echo "    If an open PR already covers this phase -> STOP, surface it."
 echo ""
@@ -110,7 +110,7 @@ echo ""
 echo "  STEP 5: BRANCH OFF MASTER + CREATE PR (NEVER MERGE)"
 echo "    cd \"${PROJECT_ROOT}\""
 echo "    BRANCH=\"auto-impl/<phase-slug>\""
-echo "    git checkout -B \"\$BRANCH\" master"
+echo "    git checkout -B \"\$BRANCH\" main"
 echo "    git add -A"
 echo "    git commit -m \"feat(<phase>): <summary>\""
 echo "    git push -u origin \"\$BRANCH\""
@@ -123,7 +123,7 @@ echo ""
 echo "  STEP 6: POST-PR HANDOFF"
 echo "    After CI has run on the new PR, hand off to the fix loop:"
 echo "      bash auto-fix.sh <NEW_PR_NUMBER>"
-echo "    auto-fix.sh is a POST-PR stage only — never during implementation."
+echo "    auto-fix.sh is a POST-PR stage only â€” never during implementation."
 echo ""
 
 # ============================================================================
@@ -142,3 +142,4 @@ echo ""
 echo "================================================================"
 echo "  auto-implement-and-pr.sh END"
 echo "================================================================"
+

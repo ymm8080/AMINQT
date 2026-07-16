@@ -1,0 +1,47 @@
+# =============================================================================
+# AMINQT PR Review Gate — blocks merge until CI passes
+# On every PR open/sync: requests changes to gray out merge button.
+# CI (ci.yml) must pass before merge is allowed.
+# =============================================================================
+name: PR Review Gate
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  block-merge:
+    name: Block merge until CI passes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request changes to block merge
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr review "$PR" --request-changes --body \
+            "## Merge Blocked — CI Review Required
+
+          This PR has been **automatically blocked** from merging.
+
+          ### What happens next:
+          1. **CI** (ci.yml) is running: lint + ADR check + tests
+          2. **Auto-Fix** (auto-fix.yml) is running: ruff format + lint fixes
+          3. If CI passes cleanly → the block is **auto-dismissed**
+          4. If issues are found → the block remains with details below
+
+          ### Checks required:
+          - [ ] Lint (ruff) — zero errors
+          - [ ] ADR validation — all ADRs have correct format
+          - [ ] Tests (pytest) — all tests pass
+          - [ ] Coverage >= 80%
+
+          ### Manual override
+          A maintainer with write access can dismiss this review and approve manually.
+
+          ---
+          *Automated gate — do not merge without CI passing*"

@@ -12,6 +12,9 @@
 | `AMINQT_BROKER` | `sim` | `sim` \| `xt` | 券商接口 (模拟/实盘) |
 | `IFIND_USER` | (空) | — | iFinD 用户名 |
 | `IFIND_PASSWORD` | (空) | — | iFinD 密码 |
+| `DEEPSEEK_API_KEY` | (GitHub Secret) | — | DeepSeek API Key (PR Review 用) |
+| `DEEPSEEK_MODEL` | `deepseek-v4-flash` | `deepseek-v4-flash` \| `deepseek-chat` | PR Review 模型选择 |
+| `GH_PAT` | (GitHub Secret) | — | GitHub PAT (auto-fix + push 触发 CI) |
 
 ## .env 文件模板
 

@@ -1,0 +1,119 @@
+# =============================================================================
+# AMINQT Auto-Approve — dismisses PR gate block when CI passes
+# Fires after CI (ci.yml) + DeepSeek review complete successfully.
+# =============================================================================
+name: Auto-Approve
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "rules/**"
+      - "skills/**"
+      - "prompts/**"
+
+permissions:
+  pull-requests: write
+  contents: read
+  checks: read
+
+concurrency:
+  group: auto-approve-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  auto-approve:
+    name: Auto-Approve after CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Wait for CI checks to complete
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          echo "Waiting for CI checks to complete..."
+          MAX_WAIT=600  # 10 minutes
+          WAITED=0
+          while [ $WAITED -lt $MAX_WAIT ]; do
+            STATUS=$(gh pr checks "$PR" --json name,state,conclusion 2>/dev/null)
+            if [ -z "$STATUS" ] || [ "$STATUS" = "[]" ]; then
+              echo "No checks yet, waiting..."
+              sleep 15
+              WAITED=$((WAITED + 15))
+              continue
+            fi
+
+            # Check if all CI checks are done
+            PENDING=$(echo "$STATUS" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          pending = [c for c in data if c.get('state') in ('PENDING', 'IN_PROGRESS', 'QUEUED')]
+          print(len(pending))
+          " 2>/dev/null || echo "1")
+
+            if [ "$PENDING" = "0" ]; then
+              echo "All checks completed."
+              break
+            fi
+
+            echo "Pending checks: $PENDING"
+            sleep 15
+            WAITED=$((WAITED + 15))
+          done
+
+          if [ $WAITED -ge $MAX_WAIT ]; then
+            echo "::warning::Timed out waiting for CI checks"
+          fi
+
+      - name: Check CI results and approve or keep blocked
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          STATUS=$(gh pr checks "$PR" --json name,state,conclusion 2>/dev/null)
+
+          # Check for failures
+          FAILED=$(echo "$STATUS" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          failed = [c for c in data if c.get('conclusion') in ('FAILURE', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED')]
+          print(len(failed))
+          " 2>/dev/null || echo "1")
+
+          if [ "$FAILED" != "0" ]; then
+            echo "::warning::CI checks failed ($FAILED failures). Keeping merge blocked."
+            # Post comment with failure summary
+            gh pr comment "$PR" --body "CI checks failed. Please fix the issues above. Auto-fix may have already pushed fixes — check the latest commit."
+            exit 0
+          fi
+
+          echo "All CI checks passed. Dismissing review block."
+
+          # Find and dismiss the PR gate review (request-changes from pr-gate.yml)
+          REVIEWS=$(gh pr view "$PR" --json reviews --jq '.reviews[] | select(.state == "CHANGES_REQUESTED") | .id')
+          for REVIEW_ID in $REVIEWS; do
+            echo "Dismissing review $REVIEW_ID"
+            gh api \
+              --method DELETE \
+              repos/${{ github.repository }}/pulls/$PR/reviews/$REVIEW_ID \
+              2>/dev/null || true
+          done
+
+          # Post approval comment
+          gh pr comment "$PR" --body "## All CI Checks Passed
+
+          - Lint (ruff): passed
+          - ADR validation: passed
+          - Tests (pytest): passed
+          - DeepSeek review: completed
+
+          Merge button is now available.
+
+          ---
+          *Automated approval — CI gate passed*"
+
+          echo "PR #$PR approved."

@@ -1,0 +1,207 @@
+# =============================================================================
+# AMINQT Auto-Fix Loop — triggered on PR, auto-fixes lint errors
+# Then optionally runs full CatPaw auto-fix on self-hosted runner
+# =============================================================================
+name: Auto-Fix Loop
+
+on:
+  pull_request:
+    branches: ['**']
+    types: [opened, reopened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to auto-fix'
+        required: true
+        type: string
+
+# NOTE on GH_PAT: pushes made with the default github.token do NOT re-trigger
+# workflow runs. Set a GH_PAT secret (PAT with repo + workflow scope) so pushed
+# fixes fire ci.yml again.
+
+jobs:
+  # ===========================================================================
+  # Job 1: Auto-fix lint errors (always runs, no special runner needed)
+  # ===========================================================================
+  auto-fix-lint:
+    name: Auto-Fix Lint Errors
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Resolve PR info
+        id: pr-info
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PR_NUMBER="${{ inputs.pr_number }}"
+          else
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          fi
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          PR_BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
+          echo "pr_branch=$PR_BRANCH" >> $GITHUB_OUTPUT
+          echo "Resolved PR #$PR_NUMBER: $PR_BRANCH"
+
+      - name: Switch to PR branch
+        run: |
+          PR_BRANCH="${{ steps.pr-info.outputs.pr_branch }}"
+          git checkout -B "$PR_BRANCH" "origin/$PR_BRANCH"
+
+      - name: Skip if already auto-fixed (loop guard)
+        id: check-skip
+        run: |
+          LAST_COMMIT=$(git log -1 --pretty=format:"%s")
+          if [[ "$LAST_COMMIT" == "fix: auto-fix lint errors"* ]]; then
+            echo "Last commit is already auto-fix. Skipping to prevent loop."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Python
+        if: steps.check-skip.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install ruff
+        if: steps.check-skip.outputs.skip != 'true'
+        run: pip install ruff
+
+      - name: Setup git
+        if: steps.check-skip.outputs.skip != 'true'
+        run: |
+          git config user.name "CatPaw Auto-Fix"
+          git config user.email "auto-fix@catpaw.local"
+
+      - name: Run ruff format
+        if: steps.check-skip.outputs.skip != 'true'
+        run: |
+          echo "=== ruff format ==="
+          ruff format app/ scripts/ services/ tests/ || \
+            echo "::warning::ruff format errors — continuing"
+
+      - name: Run ruff check --fix
+        if: steps.check-skip.outputs.skip != 'true'
+        run: |
+          echo "=== ruff check --fix ==="
+          ruff check --fix --unsafe-fixes app/ scripts/ services/ tests/ || \
+            echo "::warning::ruff check errors — continuing"
+
+      - name: Check for changes and commit
+        id: check-changes
+        if: steps.check-skip.outputs.skip != 'true'
+        env:
+          BRANCH: ${{ steps.pr-info.outputs.pr_branch }}
+        run: |
+          if ! git diff --quiet; then
+            echo "Changes detected, committing..."
+            git add -A
+            git commit -m "fix: auto-fix lint errors"
+            git push origin "$BRANCH"
+            echo "pushed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No lint fixes needed."
+            echo "pushed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR (if changes pushed)
+        if: steps.check-skip.outputs.skip != 'true' && steps.check-changes.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
+        run: |
+          PR_NUMBER=${{ steps.pr-info.outputs.pr_number }}
+          gh pr comment $PR_NUMBER --body "Auto-fix: applied ruff format + lint fixes"
+
+  # ===========================================================================
+  # Job 2: Full CatPaw Auto-Fix (self-hosted runner, gated)
+  # ===========================================================================
+  auto-fix-full:
+    name: Full CatPaw Auto-Fix (self-hosted)
+    # Runs the AI fix loop (auto-fix.ps1) that addresses CI findings.
+    # GATED behind vars.CATPAW_SELF_HOSTED so PRs don't hang on a missing runner.
+    #
+    # To activate:
+    #   1. Register a self-hosted runner with label `catpaw` on this repo.
+    #   2. Install + authenticate the CatPaw CLI on that runner.
+    #   3. Set GH_PAT secret (PAT with repo + workflow scope).
+    #   4. Create repo variable: gh variable set CATPAW_SELF_HOSTED -b true
+    #   5. Only add this check to required branch protection AFTER the runner
+    #      is stable — otherwise PRs queue forever.
+    if: ${{ vars.CATPAW_SELF_HOSTED == 'true' }}
+    runs-on: [self-hosted, catpaw]
+    timeout-minutes: 45
+    permissions:
+      pull-requests: write
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Resolve PR number
+        id: pr-info
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PR_NUMBER="${{ inputs.pr_number }}"
+          else
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          fi
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "PR #${PR_NUMBER}"
+
+      - name: Setup git
+        run: |
+          git config user.name "CatPaw Auto-Fix"
+          git config user.email "auto-fix@catpaw.local"
+
+      - name: Skip if already auto-fixed (loop guard)
+        id: check-skip
+        run: |
+          LAST_COMMIT=$(git log -1 --pretty=format:"%s")
+          if [[ "$LAST_COMMIT" == "fix: auto-fix"* ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Wait for CI to start
+        if: steps.check-skip.outputs.skip != 'true'
+        run: |
+          echo "Waiting 60s for CI checks to start..."
+          sleep 60
+
+      - name: Verify CatPaw CLI is available
+        if: steps.check-skip.outputs.skip != 'true'
+        run: |
+          if ! command -v claude &>/dev/null; then
+            echo "::error::CatPaw CLI not found on runner. Install on a self-hosted runner labeled 'catpaw'."
+            exit 1
+          fi
+          echo "CatPaw CLI: $(command -v claude)"
+
+      - name: Run CatPaw auto-fix loop
+        if: steps.check-skip.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
+        run: |
+          PR_NUMBER="${{ steps.pr-info.outputs.pr_number }}"
+          echo "=== CatPaw Auto-Fix loop for PR #${PR_NUMBER} ==="
+          # auto-fix.ps1 prints fix-loop instructions; pipe to CatPaw agent.
+          pwsh auto-fix.ps1 "$PR_NUMBER" | claude
