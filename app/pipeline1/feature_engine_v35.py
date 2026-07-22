@@ -107,10 +107,10 @@ class FeatureEngineV35:
 
         def per_stock(g: pd.DataFrame) -> pd.DataFrame:
             h = g.get("high_hfq", g["high"])
-            l = g.get("low_hfq", g["low"])
+            low = g.get("low_hfq", g["low"])
             c = g["close_hfq"]
             tr = pd.concat(
-                [h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1
+                [h - low, (h - c.shift(1)).abs(), (low - c.shift(1)).abs()], axis=1
             ).max(axis=1)
             g["ATR_pct"] = tr.rolling(14, min_periods=14).mean() / c
             ma20 = c.rolling(20, min_periods=20).mean()

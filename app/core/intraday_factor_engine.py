@@ -130,14 +130,14 @@ class IntradayFactorEngine:
         """提取 numpy 数组; amount 缺失时用 close*volume 近似."""
         o = bars["open"].to_numpy(dtype=float)
         h = bars["high"].to_numpy(dtype=float)
-        l = bars["low"].to_numpy(dtype=float)
+        low = bars["low"].to_numpy(dtype=float)
         c = bars["close"].to_numpy(dtype=float)
         v = bars["volume"].to_numpy(dtype=float)
         if "amount" in bars.columns:
             a = bars["amount"].to_numpy(dtype=float)
         else:
             a = c * v
-        return o, h, l, c, v, a
+        return o, h, low, c, v, a
 
     # ────────────────────────────────────────────────────────────────
     #  A. 个股微观因子 (16 维)
@@ -164,7 +164,7 @@ class IntradayFactorEngine:
             logger.warning("个股 5min K 线为空 — 16 维个股因子置 0")
             return zero
 
-        o, h, l, c, v, a = self._ohlcva(bars)
+        o, h, low, c, v, a = self._ohlcva(bars)
         n = len(c)
         last = c[-1]
 
@@ -174,7 +174,7 @@ class IntradayFactorEngine:
             return _safe_div(last, base) - 1.0
 
         w12 = slice(max(0, n - 12), n)
-        rng12 = h[w12] - l[w12]
+        rng12 = h[w12] - low[w12]
         range_sum = float(rng12.sum())
         total_vol = float(v.sum())
         total_amt = float(a.sum())
@@ -217,7 +217,7 @@ class IntradayFactorEngine:
 
         # 9. 振幅 (12 根)
         hhv12 = float(h[w12].max())
-        llv12 = float(l[w12].min())
+        llv12 = float(low[w12].min())
         out["intraday_spread"] = _safe_div(hhv12 - llv12, last)
 
         # 10. 趋势强度 (12 根线性斜率 / close)
@@ -246,7 +246,7 @@ class IntradayFactorEngine:
 
         # 15. 日内区间位置
         day_high = float(h.max())
-        day_low = float(l.min())
+        day_low = float(low.min())
         out["intraday_position_in_range"] = _safe_div(
             last - day_low, day_high - day_low
         )

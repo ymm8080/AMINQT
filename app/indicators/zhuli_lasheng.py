@@ -57,7 +57,7 @@ def SMA(s: pd.Series, n: int, m: int = 1) -> pd.Series:
 def zhuli_lasheng(df: pd.DataFrame) -> pd.DataFrame:
     """输入含 open/high/low/close，输出主力轨迹/MAZL/吸筹/洗盘/拉高/出货/吸筹峰"""
     N1, N2 = 9, 5
-    c, h, l, o = df["close"], df["high"], df["low"], df["open"]
+    c, h, low, o = df["close"], df["high"], df["low"], df["open"]
 
     MTM = c - REF(c, 1)
     denom = EMA(EMA(MTM.abs(), N1), N1).replace(0, np.nan)
@@ -65,12 +65,12 @@ def zhuli_lasheng(df: pd.DataFrame) -> pd.DataFrame:
     df["MAZL"] = MA(df["主力轨迹"], N2)
 
     # ---- 吸筹/洗盘（低位侧）----
-    VAR1 = REF((l + o + c + h) / 4, 1)
-    d2 = SMA((l - VAR1).clip(lower=0), 10, 1).replace(0, np.nan)
-    VAR2 = (SMA((l - VAR1).abs(), 13, 1) / d2).ffill().fillna(0)
+    VAR1 = REF((low + o + c + h) / 4, 1)
+    d2 = SMA((low - VAR1).clip(lower=0), 10, 1).replace(0, np.nan)
+    VAR2 = (SMA((low - VAR1).abs(), 13, 1) / d2).ffill().fillna(0)
     VAR3 = EMA(VAR2, 10)
-    VAR4 = LLV(l, 33)
-    VAR5 = EMA(pd.Series(np.where(l <= VAR4, VAR3, 0.0), index=df.index), 3)
+    VAR4 = LLV(low, 33)
+    VAR5 = EMA(pd.Series(np.where(low <= VAR4, VAR3, 0.0), index=df.index), 3)
     df["VAR5"] = VAR5
     df["吸筹"] = (VAR5 > REF(VAR5, 1)) & (VAR5 > 0)  # 红柱
     df["洗盘"] = (VAR5 < REF(VAR5, 1)) & (VAR5 > 0)  # 红黄柱
