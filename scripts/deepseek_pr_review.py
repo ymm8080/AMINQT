@@ -14,12 +14,15 @@ Environment variables (set by the workflow):
 """
 
 import json
+import logging
 import os
 import re
 import subprocess
 import sys
-import urllib.error
 import urllib.request
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 
 def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
@@ -47,7 +50,7 @@ def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
                         diff = diff[:50000] + "\n... [diff truncated for token budget]"
                     return diff
         except Exception as e:
-            print(f"Error fetching diff (Accept={accept}): {e}")
+            logger.error(f"Error fetching diff (Accept={accept}): {e}")
 
     # --- Strategy 2: gh CLI fallback (authenticated via GH_TOKEN env) ---
     try:
@@ -64,9 +67,47 @@ def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
             if len(diff) > 50000:
                 diff = diff[:50000] + "\n... [diff truncated for token budget]"
             return diff
-        print(f"gh pr diff failed (rc={result.returncode}): {result.stderr[:200]}")
+        logger.error(
+            f"gh pr diff failed (rc={result.returncode}): {result.stderr[:200]}"
+        )
     except Exception as e:
-        print(f"gh pr diff fallback error: {e}")
+        logger.error(f"gh pr diff fallback error: {e}")
+
+    # --- Strategy 3: List PR files API (handles PRs > 300 files) ---
+    try:
+        parts = []
+        page = 1
+        while page <= 10:  # 10 pages x 100 = 1000 files max
+            files_url = (
+                f"https://api.github.com/repos/{repo}/pulls/{pr_number}/files"
+                f"?page={page}&per_page=100"
+            )
+            freq = urllib.request.Request(
+                files_url,
+                headers={
+                    "Authorization": f"token {token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+            with urllib.request.urlopen(freq, timeout=30) as resp:
+                files = json.loads(resp.read().decode("utf-8", errors="replace"))
+            if not files:
+                break
+            for f in files:
+                patch = f.get("patch", "")
+                if patch:
+                    parts.append(f"--- {f.get('filename', '?')}\n{patch}")
+            if len(files) < 100:
+                break
+            page += 1
+        diff = "\n\n".join(parts)
+        if diff.strip():
+            if len(diff) > 30000:
+                diff = diff[:30000] + "\n... [diff truncated for token budget]"
+            return diff
+    except Exception as e:
+        logger.error(f"List PR files fallback error: {e}")
 
     return ""
 
@@ -96,7 +137,7 @@ def _extract_json(text: str) -> dict | None:
     except json.JSONDecodeError:
         pass
 
-    # Find first { and last } — extract JSON object
+    # Find first { and last } -- extract JSON object
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
@@ -137,7 +178,7 @@ Review the PR diff and identify:
 7. Missing np.nan_to_num before model input
 8. Division without safe_divide (zero division risk)
 
-Respond ONLY with valid JSON, no other text:
+Respond in JSON format:
 {"issues": [{"file": "...", "line": "...", "severity": "critical|warning|info", "message": "..."}], "summary": "one-line summary"}
 
 If no issues found: {"issues": [], "summary": "No issues found."}
@@ -147,10 +188,14 @@ If no issues found: {"issues": [], "summary": "No issues found."}
         "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Review this PR diff:\n\n```\n{diff}\n```"},
+            {
+                "role": "user",
+                "content": f"Review this PR diff:\n\n```\n{diff}\n```",
+            },
         ],
         "temperature": 0.1,
-        "max_tokens": 2000,
+        "max_tokens": 4000,
+        "response_format": {"type": "json_object"},
     }
 
     data = json.dumps(payload).encode("utf-8")
@@ -165,28 +210,19 @@ If no issues found: {"issues": [], "summary": "No issues found."}
 
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
-            raw = resp.read().decode("utf-8")
-            if not raw.strip():
-                print("DeepSeek API returned empty response")
-                return {"issues": [], "summary": "No issues found."}
-            result = json.loads(raw)
+            result = json.loads(resp.read().decode("utf-8"))
             content = result["choices"][0]["message"]["content"]
-
             parsed = _extract_json(content)
             if parsed is not None:
                 return parsed
-
-            # Fallback: if JSON parsing fails, treat as no issues
-            print(f"Could not parse JSON from LLM response: {content[:200]}")
-            return {"issues": [], "summary": "No issues found."}
-
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")[:500]
-        print(f"DeepSeek API HTTP {e.code}: {body}")
-        return {"issues": [], "summary": "No issues found."}
+            # Debug: log raw content when parsing fails
+            logger.error(
+                f"Could not parse. Raw content (first 500 chars): {content[:500]}"
+            )
+            return {"issues": [], "summary": "Could not parse review response."}
     except Exception as e:
-        print(f"DeepSeek API error: {e}")
-        return {"issues": [], "summary": "No issues found."}
+        logger.error(f"DeepSeek API error: {e}")
+        return {"issues": [], "summary": f"Review failed: {e}"}
 
 
 def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
@@ -210,35 +246,26 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
 
         lines = ["## DeepSeek PR Review", ""]
         lines.append(
-            f"**Critical:** {len(critical)} | **Warnings:** {len(warnings)} | **Info:** {len(info)}"
+            f"**Critical:** {len(critical)} | **Warnings:** {len(warnings)} "
+            f"| **Info:** {len(info)}"
         )
         lines.append("")
         lines.append(f"> {summary}")
         lines.append("")
 
-        if critical:
-            lines.append("### Critical Issues")
-            for i in critical:
-                lines.append(
-                    f"- ``{i.get('file', '?')}`` L{i.get('line', '?')}: {i.get('message', '')}"
-                )
-            lines.append("")
-
-        if warnings:
-            lines.append("### Warnings")
-            for i in warnings:
-                lines.append(
-                    f"- ``{i.get('file', '?')}`` L{i.get('line', '?')}: {i.get('message', '')}"
-                )
-            lines.append("")
-
-        if info:
-            lines.append("### Info")
-            for i in info:
-                lines.append(
-                    f"- ``{i.get('file', '?')}`` L{i.get('line', '?')}: {i.get('message', '')}"
-                )
-            lines.append("")
+        for label, items in [
+            ("### Critical Issues", critical),
+            ("### Warnings", warnings),
+            ("### Info", info),
+        ]:
+            if items:
+                lines.append(label)
+                for i in items:
+                    lines.append(
+                        f"- `{i.get('file', '?')}` L{i.get('line', '?')}: "
+                        f"{i.get('message', '')}"
+                    )
+                lines.append("")
 
         marker = (
             "<!--AUTOFIX:HAS_ISSUES-->"
@@ -249,7 +276,8 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
         lines.append("")
         lines.append("---")
         lines.append(
-            f"*Automated review by DeepSeek ({os.environ.get('DEEPSEEK_MODEL', 'unknown')})*"
+            f"*Automated review by DeepSeek "
+            f"({os.environ.get('DEEPSEEK_MODEL', 'unknown')})*"
         )
 
         body = "\n".join(lines)
@@ -268,32 +296,34 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
 
     try:
         with urllib.request.urlopen(req, timeout=30):
-            print(f"Comment posted on PR #{pr_number}")
+            logger.info(f"Comment posted on PR #{pr_number}")
             return True
     except Exception as e:
-        print(f"Error posting comment: {e}")
+        logger.error(f"Error posting comment: {e}")
         return False
 
 
 def main():
-    api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-    token = os.environ.get("GITHUB_TOKEN", "")
-    repo = os.environ.get("GITHUB_REPOSITORY", "")
-    pr_number = os.environ.get("PR_NUMBER", "")
-    model = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
-    base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+    api_key = _sanitize_header(os.environ.get("DEEPSEEK_API_KEY", ""))
+    token = _sanitize_header(os.environ.get("GITHUB_TOKEN", ""))
+    repo = _sanitize_header(os.environ.get("GITHUB_REPOSITORY", ""))
+    pr_number = _sanitize_header(os.environ.get("PR_NUMBER", ""))
+    model = _sanitize_header(os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"))
+    base_url = _sanitize_header(
+        os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+    )
 
     if not all([api_key, token, repo, pr_number]):
-        print("Missing required environment variables")
+        logger.error("Missing required environment variables")
         sys.exit(1)
 
-    print(f"Reviewing PR #{pr_number} in {repo} using {model}")
+    logger.info(f"Reviewing PR #{pr_number} in {repo} using {model}")
 
     diff = get_pr_diff(pr_number, repo, token)
-    print(f"Diff length: {len(diff)} chars")
+    logger.info(f"Diff length: {len(diff)} chars")
 
     review = review_with_deepseek(diff, api_key, model, base_url)
-    print(f"Review result: {review.get('summary', 'N/A')}")
+    logger.info(f"Review result: {review.get('summary', 'N/A')}")
 
     post_comment(pr_number, repo, token, review)
 
