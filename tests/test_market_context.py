@@ -45,7 +45,9 @@ class TestMarketContext:
         for col in MarketContext.get_factor_columns():
             pd.testing.assert_series_equal(
                 merged[col].reset_index(drop=True),
-                factors[col].reset_index(drop=True), check_names=False)
+                factors[col].reset_index(drop=True),
+                check_names=False,
+            )
 
     def test_missing_dates_ffill(self):
         """个股缺交易日 → ffill 前值, 不留 NaN."""

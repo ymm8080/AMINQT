@@ -36,7 +36,8 @@ class ONNXPredictor:
         if not os.path.exists(path):
             raise FileNotFoundError(f"ONNX 模型不存在: {path}")
         self._sessions[universe] = ort.InferenceSession(
-            path, providers=["CPUExecutionProvider"])
+            path, providers=["CPUExecutionProvider"]
+        )
         logger.info("ONNX 模型加载: %s", path)
 
     def predict(self, X: np.ndarray, universe: Universe) -> np.ndarray:
@@ -52,13 +53,16 @@ class ONNXPredictor:
         if universe not in self._sessions:
             self.load(universe)
         sess = self._sessions[universe]
-        X = np.nan_to_num(np.asarray(X, dtype=np.float32))     # NaN→0
+        X = np.nan_to_num(np.asarray(X, dtype=np.float32))  # NaN→0
         input_name = sess.get_inputs()[0].name
         out = sess.run(None, {input_name: X})[0]
         return np.asarray(out).reshape(-1)
 
     def verify_against_snapshot(
-        self, X: np.ndarray, snapshot_scores: np.ndarray, tol: float = 1e-4,
+        self,
+        X: np.ndarray,
+        snapshot_scores: np.ndarray,
+        tol: float = 1e-4,
         universe: Universe | None = None,
     ) -> bool:
         """本地二次校验: 推理结果 vs 云端特征快照 (ARCH §2)."""
