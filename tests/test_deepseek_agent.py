@@ -9,9 +9,18 @@ import app.core.deepseek_agent as ds_module
 from app.core.deepseek_agent import DeepSeekAgent
 
 ALL_FEATURES = [
-    "explain_signal", "sentiment", "factor_hypothesis", "diagnose",
-    "sentiment_index", "dragon_tiger", "northbound", "concept_graph",
-    "similar_kline", "block_trade", "order_book", "ai_report",
+    "explain_signal",
+    "sentiment",
+    "factor_hypothesis",
+    "diagnose",
+    "sentiment_index",
+    "dragon_tiger",
+    "northbound",
+    "concept_graph",
+    "similar_kline",
+    "block_trade",
+    "order_book",
+    "ai_report",
 ]
 
 
@@ -35,8 +44,9 @@ class FakeResponse:
 
     def __init__(self, content: dict, tokens: int = 100):
         self._body = {
-            "choices": [{"message": {"content": json.dumps(
-                content, ensure_ascii=False)}}],
+            "choices": [
+                {"message": {"content": json.dumps(content, ensure_ascii=False)}}
+            ],
             "usage": {"total_tokens": tokens},
         }
 
@@ -62,8 +72,9 @@ class TestFeatureGate:
 
     def test_feature_disabled(self, agent, monkeypatch):
         called = []
-        monkeypatch.setattr(ds_module.requests, "post",
-                            lambda *a, **k: called.append(1))
+        monkeypatch.setattr(
+            ds_module.requests, "post", lambda *a, **k: called.append(1)
+        )
         agent._cfg["features"]["sentiment"] = False
         result = agent.analyze_sentiment("600519", ["利好"])
         assert result == {"available": False, "reason": "feature_disabled"}
@@ -71,8 +82,9 @@ class TestFeatureGate:
 
     def test_global_disabled(self, monkeypatch):
         agent = DeepSeekAgent(config=make_config(enabled=False))
-        monkeypatch.setattr(ds_module.requests, "post",
-                            lambda *a, **k: pytest.fail("不应发起请求"))
+        monkeypatch.setattr(
+            ds_module.requests, "post", lambda *a, **k: pytest.fail("不应发起请求")
+        )
         result = agent.explain_signal("600519", 0.9, [], {})
         assert result["available"] is False
         assert result["reason"] == "feature_disabled"
@@ -88,8 +100,9 @@ class TestSuccessAndCache:
 
     def test_success_returns_parsed_json(self, agent, monkeypatch):
         payload = {"explanation": "放量突破", "key_drivers": ["量比"]}
-        monkeypatch.setattr(ds_module.requests, "post",
-                            lambda *a, **k: FakeResponse(payload))
+        monkeypatch.setattr(
+            ds_module.requests, "post", lambda *a, **k: FakeResponse(payload)
+        )
         result = agent.explain_signal("600519", 0.9, [], {})
         assert result["available"] is True
         assert result["result"] == payload
@@ -110,9 +123,11 @@ class TestSuccessAndCache:
         assert len(calls) == 1
 
     def test_token_usage_recorded(self, agent, monkeypatch):
-        monkeypatch.setattr(ds_module.requests, "post",
-                            lambda *a, **k: FakeResponse({"analysis": "x"},
-                                                         tokens=250))
+        monkeypatch.setattr(
+            ds_module.requests,
+            "post",
+            lambda *a, **k: FakeResponse({"analysis": "x"}, tokens=250),
+        )
         agent.interpret_dragon_tiger({"seats": []})
         assert sum(agent._tokens_used.values()) == 250
 
@@ -132,11 +147,9 @@ class TestDegradation:
     def test_invalid_json_degrades(self, agent, monkeypatch):
         class BadJson(FakeResponse):
             def json(self):
-                return {"choices": [{"message": {"content": "not-json"}}],
-                        "usage": {}}
+                return {"choices": [{"message": {"content": "not-json"}}], "usage": {}}
 
-        monkeypatch.setattr(ds_module.requests, "post",
-                            lambda *a, **k: BadJson({}))
+        monkeypatch.setattr(ds_module.requests, "post", lambda *a, **k: BadJson({}))
         result = agent.generate_report("600519", {})
         assert result["available"] is False
 
@@ -159,10 +172,14 @@ class TestDegradation:
         assert len(calls) == 3
 
     def test_success_resets_failure_count(self, agent, monkeypatch):
-        responses = iter([
-            ConnectionError("x"), ConnectionError("y"),
-            FakeResponse({"analysis": "ok"}), FakeResponse({"analysis": "ok2"}),
-        ])
+        responses = iter(
+            [
+                ConnectionError("x"),
+                ConnectionError("y"),
+                FakeResponse({"analysis": "ok"}),
+                FakeResponse({"analysis": "ok2"}),
+            ]
+        )
 
         def flaky(*a, **k):
             item = next(responses)
@@ -183,11 +200,11 @@ class TestDegradation:
         from datetime import date
 
         agent._tokens_used[date.today().isoformat()] = 100
-        monkeypatch.setattr(ds_module.requests, "post",
-                            lambda *a, **k: pytest.fail("不应发起请求"))
+        monkeypatch.setattr(
+            ds_module.requests, "post", lambda *a, **k: pytest.fail("不应发起请求")
+        )
         result = agent.explain_signal("600519", 0.9, [], {})
-        assert result == {"available": False,
-                          "reason": "daily_token_limit_exceeded"}
+        assert result == {"available": False, "reason": "daily_token_limit_exceeded"}
 
 
 class TestAllTwelveMethods:

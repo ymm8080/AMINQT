@@ -39,7 +39,8 @@ class ChipDistribution:
         w[in_range] = np.where(
             g[in_range] <= peak,
             (g[in_range] - gl) / max(peak - gl, 1e-9),
-            (gh - g[in_range]) / max(gh - peak, 1e-9))
+            (gh - g[in_range]) / max(gh - peak, 1e-9),
+        )
         w = np.clip(w, 0, None)
         return w / w.sum()
 
@@ -56,11 +57,11 @@ class ChipDistribution:
         out = {k: [] for k in ("A01", "A02", "A03", "获利盘")}
         for _, r in df.iterrows():
             a01 = (r["close"] + r["open"] + r["low"] + r["high"]) / 4
-            t = min(r["volume"] / float_shares, 1.0)     # 当日换手率(小数)
-            if self.dist.sum() == 0:                      # 首日全部筹码入分布
+            t = min(r["volume"] / float_shares, 1.0)  # 当日换手率(小数)
+            if self.dist.sum() == 0:  # 首日全部筹码入分布
                 self.dist = self._triangle(r["low"], r["high"], a01)
             else:
-                self.dist *= (1 - t)
+                self.dist *= 1 - t
                 self.dist += t * self._triangle(r["low"], r["high"], a01)
 
             out["A01"].append(a01)
@@ -73,8 +74,10 @@ class ChipDistribution:
         df["A04"] = df["A03"]
         df["A08"] = df["A02"] - df["A03"]
         hhv15 = df["A04"].rolling(15, min_periods=15).max()
-        df["A0A"] = (((hhv15 - df["A03"]) / df["A03"].replace(0, np.nan) * 100 > 30)
-                     & (hhv15 > 50)).fillna(False)
+        df["A0A"] = (
+            ((hhv15 - df["A03"]) / df["A03"].replace(0, np.nan) * 100 > 30)
+            & (hhv15 > 50)
+        ).fillna(False)
         return df
 
     def winner(self, price: float) -> float:
@@ -84,12 +87,11 @@ class ChipDistribution:
 # ---- 引擎接口实现（控盘红柱/获利盘）----
 class ChipFeed:
     def __init__(self, hist: dict[str, pd.DataFrame]):
-        self.hist = hist                       # {code: build()后的df}
+        self.hist = hist  # {code: build()后的df}
 
     def red_bar_rising_and_majority(self, code: str) -> bool:
         d = self.hist[code]
-        return bool(d["A04"].iloc[-1] > d["A04"].iloc[-2]
-                    and d["A04"].iloc[-1] > 50)
+        return bool(d["A04"].iloc[-1] > d["A04"].iloc[-2] and d["A04"].iloc[-1] > 50)
 
     def profit_chip_ratio(self, code: str) -> float:
         return float(self.hist[code]["获利盘"].iloc[-1])
@@ -100,20 +102,28 @@ class ChipFeed:
 
 if __name__ == "__main__":
     df = pd.read_csv("/mnt/agents/output/data_600519_2y.csv")
-    FLOAT_SHARES_600519 = 1.256e9          # 茅台流通股本约12.56亿股
+    FLOAT_SHARES_600519 = 1.256e9  # 茅台流通股本约12.56亿股
 
     chip = ChipDistribution()
     df = chip.build(df, FLOAT_SHARES_600519)
 
     print("最近5日：")
-    print(df[["time", "close", "A04", "A08", "获利盘"]]
-          .tail(5).round(2).to_string(index=False))
+    print(
+        df[["time", "close", "A04", "A08", "获利盘"]]
+        .tail(5)
+        .round(2)
+        .to_string(index=False)
+    )
 
-    print(f"\n值域检查: A04∈[{df['A04'].min():.1f},{df['A04'].max():.1f}]  "
-          f"获利盘∈[{df['获利盘'].min():.1f},{df['获利盘'].max():.1f}]")
+    print(
+        f"\n值域检查: A04∈[{df['A04'].min():.1f},{df['A04'].max():.1f}]  "
+        f"获利盘∈[{df['获利盘'].min():.1f},{df['获利盘'].max():.1f}]"
+    )
     a0a = df[df["A0A"]]
-    print(f"A0A控盘增强信号 {len(a0a)} 次: "
-          f"{a0a['time'].astype(str).str[:6].unique().tolist()}")
+    print(
+        f"A0A控盘增强信号 {len(a0a)} 次: "
+        f"{a0a['time'].astype(str).str[:6].unique().tolist()}"
+    )
 
     feed = ChipFeed({"600519.SH": df})
     print(f"\n红柱升高且>50: {feed.red_bar_rising_and_majority('600519.SH')}")
@@ -122,5 +132,7 @@ if __name__ == "__main__":
     for anchor in ["20241008", "20260525"]:
         row = df[df["time"].astype(str) == anchor]
         if len(row):
-            print(f"锚点 {anchor}: 获利盘={row['获利盘'].iloc[0]:.1f}%  "
-                  f"A04={row['A04'].iloc[0]:.1f}")
+            print(
+                f"锚点 {anchor}: 获利盘={row['获利盘'].iloc[0]:.1f}%  "
+                f"A04={row['A04'].iloc[0]:.1f}"
+            )

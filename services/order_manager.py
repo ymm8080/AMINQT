@@ -47,9 +47,9 @@ class OrderManager:
 
             executor = get_executor()
         self.executor = executor
-        self._orders: Dict[str, dict] = {}        # order_id → 委托记录
-        self._client_ids: Dict[str, str] = {}     # client_order_id → order_id (幂等)
-        self._fills: List[dict] = []              # 成交回报
+        self._orders: Dict[str, dict] = {}  # order_id → 委托记录
+        self._client_ids: Dict[str, str] = {}  # client_order_id → order_id (幂等)
+        self._fills: List[dict] = []  # 成交回报
 
     # ── 内部 helpers ──────────────────────────────────────────────
 
@@ -63,8 +63,9 @@ class OrderManager:
         Returns:
             True 执行器接受 (SUBMITTED), False 异常 (REJECTED)。
         """
-        order = Order(symbol=rec["symbol"], side=rec["side"],
-                      qty=rec["qty"], price=rec["price"])
+        order = Order(
+            symbol=rec["symbol"], side=rec["side"], qty=rec["qty"], price=rec["price"]
+        )
         try:
             result = self.executor.execute(order)
         except Exception:  # noqa: BLE001 — 执行器异常 → REJECTED
@@ -75,23 +76,30 @@ class OrderManager:
         rec["status"] = OrderStatus.SUBMITTED
         logger.info(
             "[OM] 已报: %s %s %s %d @ %s",
-            rec["order_id"], rec["side"], rec["symbol"], rec["qty"], rec["price"],
+            rec["order_id"],
+            rec["side"],
+            rec["symbol"],
+            rec["qty"],
+            rec["price"],
         )
         if result.get("executed"):
-            self._fills.append({
-                "order_id": rec["order_id"],
-                "symbol": rec["symbol"],
-                "side": rec["side"],
-                "qty": rec["qty"],
-                "price": rec["price"],
-                "result": result,
-            })
+            self._fills.append(
+                {
+                    "order_id": rec["order_id"],
+                    "symbol": rec["symbol"],
+                    "side": rec["side"],
+                    "qty": rec["qty"],
+                    "price": rec["price"],
+                    "result": result,
+                }
+            )
         return True
 
     # ── T+1 检查 ──────────────────────────────────────────────────
 
-    def check_t1_sell(self, symbol: str, qty: int,
-                      positions: Optional[dict] = None) -> bool:
+    def check_t1_sell(
+        self, symbol: str, qty: int, positions: Optional[dict] = None
+    ) -> bool:
         """T+1 检查: 卖出数量 ≤ 可用持仓 (available_qty).
 
         Args:
@@ -116,9 +124,15 @@ class OrderManager:
 
     # ── 委托操作 ──────────────────────────────────────────────────
 
-    def submit(self, symbol: str, side: str, price: float, qty: int,
-               require_confirm: bool = True,
-               client_order_id: Optional[str] = None) -> str:
+    def submit(
+        self,
+        symbol: str,
+        side: str,
+        price: float,
+        qty: int,
+        require_confirm: bool = True,
+        client_order_id: Optional[str] = None,
+    ) -> str:
         """提交委托 (默认手动确认模式).
 
         Args:
@@ -157,7 +171,12 @@ class OrderManager:
         self._client_ids[client_order_id] = order_id
         logger.info(
             "[OM] 提交: %s %s %s %d @ %s (require_confirm=%s)",
-            order_id, side, symbol, qty, price, require_confirm,
+            order_id,
+            side,
+            symbol,
+            qty,
+            price,
+            require_confirm,
         )
         if not require_confirm:
             self._send_to_executor(rec)
@@ -176,7 +195,8 @@ class OrderManager:
         if rec["status"] is not OrderStatus.PENDING_CONFIRM:
             logger.warning(
                 "[OM] 确认失败, 状态不允许: %s (%s)",
-                order_id, rec["status"].value,
+                order_id,
+                rec["status"].value,
             )
             return False
         return self._send_to_executor(rec)
@@ -202,7 +222,8 @@ class OrderManager:
         if rec["status"] not in _CANCELLABLE:
             logger.warning(
                 "[OM] 撤单失败, 状态不允许: %s (%s)",
-                order_id, rec["status"].value,
+                order_id,
+                rec["status"].value,
             )
             return False
         rec["status"] = OrderStatus.CANCELLED

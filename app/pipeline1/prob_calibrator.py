@@ -57,8 +57,9 @@ class ProbCalibrator:
         return self._iso.predict(raw_prob)
 
     # ---------------- 验收 ----------------
-    def reliability_report(self, y_true: np.ndarray, prob: np.ndarray,
-                           n_bins: int = 10) -> dict:
+    def reliability_report(
+        self, y_true: np.ndarray, prob: np.ndarray, n_bins: int = 10
+    ) -> dict:
         """可靠性报告: Brier / LogLoss / 分桶偏差 / 高概率预警.
 
         偏移 = mean |桶内预测均值 - 桶内实际胜率|; 必须 < 5%.
@@ -72,9 +73,11 @@ class ProbCalibrator:
             if mask.sum() < 5:
                 continue
             offsets.append(abs(prob[mask].mean() - y_true[mask].mean()))
-            bucket_win_rates[b] = {"pred": round(float(prob[mask].mean()), 4),
-                                   "actual": round(float(y_true[mask].mean()), 4),
-                                   "n": int(mask.sum())}
+            bucket_win_rates[b] = {
+                "pred": round(float(prob[mask].mean()), 4),
+                "actual": round(float(y_true[mask].mean()), 4),
+                "n": int(mask.sum()),
+            }
         report = {
             "brier": float(brier_score_loss(y_true, prob)),
             "logloss": float(log_loss(y_true, np.clip(prob, 1e-7, 1 - 1e-7))),
@@ -82,10 +85,14 @@ class ProbCalibrator:
             "buckets": bucket_win_rates,
             "pass": True,
         }
-        report["pass"] = (report["brier"] <= BRIER_MAX
-                          and report["reliability_offset"] <= RELIABILITY_TOL)
+        report["pass"] = (
+            report["brier"] <= BRIER_MAX
+            and report["reliability_offset"] <= RELIABILITY_TOL
+        )
         if (prob > HIGH_PROB_WARN).mean() > 0.05:
-            logger.warning("高概率预警: >5%% 样本 prob>%.0f%%, 疑似泄漏或校准失败, 先查 bug",
-                           HIGH_PROB_WARN * 100)
+            logger.warning(
+                "高概率预警: >5%% 样本 prob>%.0f%%, 疑似泄漏或校准失败, 先查 bug",
+                HIGH_PROB_WARN * 100,
+            )
             report["high_prob_warning"] = True
         return report

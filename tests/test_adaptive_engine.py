@@ -22,8 +22,7 @@ CONFIG_SPEC = {
     "risk": {
         "max_drawdown": {"initial": 0.03, "bounds": [0.02, 0.08]},
         "ctrl_ratio_threshold": {"initial": 0.30, "bounds": [0.20, 0.50]},
-        "buy_deadline": {"initial": "10:40",
-                         "candidates": ["10:30", "10:40", "11:00"]},
+        "buy_deadline": {"initial": "10:40", "candidates": ["10:30", "10:40", "11:00"]},
     },
 }
 
@@ -106,21 +105,25 @@ class TestAdjust:
 
 class TestRollback:
     def test_rollback_restores_previous(self, engine):
-        engine.compute_selection_mix({"selection_ic_gap": 1.0})   # 0.6 → 0.66
-        engine.compute_selection_mix({"selection_ic_gap": 1.0})   # 0.66 → 0.72
-        assert engine.get_adaptive_config()["scoring_mix"]["model_weight"] \
-            == pytest.approx(0.72)
+        engine.compute_selection_mix({"selection_ic_gap": 1.0})  # 0.6 → 0.66
+        engine.compute_selection_mix({"selection_ic_gap": 1.0})  # 0.66 → 0.72
+        assert engine.get_adaptive_config()["scoring_mix"][
+            "model_weight"
+        ] == pytest.approx(0.72)
         engine.rollback()
-        assert engine.get_adaptive_config()["scoring_mix"]["model_weight"] \
-            == pytest.approx(0.66)
+        assert engine.get_adaptive_config()["scoring_mix"][
+            "model_weight"
+        ] == pytest.approx(0.66)
         engine.rollback()
-        assert engine.get_adaptive_config()["scoring_mix"]["model_weight"] \
-            == pytest.approx(0.6)
+        assert engine.get_adaptive_config()["scoring_mix"][
+            "model_weight"
+        ] == pytest.approx(0.6)
 
     def test_rollback_empty_history_noop(self, engine):
         engine.rollback()  # 不应抛异常
-        assert engine.get_adaptive_config()["scoring_mix"]["model_weight"] \
-            == pytest.approx(0.6)
+        assert engine.get_adaptive_config()["scoring_mix"][
+            "model_weight"
+        ] == pytest.approx(0.6)
 
     def test_rollback_persisted(self, engine, paths):
         engine.compute_selection_mix({"selection_ic_gap": 1.0})

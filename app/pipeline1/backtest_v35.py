@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -25,32 +25,34 @@ from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
 
 logger = logging.getLogger(__name__)
 
-COMMISSION = 0.00025      # 万2.5 双边
-STAMP_TAX = 0.0005        # 印花税 0.05% 仅卖出
-SLIPPAGE = 0.0005         # 固定滑点 0.05% 双边
+COMMISSION = 0.00025  # 万2.5 双边
+STAMP_TAX = 0.0005  # 印花税 0.05% 仅卖出
+SLIPPAGE = 0.0005  # 固定滑点 0.05% 双边
 
 
 @dataclass
 class BacktestProtocol:
     """V3.5 回测协议参数."""
-    exec_session: str = "AM"        # "AM" 早盘 T+1 open / "PM" 晚盘 T close
+
+    exec_session: str = "AM"  # "AM" 早盘 T+1 open / "PM" 晚盘 T close
     slippage: float = SLIPPAGE
     commission: float = COMMISSION
     stamp_tax: float = STAMP_TAX
     top_n: int = 15
     single_max: float = 0.10
     max_per_industry: int = 4
-    max_hold_days: int = 3          # [TUNABLE] 持仓上限
+    max_hold_days: int = 3  # [TUNABLE] 持仓上限
     # 日线近似退出规则 (与 rule_engine_v2 Config 对齐, 调参目标)
-    hard_stop: float = -0.04        # [TUNABLE] 持仓浮亏硬止损 (相对成本)
+    hard_stop: float = -0.04  # [TUNABLE] 持仓浮亏硬止损 (相对成本)
     trailing_drawdown: float = 0.04  # [TUNABLE] 移动止盈: 高点回撤
-    prob_exit: float = 0.50         # [TUNABLE] 概率衰减退出
-    exec_price_col: str = "open"    # AM 口径
+    prob_exit: float = 0.50  # [TUNABLE] 概率衰减退出
+    exec_price_col: str = "open"  # AM 口径
 
 
 @dataclass
 class DailyBar:
     """单日组合状态快照."""
+
     date: pd.Timestamp
     nav: float
     cash: float
@@ -69,7 +71,9 @@ class BacktestEngineV35:
         self.cfg = protocol or BacktestProtocol()
         self.panel = panel.sort_values(["date", "symbol"]).reset_index(drop=True)
         self.dates = sorted(self.panel["date"].unique())
-        self._by_date = {d: g.set_index("symbol") for d, g in self.panel.groupby("date")}
+        self._by_date = {
+            d: g.set_index("symbol") for d, g in self.panel.groupby("date")
+        }
 
     # ---------------- 工具 ----------------
     def _bar(self, date, symbol) -> pd.Series | None:
@@ -87,7 +91,7 @@ class BacktestEngineV35:
         lu = round(bar["pre_close"] * (1 + limit), 2)
         open_px = bar["open"] if self.cfg.exec_session == "AM" else bar["close"]
         if abs(open_px - lu) < 0.01:
-            return None                       # 一字涨停, 买单放弃
+            return None  # 一字涨停, 买单放弃
         return open_px * (1 + self.cfg.slippage)
 
     def _exec_sell_price(self, date, symbol) -> float | None:
@@ -99,17 +103,22 @@ class BacktestEngineV35:
         ld = round(bar["pre_close"] * (1 - limit), 2)
         px = bar["open"] if self.cfg.exec_session == "AM" else bar["close"]
         if abs(px - ld) < 0.01:
-            return None                       # 跌停, 卖单顺延
+            return None  # 跌停, 卖单顺延
         return px * (1 - self.cfg.slippage)
 
     @staticmethod
     def _costs(buy_amount: float, sell_amount: float, cfg: BacktestProtocol) -> float:
-        return (buy_amount * cfg.commission
-                + sell_amount * (cfg.commission + cfg.stamp_tax))
+        return buy_amount * cfg.commission + sell_amount * (
+            cfg.commission + cfg.stamp_tax
+        )
 
     # ---------------- 主回测 ----------------
-    def run(self, daily_lists: dict, benchmark: pd.Series | None = None,
-            initial_capital: float = 1_000_000) -> dict:
+    def run(
+        self,
+        daily_lists: dict,
+        benchmark: pd.Series | None = None,
+        initial_capital: float = 1_000_000,
+    ) -> dict:
         """执行回测.
 
         Args:
@@ -127,7 +136,7 @@ class BacktestEngineV35:
         bench = benchmark if benchmark is not None else pd.Series(0.0, index=self.dates)
 
         for i, date in enumerate(self.dates):
-            day_bar = self._by_date[date]
+            self._by_date[date]
 
             # ---- 1. 持仓估值 + 退出裁决 (止损/移动止盈/概率衰减/到期) ----
             for sym in list(positions):
@@ -155,9 +164,16 @@ class BacktestEngineV35:
                     if sell_px is not None:
                         amount = pos["shares"] * sell_px
                         cash += amount - self._costs(0, amount, cfg)
-                        trades.append({"date": date, "symbol": sym, "side": "sell",
-                                       "price": sell_px, "reason": reason,
-                                       "pnl": sell_px / pos["cost"] - 1})
+                        trades.append(
+                            {
+                                "date": date,
+                                "symbol": sym,
+                                "side": "sell",
+                                "price": sell_px,
+                                "reason": reason,
+                                "pnl": sell_px / pos["cost"] - 1,
+                            }
+                        )
                         del positions[sym]
 
             # ---- 2. 执行昨日清单买入 (T+1) ----
@@ -181,8 +197,14 @@ class BacktestEngineV35:
                         break
                 # 等权 1/top_n, 单票 <= 10%
                 nav_now = cash + sum(
-                    p["shares"] * (self._bar(date, s)["close"] if self._bar(date, s) is not None else p["cost"])
-                    for s, p in positions.items())
+                    p["shares"]
+                    * (
+                        self._bar(date, s)["close"]
+                        if self._bar(date, s) is not None
+                        else p["cost"]
+                    )
+                    for s, p in positions.items()
+                )
                 budget = min(nav_now * min(1 / cfg.top_n, cfg.single_max), cash)
                 for row in picks:
                     px = self._exec_buy_price(date, row["symbol"])
@@ -194,40 +216,69 @@ class BacktestEngineV35:
                     amount = shares * px
                     cash -= amount + self._costs(amount, 0, cfg)
                     positions[row["symbol"]] = {
-                        "cost": px, "shares": shares, "high": px, "hold_days": 0,
+                        "cost": px,
+                        "shares": shares,
+                        "high": px,
+                        "hold_days": 0,
                         "industry": row.get("industry", "UNKNOWN"),
-                        "prob_up": row.get("prob_up", 1.0)}
-                    trades.append({"date": date, "symbol": row["symbol"], "side": "buy",
-                                   "price": px, "reason": f"清单score={row['score']:.4f}",
-                                   "pnl": np.nan})
+                        "prob_up": row.get("prob_up", 1.0),
+                    }
+                    trades.append(
+                        {
+                            "date": date,
+                            "symbol": row["symbol"],
+                            "side": "buy",
+                            "price": px,
+                            "reason": f"清单score={row['score']:.4f}",
+                            "pnl": np.nan,
+                        }
+                    )
 
             # ---- 3. 日终净值 ----
             nav = cash + sum(
-                p["shares"] * (self._bar(date, s)["close"] if self._bar(date, s) is not None else p["cost"])
-                for s, p in positions.items())
+                p["shares"]
+                * (
+                    self._bar(date, s)["close"]
+                    if self._bar(date, s) is not None
+                    else p["cost"]
+                )
+                for s, p in positions.items()
+            )
             nav_hist.append(DailyBar(date, nav, cash, len(positions)))
 
-        return {"nav_curve": pd.DataFrame([vars(b) for b in nav_hist]),
-                "trades": pd.DataFrame(
-                    trades, columns=["date", "symbol", "side", "price", "reason", "pnl"]),
-                "metrics": self._metrics(nav_hist, bench, initial_capital)}
+        return {
+            "nav_curve": pd.DataFrame([vars(b) for b in nav_hist]),
+            "trades": pd.DataFrame(
+                trades, columns=["date", "symbol", "side", "price", "reason", "pnl"]
+            ),
+            "metrics": self._metrics(nav_hist, bench, initial_capital),
+        }
 
     # ---------------- 绩效 ----------------
-    def _metrics(self, nav_hist: list[DailyBar], bench: pd.Series,
-                 initial: float) -> dict:
+    def _metrics(
+        self, nav_hist: list[DailyBar], bench: pd.Series, initial: float
+    ) -> dict:
         nav = pd.Series({b.date: b.nav for b in nav_hist})
         ret = nav.pct_change().dropna()
         bench = bench.reindex(nav.index).fillna(0.0)
         ann = (nav.iloc[-1] / initial) ** (252 / max(len(nav), 1)) - 1
-        bench_ann = (1 + bench).prod() ** (252 / max(len(bench), 1)) - 1 if bench.abs().sum() > 0 else 0.0
-        excess_series = ret - bench.pct_change().fillna(bench).reindex(ret.index).fillna(0)
+        bench_ann = (
+            (1 + bench).prod() ** (252 / max(len(bench), 1)) - 1
+            if bench.abs().sum() > 0
+            else 0.0
+        )
+        excess_series = ret - bench.pct_change().fillna(bench).reindex(
+            ret.index
+        ).fillna(0)
         excess_ann = float(excess_series.mean() * 252)
         dd = (nav / nav.cummax() - 1).min()
         sharpe = float(ret.mean() / ret.std() * np.sqrt(252)) if ret.std() > 0 else 0.0
-        return {"total_return": float(nav.iloc[-1] / initial - 1),
-                "annual_return": float(ann),
-                "benchmark_annual": float(bench_ann),
-                "net_excess_annual": excess_ann,       # 扣费后净超额 (验收口径)
-                "max_drawdown": float(dd),
-                "sharpe": sharpe,
-                "n_days": len(nav)}
+        return {
+            "total_return": float(nav.iloc[-1] / initial - 1),
+            "annual_return": float(ann),
+            "benchmark_annual": float(bench_ann),
+            "net_excess_annual": excess_ann,  # 扣费后净超额 (验收口径)
+            "max_drawdown": float(dd),
+            "sharpe": sharpe,
+            "n_days": len(nav),
+        }

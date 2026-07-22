@@ -28,10 +28,12 @@ def spearman_ic(pred: np.ndarray, y: np.ndarray) -> float:
     Returns:
         IC 值; 计算失败/常数序列返回 0.0。
     """
-    pred = np.nan_to_num(np.asarray(pred, dtype=np.float64).ravel(),
-                         nan=0.0, posinf=0.0, neginf=0.0)
-    y = np.nan_to_num(np.asarray(y, dtype=np.float64).ravel(),
-                      nan=0.0, posinf=0.0, neginf=0.0)
+    pred = np.nan_to_num(
+        np.asarray(pred, dtype=np.float64).ravel(), nan=0.0, posinf=0.0, neginf=0.0
+    )
+    y = np.nan_to_num(
+        np.asarray(y, dtype=np.float64).ravel(), nan=0.0, posinf=0.0, neginf=0.0
+    )
     if len(pred) < 3 or np.ptp(pred) == 0 or np.ptp(y) == 0:
         return 0.0
     ic = pd.Series(pred).corr(pd.Series(y), method="spearman")
@@ -87,28 +89,44 @@ class ModelSelector:
                 model = get_model(name, **params_map.get(name, {}))
             except RuntimeError as exc:
                 logger.warning("跳过模型 %s: %s", name, exc)
-                rows.append({"model": name, "family": family,
-                             "status": f"skipped: {exc}",
-                             "oos_ic": np.nan, "rmse": np.nan})
+                rows.append(
+                    {
+                        "model": name,
+                        "family": family,
+                        "status": f"skipped: {exc}",
+                        "oos_ic": np.nan,
+                        "rmse": np.nan,
+                    }
+                )
                 continue
             try:
                 model.fit(X_train, y_train)
                 pred = model.predict(X_val)
                 ic = spearman_ic(pred, self._y_val)
-                rmse = float(np.sqrt(np.mean(
-                    (pred - np.nan_to_num(self._y_val)) ** 2)))
+                rmse = float(np.sqrt(np.mean((pred - np.nan_to_num(self._y_val)) ** 2)))
                 self.models_[name] = model
                 self.val_predictions_[name] = pred
-                rows.append({"model": name, "family": family,
-                             "status": "trained",
-                             "oos_ic": ic, "rmse": rmse})
-                logger.info("模型 %s 训练完成: oos_ic=%.4f rmse=%.5f",
-                            name, ic, rmse)
+                rows.append(
+                    {
+                        "model": name,
+                        "family": family,
+                        "status": "trained",
+                        "oos_ic": ic,
+                        "rmse": rmse,
+                    }
+                )
+                logger.info("模型 %s 训练完成: oos_ic=%.4f rmse=%.5f", name, ic, rmse)
             except Exception as exc:  # noqa: BLE001 — 单模型失败不阻断全表
                 logger.warning("模型 %s 训练失败: %s", name, exc)
-                rows.append({"model": name, "family": family,
-                             "status": f"failed: {exc}",
-                             "oos_ic": np.nan, "rmse": np.nan})
+                rows.append(
+                    {
+                        "model": name,
+                        "family": family,
+                        "status": f"failed: {exc}",
+                        "oos_ic": np.nan,
+                        "rmse": np.nan,
+                    }
+                )
         self.report_ = pd.DataFrame(rows)
         return self.report_
 
@@ -129,8 +147,9 @@ class ModelSelector:
             raise ValueError("报告中无训练成功的模型, 无法选择")
         return trained
 
-    def select_best(self, report: pd.DataFrame,
-                    user_preference: Optional[str] = None) -> dict:
+    def select_best(
+        self, report: pd.DataFrame, user_preference: Optional[str] = None
+    ) -> dict:
         """选最优模型或融合组合.
 
         Args:
@@ -148,46 +167,66 @@ class ModelSelector:
         if user_preference is not None:
             if user_preference in set(trained["model"]):
                 row = trained[trained["model"] == user_preference].iloc[0]
-                return {"name": user_preference, "type": "single",
-                        "reason": f"用户指定模型 {user_preference}",
-                        "metrics": row.to_dict()}
+                return {
+                    "name": user_preference,
+                    "type": "single",
+                    "reason": f"用户指定模型 {user_preference}",
+                    "metrics": row.to_dict(),
+                }
             if user_preference in ENSEMBLE_STRATEGIES:
-                candidates = [c for c in self.search_ensemble(report)
-                              if c["strategy"] == user_preference]
+                candidates = [
+                    c
+                    for c in self.search_ensemble(report)
+                    if c["strategy"] == user_preference
+                ]
                 if not candidates:
                     raise ValueError(
                         f"融合策略 {user_preference} 无可用组合 "
-                        "(需 ≥2 个训练成功的模型)")
+                        "(需 ≥2 个训练成功的模型)"
+                    )
                 best = candidates[0]
-                return {"name": "+".join(best["models"]),
-                        "type": "ensemble", "strategy": best["strategy"],
-                        "reason": f"用户指定融合策略 {user_preference}",
-                        "metrics": best}
+                return {
+                    "name": "+".join(best["models"]),
+                    "type": "ensemble",
+                    "strategy": best["strategy"],
+                    "reason": f"用户指定融合策略 {user_preference}",
+                    "metrics": best,
+                }
             raise ValueError(
                 f"user_preference={user_preference} 不在可用模型 "
                 f"{sorted(trained['model'])} 或融合策略 "
-                f"{ENSEMBLE_STRATEGIES} 内")
+                f"{ENSEMBLE_STRATEGIES} 内"
+            )
 
         best_single_row = trained.loc[trained["oos_ic"].idxmax()]
         best_single_ic = float(best_single_row["oos_ic"])
-        result = {"name": best_single_row["model"], "type": "single",
-                  "reason": f"单模型 OOS IC 最高 ({best_single_ic:.4f})",
-                  "metrics": best_single_row.to_dict()}
+        result = {
+            "name": best_single_row["model"],
+            "type": "single",
+            "reason": f"单模型 OOS IC 最高 ({best_single_ic:.4f})",
+            "metrics": best_single_row.to_dict(),
+        }
 
         ensembles = self.search_ensemble(report)
         if ensembles and ensembles[0]["oos_ic"] > best_single_ic:
             top = ensembles[0]
-            result = {"name": "+".join(top["models"]), "type": "ensemble",
-                      "strategy": top["strategy"],
-                      "reason": f"融合组合 OOS IC ({top['oos_ic']:.4f}) "
-                                f"优于最优单模型 ({best_single_ic:.4f})",
-                      "metrics": top}
-        logger.info("select_best → %s (%s): %s",
-                    result["name"], result["type"], result["reason"])
+            result = {
+                "name": "+".join(top["models"]),
+                "type": "ensemble",
+                "strategy": top["strategy"],
+                "reason": f"融合组合 OOS IC ({top['oos_ic']:.4f}) "
+                f"优于最优单模型 ({best_single_ic:.4f})",
+                "metrics": top,
+            }
+        logger.info(
+            "select_best → %s (%s): %s",
+            result["name"],
+            result["type"],
+            result["reason"],
+        )
         return result
 
-    def search_ensemble(self, report: pd.DataFrame,
-                        top_k: int = 3) -> List[dict]:
+    def search_ensemble(self, report: pd.DataFrame, top_k: int = 3) -> List[dict]:
         """Top-K 融合组合搜索 (rank_mean/score_mean/weighted_score/stacking).
 
         组合: Top-K 单模型的全部 ≥2 元子集 (K=3 → C(3,2)+C(3,3)=4 组)。
@@ -201,17 +240,20 @@ class ModelSelector:
         Returns:
             [{models, strategy, oos_ic, type}] 按 oos_ic 降序。
         """
-        trained = self._trained(report).sort_values("oos_ic",
-                                                    ascending=False)
-        top_names = [n for n in trained["model"].head(top_k)
-                     if n in self.val_predictions_]
+        trained = self._trained(report).sort_values("oos_ic", ascending=False)
+        top_names = [
+            n for n in trained["model"].head(top_k) if n in self.val_predictions_
+        ]
         if len(top_names) < 2 or self._y_val is None:
             logger.warning("可用模型 <2 或无验证标签, 融合搜索为空")
             return []
 
         y = self._y_val
-        combos = [c for r in range(2, len(top_names) + 1)
-                  for c in itertools.combinations(top_names, r)]
+        combos = [
+            c
+            for r in range(2, len(top_names) + 1)
+            for c in itertools.combinations(top_names, r)
+        ]
         results = []
         for combo in combos:
             for strategy in ENSEMBLE_STRATEGIES:
@@ -222,20 +264,27 @@ class ModelSelector:
                         half = len(y) // 2
                         fit_preds = {n: p[:half] for n, p in preds.items()}
                         ens.fit_stacking(fit_preds, y[:half])
-                        combined = ens.combine(
-                            {n: p[half:] for n, p in preds.items()})
+                        combined = ens.combine({n: p[half:] for n, p in preds.items()})
                         ic = spearman_ic(combined, y[half:])
                     else:
                         ens.fit_stacking(preds, y)
                         ic = spearman_ic(ens.combine(preds), y)
                 else:
                     ic = spearman_ic(ens.combine(preds), y)
-                results.append({"models": list(combo),
-                                "strategy": strategy,
-                                "oos_ic": ic,
-                                "type": "ensemble"})
+                results.append(
+                    {
+                        "models": list(combo),
+                        "strategy": strategy,
+                        "oos_ic": ic,
+                        "type": "ensemble",
+                    }
+                )
         results.sort(key=lambda r: r["oos_ic"], reverse=True)
-        logger.info("融合搜索完成: %d 组合, 最优 %s/%s ic=%.4f",
-                    len(results), results[0]["models"],
-                    results[0]["strategy"], results[0]["oos_ic"])
+        logger.info(
+            "融合搜索完成: %d 组合, 最优 %s/%s ic=%.4f",
+            len(results),
+            results[0]["models"],
+            results[0]["strategy"],
+            results[0]["oos_ic"],
+        )
         return results

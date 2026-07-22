@@ -40,6 +40,7 @@ class AkshareCapitalFeed:
     @staticmethod
     def _akshare_fetch(code6: str, market: str) -> pd.DataFrame:
         import akshare as ak
+
         return ak.stock_individual_fund_flow(stock=code6, market=market)
 
     @staticmethod
@@ -80,8 +81,9 @@ class AkshareCapitalFeed:
         except KeyError:
             return float(r.get("主力净流入-净额", 0.0))
 
-    def control_proxy(self, code: str, date: str | None = None,
-                      window: int = 10) -> float:
+    def control_proxy(
+        self, code: str, date: str | None = None, window: int = 10
+    ) -> float:
         """控盘代理：近N日主力净流入合计 / 近N日成交额合计 × 100"""
         df = self._load(code).tail(window)
         if len(df) == 0:
@@ -104,9 +106,13 @@ class AkshareCapitalFeed:
 # ============================================================
 class THSManualFeed:
     COLMAP = {
-        "代码": "code", "股票代码": "code", "证券代码": "code",
-        "日期": "date", "交易日": "date",
-        "主力控盘比例": "control_ratio", "控盘比例": "control_ratio",
+        "代码": "code",
+        "股票代码": "code",
+        "证券代码": "code",
+        "日期": "date",
+        "交易日": "date",
+        "主力控盘比例": "control_ratio",
+        "控盘比例": "control_ratio",
         "大单净量": "big_order_net",
     }
 
@@ -116,17 +122,31 @@ class THSManualFeed:
 
     def _load_all(self) -> pd.DataFrame:
         frames = []
-        for f in sorted(glob.glob(os.path.join(self.folder, "*.csv"))
-                        + glob.glob(os.path.join(self.folder, "*.xlsx"))):
+        for f in sorted(
+            glob.glob(os.path.join(self.folder, "*.csv"))
+            + glob.glob(os.path.join(self.folder, "*.xlsx"))
+        ):
             d = pd.read_excel(f) if f.endswith("xlsx") else pd.read_csv(f)
-            d = d.rename(columns={k: v for k, v in self.COLMAP.items() if k in d.columns})
+            d = d.rename(
+                columns={k: v for k, v in self.COLMAP.items() if k in d.columns}
+            )
             if "code" not in d.columns:
                 continue
-            if "date" not in d.columns:   # 无日期列 → 用文件名中的日期
+            if "date" not in d.columns:  # 无日期列 → 用文件名中的日期
                 d["date"] = os.path.basename(f).split(".")[0]
-            frames.append(d[["code", "date",
-                             *[c for c in ("control_ratio", "big_order_net")
-                               if c in d.columns]]])
+            frames.append(
+                d[
+                    [
+                        "code",
+                        "date",
+                        *[
+                            c
+                            for c in ("control_ratio", "big_order_net")
+                            if c in d.columns
+                        ],
+                    ]
+                ]
+            )
         if not frames:
             return pd.DataFrame(columns=["code", "date"])
         out = pd.concat(frames, ignore_index=True)
@@ -153,34 +173,53 @@ class THSManualFeed:
 # 合成入口：C 优先，B 兜底，附数据新鲜度告警
 # ============================================================
 class CapitalFeed:
-    def __init__(self, ak_feed: AkshareCapitalFeed, ths_feed: THSManualFeed,
-                 stale_days: int = 1):
+    def __init__(
+        self, ak_feed: AkshareCapitalFeed, ths_feed: THSManualFeed, stale_days: int = 1
+    ):
         self.ak = ak_feed
         self.ths = ths_feed
         self.stale_days = stale_days
 
     def _is_stale(self, data_date: str, today: str) -> bool:
         # 简化：自然日差 > stale_days+2 视为过期（跨周末宽松处理）
-        return (pd.Timestamp(today) - pd.Timestamp(data_date)).days > self.stale_days + 2
+        return (
+            pd.Timestamp(today) - pd.Timestamp(data_date)
+        ).days > self.stale_days + 2
 
     def control_ratio(self, code: str, today: str | None = None) -> dict:
         today = today or time.strftime("%Y%m%d")
         v, d = self.ths.control_ratio(code)
         if v is not None:
-            return {"value": v, "source": "THS手工", "date": d,
-                    "stale": self._is_stale(d, today)}
-        return {"value": self.ak.control_proxy(code), "source": "东财代理",
-                "date": today, "stale": False,
-                "note": "代理口径，阈值需用calibrate_threshold重校准"}
+            return {
+                "value": v,
+                "source": "THS手工",
+                "date": d,
+                "stale": self._is_stale(d, today),
+            }
+        return {
+            "value": self.ak.control_proxy(code),
+            "source": "东财代理",
+            "date": today,
+            "stale": False,
+            "note": "代理口径，阈值需用calibrate_threshold重校准",
+        }
 
     def big_order_net(self, code: str, today: str | None = None) -> dict:
         today = today or time.strftime("%Y%m%d")
         v, d = self.ths.big_order_net(code)
         if v is not None:
-            return {"value": v, "source": "THS手工", "date": d,
-                    "stale": self._is_stale(d, today)}
-        return {"value": self.ak.big_order_net(code), "source": "东财",
-                "date": today, "stale": False}
+            return {
+                "value": v,
+                "source": "THS手工",
+                "date": d,
+                "stale": self._is_stale(d, today),
+            }
+        return {
+            "value": self.ak.big_order_net(code),
+            "source": "东财",
+            "date": today,
+            "stale": False,
+        }
 
 
 # ============================================================
@@ -191,21 +230,24 @@ if __name__ == "__main__":
 
     # ---- 构造 akshare 返回样式的合成数据 ----
     def mock_fetch(code6, market):
-        return pd.DataFrame({
-            "日期": ["2026-07-20", "2026-07-21"],
-            "主力净流入-净额": [1.2e8, 0.8e8],
-            "超大单净流入-净额": [0.7e8, 0.5e8],
-            "大单净流入-净额": [0.5e8, 0.3e8],
-            "主力净流入-净占比": [6.5, 4.2],
-        })
+        return pd.DataFrame(
+            {
+                "日期": ["2026-07-20", "2026-07-21"],
+                "主力净流入-净额": [1.2e8, 0.8e8],
+                "超大单净流入-净额": [0.7e8, 0.5e8],
+                "大单净流入-净额": [0.5e8, 0.3e8],
+                "主力净流入-净占比": [6.5, 4.2],
+            }
+        )
 
     tmp = tempfile.mkdtemp()
     ak_feed = AkshareCapitalFeed(cache_dir=tmp, fetcher=mock_fetch)
 
     # ---- 构造 C 路径手工文件：只给 600519 导入了控盘比例 ----
     os.makedirs(tmp + "/ths", exist_ok=True)
-    pd.DataFrame({"股票代码": ["600519"], "日期": ["20260721"],
-                  "主力控盘比例": [38.5]}).to_csv(tmp + "/ths/20260721.csv", index=False)
+    pd.DataFrame(
+        {"股票代码": ["600519"], "日期": ["20260721"], "主力控盘比例": [38.5]}
+    ).to_csv(tmp + "/ths/20260721.csv", index=False)
     ths_feed = THSManualFeed(folder=tmp + "/ths")
 
     cap = CapitalFeed(ak_feed, ths_feed)
@@ -214,5 +256,7 @@ if __name__ == "__main__":
     print("600519（次日，手工数据过期检查）:", cap.control_ratio("600519", "20260730"))
     print("300750（无手工数据→东财代理）:", cap.control_ratio("300750", "20260721"))
     print("600519 大单净量（东财=超大单+大单）:", cap.big_order_net("600519"))
-    print("阈值校准示例 top20%:", AkshareCapitalFeed.calibrate_threshold(
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))
+    print(
+        "阈值校准示例 top20%:",
+        AkshareCapitalFeed.calibrate_threshold([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+    )

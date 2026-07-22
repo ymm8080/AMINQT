@@ -47,23 +47,30 @@ def generate_synthetic_ohlcv(n_days: int = 300, seed: int = 42) -> pd.DataFrame:
 
     dates = pd.bdate_range(start="2023-01-01", periods=n_days)
 
-    df = pd.DataFrame({
-        "date": dates,
-        "open": open_,
-        "close": close,
-        "high": high,
-        "low": low,
-        "volume": volume,
-    })
+    df = pd.DataFrame(
+        {
+            "date": dates,
+            "open": open_,
+            "close": close,
+            "high": high,
+            "low": low,
+            "volume": volume,
+        }
+    )
     return df
 
 
 def test_ths_indicators():
     """测试同花顺指标模块."""
     from app.core.ths_indicators import (
-        add_all_ths_indicators, THS_FACTOR_COLUMNS,
-        ths_ema, ths_sma, ths_cross, ths_hhv, ths_llv, ths_ref,
-        exp_decay_encode, safe_divide,
+        add_all_ths_indicators,
+        THS_FACTOR_COLUMNS,
+        ths_ema,
+        ths_sma,
+        ths_cross,
+        ths_hhv,
+        ths_llv,
+        ths_ref,
     )
 
     print("\n" + "=" * 60)
@@ -111,9 +118,11 @@ def test_ths_indicators():
     a = pd.Series([1.0, 2.0, 3.0, 4.0])
     b = pd.Series([2.0, 2.0, 2.0, 2.0])
     cross_result = ths_cross(a, b)
-    assert cross_result.iloc[2] == True, "CROSS should trigger at index=2 (a=3 > b=2)"
-    assert cross_result.iloc[0] == False, "CROSS should not trigger at index=0"
-    assert cross_result.iloc[1] == False, "CROSS should not trigger at index=1 (a=2 = b=2, not >)"
+    assert cross_result.iloc[2], "CROSS should trigger at index=2 (a=3 > b=2)"
+    assert not cross_result.iloc[0], "CROSS should not trigger at index=0"
+    assert not cross_result.iloc[1], (
+        "CROSS should not trigger at index=1 (a=2 = b=2, not >)"
+    )
     print("[OK] THS functions (EMA/SMA/HHV/LLV/REF/CROSS) correct")
 
     # Check 5: trend line range
@@ -133,12 +142,18 @@ def test_ths_indicators():
     print(f"[OK] {len(flow_cols)} 主力资金流向因子 valid, divergence in {{-1, 0, 1}}")
 
     # Check 7: 控盘增强因子 (新增 3 列)
-    ctrl_enh_cols = ["tech_ths_ctrl_ratio", "tech_ths_ctrl_concentration", "tech_ths_ctrl_change"]
+    ctrl_enh_cols = [
+        "tech_ths_ctrl_ratio",
+        "tech_ths_ctrl_concentration",
+        "tech_ths_ctrl_change",
+    ]
     for col in ctrl_enh_cols:
         assert col in df.columns, f"{col} missing"
         assert not df[col].isna().any(), f"{col} has NaN"
     # ctrl_ratio 应在 [0, 1]
-    assert df["tech_ths_ctrl_ratio"].min() >= 0 and df["tech_ths_ctrl_ratio"].max() <= 1.01
+    assert (
+        df["tech_ths_ctrl_ratio"].min() >= 0 and df["tech_ths_ctrl_ratio"].max() <= 1.01
+    )
     print(f"[OK] {len(ctrl_enh_cols)} 控盘增强因子 valid, ctrl_ratio in [0, 1]")
 
     print("\n[PASS] TEST 1\n")
@@ -175,15 +190,21 @@ def test_factor_engine():
 
     # Check 4: feature names
     feat_names = get_feature_names()
-    assert len(feat_names) == X.shape[2], f"Feature names({len(feat_names)}) != X cols({X.shape[2]})"
+    assert len(feat_names) == X.shape[2], (
+        f"Feature names({len(feat_names)}) != X cols({X.shape[2]})"
+    )
     ths_count = sum(1 for f in feat_names if f.startswith("tech_ths_"))
-    print(f"[OK] Features: {len(feat_names)} total (base {len(feat_names)-ths_count} + THS {ths_count})")
+    print(
+        f"[OK] Features: {len(feat_names)} total (base {len(feat_names) - ths_count} + THS {ths_count})"
+    )
 
     print("\n[PASS] TEST 2\n")
 
     # Print sample feature names
     print("First 10 features:", feat_names[:10])
-    print("THS features sample:", [f for f in feat_names if f.startswith("tech_ths_")][:5])
+    print(
+        "THS features sample:", [f for f in feat_names if f.startswith("tech_ths_")][:5]
+    )
 
 
 def test_edge_cases():

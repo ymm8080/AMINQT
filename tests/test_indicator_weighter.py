@@ -25,7 +25,8 @@ class TestGroupDefinition:
 
     def test_all_45_columns_mapped(self, weighter):
         mapped = [
-            f for grp in IndicatorWeighter.INDICATOR_GROUPS.values()
+            f
+            for grp in IndicatorWeighter.INDICATOR_GROUPS.values()
             for f in grp["factors"]
         ]
         assert sorted(mapped) == sorted(THS_FACTOR_COLUMNS)
@@ -39,8 +40,7 @@ class TestGroupDefinition:
         assert w["G2_chip_control"] == pytest.approx(0.20)
         assert w["G3_bull_finder"] == pytest.approx(0.15)
         assert w["G4_trend_top_bottom"] == pytest.approx(0.15)
-        for key in ("E1_vol_price", "E2_fund_flow",
-                    "E3_ctrl_enhance", "E4_chip_dist"):
+        for key in ("E1_vol_price", "E2_fund_flow", "E3_ctrl_enhance", "E4_chip_dist"):
             assert w[key] == pytest.approx(0.05)
 
     def test_group_weights_summary(self, weighter):
@@ -48,7 +48,12 @@ class TestGroupDefinition:
         assert len(summary) == 8
         assert summary["weight"].sum() == pytest.approx(1.0)
         assert set(summary.columns) >= {
-            "group", "name", "weight", "num_factors", "factor_weight"}
+            "group",
+            "name",
+            "weight",
+            "num_factors",
+            "factor_weight",
+        }
 
 
 class TestLayer1Scoring:
@@ -59,16 +64,19 @@ class TestLayer1Scoring:
     def test_strong_signals_higher_score(self, weighter):
         weak = _neutral_factors()
         strong = _neutral_factors()
-        strong.update({
-            "tech_ths_entry_flag_decay10": 0.9,
-            "tech_ths_pullup_flag_decay10": 0.8,
-            "tech_ths_golden_cross_decay10": 0.8,
-            "tech_ths_bull_ss_decay10": 0.9,
-            "tech_ths_trend_bottom_decay10": 0.9,
-            "tech_ths_ctrl_flag_decay10": 0.8,
-        })
-        assert (weighter.compute_indicator_score(strong)
-                > weighter.compute_indicator_score(weak))
+        strong.update(
+            {
+                "tech_ths_entry_flag_decay10": 0.9,
+                "tech_ths_pullup_flag_decay10": 0.8,
+                "tech_ths_golden_cross_decay10": 0.8,
+                "tech_ths_bull_ss_decay10": 0.9,
+                "tech_ths_trend_bottom_decay10": 0.9,
+                "tech_ths_ctrl_flag_decay10": 0.8,
+            }
+        )
+        assert weighter.compute_indicator_score(
+            strong
+        ) > weighter.compute_indicator_score(weak)
 
     def test_missing_factors_renormalized(self, weighter):
         partial = {"tech_ths_entry_flag_decay10": 1.0}
@@ -86,7 +94,8 @@ class TestLayer1Scoring:
         factors = _neutral_factors()
         ind = w.compute_indicator_score(factors)
         assert w.compute_final_score(0.8, factors) == pytest.approx(
-            0.5 * 0.8 + 0.5 * ind)
+            0.5 * 0.8 + 0.5 * ind
+        )
 
 
 class TestLayer2FeatureWeighting:
@@ -103,8 +112,10 @@ class TestLayer2FeatureWeighting:
         weights = w.get_feature_weights(names)
         ratio = weights[0] / weights[1]
         # sqrt 缩放后比例 = sqrt(6 / 归一化比) > 默认 3.6 的比例
-        default_ratio = (IndicatorWeighter().get_feature_weights(names)[0]
-                         / IndicatorWeighter().get_feature_weights(names)[1])
+        default_ratio = (
+            IndicatorWeighter().get_feature_weights(names)[0]
+            / IndicatorWeighter().get_feature_weights(names)[1]
+        )
         assert ratio > default_ratio
 
     def test_weight_features_2d(self, weighter):
@@ -215,24 +226,29 @@ class TestCtrlMa5RisingWeight:
 class TestNormalizeFactor:
     def test_decay_clipped(self):
         assert IndicatorWeighter.normalize_factor(
-            1.5, "tech_ths_entry_flag_decay10") == pytest.approx(1.0)
+            1.5, "tech_ths_entry_flag_decay10"
+        ) == pytest.approx(1.0)
         assert IndicatorWeighter.normalize_factor(
-            -0.2, "tech_ths_entry_flag_decay10") == pytest.approx(0.0)
+            -0.2, "tech_ths_entry_flag_decay10"
+        ) == pytest.approx(0.0)
 
     def test_trend_line_scaled(self):
         assert IndicatorWeighter.normalize_factor(
-            100.0, "tech_ths_trend_mid") == pytest.approx(0.5)
+            100.0, "tech_ths_trend_mid"
+        ) == pytest.approx(0.5)
 
     def test_percentage_scaled(self):
         assert IndicatorWeighter.normalize_factor(
-            50.0, "tech_ths_ctrl_low") == pytest.approx(0.5)
+            50.0, "tech_ths_ctrl_low"
+        ) == pytest.approx(0.5)
 
     def test_sigmoid_for_unbounded(self):
         assert IndicatorWeighter.normalize_factor(
-            0.0, "tech_ths_vwap_dev") == pytest.approx(0.5)
-        assert IndicatorWeighter.normalize_factor(
-            10.0, "tech_ths_vwap_dev") > 0.99
+            0.0, "tech_ths_vwap_dev"
+        ) == pytest.approx(0.5)
+        assert IndicatorWeighter.normalize_factor(10.0, "tech_ths_vwap_dev") > 0.99
 
     def test_nan_safe(self):
         assert IndicatorWeighter.normalize_factor(
-            np.nan, "tech_ths_ctrl_ratio") == pytest.approx(0.0)
+            np.nan, "tech_ths_ctrl_ratio"
+        ) == pytest.approx(0.0)

@@ -55,16 +55,17 @@ def is_limit_up(close: float, pre_close: float, limit_pct: float) -> bool:
 @dataclass
 class CleaningConfig:
     """清洗阈值 (边界+初始值, 可被调参层覆盖)."""
-    min_list_days: int = 250            # 上市 >= 250 交易日 (>= 最长特征窗口)
-    min_amount: float = 5e7             # T 日成交额 >= 5000 万
-    liquidity_top_n: int = 200          # 板块内流动性 Score 前 N
-    score_w_amount: float = 0.5         # Score = w*rank(成交额) + (1-w)*rank(自由流通换手)
-    stability_window: int = 5           # D24 换手稳定性窗口
-    stability_max: float = 0.5          # std/mean > 0.5 → 对倒嫌疑
-    new_stock_days: int = 5             # 注册制新股 (<5日无涨跌幅限制)
-    abs_amount_floor: float = 8e7       # 步骤4 绝对流动性安全阀 8000 万
-    valve_full: int = 50                # 过滤后 >= 50: 正常
-    valve_reduced: int = 15             # >= 15: 减仓输出; < 15: 强制空清单
+
+    min_list_days: int = 250  # 上市 >= 250 交易日 (>= 最长特征窗口)
+    min_amount: float = 5e7  # T 日成交额 >= 5000 万
+    liquidity_top_n: int = 200  # 板块内流动性 Score 前 N
+    score_w_amount: float = 0.5  # Score = w*rank(成交额) + (1-w)*rank(自由流通换手)
+    stability_window: int = 5  # D24 换手稳定性窗口
+    stability_max: float = 0.5  # std/mean > 0.5 → 对倒嫌疑
+    new_stock_days: int = 5  # 注册制新股 (<5日无涨跌幅限制)
+    abs_amount_floor: float = 8e7  # 步骤4 绝对流动性安全阀 8000 万
+    valve_full: int = 50  # 过滤后 >= 50: 正常
+    valve_reduced: int = 15  # >= 15: 减仓输出; < 15: 强制空清单
     delisted_virtual_ret: float = -0.5  # 退市股虚拟 T+1 收益 (安全网 #14)
 
 
@@ -103,12 +104,17 @@ class CleaningPipeline:
         cfg = self.cfg
         out = df[df["amount"] >= cfg.min_amount].copy()
         grp = [out["date"], out["board"]]
-        out["rank_amount"] = out.groupby(grp[0])["amount"].rank(pct=True) \
-            if "board" not in out else out.groupby(["date", "board"])["amount"].rank(pct=True)
+        out["rank_amount"] = (
+            out.groupby(grp[0])["amount"].rank(pct=True)
+            if "board" not in out
+            else out.groupby(["date", "board"])["amount"].rank(pct=True)
+        )
         ff = out.get("free_float_turnover_rate", out["turnover_rate"])
         out["rank_ff_turnover"] = ff.groupby([out["date"], out["board"]]).rank(pct=True)
-        out["liquidity_score"] = (cfg.score_w_amount * out["rank_amount"]
-                                  + (1 - cfg.score_w_amount) * out["rank_ff_turnover"])
+        out["liquidity_score"] = (
+            cfg.score_w_amount * out["rank_amount"]
+            + (1 - cfg.score_w_amount) * out["rank_ff_turnover"]
+        )
 
         # D24 换手稳定性 (groupby symbol!)
         out = out.sort_values(["symbol", "date"]).reset_index(drop=True)
@@ -116,11 +122,14 @@ class CleaningPipeline:
         std5 = g.rolling(cfg.stability_window).std().reset_index(level=0, drop=True)
         mean5 = g.rolling(cfg.stability_window).mean().reset_index(level=0, drop=True)
         out["turnover_stability_5"] = (std5 / mean5.replace(0, np.nan)).fillna(0.0)
-        out["churn_suspect"] = (out["turnover_stability_5"] > cfg.stability_max).astype(int)
+        out["churn_suspect"] = (out["turnover_stability_5"] > cfg.stability_max).astype(
+            int
+        )
 
         # 板块内每个 date 取 Score 前 N
-        out["score_rank"] = out.groupby(["date", "board"])["liquidity_score"] \
-            .rank(ascending=False, method="first")
+        out["score_rank"] = out.groupby(["date", "board"])["liquidity_score"].rank(
+            ascending=False, method="first"
+        )
         return out[out["score_rank"] <= cfg.liquidity_top_n]
 
     # ---------------- 步骤 3: 极端数据 ----------------
@@ -137,8 +146,9 @@ class CleaningPipeline:
         return out
 
     # ---------------- 步骤 4: 可成交性 (仅推理端) ----------------
-    def step4_tradability(self, df: pd.DataFrame,
-                          inference_only: bool = True) -> tuple[pd.DataFrame, str]:
+    def step4_tradability(
+        self, df: pd.DataFrame, inference_only: bool = True
+    ) -> tuple[pd.DataFrame, str]:
         """一字涨停剔除 + 8000万安全阀. 训练集 (inference_only=False) 不受限.
 
         Returns:
@@ -147,13 +157,18 @@ class CleaningPipeline:
         if not inference_only:
             return df, "full"
         out = df.copy()
-        out["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(out["board"], out["date"])]
+        out["limit_pct"] = [
+            get_limit_pct(b, d) for b, d in zip(out["board"], out["date"])
+        ]
         out["limit_up_price"] = (out["pre_close"] * (1 + out["limit_pct"])).round(2)
-        out["is_limit_up_close"] = (abs(out["close"] - out["limit_up_price"]) < 0.01).astype(int)
+        out["is_limit_up_close"] = (
+            abs(out["close"] - out["limit_up_price"]) < 0.01
+        ).astype(int)
         out["is_one_word_limit"] = (
             out["is_limit_up_close"].astype(bool)
             & (abs(out["open"] - out["limit_up_price"]) < 0.01)
-            & (abs(out["high"] - out["low"]) < 0.01)).astype(int)
+            & (abs(out["high"] - out["low"]) < 0.01)
+        ).astype(int)
         out = out[out["is_one_word_limit"] == 0]
         out = out[out["amount"] >= self.cfg.abs_amount_floor]
 
@@ -165,12 +180,15 @@ class CleaningPipeline:
             logger.warning("流动性安全阀: 仅剩 %d 只, 减仓输出", n)
         else:
             state = "empty"
-            logger.error("流动性安全阀: 仅剩 %d 只 < %d, 强制空清单", n, self.cfg.valve_reduced)
+            logger.error(
+                "流动性安全阀: 仅剩 %d 只 < %d, 强制空清单", n, self.cfg.valve_reduced
+            )
         return out, state
 
     # ---------------- 退市股虚拟归零 (安全网 #14, D20) ----------------
-    def inject_delisted_virtual_rows(self, df: pd.DataFrame,
-                                     delisted_symbols: list[str]) -> pd.DataFrame:
+    def inject_delisted_virtual_rows(
+        self, df: pd.DataFrame, delisted_symbols: list[str]
+    ) -> pd.DataFrame:
         """退市股虚拟 T+1: 收盘价×0.5, label_1d=-50%, 让模型学到归零风险."""
         rows = []
         for sym in delisted_symbols:
@@ -191,8 +209,10 @@ class CleaningPipeline:
         """训练端清洗 (步骤 0→3, 不做步骤 4). 返回 (主板, 双创)."""
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)  # 安全网 #13
         main, dual = self.step0_board_split(df)
-        return (self.step3_extreme(self.step2_liquidity(self.step1_base_state(main))),
-                self.step3_extreme(self.step2_liquidity(self.step1_base_state(dual))))
+        return (
+            self.step3_extreme(self.step2_liquidity(self.step1_base_state(main))),
+            self.step3_extreme(self.step2_liquidity(self.step1_base_state(dual))),
+        )
 
     def run_inference(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, str]:
         """推理端清洗 (步骤 0→4). 返回 (主板, 双创, 阀门状态)."""

@@ -34,8 +34,7 @@ class ModelRegistry:
         """
         self.registry_dir = str(registry_dir)
         os.makedirs(self.registry_dir, exist_ok=True)
-        self.registry_path = os.path.join(self.registry_dir,
-                                          REGISTRY_FILENAME)
+        self.registry_path = os.path.join(self.registry_dir, REGISTRY_FILENAME)
         self._data = self._load()
 
     def _load(self) -> dict:
@@ -77,12 +76,12 @@ class ModelRegistry:
         """
         models = self._data["models"]
         if model_name not in models:
-            raise KeyError(f"模型 {model_name} 未注册. "
-                           f"已注册: {sorted(models)}")
+            raise KeyError(f"模型 {model_name} 未注册. 已注册: {sorted(models)}")
         return models[model_name]
 
-    def register(self, model_name: str, version: str,
-                 metrics: dict, file_path: str) -> None:
+    def register(
+        self, model_name: str, version: str, metrics: dict, file_path: str
+    ) -> None:
         """注册新版本 (含回测指标), 并置为当前生效版本.
 
         Args:
@@ -92,20 +91,24 @@ class ModelRegistry:
             file_path: 模型文件路径。
         """
         models = self._data["models"]
-        entry = models.setdefault(model_name,
-                                  {"current": None, "versions": []})
-        entry["versions"] = [v for v in entry["versions"]
-                             if v["version"] != version]
-        entry["versions"].append({
-            "version": version,
-            "metrics": dict(metrics),
-            "file_path": str(file_path),
-            "registered_at": datetime.now(timezone.utc).isoformat(),
-        })
+        entry = models.setdefault(model_name, {"current": None, "versions": []})
+        entry["versions"] = [v for v in entry["versions"] if v["version"] != version]
+        entry["versions"].append(
+            {
+                "version": version,
+                "metrics": dict(metrics),
+                "file_path": str(file_path),
+                "registered_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
         entry["current"] = version
         self._save()
-        logger.info("注册模型版本: %s@%s (oos_ic=%s)",
-                    model_name, version, metrics.get("oos_ic"))
+        logger.info(
+            "注册模型版本: %s@%s (oos_ic=%s)",
+            model_name,
+            version,
+            metrics.get("oos_ic"),
+        )
 
     def get_current(self, model_name: Optional[str] = None) -> dict:
         """当前生效版本.
@@ -118,9 +121,11 @@ class ModelRegistry:
             未指定: {model_name: {...}}。
         """
         if model_name is None:
-            return {name: self.get_current(name)
-                    for name in self._data["models"]
-                    if self._data["models"][name]["current"] is not None}
+            return {
+                name: self.get_current(name)
+                for name in self._data["models"]
+                if self._data["models"][name]["current"] is not None
+            }
         entry = self._entry(model_name)
         current = entry["current"]
         if current is None:
@@ -129,10 +134,10 @@ class ModelRegistry:
             if v["version"] == current:
                 return {"model_name": model_name, **v}
         raise KeyError(  # pragma: no cover — 防御性
-            f"模型 {model_name} 当前版本 {current} 不在版本列表中")
+            f"模型 {model_name} 当前版本 {current} 不在版本列表中"
+        )
 
-    def set_current(self, version: str,
-                    model_name: Optional[str] = None) -> None:
+    def set_current(self, version: str, model_name: Optional[str] = None) -> None:
         """切换生效版本.
 
         Args:
@@ -146,13 +151,14 @@ class ModelRegistry:
         if model_name is None:
             names = list(self._data["models"])
             if len(names) != 1:
-                raise ValueError(
-                    f"注册表含 {len(names)} 个模型, 必须指定 model_name")
+                raise ValueError(f"注册表含 {len(names)} 个模型, 必须指定 model_name")
             model_name = names[0]
         entry = self._entry(model_name)
         if not any(v["version"] == version for v in entry["versions"]):
-            raise KeyError(f"模型 {model_name} 无版本 {version}. "
-                           f"已有: {[v['version'] for v in entry['versions']]}")
+            raise KeyError(
+                f"模型 {model_name} 无版本 {version}. "
+                f"已有: {[v['version'] for v in entry['versions']]}"
+            )
         entry["current"] = version
         self._save()
         logger.info("切换生效版本: %s → %s", model_name, version)
@@ -172,12 +178,11 @@ class ModelRegistry:
         entry = self._entry(model_name)
         versions = entry["versions"]
         if len(versions) < 2:
-            raise ValueError(f"模型 {model_name} 仅 {len(versions)} 个版本, "
-                             "无法回滚")
-        idx = next(i for i, v in enumerate(versions)
-                   if v["version"] == entry["current"])
-        target = versions[idx - 1]["version"] if idx > 0 \
-            else versions[-2]["version"]
+            raise ValueError(f"模型 {model_name} 仅 {len(versions)} 个版本, 无法回滚")
+        idx = next(
+            i for i, v in enumerate(versions) if v["version"] == entry["current"]
+        )
+        target = versions[idx - 1]["version"] if idx > 0 else versions[-2]["version"]
         entry["current"] = target
         self._save()
         logger.warning("模型 %s 回滚 → %s", model_name, target)
@@ -193,8 +198,7 @@ class ModelRegistry:
             [{version, metrics, file_path, registered_at}, ...]。
         """
         entry = self._entry(model_name)
-        return sorted(entry["versions"],
-                      key=lambda v: v["registered_at"], reverse=True)
+        return sorted(entry["versions"], key=lambda v: v["registered_at"], reverse=True)
 
     def get_best_version(self, model_name: str) -> dict:
         """按 OOS IC 取历史最优版本.
@@ -209,11 +213,16 @@ class ModelRegistry:
             ValueError: 无任何带 oos_ic 指标的版本。
         """
         entry = self._entry(model_name)
-        scored = [v for v in entry["versions"]
-                  if v["metrics"].get("oos_ic") is not None]
+        scored = [
+            v for v in entry["versions"] if v["metrics"].get("oos_ic") is not None
+        ]
         if not scored:
             raise ValueError(f"模型 {model_name} 无含 oos_ic 的版本")
         best = max(scored, key=lambda v: v["metrics"]["oos_ic"])
-        logger.info("模型 %s 历史最优: %s (oos_ic=%.4f)",
-                    model_name, best["version"], best["metrics"]["oos_ic"])
+        logger.info(
+            "模型 %s 历史最优: %s (oos_ic=%.4f)",
+            model_name,
+            best["version"],
+            best["metrics"]["oos_ic"],
+        )
         return best

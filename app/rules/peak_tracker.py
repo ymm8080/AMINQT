@@ -35,7 +35,10 @@ class PeakTracker:
         elif price <= self._candidate_high * (1 - self.cfg.peak_confirm_drop):
             self._drop_bars += 1
             if self._drop_bars >= self.cfg.peak_confirm_bars:
-                if not self.confirmed_peaks or self.confirmed_peaks[-1] != self._candidate_high:
+                if (
+                    not self.confirmed_peaks
+                    or self.confirmed_peaks[-1] != self._candidate_high
+                ):
                     self.confirmed_peaks.append(self._candidate_high)
                 self._candidate_high, self._drop_bars = None, 0
         # ---- 谷值确认: 从候选低点回升 >= drop 且持续 N 根 ----
@@ -44,7 +47,10 @@ class PeakTracker:
         elif price >= self._candidate_low * (1 + self.cfg.peak_confirm_drop):
             self._rise_bars += 1
             if self._rise_bars >= self.cfg.peak_confirm_bars:
-                if not self.confirmed_troughs or self.confirmed_troughs[-1] != self._candidate_low:
+                if (
+                    not self.confirmed_troughs
+                    or self.confirmed_troughs[-1] != self._candidate_low
+                ):
                     self.confirmed_troughs.append(self._candidate_low)
                 self._candidate_low, self._rise_bars = None, 0
 

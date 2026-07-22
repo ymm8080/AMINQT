@@ -15,8 +15,7 @@ from app.core.intraday_factor_engine import (
 )
 
 
-def _make_bars(n=48, start_price=10.0, step=0.05, base_vol=1000.0,
-               last5_vol=2000.0):
+def _make_bars(n=48, start_price=10.0, step=0.05, base_vol=1000.0, last5_vol=2000.0):
     """构造线性上涨 + 末 5 根放量的 5 分钟 K 线."""
     close = start_price + step * np.arange(n)
     open_ = close - step / 2
@@ -24,10 +23,15 @@ def _make_bars(n=48, start_price=10.0, step=0.05, base_vol=1000.0,
     low = open_ - 0.02
     volume = np.full(n, base_vol)
     volume[-5:] = last5_vol
-    return pd.DataFrame({
-        "open": open_, "high": high, "low": low,
-        "close": close, "volume": volume,
-    })
+    return pd.DataFrame(
+        {
+            "open": open_,
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": volume,
+        }
+    )
 
 
 @pytest.fixture
@@ -114,15 +118,13 @@ class TestMarketFactors:
         bars = _make_bars()
         out = IntradayFactorEngine().compute_market_factors(bars)
         assert out["market_5min_breadth"] == 1.0
-        out = IntradayFactorEngine({"market_breadth": 0.3}) \
-            .compute_market_factors(bars)
+        out = IntradayFactorEngine({"market_breadth": 0.3}).compute_market_factors(bars)
         assert out["market_5min_breadth"] == 0.3
 
     def test_breadth_column_overrides(self):
         bars = _make_bars()
         bars["breadth"] = 0.7
-        out = IntradayFactorEngine({"market_breadth": 0.3}) \
-            .compute_market_factors(bars)
+        out = IntradayFactorEngine({"market_breadth": 0.3}).compute_market_factors(bars)
         assert out["market_5min_breadth"] == 0.7
 
     def test_empty_bars(self, engine):
@@ -158,8 +160,9 @@ class TestSectorFactors:
 
 class TestCompute5Min:
     def test_vector_shape_and_finite(self, engine, stock_bars):
-        vec = engine.compute_5min(stock_bars, _make_bars(step=0.02),
-                                  _make_bars(step=0.01))
+        vec = engine.compute_5min(
+            stock_bars, _make_bars(step=0.02), _make_bars(step=0.01)
+        )
         assert isinstance(vec, np.ndarray)
         assert vec.shape == (TOTAL_DIM,) == (25,)
         assert np.isfinite(vec).all()

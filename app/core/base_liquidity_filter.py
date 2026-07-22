@@ -69,16 +69,20 @@ class BaseLiquidityFilter:
         )
         # 大市值白马低波动剔除阈值 (数据列存在时才启用)
         self.large_mktcap_threshold = _resolve(
-            self.config.get("large_mktcap_threshold"), 100_000_000_000.0  # 1000 亿
+            self.config.get("large_mktcap_threshold"),
+            100_000_000_000.0,  # 1000 亿
         )
         self.low_volatility_threshold = _resolve(
-            self.config.get("low_volatility_threshold"), 0.20  # 年化波动率
+            self.config.get("low_volatility_threshold"),
+            0.20,  # 年化波动率
         )
         logger.info(
             "BaseLiquidityFilter 初始化, min_turnover=%.3f min_amount=%.0f "
             "min_amplitude=%.3f min_limit_up_count=%d",
-            self.min_turnover, self.min_amount,
-            self.min_amplitude, self.min_limit_up_count,
+            self.min_turnover,
+            self.min_amount,
+            self.min_amplitude,
+            self.min_limit_up_count,
         )
 
     # ── 公共入口 ────────────────────────────────────────────────────
@@ -190,9 +194,7 @@ class BaseLiquidityFilter:
     @staticmethod
     def _avg_turnover(df: pd.DataFrame) -> float:
         """日均换手率 (自动识别 0~1 / 0~100 两种量纲)."""
-        col = next(
-            (c for c in ("turnover", "turnover_rate") if c in df.columns), None
-        )
+        col = next((c for c in ("turnover", "turnover_rate") if c in df.columns), None)
         if col is None:
             return None
         avg = float(np.nan_to_num(df[col].mean()))

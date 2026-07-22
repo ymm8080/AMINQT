@@ -19,7 +19,6 @@
 """
 
 import logging
-from typing import List
 
 import numpy as np
 import pandas as pd
@@ -65,10 +64,12 @@ class ExtendedSellDetector:
         Returns:
             {is_daily_sell, case2_profit_chip, case3_macd_negative}
         """
-        chip_th = float(self._cfg("daily_sell_extended", "chip_threshold",
-                                  0.40))
-        result = {"is_daily_sell": False, "case2_profit_chip": False,
-                  "case3_macd_negative": False}
+        chip_th = float(self._cfg("daily_sell_extended", "chip_threshold", 0.40))
+        result = {
+            "is_daily_sell": False,
+            "case2_profit_chip": False,
+            "case3_macd_negative": False,
+        }
         if df is None or len(df) < 2:
             return result
 
@@ -80,8 +81,9 @@ class ExtendedSellDetector:
             if case2:
                 logger.info("CASE2 触发: 获利盘 %.2f < %.2f", chip_now, chip_th)
         else:
-            logger.warning("check_extended_daily_sell: 缺少 %s 列, CASE2 跳过",
-                           COL_CHIP_PROFIT)
+            logger.warning(
+                "check_extended_daily_sell: 缺少 %s 列, CASE2 跳过", COL_CHIP_PROFIT
+            )
 
         # CASE3: MACD dif 由正转负
         if COL_DIF in df.columns:
@@ -97,8 +99,9 @@ class ExtendedSellDetector:
             if case3:
                 logger.info("CASE3 触发: MACD dif %.4f 由正转负", dif_today)
 
-        result["is_daily_sell"] = (result["case2_profit_chip"]
-                                   or result["case3_macd_negative"])
+        result["is_daily_sell"] = (
+            result["case2_profit_chip"] or result["case3_macd_negative"]
+        )
         return result
 
     def check_auction_surge_sell(self, auction_pct: float) -> bool:
@@ -110,12 +113,14 @@ class ExtendedSellDetector:
         Returns:
             True = 立刻全仓卖出。
         """
-        th = float(self._cfg("intraday_sell_extended", "auction_threshold",
-                             0.05))
+        th = float(self._cfg("intraday_sell_extended", "auction_threshold", 0.05))
         triggered = float(auction_pct) > th
         if triggered:
-            logger.info("场景C 触发: 竞价涨 %.2f%% > %.2f%% → 全仓卖",
-                        auction_pct * 100, th * 100)
+            logger.info(
+                "场景C 触发: 竞价涨 %.2f%% > %.2f%% → 全仓卖",
+                auction_pct * 100,
+                th * 100,
+            )
         return triggered
 
     def check_vol_price_divergence_sell(self, intraday_df: pd.DataFrame) -> bool:
@@ -134,10 +139,10 @@ class ExtendedSellDetector:
         Returns:
             True = 量价背离卖出。
         """
-        surge_th = float(self._cfg("intraday_sell_extended",
-                                   "surge_threshold", 0.07))
-        vol_ratio_th = float(self._cfg("intraday_sell_extended",
-                                       "volume_surge_ratio", 1.2))
+        surge_th = float(self._cfg("intraday_sell_extended", "surge_threshold", 0.07))
+        vol_ratio_th = float(
+            self._cfg("intraday_sell_extended", "volume_surge_ratio", 1.2)
+        )
         if intraday_df is None or len(intraday_df) < 6:
             return False
         if "close" not in intraday_df.columns or "volume" not in intraday_df.columns:
@@ -148,8 +153,11 @@ class ExtendedSellDetector:
         if "pct_chg" in intraday_df.columns:
             pct = intraday_df["pct_chg"].astype(float)
         else:
-            ref = float(intraday_df["open"].iloc[0]) if "open" in intraday_df.columns \
+            ref = (
+                float(intraday_df["open"].iloc[0])
+                if "open" in intraday_df.columns
                 else float(close.iloc[0])
+            )
             pct = (close - ref) / ref if ref > 0 else pd.Series(0.0, index=close.index)
 
         peak_idx = int(np.argmax(close.to_numpy()))
@@ -160,8 +168,7 @@ class ExtendedSellDetector:
 
         vol_ma5 = volume.rolling(5, min_periods=1).mean()
         ma_at_peak = float(vol_ma5.iloc[peak_idx])
-        vol_ratio = (float(volume.iloc[peak_idx]) / ma_at_peak
-                     if ma_at_peak > 0 else 0.0)
+        vol_ratio = float(volume.iloc[peak_idx]) / ma_at_peak if ma_at_peak > 0 else 0.0
         weak_volume = vol_ratio < vol_ratio_th
 
         price_falling = float(close.iloc[-1]) < float(close.iloc[peak_idx])
@@ -169,12 +176,16 @@ class ExtendedSellDetector:
 
         triggered = weak_volume and price_falling and volume_falling
         if triggered:
-            logger.info("场景D 触发: 峰值涨幅 %.2f%%, 量比 %.2f, 峰后价量齐降",
-                        float(pct.iloc[peak_idx]) * 100, vol_ratio)
+            logger.info(
+                "场景D 触发: 峰值涨幅 %.2f%%, 量比 %.2f, 峰后价量齐降",
+                float(pct.iloc[peak_idx]) * 100,
+                vol_ratio,
+            )
         return triggered
 
-    def check_turnover_partial_sell(self, pct_chg: float, turnover: float,
-                                    volume_surge: bool) -> dict:
+    def check_turnover_partial_sell(
+        self, pct_chg: float, turnover: float, volume_surge: bool
+    ) -> dict:
         """场景 E: 涨>7%+放量+换手>40% → 卖一半; 涨>15% → 全卖.
 
         Args:
@@ -185,12 +196,11 @@ class ExtendedSellDetector:
         Returns:
             {action: 'none'|'half'|'all'}
         """
-        half_th = float(self._cfg("intraday_sell_extended",
-                                  "surge_half_threshold", 0.07))
-        all_th = float(self._cfg("intraday_sell_extended",
-                                 "surge_all_threshold", 0.15))
-        turn_th = float(self._cfg("intraday_sell_extended",
-                                  "turnover_threshold", 0.40))
+        half_th = float(
+            self._cfg("intraday_sell_extended", "surge_half_threshold", 0.07)
+        )
+        all_th = float(self._cfg("intraday_sell_extended", "surge_all_threshold", 0.15))
+        turn_th = float(self._cfg("intraday_sell_extended", "turnover_threshold", 0.40))
 
         action = "none"
         if pct_chg >= all_th:
@@ -198,12 +208,18 @@ class ExtendedSellDetector:
         elif pct_chg >= half_th and volume_surge and turnover > turn_th:
             action = "half"
         if action != "none":
-            logger.info("场景E 触发: pct=%.2f%% turnover=%.2f%% surge=%s → %s",
-                        pct_chg * 100, turnover * 100, volume_surge, action)
+            logger.info(
+                "场景E 触发: pct=%.2f%% turnover=%.2f%% surge=%s → %s",
+                pct_chg * 100,
+                turnover * 100,
+                volume_surge,
+                action,
+            )
         return {"action": action}
 
-    def check_chip_afternoon_sell(self, pct_chg: float, chip_ratio: float,
-                                  is_afternoon: bool) -> bool:
+    def check_chip_afternoon_sell(
+        self, pct_chg: float, chip_ratio: float, is_afternoon: bool
+    ) -> bool:
         """场景 F: 涨>7% + 主力筹码<40% + 下午上涨 → 全卖.
 
         Args:
@@ -214,16 +230,19 @@ class ExtendedSellDetector:
         Returns:
             True = 全仓卖出。
         """
-        surge_th = float(self._cfg("intraday_sell_extended",
-                                   "surge_threshold", 0.07))
-        chip_th = float(self._cfg("intraday_sell_extended",
-                                  "chip_threshold", 0.40))
-        triggered = (float(pct_chg) >= surge_th
-                     and float(chip_ratio) < chip_th
-                     and bool(is_afternoon))
+        surge_th = float(self._cfg("intraday_sell_extended", "surge_threshold", 0.07))
+        chip_th = float(self._cfg("intraday_sell_extended", "chip_threshold", 0.40))
+        triggered = (
+            float(pct_chg) >= surge_th
+            and float(chip_ratio) < chip_th
+            and bool(is_afternoon)
+        )
         if triggered:
-            logger.info("场景F 触发: pct=%.2f%% chip=%.2f 下午拉升 → 全仓卖",
-                        pct_chg * 100, chip_ratio)
+            logger.info(
+                "场景F 触发: pct=%.2f%% chip=%.2f 下午拉升 → 全仓卖",
+                pct_chg * 100,
+                chip_ratio,
+            )
         return triggered
 
     def check_profit_warning(self, buy_price: float, current_price: float) -> dict:
@@ -236,21 +255,21 @@ class ExtendedSellDetector:
         Returns:
             {is_marked, warning_message}
         """
-        profit_th = float(self._cfg("intraday_sell_extended",
-                                    "profit_threshold", 0.25))
+        profit_th = float(self._cfg("intraday_sell_extended", "profit_threshold", 0.25))
         if buy_price <= 0:
             return {"is_marked": False, "warning_message": None}
         profit = current_price / buy_price - 1.0
         is_marked = profit >= profit_th
         warning = None
         if is_marked:
-            warning = (f"WARNING: 盈利 {profit * 100:.1f}% 超过 "
-                       f"{profit_th * 100:.0f}%, 异常大涨请关注")
+            warning = (
+                f"WARNING: 盈利 {profit * 100:.1f}% 超过 "
+                f"{profit_th * 100:.0f}%, 异常大涨请关注"
+            )
             logger.warning("场景G 触发: %s", warning)
         return {"is_marked": is_marked, "warning_message": warning}
 
-    def check_high_turnover_surge_sell(self, pct_chg: float,
-                                       turnover: float) -> bool:
+    def check_high_turnover_surge_sell(self, pct_chg: float, turnover: float) -> bool:
         """场景 H: 换手率 > 40% 且涨 > 8% → 全卖.
 
         Args:
@@ -260,12 +279,13 @@ class ExtendedSellDetector:
         Returns:
             True = 全仓卖出。
         """
-        turn_th = float(self._cfg("intraday_sell_extended",
-                                  "turnover_threshold", 0.40))
-        surge_th = float(self._cfg("intraday_sell_extended",
-                                   "surge_threshold_h", 0.08))
+        turn_th = float(self._cfg("intraday_sell_extended", "turnover_threshold", 0.40))
+        surge_th = float(self._cfg("intraday_sell_extended", "surge_threshold_h", 0.08))
         triggered = float(turnover) > turn_th and float(pct_chg) > surge_th
         if triggered:
-            logger.info("场景H 触发: 换手 %.2f%% + 涨 %.2f%% → 全仓卖",
-                        turnover * 100, pct_chg * 100)
+            logger.info(
+                "场景H 触发: 换手 %.2f%% + 涨 %.2f%% → 全仓卖",
+                turnover * 100,
+                pct_chg * 100,
+            )
         return triggered

@@ -10,13 +10,15 @@ from app.models.iwencai_agent import IwencaiAgent, RANK_CONDITIONS
 
 def make_df(closes, vols, ctrl=None):
     """构造日线 DataFrame (open/high/low 取 close 近似)."""
-    df = pd.DataFrame({
-        "open": list(closes),
-        "high": list(closes),
-        "low": list(closes),
-        "close": list(closes),
-        "volume": list(vols),
-    })
+    df = pd.DataFrame(
+        {
+            "open": list(closes),
+            "high": list(closes),
+            "low": list(closes),
+            "close": list(closes),
+            "volume": list(vols),
+        }
+    )
     if ctrl is not None:
         df["tech_ths_ctrl_ratio"] = list(ctrl)
     return df
@@ -33,6 +35,7 @@ def agent():
 
 # ── ① 排名交集 ────────────────────────────────────────────────────
 
+
 class TestRankIntersection:
     def test_intersection_across_five_conditions(self, agent, monkeypatch):
         results = {
@@ -43,10 +46,10 @@ class TestRankIntersection:
             RANK_CONDITIONS[4]: ["C", "E"],
         }
         monkeypatch.setattr(
-            agent, "query",
+            agent,
+            "query",
             lambda cond, top_n=50: [
-                {"symbol": s, "name": s, "iwencai_score": None,
-                 "match_reasons": [cond]}
+                {"symbol": s, "name": s, "iwencai_score": None, "match_reasons": [cond]}
                 for s in results[cond]
             ],
         )
@@ -54,10 +57,15 @@ class TestRankIntersection:
 
     def test_empty_intersection(self, agent, monkeypatch):
         monkeypatch.setattr(
-            agent, "query",
+            agent,
+            "query",
             lambda cond, top_n=50: [
-                {"symbol": cond[:1], "name": "", "iwencai_score": None,
-                 "match_reasons": []}
+                {
+                    "symbol": cond[:1],
+                    "name": "",
+                    "iwencai_score": None,
+                    "match_reasons": [],
+                }
             ],
         )
         assert agent.query_rank_intersection() == []
@@ -71,7 +79,8 @@ class TestTemplates:
     def test_template_renders_condition(self, agent, monkeypatch):
         seen = []
         monkeypatch.setattr(
-            agent, "query",
+            agent,
+            "query",
             lambda cond, top_n=50: seen.append((cond, top_n)) or [],
         )
         agent.query_by_template("super_strong", 板块="半导体")
@@ -80,6 +89,7 @@ class TestTemplates:
 
 
 # ── ② 形态 (正/负) ───────────────────────────────────────────────
+
 
 class TestPatterns:
     def _prep(self, df):
@@ -141,6 +151,7 @@ class TestPatterns:
 
 # ── ③ 剔除 (正/负) ───────────────────────────────────────────────
 
+
 class TestExclusions:
     def _prep(self, df):
         return IwencaiAgent._prep(df)
@@ -180,26 +191,31 @@ class TestExclusions:
 
 # ── build_candidate_pool 集成 ────────────────────────────────────
 
+
 class TestBuildCandidatePool:
     def test_full_flow(self, agent, monkeypatch):
         # A: 缩量上涨, 无剔除 → 入池
-        df_a = make_df([10.0] * 56 + [10.0, 10.1, 10.2, 10.3],
-                       [1000.0] * 56 + [1000.0, 1000.0, 1000.0, 500.0])
+        df_a = make_df(
+            [10.0] * 56 + [10.0, 10.1, 10.2, 10.3],
+            [1000.0] * 56 + [1000.0, 1000.0, 1000.0, 500.0],
+        )
         # B: 缩量上涨 但近 5 日有放量下跌 → 剔除
-        df_b = make_df([10.0] * 55 + [10.0, 9.5, 10.1, 10.2, 10.3],
-                       [1000.0] * 55 + [1000.0, 2500.0, 1000.0, 1000.0, 500.0])
+        df_b = make_df(
+            [10.0] * 55 + [10.0, 9.5, 10.1, 10.2, 10.3],
+            [1000.0] * 55 + [1000.0, 2500.0, 1000.0, 1000.0, 500.0],
+        )
         # C: 无任何形态 → 过滤
         df_c = flat_df()
         # E: 数据不足 → 跳过
         df_e = flat_df(n=10)
 
-        monkeypatch.setattr(agent, "query_rank_intersection",
-                            lambda: ["A", "B", "C", "E"])
+        monkeypatch.setattr(
+            agent, "query_rank_intersection", lambda: ["A", "B", "C", "E"]
+        )
         base_pool = ["A", "B", "C", "D", "E"]  # D 不在排名交集
         daily = {"A": df_a, "B": df_b, "C": df_c, "D": df_a, "E": df_e}
         assert agent.build_candidate_pool(base_pool, daily) == ["A"]
 
     def test_empty_base_pool(self, agent, monkeypatch):
-        monkeypatch.setattr(agent, "query_rank_intersection",
-                            lambda: ["A"])
+        monkeypatch.setattr(agent, "query_rank_intersection", lambda: ["A"])
         assert agent.build_candidate_pool([], {"A": flat_df()}) == []

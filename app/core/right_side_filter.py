@@ -32,9 +32,14 @@ class RightSideFilter:
         6. 成交额 > 5000 万
     """
 
-    def __init__(self, ma_short: int = 5, ma_mid: int = 10, ma_long: int = 20,
-                 min_amount: float = 50_000_000,
-                 require_market_above_ma20: bool = False) -> None:
+    def __init__(
+        self,
+        ma_short: int = 5,
+        ma_mid: int = 10,
+        ma_long: int = 20,
+        min_amount: float = 50_000_000,
+        require_market_above_ma20: bool = False,
+    ) -> None:
         """初始化预筛选参数.
 
         Args:
@@ -50,8 +55,9 @@ class RightSideFilter:
         self.min_amount = min_amount
         self.require_market_above_ma20 = require_market_above_ma20
 
-    def is_uptrend(self, stock_df: pd.DataFrame,
-                   market_above_ma20: bool = True) -> bool:
+    def is_uptrend(
+        self, stock_df: pd.DataFrame, market_above_ma20: bool = True
+    ) -> bool:
         """单只股票右侧判断.
 
         Args:
@@ -89,7 +95,9 @@ class RightSideFilter:
 
         last_close = float(close.iloc[-1])
         last_s, last_m, last_l = (
-            float(ma_s.iloc[-1]), float(ma_m.iloc[-1]), float(ma_l.iloc[-1])
+            float(ma_s.iloc[-1]),
+            float(ma_m.iloc[-1]),
+            float(ma_l.iloc[-1]),
         )
         if np.isnan(last_s) or np.isnan(last_m) or np.isnan(last_l):
             return False
@@ -115,8 +123,9 @@ class RightSideFilter:
 
         return True
 
-    def batch_filter(self, all_stocks: Dict[str, pd.DataFrame],
-                     market_above_ma20: bool = True) -> Dict[str, bool]:
+    def batch_filter(
+        self, all_stocks: Dict[str, pd.DataFrame], market_above_ma20: bool = True
+    ) -> Dict[str, bool]:
         """批量预筛选.
 
         Args:
@@ -134,8 +143,12 @@ class RightSideFilter:
                 logger.exception("%s: 右侧预筛选异常, 按非上行处理", symbol)
                 result[symbol] = False
         n_up = sum(result.values())
-        logger.info("右侧预筛选: %d/%d 只上行 (%.1f%%)",
-                    n_up, len(result), 100.0 * n_up / max(len(result), 1))
+        logger.info(
+            "右侧预筛选: %d/%d 只上行 (%.1f%%)",
+            n_up,
+            len(result),
+            100.0 * n_up / max(len(result), 1),
+        )
         return result
 
     # ── 内部工具 ────────────────────────────────────────────────────
@@ -146,7 +159,7 @@ class RightSideFilter:
         if "amount" in stock_df.columns:
             return float(np.nan_to_num(stock_df["amount"].iloc[-1]))
         if {"close", "volume"} <= set(stock_df.columns):
-            return float(np.nan_to_num(
-                stock_df["close"].iloc[-1] * stock_df["volume"].iloc[-1]
-            ))
+            return float(
+                np.nan_to_num(stock_df["close"].iloc[-1] * stock_df["volume"].iloc[-1])
+            )
         return None

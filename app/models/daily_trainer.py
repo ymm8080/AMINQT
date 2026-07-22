@@ -41,9 +41,17 @@ class DailyTrainer:
         self.config = config or {}
         self.last_oos_ic_ = None
 
-    def run_daily(self, model=None, X_old=None, y_old=None,
-                  X_new=None, y_new=None, X_oos=None, y_oos=None,
-                  ic_threshold: Optional[float] = None) -> dict:
+    def run_daily(
+        self,
+        model=None,
+        X_old=None,
+        y_old=None,
+        X_new=None,
+        y_new=None,
+        X_oos=None,
+        y_oos=None,
+        ic_threshold: Optional[float] = None,
+    ) -> dict:
         """每日训练流程: fine_tune → validate_oos → 替换 or 保留+告警.
 
         数据优先取参数, 缺省回落到 config 同名键。
@@ -70,40 +78,66 @@ class DailyTrainer:
         y_new = y_new if y_new is not None else cfg.get("y_new")
         X_oos = X_oos if X_oos is not None else cfg.get("X_oos")
         y_oos = y_oos if y_oos is not None else cfg.get("y_oos")
-        threshold = float(ic_threshold if ic_threshold is not None
-                          else cfg.get("ic_threshold", 0.03))
-        missing = [k for k, v in [("model", model), ("X_new", X_new),
-                                  ("y_new", y_new), ("X_oos", X_oos),
-                                  ("y_oos", y_oos)] if v is None]
+        threshold = float(
+            ic_threshold if ic_threshold is not None else cfg.get("ic_threshold", 0.03)
+        )
+        missing = [
+            k
+            for k, v in [
+                ("model", model),
+                ("X_new", X_new),
+                ("y_new", y_new),
+                ("X_oos", X_oos),
+                ("y_oos", y_oos),
+            ]
+            if v is None
+        ]
         if missing:
             raise ValueError(f"run_daily 缺少必需数据: {missing}")
 
         old_ic = spearman_ic(model.predict(X_oos), y_oos)
         candidate = self.fine_tune(
-            model, X_new, y_new,
+            model,
+            X_new,
+            y_new,
             epochs=int(cfg.get("fine_tune_epochs", 10)),
             lr=float(cfg.get("fine_tune_lr", 1e-5)),
-            X_old=X_old, y_old=y_old)
+            X_old=X_old,
+            y_old=y_old,
+        )
         new_ic = spearman_ic(candidate.predict(X_oos), y_oos)
-        oos_pass = self.validate_oos(candidate, X_oos, y_oos,
-                                     ic_threshold=threshold)
+        oos_pass = self.validate_oos(candidate, X_oos, y_oos, ic_threshold=threshold)
 
         replaced = bool(oos_pass and new_ic >= old_ic)
         warning = None
         if not replaced:
-            warning = (f"新模型未通过替换门槛 (oos_pass={oos_pass}, "
-                       f"new_ic={new_ic:.4f} vs old_ic={old_ic:.4f}, "
-                       f"threshold={threshold}), 保留旧模型")
+            warning = (
+                f"新模型未通过替换门槛 (oos_pass={oos_pass}, "
+                f"new_ic={new_ic:.4f} vs old_ic={old_ic:.4f}, "
+                f"threshold={threshold}), 保留旧模型"
+            )
             logger.warning(warning)
         else:
             logger.info("模型替换: old_ic=%.4f → new_ic=%.4f", old_ic, new_ic)
-        return {"replaced": replaced, "oos_pass": bool(oos_pass),
-                "old_ic": old_ic, "new_ic": new_ic,
-                "warning": warning,
-                "model": candidate if replaced else model}
+        return {
+            "replaced": replaced,
+            "oos_pass": bool(oos_pass),
+            "old_ic": old_ic,
+            "new_ic": new_ic,
+            "warning": warning,
+            "model": candidate if replaced else model,
+        }
 
-    def fine_tune(self, model, X_new, y_new, epochs: int = 10,
-                  lr: float = 1e-5, X_old=None, y_old=None):
+    def fine_tune(
+        self,
+        model,
+        X_new,
+        y_new,
+        epochs: int = 10,
+        lr: float = 1e-5,
+        X_old=None,
+        y_old=None,
+    ):
         """微调 (小学习率, 少 epoch).
 
         在 deepcopy 的候选模型上操作, 旧模型不被污染 (回滚保护)。
@@ -126,23 +160,35 @@ class DailyTrainer:
         estimator = getattr(candidate, "estimator", candidate)
 
         if X_old is None and hasattr(estimator, "partial_fit"):
-            X_inc = np.nan_to_num(np.asarray(X_new, dtype=np.float64),
-                                  nan=0.0, posinf=0.0, neginf=0.0)
+            X_inc = np.nan_to_num(
+                np.asarray(X_new, dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0
+            )
             if X_inc.ndim == 3:
                 X_inc = X_inc.reshape(X_inc.shape[0], -1)
-            y_inc = np.nan_to_num(np.asarray(y_new, dtype=np.float64).ravel(),
-                                  nan=0.0, posinf=0.0, neginf=0.0)
+            y_inc = np.nan_to_num(
+                np.asarray(y_new, dtype=np.float64).ravel(),
+                nan=0.0,
+                posinf=0.0,
+                neginf=0.0,
+            )
             estimator.partial_fit(X_inc, y_inc)
             logger.info("fine_tune: partial_fit 增量 (%d 样本)", len(y_inc))
             return candidate
 
         if X_old is not None and y_old is not None:
             X_full = np.concatenate(
-                [np.asarray(X_old, dtype=np.float64),
-                 np.asarray(X_new, dtype=np.float64)], axis=0)
+                [
+                    np.asarray(X_old, dtype=np.float64),
+                    np.asarray(X_new, dtype=np.float64),
+                ],
+                axis=0,
+            )
             y_full = np.concatenate(
-                [np.asarray(y_old, dtype=np.float64).ravel(),
-                 np.asarray(y_new, dtype=np.float64).ravel()])
+                [
+                    np.asarray(y_old, dtype=np.float64).ravel(),
+                    np.asarray(y_new, dtype=np.float64).ravel(),
+                ]
+            )
         else:
             X_full = np.asarray(X_new, dtype=np.float64)
             y_full = np.asarray(y_new, dtype=np.float64).ravel()
@@ -153,8 +199,7 @@ class DailyTrainer:
         logger.info("fine_tune: 暖重启 refit (%d 样本)", len(y_full))
         return candidate
 
-    def validate_oos(self, model, X_oos, y_oos,
-                     ic_threshold: float = 0.03) -> bool:
+    def validate_oos(self, model, X_oos, y_oos, ic_threshold: float = 0.03) -> bool:
         """OOS 验证: IC > 0.03 才允许替换 (ARCH §5.12.3.C).
 
         Args:
@@ -169,6 +214,10 @@ class DailyTrainer:
         ic = spearman_ic(model.predict(X_oos), y_oos)
         self.last_oos_ic_ = ic
         passed = ic > ic_threshold
-        logger.info("OOS 验证: IC=%.4f threshold=%.3f → %s",
-                    ic, ic_threshold, "PASS" if passed else "FAIL")
+        logger.info(
+            "OOS 验证: IC=%.4f threshold=%.3f → %s",
+            ic,
+            ic_threshold,
+            "PASS" if passed else "FAIL",
+        )
         return passed

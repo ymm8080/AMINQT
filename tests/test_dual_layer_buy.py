@@ -21,8 +21,13 @@ def detector():
     return DualLayerBuyDetector()
 
 
-def _daily_df(n=30, pullup_peak_idx=10, ctrl_last=0.35,
-              trend_violation=False, distance_not_min=False):
+def _daily_df(
+    n=30,
+    pullup_peak_idx=10,
+    ctrl_last=0.35,
+    trend_violation=False,
+    distance_not_min=False,
+):
     """构造满足四条件的日线数据 (可通过参数制造失败)."""
     pullup = [0.0] * n
     if pullup_peak_idx is not None:
@@ -40,17 +45,20 @@ def _daily_df(n=30, pullup_peak_idx=10, ctrl_last=0.35,
     if distance_not_min:
         short[-5] = 100.1  # 制造更早的最小距离 0.1 < 末端 0.5
     ctrl = [0.2] * (n - 1) + [ctrl_last]
-    return pd.DataFrame({
-        COLS["pullup"]: pullup,
-        COLS["ctrl"]: ctrl,
-        COLS["short"]: short,
-        COLS["mid"]: mid,
-        COLS["ctrl_low"]: [55.0] * (n - 1) + [60.0],
-        COLS["flow"]: [100.0] * n,
-    })
+    return pd.DataFrame(
+        {
+            COLS["pullup"]: pullup,
+            COLS["ctrl"]: ctrl,
+            COLS["short"]: short,
+            COLS["mid"]: mid,
+            COLS["ctrl_low"]: [55.0] * (n - 1) + [60.0],
+            COLS["flow"]: [100.0] * n,
+        }
+    )
 
 
 # ── Layer 1: 日线买点 (四条件 AND) ──────────────────────────────
+
 
 class TestDailyBuyPoint:
     def test_all_conditions_pass(self, detector):
@@ -98,11 +106,18 @@ class TestDailyBuyPoint:
 
 # ── Layer 2: 日内买点 (六条件 AND) ──────────────────────────────
 
+
 def _intraday_ok(detector, **overrides):
-    kwargs = dict(is_daily_buy_marked=True, current_time="10:30",
-                  advancing_stocks=3000, total_stocks=5000,
-                  flow_net=100.0, ctrl_ratio=0.35,
-                  ctrl_low_today=60.0, ctrl_low_yesterday=55.0)
+    kwargs = dict(
+        is_daily_buy_marked=True,
+        current_time="10:30",
+        advancing_stocks=3000,
+        total_stocks=5000,
+        flow_net=100.0,
+        ctrl_ratio=0.35,
+        ctrl_low_today=60.0,
+        ctrl_low_yesterday=55.0,
+    )
     kwargs.update(overrides)
     return detector.check_intraday_buy_point(**kwargs)
 
@@ -139,8 +154,7 @@ class TestIntradayBuyPoint:
         assert "condition_5_ctrl_ratio" in result["failed_conditions"]
 
     def test_ctrl_low_not_rising(self, detector):
-        result = _intraday_ok(detector, ctrl_low_today=54.0,
-                              ctrl_low_yesterday=55.0)
+        result = _intraday_ok(detector, ctrl_low_today=54.0, ctrl_low_yesterday=55.0)
         assert result["is_intraday_buy"] is False
         assert "condition_6_ctrl_low" in result["failed_conditions"]
 
@@ -149,22 +163,21 @@ class TestIntradayBuyPoint:
 
         ctrl_low 49 > 昨日 40 (红柱升高) 但 < 50 (未过半) → 条件6不通过。
         """
-        result = _intraday_ok(detector, ctrl_low_today=49.0,
-                              ctrl_low_yesterday=40.0)
+        result = _intraday_ok(detector, ctrl_low_today=49.0, ctrl_low_yesterday=40.0)
         assert result["condition_6_ctrl_low"] is False
         assert result["is_intraday_buy"] is False
 
     def test_red_bar_exactly_50_fails(self, detector):
         # 50 不算过半 (> 50 才通过)
-        result = _intraday_ok(detector, ctrl_low_today=50.0,
-                              ctrl_low_yesterday=40.0)
+        result = _intraday_ok(detector, ctrl_low_today=50.0, ctrl_low_yesterday=40.0)
         assert result["condition_6_ctrl_low"] is False
 
 
 # ── Layer 3: 开盘10分钟买入时机 (互斥场景) ──────────────────────
 
+
 def _bars(closes, opens=None, lows=None):
-    n = len(closes)
+    len(closes)
     if opens is None:
         opens = [closes[0]] + closes[:-1]
     if lows is None:
@@ -189,27 +202,33 @@ class TestOpening10min:
 
     def test_scenario_b_second_peak_higher_confirmed(self, detector):
         # 上行: 峰1=10.5, 峰2=10.8 > 峰1, 第二低点 10.4 后回升至 10.6
-        df = _bars([10.0, 10.5, 10.2, 10.8, 10.4, 10.6],
-                   opens=[10.0] * 6,
-                   lows=[9.95, 10.0, 10.1, 10.2, 10.3, 10.35])
+        df = _bars(
+            [10.0, 10.5, 10.2, 10.8, 10.4, 10.6],
+            opens=[10.0] * 6,
+            lows=[9.95, 10.0, 10.1, 10.2, 10.3, 10.35],
+        )
         result = detector.check_opening_10min_buy_timing(df)
         assert result["scenario"] == "B"
         assert result["buy_timing_confirmed"] is True
 
     def test_scenario_b_second_peak_lower_rejected(self, detector):
         # 上行: 峰1=10.8 > 峰2=10.5 → 不满足第二峰更高
-        df = _bars([10.0, 10.8, 10.2, 10.5, 10.4, 10.3],
-                   opens=[10.0] * 6,
-                   lows=[9.95, 10.0, 10.1, 10.2, 10.3, 10.2])
+        df = _bars(
+            [10.0, 10.8, 10.2, 10.5, 10.4, 10.3],
+            opens=[10.0] * 6,
+            lows=[9.95, 10.0, 10.1, 10.2, 10.3, 10.2],
+        )
         result = detector.check_opening_10min_buy_timing(df)
         assert result["scenario"] == "B"
         assert result["buy_timing_confirmed"] is False
 
     def test_scenario_b_no_second_trough_pending(self, detector):
         # 两个峰但第二峰后无低点
-        df = _bars([10.0, 10.5, 10.2, 10.8, 10.9],
-                   opens=[10.0] * 5,
-                   lows=[9.95, 10.0, 10.1, 10.2, 10.75])
+        df = _bars(
+            [10.0, 10.5, 10.2, 10.8, 10.9],
+            opens=[10.0] * 5,
+            lows=[9.95, 10.0, 10.1, 10.2, 10.75],
+        )
         result = detector.check_opening_10min_buy_timing(df)
         assert result["scenario"] == "B"
         assert result["buy_timing_confirmed"] is False
@@ -221,39 +240,42 @@ class TestOpening10min:
 
 # ── detect() 三层综合: 必须全部通过 ─────────────────────────────
 
+
 class TestDetect:
     def _intraday_confirmed(self):
         return _bars([10.0, 9.5, 9.0, 9.2, 9.4], opens=[10.0] * 5)
 
     def test_all_layers_pass(self, detector):
         df = _daily_df()
-        ctx = {"current_time": "10:00", "advancing_stocks": 3000,
-               "total_stocks": 5000}
-        result = detector.detect("600000", ["600000"], df,
-                                 self._intraday_confirmed(), ctx)
+        ctx = {"current_time": "10:00", "advancing_stocks": 3000, "total_stocks": 5000}
+        result = detector.detect(
+            "600000", ["600000"], df, self._intraday_confirmed(), ctx
+        )
         assert result["final_buy_signal"] is True
         assert result["failed_layer"] is None
 
     def test_layer1_failure(self, detector):
         df = _daily_df()
-        result = detector.detect("600000", ["000001"], df,
-                                 self._intraday_confirmed())
+        result = detector.detect("600000", ["000001"], df, self._intraday_confirmed())
         assert result["final_buy_signal"] is False
         assert result["failed_layer"] == 1
 
     def test_layer2_failure(self, detector):
         df = _daily_df()
-        ctx = {"current_time": "10:00", "advancing_stocks": 1000,
-               "total_stocks": 5000}  # 广度 0.2 < 0.6
-        result = detector.detect("600000", ["600000"], df,
-                                 self._intraday_confirmed(), ctx)
+        ctx = {
+            "current_time": "10:00",
+            "advancing_stocks": 1000,
+            "total_stocks": 5000,
+        }  # 广度 0.2 < 0.6
+        result = detector.detect(
+            "600000", ["600000"], df, self._intraday_confirmed(), ctx
+        )
         assert result["final_buy_signal"] is False
         assert result["failed_layer"] == 2
 
     def test_layer3_failure(self, detector):
         df = _daily_df()
-        ctx = {"current_time": "10:00", "advancing_stocks": 3000,
-               "total_stocks": 5000}
+        ctx = {"current_time": "10:00", "advancing_stocks": 3000, "total_stocks": 5000}
         pending = _bars([10.0, 9.5, 9.0], opens=[10.0] * 3)  # 低点在末端
         result = detector.detect("600000", ["600000"], df, pending, ctx)
         assert result["final_buy_signal"] is False

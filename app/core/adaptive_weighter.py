@@ -88,16 +88,15 @@ class AdaptiveWeighter:
         self.config = config or {}
 
         # 右侧预筛选器 (参数可被配置覆盖)
-        rs_cfg = (self.config.get("right_side_filter")
-                  or self.config.get("pre_filter") or {})
+        rs_cfg = (
+            self.config.get("right_side_filter") or self.config.get("pre_filter") or {}
+        )
         self.right_side_filter = RightSideFilter(
             ma_short=int(_resolve(rs_cfg.get("ma_short"), 5)),
             ma_mid=int(_resolve(rs_cfg.get("ma_mid"), 10)),
             ma_long=int(_resolve(rs_cfg.get("ma_long"), 20)),
             min_amount=_resolve(rs_cfg.get("min_amount"), 50_000_000.0),
-            require_market_above_ma20=bool(
-                rs_cfg.get("market_above_ma20", False)
-            ),
+            require_market_above_ma20=bool(rs_cfg.get("market_above_ma20", False)),
         )
 
         # 指标加权器 (复用组定义/归一化/组内打分)
@@ -119,20 +118,20 @@ class AdaptiveWeighter:
         scoring_mix = self.config.get("scoring_mix", {}) or {}
         self.model_weight = _resolve(scoring_mix.get("model_weight"), 0.6)
         # 非上行股票得分折损系数 (ARCH §5.13.7.D)
-        self.non_uptrend_discount = float(
-            self.config.get("non_uptrend_discount", 0.8)
-        )
+        self.non_uptrend_discount = float(self.config.get("non_uptrend_discount", 0.8))
         logger.info("AdaptiveWeighter 初始化: model_weight=%.2f", self.model_weight)
 
     # ── 右侧交易预筛选 ──────────────────────────────────────────────
 
-    def pre_filter_uptrend(self, stock_df: pd.DataFrame,
-                           market_above_ma20: bool = True) -> bool:
+    def pre_filter_uptrend(
+        self, stock_df: pd.DataFrame, market_above_ma20: bool = True
+    ) -> bool:
         """右侧交易预筛选 (委托 RightSideFilter.is_uptrend)."""
         return self.right_side_filter.is_uptrend(stock_df, market_above_ma20)
 
-    def batch_pre_filter(self, all_stocks: Dict[str, pd.DataFrame],
-                         market_above_ma20: bool = True) -> Dict[str, bool]:
+    def batch_pre_filter(
+        self, all_stocks: Dict[str, pd.DataFrame], market_above_ma20: bool = True
+    ) -> Dict[str, bool]:
         """批量预筛选, 返回 {symbol: is_uptrend}."""
         return self.right_side_filter.batch_filter(all_stocks, market_above_ma20)
 
@@ -161,9 +160,9 @@ class AdaptiveWeighter:
             return {k: 0.0 for k in self.base_weights}
         return {k: v / total for k, v in weights.items()}
 
-    def compute_indicator_score(self, factors: dict,
-                                adaptive_weights: Dict[str, float] = None
-                                ) -> float:
+    def compute_indicator_score(
+        self, factors: dict, adaptive_weights: Dict[str, float] = None
+    ) -> float:
         """使用自适应权重计算指标加权得分 (0~1).
 
         Args:
@@ -173,9 +172,13 @@ class AdaptiveWeighter:
         weights = adaptive_weights or self.base_weights
         return self.indicator_weighter._score_with_weights(factors, weights)
 
-    def compute_final_score(self, model_score: float, factors: dict,
-                            is_uptrend: bool,
-                            adaptive_weights: Dict[str, float]) -> dict:
+    def compute_final_score(
+        self,
+        model_score: float,
+        factors: dict,
+        is_uptrend: bool,
+        adaptive_weights: Dict[str, float],
+    ) -> dict:
         """融合模型得分 + 自适应指标得分.
 
         上行股票: final = model_weight×model + (1-model_weight)×indicator。
@@ -200,8 +203,10 @@ class AdaptiveWeighter:
 
         weights = adaptive_weights or self.compute_adaptive_weights(factors)
         indicator_score = self.compute_indicator_score(factors, weights)
-        final = (self.model_weight * model_score
-                 + (1.0 - self.model_weight) * indicator_score)
+        final = (
+            self.model_weight * model_score
+            + (1.0 - self.model_weight) * indicator_score
+        )
         return {
             "final_score": float(np.clip(final, 0.0, 1.0)),
             "model_score": model_score,
@@ -232,12 +237,15 @@ class AdaptiveWeighter:
                 return float(np.nan_to_num(factors[key]))
         # main_force_signal 缺省时由 G1 衰减信号合成
         if factor_name == "main_force_signal":
-            entry = float(np.nan_to_num(
-                factors.get("tech_ths_entry_flag_decay10", 0.0)))
-            pullup = float(np.nan_to_num(
-                factors.get("tech_ths_pullup_flag_decay10", 0.0)))
-            golden = float(np.nan_to_num(
-                factors.get("tech_ths_golden_cross_decay10", 0.0)))
+            entry = float(
+                np.nan_to_num(factors.get("tech_ths_entry_flag_decay10", 0.0))
+            )
+            pullup = float(
+                np.nan_to_num(factors.get("tech_ths_pullup_flag_decay10", 0.0))
+            )
+            golden = float(
+                np.nan_to_num(factors.get("tech_ths_golden_cross_decay10", 0.0))
+            )
             return 0.4 * entry + 0.3 * pullup + 0.3 * golden
         return 0.0
 
@@ -257,11 +265,13 @@ class AdaptiveWeighter:
             value = self._extract_factor(factors, factor_name)
             for group, max_boost, scale in rules:
                 boost = _sigmoid(value * scale)
-                adjustments.append({
-                    "group": group,
-                    "factor": factor_name,
-                    "value": value,
-                    "reason": reason_map[factor_name].format(group=group),
-                    "boost": float(max_boost * boost),
-                })
+                adjustments.append(
+                    {
+                        "group": group,
+                        "factor": factor_name,
+                        "value": value,
+                        "reason": reason_map[factor_name].format(group=group),
+                        "boost": float(max_boost * boost),
+                    }
+                )
         return adjustments

@@ -12,7 +12,7 @@ tech_ths_ctrl_ratio 强制保留在 Top-K (ARCH §5.13.8.A)。
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -96,7 +96,7 @@ class FactorDiscovery:
                     ics.append(self.compute_ic(g.iloc[:, 0], g.iloc[:, 1]))
         else:
             for start in range(0, len(pair), _ICIR_WINDOW):
-                g = pair.iloc[start:start + _ICIR_WINDOW]
+                g = pair.iloc[start : start + _ICIR_WINDOW]
                 if len(g) >= 5:
                     ics.append(self.compute_ic(g.iloc[:, 0], g.iloc[:, 1]))
 
@@ -124,8 +124,7 @@ class FactorDiscovery:
         model.fit(X, y)
         return model
 
-    def _compute_gain(self, X: pd.DataFrame, y: pd.Series,
-                      model=None) -> np.ndarray:
+    def _compute_gain(self, X: pd.DataFrame, y: pd.Series, model=None) -> np.ndarray:
         """LightGBM gain 重要性; 缺失时 GBM feature_importances_ 兜底.
 
         优先级: 传入 model.feature_importances_ → 惰性 lightgbm 训练 →
@@ -139,6 +138,7 @@ class FactorDiscovery:
 
         try:
             import lightgbm as lgb  # noqa: WPS433 (刻意惰性导入)
+
             lgbm = lgb.LGBMRegressor(
                 n_estimators=int(self.config.get("lgbm_n_estimators", 200)),
                 random_state=42,
@@ -149,13 +149,13 @@ class FactorDiscovery:
                 booster.feature_importance(importance_type="gain"), dtype=float
             )
         except ImportError:
-            logger.warning("lightgbm 未安装 — 用 sklearn GBM "
-                           "feature_importances_ 兜底 lgbm_gain")
+            logger.warning(
+                "lightgbm 未安装 — 用 sklearn GBM feature_importances_ 兜底 lgbm_gain"
+            )
             gbm = self._fit_fallback_model(X, y)
             return np.asarray(gbm.feature_importances_, dtype=float)
 
-    def _compute_shap(self, X: pd.DataFrame, y: pd.Series,
-                      model=None) -> np.ndarray:
+    def _compute_shap(self, X: pd.DataFrame, y: pd.Series, model=None) -> np.ndarray:
         """SHAP mean(|shap|); 缺失时 permutation_importance 兜底.
 
         优先级: 惰性 shap.TreeExplainer(model) → sklearn
@@ -163,18 +163,22 @@ class FactorDiscovery:
         """
         try:
             import shap  # noqa: WPS433 (刻意惰性导入)
+
             if model is None:
                 model = self._fit_fallback_model(X, y)
             explainer = shap.TreeExplainer(model)
             shap_values = explainer.shap_values(X)
             return np.abs(np.asarray(shap_values, dtype=float)).mean(axis=0)
         except ImportError:
-            logger.warning("shap 未安装 — 用 sklearn permutation_importance "
-                           "兜底 shap_mean")
+            logger.warning(
+                "shap 未安装 — 用 sklearn permutation_importance 兜底 shap_mean"
+            )
             if model is None or not hasattr(model, "predict"):
                 model = self._fit_fallback_model(X, y)
             perm = permutation_importance(
-                model, X, y,
+                model,
+                X,
+                y,
                 n_repeats=int(self.config.get("perm_n_repeats", 5)),
                 random_state=42,
             )
@@ -184,8 +188,7 @@ class FactorDiscovery:
     #  综合评估
     # ────────────────────────────────────────────────────────────────
 
-    def run(self, X: pd.DataFrame, y: pd.Series,
-            model=None) -> pd.DataFrame:
+    def run(self, X: pd.DataFrame, y: pd.Series, model=None) -> pd.DataFrame:
         """执行因子发现.
 
         Args:
@@ -218,13 +221,15 @@ class FactorDiscovery:
             ic_map[name] = self.compute_ic(X[name], y)
             icir_map[name] = self.compute_icir(X[name], y)
 
-        report = pd.DataFrame({
-            "factor": factor_names,
-            "lgbm_gain": gain,
-            "shap_mean": shap_mean,
-            "ic": [ic_map[n] for n in factor_names],
-            "icir": [icir_map[n] for n in factor_names],
-        })
+        report = pd.DataFrame(
+            {
+                "factor": factor_names,
+                "lgbm_gain": gain,
+                "shap_mean": shap_mean,
+                "ic": [ic_map[n] for n in factor_names],
+                "icir": [icir_map[n] for n in factor_names],
+            }
+        )
 
         report["composite_score"] = (
             W_GAIN * _minmax_norm(report["lgbm_gain"])
@@ -235,8 +240,11 @@ class FactorDiscovery:
         report = report.sort_values("composite_score", ascending=False)
         report["rank"] = np.arange(1, len(report) + 1)
         report = report.reset_index(drop=True)
-        logger.info("因子发现完成: Top-1 = %s (score=%.4f)",
-                    report.iloc[0]["factor"], report.iloc[0]["composite_score"])
+        logger.info(
+            "因子发现完成: Top-1 = %s (score=%.4f)",
+            report.iloc[0]["factor"],
+            report.iloc[0]["composite_score"],
+        )
         return report
 
     def get_top_factors(self, report: pd.DataFrame, top_k: int = 10) -> List[str]:

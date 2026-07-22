@@ -52,7 +52,7 @@ class TradingStateMachine:
             on_stop_all: 可选回调, stop_all 时触发 (如撤销所有待确认委托)。
         """
         self.state = TradingState.STOPPED
-        self.auto_buy_enabled = False   # 自动买开关 (独立)
+        self.auto_buy_enabled = False  # 自动买开关 (独立)
         self.auto_sell_enabled = False  # 自动卖开关 (独立)
         self.on_stop_all = on_stop_all
 

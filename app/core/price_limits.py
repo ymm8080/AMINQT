@@ -14,11 +14,11 @@ from app.core.universe_manager import Universe, classify_symbol
 logger = logging.getLogger(__name__)
 
 # ── 涨跌停幅度常量 (ARCH §4, 可用 config 覆盖) ──────────────────────
-LIMIT_PCT_ST = 0.05        # ST / *ST / 退市整理
-LIMIT_PCT_MAIN = 0.10      # 沪深主板
-LIMIT_PCT_GROWTH = 0.20    # 创业板 + 科创板
+LIMIT_PCT_ST = 0.05  # ST / *ST / 退市整理
+LIMIT_PCT_MAIN = 0.10  # 沪深主板
+LIMIT_PCT_GROWTH = 0.20  # 创业板 + 科创板
 
-_EPS = 1e-9                # 浮点比较容差
+_EPS = 1e-9  # 浮点比较容差
 
 
 def get_limit_pct(symbol: str, universe: Universe, is_st: bool = False) -> float:
@@ -41,8 +41,13 @@ def get_limit_pct(symbol: str, universe: Universe, is_st: bool = False) -> float
     return LIMIT_PCT_MAIN
 
 
-def is_limit_up(symbol: str, current_price: float, prev_close: float,
-                universe: Universe, is_st: bool = False) -> bool:
+def is_limit_up(
+    symbol: str,
+    current_price: float,
+    prev_close: float,
+    universe: Universe,
+    is_st: bool = False,
+) -> bool:
     """判断是否涨停 (买入前检查, 涨停禁止买入).
 
     涨停价 = round(prev_close * (1 + limit_pct), 2);
@@ -66,8 +71,13 @@ def is_limit_up(symbol: str, current_price: float, prev_close: float,
     return current_price >= limit_price - _EPS
 
 
-def is_limit_down(symbol: str, current_price: float, prev_close: float,
-                  universe: Universe, is_st: bool = False) -> bool:
+def is_limit_down(
+    symbol: str,
+    current_price: float,
+    prev_close: float,
+    universe: Universe,
+    is_st: bool = False,
+) -> bool:
     """判断是否跌停 (卖出前检查, 跌停禁止卖出).
 
     跌停价 = round(prev_close * (1 - limit_pct), 2);

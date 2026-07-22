@@ -44,8 +44,7 @@ def _import_akshare():
         import akshare as ak  # noqa: WPS433 (刻意惰性导入)
     except ImportError as exc:
         raise RuntimeError(
-            "akshare 未安装, 无法加载分时数据。"
-            "请先执行: pip install akshare"
+            "akshare 未安装, 无法加载分时数据。请先执行: pip install akshare"
         ) from exc
     return ak
 
@@ -121,8 +120,9 @@ class IntradayLoader:
         safe = symbol.replace("/", "_")
         return os.path.join(self.cache_dir, f"{safe}_{period}min.parquet")
 
-    def load_history_min(self, symbol: str, period: str = "5",
-                         start: str = None, end: str = None) -> pd.DataFrame:
+    def load_history_min(
+        self, symbol: str, period: str = "5", start: str = None, end: str = None
+    ) -> pd.DataFrame:
         """历史分钟线 (akshare stock_zh_a_hist_min_em, Parquet 缓存).
 
         缓存命中时按 start/end 过滤返回; 未命中则拉全量落盘。
@@ -142,10 +142,14 @@ class IntradayLoader:
             df = pd.read_parquet(path)
         else:
             ak = _import_akshare()
-            logger.info("拉取历史分钟线: %s period=%s "
-                        "(akshare stock_zh_a_hist_min_em)", symbol, period)
+            logger.info(
+                "拉取历史分钟线: %s period=%s (akshare stock_zh_a_hist_min_em)",
+                symbol,
+                period,
+            )
             raw = ak.stock_zh_a_hist_min_em(
-                symbol=symbol, period=period,
+                symbol=symbol,
+                period=period,
                 start_date="1979-09-01 09:32:00",
                 end_date="2222-01-01 09:32:00",
                 adjust="qfq",
@@ -158,6 +162,10 @@ class IntradayLoader:
         if start is not None:
             df = df[df["datetime"] >= pd.to_datetime(start)]
         if end is not None:
-            df = df[df["datetime"] <= pd.to_datetime(end) + pd.Timedelta(days=1)
-                    - pd.Timedelta(microseconds=1)]
+            df = df[
+                df["datetime"]
+                <= pd.to_datetime(end)
+                + pd.Timedelta(days=1)
+                - pd.Timedelta(microseconds=1)
+            ]
         return df.reset_index(drop=True)

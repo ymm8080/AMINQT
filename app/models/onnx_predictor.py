@@ -6,7 +6,6 @@
 """
 
 import logging
-from typing import Dict
 
 import numpy as np
 
@@ -37,8 +36,8 @@ class ONNXPredictor:
         """
         raise NotImplementedError("P2 待建")
 
-    def verify_against_snapshot(self, X: np.ndarray,
-                                snapshot_scores: np.ndarray,
-                                tol: float = 1e-4) -> bool:
+    def verify_against_snapshot(
+        self, X: np.ndarray, snapshot_scores: np.ndarray, tol: float = 1e-4
+    ) -> bool:
         """本地二次校验: 推理结果 vs 云端特征快照 (ARCH §2)."""
         raise NotImplementedError("P2 待建")

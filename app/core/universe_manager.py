@@ -16,8 +16,8 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # ── 代码前缀 → Universe 映射 (ARCH §4) ──────────────────────────────
-MAIN_BOARD_PREFIXES = ("60", "00")     # 沪主板 60xxxx + 深主板 00xxxx
-GROWTH_BOARD_PREFIXES = ("30", "68")   # 创业板 30xxxx + 科创板 688xxx
+MAIN_BOARD_PREFIXES = ("60", "00")  # 沪主板 60xxxx + 深主板 00xxxx
+GROWTH_BOARD_PREFIXES = ("30", "68")  # 创业板 30xxxx + 科创板 688xxx
 
 # ── ST / 退市 名称前缀 ───────────────────────────────────────────────
 ST_NAME_PREFIXES = ("ST", "*ST")
@@ -28,8 +28,8 @@ class Universe(Enum):
     """股票池分类."""
 
     ALL = "all"
-    MAIN_BOARD = "main_board"          # 沪深主板, 涨跌停 ±10%
-    GROWTH_BOARDS = "growth_boards"    # 创业板+科创板, 涨跌停 ±20%
+    MAIN_BOARD = "main_board"  # 沪深主板, 涨跌停 ±10%
+    GROWTH_BOARDS = "growth_boards"  # 创业板+科创板, 涨跌停 ±20%
 
 
 def classify_symbol(symbol: str) -> Universe:
@@ -80,8 +80,11 @@ class UniverseManager:
         name_map: 可选, {symbol: 股票名称} 映射 (用于 is_st 判断)。
     """
 
-    def __init__(self, stocks: Optional[List[str]] = None,
-                 name_map: Optional[Dict[str, str]] = None) -> None:
+    def __init__(
+        self,
+        stocks: Optional[List[str]] = None,
+        name_map: Optional[Dict[str, str]] = None,
+    ) -> None:
         self._stocks: List[str] = [str(s).strip() for s in (stocks or [])]
         self._name_map: Dict[str, str] = dict(name_map or {})
 

@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import logging
 
-import pandas as pd
 
 from .capital_feed import CapitalFeed
 from .chip_distribution import ChipFeed
@@ -44,12 +43,15 @@ class CompositeFeed:
         prob_provider: callable(code) -> float, 最新 V3.5 清单 prob_up (P12)
     """
 
-    def __init__(self, yimeng: YimengFeed | None = None,
-                 chip: ChipFeed | None = None,
-                 capital: CapitalFeed | None = None,
-                 zhuli_hist: dict | None = None,
-                 daily_hist: dict | None = None,
-                 prob_provider=None):
+    def __init__(
+        self,
+        yimeng: YimengFeed | None = None,
+        chip: ChipFeed | None = None,
+        capital: CapitalFeed | None = None,
+        zhuli_hist: dict | None = None,
+        daily_hist: dict | None = None,
+        prob_provider=None,
+    ):
         self.yimeng = yimeng
         self.chip = chip
         self.capital = capital
@@ -96,7 +98,7 @@ class CompositeFeed:
 
     def profit_chip_ratio(self, code: str) -> float:
         if self.chip is None:
-            return 100.0    # 保守: 不触发低筹码卖出
+            return 100.0  # 保守: 不触发低筹码卖出
         return self.chip.profit_chip_ratio(code)
 
     def control_signal_A0A(self, code: str) -> bool:

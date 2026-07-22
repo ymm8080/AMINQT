@@ -46,11 +46,16 @@ class IndicatorWeighter:
             "source": "主力筹码指标.docx",
             "weight": 0.30,
             "factors": [
-                "tech_ths_trajectory", "tech_ths_mazl",
-                "tech_ths_entry", "tech_ths_washout",
-                "tech_ths_pullup", "tech_ths_ship",
-                "tech_ths_entry_flag_decay10", "tech_ths_pullup_flag_decay10",
-                "tech_ths_ship_flag_decay10", "tech_ths_golden_cross_decay10",
+                "tech_ths_trajectory",
+                "tech_ths_mazl",
+                "tech_ths_entry",
+                "tech_ths_washout",
+                "tech_ths_pullup",
+                "tech_ths_ship",
+                "tech_ths_entry_flag_decay10",
+                "tech_ths_pullup_flag_decay10",
+                "tech_ths_ship_flag_decay10",
+                "tech_ths_golden_cross_decay10",
             ],
             "signal_factors": [
                 "tech_ths_entry_flag_decay10",
@@ -64,8 +69,10 @@ class IndicatorWeighter:
             "source": "主力筹码控盘程度N.docx",
             "weight": 0.20,
             "factors": [
-                "tech_ths_ctrl_low", "tech_ths_ctrl_mid",
-                "tech_ths_ctrl_high", "tech_ths_ctrl_flag_decay10",
+                "tech_ths_ctrl_low",
+                "tech_ths_ctrl_mid",
+                "tech_ths_ctrl_high",
+                "tech_ths_ctrl_flag_decay10",
             ],
             "signal_factors": ["tech_ths_ctrl_flag_decay10"],
         },
@@ -74,8 +81,10 @@ class IndicatorWeighter:
             "source": "发现牛股.docx",
             "weight": 0.15,
             "factors": [
-                "tech_ths_ema3_dev_ema20", "tech_ths_ema7_dev_ema20",
-                "tech_ths_ema12_dev_ema50", "tech_ths_bull_ss_decay10",
+                "tech_ths_ema3_dev_ema20",
+                "tech_ths_ema7_dev_ema20",
+                "tech_ths_ema12_dev_ema50",
+                "tech_ths_bull_ss_decay10",
             ],
             "signal_factors": ["tech_ths_bull_ss_decay10"],
         },
@@ -84,9 +93,12 @@ class IndicatorWeighter:
             "source": "同花顺益盟趋势顶底新公式.docx",
             "weight": 0.15,
             "factors": [
-                "tech_ths_trend_short", "tech_ths_trend_mid",
-                "tech_ths_trend_long", "tech_ths_trend_top_decay10",
-                "tech_ths_trend_bottom_decay10", "tech_ths_trend_golden_decay10",
+                "tech_ths_trend_short",
+                "tech_ths_trend_mid",
+                "tech_ths_trend_long",
+                "tech_ths_trend_top_decay10",
+                "tech_ths_trend_bottom_decay10",
+                "tech_ths_trend_golden_decay10",
                 "tech_ths_vol_price_divergence",
             ],
             "signal_factors": [
@@ -100,8 +112,10 @@ class IndicatorWeighter:
             "source": "G1-G4通用派生",
             "weight": 0.05,
             "factors": [
-                "tech_ths_vol_ratio", "tech_ths_vwap_dev",
-                "tech_ths_obv_slope", "tech_ths_vol_price_corr",
+                "tech_ths_vol_ratio",
+                "tech_ths_vwap_dev",
+                "tech_ths_obv_slope",
+                "tech_ths_vol_price_corr",
                 "tech_ths_vol_weighted_mtm",
             ],
             "signal_factors": [],
@@ -111,10 +125,14 @@ class IndicatorWeighter:
             "source": "G1扩展",
             "weight": 0.05,
             "factors": [
-                "tech_ths_flow_net", "tech_ths_flow_net_ma5",
-                "tech_ths_flow_net_ma20", "tech_ths_flow_ratio",
-                "tech_ths_flow_accum", "tech_ths_flow_divergence",
-                "tech_ths_flow_strength", "tech_ths_flow_trend",
+                "tech_ths_flow_net",
+                "tech_ths_flow_net_ma5",
+                "tech_ths_flow_net_ma20",
+                "tech_ths_flow_ratio",
+                "tech_ths_flow_accum",
+                "tech_ths_flow_divergence",
+                "tech_ths_flow_strength",
+                "tech_ths_flow_trend",
             ],
             "signal_factors": ["tech_ths_flow_divergence"],
         },
@@ -123,7 +141,8 @@ class IndicatorWeighter:
             "source": "G2扩展",
             "weight": 0.05,
             "factors": [
-                "tech_ths_ctrl_ratio", "tech_ths_ctrl_concentration",
+                "tech_ths_ctrl_ratio",
+                "tech_ths_ctrl_concentration",
                 "tech_ths_ctrl_change",
             ],
             "signal_factors": [],
@@ -133,8 +152,10 @@ class IndicatorWeighter:
             "source": "G2扩展",
             "weight": 0.05,
             "factors": [
-                "tech_ths_chip_profit_ratio", "tech_ths_chip_concentration_20",
-                "tech_ths_chip_cost_skew", "tech_ths_chip_low_high_ratio",
+                "tech_ths_chip_profit_ratio",
+                "tech_ths_chip_concentration_20",
+                "tech_ths_chip_cost_skew",
+                "tech_ths_chip_low_high_ratio",
             ],
             "signal_factors": [],
         },
@@ -171,16 +192,12 @@ class IndicatorWeighter:
         self.factor_weight_overrides: Dict[str, Dict[str, float]] = {}
         for key, val in cfg_groups.items():
             if isinstance(val, dict) and "factor_weights_override" in val:
-                self.factor_weight_overrides[key] = dict(
-                    val["factor_weights_override"]
-                )
+                self.factor_weight_overrides[key] = dict(val["factor_weights_override"])
 
         scoring_mix = self.config.get("scoring_mix", {}) or {}
         self.model_weight = _resolve(scoring_mix.get("model_weight"), 0.6)
         trading_mix = self.config.get("trading_mix", {}) or {}
-        self.trading_model_weight = _resolve(
-            trading_mix.get("model_weight"), 0.6
-        )
+        self.trading_model_weight = _resolve(trading_mix.get("model_weight"), 0.6)
         factor_influence = self.config.get("factor_influence", {}) or {}
         self.ths_boost = _resolve(factor_influence.get("ths_boost"), 3.6)
         self.signal_threshold = float(self.config.get("signal_threshold", 0.3))
@@ -192,8 +209,11 @@ class IndicatorWeighter:
                 self.group_weights = {
                     k: v / total for k, v in self.group_weights.items()
                 }
-        logger.info("IndicatorWeighter 初始化: model_weight=%.2f "
-                    "ths_boost=%.2f", self.model_weight, self.ths_boost)
+        logger.info(
+            "IndicatorWeighter 初始化: model_weight=%.2f ths_boost=%.2f",
+            self.model_weight,
+            self.ths_boost,
+        )
 
     # ── Layer 1: 选股评分加权 ───────────────────────────────────────
 
@@ -212,8 +232,10 @@ class IndicatorWeighter:
                     + (1 - model_weight) × indicator_score。
         """
         indicator_score = self.compute_indicator_score(factors)
-        final = (self.model_weight * float(model_score)
-                 + (1.0 - self.model_weight) * indicator_score)
+        final = (
+            self.model_weight * float(model_score)
+            + (1.0 - self.model_weight) * indicator_score
+        )
         return float(np.clip(np.nan_to_num(final), 0.0, 1.0))
 
     # ── Layer 2: 模型训练特征加权 ───────────────────────────────────
@@ -229,8 +251,7 @@ class IndicatorWeighter:
         """
         ths_set = set(THS_FACTOR_COLUMNS)
         raw = np.array(
-            [self.ths_boost if name in ths_set else 1.0
-             for name in all_factor_names],
+            [self.ths_boost if name in ths_set else 1.0 for name in all_factor_names],
             dtype=float,
         )
         mean = raw.mean() if raw.size else 1.0
@@ -251,8 +272,7 @@ class IndicatorWeighter:
         X = np.asarray(X, dtype=float)
         if X.shape[-1] != len(weights):
             raise ValueError(
-                f"特征维度 {X.shape[-1]} 与 factor_names 长度 "
-                f"{len(weights)} 不一致"
+                f"特征维度 {X.shape[-1]} 与 factor_names 长度 {len(weights)} 不一致"
             )
         return np.nan_to_num(X * weights, nan=0.0)
 
@@ -308,8 +328,15 @@ class IndicatorWeighter:
 
         # 强度 = 触发侧衰减信号最大值
         if signal == "buy":
-            strength = max(entry, pullup, golden_cross, ctrl_flag,
-                           bull_ss, trend_bottom, trend_golden)
+            strength = max(
+                entry,
+                pullup,
+                golden_cross,
+                ctrl_flag,
+                bull_ss,
+                trend_bottom,
+                trend_golden,
+            )
         elif signal == "sell":
             strength = max(ship, trend_top)
         else:
@@ -317,9 +344,12 @@ class IndicatorWeighter:
         strength = float(np.clip(strength, 0.0, 1.0))
 
         group_of_flag = {
-            "main_entry": "G1_main_force_chip", "pullup": "G1_main_force_chip",
-            "ship": "G1_main_force_chip", "ctrl": "G2_chip_control",
-            "bull_ss": "G3_bull_finder", "bottom": "G4_trend_top_bottom",
+            "main_entry": "G1_main_force_chip",
+            "pullup": "G1_main_force_chip",
+            "ship": "G1_main_force_chip",
+            "ctrl": "G2_chip_control",
+            "bull_ss": "G3_bull_finder",
+            "bottom": "G4_trend_top_bottom",
             "top": "G4_trend_top_bottom",
         }
         triggered = sorted({group_of_flag[f] for f, on in flags.items() if on})
@@ -332,24 +362,32 @@ class IndicatorWeighter:
             "triggered_groups": triggered,
             "details": {
                 "G1_main_force_chip": {
-                    "signal": "sell" if flags["ship"] else (
-                        "buy" if flags["main_entry"] or flags["pullup"] else "hold"
-                    ),
-                    "factors": {"entry": entry, "pullup": pullup,
-                                "ship": ship, "golden_cross": golden_cross},
+                    "signal": "sell"
+                    if flags["ship"]
+                    else ("buy" if flags["main_entry"] or flags["pullup"] else "hold"),
+                    "factors": {
+                        "entry": entry,
+                        "pullup": pullup,
+                        "ship": ship,
+                        "golden_cross": golden_cross,
+                    },
                 },
                 "G4_trend_top_bottom": {
-                    "signal": "sell" if flags["top"] else (
-                        "buy" if flags["bottom"] else "hold"
-                    ),
-                    "factors": {"top": trend_top, "bottom": trend_bottom,
-                                "golden": trend_golden},
+                    "signal": "sell"
+                    if flags["top"]
+                    else ("buy" if flags["bottom"] else "hold"),
+                    "factors": {
+                        "top": trend_top,
+                        "bottom": trend_bottom,
+                        "golden": trend_golden,
+                    },
                 },
             },
         }
 
-    def boost_trading_signal(self, model_signal: int, model_strength: float,
-                             factors: dict) -> dict:
+    def boost_trading_signal(
+        self, model_signal: int, model_strength: float, factors: dict
+    ) -> dict:
         """Layer 3: 核心信号触发时增强交易信号.
 
         融合规则 (ARCH §5.13.3):
@@ -415,8 +453,7 @@ class IndicatorWeighter:
             作用于 G2/E3 组权重, 归一化前叠加。
         """
         max_boost = _resolve(
-            (self.config.get("ctrl_ratio", {}) or {})
-            .get("ma5_rising_max_boost"), 0.20
+            (self.config.get("ctrl_ratio", {}) or {}).get("ma5_rising_max_boost"), 0.20
         )
         if ctrl_ratio_series is None or len(ctrl_ratio_series) < 5:
             return 0.0
@@ -438,14 +475,16 @@ class IndicatorWeighter:
         for key, grp in self.INDICATOR_GROUPS.items():
             weight = self.group_weights[key]
             n = len(grp["factors"])
-            rows.append({
-                "group": key,
-                "name": grp["name"],
-                "source": grp["source"],
-                "weight": weight,
-                "num_factors": n,
-                "factor_weight": weight / n if n else 0.0,
-            })
+            rows.append(
+                {
+                    "group": key,
+                    "name": grp["name"],
+                    "source": grp["source"],
+                    "weight": weight,
+                    "num_factors": n,
+                    "factor_weight": weight / n if n else 0.0,
+                }
+            )
         return pd.DataFrame(rows)
 
     def validate_weights(self) -> bool:
@@ -468,16 +507,21 @@ class IndicatorWeighter:
 
         if "decay10" in name:
             return float(np.clip(v, 0.0, 1.0))
-        if name in ("tech_ths_trend_short", "tech_ths_trend_mid",
-                    "tech_ths_trend_long"):
+        if name in (
+            "tech_ths_trend_short",
+            "tech_ths_trend_mid",
+            "tech_ths_trend_long",
+        ):
             return float(np.clip(v / 200.0, 0.0, 1.0))
-        if name in ("tech_ths_ctrl_low", "tech_ths_ctrl_mid",
-                    "tech_ths_ctrl_high"):
+        if name in ("tech_ths_ctrl_low", "tech_ths_ctrl_mid", "tech_ths_ctrl_high"):
             return float(np.clip(v / 100.0, 0.0, 1.0))
-        if name in ("tech_ths_ctrl_ratio", "tech_ths_ctrl_concentration",
-                    "tech_ths_chip_profit_ratio",
-                    "tech_ths_chip_concentration_20",
-                    "tech_ths_chip_cost_skew"):
+        if name in (
+            "tech_ths_ctrl_ratio",
+            "tech_ths_ctrl_concentration",
+            "tech_ths_chip_profit_ratio",
+            "tech_ths_chip_concentration_20",
+            "tech_ths_chip_cost_skew",
+        ):
             return float(np.clip(v, 0.0, 1.0))
         if name in ("tech_ths_trajectory", "tech_ths_mazl"):
             return float(np.clip((v + 100.0) / 200.0, 0.0, 1.0))
@@ -486,8 +530,9 @@ class IndicatorWeighter:
 
     # ── 内部: 分组打分 ──────────────────────────────────────────────
 
-    def _score_with_weights(self, factors: dict,
-                            group_weights: Dict[str, float]) -> float:
+    def _score_with_weights(
+        self, factors: dict, group_weights: Dict[str, float]
+    ) -> float:
         """按给定组权重计算指标加权得分 (0~1), 缺失组重归一化."""
         total_score = 0.0
         total_weight = 0.0
@@ -506,13 +551,12 @@ class IndicatorWeighter:
             else:
                 fw = np.ones(len(present))
             fw = fw / fw.sum()
-            norm_vals = np.array([
-                self.normalize_factor(factors[f], f) for f in present
-            ])
+            norm_vals = np.array(
+                [self.normalize_factor(factors[f], f) for f in present]
+            )
             group_score = float(np.dot(fw, norm_vals))
             total_score += weight * group_score
             total_weight += weight
         if total_weight <= 0:
             return 0.0
-        return float(np.clip(np.nan_to_num(total_score / total_weight),
-                             0.0, 1.0))
+        return float(np.clip(np.nan_to_num(total_score / total_weight), 0.0, 1.0))

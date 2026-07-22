@@ -3,51 +3,98 @@
 
 from __future__ import annotations
 
-import pytest
 
 from app.rules.config import Config, TUNABLE_BOUNDS, board_of, price_limit
 from app.rules.peak_tracker import PeakTracker
-from app.rules.rule_engine import (Action, BuyShape, Candidate, PortfolioState,
-                                   Position, RuleEngine, Tick)
+from app.rules.rule_engine import (
+    Action,
+    Candidate,
+    PortfolioState,
+    Position,
+    RuleEngine,
+    Tick,
+)
 
 
 class MockFeed:
     """Mock IndicatorFeed (协议注入测试)."""
+
     def __init__(self, data: dict):
         self.d = data
 
     def _get(self, code, key, default):
         return self.d.get(code, {}).get(key, default)
 
-    def control_ratio(self, code): return self._get(code, "control", 35.0)
-    def had_accumulation_peak(self, code, lookback): return self._get(code, "acc_peak", True)
-    def red_above_blue_since_peak(self, code): return self._get(code, "red_above", True)
-    def red_blue_distance_min(self, code): return self._get(code, "rb_min", True)
-    def control_weekly_up(self, code): return self._get(code, "wk_up", True)
-    def bottom_breakout_volume(self, code): return self._get(code, "brk", False)
-    def recent_shadow_lines(self, code): return self._get(code, "shadow", False)
-    def red_bar_rising_and_majority(self, code): return self._get(code, "red_bar", True)
-    def profit_chip_ratio(self, code): return self._get(code, "chip", 55.0)
-    def latest_prob_up(self, code): return self._get(code, "prob", 0.60)
+    def control_ratio(self, code):
+        return self._get(code, "control", 35.0)
+
+    def had_accumulation_peak(self, code, lookback):
+        return self._get(code, "acc_peak", True)
+
+    def red_above_blue_since_peak(self, code):
+        return self._get(code, "red_above", True)
+
+    def red_blue_distance_min(self, code):
+        return self._get(code, "rb_min", True)
+
+    def control_weekly_up(self, code):
+        return self._get(code, "wk_up", True)
+
+    def bottom_breakout_volume(self, code):
+        return self._get(code, "brk", False)
+
+    def recent_shadow_lines(self, code):
+        return self._get(code, "shadow", False)
+
+    def red_bar_rising_and_majority(self, code):
+        return self._get(code, "red_bar", True)
+
+    def profit_chip_ratio(self, code):
+        return self._get(code, "chip", 55.0)
+
+    def latest_prob_up(self, code):
+        return self._get(code, "prob", 0.60)
 
 
 def make_engine():
-    feed = MockFeed({
-        "600519": {"control": 42, "acc_peak": True, "red_above": True, "rb_min": True},
-        "300750": {"control": 25, "wk_up": True, "rb_min": False},
-        "601318": {"control": 38, "rb_min": True, "chip": 35},
-    })
+    feed = MockFeed(
+        {
+            "600519": {
+                "control": 42,
+                "acc_peak": True,
+                "red_above": True,
+                "rb_min": True,
+            },
+            "300750": {"control": 25, "wk_up": True, "rb_min": False},
+            "601318": {"control": 38, "rb_min": True, "chip": 35},
+        }
+    )
     return RuleEngine(feed), feed
 
 
 def make_candidates():
     return [
-        Candidate("600519", "白酒", 0.03, 0.60, max_daily_gain_10d=9.0,
-                  turnover_today=12, daily_closes=[100, 101, 99, 102, 103]),
-        Candidate("300750", "电池", 0.025, 0.58, max_daily_gain_10d=3.0,
-                  turnover_today=20, daily_closes=[50] * 5),
-        Candidate("601318", "保险", 0.02, 0.57, turnover_today=55,
-                  daily_closes=[40] * 5),
+        Candidate(
+            "600519",
+            "白酒",
+            0.03,
+            0.60,
+            max_daily_gain_10d=9.0,
+            turnover_today=12,
+            daily_closes=[100, 101, 99, 102, 103],
+        ),
+        Candidate(
+            "300750",
+            "电池",
+            0.025,
+            0.58,
+            max_daily_gain_10d=3.0,
+            turnover_today=20,
+            daily_closes=[50] * 5,
+        ),
+        Candidate(
+            "601318", "保险", 0.02, 0.57, turnover_today=55, daily_closes=[40] * 5
+        ),
     ]
 
 
@@ -78,19 +125,25 @@ class TestAfterClose:
         """收盘低于4日前 → 日线卖出标记 (次日执行)."""
         eng, _ = make_engine()
         pf = PortfolioState(cash=1e6, nav=1e6, peak_nav=1e6)
-        pf.positions["601318"] = Position("601318", "保险", cost=40.0, weight=0.10, buy_day=0)
+        pf.positions["601318"] = Position(
+            "601318", "保险", cost=40.0, weight=0.10, buy_day=0
+        )
         cands = make_candidates()
-        cands[2].daily_closes = [44, 43, 42, 41, 40]   # 40 < 44
+        cands[2].daily_closes = [44, 43, 42, 41, 40]  # 40 < 44
         r = eng.after_close(1, cands, pf)
-        assert any(o.code == "601318" and "收盘低于4日前" in o.reason
-                   for o in r["daily_sell_marks"])
+        assert any(
+            o.code == "601318" and "收盘低于4日前" in o.reason
+            for o in r["daily_sell_marks"]
+        )
 
     def test_prob_decay_mark_p12(self):
         """P12 双保险: 盘后 prob < 0.50 → 日线卖出标记."""
         eng, feed = make_engine()
         feed.d["601318"] = {"chip": 55, "prob": 0.45}
         pf = PortfolioState(cash=1e6, nav=1e6, peak_nav=1e6)
-        pf.positions["601318"] = Position("601318", "保险", cost=40.0, weight=0.10, buy_day=0)
+        pf.positions["601318"] = Position(
+            "601318", "保险", cost=40.0, weight=0.10, buy_day=0
+        )
         r = eng.after_close(1, make_candidates(), pf)
         assert any("概率衰减" in o.reason for o in r["daily_sell_marks"])
 
@@ -99,8 +152,11 @@ class TestAuction:
     def test_p2_gap_sell(self):
         eng, _ = make_engine()
         pf = PortfolioState(cash=1e6, nav=1e6, peak_nav=1e6)
-        pf.positions["601318"] = Position("601318", "保险", cost=40.0, weight=0.10, buy_day=0)
+        pf.positions["601318"] = Position(
+            "601318", "保险", cost=40.0, weight=0.10, buy_day=0
+        )
         from app.rules.rule_engine import Order
+
         marks = [Order(1, "AFTER_CLOSE", "601318", Action.SELL_ALL, priority="P9")]
         orders = eng.on_auction(2, pf, {"601318": 42.4}, {"601318": 40.0}, marks)
         assert len(orders) == 1 and orders[0].priority == "P2"
@@ -111,12 +167,12 @@ class TestPeakTracker:
     def test_right_side_confirmation(self):
         """峰需回落0.8%×2根才确认; 无确认前不进 confirmed_peaks (因果性)."""
         tr = PeakTracker(Config())
-        for px in [100, 101, 102]:           # 上升, 候选峰=102
+        for px in [100, 101, 102]:  # 上升, 候选峰=102
             tr.update(px)
-        assert tr.confirmed_peaks == []       # 无回落 → 未确认
-        tr.update(102 * (1 - 0.009))          # 回落0.9% 第1根
+        assert tr.confirmed_peaks == []  # 无回落 → 未确认
+        tr.update(102 * (1 - 0.009))  # 回落0.9% 第1根
         assert tr.confirmed_peaks == []
-        tr.update(102 * (1 - 0.010))          # 持续第2根 → 确认
+        tr.update(102 * (1 - 0.010))  # 持续第2根 → 确认
         assert tr.confirmed_peaks == [102]
 
     def test_three_peaks_descending(self):
@@ -130,8 +186,9 @@ class TestPeakTracker:
 class TestSellStateMachine:
     def _pf_with_pos(self, sellable=True):
         pf = PortfolioState(cash=1e6, nav=1e6, peak_nav=1e6)
-        pf.positions["600519"] = Position("600519", "白酒", cost=100.0, weight=0.10,
-                                          buy_day=1, sellable=sellable)
+        pf.positions["600519"] = Position(
+            "600519", "白酒", cost=100.0, weight=0.10, buy_day=1, sellable=sellable
+        )
         return pf
 
     def _tick(self, price, time="10:00", volume=1.0, turnover=10):
@@ -157,7 +214,7 @@ class TestSellStateMachine:
     def test_p11_trailing_stop(self):
         """P11 移动止盈: 冲高108回落至103 (回撤≥4% 且曾盈利) → SELL_ALL."""
         eng, feed = make_engine()
-        feed.d["600519"]["prob"] = 0.60     # P12 不抢跑
+        feed.d["600519"]["prob"] = 0.60  # P12 不抢跑
         pf = self._pf_with_pos()
         pf.positions["600519"].high_since_buy = 108.0
         out = eng.on_tick(2, self._tick(103.0), [], pf, {"600519": 100.0}, 0.5, [])
@@ -169,7 +226,7 @@ class TestSellStateMachine:
         eng, feed = make_engine()
         feed.d["600519"]["prob"] = 0.60
         pf = self._pf_with_pos()
-        pf.positions["600519"].high_since_buy = 99.0   # 成本 100
+        pf.positions["600519"].high_since_buy = 99.0  # 成本 100
         out = eng.on_tick(2, self._tick(97.0), [], pf, {"600519": 100.0}, 0.5, [])
         assert not any(o.priority == "P11" for o in out)
 
@@ -242,7 +299,17 @@ class TestBuyPath:
         c = Candidate("600519", "白酒", 0.03, 0.60)
         c.flag_daily_buy = True
         seq = [100.0, 99.6, 99.0, 98.4, 98.2, 98.3, 98.9, 99.4, 99.8]
-        times = ["09:32", "09:34", "09:36", "09:38", "09:40", "09:42", "09:44", "09:46", "09:48"]
+        times = [
+            "09:32",
+            "09:34",
+            "09:36",
+            "09:38",
+            "09:40",
+            "09:42",
+            "09:44",
+            "09:46",
+            "09:48",
+        ]
         buys = []
         for t, px in zip(times, seq):
             ticks = {"600519": Tick(t, px, volume=1.6, turnover=8, big_order_net=5e6)}
@@ -257,12 +324,12 @@ class TestPortfolioGate:
         pf = PortfolioState(cash=1e6, nav=1e6, peak_nav=1e6, cooldown_left=2)
         assert eng.portfolio_gate(pf)[0] == 0.0
         pf.cooldown_left = 0
-        pf.nav, pf.peak_nav = 0.89e6, 1e6        # 回撤 -11%
+        pf.nav, pf.peak_nav = 0.89e6, 1e6  # 回撤 -11%
         assert eng.portfolio_gate(pf)[0] == 0.0
-        pf.nav = 0.94e6                           # 回撤 -6%
+        pf.nav = 0.94e6  # 回撤 -6%
         assert eng.portfolio_gate(pf)[0] == 0.60
         pf.nav = 1e6
-        pf.today_pnl_pct = -0.025                 # 浮亏熔断
+        pf.today_pnl_pct = -0.025  # 浮亏熔断
         assert eng.portfolio_gate(pf)[0] == 0.0
         pf.today_pnl_pct = 0.0
         assert eng.portfolio_gate(pf)[0] == 0.95

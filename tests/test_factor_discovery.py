@@ -25,13 +25,16 @@ def dataset():
     dates = pd.bdate_range("2025-07-01", periods=n)
     signal = rng.normal(0, 1, n)
     y = pd.Series(0.8 * signal + 0.2 * rng.normal(0, 1, n), index=dates)
-    X = pd.DataFrame({
-        "f_good": signal + 0.05 * rng.normal(0, 1, n),
-        "f_noise1": rng.normal(0, 1, n),
-        "f_noise2": rng.normal(0, 1, n),
-        "f_noise3": rng.normal(0, 1, n),
-        "tech_ths_ctrl_ratio": rng.normal(0, 1, n),  # 弱因子, 测试强制保留
-    }, index=dates)
+    X = pd.DataFrame(
+        {
+            "f_good": signal + 0.05 * rng.normal(0, 1, n),
+            "f_noise1": rng.normal(0, 1, n),
+            "f_noise2": rng.normal(0, 1, n),
+            "f_noise3": rng.normal(0, 1, n),
+            "tech_ths_ctrl_ratio": rng.normal(0, 1, n),  # 弱因子, 测试强制保留
+        },
+        index=dates,
+    )
     return X, y
 
 
@@ -56,8 +59,7 @@ class TestIC:
 
     def test_too_few_samples(self):
         fd = FactorDiscovery()
-        assert fd.compute_ic(pd.Series([1.0, 2.0]),
-                             pd.Series([1.0, 2.0])) == 0.0
+        assert fd.compute_ic(pd.Series([1.0, 2.0]), pd.Series([1.0, 2.0])) == 0.0
 
     def test_known_signal_highest_ic(self, dataset):
         X, y = dataset
@@ -89,23 +91,29 @@ class TestRun:
         fd = FactorDiscovery()
         report = fd.run(X, y)
         assert list(report.columns) == [
-            "factor", "lgbm_gain", "shap_mean", "ic", "icir",
-            "composite_score", "rank",
+            "factor",
+            "lgbm_gain",
+            "shap_mean",
+            "ic",
+            "icir",
+            "composite_score",
+            "rank",
         ]
         assert len(report) == X.shape[1]
         # 按 composite_score 降序, rank 从 1 连续
         assert report["composite_score"].is_monotonic_decreasing
         assert list(report["rank"]) == list(range(1, len(report) + 1))
-        assert np.isfinite(report[["lgbm_gain", "shap_mean", "ic", "icir",
-                                   "composite_score"]].to_numpy()).all()
+        assert np.isfinite(
+            report[
+                ["lgbm_gain", "shap_mean", "ic", "icir", "composite_score"]
+            ].to_numpy()
+        ).all()
 
     def test_good_factor_ranks_top(self, dataset):
         X, y = dataset
         report = FactorDiscovery().run(X, y)
         row = report.set_index("factor").loc["f_good"]
-        assert row["ic"] == pytest.approx(
-            report["ic"].max(), rel=1e-9
-        )
+        assert row["ic"] == pytest.approx(report["ic"].max(), rel=1e-9)
         # 强信号因子应进 Top-2
         assert row["rank"] <= 2
 

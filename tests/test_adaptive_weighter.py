@@ -10,21 +10,24 @@ from app.core.indicator_weighter import IndicatorWeighter
 from app.core.ths_indicators import THS_FACTOR_COLUMNS
 
 
-def _make_trend_df(n: int = 60, slope: float = 0.1,
-                   amount: float = 1e8) -> pd.DataFrame:
+def _make_trend_df(
+    n: int = 60, slope: float = 0.1, amount: float = 1e8
+) -> pd.DataFrame:
     """构造已知趋势的合成日线."""
     rng = np.random.default_rng(7)
     t = np.arange(n)
     close = 10.0 + slope * t + rng.normal(0.0, 0.005, n)
     close = np.maximum(close, 0.5)
-    return pd.DataFrame({
-        "open": close,
-        "high": close * 1.01,
-        "low": close * 0.99,
-        "close": close,
-        "volume": amount / close,
-        "amount": np.full(n, amount),
-    })
+    return pd.DataFrame(
+        {
+            "open": close,
+            "high": close * 1.01,
+            "low": close * 0.99,
+            "close": close,
+            "volume": amount / close,
+            "amount": np.full(n, amount),
+        }
+    )
 
 
 def _neutral_factors() -> dict:
@@ -50,12 +53,14 @@ class TestPreFilter:
         assert result == {"UP": True, "DOWN": False}
 
     def test_pre_filter_params_from_config(self):
-        w = AdaptiveWeighter({
-            "right_side_filter": {
-                "ma_long": {"initial": 15},
-                "min_amount": {"initial": 20000000},
+        w = AdaptiveWeighter(
+            {
+                "right_side_filter": {
+                    "ma_long": {"initial": 15},
+                    "min_amount": {"initial": 20000000},
+                }
             }
-        })
+        )
         assert w.right_side_filter.ma_long == 15
         assert w.right_side_filter.min_amount == pytest.approx(2e7)
 
@@ -109,8 +114,11 @@ class TestFinalScore:
     def test_non_uptrend_fallback(self, weighter):
         """非上行: final_score = model_score * 0.8, 指标得分=0."""
         result = weighter.compute_final_score(
-            model_score=0.7, factors=_neutral_factors(),
-            is_uptrend=False, adaptive_weights=None)
+            model_score=0.7,
+            factors=_neutral_factors(),
+            is_uptrend=False,
+            adaptive_weights=None,
+        )
         assert result["final_score"] == pytest.approx(0.7 * 0.8)
         assert result["indicator_score"] == 0.0
         assert result["is_uptrend"] is False
@@ -120,8 +128,8 @@ class TestFinalScore:
     def test_uptrend_mix(self, weighter):
         factors = _neutral_factors()
         result = weighter.compute_final_score(
-            model_score=0.7, factors=factors,
-            is_uptrend=True, adaptive_weights=None)
+            model_score=0.7, factors=factors, is_uptrend=True, adaptive_weights=None
+        )
         expected = 0.6 * 0.7 + 0.4 * result["indicator_score"]
         assert result["final_score"] == pytest.approx(expected)
         assert result["is_uptrend"] is True
@@ -131,12 +139,14 @@ class TestFinalScore:
         factors = _neutral_factors()
         weights = weighter.compute_adaptive_weights(factors)
         result = weighter.compute_final_score(
-            0.7, factors, is_uptrend=True, adaptive_weights=weights)
+            0.7, factors, is_uptrend=True, adaptive_weights=weights
+        )
         assert result["adaptive_weights"] == weights
 
     def test_final_score_bounds(self, weighter):
         result = weighter.compute_final_score(
-            1.5, _neutral_factors(), is_uptrend=True, adaptive_weights=None)
+            1.5, _neutral_factors(), is_uptrend=True, adaptive_weights=None
+        )
         assert 0.0 <= result["final_score"] <= 1.0
 
 
@@ -154,9 +164,11 @@ class TestExplainWeights:
         factors = _neutral_factors()
         factors["trend_strength"] = 3.0
         report = weighter.explain_weights(factors)
-        g3_adj = [a for a in report["adjustments"]
-                  if a["group"] == "G3_bull_finder"
-                  and a["factor"] == "trend_strength"]
+        g3_adj = [
+            a
+            for a in report["adjustments"]
+            if a["group"] == "G3_bull_finder" and a["factor"] == "trend_strength"
+        ]
         assert len(g3_adj) == 1
         assert g3_adj[0]["boost"] > 0.2  # sigmoid(3)*0.5 ≈ 0.476
 
@@ -165,7 +177,9 @@ class TestExplainWeights:
         factors = _neutral_factors()
         factors["trend_strength"] = 3.0
         report = w.explain_weights(factors)
-        g3_adj = [a for a in report["adjustments"]
-                  if a["group"] == "G3_bull_finder"
-                  and a["factor"] == "trend_strength"]
+        g3_adj = [
+            a
+            for a in report["adjustments"]
+            if a["group"] == "G3_bull_finder" and a["factor"] == "trend_strength"
+        ]
         assert g3_adj[0]["boost"] == pytest.approx(0.9 * (1 / (1 + np.exp(-3))))

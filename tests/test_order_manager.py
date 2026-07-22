@@ -15,8 +15,7 @@ class FakeExecutor:
 
     def execute(self, order):
         self.placed.append(order)
-        return {"mode": "auto", "executed": True,
-                "result": {"status": "filled"}}
+        return {"mode": "auto", "executed": True, "result": {"status": "filled"}}
 
     def get_positions(self):
         return self.positions
@@ -76,9 +75,11 @@ class TestSubmitConfirmFlow:
         assert om._orders[oid]["status"] is OrderStatus.SUBMITTED
 
     def test_batch_confirm(self, om, executor):
-        ids = [om.submit("600519", "buy", 1685.0, 100),
-               om.submit("000001", "buy", 12.0, 200),
-               om.submit("300750", "buy", 180.0, 100)]
+        ids = [
+            om.submit("600519", "buy", 1685.0, 100),
+            om.submit("000001", "buy", 12.0, 200),
+            om.submit("300750", "buy", 180.0, 100),
+        ]
         ok = om.batch_confirm([ids[0], ids[1], "bad-id"])
         assert ok == 2
         assert len(executor.placed) == 2

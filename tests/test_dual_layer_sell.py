@@ -17,7 +17,7 @@ def _daily(closes):
 
 
 def _intraday(closes, opens=None):
-    n = len(closes)
+    len(closes)
     if opens is None:
         opens = [closes[0]] + closes[:-1]
     return pd.DataFrame({"open": opens, "close": closes})
@@ -25,31 +25,29 @@ def _intraday(closes, opens=None):
 
 # ── Layer 1: 日线收盘跌破 (两点比较) ─────────────────────────────
 
+
 class TestDailyCloseBreak:
     def test_break_triggered(self, detector):
         # 今日 9 < 4日前 10 → 触发
-        assert detector.check_daily_close_break(
-            _daily([10, 11, 12, 13, 9])) is True
+        assert detector.check_daily_close_break(_daily([10, 11, 12, 13, 9])) is True
 
     def test_no_break_when_higher(self, detector):
-        assert detector.check_daily_close_break(
-            _daily([10, 11, 12, 13, 12])) is False
+        assert detector.check_daily_close_break(_daily([10, 11, 12, 13, 12])) is False
 
     def test_two_point_compare_middle_dip_irrelevant(self, detector):
         # 中间几日暴跌不影响: 只要今日 < 4日前即触发
-        assert detector.check_daily_close_break(
-            _daily([10, 5, 5, 5, 9])) is True
+        assert detector.check_daily_close_break(_daily([10, 5, 5, 5, 9])) is True
 
     def test_two_point_compare_middle_surge_irrelevant(self, detector):
         # 中间几日暴涨也不影响: 今日 12 > 4日前 10 → 不触发
-        assert detector.check_daily_close_break(
-            _daily([10, 15, 15, 15, 12])) is False
+        assert detector.check_daily_close_break(_daily([10, 15, 15, 15, 12])) is False
 
     def test_insufficient_data(self, detector):
         assert detector.check_daily_close_break(_daily([10, 11])) is False
 
 
 # ── 场景 A: 三峰连续下降 ────────────────────────────────────────
+
 
 class TestThreePeaksDecline:
     def test_three_declining_peaks(self, detector):
@@ -70,11 +68,14 @@ class TestThreePeaksDecline:
         assert detector.check_three_peaks_decline(df)["is_signal"] is False
 
     def test_insufficient_bars(self, detector):
-        assert detector.check_three_peaks_decline(
-            _intraday([10, 11, 10]))["is_signal"] is False
+        assert (
+            detector.check_three_peaks_decline(_intraday([10, 11, 10]))["is_signal"]
+            is False
+        )
 
 
 # ── 场景 B: 日内急跌 ────────────────────────────────────────────
+
 
 class TestIntradayCrash:
     def test_crash_triggered(self, detector):
@@ -91,6 +92,7 @@ class TestIntradayCrash:
 
 
 # ── detect() 双层综合 ───────────────────────────────────────────
+
 
 class TestDetect:
     def test_crash_priority_over_peaks(self, detector):

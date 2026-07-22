@@ -9,7 +9,7 @@ import copy
 import json
 import logging
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import numpy as np
 import yaml
@@ -18,11 +18,13 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "config", "adaptive_config.yaml",
+    "config",
+    "adaptive_config.yaml",
 )
 DEFAULT_STATE_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "adaptive_state.json",
+    "data",
+    "adaptive_state.json",
 )
 
 # 单次调整步长占边界区间宽度的比例
@@ -42,8 +44,11 @@ class AdaptiveEngine:
           data/adaptive_state.json
     """
 
-    def __init__(self, config_path: str = DEFAULT_CONFIG_PATH,
-                 state_path: str = DEFAULT_STATE_PATH) -> None:
+    def __init__(
+        self,
+        config_path: str = DEFAULT_CONFIG_PATH,
+        state_path: str = DEFAULT_STATE_PATH,
+    ) -> None:
         """加载边界与初始值配置.
 
         Args:
@@ -64,12 +69,18 @@ class AdaptiveEngine:
             for name, spec in params.items():
                 if not isinstance(spec, dict) or "initial" not in spec:
                     continue
-                value = persisted.get("current", {}).get(section, {}).get(
-                    name, spec["initial"])
+                value = (
+                    persisted.get("current", {})
+                    .get(section, {})
+                    .get(name, spec["initial"])
+                )
                 self._current[section][name] = value
         self._history: List[Dict] = persisted.get("history", [])
-        logger.info("AdaptiveEngine 初始化: %d 个配置段, 历史快照 %d 条",
-                    len(self._current), len(self._history))
+        logger.info(
+            "AdaptiveEngine 初始化: %d 个配置段, 历史快照 %d 条",
+            len(self._current),
+            len(self._history),
+        )
 
     # ── 持久化 ──────────────────────────────────────────────
 
@@ -123,8 +134,16 @@ class AdaptiveEngine:
         new_value = float(np.clip(current + step * np.sign(gap), lower, upper))
         new_value = float(np.nan_to_num(new_value, nan=current))
         self._current[section][name] = new_value
-        logger.info("自适应调整 %s.%s: %s -> %s (gap=%.4f, bounds=[%s, %s])",
-                    section, name, current, new_value, gap, lower, upper)
+        logger.info(
+            "自适应调整 %s.%s: %s -> %s (gap=%.4f, bounds=[%s, %s])",
+            section,
+            name,
+            current,
+            new_value,
+            gap,
+            lower,
+            upper,
+        )
         return new_value
 
     # ── 公开接口 ────────────────────────────────────────────
@@ -141,8 +160,10 @@ class AdaptiveEngine:
         """
         self._snapshot()
         value = self._adjust(
-            "scoring_mix", "model_weight",
-            float(backtest_gaps.get("selection_ic_gap", 0.0)))
+            "scoring_mix",
+            "model_weight",
+            float(backtest_gaps.get("selection_ic_gap", 0.0)),
+        )
         self._save_state()
         return value
 
@@ -157,8 +178,10 @@ class AdaptiveEngine:
         """
         self._snapshot()
         value = self._adjust(
-            "trading_mix", "model_weight",
-            float(backtest_gaps.get("trading_win_rate_gap", 0.0)))
+            "trading_mix",
+            "model_weight",
+            float(backtest_gaps.get("trading_win_rate_gap", 0.0)),
+        )
         self._save_state()
         return value
 
@@ -173,12 +196,16 @@ class AdaptiveEngine:
         """
         self._snapshot()
         value = self._adjust(
-            "factor_influence", "ths_boost",
-            float(backtest_gaps.get("factor_ic_gap", 0.0)))
+            "factor_influence",
+            "ths_boost",
+            float(backtest_gaps.get("factor_ic_gap", 0.0)),
+        )
         self._save_state()
         return value
 
-    def compute_risk_thresholds(self, backtest_gaps: Dict[str, float]) -> Dict[str, float]:
+    def compute_risk_thresholds(
+        self, backtest_gaps: Dict[str, float]
+    ) -> Dict[str, float]:
         """基于风控 GAP 计算风控阈值组.
 
         对 risk 段全部数值型有边界参数统一按 "risk_drawdown_gap"

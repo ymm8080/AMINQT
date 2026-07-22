@@ -42,8 +42,9 @@ def _safe_div(numerator: float, denominator: float) -> float:
     """安全除法: 分母为 0/NaN 时返回 0."""
     if denominator == 0 or not np.isfinite(denominator):
         return 0.0
-    return float(np.nan_to_num(numerator / denominator, nan=0.0,
-                               posinf=0.0, neginf=0.0))
+    return float(
+        np.nan_to_num(numerator / denominator, nan=0.0, posinf=0.0, neginf=0.0)
+    )
 
 
 class BacktestEngine:
@@ -82,17 +83,20 @@ class BacktestEngine:
         self.score_col = self.config.get("score_col", "score")
         self.signal_col = self.config.get("signal_col", "signal")
         self.ctrl_col = self.config.get("ctrl_col", "ctrl_ratio")
-        self.ctrl_rising_col = self.config.get(
-            "ctrl_rising_col", "ctrl_weekly_rising")
+        self.ctrl_rising_col = self.config.get("ctrl_rising_col", "ctrl_weekly_rising")
         self.execution = self.config.get("execution", "close")
         self.targets: Dict[str, float] = self.config.get("targets", {})
-        logger.info("BacktestEngine 初始化: holding_days=%d, execution=%s",
-                    self.holding_days, self.execution)
+        logger.info(
+            "BacktestEngine 初始化: holding_days=%d, execution=%s",
+            self.holding_days,
+            self.execution,
+        )
 
     # ── 数据准备 ────────────────────────────────────────────
 
-    def _build_panel(self, data: Dict[str, pd.DataFrame],
-                     start: str, end: str) -> pd.DataFrame:
+    def _build_panel(
+        self, data: Dict[str, pd.DataFrame], start: str, end: str
+    ) -> pd.DataFrame:
         """构建长表面板: date/symbol/close/fwd_ret/score/signal/ctrl 列.
 
         前向收益 fwd_ret = close[t+holding_days] / close[t] - 1 (标签)。
@@ -140,8 +144,9 @@ class BacktestEngine:
             return {"total_return": 0.0, "sharpe": 0.0, "max_drawdown": 0.0}
         equity = (1.0 + daily_ret).cumprod()
         total_return = float(equity.iloc[-1] - 1.0)
-        sharpe = _safe_div(float(daily_ret.mean()), float(daily_ret.std())) \
-            * np.sqrt(_TRADING_DAYS_PER_YEAR)
+        sharpe = _safe_div(float(daily_ret.mean()), float(daily_ret.std())) * np.sqrt(
+            _TRADING_DAYS_PER_YEAR
+        )
         running_max = equity.cummax()
         drawdown = equity / running_max - 1.0
         max_drawdown = float(drawdown.min()) if not drawdown.empty else 0.0
@@ -157,8 +162,11 @@ class BacktestEngine:
         ics: Dict[pd.Timestamp, float] = {}
         for date, grp in panel.groupby("date"):
             sub = grp[[factor_col, "fwd_ret"]].dropna()
-            if len(sub) < 2 or sub[factor_col].nunique() < 2 \
-                    or sub["fwd_ret"].nunique() < 2:
+            if (
+                len(sub) < 2
+                or sub[factor_col].nunique() < 2
+                or sub["fwd_ret"].nunique() < 2
+            ):
                 continue
             corr = sub[factor_col].corr(sub["fwd_ret"], method="spearman")
             if np.isfinite(corr):
@@ -177,9 +185,14 @@ class BacktestEngine:
 
     # ── 主流程 ──────────────────────────────────────────────
 
-    def run(self, strategy: str, symbols: List[str],
-            start: str, end: str,
-            data: Optional[Dict[str, pd.DataFrame]] = None) -> BacktestResult:
+    def run(
+        self,
+        strategy: str,
+        symbols: List[str],
+        start: str,
+        end: str,
+        data: Optional[Dict[str, pd.DataFrame]] = None,
+    ) -> BacktestResult:
         """执行回测.
 
         Args:
@@ -194,8 +207,14 @@ class BacktestEngine:
         """
         data = data if data is not None else self.config.get("data", {})
         subset = {s: data[s] for s in symbols if s in data}
-        logger.info("回测开始: strategy=%s, %d/%d 标的, %s ~ %s",
-                    strategy, len(subset), len(symbols), start, end)
+        logger.info(
+            "回测开始: strategy=%s, %d/%d 标的, %s ~ %s",
+            strategy,
+            len(subset),
+            len(symbols),
+            start,
+            end,
+        )
         result = BacktestResult()
         panel = self._build_panel(subset, start, end)
         if panel.empty:
@@ -219,8 +238,9 @@ class BacktestEngine:
 
         # 控盘比例专项 (ARCH §5.13.8.C)
         if self.ctrl_col in panel.columns and panel[self.ctrl_col].notna().any():
-            result.ctrl_ratio_ic, result.ctrl_ratio_icir = \
-                self._ic_icir(panel, self.ctrl_col)
+            result.ctrl_ratio_ic, result.ctrl_ratio_icir = self._ic_icir(
+                panel, self.ctrl_col
+            )
         if self.ctrl_rising_col in panel.columns:
             labeled = panel.dropna(subset=["fwd_ret"])
             rising = labeled.loc[labeled[self.ctrl_rising_col] == True, "fwd_ret"]  # noqa: E712
@@ -228,19 +248,25 @@ class BacktestEngine:
             rising_ret = float(rising.mean()) if len(rising) else 0.0
             falling_ret = float(falling.mean()) if len(falling) else 0.0
             result.ctrl_ratio_weekly_rising_return = float(
-                np.nan_to_num(rising_ret, nan=0.0))
+                np.nan_to_num(rising_ret, nan=0.0)
+            )
             result.ctrl_ratio_weekly_falling_return = float(
-                np.nan_to_num(falling_ret, nan=0.0))
+                np.nan_to_num(falling_ret, nan=0.0)
+            )
             # 多空: 做多周线上升 / 做空周线下降
             result.ctrl_ratio_long_short_return = (
                 result.ctrl_ratio_weekly_rising_return
-                - result.ctrl_ratio_weekly_falling_return)
+                - result.ctrl_ratio_weekly_falling_return
+            )
 
         result.gaps = self.compute_gaps(result)
-        logger.info("回测完成: total_return=%.4f, sharpe=%.4f, "
-                    "max_drawdown=%.4f, ic=%.4f",
-                    result.total_return, result.sharpe,
-                    result.max_drawdown, result.ic)
+        logger.info(
+            "回测完成: total_return=%.4f, sharpe=%.4f, max_drawdown=%.4f, ic=%.4f",
+            result.total_return,
+            result.sharpe,
+            result.max_drawdown,
+            result.ic,
+        )
         return result
 
     def compute_gaps(self, result: BacktestResult) -> Dict[str, float]:
@@ -261,8 +287,7 @@ class BacktestEngine:
             "target_sharpe": ("sharpe_gap", result.sharpe, 1),
             "target_total_return": ("total_return_gap", result.total_return, 1),
             "target_ic": ("ic_gap", result.ic, 1),
-            "target_max_drawdown": (
-                "max_drawdown_gap", abs(result.max_drawdown), -1),
+            "target_max_drawdown": ("max_drawdown_gap", abs(result.max_drawdown), -1),
         }
         gaps: Dict[str, float] = {}
         for target_key, (gap_key, actual, sign) in mapping.items():

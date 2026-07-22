@@ -14,28 +14,32 @@ from app.core.intraday_loader import IntradayLoader
 def _fake_minute_df():
     """伪造 akshare stock_zh_a_minute 返回 (英文列, day 为时间)."""
     n = 10
-    return pd.DataFrame({
-        "day": pd.date_range("2026-07-21 09:31", periods=n, freq="1min"),
-        "open": np.linspace(10, 11, n),
-        "high": np.linspace(10.1, 11.1, n),
-        "low": np.linspace(9.9, 10.9, n),
-        "close": np.linspace(10.05, 11.05, n),
-        "volume": np.full(n, 1000.0),
-    })
+    return pd.DataFrame(
+        {
+            "day": pd.date_range("2026-07-21 09:31", periods=n, freq="1min"),
+            "open": np.linspace(10, 11, n),
+            "high": np.linspace(10.1, 11.1, n),
+            "low": np.linspace(9.9, 10.9, n),
+            "close": np.linspace(10.05, 11.05, n),
+            "volume": np.full(n, 1000.0),
+        }
+    )
 
 
 def _fake_hist_min_df():
     """伪造 akshare stock_zh_a_hist_min_em 返回 (中文列)."""
     n = 96  # 2 天 × 48 根
-    return pd.DataFrame({
-        "时间": pd.date_range("2026-07-20 09:35", periods=n, freq="5min"),
-        "开盘": np.linspace(10, 12, n),
-        "收盘": np.linspace(10.05, 12.05, n),
-        "最高": np.linspace(10.1, 12.1, n),
-        "最低": np.linspace(9.95, 11.95, n),
-        "成交量": np.full(n, 5000.0),
-        "成交额": np.full(n, 50000.0),
-    })
+    return pd.DataFrame(
+        {
+            "时间": pd.date_range("2026-07-20 09:35", periods=n, freq="5min"),
+            "开盘": np.linspace(10, 12, n),
+            "收盘": np.linspace(10.05, 12.05, n),
+            "最高": np.linspace(10.1, 12.1, n),
+            "最低": np.linspace(9.95, 11.95, n),
+            "成交量": np.full(n, 5000.0),
+            "成交额": np.full(n, 50000.0),
+        }
+    )
 
 
 @pytest.fixture
@@ -48,8 +52,9 @@ def fake_akshare(monkeypatch):
         fake.calls["minute"] += 1
         return _fake_minute_df()
 
-    def stock_zh_a_hist_min_em(symbol, period="5", start_date=None,
-                               end_date=None, adjust=""):
+    def stock_zh_a_hist_min_em(
+        symbol, period="5", start_date=None, end_date=None, adjust=""
+    ):
         fake.calls["hist_min"] += 1
         return _fake_hist_min_df()
 
@@ -67,8 +72,15 @@ def loader(tmp_path):
 class TestRealtime:
     def test_load_and_normalize(self, loader, fake_akshare):
         df = loader.load_realtime("sh600000")
-        assert list(df.columns) == ["datetime", "open", "high", "low",
-                                    "close", "volume", "amount"]
+        assert list(df.columns) == [
+            "datetime",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "amount",
+        ]
         assert len(df) == 10
         assert df["datetime"].is_monotonic_increasing
         assert fake_akshare.calls["minute"] == 1
@@ -107,15 +119,18 @@ class TestHistoryMin:
 
     def test_chinese_columns_normalized(self, loader, fake_akshare):
         df = loader.load_history_min("600000", period="5")
-        assert {"datetime", "open", "close", "high", "low",
-                "volume", "amount"} <= set(df.columns)
+        assert {"datetime", "open", "close", "high", "low", "volume", "amount"} <= set(
+            df.columns
+        )
         assert not {"时间", "开盘", "收盘"} & set(df.columns)
 
     def test_start_end_filter(self, loader, fake_akshare):
         loader.load_history_min("600000", period="5")  # 落盘
         df = loader.load_history_min(
-            "600000", period="5",
-            start="2026-07-20 12:00", end="2026-07-20 15:00",
+            "600000",
+            period="5",
+            start="2026-07-20 12:00",
+            end="2026-07-20 15:00",
         )
         assert (df["datetime"] >= pd.Timestamp("2026-07-20 12:00")).all()
         assert (df["datetime"] <= pd.Timestamp("2026-07-21 00:00")).all()

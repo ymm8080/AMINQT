@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 # 默认存储路径
 DEFAULT_WATCHLIST_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "watchlist.json"
+    "data",
+    "watchlist.json",
 )
 
 
@@ -65,8 +66,9 @@ class WatchlistManager:
             json.dump(self._data, f, ensure_ascii=False, indent=2)
         logger.info("Watchlist 已保存: %d 只股票", len(self._data["stocks"]))
 
-    def add(self, symbol: str, note: str = "",
-            tags: Optional[List[str]] = None) -> None:
+    def add(
+        self, symbol: str, note: str = "", tags: Optional[List[str]] = None
+    ) -> None:
         """添加股票到重点关注.
 
         Args:

@@ -9,10 +9,12 @@ from app.core.dataset_splitter import DatasetSplitter
 
 
 def _daily_df(start, periods, value=1.0):
-    return pd.DataFrame({
-        "date": pd.date_range(start, periods=periods, freq="D"),
-        "feat": value,
-    })
+    return pd.DataFrame(
+        {
+            "date": pd.date_range(start, periods=periods, freq="D"),
+            "feat": value,
+        }
+    )
 
 
 @pytest.fixture
@@ -39,8 +41,9 @@ class TestSplitByTime:
         names = ["train", "val", "test", "oos"]
         for i in range(len(names)):
             for j in range(i + 1, len(names)):
-                assert not (date_sets[names[i]] & date_sets[names[j]]), \
+                assert not (date_sets[names[i]] & date_sets[names[j]]), (
                     f"{names[i]} 与 {names[j]} 日期重叠"
+                )
 
     def test_total_rows_preserved(self, full_df):
         splitter = DatasetSplitter()
@@ -50,12 +53,17 @@ class TestSplitByTime:
 
     def test_configurable_boundaries(self):
         df = _daily_df("2020-01-01", 730)  # 2 年
-        splitter = DatasetSplitter({
-            "train_start": "2020-01-01", "train_end": "2020-12-31",
-            "val_start": "2021-01-01", "val_end": "2021-06-30",
-            "test_start": "2021-07-01", "test_end": "2021-09-30",
-            "oos_start": "2021-10-01",
-        })
+        splitter = DatasetSplitter(
+            {
+                "train_start": "2020-01-01",
+                "train_end": "2020-12-31",
+                "val_start": "2021-01-01",
+                "val_end": "2021-06-30",
+                "test_start": "2021-07-01",
+                "test_end": "2021-09-30",
+                "oos_start": "2021-10-01",
+            }
+        )
         parts = splitter.split_by_time(df)
         assert parts["train"]["date"].max() == pd.Timestamp("2020-12-31")
         assert len(parts["val"]) == 181
@@ -67,13 +75,14 @@ class TestSplitByTime:
             splitter.split_by_time(pd.DataFrame({"feat": [1, 2, 3]}))
 
     def test_string_dates_accepted(self):
-        df = pd.DataFrame({
-            "date": ["2022-12-31", "2023-06-30", "2024-06-30", "2025-06-30"],
-            "feat": [1, 2, 3, 4],
-        })
+        df = pd.DataFrame(
+            {
+                "date": ["2022-12-31", "2023-06-30", "2024-06-30", "2025-06-30"],
+                "feat": [1, 2, 3, 4],
+            }
+        )
         parts = DatasetSplitter().split_by_time(df)
-        assert [len(parts[k]) for k in ("train", "val", "test", "oos")] \
-            == [1, 1, 1, 1]
+        assert [len(parts[k]) for k in ("train", "val", "test", "oos")] == [1, 1, 1, 1]
 
 
 class TestPurgedKFold:
@@ -90,8 +99,7 @@ class TestPurgedKFold:
 
     def test_no_train_val_overlap(self, df):
         splitter = DatasetSplitter()
-        for train_idx, val_idx in splitter.purged_kfold(df, n_splits=5,
-                                                        gap_days=5):
+        for train_idx, val_idx in splitter.purged_kfold(df, n_splits=5, gap_days=5):
             assert not set(train_idx.tolist()) & set(val_idx.tolist())
 
     def test_purge_gap_excludes_boundary_samples(self, df):
@@ -109,15 +117,13 @@ class TestPurgedKFold:
 
     def test_first_fold_purges_only_after(self, df):
         splitter = DatasetSplitter()
-        train_idx, val_idx = splitter.purged_kfold(df, n_splits=5,
-                                                   gap_days=5)[0]
+        train_idx, val_idx = splitter.purged_kfold(df, n_splits=5, gap_days=5)[0]
         assert val_idx.tolist() == list(range(0, 20))
         assert train_idx.tolist() == list(range(25, 100))
 
     def test_last_fold_purges_only_before(self, df):
         splitter = DatasetSplitter()
-        train_idx, val_idx = splitter.purged_kfold(df, n_splits=5,
-                                                   gap_days=5)[-1]
+        train_idx, val_idx = splitter.purged_kfold(df, n_splits=5, gap_days=5)[-1]
         assert val_idx.tolist() == list(range(80, 100))
         assert train_idx.tolist() == list(range(0, 75))
 

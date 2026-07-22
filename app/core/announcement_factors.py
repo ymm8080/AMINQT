@@ -20,33 +20,54 @@ from app.core.ths_indicators import exp_decay_encode
 logger = logging.getLogger(__name__)
 
 ANNOUNCEMENT_FACTOR_COLUMNS = [
-    "ann_count_5d",            # 近 5 日公告数
-    "ann_major_flag",          # 重大公告 flag (衰减编码)
-    "ann_earnings_flag",       # 业绩公告 flag
-    "ann_hold_change_flag",    # 增减持 flag
-    "ann_risk_warning_flag",   # 风险警示 flag (用于基础过滤剔除)
+    "ann_count_5d",  # 近 5 日公告数
+    "ann_major_flag",  # 重大公告 flag (衰减编码)
+    "ann_earnings_flag",  # 业绩公告 flag
+    "ann_hold_change_flag",  # 增减持 flag
+    "ann_risk_warning_flag",  # 风险警示 flag (用于基础过滤剔除)
 ]
 
 # ── 公告类型归类 (小写匹配, 兼容中英文标注) ─────────────────────────
 MAJOR_TYPES = {
-    "major", "重大事项", "重组", "并购", "risk_warning", "风险警示",
-    "suspend", "停牌",
+    "major",
+    "重大事项",
+    "重组",
+    "并购",
+    "risk_warning",
+    "风险警示",
+    "suspend",
+    "停牌",
 }
 EARNINGS_TYPES = {
-    "earnings", "业绩", "业绩预告", "业绩快报", "财报", "年报", "半年报",
-    "一季报", "三季报", "financial_report",
+    "earnings",
+    "业绩",
+    "业绩预告",
+    "业绩快报",
+    "财报",
+    "年报",
+    "半年报",
+    "一季报",
+    "三季报",
+    "financial_report",
 }
 HOLD_CHANGE_TYPES = {
-    "hold_change", "增减持", "增持", "减持", "回购",
+    "hold_change",
+    "增减持",
+    "增持",
+    "减持",
+    "回购",
 }
 RISK_WARNING_TYPES = {
-    "risk_warning", "风险警示", "st", "退市风险",
+    "risk_warning",
+    "风险警示",
+    "st",
+    "退市风险",
 }
 
 # 衰减/回看参数
-_COUNT_WINDOW = 5        # ann_count_5d 窗口 (交易日)
-_DECAY_TAU = 10          # 重大公告指数衰减半衰期 (天)
-_RISK_WINDOW = 10        # 风险警示回看窗口 (交易日)
+_COUNT_WINDOW = 5  # ann_count_5d 窗口 (交易日)
+_DECAY_TAU = 10  # 重大公告指数衰减半衰期 (天)
+_RISK_WINDOW = 10  # 风险警示回看窗口 (交易日)
 
 
 def _zero_frame(df: pd.DataFrame) -> pd.DataFrame:
@@ -84,8 +105,7 @@ def load_announcements(ann_dir: str, symbol: str) -> pd.DataFrame:
     return ann.sort_values("date").reset_index(drop=True)
 
 
-def _type_flag_series(dates: pd.Series, ann: pd.DataFrame,
-                      type_set: set) -> pd.Series:
+def _type_flag_series(dates: pd.Series, ann: pd.DataFrame, type_set: set) -> pd.Series:
     """生成 df 每个交易日上"当日是否有该类公告"的 0/1 序列 (causal)."""
     if ann.empty:
         return pd.Series(0.0, index=dates.index)
@@ -93,8 +113,9 @@ def _type_flag_series(dates: pd.Series, ann: pd.DataFrame,
     return dates.isin(hit_dates).astype(float)
 
 
-def compute_announcement_factors(df: pd.DataFrame, symbol: str,
-                                 ann_dir: str = "data/calendar/announcements") -> pd.DataFrame:
+def compute_announcement_factors(
+    df: pd.DataFrame, symbol: str, ann_dir: str = "data/calendar/announcements"
+) -> pd.DataFrame:
     """为日线 DataFrame 追加 5 维公告事件因子.
 
     Args:
@@ -117,9 +138,7 @@ def compute_announcement_factors(df: pd.DataFrame, symbol: str,
         return _zero_frame(df)
 
     # ── 1. 近 5 日公告数 (含当日, 只看历史) ──
-    daily_count = dates.map(
-        ann.groupby("date").size()
-    ).fillna(0.0).astype(float)
+    daily_count = dates.map(ann.groupby("date").size()).fillna(0.0).astype(float)
     df["ann_count_5d"] = daily_count.rolling(_COUNT_WINDOW, min_periods=1).sum()
 
     # ── 2. 重大公告 flag (10 日指数衰减编码) ──
@@ -136,13 +155,10 @@ def compute_announcement_factors(df: pd.DataFrame, symbol: str,
 
     # ── 5. 风险警示 flag (近 10 个交易日内出现 → 1, 供基础过滤剔除) ──
     risk_flag = _type_flag_series(dates, ann, RISK_WARNING_TYPES)
-    df["ann_risk_warning_flag"] = (
-        risk_flag.rolling(_RISK_WINDOW, min_periods=1).max()
-    )
+    df["ann_risk_warning_flag"] = risk_flag.rolling(_RISK_WINDOW, min_periods=1).max()
 
     df[ANNOUNCEMENT_FACTOR_COLUMNS] = np.nan_to_num(
         df[ANNOUNCEMENT_FACTOR_COLUMNS].to_numpy(dtype=float), nan=0.0
     )
-    logger.info("公告因子计算完成: %s, %d 行, 公告 %d 条",
-                symbol, len(df), len(ann))
+    logger.info("公告因子计算完成: %s, %d 行, 公告 %d 条", symbol, len(df), len(ann))
     return df

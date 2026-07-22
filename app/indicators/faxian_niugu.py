@@ -17,6 +17,7 @@ import pandas as pd
 def EMA(s: pd.Series, n: int) -> pd.Series:
     return s.ewm(span=n, adjust=False).mean()
 
+
 def CROSS(a: pd.Series, b: pd.Series) -> pd.Series:
     return (a > b) & (a.shift(1) <= b.shift(1))
 
@@ -30,14 +31,20 @@ def faxian_niugu(df: pd.DataFrame) -> pd.DataFrame:
     df["A5"] = EMA(c, 20)
     df["A6"] = EMA(c, 50)
 
-    df["SS"] = (CROSS(df["A1"], df["A5"])
-                & (c > o)
-                & (c > c.shift(1))
-                & (c / c.shift(1) >= 1.018))
+    df["SS"] = (
+        CROSS(df["A1"], df["A5"])
+        & (c > o)
+        & (c > c.shift(1))
+        & (c / c.shift(1) >= 1.018)
+    )
     # 多头排列辅助标记：六线完全多头（A1>A2>A3>A4>A5>A6）
-    df["多头排列"] = ((df["A1"] > df["A2"]) & (df["A2"] > df["A3"])
-                    & (df["A3"] > df["A4"]) & (df["A4"] > df["A5"])
-                    & (df["A5"] > df["A6"]))
+    df["多头排列"] = (
+        (df["A1"] > df["A2"])
+        & (df["A2"] > df["A3"])
+        & (df["A3"] > df["A4"])
+        & (df["A4"] > df["A5"])
+        & (df["A5"] > df["A6"])
+    )
     return df
 
 
@@ -52,8 +59,12 @@ if __name__ == "__main__":
         i = df.index.get_loc(_)
         r5 = df["close"].iloc[i + 5] / r["close"] - 1 if i + 5 < len(df) else None
         r10 = df["close"].iloc[i + 10] / r["close"] - 1 if i + 10 < len(df) else None
-        print(f"  {r['time']}  收盘{r['close']:.2f}  "
-              f"5日后{r5:+.1%}  10日后{r10:+.1%}" if r5 is not None and r10 is not None
-              else f"  {r['time']}  收盘{r['close']:.2f}  (样本尾端)")
+        print(
+            f"  {r['time']}  收盘{r['close']:.2f}  5日后{r5:+.1%}  10日后{r10:+.1%}"
+            if r5 is not None and r10 is not None
+            else f"  {r['time']}  收盘{r['close']:.2f}  (样本尾端)"
+        )
     print(f"\n当前多头排列: {bool(df['多头排列'].iloc[-1])}")
-    print(f"最新三线: A1={df['A1'].iloc[-1]:.2f} A5={df['A5'].iloc[-1]:.2f} A6={df['A6'].iloc[-1]:.2f}")
+    print(
+        f"最新三线: A1={df['A1'].iloc[-1]:.2f} A5={df['A5'].iloc[-1]:.2f} A6={df['A6'].iloc[-1]:.2f}"
+    )

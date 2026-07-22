@@ -143,10 +143,20 @@ class TestPipelineUpdate:
         mgr.set_tick("000858", "is_watchlist", True)
 
         new_pool = [
-            {"symbol": "600519", "name": "贵州茅台", "score": 0.99,
-             "prob_up": 0.9, "pct_up": 0.2},   # 试图覆盖固定股
-            {"symbol": "601318", "name": "中国平安", "score": 0.80,
-             "prob_up": 0.7, "pct_up": 0.1},   # 新增
+            {
+                "symbol": "600519",
+                "name": "贵州茅台",
+                "score": 0.99,
+                "prob_up": 0.9,
+                "pct_up": 0.2,
+            },  # 试图覆盖固定股
+            {
+                "symbol": "601318",
+                "name": "中国平安",
+                "score": 0.80,
+                "prob_up": 0.7,
+                "pct_up": 0.1,
+            },  # 新增
         ]
         mgr.update_from_pipeline1(new_pool)
         pool = {r["symbol"]: r for r in mgr.get_pool()}
@@ -169,9 +179,11 @@ class TestPipelineUpdate:
 
     def test_nonfixed_score_updated_ticks_kept(self, mgr):
         mgr.set_tick("000858", "is_watchlist", True, source="manual")
-        mgr.update_from_pipeline1([
-            {"symbol": "000858", "score": 0.77, "prob_up": 0.6, "pct_up": 0.05},
-        ])
+        mgr.update_from_pipeline1(
+            [
+                {"symbol": "000858", "score": 0.77, "prob_up": 0.6, "pct_up": 0.05},
+            ]
+        )
         pool = {r["symbol"]: r for r in mgr.get_pool()}
         assert pool["000858"]["score"] == 0.77
         assert pool["000858"]["ticks"]["is_watchlist"] is True
@@ -179,9 +191,11 @@ class TestPipelineUpdate:
 
     def test_fixed_not_in_new_pool_kept(self, mgr):
         mgr.set_tick("600519", "is_daily_buy", True)
-        mgr.update_from_pipeline1([
-            {"symbol": "601318", "score": 0.5, "prob_up": 0.5, "pct_up": 0.01},
-        ])
+        mgr.update_from_pipeline1(
+            [
+                {"symbol": "601318", "score": 0.5, "prob_up": 0.5, "pct_up": 0.01},
+            ]
+        )
         symbols = {r["symbol"] for r in mgr.get_pool()}
         assert symbols == {"600519", "601318"}
         assert mgr.get_fixed_stocks() == ["600519"]

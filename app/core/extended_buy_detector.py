@@ -8,9 +8,7 @@
 """
 
 import logging
-from typing import List
 
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +31,14 @@ class ExtendedBuyDetector:
             return sec.get(key, default)
         return default
 
-    def check_gap_volume_buy(self, is_daily_buy: bool, open_price: float,
-                             prev_close: float, volume: float,
-                             volume_ma5: float) -> bool:
+    def check_gap_volume_buy(
+        self,
+        is_daily_buy: bool,
+        open_price: float,
+        prev_close: float,
+        volume: float,
+        volume_ma5: float,
+    ) -> bool:
         """跳空放量日内买点 (与六条件路径 OR).
 
         Args:
@@ -49,26 +52,30 @@ class ExtendedBuyDetector:
             True = 跳空 > 4% 且放量 → 设置日内买点。
         """
         gap_th = float(self._cfg("gap_volume_buy", "gap_threshold", 0.04))
-        surge_ratio = float(self._cfg("gap_volume_buy", "volume_surge_ratio",
-                                      1.5))
+        surge_ratio = float(self._cfg("gap_volume_buy", "volume_surge_ratio", 1.5))
         if not is_daily_buy:
             return False
         if prev_close <= 0 or volume_ma5 <= 0:
-            logger.warning("check_gap_volume_buy: 价格/均量非法 "
-                           "(prev_close=%s, volume_ma5=%s)",
-                           prev_close, volume_ma5)
+            logger.warning(
+                "check_gap_volume_buy: 价格/均量非法 (prev_close=%s, volume_ma5=%s)",
+                prev_close,
+                volume_ma5,
+            )
             return False
         gap_pct = open_price / prev_close - 1.0
         volume_ok = volume > volume_ma5 * surge_ratio
         triggered = gap_pct > gap_th and volume_ok
         if triggered:
-            logger.info("跳空放量买入: 跳空 %.2f%% > %.2f%%, 量 %.0f > "
-                        "%.1f × MA5", gap_pct * 100, gap_th * 100,
-                        volume, surge_ratio)
+            logger.info(
+                "跳空放量买入: 跳空 %.2f%% > %.2f%%, 量 %.0f > %.1f × MA5",
+                gap_pct * 100,
+                gap_th * 100,
+                volume,
+                surge_ratio,
+            )
         return triggered
 
-    def filter_high_turnover(self, turnover: float,
-                             max_turnover: float = 0.50) -> bool:
+    def filter_high_turnover(self, turnover: float, max_turnover: float = 0.50) -> bool:
         """换手率过滤: True=超过上限应排除 (默认 50%, 自适应可调).
 
         Args:
@@ -78,17 +85,17 @@ class ExtendedBuyDetector:
         Returns:
             True = 换手率过高, 应排除 (不标记日线买点)。
         """
-        max_turnover = float(self._cfg("turnover_filter", "max_turnover",
-                                       max_turnover))
+        max_turnover = float(self._cfg("turnover_filter", "max_turnover", max_turnover))
         excluded = float(turnover) > max_turnover
         if excluded:
-            logger.info("换手率过滤: %.2f%% > %.2f%% → 排除",
-                        turnover * 100, max_turnover * 100)
+            logger.info(
+                "换手率过滤: %.2f%% > %.2f%% → 排除", turnover * 100, max_turnover * 100
+            )
         return excluded
 
-    def check_consecutive_buy_constraint(self, symbol: str,
-                                         last_buy_symbol: str,
-                                         price_rising: bool) -> bool:
+    def check_consecutive_buy_constraint(
+        self, symbol: str, last_buy_symbol: str, price_rising: bool
+    ) -> bool:
         """不连续买入约束.
 
         Args:

@@ -9,8 +9,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def export_onnx(model_path: str, out_path: str,
-                input_shape: tuple = (1, 20, 85)) -> None:
+def export_onnx(
+    model_path: str, out_path: str, input_shape: tuple = (1, 20, 85)
+) -> None:
     """导出 ONNX.
 
     Args:

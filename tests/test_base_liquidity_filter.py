@@ -8,24 +8,30 @@ import pytest
 from app.core.base_liquidity_filter import BaseLiquidityFilter
 
 
-def _make_daily_df(n: int = 250, turnover: float = 0.08,
-                   amount: float = 6e8, amplitude: float = 0.06,
-                   with_limit_up: bool = True) -> pd.DataFrame:
+def _make_daily_df(
+    n: int = 250,
+    turnover: float = 0.08,
+    amount: float = 6e8,
+    amplitude: float = 0.06,
+    with_limit_up: bool = True,
+) -> pd.DataFrame:
     """构造满足/不满足过滤条件的合成近一年日线."""
     rng = np.random.default_rng(42)
     close = 10.0 * np.cumprod(1.0 + rng.normal(0.001, 0.01, n))
     high = close * (1.0 + amplitude / 2.0)
     low = close * (1.0 - amplitude / 2.0)
     volume = amount / close
-    df = pd.DataFrame({
-        "open": close,
-        "high": high,
-        "low": low,
-        "close": close,
-        "volume": volume,
-        "amount": np.full(n, amount),
-        "turnover": np.full(n, turnover),
-    })
+    df = pd.DataFrame(
+        {
+            "open": close,
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": volume,
+            "amount": np.full(n, amount),
+            "turnover": np.full(n, turnover),
+        }
+    )
     if with_limit_up and n > 101:
         # 第 100 天制造一个涨停 (涨幅 >= 9.8%)
         df.loc[100, "close"] = df.loc[99, "close"] * 1.10

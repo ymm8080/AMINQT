@@ -37,8 +37,9 @@ class TestLoadHolidays:
 
     def test_parses_nested_format(self, tmp_path):
         path = tmp_path / "h.json"
-        path.write_text(json.dumps({"2026": ["2026-01-01", "2026-10-01"]}),
-                        encoding="utf-8")
+        path.write_text(
+            json.dumps({"2026": ["2026-01-01", "2026-10-01"]}), encoding="utf-8"
+        )
         holidays = load_holidays(str(path))
         assert pd.Timestamp("2026-01-01") in holidays
         assert pd.Timestamp("2026-10-01") in holidays
@@ -104,11 +105,10 @@ class TestComputeCalendarFactors:
     def test_missing_file_weekend_fallback(self, trade_df, tmp_path, caplog):
         """无节假日文件 → 周末降级 + 警告日志."""
         with caplog.at_level(logging.WARNING):
-            out = compute_calendar_factors(
-                trade_df, str(tmp_path / "missing.json")
-            )
-        assert any("weekend" in r.message or "缺失" in r.message
-                   for r in caplog.records)
+            out = compute_calendar_factors(trade_df, str(tmp_path / "missing.json"))
+        assert any(
+            "weekend" in r.message or "缺失" in r.message for r in caplog.records
+        )
         by_date = out.set_index("date")
         # 2026-03-02 (Mon) → 下一个周六: 中间 Tue-Fri 4 个交易日
         assert by_date.loc["2026-03-02", "cal_days_to_holiday"] == 4.0
@@ -122,10 +122,10 @@ class TestComputeCalendarFactors:
         (月末/月初除外 — 它们按定义由当月交易日集合决定, 此处验证
         days_to_holiday 在节假日前的部分不受尾部数据影响)."""
         dates = pd.bdate_range("2026-02-23", "2026-04-10")
-        full = compute_calendar_factors(pd.DataFrame({"date": dates}),
-                                        holidays_file)
-        head = compute_calendar_factors(pd.DataFrame({"date": dates[:10]}),
-                                        holidays_file)
+        full = compute_calendar_factors(pd.DataFrame({"date": dates}), holidays_file)
+        head = compute_calendar_factors(
+            pd.DataFrame({"date": dates[:10]}), holidays_file
+        )
         col = "cal_days_to_holiday"
         # 尾部数据缺失时 holidays 仍在视野内 → 前 10 行应一致
         assert np.allclose(full[col].to_numpy()[:10], head[col].to_numpy())

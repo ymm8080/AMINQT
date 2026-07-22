@@ -35,8 +35,9 @@ class Pipeline2WarmStarter:
         dataset_: build_5min_dataset 产出的 (X, y, index)。
     """
 
-    def __init__(self, pipeline1_model_path: str,
-                 retrain_window_days: int = 63) -> None:
+    def __init__(
+        self, pipeline1_model_path: str, retrain_window_days: int = 63
+    ) -> None:
         """初始化.
 
         Args:
@@ -58,15 +59,22 @@ class Pipeline2WarmStarter:
         """
         if not os.path.exists(self.pipeline1_model_path):
             raise FileNotFoundError(
-                f"Pipeline 1 模型不存在: {self.pipeline1_model_path}")
+                f"Pipeline 1 模型不存在: {self.pipeline1_model_path}"
+            )
         self.baseline_ = load_model(self.pipeline1_model_path)
-        logger.info("θ_p1 baseline 已加载 ← %s (name=%s)",
-                    self.pipeline1_model_path, self.baseline_.name)
+        logger.info(
+            "θ_p1 baseline 已加载 ← %s (name=%s)",
+            self.pipeline1_model_path,
+            self.baseline_.name,
+        )
 
-    def build_5min_dataset(self, symbols: list,
-                           daily_features: Optional[pd.DataFrame] = None,
-                           fivemin_features: Optional[pd.DataFrame] = None,
-                           labels: Optional[np.ndarray] = None) -> tuple:
+    def build_5min_dataset(
+        self,
+        symbols: list,
+        daily_features: Optional[pd.DataFrame] = None,
+        fivemin_features: Optional[pd.DataFrame] = None,
+        labels: Optional[np.ndarray] = None,
+    ) -> tuple:
         """构建近 3 月五分钟训练集 (110 维 = 85 日线 + 25 五分钟).
 
         Args:
@@ -86,35 +94,52 @@ class Pipeline2WarmStarter:
             raise RuntimeError(
                 "build_5min_dataset 需要预计算特征帧: daily_features "
                 "(N,85) 与 fivemin_features (N,25)。数据装配管线 "
-                "(FactorEngine/IntradayFactorEngine) 不在本模块职责内。")
+                "(FactorEngine/IntradayFactorEngine) 不在本模块职责内。"
+            )
         if daily_features.shape[1] != DAILY_FEATURE_DIM:
-            logger.warning("日线特征维度 %d ≠ %d", daily_features.shape[1],
-                           DAILY_FEATURE_DIM)
+            logger.warning(
+                "日线特征维度 %d ≠ %d", daily_features.shape[1], DAILY_FEATURE_DIM
+            )
         if fivemin_features.shape[1] != FIVEMIN_FEATURE_DIM:
-            logger.warning("五分钟特征维度 %d ≠ %d",
-                           fivemin_features.shape[1], FIVEMIN_FEATURE_DIM)
-        combined = daily_features.join(fivemin_features, how="inner",
-                                       lsuffix="_d", rsuffix="_m")
-        X = np.nan_to_num(combined.to_numpy(dtype=np.float64),
-                          nan=0.0, posinf=0.0, neginf=0.0)
+            logger.warning(
+                "五分钟特征维度 %d ≠ %d", fivemin_features.shape[1], FIVEMIN_FEATURE_DIM
+            )
+        combined = daily_features.join(
+            fivemin_features, how="inner", lsuffix="_d", rsuffix="_m"
+        )
+        X = np.nan_to_num(
+            combined.to_numpy(dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0
+        )
         y = None
         if labels is not None:
             y = np.nan_to_num(
                 pd.Series(np.asarray(labels, dtype=np.float64).ravel())
-                .reindex(combined.index if len(labels) == len(combined.index)
-                         else None).to_numpy()
+                .reindex(combined.index if len(labels) == len(combined.index) else None)
+                .to_numpy()
                 if len(labels) == len(combined.index)
                 else np.asarray(labels, dtype=np.float64).ravel(),
-                nan=0.0, posinf=0.0, neginf=0.0)
+                nan=0.0,
+                posinf=0.0,
+                neginf=0.0,
+            )
         self.dataset_ = (X, y, combined.index)
-        logger.info("五分钟训练集构建完成: symbols=%d, X=%s, y=%s",
-                    len(symbols), X.shape,
-                    None if y is None else y.shape)
+        logger.info(
+            "五分钟训练集构建完成: symbols=%d, X=%s, y=%s",
+            len(symbols),
+            X.shape,
+            None if y is None else y.shape,
+        )
         return X, y
 
-    def run(self, X_train=None, y_train=None, X_oos=None, y_oos=None,
-            ic_threshold: float = 0.03,
-            train_fraction: float = 0.8) -> dict:
+    def run(
+        self,
+        X_train=None,
+        y_train=None,
+        X_oos=None,
+        y_oos=None,
+        ic_threshold: float = 0.03,
+        train_fraction: float = 0.8,
+    ) -> dict:
         """完整 warm-start 流程.
 
         1. load_baseline() (若未加载)
@@ -143,7 +168,8 @@ class Pipeline2WarmStarter:
             if self.dataset_ is None or self.dataset_[1] is None:
                 raise ValueError(
                     "run 需要显式传入 X_train/y_train/X_oos/y_oos, "
-                    "或先调用 build_5min_dataset(..., labels=...)")
+                    "或先调用 build_5min_dataset(..., labels=...)"
+                )
             X_all, y_all, _ = self.dataset_
             cut = max(1, int(len(X_all) * train_fraction))
             X_train, y_train = X_all[:cut], y_all[:cut]
@@ -155,16 +181,20 @@ class Pipeline2WarmStarter:
 
         candidate = copy.deepcopy(self.baseline_)
         estimator = getattr(candidate, "estimator", candidate)
-        X_fit = np.nan_to_num(np.asarray(X_train, dtype=np.float64),
-                              nan=0.0, posinf=0.0, neginf=0.0)
-        y_fit = np.nan_to_num(np.asarray(y_train, dtype=np.float64).ravel(),
-                              nan=0.0, posinf=0.0, neginf=0.0)
+        X_fit = np.nan_to_num(
+            np.asarray(X_train, dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0
+        )
+        y_fit = np.nan_to_num(
+            np.asarray(y_train, dtype=np.float64).ravel(),
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        )
         if hasattr(estimator, "partial_fit"):
             if X_fit.ndim == 3:
                 X_fit = X_fit.reshape(X_fit.shape[0], -1)
             estimator.partial_fit(X_fit, y_fit)
-            logger.info("warm-start fine-tune: partial_fit (%d 样本)",
-                        len(y_fit))
+            logger.info("warm-start fine-tune: partial_fit (%d 样本)", len(y_fit))
         else:
             try:
                 candidate.fit(X_fit, y_fit, epochs=10, lr=1e-5)
@@ -177,16 +207,23 @@ class Pipeline2WarmStarter:
         replaced = bool(oos_pass and oos_ic >= baseline_ic)
         warning = None
         if not replaced:
-            warning = (f"warm-start 微调未达替换条件 (oos_pass={oos_pass}, "
-                       f"oos_ic={oos_ic:.4f} vs baseline_ic="
-                       f"{baseline_ic:.4f}, threshold={ic_threshold}), "
-                       "保留 Pipeline 1 模型")
+            warning = (
+                f"warm-start 微调未达替换条件 (oos_pass={oos_pass}, "
+                f"oos_ic={oos_ic:.4f} vs baseline_ic="
+                f"{baseline_ic:.4f}, threshold={ic_threshold}), "
+                "保留 Pipeline 1 模型"
+            )
             logger.warning(warning)
         else:
-            logger.info("warm-start 替换: baseline_ic=%.4f → oos_ic=%.4f",
-                        baseline_ic, oos_ic)
-        return {"oos_pass": oos_pass, "oos_ic": oos_ic,
-                "baseline_ic": baseline_ic, "replaced": replaced,
-                "baseline_source": self.pipeline1_model_path,
-                "warning": warning,
-                "model": candidate if replaced else self.baseline_}
+            logger.info(
+                "warm-start 替换: baseline_ic=%.4f → oos_ic=%.4f", baseline_ic, oos_ic
+            )
+        return {
+            "oos_pass": oos_pass,
+            "oos_ic": oos_ic,
+            "baseline_ic": baseline_ic,
+            "replaced": replaced,
+            "baseline_source": self.pipeline1_model_path,
+            "warning": warning,
+            "model": candidate if replaced else self.baseline_,
+        }

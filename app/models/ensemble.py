@@ -27,8 +27,9 @@ class ModelEnsemble:
         member_names_: stacking 成员顺序 (保证 combine 列序一致)。
     """
 
-    def __init__(self, strategy: str = "rank_mean",
-                 weights: Dict[str, float] = None) -> None:
+    def __init__(
+        self, strategy: str = "rank_mean", weights: Dict[str, float] = None
+    ) -> None:
         """初始化融合策略.
 
         Args:
@@ -39,8 +40,7 @@ class ModelEnsemble:
             ValueError: 未知融合策略。
         """
         if strategy not in ENSEMBLE_STRATEGIES:
-            raise ValueError(
-                f"未知融合策略: {strategy}. 可选: {ENSEMBLE_STRATEGIES}")
+            raise ValueError(f"未知融合策略: {strategy}. 可选: {ENSEMBLE_STRATEGIES}")
         self.strategy = strategy
         self.weights = dict(weights or {})
         self.meta_learner_ = None
@@ -62,8 +62,9 @@ class ModelEnsemble:
         if not predictions:
             raise ValueError("predictions 为空, 无法融合")
         cleaned = {
-            name: np.nan_to_num(np.asarray(p, dtype=np.float64).ravel(),
-                                nan=0.0, posinf=0.0, neginf=0.0)
+            name: np.nan_to_num(
+                np.asarray(p, dtype=np.float64).ravel(), nan=0.0, posinf=0.0, neginf=0.0
+            )
             for name, p in predictions.items()
         }
         lengths = {len(p) for p in cleaned.values()}
@@ -88,8 +89,7 @@ class ModelEnsemble:
 
         if self.strategy == "rank_mean":
             ranks = [
-                pd.Series(p).rank(method="average").to_numpy()
-                for p in preds.values()
+                pd.Series(p).rank(method="average").to_numpy() for p in preds.values()
             ]
             return np.mean(np.column_stack(ranks), axis=1)
 
@@ -99,8 +99,7 @@ class ModelEnsemble:
         if self.strategy == "weighted_score":
             names = list(preds)
             # 未配置权重的模型回退为等权; 权重归一化到 sum=1
-            raw = np.array([self.weights.get(n, 1.0) for n in names],
-                           dtype=np.float64)
+            raw = np.array([self.weights.get(n, 1.0) for n in names], dtype=np.float64)
             raw = np.clip(raw, 0.0, None)
             if raw.sum() <= 0:
                 logger.warning("weighted_score 权重全为 0, 回退等权")
@@ -110,17 +109,14 @@ class ModelEnsemble:
 
         # stacking
         if self.meta_learner_ is None:
-            raise RuntimeError(
-                "stacking 策略需先调用 fit_stacking 训练元学习器")
+            raise RuntimeError("stacking 策略需先调用 fit_stacking 训练元学习器")
         missing = [n for n in self.member_names_ if n not in preds]
         if missing:
             raise ValueError(f"stacking 缺少成员模型预测: {missing}")
         X_meta = np.column_stack([preds[n] for n in self.member_names_])
-        return np.asarray(self.meta_learner_.predict(X_meta),
-                          dtype=np.float64).ravel()
+        return np.asarray(self.meta_learner_.predict(X_meta), dtype=np.float64).ravel()
 
-    def fit_stacking(self, predictions: Dict[str, np.ndarray],
-                     y: np.ndarray) -> None:
+    def fit_stacking(self, predictions: Dict[str, np.ndarray], y: np.ndarray) -> None:
         """stacking 策略: 训练元学习器 (sklearn LinearRegression).
 
         Args:
@@ -131,8 +127,9 @@ class ModelEnsemble:
             ValueError: y 长度与预测不一致。
         """
         preds = self._validate(predictions)
-        y = np.nan_to_num(np.asarray(y, dtype=np.float64).ravel(),
-                          nan=0.0, posinf=0.0, neginf=0.0)
+        y = np.nan_to_num(
+            np.asarray(y, dtype=np.float64).ravel(), nan=0.0, posinf=0.0, neginf=0.0
+        )
         n = len(next(iter(preds.values())))
         if len(y) != n:
             raise ValueError(f"y 长度 {len(y)} 与预测长度 {n} 不一致")
@@ -140,6 +137,8 @@ class ModelEnsemble:
         X_meta = np.column_stack([preds[name] for name in self.member_names_])
         self.meta_learner_ = LinearRegression()
         self.meta_learner_.fit(X_meta, y)
-        logger.info("stacking 元学习器已训练: members=%s, coef=%s",
-                    self.member_names_,
-                    np.round(self.meta_learner_.coef_, 4).tolist())
+        logger.info(
+            "stacking 元学习器已训练: members=%s, coef=%s",
+            self.member_names_,
+            np.round(self.meta_learner_.coef_, 4).tolist(),
+        )

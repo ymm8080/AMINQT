@@ -31,8 +31,8 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 # ── 常量 ──────────────────────────────────────────────────────────────
-SH_INDEX_CODE = "000001"          # 上证指数
-ANNUALIZATION = np.sqrt(252)      # 年化因子
+SH_INDEX_CODE = "000001"  # 上证指数
+ANNUALIZATION = np.sqrt(252)  # 年化因子
 MARKET_FACTOR_COLUMNS: List[str] = [
     "market_return_1d",
     "market_return_5d",
@@ -85,8 +85,14 @@ class MarketContext:
         # 标准化列名
         if "date" not in raw.columns:
             # akshare stock_zh_index_daily 返回的列名可能是中文
-            col_map = {"日期": "date", "收盘": "close", "最高": "high",
-                       "最低": "low", "开盘": "open", "成交量": "volume"}
+            col_map = {
+                "日期": "date",
+                "收盘": "close",
+                "最高": "high",
+                "最低": "low",
+                "开盘": "open",
+                "成交量": "volume",
+            }
             raw = raw.rename(columns=col_map)
 
         raw["date"] = pd.to_datetime(raw["date"])
@@ -165,27 +171,31 @@ class MarketContext:
             return slope / mean_val
 
         df["market_trend"] = (
-            c.rolling(20, min_periods=5)
-            .apply(_trend_slope, raw=True)
-            .fillna(0.0)
+            c.rolling(20, min_periods=5).apply(_trend_slope, raw=True).fillna(0.0)
         )
 
         self._factors_df = df[["date"] + MARKET_FACTOR_COLUMNS].copy()
 
         # NaN → 0
         for col in MARKET_FACTOR_COLUMNS:
-            self._factors_df[col] = self._factors_df[col].replace(
-                [np.inf, -np.inf], 0.0
-            ).fillna(0.0)
+            self._factors_df[col] = (
+                self._factors_df[col].replace([np.inf, -np.inf], 0.0).fillna(0.0)
+            )
 
-        logger.info("大盘因子计算完成: %d 列, %d 行", len(MARKET_FACTOR_COLUMNS), len(self._factors_df))
+        logger.info(
+            "大盘因子计算完成: %d 列, %d 行",
+            len(MARKET_FACTOR_COLUMNS),
+            len(self._factors_df),
+        )
         return self._factors_df
 
     # ───────────────────────────────────────────────────────────────
     #  注入个股
     # ───────────────────────────────────────────────────────────────
 
-    def merge_to_stock(self, stock_df: pd.DataFrame, date_col: str = "date") -> pd.DataFrame:
+    def merge_to_stock(
+        self, stock_df: pd.DataFrame, date_col: str = "date"
+    ) -> pd.DataFrame:
         """将大盘因子按日期 merge 到个股 DataFrame.
 
         Args:

@@ -26,9 +26,9 @@ _OPS = {
 class SignalStage(Enum):
     """信号推进阶段."""
 
-    SEED = 1          # 种子: 初步条件满足
+    SEED = 1  # 种子: 初步条件满足
     CONFIRMATION = 2  # 确认: 多维条件复核
-    TRIGGER = 3       # 触发: 可执行信号
+    TRIGGER = 3  # 触发: 可执行信号
 
 
 class ProgressiveSignal:
@@ -46,9 +46,11 @@ class ProgressiveSignal:
         self.config = config or {}
         self.mode = str(self.config.get("mode", "auto"))
         self.prevent_consecutive_buy = bool(
-            self.config.get("prevent_consecutive_buy", True))
+            self.config.get("prevent_consecutive_buy", True)
+        )
         self.user_trigger_conditions: List[dict] = list(
-            self.config.get("user_trigger_conditions", []))
+            self.config.get("user_trigger_conditions", [])
+        )
         # 每股票当前阶段 / 最近因子 / 最近买入记录
         self._stages: Dict[str, SignalStage] = {}
         self._last_factors: Dict[str, dict] = {}
@@ -91,12 +93,19 @@ class ProgressiveSignal:
         w_env = float(weights.get("market_env", 0.2))
         threshold = float(self._cfg("seed", "threshold", 60))
 
-        score = (w_model * self._to_score(factors.get("model_score", 0.0))
-                 + w_res * self._to_score(factors.get("factor_resonance", 0.0))
-                 + w_env * self._to_score(factors.get("market_env", 0.0)))
+        score = (
+            w_model * self._to_score(factors.get("model_score", 0.0))
+            + w_res * self._to_score(factors.get("factor_resonance", 0.0))
+            + w_env * self._to_score(factors.get("market_env", 0.0))
+        )
         passed = score >= threshold
-        logger.debug("种子评估 %s: score=%.1f threshold=%.1f → %s",
-                     symbol, score, threshold, passed)
+        logger.debug(
+            "种子评估 %s: score=%.1f threshold=%.1f → %s",
+            symbol,
+            score,
+            threshold,
+            passed,
+        )
         return passed
 
     def evaluate_confirmation(self, symbol: str, factors: dict) -> bool:
@@ -115,18 +124,19 @@ class ProgressiveSignal:
         """
         required = self._cfg("confirmation", "required_checks", None)
         if not required:
-            required = ["daily_mark", "market_breadth",
-                        "flow_net_positive", "ctrl_ratio"]
+            required = [
+                "daily_mark",
+                "market_breadth",
+                "flow_net_positive",
+                "ctrl_ratio",
+            ]
         threshold = float(self._cfg("confirmation", "threshold", 75))
-        breadth_th = float(self._cfg("confirmation", "breadth_threshold",
-                                     0.6))
-        ctrl_th = float(self._cfg("confirmation", "ctrl_ratio_threshold",
-                                  0.30))
+        breadth_th = float(self._cfg("confirmation", "breadth_threshold", 0.6))
+        ctrl_th = float(self._cfg("confirmation", "ctrl_ratio_threshold", 0.30))
 
         checks = {
             "daily_mark": bool(factors.get("daily_mark", False)),
-            "market_breadth": float(factors.get("market_breadth", 0.0))
-            > breadth_th,
+            "market_breadth": float(factors.get("market_breadth", 0.0)) > breadth_th,
             "flow_net_positive": float(factors.get("flow_net", 0.0)) > 0.0,
             "ctrl_ratio": float(factors.get("ctrl_ratio", 0.0)) > ctrl_th,
         }
@@ -134,8 +144,14 @@ class ProgressiveSignal:
         passed_count = sum(1 for c in required if checks.get(c, False))
         score = 100.0 * passed_count / total if total > 0 else 0.0
         passed = score >= threshold
-        logger.debug("确认评估 %s: %d/%d 项通过 score=%.1f → %s",
-                     symbol, passed_count, total, score, passed)
+        logger.debug(
+            "确认评估 %s: %d/%d 项通过 score=%.1f → %s",
+            symbol,
+            passed_count,
+            total,
+            score,
+            passed,
+        )
         return passed
 
     def evaluate_trigger(self, symbol: str, factors: dict) -> bool:
@@ -175,8 +191,9 @@ class ProgressiveSignal:
             return False
         return triggered
 
-    def check_user_trigger(self, symbol: str, factors: dict,
-                           conditions: List[dict]) -> bool:
+    def check_user_trigger(
+        self, symbol: str, factors: dict, conditions: List[dict]
+    ) -> bool:
         """用户指定触发条件检查 (达到用户指标即触发).
 
         Args:
@@ -204,8 +221,13 @@ class ProgressiveSignal:
                 if not op_fn(float(actual), float(target)):
                     return False
             except (TypeError, ValueError):
-                logger.warning("check_user_trigger: 无法比较 %s=%r %s %r",
-                               factor, actual, op_str, target)
+                logger.warning(
+                    "check_user_trigger: 无法比较 %s=%r %s %r",
+                    factor,
+                    actual,
+                    op_str,
+                    target,
+                )
                 return False
         return True
 
@@ -230,13 +252,13 @@ class ProgressiveSignal:
         user_confirmed = bool(factors.get("user_confirmed", False))
 
         # 用户确认门槛
-        needs_confirm = (
-            self.mode == "manual"
-            or (self.mode == "hybrid" and stage == SignalStage.TRIGGER)
+        needs_confirm = self.mode == "manual" or (
+            self.mode == "hybrid" and stage == SignalStage.TRIGGER
         )
         if needs_confirm and not user_confirmed:
-            logger.debug("推进 %s: %s 模式等待用户确认 (stage=%s)",
-                         symbol, self.mode, stage.name)
+            logger.debug(
+                "推进 %s: %s 模式等待用户确认 (stage=%s)", symbol, self.mode, stage.name
+            )
             return None
 
         if stage == SignalStage.SEED:
@@ -292,12 +314,16 @@ class ProgressiveSignal:
         if current_price is None:
             return True  # 无法判断, 不拦截
         if float(current_price) > float(last_price):
-            if (bool(self._cfg("consecutive_buy", "allow_manual_override",
-                               True))
-                    and bool(factors.get("user_confirmed", False))):
+            if bool(
+                self._cfg("consecutive_buy", "allow_manual_override", True)
+            ) and bool(factors.get("user_confirmed", False)):
                 logger.info("不连续买入约束 %s: 用户手动覆盖, 放行", symbol)
                 return True
-            logger.info("不连续买入约束 %s: 上涨中重复买入 (%.3f > %.3f) "
-                        "→ 拦截", symbol, current_price, last_price)
+            logger.info(
+                "不连续买入约束 %s: 上涨中重复买入 (%.3f > %.3f) → 拦截",
+                symbol,
+                current_price,
+                last_price,
+            )
             return False
         return True

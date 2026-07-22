@@ -41,12 +41,14 @@ class LabelEngine:
 
     # ---------------- 缩尾 ----------------
     @staticmethod
-    def winsorize_cross_section(df: pd.DataFrame,
-                                lower: float = 0.01, upper: float = 0.99) -> pd.DataFrame:
+    def winsorize_cross_section(
+        df: pd.DataFrame, lower: float = 0.01, upper: float = 0.99
+    ) -> pd.DataFrame:
         """横截面分位缩尾 (按 date 分组), 防止极值主导损失."""
         for col in [f"label_{k}d" for k in LABEL_HORIZONS]:
             df[col] = df.groupby("date")[col].transform(
-                lambda x: x.clip(x.quantile(lower), x.quantile(upper)))
+                lambda x: x.clip(x.quantile(lower), x.quantile(upper))
+            )
         return df
 
     # ---------------- 停牌污染 ----------------
@@ -54,9 +56,14 @@ class LabelEngine:
     def mask_suspension(df: pd.DataFrame) -> pd.DataFrame:
         """T 到 T+N 区间内存在停牌 → label_Nd 置 NaN (脏标签: 复牌价差非真实持有收益)."""
         for n in LABEL_HORIZONS:
-            suspended = (df.groupby("symbol")["is_suspended"]
-                         .rolling(n + 1).sum().shift(-n)
-                         .reset_index(level=0, drop=True) > 0)
+            suspended = (
+                df.groupby("symbol")["is_suspended"]
+                .rolling(n + 1)
+                .sum()
+                .shift(-n)
+                .reset_index(level=0, drop=True)
+                > 0
+            )
             df[f"label_{n}d"] = df[f"label_{n}d"].where(~suspended, np.nan)
         df["label_cls"] = df["label_cls"].where(df["label_1d"].notna(), np.nan)
         return df
@@ -65,7 +72,7 @@ class LabelEngine:
     @staticmethod
     def mask_recent_days(df: pd.DataFrame, days: int = 5) -> pd.DataFrame:
         """实盘训练剔除最近 N 天 (label_5d 需要 T+5 收盘价, 最近 5 天标签未生成)."""
-        cutoff = df["date"].max() - pd.Timedelta(days=days * 2)  # 自然日宽松上界
+        df["date"].max() - pd.Timedelta(days=days * 2)  # 自然日宽松上界
         recent_dates = sorted(df["date"].unique())[-days:]
         mask = df["date"].isin(recent_dates)
         for col in [f"label_{k}d" for k in LABEL_HORIZONS] + ["label_cls"]:

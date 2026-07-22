@@ -21,9 +21,9 @@ from scipy.stats import spearmanr
 
 logger = logging.getLogger(__name__)
 
-IC_STRONG = 0.03      # 有效因子
-IC_WEAK = 0.01        # 弱因子 (观察)
-ROLLING_WINDOW = 60   # 滚动 IC 窗口 (交易日)
+IC_STRONG = 0.03  # 有效因子
+IC_WEAK = 0.01  # 弱因子 (观察)
+ROLLING_WINDOW = 60  # 滚动 IC 窗口 (交易日)
 ROLLING_MEAN_MIN = 0.02
 ROLLING_POS_RATIO_MIN = 0.60
 
@@ -43,33 +43,51 @@ class ICScreener:
         if sub["date"].nunique() < 5:
             return 0.0
         ics = sub.groupby("date").apply(
-            lambda g: spearmanr(g[factor], g[label]).statistic
-            if g[factor].nunique() > 5 and g[label].nunique() > 1 else np.nan)
+            lambda g: (
+                spearmanr(g[factor], g[label]).statistic
+                if g[factor].nunique() > 5 and g[label].nunique() > 1
+                else np.nan
+            )
+        )
         return float(np.nanmean(np.abs(ics.values)))  # 方向无关: 绝对值筛强度
 
     @staticmethod
-    def rolling_ic_dual(df: pd.DataFrame, factor: str, label: str,
-                        window: int = ROLLING_WINDOW) -> tuple[float, float]:
+    def rolling_ic_dual(
+        df: pd.DataFrame, factor: str, label: str, window: int = ROLLING_WINDOW
+    ) -> tuple[float, float]:
         """滚动 IC 双指标 (D13): (滚动 IC 均值, 滚动 IC 正值比例)."""
         sub = df[["date", factor, label]].dropna()
         dates = sorted(sub["date"].unique())
         if len(dates) < window:
             return 0.0, 0.0
-        daily_ic = sub.groupby("date").apply(
-            lambda g: spearmanr(g[factor], g[label]).statistic
-            if g[factor].nunique() > 5 and g[label].nunique() > 1 else np.nan).dropna()
-        rolls = [daily_ic.loc[d0:d1].mean()
-                 for d0, d1 in zip(dates[:-window], dates[window:])]
+        daily_ic = (
+            sub.groupby("date")
+            .apply(
+                lambda g: (
+                    spearmanr(g[factor], g[label]).statistic
+                    if g[factor].nunique() > 5 and g[label].nunique() > 1
+                    else np.nan
+                )
+            )
+            .dropna()
+        )
+        rolls = [
+            daily_ic.loc[d0:d1].mean()
+            for d0, d1 in zip(dates[:-window], dates[window:])
+        ]
         rolls = pd.Series(rolls).dropna().abs()
         if len(rolls) == 0:
             return 0.0, 0.0
-        return float(rolls.mean()), float((daily_ic.abs() > 0).mean() if len(daily_ic) else 0.0)
+        return float(rolls.mean()), float(
+            (daily_ic.abs() > 0).mean() if len(daily_ic) else 0.0
+        )
 
     # ---------------- 分类模型 AUC 筛选 ----------------
     @staticmethod
     def auc_score(df: pd.DataFrame, factor: str, label: str = "label_cls") -> float:
         """单因子对分类标签的 AUC (方向无关: max(auc, 1-auc))."""
         from sklearn.metrics import roc_auc_score
+
         sub = df[[factor, label]].dropna()
         if sub[label].nunique() < 2 or len(sub) < 50:
             return 0.5
@@ -77,8 +95,9 @@ class ICScreener:
         return float(max(auc, 1 - auc))
 
     # ---------------- 主筛选 ----------------
-    def screen(self, train_df: pd.DataFrame, feature_cols: list[str],
-               window_id: str) -> dict:
+    def screen(
+        self, train_df: pd.DataFrame, feature_cols: list[str], window_id: str
+    ) -> dict:
         """窗口内重算 IC 并筛因子.
 
         Returns:
@@ -87,7 +106,9 @@ class ICScreener:
         """
         result = {"window_id": window_id, "factors": [], "detail": {}}
         for f in feature_cols:
-            ic_by_label = {k: self.rank_ic(train_df, f, f"label_{k}d") for k in (1, 3, 5)}
+            ic_by_label = {
+                k: self.rank_ic(train_df, f, f"label_{k}d") for k in (1, 3, 5)
+            }
             best_ic = max(ic_by_label.values())
             auc = self.auc_score(train_df, f)
             roll_mean, roll_pos = self.rolling_ic_dual(train_df, f, "label_1d")
@@ -98,9 +119,13 @@ class ICScreener:
                 grade = "weak"
             else:
                 grade = "dead"
-            result["detail"][f] = {**{f"ic_{k}d": round(v, 4) for k, v in ic_by_label.items()},
-                                   "auc": round(auc, 4), "rolling_mean": round(roll_mean, 4),
-                                   "rolling_pos_ratio": round(roll_pos, 4), "grade": grade}
+            result["detail"][f] = {
+                **{f"ic_{k}d": round(v, 4) for k, v in ic_by_label.items()},
+                "auc": round(auc, 4),
+                "rolling_mean": round(roll_mean, 4),
+                "rolling_pos_ratio": round(roll_pos, 4),
+                "grade": grade,
+            }
             if grade in ("strong", "weak"):
                 result["factors"].append(f)
         self._persist(window_id, result)
@@ -111,13 +136,18 @@ class ICScreener:
         path = os.path.join(self.registry_path, f"factors_{window_id}.json")
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(result, fh, ensure_ascii=False, indent=1)
-        logger.info("窗口 %s 因子清单: %d strong+weak / %d 候选",
-                    window_id, len(result["factors"]), len(result["detail"]))
+        logger.info(
+            "窗口 %s 因子清单: %d strong+weak / %d 候选",
+            window_id,
+            len(result["factors"]),
+            len(result["detail"]),
+        )
 
     # ---------------- IC 归因 ----------------
     @staticmethod
-    def ic_attribution(ic_raw: float, ic_neutralized: float,
-                       drop_threshold: float = 0.5) -> str:
+    def ic_attribution(
+        ic_raw: float, ic_neutralized: float, drop_threshold: float = 0.5
+    ) -> str:
         """行业/市值中性化后 IC 降幅 > 50% → 预测力主要来自风格暴露, 降级或移除."""
         if ic_raw <= 0:
             return "dead"

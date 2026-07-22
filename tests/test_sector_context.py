@@ -11,12 +11,14 @@ from app.core.sector_context import SECTOR_FACTOR_COLUMNS, SectorContext
 def _df(closes, opens=None, volumes=None):
     """构建合成日线 DataFrame."""
     n = len(closes)
-    return pd.DataFrame({
-        "date": pd.date_range("2024-01-01", periods=n, freq="D"),
-        "open": opens if opens is not None else closes,
-        "close": closes,
-        "volume": volumes if volumes is not None else [1000.0] * n,
-    })
+    return pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=n, freq="D"),
+            "open": opens if opens is not None else closes,
+            "close": closes,
+            "volume": volumes if volumes is not None else [1000.0] * n,
+        }
+    )
 
 
 # 板块: TECH = A(600xxx→map 覆盖) + B + C; BANK = D

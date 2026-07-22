@@ -13,7 +13,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -21,12 +20,12 @@ logger = logging.getLogger(__name__)
 SCHEMA_VERSION = "1.0"
 TOP_N = 15
 MAX_PER_INDUSTRY = 4
-MIN_LIST_SIZE = 10          # 顺延后不足则接受不足
-COMPOUND_W = (0.5, 0.35, 0.15)   # 1d/3d/5d
+MIN_LIST_SIZE = 10  # 顺延后不足则接受不足
+COMPOUND_W = (0.5, 0.35, 0.15)  # 1d/3d/5d
 HOLDING_BONUS = 0.2
 # 动量阈值
-FW_HARD = -0.03             # 预测跌幅 > 3% → 强制 low
-FW_EPS = 0.001              # 预测值太小无法算比率
+FW_HARD = -0.03  # 预测跌幅 > 3% → 强制 low
+FW_EPS = 0.001  # 预测值太小无法算比率
 RATIO_UP = 1.0
 RATIO_DOWN = 0.8
 # D18 空仓触发
@@ -35,18 +34,31 @@ MARKET_LIMIT_DOWN_EMPTY = 50
 HS300_CONSEC_DOWN_CAP = 3
 CAP_POSITION_REDUCED = 0.3
 
-SCHEMA_FIELDS = ["symbol", "board", "pred_ret_1d", "pred_ret_3d", "pred_ret_5d",
-                 "prob_up", "momentum", "consensus_score", "signal_conflict",
-                 "is_limit_up_close", "is_one_word_limit", "market_state",
-                 "score", "schema_version"]
+SCHEMA_FIELDS = [
+    "symbol",
+    "board",
+    "pred_ret_1d",
+    "pred_ret_3d",
+    "pred_ret_5d",
+    "prob_up",
+    "momentum",
+    "consensus_score",
+    "signal_conflict",
+    "is_limit_up_close",
+    "is_one_word_limit",
+    "market_state",
+    "score",
+    "schema_version",
+]
 
 
 @dataclass
 class MarketEnv:
     """大盘环境 (D18 空仓触发输入)."""
-    hs300_drop_today: float = 0.0          # 沪深300 当日跌幅 (正数=跌)
-    count_limit_down_market: int = 0       # 全市场跌停家数
-    hs300_consecutive_down: int = 0        # 沪深300 连跌天数
+
+    hs300_drop_today: float = 0.0  # 沪深300 当日跌幅 (正数=跌)
+    count_limit_down_market: int = 0  # 全市场跌停家数
+    hs300_consecutive_down: int = 0  # 沪深300 连跌天数
 
 
 class ListGenerator:
@@ -60,8 +72,9 @@ class ListGenerator:
         adjusted = score + 0.2 * is_in_yesterday_list  (Holding Bonus, 目标日均换手 40-60%)"""
         w1, w3, w5 = COMPOUND_W
         df = df.copy()
-        df["compound_ret"] = (w1 * df["pred_ret_1d"] + w3 * df["pred_ret_3d"]
-                              + w5 * df["pred_ret_5d"])
+        df["compound_ret"] = (
+            w1 * df["pred_ret_1d"] + w3 * df["pred_ret_3d"] + w5 * df["pred_ret_5d"]
+        )
         base_rate = df["prob_up"].mean()
         base_rate = base_rate if base_rate > 1e-6 else 1.0
         df["base_rate"] = base_rate
@@ -101,7 +114,8 @@ class ListGenerator:
         df["consensus_score"] = (df["_rank_1d"] + df["_rank_3d"] + df["_rank_5d"]) / 3
         df["signal_conflict"] = (
             ((df["pred_ret_1d"] > 0) & (df["prob_up"] < df["base_rate"]))
-            | ((df["pred_ret_1d"] < 0) & (df["prob_up"] > df["base_rate"]))).astype(int)
+            | ((df["pred_ret_1d"] < 0) & (df["prob_up"] > df["base_rate"]))
+        ).astype(int)
         return df.drop(columns=["_rank_1d", "_rank_3d", "_rank_5d"])
 
     # ---------------- 市场状态 ----------------
@@ -116,8 +130,9 @@ class ListGenerator:
 
     # ---------------- 行业集中度 ----------------
     @staticmethod
-    def apply_industry_limit(ranked: pd.DataFrame,
-                             max_per_industry: int = MAX_PER_INDUSTRY) -> pd.DataFrame:
+    def apply_industry_limit(
+        ranked: pd.DataFrame, max_per_industry: int = MAX_PER_INDUSTRY
+    ) -> pd.DataFrame:
         """同一申万一级行业 <= 4 只, 超出顺延; 顺延后 < 10 只则接受不足 (不强凑数)."""
         counts: dict[str, int] = {}
         keep = []
@@ -138,19 +153,31 @@ class ListGenerator:
         沪深300 跌>3% 或 全市场跌停>50 → 空清单;  连跌3日 → 仓位上限 30% (仅 Top 5).
         """
         if env.hs300_drop_today > HS300_DROP_EMPTY:
-            logger.error("D18 空仓触发: 沪深300 当日跌幅 %.1f%% > 3%%", env.hs300_drop_today * 100)
+            logger.error(
+                "D18 空仓触发: 沪深300 当日跌幅 %.1f%% > 3%%",
+                env.hs300_drop_today * 100,
+            )
             return True, 0.0
         if env.count_limit_down_market > MARKET_LIMIT_DOWN_EMPTY:
-            logger.error("D18 空仓触发: 全市场跌停 %d 只 > 50", env.count_limit_down_market)
+            logger.error(
+                "D18 空仓触发: 全市场跌停 %d 只 > 50", env.count_limit_down_market
+            )
             return True, 0.0
         if env.hs300_consecutive_down >= HS300_CONSEC_DOWN_CAP:
-            logger.warning("D18 降仓: 沪深300 连跌 %d 日, 仓位上限 30%%", env.hs300_consecutive_down)
+            logger.warning(
+                "D18 降仓: 沪深300 连跌 %d 日, 仓位上限 30%%",
+                env.hs300_consecutive_down,
+            )
             return False, CAP_POSITION_REDUCED
         return False, 1.0
 
     # ---------------- 总装 ----------------
-    def emit(self, candidates: pd.DataFrame, env: MarketEnv | None = None,
-             market_state: str = "range") -> dict:
+    def emit(
+        self,
+        candidates: pd.DataFrame,
+        env: MarketEnv | None = None,
+        market_state: str = "range",
+    ) -> dict:
         """生成清单 schema V1.0.
 
         candidates: 需含 symbol/board/industry/pred_ret_1d/3d/5d/prob_up(校准后)
@@ -162,25 +189,35 @@ class ListGenerator:
         env = env or MarketEnv()
         empty, cap = self.check_empty_triggers(env)
         if empty or len(candidates) == 0:
-            return {"list": pd.DataFrame(columns=SCHEMA_FIELDS), "cap_position": 0.0,
-                    "empty": True, "schema_version": SCHEMA_VERSION}
+            return {
+                "list": pd.DataFrame(columns=SCHEMA_FIELDS),
+                "cap_position": 0.0,
+                "empty": True,
+                "schema_version": SCHEMA_VERSION,
+            }
 
         df = self.compute_scores(candidates)
         df = self.consensus_and_conflict(df)
-        df["momentum"] = [self.compute_momentum(a, b, c) for a, b, c in
-                          zip(df["pred_ret_1d"], df["pred_ret_3d"], df["pred_ret_5d"])]
+        df["momentum"] = [
+            self.compute_momentum(a, b, c)
+            for a, b, c in zip(df["pred_ret_1d"], df["pred_ret_3d"], df["pred_ret_5d"])
+        ]
         df["market_state"] = market_state
         df["prob_up"] = df["prob_up"].round(3)
         df = df.sort_values("score", ascending=False)
         df = self.apply_industry_limit(df)
-        top = TOP_N if cap >= 1.0 else 5          # D18 降仓 → 仅 Top 5
+        top = TOP_N if cap >= 1.0 else 5  # D18 降仓 → 仅 Top 5
         df = df.head(top)
         df["schema_version"] = SCHEMA_VERSION
         for col in ("is_limit_up_close", "is_one_word_limit"):
             if col not in df.columns:
                 df[col] = 0
-        return {"list": df[SCHEMA_FIELDS].reset_index(drop=True),
-                "cap_position": cap, "empty": False, "schema_version": SCHEMA_VERSION}
+        return {
+            "list": df[SCHEMA_FIELDS].reset_index(drop=True),
+            "cap_position": cap,
+            "empty": False,
+            "schema_version": SCHEMA_VERSION,
+        }
 
 
 # ============================================================
@@ -189,6 +226,7 @@ class ListGenerator:
 @dataclass
 class ListDeliveryGuard:
     """1 日失败: 沿用昨日清单(1日)+告警; 连续 2 日: 只卖不买; 连续 3 日: 人工介入."""
+
     consecutive_failures: int = 0
     last_list: pd.DataFrame | None = field(default=None)
 
@@ -213,8 +251,12 @@ class ListDeliveryGuard:
 # ============================================================
 # 清单失效条件 (T+1 盘中, 5 分钟模型执行)
 # ============================================================
-def check_invalidation(open_gap_pct: float, limit_down_within_30min: bool,
-                       sector_drop_pct: float, surge_5min_pct: float) -> str | None:
+def check_invalidation(
+    open_gap_pct: float,
+    limit_down_within_30min: bool,
+    sector_drop_pct: float,
+    surge_5min_pct: float,
+) -> str | None:
     """任一触发 → 从清单移除, 5 分钟模型不得买入.
 
     1. 开盘跳空 > ±5% (相对 T 日收盘价)

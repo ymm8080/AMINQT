@@ -23,8 +23,16 @@ from sklearn.neural_network import MLPRegressor
 logger = logging.getLogger(__name__)
 
 MODEL_NAMES = [
-    "lightgbm", "xgboost", "catboost", "random_forest",
-    "lstm", "gru", "transformer", "tcn", "mlp", "ridge",
+    "lightgbm",
+    "xgboost",
+    "catboost",
+    "random_forest",
+    "lstm",
+    "gru",
+    "transformer",
+    "tcn",
+    "mlp",
+    "ridge",
 ]
 
 SEQUENCE_MODELS = {"lstm", "gru", "transformer", "tcn"}  # 时序模型 (N,20,85)
@@ -41,23 +49,58 @@ _HEAVY_DEPS = {
 }
 
 DEFAULT_PARAMS: Dict[str, dict] = {
-    "lightgbm": {"n_estimators": 200, "learning_rate": 0.05, "num_leaves": 31,
-                 "verbose": -1, "random_state": 42},
-    "xgboost": {"n_estimators": 200, "learning_rate": 0.05, "max_depth": 6,
-                "random_state": 42},
-    "catboost": {"iterations": 200, "learning_rate": 0.05, "depth": 6,
-                 "verbose": False, "random_state": 42},
+    "lightgbm": {
+        "n_estimators": 200,
+        "learning_rate": 0.05,
+        "num_leaves": 31,
+        "verbose": -1,
+        "random_state": 42,
+    },
+    "xgboost": {
+        "n_estimators": 200,
+        "learning_rate": 0.05,
+        "max_depth": 6,
+        "random_state": 42,
+    },
+    "catboost": {
+        "iterations": 200,
+        "learning_rate": 0.05,
+        "depth": 6,
+        "verbose": False,
+        "random_state": 42,
+    },
     "random_forest": {"n_estimators": 100, "n_jobs": -1, "random_state": 42},
-    "lstm": {"hidden_size": 64, "num_layers": 2, "dropout": 0.2,
-             "epochs": 10, "lr": 1e-3},
-    "gru": {"hidden_size": 64, "num_layers": 2, "dropout": 0.2,
-            "epochs": 10, "lr": 1e-3},
-    "transformer": {"d_model": 64, "nhead": 4, "num_layers": 2, "dropout": 0.1,
-                    "epochs": 10, "lr": 1e-3},
-    "tcn": {"channels": 64, "kernel_size": 3, "num_layers": 3, "dropout": 0.1,
-            "epochs": 10, "lr": 1e-3},
-    "mlp": {"hidden_layer_sizes": (128, 64), "max_iter": 300,
-            "random_state": 42},
+    "lstm": {
+        "hidden_size": 64,
+        "num_layers": 2,
+        "dropout": 0.2,
+        "epochs": 10,
+        "lr": 1e-3,
+    },
+    "gru": {
+        "hidden_size": 64,
+        "num_layers": 2,
+        "dropout": 0.2,
+        "epochs": 10,
+        "lr": 1e-3,
+    },
+    "transformer": {
+        "d_model": 64,
+        "nhead": 4,
+        "num_layers": 2,
+        "dropout": 0.1,
+        "epochs": 10,
+        "lr": 1e-3,
+    },
+    "tcn": {
+        "channels": 64,
+        "kernel_size": 3,
+        "num_layers": 3,
+        "dropout": 0.1,
+        "epochs": 10,
+        "lr": 1e-3,
+    },
+    "mlp": {"hidden_layer_sizes": (128, 64), "max_iter": 300, "random_state": 42},
     "ridge": {"alpha": 1.0},
 }
 
@@ -103,8 +146,9 @@ def _clean(y: np.ndarray) -> np.ndarray:
     Returns:
         清洗后的一维 float 数组。
     """
-    return np.nan_to_num(np.asarray(y, dtype=np.float64).ravel(),
-                         nan=0.0, posinf=0.0, neginf=0.0)
+    return np.nan_to_num(
+        np.asarray(y, dtype=np.float64).ravel(), nan=0.0, posinf=0.0, neginf=0.0
+    )
 
 
 def _build_torch_net(name: str, input_size: int, params: dict):
@@ -133,8 +177,11 @@ def _build_torch_net(name: str, input_size: int, params: dict):
             def __init__(self) -> None:
                 super().__init__()
                 self.rnn = rnn_cls(
-                    input_size, params["hidden_size"], params["num_layers"],
-                    batch_first=True, dropout=params["dropout"],
+                    input_size,
+                    params["hidden_size"],
+                    params["num_layers"],
+                    batch_first=True,
+                    dropout=params["dropout"],
                 )
                 self.fc = nn.Linear(params["hidden_size"], 1)
 
@@ -154,12 +201,15 @@ def _build_torch_net(name: str, input_size: int, params: dict):
                 d_model = params["d_model"]
                 self.proj = nn.Linear(input_size, d_model)
                 layer = nn.TransformerEncoderLayer(
-                    d_model=d_model, nhead=params["nhead"],
-                    dim_feedforward=d_model * 4, dropout=params["dropout"],
+                    d_model=d_model,
+                    nhead=params["nhead"],
+                    dim_feedforward=d_model * 4,
+                    dropout=params["dropout"],
                     batch_first=True,
                 )
                 self.encoder = nn.TransformerEncoder(
-                    layer, num_layers=params["num_layers"])
+                    layer, num_layers=params["num_layers"]
+                )
                 self.fc = nn.Linear(d_model, 1)
 
             def forward(self, x):
@@ -173,8 +223,7 @@ def _build_torch_net(name: str, input_size: int, params: dict):
         class _CausalConv1d(nn.Module):
             """因果卷积 (左侧 padding, 不看未来)."""
 
-            def __init__(self, cin: int, cout: int, k: int,
-                         dilation: int) -> None:
+            def __init__(self, cin: int, cout: int, k: int, dilation: int) -> None:
                 super().__init__()
                 self.pad = (k - 1) * dilation
                 self.conv = nn.Conv1d(cin, cout, k, dilation=dilation)
@@ -190,11 +239,17 @@ def _build_torch_net(name: str, input_size: int, params: dict):
             def __init__(self) -> None:
                 super().__init__()
                 ch = params["channels"]
-                self.convs = nn.ModuleList([
-                    _CausalConv1d(input_size if i == 0 else ch, ch,
-                                  params["kernel_size"], dilation=2 ** i)
-                    for i in range(params["num_layers"])
-                ])
+                self.convs = nn.ModuleList(
+                    [
+                        _CausalConv1d(
+                            input_size if i == 0 else ch,
+                            ch,
+                            params["kernel_size"],
+                            dilation=2**i,
+                        )
+                        for i in range(params["num_layers"])
+                    ]
+                )
                 self.drop = nn.Dropout(params["dropout"])
                 self.fc = nn.Linear(ch, 1)
 
@@ -217,9 +272,13 @@ class ZooModel:
     保留 (N, 20, F) 时序结构。所有输入在进模型前 np.nan_to_num。
     """
 
-    def __init__(self, name: str, estimator=None,
-                 params: Optional[dict] = None,
-                 input_size: Optional[int] = None) -> None:
+    def __init__(
+        self,
+        name: str,
+        estimator=None,
+        params: Optional[dict] = None,
+        input_size: Optional[int] = None,
+    ) -> None:
         """初始化包装器.
 
         Args:
@@ -254,9 +313,14 @@ class ZooModel:
             X = X.reshape(X.shape[0], -1)
         return X
 
-    def fit(self, X: np.ndarray, y: np.ndarray,
-            X_val: Optional[np.ndarray] = None,
-            y_val: Optional[np.ndarray] = None, **kwargs) -> "ZooModel":
+    def fit(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        X_val: Optional[np.ndarray] = None,
+        y_val: Optional[np.ndarray] = None,
+        **kwargs,
+    ) -> "ZooModel":
         """训练.
 
         Args:
@@ -278,8 +342,7 @@ class ZooModel:
             self._fit_torch(X, y, **kwargs)
         else:
             if self.estimator is None:
-                raise RuntimeError(
-                    f"模型 {self.name} 缺少内部估计器, 无法 fit")
+                raise RuntimeError(f"模型 {self.name} 缺少内部估计器, 无法 fit")
             self.estimator.fit(X, y)
         return self
 
@@ -296,13 +359,11 @@ class ZooModel:
 
         self.input_size = X.shape[-1]
         if self.estimator is None:
-            self.estimator = _build_torch_net(self.name, self.input_size,
-                                              self.params)
+            self.estimator = _build_torch_net(self.name, self.input_size, self.params)
         epochs = int(kwargs.get("epochs", self.params.get("epochs", 10)))
         lr = float(kwargs.get("lr", self.params.get("lr", 1e-3)))
         torch.manual_seed(42)
-        opt = torch.optim.Adam(self.estimator.parameters(), lr=lr,
-                               weight_decay=1e-4)
+        opt = torch.optim.Adam(self.estimator.parameters(), lr=lr, weight_decay=1e-4)
         loss_fn = torch.nn.MSELoss()
         xt = torch.tensor(X, dtype=torch.float32)
         yt = torch.tensor(y, dtype=torch.float32)
@@ -312,8 +373,9 @@ class ZooModel:
             loss = loss_fn(self.estimator(xt), yt)
             loss.backward()
             opt.step()
-            logger.debug("%s epoch %d/%d loss=%.6f",
-                         self.name, epoch + 1, epochs, loss.item())
+            logger.debug(
+                "%s epoch %d/%d loss=%.6f", self.name, epoch + 1, epochs, loss.item()
+            )
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         """推理.
@@ -328,8 +390,7 @@ class ZooModel:
             RuntimeError: 模型尚未训练/加载。
         """
         if self.estimator is None:
-            raise RuntimeError(
-                f"模型 {self.name} 尚未训练或加载, 无法 predict")
+            raise RuntimeError(f"模型 {self.name} 尚未训练或加载, 无法 predict")
         X = self._prepare(X)
         if self.is_sequence:
             _require_dep(self.name)
@@ -339,8 +400,7 @@ class ZooModel:
             with torch.no_grad():
                 xt = torch.tensor(X, dtype=torch.float32)
                 return self.estimator(xt).cpu().numpy().ravel()
-        return np.asarray(self.estimator.predict(X),
-                          dtype=np.float64).ravel()
+        return np.asarray(self.estimator.predict(X), dtype=np.float64).ravel()
 
     def save(self, path: str) -> None:
         """保存模型 (sklearn → pickle; torch → .pt).
@@ -357,21 +417,27 @@ class ZooModel:
             _require_dep(self.name)
             import torch
 
-            torch.save({
-                "format": "zoo_model",
-                "name": self.name,
-                "params": self.params,
-                "input_size": self.input_size,
-                "state_dict": self.estimator.state_dict(),
-            }, path)
-        else:
-            with open(path, "wb") as f:
-                pickle.dump({
+            torch.save(
+                {
                     "format": "zoo_model",
                     "name": self.name,
                     "params": self.params,
-                    "estimator": self.estimator,
-                }, f)
+                    "input_size": self.input_size,
+                    "state_dict": self.estimator.state_dict(),
+                },
+                path,
+            )
+        else:
+            with open(path, "wb") as f:
+                pickle.dump(
+                    {
+                        "format": "zoo_model",
+                        "name": self.name,
+                        "params": self.params,
+                        "estimator": self.estimator,
+                    },
+                    f,
+                )
         logger.info("模型 %s 已保存 → %s", self.name, path)
 
     def load(self, path: str) -> "ZooModel":
@@ -391,21 +457,18 @@ class ZooModel:
             _require_dep(self.name)
             import torch
 
-            payload = torch.load(path, map_location="cpu",
-                                 weights_only=False)
+            payload = torch.load(path, map_location="cpu", weights_only=False)
             if not isinstance(payload, dict) or "state_dict" not in payload:
                 raise ValueError(f"{path} 不是 ZooModel torch 存档")
             self.params = payload.get("params", self.params)
             self.input_size = payload.get("input_size")
-            self.estimator = _build_torch_net(self.name, self.input_size,
-                                              self.params)
+            self.estimator = _build_torch_net(self.name, self.input_size, self.params)
             self.estimator.load_state_dict(payload["state_dict"])
             self.estimator.eval()
         else:
             with open(path, "rb") as f:
                 payload = pickle.load(f)
-            if isinstance(payload, dict) and \
-                    payload.get("format") == "zoo_model":
+            if isinstance(payload, dict) and payload.get("format") == "zoo_model":
                 self.name = payload["name"]
                 self.params = payload.get("params", {})
                 self.estimator = payload["estimator"]
@@ -428,14 +491,18 @@ def load_model(path: str) -> ZooModel:
         _require_dep("lstm")  # 借时序名检查 torch 是否可用
         import torch
 
-        name = torch.load(path, map_location="cpu",
-                          weights_only=False).get("name", "lstm")
+        name = torch.load(path, map_location="cpu", weights_only=False).get(
+            "name", "lstm"
+        )
         return ZooModel(name).load(path)
     with open(path, "rb") as f:
         payload = pickle.load(f)
     if isinstance(payload, dict) and payload.get("format") == "zoo_model":
-        model = ZooModel(payload["name"], estimator=payload["estimator"],
-                         params=payload.get("params", {}))
+        model = ZooModel(
+            payload["name"],
+            estimator=payload["estimator"],
+            params=payload.get("params", {}),
+        )
     else:
         model = ZooModel("custom", estimator=payload)
     logger.info("ZooModel 已加载 ← %s (name=%s)", path, model.name)
@@ -501,7 +568,8 @@ def list_models() -> Dict[str, dict]:
     return {
         name: {
             "type": meta[name][0],
-            "input_shape": "(N, 20, 85)" if name in SEQUENCE_MODELS
+            "input_shape": "(N, 20, 85)"
+            if name in SEQUENCE_MODELS
             else "(N, 1700) (由 (N,20,85) 展平)",
             "default_params": dict(DEFAULT_PARAMS[name]),
             "available": dep_available(name),

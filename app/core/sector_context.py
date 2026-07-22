@@ -25,15 +25,15 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 SECTOR_FACTOR_COLUMNS = [
-    "sector_avg_pct_change",     # 板块平均涨跌幅
+    "sector_avg_pct_change",  # 板块平均涨跌幅
     "sector_relative_strength",  # 个股相对板块强度
-    "sector_rank_pct",           # 个股在板块内排名分位
-    "sector_net_flow",           # 板块资金净流入
+    "sector_rank_pct",  # 个股在板块内排名分位
+    "sector_net_flow",  # 板块资金净流入
 ]
 
 # ── 默认配置 (可由 config dict 覆盖) ─────────────────────────────────
 DEFAULT_CONFIG = {
-    "min_rows": 2,          # 计算涨跌幅所需的最少行数
+    "min_rows": 2,  # 计算涨跌幅所需的最少行数
 }
 
 
@@ -45,8 +45,9 @@ class SectorContext:
         config: 可选配置 dict, 覆盖 DEFAULT_CONFIG。
     """
 
-    def __init__(self, sector_map: Optional[Dict[str, str]] = None,
-                 config: Optional[dict] = None) -> None:
+    def __init__(
+        self, sector_map: Optional[Dict[str, str]] = None, config: Optional[dict] = None
+    ) -> None:
         self._sector_map: Dict[str, str] = dict(sector_map or {})
         self._config = {**DEFAULT_CONFIG, **(config or {})}
 
@@ -90,8 +91,9 @@ class SectorContext:
         flow = 0.0
         if {"open", "close", "volume"}.issubset(df.columns):
             last = df.iloc[-1]
-            flow = float((float(last["close"]) - float(last["open"]))
-                         * float(last["volume"]))
+            flow = float(
+                (float(last["close"]) - float(last["open"])) * float(last["volume"])
+            )
         return pct, flow
 
     def compute(self, symbol: str, all_stocks: Dict[str, pd.DataFrame]) -> dict:
@@ -128,16 +130,18 @@ class SectorContext:
                 own_pct = pf[0]
 
         if not pcts or own_pct is None:
-            logger.warning("板块 %s 有效成员不足或 %s 数据不足, 返回全 0 因子",
-                           sector, code)
+            logger.warning(
+                "板块 %s 有效成员不足或 %s 数据不足, 返回全 0 因子", sector, code
+            )
             return result
 
-        pcts_arr = np.nan_to_num(np.asarray(pcts, dtype=float),
-                                 nan=0.0, posinf=0.0, neginf=0.0)
-        flows_arr = np.nan_to_num(np.asarray(flows, dtype=float),
-                                  nan=0.0, posinf=0.0, neginf=0.0)
-        own_pct = float(np.nan_to_num(own_pct, nan=0.0,
-                                      posinf=0.0, neginf=0.0))
+        pcts_arr = np.nan_to_num(
+            np.asarray(pcts, dtype=float), nan=0.0, posinf=0.0, neginf=0.0
+        )
+        flows_arr = np.nan_to_num(
+            np.asarray(flows, dtype=float), nan=0.0, posinf=0.0, neginf=0.0
+        )
+        own_pct = float(np.nan_to_num(own_pct, nan=0.0, posinf=0.0, neginf=0.0))
 
         sector_avg = float(pcts_arr.mean())
         result["sector_avg_pct_change"] = sector_avg
@@ -146,10 +150,15 @@ class SectorContext:
         result["sector_rank_pct"] = float(np.mean(pcts_arr <= own_pct))
         result["sector_net_flow"] = float(flows_arr.sum())
 
-        logger.debug("板块因子 %s [%s]: avg=%.4f rel=%.4f rank=%.2f flow=%.0f",
-                     code, sector, result["sector_avg_pct_change"],
-                     result["sector_relative_strength"],
-                     result["sector_rank_pct"], result["sector_net_flow"])
+        logger.debug(
+            "板块因子 %s [%s]: avg=%.4f rel=%.4f rank=%.2f flow=%.0f",
+            code,
+            sector,
+            result["sector_avg_pct_change"],
+            result["sector_relative_strength"],
+            result["sector_rank_pct"],
+            result["sector_net_flow"],
+        )
         return result
 
     # ───────────────────────────────────────────────────────────────

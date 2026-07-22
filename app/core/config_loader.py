@@ -40,7 +40,9 @@ def load_config(name: str) -> dict:
         logger.warning("配置文件为空: %s, 返回 {}", path)
         return {}
     if not isinstance(cfg, dict):
-        logger.warning("配置文件顶层非字典: %s (type=%s), 返回 {}", path, type(cfg).__name__)
+        logger.warning(
+            "配置文件顶层非字典: %s (type=%s), 返回 {}", path, type(cfg).__name__
+        )
         return {}
 
     logger.debug("配置加载完成: %s (%d 个顶层键)", path, len(cfg))

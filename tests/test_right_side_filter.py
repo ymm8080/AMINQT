@@ -8,22 +8,25 @@ import pytest
 from app.core.right_side_filter import RightSideFilter
 
 
-def _make_trend_df(n: int = 60, slope: float = 0.1,
-                   amount: float = 1e8, noise: float = 0.005) -> pd.DataFrame:
+def _make_trend_df(
+    n: int = 60, slope: float = 0.1, amount: float = 1e8, noise: float = 0.005
+) -> pd.DataFrame:
     """构造已知趋势的合成日线 (slope>0 上行, slope<0 下行)."""
     rng = np.random.default_rng(7)
     t = np.arange(n)
     close = 10.0 + slope * t + rng.normal(0.0, noise, n)
     close = np.maximum(close, 0.5)
     volume = amount / close
-    return pd.DataFrame({
-        "open": close,
-        "high": close * 1.01,
-        "low": close * 0.99,
-        "close": close,
-        "volume": volume,
-        "amount": np.full(n, amount),
-    })
+    return pd.DataFrame(
+        {
+            "open": close,
+            "high": close * 1.01,
+            "low": close * 0.99,
+            "close": close,
+            "volume": volume,
+            "amount": np.full(n, amount),
+        }
+    )
 
 
 @pytest.fixture()

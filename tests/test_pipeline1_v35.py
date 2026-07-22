@@ -7,14 +7,24 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.pipeline1.cleaning_pipeline import (CleaningConfig, CleaningPipeline,
-                                             board_of, get_limit_pct, is_limit_up,
-                                             limit_up_price)
+from app.pipeline1.cleaning_pipeline import (
+    CleaningConfig,
+    CleaningPipeline,
+    board_of,
+    get_limit_pct,
+    is_limit_up,
+    limit_up_price,
+)
 from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.ic_screener import ICScreener
-from app.pipeline1.list_generator import (ListDeliveryGuard, ListGenerator, MarketEnv,
-                                          SCHEMA_FIELDS, check_invalidation)
+from app.pipeline1.list_generator import (
+    ListDeliveryGuard,
+    ListGenerator,
+    MarketEnv,
+    SCHEMA_FIELDS,
+    check_invalidation,
+)
 from app.pipeline1.oos_monitor import OOSMonitor
 from app.pipeline1.prob_calibrator import ProbCalibrator
 
@@ -22,7 +32,9 @@ from app.pipeline1.prob_calibrator import ProbCalibrator
 # ============================================================
 # 合成数据
 # ============================================================
-def make_panel(symbols=("600519", "300750", "601318"), days=300, seed=42) -> pd.DataFrame:
+def make_panel(
+    symbols=("600519", "300750", "601318"), days=300, seed=42
+) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     dates = pd.bdate_range("2025-01-01", periods=days)
     frames = []
@@ -33,19 +45,34 @@ def make_panel(symbols=("600519", "300750", "601318"), days=300, seed=42) -> pd.
         high = np.maximum(open_, close) * (1 + abs(rng.normal(0, 0.005, days)))
         low = np.minimum(open_, close) * (1 - abs(rng.normal(0, 0.005, days)))
         pre_close = np.concatenate([[close[0]], close[:-1]])
-        frames.append(pd.DataFrame({
-            "symbol": sym, "date": dates, "board": board,
-            "open": open_, "high": high, "low": low, "close": close,
-            "close_hfq": close, "high_hfq": high, "low_hfq": low, "open_hfq": open_,
-            "volume": rng.integers(1e6, 1e8, days).astype(float),
-            "amount": rng.uniform(6e7, 2e9, days),
-            "turnover_rate": rng.uniform(1, 10, days),
-            "free_float_turnover_rate": rng.uniform(1, 10, days),
-            "pre_close": pre_close,
-            "is_suspended": False, "is_st": False,
-            "industry": "白酒" if sym == "600519" else ("电池" if sym == "300750" else "保险"),
-            "list_days": 1000,
-        }))
+        frames.append(
+            pd.DataFrame(
+                {
+                    "symbol": sym,
+                    "date": dates,
+                    "board": board,
+                    "open": open_,
+                    "high": high,
+                    "low": low,
+                    "close": close,
+                    "close_hfq": close,
+                    "high_hfq": high,
+                    "low_hfq": low,
+                    "open_hfq": open_,
+                    "volume": rng.integers(1e6, 1e8, days).astype(float),
+                    "amount": rng.uniform(6e7, 2e9, days),
+                    "turnover_rate": rng.uniform(1, 10, days),
+                    "free_float_turnover_rate": rng.uniform(1, 10, days),
+                    "pre_close": pre_close,
+                    "is_suspended": False,
+                    "is_st": False,
+                    "industry": "白酒"
+                    if sym == "600519"
+                    else ("电池" if sym == "300750" else "保险"),
+                    "list_days": 1000,
+                }
+            )
+        )
     return pd.concat(frames, ignore_index=True)
 
 
@@ -71,7 +98,7 @@ class TestCleaning:
         """涨停价精确比对 round(pre_close*(1+pct),2), 容差 <0.01 (即±1分内算涨停)."""
         assert limit_up_price(10.03, 0.10) == 11.03
         assert is_limit_up(11.03, 10.03, 0.10)
-        assert not is_limit_up(11.01, 10.03, 0.10)   # 差2分, 非涨停
+        assert not is_limit_up(11.01, 10.03, 0.10)  # 差2分, 非涨停
 
     def test_step1_st_and_list_days(self):
         df = make_panel()
@@ -96,9 +123,9 @@ class TestCleaning:
         df.loc[10, "is_suspended"] = True
         out = CleaningPipeline().step3_extreme(df)
         dates = out["date"].tolist()
-        assert df["date"].iloc[10] not in dates      # 停牌日
-        assert df["date"].iloc[11] not in dates      # 复牌首日
-        assert df["date"].iloc[12] in dates          # 复牌次日纳入
+        assert df["date"].iloc[10] not in dates  # 停牌日
+        assert df["date"].iloc[11] not in dates  # 复牌首日
+        assert df["date"].iloc[12] in dates  # 复牌次日纳入
 
     def test_step4_one_word_and_valve(self):
         """安全网 #8: 一字涨停剔除 + 8000万安全阀 + <15 强制空清单."""
@@ -112,7 +139,7 @@ class TestCleaning:
         cfg = CleaningConfig(abs_amount_floor=8e7, valve_full=50, valve_reduced=15)
         out, state = CleaningPipeline(cfg).step4_tradability(today, inference_only=True)
         assert "600519" not in set(out["symbol"])
-        assert state == "empty"     # 剩 1 只 < 15
+        assert state == "empty"  # 剩 1 只 < 15
 
     def test_delisted_virtual_rows(self):
         """安全网 #14: 退市股虚拟 T+1 = 收盘×0.5."""
@@ -150,14 +177,14 @@ class TestLabels:
     def test_winsorize(self):
         df = make_panel(symbols=("600519", "300750", "601318"), days=60)
         out = LabelEngine.build_labels(df)
-        out.loc[0, "label_1d"] = 10.0   # 极端值
+        out.loc[0, "label_1d"] = 10.0  # 极端值
         clipped = LabelEngine.winsorize_cross_section(out)
         assert clipped["label_1d"].max() < 10.0
 
     def test_mask_suspension(self):
         df = make_panel(symbols=("600519",), days=30)
         out = LabelEngine.build_labels(df)
-        out.loc[5, "is_suspended"] = True   # T+1 停牌 → T 的 label_1d 置 NaN
+        out.loc[5, "is_suspended"] = True  # T+1 停牌 → T 的 label_1d 置 NaN
         masked = LabelEngine.mask_suspension(out)
         assert np.isnan(masked["label_1d"].iloc[4])
 
@@ -182,16 +209,27 @@ class TestFeatures:
         df = make_panel(symbols=("600519", "300750"), days=300)
         eng = FeatureEngineV35()
         out = eng.build(df)
-        for col in ("MACD", "RSI", "K", "ATR_pct", "BB_width", "bias_60",
-                    "limit_up_days_10", "consecutive_board", "month",
-                    "MA250_dist", "market_turnover", "turnover_stability_5"
-                    if "turnover_stability_5" in out else "MA5_dist"):
+        for col in (
+            "MACD",
+            "RSI",
+            "K",
+            "ATR_pct",
+            "BB_width",
+            "bias_60",
+            "limit_up_days_10",
+            "consecutive_board",
+            "month",
+            "MA250_dist",
+            "market_turnover",
+            "turnover_stability_5" if "turnover_stability_5" in out else "MA5_dist",
+        ):
             assert col in out.columns, col
         # groupby 检查: 每股 MA5_dist 独立计算, 首 4 日为 NaN
         sub = out[out["symbol"] == "600519"]
         assert sub["MA5_dist"].iloc[:4].isna().all()
         assert sub["MA5_dist"].iloc[4] == pytest.approx(
-            sub["close_hfq"].iloc[4] / sub["close_hfq"].iloc[:5].mean() - 1)
+            sub["close_hfq"].iloc[4] / sub["close_hfq"].iloc[:5].mean() - 1
+        )
 
     def test_missingness_flags(self):
         df = make_panel(symbols=("600519",), days=30)
@@ -218,10 +256,12 @@ class TestICScreener:
         for d in dates:
             f = rng.normal(size=30)
             for i in range(30):
-                rows.append({"date": d, "factor": f[i], "label_1d": f[i] + rng.normal(0, 0.01)})
+                rows.append(
+                    {"date": d, "factor": f[i], "label_1d": f[i] + rng.normal(0, 0.01)}
+                )
         df = pd.DataFrame(rows)
         ic = ICScreener.rank_ic(df, "factor", "label_1d")
-        assert ic > 0.9     # 完美相关 → IC≈1
+        assert ic > 0.9  # 完美相关 → IC≈1
 
 
 # ============================================================
@@ -231,16 +271,18 @@ def make_candidates(n=20, seed=1) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     boards = ["main", "GEM", "STAR"]
     inds = ["白酒", "电池", "保险", "半导体"]
-    return pd.DataFrame({
-        "symbol": [f"60{i:04d}" for i in range(n)],
-        "board": [boards[i % 3] for i in range(n)],
-        "industry": [inds[i % 4] for i in range(n)],
-        "pred_ret_1d": rng.uniform(-0.05, 0.05, n),
-        "pred_ret_3d": rng.uniform(-0.08, 0.10, n),
-        "pred_ret_5d": rng.uniform(-0.10, 0.15, n),
-        "prob_up": rng.uniform(0.35, 0.65, n),
-        "is_in_yesterday_list": [i % 2 for i in range(n)],
-    })
+    return pd.DataFrame(
+        {
+            "symbol": [f"60{i:04d}" for i in range(n)],
+            "board": [boards[i % 3] for i in range(n)],
+            "industry": [inds[i % 4] for i in range(n)],
+            "pred_ret_1d": rng.uniform(-0.05, 0.05, n),
+            "pred_ret_3d": rng.uniform(-0.08, 0.10, n),
+            "pred_ret_5d": rng.uniform(-0.10, 0.15, n),
+            "prob_up": rng.uniform(0.35, 0.65, n),
+            "is_in_yesterday_list": [i % 2 for i in range(n)],
+        }
+    )
 
 
 class TestListGenerator:
@@ -254,7 +296,7 @@ class TestListGenerator:
 
     def test_industry_limit(self):
         cands = make_candidates(n=20)
-        cands["industry"] = "白酒"     # 全部同行业 → 最多 4 只
+        cands["industry"] = "白酒"  # 全部同行业 → 最多 4 只
         out = ListGenerator().emit(cands)
         assert len(out["list"]) == 4
 
@@ -263,8 +305,8 @@ class TestListGenerator:
         assert ListGenerator.compute_momentum(-0.08, -0.02, -0.01) == "low"
         assert ListGenerator.compute_momentum(-0.01, 0.05, 0.10) == "medium"
         assert ListGenerator.compute_momentum(0.0005, 0.001, 0.002) == "medium"
-        assert ListGenerator.compute_momentum(0.02, 0.09, 0.20) == "high"   # 加速
-        assert ListGenerator.compute_momentum(0.05, 0.10, 0.10) == "low"    # 3d 衰减
+        assert ListGenerator.compute_momentum(0.02, 0.09, 0.20) == "high"  # 加速
+        assert ListGenerator.compute_momentum(0.05, 0.10, 0.10) == "low"  # 3d 衰减
         assert ListGenerator.compute_momentum(0.03, 0.10, 0.12) == "medium"
 
     def test_holding_bonus(self):
@@ -275,15 +317,21 @@ class TestListGenerator:
         out = ListGenerator().emit(cands)
         # 昨日在清单内的票 +0.2 加成 → 排第一, 分差 ≈ 0.2
         assert out["list"].iloc[0]["symbol"] == "600000"
-        assert out["list"].iloc[0]["score"] - out["list"].iloc[1]["score"] == pytest.approx(0.2)
+        assert out["list"].iloc[0]["score"] - out["list"].iloc[1][
+            "score"
+        ] == pytest.approx(0.2)
 
     def test_empty_triggers(self):
         """D18: 暴跌/跌停>50 → 空清单; 连跌3日 → 仅 Top 5."""
         out = ListGenerator().emit(make_candidates(), MarketEnv(hs300_drop_today=0.031))
         assert out["empty"] and len(out["list"]) == 0
-        out = ListGenerator().emit(make_candidates(), MarketEnv(count_limit_down_market=51))
+        out = ListGenerator().emit(
+            make_candidates(), MarketEnv(count_limit_down_market=51)
+        )
         assert out["empty"]
-        out = ListGenerator().emit(make_candidates(n=20), MarketEnv(hs300_consecutive_down=3))
+        out = ListGenerator().emit(
+            make_candidates(n=20), MarketEnv(hs300_consecutive_down=3)
+        )
         assert not out["empty"] and len(out["list"]) <= 5 and out["cap_position"] == 0.3
 
     def test_delivery_guard(self):
@@ -342,6 +390,6 @@ class TestOOSMonitor:
     def test_kill_switch(self):
         m = OOSMonitor()
         for _ in range(40):
-            m.daily_check(0.005)     # 连续 2 月 IC < 0.01
+            m.daily_check(0.005)  # 连续 2 月 IC < 0.01
         r = m.kill_switch_check()
         assert r["retire"] and m.state == "RETIRED"

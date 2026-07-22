@@ -24,11 +24,18 @@ def trade_df():
 @pytest.fixture
 def ann_dir(tmp_path):
     """写入公告 parquet: major/earnings/hold_change/risk_warning 各一条."""
-    ann = pd.DataFrame({
-        "date": ["2026-03-05", "2026-03-05", "2026-03-10",
-                 "2026-03-20", "2026-03-25"],
-        "type": ["major", "earnings", "hold_change", "risk_warning", "major"],
-    })
+    ann = pd.DataFrame(
+        {
+            "date": [
+                "2026-03-05",
+                "2026-03-05",
+                "2026-03-10",
+                "2026-03-20",
+                "2026-03-25",
+            ],
+            "type": ["major", "earnings", "hold_change", "risk_warning", "major"],
+        }
+    )
     ann.to_parquet(tmp_path / f"{SYMBOL}_ann.parquet", index=False)
     return str(tmp_path)
 
@@ -82,8 +89,7 @@ class TestWithAnnouncements:
 class TestMissingFile:
     def test_all_zeros(self, trade_df, tmp_path, caplog):
         with caplog.at_level(logging.WARNING):
-            out = compute_announcement_factors(trade_df, "999999",
-                                               str(tmp_path))
+            out = compute_announcement_factors(trade_df, "999999", str(tmp_path))
         for col in ANNOUNCEMENT_FACTOR_COLUMNS:
             assert (out[col] == 0.0).all(), col
         assert any("缺失" in r.message for r in caplog.records)

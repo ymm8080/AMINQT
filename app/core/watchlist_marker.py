@@ -63,8 +63,7 @@ class WatchlistMarker:
         一个月内 pullup_flag_decay10 > 0 (峰值日 = 窗口内 flag 最大日),
         且自峰值日起 trend_short > trend_mid 全程成立。
         """
-        lookback = int(self._cfg("case1_pullup_trend", "pullup_lookback_days",
-                                 30))
+        lookback = int(self._cfg("case1_pullup_trend", "pullup_lookback_days", 30))
         cols = [COL_PULLUP, COL_TREND_SHORT, COL_TREND_MID]
         if df is None or len(df) == 0 or not all(c in df.columns for c in cols):
             return False
@@ -92,8 +91,7 @@ class WatchlistMarker:
         ret = df["close"].astype(float).pct_change().tail(lookback)
         passed = bool((ret > th).any())
         if passed:
-            logger.info("CASE2 命中: %d 日内存在涨幅 > %.0f%%", lookback,
-                        th * 100)
+            logger.info("CASE2 命中: %d 日内存在涨幅 > %.0f%%", lookback, th * 100)
         return passed
 
     def check_case3_weekly_ctrl_rising(self, df: pd.DataFrame) -> bool:
@@ -107,11 +105,12 @@ class WatchlistMarker:
             return False
         ctrl = df[COL_CTRL_RATIO].astype(float)
         this_week = float(ctrl.iloc[-window:].mean())
-        last_week = float(ctrl.iloc[-window * 2:-window].mean())
+        last_week = float(ctrl.iloc[-window * 2 : -window].mean())
         passed = this_week > last_week
         if passed:
-            logger.info("CASE3 命中: 本周控盘均值 %.3f > 上周 %.3f",
-                        this_week, last_week)
+            logger.info(
+                "CASE3 命中: 本周控盘均值 %.3f > 上周 %.3f", this_week, last_week
+            )
         return passed
 
     def check_case4_breakout(self, df: pd.DataFrame) -> bool:
@@ -123,58 +122,60 @@ class WatchlistMarker:
           2. 放量: volume[-1] > 1.5 × MA5(volume)
           3. 前 10 个交易日内 >= 3 天同时存在上影线和下影线
         """
-        platform_window = int(self._cfg("case4_breakout", "platform_window",
-                                        20))
-        breakout_th = float(self._cfg("case4_breakout", "breakout_threshold",
-                                      0.02))
-        vol_ratio = float(self._cfg("case4_breakout", "volume_surge_ratio",
-                                    1.5))
-        shadow_lookback = int(self._cfg("case4_breakout", "shadow_lookback_days",
-                                        10))
-        min_shadow_days = int(self._cfg("case4_breakout", "min_shadow_days",
-                                        3))
+        platform_window = int(self._cfg("case4_breakout", "platform_window", 20))
+        breakout_th = float(self._cfg("case4_breakout", "breakout_threshold", 0.02))
+        vol_ratio = float(self._cfg("case4_breakout", "volume_surge_ratio", 1.5))
+        shadow_lookback = int(self._cfg("case4_breakout", "shadow_lookback_days", 10))
+        min_shadow_days = int(self._cfg("case4_breakout", "min_shadow_days", 3))
 
         cols = ["open", "high", "low", "close", "volume"]
-        if df is None or len(df) < platform_window + 1 or not all(
-                c in df.columns for c in cols):
+        if (
+            df is None
+            or len(df) < platform_window + 1
+            or not all(c in df.columns for c in cols)
+        ):
             return False
 
         high = df["high"].astype(float)
-        low = df["low"].astype(float)
+        df["low"].astype(float)
         close = df["close"].astype(float)
-        open_ = df["open"].astype(float)
+        df["open"].astype(float)
         volume = df["volume"].astype(float)
 
         # 1. 平台突破 (平台 = 前 N 根 high, 不含当日)
-        platform_high = float(high.iloc[-(platform_window + 1):-1].max())
+        platform_high = float(high.iloc[-(platform_window + 1) : -1].max())
         breakout = float(close.iloc[-1]) > platform_high * (1.0 + breakout_th)
 
         # 2. 放量
         vol_ma5 = float(volume.rolling(5, min_periods=1).mean().iloc[-1])
-        volume_surge = (float(volume.iloc[-1]) > vol_ma5 * vol_ratio
-                        if vol_ma5 > 0 else False)
+        volume_surge = (
+            float(volume.iloc[-1]) > vol_ma5 * vol_ratio if vol_ma5 > 0 else False
+        )
 
         # 3. 上下影线天数 (上影线 = high - max(open,close) > 0;
         #    下影线 = min(open,close) - low > 0; 同日皆有)
         recent = df.tail(shadow_lookback)
         upper = recent["high"].astype(float) - np.maximum(
-            recent["open"].astype(float), recent["close"].astype(float))
+            recent["open"].astype(float), recent["close"].astype(float)
+        )
         lower = np.minimum(
-            recent["open"].astype(float),
-            recent["close"].astype(float)) - recent["low"].astype(float)
+            recent["open"].astype(float), recent["close"].astype(float)
+        ) - recent["low"].astype(float)
         shadow_days = int(((upper > 0) & (lower > 0)).sum())
         shadows_ok = shadow_days >= min_shadow_days
 
         passed = breakout and volume_surge and shadows_ok
         if passed:
-            logger.info("CASE4 命中: 突破平台 %.3f (+%.0f%%), 放量 %.1f×, "
-                        "影线天数 %d", platform_high, breakout_th * 100,
-                        volume.iloc[-1] / vol_ma5 if vol_ma5 > 0 else 0.0,
-                        shadow_days)
+            logger.info(
+                "CASE4 命中: 突破平台 %.3f (+%.0f%%), 放量 %.1f×, 影线天数 %d",
+                platform_high,
+                breakout_th * 100,
+                volume.iloc[-1] / vol_ma5 if vol_ma5 > 0 else 0.0,
+                shadow_days,
+            )
         return passed
 
-    def mark(self, pool: List[str],
-             data: dict) -> List[str]:
+    def mark(self, pool: List[str], data: dict) -> List[str]:
         """对股票池批量执行标记.
 
         Args:
@@ -192,10 +193,12 @@ class WatchlistMarker:
                 continue
             if not self.check_prerequisite(df):
                 continue
-            if (self.check_case1_pullup_trend(df)
-                    or self.check_case2_short_surge(df)
-                    or self.check_case3_weekly_ctrl_rising(df)
-                    or self.check_case4_breakout(df)):
+            if (
+                self.check_case1_pullup_trend(df)
+                or self.check_case2_short_surge(df)
+                or self.check_case3_weekly_ctrl_rising(df)
+                or self.check_case4_breakout(df)
+            ):
                 marked.append(symbol)
                 logger.info("自选标记: %s", symbol)
         return marked

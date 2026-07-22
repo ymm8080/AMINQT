@@ -32,16 +32,16 @@ KILL_WINDOW = 20
 
 STATE_NORMAL = "NORMAL"
 STATE_YELLOW = "YELLOW_REVIEW"
-STATE_RED_SIM = "RED_SIMULATE"     # 降级模拟盘
-STATE_HALT = "HALT"                # 熔断停机
-STATE_RETIRED = "RETIRED"          # Kill Switch 退役
+STATE_RED_SIM = "RED_SIMULATE"  # 降级模拟盘
+STATE_HALT = "HALT"  # 熔断停机
+STATE_RETIRED = "RETIRED"  # Kill Switch 退役
 
 
 @dataclass
 class OOSMonitor:
     """OOS 监控状态机. 每日调用 daily_check(当日 Top15 预测 vs 实际收益)."""
 
-    ic_history: list[float] = field(default_factory=list)   # 每日 Rank IC
+    ic_history: list[float] = field(default_factory=list)  # 每日 Rank IC
     state: str = STATE_NORMAL
     _red_streak: int = 0
     _neg_streak: int = 0
@@ -88,20 +88,35 @@ class OOSMonitor:
             else:
                 self.state = STATE_YELLOW
                 action = "黄色预警: 人工复核"
-        return {"state": self.state, "action": action, "rolling_ic_5d": round(rolling, 4)}
+        return {
+            "state": self.state,
+            "action": action,
+            "rolling_ic_5d": round(rolling, 4),
+        }
 
     # ---------------- Kill Switch ----------------
     def kill_switch_check(self) -> dict:
         """连续 2 个月滚动 20 日 IC 均值 < 0.01 → 模型退役."""
         if len(self.ic_history) < KILL_WINDOW * KILL_MONTHS:
             return {"retire": False, "reason": "样本不足"}
-        recent_2m = self.ic_history[-KILL_WINDOW * KILL_MONTHS:]
+        recent_2m = self.ic_history[-KILL_WINDOW * KILL_MONTHS :]
         m1 = float(np.mean(recent_2m[:KILL_WINDOW]))
         m2 = float(np.mean(recent_2m[KILL_WINDOW:]))
         if m1 < IC_WARN and m2 < IC_WARN:
             self.state = STATE_RETIRED
-            logger.critical("KILL SWITCH: 连续2月滚动20日 IC 均值 %.4f/%.4f < 0.01, 模型退役", m1, m2)
-            return {"retire": True, "month_ic": [round(m1, 4), round(m2, 4)],
-                    "procedure": ["停止实盘交易", "排查原因 (数据源/特征/市场结构变化)",
-                                  "重新训练或调整特征", "通过 OOS 验收后才可重新上线"]}
+            logger.critical(
+                "KILL SWITCH: 连续2月滚动20日 IC 均值 %.4f/%.4f < 0.01, 模型退役",
+                m1,
+                m2,
+            )
+            return {
+                "retire": True,
+                "month_ic": [round(m1, 4), round(m2, 4)],
+                "procedure": [
+                    "停止实盘交易",
+                    "排查原因 (数据源/特征/市场结构变化)",
+                    "重新训练或调整特征",
+                    "通过 OOS 验收后才可重新上线",
+                ],
+            }
         return {"retire": False, "month_ic": [round(m1, 4), round(m2, 4)]}

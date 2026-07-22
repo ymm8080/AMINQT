@@ -10,17 +10,16 @@
 from __future__ import annotations
 
 import logging
-import shutil
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.pipeline1.dual_track_trainer import DualTrackTrainer
 
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
 logger = logging.getLogger("run_monthly_retrain")
 
 MODEL_DIR = "models/pipeline1"
@@ -32,7 +31,8 @@ def main(tag: str | None = None) -> dict:
     #             + feature_cols_by_board (来自 ICScreener 当期因子清单)
     raise SystemExit(
         "生产重训需先接入全市场历史库 (DataSupplyChain.fetch_history 批量装配). "
-        "训练逻辑见 DualTrackTrainer.monthly_retrain, OOS 切换已内建.")
+        "训练逻辑见 DualTrackTrainer.monthly_retrain, OOS 切换已内建."
+    )
 
 
 if __name__ == "__main__":

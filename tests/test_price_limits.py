@@ -40,8 +40,13 @@ class TestIsLimitUp:
 
     def test_st_limit_up(self):
         # prev 10.00 → ST 涨停价 10.50
-        assert is_limit_up("600001", 10.50, 10.00, Universe.MAIN_BOARD, is_st=True) is True
-        assert is_limit_up("600001", 10.49, 10.00, Universe.MAIN_BOARD, is_st=True) is False
+        assert (
+            is_limit_up("600001", 10.50, 10.00, Universe.MAIN_BOARD, is_st=True) is True
+        )
+        assert (
+            is_limit_up("600001", 10.49, 10.00, Universe.MAIN_BOARD, is_st=True)
+            is False
+        )
 
     def test_rounding(self):
         # prev 3.33 → round(3.663, 2) = 3.66
@@ -69,8 +74,14 @@ class TestIsLimitDown:
         assert is_limit_down("300750", 8.50, 10.00, Universe.GROWTH_BOARDS) is False
 
     def test_st_limit_down(self):
-        assert is_limit_down("600001", 9.50, 10.00, Universe.MAIN_BOARD, is_st=True) is True
-        assert is_limit_down("600001", 9.51, 10.00, Universe.MAIN_BOARD, is_st=True) is False
+        assert (
+            is_limit_down("600001", 9.50, 10.00, Universe.MAIN_BOARD, is_st=True)
+            is True
+        )
+        assert (
+            is_limit_down("600001", 9.51, 10.00, Universe.MAIN_BOARD, is_st=True)
+            is False
+        )
 
     def test_rounding(self):
         # prev 3.33 → round(2.997, 2) = 3.00

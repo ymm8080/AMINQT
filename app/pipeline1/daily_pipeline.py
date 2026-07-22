@@ -23,7 +23,6 @@ from .cleaning_pipeline import CleaningPipeline
 from .data_supply import DataSupplyChain, DataSupplyError
 from .dual_track_trainer import DualTrackTrainer
 from .feature_engine_v35 import FeatureEngineV35
-from .label_engine import LabelEngine
 from .list_generator import ListDeliveryGuard, ListGenerator, MarketEnv
 from .predictor import V35Predictor
 
@@ -40,8 +39,13 @@ class DailySelectionPipeline:
         float_shares_map: {symbol: 流通股本} (dim09 筹码分布, 可选)
     """
 
-    def __init__(self, supply: DataSupplyChain, bundle_paths: dict[str, str],
-                 list_dir: str = "data/lists", float_shares_map: dict | None = None):
+    def __init__(
+        self,
+        supply: DataSupplyChain,
+        bundle_paths: dict[str, str],
+        list_dir: str = "data/lists",
+        float_shares_map: dict | None = None,
+    ):
         self.supply = supply
         self.predictor = V35Predictor(bundle_paths)
         self.cleaner = CleaningPipeline()
@@ -61,8 +65,13 @@ class DailySelectionPipeline:
         return pd.read_parquet(path) if os.path.exists(path) else None
 
     # ---------------- 主流程 ----------------
-    def run(self, trade_date: str, panel: pd.DataFrame | None = None,
-            env: MarketEnv | None = None, market_state: str = "range") -> dict:
+    def run(
+        self,
+        trade_date: str,
+        panel: pd.DataFrame | None = None,
+        env: MarketEnv | None = None,
+        market_state: str = "range",
+    ) -> dict:
         """生成当日清单.
 
         Args:
@@ -87,19 +96,34 @@ class DailySelectionPipeline:
             return {"mode": "valve_empty", "list": pd.DataFrame(), "empty": True}
 
         # 特征 (只需清洗后幸存股票的历史)
-        feat_main = self.features.build(
-            panel[panel["symbol"].isin(main_df["symbol"].unique())],
-            self.float_shares_map) if len(main_df) else pd.DataFrame()
-        feat_dual = self.features.build(
-            panel[panel["symbol"].isin(dual_df["symbol"].unique())],
-            self.float_shares_map) if len(dual_df) else pd.DataFrame()
+        feat_main = (
+            self.features.build(
+                panel[panel["symbol"].isin(main_df["symbol"].unique())],
+                self.float_shares_map,
+            )
+            if len(main_df)
+            else pd.DataFrame()
+        )
+        feat_dual = (
+            self.features.build(
+                panel[panel["symbol"].isin(dual_df["symbol"].unique())],
+                self.float_shares_map,
+            )
+            if len(dual_df)
+            else pd.DataFrame()
+        )
 
         # 推理 + 校准
         frames = []
-        for board, feat, survivors in (("main", feat_main, main_df), ("dual", feat_dual, dual_df)):
+        for board, feat, survivors in (
+            ("main", feat_main, main_df),
+            ("dual", feat_dual, dual_df),
+        ):
             if len(feat) == 0:
                 continue
-            latest_symbols = survivors[survivors["date"] == survivors["date"].max()]["symbol"]
+            latest_symbols = survivors[survivors["date"] == survivors["date"].max()][
+                "symbol"
+            ]
             today_feat = feat[feat["symbol"].isin(set(latest_symbols))]
             if len(today_feat) == 0:
                 continue
@@ -131,8 +155,11 @@ class DailySelectionPipeline:
 
     def _load_yesterday(self, trade_date: str) -> pd.DataFrame | None:
         """加载上一交易日清单 (Holding Bonus)."""
-        dates = sorted(f.replace("list_", "").replace(".parquet", "")
-                       for f in os.listdir(self.list_dir) if f.startswith("list_"))
+        dates = sorted(
+            f.replace("list_", "").replace(".parquet", "")
+            for f in os.listdir(self.list_dir)
+            if f.startswith("list_")
+        )
         prev = [d for d in dates if d < trade_date]
         return self.load_list(prev[-1]) if prev else None
 
@@ -145,9 +172,12 @@ class DailySelectionPipeline:
             return False
         return trade_date[:6] != trade_calendar[idx - 1][:6]
 
-    def monthly_retrain(self, panels: dict[str, pd.DataFrame],
-                        feature_cols_by_board: dict[str, list[str]],
-                        tag: str) -> dict:
+    def monthly_retrain(
+        self,
+        panels: dict[str, pd.DataFrame],
+        feature_cols_by_board: dict[str, list[str]],
+        tag: str,
+    ) -> dict:
         """委托 DualTrackTrainer.monthly_retrain; 与 16:00 清单生成并行 (调用方排程)."""
         trainer = DualTrackTrainer()
         return trainer.monthly_retrain(panels, feature_cols_by_board, tag)

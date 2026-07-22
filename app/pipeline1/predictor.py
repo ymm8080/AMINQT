@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 import os
 
-import numpy as np
 import pandas as pd
 
 from .dual_track_trainer import DualTrackTrainer
@@ -54,21 +53,31 @@ class V35Predictor:
         raw_prob = models["1d_cls"][0].predict_proba(X)[:, 1]
         # Platt 校准 (严禁原始 predict_proba)
         latest["prob_up"] = bundle["calibrator"].predict_proba(raw_prob)
-        keep = ["symbol", "board", "industry", "pred_ret_1d", "pred_ret_3d",
-                "pred_ret_5d", "prob_up"]
+        keep = [
+            "symbol",
+            "board",
+            "industry",
+            "pred_ret_1d",
+            "pred_ret_3d",
+            "pred_ret_5d",
+            "prob_up",
+        ]
         for opt in ("is_limit_up_close", "is_one_word_limit"):
             if opt in latest.columns:
                 keep.append(opt)
         return latest[keep].reset_index(drop=True)
 
     @staticmethod
-    def mark_yesterday_list(candidates: pd.DataFrame,
-                            yesterday_list: pd.DataFrame | None) -> pd.DataFrame:
+    def mark_yesterday_list(
+        candidates: pd.DataFrame, yesterday_list: pd.DataFrame | None
+    ) -> pd.DataFrame:
         """回填 is_in_yesterday_list (Holding Bonus 输入)."""
         candidates = candidates.copy()
         if yesterday_list is None or len(yesterday_list) == 0:
             candidates["is_in_yesterday_list"] = 0
         else:
             yesterday = set(yesterday_list["symbol"])
-            candidates["is_in_yesterday_list"] = candidates["symbol"].isin(yesterday).astype(int)
+            candidates["is_in_yesterday_list"] = (
+                candidates["symbol"].isin(yesterday).astype(int)
+            )
         return candidates

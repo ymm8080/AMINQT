@@ -60,15 +60,22 @@ class DualLayerSellDetector:
         """
         lookback = int(self._cfg("daily_close_break", "lookback_days", 4))
         if df is None or len(df) < lookback + 1 or "close" not in df.columns:
-            logger.warning("check_daily_close_break: 数据不足 (%s 根, 需 %d)",
-                           0 if df is None else len(df), lookback + 1)
+            logger.warning(
+                "check_daily_close_break: 数据不足 (%s 根, 需 %d)",
+                0 if df is None else len(df),
+                lookback + 1,
+            )
             return False
         close_today = float(df["close"].iloc[-1])
         close_n_ago = float(df["close"].iloc[-(lookback + 1)])
         is_break = close_today < close_n_ago
         if is_break:
-            logger.info("日线收盘跌破: close=%.3f < %d日前 close=%.3f",
-                        close_today, lookback, close_n_ago)
+            logger.info(
+                "日线收盘跌破: close=%.3f < %d日前 close=%.3f",
+                close_today,
+                lookback,
+                close_n_ago,
+            )
         return is_break
 
     def check_three_peaks_decline(self, intraday_df: pd.DataFrame) -> dict:
@@ -101,8 +108,7 @@ class DualLayerSellDetector:
                     break
         return result
 
-    def check_intraday_crash(self, pct_chg: float,
-                             threshold: float = -0.04) -> bool:
+    def check_intraday_crash(self, pct_chg: float, threshold: float = -0.04) -> bool:
         """场景 B: 日内急跌 >= 4% → 立刻卖 (优先级高于场景 A).
 
         Args:
@@ -117,12 +123,12 @@ class DualLayerSellDetector:
             threshold = -abs(float(cfg_threshold))
         triggered = float(pct_chg) <= threshold
         if triggered:
-            logger.info("日内急跌触发: pct=%.2f%% <= %.2f%%",
-                        pct_chg * 100, threshold * 100)
+            logger.info(
+                "日内急跌触发: pct=%.2f%% <= %.2f%%", pct_chg * 100, threshold * 100
+            )
         return triggered
 
-    def detect(self, daily_df: pd.DataFrame,
-               intraday_df: pd.DataFrame) -> dict:
+    def detect(self, daily_df: pd.DataFrame, intraday_df: pd.DataFrame) -> dict:
         """双层综合检测.
 
         场景 B (急跌) 优先级高于场景 A (三峰): 先查急跌, 触发即立刻卖。
@@ -166,6 +172,5 @@ class DualLayerSellDetector:
         # 场景 A
         peaks_result = self.check_three_peaks_decline(intraday_df)
         if peaks_result["is_signal"]:
-            result.update(intraday_signal=True, scenario="A_three_peaks",
-                          action="sell")
+            result.update(intraday_signal=True, scenario="A_three_peaks", action="sell")
         return result

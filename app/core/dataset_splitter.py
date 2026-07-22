@@ -44,12 +44,20 @@ class DatasetSplitter:
         self.config = merged
         self._bounds = {
             key: pd.Timestamp(self.config[key])
-            for key in ("train_start", "train_end", "val_start", "val_end",
-                        "test_start", "test_end", "oos_start")
+            for key in (
+                "train_start",
+                "train_end",
+                "val_start",
+                "val_end",
+                "test_start",
+                "test_end",
+                "oos_start",
+            )
         }
 
-    def split_by_time(self, df: pd.DataFrame,
-                      date_col: str = "date") -> Dict[str, pd.DataFrame]:
+    def split_by_time(
+        self, df: pd.DataFrame, date_col: str = "date"
+    ) -> Dict[str, pd.DataFrame]:
         """四段时间切分.
 
         Args:
@@ -72,15 +80,20 @@ class DatasetSplitter:
             "test": df[(dates >= b["test_start"]) & (dates <= b["test_end"])],
             "oos": df[dates >= b["oos_start"]],
         }
-        result = {name: seg.reset_index(drop=True)
-                  for name, seg in segments.items()}
-        logger.info("时间切分: train=%d, val=%d, test=%d, oos=%d",
-                    *(len(result[k]) for k in ("train", "val", "test", "oos")))
+        result = {name: seg.reset_index(drop=True) for name, seg in segments.items()}
+        logger.info(
+            "时间切分: train=%d, val=%d, test=%d, oos=%d",
+            *(len(result[k]) for k in ("train", "val", "test", "oos")),
+        )
         return result
 
-    def purged_kfold(self, df: pd.DataFrame, n_splits: int = 5,
-                     gap_days: int = 5,
-                     date_col: str = "date") -> List[Tuple[np.ndarray, np.ndarray]]:
+    def purged_kfold(
+        self,
+        df: pd.DataFrame,
+        n_splits: int = 5,
+        gap_days: int = 5,
+        date_col: str = "date",
+    ) -> List[Tuple[np.ndarray, np.ndarray]]:
         """Purged K-Fold: 每折训练/验证索引, 验证集前后各剔除 gap_days.
 
         数据按时间排序后均分为 n_splits 个连续段, 第 i 折以第 i 段为
@@ -98,8 +111,11 @@ class DatasetSplitter:
             (升序排列的整数数组, 对应排序后 df 的 iloc 位置)。
         """
         if date_col in df.columns:
-            ordered = df.assign(**{date_col: pd.to_datetime(df[date_col])}) \
-                        .sort_values(date_col).reset_index(drop=True)
+            ordered = (
+                df.assign(**{date_col: pd.to_datetime(df[date_col])})
+                .sort_values(date_col)
+                .reset_index(drop=True)
+            )
         else:
             ordered = df.reset_index(drop=True)
         n = len(ordered)
@@ -118,11 +134,14 @@ class DatasetSplitter:
             # 剔除验证窗口前后各 gap_days 个样本 (purge)
             purge_lo = max(0, val_start - gap_days)
             purge_hi = min(n, val_end + gap_days)
-            train_idx = np.concatenate([
-                np.arange(0, purge_lo, dtype=int),
-                np.arange(purge_hi, n, dtype=int),
-            ])
+            train_idx = np.concatenate(
+                [
+                    np.arange(0, purge_lo, dtype=int),
+                    np.arange(purge_hi, n, dtype=int),
+                ]
+            )
             folds.append((train_idx, val_idx))
-        logger.info("Purged K-Fold: n=%d, n_splits=%d, gap_days=%d",
-                    n, n_splits, gap_days)
+        logger.info(
+            "Purged K-Fold: n=%d, n_splits=%d, gap_days=%d", n, n_splits, gap_days
+        )
         return folds

@@ -22,12 +22,12 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 CALENDAR_FACTOR_COLUMNS = [
-    "cal_days_to_holiday",     # 距下一个节假日交易日数
-    "cal_day_of_week",         # 周几 (0-4)
-    "cal_is_month_end",        # 是否月末 (最后 3 交易日)
-    "cal_is_month_start",      # 是否月初 (前 3 交易日)
-    "cal_is_quarter_end",      # 是否季末
-    "cal_pre_holiday_flag",    # 长假前 flag (节前 5 日)
+    "cal_days_to_holiday",  # 距下一个节假日交易日数
+    "cal_day_of_week",  # 周几 (0-4)
+    "cal_is_month_end",  # 是否月末 (最后 3 交易日)
+    "cal_is_month_start",  # 是否月初 (前 3 交易日)
+    "cal_is_quarter_end",  # 是否季末
+    "cal_pre_holiday_flag",  # 长假前 flag (节前 5 日)
 ]
 
 _DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -77,13 +77,15 @@ def load_holidays(holidays_path: str) -> Set[pd.Timestamp]:
         logger.info("加载节假日 %d 天 (%s)", len(holidays), holidays_path)
         return holidays
     except (json.JSONDecodeError, OSError) as exc:
-        logger.warning("节假日文件解析失败: %s (%s) — 使用 weekend-only 降级",
-                       holidays_path, exc)
+        logger.warning(
+            "节假日文件解析失败: %s (%s) — 使用 weekend-only 降级", holidays_path, exc
+        )
         return set()
 
 
-def _next_holiday_after(t: pd.Timestamp, holidays: Set[pd.Timestamp],
-                        weekend_fallback: bool):
+def _next_holiday_after(
+    t: pd.Timestamp, holidays: Set[pd.Timestamp], weekend_fallback: bool
+):
     """返回 t 之后最近的节假日 (strictly after t); 无则 None.
 
     weekend_fallback 模式下, 下一个周六视为"节假日"。
@@ -97,8 +99,9 @@ def _next_holiday_after(t: pd.Timestamp, holidays: Set[pd.Timestamp],
     return min(cands) if cands else None
 
 
-def compute_calendar_factors(df: pd.DataFrame,
-                             holidays_path: str = "data/calendar/holidays.json") -> pd.DataFrame:
+def compute_calendar_factors(
+    df: pd.DataFrame, holidays_path: str = "data/calendar/holidays.json"
+) -> pd.DataFrame:
     """为日线 DataFrame 追加 6 维日历因子.
 
     Args:
@@ -155,14 +158,15 @@ def compute_calendar_factors(df: pd.DataFrame,
 
     # ── 6. 节前 flag (节前 5 个交易日内, 含节前最后一日 = 0) ──
     df["cal_pre_holiday_flag"] = (
-        (df["cal_days_to_holiday"] >= 0) &
-        (df["cal_days_to_holiday"] <= _PRE_HOLIDAY_DAYS)
+        (df["cal_days_to_holiday"] >= 0)
+        & (df["cal_days_to_holiday"] <= _PRE_HOLIDAY_DAYS)
     ).astype(float)
 
     df = df.drop(columns=["_cal_date"])
     df[CALENDAR_FACTOR_COLUMNS] = np.nan_to_num(
         df[CALENDAR_FACTOR_COLUMNS].to_numpy(dtype=float), nan=0.0
     )
-    logger.info("日历因子计算完成: %d 行, weekend_fallback=%s",
-                len(df), weekend_fallback)
+    logger.info(
+        "日历因子计算完成: %d 行, weekend_fallback=%s", len(df), weekend_fallback
+    )
     return df

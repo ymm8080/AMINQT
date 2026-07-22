@@ -30,10 +30,10 @@ from scipy.stats import linregress
 logger = logging.getLogger(__name__)
 
 # ── 公共参数 ────────────────────────────────────────────────────────
-DECAY_TAU = 10        # 二值信号指数衰减半衰期（天）
+DECAY_TAU = 10  # 二值信号指数衰减半衰期（天）
 WINNER_LOOKBACK = 60  # WINNER() 近似回看窗口（天）
-VOL_RATIO_CAP = 3.0   # 量比封顶（防 outlier）
-BULL_VOL_MULT = 1.5   # 发现牛股放量阈值倍数
+VOL_RATIO_CAP = 3.0  # 量比封顶（防 outlier）
+BULL_VOL_MULT = 1.5  # 发现牛股放量阈值倍数
 
 # ════════════════════════════════════════════════════════════════════
 #  因子列名清单（45 列 = 10 + 4 + 4 + 6 + 5 量价派生 + 1 背离 + 8 资金流向 + 3 控盘增强 + 4 筹码分布）
@@ -41,64 +41,65 @@ BULL_VOL_MULT = 1.5   # 发现牛股放量阈值倍数
 
 THS_FACTOR_COLUMNS: List[str] = [
     # ── 主力筹码指标（量价融合）──
-    "tech_ths_trajectory",            # 主力轨迹
-    "tech_ths_mazl",                  # MA(轨迹, 5)
-    "tech_ths_entry",                 # 主力进场（×量比）
-    "tech_ths_washout",               # 洗盘（×量比）
-    "tech_ths_pullup",                # 主力拉高（×量比）
-    "tech_ths_ship",                  # 出货（×量比）
-    "tech_ths_entry_flag_decay10",    # 进场信号（衰减）
-    "tech_ths_pullup_flag_decay10",   # 拉高信号（衰减）
-    "tech_ths_ship_flag_decay10",     # 出货信号（衰减）
+    "tech_ths_trajectory",  # 主力轨迹
+    "tech_ths_mazl",  # MA(轨迹, 5)
+    "tech_ths_entry",  # 主力进场（×量比）
+    "tech_ths_washout",  # 洗盘（×量比）
+    "tech_ths_pullup",  # 主力拉高（×量比）
+    "tech_ths_ship",  # 出货（×量比）
+    "tech_ths_entry_flag_decay10",  # 进场信号（衰减）
+    "tech_ths_pullup_flag_decay10",  # 拉高信号（衰减）
+    "tech_ths_ship_flag_decay10",  # 出货信号（衰减）
     "tech_ths_golden_cross_decay10",  # 轨迹金叉（衰减）
     # ── 主力筹码控盘程度N ──
-    "tech_ths_ctrl_low",              # 低价区筹码%
-    "tech_ths_ctrl_mid",              # 中间区筹码宽度
-    "tech_ths_ctrl_high",             # 高价区筹码%
-    "tech_ths_ctrl_flag_decay10",     # 控盘信号（衰减）
+    "tech_ths_ctrl_low",  # 低价区筹码%
+    "tech_ths_ctrl_mid",  # 中间区筹码宽度
+    "tech_ths_ctrl_high",  # 高价区筹码%
+    "tech_ths_ctrl_flag_decay10",  # 控盘信号（衰减）
     # ── 发现牛股（量价融合）──
-    "tech_ths_ema3_dev_ema20",        # EMA3/EMA20-1
-    "tech_ths_ema7_dev_ema20",        # EMA7/EMA20-1
-    "tech_ths_ema12_dev_ema50",       # EMA12/EMA50-1
-    "tech_ths_bull_ss_decay10",       # SS 买入信号（含放量确认）
+    "tech_ths_ema3_dev_ema20",  # EMA3/EMA20-1
+    "tech_ths_ema7_dev_ema20",  # EMA7/EMA20-1
+    "tech_ths_ema12_dev_ema50",  # EMA12/EMA50-1
+    "tech_ths_bull_ss_decay10",  # SS 买入信号（含放量确认）
     # ── 益盟趋势顶底（量价融合）──
-    "tech_ths_trend_short",           # 短期线 (0-200)
-    "tech_ths_trend_mid",             # 中期线 (0-200)
-    "tech_ths_trend_long",            # 长期线 (0-200)
-    "tech_ths_trend_top_decay10",     # 见顶信号（衰减）
+    "tech_ths_trend_short",  # 短期线 (0-200)
+    "tech_ths_trend_mid",  # 中期线 (0-200)
+    "tech_ths_trend_long",  # 长期线 (0-200)
+    "tech_ths_trend_top_decay10",  # 见顶信号（衰减）
     "tech_ths_trend_bottom_decay10",  # 底部区域信号（衰减）
     "tech_ths_trend_golden_decay10",  # 低位金叉信号（衰减）
     "tech_ths_vol_price_divergence",  # 量价背离（+底背离 / -顶背离）
     # ── 量价派生特征 ──
-    "tech_ths_vol_ratio",             # 量比 = V / MA(V,20)
-    "tech_ths_vwap_dev",              # VWAP 偏离度 = close/vwap - 1
-    "tech_ths_obv_slope",             # OBV 5日斜率
-    "tech_ths_vol_price_corr",        # 5日 收益率-成交量变化 相关系数
-    "tech_ths_vol_weighted_mtm",      # 量加权动量
+    "tech_ths_vol_ratio",  # 量比 = V / MA(V,20)
+    "tech_ths_vwap_dev",  # VWAP 偏离度 = close/vwap - 1
+    "tech_ths_obv_slope",  # OBV 5日斜率
+    "tech_ths_vol_price_corr",  # 5日 收益率-成交量变化 相关系数
+    "tech_ths_vol_weighted_mtm",  # 量加权动量
     # ── 主力资金流向（新增 8 列）──
-    "tech_ths_flow_net",              # 主力净流入估算 = (close-open)*volume
-    "tech_ths_flow_net_ma5",          # 5日主力净流入均值
-    "tech_ths_flow_net_ma20",         # 20日主力净流入均值
-    "tech_ths_flow_ratio",            # 主力净流入比率 = flow_net / (close*volume)
-    "tech_ths_flow_accum",            # 主力净流入累积（归一化）
-    "tech_ths_flow_divergence",       # 资金流向背离 (+底背离 / -顶背离)
-    "tech_ths_flow_strength",         # 资金强度 = |flow_net| / ((high-low)*volume)
-    "tech_ths_flow_trend",            # 资金流向趋势 (5日斜率)
+    "tech_ths_flow_net",  # 主力净流入估算 = (close-open)*volume
+    "tech_ths_flow_net_ma5",  # 5日主力净流入均值
+    "tech_ths_flow_net_ma20",  # 20日主力净流入均值
+    "tech_ths_flow_ratio",  # 主力净流入比率 = flow_net / (close*volume)
+    "tech_ths_flow_accum",  # 主力净流入累积（归一化）
+    "tech_ths_flow_divergence",  # 资金流向背离 (+底背离 / -顶背离)
+    "tech_ths_flow_strength",  # 资金强度 = |flow_net| / ((high-low)*volume)
+    "tech_ths_flow_trend",  # 资金流向趋势 (5日斜率)
     # ── 控盘增强（新增 3 列）──
-    "tech_ths_ctrl_ratio",            # 控盘比例 = ctrl_low / (ctrl_low+ctrl_mid+ctrl_high)
-    "tech_ths_ctrl_concentration",    # 筹码集中度 = 1 - ctrl_mid/100
-    "tech_ths_ctrl_change",           # 控盘比例变化 = ctrl_ratio - ctrl_ratio.shift(5)
+    "tech_ths_ctrl_ratio",  # 控盘比例 = ctrl_low / (ctrl_low+ctrl_mid+ctrl_high)
+    "tech_ths_ctrl_concentration",  # 筹码集中度 = 1 - ctrl_mid/100
+    "tech_ths_ctrl_change",  # 控盘比例变化 = ctrl_ratio - ctrl_ratio.shift(5)
     # ── 筹码分布增强（新增 4 列）──
-    "tech_ths_chip_profit_ratio",     # 获利盘比例 (WINNER近似, 0~1)
-    "tech_ths_chip_concentration_20", # 20日筹码集中度
-    "tech_ths_chip_cost_skew",        # 筹码成本偏态
-    "tech_ths_chip_low_high_ratio",   # 低高价区筹码比
+    "tech_ths_chip_profit_ratio",  # 获利盘比例 (WINNER近似, 0~1)
+    "tech_ths_chip_concentration_20",  # 20日筹码集中度
+    "tech_ths_chip_cost_skew",  # 筹码成本偏态
+    "tech_ths_chip_low_high_ratio",  # 低高价区筹码比
 ]
 
 
 # ════════════════════════════════════════════════════════════════════
 #  公共工具函数
 # ════════════════════════════════════════════════════════════════════
+
 
 def safe_divide(numerator, denominator) -> pd.Series:
     """除零安全除法：分母为 0 时返回 0."""
@@ -150,14 +151,19 @@ def exp_decay_encode(flag: pd.Series, tau: int = DECAY_TAU) -> pd.Series:
     weights = np.exp(-np.arange(kernel_len) / tau)
     weights /= weights.sum()
     result = f.rolling(kernel_len, min_periods=1).apply(
-        lambda x: np.dot(x, weights[-len(x):]), raw=True
+        lambda x: np.dot(x, weights[-len(x) :]), raw=True
     )
     return result.fillna(0.0)
 
 
-def _approx_winner(price: pd.Series, close: pd.Series,
-                   high: pd.Series, low: pd.Series,
-                   volume: pd.Series, lookback: int = WINNER_LOOKBACK) -> pd.Series:
+def _approx_winner(
+    price: pd.Series,
+    close: pd.Series,
+    high: pd.Series,
+    low: pd.Series,
+    volume: pd.Series,
+    lookback: int = WINNER_LOOKBACK,
+) -> pd.Series:
     """近似 WINNER(price) — 成交量加权获利盘比例 (0-100)."""
     typical_price = (high + low + close) / 3.0
 
@@ -165,8 +171,8 @@ def _approx_winner(price: pd.Series, close: pd.Series,
         if idx < 1:
             return 0.0
         start = max(0, idx - lookback)
-        tp_window = typical_price.iloc[start:idx + 1].values
-        vol_window = volume.iloc[start:idx + 1].values
+        tp_window = typical_price.iloc[start : idx + 1].values
+        vol_window = volume.iloc[start : idx + 1].values
         p = price.iloc[idx]
         if np.nansum(vol_window) == 0:
             return 0.0
@@ -174,8 +180,7 @@ def _approx_winner(price: pd.Series, close: pd.Series,
         return 100.0 * np.nansum(vol_window[mask]) / np.nansum(vol_window)
 
     return pd.Series(
-        [_winner_at_row(i) for i in range(len(price))],
-        index=price.index, dtype=float
+        [_winner_at_row(i) for i in range(len(price))], index=price.index, dtype=float
     )
 
 
@@ -189,6 +194,7 @@ def _compute_vol_ratio(volume: pd.Series, ma_period: int = 20) -> pd.Series:
 # ════════════════════════════════════════════════════════════════════
 #  指标 1: 主力筹码指标 — 量价融合版
 # ════════════════════════════════════════════════════════════════════
+
 
 def compute_main_force_chip(df: pd.DataFrame) -> pd.DataFrame:
     """主力筹码指标（量价融合）.
@@ -215,8 +221,7 @@ def compute_main_force_chip(df: pd.DataFrame) -> pd.DataFrame:
     # ── 主力进场 / 洗盘 (基于 LOW) ──
     var1 = ths_ref((l + o + c + h) / 4.0, 1)
     var2 = safe_divide(
-        ths_sma((l - var1).abs(), 13, 1),
-        ths_sma((l - var1).clip(lower=0), 10, 1)
+        ths_sma((l - var1).abs(), 13, 1), ths_sma((l - var1).clip(lower=0), 10, 1)
     )
     var3 = ths_ema(var2, 10)
     var4 = ths_llv(l, 33)
@@ -224,19 +229,22 @@ def compute_main_force_chip(df: pd.DataFrame) -> pd.DataFrame:
     var5 = ths_ema(var5_raw, 3)
 
     # 量价融合：信号 × 量比
-    df["tech_ths_entry"] = pd.Series(
-        np.where(var5 > ths_ref(var5, 1), var5, 0.0),
-        index=df.index, dtype=float
-    ) * vol_ratio
-    df["tech_ths_washout"] = pd.Series(
-        np.where(var5 < ths_ref(var5, 1), var5, 0.0),
-        index=df.index, dtype=float
-    ) * vol_ratio
+    df["tech_ths_entry"] = (
+        pd.Series(
+            np.where(var5 > ths_ref(var5, 1), var5, 0.0), index=df.index, dtype=float
+        )
+        * vol_ratio
+    )
+    df["tech_ths_washout"] = (
+        pd.Series(
+            np.where(var5 < ths_ref(var5, 1), var5, 0.0), index=df.index, dtype=float
+        )
+        * vol_ratio
+    )
 
     # ── 主力拉高 / 出货 (基于 HIGH) ──
     var21 = safe_divide(
-        ths_sma((h - var1).abs(), 13, 1),
-        ths_sma((h - var1).clip(upper=0), 10, 1)
+        ths_sma((h - var1).abs(), 13, 1), ths_sma((h - var1).clip(upper=0), 10, 1)
     )
     var31 = ths_ema(var21, 10)
     var41 = ths_hhv(h, 33)
@@ -244,14 +252,18 @@ def compute_main_force_chip(df: pd.DataFrame) -> pd.DataFrame:
     var51 = ths_ema(var51_raw, 3)
 
     # 量价融合：信号 × 量比
-    df["tech_ths_pullup"] = pd.Series(
-        np.where(var51 < ths_ref(var51, 1), var51, 0.0),
-        index=df.index, dtype=float
-    ) * vol_ratio
-    df["tech_ths_ship"] = pd.Series(
-        np.where(var51 > ths_ref(var51, 1), var51, 0.0),
-        index=df.index, dtype=float
-    ) * vol_ratio
+    df["tech_ths_pullup"] = (
+        pd.Series(
+            np.where(var51 < ths_ref(var51, 1), var51, 0.0), index=df.index, dtype=float
+        )
+        * vol_ratio
+    )
+    df["tech_ths_ship"] = (
+        pd.Series(
+            np.where(var51 > ths_ref(var51, 1), var51, 0.0), index=df.index, dtype=float
+        )
+        * vol_ratio
+    )
 
     # ── 衰减信号 ──
     df["tech_ths_entry_flag_decay10"] = exp_decay_encode(df["tech_ths_entry"] > 0)
@@ -268,6 +280,7 @@ def compute_main_force_chip(df: pd.DataFrame) -> pd.DataFrame:
 # ════════════════════════════════════════════════════════════════════
 #  指标 2: 主力筹码控盘程度N
 # ════════════════════════════════════════════════════════════════════
+
 
 def compute_chip_control(df: pd.DataFrame, n: int = 30) -> pd.DataFrame:
     """主力筹码控盘程度N（已含成交量，通过 WINNER 近似）.
@@ -287,9 +300,7 @@ def compute_chip_control(df: pd.DataFrame, n: int = 30) -> pd.DataFrame:
     df["tech_ths_ctrl_high"] = 100.0 - a02
 
     a04_hhv = ths_hhv(a03, 15)
-    a0a_cond = (
-        safe_divide(a04_hhv - a03, a03) * 100 > n
-    ) & (a04_hhv > 50)
+    a0a_cond = (safe_divide(a04_hhv - a03, a03) * 100 > n) & (a04_hhv > 50)
     df["tech_ths_ctrl_flag_decay10"] = exp_decay_encode(a0a_cond)
 
     logger.debug("主力筹码控盘程度N: 4 列")
@@ -299,6 +310,7 @@ def compute_chip_control(df: pd.DataFrame, n: int = 30) -> pd.DataFrame:
 # ════════════════════════════════════════════════════════════════════
 #  指标 3: 发现牛股 — 量价融合版
 # ════════════════════════════════════════════════════════════════════
+
 
 def compute_bull_finder(df: pd.DataFrame) -> pd.DataFrame:
     """发现牛股（量价融合）.
@@ -343,6 +355,7 @@ def compute_bull_finder(df: pd.DataFrame) -> pd.DataFrame:
 #  指标 4: 益盟趋势顶底 — 量价融合版
 # ════════════════════════════════════════════════════════════════════
 
+
 def compute_trend_top_bottom(df: pd.DataFrame) -> pd.DataFrame:
     """益盟趋势顶底（量价融合）.
 
@@ -379,36 +392,44 @@ def compute_trend_top_bottom(df: pd.DataFrame) -> pd.DataFrame:
 
     # ── 见顶信号 ──
     top_cond = (
-        (ths_ref(mid_line, 1) > 85) &
-        (ths_ref(short_line, 1) > 85) &
-        (ths_ref(long_line, 1) > 65) &
-        ths_cross(long_line, short_line)
+        (ths_ref(mid_line, 1) > 85)
+        & (ths_ref(short_line, 1) > 85)
+        & (ths_ref(long_line, 1) > 65)
+        & ths_cross(long_line, short_line)
     )
     df["tech_ths_trend_top_decay10"] = exp_decay_encode(top_cond)
 
     # ── 底部区域信号 ──
     bottom_cond = (
         (
-            (long_line < 12) & (mid_line < 8) &
-            ((short_line < 7.2) | (ths_ref(short_line, 1) < 5)) &
-            ((mid_line > ths_ref(mid_line, 1)) | (short_line > ths_ref(short_line, 1)))
-        ) | (
-            (long_line < 8) & (mid_line < 7) & (short_line < 15) &
-            (short_line > ths_ref(short_line, 1))
-        ) | (
-            (long_line < 10) & (mid_line < 7) & (short_line < 1)
+            (long_line < 12)
+            & (mid_line < 8)
+            & ((short_line < 7.2) | (ths_ref(short_line, 1) < 5))
+            & (
+                (mid_line > ths_ref(mid_line, 1))
+                | (short_line > ths_ref(short_line, 1))
+            )
         )
+        | (
+            (long_line < 8)
+            & (mid_line < 7)
+            & (short_line < 15)
+            & (short_line > ths_ref(short_line, 1))
+        )
+        | ((long_line < 10) & (mid_line < 7) & (short_line < 1))
     )
     df["tech_ths_trend_bottom_decay10"] = exp_decay_encode(bottom_cond)
 
     # ── 低位金叉信号 ──
     golden_cond = (
-        (long_line < 15) & (ths_ref(long_line, 1) < 15) & (mid_line < 18) &
-        (short_line > ths_ref(short_line, 1)) &
-        ths_cross(short_line, long_line) &
-        (short_line > mid_line) &
-        ((ths_ref(short_line, 1) < 5) | (ths_ref(short_line, 2) < 5)) &
-        ((mid_line >= long_line) | (ths_ref(short_line, 1) < 1))
+        (long_line < 15)
+        & (ths_ref(long_line, 1) < 15)
+        & (mid_line < 18)
+        & (short_line > ths_ref(short_line, 1))
+        & ths_cross(short_line, long_line)
+        & (short_line > mid_line)
+        & ((ths_ref(short_line, 1) < 5) | (ths_ref(short_line, 2) < 5))
+        & ((mid_line >= long_line) | (ths_ref(short_line, 1) < 1))
     )
     df["tech_ths_trend_golden_decay10"] = exp_decay_encode(golden_cond)
 
@@ -421,7 +442,7 @@ def compute_trend_top_bottom(df: pd.DataFrame) -> pd.DataFrame:
     vol_shrink = vol < ma_vol20
 
     divergence = pd.Series(0.0, index=df.index)
-    divergence[price_new_low & vol_shrink] = 1.0   # 底背离
+    divergence[price_new_low & vol_shrink] = 1.0  # 底背离
     divergence[price_new_high & vol_shrink] = -1.0  # 顶背离
     df["tech_ths_vol_price_divergence"] = divergence
 
@@ -432,6 +453,7 @@ def compute_trend_top_bottom(df: pd.DataFrame) -> pd.DataFrame:
 # ════════════════════════════════════════════════════════════════════
 #  量价派生特征
 # ════════════════════════════════════════════════════════════════════
+
 
 def compute_vol_price_features(df: pd.DataFrame) -> pd.DataFrame:
     """5 个量价派生特征.
@@ -456,13 +478,17 @@ def compute_vol_price_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # 3. OBV 5日归一化斜率
     obv = (np.sign(c.diff()) * vol).cumsum()
-    obv_norm = safe_divide(obv - obv.shift(5), obv.abs().rolling(20, min_periods=1).mean() + 1.0)
+    obv_norm = safe_divide(
+        obv - obv.shift(5), obv.abs().rolling(20, min_periods=1).mean() + 1.0
+    )
     df["tech_ths_obv_slope"] = obv_norm.fillna(0.0)
 
     # 4. 5日 收益率-成交量变化 相关系数
     ret = c.pct_change()
     vol_chg = vol.pct_change()
-    df["tech_ths_vol_price_corr"] = ret.rolling(5, min_periods=3).corr(vol_chg).fillna(0.0)
+    df["tech_ths_vol_price_corr"] = (
+        ret.rolling(5, min_periods=3).corr(vol_chg).fillna(0.0)
+    )
 
     # 5. 量加权动量 = (C - REF(C,1)) * VOL / MA(VOL,20)
     mtm = c - ths_ref(c, 1)
@@ -476,6 +502,7 @@ def compute_vol_price_features(df: pd.DataFrame) -> pd.DataFrame:
 # ════════════════════════════════════════════════════════════════════
 #  主力资金流向因子 (8 列) — 新增
 # ════════════════════════════════════════════════════════════════════
+
 
 def compute_main_force_flow(df: pd.DataFrame) -> pd.DataFrame:
     """主力资金流向估算（8 列, 纯量价）.
@@ -514,10 +541,10 @@ def compute_main_force_flow(df: pd.DataFrame) -> pd.DataFrame:
     price_up = c > ths_ref(c, 1)
     price_down = c < ths_ref(c, 1)
     flow_out = flow_net < 0  # 资金流出
-    flow_in = flow_net > 0   # 资金流入
+    flow_in = flow_net > 0  # 资金流入
     divergence = pd.Series(0.0, index=df.index)
-    divergence[price_up & flow_out] = -1.0   # 顶背离: 价涨+资金流出
-    divergence[price_down & flow_in] = 1.0    # 底背离: 价跌+资金流入
+    divergence[price_up & flow_out] = -1.0  # 顶背离: 价涨+资金流出
+    divergence[price_down & flow_in] = 1.0  # 底背离: 价跌+资金流入
     df["tech_ths_flow_divergence"] = divergence
 
     # 6. 资金强度 = |flow_net| / ((high-low) * volume)
@@ -528,6 +555,7 @@ def compute_main_force_flow(df: pd.DataFrame) -> pd.DataFrame:
     def _slope(x):
         y = np.arange(len(x))
         return linregress(y, x).slope
+
     df["tech_ths_flow_trend"] = (
         df["tech_ths_flow_net_ma5"]
         .rolling(5, min_periods=5)
@@ -542,6 +570,7 @@ def compute_main_force_flow(df: pd.DataFrame) -> pd.DataFrame:
 # ════════════════════════════════════════════════════════════════════
 #  控盘增强因子 (3 列) — 新增
 # ════════════════════════════════════════════════════════════════════
+
 
 def compute_ctrl_enhancement(df: pd.DataFrame) -> pd.DataFrame:
     """控盘增强因子（3 列）.
@@ -565,7 +594,9 @@ def compute_ctrl_enhancement(df: pd.DataFrame) -> pd.DataFrame:
     df["tech_ths_ctrl_concentration"] = 1.0 - safe_divide(ctrl_mid, 100.0)
 
     # 控盘比例 5 日变化
-    df["tech_ths_ctrl_change"] = df["tech_ths_ctrl_ratio"] - df["tech_ths_ctrl_ratio"].shift(5)
+    df["tech_ths_ctrl_change"] = df["tech_ths_ctrl_ratio"] - df[
+        "tech_ths_ctrl_ratio"
+    ].shift(5)
     df["tech_ths_ctrl_change"] = df["tech_ths_ctrl_change"].fillna(0.0)
 
     logger.debug("控盘增强: 3 列")
@@ -575,6 +606,7 @@ def compute_ctrl_enhancement(df: pd.DataFrame) -> pd.DataFrame:
 # ════════════════════════════════════════════════════════════════════
 #  筹码分布增强因子 (4 列) — 新增
 # ════════════════════════════════════════════════════════════════════
+
 
 def compute_chip_distribution(df: pd.DataFrame) -> pd.DataFrame:
     """筹码分布增强因子（4 列）.
@@ -599,13 +631,17 @@ def compute_chip_distribution(df: pd.DataFrame) -> pd.DataFrame:
     std_20 = c.rolling(20, min_periods=1).std()
     mean_20 = c.rolling(20, min_periods=1).mean()
     df["tech_ths_chip_concentration_20"] = 1.0 - safe_divide(std_20, mean_20)
-    df["tech_ths_chip_concentration_20"] = df["tech_ths_chip_concentration_20"].clip(lower=0.0)
+    df["tech_ths_chip_concentration_20"] = df["tech_ths_chip_concentration_20"].clip(
+        lower=0.0
+    )
 
     # 3. 筹码成本偏态 = (close - LLV(low,60)) / (HHV(high,60) - LLV(low,60))
     llv_60 = ths_llv(l, 60)
     hhv_60 = ths_hhv(h, 60)
     df["tech_ths_chip_cost_skew"] = safe_divide(c - llv_60, hhv_60 - llv_60)
-    df["tech_ths_chip_cost_skew"] = df["tech_ths_chip_cost_skew"].clip(lower=0.0, upper=1.0)
+    df["tech_ths_chip_cost_skew"] = df["tech_ths_chip_cost_skew"].clip(
+        lower=0.0, upper=1.0
+    )
 
     # 4. 低高价区筹码比 = ctrl_low / (ctrl_high + 1)
     ctrl_low = df.get("tech_ths_ctrl_low", pd.Series(0.0, index=df.index))
@@ -619,6 +655,7 @@ def compute_chip_distribution(df: pd.DataFrame) -> pd.DataFrame:
 # ════════════════════════════════════════════════════════════════════
 #  统一入口
 # ════════════════════════════════════════════════════════════════════
+
 
 def add_all_ths_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """一次性计算全部同花顺量价指标，输出 45 列 tech_ths_* 因子.

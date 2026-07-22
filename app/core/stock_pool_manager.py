@@ -15,10 +15,10 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 TICK_FIELDS = [
-    "is_watchlist",      # 自选
-    "is_daily_buy",      # 日线买点
-    "is_intraday_buy",   # 日内买点
-    "is_daily_sell",     # 日线卖点
+    "is_watchlist",  # 自选
+    "is_daily_buy",  # 日线买点
+    "is_intraday_buy",  # 日内买点
+    "is_daily_sell",  # 日线卖点
     "is_intraday_sell",  # 日内卖点
 ]
 
@@ -27,7 +27,8 @@ _FIXING_TICKS = ("is_daily_buy", "is_daily_sell")
 
 DEFAULT_POOL_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "stock_pool.json",
+    "data",
+    "stock_pool.json",
 )
 
 
@@ -87,9 +88,14 @@ class StockPoolManager:
         return None
 
     @staticmethod
-    def _new_record(symbol: str, added_by: str, name: str = "",
-                    score: float = 0.0, prob_up: float = 0.0,
-                    pct_up: float = 0.0) -> dict:
+    def _new_record(
+        symbol: str,
+        added_by: str,
+        name: str = "",
+        score: float = 0.0,
+        prob_up: float = 0.0,
+        pct_up: float = 0.0,
+    ) -> dict:
         """构造新股票记录 (ticks 全 False)."""
         return {
             "symbol": symbol,
@@ -120,15 +126,13 @@ class StockPoolManager:
             ValueError: filter_by_tick 不在 TICK_FIELDS 中。
         """
         if filter_by_tick is not None and filter_by_tick not in TICK_FIELDS:
-            raise ValueError(
-                f"未知 TICK 标记: {filter_by_tick}, 可选: {TICK_FIELDS}")
+            raise ValueError(f"未知 TICK 标记: {filter_by_tick}, 可选: {TICK_FIELDS}")
         pool = self._data["pool"]
         if filter_by_tick is not None:
             pool = [r for r in pool if r.get("ticks", {}).get(filter_by_tick, False)]
         return sorted(pool, key=lambda r: r.get("score", 0.0), reverse=True)
 
-    def add_stock(self, symbol: str, added_by: str = "manual",
-                  name: str = "") -> None:
+    def add_stock(self, symbol: str, added_by: str = "manual", name: str = "") -> None:
         """手工添加股票.
 
         Args:
@@ -151,15 +155,17 @@ class StockPoolManager:
         """
         before = len(self._data["pool"])
         self._data["pool"] = [
-            r for r in self._data["pool"] if r.get("symbol") != symbol]
+            r for r in self._data["pool"] if r.get("symbol") != symbol
+        ]
         if len(self._data["pool"]) < before:
             self._save()
             logger.info("已删除股票: %s", symbol)
         else:
             logger.warning("股票不在池中, 无法删除: %s", symbol)
 
-    def set_tick(self, symbol: str, tick: str, value: bool,
-                 source: str = "manual") -> None:
+    def set_tick(
+        self, symbol: str, tick: str, value: bool, source: str = "manual"
+    ) -> None:
         """打/撤 TICK 标记 (source: manual/pipeline).
 
         设置 is_daily_buy / is_daily_sell 为 True 时自动 is_fixed=True;
@@ -182,12 +188,14 @@ class StockPoolManager:
         rec.setdefault("ticks", _default_ticks())[tick] = bool(value)
         if tick in _FIXING_TICKS:
             rec["is_fixed"] = bool(value)
-        rec.setdefault("ticks_history", []).append({
-            "tick": tick,
-            "value": bool(value),
-            "source": source,
-            "timestamp": datetime.now().isoformat(),
-        })
+        rec.setdefault("ticks_history", []).append(
+            {
+                "tick": tick,
+                "value": bool(value),
+                "source": source,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
         self._save()
         logger.info("TICK 变更: %s %s=%s (%s)", symbol, tick, value, source)
 
@@ -218,19 +226,23 @@ class StockPoolManager:
         )
         if others_total + pct > 100.0:
             raise ValueError(
-                f"分配合计将超过 100% (其他 {others_total:.1f}% + 本次 {pct:.1f}%)")
+                f"分配合计将超过 100% (其他 {others_total:.1f}% + 本次 {pct:.1f}%)"
+            )
         rec["percentage_allocation"] = pct
         self._save()
-        logger.info("资金分配: %s -> %.1f%% (合计 %.1f%%)",
-                    symbol, pct, others_total + pct)
+        logger.info(
+            "资金分配: %s -> %.1f%% (合计 %.1f%%)", symbol, pct, others_total + pct
+        )
 
     def get_buy_allocation_total(self) -> float:
         """当前日线买入股票分配比例合计."""
-        return float(sum(
-            float(r.get("percentage_allocation", 0.0))
-            for r in self._data["pool"]
-            if r.get("ticks", {}).get("is_daily_buy", False)
-        ))
+        return float(
+            sum(
+                float(r.get("percentage_allocation", 0.0))
+                for r in self._data["pool"]
+                if r.get("ticks", {}).get("is_daily_buy", False)
+            )
+        )
 
     def get_fixed_stocks(self) -> List[str]:
         """返回固定保留股票 (is_fixed=True)."""
@@ -257,8 +269,10 @@ class StockPoolManager:
         for rec in self._data["pool"]:
             if rec.get("is_fixed", False):
                 merged.append(rec)
-            elif (rec.get("ticks", {}).get("is_watchlist", False)
-                  and rec["symbol"] not in new_by_symbol):
+            elif (
+                rec.get("ticks", {}).get("is_watchlist", False)
+                and rec["symbol"] not in new_by_symbol
+            ):
                 merged.append(rec)
 
         # 2. 新池股票: 更新或新增
@@ -274,16 +288,21 @@ class StockPoolManager:
                     old["name"] = p["name"]
                 merged.append(old)
             else:
-                merged.append(self._new_record(
-                    symbol,
-                    added_by="pipeline1",
-                    name=p.get("name", ""),
-                    score=p.get("score", 0.0),
-                    prob_up=p.get("prob_up", 0.0),
-                    pct_up=p.get("pct_up", 0.0),
-                ))
+                merged.append(
+                    self._new_record(
+                        symbol,
+                        added_by="pipeline1",
+                        name=p.get("name", ""),
+                        score=p.get("score", 0.0),
+                        prob_up=p.get("prob_up", 0.0),
+                        pct_up=p.get("pct_up", 0.0),
+                    )
+                )
 
         self._data["pool"] = merged
         self._save()
-        logger.info("Pipeline1 刷新完成: 池内 %d 只 (固定 %d 只)",
-                    len(merged), len(self.get_fixed_stocks()))
+        logger.info(
+            "Pipeline1 刷新完成: 池内 %d 只 (固定 %d 只)",
+            len(merged),
+            len(self.get_fixed_stocks()),
+        )
