@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 
+import numpy as np
 import pandas as pd
 
 from .dual_track_trainer import DualTrackTrainer
@@ -49,7 +50,10 @@ class V35Predictor:
             raise RuntimeError(f"板块 {board} 模型包未加载")
         cols = bundle["feature_cols"]
         latest = features.sort_values("date").groupby("symbol").tail(1).copy()
-        X = latest[cols]
+        # np.nan_to_num: 特征面板可能含 NaN, 模型输入前必须清洗 (防 LightGBM 异常)
+        X = np.nan_to_num(
+            latest[cols].to_numpy(dtype=float), nan=0.0, posinf=0.0, neginf=0.0
+        )
         models = bundle["models"]
         latest["pred_ret_1d"] = models["1d_reg"][0].predict(X)
         latest["pred_ret_3d"] = models["3d_reg"][0].predict(X)
@@ -81,11 +85,17 @@ class V35Predictor:
         Returns:
             predict() 全部列 + pred_price_tomorrow
         """
-        out = self.predict(features, board)
-        latest = features.sort_values("date").groupby("symbol").tail(1)
-        out = out.merge(latest[["symbol", "close"]], on="symbol", how="left")
-        out["pred_price_tomorrow"] = (out["close"] * (1 + out["pred_ret_1d"])).round(3)
-        return out.drop(columns=["close"])
+        try:
+            out = self.predict(features, board)
+            latest = features.sort_values("date").groupby("symbol").tail(1)
+            out = out.merge(latest[["symbol", "close"]], on="symbol", how="left")
+            out["pred_price_tomorrow"] = (
+                out["close"] * (1 + out["pred_ret_1d"])
+            ).round(3)
+            return out.drop(columns=["close"])
+        except Exception:
+            logger.exception("predict_tomorrow 推理失败 (board=%s)", board)
+            raise
 
     @staticmethod
     def mark_yesterday_list(
