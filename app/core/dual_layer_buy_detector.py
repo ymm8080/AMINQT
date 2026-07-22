@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 # 因子列名 (以 ths_indicators.py 为准)
 COL_PULLUP = "tech_ths_pullup_flag_decay10"
 COL_CTRL_RATIO = "tech_ths_ctrl_ratio"
-COL_TREND_SHORT = "tech_ths_trend_short"   # 红线
-COL_TREND_MID = "tech_ths_trend_mid"       # 蓝线
-COL_CTRL_LOW = "tech_ths_ctrl_low"         # 红柱 (0~100)
+COL_TREND_SHORT = "tech_ths_trend_short"  # 红线
+COL_TREND_MID = "tech_ths_trend_mid"  # 蓝线
+COL_CTRL_LOW = "tech_ths_ctrl_low"  # 红柱 (0~100)
 COL_FLOW_NET = "tech_ths_flow_net"
 
 
@@ -73,10 +73,14 @@ class DualLayerBuyDetector:
                 troughs.append(i)
         return troughs
 
-    def check_daily_buy_point(self, symbol: str, selection_pool: list,
-                              daily_df: pd.DataFrame,
-                              pullup_lookback_days: int = 30,
-                              ctrl_ratio_threshold: float = 0.30) -> dict:
+    def check_daily_buy_point(
+        self,
+        symbol: str,
+        selection_pool: list,
+        daily_df: pd.DataFrame,
+        pullup_lookback_days: int = 30,
+        ctrl_ratio_threshold: float = 0.30,
+    ) -> dict:
         """Layer 1: 日线买点检测 (四条件 AND, ARCH §5.15.2).
 
         条件:
@@ -91,10 +95,12 @@ class DualLayerBuyDetector:
              condition_3_ctrl_ratio, condition_4_trend, pullup_peak_date,
              failed_conditions}
         """
-        lookback = int(self._cfg("daily_buy", "pullup_lookback_days",
-                                 pullup_lookback_days))
-        ctrl_th = float(self._cfg("daily_buy", "ctrl_ratio_threshold",
-                                  ctrl_ratio_threshold))
+        lookback = int(
+            self._cfg("daily_buy", "pullup_lookback_days", pullup_lookback_days)
+        )
+        ctrl_th = float(
+            self._cfg("daily_buy", "ctrl_ratio_threshold", ctrl_ratio_threshold)
+        )
 
         result = {
             "is_daily_buy": False,
@@ -112,14 +118,18 @@ class DualLayerBuyDetector:
         if not cond1:
             result["failed_conditions"].append("condition_1_pool")
 
-        required_cols = [COL_PULLUP, COL_CTRL_RATIO, COL_TREND_SHORT,
-                         COL_TREND_MID]
-        if daily_df is None or len(daily_df) == 0 or not all(
-                c in daily_df.columns for c in required_cols):
+        required_cols = [COL_PULLUP, COL_CTRL_RATIO, COL_TREND_SHORT, COL_TREND_MID]
+        if (
+            daily_df is None
+            or len(daily_df) == 0
+            or not all(c in daily_df.columns for c in required_cols)
+        ):
             logger.warning("check_daily_buy_point(%s): 缺少 THS 因子列", symbol)
             result["failed_conditions"] += [
-                "condition_2_pullup_peak", "condition_3_ctrl_ratio",
-                "condition_4_trend"]
+                "condition_2_pullup_peak",
+                "condition_3_ctrl_ratio",
+                "condition_4_trend",
+            ]
             return result
 
         window = daily_df.tail(lookback)
@@ -160,20 +170,29 @@ class DualLayerBuyDetector:
 
         result["is_daily_buy"] = cond1 and cond2 and cond3 and cond4
         if result["is_daily_buy"]:
-            logger.info("日线买点标记: %s (ctrl=%.2f, peak=%s)",
-                        symbol, ctrl_now, result["pullup_peak_date"])
+            logger.info(
+                "日线买点标记: %s (ctrl=%.2f, peak=%s)",
+                symbol,
+                ctrl_now,
+                result["pullup_peak_date"],
+            )
         return result
 
-    def check_intraday_buy_point(self, is_daily_buy_marked: bool,
-                                 current_time: str,
-                                 advancing_stocks: int, total_stocks: int,
-                                 flow_net: float, ctrl_ratio: float,
-                                 ctrl_low_today: float,
-                                 ctrl_low_yesterday: float,
-                                 deadline: str = "10:40",
-                                 breadth_threshold: float = 0.6,
-                                 ctrl_ratio_threshold: float = 0.30,
-                                 ctrl_low_threshold: float = 50.0) -> dict:
+    def check_intraday_buy_point(
+        self,
+        is_daily_buy_marked: bool,
+        current_time: str,
+        advancing_stocks: int,
+        total_stocks: int,
+        flow_net: float,
+        ctrl_ratio: float,
+        ctrl_low_today: float,
+        ctrl_low_yesterday: float,
+        deadline: str = "10:40",
+        breadth_threshold: float = 0.6,
+        ctrl_ratio_threshold: float = 0.30,
+        ctrl_low_threshold: float = 50.0,
+    ) -> dict:
         """Layer 2: 日内买点检测 (六条件 AND, ARCH §5.15.3).
 
         条件 6: 红柱比前一天高 且 ctrl_low_today > ctrl_low_threshold
@@ -183,21 +202,26 @@ class DualLayerBuyDetector:
             {is_intraday_buy, condition_1..6, failed_conditions}
         """
         deadline = self._cfg("intraday_buy", "deadline", deadline)
-        breadth_th = float(self._cfg("intraday_buy", "breadth_threshold",
-                                     breadth_threshold))
-        ctrl_th = float(self._cfg("intraday_buy", "ctrl_ratio_threshold",
-                                  ctrl_ratio_threshold))
-        ctrl_low_th = float(self._cfg("intraday_buy", "ctrl_low_threshold",
-                                      ctrl_low_threshold))
+        breadth_th = float(
+            self._cfg("intraday_buy", "breadth_threshold", breadth_threshold)
+        )
+        ctrl_th = float(
+            self._cfg("intraday_buy", "ctrl_ratio_threshold", ctrl_ratio_threshold)
+        )
+        ctrl_low_th = float(
+            self._cfg("intraday_buy", "ctrl_low_threshold", ctrl_low_threshold)
+        )
 
         cond1 = bool(is_daily_buy_marked)
         cond2 = self._hhmm(current_time) <= self._hhmm(deadline)
         breadth = (advancing_stocks / total_stocks) if total_stocks > 0 else 0.0
-        cond3 = breadth > breadth_th
+        cond3 = breadth >= breadth_th
         cond4 = float(flow_net) > 0.0
         cond5 = float(ctrl_ratio) > ctrl_th
-        cond6 = (float(ctrl_low_today) > float(ctrl_low_yesterday)
-                 and float(ctrl_low_today) > ctrl_low_th)
+        cond6 = (
+            float(ctrl_low_today) > float(ctrl_low_yesterday)
+            and float(ctrl_low_today) > ctrl_low_th
+        )
 
         conds = {
             "condition_1_daily_mark": cond1,
@@ -210,14 +234,19 @@ class DualLayerBuyDetector:
         failed = [k for k, v in conds.items() if not v]
         is_buy = len(failed) == 0
         if is_buy:
-            logger.info("日内买点标记: breadth=%.2f flow=%.0f ctrl=%.2f "
-                        "ctrl_low=%.1f>%.1f", breadth, flow_net, ctrl_ratio,
-                        ctrl_low_today, ctrl_low_yesterday)
-        return {"is_intraday_buy": is_buy, **conds,
-                "failed_conditions": failed}
+            logger.info(
+                "日内买点标记: breadth=%.2f flow=%.0f ctrl=%.2f ctrl_low=%.1f>%.1f",
+                breadth,
+                flow_net,
+                ctrl_ratio,
+                ctrl_low_today,
+                ctrl_low_yesterday,
+            )
+        return {"is_intraday_buy": is_buy, **conds, "failed_conditions": failed}
 
-    def check_opening_10min_buy_timing(self, intraday_df: pd.DataFrame,
-                                       observation_minutes: int = 10) -> dict:
+    def check_opening_10min_buy_timing(
+        self, intraday_df: pd.DataFrame, observation_minutes: int = 10
+    ) -> dict:
         """Layer 3: 开盘 10 分钟走势 → 买入时机 (两场景互斥, ARCH §5.15.4).
 
         场景 A (开盘下行): 找到 10 分钟内最低点 → 当前价自低点回升 → 确认。
@@ -231,14 +260,18 @@ class DualLayerBuyDetector:
         Returns:
             {scenario: 'A'|'B'|None, buy_timing_confirmed, wait_reason}
         """
-        result = {"scenario": None, "buy_timing_confirmed": False,
-                  "wait_reason": "数据不足"}
+        result = {
+            "scenario": None,
+            "buy_timing_confirmed": False,
+            "wait_reason": "数据不足",
+        }
         if intraday_df is None or len(intraday_df) < 3:
             return result
 
         close = intraday_df["close"].to_numpy(dtype=float)
-        low = (intraday_df["low"] if "low" in intraday_df.columns
-               else intraday_df["close"]).to_numpy(dtype=float)
+        low = (
+            intraday_df["low"] if "low" in intraday_df.columns else intraday_df["close"]
+        ).to_numpy(dtype=float)
         open_first = float(intraday_df["open"].iloc[0])
         last_idx = len(close) - 1
         direction_down = close[-1] < open_first
@@ -253,8 +286,11 @@ class DualLayerBuyDetector:
             if close[-1] > low[trough_idx]:
                 result["buy_timing_confirmed"] = True
                 result["wait_reason"] = None
-                logger.info("开盘10min 场景A: 低点 %.3f → 回升至 %.3f, 买入",
-                            low[trough_idx], close[-1])
+                logger.info(
+                    "开盘10min 场景A: 低点 %.3f → 回升至 %.3f, 买入",
+                    low[trough_idx],
+                    close[-1],
+                )
             else:
                 result["wait_reason"] = "尚未自低点回升"
             return result
@@ -270,8 +306,7 @@ class DualLayerBuyDetector:
             result["wait_reason"] = "第二峰未超过第一峰"
             return result
         # 第二峰之后的局部低点 (第二低峰)
-        troughs_after_p2 = [t for t in self._find_local_troughs(close)
-                            if t > p2]
+        troughs_after_p2 = [t for t in self._find_local_troughs(close) if t > p2]
         if not troughs_after_p2:
             result["wait_reason"] = "第二峰后尚未形成低点"
             return result
@@ -282,16 +317,25 @@ class DualLayerBuyDetector:
         if close[-1] > low[trough_idx]:
             result["buy_timing_confirmed"] = True
             result["wait_reason"] = None
-            logger.info("开盘10min 场景B: 峰2 %.3f > 峰1 %.3f, 低点 %.3f "
-                        "回升至 %.3f, 买入", close[p2], close[p1],
-                        low[trough_idx], close[-1])
+            logger.info(
+                "开盘10min 场景B: 峰2 %.3f > 峰1 %.3f, 低点 %.3f 回升至 %.3f, 买入",
+                close[p2],
+                close[p1],
+                low[trough_idx],
+                close[-1],
+            )
         else:
             result["wait_reason"] = "尚未自第二低点回升"
         return result
 
-    def detect(self, symbol: str, selection_pool: list,
-               daily_df: pd.DataFrame, intraday_df: pd.DataFrame,
-               market_context: dict = None) -> dict:
+    def detect(
+        self,
+        symbol: str,
+        selection_pool: list,
+        daily_df: pd.DataFrame,
+        intraday_df: pd.DataFrame,
+        market_context: dict = None,
+    ) -> dict:
         """三层综合检测: 全部确认 → final_buy_signal.
 
         Args:
@@ -311,8 +355,13 @@ class DualLayerBuyDetector:
         # ── Layer 1: 日线买点 ──
         layer1 = self.check_daily_buy_point(symbol, selection_pool, daily_df)
         if not layer1["is_daily_buy"]:
-            return {"final_buy_signal": False, "failed_layer": 1,
-                    "layer1": layer1, "layer2": None, "layer3": None}
+            return {
+                "final_buy_signal": False,
+                "failed_layer": 1,
+                "layer1": layer1,
+                "layer2": None,
+                "layer3": None,
+            }
 
         # ── Layer 2: 日内买点 ──
         if intraday_df is not None and len(intraday_df) > 0:
@@ -325,28 +374,51 @@ class DualLayerBuyDetector:
         advancing = ctx.get("advancing_stocks")
         total = ctx.get("total_stocks")
         if advancing is None or total is None:
-            logger.warning("detect(%s): 未提供市场广度, 视为满足 (仅测试用)",
-                           symbol)
+            logger.warning("detect(%s): 未提供市场广度, 视为满足 (仅测试用)", symbol)
             advancing, total = 1, 1  # breadth = 1.0
-        flow_net = (float(daily_df[COL_FLOW_NET].iloc[-1])
-                    if COL_FLOW_NET in daily_df.columns else 0.0)
+        flow_net = (
+            float(daily_df[COL_FLOW_NET].iloc[-1])
+            if COL_FLOW_NET in daily_df.columns
+            else 0.0
+        )
         ctrl_ratio = float(daily_df[COL_CTRL_RATIO].iloc[-1])
-        ctrl_low_today = (float(daily_df[COL_CTRL_LOW].iloc[-1])
-                          if COL_CTRL_LOW in daily_df.columns else 0.0)
-        ctrl_low_yesterday = (float(daily_df[COL_CTRL_LOW].iloc[-2])
-                              if COL_CTRL_LOW in daily_df.columns
-                              and len(daily_df) >= 2 else 0.0)
+        ctrl_low_today = (
+            float(daily_df[COL_CTRL_LOW].iloc[-1])
+            if COL_CTRL_LOW in daily_df.columns
+            else 0.0
+        )
+        ctrl_low_yesterday = (
+            float(daily_df[COL_CTRL_LOW].iloc[-2])
+            if COL_CTRL_LOW in daily_df.columns and len(daily_df) >= 2
+            else 0.0
+        )
 
         layer2 = self.check_intraday_buy_point(
-            True, current_time, advancing, total,
-            flow_net, ctrl_ratio, ctrl_low_today, ctrl_low_yesterday)
+            True,
+            current_time,
+            advancing,
+            total,
+            flow_net,
+            ctrl_ratio,
+            ctrl_low_today,
+            ctrl_low_yesterday,
+        )
         if not layer2["is_intraday_buy"]:
-            return {"final_buy_signal": False, "failed_layer": 2,
-                    "layer1": layer1, "layer2": layer2, "layer3": None}
+            return {
+                "final_buy_signal": False,
+                "failed_layer": 2,
+                "layer1": layer1,
+                "layer2": layer2,
+                "layer3": None,
+            }
 
         # ── Layer 3: 开盘10分钟时机 ──
         layer3 = self.check_opening_10min_buy_timing(intraday_df)
         final = bool(layer3["buy_timing_confirmed"])
-        return {"final_buy_signal": final,
-                "failed_layer": None if final else 3,
-                "layer1": layer1, "layer2": layer2, "layer3": layer3}
+        return {
+            "final_buy_signal": final,
+            "failed_layer": None if final else 3,
+            "layer1": layer1,
+            "layer2": layer2,
+            "layer3": layer3,
+        }
