@@ -1,0 +1,245 @@
+# ════════════════════════════════════════════════════════════════
+# 交易用户配置 (Trading Config)
+# 用户可自由调节买卖规则、仓位管理、止损止盈等
+# ════════════════════════════════════════════════════════════════
+
+# ── 券商配置 (渤海证券 miniQMT) ──
+broker:
+  type: "xt"                      # sim (模拟, 开发用) / xt (渤海证券实盘)
+  name: "渤海证券"
+  qmt_path: "D:\\渤海证券QMT\\userdata_mini"  # miniQMT 客户端安装路径
+  account_id: ""                  # 渤海证券资金账号 (从 .env 加载, 严禁硬编码)
+  session_id: 1                   # miniQMT 连接会话ID
+  # 凭据安全: account_id 应从环境变量 BROKER_ACCOUNT_ID 加载
+
+# ── 执行模式 (独立双向状态机) ──
+execution:
+  # 手动模式: 平台给出买卖信号, 用户逐条手工确认下单
+  # 自动模式: 信号自动下单, 自动买入/卖出可独立控制
+  default_mode: "manual"          # manual (默认, 安全优先) / auto
+
+  # 自动买入/卖出独立开关 (仅 auto 模式下生效)
+  auto_buy:
+    enabled: false                # 启动时默认关闭, 由前端按钮控制
+    confirm_required: false       # 自动买入是否需要二次确认 (安全阀)
+  auto_sell:
+    enabled: false                # 启动时默认关闭, 由前端按钮控制
+    confirm_required: false       # 自动卖出是否需要二次确认
+
+  # 风控强制: 账户回撤超过阈值 → 强制停止全部自动交易
+  risk_control:
+    max_drawdown_pct: 3.0         # 回撤 > 3% → 强制停止
+    force_stop_on_disconnect: true  # miniQMT 断线 → 强制停止
+
+  # 撤单设置
+  cancel:
+    auto_cancel_on_close: true    # 收盘前自动撤单 (14:55)
+    cancel_time: "14:55"          # 自动撤单时间
+
+# ── 仓位管理 ──
+position_management:
+  max_positions: 10            # 最大持仓数
+  max_single_position_pct: 20  # 单只股票最大仓位 %
+  min_cash_reserve_pct: 10     # 最低现金保留 %
+  position_size: "equal"       # equal / score_weighted / kelly
+
+# ── 买入规则 ──
+# 每条规则: name + enabled + conditions
+# conditions 支持 all (AND) 和 any (OR) 嵌套
+# factor 名称参考 ths_indicators.py 的 THS_FACTOR_COLUMNS
+buy_rules:
+  - name: "主力进场+资金流入"
+    enabled: true
+    conditions:
+      - all:
+        - factor: "tech_ths_entry_flag_decay10"
+          op: ">"
+          value: 0.3
+        - factor: "tech_ths_flow_net_ma5"
+          op: ">"
+          value: 0
+        - factor: "tech_ths_ctrl_ratio"
+          op: ">"
+          value: 0.2
+
+  - name: "放量突破+控盘高"
+    enabled: true
+    conditions:
+      - all:
+        - factor: "tech_ths_bull_ss_decay10"
+          op: ">"
+          value: 0.3
+        - factor: "tech_ths_vol_ratio"
+          op: ">"
+          value: 1.5
+        - factor: "tech_ths_ctrl_ratio"
+          op: ">"
+          value: 0.3
+
+  - name: "底背离反弹"
+    enabled: true
+    conditions:
+      - all:
+        - factor: "tech_ths_flow_divergence"
+          op: "=="
+          value: 1.0
+        - factor: "tech_ths_trend_bottom_decay10"
+          op: ">"
+          value: 0.2
+
+# ── 卖出规则 ──
+sell_rules:
+  - name: "主力出货"
+    enabled: true
+    conditions:
+      - all:
+        - factor: "tech_ths_ship_flag_decay10"
+          op: ">"
+          value: 0.3
+
+  - name: "顶背离"
+    enabled: true
+    conditions:
+      - any:
+        - factor: "tech_ths_flow_divergence"
+          op: "=="
+          value: -1.0
+        - factor: "tech_ths_vol_price_divergence"
+          op: "=="
+          value: -1.0
+        - factor: "tech_ths_trend_top_decay10"
+          op: ">"
+          value: 0.5
+
+  - name: "控盘比例下降"
+    enabled: true
+    conditions:
+      - all:
+        - factor: "tech_ths_ctrl_change"
+          op: "<"
+          value: -0.05
+
+# ── 止损止盈 ──
+stop_loss:
+  enabled: true
+  pct: 5.0                     # 止损线 -5%
+
+take_profit:
+  enabled: true
+  pct: 15.0                    # 止盈线 +15%
+  trailing: false              # 是否跟踪止盈
+
+# ── T+1 限制 ──
+t_plus_1: true                 # A股 T+1 限制, 当日买入不可卖出
+
+# ── 涨跌停过滤 ──
+price_limit_filter: true       # 涨停不买, 跌停不卖
+
+# ── 五分钟因子配置 (交易 Pipeline 专用) ──
+intraday_factors:
+  enabled: true                  # 是否启用五分钟因子
+  update_interval: 300           # 更新间隔 (秒, 300=5分钟)
+  # 三层次五分钟因子 (共 25 维)
+  stock_factors: 16              # 个股微观结构因子
+  market_factors: 5              # 大盘指数盘中因子
+  sector_factors: 4              # 板块指数盘中因子
+  # 数据源
+  data_sources:
+    stock_5min: "miniQMT"         # 个股 5min K线 (xtdata 实时推送)
+    index_5min: "miniQMT"         # 上证指数 5min K线
+    sector_5min: "akshare"        # 板块指数 5min (盘后补充)
+  # 历史数据加载
+  history_days: 5                # 加载最近 N 天历史 5min 数据
+
+# ── 大盘盘中风控 (五分钟级别) ──
+market_risk_control:
+  # 大盘急跌风控: 触发后暂停自动买入 + 红色告警
+  crash_detection:
+    enabled: true
+    momentum_threshold: -0.005   # 大盘5min跌超 0.5% → 触发
+    breadth_threshold: 0.5       # 下跌家数/上涨家数 < 0.5 → 触发
+    action: "pause_buy"          # pause_buy (暂停买入) / pause_all (暂停全部)
+  # 大盘日线趋势过滤
+  trend_filter:
+    enabled: true
+    ma_period: 20                # 大盘在 MA20 以下时不买入
+    action: "block_buy"          # block_buy (阻止买入)
+
+# ── 自定义指标交易信号加权 (与 selection_config.yaml indicator_weights 对应) ──
+# 盘中交易信号 = model_signal * 0.6 + indicator_signal * 0.4
+# indicator_signal 由 4 组核心指标公式触发
+indicator_signal_config:
+  enabled: true                    # 是否启用指标信号加权
+
+  # 信号融合权重 (模型 vs 指标)
+  mix:
+    model_signal: 0.60             # 模型信号权重
+    indicator_signal: 0.40         # 指标信号权重
+    conflict_action: "hold"        # 信号冲突时: hold / model_wins / indicator_wins
+
+  # 4 组核心指标信号触发规则 (来自 REFERENCE/INDICATOR/ 4个公式)
+  # 每组定义 buy/sell 触发条件和对应 boost 值
+  groups:
+    G1_main_force_chip:            # 主力筹码指标 (主力筹码指标.docx)
+      weight: 0.30
+      buy_triggers:
+        - factor: "tech_ths_entry_flag_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.15            # 主力进场 → 买入信号增强 +0.15
+        - factor: "tech_ths_pullup_flag_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.15            # 主力拉高 → 买入信号增强 +0.15
+        - factor: "tech_ths_golden_cross_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.10            # 轨迹金叉 → 买入信号增强 +0.10
+      sell_triggers:
+        - factor: "tech_ths_ship_flag_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.20            # 主力出货 → 卖出信号增强 +0.20 (权重更高)
+
+    G2_chip_control:               # 筹码控盘程度 (主力筹码控盘程度N.docx)
+      weight: 0.20
+      buy_triggers:
+        - factor: "tech_ths_ctrl_flag_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.10            # 高控盘 → 买入信号增强
+        - factor: "tech_ths_ctrl_ratio"
+          op: ">"
+          value: 0.5
+          boost: 0.10            # 控盘比例>50% → 买入信号增强
+
+    G3_bull_finder:                # 发现牛股 (发现牛股.docx)
+      weight: 0.15
+      buy_triggers:
+        - factor: "tech_ths_bull_ss_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.15            # 牛股SS信号 → 买入信号增强
+
+    G4_trend_top_bottom:           # 趋势顶底 (同花顺益盟趋势顶底新公式.docx)
+      weight: 0.15
+      buy_triggers:
+        - factor: "tech_ths_trend_bottom_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.15            # 底部区域 → 买入信号增强
+        - factor: "tech_ths_trend_golden_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.15            # 低位金叉 → 买入信号增强
+      sell_triggers:
+        - factor: "tech_ths_trend_top_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.15            # 见顶信号 → 卖出信号增强
+
+  # 信号展示配置 (交易看板中显示)
+  display:
+    show_indicator_signal: true    # 显示指标信号分项
+    show_triggered_groups: true    # 显示触发信号的组名
+    show_boost_breakdown: true     # 显示 boost 来源明细

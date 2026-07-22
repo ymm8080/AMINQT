@@ -1,0 +1,280 @@
+# ════════════════════════════════════════════════════════════════
+# 选股用户配置 (Selection Config)
+# 用户可自由调节以下参数，无需改代码
+# ════════════════════════════════════════════════════════════════
+
+# ── 基本设置 ──
+universe: "all"                # all / main_board / growth_boards
+top_n: 20                      # 返回前 N 只股票
+
+# ── 数据频率配置 (双 Pipeline 频率分离) ──
+data_frequency:
+  selection_pipeline: "daily"    # 选股 Pipeline: 日线级别 (每日 14:50 触发)
+  trading_pipeline: "5min"        # 交易 Pipeline: 五分钟级别 (盘中每 5min 触发)
+  daily_factors: 85               # 日线因子总维度 (74量价 + 6日历 + 5公告)
+  intraday_factors: 25            # 五分钟因子总维度 (16个股 + 5大盘 + 4板块)
+
+# ── 模型选择配置 ──
+model:
+  # 当前选定模型 (由 ModelSelector 自动选择, 也可手动指定)
+  # auto: 自动选择 (对比 10 模型 + 4 融合, 选最高分)
+  # conservative: 自动选夏普最高且回撤最小的 (稳健优先)
+  # aggressive: 自动选年化收益最高的 (收益优先)
+  # 也可直接指定模型名: lstm / lightgbm / xgboost / ...
+  # 也可指定融合: ensemble:lstm+lightgbm
+  selected: "auto"
+  # 融合配置 (selected=auto 时由 ModelSelector 决定, 也可手动指定)
+  ensemble:
+    enabled: false             # 是否启用多模型融合
+    members:                   # 融合成员 (selected=auto 时自动填充)
+      - "lstm"
+      - "lightgbm"
+      - "xgboost"
+    method: "rank_mean"        # rank_mean / score_mean / weighted_score / stacking
+    weights: null              # weighted_score 时的权重, null=自动按回测得分
+
+  # 模型对比 (回测中心使用)
+  comparison:
+    candidates:                # 参与对比的模型 (默认全部 10 种)
+      - "lightgbm"
+      - "xgboost"
+      - "catboost"
+      - "random_forest"
+      - "lstm"
+      - "gru"
+      - "transformer"
+      - "tcn"
+      - "mlp"
+      - "ridge"
+    search_ensemble: true      # 自动搜索 Top-3 模型的融合组合
+
+# ── 盘后自动训练配置 ──
+daily_training:
+  enabled: true                # 是否启用盘后自动训练
+  schedule_time: "16:00"       # 每日训练时间 (收盘后)
+  lookback_days: 504           # 训练窗口 (2年=504交易日)
+  fine_tune_epochs: 5          # 微调 epoch 数 (深度学习模型)
+  validation_window: 21        # 验证窗口 (1月=21交易日)
+  auto_rollback: true          # 新模型不如旧模型时自动回滚
+  retrain_interval: 1          # 每 N 个交易日重训练一次
+  # 防过拟合参数 (详见 training_config.yaml)
+  dropout: 0.2                 # 深度学习 Dropout
+  weight_decay: 0.0001         # L2 正则化
+  early_stopping_patience: 10  # val_loss 连续N epoch不降→停止
+  oos_ic_threshold: 0.03       # OOS IC>0.03 才允许替换
+  oos_ic_force_offline: 0.01   # OOS IC<0.01 强制下线
+
+# ── 同花顺问财 AI 辅助 ──
+iwencai:
+  enabled: false               # 是否启用问财 AI 辅助选股
+  # 问财查询条件 (自然语言, 支持模板)
+  conditions:
+    - "主力控盘比例>30% 且 资金连续3日流入"
+    - "MACD金叉 且 量比>1.5 且 换手率>3%"
+  # 候选池合并权重
+  merge:
+    model_weight: 0.7          # 模型候选池权重
+    iwencai_weight: 0.3        # 问财候选池权重
+    iwencai_only_discount: 0.5 # 仅问财有的股票降权系数
+
+# ── 风控参数 ──
+risk_filter:
+  min_amount: 50000000         # 最低成交额 (5000万)
+  exclude_st: true             # 排除 ST 股
+  exclude_new_days: 5          # 排除上市不足 N 天的次新股
+  max_account_drawdown_pct: 3.0  # 账户回撤超此值 → 返回空列表
+
+# ── 因子筛选 (用户自定义因子阈值) ──
+# 每条规则: factor 名 + 运算符 + 阈值
+# 支持运算符: >, <, >=, <=, ==, !=, between
+# factor 名称参考:
+#   ths_indicators.py 的 THS_FACTOR_COLUMNS (41 列量价+资金+控盘+筹码)
+#   factor_engine.py 的 _BASE_FEATURES (19 列基础量价)
+#   calendar_factors.py 的 CALENDAR_FACTOR_COLUMNS (6 列日历)
+#   announcement_factors.py 的 ANNOUNCEMENT_FACTOR_COLUMNS (5 列公告)
+#   market_context.py 的 MARKET_FACTOR_COLUMNS (6 列大盘)
+#   sector_context.py 的 SECTOR_FACTOR_COLUMNS (4 列板块)
+factor_filters:
+  - factor: "tech_ths_ctrl_ratio"
+    op: ">"
+    value: 0.3                 # 只选控盘比例 > 30% 的
+  - factor: "tech_ths_flow_net_ma5"
+    op: ">"
+    value: 0                   # 5日资金净流入为正
+  - factor: "tech_ths_vol_ratio"
+    op: "between"
+    value: [0.8, 3.0]           # 量比在 0.8~3.0 之间
+  # 日历因子筛选示例
+  - factor: "cal_is_holiday_eve"
+    op: "=="
+    value: 0                   # 节前最后交易日不选股 (避险)
+  # 公告因子筛选示例
+  - factor: "ann_has_financial_report"
+    op: "=="
+    value: 0                   # 财报披露窗口内不选股 (不确定性高)
+
+# ══ 自定义指标加权体系 (REFERENCE/INDICATOR/ 4个公式) ══
+# 用户 4 个同花顺公式指标已在 ths_indicators.py 中实现为 45 列 tech_ths_* 因子
+# 本配置定义三层加权机制, 确保自定义指标在选股/训练/交易中获得应有权重
+indicator_weights:
+  enabled: true                    # 是否启用指标加权
+
+  # ── Layer 1: 选股评分混合系数 ──
+  scoring_mix:
+    model_score: 0.50              # 模型得分权重
+    indicator_score: 0.30          # 自定义指标得分权重 (45列THS因子加权)
+    other_factors: 0.20            # 其他因子得分权重 (大盘+板块+日历+公告)
+
+  # ── Layer 2: 模型训练特征加权 ──
+  training_mix:
+    ths_factor_boost: 3.6          # THS 因子训练影响力倍数 (vs 非THS)
+    # 实际操作: THS因子列 × sqrt(0.80/45), 非THS因子列 × sqrt(0.20/40)
+
+  # ── Layer 3: 交易信号混合系数 ──
+  trading_mix:
+    model_signal: 0.60             # 模型信号权重
+    indicator_signal: 0.40         # 指标信号权重
+    conflict_action: "hold"        # 信号冲突时: hold / model_wins / indicator_wins
+
+  # ── 8 组指标权重 (总和=1.0) ──
+  # 核心组 (用户原始4公式) 占 80%, 增强组 (派生) 占 20%
+  groups:
+    G1_main_force_chip:            # 主力筹码指标 (主力筹码指标.docx) — 用户称"最伟大的杰作"
+      weight: 0.30
+      factor_weights_override:     # 组内因子权重 (信号类更高)
+        tech_ths_entry_flag_decay10: 0.15   # 进场信号 (最重要)
+        tech_ths_pullup_flag_decay10: 0.15  # 拉高信号
+        tech_ths_ship_flag_decay10: 0.10    # 出货信号 (卖出参考)
+        tech_ths_golden_cross_decay10: 0.15 # 轨迹金叉
+        tech_ths_trajectory: 0.10           # 主力轨迹
+        tech_ths_mazl: 0.05                 # 主力平均线
+        tech_ths_entry: 0.05                # 进场强度
+        tech_ths_washout: 0.05              # 洗盘强度
+        tech_ths_pullup: 0.10               # 拉高强度
+        tech_ths_ship: 0.10                 # 出货强度
+
+    G2_chip_control:               # 筹码控盘程度 (主力筹码控盘程度N.docx)
+      weight: 0.20
+      factor_weights_override:
+        tech_ths_ctrl_low: 0.30            # 低价区筹码 (控盘核心)
+        tech_ths_ctrl_flag_decay10: 0.30   # 控盘信号
+        tech_ths_ctrl_mid: 0.20            # 中间区宽度
+        tech_ths_ctrl_high: 0.20           # 高价区筹码
+
+    G3_bull_finder:                # 发现牛股 (发现牛股.docx)
+      weight: 0.15
+      factor_weights_override:
+        tech_ths_bull_ss_decay10: 0.40     # SS买入信号 (核心)
+        tech_ths_ema3_dev_ema20: 0.20      # 短期偏离
+        tech_ths_ema7_dev_ema20: 0.20      # 中短期偏离
+        tech_ths_ema12_dev_ema50: 0.20     # 中长期偏离
+
+    G4_trend_top_bottom:           # 趋势顶底 (同花顺益盟趋势顶底新公式.docx)
+      weight: 0.15
+      factor_weights_override:
+        tech_ths_trend_bottom_decay10: 0.25  # 底部信号 (买入)
+        tech_ths_trend_golden_decay10: 0.25  # 低位金叉 (买入)
+        tech_ths_trend_top_decay10: 0.20     # 见顶信号 (卖出)
+        tech_ths_trend_mid: 0.10             # 中期趋势线
+        tech_ths_trend_long: 0.10            # 长期趋势线
+        tech_ths_trend_short: 0.05           # 短期趋势线
+        tech_ths_vol_price_divergence: 0.05  # 量价背离
+
+    E1_vol_price:                  # 量价派生
+      weight: 0.05
+      # 使用默认均匀权重
+
+    E2_fund_flow:                  # 主力资金流向 (G1扩展)
+      weight: 0.05
+      factor_weights_override:
+        tech_ths_flow_accum: 0.30           # 累积流入 (最重要)
+        tech_ths_flow_net_ma5: 0.20         # 5日均值
+        tech_ths_flow_divergence: 0.20      # 资金背离
+        tech_ths_flow_trend: 0.15           # 资金趋势
+        tech_ths_flow_net: 0.05             # 单日流入
+        tech_ths_flow_net_ma20: 0.05        # 20日均值
+        tech_ths_flow_ratio: 0.025          # 流入比率
+        tech_ths_flow_strength: 0.025       # 资金强度
+
+    E3_ctrl_enhance:               # 控盘增强 (G2扩展)
+      weight: 0.05
+      factor_weights_override:
+        tech_ths_ctrl_ratio: 0.50           # 控盘比例 (核心)
+        tech_ths_ctrl_change: 0.30          # 控盘变化
+        tech_ths_ctrl_concentration: 0.20   # 集中度
+
+    E4_chip_dist:                  # 筹码分布增强 (G2扩展)
+      weight: 0.05
+      factor_weights_override:
+        tech_ths_chip_profit_ratio: 0.30    # 获利盘比例
+        tech_ths_chip_low_high_ratio: 0.30  # 低高价区比
+        tech_ths_chip_concentration_20: 0.20 # 集中度
+        tech_ths_chip_cost_skew: 0.20       # 成本偏态
+
+  # ── 交易信号 boost 规则 ──
+  # 触发以下信号时, 交易信号强度增强
+  signal_boost:
+    G1_main_force_chip:
+      buy_triggers:
+        - factor: "tech_ths_entry_flag_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.15
+        - factor: "tech_ths_pullup_flag_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.15
+        - factor: "tech_ths_golden_cross_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.10
+      sell_triggers:
+        - factor: "tech_ths_ship_flag_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.20                     # 出货信号权重更高
+
+    G2_chip_control:
+      buy_triggers:
+        - factor: "tech_ths_ctrl_flag_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.10
+        - factor: "tech_ths_ctrl_ratio"
+          op: ">"
+          value: 0.5
+          boost: 0.10
+
+    G3_bull_finder:
+      buy_triggers:
+        - factor: "tech_ths_bull_ss_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.15
+
+    G4_trend_top_bottom:
+      buy_triggers:
+        - factor: "tech_ths_trend_bottom_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.15
+        - factor: "tech_ths_trend_golden_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.15
+      sell_triggers:
+        - factor: "tech_ths_trend_top_decay10"
+          op: ">"
+          value: 0.3
+          boost: 0.15
+
+# ── 回测设置 (页面 3 回测中心使用) ──
+backtest:
+  start_date: "2024-01-01"
+  end_date: "2025-01-01"
+  initial_capital: 1000000     # 初始资金 100 万
+  max_positions: 10            # 最大持仓数
+  position_size: "equal"       # equal / score_weighted
+  holding_days: 5              # 默认持有天数
+  stop_loss_pct: 5.0           # 止损百分比
+  take_profit_pct: 15.0        # 止盈百分比
