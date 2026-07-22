@@ -97,8 +97,8 @@ def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
             page += 1
         diff = "\n\n".join(parts)
         if diff.strip():
-            if len(diff) > 50000:
-                diff = diff[:50000] + "\n... [diff truncated for token budget]"
+            if len(diff) > 30000:
+                diff = diff[:30000] + "\n... [diff truncated for token budget]"
             return diff
     except Exception as e:
         print(f"List PR files fallback error: {e}")
@@ -188,7 +188,8 @@ If no issues found: {"issues": [], "summary": "No issues found."}
             },
         ],
         "temperature": 0.1,
-        "max_tokens": 2000,
+        "max_tokens": 4000,
+        "response_format": {"type": "json_object"},
     }
 
     data = json.dumps(payload).encode("utf-8")
@@ -208,6 +209,8 @@ If no issues found: {"issues": [], "summary": "No issues found."}
             parsed = _extract_json(content)
             if parsed is not None:
                 return parsed
+            # Debug: log raw content when parsing fails
+            print(f"Could not parse. Raw content (first 500 chars): {content[:500]}")
             return {"issues": [], "summary": "Could not parse review response."}
     except Exception as e:
         print(f"DeepSeek API error: {e}")
