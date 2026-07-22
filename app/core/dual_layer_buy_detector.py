@@ -215,7 +215,7 @@ class DualLayerBuyDetector:
         cond1 = bool(is_daily_buy_marked)
         cond2 = self._hhmm(current_time) <= self._hhmm(deadline)
         breadth = (advancing_stocks / total_stocks) if total_stocks > 0 else 0.0
-        cond3 = breadth > breadth_th
+        cond3 = breadth >= breadth_th
         cond4 = float(flow_net) > 0.0
         cond5 = float(ctrl_ratio) > ctrl_th
         cond6 = (
