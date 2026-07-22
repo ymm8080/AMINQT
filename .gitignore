@@ -31,3 +31,6 @@ xtquant/
 .idea/
 .vscode/
 .ipynb_checkpoints/
+
+# Graphify tool cache
+graphify-out/

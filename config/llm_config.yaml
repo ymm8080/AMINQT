@@ -1,0 +1,22 @@
+# ══ DeepSeek LLM 配置 (P13, ARCH §5.20.3) ══
+# API key 只存 .env (DEEPSEEK_API_KEY), 禁止写入本文件
+deepseek:
+  enabled: true
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-chat"              # 复杂推理用 deepseek-reasoner
+  timeout_sec: 10
+  daily_token_limit: 500000           # 日限额熔断
+  cache_ttl: "market_close"           # 当日有效
+  features:                           # 12 项独立开关
+    explain_signal: true
+    sentiment: true
+    factor_hypothesis: true
+    diagnose: true
+    sentiment_index: true
+    dragon_tiger: true
+    northbound: true
+    concept_graph: true
+    similar_kline: true
+    block_trade: true
+    order_book: true
+    ai_report: true

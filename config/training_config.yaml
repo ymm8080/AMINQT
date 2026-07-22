@@ -1,0 +1,74 @@
+# ════════════════════════════════════════════════════════════════
+# 训练防过拟合配置 (Training Config)
+# 数据集划分 + 正则化 + 特征筛选 + 评估门槛
+# ════════════════════════════════════════════════════════════════
+
+# ── 数据集划分 (严格按时间切分, 防止泄漏) ──
+data_split:
+  train_start: "2018-01-01"
+  train_end: "2022-12-31"
+  val_start: "2023-01-01"
+  val_end: "2023-12-31"
+  test_start: "2024-01-01"
+  test_end: "2024-12-31"
+  oos_start: "2025-01-01"        # 滚动更新 (每日盘后训练时自动延伸)
+  purge_gap_days: 5              # Purged K-Fold 交叉验证间隔 (防标签泄漏)
+
+# ── 五分钟数据集划分 (交易 Pipeline 回测) ──
+data_split_5min:
+  train_start: "2024-01-01"
+  train_end: "2024-06-30"
+  test_start: "2024-07-01"
+  test_end: "2024-12-31"
+  oos_start: "2025-01-01"
+
+# ── 正则化参数 ──
+regularization:
+  dropout: 0.2                   # 深度学习 Dropout (LSTM/GRU/Transformer/TCN)
+  weight_decay: 0.0001           # L2 正则化 (所有模型)
+  early_stopping_patience: 10    # val_loss 连续 N epoch 不降 → 停止训练
+  # 树模型复杂度控制
+  max_depth: 6                   # LightGBM/XGBoost/CatBoost 最大深度
+  num_leaves: 31                 # LightGBM 叶节点数
+  # LSTM 复杂度控制
+  lstm_hidden_dim: 64
+  lstm_num_layers: 2
+
+# ── 特征筛选 (降维防过拟合) ──
+feature_selection:
+  use_top_k: true                # 只用 Top-K 因子训练 (降低维度)
+  top_k: 50                      # 从 85 维中选 Top-50 (按 IC/SHAP 得分)
+  # 去极值 + 标准化
+  mad_threshold: 5.0             # MAD 去极值阈值 (中位数 ± 5×MAD)
+  zscore: true                   # Z-Score 标准化
+
+# ── 评估门槛 ──
+evaluation:
+  oos_ic_threshold: 0.03         # OOS IC > 0.03 才允许上线
+  oos_ic_force_offline: 0.01     # OOS IC < 0.01 强制下线
+  min_train_samples: 1000        # 最少训练样本数
+  # 多维度评分权重 (模型选择用)
+  score_weights:
+    annual_return: 0.25          # 年化收益 25%
+    sharpe_ratio: 0.25           # 夏普比率 25%
+    max_drawdown: 0.15           # 最大回撤 15% (越小越好)
+    win_rate: 0.10               # 胜率 10%
+    ic_mean: 0.15                # IC 均值 15%
+    icir: 0.10                   # ICIR 10%
+
+# ── 训练日志 ──
+logging:
+  log_file: "app/models/trained/training_log.csv"
+  record_fields:                 # 记录字段
+    - "date"                     # 训练日期
+    - "model_name"               # 模型名
+    - "version"                  # 版本号
+    - "train_loss"               # 训练集 loss
+    - "val_loss"                 # 验证集 loss
+    - "train_ic"                 # 训练集 IC
+    - "val_ic"                   # 验证集 IC
+    - "test_ic"                  # 测试集 IC
+    - "oos_ic"                   # OOS 集 IC
+    - "epoch"                    # 训练 epoch 数
+    - "is_replaced"              # 是否替换了生产模型
+    - "rollback_reason"          # 回滚原因 (如果回滚)

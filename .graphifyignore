@@ -1,0 +1,8 @@
+# Exclude external skills (they have their own repos/graphs)
+skills/
+node_modules/
+.git/
+__pycache__/
+*.pyc
+.venv/
+venv/

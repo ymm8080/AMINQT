@@ -1,0 +1,24 @@
+# ══ 用户自定义买卖规则 (P4, ARCH §6.2) ══
+# factor 名称参考 ths_indicators.py 的 THS_FACTOR_COLUMNS + factor_engine 基础因子
+# 示例规则, 用户可增删改
+rules:
+  - name: "主力进场买入"
+    enabled: true
+    side: buy
+    conditions:
+      - factor: "tech_ths_main_entry_flag"
+        op: ">"
+        value: 0
+      - factor: "tech_ths_ctrl_ratio"
+        op: ">"
+        value: 0.30
+    weight: 1.0
+
+  - name: "出货卖出"
+    enabled: true
+    side: sell
+    conditions:
+      - factor: "tech_ths_ship_flag"
+        op: ">"
+        value: 0
+    weight: 1.0
