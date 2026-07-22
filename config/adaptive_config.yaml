@@ -1,0 +1,45 @@
+# ══ 自适应配置 (P10.12, ARCH §5.17.4) ══
+# 仅保留边界和初始值, 实际值由 AdaptiveEngine 基于回测 GAP 动态计算
+# DESIGN_V1 §9 #4: 取消所有固定比例
+
+base_filter:                          # 第一步基础过滤 (P6)
+  min_turnover:
+    initial: 0.05                     # 近一年日均换手率 > 5%
+    bounds: [0.02, 0.10]
+  min_amount:
+    initial: 500000000                # 近一年日均成交额 > 5 亿
+    bounds: [200000000, 1000000000]
+  min_amplitude:
+    initial: 0.05                     # 年平均振幅 > 5%
+    bounds: [0.03, 0.10]
+  min_limit_up_count:
+    initial: 1                        # 近一年涨停次数 > 0
+    bounds: [1, 5]
+
+right_side_filter:                    # 右侧预筛选 (P10.8b, MA 周期回测选优)
+  ma_short: {initial: 5, candidates: [5, 10]}
+  ma_mid: {initial: 10, candidates: [10, 20]}
+  ma_long: {initial: 20, candidates: [15, 20, 30]}
+  min_amount: {initial: 50000000, bounds: [20000000, 100000000]}
+
+scoring_mix:                          # 选股评分混合 (模型分 vs 指标分)
+  model_weight: {initial: 0.6, bounds: [0.3, 0.9]}
+
+trading_mix:                          # 交易信号混合
+  model_weight: {initial: 0.6, bounds: [0.3, 0.9]}
+
+factor_influence:                     # 训练因子影响力 (THS vs 非THS)
+  ths_boost: {initial: 3.6, bounds: [1.5, 6.0]}
+
+risk:                                 # 风控阈值
+  max_drawdown: {initial: 0.03, bounds: [0.02, 0.08]}
+  ctrl_ratio_threshold: {initial: 0.30, bounds: [0.20, 0.50]}
+  breadth_threshold: {initial: 0.60, bounds: [0.50, 0.70]}
+  buy_deadline: {initial: "10:40", candidates: ["10:30", "10:40", "11:00"]}
+  crash_sell_threshold: {initial: -0.04, bounds: [-0.06, -0.02]}
+  turnover_filter: {initial: 0.50, bounds: [0.40, 0.60]}
+  ctrl_low_threshold: {initial: 50.0, bounds: [40.0, 60.0]}   # 红柱过半 (量纲 0~100)
+
+ctrl_ratio:                           # 控盘比例 (ARCH §5.13.8)
+  core_weight: {initial: 0.15, bounds: [0.05, 0.25]}
+  ma5_rising_max_boost: {initial: 0.20, bounds: [0.10, 0.30]}
