@@ -98,8 +98,10 @@ class DataSupplyChain:
         import akshare as ak
 
         code6 = str(symbol).split(".")[0]
+
         def fmt(d):
             return str(d).replace("-", "")
+
         raw = ak.stock_zh_a_hist(
             symbol=code6,
             period="daily",

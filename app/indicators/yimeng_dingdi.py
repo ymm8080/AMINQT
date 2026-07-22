@@ -74,10 +74,10 @@ def yimeng_dingdi(df: pd.DataFrame) -> pd.DataFrame:
     输入: DataFrame 含 open/high/low/close 列（按日期升序）
     输出: 原表 + 短期线/中期线/长期线/见顶/顶部/底部区域/低位金叉
     """
-    c, h, l = df["close"], df["high"], df["low"]
+    c, h, low = df["close"], df["high"], df["low"]
 
-    rsv14 = _rsv(c, h, l, 14)
-    rsv34 = _rsv(c, h, l, 34)
+    rsv14 = _rsv(c, h, low, 14)
+    rsv34 = _rsv(c, h, low, 34)
 
     df["短期线"] = rsv14 + 100
     df["中期线"] = EMA(rsv34, 4) + 100

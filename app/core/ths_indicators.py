@@ -205,7 +205,7 @@ def compute_main_force_chip(df: pd.DataFrame) -> pd.DataFrame:
     输出 10 列。
     """
     c, o = df["close"], df["open"]
-    h, l = df["high"], df["low"]
+    h, low = df["high"], df["low"]
     vol = df["volume"]
 
     N1, N2 = 9, 5
@@ -219,13 +219,13 @@ def compute_main_force_chip(df: pd.DataFrame) -> pd.DataFrame:
     df["tech_ths_mazl"] = df["tech_ths_trajectory"].rolling(N2, min_periods=1).mean()
 
     # ── 主力进场 / 洗盘 (基于 LOW) ──
-    var1 = ths_ref((l + o + c + h) / 4.0, 1)
+    var1 = ths_ref((low + o + c + h) / 4.0, 1)
     var2 = safe_divide(
-        ths_sma((l - var1).abs(), 13, 1), ths_sma((l - var1).clip(lower=0), 10, 1)
+        ths_sma((low - var1).abs(), 13, 1), ths_sma((low - var1).clip(lower=0), 10, 1)
     )
     var3 = ths_ema(var2, 10)
-    var4 = ths_llv(l, 33)
-    var5_raw = pd.Series(np.where(l <= var4, var3, 0.0), index=df.index, dtype=float)
+    var4 = ths_llv(low, 33)
+    var5_raw = pd.Series(np.where(low <= var4, var3, 0.0), index=df.index, dtype=float)
     var5 = ths_ema(var5_raw, 3)
 
     # 量价融合：信号 × 量比
@@ -288,12 +288,12 @@ def compute_chip_control(df: pd.DataFrame, n: int = 30) -> pd.DataFrame:
     输出 4 列。
     """
     c, o = df["close"], df["open"]
-    h, l = df["high"], df["low"]
+    h, low = df["high"], df["low"]
     vol = df["volume"]
 
-    a01 = (c + o + l + h) / 4.0
-    a02 = _approx_winner(a01 * 1.04, c, h, l, vol)
-    a03 = _approx_winner(a01 * 0.96, c, h, l, vol)
+    a01 = (c + o + low + h) / 4.0
+    a02 = _approx_winner(a01 * 1.04, c, h, low, vol)
+    a03 = _approx_winner(a01 * 0.96, c, h, low, vol)
 
     df["tech_ths_ctrl_low"] = a03
     df["tech_ths_ctrl_mid"] = a02 - a03
@@ -368,16 +368,16 @@ def compute_trend_top_bottom(df: pd.DataFrame) -> pd.DataFrame:
     """
     c = df["close"]
     h = df["high"]
-    l = df["low"]
+    low = df["low"]
     vol = df["volume"]
 
     # ── 三条趋势线（原公式）──
     hhv14 = ths_hhv(h, 14)
-    llv14 = ths_llv(l, 14)
+    llv14 = ths_llv(low, 14)
     b = 100.0 * safe_divide(c - hhv14, hhv14 - llv14)
 
     hhv34 = ths_hhv(h, 34)
-    llv34 = ths_llv(l, 34)
+    llv34 = ths_llv(low, 34)
     raw34 = 100.0 * safe_divide(c - hhv34, hhv34 - llv34)
     d = ths_ema(raw34, 4)
     a = raw34.rolling(19, min_periods=1).mean()
@@ -466,14 +466,14 @@ def compute_vol_price_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     c = df["close"]
     h = df["high"]
-    l = df["low"]
+    low = df["low"]
     vol = df["volume"]
 
     # 1. 量比
     df["tech_ths_vol_ratio"] = _compute_vol_ratio(vol, 20)
 
     # 2. VWAP 偏离度（日级 VWAP 近似 = 典型价）
-    vwap = (h + l + c) / 3.0
+    vwap = (h + low + c) / 3.0
     df["tech_ths_vwap_dev"] = safe_divide(c, vwap) - 1.0
 
     # 3. OBV 5日归一化斜率
@@ -517,7 +517,7 @@ def compute_main_force_flow(df: pd.DataFrame) -> pd.DataFrame:
     - 底背离: 价跌 + 资金流入 → +1
     """
     c, o = df["close"], df["open"]
-    h, l = df["high"], df["low"]
+    h, low = df["high"], df["low"]
     vol = df["volume"]
 
     # 1. 主力净流入 = (close - open) * volume
@@ -548,7 +548,7 @@ def compute_main_force_flow(df: pd.DataFrame) -> pd.DataFrame:
     df["tech_ths_flow_divergence"] = divergence
 
     # 6. 资金强度 = |flow_net| / ((high-low) * volume)
-    price_range = (h - l) * vol
+    price_range = (h - low) * vol
     df["tech_ths_flow_strength"] = safe_divide(flow_net.abs(), price_range)
 
     # 7. 资金流向趋势 (5日线性回归斜率)
@@ -621,11 +621,11 @@ def compute_chip_distribution(df: pd.DataFrame) -> pd.DataFrame:
     """
     c = df["close"]
     h = df["high"]
-    l = df["low"]
+    low = df["low"]
     vol = df["volume"]
 
     # 1. 获利盘比例 = WINNER(close) / 100 (近似，复用已有函数)
-    df["tech_ths_chip_profit_ratio"] = _approx_winner(c, c, h, l, vol) / 100.0
+    df["tech_ths_chip_profit_ratio"] = _approx_winner(c, c, h, low, vol) / 100.0
 
     # 2. 20日筹码集中度 = 1 - STD(close,20) / MEAN(close,20)
     std_20 = c.rolling(20, min_periods=1).std()
@@ -636,7 +636,7 @@ def compute_chip_distribution(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # 3. 筹码成本偏态 = (close - LLV(low,60)) / (HHV(high,60) - LLV(low,60))
-    llv_60 = ths_llv(l, 60)
+    llv_60 = ths_llv(low, 60)
     hhv_60 = ths_hhv(h, 60)
     df["tech_ths_chip_cost_skew"] = safe_divide(c - llv_60, hhv_60 - llv_60)
     df["tech_ths_chip_cost_skew"] = df["tech_ths_chip_cost_skew"].clip(
