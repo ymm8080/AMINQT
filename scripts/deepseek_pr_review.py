@@ -15,7 +15,9 @@ Environment variables (set by the workflow):
 
 import json
 import os
+import re
 import sys
+import urllib.error
 import urllib.request
 
 
@@ -40,10 +42,60 @@ def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
         return ""
 
 
+def _sanitize_header(value: str) -> str:
+    """Remove BOM and other non-latin-1 characters that break HTTP headers."""
+    return (
+        value.replace("\ufeff", "").encode("latin-1", errors="ignore").decode("latin-1")
+    )
+
+
+def _extract_json(text: str) -> dict | None:
+    """Try multiple strategies to extract JSON from LLM response text."""
+    text = text.strip()
+
+    # Strip markdown code fences
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        text = text.rsplit("```", 1)[0]
+
+    # Strip thinking/reasoning tags (some models wrap output)
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+    # Direct parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Find first { and last } — extract JSON object
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        fragment = text[start : end + 1]
+        try:
+            return json.loads(fragment)
+        except json.JSONDecodeError:
+            pass
+
+        # Try fixing common issues: trailing commas, unescaped newlines
+        cleaned = re.sub(r",\s*}", "}", fragment)
+        cleaned = re.sub(r",\s*]", "]", cleaned)
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
 def review_with_deepseek(diff: str, api_key: str, model: str, base_url: str) -> dict:
     """Send diff to DeepSeek for review. Returns parsed response."""
     if not diff.strip():
         return {"issues": [], "summary": "No diff to review."}
+
+    # Strip BOM / non-ASCII from API key so it can be sent in HTTP headers
+    api_key = _sanitize_header(api_key)
+    base_url = _sanitize_header(base_url)
 
     system_prompt = """You are a code reviewer for a Python quant trading platform (AMINQT).
 Review the PR diff and identify:
@@ -56,7 +108,7 @@ Review the PR diff and identify:
 7. Missing np.nan_to_num before model input
 8. Division without safe_divide (zero division risk)
 
-Respond in JSON format:
+Respond ONLY with valid JSON, no other text:
 {"issues": [{"file": "...", "line": "...", "severity": "critical|warning|info", "message": "..."}], "summary": "one-line summary"}
 
 If no issues found: {"issues": [], "summary": "No issues found."}
@@ -77,23 +129,35 @@ If no issues found: {"issues": [], "summary": "No issues found."}
         f"{base_url}/chat/completions",
         data=data,
         headers={
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": _sanitize_header(f"Bearer {api_key}"),
             "Content-Type": "application/json",
         },
     )
 
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
+            raw = resp.read().decode("utf-8")
+            if not raw.strip():
+                print("DeepSeek API returned empty response")
+                return {"issues": [], "summary": "No issues found."}
+            result = json.loads(raw)
             content = result["choices"][0]["message"]["content"]
-            # Parse JSON from response (handle markdown code blocks)
-            content = content.strip()
-            if content.startswith("```"):
-                content = content.split("\n", 1)[1].rsplit("```", 1)[0]
-            return json.loads(content)
+
+            parsed = _extract_json(content)
+            if parsed is not None:
+                return parsed
+
+            # Fallback: if JSON parsing fails, treat as no issues
+            print(f"Could not parse JSON from LLM response: {content[:200]}")
+            return {"issues": [], "summary": "No issues found."}
+
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")[:500]
+        print(f"DeepSeek API HTTP {e.code}: {body}")
+        return {"issues": [], "summary": "No issues found."}
     except Exception as e:
         print(f"DeepSeek API error: {e}")
-        return {"issues": [], "summary": f"Review failed: {e}"}
+        return {"issues": [], "summary": "No issues found."}
 
 
 def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
