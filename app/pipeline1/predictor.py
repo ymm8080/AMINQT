@@ -5,6 +5,10 @@ V3.5 推理预测器 (P14 推理端)
 加载板块模型包 (DualTrackTrainer.save) → 特征面板推理 →
 pred_ret_1d/3d/5d + Platt 校准 prob_up → ListGenerator 候选输入.
 维护 is_in_yesterday_list (Holding Bonus, 昨日清单回填).
+
+用户裁决 (2026-07-22): 日线预测只用本地 LightGBM 模型;
+每日 DELTA 数据 (当日新 bar 追加到历史) 推理**明天的价格和概率** —
+predict_tomorrow() 显式输出 pred_price_tomorrow + prob_up.
 """
 
 from __future__ import annotations
@@ -66,6 +70,22 @@ class V35Predictor:
             if opt in latest.columns:
                 keep.append(opt)
         return latest[keep].reset_index(drop=True)
+
+    def predict_tomorrow(self, features: pd.DataFrame, board: str) -> pd.DataFrame:
+        """每日 DELTA 推理: 输出**明天的价格和概率** (用户 2026-07-22 裁决).
+
+        输入特征面板须已包含当日 (delta) bar — 由调用方将 delta 追加到历史后
+        重算特征 (daily_pipeline.run 的 panel 路径已含当日).
+        pred_price_tomorrow = close_T * (1 + pred_ret_1d)  [点估计, 非承诺价]
+
+        Returns:
+            predict() 全部列 + pred_price_tomorrow
+        """
+        out = self.predict(features, board)
+        latest = features.sort_values("date").groupby("symbol").tail(1)
+        out = out.merge(latest[["symbol", "close"]], on="symbol", how="left")
+        out["pred_price_tomorrow"] = (out["close"] * (1 + out["pred_ret_1d"])).round(3)
+        return out.drop(columns=["close"])
 
     @staticmethod
     def mark_yesterday_list(
