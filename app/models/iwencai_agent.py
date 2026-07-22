@@ -70,8 +70,7 @@ class IwencaiAgent:
     _fetch() 统一入口: 先试 HTTP API, 失败自动降级到 Playwright。
     """
 
-    def __init__(self, cookie_path: str = None,
-                 use_api: bool = True) -> None:
+    def __init__(self, cookie_path: str = None, use_api: bool = True) -> None:
         """初始化.
 
         Args:
@@ -89,9 +88,7 @@ class IwencaiAgent:
         try:
             import requests
         except ImportError as exc:
-            raise RuntimeError(
-                "requests 未安装: pip install requests"
-            ) from exc
+            raise RuntimeError("requests 未安装: pip install requests") from exc
         return requests
 
     @staticmethod
@@ -129,25 +126,25 @@ class IwencaiAgent:
             "version": "2.0",
             "query_area": "",
             "block_list": "",
-            "add_info": json.dumps({
-                "urp": {"scene": 1, "company": 1, "business": 1},
-                "contentType": "json",
-                "searchInfo": True,
-            }),
+            "add_info": json.dumps(
+                {
+                    "urp": {"scene": 1, "company": 1, "business": 1},
+                    "contentType": "json",
+                    "searchInfo": True,
+                }
+            ),
         }
         resp = requests.post(
-            _IWENCAI_API_URL, data=payload,
-            headers=_IWENCAI_HEADERS, timeout=_IWENCAI_TIMEOUT,
+            _IWENCAI_API_URL,
+            data=payload,
+            headers=_IWENCAI_HEADERS,
+            timeout=_IWENCAI_TIMEOUT,
         )
         resp.raise_for_status()
         data = resp.json()
 
         # 问财 API 返回结构: data.result.{columns, rows} 或 data.data.result
-        result = (
-            data.get("data", {}).get("result")
-            or data.get("result")
-            or {}
-        )
+        result = data.get("data", {}).get("result") or data.get("result") or {}
         if not result:
             logger.warning("[问财API] 查询 '%s' 返回空 result", condition)
             return []
@@ -162,18 +159,19 @@ class IwencaiAgent:
 
         # 列名中查找股票代码列和名称列
         code_col = next(
-            (c for c in cols
-             if any(k in str(c).lower() for k in ("code", "代码", "股票代码"))),
+            (
+                c
+                for c in cols
+                if any(k in str(c).lower() for k in ("code", "代码", "股票代码"))
+            ),
             cols[0],
         )
         name_col = next(
-            (c for c in cols
-             if any(k in str(c) for k in ("名称", "股票简称", "name"))),
+            (c for c in cols if any(k in str(c) for k in ("名称", "股票简称", "name"))),
             cols[1] if len(cols) > 1 else cols[0],
         )
         score_col = next(
-            (c for c in cols
-             if any(k in str(c) for k in ("评分", "score"))),
+            (c for c in cols if any(k in str(c) for k in ("评分", "score"))),
             None,
         )
 
@@ -191,8 +189,7 @@ class IwencaiAgent:
             elif isinstance(row, (list, tuple)):
                 idx_code = cols.index(code_col) if code_col in cols else 0
                 idx_name = cols.index(name_col) if name_col in cols else 1
-                code = self._extract_code(
-                    row[idx_code] if idx_code < len(row) else "")
+                code = self._extract_code(row[idx_code] if idx_code < len(row) else "")
                 name = str(row[idx_name] if idx_name < len(row) else "")
                 score = None
                 if score_col and score_col in cols:
@@ -206,14 +203,15 @@ class IwencaiAgent:
                 continue
             if not code:
                 continue
-            results.append({
-                "symbol": code,
-                "name": name,
-                "iwencai_score": score,
-                "match_reasons": [condition],
-            })
-        logger.info(
-            "[问财API] 查询 '%s' → %d 条", condition, len(results))
+            results.append(
+                {
+                    "symbol": code,
+                    "name": name,
+                    "iwencai_score": score,
+                    "match_reasons": [condition],
+                }
+            )
+        logger.info("[问财API] 查询 '%s' → %d 条", condition, len(results))
         return results
 
     # ── Playwright 降级路径 ───────────────────────────────────────
@@ -255,8 +253,11 @@ class IwencaiAgent:
             context = browser.new_context(storage_state=storage)
             try:
                 page = context.new_page()
-                page.goto("https://www.iwencai.com/unifiedwap/result",
-                          wait_until="domcontentloaded", timeout=30_000)
+                page.goto(
+                    "https://www.iwencai.com/unifiedwap/result",
+                    wait_until="domcontentloaded",
+                    timeout=30_000,
+                )
                 page.fill("textarea", condition)
                 page.keyboard.press("Enter")
                 page.wait_for_selector("table", timeout=30_000)
@@ -268,17 +269,18 @@ class IwencaiAgent:
                 for row in rows[:top_n]:
                     if len(row) < 2:
                         continue
-                    results.append({
-                        "symbol": str(row[0]).split(".")[0].zfill(6),
-                        "name": row[1],
-                        "iwencai_score": None,
-                        "match_reasons": [condition],
-                    })
+                    results.append(
+                        {
+                            "symbol": str(row[0]).split(".")[0].zfill(6),
+                            "name": row[1],
+                            "iwencai_score": None,
+                            "match_reasons": [condition],
+                        }
+                    )
             finally:
                 context.close()
                 browser.close()
-        logger.info(
-            "[问财Playwright] 查询 '%s' → %d 条", condition, len(results))
+        logger.info("[问财Playwright] 查询 '%s' → %d 条", condition, len(results))
         return results
 
     # ── 统一获取入口 (API 优先 → Playwright 降级) ─────────────────
@@ -298,13 +300,11 @@ class IwencaiAgent:
                 results = self._fetch_api(condition, top_n)
                 if results:
                     return results
-                logger.warning(
-                    "[问财] API 返回空, 降级到 Playwright: '%s'",
-                    condition)
+                logger.warning("[问财] API 返回空, 降级到 Playwright: '%s'", condition)
             except Exception as exc:
                 logger.warning(
-                    "[问财] API 调用失败 (%s), 降级到 Playwright: '%s'",
-                    exc, condition)
+                    "[问财] API 调用失败 (%s), 降级到 Playwright: '%s'", exc, condition
+                )
         # 降级 / 直接走 Playwright
         return self._fetch_playwright(condition, top_n)
 
@@ -385,8 +385,7 @@ class IwencaiAgent:
     def _pat_volume_surge_pullback(df: pd.DataFrame) -> bool:
         """放量上涨缩量回踩: 放量上涨日后, 回踩且量能逐级萎缩."""
         d = df.iloc[-10:]
-        surge = (d["volume"] > 1.8 * d["vol_ma5_prev"]) & (
-            d["close"] > d["close_prev"])
+        surge = (d["volume"] > 1.8 * d["vol_ma5_prev"]) & (d["close"] > d["close_prev"])
         surge_idx = [i for i, v in zip(d.index, surge) if v]
         if not surge_idx:
             return False
@@ -420,9 +419,11 @@ class IwencaiAgent:
         half = len(r) // 2
         eps = 1e-9  # 浮点容差: 平台期不算"渐升"
         lows_rising = bool(
-            roll_min.iloc[half:].mean() > roll_min.iloc[:half].mean() + eps)
+            roll_min.iloc[half:].mean() > roll_min.iloc[:half].mean() + eps
+        )
         highs_rising = bool(
-            roll_max.iloc[half:].mean() > roll_max.iloc[:half].mean() + eps)
+            roll_max.iloc[half:].mean() > roll_max.iloc[:half].mean() + eps
+        )
         return lows_rising and highs_rising
 
     @staticmethod
@@ -430,7 +431,8 @@ class IwencaiAgent:
         """主力抢筹: 近 1-2 周突发巨量 + 价格上涨."""
         d = df.iloc[-10:]
         spike = (d["volume"] > 2.5 * d["vol_ma5_prev"]) & (
-            d["close"] > d["close_prev"] * 1.03)
+            d["close"] > d["close_prev"] * 1.03
+        )
         return bool(spike.any())
 
     # ── ③ 剔除条件 ────────────────────────────────────────────────
@@ -440,7 +442,8 @@ class IwencaiAgent:
         """放量下跌: 近 5 日存在巨量阴线."""
         d = df.iloc[-5:]
         cond = (d["volume"] > 1.8 * d["vol_ma5_prev"]) & (
-            d["close"] < d["close_prev"] * 0.97)
+            d["close"] < d["close_prev"] * 0.97
+        )
         return bool(cond.any())
 
     @staticmethod
@@ -461,8 +464,9 @@ class IwencaiAgent:
 
     # ── 候选池构建 ────────────────────────────────────────────────
 
-    def build_candidate_pool(self, base_pool: List[str],
-                             daily_data: Dict[str, pd.DataFrame]) -> List[str]:
+    def build_candidate_pool(
+        self, base_pool: List[str], daily_data: Dict[str, pd.DataFrame]
+    ) -> List[str]:
         """第二步完整候选池构建.
 
         Args:
