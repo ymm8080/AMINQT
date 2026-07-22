@@ -81,28 +81,28 @@ class CompositeFeed:
 
     # ---------------- 益盟红蓝线 ----------------
     def red_above_blue_since_peak(self, code: str) -> bool:
-        if self.yimeng is None:
+        if self.yimeng is None or code not in self.yimeng.hist:
             return False
         return self.yimeng.red_above_blue_since_peak(code)
 
     def red_blue_distance_min(self, code: str) -> bool:
-        if self.yimeng is None:
+        if self.yimeng is None or code not in self.yimeng.hist:
             return False
         return self.yimeng.red_blue_distance_min(code)
 
     # ---------------- 控盘红柱 / 获利盘 ----------------
     def red_bar_rising_and_majority(self, code: str) -> bool:
-        if self.chip is None:
+        if self.chip is None or code not in self.chip.hist:
             return False
         return self.chip.red_bar_rising_and_majority(code)
 
     def profit_chip_ratio(self, code: str) -> float:
-        if self.chip is None:
+        if self.chip is None or code not in self.chip.hist:
             return 100.0  # 保守: 不触发低筹码卖出
         return self.chip.profit_chip_ratio(code)
 
     def control_signal_A0A(self, code: str) -> bool:
-        if self.chip is None:
+        if self.chip is None or code not in self.chip.hist:
             return False
         return self.chip.control_signal_A0A(code)
 
