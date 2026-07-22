@@ -16,6 +16,7 @@ Environment variables (set by the workflow):
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 
@@ -95,13 +96,26 @@ If no issues found: {"issues": [], "summary": "No issues found."}
 
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
+            raw = resp.read().decode("utf-8")
+            if not raw.strip():
+                print("DeepSeek API returned empty response")
+                return {"issues": [], "summary": "Review failed: empty API response"}
+            result = json.loads(raw)
             content = result["choices"][0]["message"]["content"]
             # Parse JSON from response (handle markdown code blocks)
             content = content.strip()
             if content.startswith("```"):
                 content = content.split("\n", 1)[1].rsplit("```", 1)[0]
+            # Strip any leading/trailing non-JSON text
+            json_start = content.find("{")
+            json_end = content.rfind("}")
+            if json_start != -1 and json_end != -1:
+                content = content[json_start : json_end + 1]
             return json.loads(content)
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")[:500]
+        print(f"DeepSeek API HTTP {e.code}: {body}")
+        return {"issues": [], "summary": f"Review failed: HTTP {e.code}"}
     except Exception as e:
         print(f"DeepSeek API error: {e}")
         return {"issues": [], "summary": f"Review failed: {e}"}
