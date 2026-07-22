@@ -40,10 +40,21 @@ def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
         return ""
 
 
+def _sanitize_header(value: str) -> str:
+    """Remove BOM and other non-latin-1 characters that break HTTP headers."""
+    return (
+        value.replace("\ufeff", "").encode("latin-1", errors="ignore").decode("latin-1")
+    )
+
+
 def review_with_deepseek(diff: str, api_key: str, model: str, base_url: str) -> dict:
     """Send diff to DeepSeek for review. Returns parsed response."""
     if not diff.strip():
         return {"issues": [], "summary": "No diff to review."}
+
+    # Strip BOM / non-ASCII from API key so it can be sent in HTTP headers
+    api_key = _sanitize_header(api_key)
+    base_url = _sanitize_header(base_url)
 
     system_prompt = """You are a code reviewer for a Python quant trading platform (AMINQT).
 Review the PR diff and identify:
@@ -77,7 +88,7 @@ If no issues found: {"issues": [], "summary": "No issues found."}
         f"{base_url}/chat/completions",
         data=data,
         headers={
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": _sanitize_header(f"Bearer {api_key}"),
             "Content-Type": "application/json",
         },
     )
