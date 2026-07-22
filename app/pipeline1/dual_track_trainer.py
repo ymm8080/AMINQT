@@ -3,10 +3,13 @@
 双轨训练器 (DESIGN §14.4, PIPELINE1_V3.5 §二/§七)
 =====================================================
 LightGBM 双轨×8: (1d_reg Huber + 1d_cls binary + 3d_reg + 5d_reg) × (主板/双创).
+**日线预测只用本地 LightGBM 模型 (用户 2026-07-22 裁决), 无云端/ONNX/LSTM 依赖.**
 - 720 日滚动窗口: 训练690 / 早停10 / 校准10 (与验证物理隔离!) / 测试10 (仅月度归因)
 - 半衰期加权 250 天; Huber loss; early_stopping patience=50
-- 超参纪律: 年度贝叶斯调优 (≤50 组), 月度仅固定超参重训
-- 月度重训与清单生成解耦 (15:30 重训 / 16:00 旧模型出清单 / 18:00 前切换)
+- 超参纪律: 年度贝叶斯调优 (≤50 组), 每周仅固定超参重训
+- **每周一次全局重训 (用户 2026-07-22 裁决: 周频, 非月频)**:
+  每周第一个交易日 15:30 启动 (T-1 数据), 16:00 旧模型出清单, 18:00 前切换
+- 重训与清单生成解耦 (重训绝不阻塞当日清单)
 """
 
 from __future__ import annotations
@@ -195,14 +198,17 @@ class DualTrackTrainer:
         ]
         return bool(np.nanmean(corrs) > threshold)
 
-    # ---------------- 月度重训 (解耦) ----------------
-    def monthly_retrain(
+    # ---------------- 每周全局重训 (解耦) ----------------
+    def weekly_retrain(
         self,
         panels: dict[str, pd.DataFrame],
         feature_cols_by_board: dict[str, list[str]],
         tag: str,
     ) -> dict:
-        """panels: {'main': df, 'dual': df}. 15:30 启动, 与 16:00 清单生成并行.
+        """每周一次全局重训 (用户 2026-07-22 裁决: 周频全局训练).
+
+        panels: {'main': 主板720日面板, 'dual': 双创720日面板}.
+        每周第一个交易日 15:30 启动, 与 16:00 清单生成并行.
 
         Returns:
             {board: {'path', 'oos': {...}, 'switched': bool}}
@@ -222,3 +228,6 @@ class DualTrackTrainer:
                     OOS_IC_MIN,
                 )
         return results
+
+    # 兼容别名 (V3.5 原文为月度, 用户 2026-07-22 裁决改为周频)
+    monthly_retrain = weekly_retrain
