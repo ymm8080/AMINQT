@@ -25,9 +25,13 @@ def save_config(cfg: Config, path: str = DEFAULT_PATH) -> None:
     """保存全部字段到 YAML."""
     data = {f.name: getattr(cfg, f.name) for f in fields(cfg)}
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        yaml.safe_dump(data, fh, allow_unicode=True, sort_keys=True)
-    logger.info("规则配置已保存: %s", path)
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            yaml.safe_dump(data, fh, allow_unicode=True, sort_keys=True)
+        logger.info("规则配置已保存: %s", path)
+    except OSError as e:
+        logger.exception("规则配置保存失败: %s (%s)", path, e)
+        raise
 
 
 def load_config(path: str = DEFAULT_PATH) -> Config:
@@ -35,12 +39,19 @@ def load_config(path: str = DEFAULT_PATH) -> Config:
     cfg = Config()
     if not os.path.exists(path):
         return cfg
-    with open(path, encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+    except OSError as e:
+        logger.exception("规则配置加载失败: %s (%s)", path, e)
+        return cfg
     valid = {f.name for f in fields(cfg)}
     for key, value in data.items():
         if key in valid:
-            setattr(cfg, key, type(getattr(cfg, key))(value))
+            try:
+                setattr(cfg, key, type(getattr(cfg, key))(value))
+            except (TypeError, ValueError):
+                logger.warning("配置字段 %s 类型转换失败, 使用默认值", key)
         else:
             logger.warning("未知配置字段忽略: %s", key)
     return cfg
@@ -58,7 +69,11 @@ def validate_tunable(updates: dict) -> tuple[dict, list[str]]:
             rejected.append(f"{name}: 非 TUNABLE 字段")
             continue
         lo, hi, _ = TUNABLE_BOUNDS[name]
-        v = float(value)
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            rejected.append(f"{name}: 无法转换为数值 ({value})")
+            continue
         if not (lo <= v <= hi):
             rejected.append(f"{name}: {v} 越界 [{lo}, {hi}]")
             continue
