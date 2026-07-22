@@ -66,6 +66,42 @@ def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
     except Exception as e:
         print(f"gh pr diff fallback error: {e}")
 
+    # --- Strategy 3: List PR files API (handles PRs > 300 files) ---
+    try:
+        parts = []
+        page = 1
+        while page <= 10:  # 10 pages × 100 = 1000 files max
+            files_url = (
+                f"https://api.github.com/repos/{repo}/pulls/{pr_number}/files"
+                f"?page={page}&per_page=100"
+            )
+            freq = urllib.request.Request(
+                files_url,
+                headers={
+                    "Authorization": f"token {token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+            with urllib.request.urlopen(freq, timeout=30) as resp:
+                files = json.loads(resp.read().decode("utf-8", errors="replace"))
+            if not files:
+                break
+            for f in files:
+                patch = f.get("patch", "")
+                if patch:
+                    parts.append(f"--- {f.get('filename', '?')}\n{patch}")
+            if len(files) < 100:
+                break
+            page += 1
+        diff = "\n\n".join(parts)
+        if diff.strip():
+            if len(diff) > 50000:
+                diff = diff[:50000] + "\n... [diff truncated for token budget]"
+            return diff
+    except Exception as e:
+        print(f"List PR files fallback error: {e}")
+
     return ""
 
 
