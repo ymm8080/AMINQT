@@ -15,29 +15,58 @@ Environment variables (set by the workflow):
 
 import json
 import os
+import subprocess
 import sys
 import urllib.request
 
 
 def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
-    """Fetch PR diff via GitHub API."""
+    """Fetch PR diff via GitHub API.
+
+    Tries the REST diff media type first; falls back to ``gh pr diff`` (which
+    uses the authenticated GH_TOKEN) when the API returns 406 Not Acceptable.
+    """
+    # --- Strategy 1: REST API with diff media type ---
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "Authorization": f"token {token}",
-            "Accept": "application/vnd.github.v3.diff",
-        },
-    )
+    for accept in ("application/vnd.github.v3.diff", "application/vnd.github.diff"):
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"token {token}",
+                "Accept": accept,
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                diff = resp.read().decode("utf-8", errors="replace")
+                if diff.strip():
+                    if len(diff) > 50000:
+                        diff = diff[:50000] + "\n... [diff truncated for token budget]"
+                    return diff
+        except Exception as e:
+            print(f"Error fetching diff (Accept={accept}): {e}")
+
+    # --- Strategy 2: gh CLI fallback (authenticated via GH_TOKEN env) ---
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            diff = resp.read().decode("utf-8", errors="replace")
+        env = {**os.environ, "GH_TOKEN": token}
+        result = subprocess.run(
+            ["gh", "pr", "diff", pr_number, "--repo", repo],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            diff = result.stdout
             if len(diff) > 50000:
                 diff = diff[:50000] + "\n... [diff truncated for token budget]"
             return diff
+        print(f"gh pr diff failed (rc={result.returncode}): {result.stderr[:200]}")
     except Exception as e:
-        print(f"Error fetching diff: {e}")
-        return ""
+        print(f"gh pr diff fallback error: {e}")
+
+    return ""
 
 
 def _sanitize_header(value: str) -> str:
