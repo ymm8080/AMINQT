@@ -53,14 +53,18 @@ class TestDataService:
 
 class TestComponents:
     def test_chart_builders(self):
-        from app.streamlit.components import (drawdown_chart, equity_curve,
-                                              factor_radar, intraday_chart,
-                                              kline_chart)
+        from app.streamlit.components import (
+            drawdown_chart,
+            equity_curve,
+            factor_radar,
+            intraday_chart,
+            kline_chart,
+        )
+
         ohlc = ds.demo_ohlc("600519", days=80)
         assert kline_chart(ohlc) is not None
         assert intraday_chart(ds.demo_intraday("600519"), prev_close=100) is not None
-        nav = pd.DataFrame({"date": ohlc["date"],
-                            "nav": np.linspace(1e6, 1.1e6, 80)})
+        nav = pd.DataFrame({"date": ohlc["date"], "nav": np.linspace(1e6, 1.1e6, 80)})
         assert equity_curve(nav) is not None
         assert drawdown_chart(nav) is not None
         assert factor_radar({"MACD": 0.5, "RSI": 0.3}) is not None

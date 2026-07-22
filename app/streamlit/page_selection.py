@@ -26,7 +26,9 @@ def render() -> None:
     st.header("选股看板 · Pipeline 1 (V3.5)")
     pool, pool_date, is_demo = _pool_df()
     if is_demo:
-        st.warning("演示数据 — 未找到真实清单 (data/lists/), 运行 `python scripts/run_daily.py` 生成")
+        st.warning(
+            "演示数据 — 未找到真实清单 (data/lists/), 运行 `python scripts/run_daily.py` 生成"
+        )
     else:
         st.caption(f"清单日期: {pool_date} | schema V1.0 | Top {len(pool)}")
 
@@ -37,16 +39,41 @@ def render() -> None:
         show = pool.copy()
         if "name" not in show.columns:
             show["name"] = show["symbol"].map(ds.DEMO_NAMES).fillna("-")
-        cols = [c for c in ("symbol", "name", "score", "prob_up", "pred_ret_1d",
-                            "pred_ret_3d", "pred_ret_5d", "momentum",
-                            "signal_conflict", "industry") if c in show.columns]
-        st.dataframe(show[cols].style.format({
-            "score": "{:.4f}", "prob_up": "{:.3f}",
-            "pred_ret_1d": "{:+.2%}", "pred_ret_3d": "{:+.2%}", "pred_ret_5d": "{:+.2%}"}),
-            use_container_width=True, height=420)
-        sel = st.selectbox("查看详情", show["symbol"].tolist(),
-                           format_func=lambda s: f"{s} {ds.DEMO_NAMES.get(s, '')}",
-                           key="pool_detail")
+        cols = [
+            c
+            for c in (
+                "symbol",
+                "name",
+                "score",
+                "prob_up",
+                "pred_ret_1d",
+                "pred_ret_3d",
+                "pred_ret_5d",
+                "momentum",
+                "signal_conflict",
+                "industry",
+            )
+            if c in show.columns
+        ]
+        st.dataframe(
+            show[cols].style.format(
+                {
+                    "score": "{:.4f}",
+                    "prob_up": "{:.3f}",
+                    "pred_ret_1d": "{:+.2%}",
+                    "pred_ret_3d": "{:+.2%}",
+                    "pred_ret_5d": "{:+.2%}",
+                }
+            ),
+            use_container_width=True,
+            height=420,
+        )
+        sel = st.selectbox(
+            "查看详情",
+            show["symbol"].tolist(),
+            format_func=lambda s: f"{s} {ds.DEMO_NAMES.get(s, '')}",
+            key="pool_detail",
+        )
         if sel:
             _render_detail(sel)
 
@@ -57,8 +84,10 @@ def render() -> None:
         df = ds.demo_list(seed=7)
         if q:
             df = df[df["symbol"].str.contains(q) | df["name"].str.contains(q)]
-        st.dataframe(df[["symbol", "name", "prob_up", "pred_ret_1d", "industry"]],
-                     use_container_width=True)
+        st.dataframe(
+            df[["symbol", "name", "prob_up", "pred_ret_1d", "industry"]],
+            use_container_width=True,
+        )
 
     # ---------- Tab 3: 我的关注 ----------
     with tab_watch:
@@ -84,7 +113,9 @@ def _render_detail(symbol: str) -> None:
     period = st.radio("周期", ["日K", "分时"], horizontal=True, key=f"period_{symbol}")
     if period == "日K":
         df = ds.demo_ohlc(symbol)
-        st.plotly_chart(kline_chart(df, title=f"{symbol} 日K"), use_container_width=True)
+        st.plotly_chart(
+            kline_chart(df, title=f"{symbol} 日K"), use_container_width=True
+        )
     else:
         df = ds.demo_intraday(symbol)
         st.plotly_chart(intraday_chart(df, prev_close=100.0), use_container_width=True)
