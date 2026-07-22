@@ -1,0 +1,31 @@
+{
+ "param_names": [
+  "max_hold_days",
+  "prob_exit"
+ ],
+ "n_combos": 20,
+ "best_params": {
+  "max_hold_days": 5,
+  "prob_exit": 0.4
+ },
+ "train_score": -0.0082,
+ "oos_score": 0.1296,
+ "oos_default": 0.1207,
+ "fallback_to_default": false,
+ "leaderboard": [
+  [
+   {
+    "max_hold_days": 5,
+    "prob_exit": 0.4
+   },
+   -0.0082
+  ],
+  [
+   {
+    "max_hold_days": 5,
+    "prob_exit": 0.45
+   },
+   -0.0082
+  ]
+ ]
+}
