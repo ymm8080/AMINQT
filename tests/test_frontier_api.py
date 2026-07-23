@@ -3,11 +3,19 @@
 
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+import pytest
 
-from app.main import app
+try:
+    from fastapi.testclient import TestClient
 
-client = TestClient(app)
+    from app.main import app
+
+    client = TestClient(app)
+except ImportError:
+    app = None  # type: ignore[assignment]
+    client = None  # type: ignore[assignment]
+
+pytestmark = pytest.mark.skipif(client is None, reason="httpx not installed")
 
 
 class TestFrontierAPI:
