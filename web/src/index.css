@@ -1,0 +1,91 @@
+:root {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --panel: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --dim: #8b949e;
+  --up: #e54545;
+  --down: #26a69a;
+  --accent: #4f8ef7;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+.app { display: flex; min-height: 100vh; }
+nav {
+  width: 200px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+nav .logo { font-size: 18px; font-weight: 700; margin-bottom: 18px; color: var(--accent); }
+nav button {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--dim);
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+nav button.active { background: #21262d; color: var(--text); border-color: var(--border); }
+nav button:hover { color: var(--text); }
+main { flex: 1; padding: 24px 32px; overflow-y: auto; }
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  background: #9e6a03;
+  color: #fff;
+  margin-left: 8px;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--dim); font-weight: 500; }
+tr:hover td { background: #1c2128; cursor: pointer; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+.dim { color: var(--dim); }
+.grid { display: grid; gap: 16px; }
+.grid-2 { grid-template-columns: 1fr 1fr; }
+.grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+.metric { font-size: 24px; font-weight: 700; }
+.metric-label { font-size: 12px; color: var(--dim); }
+button.primary {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  padding: 8px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+button.primary:disabled { opacity: 0.5; cursor: default; }
+input, select {
+  background: #0d1117;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+label { font-size: 12px; color: var(--dim); display: block; margin: 8px 0 4px; }
+h2 { margin-top: 0; }
