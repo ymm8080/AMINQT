@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""DeepSeek PR Review -- AI-powered code review for AMINQT.
+"""DeepSeek PR Review — AI-powered code review for AMINQT.
 
 Called by .github/workflows/deepseek-pr-review.yml.
 Reviews the PR diff using DeepSeek API and posts a comment with findings.
@@ -14,17 +14,21 @@ Environment variables (set by the workflow):
 """
 
 import json
+import logging
 import os
 import re
 import subprocess
 import sys
 import urllib.request
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
+
 
 def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
     """Fetch PR diff via GitHub API.
 
-    Tries the REST diff media type first; falls back to gh pr diff (which
+    Tries the REST diff media type first; falls back to ``gh pr diff`` (which
     uses the authenticated GH_TOKEN) when the API returns 406 Not Acceptable.
     """
     # --- Strategy 1: REST API with diff media type ---
@@ -46,7 +50,7 @@ def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
                         diff = diff[:50000] + "\n... [diff truncated for token budget]"
                     return diff
         except Exception as e:
-            print(f"Error fetching diff (Accept={accept}): {e}")
+            logger.error(f"Error fetching diff (Accept={accept}): {e}")
 
     # --- Strategy 2: gh CLI fallback (authenticated via GH_TOKEN env) ---
     try:
@@ -63,9 +67,11 @@ def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
             if len(diff) > 50000:
                 diff = diff[:50000] + "\n... [diff truncated for token budget]"
             return diff
-        print(f"gh pr diff failed (rc={result.returncode}): {result.stderr[:200]}")
+        logger.error(
+            f"gh pr diff failed (rc={result.returncode}): {result.stderr[:200]}"
+        )
     except Exception as e:
-        print(f"gh pr diff fallback error: {e}")
+        logger.error(f"gh pr diff fallback error: {e}")
 
     # --- Strategy 3: List PR files API (handles PRs > 300 files) ---
     try:
@@ -97,11 +103,11 @@ def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
             page += 1
         diff = "\n\n".join(parts)
         if diff.strip():
-            if len(diff) > 50000:
-                diff = diff[:50000] + "\n... [diff truncated for token budget]"
+            if len(diff) > 30000:
+                diff = diff[:30000] + "\n... [diff truncated for token budget]"
             return diff
     except Exception as e:
-        print(f"List PR files fallback error: {e}")
+        logger.error(f"List PR files fallback error: {e}")
 
     return ""
 
@@ -188,7 +194,8 @@ If no issues found: {"issues": [], "summary": "No issues found."}
             },
         ],
         "temperature": 0.1,
-        "max_tokens": 2000,
+        "max_tokens": 4000,
+        "response_format": {"type": "json_object"},
     }
 
     data = json.dumps(payload).encode("utf-8")
@@ -208,9 +215,13 @@ If no issues found: {"issues": [], "summary": "No issues found."}
             parsed = _extract_json(content)
             if parsed is not None:
                 return parsed
+            # Debug: log raw content when parsing fails
+            logger.error(
+                f"Could not parse. Raw content (first 500 chars): {content[:500]}"
+            )
             return {"issues": [], "summary": "Could not parse review response."}
     except Exception as e:
-        print(f"DeepSeek API error: {e}")
+        logger.error(f"DeepSeek API error: {e}")
         return {"issues": [], "summary": f"Review failed: {e}"}
 
 
@@ -285,10 +296,10 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
 
     try:
         with urllib.request.urlopen(req, timeout=30):
-            print(f"Comment posted on PR #{pr_number}")
+            logger.info(f"Comment posted on PR #{pr_number}")
             return True
     except Exception as e:
-        print(f"Error posting comment: {e}")
+        logger.error(f"Error posting comment: {e}")
         return False
 
 
@@ -303,16 +314,16 @@ def main():
     )
 
     if not all([api_key, token, repo, pr_number]):
-        print("Missing required environment variables")
+        logger.error("Missing required environment variables")
         sys.exit(1)
 
-    print(f"Reviewing PR #{pr_number} in {repo} using {model}")
+    logger.info(f"Reviewing PR #{pr_number} in {repo} using {model}")
 
     diff = get_pr_diff(pr_number, repo, token)
-    print(f"Diff length: {len(diff)} chars")
+    logger.info(f"Diff length: {len(diff)} chars")
 
     review = review_with_deepseek(diff, api_key, model, base_url)
-    print(f"Review result: {review.get('summary', 'N/A')}")
+    logger.info(f"Review result: {review.get('summary', 'N/A')}")
 
     post_comment(pr_number, repo, token, review)
 
