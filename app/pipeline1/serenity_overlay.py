@@ -43,9 +43,7 @@ class SerenityOverlay:
 
     def compute_score(self, factors: dict, penalties: dict) -> float:
         """计算综合得分: 加权因子 - 罚分×2."""
-        raw = sum(
-            factors.get(k, 0) * w for k, w in WEIGHTS.items()
-        )
+        raw = sum(factors.get(k, 0) * w for k, w in WEIGHTS.items())
         penalty = sum(penalties.values()) * PENALTY_MULTIPLIER
         return raw - penalty
 

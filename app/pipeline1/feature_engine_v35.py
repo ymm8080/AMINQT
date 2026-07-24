@@ -360,7 +360,11 @@ class FeatureEngineV35:
             g["alpha042_ts"] = adv15.rolling(15, min_periods=15).corr(c)
             # alpha054: (-1 * ret_5d) + corr(open, vol, 5) * std(ret_5d, 5)
             ret5 = c.pct_change(5)
-            g["alpha054_ts"] = -ret5 + o.rolling(5, min_periods=5).corr(v) * ret5.rolling(5, min_periods=5).std()
+            g["alpha054_ts"] = (
+                -ret5
+                + o.rolling(5, min_periods=5).corr(v)
+                * ret5.rolling(5, min_periods=5).std()
+            )
             # --- GTJA191 ---
             # gtja_001: -corr(rank(Δlog(vol)), rank((close-open)/open), 6)
             dlv = np.log(v.replace(0, np.nan)).diff(1)
@@ -446,7 +450,9 @@ class FeatureEngineV35:
             amount = g.get("amount", v * c)
             # --- Amihud 非流动性 ( adapted from quant-ohlcv-feature/Amihud.py) ---
             ret_abs = c.pct_change().abs()
-            g["amihud_illiq"] = (ret_abs / amount.replace(0, np.nan)).rolling(10, min_periods=5).mean()
+            g["amihud_illiq"] = (
+                (ret_abs / amount.replace(0, np.nan)).rolling(10, min_periods=5).mean()
+            )
             # --- Fisher 变换 ( adapted from Fisher_v3.py) ---
             price = (h + lo) / 2
             n = 20
@@ -458,7 +464,9 @@ class FeatureEngineV35:
             fisher = 0.5 * np.log((1 + price_ch) / (1 - price_ch))
             g["fisher_transform"] = fisher.ewm(alpha=0.5, adjust=False).mean()
             # --- 恐慌贪婪指数 ( adapted from FearGreed_Yidai_v1.py) ---
-            tr = pd.concat([h - lo, (h - c.shift(1)).abs(), (lo - c.shift(1)).abs()], axis=1).max(axis=1)
+            tr = pd.concat(
+                [h - lo, (h - c.shift(1)).abs(), (lo - c.shift(1)).abs()], axis=1
+            ).max(axis=1)
             sma_close = c.rolling(10, min_periods=1).mean()
             str_ = tr / sma_close.replace(0, np.nan)
             tr_up = np.where(c > c.shift(1), str_, 0)

@@ -275,8 +275,15 @@ class TestFeatures:
         df = make_panel(symbols=("600519", "300750"), days=60)
         eng = FeatureEngineV35()
         out = eng.dim15_alpha_factors(df)
-        for col in ("alpha006", "alpha012", "alpha041", "alpha042_ts",
-                     "alpha054_ts", "gtja_001_ts", "gtja_004"):
+        for col in (
+            "alpha006",
+            "alpha012",
+            "alpha041",
+            "alpha042_ts",
+            "alpha054_ts",
+            "gtja_001_ts",
+            "gtja_004",
+        ):
             assert col in out.columns, col
         # groupby 检查: 每股 alpha006 首 9 日为 NaN (10 日窗口)
         sub = out[out["symbol"] == "600519"]
@@ -292,8 +299,14 @@ class TestFeatures:
         df = make_panel(symbols=("600519",), days=30)
         eng = FeatureEngineV35()
         out = eng.dim16_candlestick(df)
-        for col in ("bullish_engulfing", "bearish_engulfing", "hammer",
-                     "shooting_star", "morning_star", "evening_star"):
+        for col in (
+            "bullish_engulfing",
+            "bearish_engulfing",
+            "hammer",
+            "shooting_star",
+            "morning_star",
+            "evening_star",
+        ):
             assert col in out.columns, col
             assert set(out[col].dropna().unique()) <= {0, 1}
 
@@ -327,6 +340,7 @@ class TestFeatures:
         assert "lhb_net_buy_5d" in out.columns
         assert pd.isna(out["lhb_net_buy_5d"].iloc[0])  # shift(1)
         assert not pd.isna(out["lhb_net_buy_5d"].iloc[1])
+
 
 # ============================================================
 # IC 筛选
