@@ -241,6 +241,44 @@ class ListGenerator:
 
 
 # ============================================================
+# 清单溯源追踪 (源自 a-share-selection-strategy, provenance)
+# ============================================================
+@dataclass
+class ProvenanceTracker:
+    """记录每只候选股的数据来源/模型版本/计算时间戳.
+
+    用法:
+        tracker = ProvenanceTracker()
+        tracker.record(symbol, data_source="baostock", model_tag="main_20260724")
+        meta = tracker.get(symbol)
+    """
+
+    _records: dict[str, dict] = field(default_factory=dict)
+
+    def record(
+        self,
+        symbol: str,
+        data_source: str = "",
+        model_tag: str = "",
+        feature_version: str = "",
+    ) -> None:
+        self._records[symbol] = {
+            "data_source": data_source,
+            "model_tag": model_tag,
+            "feature_version": feature_version,
+        }
+
+    def get(self, symbol: str) -> dict:
+        return self._records.get(symbol, {})
+
+    def to_frame(self) -> pd.DataFrame:
+        if not self._records:
+            return pd.DataFrame()
+        rows = [{"symbol": k, **v} for k, v in self._records.items()]
+        return pd.DataFrame(rows)
+
+
+# ============================================================
 # 清单推送失败三档降级 (安全网, §14.4)
 # ============================================================
 @dataclass

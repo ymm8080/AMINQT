@@ -55,6 +55,10 @@ class FeatureEngineV35:
         df = self.dim12_ma_system(df)
         df = self.dim13_holiday(df)
         df = self.dim14_market_sentiment(df)
+        df = self.dim15_alpha_factors(df)
+        df = self.dim16_candlestick(df)
+        df = self.dim17_extended_factors(df)
+        df = self.dim18_lhb(df)
         df = self.industry_neutralize(df)
         df = self.add_missingness_flags(df)
         return df
@@ -331,6 +335,162 @@ class FeatureEngineV35:
             daily["market_limit_down"] = df.groupby("date")["_is_limit_down"].sum()
             df = df.drop(columns=["_is_limit_down"])
         return df.merge(daily.reset_index(), on="date", how="left")
+
+    # ---------------- ⑮ Alpha101 + GTJA191 因子 (源自 aurumq-rl, pandas 复刻) ----------------
+    def dim15_alpha_factors(self, df: pd.DataFrame) -> pd.DataFrame:
+        """WorldQuant Alpha101 + 国泰君安 GTJA191 精选因子 (pandas 复刻, 无 polars 依赖).
+
+        筛选原则: 公式简洁 + A 股日频适用 + 与现有 14 维低共线.
+        最终因子集由 IC 筛选器 (§14.3) 裁决去留, 此处仅提供原料.
+        """
+
+        def per_stock(g: pd.DataFrame) -> pd.DataFrame:
+            o, h, l, c, v = g["open"], g["high"], g["low"], g["close"], g["volume"]
+            # --- Alpha101 ---
+            # alpha006: -corr(open, volume, 10) — 量价背离信号
+            g["alpha006"] = -o.rolling(10, min_periods=10).corr(v)
+            # alpha012: sign(Δvol) * (-Δclose) — 放量下跌反转信号
+            g["alpha012"] = np.sign(v.diff(1)) * (-c.diff(1))
+            # alpha041: max(Δclose_10, 5)^2 * sign(Δclose_5) — 动量加速/减速
+            dc10 = c.diff(10)
+            dc5 = c.diff(5)
+            g["alpha041"] = (dc10.where(dc10 > 5, 5)) ** 2 * np.sign(dc5)
+            # alpha042: rank(ADV15) * corr(ADV15, close) — 成交额与收盘价相关性
+            adv15 = v.rolling(15, min_periods=15).mean()
+            g["alpha042_ts"] = adv15.rolling(15, min_periods=15).corr(c)
+            # alpha054: (-1 * ret_5d) + corr(open, vol, 5) * std(ret_5d, 5)
+            ret5 = c.pct_change(5)
+            g["alpha054_ts"] = -ret5 + o.rolling(5, min_periods=5).corr(v) * ret5.rolling(5, min_periods=5).std()
+            # --- GTJA191 ---
+            # gtja_001: -corr(rank(Δlog(vol)), rank((close-open)/open), 6)
+            dlv = np.log(v.replace(0, np.nan)).diff(1)
+            intra_ret = (c - o) / o.replace(0, np.nan)
+            # rank 在 per_stock 内是时序 rank; 横截面 rank 在 build 后由 industry_neutralize 补
+            g["gtja_001_ts"] = -dlv.rolling(6, min_periods=6).corr(intra_ret)
+            # gtja_004: -ts_rank(close, 10) — 均值回归信号
+            g["gtja_004"] = -c.rolling(10, min_periods=10).rank(pct=True)
+            return g
+
+        df = _apply_per_stock(df, per_stock)
+        # alpha042/alpha054/gtja_001 的横截面 rank (按 date 分组)
+        for col in ("alpha042_ts", "alpha054_ts", "gtja_001_ts"):
+            if col in df.columns:
+                df[col] = df.groupby("date")[col].rank(pct=True)
+        return df
+
+    # ---------------- ⑯ K线形态 (源自 ohlcpattern, pandas 复刻) ----------------
+    def dim16_candlestick(self, df: pd.DataFrame) -> pd.DataFrame:
+        """精选 6 个 K 线形态 (二值特征), 源自 ohlcpattern skill.
+
+        形态: bullish_engulfing / bearish_engulfing / hammer / shooting_star / morning_star / evening_star
+        """
+
+        def per_stock(g: pd.DataFrame) -> pd.DataFrame:
+            o, h, l, c = g["open"], g["high"], g["low"], g["close"]
+            body = (c - o).abs()
+            upper_shadow = h - np.maximum(o, c)
+            lower_shadow = np.minimum(o, c) - l
+            is_white = (c > o).astype(int)
+            is_black = (c < o).astype(int)
+            # 看涨吞没: 前黑后白, 当前实体包覆前一实体
+            g["bullish_engulfing"] = (
+                (is_black.shift(1) == 1)
+                & (is_white == 1)
+                & (o <= c.shift(1))
+                & (c >= o.shift(1))
+            ).astype(int)
+            # 看跌吞没: 前白后黑, 当前实体包覆前一实体
+            g["bearish_engulfing"] = (
+                (is_white.shift(1) == 1)
+                & (is_black == 1)
+                & (o >= c.shift(1))
+                & (c <= o.shift(1))
+            ).astype(int)
+            # 锤子线: 小实体 + 长下影 + 短上影
+            g["hammer"] = (
+                (body < 0.3 * (h - l).replace(0, np.nan))
+                & (lower_shadow > 2 * body)
+                & (upper_shadow < 0.3 * body)
+            ).astype(int)
+            # 射击之星: 小实体 + 长上影 + 短下影
+            g["shooting_star"] = (
+                (body < 0.3 * (h - l).replace(0, np.nan))
+                & (upper_shadow > 2 * body)
+                & (lower_shadow < 0.3 * body)
+            ).astype(int)
+            # 晨星 (3 根): 前黑 + 中小实体 + 后白且收盘 > 前中点
+            mid_prev = (o.shift(2) + c.shift(2)) / 2
+            g["morning_star"] = (
+                (is_black.shift(2) == 1)
+                & (body.shift(1) < 0.5 * body.shift(2))
+                & (is_white == 1)
+                & (c > mid_prev)
+            ).astype(int)
+            # 暮星 (3 根): 前白 + 中小实体 + 后黑且收盘 < 前中点
+            g["evening_star"] = (
+                (is_white.shift(2) == 1)
+                & (body.shift(1) < 0.5 * body.shift(2))
+                & (is_black == 1)
+                & (c < mid_prev)
+            ).astype(int)
+            return g
+
+        return _apply_per_stock(df, per_stock)
+
+    # ---------------- ⑰ 扩展因子 (源自 quant-ohlcv-feature, pandas 复刻) ----------------
+    def dim17_extended_factors(self, df: pd.DataFrame) -> pd.DataFrame:
+        """精选 3 个低共线因子: Amihud 流动性 + Fisher 变换 + 恐慌贪婪指数."""
+
+        def per_stock(g: pd.DataFrame) -> pd.DataFrame:
+            o, h, l, c, v = g["open"], g["high"], g["low"], g["close"], g["volume"]
+            amount = g.get("amount", v * c)
+            # --- Amihud 非流动性 ( adapted from quant-ohlcv-feature/Amihud.py) ---
+            ret_abs = c.pct_change().abs()
+            g["amihud_illiq"] = (ret_abs / amount.replace(0, np.nan)).rolling(10, min_periods=5).mean()
+            # --- Fisher 变换 ( adapted from Fisher_v3.py) ---
+            price = (h + l) / 2
+            n = 20
+            min_low = l.rolling(n, min_periods=n).min()
+            max_high = h.rolling(n, min_periods=n).max()
+            rng = (max_high - min_low).replace(0, np.nan)
+            price_ch = 0.33 * 2 * ((price - min_low) / rng - 0.5)
+            price_ch = price_ch.clip(-0.999, 0.999)
+            fisher = 0.5 * np.log((1 + price_ch) / (1 - price_ch))
+            g["fisher_transform"] = fisher.ewm(alpha=0.5, adjust=False).mean()
+            # --- 恐慌贪婪指数 ( adapted from FearGreed_Yidai_v1.py) ---
+            tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
+            sma_close = c.rolling(10, min_periods=1).mean()
+            str_ = tr / sma_close.replace(0, np.nan)
+            tr_up = np.where(c > c.shift(1), str_, 0)
+            tr_dn = np.where(c < c.shift(1), str_, 0)
+            wma_up = pd.Series(tr_up).rolling(10, min_periods=2).mean()
+            wma_dn = pd.Series(tr_dn).rolling(10, min_periods=2).mean()
+            g["fear_greed"] = (wma_up - wma_dn) / (wma_up + wma_dn).replace(0, np.nan)
+            return g
+
+        return _apply_per_stock(df, per_stock)
+
+    # ---------------- ⑱ 龙虎榜特征 (源自 uzi-skill lhb-analyzer) ----------------
+    def dim18_lhb(self, df: pd.DataFrame) -> pd.DataFrame:
+        """龙虎榜特征: 条件列, 无 LHB 数据时填 NaN (交 IC 筛选裁决).
+
+        需上游 data_supply merge: lhb_net_buy / lhb_institutional_count / lhb_hot_money_rank
+        """
+        lhb_cols = {
+            "lhb_net_buy": "lhb_net_buy_5d",
+            "lhb_institutional_count": "lhb_inst_count_5d",
+            "lhb_hot_money_rank": "lhb_hot_money_5d",
+        }
+        for src, dest in lhb_cols.items():
+            if src in df.columns:
+                df[dest] = df.groupby("symbol")[src].transform(
+                    lambda s: s.rolling(5, min_periods=1).mean()
+                )
+                # PIT: shift(1) 确保不含 T
+                df[dest] = df.groupby("symbol")[dest].shift(1)
+            else:
+                df[dest] = np.nan
+        return df
 
     # ---------------- 行业中性化 ----------------
     @staticmethod
