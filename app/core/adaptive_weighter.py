@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """按个股自适应权重器 (P10.8b, ARCH §5.13.7, DESIGN_V1 §9 #1).
 
 每只股票独立计算 8 组指标权重 (非全局统一), 内部委托 RightSideFilter
@@ -6,7 +5,6 @@
 """
 
 import logging
-from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -36,7 +34,7 @@ class AdaptiveWeighter:
 
     # 自适应增强目标组与最大增强倍数 (ARCH §5.13.7.C / §5.13.7.E)
     # factor -> [(group, max_boost, sigmoid_input_scale)]
-    BOOST_RULES: Dict[str, List[tuple]] = {
+    BOOST_RULES: dict[str, list[tuple]] = {
         "trend_strength": [
             ("G3_bull_finder", 0.50, 1.0),
             ("G4_trend_top_bottom", 0.30, 1.0),
@@ -64,7 +62,7 @@ class AdaptiveWeighter:
     }
 
     # boost 因子名 → factors 字典中的提取键 (缺省回退)
-    FACTOR_KEYS: Dict[str, List[str]] = {
+    FACTOR_KEYS: dict[str, list[str]] = {
         "trend_strength": ["trend_strength"],
         "ctrl_ratio": ["tech_ths_ctrl_ratio"],
         "flow_strength": ["tech_ths_flow_strength"],
@@ -74,7 +72,7 @@ class AdaptiveWeighter:
         "main_force_signal": ["main_force_signal"],
     }
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """加载预筛选阈值与自适应调整参数, 内部创建 RightSideFilter.
 
         Args:
@@ -101,13 +99,13 @@ class AdaptiveWeighter:
 
         # 指标加权器 (复用组定义/归一化/组内打分)
         self.indicator_weighter = IndicatorWeighter(self.config)
-        self.base_weights: Dict[str, float] = dict(
+        self.base_weights: dict[str, float] = dict(
             self.indicator_weighter.group_weights
         )
 
         # 自适应增强倍数覆盖
         adj_cfg = self.config.get("adjustment", {}) or {}
-        self.boost_rules: Dict[str, List[tuple]] = {
+        self.boost_rules: dict[str, list[tuple]] = {
             factor: [
                 (group, float(adj_cfg.get(f"{factor}_boost", max_boost)), scale)
                 for group, max_boost, scale in rules
@@ -130,14 +128,14 @@ class AdaptiveWeighter:
         return self.right_side_filter.is_uptrend(stock_df, market_above_ma20)
 
     def batch_pre_filter(
-        self, all_stocks: Dict[str, pd.DataFrame], market_above_ma20: bool = True
-    ) -> Dict[str, bool]:
+        self, all_stocks: dict[str, pd.DataFrame], market_above_ma20: bool = True
+    ) -> dict[str, bool]:
         """批量预筛选, 返回 {symbol: is_uptrend}."""
         return self.right_side_filter.batch_filter(all_stocks, market_above_ma20)
 
     # ── 按个股自适应权重计算 ────────────────────────────────────────
 
-    def compute_adaptive_weights(self, factors: dict) -> Dict[str, float]:
+    def compute_adaptive_weights(self, factors: dict) -> dict[str, float]:
         """对单只上行股票计算 8 组自适应权重.
 
         Args:
@@ -161,7 +159,7 @@ class AdaptiveWeighter:
         return {k: v / total for k, v in weights.items()}
 
     def compute_indicator_score(
-        self, factors: dict, adaptive_weights: Dict[str, float] = None
+        self, factors: dict, adaptive_weights: dict[str, float] | None = None
     ) -> float:
         """使用自适应权重计算指标加权得分 (0~1).
 
@@ -177,7 +175,7 @@ class AdaptiveWeighter:
         model_score: float,
         factors: dict,
         is_uptrend: bool,
-        adaptive_weights: Dict[str, float],
+        adaptive_weights: dict[str, float],
     ) -> dict:
         """融合模型得分 + 自适应指标得分.
 
@@ -249,7 +247,7 @@ class AdaptiveWeighter:
             return 0.4 * entry + 0.3 * pullup + 0.3 * golden
         return 0.0
 
-    def _collect_adjustments(self, factors: dict) -> List[dict]:
+    def _collect_adjustments(self, factors: dict) -> list[dict]:
         """收集各 boost 因子的调整明细 (可解释性)."""
         reason_map = {
             "trend_strength": "趋势强度高→{group}权重增强",
@@ -260,7 +258,7 @@ class AdaptiveWeighter:
             "volatility": "波动率大→{group}权重增强",
             "main_force_signal": "主力信号明确→{group}权重增强",
         }
-        adjustments: List[dict] = []
+        adjustments: list[dict] = []
         for factor_name, rules in self.boost_rules.items():
             value = self._extract_factor(factors, factor_name)
             for group, max_boost, scale in rules:

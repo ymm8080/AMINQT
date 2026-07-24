@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """数据集划分与防过拟合 (P10.7, ARCH §5.12).
 
 Train/Val/Test/OOS 四段严格按时间切分 + Purged K-Fold (gap=5 日)。
@@ -6,7 +5,6 @@ Train/Val/Test/OOS 四段严格按时间切分 + Purged K-Fold (gap=5 日)。
 """
 
 import logging
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -29,7 +27,7 @@ _DEFAULT_SPLIT = {
 class DatasetSplitter:
     """时序数据集划分器."""
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """加载切分配置 (training_config.yaml: data_split 段).
 
         含 train/val/test/oos 时间段, purge_gap_days: 5。
@@ -57,7 +55,7 @@ class DatasetSplitter:
 
     def split_by_time(
         self, df: pd.DataFrame, date_col: str = "date"
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> dict[str, pd.DataFrame]:
         """四段时间切分.
 
         Args:
@@ -93,7 +91,7 @@ class DatasetSplitter:
         n_splits: int = 5,
         gap_days: int = 5,
         date_col: str = "date",
-    ) -> List[Tuple[np.ndarray, np.ndarray]]:
+    ) -> list[tuple[np.ndarray, np.ndarray]]:
         """Purged K-Fold: 每折训练/验证索引, 验证集前后各剔除 gap_days.
 
         数据按时间排序后均分为 n_splits 个连续段, 第 i 折以第 i 段为
@@ -127,7 +125,7 @@ class DatasetSplitter:
         fold_sizes[: n % n_splits] += 1
         bounds = np.concatenate([[0], np.cumsum(fold_sizes)])
 
-        folds: List[Tuple[np.ndarray, np.ndarray]] = []
+        folds: list[tuple[np.ndarray, np.ndarray]] = []
         for i in range(n_splits):
             val_start, val_end = int(bounds[i]), int(bounds[i + 1])
             val_idx = np.arange(val_start, val_end, dtype=int)

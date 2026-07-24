@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """推荐股票池管理系统 (P10.11, ARCH §5.16, DESIGN_V1 §3).
 
 5 种 TICK 标记 (全部可手工更改) + 按标记筛选 + 手工增删 +
@@ -10,7 +9,6 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +30,7 @@ DEFAULT_POOL_PATH = os.path.join(
 )
 
 
-def _default_ticks() -> Dict[str, bool]:
+def _default_ticks() -> dict[str, bool]:
     """全部 TICK 初始化为 False."""
     return {tick: False for tick in TICK_FIELDS}
 
@@ -54,11 +52,11 @@ class StockPoolManager:
             pool_path: JSON 文件路径, 默认 data/stock_pool.json。
         """
         self.pool_path = pool_path
-        self._data: Dict = self._load()
+        self._data: dict = self._load()
 
     # ── 持久化 ──────────────────────────────────────────────
 
-    def _load(self) -> Dict:
+    def _load(self) -> dict:
         """从磁盘加载股票池."""
         if os.path.exists(self.pool_path):
             try:
@@ -66,7 +64,7 @@ class StockPoolManager:
                     data = json.load(f)
                 data.setdefault("pool", [])
                 return data
-            except (json.JSONDecodeError, IOError) as exc:
+            except (OSError, json.JSONDecodeError) as exc:
                 logger.warning("股票池加载失败 (%s), 使用空池", exc)
         return {"last_updated": None, "pool": []}
 
@@ -80,7 +78,7 @@ class StockPoolManager:
 
     # ── 内部查询 ────────────────────────────────────────────
 
-    def _find(self, symbol: str) -> Optional[dict]:
+    def _find(self, symbol: str) -> dict | None:
         """按代码查找池内记录, 不存在返回 None."""
         for rec in self._data["pool"]:
             if rec.get("symbol") == symbol:
@@ -113,7 +111,7 @@ class StockPoolManager:
 
     # ── 公开接口 ────────────────────────────────────────────
 
-    def get_pool(self, filter_by_tick: Optional[str] = None) -> List[dict]:
+    def get_pool(self, filter_by_tick: str | None = None) -> list[dict]:
         """获取股票池 (可按 TICK 筛选).
 
         Args:
@@ -244,11 +242,11 @@ class StockPoolManager:
             )
         )
 
-    def get_fixed_stocks(self) -> List[str]:
+    def get_fixed_stocks(self) -> list[str]:
         """返回固定保留股票 (is_fixed=True)."""
         return [r["symbol"] for r in self._data["pool"] if r.get("is_fixed", False)]
 
-    def update_from_pipeline1(self, new_pool: List[dict]) -> None:
+    def update_from_pipeline1(self, new_pool: list[dict]) -> None:
         """Pipeline 1 每日刷新: 更新股票池但保留 is_fixed 股票.
 
         规则 (ARCH §5.16.3):
@@ -264,12 +262,10 @@ class StockPoolManager:
         new_by_symbol = {p["symbol"]: p for p in new_pool}
         old_by_symbol = {r["symbol"]: r for r in self._data["pool"]}
 
-        merged: List[dict] = []
+        merged: list[dict] = []
         # 1. 保留固定股票 + 不在新池中的自选股
         for rec in self._data["pool"]:
-            if rec.get("is_fixed", False):
-                merged.append(rec)
-            elif (
+            if rec.get("is_fixed", False) or (
                 rec.get("ticks", {}).get("is_watchlist", False)
                 and rec["symbol"] not in new_by_symbol
             ):

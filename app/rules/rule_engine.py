@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 规则引擎 v2.0 (合并版 + P11/P12) — 生产组件
 ================================================
@@ -16,7 +15,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Optional, Protocol
+from typing import Protocol
 
 from .config import Config, price_limit
 from .peak_tracker import PeakTracker
@@ -145,9 +144,7 @@ class RuleEngine:
         self._open_prices: dict[str, float] = {}
 
     # ---------------- L0 合规 ----------------
-    def can_buy(
-        self, c: Candidate, tick: Optional[Tick], prev_close: float
-    ) -> Optional[str]:
+    def can_buy(self, c: Candidate, tick: Tick | None, prev_close: float) -> str | None:
         """返回 None 表示可买, 否则返回否决原因."""
         if c.is_st:
             return "ST禁买"
@@ -160,7 +157,7 @@ class RuleEngine:
                 return "涨停无法买入"
         return None
 
-    def can_sell(self, pos: Position, tick: Tick, prev_close: float) -> Optional[str]:
+    def can_sell(self, pos: Position, tick: Tick, prev_close: float) -> str | None:
         if not pos.sellable:
             return "T+1不可卖"
         if tick.price <= prev_close * (1 - price_limit(pos.code) / 100) * 1.001:
@@ -168,7 +165,7 @@ class RuleEngine:
         return None
 
     # ---------------- L1 组合闸门 ----------------
-    def portfolio_gate(self, pf: PortfolioState) -> tuple[float, Optional[str]]:
+    def portfolio_gate(self, pf: PortfolioState) -> tuple[float, str | None]:
         """→ (当日允许总仓位上限, 熔断原因). 与 V3.5 D18 空仓触发分层并存."""
         cfg = self.cfg
         if pf.cooldown_left > 0:
@@ -526,7 +523,7 @@ class RuleEngine:
             self.buy_shapes[c.code] = BuyShape.WAIT_OPEN
 
     # ---- 入场形态状态机 ----
-    def _entry_shape_machine(self, day, c, tick, tr) -> Optional[Order]:
+    def _entry_shape_machine(self, day, c, tick, tr) -> Order | None:
         state = self.buy_shapes.get(c.code, BuyShape.WAIT_OPEN)
 
         if state == BuyShape.WAIT_OPEN:

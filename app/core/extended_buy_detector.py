@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """扩展买入检测器 (P10.15, ARCH §5.15.7, DESIGN_V1 §5.1/§5.3).
 
 扩展买入规则:
@@ -9,14 +8,13 @@
 
 import logging
 
-
 logger = logging.getLogger(__name__)
 
 
 class ExtendedBuyDetector:
     """扩展买入检测器."""
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """加载配置 (trading_config.yaml: extended_buy 段).
 
         Args:

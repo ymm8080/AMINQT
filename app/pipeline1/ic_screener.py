@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 IC 筛选器 (DESIGN §14 三 bis, 安全网 #2)
 ===========================================
@@ -50,6 +49,49 @@ class ICScreener:
             )
         )
         return float(np.nanmean(np.abs(ics.values)))  # 方向无关: 绝对值筛强度
+
+    # ---------------- Newey-West HAC t 统计量 (B6) ----------------
+    @staticmethod
+    def ic_t_stat_newey_west(
+        df: pd.DataFrame, factor: str, label: str, lag: int = 0
+    ) -> float:
+        """IC 序列 Newey-West HAC 调整后的 t 统计量 (B6).
+
+        3d/5d 标签重叠样本导致 IC 序列自相关, t 统计量虚高.
+        lag=0: 标准 t (1d 无重叠); lag=5: 3d; lag=8: 5d.
+        """
+        sub = df[["date", factor, label]].dropna()
+        dates = sorted(sub["date"].unique())
+        if len(dates) < 10:
+            return 0.0
+        ic_series = (
+            sub.groupby("date")
+            .apply(
+                lambda g: (
+                    spearmanr(g[factor], g[label]).statistic
+                    if g[factor].nunique() > 5 and g[label].nunique() > 1
+                    else np.nan
+                )
+            )
+            .dropna()
+        )
+        n = len(ic_series)
+        if n < 5:
+            return 0.0
+        mean_ic = float(ic_series.mean())
+        # HAC 方差估计 (Bartlett kernel)
+        gamma0 = float(((ic_series - mean_ic) ** 2).mean())
+        hac_var = gamma0
+        for ell in range(1, min(lag + 1, n)):
+            w = 1 - ell / (lag + 1)  # Bartlett 权重
+            cov_l = float(
+                (
+                    (ic_series.iloc[ell:] - mean_ic) * (ic_series.iloc[:-ell] - mean_ic)
+                ).mean()
+            )
+            hac_var += 2 * w * cov_l
+        hac_var = max(hac_var, 1e-12)
+        return mean_ic / (np.sqrt(hac_var / n))
 
     @staticmethod
     def rolling_ic_dual(
@@ -113,7 +155,11 @@ class ICScreener:
             auc = self.auc_score(train_df, f)
             roll_mean, roll_pos = self.rolling_ic_dual(train_df, f, "label_1d")
             dual_ok = roll_mean > ROLLING_MEAN_MIN and roll_pos > ROLLING_POS_RATIO_MIN
-            if (best_ic > IC_STRONG or auc > 0.55) and dual_ok:
+            # B6: 3d/5d IC 显著性用 Newey-West HAC 调整 (lag=5/8)
+            t_3d = self.ic_t_stat_newey_west(train_df, f, "label_3d", lag=5)
+            t_5d = self.ic_t_stat_newey_west(train_df, f, "label_5d", lag=8)
+            nw_significant = abs(t_3d) > 1.96 or abs(t_5d) > 1.96
+            if (best_ic > IC_STRONG or auc > 0.55) and dual_ok and nw_significant:
                 grade = "strong"
             elif best_ic > IC_WEAK or auc > 0.52:
                 grade = "weak"
@@ -124,6 +170,8 @@ class ICScreener:
                 "auc": round(auc, 4),
                 "rolling_mean": round(roll_mean, 4),
                 "rolling_pos_ratio": round(roll_pos, 4),
+                "nw_t_3d": round(t_3d, 4),  # B6
+                "nw_t_5d": round(t_5d, 4),  # B6
                 "grade": grade,
             }
             if grade in ("strong", "weak"):

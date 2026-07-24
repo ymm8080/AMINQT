@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """自定义指标加权器 (P10.8, ARCH §5.13).
 
 为用户 REFERENCE/INDICATOR/ 4 个同花顺公式指标建立三层显式加权:
@@ -9,7 +8,6 @@ Layer 1 选股评分 / Layer 2 模型训练特征加权 / Layer 3 交易信号�
 """
 
 import logging
-from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -40,7 +38,7 @@ class IndicatorWeighter:
     """
 
     # ── 指标分组定义 (与 ths_indicators.py 45 列对齐, ARCH §5.13.3) ──
-    INDICATOR_GROUPS: Dict[str, dict] = {
+    INDICATOR_GROUPS: dict[str, dict] = {
         "G1_main_force_chip": {
             "name": "主力筹码指标",
             "source": "主力筹码指标.docx",
@@ -161,7 +159,7 @@ class IndicatorWeighter:
         },
     }
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """加载权重配置; config 为 None 时使用 ARCH §5.13.1 默认权重.
 
         Args:
@@ -176,7 +174,7 @@ class IndicatorWeighter:
         self.config = config or {}
 
         # 组权重 (默认 → config 覆盖)
-        self.group_weights: Dict[str, float] = {
+        self.group_weights: dict[str, float] = {
             key: grp["weight"] for key, grp in self.INDICATOR_GROUPS.items()
         }
         cfg_groups = self.config.get("groups", {}) or {}
@@ -189,7 +187,7 @@ class IndicatorWeighter:
                     self.group_weights[key] = float(val)
 
         # 组内因子权重覆盖 (config → 默认均匀)
-        self.factor_weight_overrides: Dict[str, Dict[str, float]] = {}
+        self.factor_weight_overrides: dict[str, dict[str, float]] = {}
         for key, val in cfg_groups.items():
             if isinstance(val, dict) and "factor_weights_override" in val:
                 self.factor_weight_overrides[key] = dict(val["factor_weights_override"])
@@ -240,7 +238,7 @@ class IndicatorWeighter:
 
     # ── Layer 2: 模型训练特征加权 ───────────────────────────────────
 
-    def get_feature_weights(self, all_factor_names: List[str]) -> np.ndarray:
+    def get_feature_weights(self, all_factor_names: list[str]) -> np.ndarray:
         """Layer 2: 训练特征列权重向量 (THS 因子影响力 ≈ 3.6× 非THS).
 
         THS 列 raw weight = ths_boost, 非 THS 列 = 1.0; 归一化到均值 1 后
@@ -258,7 +256,7 @@ class IndicatorWeighter:
         weights = np.sqrt(raw / (mean if mean > 0 else 1.0))
         return np.nan_to_num(weights, nan=1.0)
 
-    def weight_features(self, X: np.ndarray, factor_names: List[str]) -> np.ndarray:
+    def weight_features(self, X: np.ndarray, factor_names: list[str]) -> np.ndarray:
         """Layer 2: 特征矩阵加权 (支持 (N, F) 与 (N, T, F)).
 
         Args:
@@ -531,7 +529,7 @@ class IndicatorWeighter:
     # ── 内部: 分组打分 ──────────────────────────────────────────────
 
     def _score_with_weights(
-        self, factors: dict, group_weights: Dict[str, float]
+        self, factors: dict, group_weights: dict[str, float]
     ) -> float:
         """按给定组权重计算指标加权得分 (0~1), 缺失组重归一化."""
         total_score = 0.0

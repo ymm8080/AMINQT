@@ -1,17 +1,18 @@
-# -*- coding: utf-8 -*-
 """指标复刻层 (P16) + CompositeFeed + 双轨训练器 smoke 测试."""
 
 from __future__ import annotations
+
+import itertools
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from app.indicators.zhuli_lasheng import zhuli_lasheng, had_accumulation_peak
-from app.indicators.yimeng_dingdi import yimeng_dingdi, YimengFeed
 from app.indicators.chip_distribution import ChipDistribution, ChipFeed
 from app.indicators.faxian_niugu import faxian_niugu
 from app.indicators.indicator_feed import CompositeFeed
+from app.indicators.yimeng_dingdi import YimengFeed, yimeng_dingdi
+from app.indicators.zhuli_lasheng import had_accumulation_peak, zhuli_lasheng
 from app.rules.rule_engine import Candidate, PortfolioState, RuleEngine
 
 
@@ -73,7 +74,7 @@ class TestYimengDingdi:
         """FILTER 因果性: 顶部信号 N=4 日内最多 1 次."""
         df = yimeng_dingdi(make_ohlc())
         tops = df.index[df["顶部"]].tolist()
-        for a, b in zip(tops, tops[1:]):
+        for a, b in itertools.pairwise(tops):
             assert b - a >= 4
 
 

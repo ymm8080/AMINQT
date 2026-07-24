@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """大盘指数上下文因子 — 将大盘走势注入每只股票的特征矩阵.
 
 大盘走势对个股选股和交易至关重要。本模块负责：
@@ -23,7 +22,6 @@
 """
 
 import logging
-from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -33,7 +31,7 @@ logger = logging.getLogger(__name__)
 # ── 常量 ──────────────────────────────────────────────────────────────
 SH_INDEX_CODE = "000001"  # 上证指数
 ANNUALIZATION = np.sqrt(252)  # 年化因子
-MARKET_FACTOR_COLUMNS: List[str] = [
+MARKET_FACTOR_COLUMNS: list[str] = [
     "market_return_1d",
     "market_return_5d",
     "market_momentum",
@@ -51,8 +49,8 @@ class MarketContext:
 
     def __init__(self, index_code: str = SH_INDEX_CODE):
         self.index_code = index_code
-        self._index_df: Optional[pd.DataFrame] = None
-        self._factors_df: Optional[pd.DataFrame] = None
+        self._index_df: pd.DataFrame | None = None
+        self._factors_df: pd.DataFrame | None = None
 
     # ───────────────────────────────────────────────────────────────
     #  数据加载
@@ -229,7 +227,7 @@ class MarketContext:
     # ───────────────────────────────────────────────────────────────
 
     @staticmethod
-    def get_factor_columns() -> List[str]:
+    def get_factor_columns() -> list[str]:
         """返回大盘因子列名列表."""
         return MARKET_FACTOR_COLUMNS.copy()
 

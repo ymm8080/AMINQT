@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 规则引擎 Config 持久化 (YAML roundtrip)
 ============================================
@@ -14,7 +13,7 @@ from dataclasses import fields
 
 import yaml
 
-from .config import Config, TUNABLE_BOUNDS
+from .config import TUNABLE_BOUNDS, Config
 
 logger = logging.getLogger(__name__)
 

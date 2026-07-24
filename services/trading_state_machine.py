@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """交易状态机 (P10, ARCH §8.3.2/§9.4).
 
 独立双向控制: 自动买 / 自动卖 各自开关;
@@ -13,8 +12,8 @@
 """
 
 import logging
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,7 @@ class TradingStateMachine:
         auto_sell_enabled: 自动卖开关 (独立于自动买)。
     """
 
-    def __init__(self, on_stop_all: Optional[Callable[[], None]] = None) -> None:
+    def __init__(self, on_stop_all: Callable[[], None] | None = None) -> None:
         """初始化状态机 (初始 STOPPED, 双向自动开关均关闭).
 
         Args:
@@ -92,7 +91,7 @@ class TradingStateMachine:
         if self._transition("stop_all") and self.on_stop_all is not None:
             try:
                 self.on_stop_all()
-            except Exception:  # noqa: BLE001 — 回调异常不影响状态机
+            except Exception:
                 logger.exception("[TSM] on_stop_all 回调异常")
 
     def set_auto_buy(self, enabled: bool) -> None:

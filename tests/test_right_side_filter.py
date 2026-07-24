@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """RightSideFilter 单元测试 (P10.8b, ARCH §5.13.7.B)."""
 
 import numpy as np

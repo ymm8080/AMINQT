@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for services/executor — mode toggle + T+1 (M3 / Phase 6)."""
 
 import pytest

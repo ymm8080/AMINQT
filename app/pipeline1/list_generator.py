@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 清单生成器 (DESIGN §14.4, PIPELINE1_V3.5 §四)
 =================================================
@@ -23,6 +22,10 @@ MAX_PER_INDUSTRY = 4
 MIN_LIST_SIZE = 10  # 顺延后不足则接受不足
 COMPOUND_W = (0.5, 0.35, 0.15)  # 1d/3d/5d
 HOLDING_BONUS = 0.2
+# B3: Holding Bonus 按持仓天数衰减 day1=1.0/day2=0.5/day3=0.0
+HOLDING_DAY_WEIGHTS = {0: 0.0, 1: 1.0, 2: 0.5, 3: 0.0}
+# B4: base_rate 20 日滚动窗口
+BASE_RATE_WINDOW = 20
 # 动量阈值
 FW_HARD = -0.03  # 预测跌幅 > 3% → 强制 low
 FW_EPS = 0.001  # 预测值太小无法算比率
@@ -64,22 +67,37 @@ class MarketEnv:
 class ListGenerator:
     """每日 Top 15 清单生成."""
 
+    def __init__(self):
+        self._base_rate_history: list[float] = []
+
     # ---------------- 排序分 ----------------
-    @staticmethod
-    def compute_scores(df: pd.DataFrame) -> pd.DataFrame:
+    def compute_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """compound_ret = 0.5*pred_1d + 0.35*pred_3d + 0.15*pred_5d
-        score = compound_ret * (prob_up / base_rate);  base_rate = 当期全池基准胜率
-        adjusted = score + 0.2 * is_in_yesterday_list  (Holding Bonus, 目标日均换手 40-60%)"""
+        score = compound_ret * (prob_up / base_rate);  base_rate = B4 20日滚动均值
+        adjusted = score + 0.2 * holding_day_weight * is_in_yesterday_list  (B3 衰减)"""
         w1, w3, w5 = COMPOUND_W
         df = df.copy()
         df["compound_ret"] = (
             w1 * df["pred_ret_1d"] + w3 * df["pred_ret_3d"] + w5 * df["pred_ret_5d"]
         )
-        base_rate = df["prob_up"].mean()
+        # B4: base_rate = 20 日滚动均值 (原单日均值日间波动大致 score 尺度不稳)
+        daily_mean = float(df["prob_up"].mean())
+        self._base_rate_history.append(daily_mean)
+        recent = self._base_rate_history[-BASE_RATE_WINDOW:]
+        base_rate = float(pd.Series(recent).mean())
         base_rate = base_rate if base_rate > 1e-6 else 1.0
         df["base_rate"] = base_rate
         df["score"] = df["compound_ret"] * (df["prob_up"] / base_rate)
-        df["score"] = df["score"] + HOLDING_BONUS * df.get("is_in_yesterday_list", 0)
+        # B3: Holding Bonus 按持仓天数衰减 (day1=1.0/day2=0.5/day3=0.0)
+        if "holding_day" in df.columns:
+            df["_hd_weight"] = df["holding_day"].map(HOLDING_DAY_WEIGHTS).fillna(0.0)
+        else:
+            # 向后兼容: 无 holding_day 列时, is_in_yesterday_list=1 视为 day1 (weight=1.0)
+            df["_hd_weight"] = df.get("is_in_yesterday_list", 0)
+        df["score"] = df["score"] + HOLDING_BONUS * df["_hd_weight"] * df.get(
+            "is_in_yesterday_list", 0
+        )
+        df = df.drop(columns=["_hd_weight"])
         return df
 
     # ---------------- 动量持续性 ----------------
@@ -198,13 +216,15 @@ class ListGenerator:
 
         df = self.compute_scores(candidates)
         df = self.consensus_and_conflict(df)
+        # §14.2.3 跨组归一化: 主板/双创 score 尺度不同, 组内 rank_pct 后合并排序
+        df["score_rank_pct"] = df.groupby("board")["score"].rank(pct=True)
         df["momentum"] = [
             self.compute_momentum(a, b, c)
             for a, b, c in zip(df["pred_ret_1d"], df["pred_ret_3d"], df["pred_ret_5d"])
         ]
         df["market_state"] = market_state
         df["prob_up"] = df["prob_up"].round(3)
-        df = df.sort_values("score", ascending=False)
+        df = df.sort_values("score_rank_pct", ascending=False)
         df = self.apply_industry_limit(df)
         top = TOP_N if cap >= 1.0 else 5  # D18 降仓 → 仅 Top 5
         df = df.head(top)

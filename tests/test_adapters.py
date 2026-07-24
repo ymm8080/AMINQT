@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for data/adapters — canonicalize, factory fallback (Phase 1+)."""
 
 import pytest

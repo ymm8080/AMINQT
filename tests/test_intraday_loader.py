@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """intraday_loader 单元测试 (akshare 缺失 — monkeypatch 假模块)."""
 
 import sys

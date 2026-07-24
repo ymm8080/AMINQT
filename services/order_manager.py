@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """委托管理器 (P10, ARCH §9.4).
 
 手动确认 / 自动执行 / 撤单; 与 TradingStateMachine 联动
@@ -11,7 +10,6 @@ T+1: 卖出数量不得超过可用持仓 (available_qty)。
 import logging
 import uuid
 from enum import Enum
-from typing import Dict, List, Optional
 
 from services.executor_base import Order
 
@@ -47,9 +45,9 @@ class OrderManager:
 
             executor = get_executor()
         self.executor = executor
-        self._orders: Dict[str, dict] = {}  # order_id → 委托记录
-        self._client_ids: Dict[str, str] = {}  # client_order_id → order_id (幂等)
-        self._fills: List[dict] = []  # 成交回报
+        self._orders: dict[str, dict] = {}  # order_id → 委托记录
+        self._client_ids: dict[str, str] = {}  # client_order_id → order_id (幂等)
+        self._fills: list[dict] = []  # 成交回报
 
     # ── 内部 helpers ──────────────────────────────────────────────
 
@@ -68,7 +66,7 @@ class OrderManager:
         )
         try:
             result = self.executor.execute(order)
-        except Exception:  # noqa: BLE001 — 执行器异常 → REJECTED
+        except Exception:
             logger.exception("[OM] 执行器下单异常: %s", rec["order_id"])
             rec["status"] = OrderStatus.REJECTED
             return False
@@ -98,7 +96,7 @@ class OrderManager:
     # ── T+1 检查 ──────────────────────────────────────────────────
 
     def check_t1_sell(
-        self, symbol: str, qty: int, positions: Optional[dict] = None
+        self, symbol: str, qty: int, positions: dict | None = None
     ) -> bool:
         """T+1 检查: 卖出数量 ≤ 可用持仓 (available_qty).
 
@@ -131,7 +129,7 @@ class OrderManager:
         price: float,
         qty: int,
         require_confirm: bool = True,
-        client_order_id: Optional[str] = None,
+        client_order_id: str | None = None,
     ) -> str:
         """提交委托 (默认手动确认模式).
 
@@ -201,7 +199,7 @@ class OrderManager:
             return False
         return self._send_to_executor(rec)
 
-    def batch_confirm(self, order_ids: List[str]) -> int:
+    def batch_confirm(self, order_ids: list[str]) -> int:
         """批量确认.
 
         Returns:
@@ -230,7 +228,7 @@ class OrderManager:
         logger.info("[OM] 已撤单: %s", order_id)
         return True
 
-    def get_pending(self) -> List[dict]:
+    def get_pending(self) -> list[dict]:
         """待确认委托队列 (看板展示)."""
         return [
             self._snapshot(oid)
@@ -238,7 +236,7 @@ class OrderManager:
             if rec["status"] is OrderStatus.PENDING_CONFIRM
         ]
 
-    def get_fills(self, symbol: Optional[str] = None) -> List[dict]:
+    def get_fills(self, symbol: str | None = None) -> list[dict]:
         """成交回报 (可按 symbol 过滤)."""
         if symbol is None:
             return [dict(f) for f in self._fills]

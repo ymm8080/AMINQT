@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Phase 1 — Download daily K-line for the stock pool to data/raw/.
 
 Uses the configured data adapter (akshare by default; iFinD if creds set).
