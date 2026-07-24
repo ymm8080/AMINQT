@@ -272,3 +272,45 @@ class DataSupplyChain:
         """15:00 前置检查: 当前时间是否早于拉取死线."""
         now = now or time.strftime("%H:%M")
         return now < deadline
+
+    # ---------------- [B11] OHLCV 回填 ----------------
+    BACKFILL_MIN_DAYS = 1250  # ≥5 年交易日 (特征预热期 250 日独立于训练窗口)
+
+    def backfill_ohlcv(
+        self,
+        symbols: list[str],
+        years: int = 5,
+        end: str | None = None,
+        refresh: bool = False,
+    ) -> pd.DataFrame:
+        """[B11] OHLCV 回填 ≥5 年 (≥1250 交易日, akshare/Tushare, 不受 iFinD 3 年限制).
+
+        逐股拉取历史日线 (hfq+raw 双价格), 合并为面板; 单股失败告警并跳过
+        (不中断整体回填). 筹码/资金流维持可得深度, 不足按缺失处理
+        (NaN 不参与缩尾分位计算).
+        """
+        end = end or time.strftime("%Y-%m-%d")
+        start = (
+            pd.Timestamp(end) - pd.DateOffset(years=years) - pd.Timedelta(days=30)
+        ).strftime("%Y-%m-%d")  # 多取 30 自然日覆盖非交易日
+        frames = []
+        for sym in symbols:
+            try:
+                frames.append(self.fetch_history(sym, start, end, refresh=refresh))
+            except DataSupplyError as exc:
+                logger.warning("B11 回填跳过 %s: %s", sym, exc)
+        if not frames:
+            raise DataSupplyError("B11 回填失败: 全部标的无数据")
+        panel = pd.concat(frames, ignore_index=True)
+        return panel.sort_values(["symbol", "date"]).reset_index(drop=True)
+
+    def check_backfill_depth(
+        self, panel: pd.DataFrame, min_days: int | None = None
+    ) -> bool:
+        """[B11] 深度校验: 各标的交易日数 ≥1250 → True (720 日训练窗口);
+        否则 False (首个训练窗口降为 540 日过渡, 达标后恢复)."""
+        min_days = min_days or self.BACKFILL_MIN_DAYS
+        if panel is None or len(panel) == 0:
+            return False
+        counts = panel.groupby("symbol")["date"].nunique()
+        return bool(len(counts) > 0 and (counts >= min_days).all())

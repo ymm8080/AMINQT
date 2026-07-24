@@ -175,19 +175,33 @@ class TestCompositeFeedIntegration:
 
 class TestDualTrackTrainer:
     def test_split_window_segments(self):
-        """720 窗口四段: 690/10/10/10, 校准与早停物理隔离."""
+        """720 窗口四段 [B21③]: 670/20/20/10, 校准与早停物理隔离."""
         from app.pipeline1.dual_track_trainer import DualTrackTrainer
 
         dates = pd.bdate_range("2023-01-02", periods=720)
         df = pd.DataFrame({"date": dates, "x": range(720)})
         segs = DualTrackTrainer.split_window(df)
         assert {k: len(v) for k, v in segs.items()} == {
-            "train": 690,
-            "es": 10,
-            "calib": 10,
+            "train": 670,
+            "es": 20,
+            "calib": 20,
             "test": 10,
         }
         assert set(segs["es"]["date"]) & set(segs["calib"]["date"]) == set()
+
+    def test_split_window_transition_b11(self):
+        """B11: 回填达标前 540 日过渡窗口, es/calib/test 段长不变, 仅压缩 train."""
+        from app.pipeline1.dual_track_trainer import DualTrackTrainer
+
+        dates = pd.bdate_range("2023-01-02", periods=540)
+        df = pd.DataFrame({"date": dates, "x": range(540)})
+        segs = DualTrackTrainer.split_window(df, window_total=540)
+        assert {k: len(v) for k, v in segs.items()} == {
+            "train": 490,
+            "es": 20,
+            "calib": 20,
+            "test": 10,
+        }
 
     def test_time_weights_decay(self):
         from app.pipeline1.dual_track_trainer import DualTrackTrainer

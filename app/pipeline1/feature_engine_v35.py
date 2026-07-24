@@ -559,6 +559,8 @@ class FeatureEngineV35:
             "rank_ff_turnover",
             "liquidity_score",
             "churn_suspect",
+            "is_virtual",  # B18 标识列, 非特征
+            "price_1455",  # B9 执行价列, 非特征
             # dim09 中间量与前瞻信号: 吸筹峰含 REF(X,-1) 前瞻, 严禁入特征 (安全网 #4)
             "吸筹峰",
             "VAR5",

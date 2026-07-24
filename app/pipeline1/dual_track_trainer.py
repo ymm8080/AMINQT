@@ -3,8 +3,11 @@
 =====================================================
 LightGBM 双轨×8: (1d_reg Huber + 1d_cls binary + 3d_reg + 5d_reg) × (主板/双创).
 **日线预测只用本地 LightGBM 模型 (用户 2026-07-22 裁决), 无云端/ONNX/LSTM 依赖.**
-- 720 日滚动窗口: 训练690 / 早停10 / 校准10 (与验证物理隔离!) / 测试10 (仅月度归因)
-- 半衰期加权 250 天; Huber loss; early_stopping patience=50
+- 720 日滚动窗口 [B21③]: 训练670 / 早停20 / 校准20 (与验证物理隔离!) / 测试10 (仅月度归因)
+- [B11] OHLCV 回填达标 (<1250 交易日) 前首个训练窗口降为 540 日过渡, 达标后恢复 720 日
+- [B10] 半衰期加权 250 天, 方向断言 weights[-1] > weights[0] (最新样本权重=1.0)
+- [B9] PM 验收标签 label_pm_kd 存在时优先于研究口径 label_kd
+- Huber loss; early_stopping patience=50
 - 超参纪律: 年度贝叶斯调优 (≤50 组), 每周仅固定超参重训
 - **每周一次全局重训 (用户 2026-07-22 裁决: 周频, 非月频)**:
   每周第一个交易日 15:30 启动 (T-1 数据), 16:00 旧模型出清单, 18:00 前切换
@@ -23,9 +26,10 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 WINDOW_TOTAL = 720
-TRAIN_DAYS = 690
-ES_DAYS = 10  # 早停验证
-CALIB_DAYS = 10  # 校准 (与早停物理隔离)
+WINDOW_TRANSITION = 540  # [B11] 回填达标前过渡窗口
+TRAIN_DAYS = 670  # [B21③] 670/20/20/10
+ES_DAYS = 20  # 早停验证
+CALIB_DAYS = 20  # 校准 (与早停物理隔离)
 TEST_DAYS = 10  # 测试 (仅月度归因, 严禁反向调参)
 HALF_LIFE = 250  # 半衰期加权 (天)
 ES_PATIENCE = 50
@@ -57,23 +61,42 @@ class DualTrackTrainer:
 
     # ---------------- 窗口切分 ----------------
     @staticmethod
-    def split_window(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
-        """720 日窗口四段切分: train(690) / es(10) / calib(10) / test(10).
-        校准集与早停验证集物理隔离, 否则校准器学到被调参挑剩下的噪声."""
-        dates = sorted(df["date"].unique())[-WINDOW_TOTAL:]
+    def split_window(
+        df: pd.DataFrame, window_total: int = WINDOW_TOTAL
+    ) -> dict[str, pd.DataFrame]:
+        """滚动窗口四段切分 [B21③]: train / es / calib / test = 670/20/20/10 (720 窗口).
+
+        校准集与早停验证集物理隔离, 否则校准器学到被调参挑剩下的噪声.
+        [B11] window_total=540 为回填达标前过渡窗口 (es/calib/test 段长不变,
+        仅压缩 train 段), 达标后恢复 720.
+        """
+        n_es_calib_test = ES_DAYS + CALIB_DAYS + TEST_DAYS
+        train_days = window_total - n_es_calib_test
+        dates = sorted(df["date"].unique())[-window_total:]
         seg = {
-            "train": dates[:TRAIN_DAYS],
-            "es": dates[TRAIN_DAYS : TRAIN_DAYS + ES_DAYS],
-            "calib": dates[TRAIN_DAYS + ES_DAYS : TRAIN_DAYS + ES_DAYS + CALIB_DAYS],
+            "train": dates[:train_days],
+            "es": dates[train_days : train_days + ES_DAYS],
+            "calib": dates[train_days + ES_DAYS : train_days + ES_DAYS + CALIB_DAYS],
             "test": dates[-TEST_DAYS:],
         }
         return {k: df[df["date"].isin(v)] for k, v in seg.items()}
 
     @staticmethod
     def time_weights(df: pd.DataFrame, half_life: int = HALF_LIFE) -> np.ndarray:
-        """半衰期加权: 旧样本权重指数衰减, 让模型贴近近期市场结构."""
+        """半衰期加权: 旧样本权重指数衰减, 让模型贴近近期市场结构.
+
+        [B10] 方向断言: 日期升序轴上 weights[-1] > weights[0]
+        (最新样本权重=1.0), 写反即中止 — 训练前强制检查.
+        """
         dates = sorted(df["date"].unique())
         age = {d: len(dates) - 1 - i for i, d in enumerate(dates)}
+        if len(dates) > 1:
+            w_first = 0.5 ** (age[dates[0]] / half_life)
+            w_last = 0.5 ** (age[dates[-1]] / half_life)
+            assert w_last > w_first, (
+                "B10 半衰期权重方向错误: 最新样本权重必须最大 "
+                f"(w_last={w_last:.4f} <= w_first={w_first:.4f})"
+            )
         return np.array([0.5 ** (age[d] / half_life) for d in df["date"]])
 
     # ---------------- 单模型训练 ----------------
@@ -88,6 +111,11 @@ class DualTrackTrainer:
             "3d_reg": "label_3d",
             "5d_reg": "label_5d",
         }[kind]
+        # [B9] PM 执行口径验收标签优先 (label_pm_kd), 缺失时回退研究口径 label_kd
+        if kind != "1d_cls":
+            pm_label = f"label_pm_{kind[0]}d"
+            if pm_label in segs["train"].columns:
+                label = pm_label
         train = segs["train"].dropna(subset=[label])  # per-model dropna (安全网 #7)
         es = segs["es"].dropna(subset=[label])
         X, y = train[feature_cols], train[label]
