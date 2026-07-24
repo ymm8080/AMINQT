@@ -1,6 +1,6 @@
 # =============================================================================
 # AMINQT DeepSeek PR Review — AI-powered code review on every pull request
-# Model: deepseek-v4-flash (fast reasoning, rejects tool_choice)
+# Model: deepseek-v4-flash (thinking disabled in-script for predictable JSON output)
 # API key: stored as repo secret DEEPSEEK_API_KEY
 # Trigger: PR opened / synchronize / reopened + manual dispatch
 # =============================================================================

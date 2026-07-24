@@ -14,7 +14,7 @@ Serenity 质化叠加层 (源自 serenity-skill, 瓶颈评分卡)
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import pandas as pd
 

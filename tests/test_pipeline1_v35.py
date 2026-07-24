@@ -328,7 +328,6 @@ class TestFeatures:
         assert pd.isna(out["lhb_net_buy_5d"].iloc[0])  # shift(1)
         assert not pd.isna(out["lhb_net_buy_5d"].iloc[1])
 
-
 # ============================================================
 # IC 筛选
 # ============================================================

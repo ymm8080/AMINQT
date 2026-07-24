@@ -345,7 +345,7 @@ class FeatureEngineV35:
         """
 
         def per_stock(g: pd.DataFrame) -> pd.DataFrame:
-            o, h, l, c, v = g["open"], g["high"], g["low"], g["close"], g["volume"]
+            o, c, v = g["open"], g["close"], g["volume"]
             # --- Alpha101 ---
             # alpha006: -corr(open, volume, 10) — 量价背离信号
             g["alpha006"] = -o.rolling(10, min_periods=10).corr(v)
@@ -386,10 +386,10 @@ class FeatureEngineV35:
         """
 
         def per_stock(g: pd.DataFrame) -> pd.DataFrame:
-            o, h, l, c = g["open"], g["high"], g["low"], g["close"]
+            o, h, lo, c = g["open"], g["high"], g["low"], g["close"]
             body = (c - o).abs()
             upper_shadow = h - np.maximum(o, c)
-            lower_shadow = np.minimum(o, c) - l
+            lower_shadow = np.minimum(o, c) - lo
             is_white = (c > o).astype(int)
             is_black = (c < o).astype(int)
             # 看涨吞没: 前黑后白, 当前实体包覆前一实体
@@ -408,13 +408,13 @@ class FeatureEngineV35:
             ).astype(int)
             # 锤子线: 小实体 + 长下影 + 短上影
             g["hammer"] = (
-                (body < 0.3 * (h - l).replace(0, np.nan))
+                (body < 0.3 * (h - lo).replace(0, np.nan))
                 & (lower_shadow > 2 * body)
                 & (upper_shadow < 0.3 * body)
             ).astype(int)
             # 射击之星: 小实体 + 长上影 + 短下影
             g["shooting_star"] = (
-                (body < 0.3 * (h - l).replace(0, np.nan))
+                (body < 0.3 * (h - lo).replace(0, np.nan))
                 & (upper_shadow > 2 * body)
                 & (lower_shadow < 0.3 * body)
             ).astype(int)
@@ -442,15 +442,15 @@ class FeatureEngineV35:
         """精选 3 个低共线因子: Amihud 流动性 + Fisher 变换 + 恐慌贪婪指数."""
 
         def per_stock(g: pd.DataFrame) -> pd.DataFrame:
-            o, h, l, c, v = g["open"], g["high"], g["low"], g["close"], g["volume"]
+            h, lo, c, v = g["high"], g["low"], g["close"], g["volume"]
             amount = g.get("amount", v * c)
             # --- Amihud 非流动性 ( adapted from quant-ohlcv-feature/Amihud.py) ---
             ret_abs = c.pct_change().abs()
             g["amihud_illiq"] = (ret_abs / amount.replace(0, np.nan)).rolling(10, min_periods=5).mean()
             # --- Fisher 变换 ( adapted from Fisher_v3.py) ---
-            price = (h + l) / 2
+            price = (h + lo) / 2
             n = 20
-            min_low = l.rolling(n, min_periods=n).min()
+            min_low = lo.rolling(n, min_periods=n).min()
             max_high = h.rolling(n, min_periods=n).max()
             rng = (max_high - min_low).replace(0, np.nan)
             price_ch = 0.33 * 2 * ((price - min_low) / rng - 0.5)
@@ -458,7 +458,7 @@ class FeatureEngineV35:
             fisher = 0.5 * np.log((1 + price_ch) / (1 - price_ch))
             g["fisher_transform"] = fisher.ewm(alpha=0.5, adjust=False).mean()
             # --- 恐慌贪婪指数 ( adapted from FearGreed_Yidai_v1.py) ---
-            tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
+            tr = pd.concat([h - lo, (h - c.shift(1)).abs(), (lo - c.shift(1)).abs()], axis=1).max(axis=1)
             sma_close = c.rolling(10, min_periods=1).mean()
             str_ = tr / sma_close.replace(0, np.nan)
             tr_up = np.where(c > c.shift(1), str_, 0)
