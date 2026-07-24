@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """AdaptiveEngine 测试 (P10.12, ARCH §5.17)."""
 
 import json

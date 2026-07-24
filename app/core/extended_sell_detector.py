@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """扩展卖出检测器 (P10.15, ARCH §5.14.6, DESIGN_V1 §4 STEP4 + §5.4).
 
 日线卖出扩展 (任一 → 标记日线卖出):
@@ -32,7 +31,7 @@ COL_DIF = "tech_ths_dif"
 class ExtendedSellDetector:
     """扩展卖出检测器."""
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """加载配置 (trading_config.yaml: extended_sell 段).
 
         Args:

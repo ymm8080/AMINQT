@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for app/models/lstm_model — forward shape (Phase 3)."""
 
 import pytest

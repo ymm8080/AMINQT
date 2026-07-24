@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """统一配置加载器 (P8, ARCH §6.3).
 
 加载 selection_config.yaml / trading_config.yaml / training_config.yaml /

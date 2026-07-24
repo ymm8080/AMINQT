@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """训练自动因子发现 (P11, ARCH §5.5).
 
 每次训练后自动评估因子有效性, 输出 Top-K 因子报告:
@@ -12,7 +11,6 @@ tech_ths_ctrl_ratio 强制保留在 Top-K (ARCH §5.13.8.A)。
 """
 
 import logging
-from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -44,7 +42,7 @@ def _minmax_norm(s: pd.Series) -> pd.Series:
 class FactorDiscovery:
     """因子发现器."""
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         self.config = config or {}
 
     # ────────────────────────────────────────────────────────────────
@@ -88,7 +86,7 @@ class FactorDiscovery:
         if len(pair) < 10:
             return 0.0
 
-        ics: List[float] = []
+        ics: list[float] = []
         if isinstance(pair.index, pd.DatetimeIndex):
             groups = pair.groupby(pair.index.to_period("M"))
             for _, g in groups:
@@ -115,11 +113,11 @@ class FactorDiscovery:
 
     def _fit_fallback_model(self, X: pd.DataFrame, y: pd.Series):
         """训练兜底 GBM (lightgbm 缺失时使用)."""
-        params = dict(
-            n_estimators=int(self.config.get("gbm_n_estimators", 80)),
-            max_depth=int(self.config.get("gbm_max_depth", 3)),
-            random_state=42,
-        )
+        params = {
+            "n_estimators": int(self.config.get("gbm_n_estimators", 80)),
+            "max_depth": int(self.config.get("gbm_max_depth", 3)),
+            "random_state": 42,
+        }
         model = GradientBoostingRegressor(**params)
         model.fit(X, y)
         return model
@@ -215,8 +213,8 @@ class FactorDiscovery:
         gain = self._compute_gain(X, y, model)
         shap_mean = self._compute_shap(X, y, model)
 
-        ic_map: Dict[str, float] = {}
-        icir_map: Dict[str, float] = {}
+        ic_map: dict[str, float] = {}
+        icir_map: dict[str, float] = {}
         for name in factor_names:
             ic_map[name] = self.compute_ic(X[name], y)
             icir_map[name] = self.compute_icir(X[name], y)
@@ -247,7 +245,7 @@ class FactorDiscovery:
         )
         return report
 
-    def get_top_factors(self, report: pd.DataFrame, top_k: int = 10) -> List[str]:
+    def get_top_factors(self, report: pd.DataFrame, top_k: int = 10) -> list[str]:
         """取 Top-K 因子 (FORCE_TOP_FACTORS 强制保留).
 
         Args:

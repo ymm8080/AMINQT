@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 """Tests for app/models/iwencai_agent.py — 全部 mock, 不触网."""
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from app.models.iwencai_agent import IwencaiAgent, RANK_CONDITIONS
+from app.models.iwencai_agent import RANK_CONDITIONS, IwencaiAgent
 
 
 def make_df(closes, vols, ctrl=None):

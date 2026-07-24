@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """P10 看板测试: 数据服务层纯函数 + 图表组件 + 页面导入."""
 
 from __future__ import annotations
@@ -72,9 +71,9 @@ class TestComponents:
 
 class TestPageImports:
     def test_pages_importable(self):
-        import app.streamlit.page_backtest  # noqa: F401
-        import app.streamlit.page_config  # noqa: F401
-        import app.streamlit.page_selection  # noqa: F401
+        import app.streamlit.page_backtest
+        import app.streamlit.page_config
+        import app.streamlit.page_selection
         import app.streamlit.page_trading  # noqa: F401
 
     def test_entry_importable(self):

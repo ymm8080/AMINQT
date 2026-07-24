@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """M3 — Executor interface + execution-mode toggle.
 
 Two modes (settings.ExecutionMode):
@@ -8,8 +7,7 @@ Two modes (settings.ExecutionMode):
 
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, asdict
-from typing import Optional
+from dataclasses import asdict, dataclass
 
 from config import settings
 
@@ -23,7 +21,7 @@ class Order:
     symbol: str
     side: str  # "buy" | "sell"
     qty: int
-    price: Optional[float] = None  # None → market price
+    price: float | None = None  # None → market price
 
 
 class Executor(ABC):

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """全自适应引擎 (P10.12, ARCH §5.17, DESIGN_V1 §9 #4).
 
 取消所有固定比例: 选股评分混合/交易信号混合/因子影响力/风控阈值等
@@ -9,7 +8,6 @@ import copy
 import json
 import logging
 import os
-from typing import Dict, List
 
 import numpy as np
 import yaml
@@ -58,10 +56,10 @@ class AdaptiveEngine:
         self.config_path = config_path
         self.state_path = state_path
         with open(config_path, "r", encoding="utf-8") as f:
-            self._spec: Dict = yaml.safe_load(f) or {}
+            self._spec: dict = yaml.safe_load(f) or {}
         # 当前值: 优先取持久化状态, 否则取 initial
         persisted = self._load_state()
-        self._current: Dict[str, Dict[str, float]] = {}
+        self._current: dict[str, dict[str, float]] = {}
         for section, params in self._spec.items():
             if not isinstance(params, dict):
                 continue
@@ -75,7 +73,7 @@ class AdaptiveEngine:
                     .get(name, spec["initial"])
                 )
                 self._current[section][name] = value
-        self._history: List[Dict] = persisted.get("history", [])
+        self._history: list[dict] = persisted.get("history", [])
         logger.info(
             "AdaptiveEngine 初始化: %d 个配置段, 历史快照 %d 条",
             len(self._current),
@@ -84,13 +82,13 @@ class AdaptiveEngine:
 
     # ── 持久化 ──────────────────────────────────────────────
 
-    def _load_state(self) -> Dict:
+    def _load_state(self) -> dict:
         """从磁盘加载自适应状态."""
         if os.path.exists(self.state_path):
             try:
                 with open(self.state_path, "r", encoding="utf-8") as f:
                     return json.load(f)
-            except (json.JSONDecodeError, IOError) as exc:
+            except (OSError, json.JSONDecodeError) as exc:
                 logger.warning("自适应状态加载失败 (%s), 使用 initial", exc)
         return {}
 
@@ -148,7 +146,7 @@ class AdaptiveEngine:
 
     # ── 公开接口 ────────────────────────────────────────────
 
-    def compute_selection_mix(self, backtest_gaps: Dict[str, float]) -> float:
+    def compute_selection_mix(self, backtest_gaps: dict[str, float]) -> float:
         """基于选股 GAP 计算评分混合比例 (模型分 vs 指标分).
 
         Args:
@@ -167,7 +165,7 @@ class AdaptiveEngine:
         self._save_state()
         return value
 
-    def compute_trading_mix(self, backtest_gaps: Dict[str, float]) -> float:
+    def compute_trading_mix(self, backtest_gaps: dict[str, float]) -> float:
         """基于交易 GAP 计算信号混合比例.
 
         Args:
@@ -185,7 +183,7 @@ class AdaptiveEngine:
         self._save_state()
         return value
 
-    def compute_factor_influence(self, backtest_gaps: Dict[str, float]) -> float:
+    def compute_factor_influence(self, backtest_gaps: dict[str, float]) -> float:
         """基于因子 GAP 计算训练因子影响力比例.
 
         Args:
@@ -204,8 +202,8 @@ class AdaptiveEngine:
         return value
 
     def compute_risk_thresholds(
-        self, backtest_gaps: Dict[str, float]
-    ) -> Dict[str, float]:
+        self, backtest_gaps: dict[str, float]
+    ) -> dict[str, float]:
         """基于风控 GAP 计算风控阈值组.
 
         对 risk 段全部数值型有边界参数统一按 "risk_drawdown_gap"
@@ -219,7 +217,7 @@ class AdaptiveEngine:
         """
         self._snapshot()
         default_gap = float(backtest_gaps.get("risk_drawdown_gap", 0.0))
-        result: Dict[str, float] = {}
+        result: dict[str, float] = {}
         for name in self._current.get("risk", {}):
             current = self._current["risk"][name]
             if not isinstance(current, (int, float)) or isinstance(current, bool):

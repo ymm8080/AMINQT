@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """第一步: 基础流动性/活跃度过滤 (P6, DESIGN_V1 §4 STEP1 第一步).
 
 全市场 → 基础池。保留流动性好、活跃度高的股票; 剔除风险股。
@@ -6,7 +5,7 @@
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -52,7 +51,7 @@ class BaseLiquidityFilter:
         - 大市值白马低波动股
     """
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """加载阈值配置 (adaptive_config.yaml: base_filter 段).
 
         Args:
@@ -87,7 +86,7 @@ class BaseLiquidityFilter:
 
     # ── 公共入口 ────────────────────────────────────────────────────
 
-    def apply(self, all_stocks: Dict[str, pd.DataFrame]) -> List[str]:
+    def apply(self, all_stocks: dict[str, pd.DataFrame]) -> list[str]:
         """全市场 → 基础池.
 
         Args:
@@ -96,7 +95,7 @@ class BaseLiquidityFilter:
         Returns:
             通过过滤的 symbol 列表。
         """
-        passed: List[str] = []
+        passed: list[str] = []
         for symbol, df in all_stocks.items():
             if df is None or df.empty:
                 logger.debug("%s: 空数据, 剔除", symbol)
@@ -107,7 +106,7 @@ class BaseLiquidityFilter:
                     continue
                 if self.check_liquidity(df):
                     passed.append(symbol)
-            except Exception:  # noqa: BLE001 — 单股异常不阻断全市场过滤
+            except Exception:
                 logger.exception("%s: 过滤异常, 剔除", symbol)
         logger.info("基础过滤完成: %d/%d 只通过", len(passed), len(all_stocks))
         return passed
@@ -143,10 +142,7 @@ class BaseLiquidityFilter:
 
         # 4. 近一年涨停次数 >= min_limit_up_count (默认 1, 即 > 0)
         limit_up_count = self._limit_up_count(df)
-        if limit_up_count < self.min_limit_up_count:
-            return False
-
-        return True
+        return not limit_up_count < self.min_limit_up_count
 
     # ── 剔除条件 ────────────────────────────────────────────────────
 

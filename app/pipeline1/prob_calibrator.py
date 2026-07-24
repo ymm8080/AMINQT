@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 概率校准器 (DESIGN §14.4, PIPELINE1_V3.5 §四)
 =================================================
@@ -35,7 +34,7 @@ class ProbCalibrator:
         self._lr: LogisticRegression | None = None
         self._iso: IsotonicRegression | None = None
 
-    def fit(self, raw_prob: np.ndarray, y_calib: np.ndarray) -> "ProbCalibrator":
+    def fit(self, raw_prob: np.ndarray, y_calib: np.ndarray) -> ProbCalibrator:
         """在校准集 (窗口第 701-710 天) 上拟合. raw_prob = 分类模型原始 predict_proba."""
         raw_prob = np.asarray(raw_prob, dtype=float)
         y_calib = np.asarray(y_calib, dtype=float)

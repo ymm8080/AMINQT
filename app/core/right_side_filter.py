@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """右侧交易预筛选器 (P10.8b, ARCH §5.13.7.B, DESIGN_V1 §9 #2).
 
 右侧交易 (Right-Side Trading): 只在股票确认上升趋势后参与。
@@ -7,7 +6,6 @@
 """
 
 import logging
-from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -118,14 +116,11 @@ class RightSideFilter:
         # 条件 4: 20 日线性回归斜率 > 0 (trailing 窗口, 无未来函数)
         window = close.iloc[-SLOPE_WINDOW:].values
         slope = float(np.polyfit(np.arange(SLOPE_WINDOW), window, 1)[0])
-        if slope <= 0:
-            return False
-
-        return True
+        return not slope <= 0
 
     def batch_filter(
-        self, all_stocks: Dict[str, pd.DataFrame], market_above_ma20: bool = True
-    ) -> Dict[str, bool]:
+        self, all_stocks: dict[str, pd.DataFrame], market_above_ma20: bool = True
+    ) -> dict[str, bool]:
         """批量预筛选.
 
         Args:
@@ -135,11 +130,11 @@ class RightSideFilter:
         Returns:
             {symbol: is_uptrend}。典型通过率 20-30%。
         """
-        result: Dict[str, bool] = {}
+        result: dict[str, bool] = {}
         for symbol, df in all_stocks.items():
             try:
                 result[symbol] = self.is_uptrend(df, market_above_ma20)
-            except Exception:  # noqa: BLE001 — 单股异常按非上行处理
+            except Exception:
                 logger.exception("%s: 右侧预筛选异常, 按非上行处理", symbol)
                 result[symbol] = False
         n_up = sum(result.values())

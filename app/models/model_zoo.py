@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """模型库 (P10.5, ARCH §5.9.1 — 10 种模型).
 
 LightGBM / XGBoost / CatBoost / RF / LSTM / GRU / Transformer / TCN / MLP / Ridge。
@@ -13,7 +12,6 @@ LightGBM / XGBoost / CatBoost / RF / LSTM / GRU / Transformer / TCN / MLP / Ridg
 import importlib.util
 import logging
 import pickle
-from typing import Dict, Optional
 
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
@@ -48,7 +46,7 @@ _HEAVY_DEPS = {
     "tcn": ("torch", "torch"),
 }
 
-DEFAULT_PARAMS: Dict[str, dict] = {
+DEFAULT_PARAMS: dict[str, dict] = {
     "lightgbm": {
         "n_estimators": 200,
         "learning_rate": 0.05,
@@ -166,7 +164,7 @@ def _build_torch_net(name: str, input_size: int, params: dict):
         RuntimeError: torch 未安装。
     """
     _require_dep(name)
-    import torch.nn as nn
+    from torch import nn
 
     if name in ("lstm", "gru"):
         rnn_cls = nn.LSTM if name == "lstm" else nn.GRU
@@ -276,8 +274,8 @@ class ZooModel:
         self,
         name: str,
         estimator=None,
-        params: Optional[dict] = None,
-        input_size: Optional[int] = None,
+        params: dict | None = None,
+        input_size: int | None = None,
     ) -> None:
         """初始化包装器.
 
@@ -317,8 +315,8 @@ class ZooModel:
         self,
         X: np.ndarray,
         y: np.ndarray,
-        X_val: Optional[np.ndarray] = None,
-        y_val: Optional[np.ndarray] = None,
+        X_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
         **kwargs,
     ) -> "ZooModel":
         """训练.
@@ -551,7 +549,7 @@ def get_model(name: str, **params) -> ZooModel:
     return ZooModel(name, estimator=None, params=merged)
 
 
-def list_models() -> Dict[str, dict]:
+def list_models() -> dict[str, dict]:
     """返回 10 种模型元信息 {name: {type, input_shape, default_params}}."""
     meta = {
         "lightgbm": ("tree", "GBDT, 因子重要性+SHAP, 因子发现主力"),

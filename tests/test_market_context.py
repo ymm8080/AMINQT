@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """P12: MarketContext 大盘因子测试 (6 列 / merge 无错位 / 空值处理)."""
 
 from __future__ import annotations

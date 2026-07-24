@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """DualLayerSellDetector 单元测试 (P10.9, ARCH §5.14)."""
 
 import pandas as pd

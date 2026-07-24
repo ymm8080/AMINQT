@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for app/core/config_loader — YAML 加载 + 点号取值."""
 
 import app.core.config_loader as cl

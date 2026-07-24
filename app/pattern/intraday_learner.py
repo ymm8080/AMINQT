@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """M2 — Intraday pattern learner.
 
 Learns recurring within-day patterns from minute/tick bars and emits
@@ -11,14 +10,13 @@ discover valid patterns → rule candidates with entry/exit/stop + confidence.
 """
 
 import logging
-from typing import List
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 
-def learn_pattern(intraday_df: pd.DataFrame) -> List[dict]:
+def learn_pattern(intraday_df: pd.DataFrame) -> list[dict]:
     """Learn intraday patterns and return candidate trading rules.
 
     Args:

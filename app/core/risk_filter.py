@@ -1,8 +1,6 @@
-# -*- coding: utf-8 -*-
 """Hard-constraint risk filter applied after model prediction (Phase 4)."""
 
 import logging
-from typing import List
 
 from config import settings
 
@@ -10,8 +8,8 @@ logger = logging.getLogger(__name__)
 
 
 def apply_filters(
-    candidates: List[dict], account_drawdown_pct: float = 0.0
-) -> List[dict]:
+    candidates: list[dict], account_drawdown_pct: float = 0.0
+) -> list[dict]:
     """Apply hard constraints to model-selected candidates.
 
     TODO(Phase 4): implement.

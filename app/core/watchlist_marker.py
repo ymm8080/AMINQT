@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """自选标记规则 STEP2 (P10.14, ARCH §5.19, DESIGN_V1 §4 STEP2).
 
 前置条件: 主力控盘比例 > 30%。
@@ -12,7 +11,6 @@
 """
 
 import logging
-from typing import List
 
 import numpy as np
 import pandas as pd
@@ -28,7 +26,7 @@ COL_TREND_MID = "tech_ths_trend_mid"
 class WatchlistMarker:
     """自选标记器 (Pipeline 1 盘后执行)."""
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """加载配置 (selection_config.yaml: watchlist_marker 段).
 
         Args:
@@ -175,7 +173,7 @@ class WatchlistMarker:
             )
         return passed
 
-    def mark(self, pool: List[str], data: dict) -> List[str]:
+    def mark(self, pool: list[str], data: dict) -> list[str]:
         """对股票池批量执行标记.
 
         Args:
@@ -185,7 +183,7 @@ class WatchlistMarker:
         Returns:
             应打"自选"标记的 symbol 列表 (前置 + 任一 CASE)。
         """
-        marked: List[str] = []
+        marked: list[str] = []
         for symbol in pool or []:
             df = (data or {}).get(symbol)
             if df is None:

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """factor_discovery 单元测试 (ARCH §5.5).
 
 环境: lightgbm / shap 均缺失 → 走 sklearn GBM + permutation_importance 兜底。

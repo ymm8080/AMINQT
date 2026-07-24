@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Pipeline 2: 盘中交易 (P7, ARCH §3.3, DESIGN_V1 §5).
 
 盘中 9:15~15:00 每 2 分钟执行 (因子粒度 5 分钟 K 线):
@@ -8,7 +7,6 @@
 """
 
 import logging
-from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +18,13 @@ class TradingPipeline:
     监控范围: Pipeline 1 推荐股票池 (含 TICK 标记)。
     """
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         self.config = config or {}
         # P7 接线: IntradayFactorEngine / DualLayerBuyDetector /
         # DualLayerSellDetector / ExtendedBuyDetector / ExtendedSellDetector /
         # ProgressiveSignal / RiskFilter / RuleEngine / OrderManager
 
-    def run_cycle(self) -> List[dict]:
+    def run_cycle(self) -> list[dict]:
         """单次 2 分钟循环.
 
         Returns:

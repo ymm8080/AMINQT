@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """多模型融合 (P10.5, ARCH §5.9.3).
 
 融合策略: rank_mean / score_mean / weighted_score / stacking。
@@ -6,7 +5,6 @@ rank_mean / score_mean / weighted_score 无需训练; stacking 需先 fit_stacki
 """
 
 import logging
-from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -28,7 +26,7 @@ class ModelEnsemble:
     """
 
     def __init__(
-        self, strategy: str = "rank_mean", weights: Dict[str, float] = None
+        self, strategy: str = "rank_mean", weights: dict[str, float] | None = None
     ) -> None:
         """初始化融合策略.
 
@@ -47,7 +45,7 @@ class ModelEnsemble:
         self.member_names_ = None
 
     @staticmethod
-    def _validate(predictions: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    def _validate(predictions: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         """校验并清洗预测字典.
 
         Args:
@@ -72,7 +70,7 @@ class ModelEnsemble:
             raise ValueError(f"各模型预测长度不一致: {lengths}")
         return cleaned
 
-    def combine(self, predictions: Dict[str, np.ndarray]) -> np.ndarray:
+    def combine(self, predictions: dict[str, np.ndarray]) -> np.ndarray:
         """融合多模型预测.
 
         Args:
@@ -116,7 +114,7 @@ class ModelEnsemble:
         X_meta = np.column_stack([preds[n] for n in self.member_names_])
         return np.asarray(self.meta_learner_.predict(X_meta), dtype=np.float64).ravel()
 
-    def fit_stacking(self, predictions: Dict[str, np.ndarray], y: np.ndarray) -> None:
+    def fit_stacking(self, predictions: dict[str, np.ndarray], y: np.ndarray) -> None:
         """stacking 策略: 训练元学习器 (sklearn LinearRegression).
 
         Args:

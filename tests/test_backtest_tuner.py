@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """回测协议 + 参数调优器测试."""
 
 from __future__ import annotations

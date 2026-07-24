@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
 """规则引擎 v2 测试 (rule_engine_v2 四场景复现 + P11/P12 + PeakTracker 无未来函数)."""
 
 from __future__ import annotations
 
-
-from app.rules.config import Config, TUNABLE_BOUNDS, board_of, price_limit
+from app.rules.config import TUNABLE_BOUNDS, Config, board_of, price_limit
 from app.rules.peak_tracker import PeakTracker
 from app.rules.rule_engine import (
     Action,

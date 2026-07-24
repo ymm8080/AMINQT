@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 CompositeFeed — IndicatorFeed 协议的生产组合 (P16, DESIGN §8.3, 架构 §15.2)
 ================================================================================
@@ -21,7 +20,6 @@ CompositeFeed — IndicatorFeed 协议的生产组合 (P16, DESIGN §8.3, 架构
 from __future__ import annotations
 
 import logging
-
 
 from .capital_feed import CapitalFeed
 from .chip_distribution import ChipFeed

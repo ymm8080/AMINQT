@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """DeepSeek PR Review — AI-powered code review for AMINQT.
 
 Called by .github/workflows/deepseek-pr-review.yml.

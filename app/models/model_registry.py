@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """模型版本管理 (P10.5, ARCH §9.3).
 
 版本注册/切换/回滚; 注册表为 JSON 文件 (默认 app/models/trained/registry.json),
@@ -9,7 +8,6 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +108,7 @@ class ModelRegistry:
             metrics.get("oos_ic"),
         )
 
-    def get_current(self, model_name: Optional[str] = None) -> dict:
+    def get_current(self, model_name: str | None = None) -> dict:
         """当前生效版本.
 
         Args:
@@ -137,7 +135,7 @@ class ModelRegistry:
             f"模型 {model_name} 当前版本 {current} 不在版本列表中"
         )
 
-    def set_current(self, version: str, model_name: Optional[str] = None) -> None:
+    def set_current(self, version: str, model_name: str | None = None) -> None:
         """切换生效版本.
 
         Args:
@@ -188,7 +186,7 @@ class ModelRegistry:
         logger.warning("模型 %s 回滚 → %s", model_name, target)
         return target
 
-    def list_versions(self, model_name: str) -> List[dict]:
+    def list_versions(self, model_name: str) -> list[dict]:
         """版本列表 (按注册时间倒序, 最新在前).
 
         Args:

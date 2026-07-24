@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """BaseLiquidityFilter 单元测试 (P6, DESIGN_V1 §4 STEP1 第一步)."""
 
 import numpy as np

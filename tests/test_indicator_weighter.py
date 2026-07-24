@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """IndicatorWeighter 单元测试 (P10.8, ARCH §5.13)."""
 
 import numpy as np
