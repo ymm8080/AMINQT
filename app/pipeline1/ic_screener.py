@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 IC 筛选器 (DESIGN §14 三 bis, 安全网 #2)
 ===========================================
@@ -65,13 +64,17 @@ class ICScreener:
         dates = sorted(sub["date"].unique())
         if len(dates) < 10:
             return 0.0
-        ic_series = sub.groupby("date").apply(
-            lambda g: (
-                spearmanr(g[factor], g[label]).statistic
-                if g[factor].nunique() > 5 and g[label].nunique() > 1
-                else np.nan
+        ic_series = (
+            sub.groupby("date")
+            .apply(
+                lambda g: (
+                    spearmanr(g[factor], g[label]).statistic
+                    if g[factor].nunique() > 5 and g[label].nunique() > 1
+                    else np.nan
+                )
             )
-        ).dropna()
+            .dropna()
+        )
         n = len(ic_series)
         if n < 5:
             return 0.0
@@ -82,8 +85,9 @@ class ICScreener:
         for l in range(1, min(lag + 1, n)):
             w = 1 - l / (lag + 1)  # Bartlett 权重
             cov_l = float(
-                ((ic_series.iloc[l:] - mean_ic) * (ic_series.iloc[:-l] - mean_ic))
-                .mean()
+                (
+                    (ic_series.iloc[l:] - mean_ic) * (ic_series.iloc[:-l] - mean_ic)
+                ).mean()
             )
             hac_var += 2 * w * cov_l
         hac_var = max(hac_var, 1e-12)

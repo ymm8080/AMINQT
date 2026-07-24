@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """双层卖出信号检测 (P10.9, ARCH §5.14).
 
 Layer 1 (日线, 盘后): 今日收盘价 < 4 日前收盘价 → 标记日线卖出 (准备信号)
@@ -9,7 +8,6 @@ Layer 2 (日内, 盘中): 场景 A 三峰连续下降 (第三峰后卖) /
 """
 
 import logging
-from typing import List
 
 import numpy as np
 import pandas as pd
@@ -20,7 +18,7 @@ logger = logging.getLogger(__name__)
 class DualLayerSellDetector:
     """双层卖出检测器."""
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """加载配置 (trading_config.yaml: dual_layer_sell 段).
 
         Args:
@@ -37,13 +35,13 @@ class DualLayerSellDetector:
         return default
 
     @staticmethod
-    def _find_local_peaks(values: np.ndarray) -> List[int]:
+    def _find_local_peaks(values: np.ndarray) -> list[int]:
         """简单局部极大值: v[i] >= v[i-1] 且 v[i] > v[i+1] (严格大于右侧).
 
         只使用 i 及之前的数据确认峰值 (需右侧一根 K 线确认, 无未来函数:
         确认发生在 i+1 时刻, 不引用更晚数据)。
         """
-        peaks: List[int] = []
+        peaks: list[int] = []
         for i in range(1, len(values) - 1):
             if values[i] >= values[i - 1] and values[i] > values[i + 1]:
                 peaks.append(i)

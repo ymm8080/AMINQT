@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for app/core/universe_manager — Universe 分池 + ST 标记."""
 
 from app.core.universe_manager import (

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """同花顺问财 AI 候选池生成器 (P10.5, ARCH §5.9.5, DESIGN_V1 §4 STEP1 第二步).
 
 前置候选池生成器: 问财预筛在前, 模型打分在后。
@@ -18,7 +17,6 @@ import json
 import logging
 import os
 import re
-from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -70,7 +68,7 @@ class IwencaiAgent:
     _fetch() 统一入口: 先试 HTTP API, 失败自动降级到 Playwright。
     """
 
-    def __init__(self, cookie_path: str = None, use_api: bool = True) -> None:
+    def __init__(self, cookie_path: str | None = None, use_api: bool = True) -> None:
         """初始化.
 
         Args:
@@ -100,7 +98,7 @@ class IwencaiAgent:
         digits = re.sub(r"[^0-9]", "", str(raw))
         return digits.zfill(6) if digits else ""
 
-    def _fetch_api(self, condition: str, top_n: int) -> List[dict]:
+    def _fetch_api(self, condition: str, top_n: int) -> list[dict]:
         """HTTP API 直调问财后端, 返回结构化结果.
 
         Args:
@@ -175,7 +173,7 @@ class IwencaiAgent:
             None,
         )
 
-        results: List[dict] = []
+        results: list[dict] = []
         for row in raw_rows[:top_n]:
             # row 可能是 list (按 cols 顺序) 或 dict
             if isinstance(row, dict):
@@ -228,7 +226,7 @@ class IwencaiAgent:
             ) from exc
         return sync_playwright
 
-    def _fetch_playwright(self, condition: str, top_n: int) -> List[dict]:
+    def _fetch_playwright(self, condition: str, top_n: int) -> list[dict]:
         """Playwright 访问问财并解析结果表 (降级路径).
 
         Args:
@@ -242,7 +240,7 @@ class IwencaiAgent:
             RuntimeError: playwright 未安装。
         """
         sync_playwright = self._get_sync_playwright()
-        results: List[dict] = []
+        results: list[dict] = []
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
             storage = (
@@ -285,7 +283,7 @@ class IwencaiAgent:
 
     # ── 统一获取入口 (API 优先 → Playwright 降级) ─────────────────
 
-    def _fetch(self, condition: str, top_n: int) -> List[dict]:
+    def _fetch(self, condition: str, top_n: int) -> list[dict]:
         """统一获取入口: 先试 HTTP API, 失败降级到 Playwright.
 
         Args:
@@ -310,7 +308,7 @@ class IwencaiAgent:
 
     # ── 查询接口 ──────────────────────────────────────────────────
 
-    def query(self, condition: str, top_n: int = 50) -> List[dict]:
+    def query(self, condition: str, top_n: int = 50) -> list[dict]:
         """自然语言条件查询.
 
         Args:
@@ -322,13 +320,13 @@ class IwencaiAgent:
         """
         return self._fetch(condition, top_n)
 
-    def query_rank_intersection(self) -> List[str]:
+    def query_rank_intersection(self) -> list[str]:
         """① 排名条件交集 (AND):
         A股评分前200 ∩ 成交额前100 ∩ 热度主力前100 ∩
         主力资金流入前200 ∩ 股性极佳前100; 优选板块龙头核心股。
         """
-        per_condition: List[set] = []
-        first_order: List[str] = []
+        per_condition: list[set] = []
+        first_order: list[str] = []
         for i, cond in enumerate(RANK_CONDITIONS):
             rows = self.query(cond, top_n=200)
             symbols = [r["symbol"] for r in rows]
@@ -344,7 +342,7 @@ class IwencaiAgent:
         logger.info("[问财] 排名交集: %d 只", len(ordered))
         return ordered
 
-    def query_by_template(self, template: str, **params) -> List[dict]:
+    def query_by_template(self, template: str, **params) -> list[dict]:
         """模板化查询 (预设条件组合, 用户填参数).
 
         Args:
@@ -364,14 +362,14 @@ class IwencaiAgent:
             condition += f" 且 {key}{val}"
         return self.query(condition, top_n=top_n)
 
-    def get_market_hot(self) -> List[dict]:
+    def get_market_hot(self) -> list[dict]:
         """问财热门概念/板块."""
         return self.query("今日热门概念板块 按热度降序", top_n=20)
 
     # ── ② 本地形态 (OR) ──────────────────────────────────────────
 
     @staticmethod
-    def _prep(df: pd.DataFrame) -> Optional[pd.DataFrame]:
+    def _prep(df: pd.DataFrame) -> pd.DataFrame | None:
         """预计算均线 (rolling only); 数据不足返回 None."""
         if df is None or len(df) < _MIN_ROWS:
             return None
@@ -465,8 +463,8 @@ class IwencaiAgent:
     # ── 候选池构建 ────────────────────────────────────────────────
 
     def build_candidate_pool(
-        self, base_pool: List[str], daily_data: Dict[str, pd.DataFrame]
-    ) -> List[str]:
+        self, base_pool: list[str], daily_data: dict[str, pd.DataFrame]
+    ) -> list[str]:
         """第二步完整候选池构建.
 
         Args:
@@ -481,7 +479,7 @@ class IwencaiAgent:
             (放量下跌/高位巨量/脱离均线/板块退潮)。
         """
         rank_set = set(self.query_rank_intersection())
-        pool: List[str] = []
+        pool: list[str] = []
         for symbol in dict.fromkeys(base_pool):  # 去重保序
             # ① 排名交集 ∩ base_pool
             if symbol not in rank_set:

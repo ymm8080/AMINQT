@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for app/core/price_limits — 涨跌停幅度与判定."""
 
 from app.core.price_limits import (

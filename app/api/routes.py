@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """FastAPI routes — stock selection + execution control (Phase 4)."""
 
 import logging

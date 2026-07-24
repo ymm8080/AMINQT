@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """分时数据加载器 (P10, ARCH §8.2.2).
 
 为看板详情窗口提供分时/分钟 K 线数据:
@@ -11,7 +10,6 @@ RuntimeError, 模块本身可独立导入与单元测试 (monkeypatch 假 akshar
 import datetime as _dt
 import logging
 import os
-from typing import Dict, Optional, Tuple
 
 import pandas as pd
 
@@ -71,7 +69,7 @@ class IntradayLoader:
         """
         self.cache_dir = cache_dir
         # 实时分时内存缓存: (symbol, trade_date_str) -> DataFrame
-        self._rt_cache: Dict[Tuple[str, str], pd.DataFrame] = {}
+        self._rt_cache: dict[tuple[str, str], pd.DataFrame] = {}
         os.makedirs(cache_dir, exist_ok=True)
 
     # ────────────────────────────────────────────────────────────────
@@ -103,7 +101,7 @@ class IntradayLoader:
         self._rt_cache[key] = df
         return df
 
-    def clear_realtime_cache(self, symbol: Optional[str] = None) -> None:
+    def clear_realtime_cache(self, symbol: str | None = None) -> None:
         """清空实时分时内存缓存; symbol=None 全清."""
         if symbol is None:
             self._rt_cache.clear()
@@ -121,7 +119,7 @@ class IntradayLoader:
         return os.path.join(self.cache_dir, f"{safe}_{period}min.parquet")
 
     def load_history_min(
-        self, symbol: str, period: str = "5", start: str = None, end: str = None
+        self, symbol: str, period: str = "5", start: str | None = None, end: str | None = None
     ) -> pd.DataFrame:
         """历史分钟线 (akshare stock_zh_a_hist_min_em, Parquet 缓存).
 

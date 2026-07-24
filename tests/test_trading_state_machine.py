@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for services/trading_state_machine.py — transitions, flags, can_execute."""
 
 import logging

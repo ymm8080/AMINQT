@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Pipeline-1 V3.5 模块测试 (安全网 #0-#14 关键路径)."""
 
 from __future__ import annotations
@@ -15,14 +14,14 @@ from app.pipeline1.cleaning_pipeline import (
     is_limit_up,
     limit_up_price,
 )
-from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.ic_screener import ICScreener
+from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.list_generator import (
+    SCHEMA_FIELDS,
     ListDeliveryGuard,
     ListGenerator,
     MarketEnv,
-    SCHEMA_FIELDS,
     check_invalidation,
 )
 from app.pipeline1.oos_monitor import OOSMonitor
@@ -103,7 +102,7 @@ class TestCleaning:
     def test_limit_up_relative_tol_high_price(self):
         """B5: 高价股容差 = lu*0.1% (>0.01), 如 100元股容差=0.11."""
         # pre_close=100, limit_up=110.00, tol=max(0.01, 0.11)=0.11
-        assert is_limit_up(109.95, 100.0, 0.10)   # 差0.05 < 0.11 → 涨停
+        assert is_limit_up(109.95, 100.0, 0.10)  # 差0.05 < 0.11 → 涨停
         assert not is_limit_up(109.80, 100.0, 0.10)  # 差0.20 > 0.11 → 非涨停
 
     def test_step1_st_and_list_days(self):
@@ -189,6 +188,7 @@ class TestLabels:
         assert clipped["label_1d"].max() < 10.0
         # B2: 默认参数应为 0.001/0.999
         import inspect
+
         sig = inspect.signature(LabelEngine.winsorize_cross_section)
         assert sig.parameters["lower"].default == 0.001
         assert sig.parameters["upper"].default == 0.999

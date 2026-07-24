@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for app/core/deepseek_agent.py — 全部 mock, 不触网."""
 
 import json

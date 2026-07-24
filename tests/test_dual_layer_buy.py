@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """DualLayerBuyDetector 单元测试 (P10.10, ARCH §5.15)."""
 
 import pandas as pd
@@ -108,16 +107,16 @@ class TestDailyBuyPoint:
 
 
 def _intraday_ok(detector, **overrides):
-    kwargs = dict(
-        is_daily_buy_marked=True,
-        current_time="10:30",
-        advancing_stocks=3000,
-        total_stocks=5000,
-        flow_net=100.0,
-        ctrl_ratio=0.35,
-        ctrl_low_today=60.0,
-        ctrl_low_yesterday=55.0,
-    )
+    kwargs = {
+        "is_daily_buy_marked": True,
+        "current_time": "10:30",
+        "advancing_stocks": 3000,
+        "total_stocks": 5000,
+        "flow_net": 100.0,
+        "ctrl_ratio": 0.35,
+        "ctrl_low_today": 60.0,
+        "ctrl_low_yesterday": 55.0,
+    }
     kwargs.update(overrides)
     return detector.check_intraday_buy_point(**kwargs)
 

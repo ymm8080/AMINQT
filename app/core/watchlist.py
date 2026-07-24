@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """重点关注股标记管理 (Watchlist).
 
 用户可以在股票池中标记某些股票为"重点关注"，系统会：
@@ -11,7 +10,6 @@ import json
 import logging
 import os
 from datetime import date, datetime
-from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -39,22 +37,22 @@ class WatchlistManager:
     }
     """
 
-    def __init__(self, path: Optional[str] = None) -> None:
+    def __init__(self, path: str | None = None) -> None:
         """初始化.
 
         Args:
             path: JSON 文件路径，默认 data/watchlist.json.
         """
         self.path = path or DEFAULT_WATCHLIST_PATH
-        self._data: Dict = self._load()
+        self._data: dict = self._load()
 
-    def _load(self) -> Dict:
+    def _load(self) -> dict:
         """从磁盘加载 watchlist."""
         if os.path.exists(self.path):
             try:
                 with open(self.path, "r", encoding="utf-8") as f:
                     return json.load(f)
-            except (json.JSONDecodeError, IOError) as exc:
+            except (OSError, json.JSONDecodeError) as exc:
                 logger.warning("Watchlist 加载失败: %s", exc)
         return {"stocks": {}, "last_updated": None}
 
@@ -67,7 +65,7 @@ class WatchlistManager:
         logger.info("Watchlist 已保存: %d 只股票", len(self._data["stocks"]))
 
     def add(
-        self, symbol: str, note: str = "", tags: Optional[List[str]] = None
+        self, symbol: str, note: str = "", tags: list[str] | None = None
     ) -> None:
         """添加股票到重点关注.
 
@@ -99,15 +97,15 @@ class WatchlistManager:
         """判断是否在关注列表中."""
         return symbol in self._data["stocks"]
 
-    def get_all(self) -> Dict:
+    def get_all(self) -> dict:
         """返回全部关注股票."""
         return self._data["stocks"]
 
-    def get_symbols(self) -> List[str]:
+    def get_symbols(self) -> list[str]:
         """返回全部关注的股票代码列表."""
         return list(self._data["stocks"].keys())
 
-    def get_info(self, symbol: str) -> Optional[Dict]:
+    def get_info(self, symbol: str) -> dict | None:
         """获取某只股票的关注信息."""
         return self._data["stocks"].get(symbol)
 

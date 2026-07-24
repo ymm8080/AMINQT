@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """日历因子 (P10.6, ARCH §5.11 — 6 维).
 
 交易日历相关: 距节假日天数/周几/月初月末/季末/长假前缩量预期。
@@ -14,7 +13,6 @@ import json
 import logging
 import os
 import re
-from typing import Set
 
 import numpy as np
 import pandas as pd
@@ -38,7 +36,7 @@ _MONTH_EDGE_DAYS = 3
 _PRE_HOLIDAY_DAYS = 5
 
 
-def _collect_date_strings(obj, out: Set[pd.Timestamp]) -> None:
+def _collect_date_strings(obj, out: set[pd.Timestamp]) -> None:
     """递归收集 JSON 结构中所有 ``YYYY-MM-DD`` 日期字符串."""
     if isinstance(obj, str):
         for m in _DATE_RE.findall(obj):
@@ -54,7 +52,7 @@ def _collect_date_strings(obj, out: Set[pd.Timestamp]) -> None:
             _collect_date_strings(v, out)
 
 
-def load_holidays(holidays_path: str) -> Set[pd.Timestamp]:
+def load_holidays(holidays_path: str) -> set[pd.Timestamp]:
     """加载节假日日期集合.
 
     支持格式: ["2026-01-01", ...] / {"holidays": [...]} / {"2026": [...]} 等
@@ -72,7 +70,7 @@ def load_holidays(holidays_path: str) -> Set[pd.Timestamp]:
     try:
         with open(holidays_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        holidays: Set[pd.Timestamp] = set()
+        holidays: set[pd.Timestamp] = set()
         _collect_date_strings(data, holidays)
         logger.info("加载节假日 %d 天 (%s)", len(holidays), holidays_path)
         return holidays
@@ -84,7 +82,7 @@ def load_holidays(holidays_path: str) -> Set[pd.Timestamp]:
 
 
 def _next_holiday_after(
-    t: pd.Timestamp, holidays: Set[pd.Timestamp], weekend_fallback: bool
+    t: pd.Timestamp, holidays: set[pd.Timestamp], weekend_fallback: bool
 ):
     """返回 t 之后最近的节假日 (strictly after t); 无则 None.
 

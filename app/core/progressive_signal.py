@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """渐进式交易信号推进 (P10.13, ARCH §5.18, DESIGN_V1 §9 #5).
 
 交易信号不一次性生成: 种子 → 确认 → 触发 三阶段推进。
@@ -9,7 +8,6 @@
 import logging
 import operator
 from enum import Enum
-from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +32,7 @@ class SignalStage(Enum):
 class ProgressiveSignal:
     """渐进式交易信号推进器."""
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """加载配置 (trading_config.yaml: progressive_signal 段).
 
         含 mode (auto/manual/hybrid), prevent_consecutive_buy: true,
@@ -48,13 +46,13 @@ class ProgressiveSignal:
         self.prevent_consecutive_buy = bool(
             self.config.get("prevent_consecutive_buy", True)
         )
-        self.user_trigger_conditions: List[dict] = list(
+        self.user_trigger_conditions: list[dict] = list(
             self.config.get("user_trigger_conditions", [])
         )
         # 每股票当前阶段 / 最近因子 / 最近买入记录
-        self._stages: Dict[str, SignalStage] = {}
-        self._last_factors: Dict[str, dict] = {}
-        self._last_buy: Dict[str, float] = {}  # symbol -> 买入价
+        self._stages: dict[str, SignalStage] = {}
+        self._last_factors: dict[str, dict] = {}
+        self._last_buy: dict[str, float] = {}  # symbol -> 买入价
 
     # ── 配置读取辅助 ────────────────────────────────────────────────
     def _cfg(self, section: str, key: str, default):
@@ -192,7 +190,7 @@ class ProgressiveSignal:
         return triggered
 
     def check_user_trigger(
-        self, symbol: str, factors: dict, conditions: List[dict]
+        self, symbol: str, factors: dict, conditions: list[dict]
     ) -> bool:
         """用户指定触发条件检查 (达到用户指标即触发).
 
@@ -231,7 +229,7 @@ class ProgressiveSignal:
                 return False
         return True
 
-    def advance(self, symbol: str, factors: dict) -> Optional[dict]:
+    def advance(self, symbol: str, factors: dict) -> dict | None:
         """推进信号到下一阶段.
 
         每调用一次评估当前阶段:

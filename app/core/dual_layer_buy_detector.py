@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """双层买入信号检测 (P10.10, ARCH §5.15, DESIGN_V1 §4 STEP3 + §5.1/§5.2).
 
 Layer 1 (日线, 盘后): 选股池 + 吸筹峰(30天) + 控盘>30% +
@@ -12,7 +11,6 @@ Layer 3 (开盘10分钟): 场景 A 下行→低峰后回升买 /
 """
 
 import logging
-from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -31,7 +29,7 @@ COL_FLOW_NET = "tech_ths_flow_net"
 class DualLayerBuyDetector:
     """双层买入检测器."""
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """加载配置 (trading_config.yaml: dual_layer_buy 段).
 
         Args:
@@ -56,18 +54,18 @@ class DualLayerBuyDetector:
         return str(t)[:5]
 
     @staticmethod
-    def _find_local_peaks(values: np.ndarray) -> List[int]:
+    def _find_local_peaks(values: np.ndarray) -> list[int]:
         """简单局部极大值 (需右侧一根确认, 无未来函数)."""
-        peaks: List[int] = []
+        peaks: list[int] = []
         for i in range(1, len(values) - 1):
             if values[i] >= values[i - 1] and values[i] > values[i + 1]:
                 peaks.append(i)
         return peaks
 
     @staticmethod
-    def _find_local_troughs(values: np.ndarray) -> List[int]:
+    def _find_local_troughs(values: np.ndarray) -> list[int]:
         """简单局部极小值 (需右侧一根确认, 无未来函数)."""
-        troughs: List[int] = []
+        troughs: list[int] = []
         for i in range(1, len(values) - 1):
             if values[i] <= values[i - 1] and values[i] < values[i + 1]:
                 troughs.append(i)
@@ -138,7 +136,7 @@ class DualLayerBuyDetector:
         pullup = window[COL_PULLUP].to_numpy(dtype=float)
         cond2 = bool(np.any(pullup > 0))
         result["condition_2_pullup_peak"] = cond2
-        peak_pos: Optional[int] = None
+        peak_pos: int | None = None
         if cond2:
             peak_pos = int(np.argmax(pullup))
             result["pullup_peak_date"] = window.index[peak_pos]
@@ -334,7 +332,7 @@ class DualLayerBuyDetector:
         selection_pool: list,
         daily_df: pd.DataFrame,
         intraday_df: pd.DataFrame,
-        market_context: dict = None,
+        market_context: dict | None = None,
     ) -> dict:
         """三层综合检测: 全部确认 → final_buy_signal.
 

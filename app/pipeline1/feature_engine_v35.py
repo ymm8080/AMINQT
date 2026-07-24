@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 特征引擎 V3.5 — 14 维度 (DESIGN §14.3, 安全网 #5/#6/#13)
 =============================================================
@@ -231,10 +230,10 @@ class FeatureEngineV35:
               + SS金叉/多头排列 (faxian) + A04红柱/A08/获利盘 (chip, 需 float_shares_map)
         吸筹峰为盘后专用信号, 不入特征列 (含前瞻).
         """
-        from app.indicators.zhuli_lasheng import zhuli_lasheng
-        from app.indicators.yimeng_dingdi import yimeng_dingdi
-        from app.indicators.faxian_niugu import faxian_niugu
         from app.indicators.chip_distribution import ChipDistribution
+        from app.indicators.faxian_niugu import faxian_niugu
+        from app.indicators.yimeng_dingdi import yimeng_dingdi
+        from app.indicators.zhuli_lasheng import zhuli_lasheng
 
         def per_stock(g: pd.DataFrame) -> pd.DataFrame:
             g = zhuli_lasheng(g)

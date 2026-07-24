@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Phase 3 — Train LSTM (+ LightGBM baseline), save weights.
 
 Time split (strict, no future leakage): train 2018-2020, val 2021,

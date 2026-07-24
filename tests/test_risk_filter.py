@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for app/core/risk_filter — hard constraints (Phase 4)."""
 
 import pytest

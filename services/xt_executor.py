@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """M3 — miniQMT (xtquant) real executor.
 
 Requires the miniQMT client + xtquant (NOT pip-installable). Enforces

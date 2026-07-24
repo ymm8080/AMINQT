@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 """StockPoolManager 测试 (P10.11, ARCH §5.16)."""
 
 import json
 
 import pytest
 
-from app.core.stock_pool_manager import StockPoolManager, TICK_FIELDS
+from app.core.stock_pool_manager import TICK_FIELDS, StockPoolManager
 
 
 @pytest.fixture
@@ -28,7 +27,7 @@ class TestPersistence:
         m2 = StockPoolManager(pool_path=pool_file)
         pool = m2.get_pool()
         assert len(pool) == 3
-        rec = [r for r in pool if r["symbol"] == "600519"][0]
+        rec = next(r for r in pool if r["symbol"] == "600519")
         assert rec["ticks"]["is_watchlist"] is True
 
     def test_file_is_valid_json(self, mgr, pool_file):
@@ -62,11 +61,11 @@ class TestTicks:
 
     def test_daily_buy_auto_fixes(self, mgr):
         mgr.set_tick("600519", "is_daily_buy", True, source="manual")
-        rec = [r for r in mgr.get_pool() if r["symbol"] == "600519"][0]
+        rec = next(r for r in mgr.get_pool() if r["symbol"] == "600519")
         assert rec["is_fixed"] is True
         # 撤标自动取消固定 (ARCH §5.16.4)
         mgr.set_tick("600519", "is_daily_buy", False)
-        rec = [r for r in mgr.get_pool() if r["symbol"] == "600519"][0]
+        rec = next(r for r in mgr.get_pool() if r["symbol"] == "600519")
         assert rec["is_fixed"] is False
 
     def test_daily_sell_auto_fixes(self, mgr):
@@ -80,7 +79,7 @@ class TestTicks:
     def test_ticks_history_recorded(self, mgr):
         mgr.set_tick("600519", "is_watchlist", True, source="manual")
         mgr.set_tick("600519", "is_daily_buy", True, source="pipeline1")
-        rec = [r for r in mgr.get_pool() if r["symbol"] == "600519"][0]
+        rec = next(r for r in mgr.get_pool() if r["symbol"] == "600519")
         hist = rec["ticks_history"]
         assert len(hist) == 2
         assert hist[0]["tick"] == "is_watchlist" and hist[0]["source"] == "manual"

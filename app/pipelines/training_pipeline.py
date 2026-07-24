@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Pipeline 1: 选股预测 (P6, ARCH §3.2, DESIGN_V1 §4).
 
 每日 16:00 后执行, 三步选股:
@@ -9,7 +8,6 @@
 """
 
 import logging
-from typing import List
 
 from app.core.universe_manager import Universe, UniverseManager
 
@@ -28,7 +26,7 @@ class SelectionPipeline:
         # P6 接线: BaseLiquidityFilter / IwencaiAgent / StockPoolManager /
         # WatchlistMarker / MarketContext / SectorContext
 
-    def run(self, top_n: int = 20) -> List[dict]:
+    def run(self, top_n: int = 20) -> list[dict]:
         """完整三步选股流程.
 
         Returns:
@@ -37,7 +35,7 @@ class SelectionPipeline:
         """
         raise NotImplementedError("P6 待建")
 
-    def predict_batch(self, symbols: List[str]) -> List[dict]:
+    def predict_batch(self, symbols: list[str]) -> list[dict]:
         """批量预测: 候选池 → 因子 (85 维) → ONNX 推理 → {prob_up, pct_up}."""
         raise NotImplementedError("P6 待建")
 

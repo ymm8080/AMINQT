@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for app/core/data_loader — CSV load + canonicalize (Phase 1+)."""
 
 import pytest

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for app/core/factor_engine — build_features + safe_divide (Phase 2)."""
 
 import pytest

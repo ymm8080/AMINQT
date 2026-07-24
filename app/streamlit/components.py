@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 看板图表组件 (P10) — plotly 纯函数, 输入 DataFrame 输出 Figure.
 """
@@ -43,7 +42,7 @@ def kline_chart(
                     x=df["date"],
                     y=df["close"].rolling(w).mean(),
                     name=f"MA{w}",
-                    line=dict(width=1),
+                    line={"width": 1},
                 ),
                 row=1,
                 col=1,
@@ -64,7 +63,7 @@ def kline_chart(
         title=title,
         height=520,
         xaxis_rangeslider_visible=False,
-        margin=dict(l=10, r=10, t=40, b=10),
+        margin={"l": 10, "r": 10, "t": 40, "b": 10},
         showlegend=True,
     )
     return fig
@@ -81,7 +80,7 @@ def intraday_chart(
             x=df["time"],
             y=df["price"],
             name="价格",
-            line=dict(color="#1f77b4", width=1.5),
+            line={"color": "#1f77b4", "width": 1.5},
         )
     )
     fig.add_trace(
@@ -89,14 +88,14 @@ def intraday_chart(
             x=df["time"],
             y=avg,
             name="均价",
-            line=dict(color="#ff7f0e", width=1, dash="dot"),
+            line={"color": "#ff7f0e", "width": 1, "dash": "dot"},
         )
     )
     if prev_close:
         fig.add_hline(
             y=prev_close, line_dash="dash", line_color="gray", annotation_text="昨收"
         )
-    fig.update_layout(title=title, height=300, margin=dict(l=10, r=10, t=40, b=10))
+    fig.update_layout(title=title, height=300, margin={"l": 10, "r": 10, "t": 40, "b": 10})
     return fig
 
 
@@ -108,13 +107,13 @@ def equity_curve(nav_df: pd.DataFrame, title: str = "净值曲线") -> go.Figure
             x=nav_df["date"],
             y=nav_df["nav"],
             name="策略净值",
-            line=dict(color="#e54545", width=1.5),
+            line={"color": "#e54545", "width": 1.5},
         )
     )
     fig.update_layout(
         title=title,
         height=320,
-        margin=dict(l=10, r=10, t=40, b=10),
+        margin={"l": 10, "r": 10, "t": 40, "b": 10},
         yaxis_tickformat=".2f",
     )
     return fig
@@ -131,13 +130,13 @@ def drawdown_chart(nav_df: pd.DataFrame, title: str = "回撤") -> go.Figure:
             y=dd,
             fill="tozeroy",
             name="回撤",
-            line=dict(color="#26a69a"),
+            line={"color": "#26a69a"},
         )
     )
     fig.update_layout(
         title=title,
         height=220,
-        margin=dict(l=10, r=10, t=40, b=10),
+        margin={"l": 10, "r": 10, "t": 40, "b": 10},
         yaxis_tickformat=".1%",
     )
     return fig
@@ -156,5 +155,5 @@ def factor_radar(factors: dict, top_n: int = 10, title: str = "因子雷达") ->
             name="因子值",
         )
     )
-    fig.update_layout(title=title, height=360, margin=dict(l=40, r=40, t=40, b=10))
+    fig.update_layout(title=title, height=360, margin={"l": 40, "r": 40, "t": 40, "b": 10})
     return fig

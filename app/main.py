@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """FastAPI app entrypoint + APScheduler (daily 14:50 auto-select)."""
 
 import logging
