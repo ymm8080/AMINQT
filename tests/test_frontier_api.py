@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Frontier 前端数据 API 测试 (FastAPI TestClient)."""
 
 from __future__ import annotations

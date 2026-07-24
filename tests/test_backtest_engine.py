@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """BacktestEngine 测试 (P9, ARCH §7)."""
 
 import numpy as np

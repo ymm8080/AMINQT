@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """calendar_factors 单元测试 (ARCH §5.11)."""
 
 import json

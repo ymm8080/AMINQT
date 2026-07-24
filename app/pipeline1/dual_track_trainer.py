@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 双轨训练器 (DESIGN §14.4, PIPELINE1_V3.5 §二/§七)
 =====================================================
@@ -32,20 +31,20 @@ HALF_LIFE = 250  # 半衰期加权 (天)
 ES_PATIENCE = 50
 OOS_IC_MIN = 0.03  # 新模型切换门槛
 
-LGB_PARAMS_REG = dict(
-    objective="huber",
-    n_estimators=1000,
-    learning_rate=0.05,
-    random_state=42,
-    verbosity=-1,
-)
-LGB_PARAMS_CLS = dict(
-    objective="binary",
-    n_estimators=1000,
-    learning_rate=0.05,
-    random_state=42,
-    verbosity=-1,
-)
+LGB_PARAMS_REG = {
+    "objective": "huber",
+    "n_estimators": 1000,
+    "learning_rate": 0.05,
+    "random_state": 42,
+    "verbosity": -1,
+}
+LGB_PARAMS_CLS = {
+    "objective": "binary",
+    "n_estimators": 1000,
+    "learning_rate": 0.05,
+    "random_state": 42,
+    "verbosity": -1,
+}
 MODEL_KINDS = ("1d_reg", "1d_cls", "3d_reg", "5d_reg")
 
 

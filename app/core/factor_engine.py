@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """M1 — Factor engine: convert daily K-line into a numeric feature matrix.
 
 Phase 2 will implement build_features(). This module fixes the contract and
@@ -10,7 +9,6 @@ the 防坑 rules it MUST obey (PROMPT_CONTENT §2):
 """
 
 import logging
-from typing import Tuple
 
 import numpy as np
 import pandas as pd
@@ -22,7 +20,7 @@ WINDOW_DAYS = 20
 HORIZON_DAYS = 5
 
 
-def build_features(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
+def build_features(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
     """Build windowed feature matrix X and future-return label y.
 
     TODO(Phase 2): implement.

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """模型选择器 (P10.5, ARCH §5.9.2).
 
 基于回测结果自动选最优模型或融合组合; 支持用户手工指定。
@@ -7,7 +6,6 @@
 
 import itertools
 import logging
-from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -49,7 +47,7 @@ class ModelSelector:
         report_: 最近一次对比报告 DataFrame。
     """
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """初始化.
 
         Args:
@@ -148,7 +146,7 @@ class ModelSelector:
         return trained
 
     def select_best(
-        self, report: pd.DataFrame, user_preference: Optional[str] = None
+        self, report: pd.DataFrame, user_preference: str | None = None
     ) -> dict:
         """选最优模型或融合组合.
 
@@ -226,7 +224,7 @@ class ModelSelector:
         )
         return result
 
-    def search_ensemble(self, report: pd.DataFrame, top_k: int = 3) -> List[dict]:
+    def search_ensemble(self, report: pd.DataFrame, top_k: int = 3) -> list[dict]:
         """Top-K 融合组合搜索 (rank_mean/score_mean/weighted_score/stacking).
 
         组合: Top-K 单模型的全部 ≥2 元子集 (K=3 → C(3,2)+C(3,3)=4 组)。

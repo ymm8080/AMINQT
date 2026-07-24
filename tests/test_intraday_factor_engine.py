@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """intraday_factor_engine 单元测试 (ARCH §5.10, 25 维)."""
 
 import numpy as np

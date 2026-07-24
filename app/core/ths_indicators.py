@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """同花顺(THS)自定义量价指标 → tech_ths_* 因子列.
 
 所有指标均融合 **成交量 + 价格**（用户要求：只用量价指标）。
@@ -21,7 +20,6 @@ References
 """
 
 import logging
-from typing import List
 
 import numpy as np
 import pandas as pd
@@ -39,7 +37,7 @@ BULL_VOL_MULT = 1.5  # 发现牛股放量阈值倍数
 #  因子列名清单（45 列 = 10 + 4 + 4 + 6 + 5 量价派生 + 1 背离 + 8 资金流向 + 3 控盘增强 + 4 筹码分布）
 # ════════════════════════════════════════════════════════════════════
 
-THS_FACTOR_COLUMNS: List[str] = [
+THS_FACTOR_COLUMNS: list[str] = [
     # ── 主力筹码指标（量价融合）──
     "tech_ths_trajectory",  # 主力轨迹
     "tech_ths_mazl",  # MA(轨迹, 5)

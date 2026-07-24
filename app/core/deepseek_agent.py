@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """DeepSeek LLM AI 辅助 (P13, ARCH §5.20, DESIGN_V1 §10.2).
 
 12 项只读智能分析功能。LLM 输出仅展示给用户, 不进入交易信号链路。
@@ -16,7 +15,6 @@ import logging
 import os
 import time
 from datetime import date
-from typing import Dict, List
 
 import requests
 
@@ -41,7 +39,7 @@ class DeepSeekAgent:
     概念图谱/相似K线/大宗交易/盘口分析/AI研报。
     """
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """加载 llm_config.yaml; API key 从环境变量 DEEPSEEK_API_KEY 读取.
 
         Args:
@@ -53,9 +51,9 @@ class DeepSeekAgent:
         self.config = config or {}
         self._cfg = self.config.get("deepseek", self.config)
         # 当日缓存: {(date, feature, payload_hash): result}
-        self._cache: Dict[tuple, dict] = {}
+        self._cache: dict[tuple, dict] = {}
         # 日 token 用量: {date: tokens}
-        self._tokens_used: Dict[str, int] = {}
+        self._tokens_used: dict[str, int] = {}
         # 熔断器状态
         self._consecutive_failures = 0
         self._breaker_open_until = 0.0
@@ -195,7 +193,7 @@ class DeepSeekAgent:
     # ── 12 项功能 ─────────────────────────────────────────────────
 
     def explain_signal(
-        self, symbol: str, score: float, top_factors: List[dict], shap: dict
+        self, symbol: str, score: float, top_factors: list[dict], shap: dict
     ) -> dict:
         """1. 推理解释: 为什么选/为什么买."""
         return self._call(
@@ -211,7 +209,7 @@ class DeepSeekAgent:
             },
         )
 
-    def analyze_sentiment(self, symbol: str, texts: List[str]) -> dict:
+    def analyze_sentiment(self, symbol: str, texts: list[str]) -> dict:
         """2. 情感分析: 新闻/公告/股吧 → 情感得分 (-1~1) + 摘要."""
         return self._call(
             "sentiment",

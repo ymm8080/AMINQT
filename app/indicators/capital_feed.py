@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 资金流数据层：B路径(akshare东财) + C路径(同花顺手工导入)
 ==========================================================
@@ -18,9 +17,11 @@ B路径字段映射（东财 stock_individual_fund_flow）：
 """
 
 from __future__ import annotations
-import os
+
 import glob
+import os
 import time
+
 import pandas as pd
 
 

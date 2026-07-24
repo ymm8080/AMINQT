@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """盘后自动增量训练 (P10.5, ARCH §5.9.4).
 
 每日 16:00 微调: 增量数据 fine-tune → OOS 验证 → 优于旧模型才替换,
@@ -11,7 +10,6 @@ sklearn 模型微调策略: 有 partial_fit 用 partial_fit (纯增量);
 
 import copy
 import logging
-from typing import Optional
 
 import numpy as np
 
@@ -27,7 +25,7 @@ class DailyTrainer:
         last_oos_ic_: 最近一次 validate_oos 的 IC 值。
     """
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """初始化.
 
         Args:
@@ -50,7 +48,7 @@ class DailyTrainer:
         y_new=None,
         X_oos=None,
         y_oos=None,
-        ic_threshold: Optional[float] = None,
+        ic_threshold: float | None = None,
     ) -> dict:
         """每日训练流程: fine_tune → validate_oos → 替换 or 保留+告警.
 

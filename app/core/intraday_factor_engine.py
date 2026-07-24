@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """交易级五分钟量价因子体系 (P7, ARCH §5.10).
 
 25 维五分钟因子 = 16 个股 (含 13 微观结构) + 5 大盘 + 4 板块。
@@ -10,7 +9,6 @@
 """
 
 import logging
-from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -22,7 +20,7 @@ MARKET_FACTOR_DIM = 5  # 大盘盘中因子
 SECTOR_FACTOR_DIM = 4  # 板块盘中因子
 TOTAL_DIM = STOCK_FACTOR_DIM + MARKET_FACTOR_DIM + SECTOR_FACTOR_DIM  # 25
 
-STOCK_FACTOR_NAMES: List[str] = [
+STOCK_FACTOR_NAMES: list[str] = [
     "intraday_vwap_dev",  # 1  VWAP偏离度
     "intraday_momentum_5",  # 2  5根动量 (≈25min)
     "intraday_momentum_15",  # 3  15根动量
@@ -41,7 +39,7 @@ STOCK_FACTOR_NAMES: List[str] = [
     "intraday_vol_trend",  # 16 量能趋势
 ]
 
-MARKET_FACTOR_NAMES: List[str] = [
+MARKET_FACTOR_NAMES: list[str] = [
     "market_5min_momentum",  # 17 大盘5分钟动量
     "market_5min_volume_ratio",  # 18 大盘分钟量比
     "market_5min_vwap_dev",  # 19 大盘VWAP偏离
@@ -49,7 +47,7 @@ MARKET_FACTOR_NAMES: List[str] = [
     "market_5min_trend",  # 21 大盘日内趋势
 ]
 
-SECTOR_FACTOR_NAMES: List[str] = [
+SECTOR_FACTOR_NAMES: list[str] = [
     "sector_5min_momentum",  # 22 板块5分钟动量
     "sector_5min_volume_ratio",  # 23 板块分钟量比
     "sector_5min_dev",  # 24 个股vs板块偏离
@@ -82,7 +80,7 @@ def _slope_norm(close: np.ndarray, window: int = 12) -> float:
 class IntradayFactorEngine:
     """五分钟因子计算器."""
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         self.config = config or {}
 
     # ────────────────────────────────────────────────────────────────
@@ -99,7 +97,7 @@ class IntradayFactorEngine:
 
     @staticmethod
     def _with_snapshot(
-        bars: pd.DataFrame, current_snapshot: Optional[dict]
+        bars: pd.DataFrame, current_snapshot: dict | None
     ) -> pd.DataFrame:
         """把当前未完成 bar 快照拼到已完成 bar 末尾 (可选).
 
@@ -144,8 +142,8 @@ class IntradayFactorEngine:
     # ────────────────────────────────────────────────────────────────
 
     def compute_stock_factors(
-        self, bars_5min: pd.DataFrame, current_snapshot: dict = None
-    ) -> Dict[str, float]:
+        self, bars_5min: pd.DataFrame, current_snapshot: dict | None = None
+    ) -> dict[str, float]:
         """个股微观因子 (16 维): VWAP偏离/动量/量比/额脉冲/量价相关/
         买卖压力/振幅/趋势强度/反转 等 (ARCH §5.10.2.A).
 
@@ -179,7 +177,7 @@ class IntradayFactorEngine:
         total_vol = float(v.sum())
         total_amt = float(a.sum())
 
-        out: Dict[str, float] = {}
+        out: dict[str, float] = {}
 
         # 1. VWAP 偏离
         vwap = _safe_div(total_amt, total_vol)
@@ -266,7 +264,7 @@ class IntradayFactorEngine:
     #  B. 大盘盘中因子 (5 维)
     # ────────────────────────────────────────────────────────────────
 
-    def compute_market_factors(self, index_bars: pd.DataFrame) -> Dict[str, float]:
+    def compute_market_factors(self, index_bars: pd.DataFrame) -> dict[str, float]:
         """大盘盘中因子 (5 维).
 
         Args:
@@ -288,7 +286,7 @@ class IntradayFactorEngine:
         n = len(c)
         last = c[-1]
 
-        out: Dict[str, float] = {}
+        out: dict[str, float] = {}
 
         # 17. 大盘 5 根动量
         base = c[-6] if n > 5 else c[0]
@@ -320,7 +318,7 @@ class IntradayFactorEngine:
 
     def compute_sector_factors(
         self, sector_bars: pd.DataFrame, stock_bars: pd.DataFrame = None
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """板块盘中因子 (4 维).
 
         Args:
@@ -341,7 +339,7 @@ class IntradayFactorEngine:
         n = len(c)
         last = c[-1]
 
-        out: Dict[str, float] = {}
+        out: dict[str, float] = {}
 
         # 22. 板块 5 根动量
         base = c[-6] if n > 5 else c[0]
@@ -382,7 +380,7 @@ class IntradayFactorEngine:
         stock_bars: pd.DataFrame,
         index_bars: pd.DataFrame,
         sector_bars: pd.DataFrame,
-        current_snapshot: dict = None,
+        current_snapshot: dict | None = None,
     ) -> np.ndarray:
         """合并计算 25 维五分钟因子向量.
 

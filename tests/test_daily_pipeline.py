@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Pipeline-1 每日选股编排 e2e 测试 (合成数据 + 真实小模型)."""
 
 from __future__ import annotations
@@ -8,8 +7,8 @@ import pandas as pd
 import pytest
 
 import app.pipeline1.dual_track_trainer as dtt
-from app.pipeline1.daily_pipeline import DailySelectionPipeline
 from app.pipeline1.cleaning_pipeline import CleaningConfig, CleaningPipeline
+from app.pipeline1.daily_pipeline import DailySelectionPipeline
 from app.pipeline1.data_supply import DataSupplyChain, DataSupplyError
 from app.pipeline1.list_generator import SCHEMA_FIELDS
 

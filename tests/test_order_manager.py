@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for services/order_manager.py — confirm flow, cancel, T+1, idempotency."""
 
 import pytest

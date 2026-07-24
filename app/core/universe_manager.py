@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Universe 股票池分池管理 (P1, ARCH §4).
 
 主板 (±10%) 与创业板/科创板 (±20%) 分池, 各自路由对应 ONNX 模型。
@@ -11,7 +10,6 @@
 
 import logging
 from enum import Enum
-from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +63,7 @@ def name_is_st(name: str) -> bool:
     upper = n.upper()
     if upper.startswith(ST_NAME_PREFIXES):
         return True
-    if n.startswith(DELIST_NAME_PREFIX):
-        return True
-    return False
+    return bool(n.startswith(DELIST_NAME_PREFIX))
 
 
 class UniverseManager:
@@ -82,11 +78,11 @@ class UniverseManager:
 
     def __init__(
         self,
-        stocks: Optional[List[str]] = None,
-        name_map: Optional[Dict[str, str]] = None,
+        stocks: list[str] | None = None,
+        name_map: dict[str, str] | None = None,
     ) -> None:
-        self._stocks: List[str] = [str(s).strip() for s in (stocks or [])]
-        self._name_map: Dict[str, str] = dict(name_map or {})
+        self._stocks: list[str] = [str(s).strip() for s in (stocks or [])]
+        self._name_map: dict[str, str] = dict(name_map or {})
 
     def classify(self, symbol: str) -> Universe:
         """判断股票所属 Universe (60/00→主板, 30/68→创业科创).
@@ -99,7 +95,7 @@ class UniverseManager:
         """
         return classify_symbol(symbol)
 
-    def get_universe_stocks(self, universe: Universe) -> List[str]:
+    def get_universe_stocks(self, universe: Universe) -> list[str]:
         """返回指定 Universe 的全部股票代码.
 
         Args:
@@ -121,10 +117,10 @@ class UniverseManager:
 
     # ── 维护接口 ────────────────────────────────────────────────────
 
-    def set_stocks(self, stocks: List[str]) -> None:
+    def set_stocks(self, stocks: list[str]) -> None:
         """更新股票代码列表."""
         self._stocks = [str(s).strip() for s in stocks]
 
-    def set_names(self, name_map: Dict[str, str]) -> None:
+    def set_names(self, name_map: dict[str, str]) -> None:
         """更新 股票代码→名称 映射."""
         self._name_map = dict(name_map)

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """M1 — LSTM model for future-return prediction (Phase 3).
 
 Contract: input (batch, 20, F) → output (batch,) predicted 5-day return.
@@ -7,7 +6,7 @@ Contract: input (batch, 20, F) → output (batch,) predicted 5-day return.
 import logging
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 logger = logging.getLogger(__name__)
 

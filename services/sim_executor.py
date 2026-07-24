@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """M3 — Simulator executor: prints orders, touches no broker.
 
 Used for dev and as the MANUAL-mode recommendation sink.
