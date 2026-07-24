@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """DeepSeek PR Review — AI-powered code review for AMINQT.
 
 Called by .github/workflows/deepseek-pr-review.yml.
@@ -19,6 +18,7 @@ import os
 import re
 import subprocess
 import sys
+from urllib.error import HTTPError
 import urllib.request
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -159,13 +159,16 @@ def _extract_json(text: str) -> dict | None:
 
 
 def review_with_deepseek(diff: str, api_key: str, model: str, base_url: str) -> dict:
-    """Send diff to DeepSeek for review. Returns parsed response."""
-    if not diff.strip():
-        return {"issues": [], "summary": "No diff to review."}
+    """Send diff to DeepSeek for review. Returns parsed response.
 
-    # Strip BOM / non-ASCII from API key so it can be sent in HTTP headers
-    api_key = _sanitize_header(api_key)
-    base_url = _sanitize_header(base_url)
+    The ``error`` key is set when the review itself failed (API error,
+    parse failure, etc.) so callers can distinguish genuine "no issues"
+    from a broken review that looks blank.
+    """
+    if not diff.strip():
+        return {"issues": [], "summary": "No diff to review.", "error": True}
+
+    # api_key and base_url are already sanitized in main(); no re-sanitize needed
 
     system_prompt = """You are a code reviewer for a Python quant trading platform (AMINQT).
 Review the PR diff and identify:
@@ -184,6 +187,14 @@ Respond in JSON format:
 If no issues found: {"issues": [], "summary": "No issues found."}
 """
 
+    # ── Thinking mode control ──────────────────────────────────
+    # deepseek-v4-flash defaults to thinking mode (enabled). In thinking
+    # mode the model emits reasoning_content BEFORE content. With a small
+    # max_tokens budget the reasoning alone exhausts the limit, leaving
+    # content empty → review appears blank.
+    #
+    # Code review is a checklist task; disable thinking for predictable
+    # token usage and faster responses.
     payload = {
         "model": model,
         "messages": [
@@ -194,8 +205,9 @@ If no issues found: {"issues": [], "summary": "No issues found."}
             },
         ],
         "temperature": 0.1,
-        "max_tokens": 4000,
+        "max_tokens": 8000,
         "response_format": {"type": "json_object"},
+        "thinking": {"type": "disabled"},
     }
 
     data = json.dumps(payload).encode("utf-8")
@@ -203,7 +215,7 @@ If no issues found: {"issues": [], "summary": "No issues found."}
         f"{base_url}/chat/completions",
         data=data,
         headers={
-            "Authorization": _sanitize_header(f"Bearer {api_key}"),
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
     )
@@ -211,26 +223,72 @@ If no issues found: {"issues": [], "summary": "No issues found."}
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             result = json.loads(resp.read().decode("utf-8"))
-            content = result["choices"][0]["message"]["content"]
+            msg = result["choices"][0]["message"]
+            content = msg.get("content", "")
+            reasoning = msg.get("reasoning_content", "")
             parsed = _extract_json(content)
             if parsed is not None:
                 return parsed
-            # Debug: log raw content when parsing fails
+            # content empty or unparseable — log details for debugging
             logger.error(
-                f"Could not parse. Raw content (first 500 chars): {content[:500]}"
+                "Could not parse review response. "
+                "content (first 500): %r, reasoning_content (first 300): %r",
+                content[:500],
+                reasoning[:300],
             )
-            return {"issues": [], "summary": "Could not parse review response."}
+            if not content.strip() and reasoning:
+                return {
+                    "issues": [],
+                    "summary": (
+                        "Review failed: model returned empty content "
+                        "(reasoning consumed token budget). "
+                        "Consider increasing max_tokens."
+                    ),
+                    "error": True,
+                }
+            return {
+                "issues": [],
+                "summary": "Could not parse review response.",
+                "error": True,
+            }
+    except HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")[:500]
+        except Exception:
+            pass
+        logger.error("DeepSeek API HTTP %s: %s", e.code, body)
+        return {
+            "issues": [],
+            "summary": f"Review failed: HTTP {e.code} — {body}",
+            "error": True,
+        }
     except Exception as e:
         logger.error(f"DeepSeek API error: {e}")
-        return {"issues": [], "summary": f"Review failed: {e}"}
+        return {
+            "issues": [],
+            "summary": f"Review failed: {e}",
+            "error": True,
+        }
 
 
 def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
     """Post review comment on the PR."""
     issues = review.get("issues", [])
     summary = review.get("summary", "Review complete.")
+    is_error = review.get("error", False)
 
-    if not issues:
+    if is_error:
+        # Review itself failed — show a visible error banner, NOT "no issues"
+        body = f"""## DeepSeek PR Review
+
+**Status:** Review failed
+
+{summary}
+
+---
+*Automated review by DeepSeek ({os.environ.get("DEEPSEEK_MODEL", "unknown")})*"""
+    elif not issues:
         body = f"""## DeepSeek PR Review
 
 **Status:** No issues found.

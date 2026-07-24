@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """P12 端到端集成测试 (V3.5 全链路): 选股 → 标记 → 盘中交易 → 回测 → 调参.
 
 链路覆盖 (IMPLEMENTATION_PLAN v2.8 P12):
@@ -20,6 +19,9 @@ from app.indicators.indicator_feed import CompositeFeed
 from app.indicators.yimeng_dingdi import YimengFeed, yimeng_dingdi
 from app.indicators.zhuli_lasheng import zhuli_lasheng
 from app.pipeline1.backtest_v35 import BacktestEngineV35
+from app.pipeline1.cleaning_pipeline import CleaningConfig, CleaningPipeline
+from app.pipeline1.daily_pipeline import DailySelectionPipeline
+from app.pipeline1.data_supply import DataSupplyChain
 from app.pipeline1.list_generator import SCHEMA_FIELDS
 from app.pipeline1.param_tuner import ParamTuner
 from app.rules.config import Config
@@ -32,9 +34,6 @@ from app.rules.rule_engine import (
     Tick,
 )
 from tests.test_daily_pipeline import _StubFeatures, _train_bundle, make_panel
-from app.pipeline1.daily_pipeline import DailySelectionPipeline
-from app.pipeline1.cleaning_pipeline import CleaningConfig, CleaningPipeline
-from app.pipeline1.data_supply import DataSupplyChain
 
 
 @pytest.fixture(scope="module")
@@ -164,9 +163,9 @@ class TestEndToEndV35:
 
     def test_no_import_errors(self):
         """P12 验证: 全部新模块可导入."""
-        import app.pipeline1.daily_pipeline  # noqa: F401
-        import app.pipeline1.predictor  # noqa: F401
-        import app.pipeline1.backtest_v35  # noqa: F401
-        import app.pipeline1.param_tuner  # noqa: F401
-        import app.indicators.indicator_feed  # noqa: F401
+        import app.indicators.indicator_feed
+        import app.pipeline1.backtest_v35
+        import app.pipeline1.daily_pipeline
+        import app.pipeline1.param_tuner
+        import app.pipeline1.predictor
         import app.rules.rule_engine  # noqa: F401

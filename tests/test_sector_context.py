@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for app/core/sector_context — 板块平均效应 4 因子."""
 
 import numpy as np

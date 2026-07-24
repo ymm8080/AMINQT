@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Pipeline 2 Warm-Start (P7.5, ARCH §3.4, DESIGN_V1 §9 #3).
 
 交易 Pipeline 模型不从头训练:
@@ -13,7 +12,6 @@
 import copy
 import logging
 import os
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -71,9 +69,9 @@ class Pipeline2WarmStarter:
     def build_5min_dataset(
         self,
         symbols: list,
-        daily_features: Optional[pd.DataFrame] = None,
-        fivemin_features: Optional[pd.DataFrame] = None,
-        labels: Optional[np.ndarray] = None,
+        daily_features: pd.DataFrame | None = None,
+        fivemin_features: pd.DataFrame | None = None,
+        labels: np.ndarray | None = None,
     ) -> tuple:
         """构建近 3 月五分钟训练集 (110 维 = 85 日线 + 25 五分钟).
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """DatasetSplitter 测试 (P10.7, ARCH §5.12)."""
 
 import numpy as np
@@ -118,14 +117,14 @@ class TestPurgedKFold:
     def test_first_fold_purges_only_after(self, df):
         splitter = DatasetSplitter()
         train_idx, val_idx = splitter.purged_kfold(df, n_splits=5, gap_days=5)[0]
-        assert val_idx.tolist() == list(range(0, 20))
+        assert val_idx.tolist() == list(range(20))
         assert train_idx.tolist() == list(range(25, 100))
 
     def test_last_fold_purges_only_before(self, df):
         splitter = DatasetSplitter()
         train_idx, val_idx = splitter.purged_kfold(df, n_splits=5, gap_days=5)[-1]
         assert val_idx.tolist() == list(range(80, 100))
-        assert train_idx.tolist() == list(range(0, 75))
+        assert train_idx.tolist() == list(range(75))
 
     def test_uses_time_order_not_row_order(self):
         # 打乱行序: 索引仍按时间排序后的位置
@@ -134,7 +133,7 @@ class TestPurgedKFold:
         folds = splitter.purged_kfold(df, n_splits=2, gap_days=2)
         train_idx, val_idx = folds[1]
         assert val_idx.tolist() == list(range(10, 20))
-        assert train_idx.tolist() == list(range(0, 8))
+        assert train_idx.tolist() == list(range(8))
 
     def test_gap_days_configurable(self, df):
         splitter = DatasetSplitter()

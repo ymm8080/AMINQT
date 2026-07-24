@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Local CSV loader + column canonicalization.
 
 Reads raw CSVs written by scripts/download_data.py and renames the Chinese
@@ -9,7 +8,7 @@ happen here on read.
 
 import logging
 import os
-from typing import Dict, Iterable, Optional
+from collections.abc import Iterable
 
 import pandas as pd
 
@@ -43,7 +42,7 @@ def load_csv(symbol: str) -> pd.DataFrame:
     return df
 
 
-def load_all(symbols: Optional[Iterable[str]] = None) -> Dict[str, pd.DataFrame]:
+def load_all(symbols: Iterable[str] | None = None) -> dict[str, pd.DataFrame]:
     """Load the whole pool into memory (Phase 4 <5s response requirement).
 
     Args:
@@ -53,7 +52,7 @@ def load_all(symbols: Optional[Iterable[str]] = None) -> Dict[str, pd.DataFrame]
         Dict mapping symbol → canonicalized DataFrame.
     """
     symbols = list(symbols or settings.STOCK_LIST)
-    out: Dict[str, pd.DataFrame] = {}
+    out: dict[str, pd.DataFrame] = {}
     for sym in symbols:
         try:
             out[sym] = load_csv(sym)

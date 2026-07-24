@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """announcement_factors 单元测试 (ARCH §5.11)."""
 
 import logging

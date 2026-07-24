@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Pytest shared fixtures + project root on sys.path.
 
 Ensures `from config import settings`, `from app...`, `from data...`,

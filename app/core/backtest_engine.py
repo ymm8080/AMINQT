@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """回测引擎 (P9, ARCH §7).
 
 职责:
@@ -9,7 +8,6 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -35,7 +33,7 @@ class BacktestResult:
     ctrl_ratio_weekly_falling_return: float = 0.0
     ctrl_ratio_long_short_return: float = 0.0
     # GAP 输出 (供 AdaptiveEngine, ARCH §5.17)
-    gaps: Dict[str, float] = field(default_factory=dict)
+    gaps: dict[str, float] = field(default_factory=dict)
 
 
 def _safe_div(numerator: float, denominator: float) -> float:
@@ -65,7 +63,7 @@ class BacktestEngine:
           因子未来函数
     """
 
-    def __init__(self, config: dict = None) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         """加载回测配置.
 
         Args:
@@ -85,7 +83,7 @@ class BacktestEngine:
         self.ctrl_col = self.config.get("ctrl_col", "ctrl_ratio")
         self.ctrl_rising_col = self.config.get("ctrl_rising_col", "ctrl_weekly_rising")
         self.execution = self.config.get("execution", "close")
-        self.targets: Dict[str, float] = self.config.get("targets", {})
+        self.targets: dict[str, float] = self.config.get("targets", {})
         logger.info(
             "BacktestEngine 初始化: holding_days=%d, execution=%s",
             self.holding_days,
@@ -95,7 +93,7 @@ class BacktestEngine:
     # ── 数据准备 ────────────────────────────────────────────
 
     def _build_panel(
-        self, data: Dict[str, pd.DataFrame], start: str, end: str
+        self, data: dict[str, pd.DataFrame], start: str, end: str
     ) -> pd.DataFrame:
         """构建长表面板: date/symbol/close/fwd_ret/score/signal/ctrl 列.
 
@@ -103,7 +101,7 @@ class BacktestEngine:
         """
         start_ts = pd.Timestamp(start)
         end_ts = pd.Timestamp(end)
-        frames: List[pd.DataFrame] = []
+        frames: list[pd.DataFrame] = []
         for symbol, df in data.items():
             if df is None or df.empty or "close" not in df.columns:
                 logger.warning("跳过无 close 列的数据: %s", symbol)
@@ -137,7 +135,7 @@ class BacktestEngine:
     # ── 绩效指标 ────────────────────────────────────────────
 
     @staticmethod
-    def _portfolio_metrics(daily_ret: pd.Series) -> Dict[str, float]:
+    def _portfolio_metrics(daily_ret: pd.Series) -> dict[str, float]:
         """由日收益序列计算 total_return/sharpe/max_drawdown."""
         daily_ret = daily_ret.dropna()
         if daily_ret.empty:
@@ -159,7 +157,7 @@ class BacktestEngine:
     @staticmethod
     def _ic_series(panel: pd.DataFrame, factor_col: str) -> pd.Series:
         """逐日截面 Spearman IC (factor vs fwd_ret, pandas rank corr)."""
-        ics: Dict[pd.Timestamp, float] = {}
+        ics: dict[pd.Timestamp, float] = {}
         for date, grp in panel.groupby("date"):
             sub = grp[[factor_col, "fwd_ret"]].dropna()
             if (
@@ -188,10 +186,10 @@ class BacktestEngine:
     def run(
         self,
         strategy: str,
-        symbols: List[str],
+        symbols: list[str],
         start: str,
         end: str,
-        data: Optional[Dict[str, pd.DataFrame]] = None,
+        data: dict[str, pd.DataFrame] | None = None,
     ) -> BacktestResult:
         """执行回测.
 
@@ -243,8 +241,9 @@ class BacktestEngine:
             )
         if self.ctrl_rising_col in panel.columns:
             labeled = panel.dropna(subset=["fwd_ret"])
-            rising = labeled.loc[labeled[self.ctrl_rising_col] == True, "fwd_ret"]  # noqa: E712
-            falling = labeled.loc[labeled[self.ctrl_rising_col] == False, "fwd_ret"]  # noqa: E712
+            ctrl_mask = labeled[self.ctrl_rising_col]
+            rising = labeled.loc[ctrl_mask.eq(True), "fwd_ret"]
+            falling = labeled.loc[ctrl_mask.eq(False), "fwd_ret"]
             rising_ret = float(rising.mean()) if len(rising) else 0.0
             falling_ret = float(falling.mean()) if len(falling) else 0.0
             result.ctrl_ratio_weekly_rising_return = float(
@@ -269,7 +268,7 @@ class BacktestEngine:
         )
         return result
 
-    def compute_gaps(self, result: BacktestResult) -> Dict[str, float]:
+    def compute_gaps(self, result: BacktestResult) -> dict[str, float]:
         """计算回测 GAP (实际 vs 目标的差距), 供 AdaptiveEngine 调参.
 
         GAP 统一为 actual - target (正=优于目标, 负=低于目标);
@@ -289,7 +288,7 @@ class BacktestEngine:
             "target_ic": ("ic_gap", result.ic, 1),
             "target_max_drawdown": ("max_drawdown_gap", abs(result.max_drawdown), -1),
         }
-        gaps: Dict[str, float] = {}
+        gaps: dict[str, float] = {}
         for target_key, (gap_key, actual, sign) in mapping.items():
             if target_key not in self.targets:
                 continue

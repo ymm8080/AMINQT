@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """板块平均效应因子 (P5, ARCH §5.8 — 4 维).
 
 板块内个股联动: 板块平均涨跌幅/板块相对强度/板块内排名/板块资金流向。
@@ -17,7 +16,6 @@
 """
 
 import logging
-from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -46,9 +44,9 @@ class SectorContext:
     """
 
     def __init__(
-        self, sector_map: Optional[Dict[str, str]] = None, config: Optional[dict] = None
+        self, sector_map: dict[str, str] | None = None, config: dict | None = None
     ) -> None:
-        self._sector_map: Dict[str, str] = dict(sector_map or {})
+        self._sector_map: dict[str, str] = dict(sector_map or {})
         self._config = {**DEFAULT_CONFIG, **(config or {})}
 
     # ───────────────────────────────────────────────────────────────
@@ -79,7 +77,7 @@ class SectorContext:
     #  因子计算
     # ───────────────────────────────────────────────────────────────
 
-    def _latest_pct_and_flow(self, df: pd.DataFrame) -> Optional[tuple]:
+    def _latest_pct_and_flow(self, df: pd.DataFrame) -> tuple | None:
         """取个股最新日 (涨跌幅, 资金净流入估算); 数据不足返回 None."""
         if df is None or df.empty or "close" not in df.columns:
             return None
@@ -96,7 +94,7 @@ class SectorContext:
             )
         return pct, flow
 
-    def compute(self, symbol: str, all_stocks: Dict[str, pd.DataFrame]) -> dict:
+    def compute(self, symbol: str, all_stocks: dict[str, pd.DataFrame]) -> dict:
         """计算个股所属板块的 4 维上下文因子.
 
         Args:
@@ -117,9 +115,9 @@ class SectorContext:
         sector = self.sector_for(code)
         members = [s for s in all_stocks if self.sector_for(s) == sector]
 
-        pcts: List[float] = []
-        flows: List[float] = []
-        own_pct: Optional[float] = None
+        pcts: list[float] = []
+        flows: list[float] = []
+        own_pct: float | None = None
         for s in members:
             pf = self._latest_pct_and_flow(all_stocks[s])
             if pf is None:
@@ -166,6 +164,6 @@ class SectorContext:
     # ───────────────────────────────────────────────────────────────
 
     @staticmethod
-    def get_factor_columns() -> List[str]:
+    def get_factor_columns() -> list[str]:
         """返回板块因子列名列表."""
         return SECTOR_FACTOR_COLUMNS.copy()

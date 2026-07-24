@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Phase 2 verify: load 600519.csv, call build_features, print X/y shapes.
 
 Run after factor_engine.build_features is implemented. Acceptance:

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 峰值跟踪器 — 右侧确认, 消除未来函数 (DESIGN §15.5.1, rule_engine_v2 §4)
 ============================================================================
@@ -7,8 +6,6 @@
 """
 
 from __future__ import annotations
-
-from typing import Optional
 
 from .config import Config
 
@@ -21,9 +18,9 @@ class PeakTracker:
         self.bars: list[float] = []
         self.confirmed_peaks: list[float] = []
         self.confirmed_troughs: list[float] = []
-        self._candidate_high: Optional[float] = None
+        self._candidate_high: float | None = None
         self._drop_bars: int = 0
-        self._candidate_low: Optional[float] = None
+        self._candidate_low: float | None = None
         self._rise_bars: int = 0
 
     def update(self, price: float) -> None:

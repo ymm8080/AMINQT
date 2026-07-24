@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for M2 — intraday pattern learner + rule engine."""
 
 import pytest

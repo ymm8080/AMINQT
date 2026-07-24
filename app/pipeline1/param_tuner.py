@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 参数调优器 (用户 2026-07-22 需求: 预定义买卖/持仓规则参数由回测结果调整)
 ============================================================================
@@ -34,6 +33,13 @@ CONFIG_TO_PROTOCOL = {
     "trailing_drawdown": "trailing_drawdown",
     "prob_exit": "prob_exit",
 }
+
+
+def _native(v):
+    """numpy 标量 → Python 原生类型 (JSON/pydantic 序列化安全)."""
+    if isinstance(v, np.generic):
+        return v.item()
+    return v
 
 
 class ParamTuner:
@@ -143,13 +149,14 @@ class ParamTuner:
         report = {
             "param_names": param_names,
             "n_combos": len(combos),
-            "best_params": best_params,
+            "best_params": {k: _native(v) for k, v in best_params.items()},
             "train_score": round(best_train, 4),
             "oos_score": round(oos_best, 4),
             "oos_default": round(oos_default, 4),
             "fallback_to_default": fallback,
             "leaderboard": [
-                ({k: v for k, v in p.items()}, round(s, 4)) for p, s in leaderboard
+                ({k: _native(v) for k, v in p.items()}, round(s, 4))
+                for p, s in leaderboard
             ],
         }
         path = os.path.join(self.report_dir, "tuning_report.json")
