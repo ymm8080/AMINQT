@@ -1,0 +1,100 @@
+# ── AI Quant Research Tools ───────────────────────────────
+# 安装: pip install -r requirements-ai-tools.txt
+# 用途: 为 A股量化交易项目补充金融AI工具链
+
+# ── 1. AI量化平台 (Microsoft Qlib) ─────────────────────────
+# 统一监督学习赛道 + 自动因子生成 + ML pipeline编排
+pyqlib
+
+# ── 2. 因子分析与组合优化 ──────────────────────────────────
+# 因子 IC / 衰减曲线 / 分位数收益 / 换手率分析
+alphalens-reloaded
+# 均值-方差 / Black-Litterman / HRP / 风险平价
+pyportfolioopt
+
+# ── 3. 金融NLP (FinGPT via transformers) ──────────────────
+# 情绪因子 / 新闻因子 / 研报摘要
+transformers>=4.40
+peft
+tokenizers>=0.19
+
+# ── 4. 超参优化 ────────────────────────────────────────────
+# Bayesian/TPE 优化，替代手动调参，与 SB3 原生集成
+optuna>=3.5
+optuna-dashboard
+
+# ── 5. ML生命周期管理 ──────────────────────────────────────
+# 模型追踪 / 版本注册 / A/B测试 / 与ONNX原生集成
+mlflow>=2.10
+
+# ── 6. 事件驱动回测引擎 ────────────────────────────────────
+# 支持滑点/佣金/多账户/多周期/A股T+1
+backtrader>=1.9.78
+
+# ── 7. 风险与绩效分析 ──────────────────────────────────────
+# 组合绩效归因 / Sharpe / Sortino / 最大回撤 / Calmar
+pyfolio-reloaded
+# 金融指标计算（年化收益、波动率、VaR等）
+empyrical-reloaded
+
+# ── 8. 分布式计算 (可选，RL大规模训练) ────────────────────
+# ray>=2.9
+
+# ── 9. 设计文档 mandated 补充 (2026-07-24 审计后安装) ──────
+# 依据: Design All/ARCHITECTURE_v2.4.md + IMPLEMENTATION_PLAN_v2.9.md
+# SHAP — 因子发现评分权重25% (LGBM_gain+SHAP+IC+ICIR 综合分)
+shap>=0.44
+# XGBoost / CatBoost — 模型库10种成员 (P11 model_zoo)
+xgboost
+catboost
+# TA-Lib — skills/quant-ohlcv-feature 15+ 因子文件依赖 (import talib)
+TA-Lib
+# tushare — app/pipeline1/data_supply.py 数据降级源 (需token)
+tushare
+# playwright — app/models/iwencai_agent.py 问财抓取降级链
+#   安装后还需: playwright install chromium
+playwright
+# stable-baselines3 + gymnasium — skills/aurumq-rl RL模块 (非核心设计路径)
+stable-baselines3
+gymnasium
+
+# ── 安装记录 ──────────────────────────────────────────────
+# 安装时间: 2026-07-24
+# Python : 3.12
+# 命令   : pip install -r requirements-ai-tools.txt
+# 状态   : 成功（exit code 0）
+#
+# 已安装版本:
+#   pyqlib              0.9.7      ✅ import OK
+#   alphalens-reloaded  0.4.6      ✅ import OK
+#   pyportfolioopt      1.6.0      ✅ import OK
+#   transformers        5.14.1     ✅ import OK
+#   peft                0.19.1     ✅ import OK
+#   tokenizers          0.22.2     ✅ import OK
+#   optuna              4.9.0      ✅ import OK
+#   optuna-dashboard    0.20.0     ✅
+#   mlflow              3.14.0     ✅ import OK
+#   backtrader          1.9.78.123 ✅ import OK
+#   pyfolio-reloaded    0.9.9      ✅ import OK
+#   empyrical-reloaded  0.5.12     ✅ import OK
+#   ray                 未安装（注释，可选）
+#
+# 二次安装 (2026-07-24, 设计文档审计后, 清华镜像):
+#   TA-Lib              0.7.1      ✅ import OK
+#   shap                0.52.0     ✅ import OK
+#   xgboost             3.3.0      ✅ import OK
+#   catboost            1.2.10     ✅ import OK
+#   stable-baselines3   2.9.0      ✅ import OK
+#   gymnasium           1.3.0      ✅ import OK
+#   tushare             1.4.29     ✅ import OK
+#   playwright          1.61.0     ✅ import OK + chromium-1228 ✅
+#   验证脚本: scripts/_verify_imports.py (20/20 OK)
+#
+# 设计文档未要求 (保留为研究工具，pipeline 不依赖):
+#   qlib / alphalens / pyportfolioopt / transformers+peft(FinGPT)
+#   optuna / mlflow / backtrader / pyfolio / empyrical
+#   → 核心 pipeline 用自定义 model_registry.py + backtest_engine，非这些库
+#
+# 依赖冲突警告 (不影响上述工具使用):
+#   - omnigent 0.1.1  要求 click<8.2，实际 click 8.4.2
+#   - semgrep 1.168.0  要求 click~=8.1.8，实际 click 8.4.2

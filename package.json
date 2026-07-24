@@ -1,0 +1,9 @@
+{
+  "name": "aminqt-pipeline1",
+  "version": "1.0.0",
+  "description": "A-share quantitative trading system - Pipeline-1 with DuckDB MCP server",
+  "private": true,
+  "dependencies": {
+    "duckdb-mcp": "^1.0.0"
+  }
+}

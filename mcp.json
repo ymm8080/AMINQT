@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "duckdb": {
+      "command": "duckdb-mcp",
+      "args": [],
+      "env": {
+        "DUCKDB_PATH": "data/quant.duckdb"
+      }
+    }
+  }
+}
