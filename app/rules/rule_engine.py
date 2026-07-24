@@ -144,9 +144,7 @@ class RuleEngine:
         self._open_prices: dict[str, float] = {}
 
     # ---------------- L0 合规 ----------------
-    def can_buy(
-        self, c: Candidate, tick: Tick | None, prev_close: float
-    ) -> str | None:
+    def can_buy(self, c: Candidate, tick: Tick | None, prev_close: float) -> str | None:
         """返回 None 表示可买, 否则返回否决原因."""
         if c.is_st:
             return "ST禁买"

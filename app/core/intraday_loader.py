@@ -119,7 +119,11 @@ class IntradayLoader:
         return os.path.join(self.cache_dir, f"{safe}_{period}min.parquet")
 
     def load_history_min(
-        self, symbol: str, period: str = "5", start: str | None = None, end: str | None = None
+        self,
+        symbol: str,
+        period: str = "5",
+        start: str | None = None,
+        end: str | None = None,
     ) -> pd.DataFrame:
         """历史分钟线 (akshare stock_zh_a_hist_min_em, Parquet 缓存).
 

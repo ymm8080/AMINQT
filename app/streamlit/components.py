@@ -95,7 +95,9 @@ def intraday_chart(
         fig.add_hline(
             y=prev_close, line_dash="dash", line_color="gray", annotation_text="昨收"
         )
-    fig.update_layout(title=title, height=300, margin={"l": 10, "r": 10, "t": 40, "b": 10})
+    fig.update_layout(
+        title=title, height=300, margin={"l": 10, "r": 10, "t": 40, "b": 10}
+    )
     return fig
 
 
@@ -155,5 +157,7 @@ def factor_radar(factors: dict, top_n: int = 10, title: str = "因子雷达") ->
             name="因子值",
         )
     )
-    fig.update_layout(title=title, height=360, margin={"l": 40, "r": 40, "t": 40, "b": 10})
+    fig.update_layout(
+        title=title, height=360, margin={"l": 40, "r": 40, "t": 40, "b": 10}
+    )
     return fig

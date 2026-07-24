@@ -82,11 +82,11 @@ class ICScreener:
         # HAC 方差估计 (Bartlett kernel)
         gamma0 = float(((ic_series - mean_ic) ** 2).mean())
         hac_var = gamma0
-        for l in range(1, min(lag + 1, n)):
-            w = 1 - l / (lag + 1)  # Bartlett 权重
+        for ell in range(1, min(lag + 1, n)):
+            w = 1 - ell / (lag + 1)  # Bartlett 权重
             cov_l = float(
                 (
-                    (ic_series.iloc[l:] - mean_ic) * (ic_series.iloc[:-l] - mean_ic)
+                    (ic_series.iloc[ell:] - mean_ic) * (ic_series.iloc[:-ell] - mean_ic)
                 ).mean()
             )
             hac_var += 2 * w * cov_l

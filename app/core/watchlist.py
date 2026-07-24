@@ -64,9 +64,7 @@ class WatchlistManager:
             json.dump(self._data, f, ensure_ascii=False, indent=2)
         logger.info("Watchlist 已保存: %d 只股票", len(self._data["stocks"]))
 
-    def add(
-        self, symbol: str, note: str = "", tags: list[str] | None = None
-    ) -> None:
+    def add(self, symbol: str, note: str = "", tags: list[str] | None = None) -> None:
         """添加股票到重点关注.
 
         Args:
