@@ -48,8 +48,9 @@ def limit_up_price(pre_close: float, limit_pct: float) -> float:
 
 
 def is_limit_up(close: float, pre_close: float, limit_pct: float) -> bool:
-    """涨停判定: 精确比对, 非 0.998 容差."""
-    return abs(close - limit_up_price(pre_close, limit_pct)) < 0.01
+    """涨停判定: B5 相对容差 max(0.01, 涨停价×0.1%), 高价股0.1%低价股保底0.01."""
+    lu = limit_up_price(pre_close, limit_pct)
+    return abs(close - lu) < max(0.01, lu * 0.001)
 
 
 @dataclass
@@ -161,8 +162,9 @@ class CleaningPipeline:
             get_limit_pct(b, d) for b, d in zip(out["board"], out["date"])
         ]
         out["limit_up_price"] = (out["pre_close"] * (1 + out["limit_pct"])).round(2)
+        tol = np.maximum(0.01, out["limit_up_price"] * 0.001)  # B5: 相对容差
         out["is_limit_up_close"] = (
-            abs(out["close"] - out["limit_up_price"]) < 0.01
+            abs(out["close"] - out["limit_up_price"]) < tol
         ).astype(int)
         out["is_one_word_limit"] = (
             out["is_limit_up_close"].astype(bool)

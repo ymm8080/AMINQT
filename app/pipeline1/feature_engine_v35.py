@@ -49,6 +49,7 @@ class FeatureEngineV35:
         df = self.dim03_fundamentals(df)
         df = self.dim07_limit_gene(df)
         df = self.dim04_sector_effect(df)
+        df = self.dim_active_pit(df)  # §14.2.2 安全网 #15
         df = self.dim08_calendar_month(df)
         df = self.dim09_custom_formulas(df, float_shares_map)
         df = self.dim10_money_flow(df)
@@ -156,7 +157,9 @@ class FeatureEngineV35:
         """过去 10/20 日涨停天数 / 炸板率 / 连板高度 (0-4 截断, 4 为独立类别, V3.5 修正)."""
         if "is_limit_up" not in df.columns:
             lu_price = (df["pre_close"] * (1 + df["limit_pct"])).round(2)
-            df["is_limit_up"] = (abs(df["close"] - lu_price) < 0.01).astype(int)
+            df["is_limit_up"] = (
+                abs(df["close"] - lu_price) < np.maximum(0.01, lu_price * 0.001)
+            ).astype(int)  # B5: 相对容差
         g = df.groupby("symbol")["is_limit_up"]
         df["limit_up_days_10"] = g.rolling(10).sum().reset_index(level=0, drop=True)
         df["limit_up_days_20"] = g.rolling(20).sum().reset_index(level=0, drop=True)
@@ -190,6 +193,26 @@ class FeatureEngineV35:
             lambda s: s.rolling(5, min_periods=1).mean()
         )
         return df
+
+    # ---------------- §14.2.2 PIT 活跃度 (安全网 #15) ----------------
+    def dim_active_pit(self, df: pd.DataFrame) -> pd.DataFrame:
+        """活跃度 PIT 标签: 仅用 [T-252, T-1] 已实现数据, 严禁引用 T 及之后.
+
+        is_active = (turnover_rate_252d.mean() > 0.05) & (amplitude_252d.mean() > 0.05)
+        §14.2.4 #6: 8 模型回退时 is_active 降级为输入特征, 不做分训维度.
+        """
+
+        def per_stock(g: pd.DataFrame) -> pd.DataFrame:
+            tr = g["turnover_rate"]
+            # amplitude = (high - low) / pre_close, shift(1) 确保 PIT (不含 T)
+            amp = (g["high"] - g["low"]) / g["pre_close"].replace(0, np.nan)
+            g["is_active"] = (
+                tr.rolling(252, min_periods=60).mean().shift(1) > 0.05
+            ) & (amp.rolling(252, min_periods=60).mean().shift(1) > 0.05)
+            g["is_active"] = g["is_active"].astype(int)
+            return g
+
+        return _apply_per_stock(df, per_stock)
 
     # ---------------- ⑧日历效应-月份 ----------------
     @staticmethod

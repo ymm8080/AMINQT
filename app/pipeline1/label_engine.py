@@ -3,7 +3,7 @@
 标签引擎 (DESIGN §14.1 安全网 #1/#7/#13, PIPELINE1_V3.5 §〇.1)
 =================================================================
 - 一律后复权价 (hfq); 早盘 pipeline 标签独立 (open(T+1) 基准)
-- 横截面 1%/99% 缩尾; 停牌污染置 NaN; 实盘训练遮蔽最近 5 天
+- 横截面 0.1%/99.9% 缩尾 (B2); 停牌污染置 NaN; 实盘训练遮蔽最近 5 天
 - 各模型各自 dropna (per-model), 不统一剔除
 """
 
@@ -42,9 +42,9 @@ class LabelEngine:
     # ---------------- 缩尾 ----------------
     @staticmethod
     def winsorize_cross_section(
-        df: pd.DataFrame, lower: float = 0.01, upper: float = 0.99
+        df: pd.DataFrame, lower: float = 0.001, upper: float = 0.999
     ) -> pd.DataFrame:
-        """横截面分位缩尾 (按 date 分组), 防止极值主导损失."""
+        """横截面分位缩尾 (按 date 分组), B2: 0.1%/99.9% 仅防数据错误, 保留尾部真实收益."""
         for col in [f"label_{k}d" for k in LABEL_HORIZONS]:
             df[col] = df.groupby("date")[col].transform(
                 lambda x: x.clip(x.quantile(lower), x.quantile(upper))
