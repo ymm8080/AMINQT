@@ -241,8 +241,9 @@ class BacktestEngine:
             )
         if self.ctrl_rising_col in panel.columns:
             labeled = panel.dropna(subset=["fwd_ret"])
-            rising = labeled.loc[labeled[self.ctrl_rising_col] == True, "fwd_ret"]
-            falling = labeled.loc[labeled[self.ctrl_rising_col] == False, "fwd_ret"]
+            ctrl_mask = labeled[self.ctrl_rising_col]
+            rising = labeled.loc[ctrl_mask.eq(True), "fwd_ret"]
+            falling = labeled.loc[ctrl_mask.eq(False), "fwd_ret"]
             rising_ret = float(rising.mean()) if len(rising) else 0.0
             falling_ret = float(falling.mean()) if len(falling) else 0.0
             result.ctrl_ratio_weekly_rising_return = float(
