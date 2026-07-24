@@ -22,10 +22,12 @@ from app.pipeline1.list_generator import (
     ListDeliveryGuard,
     ListGenerator,
     MarketEnv,
+    ProvenanceTracker,
     check_invalidation,
 )
 from app.pipeline1.oos_monitor import OOSMonitor
 from app.pipeline1.prob_calibrator import ProbCalibrator
+from app.pipeline1.serenity_overlay import SerenityOverlay
 
 
 # ============================================================
@@ -268,6 +270,77 @@ class TestFeatures:
         # 第 252 行后应有非零值 (252 日窗口满足)
         assert out["is_active"].iloc[-1] in (0, 1)
 
+    def test_alpha_factors_dim15(self):
+        """dim15: Alpha101 + GTJA191 精选因子产出 + groupby(symbol) 无跨股泄漏."""
+        df = make_panel(symbols=("600519", "300750"), days=60)
+        eng = FeatureEngineV35()
+        out = eng.dim15_alpha_factors(df)
+        for col in (
+            "alpha006",
+            "alpha012",
+            "alpha041",
+            "alpha042_ts",
+            "alpha054_ts",
+            "gtja_001_ts",
+            "gtja_004",
+        ):
+            assert col in out.columns, col
+        # groupby 检查: 每股 alpha006 首 9 日为 NaN (10 日窗口)
+        sub = out[out["symbol"] == "600519"]
+        assert sub["alpha006"].iloc[:9].isna().all()
+        assert sub["alpha006"].iloc[9] == pytest.approx(
+            sub["open"].iloc[:10].corr(sub["volume"].iloc[:10]) * -1
+        )
+        # gtja_004: 10 日窗口, 首 9 日 NaN
+        assert sub["gtja_004"].iloc[:9].isna().all()
+
+    def test_candlestick_dim16(self):
+        """dim16: 6 个 K 线形态二值特征."""
+        df = make_panel(symbols=("600519",), days=30)
+        eng = FeatureEngineV35()
+        out = eng.dim16_candlestick(df)
+        for col in (
+            "bullish_engulfing",
+            "bearish_engulfing",
+            "hammer",
+            "shooting_star",
+            "morning_star",
+            "evening_star",
+        ):
+            assert col in out.columns, col
+            assert set(out[col].dropna().unique()) <= {0, 1}
+
+    def test_extended_factors_dim17(self):
+        """dim17: Amihud + Fisher + FearGreed."""
+        df = make_panel(symbols=("600519",), days=60)
+        eng = FeatureEngineV35()
+        out = eng.dim17_extended_factors(df)
+        for col in ("amihud_illiq", "fisher_transform", "fear_greed"):
+            assert col in out.columns, col
+        # Amihud: 首 4 日 NaN (min_periods=5)
+        assert out["amihud_illiq"].iloc[:4].isna().all()
+        # Fisher: 首 19 日 NaN (20 日窗口)
+        assert out["fisher_transform"].iloc[:19].isna().all()
+
+    def test_lhb_dim18_no_data(self):
+        """dim18: 无 LHB 数据时填 NaN."""
+        df = make_panel(symbols=("600519",), days=30)
+        eng = FeatureEngineV35()
+        out = eng.dim18_lhb(df)
+        for col in ("lhb_net_buy_5d", "lhb_inst_count_5d", "lhb_hot_money_5d"):
+            assert col in out.columns, col
+            assert out[col].isna().all()
+
+    def test_lhb_dim18_with_data(self):
+        """dim18: 有 LHB 数据时计算 5 日均值 + shift(1) PIT."""
+        df = make_panel(symbols=("600519",), days=30)
+        df["lhb_net_buy"] = 1e8
+        eng = FeatureEngineV35()
+        out = eng.dim18_lhb(df)
+        assert "lhb_net_buy_5d" in out.columns
+        assert pd.isna(out["lhb_net_buy_5d"].iloc[0])  # shift(1)
+        assert not pd.isna(out["lhb_net_buy_5d"].iloc[1])
+
 
 # ============================================================
 # IC 筛选
@@ -441,6 +514,49 @@ class TestListGenerator:
         assert check_invalidation(0, False, -3.5, 0) is not None
         assert check_invalidation(0, False, 0, 7.5) is not None
         assert check_invalidation(2.0, False, -1.0, 3.0) is None
+
+    def test_provenance_tracker(self):
+        """ProvenanceTracker: 记录数据来源/模型版本."""
+        tracker = ProvenanceTracker()
+        tracker.record("600519", data_source="baostock", model_tag="main_v352")
+        meta = tracker.get("600519")
+        assert meta["data_source"] == "baostock"
+        assert meta["model_tag"] == "main_v352"
+        frame = tracker.to_frame()
+        assert len(frame) == 1
+        assert "symbol" in frame.columns
+
+
+class TestSerenityOverlay:
+    def test_score_computation(self):
+        """SerenityOverlay: 加权因子 - 罚分×2."""
+        overlay = SerenityOverlay()
+        factors = {"demand_inflection": 4, "chokepoint_severity": 3}
+        penalties = {"governance": 2}
+        score = overlay.compute_score(factors, penalties)
+        # 4*15 + 3*15 = 105; penalty = 2*2 = 4; score = 105 - 4 = 101
+        assert score == pytest.approx(101)
+
+    def test_apply_filters_low_score(self):
+        """SerenityOverlay: < 40 分的票从清单移除."""
+        lst = pd.DataFrame({"symbol": ["600000", "600001"], "score": [0.5, 0.3]})
+        scorecard = {
+            "600000": {"factors": {"demand_inflection": 4}, "penalties": {}},
+            "600001": {"factors": {}, "penalties": {"governance": 5}},
+        }
+        overlay = SerenityOverlay()
+        result = overlay.apply(lst, scorecard)
+        # 600000: 4*15=60 >= 40 -> 保留
+        assert "600000" in set(result["symbol"])
+        # 600001: 0 - 5*2*2=-20 < 40 -> 移除
+        assert "600001" not in set(result["symbol"])
+
+    def test_apply_no_scorecard_passthrough(self):
+        """无质化数据时原样返回."""
+        lst = pd.DataFrame({"symbol": ["600000"]})
+        overlay = SerenityOverlay()
+        result = overlay.apply(lst, None)
+        assert len(result) == 1
 
 
 # ============================================================
