@@ -149,13 +149,15 @@ class TestCleaning:
         assert state == "empty"  # 剩 1 只 < 15
 
     def test_delisted_virtual_rows(self):
-        """安全网 #14: 退市股虚拟 T+1 = 收盘×0.5."""
+        """安全网 #14: 退市股虚拟 T+1 = 收盘×0.5; [B18] is_virtual 标记."""
         df = make_panel(symbols=("600519",), days=30)
         out = CleaningPipeline().inject_delisted_virtual_rows(df, ["600519"])
         last = out[out["symbol"] == "600519"].iloc[-1]
         prev_close = df["close"].iloc[-1]
         assert last["close"] == pytest.approx(prev_close * 0.5)
         assert len(out) == 31
+        assert last["is_virtual"] == 1  # B18: 虚拟行标记
+        assert (out.iloc[:-1]["is_virtual"] == 0).all()  # 真实行=0
 
 
 # ============================================================
@@ -180,6 +182,40 @@ class TestLabels:
         raw_c = df["close_hfq"].values
         raw_o = df["open"].values
         assert out["label_1d"].iloc[0] == pytest.approx(raw_c[1] / raw_o[1] - 1)
+
+    def test_label_pm_kd_b9(self):
+        """B9: 晚盘验收标签 label_pm_kd = close_hfq(T+1+k)/price_1455(T+1) - 1."""
+        df = make_panel(symbols=("600519",), days=30)
+        df["price_1455"] = df["close"] * 0.99  # 模拟 14:55 价
+        out = LabelEngine.build_labels(df)  # 默认 PM
+        raw_c = df["close_hfq"].values
+        raw_p = df["price_1455"].values
+        # T=0: label_pm_1d = close(T+2)/price_1455(T+1) - 1
+        assert out["label_pm_1d"].iloc[0] == pytest.approx(raw_c[2] / raw_p[1] - 1)
+        assert out["label_pm_3d"].iloc[0] == pytest.approx(raw_c[4] / raw_p[1] - 1)
+        # 研究口径 label_kd 仍保留 (close(T) 基准)
+        assert out["label_1d"].iloc[0] == pytest.approx(raw_c[1] / raw_c[0] - 1)
+
+    def test_label_pm_kd_b9_daily_proxy(self):
+        """B9 日K近似: 无 price_1455 列时用 close(T+1) 代理."""
+        df = make_panel(symbols=("600519",), days=30)
+        out = LabelEngine.build_labels(df)
+        raw_c = df["close_hfq"].values
+        assert out["label_pm_1d"].iloc[0] == pytest.approx(raw_c[2] / raw_c[1] - 1)
+
+    def test_winsorize_virtual_exemption_b18(self):
+        """B18: is_virtual=1 退市虚拟样本豁免缩尾 (-50% 不被剪, 不参与分位)."""
+        df = make_panel(symbols=("600519", "300750", "601318"), days=60)
+        out = LabelEngine.build_labels(df)
+        out["is_virtual"] = 0
+        # 注入虚拟行: 某日期 label_1d = -0.5
+        vrow = out.iloc[[0]].copy()
+        vrow["label_1d"] = -0.5
+        vrow["is_virtual"] = 1
+        out = pd.concat([out, vrow], ignore_index=True)
+        clipped = LabelEngine.winsorize_cross_section(out)
+        virtual = clipped[clipped["is_virtual"] == 1]
+        assert virtual["label_1d"].iloc[0] == pytest.approx(-0.5)  # 未被缩尾
 
     def test_winsorize(self):
         """B2: 缩尾 0.1%/99.9% 仅防数据错误, 保留尾部真实收益."""
@@ -601,3 +637,37 @@ class TestOOSMonitor:
             m.daily_check(0.005)  # 连续 2 月 IC < 0.01
         r = m.kill_switch_check()
         assert r["retire"] and m.state == "RETIRED"
+
+
+# ============================================================
+# 数据供应链 [B11]
+# ============================================================
+class TestDataSupplyB11:
+    def test_check_backfill_depth(self):
+        """B11: ≥1250 交易日 → 720 窗口; 不足 → 540 过渡; 空面板 → False."""
+        from app.pipeline1.data_supply import DataSupplyChain
+
+        chain = DataSupplyChain()
+        deep = make_panel(symbols=("600519",), days=1300)
+        assert chain.check_backfill_depth(deep) is True
+        shallow = make_panel(symbols=("600519",), days=300)
+        assert chain.check_backfill_depth(shallow) is False
+        assert chain.check_backfill_depth(pd.DataFrame()) is False
+
+    def test_backfill_ohlcv_mock(self, tmp_path):
+        """B11: backfill_ohlcv 逐股拉取 ≥5 年历史, 单股失败告警跳过不中断."""
+        from app.pipeline1.data_supply import DataSupplyChain
+
+        hist = make_panel(symbols=("600519",), days=1300).drop(columns=["board"])
+
+        def mock_hist(symbol, start, end):
+            if symbol == "300750":
+                from app.pipeline1.data_supply import DataSupplyError
+
+                raise DataSupplyError("mock 失败")
+            return hist[hist["symbol"] == "600519"].reset_index(drop=True)
+
+        chain = DataSupplyChain(cache_dir=str(tmp_path), fetcher_hist=mock_hist)
+        panel = chain.backfill_ohlcv(["600519", "300750"], years=5, end="2026-07-24")
+        assert set(panel["symbol"]) == {"600519"}  # 失败股被跳过
+        assert chain.check_backfill_depth(panel) is True

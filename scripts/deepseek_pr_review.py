@@ -174,19 +174,30 @@ def review_with_deepseek(diff: str, api_key: str, model: str, base_url: str) -> 
 
     system_prompt = """You are a code reviewer for a Python quant trading platform (AMINQT).
 Review the PR diff and identify:
-1. Future function violations (shift(-k) is FORBIDDEN)
-2. Missing risk_filter before trading logic
-3. Missing try-except error handling
+1. Future function violations: shift(-k) is FORBIDDEN in FEATURE computation \
+(look-ahead bias). Label construction legitimately references future prices \
+(e.g. label_kd = close[T+k]/close[T]-1) — this is NOT a violation. Functions \
+named _label_reference, build_labels, or mask_suspension operate on labels, \
+not features — do NOT flag them as future function violations.
+2. Missing risk_filter before trading logic (not needed in label/cleaning steps)
+3. Missing try-except error handling (only for network/API calls, file I/O, \
+model.fit/predict, or external library calls that may raise unexpectedly; \
+simple numpy/pandas operations like np.nan_to_num, boolean masking, and \
+arithmetic do NOT need try-except)
 4. Hardcoded credentials
 5. String date comparison (must use datetime objects)
 6. Missing logging (print is forbidden except SimExecutor)
-7. Missing np.nan_to_num before model input
+7. Missing np.nan_to_num before model input (only for FEATURE matrices fed to \
+model.fit/predict; label arrays (y) do NOT need nan_to_num. If np.nan_to_num \
+is already called on the feature variable in the diff, do NOT flag it)
 8. Division without safe_divide (zero division risk)
 
 Respond in JSON format:
 {"issues": [{"file": "...", "line": "...", "severity": "critical|warning|info", "message": "..."}], "summary": "one-line summary"}
 
 If no issues found: {"issues": [], "summary": "No issues found."}
+
+Keep messages concise (one sentence per issue). Only report real violations.
 """
 
     # ── Thinking mode control ──────────────────────────────────
@@ -197,86 +208,114 @@ If no issues found: {"issues": [], "summary": "No issues found."}
     #
     # Code review is a checklist task; disable thinking for predictable
     # token usage and faster responses.
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": f"Review this PR diff:\n\n```\n{diff}\n```",
-            },
-        ],
-        "temperature": 0.1,
-        "max_tokens": 8000,
-        "response_format": {"type": "json_object"},
-        "thinking": {"type": "disabled"},
-    }
-
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        f"{base_url}/chat/completions",
-        data=data,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": f"Review this PR diff:\n\n```\n{diff}\n```",
         },
-    )
+    ]
 
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-            msg = result["choices"][0]["message"]
-            content = msg.get("content") or ""
-            reasoning = msg.get("reasoning_content") or ""
-            parsed = _extract_json(content)
-            if parsed is not None:
-                return parsed
-            # content empty or unparseable — log details for debugging
-            finish_reason = result.get("choices", [{}])[0].get(
-                "finish_reason", "unknown"
-            )
-            logger.error(
-                "Could not parse review response. "
-                "finish_reason=%s, content (first 500): %r, "
-                "reasoning_content (first 300): %r",
-                finish_reason,
-                content[:500],
-                reasoning[:300],
-            )
-            if not content.strip() and reasoning:
+    max_tokens = 16000
+    for attempt in range(3):
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.1,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+            "thinking": {"type": "disabled"},
+        }
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            f"{base_url}/chat/completions",
+            data=data,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                msg = result["choices"][0]["message"]
+                content = msg.get("content") or ""
+                reasoning = msg.get("reasoning_content") or ""
+                parsed = _extract_json(content)
+                if parsed is not None:
+                    return parsed
+                finish_reason = result.get("choices", [{}])[0].get(
+                    "finish_reason", "unknown"
+                )
+                logger.error(
+                    "Could not parse review response (attempt %d). "
+                    "finish_reason=%s, content (first 500): %r, "
+                    "reasoning_content (first 300): %r",
+                    attempt + 1,
+                    finish_reason,
+                    content[:500],
+                    reasoning[:300],
+                )
+                # Retry on truncation with doubled max_tokens
+                if finish_reason == "length" and attempt < 2:
+                    max_tokens *= 2
+                    logger.info(
+                        "Retrying with max_tokens=%d due to finish_reason=length",
+                        max_tokens,
+                    )
+                    continue
+                if finish_reason == "length":
+                    return {
+                        "issues": [],
+                        "summary": (
+                            "Review failed: response truncated after "
+                            "max retries (finish_reason=length). "
+                            "Consider reducing diff size."
+                        ),
+                        "error": True,
+                    }
+                if not content.strip() and reasoning:
+                    return {
+                        "issues": [],
+                        "summary": (
+                            "Review failed: model returned empty content "
+                            "(reasoning consumed token budget). "
+                            "Consider increasing max_tokens."
+                        ),
+                        "error": True,
+                    }
                 return {
                     "issues": [],
-                    "summary": (
-                        "Review failed: model returned empty content "
-                        "(reasoning consumed token budget). "
-                        "Consider increasing max_tokens."
-                    ),
+                    "summary": "Could not parse review response.",
                     "error": True,
                 }
+        except HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", errors="replace")[:500]
+            except Exception:
+                pass
+            logger.error("DeepSeek API HTTP %s: %s", e.code, body)
             return {
                 "issues": [],
-                "summary": "Could not parse review response.",
+                "summary": f"Review failed: HTTP {e.code} — {body}",
                 "error": True,
             }
-    except HTTPError as e:
-        body = ""
-        try:
-            body = e.read().decode("utf-8", errors="replace")[:500]
-        except Exception:
-            pass
-        logger.error("DeepSeek API HTTP %s: %s", e.code, body)
-        return {
-            "issues": [],
-            "summary": f"Review failed: HTTP {e.code} — {body}",
-            "error": True,
-        }
-    except Exception as e:
-        logger.error(f"DeepSeek API error: {e}")
-        return {
-            "issues": [],
-            "summary": f"Review failed: {e}",
-            "error": True,
-        }
+        except Exception as e:
+            logger.error(f"DeepSeek API error: {e}")
+            return {
+                "issues": [],
+                "summary": f"Review failed: {e}",
+                "error": True,
+            }
+
+    return {
+        "issues": [],
+        "summary": "Review failed: response truncated after 3 retries.",
+        "error": True,
+    }
 
 
 def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:

@@ -190,7 +190,13 @@ class CleaningPipeline:
     def inject_delisted_virtual_rows(
         self, df: pd.DataFrame, delisted_symbols: list[str]
     ) -> pd.DataFrame:
-        """退市股虚拟 T+1: 收盘价×0.5, label_1d=-50%, 让模型学到归零风险."""
+        """退市股虚拟 T+1: 收盘价×0.5, label_1d=-50%, 让模型学到归零风险.
+
+        [B18] 标记 is_virtual=1 (真实行=0): label_engine 缩尾时豁免,
+        防止 -50% 被剪至当日 0.1% 分位.
+        """
+        if "is_virtual" not in df.columns:
+            df["is_virtual"] = 0
         rows = []
         for sym in delisted_symbols:
             sub = df[df["symbol"] == sym]
@@ -200,6 +206,7 @@ class CleaningPipeline:
             last["date"] = last["date"] + pd.Timedelta(days=1)
             last["close"] = last["close"] * (1 + self.cfg.delisted_virtual_ret)
             last["close_hfq"] = last["close_hfq"] * (1 + self.cfg.delisted_virtual_ret)
+            last["is_virtual"] = 1
             rows.append(last)
         if rows:
             df = pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
