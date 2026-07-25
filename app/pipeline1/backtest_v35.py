@@ -1,14 +1,19 @@
 """
-回测引擎 — V3.5 回测协议 (DESIGN §14.5, 实施计划 P9/P14.4)
-================================================================
+回测引擎 — V3.8 回测协议 (DESIGN §14.5, 实施计划 P9/P14.4, PIPELINE1_V3.8 §四 bis)
+================================================================================
 协议 (不可违背):
-  成交价: 晚盘 14:55 + 滑点0.05% / 早盘 09:35 VWAP + 滑点0.05%; 严禁裸收盘价
+  成交价: 晚盘 14:55 + 分层滑点 [E5] / 早盘 09:35 VWAP + 分层滑点; 严禁裸收盘价
           [日K近似] 日线数据无 14:55/VWAP, 买入用 T+1 open (早盘口径) 或 T close (晚盘口径),
-          统一加固定滑点 — 文档化近似, 上分钟数据后替换.
+          统一加分层滑点 — 文档化近似, 上分钟数据后替换.
+  [E5] 滑点分层 (按 ADV20): >5亿→0.05% / 1~5亿→0.10% / <1亿→0.15% (双边计入);
+       panel 无 adv20 列时回退固定滑点. slippage_multiplier=2 即 2 倍滑点敏感性测试
+       (E5 强制门禁: 2倍滑点下净年化超额 ≥5% 方算稳健).
   涨跌停: T+1 一字涨停买单放弃; 跌停卖单顺延至下一可交易日
   资金: 等权 1/Top_N, 单票 <= 10%, 行业 <= 4 只 (数量约束)
-  成本: 佣金万2.5(双边) + 印花税0.05%(卖出) + 滑点0.05%(双边) ≈ round trip 0.13%
-  验收: 扣费后净超额 vs 基准 (默认中证1000, 可注入任意基准序列)
+  成本: 佣金万2.5(双边) + 印花税0.05%(卖出) + 分层滑点 [E5]
+  验收: 扣费后净超额 vs 基准 (默认中证1000, 可注入任意基准序列); Sortino 为主目标 [E11]
+  [E9/E11] daily_multiplier 钩子: 波动率熔断/熊市协议的仓位乘数按日注入;
+           空仓期现金按 cash_yield_annual 计逆回购收益 (E11 熊市协议回测口径).
 持仓约束: 最多 max_hold_days 个交易日 (可调参).
 """
 
@@ -21,20 +26,23 @@ import numpy as np
 import pandas as pd
 
 from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
+from app.pipeline1.label_engine import slippage_tier
 
 logger = logging.getLogger(__name__)
 
 COMMISSION = 0.00025  # 万2.5 双边
 STAMP_TAX = 0.0005  # 印花税 0.05% 仅卖出
-SLIPPAGE = 0.0005  # 固定滑点 0.05% 双边
+SLIPPAGE = 0.0005  # 固定滑点 0.05% 双边 (panel 无 adv20 时回退)
 
 
 @dataclass
 class BacktestProtocol:
-    """V3.5 回测协议参数."""
+    """V3.8 回测协议参数."""
 
     exec_session: str = "AM"  # "AM" 早盘 T+1 open / "PM" 晚盘 T close
     slippage: float = SLIPPAGE
+    tiered_slippage: bool = True  # [E5] 按 ADV20 分层 (panel 需含 adv20 列)
+    slippage_multiplier: float = 1.0  # [E5] 2.0 = 2倍滑点敏感性测试 (上线门禁)
     commission: float = COMMISSION
     stamp_tax: float = STAMP_TAX
     top_n: int = 15
@@ -46,6 +54,7 @@ class BacktestProtocol:
     trailing_drawdown: float = 0.04  # [TUNABLE] 移动止盈: 高点回撤
     prob_exit: float = 0.50  # [TUNABLE] 概率衰减退出
     exec_price_col: str = "open"  # AM 口径
+    cash_yield_annual: float = 0.0  # [E11] 空仓资金逆回购/货基年化 (≈2%)
 
 
 @dataclass
@@ -81,6 +90,12 @@ class BacktestEngineV35:
             return None
         return g.loc[symbol]
 
+    def _slippage_for(self, bar: pd.Series) -> float:
+        """[E5] 分层滑点 (ADV20 三档) × 敏感性乘数; 无 adv20 列回退固定滑点."""
+        if self.cfg.tiered_slippage and "adv20" in bar.index:
+            return slippage_tier(bar["adv20"]) * self.cfg.slippage_multiplier
+        return self.cfg.slippage * self.cfg.slippage_multiplier
+
     def _exec_buy_price(self, date, symbol) -> float | None:
         """成交价 (协议 §1): AM = T+1 open × (1+滑点); 一字涨停放弃 (协议 §2)."""
         bar = self._bar(date, symbol)
@@ -91,7 +106,7 @@ class BacktestEngineV35:
         open_px = bar["open"] if self.cfg.exec_session == "AM" else bar["close"]
         if abs(open_px - lu) < 0.01:
             return None  # 一字涨停, 买单放弃
-        return open_px * (1 + self.cfg.slippage)
+        return open_px * (1 + self._slippage_for(bar))
 
     def _exec_sell_price(self, date, symbol) -> float | None:
         """跌停顺延: 返回 None 表示当日不可卖."""
@@ -103,7 +118,7 @@ class BacktestEngineV35:
         px = bar["open"] if self.cfg.exec_session == "AM" else bar["close"]
         if abs(px - ld) < 0.01:
             return None  # 跌停, 卖单顺延
-        return px * (1 - self.cfg.slippage)
+        return px * (1 - self._slippage_for(bar))
 
     @staticmethod
     def _costs(buy_amount: float, sell_amount: float, cfg: BacktestProtocol) -> float:
@@ -117,6 +132,7 @@ class BacktestEngineV35:
         daily_lists: dict,
         benchmark: pd.Series | None = None,
         initial_capital: float = 1_000_000,
+        daily_multiplier: dict | None = None,
     ) -> dict:
         """执行回测.
 
@@ -125,6 +141,8 @@ class BacktestEngineV35:
                          每日候选清单 (由 ListGenerator 或 mock 提供), T 日清单 T+1 执行
             benchmark:   基准日收益序列 (index=date), 默认 0 (绝对收益)
             initial_capital: 初始资金
+            daily_multiplier: {date: 仓位乘数} [E9 波动率熔断 / E11 熊市协议按日注入];
+                              缺省 1.0, 0.0 = 当日不开新仓
 
         Returns:
             {nav_curve, trades, metrics}
@@ -133,9 +151,12 @@ class BacktestEngineV35:
         cash, positions = initial_capital, {}
         nav_hist, trades = [], []
         bench = benchmark if benchmark is not None else pd.Series(0.0, index=self.dates)
+        daily_multiplier = daily_multiplier or {}
+        cash_yield_daily = cfg.cash_yield_annual / 252
 
         for i, date in enumerate(self.dates):
             self._by_date[date]
+            cash *= 1 + cash_yield_daily  # [E11] 空仓资金逆回购收益计入
 
             # ---- 1. 持仓估值 + 退出裁决 (止损/移动止盈/概率衰减/到期) ----
             for sym in list(positions):
@@ -178,7 +199,8 @@ class BacktestEngineV35:
             # ---- 2. 执行昨日清单买入 (T+1) ----
             prev_date = self.dates[i - 1] if i > 0 else None
             lst = daily_lists.get(prev_date) if prev_date is not None else None
-            if lst is not None and len(lst):
+            multiplier = float(daily_multiplier.get(date, 1.0))  # [E9/E11]
+            if lst is not None and len(lst) and multiplier > 0:
                 lst = lst[~lst["symbol"].isin(positions)]
                 # 行业数量约束
                 ind_count = {}
@@ -205,6 +227,7 @@ class BacktestEngineV35:
                     for s, p in positions.items()
                 )
                 budget = min(nav_now * min(1 / cfg.top_n, cfg.single_max), cash)
+                budget *= multiplier  # [E9/E11] 仓位乘数 (熔断/熊市协议)
                 for row in picks:
                     px = self._exec_buy_price(date, row["symbol"])
                     if px is None or budget < nav_now * 0.03:
@@ -272,6 +295,13 @@ class BacktestEngineV35:
         excess_ann = float(excess_series.mean() * 252)
         dd = (nav / nav.cummax() - 1).min()
         sharpe = float(ret.mean() / ret.std() * np.sqrt(252)) if ret.std() > 0 else 0.0
+        # [E11] Sortino (主目标): 只惩罚下行波动
+        downside = ret[ret < 0]
+        sortino = (
+            float(ret.mean() / downside.std() * np.sqrt(252))
+            if len(downside) > 1 and downside.std() > 0
+            else 0.0
+        )
         return {
             "total_return": float(nav.iloc[-1] / initial - 1),
             "annual_return": float(ann),
@@ -279,5 +309,6 @@ class BacktestEngineV35:
             "net_excess_annual": excess_ann,  # 扣费后净超额 (验收口径)
             "max_drawdown": float(dd),
             "sharpe": sharpe,
+            "sortino": sortino,  # [E11] 主目标 ≥ 1.5
             "n_days": len(nav),
         }

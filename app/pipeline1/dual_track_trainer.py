@@ -1,14 +1,18 @@
 """
-双轨训练器 (DESIGN §14.4, PIPELINE1_V3.5 §二/§七)
+双轨训练器 (DESIGN §14.4, PIPELINE1_V3.8 §二/§四/§七)
 =====================================================
 LightGBM 双轨×8: (1d_reg Huber + 1d_cls binary + 3d_reg + 5d_reg) × (主板/双创).
 **日线预测只用本地 LightGBM 模型 (用户 2026-07-22 裁决), 无云端/ONNX/LSTM 依赖.**
-- 720 日滚动窗口 [B21③]: 训练670 / 早停20 / 校准20 (与验证物理隔离!) / 测试10 (仅月度归因)
-- [B11] OHLCV 回填达标 (<1250 交易日) 前首个训练窗口降为 540 日过渡, 达标后恢复 720 日
+- [V3.8] 750 日滚动窗口: 训练620 / 早停20 / 校准20 (与验证物理隔离!) / 测试90; patience=100
+- [B11] OHLCV 回填达标 (<1250 交易日) 前首个训练窗口降为 540 日过渡, 达标后恢复 750 日
 - [B10] 半衰期加权 250 天, 方向断言 weights[-1] > weights[0] (最新样本权重=1.0)
 - [B9] PM 验收标签 label_pm_kd 存在时优先于研究口径 label_kd
-- Huber loss; early_stopping patience=50
-- 超参纪律: 年度贝叶斯调优 (≤50 组), 每周仅固定超参重训
+- [E5] 净收益标签 label_*_net 存在时优先 (滑点分层口径, 训练/验收主标签)
+- [E1] 分位数五模型 (q10/25/50/75/90, label_1d_net) + 保序单调性后处理
+- [E2] 痛苦预警模型 (label_pain 分类 → pain_prob)
+- [E1] 概率校准 Platt → Isotonic (月度滚动重校)
+- Huber loss; early_stopping patience=100 (V3.8 §2.1)
+- 超参纪律: 年度贝叶斯调优 (≤50 组), 每月仅重训; E1 分位数模型沿用回归超参不单独搜索
 - **每周一次全局重训 (用户 2026-07-22 裁决: 周频, 非月频)**:
   每周第一个交易日 15:30 启动 (T-1 数据), 16:00 旧模型出清单, 18:00 前切换
 - 重训与清单生成解耦 (重训绝不阻塞当日清单)
@@ -25,14 +29,14 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-WINDOW_TOTAL = 720
+WINDOW_TOTAL = 750  # [V3.8] 620/20/20/90
 WINDOW_TRANSITION = 540  # [B11] 回填达标前过渡窗口
-TRAIN_DAYS = 670  # [B21③] 670/20/20/10
+TRAIN_DAYS = 620  # [V3.8] 训练 620 天
 ES_DAYS = 20  # 早停验证
 CALIB_DAYS = 20  # 校准 (与早停物理隔离)
-TEST_DAYS = 10  # 测试 (仅月度归因, 严禁反向调参)
+TEST_DAYS = 90  # 测试 (仅归因, 严禁反向调参)
 HALF_LIFE = 250  # 半衰期加权 (天)
-ES_PATIENCE = 50
+ES_PATIENCE = 100  # [V3.8 §2.1] patience=100
 OOS_IC_MIN = 0.03  # 新模型切换门槛
 
 LGB_PARAMS_REG = {
@@ -78,11 +82,11 @@ class DualTrackTrainer:
     def split_window(
         df: pd.DataFrame, window_total: int = WINDOW_TOTAL
     ) -> dict[str, pd.DataFrame]:
-        """滚动窗口四段切分 [B21③]: train / es / calib / test = 670/20/20/10 (720 窗口).
+        """滚动窗口四段切分 [V3.8 §2.1]: train / es / calib / test = 620/20/20/90 (750 窗口).
 
         校准集与早停验证集物理隔离, 否则校准器学到被调参挑剩下的噪声.
         [B11] window_total=540 为回填达标前过渡窗口 (es/calib/test 段长不变,
-        仅压缩 train 段), 达标后恢复 720.
+        仅压缩 train 段), 达标后恢复 750.
         """
         n_es_calib_test = ES_DAYS + CALIB_DAYS + TEST_DAYS
         train_days = window_total - n_es_calib_test
@@ -130,6 +134,9 @@ class DualTrackTrainer:
             pm_label = f"label_pm_{kind[0]}d"
             if pm_label in segs["train"].columns:
                 label = pm_label
+            # [E5] 净收益标签 (分层滑点) 优先于毛收益 — 训练/验收主标签口径 (D1)
+            if f"{label}_net" in segs["train"].columns:
+                label = f"{label}_net"
         train = segs["train"].dropna(subset=[label])  # per-model dropna (安全网 #7)
         es = segs["es"].dropna(subset=[label])
         train = risk_filter(train)
@@ -157,11 +164,14 @@ class DualTrackTrainer:
             raise
         return model, label
 
-    # ---------------- 窗口训练 (单板块 4 模型) ----------------
+    # ---------------- 窗口训练 (单板块 4 模型 + E1/E2) ----------------
     def train_window(
         self, df: pd.DataFrame, board: str, feature_cols: list[str]
     ) -> dict:
-        """训练一个板块的 4 个模型. 返回 {kind: (model, label)} + 元数据."""
+        """训练一个板块的 4 个模型 + E1 分位数五模型 + E2 痛苦预警 (标签齐备时).
+
+        返回 {kind: (model, label)} + 元数据 + ['quantile_models'/'pain_model'].
+        """
         segs = self.split_window(df)
         out = {"board": board, "feature_cols": feature_cols, "models": {}, "segs": segs}
         for kind in MODEL_KINDS:
@@ -173,19 +183,77 @@ class DualTrackTrainer:
                 kind,
                 len(segs["train"].dropna(subset=[label])),
             )
+        self._train_extras(out)
         return out
+
+    # ---------------- E1/E2: 分位数 + 痛苦预警 ----------------
+    def _train_extras(self, out: dict) -> None:
+        """[E1] 分位数五模型 (label_1d_net) + [E2] 痛苦预警 (label_pain).
+
+        E1 沿用回归超参, 不单独搜索 (V3.8 §2.2, 避免调参维度爆炸).
+        标签缺失时跳过 (向后兼容旧面板).
+        """
+        from .quantile_models import PainModel, QuantileModelSet
+
+        segs, cols = out["segs"], out["feature_cols"]
+
+        def _xy(seg_name: str, label: str):
+            sub = risk_filter(segs[seg_name].dropna(subset=[label]))
+            X = np.nan_to_num(sub[cols].values, nan=0.0)
+            return sub, X, sub[label].values
+
+        # E1: label 偏好 label_pm_1d_net → label_1d_net → label_1d (与 _train_one 同口径)
+        q_label = next(
+            (
+                c
+                for c in ("label_pm_1d_net", "label_1d_net", "label_1d")
+                if c in segs["train"].columns
+            ),
+            None,
+        )
+        if q_label is not None:
+            train, X, y = _xy("train", q_label)
+            _, X_es, y_es = _xy("es", q_label)
+            # E1 沿用回归超参 (objective 由 QuantileModelSet 按分位设置)
+            params = {k: v for k, v in LGB_PARAMS_REG.items() if k != "objective"}
+            qset = QuantileModelSet(params).fit(
+                X,
+                y,
+                sample_weight=self.time_weights(train),
+                eval_set=(X_es, y_es) if len(y_es) else None,
+                es_patience=ES_PATIENCE,
+            )
+            qset.label_ = q_label
+            out["quantile_models"] = qset
+            logger.info("[%s] E1 分位数五模型训练完成 (label=%s)", out["board"], q_label)
+
+        if "label_pain" in segs["train"].columns:
+            train, X, y = _xy("train", "label_pain")
+            _, X_es, y_es = _xy("es", "label_pain")
+            params = {k: v for k, v in LGB_PARAMS_CLS.items() if k != "objective"}
+            pain = PainModel(params).fit(
+                X,
+                y,
+                sample_weight=self.time_weights(train),
+                eval_set=(X_es, y_es) if len(y_es) else None,
+                es_patience=ES_PATIENCE,
+            )
+            out["pain_model"] = pain
 
     # ---------------- 校准器拟合 (随月度重训滚动重校) ----------------
     @staticmethod
     def fit_calibrator(trained: dict):
-        """用校准集 (与早停物理隔离) 拟合 Platt 校准器 (安全网: 严禁原始 predict_proba)."""
+        """用校准集 (与早停物理隔离) 拟合 Isotonic 校准器 (安全网: 严禁原始 predict_proba).
+
+        [E1/V3.8] Platt Scaling → Isotonic Regression, 月度滚动重校.
+        """
         from .prob_calibrator import ProbCalibrator
 
         model, label = trained["models"]["1d_cls"]
         calib = trained["segs"]["calib"].dropna(subset=[label])
         cols = trained["feature_cols"]
         raw = model.predict_proba(np.nan_to_num(calib[cols].values, nan=0.0))[:, 1]
-        calibrator = ProbCalibrator(method="platt").fit(raw, calib[label].values)
+        calibrator = ProbCalibrator(method="isotonic").fit(raw, calib[label].values)
         trained["calibrator"] = calibrator
         return calibrator
 
@@ -213,16 +281,17 @@ class DualTrackTrainer:
         if "calibrator" not in trained:
             self.fit_calibrator(trained)
         path = os.path.join(self.model_dir, f"{trained['board']}_{tag}.pkl")
+        bundle = {
+            "board": trained["board"],
+            "feature_cols": trained["feature_cols"],
+            "models": trained["models"],
+            "calibrator": trained["calibrator"],
+        }
+        for extra in ("quantile_models", "pain_model"):  # E1/E2 (标签齐备时)
+            if extra in trained:
+                bundle[extra] = trained[extra]
         with open(path, "wb") as fh:
-            pickle.dump(
-                {
-                    "board": trained["board"],
-                    "feature_cols": trained["feature_cols"],
-                    "models": trained["models"],
-                    "calibrator": trained["calibrator"],
-                },
-                fh,
-            )
+            pickle.dump(bundle, fh)
         return path
 
     @staticmethod
@@ -256,7 +325,7 @@ class DualTrackTrainer:
     ) -> dict:
         """每周一次全局重训 (用户 2026-07-22 裁决: 周频全局训练).
 
-        panels: {'main': 主板720日面板, 'dual': 双创720日面板}.
+        panels: {'main': 主板750日面板, 'dual': 双创750日面板}.
         每周第一个交易日 15:30 启动, 与 16:00 清单生成并行.
 
         Returns:

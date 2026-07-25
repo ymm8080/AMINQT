@@ -175,17 +175,17 @@ class TestCompositeFeedIntegration:
 
 class TestDualTrackTrainer:
     def test_split_window_segments(self):
-        """720 窗口四段 [B21③]: 670/20/20/10, 校准与早停物理隔离."""
+        """750 窗口四段 [V3.8 §2.1]: 620/20/20/90, 校准与早停物理隔离."""
         from app.pipeline1.dual_track_trainer import DualTrackTrainer
 
-        dates = pd.bdate_range("2023-01-02", periods=720)
-        df = pd.DataFrame({"date": dates, "x": range(720)})
+        dates = pd.bdate_range("2023-01-02", periods=750)
+        df = pd.DataFrame({"date": dates, "x": range(750)})
         segs = DualTrackTrainer.split_window(df)
         assert {k: len(v) for k, v in segs.items()} == {
-            "train": 670,
+            "train": 620,
             "es": 20,
             "calib": 20,
-            "test": 10,
+            "test": 90,
         }
         assert set(segs["es"]["date"]) & set(segs["calib"]["date"]) == set()
 
@@ -197,10 +197,10 @@ class TestDualTrackTrainer:
         df = pd.DataFrame({"date": dates, "x": range(540)})
         segs = DualTrackTrainer.split_window(df, window_total=540)
         assert {k: len(v) for k, v in segs.items()} == {
-            "train": 490,
+            "train": 410,
             "es": 20,
             "calib": 20,
-            "test": 10,
+            "test": 90,
         }
 
     def test_time_weights_decay(self):
@@ -220,17 +220,17 @@ class TestDualTrackTrainer:
         dtt.LGB_PARAMS_CLS["n_estimators"] = 20
         dtt.ES_PATIENCE = 5
         rng = np.random.default_rng(2)
-        dates = pd.bdate_range("2023-01-02", periods=720)
-        f = rng.normal(size=720)
+        dates = pd.bdate_range("2023-01-02", periods=750)
+        f = rng.normal(size=750)
         df = pd.DataFrame(
             {
                 "date": dates,
                 "symbol": "600519",
                 "f1": f,
-                "f2": rng.normal(size=720),
-                "label_1d": f * 0.01 + rng.normal(0, 0.01, 720),
-                "label_3d": rng.normal(0, 0.02, 720),
-                "label_5d": rng.normal(0, 0.03, 720),
+                "f2": rng.normal(size=750),
+                "label_1d": f * 0.01 + rng.normal(0, 0.01, 750),
+                "label_3d": rng.normal(0, 0.02, 750),
+                "label_5d": rng.normal(0, 0.03, 750),
             }
         )
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)

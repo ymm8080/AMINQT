@@ -1,7 +1,7 @@
 """P12 端到端集成测试 (V3.5 全链路): 选股 → 标记 → 盘中交易 → 回测 → 调参.
 
 链路覆盖 (IMPLEMENTATION_PLAN v2.8 P12):
-  1. DailySelectionPipeline.run  → 清单 schema V1.0 (P14)
+  1. DailySelectionPipeline.run  → 清单 schema V1.2 (P14/V3.8)
   2. RuleEngine.after_close      → STEP2/3/4 标记 (P15, CompositeFeed 真实指标源)
   3. RuleEngine.on_tick          → 盘中订单 (P1-P12 状态机)
   4. BacktestEngineV35.run       → V3.5 回测协议绩效 (P9)
@@ -50,6 +50,10 @@ def chain(tmp_path_factory):
     )
     pipe.features = _StubFeatures()
     pipe.cleaner = CleaningPipeline(CleaningConfig(valve_full=2, valve_reduced=1))
+    # 伪特征模型预测≈0: 关闭 E7 准入闸门 (闸门本身由 test_pipeline1_v38 覆盖)
+    from app.pipeline1.list_generator import ListGenerator
+
+    pipe.lister = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0)
 
     # 真实指标源 (NECESSARY INDICATOR 复刻)
     df = panel[panel["symbol"] == "600519"].copy()
@@ -70,7 +74,7 @@ class TestEndToEndV35:
     def test_full_workflow(self, chain):
         panel, pipe, feed = chain["panel"], chain["pipe"], chain["feed"]
 
-        # ── 1. Pipeline-1 选股: 清单 schema V1.0 ──
+        # ── 1. Pipeline-1 选股: 清单 schema V1.2 ──
         r1 = pipe.run("20260720", panel=panel)
         assert r1["mode"] == "normal"
         lst = r1["list"]

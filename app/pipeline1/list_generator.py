@@ -1,8 +1,12 @@
 """
-清单生成器 (DESIGN §14.4, PIPELINE1_V3.5 §四)
-=================================================
-每日清单 = 全量推荐池 Top 15 (固定), schema version="1.0".
-排序分: compound_ret × prob/base_rate + Holding Bonus.
+清单生成器 (DESIGN §14.4, PIPELINE1_V3.8 §四/§四 ter)
+=====================================================
+每日清单 = 动态准入 0~15 只 [E7] (不再固定 15 只), schema version="1.2".
+排序分: compound_ret × prob/base_rate × (1-0.5×pain_prob)[E2] × 公告调整 + Holding Bonus.
+[E1] 分布预测输出 pred_q10/q50/q90 + uncertainty_width; 分布版仓位权重:
+     raw_w = pred_q50×prob_up / (ATR_pct × (1+uncertainty_width)), 不确定性越大权重越低.
+[E6] liquidity_cap (ADV20×1%, bear 0.5%); [E8] 相关性簇阻断 (簇≤15%, bear 12%).
+[E11] bear 收紧: prob 门槛 0.60→0.65, pred_ret 2×成本→3×成本, 单票 10%→7%.
 动量: 盈亏防火墙 + 日均衰减比率 (V3.5 补丁, 修复 C 场景悖论).
 空仓触发 (D18, 安全网 #12) + 清单推送失败三档降级 + 失效条件传递.
 """
@@ -12,14 +16,22 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+import numpy as np
 import pandas as pd
+
+from .risk_overlays import (
+    CLUSTER_CAP,
+    CLUSTER_CAP_BEAR,
+    apply_cluster_caps,
+    cluster_block,
+    liquidity_cap,
+)
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.2"
 TOP_N = 15
 MAX_PER_INDUSTRY = 4
-MIN_LIST_SIZE = 10  # 顺延后不足则接受不足
 COMPOUND_W = (0.5, 0.35, 0.15)  # 1d/3d/5d
 HOLDING_BONUS = 0.2
 # B3: Holding Bonus 按持仓天数衰减 day1=1.0/day2=0.5/day3=0.0
@@ -36,6 +48,15 @@ HS300_DROP_EMPTY = 0.03
 MARKET_LIMIT_DOWN_EMPTY = 50
 HS300_CONSEC_DOWN_CAP = 3
 CAP_POSITION_REDUCED = 0.3
+# V3.8 成本与准入
+COST = 0.0013  # round-trip 费用 (E5 口径)
+# E2 痛苦惩罚
+PAIN_PENALTY = 0.5  # score × (1 - 0.5×pain_prob)
+# 公告情感调整
+ANNOUNCE_ADJ = 0.3  # score × (1 + 0.3×announce_score)
+# 分布版仓位权重
+SINGLE_CAP = 0.10  # 单票上限 (bear 7%)
+SINGLE_CAP_BEAR = 0.07
 
 SCHEMA_FIELDS = [
     "symbol",
@@ -51,6 +72,14 @@ SCHEMA_FIELDS = [
     "is_one_word_limit",
     "market_state",
     "score",
+    # V1.2 新增 (E1/E2/公告/分布权重)
+    "pred_q10",
+    "pred_q50",
+    "pred_q90",
+    "uncertainty_width",
+    "pain_prob",
+    "announce_score",
+    "weight",
     "schema_version",
 ]
 
@@ -65,15 +94,26 @@ class MarketEnv:
 
 
 class ListGenerator:
-    """每日 Top 15 清单生成."""
+    """每日动态准入 0~15 只清单生成 [E7].
 
-    def __init__(self):
+    Args:
+        entry_prob: 正常状态 prob_up 准入门槛 [E7] (bear 自动收紧至 0.65 [E11])
+        entry_ret_mult: 正常状态 pred_ret_1d 准入门槛 = mult×COST (bear 3×)
+    """
+
+    def __init__(self, entry_prob: float = 0.60, entry_ret_mult: float = 2.0):
         self._base_rate_history: list[float] = []
+        self.entry_prob = entry_prob
+        self.entry_ret_mult = entry_ret_mult
+        self.entry_prob_bear = 0.65  # [E11] 准入线 bear 收紧
+        self.entry_ret_mult_bear = 3.0
 
     # ---------------- 排序分 ----------------
     def compute_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """compound_ret = 0.5*pred_1d + 0.35*pred_3d + 0.15*pred_5d
         score = compound_ret * (prob_up / base_rate);  base_rate = B4 20日滚动均值
+        [E2] 痛苦惩罚: score × (1 - 0.5×pain_prob)  (pain_prob=0.3 → ×0.85)
+        [公告] score × (1 + 0.3×announce_score)  (安全网 #17)
         adjusted = score + 0.2 * holding_day_weight * is_in_yesterday_list  (B3 衰减)"""
         w1, w3, w5 = COMPOUND_W
         df = df.copy()
@@ -88,6 +128,14 @@ class ListGenerator:
         base_rate = base_rate if base_rate > 1e-6 else 1.0
         df["base_rate"] = base_rate
         df["score"] = df["compound_ret"] * (df["prob_up"] / base_rate)
+        # [E2] 痛苦惩罚: pain_prob 高 → 排序分降权
+        if "pain_prob" in df.columns:
+            df["score"] = df["score"] * (1 - PAIN_PENALTY * df["pain_prob"].fillna(0.0))
+        # [公告因子] 利好加分/利空减分 (安全网 #17)
+        if "announce_score" in df.columns:
+            df["score"] = df["score"] * (
+                1 + ANNOUNCE_ADJ * df["announce_score"].fillna(0.0)
+            )
         # B3: Holding Bonus 按持仓天数衰减 (day1=1.0/day2=0.5/day3=0.0)
         if "holding_day" in df.columns:
             df["_hd_weight"] = df["holding_day"].map(HOLDING_DAY_WEIGHTS).fillna(0.0)
@@ -163,6 +211,63 @@ class ListGenerator:
                 keep.append(False)
         return ranked[keep]
 
+    # ---------------- E7 动态准入 ----------------
+    def dynamic_entry(self, df: pd.DataFrame, bear: bool = False) -> pd.DataFrame:
+        """[E7] 质量阈值准入: prob_up > 门槛 且 pred_ret_1d > mult×COST → 0~15 只.
+
+        [E11] bear 状态收紧: prob 0.60→0.65, ret 2×成本→3×成本.
+        符合票可能为 0 — 这是特性不是故障.
+        """
+        prob_th = self.entry_prob_bear if bear else self.entry_prob
+        ret_th = (self.entry_ret_mult_bear if bear else self.entry_ret_mult) * COST
+        ok = df[(df["prob_up"] > prob_th) & (df["pred_ret_1d"] > ret_th)]
+        n = len(ok)
+        if n == 0:
+            logger.warning("E7 动态准入: 0 只过闸 (prob>%.2f, ret>%.2f%%), 今日空清单",
+                           prob_th, ret_th * 100)
+        return ok
+
+    # ---------------- E1 分布版仓位权重 ----------------
+    @staticmethod
+    def distribution_weights(
+        df: pd.DataFrame,
+        cap: float,
+        bear: bool = False,
+        capital: float | None = None,
+    ) -> pd.Series:
+        """[E1] raw_w = pred_q50×prob_up / (ATR_pct × (1+uncertainty_width));
+        w = min(raw/Σraw, 单票上限) × position_multiplier × liquidity_cap [E6].
+
+        不确定性越大权重越低; ATR/分布列缺失 → 回落等权.
+        liquidity_cap 需要 capital (推算 order_value) 与 adv20 列, 缺一跳过.
+        """
+        single_cap = SINGLE_CAP_BEAR if bear else SINGLE_CAP
+        dist_cols = {"pred_q50", "uncertainty_width", "ATR_pct"}
+        if dist_cols <= set(df.columns) and len(df):
+            raw = (
+                df["pred_q50"] * df["prob_up"]
+                / (
+                    df["ATR_pct"].clip(lower=0.005)
+                    * (1 + df["uncertainty_width"].clip(lower=0.001))
+                )
+            ).clip(lower=0)
+        else:
+            raw = pd.Series(1.0, index=df.index)
+        if raw.sum() <= 0:
+            raw = pd.Series(1.0, index=df.index)
+        # weight_i = min(raw/Σraw, 单票上限) × multiplier × liquidity_cap (V3.8 §四)
+        # 注意: clip 后不再归一 — 被削部分留现金 (归一会把单票上限顶破)
+        w = (raw / raw.sum()).clip(upper=single_cap)
+        w = w * cap  # position_multiplier (D18/D4 出口)
+        # [E6] liquidity_cap: 单票买入 ≤ ADV20×1% (bear 0.5%)
+        if capital and "adv20" in df.columns:
+            caps = [
+                liquidity_cap(w.loc[i] * capital, a, bear)
+                for i, a in df["adv20"].items()
+            ]
+            w = w * pd.Series(caps, index=df.index)
+        return w.round(4)
+
     # ---------------- D18 空仓触发 (安全网 #12) ----------------
     @staticmethod
     def check_empty_triggers(env: MarketEnv) -> tuple[bool, float]:
@@ -195,16 +300,23 @@ class ListGenerator:
         candidates: pd.DataFrame,
         env: MarketEnv | None = None,
         market_state: str = "range",
+        capital: float | None = None,
+        ret_window_20d: pd.DataFrame | None = None,
     ) -> dict:
-        """生成清单 schema V1.0.
+        """生成清单 schema V1.2 (动态准入 0~15 只 [E7]).
 
         candidates: 需含 symbol/board/industry/pred_ret_1d/3d/5d/prob_up(校准后)
                     [/is_limit_up_close/is_one_word_limit/is_in_yesterday_list]
+                    [E1: pred_q50/uncertainty_width/ATR_pct] [E2: pain_prob]
+                    [公告: announce_score] [E6: adv20]
+        capital: 总资金 (E6 liquidity_cap 推算 order_value; None 跳过)
+        ret_window_20d: 20 日收益矩阵 (E8 簇阻断; None 跳过)
         Returns:
-            {'list': DataFrame(≤15 行, SCHEMA_FIELDS), 'cap_position': float,
-             'empty': bool, 'schema_version': '1.0'}
+            {'list': DataFrame(0~15 行, SCHEMA_FIELDS), 'cap_position': float,
+             'empty': bool, 'schema_version': '1.2'}
         """
         env = env or MarketEnv()
+        bear = market_state == "bear"  # [E11] bear 收紧联动
         empty, cap = self.check_empty_triggers(env)
         if empty or len(candidates) == 0:
             return {
@@ -218,6 +330,15 @@ class ListGenerator:
         df = self.consensus_and_conflict(df)
         # §14.2.3 跨组归一化: 主板/双创 score 尺度不同, 组内 rank_pct 后合并排序
         df["score_rank_pct"] = df.groupby("board")["score"].rank(pct=True)
+        # [E7] 动态准入 (bear 收紧 [E11])
+        df = self.dynamic_entry(df, bear=bear)
+        if len(df) == 0:
+            return {
+                "list": pd.DataFrame(columns=SCHEMA_FIELDS),
+                "cap_position": cap,
+                "empty": True,
+                "schema_version": SCHEMA_VERSION,
+            }
         df["momentum"] = [
             self.compute_momentum(a, b, c)
             for a, b, c in zip(df["pred_ret_1d"], df["pred_ret_3d"], df["pred_ret_5d"])
@@ -228,10 +349,24 @@ class ListGenerator:
         df = self.apply_industry_limit(df)
         top = TOP_N if cap >= 1.0 else 5  # D18 降仓 → 仅 Top 5
         df = df.head(top)
+        # [E1] 分布版仓位权重 (含 E6 liquidity_cap)
+        df["weight"] = self.distribution_weights(df, cap, bear=bear, capital=capital)
+        # [E8] 相关性簇阻断 (簇总权重 ≤ 15%, bear 12%)
+        if ret_window_20d is not None and len(df) > 1:
+            clusters = cluster_block(list(df["symbol"]), ret_window_20d)
+            df["weight"] = apply_cluster_caps(
+                df.set_index("symbol")["weight"],
+                clusters,
+                cap=CLUSTER_CAP_BEAR if bear else CLUSTER_CAP,
+            ).values
         df["schema_version"] = SCHEMA_VERSION
         for col in ("is_limit_up_close", "is_one_word_limit"):
             if col not in df.columns:
                 df[col] = 0
+        for col in ("pred_q10", "pred_q50", "pred_q90", "uncertainty_width",
+                    "pain_prob", "announce_score"):
+            if col not in df.columns:
+                df[col] = np.nan
         return {
             "list": df[SCHEMA_FIELDS].reset_index(drop=True),
             "cap_position": cap,
