@@ -32,6 +32,8 @@ def gt_score(daily_ics, daily_turnover) -> float:
         float: 越高越好; 可用于季度超参与 A/B 裁决.
     """
     ics = np.asarray(daily_ics, dtype=float)
+    if np.all(np.isnan(ics)):
+        return 0.0
     ic_mean = float(np.nanmean(ics))
     pos_ratio = float(np.nanmean(ics > 0))
     worst = float(np.nanpercentile(ics, 10))
