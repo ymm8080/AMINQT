@@ -49,11 +49,13 @@ class TestBrokerAdapter:
 
 class TestReconcile:
     def test_match_rate(self):
-        bt = pd.DataFrame([
-            {"symbol": "A", "side": "buy", "rule": "B2"},
-            {"symbol": "A", "side": "sell", "rule": "S1"},
-            {"symbol": "B", "side": "buy", "rule": "B1"},
-        ])
+        bt = pd.DataFrame(
+            [
+                {"symbol": "A", "side": "buy", "rule": "B2"},
+                {"symbol": "A", "side": "sell", "rule": "S1"},
+                {"symbol": "B", "side": "buy", "rule": "B1"},
+            ]
+        )
         live_same = bt.copy()
         assert trade_match_rate(bt, live_same)["pass"]
         live_missing = bt.iloc[:2]
@@ -62,10 +64,12 @@ class TestReconcile:
         assert not r["pass"] and r["missing_in_live"]
 
     def test_slippage_report(self):
-        fills = pd.DataFrame({
-            "symbol": ["A", "B", "C"],
-            "slippage": [0.0006, 0.0011, 0.0040],
-        })
+        fills = pd.DataFrame(
+            {
+                "symbol": ["A", "B", "C"],
+                "slippage": [0.0006, 0.0011, 0.0040],
+            }
+        )
         assumed = pd.Series({"A": 0.0005, "B": 0.0010, "C": 0.0015})
         r = slippage_report(fills, assumed)
         assert r["alert"] and r["exceed_symbols"] == ["C"]  # 0.004 > 2×0.0015
@@ -75,8 +79,9 @@ class TestReconcile:
 class TestSemiAuto:
     def test_signal_flow(self, tmp_path):
         desk = SemiAutoDesk(WormLogger(str(tmp_path)))
-        desk.push_signal(ticket_from_order(
-            "2026-07-25", Order("600519", "buy", 1000, 100.0, "B2")))
+        desk.push_signal(
+            ticket_from_order("2026-07-25", Order("600519", "buy", 1000, 100.0, "B2"))
+        )
         assert len(desk.pending()) == 1
         desk.confirm_fill("2026-07-25", "600519", 1000, 100.1)
         assert len(desk.pending()) == 0

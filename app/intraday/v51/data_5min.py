@@ -22,16 +22,30 @@ RETRY_SLEEP = 2.0
 def normalize_5min(df: pd.DataFrame, symbol: str, trade_date: str) -> pd.DataFrame:
     """akshare 5min 列名 → 标准列 (t/open/high/low/close/volume/amount)."""
     col_map = {
-        "时间": "datetime", "开盘": "open", "收盘": "close",
-        "最高": "high", "最低": "low", "成交量": "volume", "成交额": "amount",
+        "时间": "datetime",
+        "开盘": "open",
+        "收盘": "close",
+        "最高": "high",
+        "最低": "low",
+        "成交量": "volume",
+        "成交额": "amount",
     }
     out = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
     out["symbol"] = symbol
     out["trade_date"] = str(trade_date)
     if "datetime" in out.columns:
         out["t"] = pd.to_datetime(out["datetime"]).dt.strftime("%H:%M")
-    keep = ["symbol", "trade_date", "t", "open", "high", "low", "close",
-            "volume", "amount"]
+    keep = [
+        "symbol",
+        "trade_date",
+        "t",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "amount",
+    ]
     return out[[c for c in keep if c in out.columns]]
 
 
@@ -64,8 +78,13 @@ class IntradayDataLoader:
                 return normalize_5min(raw, symbol, trade_date)
             except Exception as exc:  # noqa: BLE001 — 重试后仍失败则告警上抛
                 last_err = exc
-                logger.warning("5min 拉取失败 (%s %s, 第%d次): %s",
-                               symbol, trade_date, attempt, exc)
+                logger.warning(
+                    "5min 拉取失败 (%s %s, 第%d次): %s",
+                    symbol,
+                    trade_date,
+                    attempt,
+                    exc,
+                )
                 time.sleep(RETRY_SLEEP)
         logger.error("5min 拉取连续 %d 次失败: %s %s", RETRY, symbol, trade_date)
         raise RuntimeError(f"5min 数据拉取失败: {symbol} {trade_date}") from last_err
@@ -76,7 +95,8 @@ class IntradayDataLoader:
         import akshare as ak
 
         return ak.stock_zh_a_hist_min_em(
-            symbol=symbol, period="5",
+            symbol=symbol,
+            period="5",
             start_date=f"{trade_date} 09:30:00",
             end_date=f"{trade_date} 15:00:00",
             adjust="",

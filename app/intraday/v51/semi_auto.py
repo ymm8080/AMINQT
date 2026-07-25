@@ -19,8 +19,13 @@ from .worm_logger import WormLogger
 logger = logging.getLogger(__name__)
 
 # 人工偏离原因代码 (周度复盘分类)
-DEVIATE_REASONS = ("price_changed", "qty_changed", "ignored_signal",
-                   "manual_override", "executor_error")
+DEVIATE_REASONS = (
+    "price_changed",
+    "qty_changed",
+    "ignored_signal",
+    "manual_override",
+    "executor_error",
+)
 
 
 @dataclass(frozen=True)
@@ -48,23 +53,40 @@ class SemiAutoDesk:
         """系统信号 → 待人工执行队列 + WORM."""
         self._pending.append(ticket)
         self.worm.log(ticket.trade_date, "signal", asdict(ticket))
-        logger.warning("半自动信号待人工执行: %s %s %d@%.2f (%s)",
-                       ticket.side, ticket.symbol, ticket.qty,
-                       ticket.limit_price, ticket.rule)
+        logger.warning(
+            "半自动信号待人工执行: %s %s %d@%.2f (%s)",
+            ticket.side,
+            ticket.symbol,
+            ticket.qty,
+            ticket.limit_price,
+            ticket.rule,
+        )
 
     def pending(self) -> list[SignalTicket]:
         return list(self._pending)
 
     # ---------------- 人工回报 ----------------
     def confirm_fill(
-        self, trade_date: str, symbol: str, filled_qty: int,
-        filled_price: float, note: str = "",
+        self,
+        trade_date: str,
+        symbol: str,
+        filled_qty: int,
+        filled_price: float,
+        note: str = "",
     ) -> None:
         """人工按信号下单成交 → 回报 + WORM (供逐笔核对)."""
         self._pending = [t for t in self._pending if t.symbol != symbol]
-        self.worm.log(trade_date, "order", {
-            "symbol": symbol, "filled_qty": filled_qty,
-            "filled_price": filled_price, "note": note, "source": "manual"})
+        self.worm.log(
+            trade_date,
+            "order",
+            {
+                "symbol": symbol,
+                "filled_qty": filled_qty,
+                "filled_price": filled_price,
+                "note": note,
+                "source": "manual",
+            },
+        )
         logger.info("人工成交回报: %s %d@%.2f", symbol, filled_qty, filled_price)
 
     def report_deviation(
@@ -73,14 +95,22 @@ class SemiAutoDesk:
         """人工偏离信号 (改价/改量/忽略) → 原因代码 + WORM (周度复盘)."""
         assert reason in DEVIATE_REASONS, f"原因代码须为 {DEVIATE_REASONS}"
         self._pending = [t for t in self._pending if t.symbol != symbol]
-        self.worm.log(trade_date, "manual", {
-            "symbol": symbol, "deviation": reason, "detail": detail})
+        self.worm.log(
+            trade_date,
+            "manual",
+            {"symbol": symbol, "deviation": reason, "detail": detail},
+        )
         logger.error("人工偏离信号: %s [%s] %s", symbol, reason, detail)
 
 
 def ticket_from_order(trade_date: str, order: Order, note: str = "") -> SignalTicket:
     """BrokerAdapter Order → 人工信号单."""
     return SignalTicket(
-        trade_date=trade_date, symbol=order.symbol, side=order.side,
-        qty=order.qty, limit_price=order.limit_price, rule=order.rule,
-        note=note)
+        trade_date=trade_date,
+        symbol=order.symbol,
+        side=order.side,
+        qty=order.qty,
+        limit_price=order.limit_price,
+        rule=order.rule,
+        note=note,
+    )

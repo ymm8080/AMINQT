@@ -76,28 +76,49 @@ class SimulationAdapter(BrokerAdapter):
             max_value = adv * 0.01
             if order.qty * order.limit_price > max_value:
                 raise ValueError(
-                    f"拒单: 单笔金额超 ADV20×1% ({order.symbol}, B6 同口径)")
-        fill = Fill(order=order, filled_qty=order.qty,
-                    filled_price=order.limit_price, slippage=0.0)
+                    f"拒单: 单笔金额超 ADV20×1% ({order.symbol}, B6 同口径)"
+                )
+        fill = Fill(
+            order=order,
+            filled_qty=order.qty,
+            filled_price=order.limit_price,
+            slippage=0.0,
+        )
         self._apply(fill)
         self.fills.append(fill)
-        logger.info("模拟成交: %s %s %d@%.2f (%s)", order.side, order.symbol,
-                    order.qty, order.limit_price, order.rule)
+        logger.info(
+            "模拟成交: %s %s %d@%.2f (%s)",
+            order.side,
+            order.symbol,
+            order.qty,
+            order.limit_price,
+            order.rule,
+        )
         return fill
 
     def place_auction_order(self, order: Order) -> Fill:
-        fill = Fill(order=order, filled_qty=order.qty,
-                    filled_price=order.limit_price, slippage=0.0, auction=True)
+        fill = Fill(
+            order=order,
+            filled_qty=order.qty,
+            filled_price=order.limit_price,
+            slippage=0.0,
+            auction=True,
+        )
         self._apply(fill)
         self.fills.append(fill)
-        logger.warning("S8 集合竞价排队成交 (模拟): %s %d@%.2f",
-                       order.symbol, order.qty, order.limit_price)
+        logger.warning(
+            "S8 集合竞价排队成交 (模拟): %s %d@%.2f",
+            order.symbol,
+            order.qty,
+            order.limit_price,
+        )
         return fill
 
     def _apply(self, fill: Fill) -> None:
         sign = 1 if fill.order.side == "buy" else -1
         self._positions[fill.order.symbol] = (
-            self._positions.get(fill.order.symbol, 0) + sign * fill.filled_qty)
+            self._positions.get(fill.order.symbol, 0) + sign * fill.filled_qty
+        )
 
     def positions(self) -> dict:
         return dict(self._positions)
@@ -115,20 +136,31 @@ class MiniQMTAdapter(BrokerAdapter):
         self._intents: list[Order] = []
         if not dry_run:
             raise NotImplementedError(
-                "MiniQMT 实盘通道待阶段四接入 (xtquant); dry_run=False 暂不可用")
+                "MiniQMT 实盘通道待阶段四接入 (xtquant); dry_run=False 暂不可用"
+            )
 
     def place_order(self, order: Order) -> Fill:
         self._intents.append(order)
-        logger.warning("MiniQMT dry_run: 记录下单意图 %s %s %d@%.2f",
-                       order.side, order.symbol, order.qty, order.limit_price)
+        logger.warning(
+            "MiniQMT dry_run: 记录下单意图 %s %s %d@%.2f",
+            order.side,
+            order.symbol,
+            order.qty,
+            order.limit_price,
+        )
         return Fill(order=order, filled_qty=0, filled_price=0.0, slippage=0.0)
 
     def place_auction_order(self, order: Order) -> Fill:
         self._intents.append(order)
-        logger.warning("MiniQMT dry_run: S8 竞价排队意图 %s %d@%.2f",
-                       order.symbol, order.qty, order.limit_price)
-        return Fill(order=order, filled_qty=0, filled_price=0.0,
-                    slippage=0.0, auction=True)
+        logger.warning(
+            "MiniQMT dry_run: S8 竞价排队意图 %s %d@%.2f",
+            order.symbol,
+            order.qty,
+            order.limit_price,
+        )
+        return Fill(
+            order=order, filled_qty=0, filled_price=0.0, slippage=0.0, auction=True
+        )
 
     def positions(self) -> dict:
         return {}

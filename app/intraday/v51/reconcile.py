@@ -18,9 +18,7 @@ MATCH_RATE_MIN = 0.99  # 逐笔一致率门禁 > 99%
 SLIPPAGE_WARN_MULT = 2.0  # 实盘滑点 > 2× 模型假设 → 告警修 E5
 
 
-def trade_match_rate(
-    backtest_trades: pd.DataFrame, live_trades: pd.DataFrame
-) -> dict:
+def trade_match_rate(backtest_trades: pd.DataFrame, live_trades: pd.DataFrame) -> dict:
     """回测 vs shadow/实盘逐笔一致率 (信号维度: symbol+side+rule).
 
     Returns:
@@ -31,16 +29,25 @@ def trade_match_rate(
     bt = set(map(tuple, backtest_trades[key].values)) if len(backtest_trades) else set()
     lv = set(map(tuple, live_trades[key].values)) if len(live_trades) else set()
     if not bt:
-        return {"match_rate": 1.0, "n_backtest": 0, "n_live": len(lv),
-                "missing_in_live": [], "extra_in_live": sorted(lv),
-                "pass": len(lv) == 0}
+        return {
+            "match_rate": 1.0,
+            "n_backtest": 0,
+            "n_live": len(lv),
+            "missing_in_live": [],
+            "extra_in_live": sorted(lv),
+            "pass": len(lv) == 0,
+        }
     matched = bt & lv
     rate = len(matched) / len(bt)
     missing = sorted(bt - lv)
     extra = sorted(lv - bt)
     if missing or extra:
-        logger.error("逐笔核对不一致: 缺失 %s / 多出 %s (一致率 %.1f%%)",
-                     missing, extra, rate * 100)
+        logger.error(
+            "逐笔核对不一致: 缺失 %s / 多出 %s (一致率 %.1f%%)",
+            missing,
+            extra,
+            rate * 100,
+        )
     return {
         "match_rate": round(rate, 4),
         "n_backtest": len(bt),
@@ -51,9 +58,7 @@ def trade_match_rate(
     }
 
 
-def slippage_report(
-    fills: pd.DataFrame, assumed_slippage: pd.Series
-) -> dict:
+def slippage_report(fills: pd.DataFrame, assumed_slippage: pd.Series) -> dict:
     """滑点偏差日报: 实盘滑点 vs 模型假设 (E5 分层).
 
     Args:
@@ -69,8 +74,9 @@ def slippage_report(
     exceed = df[df["ratio"] > SLIPPAGE_WARN_MULT]
     alert = len(exceed) > 0
     if alert:
-        logger.error("滑点超标: %s 实际滑点 > 2× 模型假设, 修 E5 分层",
-                     sorted(exceed["symbol"]))
+        logger.error(
+            "滑点超标: %s 实际滑点 > 2× 模型假设, 修 E5 分层", sorted(exceed["symbol"])
+        )
     return {
         "mean_actual": round(float(df["slippage"].abs().mean()), 6) if len(df) else 0.0,
         "mean_assumed": round(float(df["assumed"].mean()), 6) if len(df) else 0.0,
