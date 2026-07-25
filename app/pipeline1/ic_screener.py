@@ -226,13 +226,16 @@ class ICScreener:
         sub = df[["date", factor, label]].dropna()
         if sub["date"].nunique() < 5:
             return 0.0
-        ics = sub.groupby("date").apply(
-            lambda g: (
-                spearmanr(g[factor], g[label]).statistic
-                if len(g) >= 3 and g[factor].nunique() > 5 and g[label].nunique() > 1
-                else np.nan
-            )
-        )
+
+        def _daily_ic(g: pd.DataFrame) -> float:
+            if len(g) < 3 or g[factor].nunique() <= 5 or g[label].nunique() <= 1:
+                return np.nan
+            try:
+                return spearmanr(g[factor], g[label]).statistic
+            except (ValueError, TypeError):
+                return np.nan
+
+        ics = sub.groupby("date").apply(_daily_ic)
         valid = ics.dropna()
         if len(valid) == 0:
             return 0.0

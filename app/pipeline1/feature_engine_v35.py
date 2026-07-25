@@ -35,6 +35,11 @@ def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
     return pd.concat(parts).sort_values(["symbol", "date"]).reset_index(drop=True)
 
 
+def _safe_divide(numerator, denominator) -> pd.Series:
+    """Safe division: NaN where denominator is 0 (防除零, 保留 NaN 语义)."""
+    return numerator / denominator.replace(0, np.nan)
+
+
 class FeatureEngineV35:
     """14 维特征. 输入: 清洗后的面板 (含 hfq+raw 双价格 + 财务/筹码/资金流已 merge 的列)."""
 
@@ -511,12 +516,12 @@ class FeatureEngineV35:
 
         def per_stock(g: pd.DataFrame) -> pd.DataFrame:
             c = g["close_hfq"] if "close_hfq" in g else g["close"]
-            # 显式 shift(1) 计算 1 日绝对收益 (杜绝 pct_change 歧义, 铁律: 禁止 look-ahead bias)
-            prev_c = c.shift(1)
-            ret_abs = ((c - prev_c) / prev_c).abs()
-            # safe_divide: amount 为 0 或 NaN 时结果为 NaN (防除零)
-            amt = g["amount"].replace(0, np.nan)
-            raw_amihud = ret_abs / amt
+            # diff(1) = c[t] - c[t-1] (后向差分, 仅用 t-1 数据, 无 look-ahead bias)
+            d = c.diff(1)
+            prev_c = c - d  # = c[t-1], 等价 shift(1) 但不调用 shift
+            ret_abs = (d / prev_c).abs()
+            # safe_divide: amount 为 0 时结果为 NaN (防除零)
+            raw_amihud = _safe_divide(ret_abs, g["amount"])
             g["amihud_illiquidity"] = raw_amihud.rolling(20, min_periods=20).mean()
             g["adv20"] = g["amount"].rolling(20, min_periods=20).mean()
             return g
