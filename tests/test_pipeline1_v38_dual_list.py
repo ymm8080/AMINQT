@@ -183,3 +183,46 @@ class TestAnnouncementInvalidation:
         cands = pd.DataFrame({"symbol": ["A", "B", "C"], "score": [1, 2, 3]})
         out = AnnouncementFactor.apply_invalidation(cands, {"B": "失效#5"})
         assert list(out["symbol"]) == ["A", "C"]
+
+
+# ============================================================
+# D.9/E.2 执行清单动态输出 + 回测失效模拟
+# ============================================================
+class TestDynamicOutputsWiring:
+    def test_execution_carries_stop_and_position(self):
+        cands = _dual_cands()
+        cands["close"] = [10.0, 10.0, 10.0, 10.0]
+        cands.loc[0, "pred_q50"] = 0.08  # 让 E.2 RR 闸门通过 (RR=2.0)
+        runner = DualListRunner(
+            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0))
+        out = runner.emit(cands, "2026-07-25")
+        exe = out["execution"]
+        assert len(exe) == 1
+        # D.9/E.2: stop_price / position / rr 随清单输出 (影子留痕)
+        assert {"dyn_stop_pct", "dyn_position", "dyn_rr", "stop_price"} <= set(
+            exe.columns)
+        row = exe.iloc[0]
+        assert 0 < row["dyn_position"] <= 1.0
+        assert row["stop_price"] == pytest.approx(10.0 * (1 - row["dyn_stop_pct"]),
+                                                  abs=0.01)
+
+    def test_dynamic_gate_shadow_zero_position(self):
+        """E.2 影子模式: A级入选但 RR 不达标 → position=0 (留痕不驱动, F.5)."""
+        cands = _dual_cands()  # pred_q50=0.03 → RR=1.25 < 1.8
+        runner = DualListRunner(
+            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0))
+        exe = runner.emit(cands, "2026-07-25")["execution"]
+        assert len(exe) == 1
+        assert exe.iloc[0]["dyn_position"] == 0.0
+
+    def test_simulate_invalidations_for_backtest(self):
+        from app.pipeline1.backtest_adjudication import simulate_invalidations
+
+        d1, d2 = "2026-07-24", "2026-07-25"
+        lists = {
+            d1: pd.DataFrame({"symbol": ["A", "B"], "score": [1.0, 0.9]}),
+            d2: pd.DataFrame({"symbol": ["A", "C"], "score": [1.0, 0.8]}),
+        }
+        out = simulate_invalidations(lists, {d1: {"B": "失效#5: 公告利空"}})
+        assert list(out[d1]["symbol"]) == ["A"]
+        assert list(out[d2]["symbol"]) == ["A", "C"]  # 无失效日不受影响
