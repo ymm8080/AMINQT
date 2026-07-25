@@ -42,8 +42,9 @@ def ohlcv_violations(df: pd.DataFrame) -> pd.DataFrame:
     for name, m in checks.items():
         m = m.fillna(False).values
         mask |= m
-        reasons = [f"{r};{n}" if mm else r for r, n, mm in
-                   zip(reasons, [name] * len(df), m)]
+        reasons = [
+            f"{r};{n}" if mm else r for r, n, mm in zip(reasons, [name] * len(df), m)
+        ]
     out = df[mask].copy()
     out["violation"] = [r.lstrip(";") for r in np.array(reasons)[mask]]
     return out
@@ -69,7 +70,10 @@ def daily_report(df: pd.DataFrame, trade_date: str | None = None) -> dict:
     if not passed:
         logger.error(
             "数据质量日检不通过: OHLCV违规%d / 重复键%d / 缺失%d",
-            len(vio), dup, missing)
+            len(vio),
+            dup,
+            missing,
+        )
     return {
         "trade_date": trade_date or str(df["date"].max())[:10],
         "n_rows": len(df),
@@ -87,8 +91,10 @@ def drop_violations(df: pd.DataFrame) -> pd.DataFrame:
     """显式剔除违规行 (留痕日志, 非静默). 返回干净面板."""
     vio = ohlcv_violations(df)
     if len(vio):
-        logger.error("剔除 OHLCV 违规行 %d 条 (留痕): %s",
-                     len(vio), vio[["symbol", "date", "violation"]]
-                     .head(10).to_dict("records"))
+        logger.error(
+            "剔除 OHLCV 违规行 %d 条 (留痕): %s",
+            len(vio),
+            vio[["symbol", "date", "violation"]].head(10).to_dict("records"),
+        )
         df = df.drop(index=vio.index)
     return df

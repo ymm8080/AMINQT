@@ -123,31 +123,67 @@ def trigger(ctx: SellContext, pos: Position) -> dict:
         AUCTION_SELL = S8 集合竞价排队 (次日 09:25 挂跌停价, 优先于一切).
     """
     if not pos.can_sell():
-        return {"action": "HOLD", "rule": None, "qty": 0,
-                "reason": "T+1锁死: sellable_qty=0"}
+        return {
+            "action": "HOLD",
+            "rule": None,
+            "qty": 0,
+            "reason": "T+1锁死: sellable_qty=0",
+        }
     qty = pos.sellable_qty
     if s8_limit_escape(ctx):
-        return {"action": "AUCTION_SELL", "rule": "S8", "qty": qty,
-                "reason": "跌停逃生: 次日09:25集合竞价挂跌停价排队"}
+        return {
+            "action": "AUCTION_SELL",
+            "rule": "S8",
+            "qty": qty,
+            "reason": "跌停逃生: 次日09:25集合竞价挂跌停价排队",
+        }
     if s3_turnover_spike(ctx):
-        return {"action": "SELL", "rule": "S3", "qty": qty,
-                "reason": f"换手异动 {ctx.turnover_pct:.0%} 且涨 {ctx.change_pct:.1%}"}
+        return {
+            "action": "SELL",
+            "rule": "S3",
+            "qty": qty,
+            "reason": f"换手异动 {ctx.turnover_pct:.0%} 且涨 {ctx.change_pct:.1%}",
+        }
     if s6_limit_break(ctx):
-        return {"action": "SELL", "rule": "S6", "qty": qty,
-                "reason": "涨停炸板回落>1.5%"}
+        return {
+            "action": "SELL",
+            "rule": "S6",
+            "qty": qty,
+            "reason": "涨停炸板回落>1.5%",
+        }
     if s1_dynamic_stop(ctx, pos):
-        return {"action": "SELL", "rule": "S1", "qty": qty,
-                "reason": f"动态止损: 现价≤stop_price({pos.stop_price})"}
+        return {
+            "action": "SELL",
+            "rule": "S1",
+            "qty": qty,
+            "reason": f"动态止损: 现价≤stop_price({pos.stop_price})",
+        }
     if s2_trailing_stop(ctx, pos):
-        return {"action": "SELL", "rule": "S2", "qty": qty,
-                "reason": "移动止盈 (ATR自适应回撤带)"}
+        return {
+            "action": "SELL",
+            "rule": "S2",
+            "qty": qty,
+            "reason": "移动止盈 (ATR自适应回撤带)",
+        }
     if s5a_time_stop(ctx, pos):
-        return {"action": "SELL", "rule": "S5a", "qty": qty,
-                "reason": "时间止损: 满2日涨幅<1%"}
+        return {
+            "action": "SELL",
+            "rule": "S5a",
+            "qty": qty,
+            "reason": "时间止损: 满2日涨幅<1%",
+        }
     if s5b_expiry(ctx, pos):
-        return {"action": "SELL", "rule": "S5b", "qty": qty,
-                "reason": f"持仓满{S5B_DAYS}日强制轮动"}
+        return {
+            "action": "SELL",
+            "rule": "S5b",
+            "qty": qty,
+            "reason": f"持仓满{S5B_DAYS}日强制轮动",
+        }
     if s7_s4_remove(ctx):
-        return {"action": "SELL", "rule": "S7/S4", "qty": qty,
-                "reason": "清单失效/日线调出"}
+        return {
+            "action": "SELL",
+            "rule": "S7/S4",
+            "qty": qty,
+            "reason": "清单失效/日线调出",
+        }
     return {"action": "HOLD", "rule": None, "qty": 0, "reason": "未触发"}

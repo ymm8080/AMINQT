@@ -27,8 +27,13 @@ from app.intraday.v51.worm_logger import WormLogger
 # ============================================================
 class TestPosition:
     def test_t1_lock_and_settle(self):
-        pos = Position("600519", total_qty=100, sellable_qty=0,
-                       entry_price=100.0, entry_date="2026-07-25")
+        pos = Position(
+            "600519",
+            total_qty=100,
+            sellable_qty=0,
+            entry_price=100.0,
+            entry_date="2026-07-25",
+        )
         assert not pos.can_sell()  # 当日买入锁死 (满仓的代价)
         assert pos.on_sell(100) == 0  # 物理不可卖
         pos.settle_overnight()
@@ -56,11 +61,13 @@ class TestSessions:
 
     def test_bear_override(self):
         assert not buy_window_open("14:40", bear_state="DEFENSE")  # 只卖不买
-        assert not buy_window_open("09:50", bear_state="RECOVERY",
-                                   signal_grade="A")  # 首周早盘关闭
+        assert not buy_window_open(
+            "09:50", bear_state="RECOVERY", signal_grade="A"
+        )  # 首周早盘关闭
         assert buy_window_open("14:40", bear_state="RECOVERY")  # 尾盘仍开
-        assert not buy_window_open("09:50", signal_grade="A",
-                                   hs300_change=-0.015)  # 单边下跌禁用早盘
+        assert not buy_window_open(
+            "09:50", signal_grade="A", hs300_change=-0.015
+        )  # 单边下跌禁用早盘
 
 
 # ============================================================
@@ -83,18 +90,28 @@ class TestCostModel:
 # ============================================================
 def _ctx(**kw):
     base = {
-        "symbol": "600519", "t": "14:40", "price": 100.0, "pre_close": 98.0,
-        "pred_q50": 0.05, "atr_pct": 0.02, "stop_price": 94.0,
-        "adv_20d": 1e9, "order_value": 1e5, "bar_amount": 2e6,
-        "event_mean": 0.06, "oos_decay": 0.0,
+        "symbol": "600519",
+        "t": "14:40",
+        "price": 100.0,
+        "pre_close": 98.0,
+        "pred_q50": 0.05,
+        "atr_pct": 0.02,
+        "stop_price": 94.0,
+        "adv_20d": 1e9,
+        "order_value": 1e5,
+        "bar_amount": 2e6,
+        "event_mean": 0.06,
+        "oos_decay": 0.0,
     }
     return BuyContext(**{**base, **kw})
 
 
 def _bars(n=30, close=98.0, vol=1e6, vwap=99.5):
     # 默认 close=98: 不触发 B1 (跌穿 VWAP×(1-1%)) 也不触发 B2 (未站上均线)
-    return tuple(Bar(t=f"14:{i:02d}", close=close, volume=vol,
-                     amount=close * vol, vwap=vwap) for i in range(n))
+    return tuple(
+        Bar(t=f"14:{i:02d}", close=close, volume=vol, amount=close * vol, vwap=vwap)
+        for i in range(n)
+    )
 
 
 class TestBuyEngine:
@@ -120,8 +137,9 @@ class TestBuyEngine:
 
     def test_b2_evening_strength(self):
         bars = list(_bars(n=30, close=99.0, vol=1e6))
-        bars.append(Bar("14:55", close=102.0, volume=3e6,
-                        amount=3e8, vwap=99.5))  # 放量3倍+站上均线
+        bars.append(
+            Bar("14:55", close=102.0, volume=3e6, amount=3e8, vwap=99.5)
+        )  # 放量3倍+站上均线
         assert b2_evening_strength(tuple(bars), vol_ratio=1.5, ma_window=24)
 
     def test_full_pass(self):
@@ -141,8 +159,15 @@ class TestBuyEngine:
 
         import app.intraday.v51.buy_engine as be
         import app.intraday.v51.sell_engine as se
-        forbidden = (r"\bopen\(", r"\brequests\b", r"\brandom\b",
-                     r"datetime\.now\(", r"\bakshare\b", r"\bxtquant\b")
+
+        forbidden = (
+            r"\bopen\(",
+            r"\brequests\b",
+            r"\brandom\b",
+            r"datetime\.now\(",
+            r"\bakshare\b",
+            r"\bxtquant\b",
+        )
         for mod in (be, se):
             src = inspect.getsource(mod)
             for pat in forbidden:
@@ -153,66 +178,93 @@ class TestBuyEngine:
 # 卖出引擎 S1-S8 (优先级链)
 # ============================================================
 def _pos(**kw):
-    base = {"symbol": "600519", "total_qty": 100, "sellable_qty": 100,
-            "entry_price": 100.0, "entry_date": "2026-07-23", "hold_days": 2,
-            "stop_price": 95.0, "max_price_since_entry": 106.0}
+    base = {
+        "symbol": "600519",
+        "total_qty": 100,
+        "sellable_qty": 100,
+        "entry_price": 100.0,
+        "entry_date": "2026-07-23",
+        "hold_days": 2,
+        "stop_price": 95.0,
+        "max_price_since_entry": 106.0,
+    }
     return Position(**{**base, **kw})
 
 
 class TestSellEngine:
     def test_t1_gate(self):
-        r = sell_trigger(SellContext(t="14:40", price=90.0, limit_down_price=88.0),
-                         _pos(sellable_qty=0))
+        r = sell_trigger(
+            SellContext(t="14:40", price=90.0, limit_down_price=88.0),
+            _pos(sellable_qty=0),
+        )
         assert r["action"] == "HOLD" and "T+1" in r["reason"]
 
     def test_priority_order(self):
         pos = _pos()
         # S8 跌停 > 一切 (即使 S1 也同时满足)
-        r = sell_trigger(SellContext(t="14:40", price=90.0,
-                                     limit_down_price=90.0), pos)
+        r = sell_trigger(SellContext(t="14:40", price=90.0, limit_down_price=90.0), pos)
         assert r["rule"] == "S8" and r["action"] == "AUCTION_SELL"
         # S3 换手异动 > S1
-        r = sell_trigger(SellContext(t="14:40", price=94.0,
-                                     limit_down_price=80.0,
-                                     turnover_pct=0.45, change_pct=0.09), pos)
+        r = sell_trigger(
+            SellContext(
+                t="14:40",
+                price=94.0,
+                limit_down_price=80.0,
+                turnover_pct=0.45,
+                change_pct=0.09,
+            ),
+            pos,
+        )
         assert r["rule"] == "S3"
         # S6 炸板 > S1
-        r = sell_trigger(SellContext(t="14:40", price=94.0,
-                                     limit_down_price=80.0,
-                                     limit_up_price=105.0,
-                                     touched_limit_up=True), pos)
+        r = sell_trigger(
+            SellContext(
+                t="14:40",
+                price=94.0,
+                limit_down_price=80.0,
+                limit_up_price=105.0,
+                touched_limit_up=True,
+            ),
+            pos,
+        )
         assert r["rule"] == "S6"
         # S1 动态止损 (stop_price 下发制)
-        r = sell_trigger(SellContext(t="11:00", price=94.5,
-                                     limit_down_price=80.0), pos)
+        r = sell_trigger(SellContext(t="11:00", price=94.5, limit_down_price=80.0), pos)
         assert r["rule"] == "S1"
         # S2 移动止盈: 最高 106 浮盈 6% 激活, 回撤带 max(3%, 2%)=3% → 102.8
-        r = sell_trigger(SellContext(t="11:00", price=102.0,
-                                     limit_down_price=80.0, atr_pct=0.02),
-                         _pos(stop_price=90.0))
+        r = sell_trigger(
+            SellContext(t="11:00", price=102.0, limit_down_price=80.0, atr_pct=0.02),
+            _pos(stop_price=90.0),
+        )
         assert r["rule"] == "S2"
 
     def test_s5a_s5b_tail_window(self):
         pos = _pos(stop_price=50.0, max_price_since_entry=100.5)
         # S5a: 满2日涨<1% (尾盘) — price 100.5 < 101 → 触发
-        r = sell_trigger(SellContext(t="14:40", price=100.5,
-                                     limit_down_price=80.0), pos)
+        r = sell_trigger(
+            SellContext(t="14:40", price=100.5, limit_down_price=80.0), pos
+        )
         assert r["rule"] == "S5a"
         # 非尾盘不触发 S5a/S5b
-        r = sell_trigger(SellContext(t="11:00", price=100.5,
-                                     limit_down_price=80.0), pos)
+        r = sell_trigger(
+            SellContext(t="11:00", price=100.5, limit_down_price=80.0), pos
+        )
         assert r["action"] == "HOLD"
         # S5b: 满2日到期 (涨幅≥1% 也触发)
-        r = sell_trigger(SellContext(t="14:50", price=103.0,
-                                     limit_down_price=80.0),
-                         _pos(stop_price=50.0, max_price_since_entry=103.0))
+        r = sell_trigger(
+            SellContext(t="14:50", price=103.0, limit_down_price=80.0),
+            _pos(stop_price=50.0, max_price_since_entry=103.0),
+        )
         assert r["rule"] == "S5b"
 
     def test_s7_s4(self):
         pos = _pos(stop_price=50.0, max_price_since_entry=100.0, hold_days=1)
-        r = sell_trigger(SellContext(t="14:40", price=101.0,
-                                     limit_down_price=80.0,
-                                     invalidation=True), pos)
+        r = sell_trigger(
+            SellContext(
+                t="14:40", price=101.0, limit_down_price=80.0, invalidation=True
+            ),
+            pos,
+        )
         assert r["rule"] == "S7/S4"
 
 
@@ -274,15 +326,20 @@ class TestInfra:
         assert r["light"] == "YELLOW" and "复检" in r["action"]
 
     def test_plateau_drift(self):
-        r = plateau_drift({"pullback": 0.01, "vol_ratio": 1.5},
-                          {"pullback": 0.013, "vol_ratio": 1.5})
+        r = plateau_drift(
+            {"pullback": 0.01, "vol_ratio": 1.5}, {"pullback": 0.013, "vol_ratio": 1.5}
+        )
         assert r["need_review"] and "pullback" in r["drifted"]
 
     def test_state_machine(self):
         sm = ParamStateMachine()
         sm.confirm_by_human()
-        good = {"excess_return": 0.01, "veto_rate": 0.15,
-                "data_failures": 0, "match_rate": 0.995}
+        good = {
+            "excess_return": 0.01,
+            "veto_rate": 0.15,
+            "data_failures": 0,
+            "match_rate": 0.995,
+        }
         assert shadow_gate(good)["pass"]
         sm.promote_from_shadow(good)
         assert sm.state == "staging"

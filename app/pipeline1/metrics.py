@@ -18,18 +18,20 @@ IGNITION_HIGH_VOL_IC_MIN = 0.02
 TRAIN_IC_LEAK_MAX = 0.15
 
 
-def daily_ic_series(
-    df: pd.DataFrame, score_col: str, label_col: str
-) -> pd.Series:
+def daily_ic_series(df: pd.DataFrame, score_col: str, label_col: str) -> pd.Series:
     """日度横截面 Rank IC 序列 (index=date) — 净收益口径标签由调用方保证."""
     sub = df[["date", score_col, label_col]].dropna()
-    return sub.groupby("date").apply(
-        lambda g: (
-            spearmanr(g[score_col], g[label_col]).statistic
-            if g[score_col].nunique() > 5 and g[label_col].nunique() > 1
-            else np.nan
+    return (
+        sub.groupby("date")
+        .apply(
+            lambda g: (
+                spearmanr(g[score_col], g[label_col]).statistic
+                if g[score_col].nunique() > 5 and g[label_col].nunique() > 1
+                else np.nan
+            )
         )
-    ).dropna()
+        .dropna()
+    )
 
 
 def rank_ic(df: pd.DataFrame, score_col: str, label_col: str) -> float:
@@ -62,9 +64,13 @@ def ignition_gate(
     checks = {
         "rank_ic": {"value": round(ic, 4), "pass": ic >= IGNITION_IC_MIN},
         "icir": {"value": round(ir, 4), "pass": ir >= IGNITION_ICIR_MIN},
-        "high_vol_ic": {"value": round(high_vol_ic, 4),
-                        "pass": high_vol_ic >= IGNITION_HIGH_VOL_IC_MIN},
-        "train_ic_no_leak": {"value": round(train_ic, 4),
-                             "pass": train_ic <= TRAIN_IC_LEAK_MAX},
+        "high_vol_ic": {
+            "value": round(high_vol_ic, 4),
+            "pass": high_vol_ic >= IGNITION_HIGH_VOL_IC_MIN,
+        },
+        "train_ic_no_leak": {
+            "value": round(train_ic, 4),
+            "pass": train_ic <= TRAIN_IC_LEAK_MAX,
+        },
     }
     return {"pass": all(c["pass"] for c in checks.values()), "checks": checks}
