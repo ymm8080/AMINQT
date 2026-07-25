@@ -211,6 +211,99 @@ class TestBlankReviewBug:
         assert "truncated" in result["summary"].lower()
 
 
+class TestParrotingDetection:
+    """The model may return the canned 'No issues found.' summary verbatim
+    without reviewing the diff. This must be detected and flagged."""
+
+    def test_parroted_summary_flagged_for_large_diff(self, monkeypatch):
+        """Model returns exact 'No issues found.' for a substantial diff.
+
+        This reproduces the blank-review bug seen on PR #19/#20:
+        41K-char diff, 1.6s response, summary = 'No issues found.'
+        """
+        payload = {"issues": [], "summary": "No issues found."}
+
+        def fake_urlopen(req, timeout=None):
+            return FakeHTTPResponse(_api_response(json.dumps(payload)))
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        result = dsr.review_with_deepseek("x" * 1000, "key", "m", "https://x")
+
+        assert result["error"] is True
+        assert "incomplete" in result["summary"].lower()
+
+    def test_parroted_summary_accepted_for_tiny_diff(self, monkeypatch):
+        """Tiny diff (< 500 chars) with 'No issues found.' is acceptable."""
+        payload = {"issues": [], "summary": "No issues found."}
+
+        def fake_urlopen(req, timeout=None):
+            return FakeHTTPResponse(_api_response(json.dumps(payload)))
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        result = dsr.review_with_deepseek("x" * 100, "key", "m", "https://x")
+
+        assert "error" not in result
+
+    def test_substantive_summary_not_flagged(self, monkeypatch):
+        """A summary that is NOT the canned string must pass cleanly."""
+        payload = {
+            "issues": [],
+            "summary": "Reviewed 3 files / 450 changed lines, no violations found.",
+        }
+
+        def fake_urlopen(req, timeout=None):
+            return FakeHTTPResponse(_api_response(json.dumps(payload)))
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        result = dsr.review_with_deepseek("x" * 50000, "key", "m", "https://x")
+
+        assert "error" not in result
+
+    def test_issues_with_parroted_summary_not_flagged(self, monkeypatch):
+        """If the model found issues, the summary string doesn't matter."""
+        payload = {
+            "issues": [
+                {"file": "a.py", "line": "1", "severity": "warning", "message": "x"}
+            ],
+            "summary": "No issues found.",
+        }
+
+        def fake_urlopen(req, timeout=None):
+            return FakeHTTPResponse(_api_response(json.dumps(payload)))
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        result = dsr.review_with_deepseek("x" * 50000, "key", "m", "https://x")
+
+        assert "error" not in result
+        assert len(result["issues"]) == 1
+
+
+class TestDiffStats:
+    """The user message must include diff stats so the model can't
+    return a canned response without acknowledging the diff."""
+
+    def test_diff_stats_included_in_user_message(self, monkeypatch):
+        captured = {}
+
+        def fake_urlopen(req, timeout=None):
+            captured["data"] = json.loads(req.data.decode())
+            return FakeHTTPResponse(_api_response('{"issues": [], "summary": "ok"}'))
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        diff = "+++ b/file.py\n+import os\n-old_import\n"
+        dsr.review_with_deepseek(diff, "key", "m", "https://x")
+
+        user_msg = captured["data"]["messages"][1]["content"]
+        assert "[Diff stats:" in user_msg
+        assert "1 files" in user_msg
+        assert "2 changed lines" in user_msg
+
+
 class TestSuccessfulReview:
     """A valid JSON response must parse cleanly with no error flag."""
 
@@ -239,7 +332,9 @@ class TestSuccessfulReview:
         assert result["issues"][0]["severity"] == "warning"
 
     def test_no_issues_review(self, monkeypatch):
-        payload = {"issues": [], "summary": "No issues found."}
+        # Use a substantive summary — the old "No issues found." is now
+        # flagged as parroting for non-trivial diffs.
+        payload = {"issues": [], "summary": "Reviewed 1 file, no violations found."}
 
         def fake_urlopen(req, timeout=None):
             return FakeHTTPResponse(_api_response(json.dumps(payload)))
