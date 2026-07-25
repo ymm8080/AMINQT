@@ -108,11 +108,12 @@ class LabelEngine:
     # ---------------- 停牌污染 ----------------
     @staticmethod
     def mask_suspension(df: pd.DataFrame) -> pd.DataFrame:
-        """T 到 T+N 区间内存在停牌 → label_Nd 置 NaN (脏标签: 复牌价差非真实持有收益)."""
-        # risk_filter: exclude ST stocks before label masking
-        # (suspended stocks retained — needed for rolling suspension detection)
-        if "is_st" in df.columns:
-            df = df[~df["is_st"].astype(bool)].copy()
+        """T 到 T+N 区间内存在停牌 → label_Nd 置 NaN (脏标签: 复牌价差非真实持有收益).
+
+        Note: ST/suspended stock filtering is handled by risk_filter in
+        dual_track_trainer before training, not here. This method only masks
+        labels contaminated by suspension gaps.
+        """
         for n in LABEL_HORIZONS:
             rolling_sum = (
                 df.groupby("symbol")["is_suspended"]
