@@ -118,10 +118,13 @@ class DualTrackTrainer:
                 label = pm_label
         train = segs["train"].dropna(subset=[label])  # per-model dropna (安全网 #7)
         es = segs["es"].dropna(subset=[label])
-        # risk_filter: 排除停牌股 (非可交易标的不进训练)
-        if "is_suspended" in train.columns:
-            train = train[~train["is_suspended"].astype(bool)]
-            es = es[~es["is_suspended"].astype(bool)]
+        # risk_filter: 排除停牌/ST 股 (非可交易标的不进训练;
+        # 涨跌停限制在执行层 risk_filter.apply_filters 处理, 非训练层)
+        for col in ("is_suspended", "is_st"):
+            if col in train.columns:
+                train = train[~train[col].astype(bool)]
+            if col in es.columns:
+                es = es[~es[col].astype(bool)]
         X = np.nan_to_num(train[feature_cols].values, nan=0.0)
         y = train[label].values
         X_es = np.nan_to_num(es[feature_cols].values, nan=0.0)
