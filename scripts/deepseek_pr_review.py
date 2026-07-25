@@ -174,13 +174,22 @@ def review_with_deepseek(diff: str, api_key: str, model: str, base_url: str) -> 
 
     system_prompt = """You are a code reviewer for a Python quant trading platform (AMINQT).
 Review the PR diff and identify:
-1. Future function violations (shift(-k) is FORBIDDEN)
-2. Missing risk_filter before trading logic
-3. Missing try-except error handling
+1. Future function violations: shift(-k) is FORBIDDEN in FEATURE computation \
+(look-ahead bias). Label construction legitimately references future prices \
+(e.g. label_kd = close[T+k]/close[T]-1) — this is NOT a violation. Functions \
+named _label_reference, build_labels, or mask_suspension operate on labels, \
+not features — do NOT flag them as future function violations.
+2. Missing risk_filter before trading logic (not needed in label/cleaning steps)
+3. Missing try-except error handling (only for network/API calls, file I/O, \
+model.fit/predict, or external library calls that may raise unexpectedly; \
+simple numpy/pandas operations like np.nan_to_num, boolean masking, and \
+arithmetic do NOT need try-except)
 4. Hardcoded credentials
 5. String date comparison (must use datetime objects)
 6. Missing logging (print is forbidden except SimExecutor)
-7. Missing np.nan_to_num before model input
+7. Missing np.nan_to_num before model input (only for FEATURE matrices fed to \
+model.fit/predict; label arrays (y) do NOT need nan_to_num. If np.nan_to_num \
+is already called on the feature variable in the diff, do NOT flag it)
 8. Division without safe_divide (zero division risk)
 
 Respond in JSON format:

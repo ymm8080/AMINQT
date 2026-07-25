@@ -176,9 +176,7 @@ class TestBlankReviewBug:
             if call_count[0] == 1:
                 assert data["max_tokens"] == 16000
                 return FakeHTTPResponse(
-                    _api_response(
-                        content='{"issues": [', finish_reason="length"
-                    )
+                    _api_response(content='{"issues": [', finish_reason="length")
                 )
             else:
                 assert data["max_tokens"] == 32000
@@ -201,9 +199,7 @@ class TestBlankReviewBug:
         def fake_urlopen(req, timeout=None):
             call_count[0] += 1
             return FakeHTTPResponse(
-                _api_response(
-                    content='{"issues": [', finish_reason="length"
-                )
+                _api_response(content='{"issues": [', finish_reason="length")
             )
 
         monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
