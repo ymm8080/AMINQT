@@ -305,7 +305,9 @@ class DataSupplyChain:
             raise DataSupplyError("B11 回填失败: 全部标的无数据")
         panel = pd.concat(frames, ignore_index=True)
         panel = panel.sort_values(["symbol", "date"]).reset_index(drop=True)
-        logger.info("B11 回填完成: %d/%d 标的, %d 行", len(frames), len(symbols), len(panel))
+        logger.info(
+            "B11 回填完成: %d/%d 标的, %d 行", len(frames), len(symbols), len(panel)
+        )
         return panel
 
     def check_backfill_depth(
