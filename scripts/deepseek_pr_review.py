@@ -187,7 +187,9 @@ arithmetic do NOT need try-except)
 4. Hardcoded credentials
 5. String date comparison (must use datetime objects)
 6. Missing logging (print is forbidden except SimExecutor)
-7. Missing np.nan_to_num before model input
+7. Missing np.nan_to_num before model input (only for FEATURE matrices fed to \
+model.fit/predict; label arrays (y) do NOT need nan_to_num. If np.nan_to_num \
+is already called on the feature variable in the diff, do NOT flag it)
 8. Division without safe_divide (zero division risk)
 
 Respond in JSON format:
