@@ -151,3 +151,60 @@ class BearProtocol:
         if frozen:
             logger.error("E11 板块联动熔断: 冻结 %s", sorted(frozen))
         return frozen
+
+
+# ============================================================
+# #84 死叉空仓规则假阳性率回测 (E11 假信号防护, 检查清单 #84)
+# ============================================================
+def death_cross_false_positive_report(
+    hs300_close: pd.Series,
+    macd_hist: pd.Series,
+    recover_window: int = 10,
+) -> dict:
+    """回测死叉空仓规则的假阳性率 (上线前强制, 近 3 年数据).
+
+    信号: 收盘 < MA20 且 MACD 死叉 (hist 由正转负).
+    假阳性: 信号后 recover_window 个交易日内大盘收复 20 日线
+    (说明空仓是假信号, 躲过的是反弹不是熊市).
+
+    判定 (V3.8 §四 ter): 假阳性率 > 50% → 规则须改用
+    "跌破 20 日线 + 连续 2 日确认" 才允许上线.
+
+    Args:
+        hs300_close: HS300 收盘序列 (index=date, 升序, 建议近 3 年)
+        macd_hist:   同 index 的 MACD hist 序列
+        recover_window: 收复观察窗口 (交易日, 默认 10)
+
+    Returns:
+        {'n_signals', 'n_false_positive', 'false_positive_rate',
+         'use_two_day_confirm' (假阳性率>50% → True), 'signal_dates'}
+    """
+    close = hs300_close.reset_index(drop=True)
+    hist = macd_hist.reset_index(drop=True)
+    ma20 = close.rolling(20).mean()
+    signals = []
+    for i in range(1, len(close)):
+        dead_cross = hist.iloc[i] < 0 and hist.iloc[i - 1] >= 0
+        below = close.iloc[i] < ma20.iloc[i]
+        if dead_cross and below:
+            signals.append(i)
+    false_pos = 0
+    for i in signals:
+        future = close.iloc[i + 1 : i + 1 + recover_window]
+        future_ma = ma20.iloc[i + 1 : i + 1 + recover_window]
+        if len(future) and bool((future > future_ma).any()):
+            false_pos += 1  # 10 日内收复 20 日线 → 假阳性
+    n = len(signals)
+    rate = false_pos / n if n else 0.0
+    use_confirm = rate > 0.5
+    if use_confirm:
+        logger.error(
+            "#84 死叉假阳性率 %.0f%% > 50%% (%d/%d), 改用'跌破20日线+连续2日确认'",
+            rate * 100, false_pos, n)
+    return {
+        "n_signals": n,
+        "n_false_positive": false_pos,
+        "false_positive_rate": round(rate, 4),
+        "use_two_day_confirm": use_confirm,
+        "signal_dates": [str(hs300_close.index[i])[:10] for i in signals],
+    }
