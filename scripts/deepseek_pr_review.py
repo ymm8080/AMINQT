@@ -24,6 +24,14 @@ import urllib.request
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+# The exact "no issues" example string from the system prompt. If the model
+# returns this verbatim for a non-trivial diff, it parroted the example
+# instead of reviewing the code.
+_PARROTED_SUMMARY = "No issues found."
+# Diffs shorter than this are considered trivial (e.g. whitespace-only);
+# a canned "no issues" response is acceptable for them.
+_PARROT_THRESHOLD = 500
+
 
 def get_pr_diff(pr_number: str, repo: str, token: str) -> str:
     """Fetch PR diff via GitHub API.
@@ -195,7 +203,10 @@ is already called on the feature variable in the diff, do NOT flag it)
 Respond in JSON format:
 {"issues": [{"file": "...", "line": "...", "severity": "critical|warning|info", "message": "..."}], "summary": "one-line summary"}
 
-If no issues found: {"issues": [], "summary": "No issues found."}
+If no issues found, your summary MUST include the diff stats (file count and
+changed line count) provided in the user message, e.g.
+"Reviewed 3 files / 450 changed lines, no violations of the 8 rules found."
+Do NOT use the generic phrase "No issues found." — always include the counts.
 
 Keep messages concise (one sentence per issue). Only report real violations.
 """
@@ -208,11 +219,23 @@ Keep messages concise (one sentence per issue). Only report real violations.
     #
     # Code review is a checklist task; disable thinking for predictable
     # token usage and faster responses.
+    # Diff stats — concrete numbers the model must acknowledge in its summary,
+    # preventing it from blindly returning a canned "no issues" response.
+    diff_file_count = sum(1 for line in diff.splitlines() if line.startswith("+++"))
+    diff_changed_lines = sum(
+        1
+        for line in diff.splitlines()
+        if line[:1] in ("+", "-") and line[:3] not in ("+++", "---")
+    )
+    diff_stats = (
+        f"[Diff stats: {diff_file_count} files, {diff_changed_lines} changed lines]\n\n"
+    )
+
     messages = [
         {"role": "system", "content": system_prompt},
         {
             "role": "user",
-            "content": f"Review this PR diff:\n\n```\n{diff}\n```",
+            "content": f"{diff_stats}Review this PR diff:\n\n```\n{diff}\n```",
         },
     ]
 
@@ -245,6 +268,26 @@ Keep messages concise (one sentence per issue). Only report real violations.
                 reasoning = msg.get("reasoning_content") or ""
                 parsed = _extract_json(content)
                 if parsed is not None:
+                    # Detect parroting: model returns the exact canned
+                    # "No issues found." summary without reviewing the diff.
+                    if (
+                        not parsed.get("issues")
+                        and parsed.get("summary", "").strip() == _PARROTED_SUMMARY
+                        and len(diff) > _PARROT_THRESHOLD
+                    ):
+                        parsed["summary"] = (
+                            "Review may be incomplete: model returned the "
+                            "canned phrase 'No issues found.' without a "
+                            "substantive summary for a non-trivial diff. "
+                            "Re-run the review or inspect the diff manually."
+                        )
+                        parsed["error"] = True
+                        logger.warning(
+                            "Detected parroted '%s' for a %d-char diff "
+                            "— flagging as suspicious.",
+                            _PARROTED_SUMMARY,
+                            len(diff),
+                        )
                     return parsed
                 finish_reason = result.get("choices", [{}])[0].get(
                     "finish_reason", "unknown"

@@ -253,3 +253,35 @@ class AnnouncementFactor:
             out.loc[event_mask, "announce_score"] = -1.0
             out["event_window"] = event_mask
         return out
+
+    # ---------------- 清单失效条件 #5 (公告驱动) ----------------
+    def list_invalidation(
+        self, trade_date: str, threshold: float = -0.5
+    ) -> dict[str, str]:
+        """清单失效条件 #5: 公告剔除 (与盘中条件 1-4 互补, 回测必须模拟).
+
+        剔除规则: 事件窗口内 (B.4) 或 有效公告情感 ≤ -0.5 (利空).
+        Returns:
+            {symbol: 剔除原因}
+        """
+        trade_date = str(trade_date)
+        out: dict[str, str] = {}
+        for symbol in {r.symbol for r in self._records}:
+            if self.is_event_window(symbol, trade_date):
+                out[symbol] = "失效#5: 事件窗口禁买 (财报/解禁)"
+                continue
+            score = self.compute_announce_score(symbol, trade_date)
+            if score <= threshold:
+                out[symbol] = f"失效#5: 公告利空 score={score:.2f}"
+        if out:
+            logger.error("清单失效#5 (公告剔除): %s", sorted(out))
+        return out
+
+    @staticmethod
+    def apply_invalidation(
+        candidates: pd.DataFrame, invalidated: dict[str, str]
+    ) -> pd.DataFrame:
+        """按失效#5 结果从候选中剔除 (回测与实盘同口径)."""
+        if not invalidated:
+            return candidates
+        return candidates[~candidates["symbol"].isin(invalidated)]
