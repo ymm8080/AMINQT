@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .cost_model import CostModel, round_trip_cost
+from .safe_div import safe_divide
 
 # 参数 (季度平原寻优对象; 盘中绝对禁止热更新)
 CHASE_LIMIT = 0.07  # B3 追高否决: 涨幅>7% (与清单失效条件#4 口径一致, 杜绝双口径)
@@ -62,7 +63,7 @@ class BuyContext:
 # ============================================================
 def b3_chase_filter(ctx: BuyContext) -> bool:
     """B3 追高过滤: 涨幅 > 7% → 否决 (涨停附近追入赔率极差)."""
-    return ctx.price / ctx.pre_close - 1 > CHASE_LIMIT
+    return safe_divide(ctx.price, ctx.pre_close) - 1 > CHASE_LIMIT
 
 
 def b4_open_noise(ctx: BuyContext) -> bool:
@@ -83,7 +84,7 @@ def b5_net_edge_veto(ctx: BuyContext, costs: CostModel | None = None) -> bool:
 
 def b6_liquidity_veto(ctx: BuyContext) -> bool:
     """B6 流动性约束: 单笔 > ADV20×1% 或 bar 成交额 < 100 万 → 否决."""
-    if ctx.order_value > ctx.adv_20d * ADV_BUY_RATIO:
+    if ctx.adv_20d <= 0 or ctx.order_value > ctx.adv_20d * ADV_BUY_RATIO:
         return True
     return ctx.bar_amount < BAR_AMOUNT_MIN
 
@@ -95,7 +96,7 @@ def b7_stop_distance_veto(ctx: BuyContext) -> bool:
     """
     if ctx.stop_price <= 0 or ctx.price <= 0:
         return True  # 无止损价 = 无保护, 否决
-    distance = (ctx.price - ctx.stop_price) / ctx.price
+    distance = safe_divide(ctx.price - ctx.stop_price, ctx.price)
     return distance < STOP_ATR_MULT * ctx.atr_pct
 
 
@@ -139,10 +140,10 @@ def b2_evening_strength(
     if len(bars) < ma_window:
         return False
     last = bars[-1]
-    avg_vol = sum(b.volume for b in bars[-ma_window:-1]) / (ma_window - 1)
-    if avg_vol <= 0 or last.volume / avg_vol < vol_ratio:
+    avg_vol = safe_divide(float(sum(b.volume for b in bars[-ma_window:-1])), float(ma_window - 1))
+    if avg_vol <= 0 or safe_divide(last.volume, avg_vol) < vol_ratio:
         return False
-    ma = sum(b.close for b in bars[-ma_window:]) / ma_window
+    ma = safe_divide(float(sum(b.close for b in bars[-ma_window:])), float(ma_window))
     return last.close > ma
 
 

@@ -12,6 +12,8 @@ import logging
 import numpy as np
 import pandas as pd
 
+from .safe_div import safe_divide
+
 logger = logging.getLogger(__name__)
 
 MATCH_RATE_MIN = 0.99  # 逐笔一致率门禁 > 99%
@@ -38,7 +40,7 @@ def trade_match_rate(backtest_trades: pd.DataFrame, live_trades: pd.DataFrame) -
             "pass": len(lv) == 0,
         }
     matched = bt & lv
-    rate = len(matched) / len(bt)
+    rate = safe_divide(float(len(matched)), float(len(bt)))
     missing = sorted(bt - lv)
     extra = sorted(lv - bt)
     if missing or extra:

@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .position import Position
+from .safe_div import safe_divide
 from .sessions import sell_window_open
 
 # 参数 (季度平原寻优; S1 stop_price 不在寻优范围 — PIPELINE1 动态下发)
@@ -83,7 +84,7 @@ def s2_trailing_stop(ctx: SellContext, pos: Position) -> bool:
     """
     if pos.entry_price <= 0 or pos.max_price_since_entry <= pos.entry_price:
         return False
-    profit = pos.max_price_since_entry / pos.entry_price - 1
+    profit = safe_divide(pos.max_price_since_entry, pos.entry_price) - 1
     if profit < S2_ACTIVATE:
         return False
     band = max(S2_TRAIL_BASE, S2_ATR_MULT * ctx.atr_pct)
@@ -97,7 +98,7 @@ def s5a_time_stop(ctx: SellContext, pos: Position) -> bool:
     """
     if pos.hold_days < S5A_DAYS or pos.entry_price <= 0:
         return False
-    ret = ctx.price / pos.entry_price - 1
+    ret = safe_divide(ctx.price, pos.entry_price) - 1
     return ret < S5A_MIN_RET and sell_window_open(ctx.t)
 
 
