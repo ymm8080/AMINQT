@@ -71,9 +71,7 @@ class BearProtocol:
         ma20 = hs300_close.rolling(20).mean().iloc[-1]
         below_ma20 = hs300_close.iloc[-1] < ma20
         macd_dead = (
-            len(macd_hist) >= 2
-            and macd_hist.iloc[-1] < 0
-            and macd_hist.iloc[-2] >= 0
+            len(macd_hist) >= 2 and macd_hist.iloc[-1] < 0 and macd_hist.iloc[-2] >= 0
         )
         ic_ok = len(daily_ics_5d) > 0 and float(np.mean(daily_ics_5d)) > RECOVERY_IC_MIN
 
@@ -81,7 +79,11 @@ class BearProtocol:
             self.state = STATE_DEFENSE
             self.recovery_weeks = 0
             logger.warning("E11 熊市协议: NORMAL → DEFENSE, 强制空仓 + 逆回购")
-            return {"state": self.state, "action": "FULL_EXIT", "cash_to": "REVERSE_REPO"}
+            return {
+                "state": self.state,
+                "action": "FULL_EXIT",
+                "cash_to": "REVERSE_REPO",
+            }
 
         if self.state == STATE_DEFENSE and ic_ok:
             self.state = STATE_RECOVERY
@@ -107,7 +109,11 @@ class BearProtocol:
                 self.state = STATE_DEFENSE
                 self.recovery_weeks = 0
                 logger.warning("E11 熊市协议: RECOVERY → DEFENSE (IC 失守)")
-                return {"state": self.state, "action": "FULL_EXIT", "cash_to": "REVERSE_REPO"}
+                return {
+                    "state": self.state,
+                    "action": "FULL_EXIT",
+                    "cash_to": "REVERSE_REPO",
+                }
             self.recovery_weeks += 1
 
         return {"state": self.state, "action": "HOLD"}

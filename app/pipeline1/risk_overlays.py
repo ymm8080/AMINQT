@@ -46,7 +46,9 @@ def liquidity_cap(order_value: float, adv20: float, bear: bool = False) -> float
     return float(min(1.0, adv20 * ratio / max(order_value, 1.0)))
 
 
-def systemic_liquidity_check(adv20_today: pd.Series, adv20_hist_250d: pd.Series) -> bool:
+def systemic_liquidity_check(
+    adv20_today: pd.Series, adv20_hist_250d: pd.Series
+) -> bool:
     """全清单 ADV 异常 → True = 系统性流动性枯竭, 锁仓不交易.
 
     判定: 当日 ADV20 中位数 < 近 250 日 ADV20 中位数的 20% 分位.
@@ -87,9 +89,7 @@ def cluster_block(
     for s in cols:
         if s in assigned:
             continue
-        members = {s} | {
-            t for t in cols if t != s and corr.loc[s, t] > threshold
-        }
+        members = {s} | {t for t in cols if t != s and corr.loc[s, t] > threshold}
         assigned |= members
         clusters.append(members)
     # 无收益数据的票各自独立成簇 (不阻断)
@@ -118,8 +118,12 @@ def apply_cluster_caps(
         total = float(out.loc[idx].sum()) if idx else 0.0
         if total > cap and total > 0:
             out.loc[idx] = out.loc[idx] * (cap / total)
-            logger.warning("E8 簇阻断: %s 总权重 %.1f%% > %.0f%%, 按比例缩减",
-                           sorted(members), total * 100, cap * 100)
+            logger.warning(
+                "E8 簇阻断: %s 总权重 %.1f%% > %.0f%%, 按比例缩减",
+                sorted(members),
+                total * 100,
+                cap * 100,
+            )
     return out
 
 
@@ -142,11 +146,14 @@ def vol_breaker_multiplier(
     """
     m = 1.0
     if avg_amplitude_5d > AMPLITUDE_FUSE:
-        logger.error("E9 波动率熔断: 5日平均振幅 %.2f%% > 3%%, 仓位压至 0.10",
-                     avg_amplitude_5d * 100)
+        logger.error(
+            "E9 波动率熔断: 5日平均振幅 %.2f%% > 3%%, 仓位压至 0.10",
+            avg_amplitude_5d * 100,
+        )
         m = min(m, FUSE_MULTIPLIER)
     if baseline_250d > 0 and short_vol > VOL_SURGE_RATIO * baseline_250d:
-        logger.warning("E9 短期波动率 %.4f > 1.5×基线 %.4f, 乘数 ×0.6",
-                       short_vol, baseline_250d)
+        logger.warning(
+            "E9 短期波动率 %.4f > 1.5×基线 %.4f, 乘数 ×0.6", short_vol, baseline_250d
+        )
         m *= VOL_SURGE_DAMP
     return m

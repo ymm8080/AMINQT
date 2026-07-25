@@ -92,16 +92,24 @@ class OOSMonitor:
             self.state = STATE_RED_SIM
             action = "🔴 L1: IC < μ-2σ, 模型失效嫌疑, 立即降级模拟盘"
             logger.error(action)
-            return {"state": self.state, "action": action,
-                    "rolling_ic_5d": round(rolling, 4), "light": light}
+            return {
+                "state": self.state,
+                "action": action,
+                "rolling_ic_5d": round(rolling, 4),
+                "light": light,
+            }
         if light == "YELLOW":
             self._yellow_streak += 1
             if self._yellow_streak >= YELLOW_STREAK_L1:
                 self.state = STATE_RED_SIM
                 action = f"🟡×{self._yellow_streak} → L1: 连续黄灯, 降级模拟盘"
                 logger.error(action)
-                return {"state": self.state, "action": action,
-                        "rolling_ic_5d": round(rolling, 4), "light": light}
+                return {
+                    "state": self.state,
+                    "action": action,
+                    "rolling_ic_5d": round(rolling, 4),
+                    "light": light,
+                }
         else:
             self._yellow_streak = 0
 

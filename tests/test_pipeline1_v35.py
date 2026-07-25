@@ -531,13 +531,9 @@ class TestListGenerator:
         gen = ListGenerator(**GATE_OFF)
         out = gen.emit(make_candidates(), MarketEnv(hs300_drop_today=0.031))
         assert out["empty"] and len(out["list"]) == 0
-        out = gen.emit(
-            make_candidates(), MarketEnv(count_limit_down_market=51)
-        )
+        out = gen.emit(make_candidates(), MarketEnv(count_limit_down_market=51))
         assert out["empty"]
-        out = gen.emit(
-            make_candidates(n=20), MarketEnv(hs300_consecutive_down=3)
-        )
+        out = gen.emit(make_candidates(n=20), MarketEnv(hs300_consecutive_down=3))
         assert not out["empty"] and len(out["list"]) <= 5 and out["cap_position"] == 0.3
 
     def test_delivery_guard(self):

@@ -155,15 +155,20 @@ class ICScreener:
         """
         # [E5] 净收益标签优先 (分层滑点口径)
         label_of = {
-            k: (f"label_{k}d_net" if f"label_{k}d_net" in train_df.columns
-                else f"label_{k}d")
+            k: (
+                f"label_{k}d_net"
+                if f"label_{k}d_net" in train_df.columns
+                else f"label_{k}d"
+            )
             for k in (1, 3, 5)
         }
         has_mdd = "label_mdd_3d" in train_df.columns  # [E2]
         l2_history = self._load_l2_history()
         result = {"window_id": window_id, "factors": [], "detail": {}}
         for f in feature_cols:
-            ic_by_label = {k: self.rank_ic(train_df, f, lbl) for k, lbl in label_of.items()}
+            ic_by_label = {
+                k: self.rank_ic(train_df, f, lbl) for k, lbl in label_of.items()
+            }
             best_ic = max(ic_by_label.values())
             ic_mdd = self.rank_ic(train_df, f, "label_mdd_3d") if has_mdd else None
             if ic_mdd is not None:
@@ -189,8 +194,9 @@ class ICScreener:
             l2_evicted = neg_streak >= L2_NEG_PERIODS
             if l2_evicted and grade != "dead":
                 grade = "dead"
-                logger.warning("E4-L2: 因子 %s 连续 %d 期窗口IC为负, 自动剔除",
-                               f, neg_streak)
+                logger.warning(
+                    "E4-L2: 因子 %s 连续 %d 期窗口IC为负, 自动剔除", f, neg_streak
+                )
             result["detail"][f] = {
                 **{f"ic_{k}d": round(v, 4) for k, v in ic_by_label.items()},
                 "auc": round(auc, 4),

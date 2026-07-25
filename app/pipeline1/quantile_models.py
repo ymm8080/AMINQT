@@ -80,9 +80,7 @@ class QuantileModelSet:
         assert len(self.models) == len(QUANTILES), "QuantileModelSet 未 fit"
         qs = np.column_stack([self.models[q].predict(X) for q in QUANTILES])
         x = np.arange(len(QUANTILES))
-        mono = np.apply_along_axis(
-            lambda r: self._iso.fit_transform(x, r), 1, qs
-        )
+        mono = np.apply_along_axis(lambda r: self._iso.fit_transform(x, r), 1, qs)
         out = pd.DataFrame(mono, columns=QUANTILE_COLS)
         out["uncertainty_width"] = out["pred_q90"] - out["pred_q10"]
         return out
@@ -129,6 +127,8 @@ class PainModel:
 
     # ---------------- E2 降仓裁决 ----------------
     @staticmethod
-    def pain_adjustment(pain_prob: float, threshold: float = PAIN_DEMOTE_THRESHOLD) -> float:
+    def pain_adjustment(
+        pain_prob: float, threshold: float = PAIN_DEMOTE_THRESHOLD
+    ) -> float:
         """pain_prob > 30% → 仓位乘 0.5 (降仓50%); 否则 1.0. (剔除交清单层裁决)"""
         return 0.5 if pain_prob > threshold else 1.0

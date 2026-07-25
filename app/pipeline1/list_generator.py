@@ -223,8 +223,11 @@ class ListGenerator:
         ok = df[(df["prob_up"] > prob_th) & (df["pred_ret_1d"] > ret_th)]
         n = len(ok)
         if n == 0:
-            logger.warning("E7 动态准入: 0 只过闸 (prob>%.2f, ret>%.2f%%), 今日空清单",
-                           prob_th, ret_th * 100)
+            logger.warning(
+                "E7 动态准入: 0 只过闸 (prob>%.2f, ret>%.2f%%), 今日空清单",
+                prob_th,
+                ret_th * 100,
+            )
         return ok
 
     # ---------------- E1 分布版仓位权重 ----------------
@@ -245,7 +248,8 @@ class ListGenerator:
         dist_cols = {"pred_q50", "uncertainty_width", "ATR_pct"}
         if dist_cols <= set(df.columns) and len(df):
             raw = (
-                df["pred_q50"] * df["prob_up"]
+                df["pred_q50"]
+                * df["prob_up"]
                 / (
                     df["ATR_pct"].clip(lower=0.005)
                     * (1 + df["uncertainty_width"].clip(lower=0.001))
@@ -363,8 +367,14 @@ class ListGenerator:
         for col in ("is_limit_up_close", "is_one_word_limit"):
             if col not in df.columns:
                 df[col] = 0
-        for col in ("pred_q10", "pred_q50", "pred_q90", "uncertainty_width",
-                    "pain_prob", "announce_score"):
+        for col in (
+            "pred_q10",
+            "pred_q50",
+            "pred_q90",
+            "uncertainty_width",
+            "pain_prob",
+            "announce_score",
+        ):
             if col not in df.columns:
                 df[col] = np.nan
         return {

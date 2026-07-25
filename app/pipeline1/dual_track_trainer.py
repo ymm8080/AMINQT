@@ -225,7 +225,9 @@ class DualTrackTrainer:
             )
             qset.label_ = q_label
             out["quantile_models"] = qset
-            logger.info("[%s] E1 分位数五模型训练完成 (label=%s)", out["board"], q_label)
+            logger.info(
+                "[%s] E1 分位数五模型训练完成 (label=%s)", out["board"], q_label
+            )
 
         if "label_pain" in segs["train"].columns:
             train, X, y = _xy("train", "label_pain")

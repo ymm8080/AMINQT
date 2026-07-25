@@ -110,8 +110,12 @@ class TestQuantileModels:
         rng = np.random.default_rng(7)
         X = rng.normal(size=(n, 3))
         y = X[:, 0] * 0.02 + rng.normal(0, 0.03, n)
-        params = {"n_estimators": 10, "learning_rate": 0.1,
-                  "random_state": 42, "verbosity": -1}
+        params = {
+            "n_estimators": 10,
+            "learning_rate": 0.1,
+            "random_state": 42,
+            "verbosity": -1,
+        }
         qset = QuantileModelSet(params).fit(X, y)
         return qset, X
 
@@ -135,8 +139,9 @@ class TestPainModel:
         rng = np.random.default_rng(3)
         X = rng.normal(size=(200, 2))
         y = (X[:, 0] + rng.normal(0, 0.5, 200) < -0.5).astype(float)
-        pain = PainModel({"n_estimators": 10, "random_state": 42,
-                          "verbosity": -1}).fit(X, y)
+        pain = PainModel({"n_estimators": 10, "random_state": 42, "verbosity": -1}).fit(
+            X, y
+        )
         prob = pain.predict_proba(X[:10])
         assert ((prob >= 0) & (prob <= 1)).all()
 
@@ -225,8 +230,9 @@ class TestE6:
         rows = []
         for d in dates:
             for i in range(10):
-                rows.append({"symbol": f"6000{i:02d}", "date": d,
-                             "amount": 1e8 * (i + 1)})
+                rows.append(
+                    {"symbol": f"6000{i:02d}", "date": d, "amount": 1e8 * (i + 1)}
+                )
         df = pd.DataFrame(rows)
         out = CleaningPipeline().step5_amount_bottom(df)
         # 每日期剔除成交额最小 2 只 (rank_pct 0.1/0.2 不 > 0.2)
@@ -258,11 +264,13 @@ def _cands(rows: list[dict]) -> pd.DataFrame:
 
 class TestDynamicEntry:
     def test_gate_filters_low_quality(self):
-        cands = _cands([
-            {"symbol": "600001"},  # prob 0.70, ret 0.02 → 过
-            {"symbol": "600002", "prob_up": 0.55},  # prob 不足 → 剔
-            {"symbol": "600003", "pred_ret_1d": 0.001},  # ret < 2×COST → 剔
-        ])
+        cands = _cands(
+            [
+                {"symbol": "600001"},  # prob 0.70, ret 0.02 → 过
+                {"symbol": "600002", "prob_up": 0.55},  # prob 不足 → 剔
+                {"symbol": "600003", "pred_ret_1d": 0.001},  # ret < 2×COST → 剔
+            ]
+        )
         out = ListGenerator().emit(cands)
         assert list(out["list"]["symbol"]) == ["600001"]
 
@@ -280,10 +288,12 @@ class TestDynamicEntry:
 
 class TestScorePainPenalty:
     def test_pain_penalty_lowers_score(self):
-        cands = _cands([
-            {"symbol": "600001"},
-            {"symbol": "600002", "pain_prob": 0.6},
-        ])
+        cands = _cands(
+            [
+                {"symbol": "600001"},
+                {"symbol": "600002", "pain_prob": 0.6},
+            ]
+        )
         gen = ListGenerator()
         scored = gen.compute_scores(cands).set_index("symbol")
         # pain_prob=0.6 → ×(1-0.5×0.6)=×0.7 → 排序分低于无惩罚票
@@ -295,13 +305,24 @@ class TestDistributionWeights:
     def _dist_cands(n_normal=11) -> pd.DataFrame:
         inds = ["白酒", "电池", "保险", "半导体"]
         rows = [
-            {"symbol": f"600{i:03d}", "industry": inds[i % 4],
-             "pred_q50": 0.03, "ATR_pct": 0.02, "uncertainty_width": 0.04}
+            {
+                "symbol": f"600{i:03d}",
+                "industry": inds[i % 4],
+                "pred_q50": 0.03,
+                "ATR_pct": 0.02,
+                "uncertainty_width": 0.04,
+            }
             for i in range(n_normal)
         ]
-        rows.append({"symbol": "609999", "industry": "白酒",
-                     "pred_q50": 0.03, "ATR_pct": 0.02,
-                     "uncertainty_width": 0.20})  # 不确定性大 → 权重低
+        rows.append(
+            {
+                "symbol": "609999",
+                "industry": "白酒",
+                "pred_q50": 0.03,
+                "ATR_pct": 0.02,
+                "uncertainty_width": 0.20,
+            }
+        )  # 不确定性大 → 权重低
         return _cands(rows)
 
     def test_uncertainty_damps_weight(self):
@@ -325,8 +346,13 @@ class TestClusterBlock:
     def _ret_matrix(self, days=25):
         rng = np.random.default_rng(11)
         a = rng.normal(0, 0.02, days)
-        return pd.DataFrame({"A": a, "B": a + rng.normal(0, 0.001, days),
-                             "C": rng.normal(0, 0.02, days)})
+        return pd.DataFrame(
+            {
+                "A": a,
+                "B": a + rng.normal(0, 0.001, days),
+                "C": rng.normal(0, 0.02, days),
+            }
+        )
 
     def test_cluster_grouping(self):
         clusters = cluster_block(["A", "B", "C"], self._ret_matrix())
@@ -426,12 +452,21 @@ class TestBacktestV38:
         frames = []
         for sym in ("600000", "600001"):
             close = 100 * np.cumprod(1 + np.full(days, 0.001))
-            frames.append(pd.DataFrame({
-                "symbol": sym, "date": dates, "open": close, "high": close * 1.01,
-                "low": close * 0.99, "close": close,
-                "pre_close": pd.Series(close).shift(1).fillna(close[0]),
-                "industry": "白酒", "adv20": 2e8,  # 1~5亿档 → 滑点 0.10%
-            }))
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "symbol": sym,
+                        "date": dates,
+                        "open": close,
+                        "high": close * 1.01,
+                        "low": close * 0.99,
+                        "close": close,
+                        "pre_close": pd.Series(close).shift(1).fillna(close[0]),
+                        "industry": "白酒",
+                        "adv20": 2e8,  # 1~5亿档 → 滑点 0.10%
+                    }
+                )
+            )
         return pd.concat(frames, ignore_index=True)
 
     def test_tiered_slippage_in_exec_price(self):
@@ -441,22 +476,20 @@ class TestBacktestV38:
         eng = BacktestEngineV35(panel, BacktestProtocol())
         d = sorted(panel["date"].unique())[5]
         px_tiered = eng._exec_buy_price(d, "600000")
-        eng_fixed = BacktestEngineV35(
-            panel, BacktestProtocol(tiered_slippage=False)
-        )
+        eng_fixed = BacktestEngineV35(panel, BacktestProtocol(tiered_slippage=False))
         px_fixed = eng_fixed._exec_buy_price(d, "600000")
         # 分层 0.10% > 固定 0.05% → 买价更高
         assert px_tiered > px_fixed
-        base = panel[(panel["date"] == d) & (panel["symbol"] == "600000")]["open"].iloc[0]
+        base = panel[(panel["date"] == d) & (panel["symbol"] == "600000")]["open"].iloc[
+            0
+        ]
         assert px_tiered == pytest.approx(base * 1.001)
 
     def test_slippage_sensitivity_multiplier(self):
         from app.pipeline1.backtest_v35 import BacktestEngineV35, BacktestProtocol
 
         panel = self._panel()
-        eng = BacktestEngineV35(
-            panel, BacktestProtocol(slippage_multiplier=2.0)
-        )
+        eng = BacktestEngineV35(panel, BacktestProtocol(slippage_multiplier=2.0))
         d = sorted(panel["date"].unique())[5]
         bar = eng._bar(d, "600000")
         assert eng._slippage_for(bar) == pytest.approx(0.002)  # 0.10% × 2
@@ -466,8 +499,14 @@ class TestBacktestV38:
 
         panel = self._panel()
         lists = {
-            d: pd.DataFrame({"symbol": ["600000"], "score": [1.0],
-                             "prob_up": [0.7], "industry": ["白酒"]})
+            d: pd.DataFrame(
+                {
+                    "symbol": ["600000"],
+                    "score": [1.0],
+                    "prob_up": [0.7],
+                    "industry": ["白酒"],
+                }
+            )
             for d in sorted(panel["date"].unique())[:-1]
         }
         r = BacktestEngineV35(panel).run(lists)
@@ -492,10 +531,15 @@ class TestScreenerL2:
             f = rng.normal(size=30)
             for i in range(30):
                 # 因子与未来收益强负相关 → 窗口 IC 持续为负
-                rows.append({"date": d, "factor": f[i],
-                             "label_1d": -f[i] + rng.normal(0, 0.01),
-                             "label_3d": -f[i] + rng.normal(0, 0.01),
-                             "label_5d": -f[i] + rng.normal(0, 0.01)})
+                rows.append(
+                    {
+                        "date": d,
+                        "factor": f[i],
+                        "label_1d": -f[i] + rng.normal(0, 0.01),
+                        "label_3d": -f[i] + rng.normal(0, 0.01),
+                        "label_5d": -f[i] + rng.normal(0, 0.01),
+                    }
+                )
         df = pd.DataFrame(rows)
         df["label_cls"] = (df["label_1d"] > 0).astype(float)  # auc_score 需要
         sc = ICScreener(registry_path=str(tmp_path))
