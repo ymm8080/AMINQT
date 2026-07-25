@@ -14,7 +14,9 @@ import numpy as np
 import pandas as pd
 
 LABEL_HORIZONS = (1, 3, 5)
-CLS_THRESHOLD = 0.005  # +0.5% 覆盖双边成本 (佣金�?.5x2 + 印花�?.05% + 滑点0.05% �?0.13%, 留安全垫)
+CLS_THRESHOLD = (
+    0.005  # +0.5% 覆盖双边成本 (佣金�?.5x2 + 印花�?.05% + 滑点0.05% �?0.13%, 留安全垫)
+)
 
 
 def _label_reference(s: pd.Series, k: int) -> pd.Series:
