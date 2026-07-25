@@ -519,11 +519,18 @@ class FeatureEngineV35:
             # diff(1) = c[t] - c[t-1] (后向差分, 仅用 t-1 数据, 无 look-ahead bias)
             d = c.diff(1)
             prev_c = c - d  # = c[t-1], 等价 shift(1) 但不调用 shift
-            ret_abs = _safe_divide(d, prev_c).abs()
-            # safe_divide: amount 为 0 时结果为 NaN (防除零)
+            # _safe_divide 防除零 (prev_c 为 0 时结果为 NaN)
+            safe_ret = _safe_divide(d, prev_c)
+            ret_abs = safe_ret.abs()
+            # _safe_divide 防除零 (amount 为 0 时结果为 NaN)
             raw_amihud = _safe_divide(ret_abs, g["amount"])
-            g["amihud_illiquidity"] = raw_amihud.rolling(20, min_periods=20).mean()
-            g["adv20"] = g["amount"].rolling(20, min_periods=20).mean()
+            # NaN 保留入 LightGBM (CLAUDE.md 铁律); np.nan_to_num 在 _train_one 下游应用
+            g["amihud_illiquidity"] = np.nan_to_num(
+                raw_amihud.rolling(20, min_periods=20).mean(), nan=np.nan
+            )
+            g["adv20"] = np.nan_to_num(
+                g["amount"].rolling(20, min_periods=20).mean(), nan=np.nan
+            )
             return g
 
         return _apply_per_stock(df, per_stock)
