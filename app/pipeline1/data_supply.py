@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
-import time
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -270,8 +270,10 @@ class DataSupplyChain:
     @staticmethod
     def check_freshness(now: str | None = None, deadline: str = "15:00") -> bool:
         """15:00 前置检查: 当前时间是否早于拉取死线."""
-        now = now or time.strftime("%H:%M")
-        return now < deadline
+        now_str = now or datetime.now().strftime("%H:%M")
+        now_dt = datetime.strptime(now_str, "%H:%M")
+        deadline_dt = datetime.strptime(deadline, "%H:%M")
+        return now_dt < deadline_dt
 
     # ---------------- [B11] OHLCV 回填 ----------------
     BACKFILL_MIN_DAYS = 1250  # ≥5 年交易日 (特征预热期 250 日独立于训练窗口)
@@ -289,10 +291,10 @@ class DataSupplyChain:
         (不中断整体回填). 筹码/资金流维持可得深度, 不足按缺失处理
         (NaN 不参与缩尾分位计算).
         """
-        end = end or time.strftime("%Y-%m-%d")
-        start = (
-            pd.Timestamp(end) - pd.DateOffset(years=years) - pd.Timedelta(days=30)
-        ).strftime("%Y-%m-%d")  # 多取 30 自然日覆盖非交易日
+        end_dt = pd.Timestamp(end) if end else pd.Timestamp.now()
+        start_dt = end_dt - pd.DateOffset(years=years) - pd.Timedelta(days=30)
+        start = start_dt.strftime("%Y-%m-%d")  # API 边界: 转字符串
+        end = end_dt.strftime("%Y-%m-%d")
         frames = []
         for sym in symbols:
             try:

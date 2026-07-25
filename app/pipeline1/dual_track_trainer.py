@@ -118,21 +118,31 @@ class DualTrackTrainer:
                 label = pm_label
         train = segs["train"].dropna(subset=[label])  # per-model dropna (安全网 #7)
         es = segs["es"].dropna(subset=[label])
-        X, y = train[feature_cols], train[label]
-        X_es, y_es = es[feature_cols], es[label]
+        # risk_filter: 排除停牌股 (非可交易标的不进训练)
+        if "is_suspended" in train.columns:
+            train = train[~train["is_suspended"].astype(bool)]
+            es = es[~es["is_suspended"].astype(bool)]
+        X = np.nan_to_num(train[feature_cols].values, nan=0.0)
+        y = train[label].values
+        X_es = np.nan_to_num(es[feature_cols].values, nan=0.0)
+        y_es = es[label].values
         w = self.time_weights(train)
 
         if kind.endswith("cls"):
             model = lgb.LGBMClassifier(**LGB_PARAMS_CLS)
         else:
             model = lgb.LGBMRegressor(**LGB_PARAMS_REG)
-        model.fit(
-            X,
-            y,
-            sample_weight=w,
-            eval_set=[(X_es, y_es)],
-            callbacks=[lgb.early_stopping(ES_PATIENCE, verbose=False)],
-        )
+        try:
+            model.fit(
+                X,
+                y,
+                sample_weight=w,
+                eval_set=[(X_es, y_es)],
+                callbacks=[lgb.early_stopping(ES_PATIENCE, verbose=False)],
+            )
+        except Exception as exc:
+            logger.error("模型训练失败 [%s/%s]: %s", kind, label, exc)
+            raise
         return model, label
 
     # ---------------- 窗口训练 (单板块 4 模型) ----------------
@@ -162,7 +172,7 @@ class DualTrackTrainer:
         model, label = trained["models"]["1d_cls"]
         calib = trained["segs"]["calib"].dropna(subset=[label])
         cols = trained["feature_cols"]
-        raw = model.predict_proba(calib[cols])[:, 1]
+        raw = model.predict_proba(np.nan_to_num(calib[cols].values, nan=0.0))[:, 1]
         calibrator = ProbCalibrator(method="platt").fit(raw, calib[label].values)
         trained["calibrator"] = calibrator
         return calibrator
@@ -180,7 +190,7 @@ class DualTrackTrainer:
             if len(sub) < 30:
                 ics[kind] = 0.0
                 continue
-            sub["_pred"] = model.predict(sub[cols])
+            sub["_pred"] = model.predict(np.nan_to_num(sub[cols].values, nan=0.0))
             ics[kind] = ICScreener.rank_ic(
                 sub.rename(columns={"_pred": "score"}), "score", label
             )
