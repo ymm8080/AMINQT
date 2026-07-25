@@ -186,9 +186,10 @@ class DualTrackTrainer:
         self._train_extras(out)
         return out
 
-    # ---------------- E1/E2: 分位数 + 痛苦预警 ----------------
+    # ---------------- E1/E2 + LambdaRank: 分位数 + 痛苦预警 + 排序 ----------------
     def _train_extras(self, out: dict) -> None:
-        """[E1] 分位数五模型 (label_1d_net) + [E2] 痛苦预警 (label_pain).
+        """[E1] 分位数五模型 (label_1d_net) + [E2] 痛苦预警 (label_pain)
+        + [阶段四] LambdaRank 排序模型 (lambdarank_truncation_level=25, 分位 gain).
 
         E1 沿用回归超参, 不单独搜索 (V3.8 §2.2, 避免调参维度爆炸).
         标签缺失时跳过 (向后兼容旧面板).
@@ -231,6 +232,12 @@ class DualTrackTrainer:
                 )
             except Exception as e:
                 logger.warning("[%s] E1 分位数模型训练失败: %s", out["board"], e)
+            # 阶段四: LambdaRank (标签=净收益截面分位 gain 0-4, group=date)
+            try:
+                out["rank_model"] = self._train_ranker(out, q_label)
+                logger.info("[%s] LambdaRank 排序模型训练完成", out["board"])
+            except Exception as e:
+                logger.warning("[%s] LambdaRank 训练失败: %s", out["board"], e)
 
         if "label_pain" in segs["train"].columns:
             try:
@@ -247,6 +254,50 @@ class DualTrackTrainer:
                 out["pain_model"] = pain
             except Exception as e:
                 logger.warning("[%s] E2 痛苦预警模型训练失败: %s", out["board"], e)
+
+    # ---------------- 阶段四: LambdaRank 排序模型 ----------------
+    def _train_ranker(self, out: dict, label: str):
+        """LambdaRank (lambdarank_truncation_level=25, V3.8 §2.2 搜索范围之一).
+
+        标签: 净收益按 date 截面分位 → gain 0-4 (LGBMRanker 需非负整数 gain);
+        group = 每个 date 的样本数 (排序以横截面为单位).
+        """
+        import lightgbm as lgb
+
+        segs, cols = out["segs"], out["feature_cols"]
+
+        def _prep(seg_name: str):
+            sub = risk_filter(segs[seg_name].dropna(subset=[label])).sort_values("date")
+            gains = (
+                sub.groupby("date")[label]
+                .rank(pct=True)
+                .pipe(lambda s: (s * 5).clip(0, 4.999).astype(int))
+            )
+            group = sub.groupby("date").size().values
+            X = np.nan_to_num(sub[cols].values, nan=0.0)
+            return X, gains.values, group
+
+        X, gains, group = _prep("train")
+        X_es, gains_es, group_es = _prep("es")
+        model = lgb.LGBMRanker(
+            objective="lambdarank",
+            lambdarank_truncation_level=25,
+            n_estimators=LGB_PARAMS_REG["n_estimators"],
+            learning_rate=LGB_PARAMS_REG["learning_rate"],
+            random_state=42,
+            verbosity=-1,
+        )
+        model.fit(
+            X,
+            gains,
+            group=group,
+            eval_set=[(X_es, gains_es)] if len(gains_es) else None,
+            eval_group=[group_es] if len(gains_es) else None,
+            callbacks=[lgb.early_stopping(ES_PATIENCE, verbose=False)]
+            if len(gains_es)
+            else None,
+        )
+        return model, label
 
     # ---------------- 校准器拟合 (随月度重训滚动重校) ----------------
     @staticmethod
@@ -295,7 +346,7 @@ class DualTrackTrainer:
             "models": trained["models"],
             "calibrator": trained["calibrator"],
         }
-        for extra in ("quantile_models", "pain_model"):  # E1/E2 (标签齐备时)
+        for extra in ("quantile_models", "pain_model", "rank_model"):  # E1/E2/排序
             if extra in trained:
                 bundle[extra] = trained[extra]
         try:

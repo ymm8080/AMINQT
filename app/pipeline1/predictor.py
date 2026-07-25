@@ -80,6 +80,10 @@ class V35Predictor:
         if "pain_model" in bundle:
             latest["pain_prob"] = bundle["pain_model"].predict_proba(X)
             keep.append("pain_prob")
+        # [阶段四] LambdaRank 排序分 (bundle 含 rank_model 时)
+        if "rank_model" in bundle:
+            latest["rank_score"] = bundle["rank_model"][0].predict(X)
+            keep.append("rank_score")
         # [E1] 分布版仓位权重输入; [E6] liquidity_cap 输入
         for opt in ("ATR_pct", "adv20", "is_limit_up_close", "is_one_word_limit"):
             if opt in latest.columns:
