@@ -121,6 +121,8 @@ def _sanitize_header(value: str) -> str:
 
 def _extract_json(text: str) -> dict | None:
     """Try multiple strategies to extract JSON from LLM response text."""
+    if text is None:
+        return None
     text = text.strip()
 
     # Strip markdown code fences
@@ -224,15 +226,20 @@ If no issues found: {"issues": [], "summary": "No issues found."}
         with urllib.request.urlopen(req, timeout=60) as resp:
             result = json.loads(resp.read().decode("utf-8"))
             msg = result["choices"][0]["message"]
-            content = msg.get("content", "")
-            reasoning = msg.get("reasoning_content", "")
+            content = msg.get("content") or ""
+            reasoning = msg.get("reasoning_content") or ""
             parsed = _extract_json(content)
             if parsed is not None:
                 return parsed
             # content empty or unparseable — log details for debugging
+            finish_reason = result.get("choices", [{}])[0].get(
+                "finish_reason", "unknown"
+            )
             logger.error(
                 "Could not parse review response. "
-                "content (first 500): %r, reasoning_content (first 300): %r",
+                "finish_reason=%s, content (first 500): %r, "
+                "reasoning_content (first 300): %r",
+                finish_reason,
                 content[:500],
                 reasoning[:300],
             )
