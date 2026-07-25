@@ -60,7 +60,9 @@ def _apply_small_mode() -> None:
     dtt.LGB_PARAMS_REG["n_estimators"] = 20
     dtt.LGB_PARAMS_CLS["n_estimators"] = 20
     dtt.ES_PATIENCE = 5
-    logger.warning("small 模式: n_estimators=20, ES_PATIENCE=5 (仅 smoke, 不作验收依据)")
+    logger.warning(
+        "small 模式: n_estimators=20, ES_PATIENCE=5 (仅 smoke, 不作验收依据)"
+    )
 
 
 def _build_labels(df: pd.DataFrame) -> pd.DataFrame:
@@ -143,7 +145,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="P19.0 阶段一 Alpha 点火验证门禁")
     parser.add_argument("--panel", required=True, help="全市场日线面板 parquet 路径")
     parser.add_argument("--tag", default=None, help="报告标签 (默认当日 YYYYMMDD)")
-    parser.add_argument("--small", action="store_true", help="快速 smoke (缩减训练规模)")
+    parser.add_argument(
+        "--small", action="store_true", help="快速 smoke (缩减训练规模)"
+    )
     parser.add_argument("--out-dir", default="data", help="报告输出目录")
     parser.add_argument("--journal-dir", default="data/journal", help="WORM 账本目录")
     parser.add_argument("--model-dir", default="models/pipeline1", help="模型目录")
@@ -160,8 +164,10 @@ def main(argv: list[str] | None = None) -> int:
     panel["date"] = pd.to_datetime(panel["date"])
     logger.info(
         "面板加载: %d 行, %d 只, %s ~ %s",
-        len(panel), panel["symbol"].nunique(),
-        str(panel["date"].min())[:10], str(panel["date"].max())[:10],
+        len(panel),
+        panel["symbol"].nunique(),
+        str(panel["date"].min())[:10],
+        str(panel["date"].max())[:10],
     )
     dq = dq_report.daily_report(panel)
     if not dq["pass"]:

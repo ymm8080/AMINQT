@@ -44,8 +44,9 @@ class DualListRunner:
         # out["execution"] (0~2 只, A级) / out["shadow"] (0~15 只, stable)
     """
 
-    def __init__(self, store_dir: str | None = None,
-                 stable_lister: ListGenerator | None = None):
+    def __init__(
+        self, store_dir: str | None = None, stable_lister: ListGenerator | None = None
+    ):
         self.stable = stable_lister or ListGenerator()
         self.store_dir = store_dir
         self._lose_streak = 0  # D.6 连续落后月数
@@ -84,8 +85,10 @@ class DualListRunner:
         df = df.sort_values("_sel", ascending=False).head(g["rank_score_top"])
         df = df.drop(columns=["_sel"])
         if len(df) == 0:
-            logger.warning("D.8 执行清单: 0 只过 A 级门槛, 今日空仓 (特性非故障, "
-                           "预计 75%% 交易日空仓)")
+            logger.warning(
+                "D.8 执行清单: 0 只过 A 级门槛, 今日空仓 (特性非故障, "
+                "预计 75%% 交易日空仓)"
+            )
         return df
 
     # ---------------- 双清单总装 ----------------
@@ -153,9 +156,7 @@ class DualListRunner:
         out["dyn_position"] = [c["position"] for c in calcs]
         out["dyn_rr"] = [c["rr"] for c in calcs]
         if "close" in out.columns:
-            out["stop_price"] = (
-                out["close"] * (1 - out["dyn_stop_pct"])
-            ).round(3)
+            out["stop_price"] = (out["close"] * (1 - out["dyn_stop_pct"])).round(3)
         return out
 
     # ---------------- WORM 持久化 ----------------
@@ -174,8 +175,10 @@ class DualListRunner:
     # ---------------- D.6 月度双档 GT-Score 裁决 ----------------
     def monthly_adjudication(
         self,
-        exec_ics, exec_turnover,
-        shadow_ics, shadow_turnover,
+        exec_ics,
+        exec_turnover,
+        shadow_ics,
+        shadow_turnover,
     ) -> dict:
         """D.6 档位裁决: 攻击档连续 3 个月 GT-Score 低于稳定档 → 强制切回 stable.
 
@@ -188,7 +191,11 @@ class DualListRunner:
         if force_stable:
             logger.critical(
                 "D.6 档位裁决: 攻击档连续 %d 月 GT-Score 落后 (%.4f vs %.4f), "
-                "强制切回 stable 并书面归因", self._lose_streak, g_exec, g_shadow)
+                "强制切回 stable 并书面归因",
+                self._lose_streak,
+                g_exec,
+                g_shadow,
+            )
         return {
             "gt_aggressive": round(g_exec, 4),
             "gt_stable": round(g_shadow, 4),

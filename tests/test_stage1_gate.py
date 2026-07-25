@@ -27,10 +27,9 @@ def make_panel(days: int = 780, seed: int = 21) -> pd.DataFrame:
     """780 交易日 (>750 窗口) 双板块面板: 主板/双创各 6 只 (日 IC 需 >5 只/日)."""
     rng = np.random.default_rng(seed)
     dates = pd.bdate_range("2023-01-02", periods=days)
-    symbols = (
-        [("60051%d" % i, "main", "白酒") for i in range(6)]
-        + [("30001%d" % i, "GEM", "电子") for i in range(6)]
-    )
+    symbols = [("60051%d" % i, "main", "白酒") for i in range(6)] + [
+        ("30001%d" % i, "GEM", "电子") for i in range(6)
+    ]
     frames = []
     for sym, board, industry in symbols:
         close = 100 * np.cumprod(1 + rng.normal(0.0005, 0.02, days))
@@ -95,12 +94,17 @@ def test_stage1_gate_small_mode(tmp_path, monkeypatch):
 
     rc = gate.main(
         [
-            "--panel", str(panel_path),
-            "--tag", "pytest",
+            "--panel",
+            str(panel_path),
+            "--tag",
+            "pytest",
             "--small",
-            "--out-dir", str(tmp_path),
-            "--journal-dir", str(tmp_path / "journal"),
-            "--model-dir", str(tmp_path / "models"),
+            "--out-dir",
+            str(tmp_path),
+            "--journal-dir",
+            str(tmp_path / "journal"),
+            "--model-dir",
+            str(tmp_path / "models"),
         ]
     )
     assert rc in (0, 1)
@@ -110,7 +114,10 @@ def test_stage1_gate_small_mode(tmp_path, monkeypatch):
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["pass"] == (rc == 0)
     assert set(report["checks"]) == {
-        "rank_ic", "icir", "high_vol_ic", "train_ic_no_leak",
+        "rank_ic",
+        "icir",
+        "high_vol_ic",
+        "train_ic_no_leak",
     }
     # 双板块均有各自门禁结果
     assert set(report["boards"]) == {"main", "dual"}
