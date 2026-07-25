@@ -8,7 +8,7 @@ import pandas as pd
 from app.pipeline1.dq_report import daily_report, drop_violations, ohlcv_violations
 from app.pipeline1.ic_decay import ic_decay_curve
 from app.pipeline1.leakage_audit import audit_source, ic_sentinel
-from app.pipeline1.metrics import icir, ignition_gate, rank_ic
+from app.pipeline1.metrics import bucket_ic_high_vol, icir, ignition_gate, rank_ic
 
 
 # ============================================================
@@ -96,6 +96,23 @@ class TestMetrics:
         assert not bad["pass"]
         assert not bad["checks"]["high_vol_ic"]["pass"]
         assert not bad["checks"]["train_ic_no_leak"]["pass"]
+
+    def test_bucket_ic_high_vol_and_auto_gate(self):
+        """E.4: bucket_ic_high_vol 直接取 Q5; ignition_gate 缺省自动分桶."""
+        rng = np.random.default_rng(11)
+        n = 500
+        atr = rng.uniform(0.01, 0.10, n)
+        score = atr + rng.normal(0, 0.01, n)  # score∝ATR → 高波动桶 IC 高
+        df = pd.DataFrame({
+            "date": pd.to_datetime(["2026-07-25"] * n),
+            "ATR_pct": atr, "score": score,
+            "label": score + rng.normal(0, 0.01, n),
+        })
+        assert bucket_ic_high_vol(df, "score", "label") > 0.5
+        # 单日期截面 → rank_ic/icir 为 0, 仅验证 high_vol_ic 自动注入检查键
+        r = ignition_gate(df, "score", "label", train_ic=0.0)
+        assert r["checks"]["high_vol_ic"]["value"] > 0.5
+        assert r["checks"]["high_vol_ic"]["pass"]
 
 
 # ============================================================
