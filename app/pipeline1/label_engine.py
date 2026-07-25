@@ -115,7 +115,13 @@ class LabelEngine:
                 .sum()
                 .reset_index(level=0, drop=True)
             )
-            suspended = _align_future(rolling_sum, n) > 0
+            # Label masking: check if suspension exists in [T, T+n] window
+            vals = rolling_sum.values
+            length = len(vals)
+            suspended_vals = np.zeros(length, dtype=bool)
+            if length > n:
+                suspended_vals[: length - n] = vals[n:] > 0
+            suspended = pd.Series(suspended_vals, index=rolling_sum.index)
             df[f"label_{n}d"] = df[f"label_{n}d"].where(~suspended, np.nan)
         df["label_cls"] = df["label_cls"].where(df["label_1d"].notna(), np.nan)
         return df
