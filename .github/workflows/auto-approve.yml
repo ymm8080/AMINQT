@@ -100,8 +100,9 @@ jobs:
           for REVIEW_ID in $REVIEWS; do
             echo "Dismissing review $REVIEW_ID"
             gh api \
-              --method DELETE \
-              repos/${{ github.repository }}/pulls/$PR/reviews/$REVIEW_ID \
+              --method PUT \
+              repos/${{ github.repository }}/pulls/$PR/reviews/$REVIEW_ID/dismissals \
+              -f message="CI passed — auto-dismissing PR gate block" \
               2>/dev/null || true
           done
 
