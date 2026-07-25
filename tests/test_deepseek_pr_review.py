@@ -127,6 +127,7 @@ class TestBlankReviewBug:
 
     def test_none_content_with_reasoning_returns_error(self, monkeypatch):
         """API returns content=null when thinking eats the budget."""
+
         def fake_urlopen(req, timeout=None):
             return FakeHTTPResponse(
                 _api_response(content=None, reasoning="Let me think...")
@@ -141,10 +142,9 @@ class TestBlankReviewBug:
 
     def test_none_content_none_reasoning_returns_error(self, monkeypatch):
         """Both content and reasoning are null (edge case)."""
+
         def fake_urlopen(req, timeout=None):
-            return FakeHTTPResponse(
-                _api_response(content=None, reasoning=None)
-            )
+            return FakeHTTPResponse(_api_response(content=None, reasoning=None))
 
         monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
 
@@ -154,11 +154,10 @@ class TestBlankReviewBug:
 
     def test_truncated_response_returns_error(self, monkeypatch):
         """finish_reason=length means content was cut by max_tokens."""
+
         def fake_urlopen(req, timeout=None):
             return FakeHTTPResponse(
-                _api_response(
-                    content='{"issues": [', finish_reason="length"
-                )
+                _api_response(content='{"issues": [', finish_reason="length")
             )
 
         monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
