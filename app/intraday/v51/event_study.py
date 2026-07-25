@@ -31,8 +31,14 @@ def event_study(
     r = r[~np.isnan(r)]
     n = len(r)
     if n < 2:
-        return {"n": n, "mean": 0.0, "t_stat": 0.0,
-                "pass_gate0": False, "pass_gate1": False, "pass": False}
+        return {
+            "n": n,
+            "mean": 0.0,
+            "t_stat": 0.0,
+            "pass_gate0": False,
+            "pass_gate1": False,
+            "pass": False,
+        }
     mean = float(r.mean())
     t_stat = float(mean / (r.std(ddof=1) / np.sqrt(n))) if r.std(ddof=1) > 0 else 0.0
     g0 = n >= min_events
