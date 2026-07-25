@@ -103,11 +103,14 @@ class TestMetrics:
         n = 500
         atr = rng.uniform(0.01, 0.10, n)
         score = atr + rng.normal(0, 0.01, n)  # score∝ATR → 高波动桶 IC 高
-        df = pd.DataFrame({
-            "date": pd.to_datetime(["2026-07-25"] * n),
-            "ATR_pct": atr, "score": score,
-            "label": score + rng.normal(0, 0.01, n),
-        })
+        df = pd.DataFrame(
+            {
+                "date": pd.to_datetime(["2026-07-25"] * n),
+                "ATR_pct": atr,
+                "score": score,
+                "label": score + rng.normal(0, 0.01, n),
+            }
+        )
         assert bucket_ic_high_vol(df, "score", "label") > 0.5
         # 单日期截面 → rank_ic/icir 为 0, 仅验证 high_vol_ic 自动注入检查键
         r = ignition_gate(df, "score", "label", train_ic=0.0)
