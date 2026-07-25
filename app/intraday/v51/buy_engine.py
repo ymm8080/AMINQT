@@ -140,7 +140,9 @@ def b2_evening_strength(
     if len(bars) < ma_window:
         return False
     last = bars[-1]
-    avg_vol = safe_divide(float(sum(b.volume for b in bars[-ma_window:-1])), float(ma_window - 1))
+    avg_vol = safe_divide(
+        float(sum(b.volume for b in bars[-ma_window:-1])), float(ma_window - 1)
+    )
     if avg_vol <= 0 or safe_divide(last.volume, avg_vol) < vol_ratio:
         return False
     ma = safe_divide(float(sum(b.close for b in bars[-ma_window:])), float(ma_window))
