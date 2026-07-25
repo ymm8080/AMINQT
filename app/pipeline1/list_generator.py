@@ -111,7 +111,8 @@ class ListGenerator:
     # ---------------- 排序分 ----------------
     def compute_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """compound_ret = 0.5*pred_1d + 0.35*pred_3d + 0.15*pred_5d
-        score = compound_ret * (prob_up / base_rate);  base_rate = B4 20日滚动均值
+        [V3.7] rank_score 存在时: score = rank_score × (1 + 0.3·tanh(compound×100))
+               × (prob_up / base_rate); 否则回退 V3.5 公式 compound_ret × prob_adjust.
         [E2] 痛苦惩罚: score × (1 - 0.5×pain_prob)  (pain_prob=0.3 → ×0.85)
         [公告] score × (1 + 0.3×announce_score)  (安全网 #17)
         adjusted = score + 0.2 * holding_day_weight * is_in_yesterday_list  (B3 衰减)"""
@@ -127,7 +128,15 @@ class ListGenerator:
         base_rate = float(pd.Series(recent).mean())
         base_rate = base_rate if base_rate > 1e-6 else 1.0
         df["base_rate"] = base_rate
-        df["score"] = df["compound_ret"] * (df["prob_up"] / base_rate)
+        prob_adjust = df["prob_up"] / base_rate
+        if "rank_score" in df.columns:
+            # [V3.7 排序分公式] LambdaRank 排序分 × compound 修正 × prob_adjust
+            df["score"] = (
+                df["rank_score"] * (1 + 0.3 * np.tanh(df["compound_ret"] * 100))
+                * prob_adjust
+            )
+        else:
+            df["score"] = df["compound_ret"] * prob_adjust
         # [E2] 痛苦惩罚: pain_prob 高 → 排序分降权
         if "pain_prob" in df.columns:
             df["score"] = df["score"] * (1 - PAIN_PENALTY * df["pain_prob"].fillna(0.0))
