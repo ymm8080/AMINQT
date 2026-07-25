@@ -27,12 +27,18 @@ class TestLambdaRank:
         frames = []
         for s in range(8):
             f = rng.normal(size=750)
-            frames.append(pd.DataFrame({
-                "symbol": f"60000{s}", "date": dates, "f1": f,
-                "label_1d": f * 0.01 + rng.normal(0, 0.01, 750),
-                "label_3d": rng.normal(0, 0.02, 750),
-                "label_5d": rng.normal(0, 0.03, 750),
-            }))
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "symbol": f"60000{s}",
+                        "date": dates,
+                        "f1": f,
+                        "label_1d": f * 0.01 + rng.normal(0, 0.01, 750),
+                        "label_3d": rng.normal(0, 0.02, 750),
+                        "label_5d": rng.normal(0, 0.03, 750),
+                    }
+                )
+            )
         df = pd.concat(frames, ignore_index=True)
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
@@ -50,6 +56,7 @@ class TestLambdaRank:
         from app.pipeline1.predictor import V35Predictor
 
         import app.pipeline1.dual_track_trainer as dtt
+
         dtt.LGB_PARAMS_REG["n_estimators"] = 5
         dtt.LGB_PARAMS_CLS["n_estimators"] = 5
         dtt.ES_PATIENCE = 2
@@ -58,12 +65,18 @@ class TestLambdaRank:
         frames = []
         for s in range(6):
             f = rng.normal(size=750)
-            frames.append(pd.DataFrame({
-                "symbol": f"60000{s}", "date": dates, "f1": f,
-                "label_1d": f * 0.01 + rng.normal(0, 0.01, 750),
-                "label_3d": rng.normal(0, 0.02, 750),
-                "label_5d": rng.normal(0, 0.03, 750),
-            }))
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "symbol": f"60000{s}",
+                        "date": dates,
+                        "f1": f,
+                        "label_1d": f * 0.01 + rng.normal(0, 0.01, 750),
+                        "label_3d": rng.normal(0, 0.02, 750),
+                        "label_5d": rng.normal(0, 0.03, 750),
+                    }
+                )
+            )
         df = pd.concat(frames, ignore_index=True)
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
@@ -82,25 +95,31 @@ class TestLambdaRank:
 class TestV37ScoreFormula:
     def test_rank_score_formula(self):
         gen = ListGenerator()
-        df = pd.DataFrame({
-            "symbol": ["A", "B"],
-            "pred_ret_1d": [0.02, 0.02],
-            "pred_ret_3d": [0.02, 0.02],
-            "pred_ret_5d": [0.02, 0.02],
-            "prob_up": [0.6, 0.6],
-            "rank_score": [2.0, 1.0],
-        })
+        df = pd.DataFrame(
+            {
+                "symbol": ["A", "B"],
+                "pred_ret_1d": [0.02, 0.02],
+                "pred_ret_3d": [0.02, 0.02],
+                "pred_ret_5d": [0.02, 0.02],
+                "prob_up": [0.6, 0.6],
+                "rank_score": [2.0, 1.0],
+            }
+        )
         out = gen.compute_scores(df).set_index("symbol")
         # score = rank × (1+0.3·tanh(compound×100)) × prob_adjust → A 恰为 B 的 2 倍
         assert out.loc["A", "score"] == pytest.approx(2 * out.loc["B", "score"])
 
     def test_fallback_without_rank_score(self):
         gen = ListGenerator()
-        df = pd.DataFrame({
-            "symbol": ["A"],
-            "pred_ret_1d": [0.02], "pred_ret_3d": [0.02], "pred_ret_5d": [0.02],
-            "prob_up": [0.6],
-        })
+        df = pd.DataFrame(
+            {
+                "symbol": ["A"],
+                "pred_ret_1d": [0.02],
+                "pred_ret_3d": [0.02],
+                "pred_ret_5d": [0.02],
+                "prob_up": [0.6],
+            }
+        )
         out = gen.compute_scores(df)
         compound = 0.02
         assert out["score"].iloc[0] == pytest.approx(compound * 1.0)  # prob/base=1
@@ -110,20 +129,22 @@ class TestV37ScoreFormula:
 # D.8 双清单编排
 # ============================================================
 def _dual_cands() -> pd.DataFrame:
-    return pd.DataFrame({
-        "symbol": ["600001", "600002", "600003", "300001"],
-        "board": ["main", "main", "main", "GEM"],
-        "industry": ["白酒", "电池", "保险", "医药"],
-        "pred_ret_1d": [0.03, 0.025, 0.02, 0.04],
-        "pred_ret_3d": [0.05, 0.04, 0.03, 0.06],
-        "pred_ret_5d": [0.07, 0.06, 0.05, 0.08],
-        "prob_up": [0.72, 0.69, 0.60, 0.75],  # 600003 prob<0.68 出局
-        "pain_prob": [0.10, 0.20, 0.05, 0.05],  # 600002 pain≥0.15 出局
-        "score": [0.05, 0.04, 0.03, 0.06],
-        "uncertainty_width": [0.05, 0.05, 0.05, 0.05],
-        "pred_q50": [0.03, 0.025, 0.02, 0.04],
-        "ATR_pct": [0.02, 0.02, 0.02, 0.02],
-    })
+    return pd.DataFrame(
+        {
+            "symbol": ["600001", "600002", "600003", "300001"],
+            "board": ["main", "main", "main", "GEM"],
+            "industry": ["白酒", "电池", "保险", "医药"],
+            "pred_ret_1d": [0.03, 0.025, 0.02, 0.04],
+            "pred_ret_3d": [0.05, 0.04, 0.03, 0.06],
+            "pred_ret_5d": [0.07, 0.06, 0.05, 0.08],
+            "prob_up": [0.72, 0.69, 0.60, 0.75],  # 600003 prob<0.68 出局
+            "pain_prob": [0.10, 0.20, 0.05, 0.05],  # 600002 pain≥0.15 出局
+            "score": [0.05, 0.04, 0.03, 0.06],
+            "uncertainty_width": [0.05, 0.05, 0.05, 0.05],
+            "pred_q50": [0.03, 0.025, 0.02, 0.04],
+            "ATR_pct": [0.02, 0.02, 0.02, 0.02],
+        }
+    )
 
 
 class TestDualListRunner:
@@ -144,6 +165,7 @@ class TestDualListRunner:
         # WORM: 两份清单均落盘且含 profile
         import json
         import os
+
         files = os.listdir(tmp_path)
         assert files and files[0].startswith("dual_2026-07-25")
         with open(os.path.join(tmp_path, files[0]), encoding="utf-8") as fh:
@@ -152,7 +174,8 @@ class TestDualListRunner:
 
     def test_bear_takeover_blocks_aggressive(self):
         runner = DualListRunner(
-            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0))
+            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0)
+        )
         out = runner.emit(_dual_cands(), "2026-07-25", market_state="bear")
         assert out["bear_takeover"]
         assert len(out["execution"]) == 0  # D.7: DEFENSE 攻击档只卖不买
@@ -194,23 +217,27 @@ class TestDynamicOutputsWiring:
         cands["close"] = [10.0, 10.0, 10.0, 10.0]
         cands.loc[0, "pred_q50"] = 0.08  # 让 E.2 RR 闸门通过 (RR=2.0)
         runner = DualListRunner(
-            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0))
+            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0)
+        )
         out = runner.emit(cands, "2026-07-25")
         exe = out["execution"]
         assert len(exe) == 1
         # D.9/E.2: stop_price / position / rr 随清单输出 (影子留痕)
         assert {"dyn_stop_pct", "dyn_position", "dyn_rr", "stop_price"} <= set(
-            exe.columns)
+            exe.columns
+        )
         row = exe.iloc[0]
         assert 0 < row["dyn_position"] <= 1.0
-        assert row["stop_price"] == pytest.approx(10.0 * (1 - row["dyn_stop_pct"]),
-                                                  abs=0.01)
+        assert row["stop_price"] == pytest.approx(
+            10.0 * (1 - row["dyn_stop_pct"]), abs=0.01
+        )
 
     def test_dynamic_gate_shadow_zero_position(self):
         """E.2 影子模式: A级入选但 RR 不达标 → position=0 (留痕不驱动, F.5)."""
         cands = _dual_cands()  # pred_q50=0.03 → RR=1.25 < 1.8
         runner = DualListRunner(
-            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0))
+            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0)
+        )
         exe = runner.emit(cands, "2026-07-25")["execution"]
         assert len(exe) == 1
         assert exe.iloc[0]["dyn_position"] == 0.0

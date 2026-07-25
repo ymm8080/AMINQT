@@ -78,8 +78,11 @@ class TradingDiscipline:
             self._worm.append(
                 {"day": day, "event": "DAILY_FUSE", "pnl": round(daily_pnl_pct, 4)}
             )
-            logger.error("D.3 日保险丝: 日亏 %.1f%% 触及 %.1f%%, 当日锁仓",
-                         -daily_pnl_pct * 100, self.daily_loss_limit * 100)
+            logger.error(
+                "D.3 日保险丝: 日亏 %.1f%% 触及 %.1f%%, 当日锁仓",
+                -daily_pnl_pct * 100,
+                self.daily_loss_limit * 100,
+            )
             return {"state": self.state, "action": "LOCK_TODAY"}
         if self.state == STATE_LOCKED_TODAY and day > self._locked_day:
             self.state = STATE_ACTIVE  # 次日恢复
@@ -102,7 +105,10 @@ class TradingDiscipline:
                 )
                 logger.critical(
                     "D.3 停机线: 回撤 %.1f%% 触及 %.0f%%, 停机 %d 天复盘",
-                    -dd * 100, self.drawdown_limit * 100, HALT_DAYS)
+                    -dd * 100,
+                    self.drawdown_limit * 100,
+                    HALT_DAYS,
+                )
                 return {"state": self.state, "action": "HALT"}
         return {"state": self.state, "action": "HOLD"}
 
@@ -163,8 +169,12 @@ class TradeJournal:
         self._trades.append(rec)
 
     def close_trade(
-        self, symbol: str, exit_date: str, exit_price: float,
-        hold_days: int, pnl_pct: float,
+        self,
+        symbol: str,
+        exit_date: str,
+        exit_price: float,
+        hold_days: int,
+        pnl_pct: float,
     ) -> None:
         """平仓回填 (找最近一笔未平仓的该标的)."""
         for rec in reversed(self._trades):
@@ -187,7 +197,9 @@ class TradeJournal:
         wins, losses = pnls[pnls > 0], pnls[pnls <= 0]
         win_rate = float(len(wins) / n)
         pl_ratio = (
-            float(wins.mean() / abs(losses.mean())) if len(losses) and len(wins) else 0.0
+            float(wins.mean() / abs(losses.mean()))
+            if len(losses) and len(wins)
+            else 0.0
         )
         # 最大连亏
         max_streak = streak = 0
@@ -210,8 +222,7 @@ class TradeJournal:
         s = self.sample_stats()
         n = s.get("n_trades", 0)
         if n < UNLOCK_MIN_TRADES:
-            return {"unlock": False, "reason": f"样本不足 {n}/{UNLOCK_MIN_TRADES}",
-                    **s}
+            return {"unlock": False, "reason": f"样本不足 {n}/{UNLOCK_MIN_TRADES}", **s}
         ok = (
             s["expectancy"] > UNLOCK_MIN_EXPECTANCY
             and s["max_consec_loss"] <= UNLOCK_MAX_CONSEC_LOSS
@@ -219,5 +230,7 @@ class TradeJournal:
         if not ok:
             logger.warning(
                 "D.10 解锁否决: 期望 %.3f%% / 最大连亏 %d (门槛 >0.5%% / ≤5)",
-                s["expectancy"] * 100, s["max_consec_loss"])
+                s["expectancy"] * 100,
+                s["max_consec_loss"],
+            )
         return {"unlock": ok, **s}

@@ -132,7 +132,8 @@ class ListGenerator:
         if "rank_score" in df.columns:
             # [V3.7 排序分公式] LambdaRank 排序分 × compound 修正 × prob_adjust
             df["score"] = (
-                df["rank_score"] * (1 + 0.3 * np.tanh(df["compound_ret"] * 100))
+                df["rank_score"]
+                * (1 + 0.3 * np.tanh(df["compound_ret"] * 100))
                 * prob_adjust
             )
         else:
