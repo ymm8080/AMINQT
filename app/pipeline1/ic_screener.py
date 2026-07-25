@@ -229,9 +229,7 @@ class ICScreener:
         ics = sub.groupby("date").apply(
             lambda g: (
                 spearmanr(g[factor], g[label]).statistic
-                if len(g) >= 3
-                and g[factor].nunique() > 5
-                and g[label].nunique() > 1
+                if len(g) >= 3 and g[factor].nunique() > 5 and g[label].nunique() > 1
                 else np.nan
             )
         )

@@ -200,7 +200,10 @@ def death_cross_false_positive_report(
     if use_confirm:
         logger.error(
             "#84 死叉假阳性率 %.0f%% > 50%% (%d/%d), 改用'跌破20日线+连续2日确认'",
-            rate * 100, false_pos, n)
+            rate * 100,
+            false_pos,
+            n,
+        )
     return {
         "n_signals": n,
         "n_false_positive": false_pos,

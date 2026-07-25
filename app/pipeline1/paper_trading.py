@@ -44,12 +44,21 @@ class FillRateTracker:
         hit = len(planned_set & filled_set)
         rate = hit / len(planned_set) if planned_set else 1.0
         self._records.append(
-            {"date": str(date), "planned": len(planned_set), "filled": hit,
-             "rate": rate}
+            {
+                "date": str(date),
+                "planned": len(planned_set),
+                "filled": hit,
+                "rate": rate,
+            }
         )
         if planned_set and rate < FILL_RATE_GATE:
-            logger.error("E10 成交率告警: %s 成交率 %.0f%% < 80%% (%d/%d)",
-                         date, rate * 100, hit, len(planned_set))
+            logger.error(
+                "E10 成交率告警: %s 成交率 %.0f%% < 80%% (%d/%d)",
+                date,
+                rate * 100,
+                hit,
+                len(planned_set),
+            )
         return rate
 
     def rolling_rate(self, days: int = 10) -> float:
@@ -66,7 +75,9 @@ class FillRateTracker:
         if not ok:
             logger.critical(
                 "E10 门禁否决: 近%d日成交率 %.1f%% < 80%%, 冲击成本模型错误, 禁止上线",
-                days, rate * 100)
+                days,
+                rate * 100,
+            )
         return {"pass": ok, "fill_rate": round(rate, 4), "days": days}
 
 
@@ -102,9 +113,14 @@ class ShadowListTracker:
     def record_list(self, date: str, list_df: pd.DataFrame) -> None:
         """记录 T 日影子清单 (WORM, 只追加不覆盖)."""
         self._lists.append(
-            {"date": str(date), "profile": self.profile,
-             "symbols": list(list_df["symbol"]),
-             "weights": list(list_df.get("weight", [1 / max(len(list_df), 1)] * len(list_df)))}
+            {
+                "date": str(date),
+                "profile": self.profile,
+                "symbols": list(list_df["symbol"]),
+                "weights": list(
+                    list_df.get("weight", [1 / max(len(list_df), 1)] * len(list_df))
+                ),
+            }
         )
 
     def mark_to_market(self, date: str, close_prices: pd.Series) -> float:
@@ -127,8 +143,10 @@ class ShadowListTracker:
                     amount = self._cash * float(w)
                     if amount > 0:
                         self._positions[sym] = {
-                            "cost": float(prices[sym]), "amount": amount,
-                            "hold_days": 0}
+                            "cost": float(prices[sym]),
+                            "amount": amount,
+                            "hold_days": 0,
+                        }
                         self._cash -= amount
         # 估值 + 到期卖出 (卖出所得计入现金, 当日 NAV 仍含该价值)
         nav = self._cash
@@ -152,9 +170,7 @@ class ShadowListTracker:
 # ============================================================
 # E10 回测 vs 模拟盘偏差 (门禁 <30%)
 # ============================================================
-def backtest_vs_paper_deviation(
-    backtest_nav: pd.Series, paper_nav: pd.Series
-) -> dict:
+def backtest_vs_paper_deviation(backtest_nav: pd.Series, paper_nav: pd.Series) -> dict:
     """回测-模拟盘收益偏差: |paper_ret - bt_ret| / max(|bt_ret|, 1e-9).
 
     偏差 ≥30% → 查标签口径 (B9) 与滑点分层 (E5), 一票否决上线.
@@ -166,9 +182,16 @@ def backtest_vs_paper_deviation(
     if not ok:
         logger.critical(
             "E10 偏差否决: 回测 %.2f%% vs 模拟盘 %.2f%%, 偏差 %.1f%% ≥ 30%%",
-            bt_ret * 100, pp_ret * 100, dev * 100)
-    return {"pass": ok, "deviation": round(dev, 4),
-            "backtest_return": round(bt_ret, 4), "paper_return": round(pp_ret, 4)}
+            bt_ret * 100,
+            pp_ret * 100,
+            dev * 100,
+        )
+    return {
+        "pass": ok,
+        "deviation": round(dev, 4),
+        "backtest_return": round(bt_ret, 4),
+        "paper_return": round(pp_ret, 4),
+    }
 
 
 # ============================================================

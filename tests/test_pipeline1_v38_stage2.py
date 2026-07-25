@@ -31,7 +31,8 @@ class TestAnnouncementFactor:
         assert af.compute_announce_score("600519", "2026-07-25") == pytest.approx(0.5)
         # 时间衰减: 2 天后 0.5×0.8² = 0.32
         assert af.compute_announce_score("600519", "2026-07-27") == pytest.approx(
-            0.5 * 0.64)
+            0.5 * 0.64
+        )
         # 超过 5 日 → 0
         assert af.compute_announce_score("600519", "2026-08-05") == 0.0
 
@@ -52,10 +53,12 @@ class TestAnnouncementFactor:
     def test_sector_freeze(self):
         af = AnnouncementFactor()
         for i, sym in enumerate(["600001", "600002", "600003"]):
-            af.add_manual_entry(sym, "2026-07-25", "风险提示",
-                                score=-0.5, industry="白酒")
-        af.add_manual_entry("600004", "2026-07-25", "风险提示",
-                            score=-0.5, industry="电池")
+            af.add_manual_entry(
+                sym, "2026-07-25", "风险提示", score=-0.5, industry="白酒"
+            )
+        af.add_manual_entry(
+            "600004", "2026-07-25", "风险提示", score=-0.5, industry="电池"
+        )
         assert af.get_sector_freeze("2026-07-25") == {"白酒"}  # ≥3 只利空才冻结
         assert af.get_sector_freeze("2026-07-26") == set()
 
@@ -76,8 +79,13 @@ class TestAnnouncementFactor:
         df = af2.load_announcements("600519", "2026-07-01", "2026-07-31")
         assert len(df) == 1 and df["announce_score"].iloc[0] == 0.8
         # B.5 schema 列齐全
-        assert {"symbol", "announce_date", "announce_type", "announce_score",
-                "event_window_flag"} <= set(df.columns)
+        assert {
+            "symbol",
+            "announce_date",
+            "announce_type",
+            "announce_score",
+            "event_window_flag",
+        } <= set(df.columns)
 
 
 # ============================================================
@@ -137,10 +145,12 @@ class TestDeviationAndBadTrades:
         assert not bad["pass"]
 
     def test_bad_trade_review(self):
-        preds = pd.DataFrame({
-            "symbol": ["A", "B", "C"],
-            "pred_ret_1d": [0.03, 0.03, 0.001],  # C 未达预测大涨门槛
-        })
+        preds = pd.DataFrame(
+            {
+                "symbol": ["A", "B", "C"],
+                "pred_ret_1d": [0.03, 0.03, 0.001],  # C 未达预测大涨门槛
+            }
+        )
         actual = pd.Series({"A": -0.08, "B": 0.05, "C": -0.09})
         bad = bad_trade_review(preds, actual)
         assert list(bad["symbol"]) == ["A"]  # 只有 A: 预测大涨+实际大跌
@@ -152,8 +162,7 @@ class TestDeviationAndBadTrades:
 class TestDeathCrossFalsePositive:
     def _series(self):
         dates = pd.bdate_range("2025-01-01", periods=60)
-        close = pd.Series(
-            [100.0] * 30 + [94.0] * 5 + [101.0] * 25, index=dates)
+        close = pd.Series([100.0] * 30 + [94.0] * 5 + [101.0] * 25, index=dates)
         hist = pd.Series(0.0, index=dates)
         hist.iloc[29] = 0.5
         hist.iloc[30] = -0.5  # 第30日死叉 (同时跌破20日线)

@@ -37,12 +37,39 @@ SECTOR_FREEZE_COUNT = 3
 
 # B.3 关键词词典 (阶段二, LLM 复核留阶段四)
 POSITIVE_KEYWORDS = (
-    "预增", "扭亏", "中标", "签约", "获批", "回购", "增持", "分红", "突破",
-    "量产", "定点", "超预期", "涨价", "扩产", "重组成功", "注入",
+    "预增",
+    "扭亏",
+    "中标",
+    "签约",
+    "获批",
+    "回购",
+    "增持",
+    "分红",
+    "突破",
+    "量产",
+    "定点",
+    "超预期",
+    "涨价",
+    "扩产",
+    "重组成功",
+    "注入",
 )
 NEGATIVE_KEYWORDS = (
-    "预亏", "预减", "减持", "处罚", "立案", "警示", "退市风险", "质押",
-    "违约", "诉讼", "冻结", "问询", "商誉减值", "爆雷", "ST",
+    "预亏",
+    "预减",
+    "减持",
+    "处罚",
+    "立案",
+    "警示",
+    "退市风险",
+    "质押",
+    "违约",
+    "诉讼",
+    "冻结",
+    "问询",
+    "商誉减值",
+    "爆雷",
+    "ST",
 )
 
 ANNOUNCE_TYPES = ("财报", "解禁", "增发", "重组", "风险提示", "其他")  # B.2
@@ -138,9 +165,7 @@ class AnnouncementFactor:
         return max(-1.0, min(1.0, 0.5 * (pos - neg)))
 
     # ---------------- 查询 ----------------
-    def load_announcements(
-        self, symbol: str, start: str, end: str
-    ) -> pd.DataFrame:
+    def load_announcements(self, symbol: str, start: str, end: str) -> pd.DataFrame:
         """按标的+日期区间查询 (B.5 schema)."""
         rows = [
             asdict(r)
@@ -150,8 +175,13 @@ class AnnouncementFactor:
         return pd.DataFrame(
             rows,
             columns=[
-                "symbol", "announce_date", "announce_type", "announce_score",
-                "event_window_flag", "title", "industry",
+                "symbol",
+                "announce_date",
+                "announce_type",
+                "announce_score",
+                "event_window_flag",
+                "title",
+                "industry",
             ],
         )
 
@@ -165,14 +195,12 @@ class AnnouncementFactor:
                 continue
             age = (td - pd.Timestamp(r.announce_date)).days
             if 0 <= age <= 5:
-                scores.append(r.announce_score * (0.8 ** age))  # 时间衰减
+                scores.append(r.announce_score * (0.8**age))  # 时间衰减
         if not scores:
             return 0.0
         return max(-1.0, min(1.0, float(sum(scores) / len(scores))))
 
-    def apply_announcement(
-        self, score: float, symbol: str, trade_date: str
-    ) -> float:
+    def apply_announcement(self, score: float, symbol: str, trade_date: str) -> float:
         """排序分公告调整: score × (1 + 0.3×announce_score) (安全网 #17)."""
         return score * (1 + SCORE_ADJ * self.compute_announce_score(symbol, trade_date))
 
@@ -203,14 +231,15 @@ class AnnouncementFactor:
                 neg[r.industry] = neg.get(r.industry, 0) + 1
         frozen = {ind for ind, n in neg.items() if n >= SECTOR_FREEZE_COUNT}
         if frozen:
-            logger.error("公告驱动板块冻结: %s (单日利空≥%d只)",
-                         sorted(frozen), SECTOR_FREEZE_COUNT)
+            logger.error(
+                "公告驱动板块冻结: %s (单日利空≥%d只)",
+                sorted(frozen),
+                SECTOR_FREEZE_COUNT,
+            )
         return frozen
 
     # ---------------- 清单集成 ----------------
-    def attach_scores(
-        self, candidates: pd.DataFrame, trade_date: str
-    ) -> pd.DataFrame:
+    def attach_scores(self, candidates: pd.DataFrame, trade_date: str) -> pd.DataFrame:
         """给清单候选并入 announce_score 列 (ListGenerator.compute_scores 消费).
 
         事件窗口内的标的 announce_score 置 -1.0 并标记 (下游/攻击档禁买).
@@ -220,9 +249,7 @@ class AnnouncementFactor:
             self.compute_announce_score(s, trade_date) for s in out["symbol"]
         ]
         if len(out):
-            event_mask = [
-                self.is_event_window(s, trade_date) for s in out["symbol"]
-            ]
+            event_mask = [self.is_event_window(s, trade_date) for s in out["symbol"]]
             out.loc[event_mask, "announce_score"] = -1.0
             out["event_window"] = event_mask
         return out
