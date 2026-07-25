@@ -65,7 +65,9 @@ class LabelEngine:
         否则 -50% 被剪至当日 0.1% 分位, "让模型学习归零"名存实亡.
         """
         label_cols = [f"label_{k}d" for k in LABEL_HORIZONS]
-        label_cols += [f"label_pm_{k}d" for k in LABEL_HORIZONS if f"label_pm_{k}d" in df]
+        label_cols += [
+            f"label_pm_{k}d" for k in LABEL_HORIZONS if f"label_pm_{k}d" in df
+        ]
         if "is_virtual" in df.columns:
             real = df["is_virtual"] != 1
         else:
