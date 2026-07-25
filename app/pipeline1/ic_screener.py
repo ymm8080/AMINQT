@@ -229,24 +229,35 @@ class ICScreener:
         ics = sub.groupby("date").apply(
             lambda g: (
                 spearmanr(g[factor], g[label]).statistic
-                if g[factor].nunique() > 5 and g[label].nunique() > 1
+                if len(g) >= 3
+                and g[factor].nunique() > 5
+                and g[label].nunique() > 1
                 else np.nan
             )
         )
-        return float(np.nanmean(ics.values))
+        valid = ics.dropna()
+        if len(valid) == 0:
+            return 0.0
+        return float(valid.mean())
 
     def _l2_path(self) -> str:
         return os.path.join(self.registry_path, "l2_factor_neg_streaks.json")
 
     def _load_l2_history(self) -> dict:
-        if os.path.exists(self._l2_path()):
-            with open(self._l2_path(), encoding="utf-8") as fh:
-                return json.load(fh)
+        try:
+            if os.path.exists(self._l2_path()):
+                with open(self._l2_path(), encoding="utf-8") as fh:
+                    return json.load(fh)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("L2 历史加载失败: %s", e)
         return {}
 
     def _save_l2_history(self, history: dict) -> None:
-        with open(self._l2_path(), "w", encoding="utf-8") as fh:
-            json.dump(history, fh, ensure_ascii=False, indent=1)
+        try:
+            with open(self._l2_path(), "w", encoding="utf-8") as fh:
+                json.dump(history, fh, ensure_ascii=False, indent=1)
+        except OSError as e:
+            logger.warning("L2 历史保存失败: %s", e)
 
     def _persist(self, window_id: str, result: dict) -> None:
         """每期因子清单必须记录 (安全网 #2 工程强制)."""

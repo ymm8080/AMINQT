@@ -212,35 +212,41 @@ class DualTrackTrainer:
             None,
         )
         if q_label is not None:
-            train, X, y = _xy("train", q_label)
-            _, X_es, y_es = _xy("es", q_label)
-            # E1 沿用回归超参 (objective 由 QuantileModelSet 按分位设置)
-            params = {k: v for k, v in LGB_PARAMS_REG.items() if k != "objective"}
-            qset = QuantileModelSet(params).fit(
-                X,
-                y,
-                sample_weight=self.time_weights(train),
-                eval_set=(X_es, y_es) if len(y_es) else None,
-                es_patience=ES_PATIENCE,
-            )
-            qset.label_ = q_label
-            out["quantile_models"] = qset
-            logger.info(
-                "[%s] E1 分位数五模型训练完成 (label=%s)", out["board"], q_label
-            )
+            try:
+                train, X, y = _xy("train", q_label)
+                _, X_es, y_es = _xy("es", q_label)
+                # E1 沿用回归超参 (objective 由 QuantileModelSet 按分位设置)
+                params = {k: v for k, v in LGB_PARAMS_REG.items() if k != "objective"}
+                qset = QuantileModelSet(params).fit(
+                    X,
+                    y,
+                    sample_weight=self.time_weights(train),
+                    eval_set=(X_es, y_es) if len(y_es) else None,
+                    es_patience=ES_PATIENCE,
+                )
+                qset.label_ = q_label
+                out["quantile_models"] = qset
+                logger.info(
+                    "[%s] E1 分位数五模型训练完成 (label=%s)", out["board"], q_label
+                )
+            except Exception as e:
+                logger.warning("[%s] E1 分位数模型训练失败: %s", out["board"], e)
 
         if "label_pain" in segs["train"].columns:
-            train, X, y = _xy("train", "label_pain")
-            _, X_es, y_es = _xy("es", "label_pain")
-            params = {k: v for k, v in LGB_PARAMS_CLS.items() if k != "objective"}
-            pain = PainModel(params).fit(
-                X,
-                y,
-                sample_weight=self.time_weights(train),
-                eval_set=(X_es, y_es) if len(y_es) else None,
-                es_patience=ES_PATIENCE,
-            )
-            out["pain_model"] = pain
+            try:
+                train, X, y = _xy("train", "label_pain")
+                _, X_es, y_es = _xy("es", "label_pain")
+                params = {k: v for k, v in LGB_PARAMS_CLS.items() if k != "objective"}
+                pain = PainModel(params).fit(
+                    X,
+                    y,
+                    sample_weight=self.time_weights(train),
+                    eval_set=(X_es, y_es) if len(y_es) else None,
+                    es_patience=ES_PATIENCE,
+                )
+                out["pain_model"] = pain
+            except Exception as e:
+                logger.warning("[%s] E2 痛苦预警模型训练失败: %s", out["board"], e)
 
     # ---------------- 校准器拟合 (随月度重训滚动重校) ----------------
     @staticmethod
@@ -292,8 +298,12 @@ class DualTrackTrainer:
         for extra in ("quantile_models", "pain_model"):  # E1/E2 (标签齐备时)
             if extra in trained:
                 bundle[extra] = trained[extra]
-        with open(path, "wb") as fh:
-            pickle.dump(bundle, fh)
+        try:
+            with open(path, "wb") as fh:
+                pickle.dump(bundle, fh)
+        except OSError as e:
+            logger.error("模型保存失败 (%s): %s", path, e)
+            raise
         return path
 
     @staticmethod
