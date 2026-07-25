@@ -52,6 +52,20 @@ LGB_PARAMS_CLS = {
 MODEL_KINDS = ("1d_reg", "1d_cls", "3d_reg", "5d_reg")
 
 
+def risk_filter(df: pd.DataFrame) -> pd.DataFrame:
+    """Filter non-tradable stocks (suspended/ST) before training.
+
+    Limit-up/down is NOT filtered here — it's an execution-time constraint
+    handled by app.core.risk_filter.apply_filters, not a training-time filter.
+    Models must learn limit-up/down patterns.
+    """
+    mask = pd.Series(True, index=df.index)
+    for col in ("is_suspended", "is_st"):
+        if col in df.columns:
+            mask &= ~df[col].astype(bool)
+    return df[mask]
+
+
 class DualTrackTrainer:
     """双轨训练 — 每个板块独立训练 4 个模型."""
 
@@ -118,13 +132,8 @@ class DualTrackTrainer:
                 label = pm_label
         train = segs["train"].dropna(subset=[label])  # per-model dropna (安全网 #7)
         es = segs["es"].dropna(subset=[label])
-        # risk_filter: 排除停牌/ST 股 (非可交易标的不进训练;
-        # 涨跌停限制在执行层 risk_filter.apply_filters 处理, 非训练层)
-        for col in ("is_suspended", "is_st"):
-            if col in train.columns:
-                train = train[~train[col].astype(bool)]
-            if col in es.columns:
-                es = es[~es[col].astype(bool)]
+        train = risk_filter(train)
+        es = risk_filter(es)
         X = np.nan_to_num(train[feature_cols].values, nan=0.0)
         y = train[label].values
         X_es = np.nan_to_num(es[feature_cols].values, nan=0.0)

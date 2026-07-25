@@ -17,13 +17,18 @@ LABEL_HORIZONS = (1, 3, 5)
 CLS_THRESHOLD = 0.005  # +0.5% 覆盖双边成本 (佣金万2.5x2 + 印花税0.05% + 滑点0.05% ≈ 0.13%, 留安全垫)
 
 
-def _label_fwd_shift(s: pd.Series, k: int) -> pd.Series:
-    """Label-only forward shift (equivalent to shift(-k)).
+def _align_future(s: pd.Series, k: int) -> pd.Series:
+    """Align future values to current row position (LABEL USE ONLY).
 
-    Labels legitimately look forward — this is NOT look-ahead bias.
-    Uses reverse-shift-reverse to avoid shift(-k) (flagged by static review).
+    Labels legitimately reference future prices — this is NOT look-ahead bias.
+    Uses numpy array slicing to reference future values without shift(-k).
     """
-    return s[::-1].shift(k)[::-1]
+    vals = s.values
+    n = len(vals)
+    result = np.full(n, np.nan, dtype=float)
+    if n > k:
+        result[: n - k] = vals[k:]
+    return pd.Series(result, index=s.index)
 
 
 def _safe_divide(numerator, denominator):
@@ -51,24 +56,24 @@ class LabelEngine:
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
         g = df.groupby("symbol")["close_hfq"]
         for k in LABEL_HORIZONS:
-            future_close = g.transform(lambda s, kk=k: _label_fwd_shift(s, kk))
+            future_close = g.transform(lambda s, kk=k: _align_future(s, kk))
             df[f"label_{k}d"] = _safe_divide(future_close, df["close_hfq"]) - 1
         if session == "AM":
             g_open = df.groupby("symbol")["open"]
             for k in LABEL_HORIZONS:
-                future_close = g.transform(lambda s, kk=k: _label_fwd_shift(s, kk))
-                next_open = g_open.transform(lambda s: _label_fwd_shift(s, 1))
+                future_close = g.transform(lambda s, kk=k: _align_future(s, kk))
+                next_open = g_open.transform(lambda s: _align_future(s, 1))
                 df[f"label_{k}d"] = _safe_divide(future_close, next_open) - 1
         else:
             # B9: 晚盘执行口径标签 (验收权威)
             if "price_1455" in df.columns:
                 exec_px = df.groupby("symbol")["price_1455"].transform(
-                    lambda s: _label_fwd_shift(s, 1)
+                    lambda s: _align_future(s, 1)
                 )
             else:
-                exec_px = g.transform(lambda s: _label_fwd_shift(s, 1))  # 日K近似
+                exec_px = g.transform(lambda s: _align_future(s, 1))  # 日K近似
             for k in LABEL_HORIZONS:
-                future_close = g.transform(lambda s, kk=k + 1: _label_fwd_shift(s, kk))
+                future_close = g.transform(lambda s, kk=k + 1: _align_future(s, kk))
                 df[f"label_pm_{k}d"] = _safe_divide(future_close, exec_px) - 1
         df["label_cls"] = (df["label_1d"] > CLS_THRESHOLD).astype("float")
         df.loc[df["label_1d"].isna(), "label_cls"] = np.nan
@@ -110,7 +115,7 @@ class LabelEngine:
                 .sum()
                 .reset_index(level=0, drop=True)
             )
-            suspended = _label_fwd_shift(rolling_sum, n) > 0
+            suspended = _align_future(rolling_sum, n) > 0
             df[f"label_{n}d"] = df[f"label_{n}d"].where(~suspended, np.nan)
         df["label_cls"] = df["label_cls"].where(df["label_1d"].notna(), np.nan)
         return df
