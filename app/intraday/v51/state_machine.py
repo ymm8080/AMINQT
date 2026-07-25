@@ -65,8 +65,10 @@ class ParamStateMachine:
             logger.info("参数流转: shadow → staging (门禁通过)")
         else:
             self.state = STATE_CANDIDATE
-            logger.error("参数回退: shadow → candidate (门禁失败 %s), 书面归因",
-                         [k for k, v in gate["checks"].items() if not v])
+            logger.error(
+                "参数回退: shadow → candidate (门禁失败 %s), 书面归因",
+                [k for k, v in gate["checks"].items() if not v],
+            )
         return self.state
 
     def promote_from_staging(self, abnormal: bool) -> str:

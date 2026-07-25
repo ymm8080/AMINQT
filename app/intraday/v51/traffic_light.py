@@ -40,14 +40,18 @@ class IntradayTrafficLight:
         mu, sigma = float(np.mean(hist)), float(np.std(hist))
         if sharpe_20d < mu - 2 * sigma:
             self._yellow_streak = 0
-            logger.critical("红灯: 滚动夏普 %.3f < μ-2σ (%.3f), 规则下线, 紧急寻优",
-                            sharpe_20d, mu - 2 * sigma)
+            logger.critical(
+                "红灯: 滚动夏普 %.3f < μ-2σ (%.3f), 规则下线, 紧急寻优",
+                sharpe_20d,
+                mu - 2 * sigma,
+            )
             return {"light": LIGHT_RED, "action": "规则下线 + 紧急寻优"}
         if sharpe_20d < mu - 1 * sigma:
             self._yellow_streak += 1
             if self._yellow_streak >= YELLOW_DAYS:
-                logger.error("黄灯×%d: 进入复检队列 (联动 PIPELINE1 L1)",
-                             self._yellow_streak)
+                logger.error(
+                    "黄灯×%d: 进入复检队列 (联动 PIPELINE1 L1)", self._yellow_streak
+                )
                 return {"light": LIGHT_YELLOW, "action": "复检队列 (L1 联动)"}
             return {"light": LIGHT_YELLOW, "action": "黄灯观察"}
         self._yellow_streak = 0

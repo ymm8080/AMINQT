@@ -173,8 +173,11 @@ def trigger(ctx: BuyContext, bars: tuple[Bar, ...]) -> dict:
             positive = "B1"
         elif b2_evening_strength(bars):
             positive = "B2"
-    return {"pass": not vetoes and positive is not None,
-            "vetoes": vetoes, "positive": positive}
+    return {
+        "pass": not vetoes and positive is not None,
+        "vetoes": vetoes,
+        "positive": positive,
+    }
 
 
 def limit_order_price(bar_close: float, side: str = "buy") -> float:

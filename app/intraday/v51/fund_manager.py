@@ -68,16 +68,20 @@ class FundManager:
         self._daily_pnl += pnl_pct
         if self._daily_pnl <= -self.daily_fuse and not self._fuse_triggered:
             self._fuse_triggered = True
-            logger.error("日内保险丝: 当日亏损 %.1f%% ≥ %.0f%%, 暂停新买入",
-                         -self._daily_pnl * 100, self.daily_fuse * 100)
+            logger.error(
+                "日内保险丝: 当日亏损 %.1f%% ≥ %.0f%%, 暂停新买入",
+                -self._daily_pnl * 100,
+                self.daily_fuse * 100,
+            )
 
     def on_nav(self, nav: float) -> None:
         self.peak_nav = max(self.peak_nav, nav)
         if self.peak_nav > 0 and nav / self.peak_nav - 1 <= -HALT_DRAWDOWN:
             if not self.halted:
                 self.halted = True
-                logger.critical("系统停机线: 回撤 ≥15%%, 全系统暂停, "
-                                "清仓所有可卖持仓, 人工介入")
+                logger.critical(
+                    "系统停机线: 回撤 ≥15%%, 全系统暂停, 清仓所有可卖持仓, 人工介入"
+                )
 
     def new_day(self) -> None:
         """每日开盘前 reset (停机线/保险丝触发状态跨日保持)."""
