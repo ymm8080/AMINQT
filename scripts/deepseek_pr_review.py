@@ -180,7 +180,10 @@ Review the PR diff and identify:
 named _label_reference, build_labels, or mask_suspension operate on labels, \
 not features — do NOT flag them as future function violations.
 2. Missing risk_filter before trading logic (not needed in label/cleaning steps)
-3. Missing try-except error handling
+3. Missing try-except error handling (only for network/API calls, file I/O, \
+model.fit/predict, or external library calls that may raise unexpectedly; \
+simple numpy/pandas operations like np.nan_to_num, boolean masking, and \
+arithmetic do NOT need try-except)
 4. Hardcoded credentials
 5. String date comparison (must use datetime objects)
 6. Missing logging (print is forbidden except SimExecutor)
