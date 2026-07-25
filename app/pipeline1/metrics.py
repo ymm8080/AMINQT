@@ -48,19 +48,45 @@ def icir(df: pd.DataFrame, score_col: str, label_col: str) -> float:
     return float(ics.mean() / ics.std() * np.sqrt(252))
 
 
+def bucket_ic_high_vol(
+    df: pd.DataFrame,
+    score_col: str,
+    label_col: str,
+    atr_col: str = "ATR_pct",
+) -> float:
+    """E.4 分波动桶 IC: 按 ATR 五桶独立 Rank IC, 取高波动桶 (Q5).
+
+    点火门禁 (P19.0) 高波动桶 IC ≥ 0.02 的直接输入;
+    完整五桶报告见 dynamic_engine.DynamicEngine.bucket_ic.
+    """
+    from .dynamic_engine import DynamicEngine
+
+    return float(
+        DynamicEngine.bucket_ic(df, score_col, label_col, atr_col)["high_vol_ic"]
+    )
+
+
 def ignition_gate(
     df: pd.DataFrame,
     score_col: str,
     label_col: str,
-    high_vol_ic: float,
-    train_ic: float,
+    high_vol_ic: float | None = None,
+    train_ic: float = 0.0,
+    atr_col: str = "ATR_pct",
 ) -> dict:
     """阶段一点火验收 (P19.0): 全部满足方可进入阶段二.
 
+    high_vol_ic=None 且面板含 atr_col 时自动按 ATR 五桶计算 (E.4).
     不达标 → 按序排查 未来函数→复权→幸存者偏差; 禁止加特征硬堆 IC.
     """
     ic = rank_ic(df, score_col, label_col)
     ir = icir(df, score_col, label_col)
+    if high_vol_ic is None:
+        high_vol_ic = (
+            bucket_ic_high_vol(df, score_col, label_col, atr_col)
+            if atr_col in df.columns
+            else 0.0
+        )
     checks = {
         "rank_ic": {"value": round(ic, 4), "pass": ic >= IGNITION_IC_MIN},
         "icir": {"value": round(ir, 4), "pass": ir >= IGNITION_ICIR_MIN},
