@@ -19,6 +19,8 @@ import logging
 
 import numpy as np
 
+from .safe_div import safe_divide
+
 logger = logging.getLogger(__name__)
 
 T_STAT_MIN = 3.0
@@ -39,7 +41,7 @@ def plateau_check(neighbor_scores: list[float], candidate_score: float) -> dict:
     if n == 0:
         return {"pass": False, "reason": "无邻域样本"}
     positive = [s > 0 for s in neighbor_scores]
-    same_dir = sum(positive) / n
+    same_dir = safe_divide(float(sum(positive)), float(n))
     neighbor_mean = float(np.mean(neighbor_scores))
     mean_ok = neighbor_mean >= 0.5 * candidate_score if candidate_score > 0 else False
     ok = same_dir >= PLATEAU_SAME_DIR_MIN and mean_ok
@@ -64,7 +66,7 @@ def oos_decay_check(train_score: float, oos_score: float) -> dict:
     """验证段超额 ≥ 训练段 50% (防 regime 依赖)."""
     if train_score <= 0:
         return {"pass": False, "decay": 0.0}
-    keep = oos_score / train_score
+    keep = safe_divide(oos_score, train_score)
     return {"pass": keep >= OOS_DECAY_MIN, "decay": round(keep, 3)}
 
 

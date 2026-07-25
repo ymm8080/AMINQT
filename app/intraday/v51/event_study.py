@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from .safe_div import safe_divide
+
 MIN_EVENTS = 1000  # 关卡 0: 事件数下限
 T_STAT_MIN = 3.0  # 关卡 1: 显著性下限
 
@@ -40,7 +42,9 @@ def event_study(
             "pass": False,
         }
     mean = float(r.mean())
-    t_stat = float(mean / (r.std(ddof=1) / np.sqrt(n))) if r.std(ddof=1) > 0 else 0.0
+    std = float(r.std(ddof=1))
+    se = safe_divide(std, float(np.sqrt(n)))
+    t_stat = safe_divide(mean, se) if se > 0 else 0.0
     g0 = n >= min_events
     g1 = abs(t_stat) > t_min
     return {
