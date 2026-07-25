@@ -87,6 +87,10 @@ def pipeline(tmp_path):
     pipe.features = _StubFeatures()
     # 测试仅 2 只股: 放宽流动性安全阀阈值 (生产默认 50/15 针对全市场)
     pipe.cleaner = CleaningPipeline(CleaningConfig(valve_full=2, valve_reduced=1))
+    # 伪特征模型预测≈0: 关闭 E7 准入闸门 (闸门本身由 test_pipeline1_v38 覆盖)
+    from app.pipeline1.list_generator import ListGenerator
+
+    pipe.lister = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0)
     return pipe, panel
 
 
@@ -98,7 +102,7 @@ class TestDailyPipeline:
         lst = result["list"]
         assert list(lst.columns) == SCHEMA_FIELDS
         assert 0 < len(lst) <= 2
-        assert (lst["schema_version"] == "1.0").all()
+        assert (lst["schema_version"] == "1.2").all()
 
     def test_list_persisted_and_yesterday_carryover(self, pipeline):
         """清单持久化 + 次日 is_in_yesterday_list 回填 (Holding Bonus)."""

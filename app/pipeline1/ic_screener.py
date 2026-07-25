@@ -1,10 +1,12 @@
 """
-IC 筛选器 (DESIGN §14 三 bis, 安全网 #2)
-===========================================
+IC 筛选器 (DESIGN §14 三 bis, 安全网 #2, PIPELINE1_V3.8 §三 bis)
+==================================================================
 - 每个滚动重训窗口内, 仅用该窗口训练集重新计算 IC 并重新筛因子 (严禁全样本一次筛选 = 前视偏差)
-- 三标签 (1d/3d/5d) 分别计算 Rank IC → 取并集
+- 三标签 (1d/3d/5d) 分别计算 Rank IC → 取并集; [E5] 净口径 label_*_net 优先
+- [E2] mdd 标签独立筛选 (label_mdd_3d) → 与净口径并集再取并集
 - 分类模型独立: AUC + 互信息 → 与回归并集再取并集
 - 滚动 IC 双指标 (D13): 60日滚动 IC 均值 > 0.02 且正值比例 > 60%
+- [E4-L2] 连续 3 期滚动 IC 为负的因子自动剔除 (跨窗口持久化追踪)
 - 每期因子清单必须记录 (工程强制)
 """
 
@@ -25,6 +27,7 @@ IC_WEAK = 0.01  # 弱因子 (观察)
 ROLLING_WINDOW = 60  # 滚动 IC 窗口 (交易日)
 ROLLING_MEAN_MIN = 0.02
 ROLLING_POS_RATIO_MIN = 0.60
+L2_NEG_PERIODS = 3  # [E4-L2] 连续 3 期滚动 IC 为负 → 自动剔除
 
 
 class ICScreener:
@@ -142,22 +145,40 @@ class ICScreener:
     ) -> dict:
         """窗口内重算 IC 并筛因子.
 
+        [E5] 净口径: label_{k}d_net 存在时优先于毛收益 label_{k}d;
+        [E2] label_mdd_3d 独立筛选, 并入并集;
+        [E4-L2] 连续 3 期滚动 IC 为负 → 强制 grade='dead'.
+
         Returns:
-            {window_id, factors: [...], detail: {factor: {ic_1d, ic_3d, ic_5d, auc, grade}}}
+            {window_id, factors: [...], detail: {factor: {ic_1d, ..., grade}}}
             grade: 'strong' 保留 / 'weak' 观察 / 'dead' 剔除
         """
+        # [E5] 净收益标签优先 (分层滑点口径)
+        label_of = {
+            k: (
+                f"label_{k}d_net"
+                if f"label_{k}d_net" in train_df.columns
+                else f"label_{k}d"
+            )
+            for k in (1, 3, 5)
+        }
+        has_mdd = "label_mdd_3d" in train_df.columns  # [E2]
+        l2_history = self._load_l2_history()
         result = {"window_id": window_id, "factors": [], "detail": {}}
         for f in feature_cols:
             ic_by_label = {
-                k: self.rank_ic(train_df, f, f"label_{k}d") for k in (1, 3, 5)
+                k: self.rank_ic(train_df, f, lbl) for k, lbl in label_of.items()
             }
             best_ic = max(ic_by_label.values())
+            ic_mdd = self.rank_ic(train_df, f, "label_mdd_3d") if has_mdd else None
+            if ic_mdd is not None:
+                best_ic = max(best_ic, ic_mdd)  # [E2] mdd 独立筛选并入并集
             auc = self.auc_score(train_df, f)
-            roll_mean, roll_pos = self.rolling_ic_dual(train_df, f, "label_1d")
+            roll_mean, roll_pos = self.rolling_ic_dual(train_df, f, label_of[1])
             dual_ok = roll_mean > ROLLING_MEAN_MIN and roll_pos > ROLLING_POS_RATIO_MIN
             # B6: 3d/5d IC 显著性用 Newey-West HAC 调整 (lag=5/8)
-            t_3d = self.ic_t_stat_newey_west(train_df, f, "label_3d", lag=5)
-            t_5d = self.ic_t_stat_newey_west(train_df, f, "label_5d", lag=8)
+            t_3d = self.ic_t_stat_newey_west(train_df, f, label_of[3], lag=5)
+            t_5d = self.ic_t_stat_newey_west(train_df, f, label_of[5], lag=8)
             nw_significant = abs(t_3d) > 1.96 or abs(t_5d) > 1.96
             if (best_ic > IC_STRONG or auc > 0.55) and dual_ok and nw_significant:
                 grade = "strong"
@@ -165,6 +186,17 @@ class ICScreener:
                 grade = "weak"
             else:
                 grade = "dead"
+            # [E4-L2] 连续 3 期窗口 IC 为负 (带符号) → 自动剔除
+            signed_ic = self._signed_daily_ic_mean(train_df, f, label_of[1])
+            neg_streak = l2_history.get(f, 0)
+            neg_streak = neg_streak + 1 if signed_ic < 0 else 0
+            l2_history[f] = neg_streak
+            l2_evicted = neg_streak >= L2_NEG_PERIODS
+            if l2_evicted and grade != "dead":
+                grade = "dead"
+                logger.warning(
+                    "E4-L2: 因子 %s 连续 %d 期窗口IC为负, 自动剔除", f, neg_streak
+                )
             result["detail"][f] = {
                 **{f"ic_{k}d": round(v, 4) for k, v in ic_by_label.items()},
                 "auc": round(auc, 4),
@@ -174,10 +206,59 @@ class ICScreener:
                 "nw_t_5d": round(t_5d, 4),  # B6
                 "grade": grade,
             }
+            if ic_mdd is not None:
+                result["detail"][f]["ic_mdd_3d"] = round(ic_mdd, 4)  # [E2]
+            if l2_evicted:
+                result["detail"][f]["l2_evicted"] = True  # [E4-L2]
             if grade in ("strong", "weak"):
                 result["factors"].append(f)
         self._persist(window_id, result)
+        self._save_l2_history(l2_history)
         return result
+
+    # ---------------- E4-L2 跨窗口负 IC 追踪 ----------------
+    @staticmethod
+    def _signed_daily_ic_mean(df: pd.DataFrame, factor: str, label: str) -> float:
+        """窗口内日度 Rank IC 均值 (带符号) — L2 "连续3期为负" 判定输入.
+
+        rank_ic/rolling_ic_dual 取绝对值 (方向无关筛强度), 不能用于符号判定.
+        """
+        sub = df[["date", factor, label]].dropna()
+        if sub["date"].nunique() < 5:
+            return 0.0
+
+        def _daily_ic(g: pd.DataFrame) -> float:
+            if len(g) < 3 or g[factor].nunique() <= 5 or g[label].nunique() <= 1:
+                return np.nan
+            try:
+                return spearmanr(g[factor], g[label]).statistic
+            except (ValueError, TypeError):
+                return np.nan
+
+        ics = sub.groupby("date").apply(_daily_ic)
+        valid = ics.dropna()
+        if len(valid) == 0:
+            return 0.0
+        return float(valid.mean())
+
+    def _l2_path(self) -> str:
+        return os.path.join(self.registry_path, "l2_factor_neg_streaks.json")
+
+    def _load_l2_history(self) -> dict:
+        try:
+            if os.path.exists(self._l2_path()):
+                with open(self._l2_path(), encoding="utf-8") as fh:
+                    return json.load(fh)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("L2 历史加载失败: %s", e)
+        return {}
+
+    def _save_l2_history(self, history: dict) -> None:
+        try:
+            with open(self._l2_path(), "w", encoding="utf-8") as fh:
+                json.dump(history, fh, ensure_ascii=False, indent=1)
+        except OSError as e:
+            logger.warning("L2 历史保存失败: %s", e)
 
     def _persist(self, window_id: str, result: dict) -> None:
         """每期因子清单必须记录 (安全网 #2 工程强制)."""

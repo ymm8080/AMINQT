@@ -35,6 +35,11 @@ def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
     return pd.concat(parts).sort_values(["symbol", "date"]).reset_index(drop=True)
 
 
+def _safe_divide(numerator, denominator) -> pd.Series:
+    """Safe division: NaN where denominator is 0 (防除零, 保留 NaN 语义)."""
+    return numerator / denominator.replace(0, np.nan)
+
+
 class FeatureEngineV35:
     """14 维特征. 输入: 清洗后的面板 (含 hfq+raw 双价格 + 财务/筹码/资金流已 merge 的列)."""
 
@@ -59,6 +64,7 @@ class FeatureEngineV35:
         df = self.dim16_candlestick(df)
         df = self.dim17_extended_factors(df)
         df = self.dim18_lhb(df)
+        df = self.dim19_amihud(df)  # E6
         df = self.industry_neutralize(df)
         df = self.add_missingness_flags(df)
         return df
@@ -500,6 +506,34 @@ class FeatureEngineV35:
                 df[dest] = np.nan
         return df
 
+    # ---------------- ⑲ Amihud 非流动性 (E6, V3.8) ----------------
+    def dim19_amihud(self, df: pd.DataFrame) -> pd.DataFrame:
+        """[E6] amihud_illiquidity = |ret_1d| / amount (20 日均值, 越高越危险);
+        adv20 = 20 日日均成交额 (E5 滑点分层 / E6 liquidity_cap 输入, 非特征).
+
+        纳入 IC 筛选与 B8 剪枝范围 (V3.8 §三).
+        """
+
+        def per_stock(g: pd.DataFrame) -> pd.DataFrame:
+            c = g["close_hfq"] if "close_hfq" in g else g["close"]
+            # shift(1) 后向取前值 (仅用 t-1 数据, 无 look-ahead bias)
+            prev_c = c.shift(1)
+            # _safe_divide 防除零 (prev_c 为 0 时结果为 NaN)
+            safe_ret = _safe_divide(c - prev_c, prev_c)
+            ret_abs = safe_ret.abs()
+            # _safe_divide 防除零 (amount 为 0 时结果为 NaN)
+            raw_amihud = _safe_divide(ret_abs, g["amount"])
+            # NaN 保留入 LightGBM (CLAUDE.md 铁律); np.nan_to_num 在 _train_one 下游应用
+            g["amihud_illiquidity"] = np.nan_to_num(
+                raw_amihud.rolling(20, min_periods=20).mean(), nan=np.nan
+            )
+            g["adv20"] = np.nan_to_num(
+                g["amount"].rolling(20, min_periods=20).mean(), nan=np.nan
+            )
+            return g
+
+        return _apply_per_stock(df, per_stock)
+
     # ---------------- 行业中性化 ----------------
     @staticmethod
     def industry_neutralize(df: pd.DataFrame, cols: list | None = None) -> pd.DataFrame:
@@ -561,6 +595,7 @@ class FeatureEngineV35:
             "churn_suspect",
             "is_virtual",  # B18 标识列, 非特征
             "price_1455",  # B9 执行价列, 非特征
+            "adv20",  # E6 中间量 (滑点分层/liquidity_cap 输入), 非特征
             # dim09 中间量与前瞻信号: 吸筹峰含 REF(X,-1) 前瞻, 严禁入特征 (安全网 #4)
             "吸筹峰",
             "VAR5",

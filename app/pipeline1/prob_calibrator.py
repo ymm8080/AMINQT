@@ -1,7 +1,8 @@
 """
-概率校准器 (DESIGN §14.4, PIPELINE1_V3.5 §四)
+概率校准器 (DESIGN §14.4, PIPELINE1_V3.8 §四/§2.7)
 =================================================
-Platt Scaling (逻辑回归校准); 校准集与早停验证集物理隔离 (训练器切分已保证);
+[E1/V3.8] Isotonic Regression 为默认校准 (Platt Scaling 保留作对照);
+校准集与早停验证集物理隔离 (训练器切分已保证);
 随月度重训滚动重校 (用最近窗口, 不用历史全集).
 严禁直接使用 LightGBM 原始 predict_proba 输出.
 验收: Brier <= 0.24; 可靠性曲线偏移 < 5%.
@@ -26,9 +27,9 @@ HIGH_PROB_WARN = 0.70
 
 
 class ProbCalibrator:
-    """Platt Scaling 概率校准 (V3.6 候选: Isotonic)."""
+    """Isotonic 概率校准 (V3.8 默认); Platt Scaling 保留作历史对照."""
 
-    def __init__(self, method: str = "platt"):
+    def __init__(self, method: str = "isotonic"):
         assert method in ("platt", "isotonic")
         self.method = method
         self._lr: LogisticRegression | None = None
