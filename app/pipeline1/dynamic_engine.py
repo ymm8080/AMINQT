@@ -137,8 +137,12 @@ class DynamicEngine:
 
         sub = df[[atr_col, score_col, label_col]].dropna()
         if len(sub) < n_buckets * 10:
-            return {"buckets": {}, "high_vol_ic": 0.0,
-                    "high_vol_ok": False, "action": "insufficient_data"}
+            return {
+                "buckets": {},
+                "high_vol_ic": 0.0,
+                "high_vol_ok": False,
+                "action": "insufficient_data",
+            }
         sub = sub.copy()
         sub["bucket"] = pd.qcut(
             sub[atr_col], n_buckets, labels=[f"Q{i + 1}" for i in range(n_buckets)]
@@ -147,7 +151,8 @@ class DynamicEngine:
         for b, g in sub.groupby("bucket", observed=True):
             if g[score_col].nunique() > 2 and g[label_col].nunique() > 1:
                 ics[str(b)] = round(
-                    float(spearmanr(g[score_col], g[label_col]).statistic), 4)
+                    float(spearmanr(g[score_col], g[label_col]).statistic), 4
+                )
             else:
                 ics[str(b)] = 0.0
         high_ic = ics.get(f"Q{n_buckets}", 0.0)
@@ -156,7 +161,10 @@ class DynamicEngine:
             logger.error(
                 "E.4 高波动桶 IC=%.4f < %.2f: 模型在最敢下注的地方最不准 → "
                 "阻尼排序权重上调 + 高波动桶仓位上限 ×%.1f, 书面记录裁决",
-                high_ic, BUCKET_IC_MIN, HIGH_VOL_DAMP)
+                high_ic,
+                BUCKET_IC_MIN,
+                HIGH_VOL_DAMP,
+            )
         return {
             "buckets": ics,
             "high_vol_ic": high_ic,

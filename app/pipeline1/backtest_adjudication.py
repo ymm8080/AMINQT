@@ -63,13 +63,21 @@ def resolve_range(
     """
     if custom is not None:
         logger.warning("自定义回测区间 %s — exploratory 标记, 不得作裁决依据", custom)
-        return {"start": custom[0], "end": custom[1], "preset": None,
-                "exploratory": True}
+        return {
+            "start": custom[0],
+            "end": custom[1],
+            "preset": None,
+            "exploratory": True,
+        }
     if recent_years is not None:  # "近1年" 预置档
         end = pd.Timestamp.today().normalize()
         start = end - pd.DateOffset(years=recent_years)
-        return {"start": str(start)[:10], "end": str(end)[:10],
-                "preset": f"recent_{recent_years}y", "exploratory": False}
+        return {
+            "start": str(start)[:10],
+            "end": str(end)[:10],
+            "preset": f"recent_{recent_years}y",
+            "exploratory": False,
+        }
     key = preset or "all"
     if key not in PRESET_RANGES:
         raise KeyError(f"未知预置区间: {key} (可选: {list(PRESET_RANGES)})")
@@ -105,8 +113,9 @@ def inject_tail_shocks(
         gap = GAP_2_SIZE if (i % GAP_2_EVERY) < 10 else GAP_1_SIZE
         loss = 1 + gap * position_cap
         out.iloc[i:] = out.iloc[i:] * loss  # 跳空永久冲击后续净值
-    logger.warning("补丁1 尾部注入: %d 次跳空 (cap=%.0f%%)", len(shock_days),
-                   position_cap * 100)
+    logger.warning(
+        "补丁1 尾部注入: %d 次跳空 (cap=%.0f%%)", len(shock_days), position_cap * 100
+    )
     return out
 
 
@@ -127,9 +136,13 @@ def worst_trades_audit(
     unexec = sells[sells["pnl"] < stop - STOP_TOLERANCE]
     distortion = len(unexec) > 0
     if distortion:
-        logger.error("补丁2 最坏交易审计: %d/%d 笔亏损超止损可执行范围 (%.1f%%), "
-                     "含跳空/跌停顺延, 需按真实可执行价重算",
-                     len(unexec), len(sells), (stop - STOP_TOLERANCE) * 100)
+        logger.error(
+            "补丁2 最坏交易审计: %d/%d 笔亏损超止损可执行范围 (%.1f%%), "
+            "含跳空/跌停顺延, 需按真实可执行价重算",
+            len(unexec),
+            len(sells),
+            (stop - STOP_TOLERANCE) * 100,
+        )
     return {
         "worst": sells,
         "n_unexecutable": len(unexec),
@@ -149,15 +162,16 @@ def segment_robustness(
         segment_max_dd: {段名: 该段最大回撤 (负数)}, 段名须覆盖 CRISIS_SEGMENTS.
     """
     failures = {
-        seg: dd for seg, dd in segment_max_dd.items()
+        seg: dd
+        for seg, dd in segment_max_dd.items()
         if seg in CRISIS_SEGMENTS and dd < -dd_limit
     }
-    ok = len(failures) == 0 and all(
-        seg in segment_max_dd for seg in CRISIS_SEGMENTS
-    )
+    ok = len(failures) == 0 and all(seg in segment_max_dd for seg in CRISIS_SEGMENTS)
     if failures:
-        logger.error("补丁3 分时段稳健性: %s 回撤破停机线, C 档出局",
-                     {k: f"{v:.1%}" for k, v in failures.items()})
+        logger.error(
+            "补丁3 分时段稳健性: %s 回撤破停机线, C 档出局",
+            {k: f"{v:.1%}" for k, v in failures.items()},
+        )
     return {"pass": ok, "failed_segments": failures}
 
 
@@ -165,7 +179,8 @@ def segment_robustness(
 # D.10 总裁决
 # ============================================================
 def adjudicate_b_vs_c(
-    gt_b: float, gt_c: float,
+    gt_b: float,
+    gt_c: float,
     c_max_dd_injected: float,
     c_segment_dd: dict[str, float],
     c_worst_audit: dict,
@@ -178,8 +193,11 @@ def adjudicate_b_vs_c(
         "c_no_execution_distortion": not c_worst_audit["executable_distortion"],
     }
     choose_c = all(checks.values())
-    logger.warning("D.10 B/C 裁决: %s (checks=%s)",
-                   "选 C (1只×100%)" if choose_c else "选 B (1只×75%)", checks)
+    logger.warning(
+        "D.10 B/C 裁决: %s (checks=%s)",
+        "选 C (1只×100%)" if choose_c else "选 B (1只×75%)",
+        checks,
+    )
     return {"choose": "C" if choose_c else "B", "checks": checks}
 
 
