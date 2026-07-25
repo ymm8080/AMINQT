@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api/frontier", tags=["frontier"])
 # ============================================================
 @router.get("/list/latest")
 def get_latest_list() -> dict:
-    """最新 V3.5 清单 (真实优先, 演示兜底 + demo 标记)."""
+    """最新 V3.8 清单 (真实优先, 演示兜底 + demo 标记)."""
     lst, date = ds.load_latest_list()
     demo = lst is None
     if demo:
@@ -36,7 +36,7 @@ def get_latest_list() -> dict:
     return {
         "date": date,
         "demo": demo,
-        "schema_version": "1.0",
+        "schema_version": "1.2",
         "items": lst.to_dict("records"),
     }
 

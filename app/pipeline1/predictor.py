@@ -2,7 +2,8 @@
 V3.5 推理预测器 (P14 推理端)
 ================================
 加载板块模型包 (DualTrackTrainer.save) → 特征面板推理 →
-pred_ret_1d/3d/5d + Platt 校准 prob_up → ListGenerator 候选输入.
+pred_ret_1d/3d/5d + Isotonic 校准 prob_up [E1] + 分布预测 pred_q10..q90
++ uncertainty_width [E1] + pain_prob [E2] → ListGenerator 候选输入.
 维护 is_in_yesterday_list (Holding Bonus, 昨日清单回填).
 
 用户裁决 (2026-07-22): 日线预测只用本地 LightGBM 模型;
@@ -58,7 +59,7 @@ class V35Predictor:
         latest["pred_ret_3d"] = models["3d_reg"][0].predict(X)
         latest["pred_ret_5d"] = models["5d_reg"][0].predict(X)
         raw_prob = models["1d_cls"][0].predict_proba(X)[:, 1]
-        # Platt 校准 (严禁原始 predict_proba)
+        # Isotonic 校准 (严禁原始 predict_proba)
         latest["prob_up"] = bundle["calibrator"].predict_proba(raw_prob)
         keep = [
             "symbol",
@@ -69,7 +70,18 @@ class V35Predictor:
             "pred_ret_5d",
             "prob_up",
         ]
-        for opt in ("is_limit_up_close", "is_one_word_limit"):
+        # [E1] 分位数分布预测 (bundle 含 quantile_models 时)
+        if "quantile_models" in bundle:
+            dist = bundle["quantile_models"].predict(X)
+            for col in dist.columns:
+                latest[col] = dist[col].values
+            keep += list(dist.columns)
+        # [E2] 痛苦预警 (bundle 含 pain_model 时)
+        if "pain_model" in bundle:
+            latest["pain_prob"] = bundle["pain_model"].predict_proba(X)
+            keep.append("pain_prob")
+        # [E1] 分布版仓位权重输入; [E6] liquidity_cap 输入
+        for opt in ("ATR_pct", "adv20", "is_limit_up_close", "is_one_word_limit"):
             if opt in latest.columns:
                 keep.append(opt)
         return latest[keep].reset_index(drop=True)

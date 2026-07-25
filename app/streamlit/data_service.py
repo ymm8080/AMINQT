@@ -112,7 +112,15 @@ def demo_list(seed: int = 42) -> pd.DataFrame:
             "is_one_word_limit": 0,
             "market_state": "range",
             "score": rng.uniform(0, 0.05, n),
-            "schema_version": "1.0",
+            # V1.2 新增列 (E1/E2/公告/分布权重)
+            "pred_q10": rng.uniform(-0.04, 0.01, n),
+            "pred_q50": rng.uniform(-0.01, 0.04, n),
+            "pred_q90": rng.uniform(0.01, 0.10, n),
+            "uncertainty_width": rng.uniform(0.02, 0.12, n),
+            "pain_prob": np.round(rng.uniform(0.0, 0.5, n), 3),
+            "announce_score": rng.uniform(-1.0, 1.0, n),
+            "weight": np.round(rng.uniform(0.02, 0.10, n), 4),
+            "schema_version": "1.2",
         }
     )
     df["name"] = df["symbol"].map(DEMO_NAMES)

@@ -64,6 +64,7 @@ class CleaningConfig:
     stability_max: float = 0.5  # std/mean > 0.5 → 对倒嫌疑
     new_stock_days: int = 5  # 注册制新股 (<5日无涨跌幅限制)
     abs_amount_floor: float = 8e7  # 步骤4 绝对流动性安全阀 8000 万
+    bottom_amount_pct: float = 0.2  # 步骤5 [E6] 剔除成交额全市场后 20% (流动性黑洞预防)
     valve_full: int = 50  # 过滤后 >= 50: 正常
     valve_reduced: int = 15  # >= 15: 减仓输出; < 15: 强制空清单
     delisted_virtual_ret: float = -0.5  # 退市股虚拟 T+1 收益 (安全网 #14)
@@ -186,6 +187,18 @@ class CleaningPipeline:
             )
         return out, state
 
+    # ---------------- 步骤 5: 成交额后 20% 剔除 (E6, V3.8) ----------------
+    def step5_amount_bottom(self, df: pd.DataFrame) -> pd.DataFrame:
+        """[E6] 剔除当日成交额全市场后 20% 的票 (按 date 横截面 rank_pct).
+
+        流动性黑洞预防: 买错后卖不掉是最致命死法. 训练端与推理端同步执行.
+        """
+        pct = self.cfg.bottom_amount_pct
+        if pct <= 0:
+            return df
+        rank = df.groupby("date")["amount"].rank(pct=True)
+        return df[rank > pct]
+
     # ---------------- 退市股虚拟归零 (安全网 #14, D20) ----------------
     def inject_delisted_virtual_rows(
         self, df: pd.DataFrame, delisted_symbols: list[str]
@@ -214,21 +227,26 @@ class CleaningPipeline:
 
     # ---------------- 总装 ----------------
     def run_train(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """训练端清洗 (步骤 0→3, 不做步骤 4). 返回 (主板, 双创)."""
+        """训练端清洗 (步骤 0→3 + 步骤5[E6], 不做步骤 4). 返回 (主板, 双创)."""
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)  # 安全网 #13
         main, dual = self.step0_board_split(df)
         return (
-            self.step3_extreme(self.step2_liquidity(self.step1_base_state(main))),
-            self.step3_extreme(self.step2_liquidity(self.step1_base_state(dual))),
+            self.step5_amount_bottom(
+                self.step3_extreme(self.step2_liquidity(self.step1_base_state(main)))
+            ),
+            self.step5_amount_bottom(
+                self.step3_extreme(self.step2_liquidity(self.step1_base_state(dual)))
+            ),
         )
 
     def run_inference(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, str]:
-        """推理端清洗 (步骤 0→4). 返回 (主板, 双创, 阀门状态)."""
+        """推理端清洗 (步骤 0→4 + 步骤5[E6]). 返回 (主板, 双创, 阀门状态)."""
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
         main, dual = self.step0_board_split(df)
         main = self.step3_extreme(self.step2_liquidity(self.step1_base_state(main)))
         dual = self.step3_extreme(self.step2_liquidity(self.step1_base_state(dual)))
         both = pd.concat([main, dual], ignore_index=True)
         both, state = self.step4_tradability(both, inference_only=True)
+        both = self.step5_amount_bottom(both)  # [E6] 成交额后 20% 剔除
         m, d = self.step0_board_split(both)
         return m, d, state

@@ -1,20 +1,29 @@
 """
-标签引擎 (DESIGN §14.1 安全网 #1/#7/#13, PIPELINE1_V3.5 §〇.1)
+标签引擎 (DESIGN §14.1 安全网 #1/#7/#13, PIPELINE1_V3.8 §〇.1)
 =================================================================
 - 一律后复权价 (hfq); 早盘 pipeline 标签独立 (open(T+1) 基准)
 - [B9] 晚盘验收标签 label_pm_kd = close(T+1+k)/price_1455(T+1)-1 (执行口径, 严格 T+1);
   旧 close(T)→close(T+k) 口径仅保留研究对照
+- [E5] 滑点分层 (ADV20 三档 0.05%/0.10%/0.15%) + 净收益标签 label_*_net
+  (主标签=可执行净收益, 沿用 D1: 毛收益 - COST - 2×分层滑点)
+- [E2] 路径依赖标签 label_mdd_1d/3d/5d (期间最大浮亏) + label_pain (3日浮亏>5%)
 - 横截面 0.1%/99.9% 缩尾 (B2); [B18] is_virtual=1 退市虚拟样本豁免缩尾
-- 停牌污染置 NaN; 实盘训练遮蔽最近 5 天; 各模型各自 dropna (per-model), 不统一剔除
+- 停牌污染置 NaN; 实盘训练遮蔽最近 6 天; 各模型各自 dropna (per-model), 不统一剔除
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view
 
 LABEL_HORIZONS = (1, 3, 5)
 CLS_THRESHOLD = 0.005  # +0.5% 覆盖双边成本 (佣金万2.5x2 + 印花税0.05% + 滑点0.05% ≈ 0.13%, 留安全垫)
+COST = 0.0013  # round-trip 费用: 佣金万2.5双边 + 印花税0.05%卖出 (E5 净标签口径)
+# E5 滑点分层 (按 ADV20): >5亿→0.05% / 1~5亿→0.10% / <1亿→0.15% (双边计入)
+ADV20_TIER_HIGH = 5e8
+ADV20_TIER_MID = 1e8
+PAIN_THRESHOLD = -0.05  # E2: 3日内浮亏超5% → label_pain=1
 
 
 def _label_reference(s: pd.Series, k: int) -> pd.Series:
@@ -35,6 +44,31 @@ def _label_reference(s: pd.Series, k: int) -> pd.Series:
 def _safe_divide(numerator, denominator):
     """Safe division (zero-division guard): NaN where denominator is 0."""
     return numerator / denominator.replace(0, np.nan)
+
+
+def slippage_tier(adv20: float) -> float:
+    """E5 滑点分层: ADV20 > 5亿 → 0.05%; 1~5亿 → 0.10%; < 1亿 → 0.15% (单边)."""
+    if pd.isna(adv20):
+        return 0.0015  # ADV 未知按最差档 (保守)
+    if adv20 > ADV20_TIER_HIGH:
+        return 0.0005
+    if adv20 > ADV20_TIER_MID:
+        return 0.0010
+    return 0.0015
+
+
+def _future_window_min(vals: np.ndarray, start: int, window: int) -> np.ndarray:
+    """min(vals[T+start .. T+start+window-1]) — 标签专用 (合法引用未来, 非特征).
+
+    窗口内含 NaN → 结果 NaN (保守: 停牌/缺数据污染的路径标签不可用).
+    """
+    n = len(vals)
+    out = np.full(n, np.nan, dtype=float)
+    if n >= start + window:
+        w = sliding_window_view(vals[start:], window)
+        m = np.min(w, axis=1)  # NaN 传播 (刻意, 不用 nanmin)
+        out[: len(m)] = m
+    return out
 
 
 class LabelEngine:
@@ -78,6 +112,61 @@ class LabelEngine:
                 df[f"label_pm_{k}d"] = _safe_divide(future_close, exec_px) - 1
         df["label_cls"] = (df["label_1d"] > CLS_THRESHOLD).astype("float")
         df.loc[df["label_1d"].isna(), "label_cls"] = np.nan
+        df = LabelEngine.add_net_labels(df)
+        return df
+
+    # ---------------- E5: 净收益标签 (分层滑点) ----------------
+    @classmethod
+    def add_net_labels(cls, df: pd.DataFrame) -> pd.DataFrame:
+        """[E5] 主标签=可执行净收益 (沿用 D1): label_*_net = 毛收益 - COST - 2×分层滑点.
+
+        滑点按 ADV20 三档 (slippage_tier); ADV20 缺失时由 amount 20 日均值现算
+        (groupby symbol, 仅用历史 — adv20 是 t 日及以前的均值, 无未来函数).
+        毛收益标签保留作研究对照; 训练/验收一律用 *_net 口径.
+        """
+        if "adv20" not in df.columns and "amount" in df.columns:
+            df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
+            df["adv20"] = (
+                df.groupby("symbol")["amount"]
+                .rolling(20, min_periods=20)
+                .mean()
+                .reset_index(level=0, drop=True)
+            )
+        slip = df["adv20"].map(slippage_tier) if "adv20" in df.columns else 0.0015
+        cost_total = COST + 2 * slip
+        for k in LABEL_HORIZONS:
+            for prefix in (f"label_{k}d", f"label_pm_{k}d"):
+                if prefix in df.columns:
+                    df[f"{prefix}_net"] = df[prefix] - cost_total
+        return df
+
+    # ---------------- E2: 路径依赖标签 (期间最大浮亏) ----------------
+    @staticmethod
+    def build_path_labels(df: pd.DataFrame) -> pd.DataFrame:
+        """[E2] label_mdd_1d/3d/5d: 持有期内最大浮亏 (相对 T+1 收盘≈执行价).
+
+        label_mdd_1d = min(low_hfq[T+1..T+2]) / close_hfq[T+1] - 1  (首个持有日内)
+        label_mdd_3d = min(low_hfq[T+1..T+4]) / close_hfq[T+1] - 1
+        label_mdd_5d = min(low_hfq[T+1..T+6]) / close_hfq[T+1] - 1
+        label_pain   = 1 if label_mdd_3d < -5% else 0  (痛苦标签, 训练痛苦预警模型)
+
+        实盘最伤人的不是期末小亏, 而是期间浮亏触发日内引擎被迫止损 ——
+        止损后期末涨回来与你无关.
+        """
+        df = df.sort_values(["symbol", "date"]).reset_index(drop=True)  # 安全网 #13
+        low_col = "low_hfq" if "low_hfq" in df.columns else "low"
+        g_low = df.groupby("symbol")[low_col]
+        g_close = df.groupby("symbol")["close_hfq"]
+        exec_close = g_close.transform(lambda s: _label_reference(s, 1))
+        for n, h in ((1, 2), (3, 4), (5, 6)):
+            min_low = g_low.transform(
+                lambda s, hh=h: pd.Series(
+                    _future_window_min(s.values, 1, hh), index=s.index
+                )
+            )
+            df[f"label_mdd_{n}d"] = _safe_divide(min_low, exec_close) - 1
+        df["label_pain"] = (df["label_mdd_3d"] < PAIN_THRESHOLD).astype("float")
+        df.loc[df["label_mdd_3d"].isna(), "label_pain"] = np.nan
         return df
 
     # ---------------- 缩尾 ----------------
@@ -93,6 +182,10 @@ class LabelEngine:
         label_cols = [f"label_{k}d" for k in LABEL_HORIZONS]
         label_cols += [
             f"label_pm_{k}d" for k in LABEL_HORIZONS if f"label_pm_{k}d" in df
+        ]
+        label_cols += [c for c in df.columns if c.endswith("_net")]  # E5 净标签
+        label_cols += [
+            f"label_mdd_{k}d" for k in LABEL_HORIZONS if f"label_mdd_{k}d" in df
         ]
         if "is_virtual" in df.columns:
             real = df["is_virtual"] != 1
@@ -129,17 +222,39 @@ class LabelEngine:
                 suspended_vals[: length - n] = vals[n:] > 0
             suspended = pd.Series(suspended_vals, index=rolling_sum.index)
             df[f"label_{n}d"] = df[f"label_{n}d"].where(~suspended, np.nan)
+            if f"label_{n}d_net" in df.columns:  # E5 净标签同步遮蔽
+                df[f"label_{n}d_net"] = df[f"label_{n}d_net"].where(~suspended, np.nan)
+            # E2: mdd 路径窗口 [T+1, T+n+1] ⊂ [T, T+n+1]
+            if f"label_mdd_{n}d" in df.columns:
+                rolling_mdd = (
+                    df.groupby("symbol")["is_suspended"]
+                    .rolling(n + 2)
+                    .sum()
+                    .reset_index(level=0, drop=True)
+                )
+                vals_m = rolling_mdd.values
+                susp_m = np.zeros(len(vals_m), dtype=bool)
+                if len(vals_m) > n + 1:
+                    susp_m[: len(vals_m) - n - 1] = vals_m[n + 1 :] > 0
+                susp_m = pd.Series(susp_m, index=rolling_mdd.index)
+                df[f"label_mdd_{n}d"] = df[f"label_mdd_{n}d"].where(~susp_m, np.nan)
+        if "label_mdd_3d" in df.columns:
+            df["label_pain"] = (df["label_mdd_3d"] < PAIN_THRESHOLD).astype("float")
+            df.loc[df["label_mdd_3d"].isna(), "label_pain"] = np.nan
         df["label_cls"] = df["label_cls"].where(df["label_1d"].notna(), np.nan)
         return df
 
     # ---------------- 实盘标签遮蔽 ----------------
     @staticmethod
-    def mask_recent_days(df: pd.DataFrame, days: int = 5) -> pd.DataFrame:
-        """实盘训练剔除最近 N 天 (label_5d 需要 T+5 收盘价, 最近 5 天标签未生成)."""
+    def mask_recent_days(df: pd.DataFrame, days: int = 6) -> pd.DataFrame:
+        """实盘训练剔除最近 N 天 (V3.8: 6 天 — label_5d 需 T+6 收盘价, 标签未生成)."""
         df["date"].max() - pd.Timedelta(days=days * 2)  # 自然日宽松上界
         recent_dates = sorted(df["date"].unique())[-days:]
         mask = df["date"].isin(recent_dates)
-        for col in [f"label_{k}d" for k in LABEL_HORIZONS] + ["label_cls"]:
+        cols = [f"label_{k}d" for k in LABEL_HORIZONS] + ["label_cls"]
+        cols += [c for c in df.columns if c.endswith("_net")]
+        cols += [c for c in df.columns if c.startswith("label_mdd_")] + ["label_pain"]
+        for col in [c for c in cols if c in df.columns]:
             df.loc[mask, col] = np.nan
         return df
 
@@ -149,11 +264,15 @@ class LabelEngine:
         """各模型各自丢弃缺失标签 (不统一剔除最后 5 天).
 
         Returns:
-            {'1d': df_1d, '3d': df_3d, '5d': df_5d, 'cls': df_cls}
+            {'1d': df_1d, '3d': df_3d, '5d': df_5d, 'cls': df_cls,
+             'pain': df_pain (E2, 若 label_pain 存在)}
         """
-        return {
+        out = {
             "1d": df.dropna(subset=["label_1d"]),
             "3d": df.dropna(subset=["label_3d"]),
             "5d": df.dropna(subset=["label_5d"]),
             "cls": df.dropna(subset=["label_cls"]),
         }
+        if "label_pain" in df.columns:  # E2 痛苦预警模型
+            out["pain"] = df.dropna(subset=["label_pain"])
+        return out

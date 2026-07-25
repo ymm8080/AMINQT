@@ -22,7 +22,7 @@ class TestFrontierAPI:
         r = client.get("/api/frontier/list/latest")
         assert r.status_code == 200
         body = r.json()
-        assert body["schema_version"] == "1.0"
+        assert body["schema_version"] == "1.2"
         assert len(body["items"]) > 0
         assert {"symbol", "score", "prob_up", "pred_ret_1d"} <= set(body["items"][0])
 

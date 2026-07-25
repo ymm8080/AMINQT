@@ -420,6 +420,10 @@ class TestICScreener:
 # ============================================================
 # 清单生成
 # ============================================================
+# E7 准入闸门默认开启 (prob>0.60, ret>2×COST); 非闸门主题的测试用透传档位
+GATE_OFF = {"entry_prob": 0.0, "entry_ret_mult": 0.0}
+
+
 def make_candidates(n=20, seed=1) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     boards = ["main", "GEM", "STAR"]
@@ -440,17 +444,17 @@ def make_candidates(n=20, seed=1) -> pd.DataFrame:
 
 class TestListGenerator:
     def test_schema_and_top15(self):
-        out = ListGenerator().emit(make_candidates())
+        out = ListGenerator(**GATE_OFF).emit(make_candidates())
         lst = out["list"]
         assert len(lst) <= 15
         assert list(lst.columns) == SCHEMA_FIELDS
-        assert out["schema_version"] == "1.0"
+        assert out["schema_version"] == "1.2"
         assert lst["prob_up"].iloc[0] == round(lst["prob_up"].iloc[0], 3)
 
     def test_industry_limit(self):
         cands = make_candidates(n=20)
         cands["industry"] = "白酒"  # 全部同行业 → 最多 4 只
-        out = ListGenerator().emit(cands)
+        out = ListGenerator(**GATE_OFF).emit(cands)
         assert len(out["list"]) == 4
 
     def test_momentum_firewall(self):
@@ -468,7 +472,7 @@ class TestListGenerator:
         cands.loc[:, ["pred_ret_1d", "pred_ret_3d", "pred_ret_5d"]] = 0.02
         cands.loc[:, "prob_up"] = 0.5
         cands["is_in_yesterday_list"] = [1, 0]
-        out = ListGenerator().emit(cands)
+        out = ListGenerator(**GATE_OFF).emit(cands)
         # 昨日在清单内的票 +0.2 加成 → 排第一, 分差 ≈ 0.2
         assert out["list"].iloc[0]["symbol"] == "600000"
         assert out["list"].iloc[0]["score"] - out["list"].iloc[1][
@@ -482,7 +486,7 @@ class TestListGenerator:
         cands.loc[:, "prob_up"] = 0.5
         cands["is_in_yesterday_list"] = [1, 1, 1]
         cands["holding_day"] = [1, 2, 3]  # day1/day2/day3
-        gen = ListGenerator()
+        gen = ListGenerator(**GATE_OFF)
         out = gen.emit(cands)
         scores = out["list"].set_index("symbol")["score"].to_dict()
         # day1 > day2 > day3 (衰减: 0.2/0.1/0.0)
@@ -516,7 +520,7 @@ class TestListGenerator:
         cands.loc[:, ["pred_ret_3d", "pred_ret_5d"]] = 0.01
         cands.loc[:, "prob_up"] = 0.5
         cands["industry"] = ["白酒", "电池", "半导体", "保险", "白酒", "电池"]
-        out = ListGenerator().emit(cands)
+        out = ListGenerator(**GATE_OFF).emit(cands)
         lst = out["list"]
         # 跨组归一化后, 双创板 (低 score) 也有机会进 Top 15
         boards_in_list = set(lst["board"])
@@ -524,15 +528,12 @@ class TestListGenerator:
 
     def test_empty_triggers(self):
         """D18: 暴跌/跌停>50 → 空清单; 连跌3日 → 仅 Top 5."""
-        out = ListGenerator().emit(make_candidates(), MarketEnv(hs300_drop_today=0.031))
+        gen = ListGenerator(**GATE_OFF)
+        out = gen.emit(make_candidates(), MarketEnv(hs300_drop_today=0.031))
         assert out["empty"] and len(out["list"]) == 0
-        out = ListGenerator().emit(
-            make_candidates(), MarketEnv(count_limit_down_market=51)
-        )
+        out = gen.emit(make_candidates(), MarketEnv(count_limit_down_market=51))
         assert out["empty"]
-        out = ListGenerator().emit(
-            make_candidates(n=20), MarketEnv(hs300_consecutive_down=3)
-        )
+        out = gen.emit(make_candidates(n=20), MarketEnv(hs300_consecutive_down=3))
         assert not out["empty"] and len(out["list"]) <= 5 and out["cap_position"] == 0.3
 
     def test_delivery_guard(self):
