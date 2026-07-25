@@ -30,9 +30,7 @@ OOS_DECAY_MIN = 0.50  # 验证段 ≥ 训练段 50%
 # ============================================================
 # 关卡 2: 平原检测 (拒绝孤峰)
 # ============================================================
-def plateau_check(
-    neighbor_scores: list[float], candidate_score: float
-) -> dict:
+def plateau_check(neighbor_scores: list[float], candidate_score: float) -> dict:
     """平原检测 (组合判据): 候选参数的邻域表现必须同样为正且不太弱.
 
     孤峰 (只有候选点为正 / 邻域均值远低于候选) = 运气, 拒绝.
@@ -46,11 +44,17 @@ def plateau_check(
     mean_ok = neighbor_mean >= 0.5 * candidate_score if candidate_score > 0 else False
     ok = same_dir >= PLATEAU_SAME_DIR_MIN and mean_ok
     if not ok:
-        logger.error("平原检测拒绝: 邻域同向 %.0f%% (<70%%) 或邻域均值 %.4f "
-                     "< 候选 %.4f×50%%", same_dir * 100, neighbor_mean,
-                     candidate_score)
-    return {"pass": ok, "same_dir_ratio": round(same_dir, 3),
-            "neighbor_mean": round(neighbor_mean, 5)}
+        logger.error(
+            "平原检测拒绝: 邻域同向 %.0f%% (<70%%) 或邻域均值 %.4f < 候选 %.4f×50%%",
+            same_dir * 100,
+            neighbor_mean,
+            candidate_score,
+        )
+    return {
+        "pass": ok,
+        "same_dir_ratio": round(same_dir, 3),
+        "neighbor_mean": round(neighbor_mean, 5),
+    }
 
 
 # ============================================================
@@ -77,8 +81,10 @@ def three_gate_verdict(
     g1 = abs(t_stat) > T_STAT_MIN
     g2 = plateau_check(neighbor_scores, candidate_score)
     g3 = oos_decay_check(candidate_score, oos_score)
-    return {"pass": g1 and g2["pass"] and g3["pass"],
-            "gates": {"t_stat": g1, "plateau": g2, "oos_decay": g3}}
+    return {
+        "pass": g1 and g2["pass"] and g3["pass"],
+        "gates": {"t_stat": g1, "plateau": g2, "oos_decay": g3},
+    }
 
 
 # ============================================================
@@ -90,8 +96,9 @@ def grid_search(param_grid: dict, evaluate_fn, top_k: int = 1) -> list[dict]:
     季度执行一次, 盘中绝对禁止热更新参数.
     """
     names = list(param_grid)
-    combos = [dict(zip(names, v)) for v in
-              itertools.product(*(param_grid[n] for n in names))]
+    combos = [
+        dict(zip(names, v)) for v in itertools.product(*(param_grid[n] for n in names))
+    ]
     scored = [(c, evaluate_fn(c)) for c in combos]
     scored.sort(key=lambda x: x[1], reverse=True)
     return [{"params": c, "score": s} for c, s in scored[:top_k]]
@@ -117,13 +124,17 @@ def walk_forward(
             continue
         oos_score = evaluate_oos_fn(best["params"], oos)
         verdict = three_gate_verdict(
-            best["t_stat"], best["neighbor_scores"], best["score"], oos_score)
-        results.append({
-            "window_id": wid, "params": best["params"],
-            "train_score": best["score"], "oos_score": oos_score,
-            "verdict": verdict,
-        })
+            best["t_stat"], best["neighbor_scores"], best["score"], oos_score
+        )
+        results.append(
+            {
+                "window_id": wid,
+                "params": best["params"],
+                "train_score": best["score"],
+                "oos_score": oos_score,
+                "verdict": verdict,
+            }
+        )
         if not verdict["pass"]:
-            logger.error("Walk-Forward 窗口 %s 三关未过: %s", wid,
-                         verdict["gates"])
+            logger.error("Walk-Forward 窗口 %s 三关未过: %s", wid, verdict["gates"])
     return results

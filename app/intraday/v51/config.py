@@ -68,16 +68,19 @@ class EmergencySwitch:
         self.state = "NORMAL"
         self.worm = worm
 
-    def activate(self, trade_date: str, action: str, operator: str,
-                 reason: str) -> None:
+    def activate(
+        self, trade_date: str, action: str, operator: str, reason: str
+    ) -> None:
         """触发紧急动作 (人工, 需操作员与原因 — 留痕审计)."""
         assert action in SWITCH_ACTIONS, f"动作须为 {SWITCH_ACTIONS}"
         assert operator and reason, "紧急开关必须登记操作员与原因"
         self.state = "NORMAL" if action == "resume" else action
-        self.worm.log(trade_date, "manual", {
-            "emergency": action, "operator": operator, "reason": reason})
-        logger.critical("紧急开关: %s (操作员 %s, 原因: %s)",
-                        action, operator, reason)
+        self.worm.log(
+            trade_date,
+            "manual",
+            {"emergency": action, "operator": operator, "reason": reason},
+        )
+        logger.critical("紧急开关: %s (操作员 %s, 原因: %s)", action, operator, reason)
 
     def allow_buy(self) -> bool:
         return self.state == "NORMAL"
