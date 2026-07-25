@@ -35,8 +35,16 @@ class FakeHTTPResponse:
         pass
 
 
-def _api_response(content: str, reasoning: str = "") -> bytes:
-    """Build a DeepSeek chat/completions response body."""
+def _api_response(
+    content: str | None,
+    reasoning: str | None = "",
+    finish_reason: str = "stop",
+) -> bytes:
+    """Build a DeepSeek chat/completions response body.
+
+    ``content`` and ``reasoning`` can be ``None`` to simulate the API
+    returning ``null`` when thinking mode exhausts the token budget.
+    """
     return json.dumps(
         {
             "choices": [
@@ -45,7 +53,8 @@ def _api_response(content: str, reasoning: str = "") -> bytes:
                         "role": "assistant",
                         "content": content,
                         "reasoning_content": reasoning,
-                    }
+                    },
+                    "finish_reason": finish_reason,
                 }
             ],
             "usage": {"total_tokens": 10},
@@ -114,6 +123,48 @@ class TestBlankReviewBug:
         monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
 
         result = dsr.review_with_deepseek("diff", "key", "m", "https://x")
+        assert result["error"] is True
+
+    def test_none_content_with_reasoning_returns_error(self, monkeypatch):
+        """API returns content=null when thinking eats the budget."""
+        def fake_urlopen(req, timeout=None):
+            return FakeHTTPResponse(
+                _api_response(content=None, reasoning="Let me think...")
+            )
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        result = dsr.review_with_deepseek("diff", "key", "m", "https://x")
+
+        assert result["error"] is True
+        assert "empty content" in result["summary"].lower()
+
+    def test_none_content_none_reasoning_returns_error(self, monkeypatch):
+        """Both content and reasoning are null (edge case)."""
+        def fake_urlopen(req, timeout=None):
+            return FakeHTTPResponse(
+                _api_response(content=None, reasoning=None)
+            )
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        result = dsr.review_with_deepseek("diff", "key", "m", "https://x")
+
+        assert result["error"] is True
+
+    def test_truncated_response_returns_error(self, monkeypatch):
+        """finish_reason=length means content was cut by max_tokens."""
+        def fake_urlopen(req, timeout=None):
+            return FakeHTTPResponse(
+                _api_response(
+                    content='{"issues": [', finish_reason="length"
+                )
+            )
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        result = dsr.review_with_deepseek("diff", "key", "m", "https://x")
+
         assert result["error"] is True
 
 
@@ -272,3 +323,6 @@ class TestExtractJson:
 
     def test_invalid_returns_none(self):
         assert dsr._extract_json("not json at all") is None
+
+    def test_none_input_returns_none(self):
+        assert dsr._extract_json(None) is None
