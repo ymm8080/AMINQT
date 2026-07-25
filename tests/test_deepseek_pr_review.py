@@ -81,7 +81,7 @@ class TestThinkingDisabled:
 
         assert captured["data"]["thinking"] == {"type": "disabled"}
 
-    def test_max_tokens_is_8000(self, monkeypatch):
+    def test_max_tokens_is_16000(self, monkeypatch):
         captured = {}
 
         def fake_urlopen(req, timeout=None):
@@ -92,7 +92,7 @@ class TestThinkingDisabled:
 
         dsr.review_with_deepseek("diff", "key", "m", "https://x")
 
-        assert captured["data"]["max_tokens"] == 8000
+        assert captured["data"]["max_tokens"] == 16000
 
 
 class TestBlankReviewBug:
@@ -165,6 +165,54 @@ class TestBlankReviewBug:
         result = dsr.review_with_deepseek("diff", "key", "m", "https://x")
 
         assert result["error"] is True
+
+    def test_truncated_then_success_retries(self, monkeypatch):
+        """First call truncated, retry with doubled max_tokens succeeds."""
+        call_count = [0]
+
+        def fake_urlopen(req, timeout=None):
+            call_count[0] += 1
+            data = json.loads(req.data.decode())
+            if call_count[0] == 1:
+                assert data["max_tokens"] == 16000
+                return FakeHTTPResponse(
+                    _api_response(
+                        content='{"issues": [', finish_reason="length"
+                    )
+                )
+            else:
+                assert data["max_tokens"] == 32000
+                return FakeHTTPResponse(
+                    _api_response('{"issues": [], "summary": "ok"}')
+                )
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        result = dsr.review_with_deepseek("diff", "key", "m", "https://x")
+
+        assert call_count[0] == 2
+        assert "error" not in result
+        assert result["summary"] == "ok"
+
+    def test_truncated_3_times_returns_error(self, monkeypatch):
+        """All 3 retries truncated — returns error."""
+        call_count = [0]
+
+        def fake_urlopen(req, timeout=None):
+            call_count[0] += 1
+            return FakeHTTPResponse(
+                _api_response(
+                    content='{"issues": [', finish_reason="length"
+                )
+            )
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        result = dsr.review_with_deepseek("diff", "key", "m", "https://x")
+
+        assert call_count[0] == 3
+        assert result["error"] is True
+        assert "truncated" in result["summary"].lower()
 
 
 class TestSuccessfulReview:
