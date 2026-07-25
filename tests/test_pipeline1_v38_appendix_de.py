@@ -82,9 +82,16 @@ class TestTradingDiscipline:
 # ============================================================
 def _fill_journal(j: TradeJournal, pnls: list[float]) -> None:
     for i, pnl in enumerate(pnls):
-        j.record(TradeRecord(symbol=f"S{i}", signal_grade="A", prob_up=0.7,
-                             rank_score=1.0, entry_date="2026-07-01",
-                             entry_price=10.0))
+        j.record(
+            TradeRecord(
+                symbol=f"S{i}",
+                signal_grade="A",
+                prob_up=0.7,
+                rank_score=1.0,
+                entry_date="2026-07-01",
+                entry_price=10.0,
+            )
+        )
         j.close_trade(f"S{i}", "2026-07-03", 10.0 * (1 + pnl), 2, pnl)
 
 
@@ -151,10 +158,8 @@ class TestDynamicEngine:
         n = 500
         atr = rng.uniform(0.01, 0.10, n)
         # score 与 label 在高 ATR 区间相关, 低 ATR 区间噪声
-        score = np.where(atr > 0.08, atr + rng.normal(0, 0.01, n),
-                         rng.normal(0, 1, n))
-        label = np.where(atr > 0.08, atr + rng.normal(0, 0.02, n),
-                         rng.normal(0, 1, n))
+        score = np.where(atr > 0.08, atr + rng.normal(0, 0.01, n), rng.normal(0, 1, n))
+        label = np.where(atr > 0.08, atr + rng.normal(0, 0.02, n), rng.normal(0, 1, n))
         df = pd.DataFrame({"ATR_pct": atr, "score": score, "label": label})
         r = DynamicEngine.bucket_ic(df, "score", "label")
         assert set(r["buckets"]) == {"Q1", "Q2", "Q3", "Q4", "Q5"}
@@ -162,11 +167,13 @@ class TestDynamicEngine:
 
     def test_bucket_ic_low_detects_dampen(self):
         rng = np.random.default_rng(2)
-        df = pd.DataFrame({
-            "ATR_pct": rng.uniform(0.01, 0.10, 500),
-            "score": rng.normal(0, 1, 500),
-            "label": rng.normal(0, 1, 500),  # 纯噪声 → 各桶 IC≈0
-        })
+        df = pd.DataFrame(
+            {
+                "ATR_pct": rng.uniform(0.01, 0.10, 500),
+                "score": rng.normal(0, 1, 500),
+                "label": rng.normal(0, 1, 500),  # 纯噪声 → 各桶 IC≈0
+            }
+        )
         r = DynamicEngine.bucket_ic(df, "score", "label")
         assert not r["high_vol_ok"] and r["action"] == "dampen"
 
