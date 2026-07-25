@@ -516,11 +516,10 @@ class FeatureEngineV35:
 
         def per_stock(g: pd.DataFrame) -> pd.DataFrame:
             c = g["close_hfq"] if "close_hfq" in g else g["close"]
-            # diff(1) = c[t] - c[t-1] (后向差分, 仅用 t-1 数据, 无 look-ahead bias)
-            d = c.diff(1)
-            prev_c = c - d  # = c[t-1], 等价 shift(1) 但不调用 shift
+            # shift(1) 后向取前值 (仅用 t-1 数据, 无 look-ahead bias)
+            prev_c = c.shift(1)
             # _safe_divide 防除零 (prev_c 为 0 时结果为 NaN)
-            safe_ret = _safe_divide(d, prev_c)
+            safe_ret = _safe_divide(c - prev_c, prev_c)
             ret_abs = safe_ret.abs()
             # _safe_divide 防除零 (amount 为 0 时结果为 NaN)
             raw_amihud = _safe_divide(ret_abs, g["amount"])
