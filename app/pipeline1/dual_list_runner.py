@@ -113,6 +113,10 @@ class DualListRunner:
         shadow = shadow.copy()
         execution["profile"] = "aggressive"
         shadow["profile"] = "stable"
+        # D.9/E.2: 执行清单每票附带 stop_price 与 position (动态引擎影子输出,
+        # 阶段一至三只留痕不驱动交易, F.5)
+        if len(execution):
+            execution = self._attach_dynamic_outputs(execution)
         if bear_takeover and len(execution):
             logger.error("D.7 熊市协议强制接管: DEFENSE 状态下攻击档只卖不买")
             execution = execution.iloc[0:0]
@@ -122,6 +126,37 @@ class DualListRunner:
             "shadow": shadow,
             "bear_takeover": bear_takeover,
         }
+
+    # ---------------- D.9/E.2 执行清单动态输出 ----------------
+    @staticmethod
+    def _attach_dynamic_outputs(execution: pd.DataFrame) -> pd.DataFrame:
+        """每票每日随清单输出 stop_price 与 position (D.9/E.2 计算链留痕).
+
+        输入列齐备 (prob_up/pred_q50/ATR_pct[/pain_prob]) 时逐票反推;
+        缺列跳过 (向后兼容). close 存在时给出 stop_price 绝对价.
+        """
+        required = {"prob_up", "pred_q50", "ATR_pct"}
+        if not required <= set(execution.columns):
+            return execution
+        eng = DynamicEngine()
+        calcs = [
+            eng.per_stock_calc(
+                p=float(r["prob_up"]),
+                pred_q50=float(r["pred_q50"]),
+                atr_pct=float(r["ATR_pct"]),
+                pain_prob=float(r.get("pain_prob", 0.0) or 0.0),
+            )
+            for _, r in execution.iterrows()
+        ]
+        out = execution.copy()
+        out["dyn_stop_pct"] = [c["stop"] for c in calcs]
+        out["dyn_position"] = [c["position"] for c in calcs]
+        out["dyn_rr"] = [c["rr"] for c in calcs]
+        if "close" in out.columns:
+            out["stop_price"] = (
+                out["close"] * (1 - out["dyn_stop_pct"])
+            ).round(3)
+        return out
 
     # ---------------- WORM 持久化 ----------------
     def _persist(

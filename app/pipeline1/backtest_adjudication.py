@@ -184,6 +184,35 @@ def adjudicate_b_vs_c(
 
 
 # ============================================================
+# 回测清单失效条件模拟 (V3.8 §四 bis: 回测必须模拟清单失效条件)
+# ============================================================
+def simulate_invalidations(
+    daily_lists: dict, invalidated_by_date: dict
+) -> dict:
+    """把失效条件 (跳空/跌停/板块/公告#5) 应用到每日清单字典.
+
+    Args:
+        daily_lists: {date: DataFrame(symbol, ...)} 原始清单
+        invalidated_by_date: {date: {symbol: 原因}} 失效票 (如
+            AnnouncementFactor.list_invalidation 的输出, 或盘中条件 1-4 汇总)
+    Returns:
+        过滤后的 {date: DataFrame}; 失效票剔除留痕 (日志), 不静默.
+    """
+    out = {}
+    for date, lst in daily_lists.items():
+        bad = (invalidated_by_date or {}).get(date, {})
+        if bad and len(lst):
+            n_before = len(lst)
+            lst = lst[~lst["symbol"].isin(bad)]
+            if len(lst) < n_before:
+                logger.warning(
+                    "回测失效条件模拟: %s 剔除 %d 只 (%s)",
+                    date, n_before - len(lst), sorted(bad)[:5])
+        out[date] = lst
+    return out
+
+
+# ============================================================
 # 补丁4: WORM 反数据窥探账本
 # ============================================================
 class BacktestJournal:
