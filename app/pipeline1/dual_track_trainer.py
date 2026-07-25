@@ -267,9 +267,7 @@ class DualTrackTrainer:
         segs, cols = out["segs"], out["feature_cols"]
 
         def _prep(seg_name: str):
-            sub = risk_filter(
-                segs[seg_name].dropna(subset=[label])
-            ).sort_values("date")
+            sub = risk_filter(segs[seg_name].dropna(subset=[label])).sort_values("date")
             gains = (
                 sub.groupby("date")[label]
                 .rank(pct=True)

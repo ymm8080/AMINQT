@@ -58,26 +58,37 @@ class DualModelFusion:
         w_new = float(np.clip(w_new, W_LONG_MIN, W_LONG_MAX))
         self.w_long = INERTIA_PREV * self.w_long + INERTIA_NEW * w_new
         if ic_long_20d < IC_YELLOW and ic_short_20d < IC_YELLOW:
-            logger.error("双模型 20 日 OOS IC 均 < %.2f (long=%.4f short=%.4f), "
-                         "黄色告警 → E4 三色灯联动", IC_YELLOW,
-                         ic_long_20d, ic_short_20d)
+            logger.error(
+                "双模型 20 日 OOS IC 均 < %.2f (long=%.4f short=%.4f), "
+                "黄色告警 → E4 三色灯联动",
+                IC_YELLOW,
+                ic_long_20d,
+                ic_short_20d,
+            )
         self._worm(ic_long_20d, ic_short_20d, w_new)
-        logger.info("融合权重更新: w_long=%.3f (IC long=%.4f short=%.4f)",
-                    self.w_long, ic_long_20d, ic_short_20d)
+        logger.info(
+            "融合权重更新: w_long=%.3f (IC long=%.4f short=%.4f)",
+            self.w_long,
+            ic_long_20d,
+            ic_short_20d,
+        )
         return self.w_long
 
     def fuse(self, pred_long: np.ndarray, pred_short: np.ndarray) -> np.ndarray:
         """预测融合: w_long×pred_long + (1-w_long)×pred_short."""
-        return self.w_long * np.asarray(pred_long) + (
-            1 - self.w_long) * np.asarray(pred_short)
+        return self.w_long * np.asarray(pred_long) + (1 - self.w_long) * np.asarray(
+            pred_short
+        )
 
     # ---------------- WORM 日志 ----------------
     def _worm(self, ic_long: float, ic_short: float, w_new: float) -> None:
         if not self.log_path:
             return
         rec = {
-            "ic_long_20d": round(ic_long, 5), "ic_short_20d": round(ic_short, 5),
-            "w_softmax": round(w_new, 4), "w_long": round(self.w_long, 4),
+            "ic_long_20d": round(ic_long, 5),
+            "ic_short_20d": round(ic_short, 5),
+            "w_softmax": round(w_new, 4),
+            "w_long": round(self.w_long, 4),
         }
         path = os.path.join(self.log_path, "fusion_weights.jsonl")
         with open(path, "a", encoding="utf-8") as fh:

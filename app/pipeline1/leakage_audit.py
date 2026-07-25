@@ -49,11 +49,18 @@ def audit_source(source: str, filename: str = "<source>") -> list[dict]:
         stripped = line.split("#", 1)[0]  # 忽略注释
         for pat in FORBIDDEN_PATTERNS:
             if re.search(pat, stripped):
-                hits.append({"file": filename, "line": i, "pattern": pat,
-                             "code": line.strip()[:80]})
+                hits.append(
+                    {
+                        "file": filename,
+                        "line": i,
+                        "pattern": pat,
+                        "code": line.strip()[:80],
+                    }
+                )
     for h in hits:
-        logger.error("未来函数嫌疑: %s:%d [%s] %s",
-                     h["file"], h["line"], h["pattern"], h["code"])
+        logger.error(
+            "未来函数嫌疑: %s:%d [%s] %s", h["file"], h["line"], h["pattern"], h["code"]
+        )
     return hits
 
 
@@ -95,7 +102,11 @@ def ic_sentinel(
         if abs(ic) > IC_SENTINEL:
             suspects[f] = round(ic, 4)
     for f, ic in suspects.items():
-        logger.error("IC 上限哨兵: %s IC=%.4f > %.2f, 未来函数嫌疑, 触发复核",
-                     f, ic, IC_SENTINEL)
-    return {"pass": len(suspects) == 0, "suspects": suspects,
-            "max_abs_ic": round(max_ic, 4)}
+        logger.error(
+            "IC 上限哨兵: %s IC=%.4f > %.2f, 未来函数嫌疑, 触发复核", f, ic, IC_SENTINEL
+        )
+    return {
+        "pass": len(suspects) == 0,
+        "suspects": suspects,
+        "max_abs_ic": round(max_ic, 4),
+    }

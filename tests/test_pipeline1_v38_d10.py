@@ -51,9 +51,11 @@ class TestTailShockInjection:
 
 class TestWorstTradesAudit:
     def test_flags_unexecutable_stops(self):
-        trades = pd.DataFrame({
-            "pnl": [-0.045, -0.08, -0.02, 0.03, -0.041],
-        })
+        trades = pd.DataFrame(
+            {
+                "pnl": [-0.045, -0.08, -0.02, 0.03, -0.041],
+            }
+        )
         r = worst_trades_audit(trades, n=20)
         assert r["n_unexecutable"] == 1  # -0.08 超出 -4.5% 可执行范围
         assert r["executable_distortion"]
@@ -66,8 +68,12 @@ class TestWorstTradesAudit:
 
 class TestSegmentRobustness:
     def test_any_segment_breach_rejects(self):
-        dd = {"bear_2018": -0.10, "covid_2020": -0.16,
-              "bear_2022": -0.08, "liquidity_2024": -0.05}
+        dd = {
+            "bear_2018": -0.10,
+            "covid_2020": -0.16,
+            "bear_2022": -0.08,
+            "liquidity_2024": -0.05,
+        }
         r = segment_robustness(dd)
         assert not r["pass"] and "covid_2020" in r["failed_segments"]
 
@@ -95,8 +101,12 @@ class TestAdjudication:
         # 注入回撤破线
         assert adjudicate_b_vs_c(0.03, 0.04, -0.16, dd, self._audit())["choose"] == "B"
         # 可执行性失真
-        assert adjudicate_b_vs_c(0.03, 0.04, -0.10, dd,
-                                 self._audit(distortion=True))["choose"] == "B"
+        assert (
+            adjudicate_b_vs_c(0.03, 0.04, -0.10, dd, self._audit(distortion=True))[
+                "choose"
+            ]
+            == "B"
+        )
 
 
 class TestBacktestJournal:
