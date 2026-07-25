@@ -519,7 +519,7 @@ class FeatureEngineV35:
             # diff(1) = c[t] - c[t-1] (后向差分, 仅用 t-1 数据, 无 look-ahead bias)
             d = c.diff(1)
             prev_c = c - d  # = c[t-1], 等价 shift(1) 但不调用 shift
-            ret_abs = (d / prev_c).abs()
+            ret_abs = _safe_divide(d, prev_c).abs()
             # safe_divide: amount 为 0 时结果为 NaN (防除零)
             raw_amihud = _safe_divide(ret_abs, g["amount"])
             g["amihud_illiquidity"] = raw_amihud.rolling(20, min_periods=20).mean()
