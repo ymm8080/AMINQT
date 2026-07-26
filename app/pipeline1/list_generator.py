@@ -61,6 +61,7 @@ SINGLE_CAP_BEAR = 0.07
 SCHEMA_FIELDS = [
     "symbol",
     "board",
+    "day_change",
     "pred_ret_1d",
     "pred_ret_3d",
     "pred_ret_5d",

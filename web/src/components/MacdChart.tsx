@@ -33,7 +33,7 @@ export function MacdChart({ data, height = 200 }: { data: OhlcBar[]; height?: nu
   }))
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={chartData}>
+      <ComposedChart data={chartData} syncId="stock-detail">
         <XAxis dataKey="date" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={40} />
         <YAxis tick={{ fill: '#8b949e', fontSize: 10 }} />
         <Tooltip
