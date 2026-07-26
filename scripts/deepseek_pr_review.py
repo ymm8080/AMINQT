@@ -362,7 +362,13 @@ Keep messages concise (one sentence per issue). Only report real violations.
 
 
 def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
-    """Post review comment on the PR."""
+    """Post review as a formal PR review (visible in Files changed tab).
+
+    Uses the pulls reviews API with ``event=COMMENTED`` so the review
+    appears in both the Conversation tab and the Files changed tab.
+    ``COMMENTED`` does not approve or request changes, so it does not
+    interfere with the PR Review Gate workflow.
+    """
     issues = review.get("issues", [])
     summary = review.get("summary", "Review complete.")
     is_error = review.get("error", False)
@@ -429,8 +435,8 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
 
         body = "\n".join(lines)
 
-    url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
-    data = json.dumps({"body": body}).encode("utf-8")
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/reviews"
+    data = json.dumps({"body": body, "event": "COMMENTED"}).encode("utf-8")
     req = urllib.request.Request(
         url,
         data=data,
@@ -443,10 +449,10 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
 
     try:
         with urllib.request.urlopen(req, timeout=30):
-            logger.info(f"Comment posted on PR #{pr_number}")
+            logger.info(f"Review posted on PR #{pr_number}")
             return True
     except Exception as e:
-        logger.error(f"Error posting comment: {e}")
+        logger.error(f"Error posting review: {e}")
         return False
 
 
