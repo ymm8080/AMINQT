@@ -364,10 +364,10 @@ Keep messages concise (one sentence per issue). Only report real violations.
 def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
     """Post review as a formal PR review (visible in Files changed tab).
 
-    Uses the pulls reviews API with ``event=COMMENTED`` so the review
+    Uses the pulls reviews API with ``event=COMMENT`` so the review
     appears in both the Conversation tab and the Files changed tab.
-    ``COMMENTED`` does not approve or request changes, so it does not
-    interfere with the PR Review Gate workflow.
+    The resulting review state is ``COMMENTED`` (no approve/request-changes),
+    so it does not interfere with the PR Review Gate workflow.
     """
     issues = review.get("issues", [])
     summary = review.get("summary", "Review complete.")
@@ -436,7 +436,7 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
         body = "\n".join(lines)
 
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/reviews"
-    data = json.dumps({"body": body, "event": "COMMENTED"}).encode("utf-8")
+    data = json.dumps({"body": body, "event": "COMMENT"}).encode("utf-8")
     req = urllib.request.Request(
         url,
         data=data,
