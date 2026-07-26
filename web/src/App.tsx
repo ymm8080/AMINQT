@@ -4,7 +4,7 @@ import { ConfigPage } from './pages/ConfigPage'
 import { SelectionPage } from './pages/SelectionPage'
 import { TradingPage } from './pages/TradingPage'
 
-const PAGES: Record<string, () => JSX.Element> = {
+const PAGES: Record<string, (props: Record<string, unknown>) => JSX.Element> = {
   选股看板: SelectionPage,
   交易看板: TradingPage,
   回测中心: BacktestPage,
@@ -13,7 +13,14 @@ const PAGES: Record<string, () => JSX.Element> = {
 
 export default function App() {
   const [page, setPage] = useState<keyof typeof PAGES>('选股看板')
+  const [tradingSymbol, setTradingSymbol] = useState<string | undefined>(undefined)
   const Page = PAGES[page]
+
+  const jumpToTrading = (symbol: string) => {
+    setTradingSymbol(symbol)
+    setPage('交易看板')
+  }
+
   return (
     <div className="app">
       <nav>
@@ -30,7 +37,13 @@ export default function App() {
         </div>
       </nav>
       <main>
-        <Page />
+        {page === '选股看板' ? (
+          <SelectionPage onJumpToTrading={jumpToTrading} />
+        ) : page === '交易看板' ? (
+          <TradingPage initialSymbol={tradingSymbol} />
+        ) : (
+          <Page />
+        )}
       </main>
     </div>
   )

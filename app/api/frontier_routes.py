@@ -55,6 +55,38 @@ def get_list(trade_date: str) -> dict:
 
 
 # ============================================================
+# 板块行情
+# ============================================================
+@router.get("/sectors")
+def get_sectors() -> dict:
+    """板块当日涨跌幅 + 日内走势 (演示数据)."""
+    df = ds.demo_sector_changes()
+    records = df.to_dict("records")
+    for rec in records:
+        sector = rec["板块"]
+        intra = ds.demo_sector_intraday(sector)
+        p0 = intra["price"].iloc[0]
+        rec["intraday"] = ((intra["price"] / p0) - 1).tolist()
+    return {"demo": True, "items": records}
+
+
+# ============================================================
+# 日内买入候选 (priority)
+# ============================================================
+@router.get("/priority")
+def get_priority() -> dict:
+    return {"symbols": sorted(ds.load_priority_symbols())}
+
+
+@router.post("/priority/toggle")
+def toggle_priority(item: WatchItem) -> dict:
+    return {
+        "symbol": item.symbol,
+        "priority": ds.toggle_priority(item.symbol),
+    }
+
+
+# ============================================================
 # K线 / 分时
 # ============================================================
 @router.get("/ohlc/{symbol}")
@@ -102,15 +134,19 @@ class BacktestRequest(BaseModel):
     trailing_drawdown: float = 0.04
     prob_exit: float = 0.50
     initial_capital: float = 1_000_000
+    window_days: int = 180
+    objective: str = "net_excess_annual"
+    max_dd_limit: float | None = None
 
 
-def _demo_panel_and_lists():
-    rng = np.random.default_rng(9)
-    dates = pd.bdate_range("2025-06-01", periods=180)
+def _demo_panel_and_lists(window_days: int = 180, seed: int = 9):
+    rng = np.random.default_rng(seed)
+    end = pd.Timestamp.today().normalize()
+    dates = pd.bdate_range(end=end, periods=window_days)
     frames = []
     for sym, ind in (("600519", "白酒"), ("601318", "保险"), ("600000", "银行")):
-        close = 100 * np.cumprod(1 + rng.normal(0.001, 0.015, 180))
-        open_ = close * (1 + rng.normal(0, 0.003, 180))
+        close = 100 * np.cumprod(1 + rng.normal(0.001, 0.015, window_days))
+        open_ = close * (1 + rng.normal(0, 0.003, window_days))
         frames.append(
             pd.DataFrame(
                 {
@@ -146,7 +182,7 @@ def _demo_panel_and_lists():
 @router.post("/backtest/run")
 def run_backtest(req: BacktestRequest) -> dict:
     """V3.5 协议回测 (演示面板)."""
-    panel, lists = _demo_panel_and_lists()
+    panel, lists = _demo_panel_and_lists(req.window_days)
     proto = BacktestProtocol(
         top_n=req.top_n,
         max_hold_days=req.max_hold_days,
@@ -173,6 +209,9 @@ def run_backtest(req: BacktestRequest) -> dict:
 class TuneRequest(BaseModel):
     params: list[str] = ["max_hold_days", "prob_exit"]
     top_k: int = 3
+    objective: str = "net_excess_annual"
+    max_dd_limit: float | None = None
+    ranges: dict[str, tuple[float, float, float]] | None = None
 
 
 @router.post("/backtest/tune")
@@ -184,7 +223,23 @@ def run_tune(req: TuneRequest) -> dict:
     if len(req.params) > 4:
         raise HTTPException(400, "建议 ≤4 维 (控制组合数)")
     panel, lists = _demo_panel_and_lists()
-    report = ParamTuner(panel, lists).grid_search(req.params, top_k=req.top_k)
+
+    original_bounds = dict(TUNABLE_BOUNDS)
+    if req.ranges:
+        for name, (lo, hi, step) in req.ranges.items():
+            if name in TUNABLE_BOUNDS:
+                TUNABLE_BOUNDS[name] = (lo, hi, step)
+    try:
+        report = ParamTuner(panel, lists).grid_search(
+            req.params,
+            top_k=req.top_k,
+            objective=req.objective,
+            max_dd_limit=req.max_dd_limit,
+        )
+    finally:
+        TUNABLE_BOUNDS.clear()
+        TUNABLE_BOUNDS.update(original_bounds)
+
     report["leaderboard"] = [(str(p), s) for p, s in report["leaderboard"]]
     return report
 
