@@ -63,9 +63,9 @@ PROFILES: dict[str, dict] = {
 C_PROFILE_LOCKED = True
 ACTIVE_PROFILE = "aggressive_b"
 
-assert not (
-    C_PROFILE_LOCKED and ACTIVE_PROFILE == "aggressive"
-), "C档(100%)锁定: D.10裁决+40笔双闸门通过前不可启用为生产档"
+assert not (C_PROFILE_LOCKED and ACTIVE_PROFILE == "aggressive"), (
+    "C档(100%)锁定: D.10裁决+40笔双闸门通过前不可启用为生产档"
+)
 
 
 def get_profile(name: str | None = None) -> dict:
