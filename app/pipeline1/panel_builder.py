@@ -17,8 +17,10 @@ cleaning/feature/label 全链路可用的标准面板:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import time
 from datetime import datetime
 
 import pandas as pd
@@ -26,12 +28,58 @@ import pandas as pd
 from app.core.universe_manager import name_is_st
 
 from .cleaning_pipeline import board_of
-from .data_supply import DataSupplyChain
+from .data_supply import DataSupplyChain, _ak_call
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_YEARS = 3  # 用户裁决 (2026-07-26): 训练数据取最近 3 年
 PANEL_CACHE_DIR = os.path.join("data", "processed")
+
+
+def load_or_fetch_meta(
+    cache_dir: str = PANEL_CACHE_DIR, refresh: bool = False
+) -> tuple[dict[str, str], dict[str, str]]:
+    """股票元数据 (industry_map, name_map): 东财行业板块成分 + 现货名称.
+
+    industry_map 用于行业中性化/行业集中度上限 (缺失时全 UNKNOWN → 清单 ≤4 只);
+    name_map 用于 ST 标记. 缓存 stock_meta_<YYYYMMDD>.json (WORM, 当日有效).
+    """
+    os.makedirs(cache_dir, exist_ok=True)
+    path = os.path.join(cache_dir, f"stock_meta_{datetime.now():%Y%m%d}.json")
+    if not refresh and os.path.exists(path):
+        with open(path, encoding="utf-8") as fh:
+            meta = json.load(fh)
+        return meta["industry_map"], meta["name_map"]
+
+    import akshare as ak
+
+    spot = _ak_call(ak.stock_zh_a_spot_em)
+    name_map = dict(zip(spot["代码"].astype(str).str[-6:], spot["名称"].astype(str)))
+
+    boards = _ak_call(ak.stock_board_industry_name_em)
+    industry_map: dict[str, str] = {}
+    consecutive_fail = 0
+    for i, board in enumerate(boards["板块名称"].astype(str)):
+        try:
+            cons = _ak_call(ak.stock_board_industry_cons_em, symbol=board)
+            for code in cons["代码"].astype(str).str[-6:]:
+                industry_map[code] = board
+            consecutive_fail = 0
+        except Exception as exc:  # 单板块失败跳过; 连续失败=IP 被封, 放弃本次
+            consecutive_fail += 1
+            logger.warning("行业板块 %s 成分拉取失败: %s", board, exc)
+            if consecutive_fail >= 3:
+                raise RuntimeError(
+                    f"东财连续 {consecutive_fail} 板块拉取失败 (疑似封 IP), 放弃元数据"
+                ) from exc
+        time.sleep(0.3)
+        if (i + 1) % 30 == 0:
+            logger.info("行业元数据进度: %d/%d 板块", i + 1, len(boards))
+
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({"industry_map": industry_map, "name_map": name_map}, fh, ensure_ascii=False)
+    logger.info("元数据: %d 行业映射, %d 名称 → %s", len(industry_map), len(name_map), path)
+    return industry_map, name_map
 
 
 def enrich_panel(

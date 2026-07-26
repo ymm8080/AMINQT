@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
-from app.pipeline1.panel_builder import assemble_panel  # noqa: E402
+from app.pipeline1.panel_builder import assemble_panel, load_or_fetch_meta  # noqa: E402
 from app.pipeline1.predict_runner import find_bundles, run_prediction  # noqa: E402
 from scripts.train_pipeline1 import load_symbols  # noqa: E402
 
@@ -54,8 +54,19 @@ def main() -> dict:
 
     supply = DataSupplyChain()
     end = f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}"
+    try:
+        industry_map, name_map = load_or_fetch_meta(refresh=args.refresh)
+    except Exception as exc:
+        logger.warning("元数据拉取失败 (%s), 行业/名称用默认值", exc)
+        industry_map = name_map = None
     panel = assemble_panel(
-        supply, symbols, end=end, years=args.years, refresh=args.refresh
+        supply,
+        symbols,
+        end=end,
+        years=args.years,
+        refresh=args.refresh,
+        industry_map=industry_map,
+        name_map=name_map,
     )
     result = run_prediction(
         panel,

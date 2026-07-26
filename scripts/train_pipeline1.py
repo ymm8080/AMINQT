@@ -22,7 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
-from app.pipeline1.panel_builder import assemble_panel  # noqa: E402
+from app.pipeline1.panel_builder import assemble_panel, load_or_fetch_meta  # noqa: E402
 from app.pipeline1.train_runner import run_training  # noqa: E402
 
 logging.basicConfig(
@@ -72,8 +72,19 @@ def main() -> dict:
     logger.info("universe=%d 只, years=%d, tag=%s", len(symbols), args.years, tag)
 
     supply = DataSupplyChain()
+    try:
+        industry_map, name_map = load_or_fetch_meta(refresh=args.refresh)
+    except Exception as exc:
+        logger.warning("元数据拉取失败 (%s), 行业/名称用默认值", exc)
+        industry_map = name_map = None
     panel = assemble_panel(
-        supply, symbols, end=args.end, years=args.years, refresh=args.refresh
+        supply,
+        symbols,
+        end=args.end,
+        years=args.years,
+        refresh=args.refresh,
+        industry_map=industry_map,
+        name_map=name_map,
     )
     results = run_training(
         panel, tag, model_dir=args.model_dir, use_ic_screen=not args.no_ic_screen
