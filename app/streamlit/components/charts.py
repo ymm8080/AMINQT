@@ -75,7 +75,11 @@ def intraday_chart(
     """分时走势线 + VWAP均价线 + 昨收价 + 成交量副图(含5日均量)."""
     vwap = (df["price"] * df["volume"]).cumsum() / df["volume"].cumsum()
     vol_ma5 = df["volume"].rolling(window=5, min_periods=1).mean()
-    colors = np.where(df["price"] >= df["price"].shift(1).fillna(df["price"].iloc[0]), "#e54545", "#26a69a")
+    colors = np.where(
+        df["price"] >= df["price"].shift(1).fillna(df["price"].iloc[0]),
+        "#e54545",
+        "#26a69a",
+    )
 
     fig = make_subplots(
         rows=2,
@@ -106,8 +110,12 @@ def intraday_chart(
     )
     if prev_close:
         fig.add_hline(
-            y=prev_close, line_dash="dash", line_color="gray", annotation_text="昨收",
-            row=1, col=1,
+            y=prev_close,
+            line_dash="dash",
+            line_color="gray",
+            annotation_text="昨收",
+            row=1,
+            col=1,
         )
     fig.add_trace(
         go.Bar(
