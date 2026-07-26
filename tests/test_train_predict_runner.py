@@ -164,8 +164,8 @@ class TestAssemblePanel:
         )
         assert set(panel["symbol"]) == {"600519", "300750"}
         assert {"board", "is_st", "list_days", "industry"} <= set(panel.columns)
-        # 缓存落盘 (WORM 日期后缀) + 二次调用读缓存
-        cached = list((tmp_path / "panels").glob("panel_20260724_3y.parquet"))
+        # 缓存落盘 (WORM 日期后缀 + universe 哈希) + 二次调用读缓存
+        cached = list((tmp_path / "panels").glob("panel_20260724_3y_*.parquet"))
         assert len(cached) == 1
         panel2 = assemble_panel(
             supply,
@@ -175,6 +175,12 @@ class TestAssemblePanel:
             cache_dir=str(tmp_path / "panels"),
         )
         assert len(panel2) == len(panel)
+        # 不同 universe 不得共享缓存 (缓存键含 universe 哈希)
+        assemble_panel(
+            supply, ["600519"], end="2026-07-24", years=3,
+            cache_dir=str(tmp_path / "panels"),
+        )
+        assert len(list((tmp_path / "panels").glob("panel_20260724_3y_*.parquet"))) == 2
 
 
 # ---------------- train → predict 全链路 ----------------
