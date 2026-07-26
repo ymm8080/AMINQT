@@ -11,7 +11,7 @@ from plotly.subplots import make_subplots
 
 
 def kline_chart(
-    df: pd.DataFrame, ma_list: tuple = (5, 20, 60), title: str = ""
+    df: pd.DataFrame, ma_list: tuple = (5, 10, 20), title: str = ""
 ) -> go.Figure:
     """日K线 + 均线 + 成交量副图."""
     fig = make_subplots(
@@ -72,32 +72,81 @@ def kline_chart(
 def intraday_chart(
     df: pd.DataFrame, prev_close: float | None = None, title: str = "分时"
 ) -> go.Figure:
-    """分时走势线 + 均价线 + 昨收价."""
-    avg = (df["price"] * df["volume"]).cumsum() / df["volume"].cumsum()
-    fig = go.Figure()
+    """分时走势线 + VWAP均价线 + 昨收价 + 成交量副图(含5日均量)."""
+    vwap = (df["price"] * df["volume"]).cumsum() / df["volume"].cumsum()
+    vol_ma5 = df["volume"].rolling(window=5, min_periods=1).mean()
+    colors = np.where(
+        df["price"] >= df["price"].shift(1).fillna(df["price"].iloc[0]),
+        "#e54545",
+        "#26a69a",
+    )
+
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        row_heights=[0.72, 0.28],
+        vertical_spacing=0.03,
+    )
     fig.add_trace(
         go.Scatter(
             x=df["time"],
             y=df["price"],
             name="价格",
             line={"color": "#1f77b4", "width": 1.5},
-        )
+        ),
+        row=1,
+        col=1,
     )
     fig.add_trace(
         go.Scatter(
             x=df["time"],
-            y=avg,
-            name="均价",
+            y=vwap,
+            name="VWAP",
             line={"color": "#ff7f0e", "width": 1, "dash": "dot"},
-        )
+        ),
+        row=1,
+        col=1,
     )
     if prev_close:
         fig.add_hline(
-            y=prev_close, line_dash="dash", line_color="gray", annotation_text="昨收"
+            y=prev_close,
+            line_dash="dash",
+            line_color="gray",
+            annotation_text="昨收",
+            row=1,
+            col=1,
         )
-    fig.update_layout(
-        title=title, height=300, margin={"l": 10, "r": 10, "t": 40, "b": 10}
+    fig.add_trace(
+        go.Bar(
+            x=df["time"],
+            y=df["volume"],
+            name="成交量",
+            marker_color=colors,
+            opacity=0.7,
+        ),
+        row=2,
+        col=1,
     )
+    fig.add_trace(
+        go.Scatter(
+            x=df["time"],
+            y=vol_ma5,
+            name="成交量MA5",
+            line={"color": "#ff7f0e", "width": 1},
+        ),
+        row=2,
+        col=1,
+    )
+    fig.update_layout(
+        title=title,
+        height=420,
+        xaxis_rangeslider_visible=False,
+        margin={"l": 10, "r": 10, "t": 40, "b": 10},
+        showlegend=True,
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02},
+    )
+    fig.update_xaxes(rangeslider_visible=False)
     return fig
 
 

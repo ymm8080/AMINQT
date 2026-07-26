@@ -61,6 +61,7 @@ SINGLE_CAP_BEAR = 0.07
 SCHEMA_FIELDS = [
     "symbol",
     "board",
+    "day_change",
     "pred_ret_1d",
     "pred_ret_3d",
     "pred_ret_5d",
@@ -377,6 +378,9 @@ class ListGenerator:
         for col in ("is_limit_up_close", "is_one_word_limit"):
             if col not in df.columns:
                 df[col] = 0
+        # day_change 由 predictor 透传 (close/pre_close-1); 候选缺失时回填 NaN
+        if "day_change" not in df.columns:
+            df["day_change"] = np.nan
         for col in (
             "pred_q10",
             "pred_q50",
