@@ -101,6 +101,24 @@ class TestAdaptiveWindow:
         with pytest.raises(RuntimeError, match="深度不足"):
             trainer.train_window(df, "main", ["f1", "f2"])
 
+    def test_sparse_symbol_does_not_shrink_window(self, tmp_path):
+        """多股面板中个股只剩 2 天 (新股/被过滤) 不影响窗口深度 (按日期并集)."""
+        dtt.LGB_PARAMS_REG["n_estimators"] = 10
+        dtt.LGB_PARAMS_CLS["n_estimators"] = 10
+        dtt.ES_PATIENCE = 3
+        panel = make_panel(days=500)
+        sparse = panel[panel["symbol"] == "600519"].tail(2).copy()
+        sparse["symbol"] = "000999"  # 只有 2 天数据的"新股"
+        df = pd.concat([panel, sparse], ignore_index=True)
+        for k in (1, 3, 5):
+            df[f"label_{k}d"] = (
+                df.groupby("symbol")["close_hfq"].shift(-k) / df["close_hfq"] - 1
+            )
+        df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
+        trained = trainer.train_window(df, "main", ["f1", "f2"])  # 不应 raise
+        assert len(trained["segs"]["es"]) > 0
+
 
 # ---------------- enrich_panel ----------------
 class TestEnrichPanel:

@@ -176,7 +176,9 @@ class DualTrackTrainer:
         3 年数据经步骤1 (list_days≥250) 过滤后约 490 日, 750 窗口会让 es/calib 落空.
         返回 {kind: (model, label)} + 元数据 + ['quantile_models'/'pain_model'].
         """
-        depth = int(df.groupby("symbol")["date"].nunique().min()) if len(df) else 0
+        # 深度按日期并集 (split_window 的切片轴): 多股面板中个股上市晚/被清洗过滤
+        # 只剩几天不影响窗口有效性, 各段行数由并集日期天然保证
+        depth = int(df["date"].nunique()) if len(df) else 0
         window = (
             WINDOW_TOTAL if depth >= B11_FULL_DEPTH else min(WINDOW_TRANSITION, depth)
         )
