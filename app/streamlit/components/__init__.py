@@ -7,7 +7,13 @@ app/streamlit/components 包 (P10)
 
 from __future__ import annotations
 
-from .charts import drawdown_chart, equity_curve, factor_radar, intraday_chart, kline_chart
+from .charts import (
+    drawdown_chart,
+    equity_curve,
+    factor_radar,
+    intraday_chart,
+    kline_chart,
+)
 from .indicators import (
     chip_control_chart,
     find_bull_chart,

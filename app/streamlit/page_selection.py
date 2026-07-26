@@ -174,9 +174,7 @@ def _render_charts(symbol: str) -> None:
         )
     else:
         df = ds.demo_intraday(symbol)
-        st.plotly_chart(
-            intraday_chart(df, prev_close=100.0), use_container_width=True
-        )
+        st.plotly_chart(intraday_chart(df, prev_close=100.0), use_container_width=True)
 
     st.divider()
     st.subheader("参考指标")
@@ -202,9 +200,15 @@ def _render_priority_tab(pool: pd.DataFrame) -> None:
         return
 
     st.caption(f"共 {len(priority_df)} 只重点股 (次日日内操作候选池)")
-    display_cols = [c for c in ["symbol", "name", "score", "pred_ret_1d", "industry"] if c in priority_df.columns]
+    display_cols = [
+        c
+        for c in ["symbol", "name", "score", "pred_ret_1d", "industry"]
+        if c in priority_df.columns
+    ]
     rename_map = {"symbol": "代码", "pred_ret_1d": "预测1日收益"}
-    display_df = priority_df[display_cols].rename(columns=rename_map).reset_index(drop=True)
+    display_df = (
+        priority_df[display_cols].rename(columns=rename_map).reset_index(drop=True)
+    )
 
     st.dataframe(
         display_df.style.format({"score": "{:.4f}", "预测1日收益": "{:+.2%}"}),

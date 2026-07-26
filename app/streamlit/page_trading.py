@@ -118,7 +118,9 @@ def render() -> None:
         df = ds.demo_intraday(symbol)
         last_price = float(df["price"].iloc[-1])
         first_price = float(df["price"].iloc[0])
-        st.metric("最新价", f"{last_price:.2f}", f"{(last_price / first_price - 1):+.2%}")
+        st.metric(
+            "最新价", f"{last_price:.2f}", f"{(last_price / first_price - 1):+.2%}"
+        )
         st.plotly_chart(
             intraday_chart(df, prev_close=first_price), use_container_width=True
         )
