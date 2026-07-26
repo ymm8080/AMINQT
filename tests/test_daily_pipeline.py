@@ -141,7 +141,15 @@ class TestDailyPipeline:
         assert r["empty"] and len(r["list"]) == 0
 
     def test_is_retrain_day(self):
-        cal = ["20260529", "20260601", "20260602", "20260701"]
+        """周频重训 (用户 2026-07-22 裁决): 每周第一个交易日触发, 跨月不特殊."""
+        cal = [
+            "20260529",  # 周五 (ISO W22)
+            "20260601",  # 周一 (W23) → 重训
+            "20260602",  # 周二 (W23)
+            "20260608",  # 周一 (W24) → 重训 (同月, 月频判据会漏掉)
+            "20260701",  # 周三 (W27) → 重训
+        ]
         assert DailySelectionPipeline.is_retrain_day("20260601", cal)
         assert not DailySelectionPipeline.is_retrain_day("20260602", cal)
+        assert DailySelectionPipeline.is_retrain_day("20260608", cal)
         assert DailySelectionPipeline.is_retrain_day("20260701", cal)
