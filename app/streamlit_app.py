@@ -7,9 +7,22 @@ A股量化交易系统 — Streamlit 四页看板 (P10)
 
 from __future__ import annotations
 
-import streamlit as st
+import sys
+from pathlib import Path
 
-from app.streamlit import page_backtest, page_config, page_selection, page_trading
+# 确保仓库根目录在 sys.path, 支持 `streamlit run app/streamlit_app.py` 直接启动
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+import streamlit as st  # noqa: E402
+
+from app.streamlit import (  # noqa: E402
+    page_backtest,
+    page_config,
+    page_selection,
+    page_trading,
+)
 
 st.set_page_config(page_title="A股量化交易系统", page_icon="📈", layout="wide")
 

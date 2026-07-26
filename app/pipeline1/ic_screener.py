@@ -18,7 +18,8 @@ import os
 
 import numpy as np
 import pandas as pd
-from scipy.stats import spearmanr
+
+from app.utils.daily_rank_ic import daily_rank_ic_series, mean_rank_ic
 
 logger = logging.getLogger(__name__)
 
@@ -41,17 +42,7 @@ class ICScreener:
     @staticmethod
     def rank_ic(df: pd.DataFrame, factor: str, label: str) -> float:
         """横截面 Rank IC 均值 (按 date 分组 Spearman, 再取时间均值)."""
-        sub = df[["date", factor, label]].dropna()
-        if sub["date"].nunique() < 5:
-            return 0.0
-        ics = sub.groupby("date").apply(
-            lambda g: (
-                spearmanr(g[factor], g[label]).statistic
-                if g[factor].nunique() > 5 and g[label].nunique() > 1
-                else np.nan
-            )
-        )
-        return float(np.nanmean(np.abs(ics.values)))  # 方向无关: 绝对值筛强度
+        return mean_rank_ic(df, factor, label, abs_mean=True)
 
     # ---------------- Newey-West HAC t 统计量 (B6) ----------------
     @staticmethod
@@ -67,17 +58,7 @@ class ICScreener:
         dates = sorted(sub["date"].unique())
         if len(dates) < 10:
             return 0.0
-        ic_series = (
-            sub.groupby("date")
-            .apply(
-                lambda g: (
-                    spearmanr(g[factor], g[label]).statistic
-                    if g[factor].nunique() > 5 and g[label].nunique() > 1
-                    else np.nan
-                )
-            )
-            .dropna()
-        )
+        ic_series = daily_rank_ic_series(sub, factor, label)
         n = len(ic_series)
         if n < 5:
             return 0.0
@@ -105,17 +86,7 @@ class ICScreener:
         dates = sorted(sub["date"].unique())
         if len(dates) < window:
             return 0.0, 0.0
-        daily_ic = (
-            sub.groupby("date")
-            .apply(
-                lambda g: (
-                    spearmanr(g[factor], g[label]).statistic
-                    if g[factor].nunique() > 5 and g[label].nunique() > 1
-                    else np.nan
-                )
-            )
-            .dropna()
-        )
+        daily_ic = daily_rank_ic_series(sub, factor, label)
         rolls = [
             daily_ic.loc[d0:d1].mean()
             for d0, d1 in zip(dates[:-window], dates[window:])
@@ -223,23 +194,10 @@ class ICScreener:
 
         rank_ic/rolling_ic_dual 取绝对值 (方向无关筛强度), 不能用于符号判定.
         """
-        sub = df[["date", factor, label]].dropna()
-        if sub["date"].nunique() < 5:
+        ics = daily_rank_ic_series(df, factor, label)
+        if ics.empty:
             return 0.0
-
-        def _daily_ic(g: pd.DataFrame) -> float:
-            if len(g) < 3 or g[factor].nunique() <= 5 or g[label].nunique() <= 1:
-                return np.nan
-            try:
-                return spearmanr(g[factor], g[label]).statistic
-            except (ValueError, TypeError):
-                return np.nan
-
-        ics = sub.groupby("date").apply(_daily_ic)
-        valid = ics.dropna()
-        if len(valid) == 0:
-            return 0.0
-        return float(valid.mean())
+        return float(ics.mean())
 
     def _l2_path(self) -> str:
         return os.path.join(self.registry_path, "l2_factor_neg_streaks.json")

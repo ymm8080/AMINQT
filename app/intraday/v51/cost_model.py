@@ -33,6 +33,8 @@ def round_trip_cost(
     (B6 说明: 小资金阶段冲击≈0, 资金增长后自动生效, 无需改代码).
     """
     c = costs or CostModel()
+    if adv_20d <= 0:
+        return float("inf")  # 无流动性数据 → 成本无穷大 (B5/B6 否决保护)
     slip = slippage_tier(adv_20d)
-    impact = c.impact_coef * (order_value / max(adv_20d, 1.0)) ** 0.5
+    impact = c.impact_coef * (order_value / adv_20d) ** 0.5
     return 2 * c.commission + c.stamp_tax_sell + 2 * slip + impact

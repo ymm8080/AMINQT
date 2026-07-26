@@ -54,6 +54,9 @@ class TradingStateMachine:
         self.auto_buy_enabled = False  # 自动买开关 (独立)
         self.auto_sell_enabled = False  # 自动卖开关 (独立)
         self.on_stop_all = on_stop_all
+        # 暂停记忆: pause 前保存的自动开关状态, resume 时恢复
+        self._paused_auto_buy = False
+        self._paused_auto_sell = False
 
     def _transition(self, action: str) -> bool:
         """执行状态迁移; 非法迁移记录 warning 并 no-op.
@@ -79,20 +82,31 @@ class TradingStateMachine:
         self._transition("start")
 
     def pause(self) -> None:
-        """暂停 (RUNNING → PAUSED), 保持持仓监控, 停止新信号执行."""
-        self._transition("pause")
+        """暂停 (RUNNING → PAUSED), 记住当前自动开关状态."""
+        if self._transition("pause"):
+            self._paused_auto_buy = self.auto_buy_enabled
+            self._paused_auto_sell = self.auto_sell_enabled
+            logger.info("[TSM] 暂停, 记忆自动买/卖=%s/%s", self._paused_auto_buy, self._paused_auto_sell)
 
     def resume(self) -> None:
-        """恢复 (PAUSED → RUNNING)."""
-        self._transition("resume")
+        """恢复 (PAUSED → RUNNING), 还原暂停前自动开关状态."""
+        if self._transition("resume"):
+            self.auto_buy_enabled = self._paused_auto_buy
+            self.auto_sell_enabled = self._paused_auto_sell
+            logger.info("[TSM] 恢复, 还原自动买/卖=%s/%s", self.auto_buy_enabled, self.auto_sell_enabled)
 
     def stop_all(self) -> None:
         """停止全部 (→ STOPPED), 并触发 on_stop_all 回调 (如撤销待确认委托)."""
-        if self._transition("stop_all") and self.on_stop_all is not None:
-            try:
-                self.on_stop_all()
-            except Exception:
-                logger.exception("[TSM] on_stop_all 回调异常")
+        if self._transition("stop_all"):
+            self.auto_buy_enabled = False
+            self.auto_sell_enabled = False
+            self._paused_auto_buy = False
+            self._paused_auto_sell = False
+            if self.on_stop_all is not None:
+                try:
+                    self.on_stop_all()
+                except Exception:
+                    logger.exception("[TSM] on_stop_all 回调异常")
 
     def set_auto_buy(self, enabled: bool) -> None:
         """自动买开关 (独立于自动卖)."""
@@ -121,3 +135,30 @@ class TradingStateMachine:
             return self.auto_sell_enabled
         logger.warning("[TSM] can_execute 未知方向: %s", side)
         return False
+
+    # ── IMPLEMENTATION PLAN v3.1 命名别名 ─────────────────────────
+
+    def enable_auto_buy(self) -> None:
+        """启动自动买入 (P10 命名)."""
+        self.set_auto_buy(True)
+
+    def disable_auto_buy(self) -> None:
+        """停止自动买入 (P10 命名)."""
+        self.set_auto_buy(False)
+
+    def enable_auto_sell(self) -> None:
+        """启动自动卖出 (P10 命名)."""
+        self.set_auto_sell(True)
+
+    def disable_auto_sell(self) -> None:
+        """停止自动卖出 (P10 命名)."""
+        self.set_auto_sell(False)
+
+    def force_stop(self, reason: str = "风控强制停止") -> None:
+        """风控强制停止全部自动交易 (→ STOPPED)."""
+        logger.warning("[TSM] %s", reason)
+        self.stop_all()
+
+    def should_auto_execute(self, side: str) -> bool:
+        """判断信号是否自动执行 (P10 命名, 同 can_execute)."""
+        return self.can_execute(side)

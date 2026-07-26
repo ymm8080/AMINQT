@@ -25,7 +25,7 @@ from .position import Position
 from .safe_div import safe_divide
 from .sell_engine import SellContext
 from .sell_engine import trigger as sell_trigger
-from .sessions import buy_window_open
+from .sessions import buy_window_open, position_cap
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,7 @@ class DayContext:
     hs300_change: float = 0.0
     sector_drop_count: int = 0
     event_mean: float = 0.0
+    oos_decay: float = 0.0  # 样本外衰减折扣 (B5 透传)
     limit_up_price: float = 0.0
     limit_down_price: float = 0.0
     turnover_pct: float = 0.0
@@ -73,16 +74,18 @@ class IntradayBacktester:
         self.costs = costs or CostModel()
         self.fm = FundManager(daily_fuse=0.04 if profile == "C" else 0.03)
         self.peak = capital
+        self._auction_queued = False  # S8 当日已挂跌停排队 (防同日重复记录)
 
     # ---------------- 买入 ----------------
     def _try_buy(
-        self, dc: DayContext, bar: Bar, pos: Position | None
-    ) -> Position | None:
+        self, dc: DayContext, bar: Bar, bar_idx: int, pos: Position | None
+    ) -> Position | tuple[Position, dict] | None:
         if pos is not None or dc.invalidation:
             return pos
         if not buy_window_open(bar.t, dc.bear_state, dc.signal_grade, dc.hs300_change):
             return pos
-        ok, reason = self.fm.can_buy(dc.symbol, dc.position_weight)
+        pw = position_cap(dc.bear_state, base_cap=dc.position_weight)
+        ok, reason = self.fm.can_buy(dc.symbol, pw)
         if not ok:
             return pos
         ctx = BuyContext(
@@ -94,17 +97,18 @@ class IntradayBacktester:
             atr_pct=dc.atr_pct,
             stop_price=dc.stop_price,
             adv_20d=dc.adv_20d,
-            order_value=self.cash * dc.position_weight,
+            order_value=self.cash * pw,
             bar_amount=bar.amount,
             sector_drop_count=dc.sector_drop_count,
             event_mean=dc.event_mean,
+            oos_decay=dc.oos_decay,
         )
-        r = buy_trigger(ctx, dc.bars[: dc.bars.index(bar) + 1])
+        r = buy_trigger(ctx, dc.bars[: bar_idx + 1], self.costs)
         if not r["pass"]:
             return pos
         # 成交: ±1 档限价 + 成本
         px = limit_order_price(bar.close, "buy")
-        amount = self.cash * dc.position_weight
+        amount = self.cash * pw
         qty = int(safe_divide(amount, px) / 100) * 100
         if qty <= 0:
             return pos
@@ -140,6 +144,9 @@ class IntradayBacktester:
             return None
         # S8 跌停: 无法成交 (排队到次日), 其余按 bar 价 - 滑点成交
         if r["action"] == "AUCTION_SELL":
+            if self._auction_queued:
+                return None  # 同日已挂跌停排队, 不重复记录
+            self._auction_queued = True
             return {
                 "date": dc.date,
                 "side": "auction_queue",
@@ -176,12 +183,13 @@ class IntradayBacktester:
         """单票单日决策链回放. pos = 隔夜持仓 (T+1 状态由 settle_overnight 流转)."""
         res = DayResult()
         self.fm.new_day()  # 每日纪律重置 (停机线状态跨日保持)
+        self._auction_queued = False  # S8 每日重置
         if pos is not None:
             pos.settle_overnight()  # 隔夜结算: 全部可卖
         start_nav = self.cash + (
             pos.total_qty * dc.bars[0].close if pos and dc.bars else 0
         )
-        for bar in dc.bars:
+        for bar_idx, bar in enumerate(dc.bars):
             if pos is not None:
                 pos.on_bar(bar.close)
                 trade = self._try_sell(dc, bar, pos)
@@ -191,7 +199,7 @@ class IntradayBacktester:
                         pos = None
                 if pos is None:
                     continue
-            bought = self._try_buy(dc, bar, pos)
+            bought = self._try_buy(dc, bar, bar_idx, pos)
             if isinstance(bought, tuple):
                 pos, trade = bought
                 res.trades.append(trade)

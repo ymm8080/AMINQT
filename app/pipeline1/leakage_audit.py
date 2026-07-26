@@ -17,7 +17,8 @@ import re
 
 import numpy as np
 import pandas as pd
-from scipy.stats import spearmanr
+
+from app.utils.daily_rank_ic import daily_rank_ic_series
 
 logger = logging.getLogger(__name__)
 
@@ -90,13 +91,7 @@ def ic_sentinel(
         sub = df[["date", f, label]].dropna()
         if sub["date"].nunique() < 5:
             continue
-        ics = sub.groupby("date").apply(
-            lambda g: (
-                spearmanr(g[f], g[label]).statistic
-                if g[f].nunique() > 5 and g[label].nunique() > 1
-                else np.nan
-            )
-        )
+        ics = daily_rank_ic_series(sub, f, label)
         ic = float(np.nanmean(ics.values))
         max_ic = max(max_ic, abs(ic))
         if abs(ic) > IC_SENTINEL:

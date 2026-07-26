@@ -146,3 +146,57 @@ class TestCanExecute:
     def test_unknown_side(self, tsm):
         tsm.start()
         assert tsm.can_execute("hold") is False
+
+
+class TestP10Aliases:
+    """P10 命名别名与风控强制停止."""
+
+    def test_enable_disable_auto_buy(self, tsm):
+        tsm.enable_auto_buy()
+        assert tsm.auto_buy_enabled is True
+        tsm.disable_auto_buy()
+        assert tsm.auto_buy_enabled is False
+
+    def test_enable_disable_auto_sell(self, tsm):
+        tsm.enable_auto_sell()
+        assert tsm.auto_sell_enabled is True
+        tsm.disable_auto_sell()
+        assert tsm.auto_sell_enabled is False
+
+    def test_should_auto_execute_matches_can_execute(self, tsm):
+        tsm.enable_auto_buy()
+        tsm.enable_auto_sell()
+        tsm.start()
+        assert tsm.should_auto_execute("buy") is tsm.can_execute("buy")
+        assert tsm.should_auto_execute("sell") is tsm.can_execute("sell")
+
+    def test_pause_remembers_auto_flags(self, tsm):
+        tsm.start()
+        tsm.enable_auto_buy()
+        tsm.enable_auto_sell()
+        tsm.pause()
+        # 暂停期间信号不执行 (can_execute 为 False), 但开关记忆保留
+        assert tsm.can_execute("buy") is False
+        assert tsm.can_execute("sell") is False
+        tsm.resume()
+        assert tsm.auto_buy_enabled is True
+        assert tsm.auto_sell_enabled is True
+        assert tsm.can_execute("buy") is True
+        assert tsm.can_execute("sell") is True
+
+    def test_force_stop_goes_to_stopped(self, tsm):
+        tsm.start()
+        tsm.enable_auto_buy()
+        tsm.force_stop("回撤超限")
+        assert tsm.state is TradingState.STOPPED
+        assert tsm.auto_buy_enabled is False
+
+    def test_pause_memory_not_lost_after_multiple_pauses(self, tsm):
+        tsm.start()
+        tsm.enable_auto_buy()
+        tsm.pause()
+        tsm.resume()
+        tsm.pause()
+        tsm.resume()
+        assert tsm.auto_buy_enabled is True
+        assert tsm.state is TradingState.RUNNING

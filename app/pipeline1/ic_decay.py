@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from scipy.stats import spearmanr
+
+from app.utils.daily_rank_ic import daily_rank_ic_series
 
 HORIZONS = (1, 2, 3)  # t+1 / t+2 / t+3
 
@@ -45,13 +46,7 @@ def ic_decay_curve(
         sub = pd.DataFrame(
             {"date": df["date"], "score": df[score_col], "ret": fwd}
         ).dropna()
-        daily = sub.groupby("date").apply(
-            lambda x: (
-                spearmanr(x["score"], x["ret"]).statistic
-                if x["score"].nunique() > 5 and x["ret"].nunique() > 1
-                else np.nan
-            )
-        )
+        daily = daily_rank_ic_series(sub, "score", "ret")
         ics[f"ic_t+{k}"] = round(float(daily.mean()), 4) if len(daily) else 0.0
     ic1, ic3 = ics.get("ic_t+1", 0.0), ics.get("ic_t+3", 0.0)
     ratio = ic3 / ic1 if abs(ic1) > 1e-9 else 0.0
