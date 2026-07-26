@@ -60,8 +60,11 @@ def monthly_gt_scores(dates, daily_ics, daily_turnover) -> dict[str, float]:
         daily_ics / daily_turnover: 与 gt_score 同口径的日度序列
     """
     df = pd.DataFrame(
-        {"month": pd.to_datetime(dates).strftime("%Y-%m"), "ic": daily_ics,
-         "to": daily_turnover}
+        {
+            "month": pd.to_datetime(dates).strftime("%Y-%m"),
+            "ic": daily_ics,
+            "to": daily_turnover,
+        }
     )
     return {m: gt_score(g["ic"], g["to"]) for m, g in df.groupby("month")}
 
