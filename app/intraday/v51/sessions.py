@@ -17,6 +17,7 @@ EVENING_BUY = ("14:30", "14:55")  # 尾盘窗口 (主窗口)
 SELL_WINDOW = ("14:30", "14:55")  # 尾盘强制卖出窗口
 CLOSE = "15:00"
 MORNING_HS300_DROP_LIMIT = -0.01  # 早盘窗口: hs300 跌幅 ≥1% 禁用
+RECOVERY_POSITION_CAP = 0.30  # RECOVERY 首周仓位上限 30% (V5.1 §2)
 
 
 def _in_window(t: str, window: tuple[str, str]) -> bool:
@@ -51,3 +52,17 @@ def buy_window_open(
 def sell_window_open(t: str) -> bool:
     """尾盘强制卖出窗口 (时间止损/持仓到期/调出在此执行)."""
     return _in_window(t, SELL_WINDOW)
+
+
+def position_cap(bear_state: str = "NORMAL", base_cap: float = 1.0) -> float:
+    """熊市协议仓位上限 (V5.1 §2, 单点引用, 与 buy_window_open 同口径).
+
+    DEFENSE  → 0   (只卖不买, 与买入窗口全关一致)
+    RECOVERY → min(base_cap, 30%)  (首周仓位上限)
+    NORMAL   → base_cap (清单下发的 position_weight 不再打折)
+    """
+    if bear_state == "DEFENSE":
+        return 0.0
+    if bear_state == "RECOVERY":
+        return min(base_cap, RECOVERY_POSITION_CAP)
+    return base_cap
