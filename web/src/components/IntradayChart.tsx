@@ -61,17 +61,19 @@ export function IntradayChart({
   return (
     <div style={{ height: totalHeight }}>
       <ResponsiveContainer width="100%" height={priceHeight}>
-        <LineChart data={chartData}>
+        <LineChart data={chartData} syncId="intraday">
           <XAxis dataKey="time" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={30} />
           <YAxis
             yAxisId="price"
             domain={['auto', 'auto']}
             tick={{ fill: '#8b949e', fontSize: 10 }}
-            orientation="right"
+            orientation="left"
+            width={55}
           />
           <Tooltip
             contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
             labelStyle={{ color: '#8b949e' }}
+            formatter={(value: unknown, name: string) => [name === '成交量' ? Number(value).toLocaleString() : Number(value).toFixed(2), name]}
           />
           {prevClose != null && (
             <ReferenceLine
@@ -127,16 +129,18 @@ export function IntradayChart({
       </ResponsiveContainer>
 
       <ResponsiveContainer width="100%" height={volHeight}>
-        <ComposedChart data={chartData}>
+        <ComposedChart data={chartData} syncId="intraday">
           <XAxis dataKey="time" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={30} />
           <YAxis
             yAxisId="vol"
             orientation="left"
             tick={{ fill: '#8b949e', fontSize: 10 }}
+            width={55}
           />
           <Tooltip
             contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
             labelStyle={{ color: '#8b949e' }}
+            formatter={(value: unknown, name: string) => [name === '成交量' ? Number(value).toLocaleString() : Number(value).toFixed(2), name]}
           />
           <Bar
             yAxisId="vol"
