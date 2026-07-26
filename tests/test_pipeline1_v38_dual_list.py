@@ -189,6 +189,60 @@ class TestDualListRunner:
         r = runner.monthly_adjudication(bad, [0.3] * 20, good, [0.3] * 20)
         assert r["force_switch_to_stable"]  # 连续 3 月落后 → 强制切回
 
+    def test_monthly_adjudication_delegates_single_source(self):
+        """裁决逻辑单点: runner 与 gt_score.dual_profile_verdict 结论一致."""
+        from app.pipeline1.gt_score import dual_profile_verdict
+
+        runner = DualListRunner()
+        good, bad = [0.03] * 20, [-0.02] * 20
+        for m in ("2026-05", "2026-06", "2026-07"):
+            r = runner.monthly_adjudication(bad, [0.3] * 20, good, [0.3] * 20, month=m)
+        v = dual_profile_verdict(
+            runner._hist_shadow, runner._hist_exec  # noqa: SLF001
+        )
+        assert r["force_switch_to_stable"] == v["force_switch_to_stable"]
+        assert r["lose_streak"] == v["trailing_below"]
+
+
+# ============================================================
+# P21.4 资金不分仓校验 (D.8: 任何时刻只一份清单进入真实执行)
+# ============================================================
+class TestSingleLiveList:
+    def test_normal_day_live_is_aggressive(self):
+        from app.pipeline1.dual_list_runner import resolve_live_list
+
+        runner = DualListRunner(
+            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0)
+        )
+        out = runner.emit(_dual_cands(), "2026-07-25")
+        assert out["live_profile"] == "aggressive"
+        live = resolve_live_list(out)
+        assert (live["profile"] == "aggressive").all()
+        assert list(live["symbol"]) == list(out["execution"]["symbol"])
+
+    def test_bear_day_no_live_list(self):
+        """熊市接管: live_profile=None → 无可执行清单 (只卖不买)."""
+        from app.pipeline1.dual_list_runner import resolve_live_list
+
+        runner = DualListRunner(
+            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0)
+        )
+        out = runner.emit(_dual_cands(), "2026-07-25", market_state="bear")
+        assert out["live_profile"] is None
+        assert len(resolve_live_list(out)) == 0
+
+    def test_shadow_can_never_be_live(self):
+        """shadow 与 live 通道不一致 → 断言拒绝 (严禁两份都买)."""
+        from app.pipeline1.dual_list_runner import resolve_live_list
+
+        runner = DualListRunner(
+            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0)
+        )
+        out = runner.emit(_dual_cands(), "2026-07-25")
+        tampered = {**out, "shadow": out["shadow"].assign(profile="aggressive")}
+        with pytest.raises(AssertionError, match="两份都买"):
+            resolve_live_list(tampered)
+
 
 # ============================================================
 # 失效条件 #5 (公告剔除)
