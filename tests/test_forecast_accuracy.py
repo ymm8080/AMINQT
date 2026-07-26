@@ -112,7 +112,9 @@ class TestScoreForecast:
 class TestScoreMatured:
     def test_writes_and_skips(self, tmp_path):
         labeled = _labeled_panel()
-        panel = labeled.drop(columns=[c for c in labeled.columns if c.startswith("label_")])
+        panel = labeled.drop(
+            columns=[c for c in labeled.columns if c.startswith("label_")]
+        )
         list_dir = tmp_path / "lists"
         out_dir = tmp_path / "acc"
         list_dir.mkdir()

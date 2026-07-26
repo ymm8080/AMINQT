@@ -69,7 +69,11 @@ def score_forecast(
         actual_col = f"label_pm_{k}d_net"
         if actual_col not in rows.columns:
             actual_col = f"label_{k}d_net"  # 兼容无 PM 口径的面板
-        actuals = rows.set_index("symbol")[actual_col] if len(rows) else pd.Series(dtype=float)
+        actuals = (
+            rows.set_index("symbol")[actual_col]
+            if len(rows)
+            else pd.Series(dtype=float)
+        )
         detail[f"actual_{k}d"] = detail["symbol"].map(actuals)
         detail[f"pred_{k}d"] = forecast_df[f"pred_ret_{k}d"].values
 
@@ -80,8 +84,12 @@ def score_forecast(
         if k == max(horizons) and len(sub) == 0:
             mature = False
         out["horizons"][k] = {
-            "wmape": wmape(sub[f"actual_{k}d"], sub[f"pred_{k}d"]) if len(sub) else float("nan"),
-            "bias": bias(sub[f"actual_{k}d"], sub[f"pred_{k}d"]) if len(sub) else float("nan"),
+            "wmape": wmape(sub[f"actual_{k}d"], sub[f"pred_{k}d"])
+            if len(sub)
+            else float("nan"),
+            "bias": bias(sub[f"actual_{k}d"], sub[f"pred_{k}d"])
+            if len(sub)
+            else float("nan"),
             "n": int(len(sub)),
         }
     out["mature"] = mature
@@ -129,7 +137,10 @@ def score_matured_forecasts(
         h1 = result["horizons"][1]
         logger.info(
             "预测 %s 准确度: WMAPE(1d)=%.4f bias(1d)=%+.4f n=%d",
-            fdate, h1["wmape"], h1["bias"], h1["n"],
+            fdate,
+            h1["wmape"],
+            h1["bias"],
+            h1["n"],
         )
         scored.append(result)
     return scored
