@@ -34,6 +34,7 @@ from services.trading_state_machine import TradingStateMachine
 
 # Streamlit 会话级单例: 状态机 + 委托管理器
 
+
 def _get_state_machine() -> TradingStateMachine:
     if "trading_sm" not in st.session_state:
         st.session_state.trading_sm = TradingStateMachine()
@@ -47,6 +48,7 @@ def _get_order_manager() -> OrderManager:
 
 
 # 演示数据
+
 
 def _demo_signals() -> list[dict]:
     """演示信号 (SimExecutor 模式)."""
@@ -107,6 +109,7 @@ def _account_snapshot() -> dict:
 
 
 # ---------- 页面入口 ----------
+
 
 def render() -> None:
     st.header("交易看板 · Pipeline 2")

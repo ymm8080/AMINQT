@@ -29,6 +29,7 @@ from .components import drawdown_chart, equity_curve
 
 # ---------- 演示面板 ----------
 
+
 def _demo_panel(days: int = 180, seed: int = 9) -> pd.DataFrame:
     """合成演示面板 (多股 × 多日)."""
     rng = np.random.default_rng(seed)
@@ -74,6 +75,7 @@ def _demo_lists(panel: pd.DataFrame) -> dict:
 
 # ---------- 目标函数 ----------
 
+
 def _objective_value(metrics: dict, objective: str) -> float:
     """根据选择的目标函数从回测指标中提取评分."""
     if objective == "净超额(年化)":
@@ -86,6 +88,7 @@ def _objective_value(metrics: dict, objective: str) -> float:
 
 
 # ---------- 页面入口 ----------
+
 
 def render() -> None:
     st.header("回测中心 · V3.5 协议")
@@ -145,9 +148,7 @@ def render() -> None:
             help="调参时用于比较参数组合优劣的指标",
         )
     with constr_col:
-        max_dd_limit = st.slider(
-            "约束: 最大回撤限制 %", -20.0, -2.0, -10.0, 1.0
-        ) / 100
+        max_dd_limit = st.slider("约束: 最大回撤限制 %", -20.0, -2.0, -10.0, 1.0) / 100
         st.caption("OOS 复验时, 最大回撤超过此限制的组合会被过滤")
 
     tunable = st.multiselect(
