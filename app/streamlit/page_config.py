@@ -4,7 +4,11 @@
 - 规则引擎 Config 在线编辑 ([TUNABLE] 参数 + 边界提示)
 - selection/trading YAML 配置编辑/保存/校验
 - 调参报告查看 (tuning_report.json)
-- 因子参考表 (V3.5 14 维度)
+- 因子参考表 (V3.5 14 维 + 个股公告因子)
+
+变更点 (看板.docx):
+- 因子参考表补充个股公告因子
+- 调参报告用用户能理解的语言解释
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ FACTOR_DIMS = [
     ("③ 基本面", "PE_log/PB/净利营收增速 (announce_date PIT)"),
     ("④ 板块效应", "板块涨停家数/板块收益 (历史快照)"),
     ("⑤ 筹码分布", "集中度/获利盘 (shift 1)"),
+    ("⑥ 个股公告因子", "announce_score: 公告/业绩预告/解禁/分红等事件评分"),
     ("⑦ 涨停基因", "10/20日涨停天数/炸板率/连板高度0-4"),
     ("⑧ 日历-月份", "月份分类"),
     ("⑨ 自定义公式", "4 同花顺公式 (已审计, NECESSARY INDICATOR 复刻)"),
@@ -88,11 +93,11 @@ def render() -> None:
         if report is None:
             st.info("暂无调参报告 — 在 回测中心 执行 参数调优 后生成")
         else:
-            st.json(report)
+            _render_tuning_report(report)
 
     # ---------- Tab 4: 因子参考 ----------
     with tab_factors:
-        st.subheader("V3.5 特征维度 (14 维)")
+        st.subheader("V3.5 特征维度 (14 维 + 公告因子)")
         st.dataframe(
             {"维度": [d for d, _ in FACTOR_DIMS], "组成": [c for _, c in FACTOR_DIMS]},
             use_container_width=True,
@@ -107,3 +112,51 @@ def _to_yaml(data: dict) -> str:
     import yaml
 
     return yaml.safe_dump(data, allow_unicode=True, sort_keys=False) if data else ""
+
+
+def _render_tuning_report(report: dict) -> None:
+    """用用户能理解的语言展示调参报告."""
+    best = report.get("best_params", {})
+    fallback = report.get("fallback_to_default", False)
+    train = report.get("train_score", 0.0)
+    oos = report.get("oos_score", 0.0)
+
+    st.subheader("调参结论")
+    if fallback:
+        st.warning(
+            "⚠️ 调参结果在样本外 (OOS) 表现不如默认参数, 系统已自动回退到默认值。"
+            "建议不要硬调参数, 优先检查数据质量或特征是否有泄漏。"
+        )
+    else:
+        st.success(
+            "✅ 调参结果在样本外 (OOS) 验证通过, 推荐参数如下。"
+        )
+
+    if best:
+        st.markdown("**推荐参数:**")
+        for k, v in best.items():
+            st.markdown(f"- `{k}`: {v}")
+    else:
+        st.markdown("**推荐参数: 使用默认值**")
+
+    st.markdown(
+        f"**训练段评分:** {train:+.2%} | "
+        f"**样本外 (OOS) 评分:** {oos:+.2%}"
+    )
+    st.caption(
+        "训练段评分 = 用历史数据训练时表现最好的参数组合; "
+        "OOS 评分 = 用最近一段未参与调参的数据验证, 防止过拟合。"
+    )
+
+    leaderboard = report.get("leaderboard", [])
+    if leaderboard:
+        with st.expander("查看 TOP 参数组合明细"):
+            for i, (params, score) in enumerate(leaderboard, 1):
+                st.markdown(f"**第 {i} 名** 训练段评分 {score:+.2%}")
+                st.json(params)
+
+    st.json(report)
+
+
+if __name__ == "__main__":
+    render()

@@ -37,7 +37,9 @@ PAGES = {
 def main() -> None:
     st.sidebar.title("📈 A股量化")
     st.sidebar.caption("Pipeline-1 V3.5 (LightGBM 双轨) + 规则引擎 v2")
-    page = st.sidebar.radio("页面", list(PAGES))
+    page = st.sidebar.radio(
+        "页面", list(PAGES), key="nav_page", index=list(PAGES).index("选股看板")
+    )
     st.sidebar.divider()
     st.sidebar.caption("数据: akshare | 执行: miniQMT (sim) | 模型: 本地 LightGBM")
     PAGES[page]()
