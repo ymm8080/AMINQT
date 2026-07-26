@@ -7,9 +7,9 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
-from scipy.stats import spearmanr
+
+from app.utils.daily_rank_ic import daily_rank_ic_series, icir as _icir
 
 # 阶段一点火门禁 (P19.0 通过标准)
 IGNITION_IC_MIN = 0.03
@@ -20,18 +20,7 @@ TRAIN_IC_LEAK_MAX = 0.15
 
 def daily_ic_series(df: pd.DataFrame, score_col: str, label_col: str) -> pd.Series:
     """日度横截面 Rank IC 序列 (index=date) — 净收益口径标签由调用方保证."""
-    sub = df[["date", score_col, label_col]].dropna()
-    return (
-        sub.groupby("date")
-        .apply(
-            lambda g: (
-                spearmanr(g[score_col], g[label_col]).statistic
-                if g[score_col].nunique() > 5 and g[label_col].nunique() > 1
-                else np.nan
-            )
-        )
-        .dropna()
-    )
+    return daily_rank_ic_series(df, score_col, label_col)
 
 
 def rank_ic(df: pd.DataFrame, score_col: str, label_col: str) -> float:
@@ -42,10 +31,7 @@ def rank_ic(df: pd.DataFrame, score_col: str, label_col: str) -> float:
 
 def icir(df: pd.DataFrame, score_col: str, label_col: str) -> float:
     """ICIR = 日度 IC 均值 / 标准差 × √252 (年化)."""
-    ics = daily_ic_series(df, score_col, label_col)
-    if len(ics) < 5 or ics.std() == 0:
-        return 0.0
-    return float(ics.mean() / ics.std() * np.sqrt(252))
+    return _icir(df, score_col, label_col)
 
 
 def bucket_ic_high_vol(
