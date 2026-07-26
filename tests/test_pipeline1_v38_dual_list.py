@@ -198,7 +198,8 @@ class TestDualListRunner:
         for m in ("2026-05", "2026-06", "2026-07"):
             r = runner.monthly_adjudication(bad, [0.3] * 20, good, [0.3] * 20, month=m)
         v = dual_profile_verdict(
-            runner._hist_shadow, runner._hist_exec  # noqa: SLF001
+            runner._hist_shadow,
+            runner._hist_exec,  # noqa: SLF001
         )
         assert r["force_switch_to_stable"] == v["force_switch_to_stable"]
         assert r["lose_streak"] == v["trailing_below"]
