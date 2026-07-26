@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, BacktestResult } from '../api'
 import { EquityChart } from '../components/EquityChart'
 
@@ -21,6 +21,22 @@ export function BacktestPage() {
   const [tuneParams, setTuneParams] = useState('max_hold_days,prob_exit')
   const [tuneRanges, setTuneRanges] = useState('')
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    api.tuningReport()
+      .then((r) => {
+        if (!r.exists || !r.best_params || typeof r.best_params !== 'object') return
+        const best = r.best_params as Record<string, number>
+        setParams((prev) => ({
+          ...prev,
+          ...Object.fromEntries(
+            Object.entries(best).map(([k, v]) => [k, Number(v)])
+          ),
+        }))
+        setTune(r)
+      })
+      .catch(() => {})
+  }, [])
 
   const run = () => {
     setBusy(true)
@@ -64,22 +80,19 @@ export function BacktestPage() {
       <p className="dim">T+1 open + 滑点0.05% · 佣金万2.5 + 印花税0.05% · 等权1/N 单票≤10% · 验收=扣费后净超额</p>
 
       <div className="panel grid grid-3">
-        <div>
-          <label>回测窗口</label>
-          <select
-            value={params.window_days}
-            onChange={(e) => setParams({ ...params, window_days: Number(e.target.value) })}
-          >
-            <option value={120}>最近 6 个月</option>
-            <option value={750}>过去三年</option>
-          </select>
-        </div>
+        {tune && tune.exists === true && (
+          <p className="dim" style={{ gridColumn: '1 / -1', margin: 0 }}>
+            已加载参数调优最优解 (目标: {String(tune.objective)})
+            {tune.fallback_to_default === true && ' · 已回退默认值'}
+          </p>
+        )}
+        {num('window_days', '回测窗口')}
+        {num('initial_capital', '初始资金', 100000)}
         {num('top_n', 'Top N')}
         {num('max_hold_days', '最大持仓天数')}
         {num('prob_exit', '概率衰减退出', 0.05)}
         {num('hard_stop', '硬止损', 0.005)}
         {num('trailing_drawdown', '移动止盈回撤', 0.005)}
-        {num('initial_capital', '初始资金', 100000)}
       </div>
 
       <div className="panel grid grid-2">

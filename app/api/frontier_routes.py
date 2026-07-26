@@ -70,6 +70,58 @@ def get_sectors() -> dict:
     return {"demo": True, "items": records}
 
 
+@router.get("/signals/{symbol}")
+def get_signals(symbol: str) -> dict:
+    """演示买卖信号 (时间、价格、量、方向、原因); 价格取该标的日内最近时刻."""
+
+    def _minutes(t: str) -> int:
+        h, m = map(int, t.split(":"))
+        return h * 60 + m
+
+    def _price_at(sym: str, target: str) -> float:
+        df = ds.demo_intraday(sym)
+        tm = _minutes(target)
+        df["_tm"] = df["time"].apply(_minutes)
+        idx = (df["_tm"] - tm).abs().idxmin()
+        return float(df.loc[idx, "price"])
+
+    raw = [
+        {
+            "time": "09:44",
+            "symbol": "600519",
+            "side": "buy",
+            "priority": "L4-形态",
+            "reason": "下探后低峰确认回升",
+            "qty": 100,
+            "executed": True,
+        },
+        {
+            "time": "10:12",
+            "symbol": "300750",
+            "side": "sell",
+            "priority": "P7",
+            "reason": "涨7%+高换手减半",
+            "qty": 200,
+            "executed": False,
+        },
+        {
+            "time": "13:05",
+            "symbol": "601318",
+            "side": "sell",
+            "priority": "P10",
+            "reason": "浮盈≥20%人工复核",
+            "qty": 500,
+            "executed": True,
+        },
+    ]
+    items = [
+        {**s, "price": round(_price_at(s["symbol"], s["time"]), 2)}
+        for s in raw
+        if s["symbol"] == symbol
+    ]
+    return {"demo": True, "symbol": symbol, "items": items}
+
+
 # ============================================================
 # 日内买入候选 (priority)
 # ============================================================

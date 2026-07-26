@@ -4,6 +4,7 @@ const BASE = '/api/frontier'
 export interface ListItem {
   symbol: string
   board: string
+  day_change: number
   pred_ret_1d: number
   pred_ret_3d: number
   pred_ret_5d: number
@@ -17,6 +18,7 @@ export interface ListItem {
   name?: string
   industry?: string
   priority?: boolean
+  added_at?: number
 }
 
 export interface LatestList {
@@ -49,6 +51,17 @@ export interface SectorItem {
   intraday: number[]
 }
 
+export interface SignalItem {
+  time: string
+  symbol: string
+  side: 'buy' | 'sell'
+  price: number
+  qty: number
+  priority?: string
+  reason?: string
+  executed?: boolean
+}
+
 export interface BacktestMetrics {
   total_return: number
   annual_return: number
@@ -78,6 +91,8 @@ export const api = {
   intraday: (symbol: string) =>
     req<{ items: IntradayPoint[] }>(`/intraday/${symbol}`),
   sectors: () => req<{ demo: boolean; items: SectorItem[] }>('/sectors'),
+  signals: (symbol: string) =>
+    req<{ demo: boolean; items: SignalItem[] }>(`/signals/${symbol}`),
   priority: () => req<{ symbols: string[] }>('/priority'),
   togglePriority: (symbol: string, name = '') =>
     req<{ priority: boolean }>('/priority/toggle', {

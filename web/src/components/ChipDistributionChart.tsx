@@ -12,13 +12,15 @@ import type { OhlcBar } from '../api'
 export function ChipDistributionChart({
   data,
   height = 260,
+  priceRange,
 }: {
   data: OhlcBar[]
   height?: number
+  priceRange?: { min: number; max: number }
 }) {
   const close = data.map((d) => d.close)
-  const min = Math.min(...close)
-  const max = Math.max(...close)
+  const min = priceRange?.min ?? Math.min(...close)
+  const max = priceRange?.max ?? Math.max(...close)
   const bins = 20
   const step = (max - min) / bins || 1
   const counts = new Array(bins).fill(0)
@@ -34,7 +36,13 @@ export function ChipDistributionChart({
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={chartData} layout="vertical">
         <XAxis type="number" tick={{ fill: '#8b949e', fontSize: 10 }} />
-        <YAxis dataKey="price" type="category" tick={{ fill: '#8b949e', fontSize: 10 }} width={50} />
+        <YAxis
+          dataKey="price"
+          type="category"
+          domain={[min, max]}
+          tick={{ fill: '#8b949e', fontSize: 10 }}
+          width={50}
+        />
         <Tooltip
           contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
           labelStyle={{ color: '#8b949e' }}
