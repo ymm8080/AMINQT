@@ -16,6 +16,80 @@ from app.pipeline1.train_runner import prepare_board_frame, run_training
 from tests.test_daily_pipeline import make_panel
 
 
+# ---------------- 数据源级联 + 硬超时 ----------------
+class TestFetchCascade:
+    def test_fallback_order_and_down_flag(self, tmp_path):
+        """akshare 失败 → sina; 失败后本次运行内跳过该源."""
+        from app.pipeline1.data_supply import DataSupplyChain
+
+        supply = DataSupplyChain(cache_dir=str(tmp_path))
+        calls = []
+        good = pd.DataFrame({"symbol": ["600519"], "date": [pd.Timestamp("2026-07-24")]})
+
+        def fail(symbol, start, end):
+            calls.append("fail")
+            raise ConnectionError("boom")
+
+        supply._akshare_fetch_hist = fail
+        supply._sina_fetch_hist = lambda s, a, b: (calls.append("sina"), good)[1]
+        df = supply._default_fetch_hist("600519", "2023-01-01", "2026-07-24")
+        assert len(df) == 1 and calls == ["fail", "sina"]
+        # 第二次: akshare 已被标记 down, 直走 sina
+        supply._default_fetch_hist("600519", "2023-01-01", "2026-07-24")
+        assert calls == ["fail", "sina", "sina"]
+
+    def test_all_sources_fail_raises(self, tmp_path):
+        from app.pipeline1.data_supply import DataSupplyChain, DataSupplyError
+
+        supply = DataSupplyChain(cache_dir=str(tmp_path))
+        for name in ("_akshare_fetch_hist", "_sina_fetch_hist", "_baostock_fetch_hist"):
+            setattr(supply, name, lambda s, a, b: (_ for _ in ()).throw(ConnectionError("x")))
+        with pytest.raises(DataSupplyError, match="全部数据源失败"):
+            supply._default_fetch_hist("600519", "2023-01-01", "2026-07-24")
+
+    def test_with_timeout_on_hang(self):
+        import time
+
+        from app.pipeline1.data_supply import _with_timeout
+
+        with pytest.raises(TimeoutError):
+            _with_timeout(lambda: time.sleep(5), timeout=0.2)
+
+    def test_with_timeout_passthrough_exception(self):
+        from app.pipeline1.data_supply import _with_timeout
+
+        with pytest.raises(ValueError, match="inner"):
+            _with_timeout(lambda: (_ for _ in ()).throw(ValueError("inner")), timeout=1)
+
+
+# ---------------- 窗口深度自适应 (B11) ----------------
+class TestAdaptiveWindow:
+    def test_shallow_data_uses_transition_window(self, tmp_path):
+        """3 年数据经步骤1过滤后 ~490 日 < 750 → 过渡窗口, es/calib 不为空."""
+        dtt.LGB_PARAMS_REG["n_estimators"] = 10
+        dtt.LGB_PARAMS_CLS["n_estimators"] = 10
+        dtt.ES_PATIENCE = 3
+        panel = make_panel(days=500)  # 500 日面板 (< 750 窗口)
+        df = panel.copy()
+        df["label_1d"] = df.groupby("symbol")["close_hfq"].shift(-1) / df["close_hfq"] - 1
+        df["label_3d"] = df.groupby("symbol")["close_hfq"].shift(-3) / df["close_hfq"] - 1
+        df["label_5d"] = df.groupby("symbol")["close_hfq"].shift(-5) / df["close_hfq"] - 1
+        df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
+        trained = trainer.train_window(df, "main", ["f1", "f2"])
+        assert len(trained["segs"]["es"]) > 0
+        assert len(trained["segs"]["calib"]) > 0
+        assert len(trained["segs"]["test"]) > 0
+
+    def test_too_shallow_raises(self, tmp_path):
+        panel = make_panel(days=160)  # < 130+50 下限
+        df = panel.copy()
+        df["label_1d"] = 0.01
+        trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
+        with pytest.raises(RuntimeError, match="深度不足"):
+            trainer.train_window(df, "main", ["f1", "f2"])
+
+
 # ---------------- enrich_panel ----------------
 class TestEnrichPanel:
     def _mini(self) -> pd.DataFrame:

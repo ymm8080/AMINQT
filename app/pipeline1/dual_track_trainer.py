@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 
 WINDOW_TOTAL = 750  # [V3.8] 620/20/20/90
 WINDOW_TRANSITION = 540  # [B11] 回填达标前过渡窗口
+B11_FULL_DEPTH = 1250  # [B11] 回填达标线 (≥5 年交易日): 达到才用 750 窗口
+MIN_TRAIN_DAYS = 50  # 窗口 train 段下限, 不足即拒绝训练
 TRAIN_DAYS = 620  # [V3.8] 训练 620 天
 ES_DAYS = 20  # 早停验证
 CALIB_DAYS = 20  # 校准 (与早停物理隔离)
@@ -170,9 +172,20 @@ class DualTrackTrainer:
     ) -> dict:
         """训练一个板块的 4 个模型 + E1 分位数五模型 + E2 痛苦预警 (标签齐备时).
 
+        窗口深度自适应: ≥1250 交易日 (B11 达标) → 750; 否则过渡 min(540, 实际深度).
+        3 年数据经步骤1 (list_days≥250) 过滤后约 490 日, 750 窗口会让 es/calib 落空.
         返回 {kind: (model, label)} + 元数据 + ['quantile_models'/'pain_model'].
         """
-        segs = self.split_window(df)
+        depth = int(df.groupby("symbol")["date"].nunique().min()) if len(df) else 0
+        window = WINDOW_TOTAL if depth >= B11_FULL_DEPTH else min(WINDOW_TRANSITION, depth)
+        if window - (ES_DAYS + CALIB_DAYS + TEST_DAYS) < MIN_TRAIN_DAYS:
+            raise RuntimeError(
+                f"[{board}] 训练样本深度不足: {depth} 交易日 "
+                f"(需 ≥ {ES_DAYS + CALIB_DAYS + TEST_DAYS + MIN_TRAIN_DAYS})"
+            )
+        if window != WINDOW_TOTAL:
+            logger.info("[%s] B11 过渡窗口: 深度 %d 日 → 窗口 %d", board, depth, window)
+        segs = self.split_window(df, window)
         out = {"board": board, "feature_cols": feature_cols, "models": {}, "segs": segs}
         for kind in MODEL_KINDS:
             model, label = self._train_one(kind, segs, feature_cols)
