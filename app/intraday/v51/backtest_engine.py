@@ -22,6 +22,7 @@ from .buy_engine import trigger as buy_trigger
 from .cost_model import CostModel, round_trip_cost
 from .fund_manager import FundManager
 from .position import Position
+from .safe_div import safe_divide
 from .sell_engine import SellContext
 from .sell_engine import trigger as sell_trigger
 from .sessions import buy_window_open
@@ -104,7 +105,7 @@ class IntradayBacktester:
         # 成交: ±1 档限价 + 成本
         px = limit_order_price(bar.close, "buy")
         amount = self.cash * dc.position_weight
-        qty = int(amount / px / 100) * 100
+        qty = int(safe_divide(amount, px) / 100) * 100
         if qty <= 0:
             return pos
         cost = qty * px * round_trip_cost(dc.adv_20d, qty * px, self.costs) / 2
@@ -130,7 +131,7 @@ class IntradayBacktester:
             limit_down_price=dc.limit_down_price,
             limit_up_price=dc.limit_up_price,
             turnover_pct=dc.turnover_pct,
-            change_pct=bar.close / dc.pre_close - 1,
+            change_pct=safe_divide(bar.close, dc.pre_close) - 1,
             atr_pct=dc.atr_pct,
             invalidation=dc.invalidation,
         )
@@ -167,7 +168,7 @@ class IntradayBacktester:
             "qty": qty,
             "rule": r["rule"],
             "reason": r["reason"],
-            "pnl": bar.close / pos.entry_price - 1,
+            "pnl": safe_divide(bar.close, pos.entry_price) - 1,
         }
 
     # ---------------- 单日回放 ----------------
@@ -199,7 +200,7 @@ class IntradayBacktester:
         # 日终净值 → 保险丝/停机线
         nav = self.cash + (pos.total_qty * dc.bars[-1].close if pos else 0)
         if start_nav > 0:
-            self.fm.on_daily_pnl(nav / start_nav - 1)
+            self.fm.on_daily_pnl(safe_divide(nav, start_nav) - 1)
         self.fm.on_nav(nav)
         res.end_position = pos
         return res

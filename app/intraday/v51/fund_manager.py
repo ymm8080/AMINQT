@@ -16,6 +16,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+from .safe_div import safe_divide
+
 logger = logging.getLogger(__name__)
 
 MAX_BUY_PER_SYMBOL_PER_DAY = 1  # 单票每日最多买 1 次, 绝不补仓
@@ -76,7 +78,7 @@ class FundManager:
 
     def on_nav(self, nav: float) -> None:
         self.peak_nav = max(self.peak_nav, nav)
-        if self.peak_nav > 0 and nav / self.peak_nav - 1 <= -HALT_DRAWDOWN:
+        if self.peak_nav > 0 and safe_divide(nav, self.peak_nav) - 1 <= -HALT_DRAWDOWN:
             if not self.halted:
                 self.halted = True
                 logger.critical(
