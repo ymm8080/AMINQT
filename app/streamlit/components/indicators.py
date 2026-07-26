@@ -1,7 +1,7 @@
 """
 参考指标图表组件 (P10)
 ========================
-基于 D:\aminqt\reference\indicator 四个指标公式绘制的简化版图案。
+基于 D:\\aminqt\\reference\\indicator 四个指标公式绘制的简化版图案。
 当前使用 demo OHLC 数据做近似计算; 生产环境可替换为真实日线。
 
 四个指标:

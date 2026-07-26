@@ -5,6 +5,11 @@
 - 自动买/卖独立开关
 - 手动模式信号确认 / 自动模式直接报单
 - 委托队列、成交回报、持仓列表 (SimExecutor 演示)
+
+变更点 (看板.docx):
+- 交易控制按钮移至顶栏, 尺寸紧凑
+- 行情图放大并在下方显示成交量
+- 个股日曲线支持跳转查看
 """
 
 from __future__ import annotations
@@ -15,7 +20,7 @@ import pandas as pd
 import streamlit as st
 
 from app.streamlit import data_service as ds
-from app.streamlit.components import intraday_chart
+from app.streamlit.components import intraday_chart, kline_chart
 from app.streamlit.components.trading_panel import (
     render_order_queue,
     render_position_list,
@@ -28,6 +33,8 @@ from services.trading_state_machine import TradingStateMachine
 
 
 # Streamlit 会话级单例: 状态机 + 委托管理器
+
+
 def _get_state_machine() -> TradingStateMachine:
     if "trading_sm" not in st.session_state:
         st.session_state.trading_sm = TradingStateMachine()
@@ -38,6 +45,9 @@ def _get_order_manager() -> OrderManager:
     if "order_manager" not in st.session_state:
         st.session_state.order_manager = OrderManager()
     return st.session_state.order_manager
+
+
+# 演示数据
 
 
 def _demo_signals() -> list[dict]:
@@ -98,6 +108,9 @@ def _account_snapshot() -> dict:
     return {"total_asset": 1018000.0, "available_cash": 817400.0, "frozen": 0.0}
 
 
+# ---------- 页面入口 ----------
+
+
 def render() -> None:
     st.header("交易看板 · Pipeline 2")
     st.caption("状态机 + 委托管理器已接入 (SimExecutor 演示模式, 不真实下单)")
@@ -105,24 +118,51 @@ def render() -> None:
     sm = _get_state_machine()
     om = _get_order_manager()
 
+    # 顶栏: 交易控制按钮紧凑排布
+    with st.container():
+        st.subheader("交易控制")
+        render_trading_control(sm, drawdown_pct=0.0)
+
+    st.divider()
+
+    # 三栏主体
     left, mid, right = st.columns([3, 4, 3])
 
-    # ---------- 左栏: 行情 ----------
+    # ---------- 左栏: 行情 + 成交量 ----------
     with left:
         st.subheader("行情")
+        default_symbol = st.session_state.get("trading_symbol", ds.DEMO_SYMBOLS[0])
+        default_index = (
+            ds.DEMO_SYMBOLS.index(default_symbol)
+            if default_symbol in ds.DEMO_SYMBOLS
+            else 0
+        )
         symbol = st.selectbox(
             "标的",
             ds.DEMO_SYMBOLS,
+            index=default_index,
             format_func=lambda s: f"{s} {ds.DEMO_NAMES.get(s, '')}",
         )
-        df = ds.demo_intraday(symbol)
-        last_price = float(df["price"].iloc[-1])
-        first_price = float(df["price"].iloc[0])
+        # 消费掉跳转标记, 避免刷新后仍锁定
+        st.session_state.pop("trading_symbol", None)
+        ohlc = ds.demo_ohlc(symbol)
+        last_price = float(ohlc["close"].iloc[-1])
+        first_price = float(ohlc["close"].iloc[0])
         st.metric(
             "最新价", f"{last_price:.2f}", f"{(last_price / first_price - 1):+.2%}"
         )
+
+        # 日K线图 (放大 + 成交量)
         st.plotly_chart(
-            intraday_chart(df, prev_close=first_price), use_container_width=True
+            kline_chart(ohlc, ma_list=(5, 10, 20), title=f"{symbol} 日K"),
+            use_container_width=True,
+        )
+
+        # 分时图 (带成交量/VWAP)
+        df = ds.demo_intraday(symbol)
+        st.plotly_chart(
+            intraday_chart(df, prev_close=first_price, title=f"{symbol} 分时"),
+            use_container_width=True,
         )
         st.caption("五档盘口: 待 miniQMT xtdata.get_quote 接入")
 
@@ -144,11 +184,8 @@ def render() -> None:
             use_container_width=True,
         )
 
-    # ---------- 中栏: 状态机 + 信号 ----------
+    # ---------- 中栏: 信号 ----------
     with mid:
-        st.subheader("交易控制")
-        render_trading_control(sm, drawdown_pct=0.0)
-
         st.subheader("信号列表")
         render_signal_list(sm, om, _demo_signals())
 
