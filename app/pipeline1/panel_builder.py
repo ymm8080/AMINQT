@@ -133,8 +133,12 @@ def assemble_panel(
         enrich 后的全 symbol 面板 (symbol/date 升序)
     """
     end_str = end or datetime.now().strftime("%Y-%m-%d")
+    # 缓存键含 universe 哈希: 同一截止日期不同股票池不得共享面板缓存
+    import hashlib
+
+    universe_hash = hashlib.md5("|".join(sorted(symbols)).encode()).hexdigest()[:8]
     cache_path = os.path.join(
-        cache_dir, f"panel_{end_str.replace('-', '')}_{years}y.parquet"
+        cache_dir, f"panel_{end_str.replace('-', '')}_{years}y_{universe_hash}.parquet"
     )
     if not refresh and os.path.exists(cache_path):
         logger.info("命中面板缓存: %s", cache_path)
