@@ -64,6 +64,7 @@ tr:hover td { background: #1c2128; cursor: pointer; }
 .up { color: var(--up); }
 .down { color: var(--down); }
 .dim { color: var(--dim); }
+.selected-row td { background: #1f6feb22 !important; }
 .grid { display: grid; gap: 16px; }
 .grid-2 { grid-template-columns: 1fr 1fr; }
 .grid-3 { grid-template-columns: 1fr 1fr 1fr; }

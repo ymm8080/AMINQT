@@ -4,6 +4,7 @@ const BASE = '/api/frontier'
 export interface ListItem {
   symbol: string
   board: string
+  day_change: number
   pred_ret_1d: number
   pred_ret_3d: number
   pred_ret_5d: number
@@ -16,6 +17,8 @@ export interface ListItem {
   schema_version: string
   name?: string
   industry?: string
+  priority?: boolean
+  added_at?: number
 }
 
 export interface LatestList {
@@ -32,6 +35,31 @@ export interface OhlcBar {
   low: number
   close: number
   volume: number
+}
+
+export interface IntradayPoint {
+  time: string
+  price: number
+  volume: number
+}
+
+export interface SectorItem {
+  板块: string
+  涨跌幅: number
+  上涨家数: number
+  下跌家数: number
+  intraday: number[]
+}
+
+export interface SignalItem {
+  time: string
+  symbol: string
+  side: 'buy' | 'sell'
+  price: number
+  qty: number
+  priority?: string
+  reason?: string
+  executed?: boolean
 }
 
 export interface BacktestMetrics {
@@ -60,6 +88,18 @@ export const api = {
   latestList: () => req<LatestList>('/list/latest'),
   ohlc: (symbol: string, days = 120) =>
     req<{ items: OhlcBar[] }>(`/ohlc/${symbol}?days=${days}`),
+  intraday: (symbol: string) =>
+    req<{ items: IntradayPoint[] }>(`/intraday/${symbol}`),
+  sectors: () => req<{ demo: boolean; items: SectorItem[] }>('/sectors'),
+  signals: (symbol: string) =>
+    req<{ demo: boolean; items: SignalItem[] }>(`/signals/${symbol}`),
+  priority: () => req<{ symbols: string[] }>('/priority'),
+  togglePriority: (symbol: string, name = '') =>
+    req<{ priority: boolean }>('/priority/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol, name }),
+    }),
   watchlist: () => req<{ items: { symbol: string; name?: string; note?: string }[] }>('/watchlist'),
   toggleWatch: (symbol: string, name = '') =>
     req<{ watched: boolean }>('/watchlist/toggle', {
@@ -67,17 +107,17 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ symbol, name }),
     }),
-  runBacktest: (params: Record<string, number>) =>
+  runBacktest: (params: Record<string, unknown>) =>
     req<BacktestResult>('/backtest/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     }),
-  runTune: (params: string[]) =>
+  runTune: (params: string[], objective: string, maxDdLimit: number | null, ranges: Record<string, [number, number, number]>) =>
     req<Record<string, unknown>>('/backtest/tune', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ params }),
+      body: JSON.stringify({ params, objective, max_dd_limit: maxDdLimit, ranges }),
     }),
   ruleConfig: () =>
     req<{ tunable: Record<string, { value: number; bounds: number[] }> }>('/config/rules'),
