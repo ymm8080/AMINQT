@@ -86,7 +86,7 @@ class FundManager:
                 )
 
     def new_day(self) -> None:
-        """每日开盘前 reset (停机线/保险丝触发状态跨日保持)."""
+        """每日开盘前 reset (停机线 halted 跨日保持; 保险丝按日重置)."""
         self._bought_today.clear()
         self._new_positions_today = 0
         self._cooldown.clear()

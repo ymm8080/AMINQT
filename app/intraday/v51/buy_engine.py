@@ -152,8 +152,13 @@ def b2_evening_strength(
 # ============================================================
 # 买入决策链 (纯函数)
 # ============================================================
-def trigger(ctx: BuyContext, bars: tuple[Bar, ...]) -> dict:
+def trigger(
+    ctx: BuyContext, bars: tuple[Bar, ...], costs: CostModel | None = None
+) -> dict:
     """买入决策链: 否决链 B3-B8 → 正向 B1/B2.
+
+    Args:
+        costs: 成本模型 (B5 闸门用; 默认 CostModel() — 回测需透传自定义成本).
 
     Returns:
         {'pass': bool, 'vetoes': [...], 'positive': 'B1'/'B2'/None}
@@ -168,7 +173,10 @@ def trigger(ctx: BuyContext, bars: tuple[Bar, ...]) -> dict:
         ("B7", b7_stop_distance_veto),
         ("B8", b8_sector_crash_veto),
     ):
-        if fn(ctx):
+        if name == "B5":
+            if b5_net_edge_veto(ctx, costs):
+                vetoes.append(name)
+        elif fn(ctx):
             vetoes.append(name)
     positive = None
     if not vetoes:

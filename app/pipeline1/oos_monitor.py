@@ -18,7 +18,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
-from scipy.stats import spearmanr
+
+from app.utils.daily_rank_ic import cross_sectional_rank_ic
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +56,8 @@ class OOSMonitor:
     def daily_rank_ic(pred_scores: pd.Series, actual_returns: pd.Series) -> float:
         """Top 15 清单预测得分 vs 次日实际收益的 Spearman IC."""
         df = pd.DataFrame({"s": pred_scores, "r": actual_returns}).dropna()
-        if len(df) < 5:
-            return 0.0
-        return float(spearmanr(df["s"], df["r"]).statistic)
+        ic = cross_sectional_rank_ic(df["s"], df["r"], min_x_unique=2, min_y_unique=1)
+        return 0.0 if np.isnan(ic) else float(ic)
 
     # ---------------- E4: IC 日度三色灯 ----------------
     def ic_traffic_light(self, ic_today: float) -> str:
