@@ -377,7 +377,7 @@ class TestHTTPError:
 class TestPostComment:
     """Reviews must be posted as formal PR reviews (visible in Files changed).
 
-    The pulls reviews API is used with ``event=COMMENTED`` so the review
+    The pulls reviews API is used with ``event=COMMENT`` so the review
     appears in both the Conversation tab and the Files changed tab.
     """
 
@@ -409,7 +409,7 @@ class TestPostComment:
         review = {"issues": [], "summary": "ok"}
         dsr.post_comment("1", "owner/repo", "tok", review)
 
-        assert captured["body"]["event"] == "COMMENTED"
+        assert captured["body"]["event"] == "COMMENT"
 
     def test_error_review_shows_failed_banner(self, monkeypatch):
         captured = {}
