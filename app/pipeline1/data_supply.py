@@ -56,9 +56,16 @@ def _ak_call(fn, *args, retries: int = 3, backoff: float = 2.0, **kwargs):
         except Exception as exc:  # noqa: BLE001 — 网络层异常类型多样, 统一重试
             last = exc
             wait = backoff * (attempt + 1)
-            logger.warning("akshare 调用失败 (%s), %.1fs 后重试 %d/%d", exc, wait, attempt + 1, retries)
+            logger.warning(
+                "akshare 调用失败 (%s), %.1fs 后重试 %d/%d",
+                exc,
+                wait,
+                attempt + 1,
+                retries,
+            )
             time.sleep(wait)
     raise last
+
 
 # 标准列: symbol, date, board, open/high/low/close (raw), open_hfq..close_hfq,
 #         volume, amount, turnover_rate, pre_close, is_suspended, is_st,
@@ -152,7 +159,9 @@ class DataSupplyChain:
             try:
                 return _with_timeout(lambda: fn(symbol, start, end), FETCH_TIMEOUT)
             except Exception as exc:
-                logger.warning("%s 历史拉取失败 %s (%s) → 本次运行内切换下一源", name, symbol, exc)
+                logger.warning(
+                    "%s 历史拉取失败 %s (%s) → 本次运行内切换下一源", name, symbol, exc
+                )
                 down.add(name)
                 last = exc
         raise DataSupplyError(f"全部数据源失败 {symbol}: {last}")
@@ -170,12 +179,18 @@ class DataSupplyChain:
         exchange = "sh" if code6.startswith(("6", "9")) else "sz"
         sina_code = f"{exchange}{code6}"
         raw = _ak_call(
-            ak.stock_zh_a_daily, symbol=sina_code,
-            start_date=start, end_date=end, adjust="",
+            ak.stock_zh_a_daily,
+            symbol=sina_code,
+            start_date=start,
+            end_date=end,
+            adjust="",
         )
         hfq = _ak_call(
-            ak.stock_zh_a_daily, symbol=sina_code,
-            start_date=start, end_date=end, adjust="hfq",
+            ak.stock_zh_a_daily,
+            symbol=sina_code,
+            start_date=start,
+            end_date=end,
+            adjust="hfq",
         )
         if raw is None or len(raw) == 0:
             raise DataSupplyError(f"sina 无数据: {symbol}")
@@ -190,9 +205,20 @@ class DataSupplyChain:
         df["pre_close"] = df["close"].shift(1)
         return df[
             [
-                "symbol", "date", "open", "high", "low", "close",
-                "open_hfq", "high_hfq", "low_hfq", "close_hfq",
-                "volume", "amount", "turnover_rate", "pre_close",
+                "symbol",
+                "date",
+                "open",
+                "high",
+                "low",
+                "close",
+                "open_hfq",
+                "high_hfq",
+                "low_hfq",
+                "close_hfq",
+                "volume",
+                "amount",
+                "turnover_rate",
+                "pre_close",
             ]
         ]
 
@@ -235,15 +261,28 @@ class DataSupplyChain:
 
         def query(adjustflag: str) -> pd.DataFrame:
             rs = bs.query_history_k_data_plus(
-                bs_code, fields, start_date=start, end_date=end,
-                frequency="d", adjustflag=adjustflag,
+                bs_code,
+                fields,
+                start_date=start,
+                end_date=end,
+                frequency="d",
+                adjustflag=adjustflag,
             )
             rows = []
             while rs.error_code == "0" and rs.next():
                 rows.append(rs.get_row_data())
             df = pd.DataFrame(
-                rows, columns=["date", "open", "high", "low", "close",
-                               "volume", "amount", "turnover_rate"]
+                rows,
+                columns=[
+                    "date",
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "volume",
+                    "amount",
+                    "turnover_rate",
+                ],
             )
             return df
 
@@ -262,9 +301,20 @@ class DataSupplyChain:
         df["pre_close"] = df["close"].shift(1)
         return df[
             [
-                "symbol", "date", "open", "high", "low", "close",
-                "open_hfq", "high_hfq", "low_hfq", "close_hfq",
-                "volume", "amount", "turnover_rate", "pre_close",
+                "symbol",
+                "date",
+                "open",
+                "high",
+                "low",
+                "close",
+                "open_hfq",
+                "high_hfq",
+                "low_hfq",
+                "close_hfq",
+                "volume",
+                "amount",
+                "turnover_rate",
+                "pre_close",
             ]
         ]
 

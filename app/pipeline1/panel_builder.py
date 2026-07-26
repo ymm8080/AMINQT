@@ -77,8 +77,12 @@ def load_or_fetch_meta(
             logger.info("行业元数据进度: %d/%d 板块", i + 1, len(boards))
 
     with open(path, "w", encoding="utf-8") as fh:
-        json.dump({"industry_map": industry_map, "name_map": name_map}, fh, ensure_ascii=False)
-    logger.info("元数据: %d 行业映射, %d 名称 → %s", len(industry_map), len(name_map), path)
+        json.dump(
+            {"industry_map": industry_map, "name_map": name_map}, fh, ensure_ascii=False
+        )
+    logger.info(
+        "元数据: %d 行业映射, %d 名称 → %s", len(industry_map), len(name_map), path
+    )
     return industry_map, name_map
 
 
