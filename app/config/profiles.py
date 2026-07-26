@@ -24,7 +24,7 @@ PROFILES: dict[str, dict] = {
         "drawdown_limit": 0.15,
         "target_holding_days": (2.5, 3.5),
     },
-    # 狙击满仓档 (用户定稿): 高置信才出手, 出手即满仓
+    # 狙击满仓档 C档 (1只×100%): 锁定待 D.10 裁决 + 实盘40笔双闸门解锁 (P21.0)
     "aggressive": {
         "max_positions": 1,
         "single_cap": 1.00,  # 仅 A 级信号允许满仓
@@ -43,7 +43,7 @@ PROFILES: dict[str, dict] = {
         "target_holding_days": (1, 2),
         "expected_idle_ratio": 0.75,  # 门槛 0.68+Top2 → 预计 75% 交易日空仓 (特性非故障)
     },
-    # B 档 (1只×75%, prob_entry 0.58): 回退/验证档 (D.10 裁决对象)
+    # B 档 (1只×75%, prob_entry 0.58): 生产档 (V3.8 定稿); 兼 D.10 回退/验证档
     "aggressive_b": {
         "max_positions": 1,
         "single_cap": 0.75,
@@ -57,7 +57,15 @@ PROFILES: dict[str, dict] = {
 }
 
 # 切档的唯一入口 (D.1): 改这一行 = 全系统切档
-ACTIVE_PROFILE = "aggressive"
+# V3.8 定稿: 生产档 = B档 (单票75%); C档 (100%) 锁定待 D.10 裁决 +
+# 实盘40笔双闸门 (期望>+0.5%/笔 且 最大连亏≤5) 解锁, 此前 ACTIVE_PROFILE
+# 不得指向 "aggressive" (参数读取用于影子清单/D.10回测不受限).
+C_PROFILE_LOCKED = True
+ACTIVE_PROFILE = "aggressive_b"
+
+assert not (
+    C_PROFILE_LOCKED and ACTIVE_PROFILE == "aggressive"
+), "C档(100%)锁定: D.10裁决+40笔双闸门通过前不可启用为生产档"
 
 
 def get_profile(name: str | None = None) -> dict:
