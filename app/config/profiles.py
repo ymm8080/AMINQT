@@ -79,3 +79,19 @@ def get_profile(name: str | None = None) -> dict:
 def is_aggressive(name: str | None = None) -> bool:
     """是否攻击档 (stable 之外的狙击/回退档)."""
     return (name or ACTIVE_PROFILE) != "stable"
+
+
+def resolve_live_profile(journal=None, d10_c_approved: bool = False) -> str:
+    """P21.3 实盘解锁双闸门 (D.10): 前 40 笔实盘按 B 档执行;
+    D.10 回测裁决选 C 且 40 笔样本满足 期望>+0.5%/笔 且 最大连亏≤5,
+    方可切 C 档. 任一闸门不过 → "aggressive_b" (失败要大声, 默认保守).
+
+    Args:
+        journal: TradeJournal (实盘成交日志); 样本不足时 unlock_check 即否决
+        d10_c_approved: D.10 回测裁决是否选 C (四条件全满足, 事前冻结标准)
+    """
+    if not d10_c_approved:
+        return "aggressive_b"
+    if journal is None:
+        return "aggressive_b"
+    return "aggressive" if journal.unlock_check()["unlock"] else "aggressive_b"
