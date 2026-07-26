@@ -39,7 +39,12 @@ def render_trading_control(sm: TradingStateMachine, drawdown_pct: float = 0.0) -
 
     with col_buy:
         if sm.auto_buy_enabled:
-            if st.button("⏹ 停止买入", key="stop_auto_buy", type="primary", use_container_width=True):
+            if st.button(
+                "⏹ 停止买入",
+                key="stop_auto_buy",
+                type="primary",
+                use_container_width=True,
+            ):
                 sm.disable_auto_buy()
                 st.rerun()
         else:
@@ -50,7 +55,12 @@ def render_trading_control(sm: TradingStateMachine, drawdown_pct: float = 0.0) -
 
     with col_sell:
         if sm.auto_sell_enabled:
-            if st.button("⏹ 停止卖出", key="stop_auto_sell", type="primary", use_container_width=True):
+            if st.button(
+                "⏹ 停止卖出",
+                key="stop_auto_sell",
+                type="primary",
+                use_container_width=True,
+            ):
                 sm.disable_auto_sell()
                 st.rerun()
         else:
@@ -67,7 +77,9 @@ def render_trading_control(sm: TradingStateMachine, drawdown_pct: float = 0.0) -
         if c2.button("⏯ 恢复", key="resume_all", use_container_width=True):
             sm.resume()
             st.rerun()
-        if c3.button("⏹ 停止", key="stop_all", type="primary", use_container_width=True):
+        if c3.button(
+            "⏹ 停止", key="stop_all", type="primary", use_container_width=True
+        ):
             sm.stop_all()
             st.rerun()
 

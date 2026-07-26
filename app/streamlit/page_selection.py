@@ -28,6 +28,7 @@ from .components import (
 
 # ---------- 数据加载 ----------
 
+
 def _pool_df() -> tuple:
     """真实清单优先, 否则演示数据 (显著标记)."""
     lst, date = ds.load_latest_list()
@@ -37,6 +38,7 @@ def _pool_df() -> tuple:
 
 
 # ---------- 选股池: 人为添加股票 ----------
+
 
 def _add_symbol_to_pool(pool: pd.DataFrame, symbol: str) -> pd.DataFrame:
     """把用户输入的股票代码追加到选股池 (演示模式补充基本信息)."""
@@ -63,6 +65,7 @@ def _add_symbol_to_pool(pool: pd.DataFrame, symbol: str) -> pd.DataFrame:
 
 # ---------- 显示列 ----------
 
+
 def _display_cols(pool: pd.DataFrame) -> list[str]:
     """选股池展示列 (保持稳定的列顺序)."""
     candidates = [
@@ -82,6 +85,7 @@ def _display_cols(pool: pd.DataFrame) -> list[str]:
 
 # ---------- 页面入口 ----------
 
+
 def render() -> None:
     st.header("选股看板 · Pipeline 1 (V3.5)")
     pool, pool_date, is_demo = _pool_df()
@@ -94,7 +98,9 @@ def render() -> None:
 
     # 人为添加股票
     with st.expander("➕ 添加股票到选股池", expanded=False):
-        new_sym = st.text_input("输入股票代码", placeholder="如 600519", key="add_symbol")
+        new_sym = st.text_input(
+            "输入股票代码", placeholder="如 600519", key="add_symbol"
+        )
         if st.button("添加", key="btn_add_symbol"):
             pool = _add_symbol_to_pool(pool, new_sym)
             st.session_state["selection_pool_override"] = pool
@@ -132,6 +138,7 @@ def render() -> None:
 
 # ---------- 选股池表格 ----------
 
+
 def _render_pool_table(pool: pd.DataFrame) -> None:
     """渲染选股池表格, 含日内走势 sparkline 与买入标记."""
     show = pool.copy()
@@ -151,9 +158,11 @@ def _render_pool_table(pool: pd.DataFrame) -> None:
 
     # 日内买入标记列
     display["日内买入"] = display["symbol"].apply(
-        lambda s: bool(show.loc[show["symbol"] == s, "priority"].iloc[0])
-        if "priority" in show.columns
-        else False
+        lambda s: (
+            bool(show.loc[show["symbol"] == s, "priority"].iloc[0])
+            if "priority" in show.columns
+            else False
+        )
     )
 
     # 列顺序: 代码/名称/走势/评分等
@@ -197,6 +206,7 @@ def _render_pool_table(pool: pd.DataFrame) -> None:
 
 
 # ---------- 详情面板 ----------
+
 
 def _render_detail_panel(pool: pd.DataFrame) -> None:
     """右侧详情面板: 切股 + 标记 + K线/分时/指标."""
@@ -255,6 +265,7 @@ def _render_detail_panel(pool: pd.DataFrame) -> None:
 
 
 # ---------- 图表区 ----------
+
 
 def _render_charts(symbol: str) -> None:
     """个股 K线/分时 + 参考指标图案 + 筹码分布."""
@@ -361,7 +372,13 @@ def _render_sector_panel() -> None:
     sector_df = ds.demo_sector_changes()
     # 为每个板块生成日内分时收益序列
     sector_df["日内走势"] = sector_df["板块"].apply(
-        lambda s: ((ds.demo_sector_intraday(s)["price"] / ds.demo_sector_intraday(s)["price"].iloc[0]) - 1).tolist()
+        lambda s: (
+            (
+                ds.demo_sector_intraday(s)["price"]
+                / ds.demo_sector_intraday(s)["price"].iloc[0]
+            )
+            - 1
+        ).tolist()
     )
     st.dataframe(
         sector_df,
@@ -381,6 +398,7 @@ def _render_sector_panel() -> None:
 
 
 # ---------- 全市场 ----------
+
 
 def _render_market_tab() -> None:
     """全市场演示 tab."""
