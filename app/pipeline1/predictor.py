@@ -84,8 +84,13 @@ class V35Predictor:
         if "rank_model" in bundle:
             latest["rank_score"] = bundle["rank_model"][0].predict(X)
             keep.append("rank_score")
+        # 当日涨跌幅 (看板 day_change 列): close/pre_close - 1, 除零防护
+        if {"close", "pre_close"} <= set(latest.columns):
+            latest["day_change"] = (
+                latest["close"] / latest["pre_close"].replace(0, np.nan) - 1
+            )
         # [E1] 分布版仓位权重输入; [E6] liquidity_cap 输入
-        for opt in ("ATR_pct", "adv20", "is_limit_up_close", "is_one_word_limit"):
+        for opt in ("ATR_pct", "adv20", "is_limit_up_close", "is_one_word_limit", "day_change"):
             if opt in latest.columns:
                 keep.append(opt)
         return latest[keep].reset_index(drop=True)
