@@ -375,7 +375,41 @@ class TestHTTPError:
 
 
 class TestPostComment:
-    """Error reviews must show 'Review failed', not 'No issues found'."""
+    """Reviews must be posted as formal PR reviews (visible in Files changed).
+
+    The pulls reviews API is used with ``event=COMMENTED`` so the review
+    appears in both the Conversation tab and the Files changed tab.
+    """
+
+    def test_uses_pulls_reviews_endpoint(self, monkeypatch):
+        captured = {}
+
+        def fake_urlopen(req, timeout=None):
+            captured["url"] = req.full_url
+            captured["body"] = json.loads(req.data.decode())
+            return FakeHTTPResponse(b'{"id": 1}')
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        review = {"issues": [], "summary": "ok"}
+        dsr.post_comment("1", "owner/repo", "tok", review)
+
+        assert "/pulls/1/reviews" in captured["url"]
+        assert "/issues/1/comments" not in captured["url"]
+
+    def test_event_is_commented(self, monkeypatch):
+        captured = {}
+
+        def fake_urlopen(req, timeout=None):
+            captured["body"] = json.loads(req.data.decode())
+            return FakeHTTPResponse(b'{"id": 1}')
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        review = {"issues": [], "summary": "ok"}
+        dsr.post_comment("1", "owner/repo", "tok", review)
+
+        assert captured["body"]["event"] == "COMMENTED"
 
     def test_error_review_shows_failed_banner(self, monkeypatch):
         captured = {}
