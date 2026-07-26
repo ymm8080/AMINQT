@@ -43,7 +43,8 @@ def find_bundles(
                 logger.error("模型包缺失: %s", path)
             continue
         candidates = sorted(
-            f for f in os.listdir(model_dir)
+            f
+            for f in os.listdir(model_dir)
             if f.startswith(f"{board}_") and f.endswith(".pkl")
         )
         if candidates:
@@ -89,6 +90,9 @@ def run_prediction(
     n = 0 if result.get("empty") else len(result.get("list", []))
     logger.info(
         "清单生成完成 (%s): mode=%s, %d 只, cap=%.2f",
-        trade_date, result.get("mode"), n, result.get("cap_position", 0.0),
+        trade_date,
+        result.get("mode"),
+        n,
+        result.get("cap_position", 0.0),
     )
     return result

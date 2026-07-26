@@ -95,5 +95,10 @@ def assemble_panel(
     panel = enrich_panel(panel, industry_map=industry_map, name_map=name_map)
     os.makedirs(cache_dir, exist_ok=True)
     panel.to_parquet(cache_path, index=False)
-    logger.info("面板装配完成: %d 股 %d 行 → %s", panel["symbol"].nunique(), len(panel), cache_path)
+    logger.info(
+        "面板装配完成: %d 股 %d 行 → %s",
+        panel["symbol"].nunique(),
+        len(panel),
+        cache_path,
+    )
     return panel
