@@ -39,6 +39,7 @@ export function MacdChart({ data, height = 200 }: { data: OhlcBar[]; height?: nu
         <Tooltip
           contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
           labelStyle={{ color: '#8b949e' }}
+          formatter={(value: unknown, name: string) => [Number(value).toFixed(2), name]}
         />
         <Bar dataKey="bar" fill="#8884d8" name="MACD" />
         <Line type="monotone" dataKey="dif" stroke="#fff" dot={false} name="DIF" />

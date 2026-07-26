@@ -3,7 +3,6 @@ import { api, type ListItem, type OhlcBar, type IntradayPoint, type SectorItem }
 import { ChipDistributionChart } from '../components/ChipDistributionChart'
 import {
   ChipControlChart,
-  FindBullChart,
   MainForceChipsChart,
   TrendTopBottomChart,
 } from '../components/IndicatorCharts'
@@ -67,7 +66,6 @@ export function SelectionPage({ onJumpToTrading }: { onJumpToTrading?: (symbol: 
   }, [detail])
 
   useEffect(() => {
-    api.priority().then((r) => setPriority(new Set(r.symbols))).catch(() => {})
     api.sectors().then((r) => setSectors(r.items)).catch(() => {})
   }, [])
 
@@ -189,8 +187,8 @@ export function SelectionPage({ onJumpToTrading }: { onJumpToTrading?: (symbol: 
                       <span className="dim">{it.industry ?? '-'}</span>
                     )}
                   </td>
-                  <td>{it.score.toFixed(4)}</td>
-                  <td>{it.prob_up.toFixed(3)}</td>
+                  <td>{it.score.toFixed(2)}</td>
+                  <td>{it.prob_up.toFixed(2)}</td>
                   <td>{pct(it.pred_ret_1d)}</td>
                   <td>{pct(it.pred_ret_3d)}</td>
                   <td>{pct(it.pred_ret_5d)}</td>
@@ -246,7 +244,6 @@ export function SelectionPage({ onJumpToTrading }: { onJumpToTrading?: (symbol: 
                   <MacdChart data={ohlc} />
                   <MainForceChipsChart data={ohlc} />
                   <ChipControlChart data={ohlc} />
-                  <FindBullChart data={ohlc} />
                   <TrendTopBottomChart data={ohlc} />
                 </div>
                 <div style={{ width: 160, flexShrink: 0 }}>
