@@ -34,6 +34,10 @@ HALT_DAYS = 7  # 停机一周
 UNLOCK_MIN_TRADES = 40
 UNLOCK_MIN_EXPECTANCY = 0.005  # 期望 > +0.5%/笔
 UNLOCK_MAX_CONSEC_LOSS = 5
+# P19.2 阶段三小资金实盘裁决 (W12, 与 D.10 口径不同: 更早更宽)
+STAGE3_MIN_TRADES = 20
+STAGE3_MIN_EXPECTANCY = 0.003  # 期望 > +0.3%/笔
+STAGE3_MAX_CONSEC_LOSS = 4
 
 STATE_ACTIVE = "ACTIVE"
 STATE_LOCKED_TODAY = "LOCKED_TODAY"  # 日保险丝触发
@@ -234,3 +238,24 @@ class TradeJournal:
                 s["max_consec_loss"],
             )
         return {"unlock": ok, **s}
+
+    def stage3_gate(self) -> dict:
+        """P19.2 阶段三小资金实盘裁决 (W12): 20 笔样本 期望>+0.3%/笔
+        且 最大连亏≤4 → 阶段四部件叠加解锁; 与 D.10 (40笔/0.5%/≤5)
+        口径不同, 单独门禁不得混用.
+        """
+        s = self.sample_stats()
+        n = s.get("n_trades", 0)
+        if n < STAGE3_MIN_TRADES:
+            return {"pass": False, "reason": f"样本不足 {n}/{STAGE3_MIN_TRADES}", **s}
+        ok = (
+            s["expectancy"] > STAGE3_MIN_EXPECTANCY
+            and s["max_consec_loss"] <= STAGE3_MAX_CONSEC_LOSS
+        )
+        if not ok:
+            logger.warning(
+                "P19.2 阶段三裁决否决: 期望 %.3f%% / 最大连亏 %d (门槛 >0.3%% / ≤4)",
+                s["expectancy"] * 100,
+                s["max_consec_loss"],
+            )
+        return {"pass": ok, **s}
