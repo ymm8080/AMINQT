@@ -18,8 +18,8 @@ from services.trading_state_machine import TradingState, TradingStateMachine
 
 
 def render_trading_control(sm: TradingStateMachine, drawdown_pct: float = 0.0) -> None:
-    """渲染交易模式控制面板 (中栏顶部)."""
-    col_state, col_buy, col_sell, col_global = st.columns(4)
+    """渲染交易模式控制面板 (顶栏紧凑排布)."""
+    col_state, col_buy, col_sell, col_global = st.columns([1, 1, 1, 2])
 
     with col_state:
         state_label = {
@@ -39,35 +39,35 @@ def render_trading_control(sm: TradingStateMachine, drawdown_pct: float = 0.0) -
 
     with col_buy:
         if sm.auto_buy_enabled:
-            if st.button("⏹ 停止自动买入", key="stop_auto_buy", type="primary"):
+            if st.button("⏹ 停止买入", key="stop_auto_buy", type="primary", use_container_width=True):
                 sm.disable_auto_buy()
                 st.rerun()
         else:
-            if st.button("▶️ 启动自动买入", key="start_auto_buy"):
+            if st.button("▶️ 启动买入", key="start_auto_buy", use_container_width=True):
                 sm.start()
                 sm.enable_auto_buy()
                 st.rerun()
 
     with col_sell:
         if sm.auto_sell_enabled:
-            if st.button("⏹ 停止自动卖出", key="stop_auto_sell", type="primary"):
+            if st.button("⏹ 停止卖出", key="stop_auto_sell", type="primary", use_container_width=True):
                 sm.disable_auto_sell()
                 st.rerun()
         else:
-            if st.button("▶️ 启动自动卖出", key="start_auto_sell"):
+            if st.button("▶️ 启动卖出", key="start_auto_sell", use_container_width=True):
                 sm.start()
                 sm.enable_auto_sell()
                 st.rerun()
 
     with col_global:
         c1, c2, c3 = st.columns(3)
-        if c1.button("⏸ 暂停", key="pause_all"):
+        if c1.button("⏸ 暂停", key="pause_all", use_container_width=True):
             sm.pause()
             st.rerun()
-        if c2.button("⏯ 恢复", key="resume_all"):
+        if c2.button("⏯ 恢复", key="resume_all", use_container_width=True):
             sm.resume()
             st.rerun()
-        if c3.button("⏹ 停止全部", key="stop_all"):
+        if c3.button("⏹ 停止", key="stop_all", type="primary", use_container_width=True):
             sm.stop_all()
             st.rerun()
 
