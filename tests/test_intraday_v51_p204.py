@@ -107,7 +107,9 @@ class TestTriggerPurityAudit:
                     isinstance(f, ast.Attribute)
                     and f.attr in TestTriggerPurityAudit.FORBIDDEN_ATTR_CALLS
                 ):
-                    violations.append(f"{mod.__name__}: 调用 .{f.attr}() (行{f.lineno})")
+                    violations.append(
+                        f"{mod.__name__}: 调用 .{f.attr}() (行{f.lineno})"
+                    )
         return violations
 
     def test_buy_engine_pure(self):
