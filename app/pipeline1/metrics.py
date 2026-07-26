@@ -52,24 +52,6 @@ def bucket_ic_high_vol(
     )
 
 
-def bucket_ic_high_vol(
-    df: pd.DataFrame,
-    score_col: str,
-    label_col: str,
-    atr_col: str = "ATR_pct",
-) -> float:
-    """E.4 分波动桶 IC: 按 ATR 五桶独立 Rank IC, 取高波动桶 (Q5).
-
-    点火门禁 (P19.0) 高波动桶 IC ≥ 0.02 的直接输入;
-    完整五桶报告见 dynamic_engine.DynamicEngine.bucket_ic.
-    """
-    from .dynamic_engine import DynamicEngine
-
-    return float(
-        DynamicEngine.bucket_ic(df, score_col, label_col, atr_col)["high_vol_ic"]
-    )
-
-
 def ignition_gate(
     df: pd.DataFrame,
     score_col: str,
