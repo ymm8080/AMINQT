@@ -38,7 +38,11 @@ class TestCrossSectionalRankIC:
         assert np.isnan(cross_sectional_rank_ic(x, y))
 
     def test_empty_returns_nan(self):
-        assert np.isnan(cross_sectional_rank_ic(pd.Series([], dtype=float), pd.Series([], dtype=float)))
+        assert np.isnan(
+            cross_sectional_rank_ic(
+                pd.Series([], dtype=float), pd.Series([], dtype=float)
+            )
+        )
 
 
 class TestDailyRankICSeries:
@@ -53,11 +57,7 @@ class TestDailyRankICSeries:
             n = 20
             score = rng.uniform(0, 1, n)
             ret = score + rng.normal(0, 0.1, n)  # 强相关
-            frames.append(
-                pd.DataFrame(
-                    {"date": d, "score": score, "ret": ret}
-                )
-            )
+            frames.append(pd.DataFrame({"date": d, "score": score, "ret": ret}))
         return pd.concat(frames, ignore_index=True)
 
     def test_series_length_equals_unique_dates(self, df):
@@ -115,8 +115,12 @@ class TestMeanRankIC:
                 "ret": [2, 1, 1, 2],  # 第一日 -1, 第二日 +1
             }
         )
-        assert mean_rank_ic(df, "score", "ret", abs_mean=True, min_x_unique=2) == pytest.approx(1.0)
-        assert mean_rank_ic(df, "score", "ret", abs_mean=False, min_x_unique=2) == pytest.approx(0.0)
+        assert mean_rank_ic(
+            df, "score", "ret", abs_mean=True, min_x_unique=2
+        ) == pytest.approx(1.0)
+        assert mean_rank_ic(
+            df, "score", "ret", abs_mean=False, min_x_unique=2
+        ) == pytest.approx(0.0)
 
     def test_empty_returns_zero(self):
         df = pd.DataFrame({"date": [], "score": [], "ret": []})
