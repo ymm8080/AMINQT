@@ -118,13 +118,29 @@ def render() -> None:
         df = ds.demo_intraday(symbol)
         last_price = float(df["price"].iloc[-1])
         first_price = float(df["price"].iloc[0])
-        st.metric(
-            "最新价", f"{last_price:.2f}", f"{(last_price / first_price - 1):+.2%}"
-        )
+        st.metric("最新价", f"{last_price:.2f}", f"{(last_price / first_price - 1):+.2%}")
         st.plotly_chart(
             intraday_chart(df, prev_close=first_price), use_container_width=True
         )
         st.caption("五档盘口: 待 miniQMT xtdata.get_quote 接入")
+
+        st.subheader("板块涨跌幅")
+        sector_df = ds.demo_sector_changes()
+        st.dataframe(
+            sector_df,
+            column_config={
+                "板块": st.column_config.TextColumn("板块"),
+                "涨跌幅": st.column_config.NumberColumn(
+                    "涨跌幅",
+                    format="+.2%%",
+                ),
+                "上涨家数": st.column_config.NumberColumn("上涨家数"),
+                "下跌家数": st.column_config.NumberColumn("下跌家数"),
+            },
+            column_order=["板块", "涨跌幅", "上涨家数", "下跌家数"],
+            hide_index=True,
+            use_container_width=True,
+        )
 
     # ---------- 中栏: 状态机 + 信号 ----------
     with mid:
