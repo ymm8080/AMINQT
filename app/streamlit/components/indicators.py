@@ -71,7 +71,9 @@ def main_force_chips_chart(df: pd.DataFrame, title: str = "主力筹码指标") 
 # ───────────────────────────────────────────────────────────────
 # 2. 主力筹码控盘程度 N
 # ───────────────────────────────────────────────────────────────
-def chip_control_chart(df: pd.DataFrame, title: str = "主力筹码控盘程度 N") -> go.Figure:
+def chip_control_chart(
+    df: pd.DataFrame, title: str = "主力筹码控盘程度 N"
+) -> go.Figure:
     """近似版: 用价格在过去 30 日区间内的位置模拟筹码集中度。"""
     close = df["close"].astype(float)
     high = df["high"].astype(float)
@@ -157,12 +159,30 @@ def find_bull_chart(df: pd.DataFrame, title: str = "发现牛股") -> go.Figure:
     ss = ss & (close / prev_close >= 1.018)
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["date"], y=a1, name="EMA3", line={"color": "white", "width": 1}))
-    fig.add_trace(go.Scatter(x=df["date"], y=a2, name="EMA5", line={"color": "yellow", "width": 1}))
-    fig.add_trace(go.Scatter(x=df["date"], y=a3, name="EMA7", line={"color": "magenta", "width": 1}))
-    fig.add_trace(go.Scatter(x=df["date"], y=a4, name="EMA12", line={"color": "green", "width": 1}))
-    fig.add_trace(go.Scatter(x=df["date"], y=a5, name="EMA20", line={"color": "red", "width": 1}))
-    fig.add_trace(go.Scatter(x=df["date"], y=a6, name="EMA50", line={"color": "blue", "width": 2}))
+    fig.add_trace(
+        go.Scatter(x=df["date"], y=a1, name="EMA3", line={"color": "white", "width": 1})
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df["date"], y=a2, name="EMA5", line={"color": "yellow", "width": 1}
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df["date"], y=a3, name="EMA7", line={"color": "magenta", "width": 1}
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df["date"], y=a4, name="EMA12", line={"color": "green", "width": 1}
+        )
+    )
+    fig.add_trace(
+        go.Scatter(x=df["date"], y=a5, name="EMA20", line={"color": "red", "width": 1})
+    )
+    fig.add_trace(
+        go.Scatter(x=df["date"], y=a6, name="EMA50", line={"color": "blue", "width": 2})
+    )
 
     signal_dates = df.loc[ss, "date"]
     signal_prices = close[ss]
