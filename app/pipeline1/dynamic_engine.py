@@ -50,6 +50,7 @@ PAIN_PROB_MAX = 0.15  # 痛苦概率上限
 QUANTITY_QUOTA = 2  # 数量闸门: rank_score 前 2
 ATR_NOISE_MULT = 1.2  # 止损噪音带: ≥1.2×ATR (防正常波动扫损)
 ATR_TARGET_MULT = 1.5  # 目标收益下限: ≥1.5×ATR
+EXPECTED_IDLE_RATIO = 0.75  # 攻击档预计空仓比例 (门槛 0.68+Top2 → 特性非故障)
 
 
 class DynamicEngine:
@@ -171,3 +172,59 @@ class DynamicEngine:
             "high_vol_ok": ok,
             "action": "ok" if ok else "dampen",
         }
+
+
+# ============================================================
+# E-5 月度旋钮体检 (体检表只告警, 不自动调参 — 安全网 #15)
+# ============================================================
+def knob_health_check(
+    journal,
+    idle_ratio: float,
+    expected_idle: float = EXPECTED_IDLE_RATIO,
+    knobs: DynamicKnobs | None = None,
+) -> dict:
+    """E-5 月度旋钮体检: 空仓比例 / 实际胜率 / 实际盈亏比 (旋钮有效性的体检表).
+
+    统计口径单点维护于 TradeJournal.sample_stats (禁止第二份统计逻辑).
+    体检只输出告警 flags, 旋钮修改只能在季度窗口且需书面记录 — 本函数
+    永不返回"建议调参值" (禁止凭体检表自动调参).
+
+    Args:
+        journal: app.pipeline1.trade_discipline.TradeJournal (或同接口对象)
+        idle_ratio: 当月实际空仓比例 (空仓交易日数 / 总交易日数)
+        expected_idle: 预期空仓比例 (攻击档默认 75%)
+        knobs: 当前旋钮 (胜率/盈亏比体检基准), 缺省用默认旋钮
+    Returns:
+        {'n_trades', 'win_rate', 'pl_ratio', 'idle_ratio', 'flags': [...]}
+    """
+    k = knobs or DynamicKnobs()
+    s = journal.sample_stats()
+    n = s.get("n_trades", 0)
+    flags: list[str] = []
+    if n == 0:
+        flags.append("无成交样本: 体检跳过 (本月全空仓或日志缺失, 需人工确认)")
+    else:
+        if s["win_rate"] < k.min_win_prob:
+            flags.append(
+                f"实际胜率 {s['win_rate']:.1%} < 旋钮 {k.min_win_prob:.0%}: "
+                "校准曲线或胜率闸门需季度复检"
+            )
+        if 0 < s["pl_ratio"] < k.min_rr:
+            flags.append(
+                f"实际盈亏比 {s['pl_ratio']:.2f} < 旋钮 {k.min_rr}: "
+                "RR 闸门或移动止盈需季度复检"
+            )
+    if idle_ratio < expected_idle - 0.15:
+        flags.append(
+            f"空仓比例 {idle_ratio:.0%} 远低于预期 {expected_idle:.0%}: "
+            "入场门槛可能被击穿 (频率异常), 书面复核 A 级门槛"
+        )
+    for f in flags:
+        logger.warning("E-5 月度旋钮体检: %s", f)
+    return {
+        "n_trades": n,
+        "win_rate": s.get("win_rate", 0.0),
+        "pl_ratio": s.get("pl_ratio", 0.0),
+        "idle_ratio": round(idle_ratio, 4),
+        "flags": flags,
+    }
