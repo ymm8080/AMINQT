@@ -177,7 +177,9 @@ class DualTrackTrainer:
         返回 {kind: (model, label)} + 元数据 + ['quantile_models'/'pain_model'].
         """
         depth = int(df.groupby("symbol")["date"].nunique().min()) if len(df) else 0
-        window = WINDOW_TOTAL if depth >= B11_FULL_DEPTH else min(WINDOW_TRANSITION, depth)
+        window = (
+            WINDOW_TOTAL if depth >= B11_FULL_DEPTH else min(WINDOW_TRANSITION, depth)
+        )
         if window - (ES_DAYS + CALIB_DAYS + TEST_DAYS) < MIN_TRAIN_DAYS:
             raise RuntimeError(
                 f"[{board}] 训练样本深度不足: {depth} 交易日 "

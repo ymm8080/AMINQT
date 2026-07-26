@@ -24,7 +24,9 @@ class TestFetchCascade:
 
         supply = DataSupplyChain(cache_dir=str(tmp_path))
         calls = []
-        good = pd.DataFrame({"symbol": ["600519"], "date": [pd.Timestamp("2026-07-24")]})
+        good = pd.DataFrame(
+            {"symbol": ["600519"], "date": [pd.Timestamp("2026-07-24")]}
+        )
 
         def fail(symbol, start, end):
             calls.append("fail")
@@ -43,7 +45,11 @@ class TestFetchCascade:
 
         supply = DataSupplyChain(cache_dir=str(tmp_path))
         for name in ("_akshare_fetch_hist", "_sina_fetch_hist", "_baostock_fetch_hist"):
-            setattr(supply, name, lambda s, a, b: (_ for _ in ()).throw(ConnectionError("x")))
+            setattr(
+                supply,
+                name,
+                lambda s, a, b: (_ for _ in ()).throw(ConnectionError("x")),
+            )
         with pytest.raises(DataSupplyError, match="全部数据源失败"):
             supply._default_fetch_hist("600519", "2023-01-01", "2026-07-24")
 
@@ -71,9 +77,15 @@ class TestAdaptiveWindow:
         dtt.ES_PATIENCE = 3
         panel = make_panel(days=500)  # 500 日面板 (< 750 窗口)
         df = panel.copy()
-        df["label_1d"] = df.groupby("symbol")["close_hfq"].shift(-1) / df["close_hfq"] - 1
-        df["label_3d"] = df.groupby("symbol")["close_hfq"].shift(-3) / df["close_hfq"] - 1
-        df["label_5d"] = df.groupby("symbol")["close_hfq"].shift(-5) / df["close_hfq"] - 1
+        df["label_1d"] = (
+            df.groupby("symbol")["close_hfq"].shift(-1) / df["close_hfq"] - 1
+        )
+        df["label_3d"] = (
+            df.groupby("symbol")["close_hfq"].shift(-3) / df["close_hfq"] - 1
+        )
+        df["label_5d"] = (
+            df.groupby("symbol")["close_hfq"].shift(-5) / df["close_hfq"] - 1
+        )
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         trained = trainer.train_window(df, "main", ["f1", "f2"])
@@ -177,7 +189,10 @@ class TestAssemblePanel:
         assert len(panel2) == len(panel)
         # 不同 universe 不得共享缓存 (缓存键含 universe 哈希)
         assemble_panel(
-            supply, ["600519"], end="2026-07-24", years=3,
+            supply,
+            ["600519"],
+            end="2026-07-24",
+            years=3,
             cache_dir=str(tmp_path / "panels"),
         )
         assert len(list((tmp_path / "panels").glob("panel_20260724_3y_*.parquet"))) == 2
