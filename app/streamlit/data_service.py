@@ -181,6 +181,7 @@ def demo_list(seed: int = 42) -> pd.DataFrame:
                 "main",
                 "main",
             ],
+            "day_change": rng.uniform(-0.03, 0.06, n),
             "pred_ret_1d": rng.uniform(-0.02, 0.05, n),
             "pred_ret_3d": rng.uniform(-0.03, 0.09, n),
             "pred_ret_5d": rng.uniform(-0.04, 0.12, n),
@@ -277,6 +278,17 @@ def demo_sector_changes(seed: int = 11) -> pd.DataFrame:
     df["上涨家数"] = df["上涨家数"].clip(lower=df["下跌家数"] * (1 + df["涨跌幅"] * 20))
     df["上涨家数"] = df["上涨家数"].astype(int)
     return df.sort_values("涨跌幅", ascending=False).reset_index(drop=True)
+
+
+def demo_sector_intraday(sector: str, seed: int = 13) -> pd.DataFrame:
+    """合成某板块当日 2 分钟分时曲线 (用于板块 sparkline)."""
+    rng = np.random.default_rng(seed + hash(sector) % 100)
+    n = 120
+    times = pd.date_range("09:30", periods=n, freq="2min").strftime("%H:%M")
+    base_index = DEMO_SECTOR_BASE_INDEX.get(sector, 1.0)
+    pct = rng.normal(0, 0.0008, n).cumsum()
+    price = base_index * (1 + pct)
+    return pd.DataFrame({"time": times, "price": price})
 
 
 # ============================================================
