@@ -86,14 +86,22 @@ class TradingStateMachine:
         if self._transition("pause"):
             self._paused_auto_buy = self.auto_buy_enabled
             self._paused_auto_sell = self.auto_sell_enabled
-            logger.info("[TSM] 暂停, 记忆自动买/卖=%s/%s", self._paused_auto_buy, self._paused_auto_sell)
+            logger.info(
+                "[TSM] 暂停, 记忆自动买/卖=%s/%s",
+                self._paused_auto_buy,
+                self._paused_auto_sell,
+            )
 
     def resume(self) -> None:
         """恢复 (PAUSED → RUNNING), 还原暂停前自动开关状态."""
         if self._transition("resume"):
             self.auto_buy_enabled = self._paused_auto_buy
             self.auto_sell_enabled = self._paused_auto_sell
-            logger.info("[TSM] 恢复, 还原自动买/卖=%s/%s", self.auto_buy_enabled, self.auto_sell_enabled)
+            logger.info(
+                "[TSM] 恢复, 还原自动买/卖=%s/%s",
+                self.auto_buy_enabled,
+                self.auto_sell_enabled,
+            )
 
     def stop_all(self) -> None:
         """停止全部 (→ STOPPED), 并触发 on_stop_all 回调 (如撤销待确认委托)."""

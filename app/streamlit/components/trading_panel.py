@@ -98,7 +98,11 @@ def render_signal_list(
 
     df = pd.DataFrame(signals)
     df["方向"] = df["side"].map(_signal_action_label)
-    display_cols = [c for c in ["time", "symbol", "方向", "price", "qty", "priority", "reason"] if c in df.columns]
+    display_cols = [
+        c
+        for c in ["time", "symbol", "方向", "price", "qty", "priority", "reason"]
+        if c in df.columns
+    ]
     st.dataframe(df[display_cols], use_container_width=True)
 
     # 自动模式: 为每个信号直接提交委托 (require_confirm=False)
@@ -174,8 +178,25 @@ def render_position_list(positions: list[dict]) -> None:
     df = pd.DataFrame(positions)
     df["盈亏%"] = (df["current_price"] / df["cost"] - 1) * 100
     df["T+1"] = df["available_qty"].apply(lambda x: "不可卖" if x == 0 else "可卖")
-    display_cols = [c for c in ["symbol", "qty", "available_qty", "cost", "current_price", "盈亏%", "T+1"] if c in df.columns]
-    st.dataframe(df[display_cols].style.format({"盈亏%": "{:.2f}", "cost": "{:.2f}", "current_price": "{:.2f}"}), use_container_width=True)
+    display_cols = [
+        c
+        for c in [
+            "symbol",
+            "qty",
+            "available_qty",
+            "cost",
+            "current_price",
+            "盈亏%",
+            "T+1",
+        ]
+        if c in df.columns
+    ]
+    st.dataframe(
+        df[display_cols].style.format(
+            {"盈亏%": "{:.2f}", "cost": "{:.2f}", "current_price": "{:.2f}"}
+        ),
+        use_container_width=True,
+    )
 
 
 def render_trade_list(om: OrderManager) -> None:

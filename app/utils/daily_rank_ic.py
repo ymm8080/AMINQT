@@ -35,11 +35,7 @@ def cross_sectional_rank_ic(
     Returns:
         Spearman 相关系数 (statistic); 无法计算时返回 NaN。
     """
-    if (
-        len(x) < 2
-        or x.nunique() < min_x_unique
-        or y.nunique() < min_y_unique
-    ):
+    if len(x) < 2 or x.nunique() < min_x_unique or y.nunique() < min_y_unique:
         return float(np.nan)
     try:
         return float(spearmanr(x, y).statistic)
@@ -82,9 +78,7 @@ def daily_rank_ic_series(
         )
 
     return (
-        sub.groupby(date_col, observed=True)
-        .apply(_ic, include_groups=False)
-        .dropna()
+        sub.groupby(date_col, observed=True).apply(_ic, include_groups=False).dropna()
     )
 
 
