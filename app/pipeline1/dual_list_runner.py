@@ -27,7 +27,7 @@ import pandas as pd
 from app.config.profiles import get_profile
 
 from .dynamic_engine import DynamicEngine
-from .gt_score import gt_score
+from .gt_score import dual_profile_verdict, gt_score
 from .list_generator import ListGenerator
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,8 @@ class DualListRunner:
     ):
         self.stable = stable_lister or ListGenerator()
         self.store_dir = store_dir
-        self._lose_streak = 0  # D.6 连续落后月数
+        self._hist_exec: dict[str, float] = {}  # D.6 月度 GT 历史 (执行清单)
+        self._hist_shadow: dict[str, float] = {}  # D.6 月度 GT 历史 (影子清单)
         if store_dir:
             os.makedirs(store_dir, exist_ok=True)
 
@@ -128,6 +129,9 @@ class DualListRunner:
             "execution": execution,
             "shadow": shadow,
             "bear_takeover": bear_takeover,
+            # 资金不分仓 (D.8): live_profile 是唯一允许进入真实执行的清单;
+            # 熊市接管日 None (只卖不买). shadow 永不 live, 严禁"两份都买".
+            "live_profile": None if bear_takeover else "aggressive",
         }
 
     # ---------------- D.9/E.2 执行清单动态输出 ----------------
@@ -179,26 +183,49 @@ class DualListRunner:
         exec_turnover,
         shadow_ics,
         shadow_turnover,
+        month: str | None = None,
     ) -> dict:
         """D.6 档位裁决: 攻击档连续 3 个月 GT-Score 低于稳定档 → 强制切回 stable.
 
-        用事实裁决档位, 不拍脑袋. 同一批预测两种执行方式, 回测与模拟盘可并行.
+        用事实裁决档位, 不拍脑袋. 裁决逻辑单点维护于
+        `gt_score.dual_profile_verdict` (重叠月份不足 3 个月不得裁决).
+        month: 月份标签 ("YYYY-MM"), 缺省按调用顺序合成.
         """
-        g_exec = gt_score(exec_ics, exec_turnover)
-        g_shadow = gt_score(shadow_ics, shadow_turnover)
-        self._lose_streak = self._lose_streak + 1 if g_exec < g_shadow else 0
-        force_stable = self._lose_streak >= ADJUDICATE_STREAK
-        if force_stable:
+        label = month or f"m{len(self._hist_exec) + 1}"
+        self._hist_exec[label] = gt_score(exec_ics, exec_turnover)
+        self._hist_shadow[label] = gt_score(shadow_ics, shadow_turnover)
+        v = dual_profile_verdict(
+            self._hist_shadow, self._hist_exec, consecutive=ADJUDICATE_STREAK
+        )
+        force = v["force_switch_to_stable"]
+        if force:
             logger.critical(
                 "D.6 档位裁决: 攻击档连续 %d 月 GT-Score 落后 (%.4f vs %.4f), "
                 "强制切回 stable 并书面归因",
-                self._lose_streak,
-                g_exec,
-                g_shadow,
+                v["trailing_below"],
+                self._hist_exec[label],
+                self._hist_shadow[label],
             )
         return {
-            "gt_aggressive": round(g_exec, 4),
-            "gt_stable": round(g_shadow, 4),
-            "lose_streak": self._lose_streak,
-            "force_switch_to_stable": force_stable,
+            "gt_aggressive": round(self._hist_exec[label], 4),
+            "gt_stable": round(self._hist_shadow[label], 4),
+            "lose_streak": v["trailing_below"],
+            "force_switch_to_stable": force,
         }
+
+
+def resolve_live_list(out: dict) -> pd.DataFrame:
+    """资金不分仓校验 (P21.4 / D.8): 返回唯一允许进入真实执行的清单.
+
+    任何时刻只有 live_profile 指向的清单可下单; shadow 永不返回;
+    熊市接管日 (live_profile=None) 返回空表 (只卖不买).
+    """
+    live = out.get("live_profile")
+    assert live in (None, "aggressive"), f"非法 live 通道: {live}"
+    if live is None:
+        return out["execution"].iloc[0:0]
+    df = out["execution"]
+    assert (df["profile"] == live).all(), "执行清单 profile 与 live 通道不一致"
+    shadow = out["shadow"]
+    assert (shadow["profile"] != live).all(), "影子清单混入 live 通道 (两份都买?)"
+    return df
