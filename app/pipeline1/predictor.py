@@ -19,6 +19,7 @@ import os
 import numpy as np
 import pandas as pd
 
+from app.core.factor_engine import safe_divide
 from .dual_track_trainer import DualTrackTrainer
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,8 @@ class V35Predictor:
         # 当日涨跌幅 (看板 day_change 列): close/pre_close - 1, 除零防护
         if {"close", "pre_close"} <= set(latest.columns):
             latest["day_change"] = (
-                latest["close"] / latest["pre_close"].replace(0, np.nan) - 1
+                safe_divide(latest["close"], latest["pre_close"].replace(0, np.nan))
+                - 1
             )
         # [E1] 分布版仓位权重输入; [E6] liquidity_cap 输入
         for opt in (
