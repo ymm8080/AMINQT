@@ -61,8 +61,8 @@ class ParamTuner:
     # ---------------- 单次评估 ----------------
     def _evaluate(
         self, params: dict, panel: pd.DataFrame, lists: dict, benchmark
-    ) -> float:
-        """跑一轮回测, 返回扣费后净年化超额 (目标函数). None = 协议默认值."""
+    ) -> dict:
+        """跑一轮回测, 返回完整 metrics 字典."""
         proto_kwargs = {}
         for cfg_name, value in params.items():
             if value is None:
@@ -73,11 +73,26 @@ class ParamTuner:
         protocol = BacktestProtocol(**proto_kwargs)
         eng = BacktestEngineV35(panel, protocol)
         result = eng.run(lists, benchmark)
-        return result["metrics"]["net_excess_annual"]
+        return result["metrics"]
+
+    @staticmethod
+    def _score(metrics: dict, objective: str) -> float:
+        """从 metrics 中提取目标函数值."""
+        if objective == "sharpe":
+            return metrics.get("sharpe", -np.inf)
+        if objective == "total_return":
+            return metrics.get("total_return", -np.inf)
+        # 默认: 扣费后净年化超额
+        return metrics.get("net_excess_annual", -np.inf)
 
     # ---------------- 网格搜索 ----------------
     def grid_search(
-        self, param_names: list[str], oos_ratio: float = 0.3, top_k: int = 5
+        self,
+        param_names: list[str],
+        oos_ratio: float = 0.3,
+        top_k: int = 5,
+        objective: str = "net_excess_annual",
+        max_dd_limit: float | None = None,
     ) -> dict:
         """对指定参数做网格搜索.
 
@@ -85,6 +100,8 @@ class ParamTuner:
             param_names: TUNABLE_BOUNDS 的子集 (建议 <= 4 维, 控制组合数)
             oos_ratio: OOS 段占比 (尾部样本, 严禁反向调参)
             top_k: 训练段前 K 名进入 OOS 复验
+            objective: 目标函数字段 (net_excess_annual / sharpe / total_return)
+            max_dd_limit: 最大回撤约束 (如 -0.10); OOS 复验时过滤
 
         Returns:
             {best_params, train_score, oos_score, fallback, leaderboard, report_path}
@@ -125,29 +142,50 @@ class ParamTuner:
         # 训练段评分
         scores = []
         for params in combos:
-            score = self._evaluate(params, train_panel, train_lists, bench_train)
+            metrics = self._evaluate(params, train_panel, train_lists, bench_train)
+            score = self._score(metrics, objective)
+            if np.isnan(score):
+                continue
             scores.append((params, score))
         scores.sort(key=lambda x: x[1], reverse=True)
         leaderboard = scores[:top_k]
 
         # OOS 复验 (只验 top_k, 不做二次搜索)
         best_params, best_train = leaderboard[0]
-        default_params = {n: None for n in param_names}  # 协议默认值
-        oos_best = self._evaluate(best_params, oos_panel, oos_lists, bench_oos)
-        oos_default = self._evaluate(default_params, oos_panel, oos_lists, bench_oos)
+        oos_metrics = self._evaluate(best_params, oos_panel, oos_lists, bench_oos)
+        oos_best = self._score(oos_metrics, objective)
 
+        default_params = {n: None for n in param_names}  # 协议默认值
+        oos_default_metrics = self._evaluate(
+            default_params, oos_panel, oos_lists, bench_oos
+        )
+        oos_default = self._score(oos_default_metrics, objective)
+
+        # 约束检查
         fallback = False
-        if oos_best < oos_default:
+        if max_dd_limit is not None:
+            dd = oos_metrics.get("max_drawdown", 0.0)
+            if dd < max_dd_limit:
+                fallback = True
+                logger.warning(
+                    "OOS 最大回撤 %.2f%% 超过约束 %.2f%%, 回退默认值",
+                    dd * 100,
+                    max_dd_limit * 100,
+                )
+        if not fallback and oos_best < oos_default:
             fallback = True
             logger.warning(
                 "OOS 复验不达标: 调参 %.2f%% < 默认 %.2f%%, 回退默认值",
                 oos_best * 100,
                 oos_default * 100,
             )
+        if fallback:
             best_params = default_params
 
         report = {
             "param_names": param_names,
+            "objective": objective,
+            "max_dd_limit": max_dd_limit,
             "n_combos": len(combos),
             "best_params": {k: _native(v) for k, v in best_params.items()},
             "train_score": round(best_train, 4),

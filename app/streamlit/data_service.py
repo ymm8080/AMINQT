@@ -279,6 +279,17 @@ def demo_sector_changes(seed: int = 11) -> pd.DataFrame:
     return df.sort_values("涨跌幅", ascending=False).reset_index(drop=True)
 
 
+def demo_sector_intraday(sector: str, seed: int = 13) -> pd.DataFrame:
+    """合成某板块当日 2 分钟分时曲线 (用于板块 sparkline)."""
+    rng = np.random.default_rng(seed + hash(sector) % 100)
+    n = 120
+    times = pd.date_range("09:30", periods=n, freq="2min").strftime("%H:%M")
+    base_index = DEMO_SECTOR_BASE_INDEX.get(sector, 1.0)
+    pct = rng.normal(0, 0.0008, n).cumsum()
+    price = base_index * (1 + pct)
+    return pd.DataFrame({"time": times, "price": price})
+
+
 # ============================================================
 # 关注股
 # ============================================================
