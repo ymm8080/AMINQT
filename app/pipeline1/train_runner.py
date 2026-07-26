@@ -54,7 +54,9 @@ def select_features(
         result = screener.screen(df, candidates, window_id=f"{board}_{tag}")
         picked = [f for f in result["factors"] if f in candidates]
         if picked:
-            logger.info("[%s] IC 筛选保留 %d/%d 因子", board, len(picked), len(candidates))
+            logger.info(
+                "[%s] IC 筛选保留 %d/%d 因子", board, len(picked), len(candidates)
+            )
             return picked
         logger.warning("[%s] IC 筛选全部淘汰, 回退全量 %d 因子", board, len(candidates))
     except Exception as exc:  # 筛选失败不阻断训练 (降级全量)

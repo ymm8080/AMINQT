@@ -54,10 +54,14 @@ def load_symbols(args: argparse.Namespace) -> list[str]:
 def main() -> dict:
     parser = argparse.ArgumentParser(description="Pipeline-1 周频训练")
     parser.add_argument("--symbols", nargs="*", default=None, help="股票代码列表")
-    parser.add_argument("--symbols-file", default=None, help="universe 文件 (每行一代码)")
+    parser.add_argument(
+        "--symbols-file", default=None, help="universe 文件 (每行一代码)"
+    )
     parser.add_argument("--years", type=int, default=3, help="回看年数 (默认 3)")
     parser.add_argument("--end", default=None, help="数据截止 YYYY-MM-DD (默认今天)")
-    parser.add_argument("--tag", default=None, help="模型标签 (默认 ISO 周, 如 2026W30)")
+    parser.add_argument(
+        "--tag", default=None, help="模型标签 (默认 ISO 周, 如 2026W30)"
+    )
     parser.add_argument("--model-dir", default="models/pipeline1")
     parser.add_argument("--refresh", action="store_true", help="忽略缓存强制重拉")
     parser.add_argument("--no-ic-screen", action="store_true", help="跳过 IC 筛选")
@@ -77,7 +81,10 @@ def main() -> dict:
     for board, res in results.items():
         logger.info(
             "[%s] path=%s OOS=%s switched=%s",
-            board, res["path"], res["oos"], res["switched"],
+            board,
+            res["path"],
+            res["oos"],
+            res["switched"],
         )
     return results
 

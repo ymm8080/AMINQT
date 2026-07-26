@@ -33,13 +33,17 @@ logger = logging.getLogger("predict_pipeline1")
 def main() -> dict:
     parser = argparse.ArgumentParser(description="Pipeline-1 每日清单预测")
     parser.add_argument("--symbols", nargs="*", default=None, help="股票代码列表")
-    parser.add_argument("--symbols-file", default=None, help="universe 文件 (每行一代码)")
+    parser.add_argument(
+        "--symbols-file", default=None, help="universe 文件 (每行一代码)"
+    )
     parser.add_argument("--trade-date", default=None, help="YYYYMMDD (默认今天)")
     parser.add_argument("--years", type=int, default=3, help="回看年数 (默认 3)")
     parser.add_argument("--tag", default=None, help="模型标签 (默认每板块最新)")
     parser.add_argument("--model-dir", default="models/pipeline1")
     parser.add_argument("--list-dir", default="data/lists")
-    parser.add_argument("--market-state", default="range", choices=["bull", "bear", "range"])
+    parser.add_argument(
+        "--market-state", default="range", choices=["bull", "bear", "range"]
+    )
     parser.add_argument("--refresh", action="store_true", help="忽略缓存强制重拉")
     args = parser.parse_args()
 
