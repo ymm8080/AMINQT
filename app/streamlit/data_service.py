@@ -17,6 +17,7 @@ import pandas as pd
 LIST_DIR = "data/lists"
 TUNING_REPORT = "data/tuning_report.json"
 WATCHLIST_PATH = "data/watchlist.json"
+PRIORITY_PATH = "data/priority.json"
 
 DEMO_SYMBOLS = [
     "600519",
@@ -54,6 +55,80 @@ DEMO_INDUSTRIES = {
     "000858": "白酒",
     "601899": "有色",
 }
+DEMO_SECTOR_BASE_INDEX: dict[str, float] = {
+    "白酒": 1.0,
+    "电池": 1.0,
+    "保险": 1.0,
+    "银行": 1.0,
+    "汽车": 1.0,
+    "半导体": 1.0,
+    "有色": 1.0,
+}
+
+
+# ============================================================
+# 重点股 (次日日内操作候选池)
+# ============================================================
+def load_priority_symbols(path: str = PRIORITY_PATH) -> set[str]:
+    """读取已保存的重点股代码集合."""
+    if not os.path.exists(path):
+        return set()
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    if isinstance(data, list):
+        return set(str(s).strip() for s in data if s)
+    if isinstance(data, dict):
+        return set(str(s).strip() for s in data.get("symbols", []) if s)
+    return set()
+
+
+def save_priority_symbols(symbols: set[str], path: str = PRIORITY_PATH) -> None:
+    """保存重点股代码集合."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({"symbols": sorted(symbols)}, fh, ensure_ascii=False, indent=1)
+
+
+def toggle_priority(symbol: str, path: str = PRIORITY_PATH) -> bool:
+    """切换重点股状态. 返回新状态 (True=已标记)."""
+    symbols = load_priority_symbols(path)
+    symbol = str(symbol).strip()
+    if symbol in symbols:
+        symbols.discard(symbol)
+        save_priority_symbols(symbols, path)
+        return False
+    symbols.add(symbol)
+    save_priority_symbols(symbols, path)
+    return True
+
+
+def pipeline_buy_candidates(df: pd.DataFrame) -> set[str]:
+    """根据 Pipeline-1 清单规则选出推荐买入候选.
+
+    规则优先级:
+    1. 存在 pred_ret_1d 列时, 取预测次日收益 > 0 的股票;
+    2. 否则存在 score 列时, 取 score 前 30%;
+    3. 否则取前 5 名。
+    """
+    if df is None or df.empty or "symbol" not in df.columns:
+        return set()
+    if "pred_ret_1d" in df.columns:
+        return set(df.loc[df["pred_ret_1d"] > 0, "symbol"])
+    if "score" in df.columns:
+        threshold = df["score"].quantile(0.7)
+        return set(df.loc[df["score"] >= threshold, "symbol"])
+    return set(df["symbol"].head(5))
+
+
+def apply_priority_tags(df: pd.DataFrame) -> pd.DataFrame:
+    """为清单打重点股标签: 已保存 + Pipeline1 推荐买入."""
+    if df is None or df.empty or "symbol" not in df.columns:
+        return df
+    df = df.copy()
+    saved = load_priority_symbols()
+    auto = pipeline_buy_candidates(df)
+    df["priority"] = df["symbol"].isin(saved | auto)
+    return df
 
 
 # ============================================================
@@ -79,7 +154,12 @@ def load_latest_list(
 ) -> tuple[pd.DataFrame | None, str | None]:
     """加载最新清单 → (df, date); 无清单返回 (None, None)."""
     dates = list_available_dates(list_dir)
-    return (load_list(dates[0], list_dir), dates[0]) if dates else (None, None)
+    if not dates:
+        return None, None
+    df = load_list(dates[0], list_dir)
+    if df is not None:
+        df = apply_priority_tags(df)
+    return df, dates[0]
 
 
 def demo_list(seed: int = 42) -> pd.DataFrame:
@@ -125,6 +205,7 @@ def demo_list(seed: int = 42) -> pd.DataFrame:
     )
     df["name"] = df["symbol"].map(DEMO_NAMES)
     df["industry"] = df["symbol"].map(DEMO_INDUSTRIES)
+    df = apply_priority_tags(df)
     return df.sort_values("score", ascending=False).reset_index(drop=True)
 
 
@@ -162,6 +243,40 @@ def demo_intraday(symbol: str, seed: int = 7) -> pd.DataFrame:
             "volume": rng.integers(1000, 50000, n).astype(float),
         }
     )
+
+
+# ============================================================
+# 板块行情 (演示)
+# ============================================================
+def demo_sector_changes(seed: int = 11) -> pd.DataFrame:
+    """合成板块当日涨跌幅排行 (演示用)."""
+    rng = np.random.default_rng(seed)
+    sectors = list(DEMO_SECTOR_BASE_INDEX.keys())
+    pct = rng.uniform(-0.025, 0.035, len(sectors))
+    # 让银行和白酒相对稳定, 电池/半导体波动大一点 (演示差异)
+    multipliers = {
+        "白酒": 0.8,
+        "银行": 0.5,
+        "保险": 0.7,
+        "电池": 1.4,
+        "半导体": 1.5,
+        "汽车": 1.2,
+        "有色": 1.3,
+    }
+    pct = np.array(
+        [p * multipliers.get(s, 1.0) for s, p in zip(sectors, pct)], dtype=float
+    )
+    df = pd.DataFrame(
+        {
+            "板块": sectors,
+            "涨跌幅": pct,
+            "上涨家数": rng.integers(5, 80, len(sectors)),
+            "下跌家数": rng.integers(5, 80, len(sectors)),
+        }
+    )
+    df["上涨家数"] = df["上涨家数"].clip(lower=df["下跌家数"] * (1 + df["涨跌幅"] * 20))
+    df["上涨家数"] = df["上涨家数"].astype(int)
+    return df.sort_values("涨跌幅", ascending=False).reset_index(drop=True)
 
 
 # ============================================================

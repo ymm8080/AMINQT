@@ -90,6 +90,24 @@ class TestIntradayBacktester:
         assert bt.cash < 200_000 + 98_000 - 100  # 成本已扣 (< 毛额)
         assert bt.cash > 200_000 + 97_000  # 成本量级合理 (~0.35%)
 
+    def test_recovery_caps_position_weight(self):
+        """RECOVERY 仓位上限 30%: position_weight=1.0 被 cap 到 0.30 (本地强制)."""
+        closes = [100.0] * 20 + [101.0] * 8 + [102.0] * 20
+        bars = _make_bars(closes)
+        # 尾盘窗口放量走强触发 B2
+        for i in range(len(bars) - 5, len(bars) - 2):
+            bars[i] = Bar("14:50", 102.0, 3e6, 3e8, 100.0)
+        # RECOVERY + position_weight=1.0 (攻击档默认, 应被 cap 到 0.30)
+        bt = IntradayBacktester(capital=100_000)
+        r = bt.run_day(_day_ctx(bars, bear_state="RECOVERY", position_weight=1.0))
+        buys = [t for t in r.trades if t["side"] == "buy"]
+        if buys:
+            # 100% 仓位: qty ≈ 100000/100 = 1000 股
+            # 30% 仓位: qty ≈ 30000/100 = 300 股
+            assert buys[0]["qty"] <= 400, (
+                f"RECOVERY cap 失效: 买入 {buys[0]['qty']} 股 (应 ≤400, 30%上限)"
+            )
+
 
 # ============================================================
 # 事件研究 (关卡 0/1)
