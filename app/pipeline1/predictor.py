@@ -90,7 +90,13 @@ class V35Predictor:
                 latest["close"] / latest["pre_close"].replace(0, np.nan) - 1
             )
         # [E1] 分布版仓位权重输入; [E6] liquidity_cap 输入
-        for opt in ("ATR_pct", "adv20", "is_limit_up_close", "is_one_word_limit", "day_change"):
+        for opt in (
+            "ATR_pct",
+            "adv20",
+            "is_limit_up_close",
+            "is_one_word_limit",
+            "day_change",
+        ):
             if opt in latest.columns:
                 keep.append(opt)
         return latest[keep].reset_index(drop=True)
