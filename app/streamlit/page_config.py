@@ -128,9 +128,7 @@ def _render_tuning_report(report: dict) -> None:
             "建议不要硬调参数, 优先检查数据质量或特征是否有泄漏。"
         )
     else:
-        st.success(
-            "✅ 调参结果在样本外 (OOS) 验证通过, 推荐参数如下。"
-        )
+        st.success("✅ 调参结果在样本外 (OOS) 验证通过, 推荐参数如下。")
 
     if best:
         st.markdown("**推荐参数:**")
@@ -139,10 +137,7 @@ def _render_tuning_report(report: dict) -> None:
     else:
         st.markdown("**推荐参数: 使用默认值**")
 
-    st.markdown(
-        f"**训练段评分:** {train:+.2%} | "
-        f"**样本外 (OOS) 评分:** {oos:+.2%}"
-    )
+    st.markdown(f"**训练段评分:** {train:+.2%} | **样本外 (OOS) 评分:** {oos:+.2%}")
     st.caption(
         "训练段评分 = 用历史数据训练时表现最好的参数组合; "
         "OOS 评分 = 用最近一段未参与调参的数据验证, 防止过拟合。"
