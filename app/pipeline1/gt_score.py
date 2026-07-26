@@ -17,8 +17,10 @@ ic_t 与 ic_mean 数学同源 (t=mean×√n/std) 等于同一量乘两次;
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 
 TURNOVER_TARGET = 0.45  # 换手目标上限 (日均换手 30-45%, 超 45% 部分惩罚)
+D6_CONSEC_MONTHS = 3  # D.6: 攻击档连续 N 个月 GT-Score 低于稳定档 → 强制切回
 
 
 def gt_score(daily_ics, daily_turnover) -> float:
@@ -45,3 +47,58 @@ def gt_score(daily_ics, daily_turnover) -> float:
         - 0.3 * abs(min(worst, 0.0))
         - 1.0 * turnover_pen
     )
+
+
+# ============================================================
+# P21.1 双档 GT-Score 对比 (D.6 档位裁决, 月度报表)
+# ============================================================
+def monthly_gt_scores(dates, daily_ics, daily_turnover) -> dict[str, float]:
+    """月度 GT-Score 报表: 同一打分函数按月分桶 (月份键 "YYYY-MM").
+
+    Args:
+        dates: 日度日期序列 ("YYYY-MM-DD" 或 Timestamp)
+        daily_ics / daily_turnover: 与 gt_score 同口径的日度序列
+    """
+    df = pd.DataFrame(
+        {
+            "month": pd.to_datetime(dates).strftime("%Y-%m"),
+            "ic": daily_ics,
+            "to": daily_turnover,
+        }
+    )
+    return {m: gt_score(g["ic"], g["to"]) for m, g in df.groupby("month")}
+
+
+def dual_profile_verdict(
+    stable_monthly: dict[str, float],
+    aggressive_monthly: dict[str, float],
+    consecutive: int = D6_CONSEC_MONTHS,
+) -> dict:
+    """D.6 档位裁决: 用事实裁决档位, 不拍脑袋.
+
+    同一批预测、两种执行方式, 逐月对比 GT-Score; 攻击档连续 N 个月
+    低于稳定档 → 强制切回 stable 并书面归因. 只统计两档都有数据的月份;
+    重叠月份不足 N 个月时不得裁决 (样本不足, 安全网#15).
+
+    Returns:
+        {'force_switch_to_stable': bool, 'trailing_below': int,
+         'overlap_months': int, 'months': {month: {...}}}
+    """
+    months = sorted(set(stable_monthly) & set(aggressive_monthly))
+    detail = {}
+    trailing = 0
+    for m in months:
+        below = aggressive_monthly[m] < stable_monthly[m]
+        detail[m] = {
+            "stable": round(stable_monthly[m], 5),
+            "aggressive": round(aggressive_monthly[m], 5),
+            "aggressive_below": below,
+        }
+        trailing = trailing + 1 if below else 0  # 月份升序 → 末尾即最新连续段
+    switch = len(months) >= consecutive and trailing >= consecutive
+    return {
+        "force_switch_to_stable": switch,
+        "trailing_below": trailing,
+        "overlap_months": len(months),
+        "months": detail,
+    }
