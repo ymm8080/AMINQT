@@ -68,12 +68,12 @@ export function MainForceChipsChart({ data, height = 200 }: { data: OhlcBar[]; h
   }))
 
   return (
-    <div className="panel" style={{ padding: 12 }}>
+    <div className="panel" style={{ padding: '12px 0' }}>
       <h4 style={{ margin: '0 0 8px' }}>主力筹码指标</h4>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={chartData} syncId="stock-detail">
           <XAxis dataKey="date" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={40} />
-          <YAxis tick={{ fill: '#8b949e', fontSize: 10 }} />
+          <YAxis tick={{ fill: '#8b949e', fontSize: 10 }} orientation="right" width={55} />
           <Tooltip
             contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
             labelStyle={{ color: '#8b949e' }}
@@ -117,12 +117,12 @@ export function ChipControlChart({ data, height = 200 }: { data: OhlcBar[]; heig
   }))
 
   return (
-    <div className="panel" style={{ padding: 12 }}>
+    <div className="panel" style={{ padding: '12px 0' }}>
       <h4 style={{ margin: '0 0 8px' }}>主力筹码控盘程度 N</h4>
       <ResponsiveContainer width="100%" height={height}>
-        <ComposedChart data={chartData}>
+        <ComposedChart data={chartData} syncId="stock-detail">
           <XAxis dataKey="date" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={40} />
-          <YAxis domain={[0, 100]} tick={{ fill: '#8b949e', fontSize: 10 }} />
+          <YAxis domain={[0, 100]} tick={{ fill: '#8b949e', fontSize: 10 }} orientation="right" width={55} />
           <Tooltip
             contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
             labelStyle={{ color: '#8b949e' }}
@@ -171,12 +171,12 @@ export function FindBullChart({ data, height = 200 }: { data: OhlcBar[]; height?
   }))
 
   return (
-    <div className="panel" style={{ padding: 12 }}>
+    <div className="panel" style={{ padding: '12px 0' }}>
       <h4 style={{ margin: '0 0 8px' }}>发现牛股</h4>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={chartData} syncId="stock-detail">
           <XAxis dataKey="date" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={40} />
-          <YAxis tick={{ fill: '#8b949e', fontSize: 10 }} />
+          <YAxis tick={{ fill: '#8b949e', fontSize: 10 }} orientation="right" width={55} />
           <Tooltip
             contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
             labelStyle={{ color: '#8b949e' }}
@@ -225,12 +225,12 @@ export function TrendTopBottomChart({ data, height = 200 }: { data: OhlcBar[]; h
   }))
 
   return (
-    <div className="panel" style={{ padding: 12 }}>
+    <div className="panel" style={{ padding: '12px 0' }}>
       <h4 style={{ margin: '0 0 8px' }}>趋势顶底</h4>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={chartData} syncId="stock-detail">
           <XAxis dataKey="date" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={40} />
-          <YAxis domain={[0, 100]} tick={{ fill: '#8b949e', fontSize: 10 }} />
+          <YAxis domain={[0, 100]} tick={{ fill: '#8b949e', fontSize: 10 }} orientation="right" width={55} />
           <Tooltip
             contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
             labelStyle={{ color: '#8b949e' }}

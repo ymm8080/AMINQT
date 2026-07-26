@@ -24,7 +24,6 @@ export function SelectionPage({ onJumpToTrading }: { onJumpToTrading?: (symbol: 
   const [error, setError] = useState('')
   const [detailIdx, setDetailIdx] = useState(0)
   const [ohlc, setOhlc] = useState<OhlcBar[]>([])
-  const [priceRange, setPriceRange] = useState<{ min: number; max: number } | undefined>(undefined)
   const [intraday, setIntraday] = useState<IntradayPoint[]>([])
   const [priority, setPriority] = useState<Set<string>>(new Set())
   const [sectors, setSectors] = useState<SectorItem[]>([])
@@ -71,6 +70,14 @@ export function SelectionPage({ onJumpToTrading }: { onJumpToTrading?: (symbol: 
     api.priority().then((r) => setPriority(new Set(r.symbols))).catch(() => {})
     api.sectors().then((r) => setSectors(r.items)).catch(() => {})
   }, [])
+
+  const priceDomain = useMemo<[number, number] | undefined>(() => {
+    if (ohlc.length === 0) return undefined
+    const minLow = Math.min(...ohlc.map((d) => d.low))
+    const maxHigh = Math.max(...ohlc.map((d) => d.high))
+    const padding = (maxHigh - minLow) * 0.05
+    return [minLow - padding, maxHigh + padding]
+  }, [ohlc])
 
   const togglePriority = async (symbol: string, name = '') => {
     const r = await api.togglePriority(symbol, name)
@@ -234,18 +241,18 @@ export function SelectionPage({ onJumpToTrading }: { onJumpToTrading?: (symbol: 
                 })}
               </div>
               <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <KlineChart data={ohlc} showMaLines={false} onPriceRangeChange={setPriceRange} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <KlineChart data={ohlc} showMaLines={false} priceDomain={priceDomain} />
+                  <MacdChart data={ohlc} />
+                  <MainForceChipsChart data={ohlc} />
+                  <ChipControlChart data={ohlc} />
+                  <FindBullChart data={ohlc} />
+                  <TrendTopBottomChart data={ohlc} />
                 </div>
-                <div style={{ width: 320, flexShrink: 0 }}>
-                  <ChipDistributionChart data={ohlc} priceRange={priceRange} height={420} />
+                <div style={{ width: 160, flexShrink: 0 }}>
+                  <ChipDistributionChart data={ohlc} priceDomain={priceDomain} height={420} />
                 </div>
               </div>
-              <MacdChart data={ohlc} />
-              <MainForceChipsChart data={ohlc} />
-              <ChipControlChart data={ohlc} />
-              <FindBullChart data={ohlc} />
-              <TrendTopBottomChart data={ohlc} />
             </>
           ) : (
             <IntradayChart data={intraday} prevClose={ohlc[ohlc.length - 1]?.close} />
