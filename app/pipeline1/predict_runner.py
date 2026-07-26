@@ -87,6 +87,14 @@ def run_prediction(
     if cleaner is not None:
         pipe.cleaner = cleaner
     result = pipe.run(trade_date, panel=panel, env=env, market_state=market_state)
+    # 预测准确度: 对视野已成熟的往期清单计算 WMAPE/bias (幂等, WORM)
+    try:
+        from .forecast_accuracy import score_matured_forecasts
+
+        result["accuracy_scored"] = score_matured_forecasts(list_dir, panel)
+    except Exception as exc:
+        logger.error("预测准确度评估失败 (%s), 不影响清单输出", exc)
+        result["accuracy_scored"] = []
     n = 0 if result.get("empty") else len(result.get("list", []))
     logger.info(
         "清单生成完成 (%s): mode=%s, %d 只, cap=%.2f",

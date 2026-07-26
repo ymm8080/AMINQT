@@ -82,6 +82,12 @@ def main() -> dict:
         print(lst[[c for c in cols if c in lst.columns]].to_string(index=False))
     else:
         print(f"空清单 (mode={result.get('mode')})")
+    for acc in result.get("accuracy_scored", []):
+        for k, m in acc["horizons"].items():
+            print(
+                f"准确度 {acc['forecast_date']} [{k}d] "
+                f"WMAPE={m['wmape']:.4f} bias={m['bias']:+.4f} n={m['n']}"
+            )
     return result
 
 
