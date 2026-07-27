@@ -3,6 +3,8 @@
   "max_hold_days",
   "prob_exit"
  ],
+ "objective": "net_excess_annual",
+ "max_dd_limit": null,
  "n_combos": 20,
  "best_params": {
   "max_hold_days": 5,

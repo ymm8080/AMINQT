@@ -76,6 +76,11 @@ export function KlineChart({
         row[`ma${w}`] = sum / w
       }
     })
+    // 成交量 MA20
+    if (i >= 19) {
+      const volSum = data.slice(i - 19, i + 1).reduce((s, x) => s + x.volume, 0)
+      row.volMa20 = volSum / 20
+    }
     return row
   })
 
@@ -153,11 +158,24 @@ export function KlineChart({
             if (name === '成交量') {
               return [Number(value).toLocaleString(), name]
             }
+            if (name === 'VolMA20') {
+              return [Number(value).toLocaleString(), name]
+            }
             return [Number(value).toFixed(2), name]
             }}
           />
           <Bar yAxisId="price" dataKey="range" shape={candleShape} name="K线" isAnimationActive={false} />
           <Bar yAxisId="volume" dataKey="volume" fill="#4f8ef755" name="成交量" isAnimationActive={false} />
+          <Line
+            yAxisId="volume"
+            type="monotone"
+            dataKey="volMa20"
+            stroke="#ff9800"
+            dot={false}
+            strokeWidth={1}
+            connectNulls
+            name="VolMA20"
+          />
           {showMaLines &&
             mas.map((w, idx) => (
               <Line

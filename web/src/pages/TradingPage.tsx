@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type ListItem, type OhlcBar, type IntradayPoint, type SignalItem } from '../api'
+import { api, type OhlcBar, type IntradayPoint, type SignalItem } from '../api'
 import { IntradayChart } from '../components/IntradayChart'
 
 export function TradingPage({ initialSymbol }: { initialSymbol?: string }) {
@@ -9,7 +9,8 @@ export function TradingPage({ initialSymbol }: { initialSymbol?: string }) {
   const [signals, setSignals] = useState<SignalItem[]>([])
   const [autoBuy, setAutoBuy] = useState(false)
   const [autoSell, setAutoSell] = useState(false)
-  const [priorityItems, setPriorityItems] = useState<ListItem[]>([])
+  const [prioritySymbols, setPrioritySymbols] = useState<string[]>([])
+  const [nameMap, setNameMap] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (initialSymbol) setSymbol(initialSymbol)
@@ -23,24 +24,16 @@ export function TradingPage({ initialSymbol }: { initialSymbol?: string }) {
   }, [symbol])
 
   useEffect(() => {
-    // 与选股看板同源：latestList 的 priority 字段 + priority.json 手工添加股
-    Promise.all([api.latestList(), api.priority()])
-      .then(([listRes, priRes]) => {
-        const m: Record<string, string> = {}
-        for (const it of listRes.items) if (it.name) m[it.symbol] = it.name
-        const fromList = listRes.items.filter((i) => i.priority)
-        const listSyms = new Set(fromList.map((i) => i.symbol))
-        const extra = priRes.symbols
-          .filter((s) => !listSyms.has(s))
-          .map((s) => ({
-            symbol: s, name: m[s], priority: true,
-          } as ListItem))
-        const merged = [...fromList, ...extra]
-        setPriorityItems(merged)
-        const syms = merged.map((i) => i.symbol)
-        setSymbol((prev) => (prev && syms.includes(prev) ? prev : syms[0] ?? ''))
-      })
-      .catch(() => setPriorityItems([]))
+    // priority.json 是唯一数据源：Pipeline1 写入 + 手工 toggle
+    api.priority().then((r) => {
+      setPrioritySymbols(r.symbols)
+      setSymbol((prev) => (prev && r.symbols.includes(prev) ? prev : r.symbols[0] ?? ''))
+    }).catch(() => setPrioritySymbols([]))
+    api.latestList().then((r) => {
+      const m: Record<string, string> = {}
+      for (const it of r.items) if (it.name) m[it.symbol] = it.name
+      setNameMap(m)
+    }).catch(() => {})
   }, [])
 
   const last = ohlc[ohlc.length - 1]
@@ -70,16 +63,16 @@ export function TradingPage({ initialSymbol }: { initialSymbol?: string }) {
       <div className="panel grid grid-2">
         <div>
           <label>标的（选股看板日内买入标记股）</label>
-          <select value={symbol} onChange={(e) => setSymbol(e.target.value)} disabled={priorityItems.length === 0}>
-            {priorityItems.length > 0 ? (
-              priorityItems.map((it) => (
-                <option key={it.symbol} value={it.symbol}>{it.symbol} {it.name ?? ''}</option>
+          <select value={symbol} onChange={(e) => setSymbol(e.target.value)} disabled={prioritySymbols.length === 0}>
+            {prioritySymbols.length > 0 ? (
+              prioritySymbols.map((s) => (
+                <option key={s} value={s}>{s} {nameMap[s] ?? ''}</option>
               ))
             ) : (
               <option value="">暂无日内买入标的</option>
             )}
           </select>
-          {priorityItems.length === 0 && <p className="dim">请先在选股看板标记"日内买入"股票。</p>}
+          {prioritySymbols.length === 0 && <p className="dim">请先在选股看板标记“日内买入”股票。</p>}
           <div style={{ marginTop: 12, fontSize: 24, fontWeight: 700 }}>
             {last?.close.toFixed(2)}{' '}
             <span className={change >= 0 ? 'up' : 'down'}>{(change * 100).toFixed(2)}%</span>

@@ -121,13 +121,16 @@ def pipeline_buy_candidates(df: pd.DataFrame) -> set[str]:
 
 
 def apply_priority_tags(df: pd.DataFrame) -> pd.DataFrame:
-    """为清单打重点股标签: 已保存 + Pipeline1 推荐买入."""
+    """为清单打日内交易标签: 只读 priority.json.
+
+    Pipeline1 程序离线运行时写入 priority.json; 用户手工 toggle 也写 priority.json.
+    页面不做自动计算, 手工更改不会被覆盖.
+    """
     if df is None or df.empty or "symbol" not in df.columns:
         return df
     df = df.copy()
     saved = load_priority_symbols()
-    auto = pipeline_buy_candidates(df)
-    df["priority"] = df["symbol"].isin(saved | auto)
+    df["priority"] = df["symbol"].isin(saved)
     return df
 
 
