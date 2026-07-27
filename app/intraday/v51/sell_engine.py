@@ -47,6 +47,44 @@ class SellContext:
 
 
 # ============================================================
+# P23.5 自适应止损: ATR 驱动 + board_type 分档 (D-20, v3.2)
+# ============================================================
+def adaptive_stop_loss(stock: dict, board_type: str = "main") -> float:
+    """D-20: ATR驱动止损, 分主板/双创.
+
+    Args:
+        stock: 含 'ATR_14', 'close' (或 'atr_pct')
+        board_type: 'main' | 'chinext'
+
+    Returns:
+        止损比例 (负数, 如 -0.04).
+    """
+    if "atr_pct" in stock:
+        atr_pct = float(stock["atr_pct"])
+    elif "ATR_14" in stock and "close" in stock:
+        atr_14 = stock["ATR_14"]
+        close = stock["close"]
+        atr_pct = float(atr_14) / float(close) if close > 0 else 0.02
+    else:
+        atr_pct = 0.02
+
+    atr_mult = 1.5
+    if board_type == "main":
+        stop = max(-0.04, -atr_mult * atr_pct)
+    elif board_type == "chinext":
+        stop = max(-0.06, -atr_mult * atr_pct)
+    else:
+        stop = -atr_mult * atr_pct
+
+    # 噪音带校验：止损必须挂在 1.2 倍正常波动之外
+    min_buffer = 1.2 * atr_pct
+    if abs(stop) < min_buffer:
+        stop = -min_buffer
+
+    return round(stop, 4)
+
+
+# ============================================================
 # 单规则 (True = 触发; 全部需调用方保证 sellable_qty>0 前置)
 # ============================================================
 def s8_limit_escape(ctx: SellContext) -> bool:
