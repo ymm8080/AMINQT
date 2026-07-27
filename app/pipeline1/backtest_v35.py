@@ -253,6 +253,7 @@ class BacktestEngineV35:
                             "price": px,
                             "reason": f"清单score={row['score']:.4f}",
                             "pnl": np.nan,
+                            "score": float(row.get("score", 0.5)),
                         }
                     )
 
@@ -268,17 +269,22 @@ class BacktestEngineV35:
             )
             nav_hist.append(DailyBar(date, nav, cash, len(positions)))
 
+        trades_df = pd.DataFrame(
+            trades, columns=["date", "symbol", "side", "price", "reason", "pnl", "score"]
+        )
         return {
             "nav_curve": pd.DataFrame([vars(b) for b in nav_hist]),
-            "trades": pd.DataFrame(
-                trades, columns=["date", "symbol", "side", "price", "reason", "pnl"]
-            ),
-            "metrics": self._metrics(nav_hist, bench, initial_capital),
+            "trades": trades_df,
+            "metrics": self._metrics(nav_hist, bench, initial_capital, trades_df),
         }
 
     # ---------------- 绩效 ----------------
     def _metrics(
-        self, nav_hist: list[DailyBar], bench: pd.Series, initial: float
+        self,
+        nav_hist: list[DailyBar],
+        bench: pd.Series,
+        initial: float,
+        trades_df: pd.DataFrame | None = None,
     ) -> dict:
         nav = pd.Series({b.date: b.nav for b in nav_hist})
         ret = nav.pct_change().dropna()
@@ -302,13 +308,80 @@ class BacktestEngineV35:
             if len(downside) > 1 and downside.std() > 0
             else 0.0
         )
+
+        # ---- 赚钱指标: 胜率/盈亏比/期望/最大连亏 ----
+        win_rate, pl_ratio, expectancy, max_consec_loss, total_trades, avg_holding = (
+            0.0, 0.0, 0.0, 0, 0, 0.0
+        )
+        if trades_df is not None and len(trades_df):
+            sells = trades_df[trades_df["side"] == "sell"]
+            if len(sells):
+                pnls = sells["pnl"].dropna().values
+                total_trades = len(pnls)
+                wins = pnls[pnls > 0]
+                losses = pnls[pnls <= 0]
+                win_rate = float(len(wins) / total_trades) if total_trades else 0.0
+                avg_win = float(wins.mean()) if len(wins) else 0.0
+                avg_loss = float(abs(losses.mean())) if len(losses) else 0.0
+                pl_ratio = float(avg_win / avg_loss) if avg_loss > 0 else 0.0
+                expectancy = float(pnls.mean())
+                streak = 0
+                for p in pnls:
+                    streak = streak + 1 if p <= 0 else 0
+                    max_consec_loss = max(max_consec_loss, streak)
+                # 每笔卖出匹配最临近的前一笔买入 (同一 symbol, 严格早于卖出日)
+                buys = trades_df[trades_df["side"] == "buy"].sort_values("date")
+                hold_days = []
+                for _, sell in sells.iterrows():
+                    sell_dt = pd.to_datetime(sell["date"])
+                    sym_buys = buys[
+                        (buys["symbol"] == sell["symbol"])
+                        & (pd.to_datetime(buys["date"]) < sell_dt)
+                    ]
+                    if len(sym_buys):
+                        entry_dt = pd.to_datetime(sym_buys.iloc[-1]["date"])
+                        hold_days.append((sell_dt - entry_dt).days)
+                avg_holding = float(np.mean(hold_days)) if hold_days else 0.0
+
+        # ---- OOS Rank IC: 预测排序 vs 实际收益 — 核心判断"模型是否有效" ----
+        oos_rank_ic, ic_rolling_20d, ic_daily = 0.0, 0.0, []
+        if trades_df is not None and len(trades_df):
+            sells = trades_df[trades_df["side"] == "sell"]
+            if len(sells) >= 5:
+                from scipy.stats import spearmanr
+                # Match each sell with its buy score (if available via the buy trade)
+                pnl_scores = []
+                for _, sell in sells.iterrows():
+                    buy = trades_df[
+                        (trades_df["side"] == "buy")
+                        & (trades_df["symbol"] == sell["symbol"])
+                    ]
+                    if len(buy):
+                        pnl_scores.append((sell["pnl"], buy.iloc[-1].get("score", 0.5)))
+                if len(pnl_scores) >= 5:
+                    pnls_arr = np.array([p[0] for p in pnl_scores])
+                    scores_arr = np.array([p[1] for p in pnl_scores])
+                    if np.std(scores_arr) > 1e-9:
+                        r = spearmanr(scores_arr, pnls_arr)
+                        oos_rank_ic = float(r.correlation) if not np.isnan(r.correlation) else 0.0
+
         return {
             "total_return": float(nav.iloc[-1] / initial - 1),
             "annual_return": float(ann),
             "benchmark_annual": float(bench_ann),
-            "net_excess_annual": excess_ann,  # 扣费后净超额 (验收口径)
+            "net_excess_annual": excess_ann,
             "max_drawdown": float(dd),
             "sharpe": sharpe,
-            "sortino": sortino,  # [E11] 主目标 ≥ 1.5
+            "sortino": sortino,
             "n_days": len(nav),
+            # 赚钱指标
+            "win_rate": round(win_rate, 4),
+            "pl_ratio": round(pl_ratio, 4),
+            "expectancy": round(expectancy, 5),
+            "total_trades": total_trades,
+            "max_consecutive_loss": max_consec_loss,
+            "avg_holding_days": round(avg_holding, 1),
+            # OOS IC — 模型预测排序有效性
+            "oos_rank_ic": round(oos_rank_ic, 4),
+            "ic_daily": [round(float(x), 4) for x in ic_daily[::-1][:20]],
         }

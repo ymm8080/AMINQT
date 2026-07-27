@@ -68,7 +68,18 @@ export interface BacktestMetrics {
   net_excess_annual: number
   max_drawdown: number
   sharpe: number
+  sortino: number
   n_days: number
+  // trade-level profitability
+  win_rate: number
+  pl_ratio: number
+  expectancy: number
+  total_trades: number
+  max_consecutive_loss: number
+  avg_holding_days: number
+  // OOS IC — model predictive validity
+  oos_rank_ic: number
+  ic_daily: number[]
 }
 
 export interface BacktestResult {
@@ -76,6 +87,20 @@ export interface BacktestResult {
   metrics: BacktestMetrics
   nav_curve: { date: string; nav: number }[]
   trades: Record<string, unknown>[]
+}
+
+export interface ForecastQuality {
+  exists: boolean
+  demo: boolean
+  date?: string
+  mae_1d: number | null
+  bias_1d: number | null
+  direction_accuracy: number | null
+  n_samples: number
+  bias_big_up: number | null
+  bias_small_up: number | null
+  bias_small_down: number | null
+  bias_big_down: number | null
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -122,4 +147,5 @@ export const api = {
   ruleConfig: () =>
     req<{ tunable: Record<string, { value: number; bounds: number[] }> }>('/config/rules'),
   tuningReport: () => req<Record<string, unknown> & { exists: boolean }>('/tuning/report'),
+  forecastQuality: () => req<ForecastQuality>('/forecast/quality'),
 }
