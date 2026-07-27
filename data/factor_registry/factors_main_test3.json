@@ -1,0 +1,46 @@
+{
+ "window_id": "main_test3",
+ "factors": [
+  "turnover_stability_5"
+ ],
+ "detail": {
+  "turn": {
+   "ic_1d": 0.1136,
+   "ic_3d": 0.1261,
+   "ic_5d": 0.1266,
+   "auc": 0.5445,
+   "rolling_mean": 0.0512,
+   "rolling_pos_ratio": 1.0,
+   "nw_t_3d": -2.4626,
+   "nw_t_5d": -1.8972,
+   "grade": "dead",
+   "ic_mdd_3d": 0.1909,
+   "l2_evicted": true
+  },
+  "turnover_stability_5": {
+   "ic_1d": 0.0834,
+   "ic_3d": 0.1033,
+   "ic_5d": 0.1036,
+   "auc": 0.5386,
+   "rolling_mean": 0.0157,
+   "rolling_pos_ratio": 1.0,
+   "nw_t_3d": 2.3742,
+   "nw_t_5d": 2.6176,
+   "grade": "weak",
+   "ic_mdd_3d": 0.0988
+  },
+  "MACD": {
+   "ic_1d": 0.1248,
+   "ic_3d": 0.1294,
+   "ic_5d": 0.1349,
+   "auc": 0.5033,
+   "rolling_mean": 0.0321,
+   "rolling_pos_ratio": 1.0,
+   "nw_t_3d": -1.6435,
+   "nw_t_5d": -1.2527,
+   "grade": "dead",
+   "ic_mdd_3d": 0.1762,
+   "l2_evicted": true
+  }
+ }
+}

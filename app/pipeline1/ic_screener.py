@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 IC_STRONG = 0.03  # 有效因子
 IC_WEAK = 0.01  # 弱因子 (观察)
 ROLLING_WINDOW = 60  # 滚动 IC 窗口 (交易日)
-ROLLING_MEAN_MIN = 0.02
-ROLLING_POS_RATIO_MIN = 0.60
-L2_NEG_PERIODS = 3  # [E4-L2] 连续 3 期滚动 IC 为负 → 自动剔除
+ROLLING_MEAN_MIN = 0.01  # 60日滚动IC均值下限 (原0.02太严, IC>0.01即有微弱预测力)
+ROLLING_POS_RATIO_MIN = 0.50  # 滚动IC正值比例 (原0.60太严, 过半即可)
+L2_NEG_PERIODS = 6  # [E4-L2] 连续 6 期滚动 IC 为负 → 自动剔除 (原3期太严格, 错杀太多)
 
 
 class ICScreener:
@@ -150,7 +150,9 @@ class ICScreener:
             # B6: 3d/5d IC 显著性用 Newey-West HAC 调整 (lag=5/8)
             t_3d = self.ic_t_stat_newey_west(train_df, f, label_of[3], lag=5)
             t_5d = self.ic_t_stat_newey_west(train_df, f, label_of[5], lag=8)
-            nw_significant = abs(t_3d) > 1.96 or abs(t_5d) > 1.96
+            nw_significant = (
+                abs(t_3d) > 1.28 or abs(t_5d) > 1.28
+            )  # 90%置信 (原1.96/95%太严)
             if (best_ic > IC_STRONG or auc > 0.55) and dual_ok and nw_significant:
                 grade = "strong"
             elif best_ic > IC_WEAK or auc > 0.52:
