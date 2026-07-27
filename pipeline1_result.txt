@@ -1,0 +1,5 @@
+Pipeline1 Prediction: 20260727
+Cleaning: main=1510 dual=0 valve=empty
+Candidates: 10
+List: 0 stocks (empty=True)
+

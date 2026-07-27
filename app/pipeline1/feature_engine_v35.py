@@ -67,6 +67,51 @@ class FeatureEngineV35:
         df = self.dim19_amihud(df)  # E6
         df = self.industry_neutralize(df)
         df = self.add_missingness_flags(df)
+        df = self._add_cross_sectional_ranks(df)
+        return df
+
+    # ---------------- ⑳ 截面排名特征 (IC提升最快路径) ----------------
+    @staticmethod
+    def _add_cross_sectional_ranks(df: pd.DataFrame) -> pd.DataFrame:
+        """对每个数值特征生成同板块同日内的百分位排名 (_xrank).
+
+        原始特征提供绝对量纲, 截面排名提供相对位置 — 两者互补.
+        仅对已有 >50% 非 NaN 且 std>0 的列生成排名.
+        """
+        from .cleaning_pipeline import board_of
+
+        df = df.copy()
+        if "board" not in df.columns:
+            df["board"] = df["symbol"].map(board_of)
+
+        skip_prefix = ("label_", "is_limit_up", "is_one_word", "limit_up_",
+                       "is_missing_", "is_pre_", "is_post_", "is_st", "is_suspended")
+        skip_exact = {"symbol", "date", "board", "industry", "name", "tradestatus",
+                       "close_hfq", "open_hfq", "high_hfq", "low_hfq",
+                       "list_days", "announce_date", "churn_suspect",
+                       "score_rank", "rank_amount", "rank_ff_turnover",
+                       "liquidity_score", "market_state", "schema_version",
+                       "PE_TTM", "is_virtual", "price_1455", "adv20",
+                       "limit_pct", "touched_limit_up", "time", "VAR5", "VAR51"}
+
+        src_cols = [
+            c for c in df.columns
+            if c not in skip_exact
+            and not c.startswith(skip_prefix)
+            and not c.endswith("_xrank")  # 不做二阶排名
+            and df[c].dtype in ("float64", "float32", "int64", "int32")
+        ]
+        # 只对非NaN率>50%的列生成排名 (全NaN列排名无意义)
+        valid = [c for c in src_cols if df[c].isna().mean() < 0.5 and df[c].std() > 0]
+
+        if not valid:
+            return df
+
+        # 批量计算: date+board 分组的百分位排名, 直接赋值回原 df
+        grp = df.groupby(["date", "board"], observed=True)
+        for col in valid:
+            df[f"{col}_xrank"] = grp[col].rank(pct=True)
+
         return df
 
     # ---------------- ①价量动能 ----------------

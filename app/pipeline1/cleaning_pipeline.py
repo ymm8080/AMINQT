@@ -258,14 +258,17 @@ class CleaningPipeline:
         )
 
     def run_inference(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, str]:
-        """推理端清洗 (步骤 0→4 + 步骤5[E6]). 返回 (主板, 双创, 阀门状态)."""
+        """推理端清洗 (步骤 0→4 + 步骤5[E6]). 返回 (主板, 双创, 阀门状态).
+
+        推理端 step2 截取 top-N: 候选清单需要收敛 (训练端不截断, 推理端截断).
+        """
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
         main, dual = self.step0_board_split(df)
         main = self.step3_extreme(
-            self.step2_liquidity(self.step1_base_state(main), apply_top_n=False)
+            self.step2_liquidity(self.step1_base_state(main), apply_top_n=True)
         )
         dual = self.step3_extreme(
-            self.step2_liquidity(self.step1_base_state(dual), apply_top_n=False)
+            self.step2_liquidity(self.step1_base_state(dual), apply_top_n=True)
         )
         both = pd.concat([main, dual], ignore_index=True)
         both, state = self.step4_tradability(both, inference_only=True)

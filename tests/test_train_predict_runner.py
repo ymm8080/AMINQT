@@ -94,7 +94,7 @@ class TestAdaptiveWindow:
         assert len(trained["segs"]["test"]) > 0
 
     def test_too_shallow_raises(self, tmp_path):
-        panel = make_panel(days=160)  # < 130+50 下限
+        panel = make_panel(days=140)  # < 100+50 下限 (es+calib+test=100, train>=50)
         df = panel.copy()
         df["label_1d"] = 0.01
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))

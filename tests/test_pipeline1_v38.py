@@ -274,16 +274,26 @@ class TestDynamicEntry:
         out = ListGenerator().emit(cands)
         assert list(out["list"]["symbol"]) == ["600001"]
 
-    def test_zero_passing_is_feature_not_bug(self):
+    def test_quantile_fallback_when_absolute_threshold_unreachable(self):
+        """E7: 绝对阈值不可达时, 分位数回退取 prob_up 前 20% — 不再返回空清单."""
         cands = _cands([{"symbol": "600001", "prob_up": 0.50}])
         out = ListGenerator().emit(cands)
-        assert out["empty"] and len(out["list"]) == 0
+        assert not out["empty"] and len(out["list"]) == 1
 
     def test_bear_tightening(self):
-        # prob 0.62 正常过 (0.60), bear 不过 (0.65) [E11]
-        cands = _cands([{"symbol": "600001", "prob_up": 0.62}])
-        assert len(ListGenerator().emit(cands, market_state="range")["list"]) == 1
-        assert ListGenerator().emit(cands, market_state="bear")["empty"]
+        # 4 只 prob=0.62 (正常过0.60, bear不过0.65) + 1 只 prob=0.70 (两种都过) [E11]
+        cands = _cands([
+            {"symbol": "600001", "industry": "A", "prob_up": 0.62},
+            {"symbol": "600002", "industry": "B", "prob_up": 0.62},
+            {"symbol": "600003", "industry": "C", "prob_up": 0.62},
+            {"symbol": "600004", "industry": "D", "prob_up": 0.62},
+            {"symbol": "600005", "industry": "E", "prob_up": 0.70},
+        ])
+        # 正常: 5 只全过绝对阈值 (0.62/0.70 > 0.60)
+        assert len(ListGenerator().emit(cands, market_state="range")["list"]) == 5
+        # bear: 仅 1 只过绝对阈值 (0.70 > 0.65, 其余 0.62 < 0.65)
+        bear_out = ListGenerator().emit(cands, market_state="bear")
+        assert not bear_out["empty"] and len(bear_out["list"]) == 1
 
 
 class TestScorePainPenalty:
@@ -521,7 +531,7 @@ class TestBacktestV38:
 # E4-L2 因子剔除 + Isotonic 校准默认
 # ============================================================
 class TestScreenerL2:
-    def test_l2_evicts_after_three_negative_periods(self, tmp_path):
+    def test_l2_evicts_after_six_negative_periods(self, tmp_path):
         from app.pipeline1.ic_screener import ICScreener
 
         dates = pd.bdate_range("2024-01-01", periods=70)
@@ -545,11 +555,13 @@ class TestScreenerL2:
         sc = ICScreener(registry_path=str(tmp_path))
         r1 = sc.screen(df, ["factor"], "w1")
         assert r1["detail"]["factor"]["grade"] == "strong"  # 强度(绝对值)仍强
-        sc.screen(df, ["factor"], "w2")
-        r3 = sc.screen(df, ["factor"], "w3")
-        assert r3["detail"]["factor"]["grade"] == "dead"
-        assert r3["detail"]["factor"]["l2_evicted"] is True
-        assert "factor" not in r3["factors"]
+        # L2_NEG_PERIODS=6: 连续 6 期窗口 IC 为负才剔除
+        r = None
+        for w in range(2, 7):
+            r = sc.screen(df, ["factor"], f"w{w}")
+        assert r["detail"]["factor"]["grade"] == "dead"
+        assert r["detail"]["factor"]["l2_evicted"] is True
+        assert "factor" not in r["factors"]
 
 
 class TestIsotonicDefault:

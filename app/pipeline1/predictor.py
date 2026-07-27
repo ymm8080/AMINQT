@@ -94,16 +94,22 @@ class V35Predictor:
             latest["pain_prob"] = bundle["pain_model"].predict_proba(X)
             keep.append("pain_prob")
         # [阶段四] LambdaRank 排序分 (bundle 含 rank_model 时)
-        # 若 LambdaRank 退化 (常数输出), 自动回退 pred_ret_1d 横截面排名
+        # 若 LambdaRank 退化 (常数输出) 或预测异常, 自动回退 pred_ret_1d 横截面排名
         if "rank_model" in bundle:
-            raw_rank = bundle["rank_model"][0].predict(X)
-            if np.std(raw_rank) < 1e-6:
+            try:
+                raw_rank = bundle["rank_model"][0].predict(X)
+                if np.std(raw_rank) < 1e-6:
+                    logger.warning(
+                        "[%s] LambdaRank 退化 (std=%.6f), 回退 pred_ret_1d 排名",
+                        board,
+                        np.std(raw_rank),
+                    )
+                    reg_pred = models["1d_reg"][0].predict(X)
+                    raw_rank = _cross_sectional_rank(reg_pred)
+            except Exception:
                 logger.warning(
-                    "[%s] LambdaRank 退化 (std=%.6f), 回退 pred_ret_1d 排名",
-                    board,
-                    np.std(raw_rank),
+                    "[%s] LambdaRank 预测异常, 回退 pred_ret_1d 排名", board
                 )
-                # 用 1d_reg 预测值作为排名 (回归模型有信号)
                 reg_pred = models["1d_reg"][0].predict(X)
                 raw_rank = _cross_sectional_rank(reg_pred)
             latest["rank_score"] = raw_rank
