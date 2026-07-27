@@ -33,22 +33,22 @@ WINDOW_TOTAL = 770  # [V3.8] 设计目标窗口 (3年数据≈750交易日)
 WINDOW_TRANSITION = 560  # [B11] 过渡窗口下限
 B11_FULL_DEPTH = 1250  # [B11] 回填达标线 (≥5 年交易日): 达到才用 770 窗口
 MIN_TRAIN_DAYS = 50  # 窗口 train 段下限, 不足即拒绝训练
-MIN_ES_DATES = 30  # ES 集日期下限, 不足则跳过早停 (防 best_iteration=1 坍缩)
 # 段长比例 (train:es:calib:test ≈ 80:4:4:12)
 WINDOW_RATIOS = {"train": 0.80, "es": 0.04, "calib": 0.04, "test": 0.12}
-# 各段最小日期数 (低于此值训练不可靠)
+# 各段最小日期数: 用过渡窗口 × 比例 推导, 不定死常数
+_MIN_WINDOW = min(WINDOW_TOTAL, WINDOW_TRANSITION)
 SEG_MIN_DAYS = {
     "train": MIN_TRAIN_DAYS,
-    "es": MIN_ES_DATES,
-    "calib": MIN_ES_DATES,
-    "test": 60,
+    "es": max(int(_MIN_WINDOW * WINDOW_RATIOS["es"]), 8),
+    "calib": max(int(_MIN_WINDOW * WINDOW_RATIOS["calib"]), 8),
+    "test": max(int(_MIN_WINDOW * WINDOW_RATIOS["test"]), 30),
 }
+MIN_ES_DATES = SEG_MIN_DAYS["es"]  # 早停/校准决策阈值, 从比例推算
 # 兼容旧引用 (实际段长由 split_window 按比例动态计算)
 TRAIN_DAYS = 620
-ES_DAYS = 30
-CALIB_DAYS = 30
-TEST_DAYS = 90
-TEST_DAYS = 90  # 测试 (仅归因, 严禁反向调参)
+ES_DAYS = SEG_MIN_DAYS["es"]
+CALIB_DAYS = SEG_MIN_DAYS["calib"]
+TEST_DAYS = SEG_MIN_DAYS["test"]  # 仅归因, 严禁反向调参
 HALF_LIFE = 250  # 半衰期加权 (天)
 ES_PATIENCE = 100  # [V3.8 §2.1] patience=100
 OOS_IC_MIN = 0.03  # 新模型切换门槛
