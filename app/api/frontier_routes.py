@@ -187,8 +187,8 @@ class BacktestRequest(BaseModel):
     prob_exit: float = 0.50
     initial_capital: float = 1_000_000
     window_days: int = 180
-    start_date: str | None = None   # 'YYYY-MM-DD', 优先级高于 window_days
-    end_date: str | None = None     # 'YYYY-MM-DD'
+    start_date: str | None = None  # 'YYYY-MM-DD', 优先级高于 window_days
+    end_date: str | None = None  # 'YYYY-MM-DD'
     objective: str = "net_excess_annual"
     max_dd_limit: float | None = None
 
