@@ -1,14 +1,13 @@
+# -*- coding: utf-8 -*-
 """
-OOS 监控 + Kill Switch (DESIGN §14.6, 安全网 #10, PIPELINE1_V3.8 §2.7 E4)
-==========================================================================
-[E4] IC 日度三色灯 (替代月度监控): 每日推理后记录当日 OOS IC,
-  滚动 20 日均值 μ 与标准差 σ:
-  🟢 IC > μ-1σ        : 正常
-  🟡 μ-2σ < IC < μ-1σ : 警告, 进入复检队列 (连续3日🟡 → 按 L1 处理)
-  🔴 IC < μ-2σ        : 模型失效嫌疑, 触发 L1 切换 (立即降级模拟盘)
-历史绝对阈值档位 (IC>0.03 正常 / IC<0.01 连续3日降级 / IC<0 连续5日熔断) 保留作
-L2/L3 后备; Kill Switch: 连续 2 个月滚动 20 日 IC 均值 < 0.01 → 模型退役.
-没有 kill switch 的量化模型, 亏损期你分不清是运气还是失效.
+OOS 监控 + Kill Switch + BIAS 红灯规则 (IMPLEMENTATION_PLAN_v3.2 P25.3)
+========================================================================
+[E4] IC 日度三色灯: 每日推理后记录当日 OOS IC, 滚动 20 日 u/o:
+  🟢 IC > u-1o    : 正常
+  🟡 u-2o < IC < u-1o : 警告, 连续3日🟡 → L1
+  🔴 IC < u-2o    : 模型失效嫌疑, 触发 L1 (立即降级模拟盘)
+[P25.3] BIAS 红灯规则: bias_big_down > +0.02 → 触发 E4-L1 模型降级.
+Kill Switch: 连续 2 个月滚动 20 日 IC 均值 < 0.01 → 模型退役.
 """
 
 from __future__ import annotations
@@ -29,43 +28,81 @@ RED_DAYS = 3
 HALT_DAYS = 5
 KILL_MONTHS = 2
 KILL_WINDOW = 20
-# E4 三色灯
-LIGHT_WINDOW = 20  # 滚动 μ/σ 窗口
-YELLOW_STREAK_L1 = 3  # 连续 3 日黄灯 → 按 L1 处理
-LIGHT_MIN_SAMPLES = 5  # 历史不足时不亮灯 (回退绝对阈值)
+LIGHT_WINDOW = 20
+YELLOW_STREAK_L1 = 3
+LIGHT_MIN_SAMPLES = 5
 
 STATE_NORMAL = "NORMAL"
 STATE_YELLOW = "YELLOW_REVIEW"
-STATE_RED_SIM = "RED_SIMULATE"  # L1: 降级模拟盘
-STATE_HALT = "HALT"  # L3: 熔断停机
-STATE_RETIRED = "RETIRED"  # Kill Switch 退役
+STATE_RED_SIM = "RED_SIMULATE"
+STATE_HALT = "HALT"
+STATE_RETIRED = "RETIRED"
+
+
+# ---- P25.3 BIAS 红灯规则 (D-25) ----
+def bias_traffic_light(quality):
+    """D-25: BIAS红灯规则.
+
+    Args:
+        quality: compute_quality_metrics + compute_bias_buckets 输出 dict
+
+    Returns:
+        'GREEN' | 'YELLOW' | 'RED'
+    """
+    bias_big_down = quality.get("bias_big_down", 0)
+    if bias_big_down and not (
+        isinstance(bias_big_down, float) and np.isnan(bias_big_down)
+    ):
+        if bias_big_down > 0.02:
+            logger.critical(
+                "BIAS 红灯: bias_big_down=%.4f > 0.02, 大跌日模型高估!", bias_big_down
+            )
+            trigger_e4_l1("BIAS_BIG_DOWN_RED", bias_big_down)
+            return "RED"
+
+    bias_1d = quality.get("bias_1d", 0)
+    if bias_1d and not (isinstance(bias_1d, float) and np.isnan(bias_1d)):
+        if abs(bias_1d) > 0.01:
+            return "RED"
+        if abs(bias_1d) > 0.005:
+            return "YELLOW"
+
+    dir_acc = quality.get("direction_accuracy", 0)
+    if dir_acc and not (isinstance(dir_acc, float) and np.isnan(dir_acc)):
+        if dir_acc < 0.50:
+            return "RED"
+
+    return "GREEN"
+
+
+def trigger_e4_l1(reason, value):
+    """触发 E4-L1 模型降级 (记录 + 告警, 实际降级由上层调用)."""
+    logger.critical("E4-L1 触发: %s (value=%.4f), 模型降级为模拟盘", reason, value)
 
 
 @dataclass
 class OOSMonitor:
-    """OOS 监控状态机. 每日调用 daily_check(当日 Top15 预测 vs 实际收益)."""
+    """OOS 监控状态机. P25.3: daily_check 增加 BIAS 输入."""
 
-    ic_history: list[float] = field(default_factory=list)  # 每日 Rank IC
+    ic_history: list[float] = field(default_factory=list)
     state: str = STATE_NORMAL
     _red_streak: int = 0
     _neg_streak: int = 0
-    _yellow_streak: int = 0  # E4 连续黄灯计数
+    _yellow_streak: int = 0
 
-    # ---------------- 当日 IC ----------------
     @staticmethod
-    def daily_rank_ic(pred_scores: pd.Series, actual_returns: pd.Series) -> float:
-        """Top 15 清单预测得分 vs 次日实际收益的 Spearman IC."""
+    def daily_rank_ic(pred_scores, actual_returns):
         df = pd.DataFrame({"s": pred_scores, "r": actual_returns}).dropna()
-        ic = cross_sectional_rank_ic(df["s"], df["r"], min_x_unique=2, min_y_unique=1)
+        try:
+            ic = cross_sectional_rank_ic(
+                df["s"], df["r"], min_x_unique=2, min_y_unique=1
+            )
+        except Exception:
+            logger.warning("cross_sectional_rank_ic 计算异常, 返回 0.0", exc_info=True)
+            return 0.0
         return 0.0 if np.isnan(ic) else float(ic)
 
-    # ---------------- E4: IC 日度三色灯 ----------------
-    def ic_traffic_light(self, ic_today: float) -> str:
-        """[E4] 基于滚动 20 日 μ/σ 的三色灯 (替代月度监控).
-
-        🟢 IC > μ-1σ / 🟡 μ-2σ < IC < μ-1σ / 🔴 IC < μ-2σ (模型失效嫌疑 → L1).
-        历史 < 5 日返回 "GREEN" (样本不足不亮灯, 由绝对阈值档位接管).
-        """
+    def ic_traffic_light(self, ic_today):
         hist = self.ic_history[-LIGHT_WINDOW:]
         if len(hist) < LIGHT_MIN_SAMPLES:
             return "GREEN"
@@ -76,39 +113,62 @@ class OOSMonitor:
             return "YELLOW"
         return "GREEN"
 
-    # ---------------- 每日检查 ----------------
-    def daily_check(self, ic_today: float) -> dict:
-        """输入当日 Rank IC, 返回 {'state', 'action', 'rolling_ic_5d', 'light'}.
+    def daily_check(self, ic_today, quality=None):
+        """输入当日 Rank IC + (可选) BIAS 质量指标.
 
-        [E4] 三色灯优先: 🔴 → 立即 L1 降级; 🟡 连续 3 日 → 按 L1 处理.
+        Args:
+            ic_today: 当日 Rank IC
+            quality: P25.1/P25.2 输出 dict (含 mae_1d/bias_1d/direction_accuracy/bias_big_down)
+
+        Returns:
+            {'state', 'action', 'rolling_ic_5d', 'light', 'bias_light'}
         """
         light = self.ic_traffic_light(ic_today)
         self.ic_history.append(ic_today)
         rolling = float(np.mean(self.ic_history[-5:]))
 
-        # E4 三色灯裁决 (优先于绝对阈值)
-        if light == "RED":
-            self._yellow_streak = 0
-            self.state = STATE_RED_SIM
-            action = "🔴 L1: IC < μ-2σ, 模型失效嫌疑, 立即降级模拟盘"
-            logger.error(action)
-            return {
-                "state": self.state,
-                "action": action,
-                "rolling_ic_5d": round(rolling, 4),
-                "light": light,
-            }
-        if light == "YELLOW":
-            self._yellow_streak += 1
-            if self._yellow_streak >= YELLOW_STREAK_L1:
+        # P25.3 BIAS 红灯 (与 IC 三色灯并列)
+        bias_light = "NONE"
+        if quality:
+            bias_light = bias_traffic_light(quality)
+            if bias_light == "RED":
+                self._yellow_streak = 0
                 self.state = STATE_RED_SIM
-                action = f"🟡×{self._yellow_streak} → L1: 连续黄灯, 降级模拟盘"
+                action = "🔴 BIAS_RED: bias_big_down>0.02, E4-L1 模型降级"
                 logger.error(action)
                 return {
                     "state": self.state,
                     "action": action,
                     "rolling_ic_5d": round(rolling, 4),
                     "light": light,
+                    "bias_light": bias_light,
+                }
+
+        # E4 三色灯裁决
+        if light == "RED":
+            self._yellow_streak = 0
+            self.state = STATE_RED_SIM
+            action = "🔴 L1: IC < u-2o, 模型失效嫌疑, 立即降级模拟盘"
+            logger.error(action)
+            return {
+                "state": self.state,
+                "action": action,
+                "rolling_ic_5d": round(rolling, 4),
+                "light": light,
+                "bias_light": bias_light,
+            }
+        if light == "YELLOW":
+            self._yellow_streak += 1
+            if self._yellow_streak >= YELLOW_STREAK_L1:
+                self.state = STATE_RED_SIM
+                action = f"🟡x{self._yellow_streak} → L1: 连续黄灯, 降级模拟盘"
+                logger.error(action)
+                return {
+                    "state": self.state,
+                    "action": action,
+                    "rolling_ic_5d": round(rolling, 4),
+                    "light": light,
+                    "bias_light": bias_light,
                 }
         else:
             self._yellow_streak = 0
@@ -146,11 +206,10 @@ class OOSMonitor:
             "action": action,
             "rolling_ic_5d": round(rolling, 4),
             "light": light,
+            "bias_light": bias_light,
         }
 
-    # ---------------- Kill Switch ----------------
-    def kill_switch_check(self) -> dict:
-        """连续 2 个月滚动 20 日 IC 均值 < 0.01 → 模型退役."""
+    def kill_switch_check(self):
         if len(self.ic_history) < KILL_WINDOW * KILL_MONTHS:
             return {"retire": False, "reason": "样本不足"}
         recent_2m = self.ic_history[-KILL_WINDOW * KILL_MONTHS :]
@@ -168,7 +227,7 @@ class OOSMonitor:
                 "month_ic": [round(m1, 4), round(m2, 4)],
                 "procedure": [
                     "停止实盘交易",
-                    "排查原因 (数据源/特征/市场结构变化)",
+                    "排查原因",
                     "重新训练或调整特征",
                     "通过 OOS 验收后才可重新上线",
                 ],

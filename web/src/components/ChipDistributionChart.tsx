@@ -39,16 +39,16 @@ export function ChipDistributionChart({
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={chartData} layout="vertical">
-        <XAxis type="number" tick={{ fill: '#8b949e', fontSize: 10 }} />
+        <XAxis type="number" tick={{ fill: '#636c76', fontSize: 10 }} />
         <YAxis
           dataKey="price"
           type="category"
-          tick={{ fill: '#8b949e', fontSize: 10 }}
+          tick={{ fill: '#636c76', fontSize: 10 }}
           width={55}
         />
         <Tooltip
-          contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
-          labelStyle={{ color: '#8b949e' }}
+          contentStyle={{ background: '#ffffff', border: '1px solid #30363d' }}
+          labelStyle={{ color: '#636c76' }}
         />
         <Bar dataKey="count" fill="#4f8ef7" name="筹码量" />
       </BarChart>

@@ -71,14 +71,14 @@ export function MainForceChipsChart({ data, height = 200 }: { data: OhlcBar[]; h
       <h4 style={{ margin: '0 0 8px' }}>主力筹码指标</h4>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={chartData} syncId="stock-detail">
-          <XAxis dataKey="date" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={40} />
-          <YAxis tick={{ fill: '#8b949e', fontSize: 10 }} orientation="right" width={55} />
+          <XAxis dataKey="date" tick={{ fill: '#636c76', fontSize: 10 }} minTickGap={40} />
+          <YAxis tick={{ fill: '#636c76', fontSize: 10 }} orientation="right" width={55} />
           <Tooltip
-            contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
-            labelStyle={{ color: '#8b949e' }}
+            contentStyle={{ background: '#ffffff', border: '1px solid #30363d' }}
+            labelStyle={{ color: '#636c76' }}
             formatter={(value: unknown, name: string) => [Number(value).toFixed(2), name]}
           />
-          <ReferenceLine y={0} stroke="#8b949e" strokeDasharray="4 4" />
+          <ReferenceLine y={0} stroke="#636c76" strokeDasharray="4 4" />
           <Line type="monotone" dataKey="mainTraj" stroke="#e6edf3" dot={false} strokeWidth={1.2} name="主力轨迹" />
           <Line type="monotone" dataKey="mainAvg" stroke="#facc15" dot={false} strokeWidth={1.2} name="主力平均" />
         </LineChart>
@@ -121,14 +121,14 @@ export function ChipControlChart({ data, height = 200 }: { data: OhlcBar[]; heig
       <h4 style={{ margin: '0 0 8px' }}>主力筹码控盘程度 N</h4>
       <ResponsiveContainer width="100%" height={height}>
         <ComposedChart data={chartData} syncId="stock-detail">
-          <XAxis dataKey="date" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={40} />
-          <YAxis domain={[0, 100]} tick={{ fill: '#8b949e', fontSize: 10 }} orientation="right" width={55} />
+          <XAxis dataKey="date" tick={{ fill: '#636c76', fontSize: 10 }} minTickGap={40} />
+          <YAxis domain={[0, 100]} tick={{ fill: '#636c76', fontSize: 10 }} orientation="right" width={55} />
           <Tooltip
-            contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
-            labelStyle={{ color: '#8b949e' }}
+            contentStyle={{ background: '#ffffff', border: '1px solid #30363d' }}
+            labelStyle={{ color: '#636c76' }}
             formatter={(value: unknown, name: string) => [Number(value).toFixed(2), name]}
           />
-          <ReferenceLine y={50} stroke="#8b949e" strokeDasharray="4 4" />
+          <ReferenceLine y={50} stroke="#636c76" strokeDasharray="4 4" />
           <Bar dataKey="a04" fill="#e54545" name="获利盘(近)" />
           <Bar dataKey="a02" fill="#26a69a" name="获利盘(远)" />
           <Bar dataKey="a08" fill="#facc15" name="筹码差" />
@@ -174,11 +174,11 @@ export function TrendTopBottomChart({ data, height = 200 }: { data: OhlcBar[]; h
       <h4 style={{ margin: '0 0 8px' }}>趋势顶底</h4>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={chartData} syncId="stock-detail">
-          <XAxis dataKey="date" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={40} />
-          <YAxis domain={[0, 100]} tick={{ fill: '#8b949e', fontSize: 10 }} orientation="right" width={55} />
+          <XAxis dataKey="date" tick={{ fill: '#636c76', fontSize: 10 }} minTickGap={40} />
+          <YAxis domain={[0, 100]} tick={{ fill: '#636c76', fontSize: 10 }} orientation="right" width={55} />
           <Tooltip
-            contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
-            labelStyle={{ color: '#8b949e' }}
+            contentStyle={{ background: '#ffffff', border: '1px solid #30363d' }}
+            labelStyle={{ color: '#636c76' }}
             formatter={(value: unknown, name: string) => [Number(value).toFixed(2), name]}
           />
           <ReferenceLine y={20} stroke="#26a69a" strokeDasharray="4 4" />
