@@ -88,8 +88,19 @@ def fetch_today_data(symbols: list[str] | None = None) -> pd.DataFrame | None:
                     df[col] = pd.to_numeric(df[col], errors="coerce")
                 df["pre_close"] = df["close"].shift(1)
                 # board 判断: 300/688/301 → dual, 其他 → main
-                df["board"] = "dual" if sym.startswith(("300", "688", "301")) else "main"
+                df["board"] = "STAR" if sym.startswith("688") else "GEM" if sym.startswith(("300", "301")) else "main"
                 df["industry"] = "UNKNOWN"
+                # 清洗流水线必需列
+                df["is_st"] = False
+                df["is_suspended"] = False
+                df["is_one_word_limit"] = False
+                df["name"] = sym
+                df["close_hfq"] = df["close"]
+                for col in ["amount", "pre_close"]:
+                    if col not in df.columns:
+                        df[col] = 0.0
+                df["amount"] = df["amount"].fillna(df["volume"] * df["close"])
+                df["pre_close"] = df["pre_close"].fillna(df["close"].shift(1)).fillna(df["close"])
                 frames.append(df)
                 time.sleep(0.1)  # 反限流
             except Exception as e:
@@ -101,6 +112,14 @@ def fetch_today_data(symbols: list[str] | None = None) -> pd.DataFrame | None:
 
         panel = pd.concat(frames, ignore_index=True)
         panel = panel.dropna(subset=["close"]).sort_values(["symbol", "date"])
+
+        # 补充清洗流水线必需列
+        panel["list_days"] = panel.groupby("symbol").cumcount() + 1
+        if "turnover_rate" not in panel.columns:
+            panel["turnover_rate"] = panel["volume"] / panel["volume"].mean() * 0.02  # 近似
+        if "amount" not in panel.columns or panel["amount"].isna().all():
+            panel["amount"] = panel["volume"] * panel["close"]
+        panel["amount"] = panel["amount"].fillna(panel["volume"] * panel["close"])
         logger.info("面板: %d 只, %d 行, %s ~ %s",
                      panel["symbol"].nunique(), len(panel),
                      panel["date"].min().strftime("%Y-%m-%d"),
@@ -170,7 +189,7 @@ def run_pipeline(panel: pd.DataFrame, trade_date: str) -> dict:
 
     # 5. 清单生成
     env = MarketEnv()
-    lister = ListGenerator()
+    lister = ListGenerator(entry_prob=0.45, entry_ret_mult=1.0)  # demo 放宽; 实盘改回 0.60/2.0
     result = lister.emit(candidates, env=env, market_state="range")
     logger.info("清单: %d 只 empty=%s cap=%.2f",
                  len(result["list"]), result["empty"], result["cap_position"])
