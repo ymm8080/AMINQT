@@ -17,7 +17,6 @@ import os
 import re
 import sys
 
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -37,6 +36,7 @@ def load_ohlcv_panel(list_dir: str = "data/lists") -> pd.DataFrame | None:
     # 尝试从 akshare 获取
     try:
         import akshare as ak
+
         symbols = set()
         for fname in os.listdir(list_dir):
             if fname.startswith("list_") and fname.endswith(".parquet"):
@@ -49,7 +49,9 @@ def load_ohlcv_panel(list_dir: str = "data/lists") -> pd.DataFrame | None:
                 df = ak.stock_zh_a_hist(symbol=sym, period="daily", adjust="qfq")
                 if len(df):
                     df["symbol"] = sym
-                    df = df.rename(columns={"日期": "date", "收盘": "close", "前收盘": "pre_close"})
+                    df = df.rename(
+                        columns={"日期": "date", "收盘": "close", "前收盘": "pre_close"}
+                    )
                     df["date"] = pd.to_datetime(df["date"])
                     frames.append(df[["symbol", "date", "close", "pre_close"]])
             except Exception:
@@ -134,8 +136,11 @@ def main():
         return
 
     # Scan all unmatured lists
-    files = sorted(f for f in os.listdir(list_dir)
-                   if f.startswith("list_") and f.endswith(".parquet"))
+    files = sorted(
+        f
+        for f in os.listdir(list_dir)
+        if f.startswith("list_") and f.endswith(".parquet")
+    )
     for fname in files:
         date_str = fname.replace("list_", "").replace(".parquet", "")
         reconcile_date(date_str, panel, db)
