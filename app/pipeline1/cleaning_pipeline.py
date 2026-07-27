@@ -58,7 +58,9 @@ class CleaningConfig:
 
     min_list_days: int = 250  # 上市 >= 250 交易日 (>= 最长特征窗口)
     min_amount: float = 5e7  # T 日成交额 >= 5000 万
-    liquidity_top_n: int = 400  # 板块内流动性 Score 前 N (原200太保守, 3年数据可支撑更大池)
+    liquidity_top_n: int = (
+        400  # 板块内流动性 Score 前 N (原200太保守, 3年数据可支撑更大池)
+    )
     score_w_amount: float = 0.5  # Score = w*rank(成交额) + (1-w)*rank(自由流通换手)
     stability_window: int = 5  # D24 换手稳定性窗口
     stability_max: float = 0.5  # std/mean > 0.5 → 对倒嫌疑
@@ -95,7 +97,9 @@ class CleaningPipeline:
         return out
 
     # ---------------- 步骤 2: 流动性底线 ----------------
-    def step2_liquidity(self, df: pd.DataFrame, apply_top_n: bool = True) -> pd.DataFrame:
+    def step2_liquidity(
+        self, df: pd.DataFrame, apply_top_n: bool = True
+    ) -> pd.DataFrame:
         """成交额 >= 5000万; 板块内流动性 Score 前 N (按 date+board 独立排名).
 
         Score = w*rank_pct(turnover_value) + (1-w)*rank_pct(free_float_turnover_rate)
@@ -242,10 +246,14 @@ class CleaningPipeline:
         main, dual = self.step0_board_split(df)
         return (
             self.step5_amount_bottom(
-                self.step3_extreme(self.step2_liquidity(self.step1_base_state(main), apply_top_n=False))
+                self.step3_extreme(
+                    self.step2_liquidity(self.step1_base_state(main), apply_top_n=False)
+                )
             ),
             self.step5_amount_bottom(
-                self.step3_extreme(self.step2_liquidity(self.step1_base_state(dual), apply_top_n=False))
+                self.step3_extreme(
+                    self.step2_liquidity(self.step1_base_state(dual), apply_top_n=False)
+                )
             ),
         )
 
@@ -253,8 +261,12 @@ class CleaningPipeline:
         """推理端清洗 (步骤 0→4 + 步骤5[E6]). 返回 (主板, 双创, 阀门状态)."""
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
         main, dual = self.step0_board_split(df)
-        main = self.step3_extreme(self.step2_liquidity(self.step1_base_state(main), apply_top_n=False))
-        dual = self.step3_extreme(self.step2_liquidity(self.step1_base_state(dual), apply_top_n=False))
+        main = self.step3_extreme(
+            self.step2_liquidity(self.step1_base_state(main), apply_top_n=False)
+        )
+        dual = self.step3_extreme(
+            self.step2_liquidity(self.step1_base_state(dual), apply_top_n=False)
+        )
         both = pd.concat([main, dual], ignore_index=True)
         both, state = self.step4_tradability(both, inference_only=True)
         both = self.step5_amount_bottom(both)  # [E6] 成交额后 20% 剔除

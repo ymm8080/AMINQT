@@ -251,15 +251,17 @@ class ListGenerator:
         if n == 0 and len(df) > 0:
             pctile_th = float(df["prob_up"].quantile(self._prob_pctile))
             ret_pctile_th = float(df["pred_ret_1d"].quantile(self._prob_pctile))
-            ok = df[
-                (df["prob_up"] >= pctile_th) & (df["pred_ret_1d"] >= ret_pctile_th)
-            ]
+            ok = df[(df["prob_up"] >= pctile_th) & (df["pred_ret_1d"] >= ret_pctile_th)]
             n_pct = len(ok)
             logger.warning(
                 "E7 动态准入: 绝对阈值 0 只 (prob>%.2f, ret>%.2f%%), "
                 "分位数回退取前 %.0f%% → %d 只 (prob≥%.4f, ret≥%.4f)",
-                prob_th, ret_th * 100, (1 - self._prob_pctile) * 100,
-                n_pct, pctile_th, ret_pctile_th,
+                prob_th,
+                ret_th * 100,
+                (1 - self._prob_pctile) * 100,
+                n_pct,
+                pctile_th,
+                ret_pctile_th,
             )
         elif n == 0:
             logger.warning(

@@ -37,7 +37,12 @@ MIN_ES_DATES = 30  # ES 集日期下限, 不足则跳过早停 (防 best_iterati
 # 段长比例 (train:es:calib:test ≈ 80:4:4:12)
 WINDOW_RATIOS = {"train": 0.80, "es": 0.04, "calib": 0.04, "test": 0.12}
 # 各段最小日期数 (低于此值训练不可靠)
-SEG_MIN_DAYS = {"train": MIN_TRAIN_DAYS, "es": MIN_ES_DATES, "calib": MIN_ES_DATES, "test": 60}
+SEG_MIN_DAYS = {
+    "train": MIN_TRAIN_DAYS,
+    "es": MIN_ES_DATES,
+    "calib": MIN_ES_DATES,
+    "test": 60,
+}
 # 兼容旧引用 (实际段长由 split_window 按比例动态计算)
 TRAIN_DAYS = 620
 ES_DAYS = 30
@@ -99,7 +104,9 @@ class DualTrackTrainer:
         dates = sorted(df["date"].unique())[-window_total:]
         n = len(dates)
         # 按比例分配, 向下取整
-        seg_lens = {k: max(int(n * r), SEG_MIN_DAYS[k]) for k, r in WINDOW_RATIOS.items()}
+        seg_lens = {
+            k: max(int(n * r), SEG_MIN_DAYS[k]) for k, r in WINDOW_RATIOS.items()
+        }
         # 修正: 保证各段之和 <= n (train 让出余量)
         overflow = sum(seg_lens.values()) - n
         if overflow > 0:
@@ -111,10 +118,14 @@ class DualTrackTrainer:
             seg_dates[k] = dates[pos : pos + seg_lens[k]]
             pos += seg_lens[k]
         # test 取最后一段 (保证是最近期数据)
-        seg_dates["test"] = dates[-seg_lens["test"]:]
+        seg_dates["test"] = dates[-seg_lens["test"] :]
         logger.info(
             "窗口切分: total=%d train=%d es=%d calib=%d test=%d",
-            n, seg_lens["train"], seg_lens["es"], seg_lens["calib"], seg_lens["test"],
+            n,
+            seg_lens["train"],
+            seg_lens["es"],
+            seg_lens["calib"],
+            seg_lens["test"],
         )
         return {k: df[df["date"].isin(v)] for k, v in seg_dates.items()}
 
@@ -176,7 +187,10 @@ class DualTrackTrainer:
         if not use_es:
             logger.warning(
                 "[%s/%s] ES 集仅 %d 交易日 (< %d), 跳过早停",
-                kind, label, es_dates, MIN_ES_DATES,
+                kind,
+                label,
+                es_dates,
+                MIN_ES_DATES,
             )
         try:
             model.fit(
@@ -184,7 +198,9 @@ class DualTrackTrainer:
                 y,
                 sample_weight=w,
                 eval_set=[(X_es, y_es)] if use_es else None,
-                callbacks=[lgb.early_stopping(ES_PATIENCE, verbose=False)] if use_es else None,
+                callbacks=[lgb.early_stopping(ES_PATIENCE, verbose=False)]
+                if use_es
+                else None,
             )
         except Exception as exc:
             logger.error("模型训练失败 [%s/%s]: %s", kind, label, exc)
@@ -353,12 +369,15 @@ class DualTrackTrainer:
         calib = trained["segs"]["calib"].dropna(subset=[label])
         cols = trained["feature_cols"]
         raw = model.predict_proba(np.nan_to_num(calib[cols].values, nan=0.0))[:, 1]
-        n_calib_dates = calib["date"].nunique() if "date" in calib.columns else len(calib)
+        n_calib_dates = (
+            calib["date"].nunique() if "date" in calib.columns else len(calib)
+        )
         method = "platt" if n_calib_dates < MIN_ES_DATES else "isotonic"
         if n_calib_dates < MIN_ES_DATES:
             logger.warning(
                 "[%s] 校准集仅 %d 交易日, 使用 Platt (Isotonic 小样本退化为阶跃函数)",
-                trained["board"], n_calib_dates,
+                trained["board"],
+                n_calib_dates,
             )
         calibrator = ProbCalibrator(method=method).fit(raw, calib[label].values)
         trained["calibrator"] = calibrator

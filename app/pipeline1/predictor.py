@@ -28,8 +28,13 @@ logger = logging.getLogger(__name__)
 def _cross_sectional_rank(values: np.ndarray) -> np.ndarray:
     """将一维数组转换为 [0, 1] 范围内的百分位排名 (用于回退 LambdaRank)."""
     from scipy.stats import rankdata
+
     ranks = rankdata(values)
-    return (ranks - 1) / (len(ranks) - 1) if len(ranks) > 1 else np.zeros_like(values, dtype=float)
+    return (
+        (ranks - 1) / (len(ranks) - 1)
+        if len(ranks) > 1
+        else np.zeros_like(values, dtype=float)
+    )
 
 
 class V35Predictor:
@@ -94,7 +99,9 @@ class V35Predictor:
             raw_rank = bundle["rank_model"][0].predict(X)
             if np.std(raw_rank) < 1e-6:
                 logger.warning(
-                    "[%s] LambdaRank 退化 (std=%.6f), 回退 pred_ret_1d 排名", board, np.std(raw_rank)
+                    "[%s] LambdaRank 退化 (std=%.6f), 回退 pred_ret_1d 排名",
+                    board,
+                    np.std(raw_rank),
                 )
                 # 用 1d_reg 预测值作为排名 (回归模型有信号)
                 reg_pred = models["1d_reg"][0].predict(X)

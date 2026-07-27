@@ -150,7 +150,9 @@ class ICScreener:
             # B6: 3d/5d IC 显著性用 Newey-West HAC 调整 (lag=5/8)
             t_3d = self.ic_t_stat_newey_west(train_df, f, label_of[3], lag=5)
             t_5d = self.ic_t_stat_newey_west(train_df, f, label_of[5], lag=8)
-            nw_significant = abs(t_3d) > 1.28 or abs(t_5d) > 1.28  # 90%置信 (原1.96/95%太严)
+            nw_significant = (
+                abs(t_3d) > 1.28 or abs(t_5d) > 1.28
+            )  # 90%置信 (原1.96/95%太严)
             if (best_ic > IC_STRONG or auc > 0.55) and dual_ok and nw_significant:
                 grade = "strong"
             elif best_ic > IC_WEAK or auc > 0.52:
