@@ -1,0 +1,1350 @@
+diff --git a/app/config/__init__.py b/app/config/__init__.py
+index 9d163f3..cf9781a 100644
+--- a/app/config/__init__.py
++++ b/app/config/__init__.py
+@@ -1 +1 @@
+-"""app.config 包 — 用户配置体系."""
+\ No newline at end of file
++"""app.config 包 — 用户配置体系."""
+diff --git a/app/pipeline1/backtest_adjudication.py b/app/pipeline1/backtest_adjudication.py
+index f094f84..abaaf58 100644
+--- a/app/pipeline1/backtest_adjudication.py
++++ b/app/pipeline1/backtest_adjudication.py
+@@ -63,13 +63,21 @@ def resolve_range(
+     """
+     if custom is not None:
+         logger.warning("自定义回测区间 %s — exploratory 标记, 不得作裁决依据", custom)
+-        return {"start": custom[0], "end": custom[1], "preset": None,
+-                "exploratory": True}
++        return {
++            "start": custom[0],
++            "end": custom[1],
++            "preset": None,
++            "exploratory": True,
++        }
+     if recent_years is not None:  # "近1年" 预置档
+         end = pd.Timestamp.today().normalize()
+         start = end - pd.DateOffset(years=recent_years)
+-        return {"start": str(start)[:10], "end": str(end)[:10],
+-                "preset": f"recent_{recent_years}y", "exploratory": False}
++        return {
++            "start": str(start)[:10],
++            "end": str(end)[:10],
++            "preset": f"recent_{recent_years}y",
++            "exploratory": False,
++        }
+     key = preset or "all"
+     if key not in PRESET_RANGES:
+         raise KeyError(f"未知预置区间: {key} (可选: {list(PRESET_RANGES)})")
+@@ -105,8 +113,9 @@ def inject_tail_shocks(
+         gap = GAP_2_SIZE if (i % GAP_2_EVERY) < 10 else GAP_1_SIZE
+         loss = 1 + gap * position_cap
+         out.iloc[i:] = out.iloc[i:] * loss  # 跳空永久冲击后续净值
+-    logger.warning("补丁1 尾部注入: %d 次跳空 (cap=%.0f%%)", len(shock_days),
+-                   position_cap * 100)
++    logger.warning(
++        "补丁1 尾部注入: %d 次跳空 (cap=%.0f%%)", len(shock_days), position_cap * 100
++    )
+     return out
+ 
+ 
+@@ -127,9 +136,13 @@ def worst_trades_audit(
+     unexec = sells[sells["pnl"] < stop - STOP_TOLERANCE]
+     distortion = len(unexec) > 0
+     if distortion:
+-        logger.error("补丁2 最坏交易审计: %d/%d 笔亏损超止损可执行范围 (%.1f%%), "
+-                     "含跳空/跌停顺延, 需按真实可执行价重算",
+-                     len(unexec), len(sells), (stop - STOP_TOLERANCE) * 100)
++        logger.error(
++            "补丁2 最坏交易审计: %d/%d 笔亏损超止损可执行范围 (%.1f%%), "
++            "含跳空/跌停顺延, 需按真实可执行价重算",
++            len(unexec),
++            len(sells),
++            (stop - STOP_TOLERANCE) * 100,
++        )
+     return {
+         "worst": sells,
+         "n_unexecutable": len(unexec),
+@@ -149,15 +162,16 @@ def segment_robustness(
+         segment_max_dd: {段名: 该段最大回撤 (负数)}, 段名须覆盖 CRISIS_SEGMENTS.
+     """
+     failures = {
+-        seg: dd for seg, dd in segment_max_dd.items()
++        seg: dd
++        for seg, dd in segment_max_dd.items()
+         if seg in CRISIS_SEGMENTS and dd < -dd_limit
+     }
+-    ok = len(failures) == 0 and all(
+-        seg in segment_max_dd for seg in CRISIS_SEGMENTS
+-    )
++    ok = len(failures) == 0 and all(seg in segment_max_dd for seg in CRISIS_SEGMENTS)
+     if failures:
+-        logger.error("补丁3 分时段稳健性: %s 回撤破停机线, C 档出局",
+-                     {k: f"{v:.1%}" for k, v in failures.items()})
++        logger.error(
++            "补丁3 分时段稳健性: %s 回撤破停机线, C 档出局",
++            {k: f"{v:.1%}" for k, v in failures.items()},
++        )
+     return {"pass": ok, "failed_segments": failures}
+ 
+ 
+@@ -165,7 +179,8 @@ def segment_robustness(
+ # D.10 总裁决
+ # ============================================================
+ def adjudicate_b_vs_c(
+-    gt_b: float, gt_c: float,
++    gt_b: float,
++    gt_c: float,
+     c_max_dd_injected: float,
+     c_segment_dd: dict[str, float],
+     c_worst_audit: dict,
+@@ -178,17 +193,18 @@ def adjudicate_b_vs_c(
+         "c_no_execution_distortion": not c_worst_audit["executable_distortion"],
+     }
+     choose_c = all(checks.values())
+-    logger.warning("D.10 B/C 裁决: %s (checks=%s)",
+-                   "选 C (1只×100%)" if choose_c else "选 B (1只×75%)", checks)
++    logger.warning(
++        "D.10 B/C 裁决: %s (checks=%s)",
++        "选 C (1只×100%)" if choose_c else "选 B (1只×75%)",
++        checks,
++    )
+     return {"choose": "C" if choose_c else "B", "checks": checks}
+ 
+ 
+ # ============================================================
+ # 回测清单失效条件模拟 (V3.8 §四 bis: 回测必须模拟清单失效条件)
+ # ============================================================
+-def simulate_invalidations(
+-    daily_lists: dict, invalidated_by_date: dict
+-) -> dict:
++def simulate_invalidations(daily_lists: dict, invalidated_by_date: dict) -> dict:
+     """把失效条件 (跳空/跌停/板块/公告#5) 应用到每日清单字典.
+ 
+     Args:
+@@ -207,7 +223,10 @@ def simulate_invalidations(
+             if len(lst) < n_before:
+                 logger.warning(
+                     "回测失效条件模拟: %s 剔除 %d 只 (%s)",
+-                    date, n_before - len(lst), sorted(bad)[:5])
++                    date,
++                    n_before - len(lst),
++                    sorted(bad)[:5],
++                )
+         out[date] = lst
+     return out
+ 
+diff --git a/app/pipeline1/dq_report.py b/app/pipeline1/dq_report.py
+index fc72ecb..b57fd86 100644
+--- a/app/pipeline1/dq_report.py
++++ b/app/pipeline1/dq_report.py
+@@ -42,8 +42,9 @@ def ohlcv_violations(df: pd.DataFrame) -> pd.DataFrame:
+     for name, m in checks.items():
+         m = m.fillna(False).values
+         mask |= m
+-        reasons = [f"{r};{n}" if mm else r for r, n, mm in
+-                   zip(reasons, [name] * len(df), m)]
++        reasons = [
++            f"{r};{n}" if mm else r for r, n, mm in zip(reasons, [name] * len(df), m)
++        ]
+     out = df[mask].copy()
+     out["violation"] = [r.lstrip(";") for r in np.array(reasons)[mask]]
+     return out
+@@ -69,7 +70,10 @@ def daily_report(df: pd.DataFrame, trade_date: str | None = None) -> dict:
+     if not passed:
+         logger.error(
+             "数据质量日检不通过: OHLCV违规%d / 重复键%d / 缺失%d",
+-            len(vio), dup, missing)
++            len(vio),
++            dup,
++            missing,
++        )
+     return {
+         "trade_date": trade_date or str(df["date"].max())[:10],
+         "n_rows": len(df),
+@@ -87,8 +91,10 @@ def drop_violations(df: pd.DataFrame) -> pd.DataFrame:
+     """显式剔除违规行 (留痕日志, 非静默). 返回干净面板."""
+     vio = ohlcv_violations(df)
+     if len(vio):
+-        logger.error("剔除 OHLCV 违规行 %d 条 (留痕): %s",
+-                     len(vio), vio[["symbol", "date", "violation"]]
+-                     .head(10).to_dict("records"))
++        logger.error(
++            "剔除 OHLCV 违规行 %d 条 (留痕): %s",
++            len(vio),
++            vio[["symbol", "date", "violation"]].head(10).to_dict("records"),
++        )
+         df = df.drop(index=vio.index)
+     return df
+diff --git a/app/pipeline1/dual_list_runner.py b/app/pipeline1/dual_list_runner.py
+index eb99d9f..3bd41f7 100644
+--- a/app/pipeline1/dual_list_runner.py
++++ b/app/pipeline1/dual_list_runner.py
+@@ -44,8 +44,9 @@ class DualListRunner:
+         # out["execution"] (0~2 只, A级) / out["shadow"] (0~15 只, stable)
+     """
+ 
+-    def __init__(self, store_dir: str | None = None,
+-                 stable_lister: ListGenerator | None = None):
++    def __init__(
++        self, store_dir: str | None = None, stable_lister: ListGenerator | None = None
++    ):
+         self.stable = stable_lister or ListGenerator()
+         self.store_dir = store_dir
+         self._lose_streak = 0  # D.6 连续落后月数
+@@ -84,8 +85,10 @@ def aggressive_entry(candidates: pd.DataFrame) -> pd.DataFrame:
+         df = df.sort_values("_sel", ascending=False).head(g["rank_score_top"])
+         df = df.drop(columns=["_sel"])
+         if len(df) == 0:
+-            logger.warning("D.8 执行清单: 0 只过 A 级门槛, 今日空仓 (特性非故障, "
+-                           "预计 75%% 交易日空仓)")
++            logger.warning(
++                "D.8 执行清单: 0 只过 A 级门槛, 今日空仓 (特性非故障, "
++                "预计 75%% 交易日空仓)"
++            )
+         return df
+ 
+     # ---------------- 双清单总装 ----------------
+@@ -153,9 +156,7 @@ def _attach_dynamic_outputs(execution: pd.DataFrame) -> pd.DataFrame:
+         out["dyn_position"] = [c["position"] for c in calcs]
+         out["dyn_rr"] = [c["rr"] for c in calcs]
+         if "close" in out.columns:
+-            out["stop_price"] = (
+-                out["close"] * (1 - out["dyn_stop_pct"])
+-            ).round(3)
++            out["stop_price"] = (out["close"] * (1 - out["dyn_stop_pct"])).round(3)
+         return out
+ 
+     # ---------------- WORM 持久化 ----------------
+@@ -174,8 +175,10 @@ def _persist(
+     # ---------------- D.6 月度双档 GT-Score 裁决 ----------------
+     def monthly_adjudication(
+         self,
+-        exec_ics, exec_turnover,
+-        shadow_ics, shadow_turnover,
++        exec_ics,
++        exec_turnover,
++        shadow_ics,
++        shadow_turnover,
+     ) -> dict:
+         """D.6 档位裁决: 攻击档连续 3 个月 GT-Score 低于稳定档 → 强制切回 stable.
+ 
+@@ -188,7 +191,11 @@ def monthly_adjudication(
+         if force_stable:
+             logger.critical(
+                 "D.6 档位裁决: 攻击档连续 %d 月 GT-Score 落后 (%.4f vs %.4f), "
+-                "强制切回 stable 并书面归因", self._lose_streak, g_exec, g_shadow)
++                "强制切回 stable 并书面归因",
++                self._lose_streak,
++                g_exec,
++                g_shadow,
++            )
+         return {
+             "gt_aggressive": round(g_exec, 4),
+             "gt_stable": round(g_shadow, 4),
+diff --git a/app/pipeline1/dual_track_trainer.py b/app/pipeline1/dual_track_trainer.py
+index e82284a..54f43f4 100644
+--- a/app/pipeline1/dual_track_trainer.py
++++ b/app/pipeline1/dual_track_trainer.py
+@@ -267,9 +267,7 @@ def _train_ranker(self, out: dict, label: str):
+         segs, cols = out["segs"], out["feature_cols"]
+ 
+         def _prep(seg_name: str):
+-            sub = risk_filter(
+-                segs[seg_name].dropna(subset=[label])
+-            ).sort_values("date")
++            sub = risk_filter(segs[seg_name].dropna(subset=[label])).sort_values("date")
+             gains = (
+                 sub.groupby("date")[label]
+                 .rank(pct=True)
+diff --git a/app/pipeline1/dynamic_engine.py b/app/pipeline1/dynamic_engine.py
+index 07cac0a..f3449e5 100644
+--- a/app/pipeline1/dynamic_engine.py
++++ b/app/pipeline1/dynamic_engine.py
+@@ -137,8 +137,12 @@ def bucket_ic(
+ 
+         sub = df[[atr_col, score_col, label_col]].dropna()
+         if len(sub) < n_buckets * 10:
+-            return {"buckets": {}, "high_vol_ic": 0.0,
+-                    "high_vol_ok": False, "action": "insufficient_data"}
++            return {
++                "buckets": {},
++                "high_vol_ic": 0.0,
++                "high_vol_ok": False,
++                "action": "insufficient_data",
++            }
+         sub = sub.copy()
+         sub["bucket"] = pd.qcut(
+             sub[atr_col], n_buckets, labels=[f"Q{i + 1}" for i in range(n_buckets)]
+@@ -147,7 +151,8 @@ def bucket_ic(
+         for b, g in sub.groupby("bucket", observed=True):
+             if g[score_col].nunique() > 2 and g[label_col].nunique() > 1:
+                 ics[str(b)] = round(
+-                    float(spearmanr(g[score_col], g[label_col]).statistic), 4)
++                    float(spearmanr(g[score_col], g[label_col]).statistic), 4
++                )
+             else:
+                 ics[str(b)] = 0.0
+         high_ic = ics.get(f"Q{n_buckets}", 0.0)
+@@ -156,7 +161,10 @@ def bucket_ic(
+             logger.error(
+                 "E.4 高波动桶 IC=%.4f < %.2f: 模型在最敢下注的地方最不准 → "
+                 "阻尼排序权重上调 + 高波动桶仓位上限 ×%.1f, 书面记录裁决",
+-                high_ic, BUCKET_IC_MIN, HIGH_VOL_DAMP)
++                high_ic,
++                BUCKET_IC_MIN,
++                HIGH_VOL_DAMP,
++            )
+         return {
+             "buckets": ics,
+             "high_vol_ic": high_ic,
+diff --git a/app/pipeline1/leakage_audit.py b/app/pipeline1/leakage_audit.py
+index ba44a0e..80bd947 100644
+--- a/app/pipeline1/leakage_audit.py
++++ b/app/pipeline1/leakage_audit.py
+@@ -49,11 +49,18 @@ def audit_source(source: str, filename: str = "<source>") -> list[dict]:
+         stripped = line.split("#", 1)[0]  # 忽略注释
+         for pat in FORBIDDEN_PATTERNS:
+             if re.search(pat, stripped):
+-                hits.append({"file": filename, "line": i, "pattern": pat,
+-                             "code": line.strip()[:80]})
++                hits.append(
++                    {
++                        "file": filename,
++                        "line": i,
++                        "pattern": pat,
++                        "code": line.strip()[:80],
++                    }
++                )
+     for h in hits:
+-        logger.error("未来函数嫌疑: %s:%d [%s] %s",
+-                     h["file"], h["line"], h["pattern"], h["code"])
++        logger.error(
++            "未来函数嫌疑: %s:%d [%s] %s", h["file"], h["line"], h["pattern"], h["code"]
++        )
+     return hits
+ 
+ 
+@@ -95,7 +102,11 @@ def ic_sentinel(
+         if abs(ic) > IC_SENTINEL:
+             suspects[f] = round(ic, 4)
+     for f, ic in suspects.items():
+-        logger.error("IC 上限哨兵: %s IC=%.4f > %.2f, 未来函数嫌疑, 触发复核",
+-                     f, ic, IC_SENTINEL)
+-    return {"pass": len(suspects) == 0, "suspects": suspects,
+-            "max_abs_ic": round(max_ic, 4)}
++        logger.error(
++            "IC 上限哨兵: %s IC=%.4f > %.2f, 未来函数嫌疑, 触发复核", f, ic, IC_SENTINEL
++        )
++    return {
++        "pass": len(suspects) == 0,
++        "suspects": suspects,
++        "max_abs_ic": round(max_ic, 4),
++    }
+diff --git a/app/pipeline1/list_generator.py b/app/pipeline1/list_generator.py
+index c92942f..746fcc8 100644
+--- a/app/pipeline1/list_generator.py
++++ b/app/pipeline1/list_generator.py
+@@ -132,7 +132,8 @@ def compute_scores(self, df: pd.DataFrame) -> pd.DataFrame:
+         if "rank_score" in df.columns:
+             # [V3.7 排序分公式] LambdaRank 排序分 × compound 修正 × prob_adjust
+             df["score"] = (
+-                df["rank_score"] * (1 + 0.3 * np.tanh(df["compound_ret"] * 100))
++                df["rank_score"]
++                * (1 + 0.3 * np.tanh(df["compound_ret"] * 100))
+                 * prob_adjust
+             )
+         else:
+diff --git a/app/pipeline1/metrics.py b/app/pipeline1/metrics.py
+index ddc37f4..33b020b 100644
+--- a/app/pipeline1/metrics.py
++++ b/app/pipeline1/metrics.py
+@@ -18,18 +18,20 @@
+ TRAIN_IC_LEAK_MAX = 0.15
+ 
+ 
+-def daily_ic_series(
+-    df: pd.DataFrame, score_col: str, label_col: str
+-) -> pd.Series:
++def daily_ic_series(df: pd.DataFrame, score_col: str, label_col: str) -> pd.Series:
+     """日度横截面 Rank IC 序列 (index=date) — 净收益口径标签由调用方保证."""
+     sub = df[["date", score_col, label_col]].dropna()
+-    return sub.groupby("date").apply(
+-        lambda g: (
+-            spearmanr(g[score_col], g[label_col]).statistic
+-            if g[score_col].nunique() > 5 and g[label_col].nunique() > 1
+-            else np.nan
++    return (
++        sub.groupby("date")
++        .apply(
++            lambda g: (
++                spearmanr(g[score_col], g[label_col]).statistic
++                if g[score_col].nunique() > 5 and g[label_col].nunique() > 1
++                else np.nan
++            )
+         )
+-    ).dropna()
++        .dropna()
++    )
+ 
+ 
+ def rank_ic(df: pd.DataFrame, score_col: str, label_col: str) -> float:
+@@ -62,9 +64,13 @@ def ignition_gate(
+     checks = {
+         "rank_ic": {"value": round(ic, 4), "pass": ic >= IGNITION_IC_MIN},
+         "icir": {"value": round(ir, 4), "pass": ir >= IGNITION_ICIR_MIN},
+-        "high_vol_ic": {"value": round(high_vol_ic, 4),
+-                        "pass": high_vol_ic >= IGNITION_HIGH_VOL_IC_MIN},
+-        "train_ic_no_leak": {"value": round(train_ic, 4),
+-                             "pass": train_ic <= TRAIN_IC_LEAK_MAX},
++        "high_vol_ic": {
++            "value": round(high_vol_ic, 4),
++            "pass": high_vol_ic >= IGNITION_HIGH_VOL_IC_MIN,
++        },
++        "train_ic_no_leak": {
++            "value": round(train_ic, 4),
++            "pass": train_ic <= TRAIN_IC_LEAK_MAX,
++        },
+     }
+     return {"pass": all(c["pass"] for c in checks.values()), "checks": checks}
+diff --git a/app/pipeline1/model_fusion.py b/app/pipeline1/model_fusion.py
+index 516aad0..e261ae3 100644
+--- a/app/pipeline1/model_fusion.py
++++ b/app/pipeline1/model_fusion.py
+@@ -58,26 +58,37 @@ def update_weight(self, ic_long_20d: float, ic_short_20d: float) -> float:
+         w_new = float(np.clip(w_new, W_LONG_MIN, W_LONG_MAX))
+         self.w_long = INERTIA_PREV * self.w_long + INERTIA_NEW * w_new
+         if ic_long_20d < IC_YELLOW and ic_short_20d < IC_YELLOW:
+-            logger.error("双模型 20 日 OOS IC 均 < %.2f (long=%.4f short=%.4f), "
+-                         "黄色告警 → E4 三色灯联动", IC_YELLOW,
+-                         ic_long_20d, ic_short_20d)
++            logger.error(
++                "双模型 20 日 OOS IC 均 < %.2f (long=%.4f short=%.4f), "
++                "黄色告警 → E4 三色灯联动",
++                IC_YELLOW,
++                ic_long_20d,
++                ic_short_20d,
++            )
+         self._worm(ic_long_20d, ic_short_20d, w_new)
+-        logger.info("融合权重更新: w_long=%.3f (IC long=%.4f short=%.4f)",
+-                    self.w_long, ic_long_20d, ic_short_20d)
++        logger.info(
++            "融合权重更新: w_long=%.3f (IC long=%.4f short=%.4f)",
++            self.w_long,
++            ic_long_20d,
++            ic_short_20d,
++        )
+         return self.w_long
+ 
+     def fuse(self, pred_long: np.ndarray, pred_short: np.ndarray) -> np.ndarray:
+         """预测融合: w_long×pred_long + (1-w_long)×pred_short."""
+-        return self.w_long * np.asarray(pred_long) + (
+-            1 - self.w_long) * np.asarray(pred_short)
++        return self.w_long * np.asarray(pred_long) + (1 - self.w_long) * np.asarray(
++            pred_short
++        )
+ 
+     # ---------------- WORM 日志 ----------------
+     def _worm(self, ic_long: float, ic_short: float, w_new: float) -> None:
+         if not self.log_path:
+             return
+         rec = {
+-            "ic_long_20d": round(ic_long, 5), "ic_short_20d": round(ic_short, 5),
+-            "w_softmax": round(w_new, 4), "w_long": round(self.w_long, 4),
++            "ic_long_20d": round(ic_long, 5),
++            "ic_short_20d": round(ic_short, 5),
++            "w_softmax": round(w_new, 4),
++            "w_long": round(self.w_long, 4),
+         }
+         path = os.path.join(self.log_path, "fusion_weights.jsonl")
+         with open(path, "a", encoding="utf-8") as fh:
+diff --git a/app/pipeline1/trade_discipline.py b/app/pipeline1/trade_discipline.py
+index 3f3160b..3645f43 100644
+--- a/app/pipeline1/trade_discipline.py
++++ b/app/pipeline1/trade_discipline.py
+@@ -78,8 +78,11 @@ def on_daily_pnl(self, day: int, daily_pnl_pct: float) -> dict:
+             self._worm.append(
+                 {"day": day, "event": "DAILY_FUSE", "pnl": round(daily_pnl_pct, 4)}
+             )
+-            logger.error("D.3 日保险丝: 日亏 %.1f%% 触及 %.1f%%, 当日锁仓",
+-                         -daily_pnl_pct * 100, self.daily_loss_limit * 100)
++            logger.error(
++                "D.3 日保险丝: 日亏 %.1f%% 触及 %.1f%%, 当日锁仓",
++                -daily_pnl_pct * 100,
++                self.daily_loss_limit * 100,
++            )
+             return {"state": self.state, "action": "LOCK_TODAY"}
+         if self.state == STATE_LOCKED_TODAY and day > self._locked_day:
+             self.state = STATE_ACTIVE  # 次日恢复
+@@ -102,7 +105,10 @@ def on_nav(self, day: int, nav: float) -> dict:
+                 )
+                 logger.critical(
+                     "D.3 停机线: 回撤 %.1f%% 触及 %.0f%%, 停机 %d 天复盘",
+-                    -dd * 100, self.drawdown_limit * 100, HALT_DAYS)
++                    -dd * 100,
++                    self.drawdown_limit * 100,
++                    HALT_DAYS,
++                )
+                 return {"state": self.state, "action": "HALT"}
+         return {"state": self.state, "action": "HOLD"}
+ 
+@@ -163,8 +169,12 @@ def record(self, rec: TradeRecord) -> None:
+         self._trades.append(rec)
+ 
+     def close_trade(
+-        self, symbol: str, exit_date: str, exit_price: float,
+-        hold_days: int, pnl_pct: float,
++        self,
++        symbol: str,
++        exit_date: str,
++        exit_price: float,
++        hold_days: int,
++        pnl_pct: float,
+     ) -> None:
+         """平仓回填 (找最近一笔未平仓的该标的)."""
+         for rec in reversed(self._trades):
+@@ -187,7 +197,9 @@ def sample_stats(self) -> dict:
+         wins, losses = pnls[pnls > 0], pnls[pnls <= 0]
+         win_rate = float(len(wins) / n)
+         pl_ratio = (
+-            float(wins.mean() / abs(losses.mean())) if len(losses) and len(wins) else 0.0
++            float(wins.mean() / abs(losses.mean()))
++            if len(losses) and len(wins)
++            else 0.0
+         )
+         # 最大连亏
+         max_streak = streak = 0
+@@ -210,8 +222,7 @@ def unlock_check(self) -> dict:
+         s = self.sample_stats()
+         n = s.get("n_trades", 0)
+         if n < UNLOCK_MIN_TRADES:
+-            return {"unlock": False, "reason": f"样本不足 {n}/{UNLOCK_MIN_TRADES}",
+-                    **s}
++            return {"unlock": False, "reason": f"样本不足 {n}/{UNLOCK_MIN_TRADES}", **s}
+         ok = (
+             s["expectancy"] > UNLOCK_MIN_EXPECTANCY
+             and s["max_consec_loss"] <= UNLOCK_MAX_CONSEC_LOSS
+@@ -219,5 +230,7 @@ def unlock_check(self) -> dict:
+         if not ok:
+             logger.warning(
+                 "D.10 解锁否决: 期望 %.3f%% / 最大连亏 %d (门槛 >0.5%% / ≤5)",
+-                s["expectancy"] * 100, s["max_consec_loss"])
++                s["expectancy"] * 100,
++                s["max_consec_loss"],
++            )
+         return {"unlock": ok, **s}
+diff --git a/scripts/run_stage1_gate.py b/scripts/run_stage1_gate.py
+new file mode 100644
+index 0000000..44770d2
+--- /dev/null
++++ b/scripts/run_stage1_gate.py
+@@ -0,0 +1,279 @@
++# -*- coding: utf-8 -*-
++"""
++P19.0 阶段一: Alpha 点火验证 (端到端验收门禁)
++=====================================================
++用法: python scripts/run_stage1_gate.py --panel <面板parquet> [--tag TAG] [--small]
++
++流程 (对齐 P19.0 W1-W4):
++  W1 数据质量日检 (dq_report): OHLCV 铁律校验, 不通过显式剔除并告警
++  W2 未来函数审计 (leakage_audit): 特征引擎源码静态扫描 + IC 上限哨兵
++  W3 双板块训练 (CleaningPipeline -> LabelEngine -> FeatureEngineV35 ->
++     DualTrackTrainer.train_window/validate_oos), 汇总 OOS Rank IC/ICIR
++  W4 IC 衰减曲线 (ic_decay) + 波动桶 IC (DynamicEngine.bucket_ic)
++  裁决: metrics.ignition_gate — Rank IC>=0.03 且 ICIR>=0.3 且
++        高波动桶 IC>=0.02 且 训练 IC<=0.15 (无泄漏)
++
++输出: data/stage1_gate_{tag}.json + BacktestJournal WORM 账本追加;
++      exit code: 全部通过=0, 任一不通过=1.
++--small: 快速 smoke (LightGBM n_estimators=20, ES_PATIENCE=5).
++"""
++
++from __future__ import annotations
++
++import argparse
++import json
++import logging
++import os
++import random
++import sys
++import time
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
++
++import numpy as np
++import pandas as pd
++
++import app.pipeline1.dual_track_trainer as dtt
++from app.pipeline1 import dq_report, leakage_audit, metrics
++from app.pipeline1.backtest_adjudication import BacktestJournal
++from app.pipeline1.cleaning_pipeline import CleaningPipeline
++from app.pipeline1.dynamic_engine import DynamicEngine
++from app.pipeline1.feature_engine_v35 import FeatureEngineV35
++from app.pipeline1.ic_decay import ic_decay_curve
++from app.pipeline1.label_engine import LabelEngine
++
++logging.basicConfig(
++    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
++)
++logger = logging.getLogger("run_stage1_gate")
++
++REPO_ROOT = Path(__file__).resolve().parent.parent
++# W2 静态扫描对象: 特征计算模块 (未来函数红线, 特征模块绝不豁免)
++FEATURE_MODULES = [str(REPO_ROOT / "app" / "pipeline1" / "feature_engine_v35.py")]
++MASK_RECENT_DAYS = 6  # V3.8: label_5d 需 T+6 收盘价, 最近 6 天标签未生成
++SEED = 42  # 量化铁律: 随机种子固定
++
++
++def _apply_small_mode() -> None:
++    """--small: 缩减训练规模 (smoke 用), 不改变门禁口径."""
++    dtt.LGB_PARAMS_REG["n_estimators"] = 20
++    dtt.LGB_PARAMS_CLS["n_estimators"] = 20
++    dtt.ES_PATIENCE = 5
++    logger.warning(
++        "small 模式: n_estimators=20, ES_PATIENCE=5 (仅 smoke, 不作验收依据)"
++    )
++
++
++def _build_labels(df: pd.DataFrame) -> pd.DataFrame:
++    """标签链 (P19.0): PM 执行口径 + 路径标签 + 停牌遮蔽 + 缩尾 + 近 6 日遮蔽."""
++    df = LabelEngine.build_labels(df, session="PM")
++    df = LabelEngine.build_path_labels(df)
++    df = LabelEngine.mask_suspension(df)
++    df = LabelEngine.winsorize_cross_section(df)
++    return LabelEngine.mask_recent_days(df, MASK_RECENT_DAYS)
++
++
++def _evaluate_board(
++    board: str, df: pd.DataFrame, trainer: dtt.DualTrackTrainer
++) -> dict:
++    """单板块: 特征 -> 训练 -> OOS -> Rank IC/ICIR/波动桶/哨兵/IC衰减 -> 点火门禁."""
++    df = FeatureEngineV35().build(df)
++    cols = FeatureEngineV35.feature_columns(df)
++    logger.info("[%s] 特征列 %d 个, 样本 %d 行", board, len(cols), len(df))
++
++    trained = trainer.train_window(df, board, cols)
++    oos = trainer.validate_oos(trained)
++    model, label = trained["models"]["1d_reg"]
++    segs = trained["segs"]
++
++    def _scored(seg: pd.DataFrame) -> pd.DataFrame:
++        sub = seg.dropna(subset=[label]).copy()
++        sub["score"] = model.predict(np.nan_to_num(sub[cols].values, nan=0.0))
++        return sub
++
++    test = _scored(segs["test"])
++    train = _scored(segs["train"])
++
++    # W3: OOS Rank IC / ICIR (1d_reg 模型, 验收口径标签)
++    rank_ic = metrics.rank_ic(test, "score", label)
++    icir = metrics.icir(test, "score", label)
++    # 训练段 IC (泄漏哨兵口径: A股日频横截面 alpha 不可能稳定 > 0.15)
++    train_ic = metrics.rank_ic(train, "score", label)
++    # W2 防线 2: 特征级 IC 上限哨兵
++    sentinel = leakage_audit.ic_sentinel(train, cols, label)
++    # E.4: ATR 五桶 IC, Q5=高波动桶 (上线前必跑)
++    if "ATR_pct" in test.columns:
++        bucket = DynamicEngine.bucket_ic(test, "score", label)
++        high_vol_ic = bucket["high_vol_ic"]
++    else:
++        logger.error("[%s] 缺 ATR_pct 列, 高波动桶 IC 按 0 计 (门禁不通过)", board)
++        bucket = {"buckets": {}, "high_vol_ic": 0.0, "action": "missing_atr"}
++        high_vol_ic = 0.0
++    # W4: IC 衰减曲线 (t+1/2/3)
++    decay = ic_decay_curve(test, "score")
++
++    gate = metrics.ignition_gate(test, "score", label, high_vol_ic, train_ic)
++    return {
++        "label": label,
++        "n_features": len(cols),
++        "oos_ics": oos["ics"],
++        "rank_ic": round(rank_ic, 4),
++        "icir": round(icir, 4),
++        "train_ic": round(train_ic, 4),
++        "bucket_ic": bucket,
++        "ic_sentinel": sentinel,
++        "ic_decay": decay,
++        "gate": gate,
++    }
++
++
++def _aggregate_checks(boards: dict[str, dict]) -> dict:
++    """跨板块汇总四项门禁 (保守口径: 任一板块不通过即不通过)."""
++    keys = ("rank_ic", "icir", "high_vol_ic", "train_ic_no_leak")
++    checks = {}
++    for k in keys:
++        per_board = {b: r["gate"]["checks"][k] for b, r in boards.items()}
++        checks[k] = {
++            "value": {b: c["value"] for b, c in per_board.items()},
++            "pass": all(c["pass"] for c in per_board.values()),
++        }
++    return checks
++
++
++def main(argv: list[str] | None = None) -> int:
++    parser = argparse.ArgumentParser(description="P19.0 阶段一 Alpha 点火验证门禁")
++    parser.add_argument("--panel", required=True, help="全市场日线面板 parquet 路径")
++    parser.add_argument("--tag", default=None, help="报告标签 (默认当日 YYYYMMDD)")
++    parser.add_argument(
++        "--small", action="store_true", help="快速 smoke (缩减训练规模)"
++    )
++    parser.add_argument("--out-dir", default="data", help="报告输出目录")
++    parser.add_argument("--journal-dir", default="data/journal", help="WORM 账本目录")
++    parser.add_argument("--model-dir", default="models/pipeline1", help="模型目录")
++    args = parser.parse_args(argv)
++
++    random.seed(SEED)
++    np.random.seed(SEED)
++    if args.small:
++        _apply_small_mode()
++    tag = args.tag or time.strftime("%Y%m%d")
++
++    # ---- W1: 加载 + 数据质量日检 ----
++    panel = pd.read_parquet(args.panel)
++    panel["date"] = pd.to_datetime(panel["date"])
++    logger.info(
++        "面板加载: %d 行, %d 只, %s ~ %s",
++        len(panel),
++        panel["symbol"].nunique(),
++        str(panel["date"].min())[:10],
++        str(panel["date"].max())[:10],
++    )
++    dq = dq_report.daily_report(panel)
++    if not dq["pass"]:
++        logger.error("W1 数据质量日检不通过, 显式剔除违规行并告警 (不静默丢弃)")
++        panel = dq_report.drop_violations(panel)
++    dq_summary = {k: v for k, v in dq.items() if k != "violations"}
++    dq_summary["violations_head"] = (
++        dq["violations"][["symbol", "date", "violation"]].head(10).to_dict("records")
++        if len(dq["violations"])
++        else []
++    )
++
++    # ---- W2 防线 1: 特征引擎源码未来函数静态扫描 ----
++    audit = leakage_audit.audit_feature_modules(FEATURE_MODULES)
++    if not audit["pass"]:
++        logger.error(
++            "W2 未来函数静态扫描命中 %d 处, 点火验收中止", len(audit["violations"])
++        )
++
++    # ---- W3: 清洗 -> 标签 -> 特征 -> 双板块训练 ----
++    main_df, dual_df = CleaningPipeline().run_train(panel)
++    logger.info("清洗完成: 主板 %d 行 / 双创 %d 行", len(main_df), len(dual_df))
++    trainer = dtt.DualTrackTrainer(model_dir=args.model_dir)
++    boards = {}
++    for board, bdf in (("main", main_df), ("dual", dual_df)):
++        if len(bdf) == 0:
++            logger.error("[%s] 清洗后为空, 该板块跳过 (门禁不通过)", board)
++            boards[board] = {"gate": {"pass": False, "checks": {}}, "skipped": True}
++            continue
++        boards[board] = _evaluate_board(board, _build_labels(bdf), trainer)
++
++    # ---- 裁决: 点火门禁 (四 checks 全过 + 审计过 + 双板块过) ----
++    valid = {b: r for b, r in boards.items() if not r.get("skipped")}
++    checks = _aggregate_checks(valid) if valid else {}
++    gate_pass = (
++        bool(valid) and len(valid) == 2 and all(c["pass"] for c in checks.values())
++    )
++    sentinel_pass = all(r["ic_sentinel"]["pass"] for r in valid.values())
++    final_pass = bool(audit["pass"]) and gate_pass and sentinel_pass
++
++    report = {
++        "tag": tag,
++        "panel": str(args.panel),
++        "small_mode": bool(args.small),
++        "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
++        "dq_report": dq_summary,
++        "leakage_audit": audit,
++        "boards": boards,
++        "checks": checks,
++        "source_audit_pass": bool(audit["pass"]),
++        "ic_sentinel_pass": sentinel_pass,
++        "pass": final_pass,
++    }
++
++    os.makedirs(args.out_dir, exist_ok=True)
++    out_path = os.path.join(args.out_dir, f"stage1_gate_{tag}.json")
++    with open(out_path, "w", encoding="utf-8") as fh:
++        fh.write(json.dumps(report, ensure_ascii=False, indent=2, default=str))
++    logger.info("报告已写入: %s", out_path)
++
++    # ---- WORM 账本 (反数据窥探, 失败区间一并保留) ----
++    journal_path = BacktestJournal(args.journal_dir).log(
++        tag=f"stage1_gate_{tag}",
++        params={
++            "panel": str(args.panel),
++            "small": bool(args.small),
++            "mask_recent_days": MASK_RECENT_DAYS,
++            "seed": SEED,
++        },
++        metrics={"checks": checks, "pass": final_pass},
++    )
++    logger.info("WORM 账本已追加: %s", journal_path)
++
++    # ---- 中文摘要 ----
++    print("\n========== P19.0 阶段一 Alpha 点火验收 ==========")
++    print(f"标签: {tag} | 面板: {args.panel} | small: {bool(args.small)}")
++    dq_verdict = "通过" if dq["pass"] else "不通过(已显式剔除违规行)"
++    print(
++        f"W1 数据质量日检: {dq_verdict} "
++        f"(OHLCV违规 {dq['n_ohlcv_violations']}, 重复键 {dq['n_duplicate_keys']}, "
++        f"缺失 {dq['n_missing_key_cols']})"
++    )
++    audit_verdict = "通过" if audit["pass"] else "不通过"
++    print(f"W2 源码未来函数扫描: {audit_verdict} ({len(audit['violations'])} 处命中)")
++    for board, r in boards.items():
++        if r.get("skipped"):
++            print(f"[{board}] 跳过 (清洗后为空)")
++            continue
++        g = r["gate"]["checks"]
++        marks = "/".join(f"{k}={'OK' if v['pass'] else 'X'}" for k, v in g.items())
++        decay = r["ic_decay"]
++        print(
++            f"[{board}] OOS Rank IC={r['rank_ic']:.4f} ICIR={r['icir']:.4f} "
++            f"高波动桶IC={r['bucket_ic']['high_vol_ic']:.4f} "
++            f"训练IC={r['train_ic']:.4f} | IC衰减 t+1/2/3="
++            f"{decay.get('ic_t+1')}/{decay.get('ic_t+2')}/{decay.get('ic_t+3')} "
++            f"| 门禁: {marks}"
++        )
++    if final_pass:
++        verdict = "通过 — 允许进入阶段二"
++    else:
++        verdict = "不通过 — 按序排查 未来函数->复权->幸存者偏差, 禁止加特征硬堆 IC"
++    print(f"最终裁决: {verdict}")
++    print(f"报告: {out_path}")
++    return 0 if final_pass else 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/tests/test_pipeline1_v38_appendix_de.py b/tests/test_pipeline1_v38_appendix_de.py
+index ffe0c42..4a4948c 100644
+--- a/tests/test_pipeline1_v38_appendix_de.py
++++ b/tests/test_pipeline1_v38_appendix_de.py
+@@ -82,9 +82,16 @@ def test_halt_requires_attribution_and_week(self):
+ # ============================================================
+ def _fill_journal(j: TradeJournal, pnls: list[float]) -> None:
+     for i, pnl in enumerate(pnls):
+-        j.record(TradeRecord(symbol=f"S{i}", signal_grade="A", prob_up=0.7,
+-                             rank_score=1.0, entry_date="2026-07-01",
+-                             entry_price=10.0))
++        j.record(
++            TradeRecord(
++                symbol=f"S{i}",
++                signal_grade="A",
++                prob_up=0.7,
++                rank_score=1.0,
++                entry_date="2026-07-01",
++                entry_price=10.0,
++            )
++        )
+         j.close_trade(f"S{i}", "2026-07-03", 10.0 * (1 + pnl), 2, pnl)
+ 
+ 
+@@ -151,10 +158,8 @@ def test_bucket_ic(self):
+         n = 500
+         atr = rng.uniform(0.01, 0.10, n)
+         # score 与 label 在高 ATR 区间相关, 低 ATR 区间噪声
+-        score = np.where(atr > 0.08, atr + rng.normal(0, 0.01, n),
+-                         rng.normal(0, 1, n))
+-        label = np.where(atr > 0.08, atr + rng.normal(0, 0.02, n),
+-                         rng.normal(0, 1, n))
++        score = np.where(atr > 0.08, atr + rng.normal(0, 0.01, n), rng.normal(0, 1, n))
++        label = np.where(atr > 0.08, atr + rng.normal(0, 0.02, n), rng.normal(0, 1, n))
+         df = pd.DataFrame({"ATR_pct": atr, "score": score, "label": label})
+         r = DynamicEngine.bucket_ic(df, "score", "label")
+         assert set(r["buckets"]) == {"Q1", "Q2", "Q3", "Q4", "Q5"}
+@@ -162,11 +167,13 @@ def test_bucket_ic(self):
+ 
+     def test_bucket_ic_low_detects_dampen(self):
+         rng = np.random.default_rng(2)
+-        df = pd.DataFrame({
+-            "ATR_pct": rng.uniform(0.01, 0.10, 500),
+-            "score": rng.normal(0, 1, 500),
+-            "label": rng.normal(0, 1, 500),  # 纯噪声 → 各桶 IC≈0
+-        })
++        df = pd.DataFrame(
++            {
++                "ATR_pct": rng.uniform(0.01, 0.10, 500),
++                "score": rng.normal(0, 1, 500),
++                "label": rng.normal(0, 1, 500),  # 纯噪声 → 各桶 IC≈0
++            }
++        )
+         r = DynamicEngine.bucket_ic(df, "score", "label")
+         assert not r["high_vol_ok"] and r["action"] == "dampen"
+ 
+diff --git a/tests/test_pipeline1_v38_d10.py b/tests/test_pipeline1_v38_d10.py
+index db957cf..e3b8b81 100644
+--- a/tests/test_pipeline1_v38_d10.py
++++ b/tests/test_pipeline1_v38_d10.py
+@@ -51,9 +51,11 @@ def test_reproducible_seed(self):
+ 
+ class TestWorstTradesAudit:
+     def test_flags_unexecutable_stops(self):
+-        trades = pd.DataFrame({
+-            "pnl": [-0.045, -0.08, -0.02, 0.03, -0.041],
+-        })
++        trades = pd.DataFrame(
++            {
++                "pnl": [-0.045, -0.08, -0.02, 0.03, -0.041],
++            }
++        )
+         r = worst_trades_audit(trades, n=20)
+         assert r["n_unexecutable"] == 1  # -0.08 超出 -4.5% 可执行范围
+         assert r["executable_distortion"]
+@@ -66,8 +68,12 @@ def test_clean_trades_no_distortion(self):
+ 
+ class TestSegmentRobustness:
+     def test_any_segment_breach_rejects(self):
+-        dd = {"bear_2018": -0.10, "covid_2020": -0.16,
+-              "bear_2022": -0.08, "liquidity_2024": -0.05}
++        dd = {
++            "bear_2018": -0.10,
++            "covid_2020": -0.16,
++            "bear_2022": -0.08,
++            "liquidity_2024": -0.05,
++        }
+         r = segment_robustness(dd)
+         assert not r["pass"] and "covid_2020" in r["failed_segments"]
+ 
+@@ -95,8 +101,12 @@ def test_any_failure_chooses_b(self):
+         # 注入回撤破线
+         assert adjudicate_b_vs_c(0.03, 0.04, -0.16, dd, self._audit())["choose"] == "B"
+         # 可执行性失真
+-        assert adjudicate_b_vs_c(0.03, 0.04, -0.10, dd,
+-                                 self._audit(distortion=True))["choose"] == "B"
++        assert (
++            adjudicate_b_vs_c(0.03, 0.04, -0.10, dd, self._audit(distortion=True))[
++                "choose"
++            ]
++            == "B"
++        )
+ 
+ 
+ class TestBacktestJournal:
+diff --git a/tests/test_pipeline1_v38_dual_list.py b/tests/test_pipeline1_v38_dual_list.py
+index 6d4c23e..e09bed2 100644
+--- a/tests/test_pipeline1_v38_dual_list.py
++++ b/tests/test_pipeline1_v38_dual_list.py
+@@ -27,12 +27,18 @@ def test_rank_model_trained_and_saved(self, tmp_path):
+         frames = []
+         for s in range(8):
+             f = rng.normal(size=750)
+-            frames.append(pd.DataFrame({
+-                "symbol": f"60000{s}", "date": dates, "f1": f,
+-                "label_1d": f * 0.01 + rng.normal(0, 0.01, 750),
+-                "label_3d": rng.normal(0, 0.02, 750),
+-                "label_5d": rng.normal(0, 0.03, 750),
+-            }))
++            frames.append(
++                pd.DataFrame(
++                    {
++                        "symbol": f"60000{s}",
++                        "date": dates,
++                        "f1": f,
++                        "label_1d": f * 0.01 + rng.normal(0, 0.01, 750),
++                        "label_3d": rng.normal(0, 0.02, 750),
++                        "label_5d": rng.normal(0, 0.03, 750),
++                    }
++                )
++            )
+         df = pd.concat(frames, ignore_index=True)
+         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
+@@ -50,6 +56,7 @@ def test_predictor_outputs_rank_score(self, tmp_path):
+         from app.pipeline1.predictor import V35Predictor
+ 
+         import app.pipeline1.dual_track_trainer as dtt
++
+         dtt.LGB_PARAMS_REG["n_estimators"] = 5
+         dtt.LGB_PARAMS_CLS["n_estimators"] = 5
+         dtt.ES_PATIENCE = 2
+@@ -58,12 +65,18 @@ def test_predictor_outputs_rank_score(self, tmp_path):
+         frames = []
+         for s in range(6):
+             f = rng.normal(size=750)
+-            frames.append(pd.DataFrame({
+-                "symbol": f"60000{s}", "date": dates, "f1": f,
+-                "label_1d": f * 0.01 + rng.normal(0, 0.01, 750),
+-                "label_3d": rng.normal(0, 0.02, 750),
+-                "label_5d": rng.normal(0, 0.03, 750),
+-            }))
++            frames.append(
++                pd.DataFrame(
++                    {
++                        "symbol": f"60000{s}",
++                        "date": dates,
++                        "f1": f,
++                        "label_1d": f * 0.01 + rng.normal(0, 0.01, 750),
++                        "label_3d": rng.normal(0, 0.02, 750),
++                        "label_5d": rng.normal(0, 0.03, 750),
++                    }
++                )
++            )
+         df = pd.concat(frames, ignore_index=True)
+         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
+@@ -82,25 +95,31 @@ def test_predictor_outputs_rank_score(self, tmp_path):
+ class TestV37ScoreFormula:
+     def test_rank_score_formula(self):
+         gen = ListGenerator()
+-        df = pd.DataFrame({
+-            "symbol": ["A", "B"],
+-            "pred_ret_1d": [0.02, 0.02],
+-            "pred_ret_3d": [0.02, 0.02],
+-            "pred_ret_5d": [0.02, 0.02],
+-            "prob_up": [0.6, 0.6],
+-            "rank_score": [2.0, 1.0],
+-        })
++        df = pd.DataFrame(
++            {
++                "symbol": ["A", "B"],
++                "pred_ret_1d": [0.02, 0.02],
++                "pred_ret_3d": [0.02, 0.02],
++                "pred_ret_5d": [0.02, 0.02],
++                "prob_up": [0.6, 0.6],
++                "rank_score": [2.0, 1.0],
++            }
++        )
+         out = gen.compute_scores(df).set_index("symbol")
+         # score = rank × (1+0.3·tanh(compound×100)) × prob_adjust → A 恰为 B 的 2 倍
+         assert out.loc["A", "score"] == pytest.approx(2 * out.loc["B", "score"])
+ 
+     def test_fallback_without_rank_score(self):
+         gen = ListGenerator()
+-        df = pd.DataFrame({
+-            "symbol": ["A"],
+-            "pred_ret_1d": [0.02], "pred_ret_3d": [0.02], "pred_ret_5d": [0.02],
+-            "prob_up": [0.6],
+-        })
++        df = pd.DataFrame(
++            {
++                "symbol": ["A"],
++                "pred_ret_1d": [0.02],
++                "pred_ret_3d": [0.02],
++                "pred_ret_5d": [0.02],
++                "prob_up": [0.6],
++            }
++        )
+         out = gen.compute_scores(df)
+         compound = 0.02
+         assert out["score"].iloc[0] == pytest.approx(compound * 1.0)  # prob/base=1
+@@ -110,20 +129,22 @@ def test_fallback_without_rank_score(self):
+ # D.8 双清单编排
+ # ============================================================
+ def _dual_cands() -> pd.DataFrame:
+-    return pd.DataFrame({
+-        "symbol": ["600001", "600002", "600003", "300001"],
+-        "board": ["main", "main", "main", "GEM"],
+-        "industry": ["白酒", "电池", "保险", "医药"],
+-        "pred_ret_1d": [0.03, 0.025, 0.02, 0.04],
+-        "pred_ret_3d": [0.05, 0.04, 0.03, 0.06],
+-        "pred_ret_5d": [0.07, 0.06, 0.05, 0.08],
+-        "prob_up": [0.72, 0.69, 0.60, 0.75],  # 600003 prob<0.68 出局
+-        "pain_prob": [0.10, 0.20, 0.05, 0.05],  # 600002 pain≥0.15 出局
+-        "score": [0.05, 0.04, 0.03, 0.06],
+-        "uncertainty_width": [0.05, 0.05, 0.05, 0.05],
+-        "pred_q50": [0.03, 0.025, 0.02, 0.04],
+-        "ATR_pct": [0.02, 0.02, 0.02, 0.02],
+-    })
++    return pd.DataFrame(
++        {
++            "symbol": ["600001", "600002", "600003", "300001"],
++            "board": ["main", "main", "main", "GEM"],
++            "industry": ["白酒", "电池", "保险", "医药"],
++            "pred_ret_1d": [0.03, 0.025, 0.02, 0.04],
++            "pred_ret_3d": [0.05, 0.04, 0.03, 0.06],
++            "pred_ret_5d": [0.07, 0.06, 0.05, 0.08],
++            "prob_up": [0.72, 0.69, 0.60, 0.75],  # 600003 prob<0.68 出局
++            "pain_prob": [0.10, 0.20, 0.05, 0.05],  # 600002 pain≥0.15 出局
++            "score": [0.05, 0.04, 0.03, 0.06],
++            "uncertainty_width": [0.05, 0.05, 0.05, 0.05],
++            "pred_q50": [0.03, 0.025, 0.02, 0.04],
++            "ATR_pct": [0.02, 0.02, 0.02, 0.02],
++        }
++    )
+ 
+ 
+ class TestDualListRunner:
+@@ -144,6 +165,7 @@ def test_emit_dual_profiles_and_worm(self, tmp_path):
+         # WORM: 两份清单均落盘且含 profile
+         import json
+         import os
++
+         files = os.listdir(tmp_path)
+         assert files and files[0].startswith("dual_2026-07-25")
+         with open(os.path.join(tmp_path, files[0]), encoding="utf-8") as fh:
+@@ -152,7 +174,8 @@ def test_emit_dual_profiles_and_worm(self, tmp_path):
+ 
+     def test_bear_takeover_blocks_aggressive(self):
+         runner = DualListRunner(
+-            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0))
++            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0)
++        )
+         out = runner.emit(_dual_cands(), "2026-07-25", market_state="bear")
+         assert out["bear_takeover"]
+         assert len(out["execution"]) == 0  # D.7: DEFENSE 攻击档只卖不买
+@@ -194,23 +217,27 @@ def test_execution_carries_stop_and_position(self):
+         cands["close"] = [10.0, 10.0, 10.0, 10.0]
+         cands.loc[0, "pred_q50"] = 0.08  # 让 E.2 RR 闸门通过 (RR=2.0)
+         runner = DualListRunner(
+-            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0))
++            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0)
++        )
+         out = runner.emit(cands, "2026-07-25")
+         exe = out["execution"]
+         assert len(exe) == 1
+         # D.9/E.2: stop_price / position / rr 随清单输出 (影子留痕)
+         assert {"dyn_stop_pct", "dyn_position", "dyn_rr", "stop_price"} <= set(
+-            exe.columns)
++            exe.columns
++        )
+         row = exe.iloc[0]
+         assert 0 < row["dyn_position"] <= 1.0
+-        assert row["stop_price"] == pytest.approx(10.0 * (1 - row["dyn_stop_pct"]),
+-                                                  abs=0.01)
++        assert row["stop_price"] == pytest.approx(
++            10.0 * (1 - row["dyn_stop_pct"]), abs=0.01
++        )
+ 
+     def test_dynamic_gate_shadow_zero_position(self):
+         """E.2 影子模式: A级入选但 RR 不达标 → position=0 (留痕不驱动, F.5)."""
+         cands = _dual_cands()  # pred_q50=0.03 → RR=1.25 < 1.8
+         runner = DualListRunner(
+-            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0))
++            stable_lister=ListGenerator(entry_prob=0.55, entry_ret_mult=0.0)
++        )
+         exe = runner.emit(cands, "2026-07-25")["execution"]
+         assert len(exe) == 1
+         assert exe.iloc[0]["dyn_position"] == 0.0
+diff --git a/tests/test_pipeline1_v38_gates.py b/tests/test_pipeline1_v38_gates.py
+index 78934ec..b5c0c69 100644
+--- a/tests/test_pipeline1_v38_gates.py
++++ b/tests/test_pipeline1_v38_gates.py
+@@ -34,8 +34,14 @@ def test_ic_sentinel(self):
+         for d in dates:
+             f = rng.normal(size=30)
+             for i in range(30):
+-                rows.append({"date": d, "leak": f[i], "noise": rng.normal(),
+-                             "label_1d": f[i] + rng.normal(0, 0.01)})
++                rows.append(
++                    {
++                        "date": d,
++                        "leak": f[i],
++                        "noise": rng.normal(),
++                        "label_1d": f[i] + rng.normal(0, 0.01),
++                    }
++                )
+         df = pd.DataFrame(rows)
+         r = ic_sentinel(df, ["leak", "noise"])
+         assert not r["pass"]
+@@ -44,10 +50,12 @@ def test_ic_sentinel(self):
+     def test_feature_engine_source_clean(self):
+         """红线回归: 特征引擎源码不得含未来函数模式."""
+         import pathlib
++
+         root = pathlib.Path(__file__).resolve().parents[1]
+         hits = audit_source(
+             (root / "app" / "pipeline1" / "feature_engine_v35.py").read_text(
+-                encoding="utf-8"),
++                encoding="utf-8"
++            ),
+             "feature_engine_v35.py",
+         )
+         assert hits == []
+@@ -64,8 +72,13 @@ def _df(self, corr_noise=0.01, days=60, n=30, seed=7):
+         for d in dates:
+             s = rng.normal(size=n)
+             for i in range(n):
+-                rows.append({"date": d, "score": s[i],
+-                             "label": s[i] + rng.normal(0, corr_noise)})
++                rows.append(
++                    {
++                        "date": d,
++                        "score": s[i],
++                        "label": s[i] + rng.normal(0, corr_noise),
++                    }
++                )
+         return pd.DataFrame(rows)
+ 
+     def test_rank_ic_and_icir(self):
+@@ -99,8 +112,11 @@ def test_decay_curve(self):
+             f = rng.normal(size=days)
+             ret = 0.01 * np.roll(f, 1) + rng.normal(0, 0.01, days)  # t+1 收益∝f
+             close = 100 * np.cumprod(1 + ret)
+-            frames.append(pd.DataFrame({
+-                "symbol": f"S{s}", "date": dates, "close_hfq": close, "score": f}))
++            frames.append(
++                pd.DataFrame(
++                    {"symbol": f"S{s}", "date": dates, "close_hfq": close, "score": f}
++                )
++            )
+         df = pd.concat(frames, ignore_index=True)
+         r = ic_decay_curve(df, "score")
+         assert r["ic_t+1"] > 0.3  # t+1 强相关
+@@ -113,16 +129,18 @@ def test_decay_curve(self):
+ # ============================================================
+ class TestDQReport:
+     def _panel(self, bad=False):
+-        df = pd.DataFrame({
+-            "symbol": ["A", "B", "C"],
+-            "date": pd.to_datetime(["2026-07-25"] * 3),
+-            "open": [10.0, 20.0, 30.0],
+-            "high": [10.5, 20.5, 30.5],
+-            "low": [9.5, 19.5, 29.5],
+-            "close": [10.2, 20.2, 30.2],
+-            "volume": [1e6, 2e6, 3e6],
+-            "amount": [1e7, 2e7, 3e7],
+-        })
++        df = pd.DataFrame(
++            {
++                "symbol": ["A", "B", "C"],
++                "date": pd.to_datetime(["2026-07-25"] * 3),
++                "open": [10.0, 20.0, 30.0],
++                "high": [10.5, 20.5, 30.5],
++                "low": [9.5, 19.5, 29.5],
++                "close": [10.2, 20.2, 30.2],
++                "volume": [1e6, 2e6, 3e6],
++                "amount": [1e7, 2e7, 3e7],
++            }
++        )
+         if bad:
+             df.loc[1, "high"] = 19.0  # high < open/close (B 违规)
+             df.loc[2, "volume"] = -1  # volume < 0 (C 违规)
+diff --git a/tests/test_stage1_gate.py b/tests/test_stage1_gate.py
+new file mode 100644
+index 0000000..0c715ab
+--- /dev/null
++++ b/tests/test_stage1_gate.py
+@@ -0,0 +1,130 @@
++# -*- coding: utf-8 -*-
++"""P19.0 阶段一点火验收脚本 e2e 测试 (合成面板 + small 模式 + 伪特征 stub)."""
++
++from __future__ import annotations
++
++import importlib.util
++import json
++from pathlib import Path
++
++import numpy as np
++import pandas as pd
++
++ROOT = Path(__file__).resolve().parent.parent
++
++
++def _load_gate_module():
++    """按路径加载 scripts/run_stage1_gate.py (scripts 非包)."""
++    spec = importlib.util.spec_from_file_location(
++        "run_stage1_gate", ROOT / "scripts" / "run_stage1_gate.py"
++    )
++    mod = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(mod)
++    return mod
++
++
++def make_panel(days: int = 780, seed: int = 21) -> pd.DataFrame:
++    """780 交易日 (>750 窗口) 双板块面板: 主板/双创各 6 只 (日 IC 需 >5 只/日)."""
++    rng = np.random.default_rng(seed)
++    dates = pd.bdate_range("2023-01-02", periods=days)
++    symbols = [("60051%d" % i, "main", "白酒") for i in range(6)] + [
++        ("30001%d" % i, "GEM", "电子") for i in range(6)
++    ]
++    frames = []
++    for sym, board, industry in symbols:
++        close = 100 * np.cumprod(1 + rng.normal(0.0005, 0.02, days))
++        frames.append(
++            pd.DataFrame(
++                {
++                    "symbol": sym,
++                    "date": dates,
++                    "board": board,
++                    "open": close,
++                    "high": close * 1.01,
++                    "low": close * 0.99,
++                    "close": close,
++                    "close_hfq": close,
++                    "open_hfq": close,
++                    "high_hfq": close * 1.01,
++                    "low_hfq": close * 0.99,
++                    "volume": 1e7,
++                    "amount": 1e9,
++                    "turnover_rate": 5.0,
++                    "free_float_turnover_rate": 5.0,
++                    "pre_close": pd.Series(close).shift(1).fillna(close[0]),
++                    "is_suspended": False,
++                    "is_st": False,
++                    "industry": industry,
++                    "list_days": 1000,
++                }
++            )
++        )
++    return pd.concat(frames, ignore_index=True)
++
++
++class _StubFeatures:
++    """跳过真实特征工程 (慢), 直接加 f1/f2 伪特征 + ATR_pct (波动桶分桶用)."""
++
++    def build(self, df, float_shares_map=None):
++        rng = np.random.default_rng(7)
++        df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
++        df["f1"] = rng.normal(size=len(df))
++        df["f2"] = rng.normal(size=len(df))
++        ret = df.groupby("symbol")["close_hfq"].pct_change()
++        df["ATR_pct"] = (
++            ret.groupby(df["symbol"])
++            .rolling(14, min_periods=5)
++            .std()
++            .reset_index(level=0, drop=True)
++        )
++        return df
++
++    @staticmethod
++    def feature_columns(df):
++        return ["f1", "f2"]
++
++
++def test_stage1_gate_small_mode(tmp_path, monkeypatch):
++    """--small 跑通主函数: 返回码 0/1 + JSON 报告含四项门禁 checks."""
++    panel_path = tmp_path / "panel.parquet"
++    make_panel().to_parquet(panel_path)
++
++    gate = _load_gate_module()
++    monkeypatch.setattr(gate, "FeatureEngineV35", _StubFeatures)
++
++    rc = gate.main(
++        [
++            "--panel",
++            str(panel_path),
++            "--tag",
++            "pytest",
++            "--small",
++            "--out-dir",
++            str(tmp_path),
++            "--journal-dir",
++            str(tmp_path / "journal"),
++            "--model-dir",
++            str(tmp_path / "models"),
++        ]
++    )
++    assert rc in (0, 1)
++
++    report_path = tmp_path / "stage1_gate_pytest.json"
++    assert report_path.exists()
++    report = json.loads(report_path.read_text(encoding="utf-8"))
++    assert report["pass"] == (rc == 0)
++    assert set(report["checks"]) == {
++        "rank_ic",
++        "icir",
++        "high_vol_ic",
++        "train_ic_no_leak",
++    }
++    # 双板块均有各自门禁结果
++    assert set(report["boards"]) == {"main", "dual"}
++    for b in ("main", "dual"):
++        assert set(report["boards"][b]["gate"]["checks"]) == set(report["checks"])
++    # WORM 账本已追加
++    journal = tmp_path / "journal" / "backtest_runs.jsonl"
++    assert journal.exists()
++    rec = json.loads(journal.read_text(encoding="utf-8").strip().splitlines()[-1])
++    assert rec["tag"] == "stage1_gate_pytest"

@@ -25,6 +25,18 @@ from .dual_track_trainer import DualTrackTrainer
 logger = logging.getLogger(__name__)
 
 
+def _cross_sectional_rank(values: np.ndarray) -> np.ndarray:
+    """将一维数组转换为 [0, 1] 范围内的百分位排名 (用于回退 LambdaRank)."""
+    from scipy.stats import rankdata
+
+    ranks = rankdata(values)
+    return (
+        (ranks - 1) / (len(ranks) - 1)
+        if len(ranks) > 1
+        else np.zeros_like(values, dtype=float)
+    )
+
+
 class V35Predictor:
     """双板块推理: {'main': bundle_path, 'dual': bundle_path}."""
 
@@ -82,8 +94,23 @@ class V35Predictor:
             latest["pain_prob"] = bundle["pain_model"].predict_proba(X)
             keep.append("pain_prob")
         # [阶段四] LambdaRank 排序分 (bundle 含 rank_model 时)
+        # 若 LambdaRank 退化 (常数输出) 或预测异常, 自动回退 pred_ret_1d 横截面排名
         if "rank_model" in bundle:
-            latest["rank_score"] = bundle["rank_model"][0].predict(X)
+            try:
+                raw_rank = bundle["rank_model"][0].predict(X)
+                if np.std(raw_rank) < 1e-6:
+                    logger.warning(
+                        "[%s] LambdaRank 退化 (std=%.6f), 回退 pred_ret_1d 排名",
+                        board,
+                        np.std(raw_rank),
+                    )
+                    reg_pred = models["1d_reg"][0].predict(X)
+                    raw_rank = _cross_sectional_rank(reg_pred)
+            except Exception:
+                logger.warning("[%s] LambdaRank 预测异常, 回退 pred_ret_1d 排名", board)
+                reg_pred = models["1d_reg"][0].predict(X)
+                raw_rank = _cross_sectional_rank(reg_pred)
+            latest["rank_score"] = raw_rank
             keep.append("rank_score")
         # 当日涨跌幅 (看板 day_change 列): close/pre_close - 1, 除零防护
         if {"close", "pre_close"} <= set(latest.columns):

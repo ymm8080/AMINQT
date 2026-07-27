@@ -35,18 +35,18 @@ logging.basicConfig(
 logger = logging.getLogger("train_predict")
 
 MODEL_DIR = "models/pipeline1"
-PANEL_PATH = "data/panel_18m.parquet"
+PANEL_PATH = "data/panel_3y.parquet"
 LIST_DIR = "data/lists"
 CACHE_DIR = "data/stock_cache"
-YEARS = 1.5
-MIN_DAYS = 180  # 最少交易日
+YEARS = 3.0
+MIN_DAYS = 360  # 最少交易日
 
 
 # ============================================================
 # 阶段 1: 全 A 数据拉取
 # ============================================================
 def fetch_all_stocks(limit: int = 0) -> pd.DataFrame | None:
-    """拉取全 A 股 1.5 年日线 → 本地 parquet (支持断点续拉).
+    """拉取全 A 股 3 年日线 → 本地 parquet (支持断点续拉).
 
     Args:
         limit: 0=全量, N=只拉前 N 只.
@@ -375,7 +375,7 @@ def run_prediction(trade_date: str | None = None) -> pd.DataFrame | None:
     logger.info("Candidates: %d", len(candidates))
 
     # 清单
-    lister = ListGenerator(entry_prob=0.45, entry_ret_mult=1.0)
+    lister = ListGenerator(entry_prob=0.55, entry_ret_mult=2.0)
     result = lister.emit(candidates, env=MarketEnv(), market_state="range")
     logger.info("List: %d stocks (empty=%s)", len(result["list"]), result["empty"])
 

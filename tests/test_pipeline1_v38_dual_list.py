@@ -114,6 +114,7 @@ class TestV37ScoreFormula:
         df = pd.DataFrame(
             {
                 "symbol": ["A"],
+                "board": ["main"],
                 "pred_ret_1d": [0.02],
                 "pred_ret_3d": [0.02],
                 "pred_ret_5d": [0.02],
@@ -121,8 +122,8 @@ class TestV37ScoreFormula:
             }
         )
         out = gen.compute_scores(df)
-        compound = 0.02
-        assert out["score"].iloc[0] == pytest.approx(compound * 1.0)  # prob/base=1
+        # 无 rank_score → 回退 pred_ret_1d 横截面 rank(pct=True)=1.0, prob/base=1
+        assert out["score"].iloc[0] == pytest.approx(1.0 * 1.0)
 
 
 # ============================================================
