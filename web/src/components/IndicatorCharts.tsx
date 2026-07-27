@@ -1,11 +1,10 @@
 import {
-  Area,
+  Bar,
   ComposedChart,
   Line,
   LineChart,
   ReferenceLine,
   ResponsiveContainer,
-  Scatter,
   Tooltip,
   XAxis,
   YAxis,
@@ -77,6 +76,7 @@ export function MainForceChipsChart({ data, height = 200 }: { data: OhlcBar[]; h
           <Tooltip
             contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
             labelStyle={{ color: '#8b949e' }}
+            formatter={(value: unknown, name: string) => [Number(value).toFixed(2), name]}
           />
           <ReferenceLine y={0} stroke="#8b949e" strokeDasharray="4 4" />
           <Line type="monotone" dataKey="mainTraj" stroke="#e6edf3" dot={false} strokeWidth={1.2} name="主力轨迹" />
@@ -126,75 +126,20 @@ export function ChipControlChart({ data, height = 200 }: { data: OhlcBar[]; heig
           <Tooltip
             contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
             labelStyle={{ color: '#8b949e' }}
+            formatter={(value: unknown, name: string) => [Number(value).toFixed(2), name]}
           />
           <ReferenceLine y={50} stroke="#8b949e" strokeDasharray="4 4" />
-          <Area type="monotone" dataKey="a04" stroke="#e54545" fill="#e54545" fillOpacity={0.3} name="获利盘(近)" />
-          <Area type="monotone" dataKey="a02" stroke="#26a69a" fill="#26a69a" fillOpacity={0.2} name="获利盘(远)" />
+          <Bar dataKey="a04" fill="#e54545" name="获利盘(近)" />
+          <Bar dataKey="a02" fill="#26a69a" name="获利盘(远)" />
+          <Bar dataKey="a08" fill="#facc15" name="筹码差" />
           <Line type="monotone" dataKey="a06" stroke="#00ffff" dot={false} strokeWidth={1} name="套牢盘" />
-          <Line type="monotone" dataKey="a08" stroke="#facc15" dot={false} strokeWidth={1} name="筹码差" />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
   )
 }
 
-/** 3. 发现牛股: EMA3/5/7/12/20/50 + 金叉买入信号. */
-export function FindBullChart({ data, height = 200 }: { data: OhlcBar[]; height?: number }) {
-  const close = data.map((d) => d.close)
-  const open = data.map((d) => d.open)
-  const a1 = ema(close, 3)
-  const a2 = ema(close, 5)
-  const a3 = ema(close, 7)
-  const a4 = ema(close, 12)
-  const a5 = ema(close, 20)
-  const a6 = ema(close, 50)
-
-  const signals = data.map((d, i) => {
-    if (i === 0) return null
-    const ss =
-      a1[i] > a5[i] &&
-      a1[i - 1] <= a5[i - 1] &&
-      close[i] > open[i] &&
-      close[i] > close[i - 1] &&
-      close[i] / close[i - 1] >= 1.018
-    return ss ? { date: d.date, price: close[i] } : null
-  }).filter(Boolean) as { date: string; price: number }[]
-
-  const chartData = data.map((d, i) => ({
-    date: d.date,
-    a1: a1[i],
-    a2: a2[i],
-    a3: a3[i],
-    a4: a4[i],
-    a5: a5[i],
-    a6: a6[i],
-  }))
-
-  return (
-    <div className="panel" style={{ padding: '12px 0' }}>
-      <h4 style={{ margin: '0 0 8px' }}>发现牛股</h4>
-      <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={chartData} syncId="stock-detail">
-          <XAxis dataKey="date" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={40} />
-          <YAxis tick={{ fill: '#8b949e', fontSize: 10 }} orientation="right" width={55} />
-          <Tooltip
-            contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
-            labelStyle={{ color: '#8b949e' }}
-          />
-          <Line type="monotone" dataKey="a1" stroke="#e6edf3" dot={false} strokeWidth={1} name="EMA3" />
-          <Line type="monotone" dataKey="a2" stroke="#facc15" dot={false} strokeWidth={1} name="EMA5" />
-          <Line type="monotone" dataKey="a3" stroke="#ff00ff" dot={false} strokeWidth={1} name="EMA7" />
-          <Line type="monotone" dataKey="a4" stroke="#26a69a" dot={false} strokeWidth={1} name="EMA12" />
-          <Line type="monotone" dataKey="a5" stroke="#e54545" dot={false} strokeWidth={1} name="EMA20" />
-          <Line type="monotone" dataKey="a6" stroke="#4f8ef7" dot={false} strokeWidth={2} name="EMA50" />
-          <Scatter data={signals} dataKey="price" fill="#ffd700" shape="triangle" name="买入信号" />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  )
-}
-
-/** 4. 同花顺益盟趋势顶底. */
+/** 3. 同花顺益盟趋势顶底. */
 export function TrendTopBottomChart({ data, height = 200 }: { data: OhlcBar[]; height?: number }) {
   const close = data.map((d) => d.close)
   const high = data.map((d) => d.high)
@@ -234,13 +179,14 @@ export function TrendTopBottomChart({ data, height = 200 }: { data: OhlcBar[]; h
           <Tooltip
             contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
             labelStyle={{ color: '#8b949e' }}
+            formatter={(value: unknown, name: string) => [Number(value).toFixed(2), name]}
           />
           <ReferenceLine y={20} stroke="#26a69a" strokeDasharray="4 4" />
           <ReferenceLine y={80} stroke="#26a69a" strokeDasharray="4 4" />
           <ReferenceLine y={90} stroke="#e54545" strokeDasharray="4 4" />
-          <Line type="monotone" dataKey="short" stroke="#888888" dot={false} strokeWidth={1} name="短期线" />
-          <Line type="monotone" dataKey="mid" stroke="#facc15" dot={false} strokeWidth={2} name="中期线" />
-          <Line type="monotone" dataKey="long" stroke="#e54545" dot={false} strokeWidth={1} name="长期线" />
+          <Line type="monotone" dataKey="short" stroke="#e54545" dot={false} strokeWidth={1} name="短期线" />
+          <Line type="monotone" dataKey="mid" stroke="#26a69a" dot={false} strokeWidth={2} name="中期线" />
+          <Line type="monotone" dataKey="long" stroke="#4f8ef7" dot={false} strokeWidth={1} name="长期线" />
         </LineChart>
       </ResponsiveContainer>
     </div>
