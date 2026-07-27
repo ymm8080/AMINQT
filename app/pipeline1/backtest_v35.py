@@ -270,7 +270,8 @@ class BacktestEngineV35:
             nav_hist.append(DailyBar(date, nav, cash, len(positions)))
 
         trades_df = pd.DataFrame(
-            trades, columns=["date", "symbol", "side", "price", "reason", "pnl", "score"]
+            trades,
+            columns=["date", "symbol", "side", "price", "reason", "pnl", "score"],
         )
         return {
             "nav_curve": pd.DataFrame([vars(b) for b in nav_hist]),
@@ -311,7 +312,12 @@ class BacktestEngineV35:
 
         # ---- 赚钱指标: 胜率/盈亏比/期望/最大连亏 ----
         win_rate, pl_ratio, expectancy, max_consec_loss, total_trades, avg_holding = (
-            0.0, 0.0, 0.0, 0, 0, 0.0
+            0.0,
+            0.0,
+            0.0,
+            0,
+            0,
+            0.0,
         )
         if trades_df is not None and len(trades_df):
             sells = trades_df[trades_df["side"] == "sell"]
@@ -344,11 +350,12 @@ class BacktestEngineV35:
                 avg_holding = float(np.mean(hold_days)) if hold_days else 0.0
 
         # ---- OOS Rank IC: 预测排序 vs 实际收益 — 核心判断"模型是否有效" ----
-        oos_rank_ic, ic_rolling_20d, ic_daily = 0.0, 0.0, []
+        oos_rank_ic, _ic_rolling_20d, ic_daily = 0.0, 0.0, []
         if trades_df is not None and len(trades_df):
             sells = trades_df[trades_df["side"] == "sell"]
             if len(sells) >= 5:
                 from scipy.stats import spearmanr
+
                 # Match each sell with its buy score (if available via the buy trade)
                 pnl_scores = []
                 for _, sell in sells.iterrows():
@@ -363,7 +370,9 @@ class BacktestEngineV35:
                     scores_arr = np.array([p[1] for p in pnl_scores])
                     if np.std(scores_arr) > 1e-9:
                         r = spearmanr(scores_arr, pnls_arr)
-                        oos_rank_ic = float(r.correlation) if not np.isnan(r.correlation) else 0.0
+                        oos_rank_ic = (
+                            float(r.correlation) if not np.isnan(r.correlation) else 0.0
+                        )
 
         return {
             "total_return": float(nav.iloc[-1] / initial - 1),
