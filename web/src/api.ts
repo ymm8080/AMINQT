@@ -112,9 +112,9 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   latestList: () => req<LatestList>('/list/latest'),
   ohlc: (symbol: string, days = 120) =>
-    req<{ items: OhlcBar[] }>(`/ohlc/${symbol}?days=${days}`),
+    req<{ demo: boolean; items: OhlcBar[] }>(`/ohlc/${symbol}?days=${days}`),
   intraday: (symbol: string) =>
-    req<{ items: IntradayPoint[] }>(`/intraday/${symbol}`),
+    req<{ demo: boolean; items: IntradayPoint[] }>(`/intraday/${symbol}`),
   sectors: () => req<{ demo: boolean; items: SectorItem[] }>('/sectors'),
   signals: (symbol: string) =>
     req<{ demo: boolean; items: SignalItem[] }>(`/signals/${symbol}`),

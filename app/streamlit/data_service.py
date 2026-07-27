@@ -339,6 +339,80 @@ def toggle_watchlist(symbol: str, name: str = "", path: str = WATCHLIST_PATH) ->
 
 
 # ============================================================
+# 真实行情数据 (akshare fallback → demo)
+# ============================================================
+import logging
+
+_data_logger = logging.getLogger(__name__)
+_OHLC_CACHE: dict[str, tuple[str, pd.DataFrame]] = {}  # key → (date, df)
+
+
+def fetch_real_ohlc(symbol: str, days: int = 120) -> pd.DataFrame | None:
+    """从 akshare 获取真实个股日线 (前复权).
+
+    Returns:
+        DataFrame with date/open/high/low/close/volume columns, or None on failure.
+    """
+    cache_key = f"{symbol}:{days}"
+    today = pd.Timestamp.today().strftime("%Y%m%d")
+    if cache_key in _OHLC_CACHE and _OHLC_CACHE[cache_key][0] == today:
+        return _OHLC_CACHE[cache_key][1].copy()
+
+    try:
+        import akshare as ak
+        df = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date="20200101",
+                                 end_date=today, adjust="qfq")
+        if df is None or len(df) == 0:
+            return None
+        df = df.rename(columns={
+            "日期": "date", "开盘": "open", "最高": "high",
+            "最低": "low", "收盘": "close", "成交量": "volume",
+        })
+        df["date"] = pd.to_datetime(df["date"])
+        for col in ["open", "high", "low", "close", "volume"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        df = df.dropna(subset=["close"]).sort_values("date").tail(days)
+        _OHLC_CACHE[cache_key] = (today, df.copy())
+        _data_logger.info("akshare OHLC %s: %d bars", symbol, len(df))
+        return df
+    except Exception:
+        _data_logger.warning("akshare OHLC %s 失败, 回退 demo", symbol, exc_info=True)
+        return None
+
+
+def fetch_real_intraday(symbol: str) -> pd.DataFrame | None:
+    """从 akshare 获取今日 5 分钟分时 (实时).
+
+    Returns:
+        DataFrame with time/price/volume columns, or None on failure.
+    """
+    try:
+        import akshare as ak
+        df = ak.stock_zh_a_hist_min_em(symbol=symbol, period="5", adjust="qfq")
+        if df is None or len(df) == 0:
+            return None
+        df = df.rename(columns={
+            "时间": "time", "开盘": "open", "最高": "high",
+            "最低": "low", "收盘": "close", "成交量": "volume",
+        })
+        # Keep only today's bars
+        if "time" in df.columns:
+            df["time"] = pd.to_datetime(df["time"])
+            today = pd.Timestamp.today().normalize()
+            df = df[df["time"] >= today]
+            df["time"] = df["time"].dt.strftime("%H:%M")
+        result = df[["time", "close", "volume"]].rename(
+            columns={"close": "price"}).copy()
+        result["volume"] = pd.to_numeric(result["volume"], errors="coerce").fillna(0)
+        result["price"] = pd.to_numeric(result["price"], errors="coerce").ffill()
+        _data_logger.info("akshare intraday %s: %d bars", symbol, len(result))
+        return result if len(result) else None
+    except Exception:
+        _data_logger.warning("akshare intraday %s 失败, 回退 demo", symbol, exc_info=True)
+        return None
+
+
+# ============================================================
 # 调参报告 / 配置
 # ============================================================
 def load_tuning_report(path: str = TUNING_REPORT) -> dict | None:
