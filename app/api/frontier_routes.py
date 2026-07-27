@@ -267,7 +267,11 @@ def toggle_priority(item: WatchItem) -> dict:
 @router.get("/ohlc/{symbol}")
 def get_ohlc(symbol: str, days: int = 120) -> dict:
     """K线数据: 真实优先 (akshare), 失败回退 demo."""
-    df = ds.fetch_real_ohlc(symbol, days=min(days, 500))
+    try:
+        df = ds.fetch_real_ohlc(symbol, days=min(days, 500))
+    except Exception:
+        logger.warning("fetch_real_ohlc 网络异常: %s", symbol, exc_info=True)
+        df = None
     demo = df is None
     if demo:
         df = ds.demo_ohlc(symbol, days=min(days, 500))
@@ -278,7 +282,11 @@ def get_ohlc(symbol: str, days: int = 120) -> dict:
 @router.get("/intraday/{symbol}")
 def get_intraday(symbol: str) -> dict:
     """分时数据: 真实优先 (akshare 5min), 失败回退 demo."""
-    df = ds.fetch_real_intraday(symbol)
+    try:
+        df = ds.fetch_real_intraday(symbol)
+    except Exception:
+        logger.warning("fetch_real_intraday 网络异常: %s", symbol, exc_info=True)
+        df = None
     demo = df is None
     if demo:
         df = ds.demo_intraday(symbol)
