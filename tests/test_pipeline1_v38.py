@@ -282,13 +282,15 @@ class TestDynamicEntry:
 
     def test_bear_tightening(self):
         # 4 只 prob=0.62 (正常过0.60, bear不过0.65) + 1 只 prob=0.70 (两种都过) [E11]
-        cands = _cands([
-            {"symbol": "600001", "industry": "A", "prob_up": 0.62},
-            {"symbol": "600002", "industry": "B", "prob_up": 0.62},
-            {"symbol": "600003", "industry": "C", "prob_up": 0.62},
-            {"symbol": "600004", "industry": "D", "prob_up": 0.62},
-            {"symbol": "600005", "industry": "E", "prob_up": 0.70},
-        ])
+        cands = _cands(
+            [
+                {"symbol": "600001", "industry": "A", "prob_up": 0.62},
+                {"symbol": "600002", "industry": "B", "prob_up": 0.62},
+                {"symbol": "600003", "industry": "C", "prob_up": 0.62},
+                {"symbol": "600004", "industry": "D", "prob_up": 0.62},
+                {"symbol": "600005", "industry": "E", "prob_up": 0.70},
+            ]
+        )
         # 正常: 5 只全过绝对阈值 (0.62/0.70 > 0.60)
         assert len(ListGenerator().emit(cands, market_state="range")["list"]) == 5
         # bear: 仅 1 只过绝对阈值 (0.70 > 0.65, 其余 0.62 < 0.65)

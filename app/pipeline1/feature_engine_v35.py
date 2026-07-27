@@ -84,18 +84,51 @@ class FeatureEngineV35:
         if "board" not in df.columns:
             df["board"] = df["symbol"].map(board_of)
 
-        skip_prefix = ("label_", "is_limit_up", "is_one_word", "limit_up_",
-                       "is_missing_", "is_pre_", "is_post_", "is_st", "is_suspended")
-        skip_exact = {"symbol", "date", "board", "industry", "name", "tradestatus",
-                       "close_hfq", "open_hfq", "high_hfq", "low_hfq",
-                       "list_days", "announce_date", "churn_suspect",
-                       "score_rank", "rank_amount", "rank_ff_turnover",
-                       "liquidity_score", "market_state", "schema_version",
-                       "PE_TTM", "is_virtual", "price_1455", "adv20",
-                       "limit_pct", "touched_limit_up", "time", "VAR5", "VAR51"}
+        skip_prefix = (
+            "label_",
+            "is_limit_up",
+            "is_one_word",
+            "limit_up_",
+            "is_missing_",
+            "is_pre_",
+            "is_post_",
+            "is_st",
+            "is_suspended",
+        )
+        skip_exact = {
+            "symbol",
+            "date",
+            "board",
+            "industry",
+            "name",
+            "tradestatus",
+            "close_hfq",
+            "open_hfq",
+            "high_hfq",
+            "low_hfq",
+            "list_days",
+            "announce_date",
+            "churn_suspect",
+            "score_rank",
+            "rank_amount",
+            "rank_ff_turnover",
+            "liquidity_score",
+            "market_state",
+            "schema_version",
+            "PE_TTM",
+            "is_virtual",
+            "price_1455",
+            "adv20",
+            "limit_pct",
+            "touched_limit_up",
+            "time",
+            "VAR5",
+            "VAR51",
+        }
 
         src_cols = [
-            c for c in df.columns
+            c
+            for c in df.columns
             if c not in skip_exact
             and not c.startswith(skip_prefix)
             and not c.endswith("_xrank")  # 不做二阶排名

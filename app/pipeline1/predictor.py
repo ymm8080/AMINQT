@@ -107,9 +107,7 @@ class V35Predictor:
                     reg_pred = models["1d_reg"][0].predict(X)
                     raw_rank = _cross_sectional_rank(reg_pred)
             except Exception:
-                logger.warning(
-                    "[%s] LambdaRank 预测异常, 回退 pred_ret_1d 排名", board
-                )
+                logger.warning("[%s] LambdaRank 预测异常, 回退 pred_ret_1d 排名", board)
                 reg_pred = models["1d_reg"][0].predict(X)
                 raw_rank = _cross_sectional_rank(reg_pred)
             latest["rank_score"] = raw_rank
