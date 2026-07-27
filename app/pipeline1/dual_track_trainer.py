@@ -33,18 +33,43 @@ WINDOW_TOTAL = 770  # [V3.8] 设计目标窗口 (3年数据≈750交易日)
 WINDOW_TRANSITION = 560  # [B11] 过渡窗口下限
 B11_FULL_DEPTH = 1250  # [B11] 回填达标线 (≥5 年交易日): 达到才用 770 窗口
 MIN_TRAIN_DAYS = 50  # 窗口 train 段下限, 不足即拒绝训练
-# 段长比例 (train:es:calib:test ≈ 80:4:4:12)
-WINDOW_RATIOS = {"train": 0.80, "es": 0.04, "calib": 0.04, "test": 0.12}
-# 各段最小日期数: 用过渡窗口 × 比例 推导, 不定死常数
-_MIN_WINDOW = min(WINDOW_TOTAL, WINDOW_TRANSITION)
-SEG_MIN_DAYS = {
-    "train": MIN_TRAIN_DAYS,
-    "es": max(int(_MIN_WINDOW * WINDOW_RATIOS["es"]), 8),
-    "calib": max(int(_MIN_WINDOW * WINDOW_RATIOS["calib"]), 8),
-    "test": max(int(_MIN_WINDOW * WINDOW_RATIOS["test"]), 30),
-}
-MIN_ES_DATES = SEG_MIN_DAYS["es"]  # 早停/校准决策阈值, 从比例推算
-# 兼容旧引用 (实际段长由 split_window 按比例动态计算)
+
+# ---- 非训练段绝对下限 (统计需求推导, 不做固定比例) ----
+# es:  早停验证需 ≥4000样本 → 200股/日×20日, IC_SE≈0.15/√4000≈0.002, 可检测ΔIC>0.005
+# calib: isotonic分桶需 ≥10桶 → 200股/日×20日=4000样本, ~400/桶, 足够稳定
+# test: OOS IC t-test → ICIR=IC_mean/IC_std×√n, IC≈0.10/0.15×√60=5.2, t>2稳健
+_ES_FLOOR = 20
+_CALIB_FLOOR = 20
+_TEST_FLOOR = 60
+_NON_TRAIN_FLOORS = _ES_FLOOR + _CALIB_FLOOR + _TEST_FLOOR  # =100
+
+
+def _derive_seg_min_days(window_days: int) -> dict[str, int]:
+    """从绝对统计下限 + 窗口总天数 推导各段最小日期数.
+
+    窗口足够大 → train 段吸收余量, es/calib/test 保持绝对下限.
+    窗口不足   → 等比例压缩非训练段, 保证 train 不低于 MIN_TRAIN_DAYS.
+    """
+    if window_days < _NON_TRAIN_FLOORS + MIN_TRAIN_DAYS:
+        scale = max(window_days - MIN_TRAIN_DAYS, 1) / _NON_TRAIN_FLOORS
+        return {
+            "train": MIN_TRAIN_DAYS,
+            "es": max(int(_ES_FLOOR * scale), 5),
+            "calib": max(int(_CALIB_FLOOR * scale), 5),
+            "test": max(int(_TEST_FLOOR * scale), 15),
+        }
+    return {
+        "train": window_days - _NON_TRAIN_FLOORS,
+        "es": _ES_FLOOR,
+        "calib": _CALIB_FLOOR,
+        "test": _TEST_FLOOR,
+    }
+
+
+# 全局段长下限: 用过渡窗口推导 (适用于所有短窗口场景)
+SEG_MIN_DAYS = _derive_seg_min_days(WINDOW_TRANSITION)
+MIN_ES_DATES = SEG_MIN_DAYS["es"]
+# 兼容旧引用
 TRAIN_DAYS = 620
 ES_DAYS = SEG_MIN_DAYS["es"]
 CALIB_DAYS = SEG_MIN_DAYS["calib"]
@@ -96,22 +121,18 @@ class DualTrackTrainer:
     def split_window(
         df: pd.DataFrame, window_total: int = WINDOW_TOTAL
     ) -> dict[str, pd.DataFrame]:
-        """按比例动态四段切分: train/es/calib/test = 80%/4%/4%/12%.
+        """四段切分: train/es/calib/test 从统计下限 + 实际日期数自动推导.
 
-        段长从 window_total 按比例计算, 保证各段不低于 SEG_MIN_DAYS.
-        校准集与早停验证集物理隔离, 否则校准器学到被调参挑剩下的噪声.
+        train 段吸收余量 (window_total - es - calib - test).
+        校准集与早停验证集物理隔离, 保证各段不低于 SEG_MIN_DAYS.
         """
         dates = sorted(df["date"].unique())[-window_total:]
         n = len(dates)
-        # 按比例分配, 向下取整
-        seg_lens = {
-            k: max(int(n * r), SEG_MIN_DAYS[k]) for k, r in WINDOW_RATIOS.items()
-        }
-        # 修正: 保证各段之和 <= n (train 让出余量)
-        overflow = sum(seg_lens.values()) - n
-        if overflow > 0:
-            seg_lens["train"] = max(seg_lens["train"] - overflow, SEG_MIN_DAYS["train"])
-        # 切片
+        seg_lens = _derive_seg_min_days(n)
+        # train 段补齐: 保证各段之和 = n
+        seg_lens["train"] = n - seg_lens["es"] - seg_lens["calib"] - seg_lens["test"]
+        seg_lens["train"] = max(seg_lens["train"], SEG_MIN_DAYS["train"])
+        # 切片: train → es → calib → test (时序)
         pos = 0
         seg_dates = {}
         for k in ("train", "es", "calib", "test"):
@@ -181,7 +202,7 @@ class DualTrackTrainer:
             model = lgb.LGBMClassifier(**LGB_PARAMS_CLS)
         else:
             model = lgb.LGBMRegressor(**LGB_PARAMS_REG)
-        # ES 段长度由 split_window 按 WINDOW_RATIOS 比例计算, 保证 >= MIN_ES_DATES
+        # ES 段长度由 split_window 按统计下限推导, 保证 >= MIN_ES_DATES
         es_dates = es["date"].nunique() if "date" in es.columns else len(es)
         use_es = es_dates >= MIN_ES_DATES
         if not use_es:
