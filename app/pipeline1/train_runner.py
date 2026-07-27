@@ -48,6 +48,28 @@ def select_features(
 ) -> list[str]:
     """IC 筛选当期因子; 全部被淘汰时回退全量特征列 (告警, 不中断训练)."""
     candidates = FeatureEngineV35.feature_columns(df)
+
+    # ---- NaN-rate 预筛 (工程强制, 铁律 #1 防止噪音特征污染模型) ----
+    NaN_DROP_THRESHOLD = 0.95
+    valid_candidates = []
+    for col in candidates:
+        if col in df.columns:
+            nan_rate = df[col].isna().mean()
+            if nan_rate < NaN_DROP_THRESHOLD:
+                valid_candidates.append(col)
+    dropped = len(candidates) - len(valid_candidates)
+    if dropped > 0:
+        logger.warning(
+            "[%s] NaN预筛剔除 %d/%d 因子 (>%.0f%% NaN), 保留 %d",
+            board,
+            dropped,
+            len(candidates),
+            NaN_DROP_THRESHOLD * 100,
+            len(valid_candidates),
+        )
+    candidates = valid_candidates
+    # ----------------------------------------------------------------
+
     if screener is None:
         return candidates
     try:

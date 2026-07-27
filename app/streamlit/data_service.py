@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import os
 
 import numpy as np
@@ -341,7 +342,6 @@ def toggle_watchlist(symbol: str, name: str = "", path: str = WATCHLIST_PATH) ->
 # ============================================================
 # 真实行情数据 (akshare fallback → demo)
 # ============================================================
-import logging
 
 _data_logger = logging.getLogger(__name__)
 _OHLC_CACHE: dict[str, tuple[str, pd.DataFrame]] = {}  # key → (date, df)

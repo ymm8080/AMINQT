@@ -366,9 +366,12 @@ class BacktestEngineV35:
                     if len(buy):
                         pnl_scores.append((sell["pnl"], buy.iloc[-1].get("score", 0.5)))
                 if len(pnl_scores) >= 5:
-                    pnls_arr = np.array([p[0] for p in pnl_scores])
-                    scores_arr = np.array([p[1] for p in pnl_scores])
-                    if np.std(scores_arr) > 1e-9:
+                    pnls_arr = np.array([p[0] for p in pnl_scores], dtype=float)
+                    scores_arr = np.array([p[1] for p in pnl_scores], dtype=float)
+                    valid = ~(np.isnan(pnls_arr) | np.isnan(scores_arr))
+                    pnls_arr = pnls_arr[valid]
+                    scores_arr = scores_arr[valid]
+                    if len(pnls_arr) >= 5 and np.std(scores_arr) > 1e-9:
                         r = spearmanr(scores_arr, pnls_arr)
                         oos_rank_ic = (
                             float(r.correlation) if not np.isnan(r.correlation) else 0.0

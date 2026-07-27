@@ -221,11 +221,14 @@ class DailySelectionPipeline:
         }
 
         # WORM 入库
-        worm_dir = os.path.join("data", "quality_reports")
-        os.makedirs(worm_dir, exist_ok=True)
-        path = os.path.join(worm_dir, f"quality_{trade_date}.json")
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump(report, fh, ensure_ascii=False, indent=2)
+        try:
+            worm_dir = os.path.join("data", "quality_reports")
+            os.makedirs(worm_dir, exist_ok=True)
+            path = os.path.join(worm_dir, f"quality_{trade_date}.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(report, fh, ensure_ascii=False, indent=2)
+        except Exception:
+            logger.warning("质量报告 WORM 入库失败 (非阻塞)", exc_info=True)
 
         if light == "RED":
             logger.critical("BIAS 红灯触发: %s → E4-L1 模型降级", trade_date)
