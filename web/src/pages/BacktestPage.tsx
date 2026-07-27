@@ -18,6 +18,8 @@ const qualityTrafficLight = (q: ForecastQuality | null) => {
 }
 
 export function BacktestPage() {
+  const today = new Date().toISOString().slice(0, 10)
+  const ago180 = new Date(Date.now() - 180 * 86400000).toISOString().slice(0, 10)
   const [params, setParams] = useState({
     top_n: 15,
     max_hold_days: 3,
@@ -27,6 +29,8 @@ export function BacktestPage() {
     initial_capital: 1000000,
     window_days: 180,
   })
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [objective, setObjective] = useState('net_excess_annual')
   const [maxDdLimit, setMaxDdLimit] = useState(-0.1)
   const [result, setResult] = useState<BacktestResult | null>(null)
@@ -55,7 +59,13 @@ export function BacktestPage() {
 
   const run = () => {
     setBusy(true)
-    api.runBacktest({ ...params, objective, max_dd_limit: maxDdLimit })
+    api.runBacktest({
+      ...params,
+      objective,
+      max_dd_limit: maxDdLimit,
+      start_date: startDate || undefined,
+      end_date: endDate || undefined,
+    })
       .then(setResult)
       .finally(() => setBusy(false))
   }
@@ -130,7 +140,41 @@ export function BacktestPage() {
         </div>
       </div>
 
-      <button className="primary" onClick={run} disabled={busy}>▶ 执行回测</button>
+      <div className="panel grid grid-4" style={{ marginTop: 12 }}>
+        <div>
+          <label>起始日期 (留空=自动)</label>
+          <input
+            type="date"
+            value={startDate}
+            max={endDate || today}
+            onChange={(e) => setStartDate(e.target.value)}
+            placeholder={ago180}
+          />
+        </div>
+        <div>
+          <label>结束日期 (留空=今天)</label>
+          <input
+            type="date"
+            value={endDate}
+            min={startDate || undefined}
+            max={today}
+            onChange={(e) => setEndDate(e.target.value)}
+            placeholder={today}
+          />
+        </div>
+        <div>
+          <label>或: 回测天数</label>
+          <input
+            type="number"
+            value={params.window_days}
+            onChange={(e) => setParams({ ...params, window_days: Number(e.target.value) })}
+            disabled={!!startDate && !!endDate}
+          />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+          <button className="primary" onClick={run} disabled={busy} style={{ width: '100%' }}>▶ 执行回测</button>
+        </div>
+      </div>
 
       {result && (
         <>

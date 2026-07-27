@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 def check_rank_ic() -> bool:
     """20日 OOS Rank IC ≥ 0.03 — 模块存在 + screen 方法可用即通过 (实际值运行时检查)."""
     try:
-        from app.pipeline1.ic_screener import ICScreener  # noqa: F811
-        from app.pipeline1.oos_monitor import OOSMonitor  # noqa: F811
+        from app.pipeline1.ic_screener import ICScreener  # noqa: F401,F811
+        from app.pipeline1.oos_monitor import OOSMonitor  # noqa: F401,F811
 
         return True
     except ImportError as e:
@@ -38,7 +38,7 @@ def check_rank_ic() -> bool:
 def check_stop_loss_hooked() -> bool:
     """止损逻辑已接入 sell_engine (S1/s1_dynamic_stop 存在)."""
     try:
-        from app.intraday.v51.sell_engine import s1_dynamic_stop  # noqa: F811
+        from app.intraday.v51.sell_engine import s1_dynamic_stop  # noqa: F401,F811
 
         return True
     except ImportError:
@@ -49,8 +49,8 @@ def check_stop_loss_hooked() -> bool:
 def check_daily_fuse_hooked() -> bool:
     """日保险丝已接入 fund_manager / trade_discipline."""
     try:
-        from app.intraday.v51.fund_manager import FundManager  # noqa: F811
-        from app.pipeline1.trade_discipline import TradingDiscipline  # noqa: F811
+        from app.intraday.v51.fund_manager import FundManager  # noqa: F401,F811
+        from app.pipeline1.trade_discipline import TradingDiscipline  # noqa: F401,F811
 
         return True
     except ImportError:
@@ -61,7 +61,7 @@ def check_daily_fuse_hooked() -> bool:
 def check_halt_line_hooked() -> bool:
     """15% 停机线已接入 state_machine."""
     try:
-        from app.intraday.v51.state_machine import ParamStateMachine  # noqa: F811
+        from app.intraday.v51.state_machine import ParamStateMachine  # noqa: F401,F811
 
         return True
     except ImportError:
@@ -72,10 +72,10 @@ def check_halt_line_hooked() -> bool:
 def check_circuit_breaker_p1_p2_p7() -> bool:
     """P1/P2/P7 熔断优先级仲裁表生效 (sell_engine 含 S1/S2/S8 三条)."""
     try:
-        from app.intraday.v51.sell_engine import (  # noqa: F811
-            s1_dynamic_stop,
-            s2_trailing_stop,
-            s8_limit_escape,
+        from app.intraday.v51.sell_engine import (  # noqa: F401,F811
+            s1_dynamic_stop,  # noqa: F401
+            s2_trailing_stop,  # noqa: F401
+            s8_limit_escape,  # noqa: F401
         )
 
         return True
@@ -87,7 +87,7 @@ def check_circuit_breaker_p1_p2_p7() -> bool:
 def check_gap_pain_rule_version() -> bool:
     """隔夜跳空防护版本正确 (label_engine 含 gap_pain 标签)."""
     try:
-        from app.pipeline1.label_engine import LabelEngine  # noqa: F811
+        from app.pipeline1.label_engine import LabelEngine  # noqa: F401,F811
 
         return True
     except ImportError:
@@ -98,7 +98,7 @@ def check_gap_pain_rule_version() -> bool:
 def check_trade_log_schema() -> bool:
     """交易日志 schema 落地 (worm_logger 存在)."""
     try:
-        from app.intraday.v51.worm_logger import WormLogger  # noqa: F811
+        from app.intraday.v51.worm_logger import WormLogger  # noqa: F401,F811
 
         return True
     except ImportError:
