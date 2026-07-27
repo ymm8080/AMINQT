@@ -72,54 +72,109 @@ def get_sectors() -> dict:
 
 @router.get("/signals/{symbol}")
 def get_signals(symbol: str) -> dict:
-    """演示买卖信号 (时间、价格、量、方向、原因); 价格取该标的日内最近时刻."""
+    """买卖建议信号: 优先从 Pipeline1 清单生成, fallback demo.
 
-    def _minutes(t: str) -> int:
-        h, m = map(int, t.split(":"))
-        return h * 60 + m
+    真实信号: 从最新清单读 pred_ret/prob_up/score → 生成买入建议 +
+    止损价/止盈价/时间止损.
+    """
+    items = []
+    demo = True
 
-    def _price_at(sym: str, target: str) -> float:
-        df = ds.demo_intraday(sym)
-        tm = _minutes(target)
-        df["_tm"] = df["time"].apply(_minutes)
-        idx = (df["_tm"] - tm).abs().idxmin()
-        return float(df.loc[idx, "price"])
+    # 1. 尝试从最新清单生成真实信号
+    lst_df, _ = ds.load_latest_list()
+    if lst_df is not None and len(lst_df):
+        row = lst_df[lst_df["symbol"] == symbol]
+        if len(row):
+            demo = False
+            r = row.iloc[0]
+            score = float(r.get("score", 0))
+            prob = float(r.get("prob_up", 0.5))
+            pred_1d = float(r.get("pred_ret_1d", 0))
+            momentum = str(r.get("momentum", "medium"))
+            weight = float(r.get("weight", 0.1))
 
-    raw = [
-        {
-            "time": "09:44",
-            "symbol": "600519",
-            "side": "buy",
-            "priority": "L4-形态",
-            "reason": "下探后低峰确认回升",
-            "qty": 100,
-            "executed": True,
-        },
-        {
-            "time": "10:12",
-            "symbol": "300750",
-            "side": "sell",
-            "priority": "P7",
-            "reason": "涨7%+高换手减半",
-            "qty": 200,
-            "executed": False,
-        },
-        {
-            "time": "13:05",
-            "symbol": "601318",
-            "side": "sell",
-            "priority": "P10",
-            "reason": "浮盈≥20%人工复核",
-            "qty": 500,
-            "executed": True,
-        },
-    ]
-    items = [
-        {**s, "price": round(_price_at(s["symbol"], s["time"]), 2)}
-        for s in raw
-        if s["symbol"] == symbol
-    ]
-    return {"demo": True, "symbol": symbol, "items": items}
+            # 买入建议 — 在 Pipeline1 清单中即生成建议 (选股逻辑已在 pipeline 完成)
+            grade = "A" if score > 0.15 and momentum == "high" else "B" if score > 0.05 else "C"
+            items.append({
+                "time": "09:35",
+                "symbol": symbol,
+                "side": "buy",
+                "price": 0,
+                "priority": f"P1-{grade}",
+                "reason": f"prob={prob:.0%} pred_1d={pred_1d:+.2%} score={score:.3f} w={weight:.0%} {momentum}",
+                "qty": 100,
+                "executed": False,
+            })
+
+            # 止损建议
+            stop_loss = -0.04
+            try:
+                from app.pipeline1.trade_discipline import adaptive_stop_loss
+                board = str(r.get("board", "main"))
+                stock = {"ATR_14": 0.02 * 100, "close": 100}
+                stop_loss = adaptive_stop_loss(stock, board)
+            except Exception:
+                pass
+
+            items.append({
+                "time": "14:50",
+                "symbol": symbol,
+                "side": "sell",
+                "priority": "S1-止损",
+                "reason": f"硬止损 {stop_loss:.1%} · 时间止损 2日",
+                "qty": 0,
+                "executed": False,
+            })
+
+            # 移动止盈
+            items.append({
+                "time": "14:50",
+                "symbol": symbol,
+                "side": "sell",
+                "priority": "S2-止盈",
+                "reason": f"浮盈≥3%激活 · 回撤>3%卖出",
+                "qty": 0,
+                "executed": False,
+            })
+
+            # 持仓到期
+            items.append({
+                "time": "14:55",
+                "symbol": symbol,
+                "side": "sell",
+                "priority": "S5-到期",
+                "reason": "持仓满2日尾盘轮动",
+                "qty": 0,
+                "executed": False,
+            })
+
+    # 2. Fallback: demo 信号
+    if demo:
+        def _minutes(t):
+            h, m = map(int, t.split(":"))
+            return h * 60 + m
+
+        def _price_at(sym, target):
+            df = ds.demo_intraday(sym)
+            tm = _minutes(target)
+            df["_tm"] = df["time"].apply(_minutes)
+            idx = (df["_tm"] - tm).abs().idxmin()
+            return float(df.loc[idx, "price"])
+
+        raw = [
+            {"time": "09:44", "symbol": "600519", "side": "buy", "priority": "L4-形态",
+             "reason": "下探后低峰确认回升", "qty": 100, "executed": True},
+            {"time": "10:12", "symbol": "300750", "side": "sell", "priority": "P7",
+             "reason": "涨7%+高换手减半", "qty": 200, "executed": False},
+            {"time": "13:05", "symbol": "601318", "side": "sell", "priority": "P10",
+             "reason": "浮盈≥20%人工复核", "qty": 500, "executed": True},
+        ]
+        items = [
+            {**s, "price": round(_price_at(s["symbol"], s["time"]), 2)}
+            for s in raw if s["symbol"] == symbol
+        ]
+
+    return {"demo": demo, "symbol": symbol, "items": items}
 
 
 # ============================================================
@@ -388,3 +443,39 @@ def get_forecast_quality() -> dict:
         "bias_small_down": None,
         "bias_big_down": None,
     }
+
+
+# ============================================================
+# 预测池数据库 (P25.5)
+# ============================================================
+@router.get("/prediction/runs")
+def get_prediction_runs(limit: int = 60) -> dict:
+    """预测运行日期列表."""
+    try:
+        from app.pipeline1.prediction_db import PredictionDB
+        return {"runs": PredictionDB().list_runs(limit)}
+    except Exception:
+        return {"runs": []}
+
+
+@router.get("/prediction/run/{date}")
+def get_prediction_run(date: str) -> dict:
+    """单个预测日期完整记录 (stocks + outcomes)."""
+    try:
+        from app.pipeline1.prediction_db import PredictionDB
+        run = PredictionDB().get_run(date)
+    except Exception:
+        run = None
+    if run is None:
+        raise HTTPException(404, f"预测记录不存在: {date}")
+    return run
+
+
+@router.get("/prediction/quality")
+def get_prediction_quality(limit: int = 60) -> dict:
+    """所有日期预测质量汇总 (趋势)."""
+    try:
+        from app.pipeline1.prediction_db import PredictionDB
+        return {"items": PredictionDB().all_quality(limit)}
+    except Exception:
+        return {"items": []}
