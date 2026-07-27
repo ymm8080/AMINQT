@@ -27,12 +27,12 @@ class TestResolveLiveProfile:
     def test_d10_not_approved_always_b(self):
         """闸门1: D.10 回测未裁决选C → 永远 B (即便样本达标)."""
         good = _journal([0.01] * 40)
-        assert resolve_live_profile(good, d10_c_approved=False) == "aggressive_b"
+        assert resolve_live_profile(good, d10_c_approved=False) == "aggressive_main"
 
     def test_insufficient_sample_stays_b(self):
         """闸门2: 裁决选C 但样本不足 40 笔 → 仍按 B 执行 (前40笔按B)."""
         j = _journal([0.02] * 39)
-        assert resolve_live_profile(j, d10_c_approved=True) == "aggressive_b"
+        assert resolve_live_profile(j, d10_c_approved=True) == "aggressive_main"
 
     def test_double_gate_pass_unlocks_c(self):
         """双闸门全过: 裁决选C + 40笔 期望>0.5% 且 连亏≤5 → 切 C."""
@@ -42,13 +42,13 @@ class TestResolveLiveProfile:
     def test_expectancy_shortfall_stays_b(self):
         """期望 ≤0.5%/笔 → 否决切C."""
         j = _journal([0.003] * 40)
-        assert resolve_live_profile(j, d10_c_approved=True) == "aggressive_b"
+        assert resolve_live_profile(j, d10_c_approved=True) == "aggressive_main"
 
     def test_consec_loss_streak_stays_b(self):
         """最大连亏 >5 → 否决切C."""
         j = _journal([-0.04] * 6 + [0.02] * 34)
-        assert resolve_live_profile(j, d10_c_approved=True) == "aggressive_b"
+        assert resolve_live_profile(j, d10_c_approved=True) == "aggressive_main"
 
     def test_no_journal_defaults_conservative(self):
         """无实盘日志 → 默认保守 B (失败要大声, 不默许升档)."""
-        assert resolve_live_profile(None, d10_c_approved=True) == "aggressive_b"
+        assert resolve_live_profile(None, d10_c_approved=True) == "aggressive_main"

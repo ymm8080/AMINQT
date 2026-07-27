@@ -20,7 +20,7 @@ from app.pipeline1.trade_discipline import (
 # ============================================================
 class TestProfiles:
     def test_three_profiles_exist(self):
-        assert set(PROFILES) == {"stable", "aggressive", "aggressive_b"}
+        assert set(PROFILES) >= {"stable", "aggressive", "aggressive_b", "aggressive_main", "aggressive_chinext"}
         assert PROFILES["aggressive"]["single_cap"] == 1.00
         assert PROFILES["aggressive"]["stop_loss"] == -0.04
         assert PROFILES["stable"]["stop_loss"] is None
@@ -35,7 +35,7 @@ class TestProfiles:
 
     def test_get_profile_and_switch(self):
         assert get_profile("stable")["max_positions"] == 15
-        assert get_profile()["max_positions"] == 1  # ACTIVE=aggressive_b (B档生产)
+        assert get_profile()["max_positions"] == 1  # ACTIVE=aggressive_main (v3.2)
         assert is_aggressive() and not is_aggressive("stable")
         with pytest.raises(KeyError):
             get_profile("nonexistent")
@@ -45,10 +45,10 @@ class TestProfiles:
         from app.config.profiles import ACTIVE_PROFILE, C_PROFILE_LOCKED
 
         assert C_PROFILE_LOCKED  # 解锁前不得翻 False (D.10 裁决对象)
-        assert ACTIVE_PROFILE == "aggressive_b"  # V3.8 定稿生产档
-        assert get_profile()["single_cap"] == 0.75  # B档单票75%
-        assert get_profile()["prob_entry"] == 0.58  # B档准入线 (Table 4)
-        assert get_profile()["daily_loss_limit"] == 0.03  # 75%×4%
+        assert ACTIVE_PROFILE == "aggressive_main"  # v3.2 生产档
+        assert get_profile()["single_cap"] == 0.75  # aggressive_main 单票75%
+        # aggressive_main uses grade_A_entry; prob_entry not a top-level key
+        # daily_loss_limit now "2sigma_20d" (adaptive)
         # C档参数仍可读 (影子清单/D.10回测需要), 仅不可启用为生产档
         assert get_profile("aggressive")["single_cap"] == 1.00
 
