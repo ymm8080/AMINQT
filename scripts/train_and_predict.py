@@ -375,7 +375,7 @@ def run_prediction(trade_date: str | None = None) -> pd.DataFrame | None:
     logger.info("Candidates: %d", len(candidates))
 
     # 清单
-    lister = ListGenerator()
+    lister = ListGenerator(entry_prob=0.45, entry_ret_mult=1.0)
     result = lister.emit(candidates, env=MarketEnv(), market_state="range")
     logger.info("List: %d stocks (empty=%s)", len(result["list"]), result["empty"])
 

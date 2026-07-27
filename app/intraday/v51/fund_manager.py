@@ -85,7 +85,7 @@ class FundManager:
 
             mu = float(np.mean(daily_dds[-20:]))
             sigma = float(np.std(daily_dds[-20:]))
-            threshold = mu - 2 * sigma
+            threshold = mu - 2 * sigma if sigma > 0 else -self.daily_fuse
             if self._daily_pnl < threshold:
                 fused = True
                 logger.error(

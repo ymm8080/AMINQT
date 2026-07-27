@@ -188,9 +188,15 @@ def score_matured_forecasts(list_dir, panel, out_dir=ACCURACY_DIR):
             logger.info("预测 %s 5d 视野未成熟, 下次再评", fdate)
             continue
         detail = result.pop("detail")
-        with open(summary_path, "w", encoding="utf-8") as fh:
-            json.dump(result, fh, ensure_ascii=False, indent=2)
-        detail.to_parquet(os.path.join(out_dir, f"detail_{fdate}.parquet"), index=False)
+        try:
+            with open(summary_path, "w", encoding="utf-8") as fh:
+                json.dump(result, fh, ensure_ascii=False, indent=2)
+            detail.to_parquet(
+                os.path.join(out_dir, f"detail_{fdate}.parquet"), index=False
+            )
+        except Exception:
+            logger.warning("准确度报告写入失败: %s (非阻塞)", fdate, exc_info=True)
+            continue
         h1 = result["horizons"][1]
         logger.info(
             "预测 %s 准确度: MAE(1d)=%.4f bias(1d)=%+.4f dir_acc=%.2f n=%d",

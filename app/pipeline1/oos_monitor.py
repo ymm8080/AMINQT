@@ -93,7 +93,13 @@ class OOSMonitor:
     @staticmethod
     def daily_rank_ic(pred_scores, actual_returns):
         df = pd.DataFrame({"s": pred_scores, "r": actual_returns}).dropna()
-        ic = cross_sectional_rank_ic(df["s"], df["r"], min_x_unique=2, min_y_unique=1)
+        try:
+            ic = cross_sectional_rank_ic(
+                df["s"], df["r"], min_x_unique=2, min_y_unique=1
+            )
+        except Exception:
+            logger.warning("cross_sectional_rank_ic 计算异常, 返回 0.0", exc_info=True)
+            return 0.0
         return 0.0 if np.isnan(ic) else float(ic)
 
     def ic_traffic_light(self, ic_today):
