@@ -317,3 +317,58 @@ def get_tuning_report() -> dict:
     if report is None:
         return {"exists": False}
     return {"exists": True, **report}
+
+
+# ============================================================
+# 预测质量 (P25)
+# ============================================================
+@router.get("/forecast/quality")
+def get_forecast_quality() -> dict:
+    """返回最新预测质量报告 (MAE/BIAS/方向准确率/分桶/红灯).
+
+    优先读 data/forecast_accuracy/ 真实数据; 无数据时返回 demo 占位.
+    """
+    import json
+    import os
+
+    acc_dir = os.path.join("data", "forecast_accuracy")
+    if os.path.isdir(acc_dir):
+        files = sorted(
+            [
+                f
+                for f in os.listdir(acc_dir)
+                if f.startswith("accuracy_") and f.endswith(".json")
+            ],
+            reverse=True,
+        )
+        if files:
+            with open(os.path.join(acc_dir, files[0]), "r", encoding="utf-8") as fh:
+                report = json.load(fh)
+            latest_1d = report.get("horizons", {}).get("1", {})
+            return {
+                "exists": True,
+                "demo": False,
+                "date": report.get("forecast_date", ""),
+                "mae_1d": latest_1d.get("mae_1d"),
+                "bias_1d": latest_1d.get("bias_1d"),
+                "direction_accuracy": latest_1d.get("direction_accuracy"),
+                "n_samples": latest_1d.get("n_samples"),
+                "bias_big_up": latest_1d.get("bias_big_up"),
+                "bias_small_up": latest_1d.get("bias_small_up"),
+                "bias_small_down": latest_1d.get("bias_small_down"),
+                "bias_big_down": latest_1d.get("bias_big_down"),
+            }
+
+    # 无真实数据 — 返回 demo 占位
+    return {
+        "exists": False,
+        "demo": True,
+        "mae_1d": None,
+        "bias_1d": None,
+        "direction_accuracy": None,
+        "n_samples": 0,
+        "bias_big_up": None,
+        "bias_small_up": None,
+        "bias_small_down": None,
+        "bias_big_down": None,
+    }
