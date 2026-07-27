@@ -58,7 +58,7 @@ class CleaningConfig:
 
     min_list_days: int = 250  # 上市 >= 250 交易日 (>= 最长特征窗口)
     min_amount: float = 5e7  # T 日成交额 >= 5000 万
-    liquidity_top_n: int = 200  # 板块内流动性 Score 前 N
+    liquidity_top_n: int = 400  # 板块内流动性 Score 前 N (原200太保守, 3年数据可支撑更大池)
     score_w_amount: float = 0.5  # Score = w*rank(成交额) + (1-w)*rank(自由流通换手)
     stability_window: int = 5  # D24 换手稳定性窗口
     stability_max: float = 0.5  # std/mean > 0.5 → 对倒嫌疑
@@ -95,12 +95,15 @@ class CleaningPipeline:
         return out
 
     # ---------------- 步骤 2: 流动性底线 ----------------
-    def step2_liquidity(self, df: pd.DataFrame) -> pd.DataFrame:
+    def step2_liquidity(self, df: pd.DataFrame, apply_top_n: bool = True) -> pd.DataFrame:
         """成交额 >= 5000万; 板块内流动性 Score 前 N (按 date+board 独立排名).
 
         Score = w*rank_pct(turnover_value) + (1-w)*rank_pct(free_float_turnover_rate)
         D24 换手稳定性: std(turnover_5d)/mean(turnover_5d) > 0.5 → 对倒嫌疑,
         附加 turnover_stability_5 列供模型学习 (不硬剔除).
+
+        apply_top_n: True=推理端截取前N (默认), False=训练端仅保留 amount 底线.
+        训练端不截断: 模型需学习全谱股票 (含中小流动性), 仅推理端需要候选清单收敛.
         """
         cfg = self.cfg
         out = df[df["amount"] >= cfg.min_amount].copy()
@@ -127,7 +130,10 @@ class CleaningPipeline:
             int
         )
 
-        # 板块内每个 date 取 Score 前 N
+        if not apply_top_n:
+            return out
+
+        # 板块内每个 date 取 Score 前 N (仅推理端)
         out["score_rank"] = out.groupby(["date", "board"])["liquidity_score"].rank(
             ascending=False, method="first"
         )
@@ -227,15 +233,19 @@ class CleaningPipeline:
 
     # ---------------- 总装 ----------------
     def run_train(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """训练端清洗 (步骤 0→3 + 步骤5[E6], 不做步骤 4). 返回 (主板, 双创)."""
+        """训练端清洗 (步骤 0→3 + 步骤5[E6], 不做步骤 4). 返回 (主板, 双创).
+
+        训练端 step2 不截取 top-N: 模型需学习全谱股票 (含中小流动性),
+        仅推理端需要候选清单收敛 (run_inference 保留 top-N).
+        """
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)  # 安全网 #13
         main, dual = self.step0_board_split(df)
         return (
             self.step5_amount_bottom(
-                self.step3_extreme(self.step2_liquidity(self.step1_base_state(main)))
+                self.step3_extreme(self.step2_liquidity(self.step1_base_state(main), apply_top_n=False))
             ),
             self.step5_amount_bottom(
-                self.step3_extreme(self.step2_liquidity(self.step1_base_state(dual)))
+                self.step3_extreme(self.step2_liquidity(self.step1_base_state(dual), apply_top_n=False))
             ),
         )
 
@@ -243,8 +253,8 @@ class CleaningPipeline:
         """推理端清洗 (步骤 0→4 + 步骤5[E6]). 返回 (主板, 双创, 阀门状态)."""
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
         main, dual = self.step0_board_split(df)
-        main = self.step3_extreme(self.step2_liquidity(self.step1_base_state(main)))
-        dual = self.step3_extreme(self.step2_liquidity(self.step1_base_state(dual)))
+        main = self.step3_extreme(self.step2_liquidity(self.step1_base_state(main), apply_top_n=False))
+        dual = self.step3_extreme(self.step2_liquidity(self.step1_base_state(dual), apply_top_n=False))
         both = pd.concat([main, dual], ignore_index=True)
         both, state = self.step4_tradability(both, inference_only=True)
         both = self.step5_amount_bottom(both)  # [E6] 成交额后 20% 剔除

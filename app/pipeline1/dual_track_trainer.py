@@ -29,13 +29,20 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-WINDOW_TOTAL = 750  # [V3.8] 620/20/20/90
-WINDOW_TRANSITION = 540  # [B11] 回填达标前过渡窗口
-B11_FULL_DEPTH = 1250  # [B11] 回填达标线 (≥5 年交易日): 达到才用 750 窗口
+WINDOW_TOTAL = 770  # [V3.8] 设计目标窗口 (3年数据≈750交易日)
+WINDOW_TRANSITION = 560  # [B11] 过渡窗口下限
+B11_FULL_DEPTH = 1250  # [B11] 回填达标线 (≥5 年交易日): 达到才用 770 窗口
 MIN_TRAIN_DAYS = 50  # 窗口 train 段下限, 不足即拒绝训练
-TRAIN_DAYS = 620  # [V3.8] 训练 620 天
-ES_DAYS = 20  # 早停验证
-CALIB_DAYS = 20  # 校准 (与早停物理隔离)
+MIN_ES_DATES = 30  # ES 集日期下限, 不足则跳过早停 (防 best_iteration=1 坍缩)
+# 段长比例 (train:es:calib:test ≈ 80:4:4:12)
+WINDOW_RATIOS = {"train": 0.80, "es": 0.04, "calib": 0.04, "test": 0.12}
+# 各段最小日期数 (低于此值训练不可靠)
+SEG_MIN_DAYS = {"train": MIN_TRAIN_DAYS, "es": MIN_ES_DATES, "calib": MIN_ES_DATES, "test": 60}
+# 兼容旧引用 (实际段长由 split_window 按比例动态计算)
+TRAIN_DAYS = 620
+ES_DAYS = 30
+CALIB_DAYS = 30
+TEST_DAYS = 90
 TEST_DAYS = 90  # 测试 (仅归因, 严禁反向调参)
 HALF_LIFE = 250  # 半衰期加权 (天)
 ES_PATIENCE = 100  # [V3.8 §2.1] patience=100
@@ -84,22 +91,32 @@ class DualTrackTrainer:
     def split_window(
         df: pd.DataFrame, window_total: int = WINDOW_TOTAL
     ) -> dict[str, pd.DataFrame]:
-        """滚动窗口四段切分 [V3.8 §2.1]: train / es / calib / test = 620/20/20/90 (750 窗口).
+        """按比例动态四段切分: train/es/calib/test = 80%/4%/4%/12%.
 
+        段长从 window_total 按比例计算, 保证各段不低于 SEG_MIN_DAYS.
         校准集与早停验证集物理隔离, 否则校准器学到被调参挑剩下的噪声.
-        [B11] window_total=540 为回填达标前过渡窗口 (es/calib/test 段长不变,
-        仅压缩 train 段), 达标后恢复 750.
         """
-        n_es_calib_test = ES_DAYS + CALIB_DAYS + TEST_DAYS
-        train_days = window_total - n_es_calib_test
         dates = sorted(df["date"].unique())[-window_total:]
-        seg = {
-            "train": dates[:train_days],
-            "es": dates[train_days : train_days + ES_DAYS],
-            "calib": dates[train_days + ES_DAYS : train_days + ES_DAYS + CALIB_DAYS],
-            "test": dates[-TEST_DAYS:],
-        }
-        return {k: df[df["date"].isin(v)] for k, v in seg.items()}
+        n = len(dates)
+        # 按比例分配, 向下取整
+        seg_lens = {k: max(int(n * r), SEG_MIN_DAYS[k]) for k, r in WINDOW_RATIOS.items()}
+        # 修正: 保证各段之和 <= n (train 让出余量)
+        overflow = sum(seg_lens.values()) - n
+        if overflow > 0:
+            seg_lens["train"] = max(seg_lens["train"] - overflow, SEG_MIN_DAYS["train"])
+        # 切片
+        pos = 0
+        seg_dates = {}
+        for k in ("train", "es", "calib", "test"):
+            seg_dates[k] = dates[pos : pos + seg_lens[k]]
+            pos += seg_lens[k]
+        # test 取最后一段 (保证是最近期数据)
+        seg_dates["test"] = dates[-seg_lens["test"]:]
+        logger.info(
+            "窗口切分: total=%d train=%d es=%d calib=%d test=%d",
+            n, seg_lens["train"], seg_lens["es"], seg_lens["calib"], seg_lens["test"],
+        )
+        return {k: df[df["date"].isin(v)] for k, v in seg_dates.items()}
 
     @staticmethod
     def time_weights(df: pd.DataFrame, half_life: int = HALF_LIFE) -> np.ndarray:
@@ -153,13 +170,21 @@ class DualTrackTrainer:
             model = lgb.LGBMClassifier(**LGB_PARAMS_CLS)
         else:
             model = lgb.LGBMRegressor(**LGB_PARAMS_REG)
+        # ES 段长度由 split_window 按 WINDOW_RATIOS 比例计算, 保证 >= MIN_ES_DATES
+        es_dates = es["date"].nunique() if "date" in es.columns else len(es)
+        use_es = es_dates >= MIN_ES_DATES
+        if not use_es:
+            logger.warning(
+                "[%s/%s] ES 集仅 %d 交易日 (< %d), 跳过早停",
+                kind, label, es_dates, MIN_ES_DATES,
+            )
         try:
             model.fit(
                 X,
                 y,
                 sample_weight=w,
-                eval_set=[(X_es, y_es)],
-                callbacks=[lgb.early_stopping(ES_PATIENCE, verbose=False)],
+                eval_set=[(X_es, y_es)] if use_es else None,
+                callbacks=[lgb.early_stopping(ES_PATIENCE, verbose=False)] if use_es else None,
             )
         except Exception as exc:
             logger.error("模型训练失败 [%s/%s]: %s", kind, label, exc)
@@ -172,17 +197,15 @@ class DualTrackTrainer:
     ) -> dict:
         """训练一个板块的 4 个模型 + E1 分位数五模型 + E2 痛苦预警 (标签齐备时).
 
-        窗口深度自适应: ≥1250 交易日 (B11 达标) → 750; 否则过渡 min(540, 实际深度).
-        3 年数据经步骤1 (list_days≥250) 过滤后约 490 日, 750 窗口会让 es/calib 落空.
-        返回 {kind: (model, label)} + 元数据 + ['quantile_models'/'pain_model'].
+        窗口深度自适应: ≥1250 交易日 (B11 达标) → WINDOW_TOTAL; 否则 min(WINDOW_TRANSITION, 实际深度).
+        段长按比例动态分配 (split_window), 保证 es/calib/test 各 >= 最小值.
         """
-        # 深度按日期并集 (split_window 的切片轴): 多股面板中个股上市晚/被清洗过滤
-        # 只剩几天不影响窗口有效性, 各段行数由并集日期天然保证
         depth = int(df["date"].nunique()) if len(df) else 0
         window = (
             WINDOW_TOTAL if depth >= B11_FULL_DEPTH else min(WINDOW_TRANSITION, depth)
         )
-        if window - (ES_DAYS + CALIB_DAYS + TEST_DAYS) < MIN_TRAIN_DAYS:
+        min_non_train = sum(v for k, v in SEG_MIN_DAYS.items() if k != "train")
+        if window - min_non_train < MIN_TRAIN_DAYS:
             raise RuntimeError(
                 f"[{board}] 训练样本深度不足: {depth} 交易日 "
                 f"(需 ≥ {ES_DAYS + CALIB_DAYS + TEST_DAYS + MIN_TRAIN_DAYS})"
@@ -319,9 +342,10 @@ class DualTrackTrainer:
     # ---------------- 校准器拟合 (随月度重训滚动重校) ----------------
     @staticmethod
     def fit_calibrator(trained: dict):
-        """用校准集 (与早停物理隔离) 拟合 Isotonic 校准器 (安全网: 严禁原始 predict_proba).
+        """用校准集 (与早停物理隔离) 拟合校准器 (安全网: 严禁原始 predict_proba).
 
-        [E1/V3.8] Platt Scaling → Isotonic Regression, 月度滚动重校.
+        [E1/V3.8] Isotonic → Platt Scaling (小样本更稳定), 月度滚动重校.
+        校准集 < 30 交易日时强制 Platt (Isotonic 小样本退化为阶跃函数).
         """
         from .prob_calibrator import ProbCalibrator
 
@@ -329,7 +353,14 @@ class DualTrackTrainer:
         calib = trained["segs"]["calib"].dropna(subset=[label])
         cols = trained["feature_cols"]
         raw = model.predict_proba(np.nan_to_num(calib[cols].values, nan=0.0))[:, 1]
-        calibrator = ProbCalibrator(method="isotonic").fit(raw, calib[label].values)
+        n_calib_dates = calib["date"].nunique() if "date" in calib.columns else len(calib)
+        method = "platt" if n_calib_dates < MIN_ES_DATES else "isotonic"
+        if n_calib_dates < MIN_ES_DATES:
+            logger.warning(
+                "[%s] 校准集仅 %d 交易日, 使用 Platt (Isotonic 小样本退化为阶跃函数)",
+                trained["board"], n_calib_dates,
+            )
+        calibrator = ProbCalibrator(method=method).fit(raw, calib[label].values)
         trained["calibrator"] = calibrator
         return calibrator
 

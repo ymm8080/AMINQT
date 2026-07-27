@@ -108,6 +108,7 @@ class ListGenerator:
         self.entry_ret_mult = entry_ret_mult
         self.entry_prob_bear = 0.65  # [E11] 准入线 bear 收紧
         self.entry_ret_mult_bear = 3.0
+        self._prob_pctile = 0.80  # 若绝对阈值不可达, 回退取 prob_up 前 20%
 
     # ---------------- 排序分 ----------------
     def compute_scores(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -143,11 +144,14 @@ class ListGenerator:
                 use_rank = True
             else:
                 logger.warning(
-                    "LambdaRank rank_score 退化 (std=%.6f), 回退 compound_ret 排序",
+                    "LambdaRank rank_score 退化 (std=%.6f), 回退 pred_ret_1d 横截面排名",
                     rank_std,
                 )
         if not use_rank:
-            df["score"] = df["compound_ret"] * prob_adjust
+            # 回退: pred_ret_1d 组内百分位排名 (按 board 独立排名, 尺度对齐)
+            df["_fallback_rank"] = df.groupby("board")["pred_ret_1d"].rank(pct=True)
+            df["score"] = df["_fallback_rank"] * prob_adjust
+            df = df.drop(columns=["_fallback_rank"])
         # [E2] 痛苦惩罚: pain_prob 高 → 排序分降权
         if "pain_prob" in df.columns:
             df["score"] = df["score"] * (1 - PAIN_PENALTY * df["pain_prob"].fillna(0.0))
@@ -236,13 +240,28 @@ class ListGenerator:
         """[E7] 质量阈值准入: prob_up > 门槛 且 pred_ret_1d > mult×COST → 0~15 只.
 
         [E11] bear 状态收紧: prob 0.60→0.65, ret 2×成本→3×成本.
+        若绝对阈值不可达, 自动回退至 prob_up 分位数门槛 (取前 20%).
         符合票可能为 0 — 这是特性不是故障.
         """
         prob_th = self.entry_prob_bear if bear else self.entry_prob
         ret_th = (self.entry_ret_mult_bear if bear else self.entry_ret_mult) * COST
         ok = df[(df["prob_up"] > prob_th) & (df["pred_ret_1d"] > ret_th)]
         n = len(ok)
-        if n == 0:
+        # 绝对阈值未命中 → 分位数回退 (模型概率天然保守, 取相对排名)
+        if n == 0 and len(df) > 0:
+            pctile_th = float(df["prob_up"].quantile(self._prob_pctile))
+            ret_pctile_th = float(df["pred_ret_1d"].quantile(self._prob_pctile))
+            ok = df[
+                (df["prob_up"] >= pctile_th) & (df["pred_ret_1d"] >= ret_pctile_th)
+            ]
+            n_pct = len(ok)
+            logger.warning(
+                "E7 动态准入: 绝对阈值 0 只 (prob>%.2f, ret>%.2f%%), "
+                "分位数回退取前 %.0f%% → %d 只 (prob≥%.4f, ret≥%.4f)",
+                prob_th, ret_th * 100, (1 - self._prob_pctile) * 100,
+                n_pct, pctile_th, ret_pctile_th,
+            )
+        elif n == 0:
             logger.warning(
                 "E7 动态准入: 0 只过闸 (prob>%.2f, ret>%.2f%%), 今日空清单",
                 prob_th,
