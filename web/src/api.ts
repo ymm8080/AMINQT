@@ -148,4 +148,15 @@ export const api = {
     req<{ tunable: Record<string, { value: number; bounds: number[] }> }>('/config/rules'),
   tuningReport: () => req<Record<string, unknown> & { exists: boolean }>('/tuning/report'),
   forecastQuality: () => req<ForecastQuality>('/forecast/quality'),
+  // prediction pool
+  predictionRuns: () => req<{ runs: { date: string; n_stocks: number; schema_version: string; created_at: string }[] }>('/prediction/runs'),
+  predictionRun: (date: string) => req<{
+    date: string
+    meta: Record<string, unknown>
+    stocks: (ListItem & {
+      actual_ret_1d?: number; actual_ret_3d?: number; actual_ret_5d?: number
+      direction_correct_1d?: number; pred_error_1d?: number
+    })[]
+  }>('/prediction/run/' + date),
+  predictionQuality: () => req<{ items: { date: string; n: number; direction_accuracy: number; bias_1d: number; mae_1d: number }[] }>('/prediction/quality'),
 }

@@ -136,11 +136,33 @@ class DailySelectionPipeline:
         result = self.lister.emit(candidates, env=env, market_state=market_state)
         result["valve_state"] = valve_state
 
-        # 持久化 + 守卫
+        # 持久化 + 守卫 + DB入库
         if not result["empty"] and len(result["list"]):
             result["list"].to_parquet(self._list_path(trade_date), index=False)
             self.guard.on_success(result["list"])
             result["mode"] = "normal"
+            # P25.5: 入库 prediction DB
+            try:
+                from .prediction_db import PredictionDB
+                PredictionDB().insert_run(trade_date, result["list"])
+            except Exception:
+                logger.warning("预测池DB入库失败 (非阻塞)", exc_info=True)
+            # 同步到 priority.json (交易看板下拉框)
+            try:
+                import json, os
+                pq_path = os.path.join("data", "priority.json")
+                existing = set()
+                if os.path.exists(pq_path):
+                    with open(pq_path, "r", encoding="utf-8") as f:
+                        existing = set(json.load(f).get("symbols", []))
+                new_symbols = set(result["list"]["symbol"].tolist())
+                merged = sorted(existing | new_symbols)
+                with open(pq_path, "w", encoding="utf-8") as f:
+                    json.dump({"symbols": merged}, f, ensure_ascii=False, indent=2)
+                logger.info("priority.json 同步: %d → %d (新增 %d)",
+                            len(existing), len(merged), len(new_symbols - existing))
+            except Exception:
+                logger.warning("priority.json 同步失败 (非阻塞)", exc_info=True)
         else:
             result["mode"] = "empty"
         return result
