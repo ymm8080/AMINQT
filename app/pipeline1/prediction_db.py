@@ -17,11 +17,9 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import sqlite3
-from datetime import date as dt
 
 import numpy as np
 import pandas as pd
@@ -87,11 +85,15 @@ class PredictionDB:
             conn.commit()
 
     # ── 写入 ──
-    def insert_run(self, date_str: str, stocks: pd.DataFrame, schema_version: str = "1.2") -> int:
+    def insert_run(
+        self, date_str: str, stocks: pd.DataFrame, schema_version: str = "1.2"
+    ) -> int:
         """插入当日清单 (幂等: 已存在则跳过)."""
         with sqlite3.connect(self.path) as conn:
             # 幂等检查
-            cur = conn.execute("SELECT 1 FROM prediction_runs WHERE date=?", (date_str,))
+            cur = conn.execute(
+                "SELECT 1 FROM prediction_runs WHERE date=?", (date_str,)
+            )
             if cur.fetchone():
                 logger.info("清单 %s 已入库, 跳过", date_str)
                 return 0
@@ -254,8 +256,16 @@ class PredictionDB:
                    LIMIT ?""",
                 (limit,),
             ).fetchall()
-            return [{"date": r[0], "n": r[1], "direction_accuracy": r[2],
-                     "bias_1d": r[3], "mae_1d": r[4]} for r in rows]
+            return [
+                {
+                    "date": r[0],
+                    "n": r[1],
+                    "direction_accuracy": r[2],
+                    "bias_1d": r[3],
+                    "mae_1d": r[4],
+                }
+                for r in rows
+            ]
 
 
 def _safe_float(row, col: str) -> float | None:
