@@ -143,7 +143,8 @@ class ListGenerator:
                 use_rank = True
             else:
                 logger.warning(
-                    "LambdaRank rank_score 退化 (std=%.6f), 回退 compound_ret 排序", rank_std
+                    "LambdaRank rank_score 退化 (std=%.6f), 回退 compound_ret 排序",
+                    rank_std,
                 )
         if not use_rank:
             df["score"] = df["compound_ret"] * prob_adjust
