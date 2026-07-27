@@ -187,18 +187,32 @@ class BacktestRequest(BaseModel):
     prob_exit: float = 0.50
     initial_capital: float = 1_000_000
     window_days: int = 180
+    start_date: str | None = None   # 'YYYY-MM-DD', 优先级高于 window_days
+    end_date: str | None = None     # 'YYYY-MM-DD'
     objective: str = "net_excess_annual"
     max_dd_limit: float | None = None
 
 
-def _demo_panel_and_lists(window_days: int = 180, seed: int = 9):
+def _demo_panel_and_lists(
+    window_days: int = 180,
+    seed: int = 9,
+    start_date: str | None = None,
+    end_date: str | None = None,
+):
     rng = np.random.default_rng(seed)
-    end = pd.Timestamp.today().normalize()
-    dates = pd.bdate_range(end=end, periods=window_days)
+    if start_date and end_date:
+        start = pd.Timestamp(start_date)
+        end = pd.Timestamp(end_date)
+        dates = pd.bdate_range(start=start, end=end)
+        n_days = len(dates)
+    else:
+        end = pd.Timestamp.today().normalize()
+        dates = pd.bdate_range(end=end, periods=window_days)
+        n_days = window_days
     frames = []
     for sym, ind in (("600519", "白酒"), ("601318", "保险"), ("600000", "银行")):
-        close = 100 * np.cumprod(1 + rng.normal(0.001, 0.015, window_days))
-        open_ = close * (1 + rng.normal(0, 0.003, window_days))
+        close = 100 * np.cumprod(1 + rng.normal(0.001, 0.015, n_days))
+        open_ = close * (1 + rng.normal(0, 0.003, n_days))
         frames.append(
             pd.DataFrame(
                 {
@@ -234,7 +248,9 @@ def _demo_panel_and_lists(window_days: int = 180, seed: int = 9):
 @router.post("/backtest/run")
 def run_backtest(req: BacktestRequest) -> dict:
     """V3.5 协议回测 (演示面板)."""
-    panel, lists = _demo_panel_and_lists(req.window_days)
+    panel, lists = _demo_panel_and_lists(
+        req.window_days, start_date=req.start_date, end_date=req.end_date
+    )
     proto = BacktestProtocol(
         top_n=req.top_n,
         max_hold_days=req.max_hold_days,
