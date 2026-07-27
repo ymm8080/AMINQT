@@ -23,7 +23,6 @@ import sys
 import time
 from datetime import date, datetime
 
-import numpy as np
 import pandas as pd
 
 # Ensure project root on path
@@ -72,23 +71,38 @@ def fetch_today_data(symbols: list[str] | None = None) -> pd.DataFrame | None:
                 logger.info("拉取进度: %d/%d", i, len(symbols))
             try:
                 df = ak.stock_zh_a_hist(
-                    symbol=sym, period="daily", start_date=start,
-                    end_date=today, adjust="qfq",
+                    symbol=sym,
+                    period="daily",
+                    start_date=start,
+                    end_date=today,
+                    adjust="qfq",
                 )
                 if df is None or len(df) == 0:
                     continue
-                df = df.rename(columns={
-                    "日期": "date", "开盘": "open", "最高": "high",
-                    "最低": "low", "收盘": "close", "成交量": "volume",
-                    "成交额": "amount",
-                })
+                df = df.rename(
+                    columns={
+                        "日期": "date",
+                        "开盘": "open",
+                        "最高": "high",
+                        "最低": "low",
+                        "收盘": "close",
+                        "成交量": "volume",
+                        "成交额": "amount",
+                    }
+                )
                 df["symbol"] = sym
                 df["date"] = pd.to_datetime(df["date"])
                 for col in ["open", "high", "low", "close", "volume", "amount"]:
                     df[col] = pd.to_numeric(df[col], errors="coerce")
                 df["pre_close"] = df["close"].shift(1)
                 # board 判断: 300/688/301 → dual, 其他 → main
-                df["board"] = "STAR" if sym.startswith("688") else "GEM" if sym.startswith(("300", "301")) else "main"
+                df["board"] = (
+                    "STAR"
+                    if sym.startswith("688")
+                    else "GEM"
+                    if sym.startswith(("300", "301"))
+                    else "main"
+                )
                 df["industry"] = "UNKNOWN"
                 # 清洗流水线必需列
                 df["is_st"] = False
@@ -100,7 +114,9 @@ def fetch_today_data(symbols: list[str] | None = None) -> pd.DataFrame | None:
                     if col not in df.columns:
                         df[col] = 0.0
                 df["amount"] = df["amount"].fillna(df["volume"] * df["close"])
-                df["pre_close"] = df["pre_close"].fillna(df["close"].shift(1)).fillna(df["close"])
+                df["pre_close"] = (
+                    df["pre_close"].fillna(df["close"].shift(1)).fillna(df["close"])
+                )
                 frames.append(df)
                 time.sleep(0.1)  # 反限流
             except Exception as e:
@@ -116,14 +132,19 @@ def fetch_today_data(symbols: list[str] | None = None) -> pd.DataFrame | None:
         # 补充清洗流水线必需列
         panel["list_days"] = panel.groupby("symbol").cumcount() + 1
         if "turnover_rate" not in panel.columns:
-            panel["turnover_rate"] = panel["volume"] / panel["volume"].mean() * 0.02  # 近似
+            panel["turnover_rate"] = (
+                panel["volume"] / panel["volume"].mean() * 0.02
+            )  # 近似
         if "amount" not in panel.columns or panel["amount"].isna().all():
             panel["amount"] = panel["volume"] * panel["close"]
         panel["amount"] = panel["amount"].fillna(panel["volume"] * panel["close"])
-        logger.info("面板: %d 只, %d 行, %s ~ %s",
-                     panel["symbol"].nunique(), len(panel),
-                     panel["date"].min().strftime("%Y-%m-%d"),
-                     panel["date"].max().strftime("%Y-%m-%d"))
+        logger.info(
+            "面板: %d 只, %d 行, %s ~ %s",
+            panel["symbol"].nunique(),
+            len(panel),
+            panel["date"].min().strftime("%Y-%m-%d"),
+            panel["date"].max().strftime("%Y-%m-%d"),
+        )
         return panel
 
     except Exception:
@@ -140,6 +161,7 @@ def run_pipeline(panel: pd.DataFrame, trade_date: str) -> dict:
 
     # 1. 定位最新模型包
     from app.pipeline1.predict_runner import find_bundles
+
     bundles = find_bundles(model_dir=MODEL_DIR)
     if "main" not in bundles:
         raise RuntimeError(f"主板块模型包缺失: {MODEL_DIR}")
@@ -148,7 +170,9 @@ def run_pipeline(panel: pd.DataFrame, trade_date: str) -> dict:
     # 2. 清洗
     cleaner = CleaningPipeline()
     main_df, dual_df, valve_state = cleaner.run_inference(panel)
-    logger.info("清洗: main=%d dual=%d valve=%s", len(main_df), len(dual_df), valve_state)
+    logger.info(
+        "清洗: main=%d dual=%d valve=%s", len(main_df), len(dual_df), valve_state
+    )
     if valve_state == "empty":
         logger.error("流动性安全阀触发: 空清单")
         return {"mode": "valve_empty", "list": pd.DataFrame(), "empty": True}
@@ -168,9 +192,11 @@ def run_pipeline(panel: pd.DataFrame, trade_date: str) -> dict:
         if len(feat) == 0:
             continue
         latest_date = survivors["date"].max()
-        today_feat = feat[feat["symbol"].isin(
-            set(survivors[survivors["date"] == latest_date]["symbol"])
-        )]
+        today_feat = feat[
+            feat["symbol"].isin(
+                set(survivors[survivors["date"] == latest_date]["symbol"])
+            )
+        ]
         if len(today_feat) == 0:
             continue
         pred = predictor.predict(today_feat, board)
@@ -182,17 +208,25 @@ def run_pipeline(panel: pd.DataFrame, trade_date: str) -> dict:
         return {"mode": "no_candidates", "list": pd.DataFrame(), "empty": True}
 
     candidates = pd.concat(frames, ignore_index=True)
-    logger.info("候选: %d 只 (main=%d dual=%d)",
-                 len(candidates),
-                 len(frames[0]) if len(frames) > 0 else 0,
-                 len(frames[1]) if len(frames) > 1 else 0)
+    logger.info(
+        "候选: %d 只 (main=%d dual=%d)",
+        len(candidates),
+        len(frames[0]) if len(frames) > 0 else 0,
+        len(frames[1]) if len(frames) > 1 else 0,
+    )
 
     # 5. 清单生成
     env = MarketEnv()
-    lister = ListGenerator(entry_prob=0.45, entry_ret_mult=1.0)  # demo 放宽; 实盘改回 0.60/2.0
+    lister = ListGenerator(
+        entry_prob=0.45, entry_ret_mult=1.0
+    )  # demo 放宽; 实盘改回 0.60/2.0
     result = lister.emit(candidates, env=env, market_state="range")
-    logger.info("清单: %d 只 empty=%s cap=%.2f",
-                 len(result["list"]), result["empty"], result["cap_position"])
+    logger.info(
+        "清单: %d 只 empty=%s cap=%.2f",
+        len(result["list"]),
+        result["empty"],
+        result["cap_position"],
+    )
 
     # 6. 持久化
     os.makedirs(LIST_DIR, exist_ok=True)
@@ -207,6 +241,7 @@ def run_pipeline(panel: pd.DataFrame, trade_date: str) -> dict:
         # 入库 prediction DB
         try:
             from app.pipeline1.prediction_db import PredictionDB
+
             PredictionDB().insert_run(trade_date, result["list"])
         except Exception:
             pass
@@ -217,6 +252,7 @@ def run_pipeline(panel: pd.DataFrame, trade_date: str) -> dict:
 def _sync_priority(list_df: pd.DataFrame) -> None:
     """将清单股票合并到 priority.json."""
     import json
+
     pq_path = os.path.join("data", "priority.json")
     existing = set()
     if os.path.exists(pq_path):
@@ -226,7 +262,12 @@ def _sync_priority(list_df: pd.DataFrame) -> None:
     merged = sorted(existing | new_syms)
     with open(pq_path, "w", encoding="utf-8") as f:
         json.dump({"symbols": merged}, f, ensure_ascii=False, indent=2)
-    logger.info("priority.json: %d → %d (新增 %d)", len(existing), len(merged), len(new_syms - existing))
+    logger.info(
+        "priority.json: %d → %d (新增 %d)",
+        len(existing),
+        len(merged),
+        len(new_syms - existing),
+    )
 
 
 def print_list(df: pd.DataFrame, top: int = 20) -> None:
@@ -235,8 +276,16 @@ def print_list(df: pd.DataFrame, top: int = 20) -> None:
         print("\n  WARNING:️ 空清单 — 当日无候选\n")
         return
 
-    cols = ["symbol", "board", "prob_up", "score", "momentum",
-            "pred_ret_1d", "pred_ret_3d", "weight"]
+    cols = [
+        "symbol",
+        "board",
+        "prob_up",
+        "score",
+        "momentum",
+        "pred_ret_1d",
+        "pred_ret_3d",
+        "weight",
+    ]
     available = [c for c in cols if c in df.columns]
     show = df[available].head(top).copy()
 
@@ -245,33 +294,43 @@ def print_list(df: pd.DataFrame, top: int = 20) -> None:
         if c in show.columns:
             show[c] = show[c].apply(lambda x: f"{x:+.2%}" if pd.notna(x) else "—")
     if "prob_up" in show.columns:
-        show["prob_up"] = show["prob_up"].apply(lambda x: f"{x:.0%}" if pd.notna(x) else "—")
+        show["prob_up"] = show["prob_up"].apply(
+            lambda x: f"{x:.0%}" if pd.notna(x) else "—"
+        )
     if "score" in show.columns:
-        show["score"] = show["score"].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "—")
+        show["score"] = show["score"].apply(
+            lambda x: f"{x:.4f}" if pd.notna(x) else "—"
+        )
     if "weight" in show.columns:
-        show["weight"] = show["weight"].apply(lambda x: f"{x:.0%}" if pd.notna(x) else "—")
+        show["weight"] = show["weight"].apply(
+            lambda x: f"{x:.0%}" if pd.notna(x) else "—"
+        )
 
-    print(f"\n{'='*80}")
-    print(f"  Pipeline1 推荐股票池 · {date.today().isoformat()} · Top {min(top, len(df))}/{len(df)}")
-    print(f"{'='*80}")
+    print(f"\n{'=' * 80}")
+    print(
+        f"  Pipeline1 推荐股票池 · {date.today().isoformat()} · Top {min(top, len(df))}/{len(df)}"
+    )
+    print(f"{'=' * 80}")
     print(show.to_string(index=False))
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Pipeline1 实盘预测")
     parser.add_argument("--top", type=int, default=20, help="显示前 N 只")
     parser.add_argument("--symbols", type=str, default=None, help="指定股票, 逗号分隔")
-    parser.add_argument("--no-fetch", action="store_true", help="跳过数据拉取, 用已有 panel")
+    parser.add_argument(
+        "--no-fetch", action="store_true", help="跳过数据拉取, 用已有 panel"
+    )
     args = parser.parse_args()
 
     trade_date = datetime.now().strftime("%Y%m%d")
     symbols = args.symbols.split(",") if args.symbols else None
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  Pipeline1 实盘预测 · {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"  模型: {MODEL_DIR}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # 1. 拉取数据
     panel = None
