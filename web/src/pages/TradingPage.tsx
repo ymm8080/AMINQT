@@ -1,24 +1,15 @@
 import { useEffect, useState } from 'react'
-import { api, type OhlcBar, type IntradayPoint, type SectorItem, type SignalItem } from '../api'
+import { api, type ListItem, type OhlcBar, type IntradayPoint, type SignalItem } from '../api'
 import { IntradayChart } from '../components/IntradayChart'
-import { Sparkline } from '../components/Sparkline'
-
-const DEMO_NAMES: Record<string, string> = {
-  '600519': '贵州茅台', '300750': '宁德时代', '601318': '中国平安',
-  '600000': '浦发银行', '000001': '平安银行', '002594': '比亚迪',
-  '688981': '中芯国际', '600036': '招商银行', '000858': '五粮液',
-  '601899': '紫金矿业',
-}
 
 export function TradingPage({ initialSymbol }: { initialSymbol?: string }) {
   const [symbol, setSymbol] = useState(initialSymbol ?? '')
   const [ohlc, setOhlc] = useState<OhlcBar[]>([])
   const [intraday, setIntraday] = useState<IntradayPoint[]>([])
-  const [sectors, setSectors] = useState<SectorItem[]>([])
   const [signals, setSignals] = useState<SignalItem[]>([])
   const [autoBuy, setAutoBuy] = useState(false)
   const [autoSell, setAutoSell] = useState(false)
-  const [prioritySymbols, setPrioritySymbols] = useState<string[]>([])
+  const [priorityItems, setPriorityItems] = useState<ListItem[]>([])
 
   useEffect(() => {
     if (initialSymbol) setSymbol(initialSymbol)
@@ -32,12 +23,24 @@ export function TradingPage({ initialSymbol }: { initialSymbol?: string }) {
   }, [symbol])
 
   useEffect(() => {
-    api.sectors().then((r) => setSectors(r.items)).catch(() => {})
-    api.priority().then((r) => {
-      const syms = r.symbols
-      setPrioritySymbols(syms)
-      setSymbol((prev) => (prev && syms.includes(prev) ? prev : syms[0] ?? ''))
-    }).catch(() => setPrioritySymbols([]))
+    // 与选股看板同源：latestList 的 priority 字段 + priority.json 手工添加股
+    Promise.all([api.latestList(), api.priority()])
+      .then(([listRes, priRes]) => {
+        const m: Record<string, string> = {}
+        for (const it of listRes.items) if (it.name) m[it.symbol] = it.name
+        const fromList = listRes.items.filter((i) => i.priority)
+        const listSyms = new Set(fromList.map((i) => i.symbol))
+        const extra = priRes.symbols
+          .filter((s) => !listSyms.has(s))
+          .map((s) => ({
+            symbol: s, name: m[s], priority: true,
+          } as ListItem))
+        const merged = [...fromList, ...extra]
+        setPriorityItems(merged)
+        const syms = merged.map((i) => i.symbol)
+        setSymbol((prev) => (prev && syms.includes(prev) ? prev : syms[0] ?? ''))
+      })
+      .catch(() => setPriorityItems([]))
   }, [])
 
   const last = ohlc[ohlc.length - 1]
@@ -67,16 +70,16 @@ export function TradingPage({ initialSymbol }: { initialSymbol?: string }) {
       <div className="panel grid grid-2">
         <div>
           <label>标的（选股看板日内买入标记股）</label>
-          <select value={symbol} onChange={(e) => setSymbol(e.target.value)} disabled={prioritySymbols.length === 0}>
-            {prioritySymbols.length > 0 ? (
-              prioritySymbols.map((s) => (
-                <option key={s} value={s}>{s} {DEMO_NAMES[s] ?? ''}</option>
+          <select value={symbol} onChange={(e) => setSymbol(e.target.value)} disabled={priorityItems.length === 0}>
+            {priorityItems.length > 0 ? (
+              priorityItems.map((it) => (
+                <option key={it.symbol} value={it.symbol}>{it.symbol} {it.name ?? ''}</option>
               ))
             ) : (
               <option value="">暂无日内买入标的</option>
             )}
           </select>
-          {prioritySymbols.length === 0 && <p className="dim">请先在选股看板标记“日内买入”股票。</p>}
+          {priorityItems.length === 0 && <p className="dim">请先在选股看板标记"日内买入"股票。</p>}
           <div style={{ marginTop: 12, fontSize: 24, fontWeight: 700 }}>
             {last?.close.toFixed(2)}{' '}
             <span className={change >= 0 ? 'up' : 'down'}>{(change * 100).toFixed(2)}%</span>
@@ -122,31 +125,6 @@ export function TradingPage({ initialSymbol }: { initialSymbol?: string }) {
         </div>
       )}
 
-      <div className="panel">
-        <h3>板块行情</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>板块</th>
-              <th>涨跌幅</th>
-              <th>日内走势</th>
-              <th>上涨家数</th>
-              <th>下跌家数</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sectors.map((s) => (
-              <tr key={s.板块}>
-                <td>{s.板块}</td>
-                <td className={s.涨跌幅 >= 0 ? 'up' : 'down'}>{(s.涨跌幅 * 100).toFixed(2)}%</td>
-                <td><Sparkline data={s.intraday} /></td>
-                <td>{s.上涨家数}</td>
-                <td>{s.下跌家数}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </>
   )
 }

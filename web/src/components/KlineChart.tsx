@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from 'react'
 import {
   Bar,
+  Brush,
   ComposedChart,
   Line,
   ResponsiveContainer,
@@ -79,54 +81,113 @@ export function KlineChart({
 
   const maxVol = Math.max(...data.map((d) => d.volume), 1)
 
+  // --- 受控 Brush 范围 + 鼠标滚轮缩放 ---
+  const [range, setRange] = useState<[number, number]>([0, 0])
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // 数据变化（切换股票）时重置为全范围
+  useEffect(() => {
+    if (data.length > 0) setRange([0, data.length - 1])
+  }, [data])
+
+  // 非被动 wheel 监听，阻止页面滚动并实现缩放
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      setRange(([start, end]) => {
+        const total = data.length
+        if (total === 0) return [0, 0]
+        const center = (start + end) / 2
+        const currentSpan = end - start
+        // deltaY > 0 (向下滚) → 放大（缩小可见范围）
+        // deltaY < 0 (向上滚) → 缩小（扩大可见范围）
+        const factor = e.deltaY > 0 ? 0.8 : 1.25
+        let newSpan = Math.round(currentSpan * factor)
+        newSpan = Math.max(10, Math.min(total - 1, newSpan))
+        let newStart = Math.round(center - newSpan / 2)
+        let newEnd = newStart + newSpan
+        if (newStart < 0) {
+          newStart = 0
+          newEnd = newSpan
+        }
+        if (newEnd > total - 1) {
+          newEnd = total - 1
+          newStart = Math.max(0, newEnd - newSpan)
+        }
+        return [newStart, newEnd]
+      })
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [data.length])
+
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={chartData} syncId={syncId}>
-        <XAxis dataKey="date" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={40} />
-        <YAxis
-          yAxisId="price"
-          tick={{ fill: '#8b949e', fontSize: 10 }}
-          domain={priceDomain ?? ['auto', 'auto']}
-          orientation="right"
-          width={55}
-        />
-        <YAxis yAxisId="volume" orientation="left" hide width={0} domain={[0, maxVol * 5]} />
-        <Tooltip
-          contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
-          labelStyle={{ color: '#8b949e' }}
-          formatter={(value: unknown, name: string, item: any) => {
-            if (name === 'K线' && Array.isArray(value)) {
-              const p = item?.payload
-              if (p) {
+    <div ref={containerRef} style={{ width: '100%', cursor: 'crosshair' }}>
+      <ResponsiveContainer width="100%" height={height}>
+        <ComposedChart data={chartData} syncId={syncId}>
+          <XAxis dataKey="date" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={40} />
+          <YAxis
+            yAxisId="price"
+            tick={{ fill: '#8b949e', fontSize: 10 }}
+            domain={priceDomain ?? ['auto', 'auto']}
+            orientation="right"
+            width={55}
+            tickFormatter={(v: number) => v.toFixed(2)}
+          />
+          <YAxis yAxisId="volume" orientation="left" hide width={0} domain={[0, maxVol * 5]} />
+          <Tooltip
+            contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
+            labelStyle={{ color: '#8b949e' }}
+            formatter={(value: unknown, name: string, item: any) => {
+              if (name === 'K线' && Array.isArray(value)) {
+                const p = item?.payload
+                if (p) {
                 return [
-                  `开:${p.open} 高:${p.high} 低:${p.low} 收:${p.close}`,
+                  `开:${Number(p.open).toFixed(2)} 高:${Number(p.high).toFixed(2)} 低:${Number(p.low).toFixed(2)} 收:${Number(p.close).toFixed(2)}`,
                   'K线',
                 ]
+                }
               }
-            }
             if (name === '成交量') {
               return [Number(value).toLocaleString(), name]
             }
-            return [String(value), name]
-          }}
-        />
-        <Bar yAxisId="price" dataKey="range" shape={candleShape} name="K线" isAnimationActive={false} />
-        <Bar yAxisId="volume" dataKey="volume" fill="#4f8ef755" name="成交量" isAnimationActive={false} />
-        {showMaLines &&
-          mas.map((w, idx) => (
-            <Line
-              key={w}
-              yAxisId="price"
-              type="monotone"
-              dataKey={`ma${w}`}
-              stroke={MA_COLORS[idx % MA_COLORS.length]}
-              dot={false}
-              strokeWidth={1}
-              connectNulls
-              name={`MA${w}`}
-            />
-          ))}
-      </ComposedChart>
-    </ResponsiveContainer>
+            return [Number(value).toFixed(2), name]
+            }}
+          />
+          <Bar yAxisId="price" dataKey="range" shape={candleShape} name="K线" isAnimationActive={false} />
+          <Bar yAxisId="volume" dataKey="volume" fill="#4f8ef755" name="成交量" isAnimationActive={false} />
+          {showMaLines &&
+            mas.map((w, idx) => (
+              <Line
+                key={w}
+                yAxisId="price"
+                type="monotone"
+                dataKey={`ma${w}`}
+                stroke={MA_COLORS[idx % MA_COLORS.length]}
+                dot={false}
+                strokeWidth={1}
+                connectNulls
+                name={`MA${w}`}
+              />
+            ))}
+          <Brush
+            dataKey="close"
+            height={30}
+            stroke="#4f8ef7"
+            fill="#161b22"
+            travellerWidth={8}
+            startIndex={range[0]}
+            endIndex={range[1]}
+            onChange={(e: { startIndex?: number; endIndex?: number }) => {
+              if (e.startIndex != null && e.endIndex != null) {
+                setRange([e.startIndex, e.endIndex])
+              }
+            }}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
