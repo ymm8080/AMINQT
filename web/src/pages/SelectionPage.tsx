@@ -31,18 +31,29 @@ export function SelectionPage({ onJumpToTrading }: { onJumpToTrading?: (symbol: 
 
   useEffect(() => {
     api.latestList()
-      .then((r) => {
-        setData(r)
-        // 同步 priority 状态
-        const pri = new Set(r.items.filter((i) => i.priority).map((i) => i.symbol))
-        setPriority(pri)
-      })
+      .then((r) => setData(r))
       .catch((e) => setError(String(e)))
+  }, [])
+
+  useEffect(() => {
+    api.priority().then((r) => setPriority(new Set(r.symbols))).catch(() => {})
+    api.sectors().then((r) => setSectors(r.items)).catch(() => {})
   }, [])
 
   const items = useMemo(() => {
     if (!data) return []
-    return data.items
+    const listSyms = new Set(data.items.map((it) => it.symbol))
+    // 合并 priority.json 中不在清单里的股票
+    const extra: ListItem[] = [...priority]
+      .filter((s) => !listSyms.has(s))
+      .map((s) => ({
+        symbol: s, name: s, board: '-', industry: '-',
+        day_change: 0, pred_ret_1d: 0, pred_ret_3d: 0, pred_ret_5d: 0,
+        prob_up: 0.5, momentum: '-', consensus_score: 0, signal_conflict: 0,
+        market_state: '-', score: 0, schema_version: data.schema_version,
+        priority: true, added_at: 0,
+      }))
+    return [...data.items, ...extra]
       .map((it) => ({ ...it, priority: priority.has(it.symbol) }))
       .sort((a, b) => {
         // 1. 日内买入指标优先
@@ -65,9 +76,6 @@ export function SelectionPage({ onJumpToTrading }: { onJumpToTrading?: (symbol: 
     api.intraday(detail.symbol).then((r) => setIntraday(r.items)).catch(() => setIntraday([]))
   }, [detail])
 
-  useEffect(() => {
-    api.sectors().then((r) => setSectors(r.items)).catch(() => {})
-  }, [])
 
   const priceDomain = useMemo<[number, number] | undefined>(() => {
     if (ohlc.length === 0) return undefined
@@ -90,6 +98,7 @@ export function SelectionPage({ onJumpToTrading }: { onJumpToTrading?: (symbol: 
     const sym = addSymbol.trim()
     if (!sym || !data) return
     if (data.items.some((i) => i.symbol === sym)) return
+    if (priority.has(sym)) return
     const row: ListItem = {
       symbol: sym,
       name: sym,
@@ -233,14 +242,14 @@ export function SelectionPage({ onJumpToTrading }: { onJumpToTrading?: (symbol: 
                   const value = ohlc.slice(-w).reduce((s, b) => s + b.close, 0) / w
                   return (
                     <span key={w} className="dim">
-                      MA{w}: <span style={{ color: '#e6edf3' }}>{value.toFixed(2)}</span>
+                      MA{w}: <span style={{ color: '#1f2328' }}>{value.toFixed(2)}</span>
                     </span>
                   )
                 })}
               </div>
               <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <KlineChart data={ohlc} showMaLines={false} priceDomain={priceDomain} />
+                  <KlineChart data={ohlc} showMaLines={true} priceDomain={priceDomain} />
                   <MacdChart data={ohlc} />
                   <MainForceChipsChart data={ohlc} />
                   <ChipControlChart data={ohlc} />
