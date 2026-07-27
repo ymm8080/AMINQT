@@ -75,9 +75,9 @@ class TestScoreForecast:
         out = score_forecast(forecast, labeled, fdate)
         assert out["mature"]
         for k in (1, 3, 5):
-            assert out["horizons"][k]["wmape"] == pytest.approx(0.0)
-            assert out["horizons"][k]["bias"] == pytest.approx(0.0)
-            assert out["horizons"][k]["n"] == 2
+            assert out["horizons"][k]["mae_1d"] == pytest.approx(0.0, abs=1e-4)
+            assert out["horizons"][k]["bias_1d"] == pytest.approx(0.0, abs=1e-4)
+            assert out["horizons"][k]["n_samples"] == 2
 
     def test_constant_overestimate(self):
         labeled = _labeled_panel()
@@ -92,7 +92,7 @@ class TestScoreForecast:
             }
         )
         out = score_forecast(forecast, labeled, fdate)
-        assert out["horizons"][1]["bias"] == pytest.approx(0.01)
+        assert out["horizons"][1]["bias_1d"] == pytest.approx(0.01)
 
     def test_immature_when_no_5d_actuals(self):
         labeled = _labeled_panel()
@@ -142,7 +142,7 @@ class TestScoreMatured:
         scored = score_matured_forecasts(str(list_dir), panel, out_dir=str(out_dir))
         assert len(scored) == 1 and scored[0]["forecast_date"] == fdate
         summary = json.loads((out_dir / f"accuracy_{fdate}.json").read_text())
-        assert summary["horizons"]["1"]["bias"] == pytest.approx(0.005)
+        assert summary["horizons"]["1"]["bias_1d"] == pytest.approx(0.005)
         assert (out_dir / f"detail_{fdate}.parquet").exists()
         # 幂等: 第二次不再重复打分
         assert score_matured_forecasts(str(list_dir), panel, out_dir=str(out_dir)) == []

@@ -72,54 +72,177 @@ def get_sectors() -> dict:
 
 @router.get("/signals/{symbol}")
 def get_signals(symbol: str) -> dict:
-    """演示买卖信号 (时间、价格、量、方向、原因); 价格取该标的日内最近时刻."""
+    """买卖信号: Pipeline2 V5.1 引擎生成 (买/卖纯函数 trigger).
 
-    def _minutes(t: str) -> int:
-        h, m = map(int, t.split(":"))
-        return h * 60 + m
+    Pipeline1 提供候选池 + stop_price/pred_q50 → Pipeline2 V5.1 决策.
+    """
+    items = []
 
-    def _price_at(sym: str, target: str) -> float:
-        df = ds.demo_intraday(sym)
-        tm = _minutes(target)
-        df["_tm"] = df["time"].apply(_minutes)
-        idx = (df["_tm"] - tm).abs().idxmin()
-        return float(df.loc[idx, "price"])
+    # 1. 检查是否在 Pipeline1 清单中
+    lst_df, _ = ds.load_latest_list()
+    in_pool = False
+    stock_info = {}
+    if lst_df is not None and len(lst_df):
+        row = lst_df[lst_df["symbol"] == symbol]
+        if len(row):
+            in_pool = True
+            r = row.iloc[0]
+            stock_info = {
+                "pred_q50": float(r.get("pred_q50", 0.005)),
+                "prob_up": float(r.get("prob_up", 0.5)),
+                "score": float(r.get("score", 0)),
+                "weight": float(r.get("weight", 0.1)),
+                "board": str(r.get("board", "main")),
+                "momentum": str(r.get("momentum", "medium")),
+            }
 
-    raw = [
-        {
-            "time": "09:44",
-            "symbol": "600519",
-            "side": "buy",
-            "priority": "L4-形态",
-            "reason": "下探后低峰确认回升",
-            "qty": 100,
-            "executed": True,
-        },
-        {
-            "time": "10:12",
-            "symbol": "300750",
-            "side": "sell",
-            "priority": "P7",
-            "reason": "涨7%+高换手减半",
-            "qty": 200,
-            "executed": False,
-        },
-        {
-            "time": "13:05",
-            "symbol": "601318",
-            "side": "sell",
-            "priority": "P10",
-            "reason": "浮盈≥20%人工复核",
-            "qty": 500,
-            "executed": True,
-        },
-    ]
-    items = [
-        {**s, "price": round(_price_at(s["symbol"], s["time"]), 2)}
-        for s in raw
-        if s["symbol"] == symbol
-    ]
-    return {"demo": True, "symbol": symbol, "items": items}
+    if in_pool:
+        # 2. Pipeline2 V5.1 买入引擎
+        try:
+            ohlc = ds.fetch_real_ohlc(symbol, days=30)
+            if ohlc is None:
+                ohlc = ds.demo_ohlc(symbol, days=30)
+            last_bar = ohlc.iloc[-1]
+            prev_bar = ohlc.iloc[-2] if len(ohlc) > 1 else last_bar
+            atr_pct = 0.02
+            if len(ohlc) >= 15:
+                tr = np.maximum(
+                    ohlc["high"].values - ohlc["low"].values,
+                    np.abs(ohlc["high"].values - np.roll(ohlc["close"].values, 1)),
+                )
+                atr_pct = float(np.mean(tr[-14:]) / last_bar["close"])
+            stop_price = last_bar["close"] * (1 + max(-0.04, -1.5 * atr_pct))
+
+            # Pipeline2 买入信号
+            from app.intraday.v51.buy_engine import BuyContext, trigger as buy_trigger
+            from app.intraday.v51.buy_engine import Bar as BuyBar
+
+            ctx = BuyContext(
+                symbol=symbol,
+                t="09:35",
+                price=float(last_bar["close"]),
+                pre_close=float(prev_bar["close"]),
+                pred_q50=stock_info["pred_q50"],
+                atr_pct=atr_pct,
+                stop_price=stop_price,
+                adv_20d=float(ohlc["volume"].tail(20).mean() * last_bar["close"]),
+                order_value=100000,
+                bar_amount=float(last_bar["volume"] * last_bar["close"])
+                if "volume" in last_bar.index
+                else 2e6,
+            )
+            bars = tuple(
+                BuyBar(
+                    t=str(row_date)[:16]
+                    if hasattr(row_date, "__str__")
+                    else str(row_date),
+                    close=float(row["close"]),
+                    volume=float(row.get("volume", 1e6)),
+                    amount=float(row["close"] * row.get("volume", 1e6)),
+                )
+                for row_date, row in ohlc.tail(5).iterrows()
+            )
+            buy_signal = buy_trigger(ctx, bars)
+            if buy_signal["pass"]:
+                items.append(
+                    {
+                        "time": "09:35",
+                        "symbol": symbol,
+                        "side": "buy",
+                        "price": round(float(last_bar["close"]), 2),
+                        "priority": f"P2-{buy_signal.get('positive', 'B1')}",
+                        "reason": f"V5.1买入·{buy_signal.get('positive', 'B1')} pred_q50={stock_info['pred_q50']:+.3f}",
+                        "qty": 100,
+                        "executed": False,
+                    }
+                )
+            else:
+                veto_str = ", ".join(buy_signal.get("vetoes", ["未知"])) or "无否决"
+                items.append(
+                    {
+                        "time": "09:35",
+                        "symbol": symbol,
+                        "side": "buy",
+                        "price": 0,
+                        "priority": "P2-BLOCKED",
+                        "reason": f"V5.1否决: {veto_str}",
+                        "qty": 0,
+                        "executed": False,
+                    }
+                )
+        except Exception:
+            logger.warning("Pipeline2 buy_engine 失败", exc_info=True)
+
+        # 3. Pipeline2 V5.1 卖出信号
+        try:
+            from app.intraday.v51.sell_engine import (
+                SellContext,
+                trigger as sell_trigger,
+            )
+            from app.intraday.v51.position import Position
+
+            intraday = ds.fetch_real_intraday(symbol)
+            if intraday is None:
+                intraday = ds.demo_intraday(symbol)
+            latest_px = (
+                float(intraday["price"].iloc[-1])
+                if len(intraday)
+                else float(last_bar["close"])
+            )
+            ld_price = round(float(prev_bar["close"]) * 0.9, 2)
+
+            sctx = SellContext(
+                t="14:50",
+                price=latest_px,
+                limit_down_price=ld_price,
+                limit_up_price=round(float(prev_bar["close"]) * 1.1, 2),
+                atr_pct=atr_pct,
+            )
+            pos = Position(
+                symbol=symbol,
+                total_qty=100,
+                sellable_qty=100,
+                entry_price=float(last_bar["close"]),
+                entry_date=str(ohlc.index[-1])[:10]
+                if hasattr(ohlc.index[-1], "__str__")
+                else str(ohlc.iloc[-1]["date"])[:10],
+                hold_days=1,
+                max_price_since_entry=float(last_bar["high"]),
+                stop_price=stop_price,
+            )
+            sell_signal = sell_trigger(sctx, pos)
+            if sell_signal["action"] != "HOLD":
+                items.append(
+                    {
+                        "time": sell_signal.get("time", "14:50"),
+                        "symbol": symbol,
+                        "side": "sell",
+                        "price": round(latest_px, 2),
+                        "priority": sell_signal.get("rule", "S0"),
+                        "reason": sell_signal.get("reason", sell_signal["action"]),
+                        "qty": sell_signal.get("qty", 0),
+                        "executed": False,
+                    }
+                )
+        except Exception:
+            logger.warning("Pipeline2 sell_engine 失败", exc_info=True)
+
+    # 4. Fallback: 不在清单中 → demo
+    if not in_pool:
+        items = [
+            {
+                "time": "09:44",
+                "symbol": symbol,
+                "side": "buy",
+                "priority": "L4-DEMO",
+                "reason": "不在Pipeline1清单中, 演示数据",
+                "qty": 0,
+                "price": 0,
+                "executed": False,
+            },
+        ]
+
+    return {"demo": not in_pool, "symbol": symbol, "items": items, "pipeline2": True}
 
 
 # ============================================================
@@ -143,16 +266,31 @@ def toggle_priority(item: WatchItem) -> dict:
 # ============================================================
 @router.get("/ohlc/{symbol}")
 def get_ohlc(symbol: str, days: int = 120) -> dict:
-    """K线数据 (生产: 历史库; 当前演示合成)."""
-    df = ds.demo_ohlc(symbol, days=min(days, 500))
+    """K线数据: 真实优先 (akshare), 失败回退 demo."""
+    try:
+        df = ds.fetch_real_ohlc(symbol, days=min(days, 500))
+    except Exception:
+        logger.warning("fetch_real_ohlc 网络异常: %s", symbol, exc_info=True)
+        df = None
+    demo = df is None
+    if demo:
+        df = ds.demo_ohlc(symbol, days=min(days, 500))
     df["date"] = df["date"].astype(str)
-    return {"symbol": symbol, "demo": True, "items": df.to_dict("records")}
+    return {"symbol": symbol, "demo": demo, "items": df.to_dict("records")}
 
 
 @router.get("/intraday/{symbol}")
 def get_intraday(symbol: str) -> dict:
-    df = ds.demo_intraday(symbol)
-    return {"symbol": symbol, "demo": True, "items": df.to_dict("records")}
+    """分时数据: 真实优先 (akshare 5min), 失败回退 demo."""
+    try:
+        df = ds.fetch_real_intraday(symbol)
+    except Exception:
+        logger.warning("fetch_real_intraday 网络异常: %s", symbol, exc_info=True)
+        df = None
+    demo = df is None
+    if demo:
+        df = ds.demo_intraday(symbol)
+    return {"symbol": symbol, "demo": demo, "items": df.to_dict("records")}
 
 
 # ============================================================
@@ -187,18 +325,32 @@ class BacktestRequest(BaseModel):
     prob_exit: float = 0.50
     initial_capital: float = 1_000_000
     window_days: int = 180
+    start_date: str | None = None  # 'YYYY-MM-DD', 优先级高于 window_days
+    end_date: str | None = None  # 'YYYY-MM-DD'
     objective: str = "net_excess_annual"
     max_dd_limit: float | None = None
 
 
-def _demo_panel_and_lists(window_days: int = 180, seed: int = 9):
+def _demo_panel_and_lists(
+    window_days: int = 180,
+    seed: int = 9,
+    start_date: str | None = None,
+    end_date: str | None = None,
+):
     rng = np.random.default_rng(seed)
-    end = pd.Timestamp.today().normalize()
-    dates = pd.bdate_range(end=end, periods=window_days)
+    if start_date and end_date:
+        start = pd.Timestamp(start_date)
+        end = pd.Timestamp(end_date)
+        dates = pd.bdate_range(start=start, end=end)
+        n_days = len(dates)
+    else:
+        end = pd.Timestamp.today().normalize()
+        dates = pd.bdate_range(end=end, periods=window_days)
+        n_days = window_days
     frames = []
     for sym, ind in (("600519", "白酒"), ("601318", "保险"), ("600000", "银行")):
-        close = 100 * np.cumprod(1 + rng.normal(0.001, 0.015, window_days))
-        open_ = close * (1 + rng.normal(0, 0.003, window_days))
+        close = 100 * np.cumprod(1 + rng.normal(0.001, 0.015, n_days))
+        open_ = close * (1 + rng.normal(0, 0.003, n_days))
         frames.append(
             pd.DataFrame(
                 {
@@ -234,7 +386,9 @@ def _demo_panel_and_lists(window_days: int = 180, seed: int = 9):
 @router.post("/backtest/run")
 def run_backtest(req: BacktestRequest) -> dict:
     """V3.5 协议回测 (演示面板)."""
-    panel, lists = _demo_panel_and_lists(req.window_days)
+    panel, lists = _demo_panel_and_lists(
+        req.window_days, start_date=req.start_date, end_date=req.end_date
+    )
     proto = BacktestProtocol(
         top_n=req.top_n,
         max_hold_days=req.max_hold_days,
@@ -317,3 +471,97 @@ def get_tuning_report() -> dict:
     if report is None:
         return {"exists": False}
     return {"exists": True, **report}
+
+
+# ============================================================
+# 预测质量 (P25)
+# ============================================================
+@router.get("/forecast/quality")
+def get_forecast_quality() -> dict:
+    """返回最新预测质量报告 (MAE/BIAS/方向准确率/分桶/红灯).
+
+    优先读 data/forecast_accuracy/ 真实数据; 无数据时返回 demo 占位.
+    """
+    import json
+    import os
+
+    acc_dir = os.path.join("data", "forecast_accuracy")
+    if os.path.isdir(acc_dir):
+        files = sorted(
+            [
+                f
+                for f in os.listdir(acc_dir)
+                if f.startswith("accuracy_") and f.endswith(".json")
+            ],
+            reverse=True,
+        )
+        if files:
+            with open(os.path.join(acc_dir, files[0]), "r", encoding="utf-8") as fh:
+                report = json.load(fh)
+            latest_1d = report.get("horizons", {}).get("1", {})
+            return {
+                "exists": True,
+                "demo": False,
+                "date": report.get("forecast_date", ""),
+                "mae_1d": latest_1d.get("mae_1d"),
+                "bias_1d": latest_1d.get("bias_1d"),
+                "direction_accuracy": latest_1d.get("direction_accuracy"),
+                "n_samples": latest_1d.get("n_samples"),
+                "bias_big_up": latest_1d.get("bias_big_up"),
+                "bias_small_up": latest_1d.get("bias_small_up"),
+                "bias_small_down": latest_1d.get("bias_small_down"),
+                "bias_big_down": latest_1d.get("bias_big_down"),
+            }
+
+    # 无真实数据 — 返回 demo 占位
+    return {
+        "exists": False,
+        "demo": True,
+        "mae_1d": None,
+        "bias_1d": None,
+        "direction_accuracy": None,
+        "n_samples": 0,
+        "bias_big_up": None,
+        "bias_small_up": None,
+        "bias_small_down": None,
+        "bias_big_down": None,
+    }
+
+
+# ============================================================
+# 预测池数据库 (P25.5)
+# ============================================================
+@router.get("/prediction/runs")
+def get_prediction_runs(limit: int = 60) -> dict:
+    """预测运行日期列表."""
+    try:
+        from app.pipeline1.prediction_db import PredictionDB
+
+        return {"runs": PredictionDB().list_runs(limit)}
+    except Exception:
+        return {"runs": []}
+
+
+@router.get("/prediction/run/{date}")
+def get_prediction_run(date: str) -> dict:
+    """单个预测日期完整记录 (stocks + outcomes)."""
+    try:
+        from app.pipeline1.prediction_db import PredictionDB
+
+        run = PredictionDB().get_run(date)
+    except Exception:
+        run = None
+    if run is None:
+        raise HTTPException(404, f"预测记录不存在: {date}")
+    return run
+
+
+@router.get("/prediction/quality")
+def get_prediction_quality(limit: int = 60) -> dict:
+    """所有日期预测质量汇总 (趋势)."""
+    try:
+        from app.pipeline1.prediction_db import PredictionDB
+
+        return {"items": PredictionDB().all_quality(limit)}
+    except Exception:
+        return {"items": []}

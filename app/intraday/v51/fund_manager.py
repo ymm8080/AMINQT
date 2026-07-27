@@ -25,6 +25,8 @@ MAX_NEW_POSITIONS_PER_DAY = 2  # 全局每日新开仓 ≤ 2 笔 (数量闸门)
 DAILY_FUSE_C = 0.04  # 日内保险丝 C档 (100%×-4%, 一笔止损即当日收工)
 DAILY_FUSE_B = 0.03  # B档 (75%×4%)
 HALT_DRAWDOWN = 0.15  # 停机线 15%
+# P23.7 双轨: 2σ 自适应 + 固定阈值 fallback
+FUSE_2SIGMA_ENABLED = True  # 启用 2σ 自适应日保险丝
 
 
 @dataclass
@@ -67,14 +69,41 @@ class FundManager:
 
     # ---------------- 保险丝 / 停机线 ----------------
     def on_daily_pnl(self, pnl_pct: float) -> None:
+        """P23.7: 2σ 自适应优先, 固定阈值 fallback (双轨并行)."""
         self._daily_pnl += pnl_pct
-        if self._daily_pnl <= -self.daily_fuse and not self._fuse_triggered:
-            self._fuse_triggered = True
+        if self._fuse_triggered:
+            return
+        fused = False
+        if not hasattr(self, "_daily_drawdowns"):
+            self._daily_drawdowns = []
+        self._daily_drawdowns.append(pnl_pct)
+        if len(self._daily_drawdowns) > 60:
+            self._daily_drawdowns = self._daily_drawdowns[-60:]
+        daily_dds = getattr(self, "_daily_drawdowns", [])
+        if FUSE_2SIGMA_ENABLED and len(daily_dds) >= 5:
+            import numpy as np
+
+            mu = float(np.mean(daily_dds[-20:]))
+            sigma = float(np.std(daily_dds[-20:]))
+            threshold = mu - 2 * sigma if sigma > 0 else -self.daily_fuse
+            if self._daily_pnl < threshold:
+                fused = True
+                logger.error(
+                    "日内保险丝(2σ): 当日亏损 %.1f%% < μ-2σ (μ=%.1f%%, σ=%.1f%%, th=%.1f%%), 暂停新买入",
+                    -self._daily_pnl * 100,
+                    mu * 100,
+                    sigma * 100,
+                    threshold * 100,
+                )
+        if not fused and self._daily_pnl <= -self.daily_fuse:
+            fused = True
             logger.error(
                 "日内保险丝: 当日亏损 %.1f%% ≥ %.0f%%, 暂停新买入",
                 -self._daily_pnl * 100,
                 self.daily_fuse * 100,
             )
+        if fused:
+            self._fuse_triggered = True
 
     def on_nav(self, nav: float) -> None:
         self.peak_nav = max(self.peak_nav, nav)

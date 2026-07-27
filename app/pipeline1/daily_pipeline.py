@@ -23,6 +23,7 @@ from .cleaning_pipeline import CleaningPipeline
 from .data_supply import DataSupplyChain, DataSupplyError
 from .dual_track_trainer import DualTrackTrainer
 from .feature_engine_v35 import FeatureEngineV35
+from .forecast_accuracy import compute_bias_buckets, compute_quality_metrics
 from .list_generator import ListDeliveryGuard, ListGenerator, MarketEnv
 from .predictor import V35Predictor
 
@@ -135,11 +136,40 @@ class DailySelectionPipeline:
         result = self.lister.emit(candidates, env=env, market_state=market_state)
         result["valve_state"] = valve_state
 
-        # 持久化 + 守卫
+        # 持久化 + 守卫 + DB入库
         if not result["empty"] and len(result["list"]):
             result["list"].to_parquet(self._list_path(trade_date), index=False)
             self.guard.on_success(result["list"])
             result["mode"] = "normal"
+            # P25.5: 入库 prediction DB
+            try:
+                from .prediction_db import PredictionDB
+
+                PredictionDB().insert_run(trade_date, result["list"])
+            except Exception:
+                logger.warning("预测池DB入库失败 (非阻塞)", exc_info=True)
+            # 同步到 priority.json (交易看板下拉框)
+            try:
+                import json
+                import os
+
+                pq_path = os.path.join("data", "priority.json")
+                existing = set()
+                if os.path.exists(pq_path):
+                    with open(pq_path, "r", encoding="utf-8") as f:
+                        existing = set(json.load(f).get("symbols", []))
+                new_symbols = set(result["list"]["symbol"].tolist())
+                merged = sorted(existing | new_symbols)
+                with open(pq_path, "w", encoding="utf-8") as f:
+                    json.dump({"symbols": merged}, f, ensure_ascii=False, indent=2)
+                logger.info(
+                    "priority.json 同步: %d → %d (新增 %d)",
+                    len(existing),
+                    len(merged),
+                    len(new_symbols - existing),
+                )
+            except Exception:
+                logger.warning("priority.json 同步失败 (非阻塞)", exc_info=True)
         else:
             result["mode"] = "empty"
         return result
@@ -157,6 +187,61 @@ class DailySelectionPipeline:
         )
         prev = [d for d in dates if d < trade_date]
         return self.load_list(prev[-1]) if prev else None
+
+    # ---------------- P25.4 每日质量报告 (D-26) ----------------
+    def generate_quality_report(self, forecast_df, actual_returns, trade_date):
+        """D-26: 推理后自动计算预测质量报告.
+
+        Returns:
+            quality_report dict (MAE/BIAS/方向准确率/分桶BIAS/红灯状态).
+        """
+        import json
+        import os
+
+        actual = actual_returns.get(
+            "label_pm_1d_net", actual_returns.get("label_1d_net", None)
+        )
+        if actual is None or len(forecast_df) == 0:
+            return None
+
+        pred = forecast_df["pred_ret_1d"].values
+        act = actual.values if hasattr(actual, "values") else actual
+
+        metrics = compute_quality_metrics(act, pred)
+        buckets = compute_bias_buckets(act, pred)
+        from .oos_monitor import bias_traffic_light
+
+        light = bias_traffic_light({**metrics, **buckets})
+
+        report = {
+            "date": trade_date,
+            **metrics,
+            **buckets,
+            "traffic_light": light,
+        }
+
+        # WORM 入库
+        try:
+            worm_dir = os.path.join("data", "quality_reports")
+            os.makedirs(worm_dir, exist_ok=True)
+            path = os.path.join(worm_dir, f"quality_{trade_date}.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(report, fh, ensure_ascii=False, indent=2)
+        except Exception:
+            logger.warning("质量报告 WORM 入库失败 (非阻塞)", exc_info=True)
+
+        if light == "RED":
+            logger.critical("BIAS 红灯触发: %s → E4-L1 模型降级", trade_date)
+
+        logger.info(
+            "预测质量报告 %s: MAE=%.4f BIAS=%+.4f DirAcc=%.2f%% Light=%s",
+            trade_date,
+            metrics["mae_1d"],
+            metrics["bias_1d"],
+            metrics["direction_accuracy"] * 100,
+            light,
+        )
+        return report
 
     # ---------------- 周度重训 (解耦) ----------------
     @staticmethod

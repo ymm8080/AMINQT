@@ -34,11 +34,11 @@ export function MacdChart({ data, height = 200 }: { data: OhlcBar[]; height?: nu
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={chartData} syncId="stock-detail">
-        <XAxis dataKey="date" tick={{ fill: '#8b949e', fontSize: 10 }} minTickGap={40} />
-        <YAxis tick={{ fill: '#8b949e', fontSize: 10 }} orientation="right" width={55} />
+        <XAxis dataKey="date" tick={{ fill: '#636c76', fontSize: 10 }} minTickGap={40} />
+        <YAxis tick={{ fill: '#636c76', fontSize: 10 }} orientation="right" width={55} />
         <Tooltip
           contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
-          labelStyle={{ color: '#8b949e' }}
+          labelStyle={{ color: '#636c76' }}
           formatter={(value: unknown, name: string) => [Number(value).toFixed(2), name]}
         />
         <Bar dataKey="bar" fill="#8884d8" name="MACD" />
