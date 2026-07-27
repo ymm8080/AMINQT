@@ -77,7 +77,6 @@ def get_signals(symbol: str) -> dict:
     Pipeline1 提供候选池 + stop_price/pred_q50 → Pipeline2 V5.1 决策.
     """
     items = []
-    demo = True
 
     # 1. 检查是否在 Pipeline1 清单中
     lst_df, _ = ds.load_latest_list()
@@ -87,7 +86,6 @@ def get_signals(symbol: str) -> dict:
         row = lst_df[lst_df["symbol"] == symbol]
         if len(row):
             in_pool = True
-            demo = False
             r = row.iloc[0]
             stock_info = {
                 "pred_q50": float(r.get("pred_q50", 0.005)),
@@ -129,74 +127,119 @@ def get_signals(symbol: str) -> dict:
                 stop_price=stop_price,
                 adv_20d=float(ohlc["volume"].tail(20).mean() * last_bar["close"]),
                 order_value=100000,
-                bar_amount=float(last_bar["volume"] * last_bar["close"]) if "volume" in last_bar.index else 2e6,
+                bar_amount=float(last_bar["volume"] * last_bar["close"])
+                if "volume" in last_bar.index
+                else 2e6,
             )
             bars = tuple(
-                BuyBar(t=str(row_date)[:16] if hasattr(row_date, '__str__') else str(row_date),
-                       close=float(row["close"]), volume=float(row.get("volume", 1e6)),
-                       amount=float(row["close"] * row.get("volume", 1e6)))
+                BuyBar(
+                    t=str(row_date)[:16]
+                    if hasattr(row_date, "__str__")
+                    else str(row_date),
+                    close=float(row["close"]),
+                    volume=float(row.get("volume", 1e6)),
+                    amount=float(row["close"] * row.get("volume", 1e6)),
+                )
                 for row_date, row in ohlc.tail(5).iterrows()
             )
             buy_signal = buy_trigger(ctx, bars)
             if buy_signal["pass"]:
-                items.append({
-                    "time": "09:35", "symbol": symbol, "side": "buy",
-                    "price": round(float(last_bar["close"]), 2),
-                    "priority": f"P2-{buy_signal.get('positive', 'B1')}",
-                    "reason": f"V5.1买入·{buy_signal.get('positive', 'B1')} pred_q50={stock_info['pred_q50']:+.3f}",
-                    "qty": 100, "executed": False,
-                })
+                items.append(
+                    {
+                        "time": "09:35",
+                        "symbol": symbol,
+                        "side": "buy",
+                        "price": round(float(last_bar["close"]), 2),
+                        "priority": f"P2-{buy_signal.get('positive', 'B1')}",
+                        "reason": f"V5.1买入·{buy_signal.get('positive', 'B1')} pred_q50={stock_info['pred_q50']:+.3f}",
+                        "qty": 100,
+                        "executed": False,
+                    }
+                )
             else:
                 veto_str = ", ".join(buy_signal.get("vetoes", ["未知"])) or "无否决"
-                items.append({
-                    "time": "09:35", "symbol": symbol, "side": "buy",
-                    "price": 0, "priority": "P2-BLOCKED",
-                    "reason": f"V5.1否决: {veto_str}",
-                    "qty": 0, "executed": False,
-                })
+                items.append(
+                    {
+                        "time": "09:35",
+                        "symbol": symbol,
+                        "side": "buy",
+                        "price": 0,
+                        "priority": "P2-BLOCKED",
+                        "reason": f"V5.1否决: {veto_str}",
+                        "qty": 0,
+                        "executed": False,
+                    }
+                )
         except Exception:
             logger.warning("Pipeline2 buy_engine 失败", exc_info=True)
 
         # 3. Pipeline2 V5.1 卖出信号
         try:
-            from app.intraday.v51.sell_engine import SellContext, trigger as sell_trigger
+            from app.intraday.v51.sell_engine import (
+                SellContext,
+                trigger as sell_trigger,
+            )
             from app.intraday.v51.position import Position
 
             intraday = ds.fetch_real_intraday(symbol)
             if intraday is None:
                 intraday = ds.demo_intraday(symbol)
-            latest_px = float(intraday["price"].iloc[-1]) if len(intraday) else float(last_bar["close"])
+            latest_px = (
+                float(intraday["price"].iloc[-1])
+                if len(intraday)
+                else float(last_bar["close"])
+            )
             ld_price = round(float(prev_bar["close"]) * 0.9, 2)
 
             sctx = SellContext(
-                t="14:50", price=latest_px, limit_down_price=ld_price,
+                t="14:50",
+                price=latest_px,
+                limit_down_price=ld_price,
                 limit_up_price=round(float(prev_bar["close"]) * 1.1, 2),
                 atr_pct=atr_pct,
             )
             pos = Position(
-                symbol=symbol, total_qty=100, sellable_qty=100,
+                symbol=symbol,
+                total_qty=100,
+                sellable_qty=100,
                 entry_price=float(last_bar["close"]),
-                entry_date=str(ohlc.index[-1])[:10] if hasattr(ohlc.index[-1], '__str__') else str(ohlc.iloc[-1]["date"])[:10],
-                hold_days=1, max_price_since_entry=float(last_bar["high"]),
+                entry_date=str(ohlc.index[-1])[:10]
+                if hasattr(ohlc.index[-1], "__str__")
+                else str(ohlc.iloc[-1]["date"])[:10],
+                hold_days=1,
+                max_price_since_entry=float(last_bar["high"]),
                 stop_price=stop_price,
             )
             sell_signal = sell_trigger(sctx, pos)
             if sell_signal["action"] != "HOLD":
-                items.append({
-                    "time": sell_signal.get("time", "14:50"), "symbol": symbol,
-                    "side": "sell", "price": round(latest_px, 2),
-                    "priority": sell_signal.get("rule", "S0"),
-                    "reason": sell_signal.get("reason", sell_signal["action"]),
-                    "qty": sell_signal.get("qty", 0), "executed": False,
-                })
+                items.append(
+                    {
+                        "time": sell_signal.get("time", "14:50"),
+                        "symbol": symbol,
+                        "side": "sell",
+                        "price": round(latest_px, 2),
+                        "priority": sell_signal.get("rule", "S0"),
+                        "reason": sell_signal.get("reason", sell_signal["action"]),
+                        "qty": sell_signal.get("qty", 0),
+                        "executed": False,
+                    }
+                )
         except Exception:
             logger.warning("Pipeline2 sell_engine 失败", exc_info=True)
 
     # 4. Fallback: 不在清单中 → demo
     if not in_pool:
         items = [
-            {"time": "09:44", "symbol": symbol, "side": "buy", "priority": "L4-DEMO",
-             "reason": "不在Pipeline1清单中, 演示数据", "qty": 0, "price": 0, "executed": False},
+            {
+                "time": "09:44",
+                "symbol": symbol,
+                "side": "buy",
+                "priority": "L4-DEMO",
+                "reason": "不在Pipeline1清单中, 演示数据",
+                "qty": 0,
+                "price": 0,
+                "executed": False,
+            },
         ]
 
     return {"demo": not in_pool, "symbol": symbol, "items": items, "pipeline2": True}
@@ -485,6 +528,7 @@ def get_prediction_runs(limit: int = 60) -> dict:
     """预测运行日期列表."""
     try:
         from app.pipeline1.prediction_db import PredictionDB
+
         return {"runs": PredictionDB().list_runs(limit)}
     except Exception:
         return {"runs": []}
@@ -495,6 +539,7 @@ def get_prediction_run(date: str) -> dict:
     """单个预测日期完整记录 (stocks + outcomes)."""
     try:
         from app.pipeline1.prediction_db import PredictionDB
+
         run = PredictionDB().get_run(date)
     except Exception:
         run = None
@@ -508,6 +553,7 @@ def get_prediction_quality(limit: int = 60) -> dict:
     """所有日期预测质量汇总 (趋势)."""
     try:
         from app.pipeline1.prediction_db import PredictionDB
+
         return {"items": PredictionDB().all_quality(limit)}
     except Exception:
         return {"items": []}
