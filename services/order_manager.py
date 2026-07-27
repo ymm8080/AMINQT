@@ -11,7 +11,6 @@ import logging
 import uuid
 from enum import Enum
 
-from app.intraday.v51.mvp_gate import enforce_mvp_gate
 from services.executor_base import Order
 
 logger = logging.getLogger(__name__)

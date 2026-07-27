@@ -28,6 +28,7 @@ def check_rank_ic() -> bool:
     try:
         from app.pipeline1.ic_screener import ICScreener  # noqa: F811
         from app.pipeline1.oos_monitor import OOSMonitor  # noqa: F811
+
         return True
     except ImportError as e:
         logger.error("MVP Gate: Rank IC 模块缺失: %s", e)
@@ -38,6 +39,7 @@ def check_stop_loss_hooked() -> bool:
     """止损逻辑已接入 sell_engine (S1/s1_dynamic_stop 存在)."""
     try:
         from app.intraday.v51.sell_engine import s1_dynamic_stop  # noqa: F811
+
         return True
     except ImportError:
         logger.error("MVP Gate: s1_dynamic_stop 缺失")
@@ -49,6 +51,7 @@ def check_daily_fuse_hooked() -> bool:
     try:
         from app.intraday.v51.fund_manager import FundManager  # noqa: F811
         from app.pipeline1.trade_discipline import TradingDiscipline  # noqa: F811
+
         return True
     except ImportError:
         logger.error("MVP Gate: 日保险丝模块缺失")
@@ -59,6 +62,7 @@ def check_halt_line_hooked() -> bool:
     """15% 停机线已接入 state_machine."""
     try:
         from app.intraday.v51.state_machine import ParamStateMachine  # noqa: F811
+
         return True
     except ImportError:
         logger.error("MVP Gate: state_machine 缺失")
@@ -73,6 +77,7 @@ def check_circuit_breaker_p1_p2_p7() -> bool:
             s2_trailing_stop,
             s8_limit_escape,
         )
+
         return True
     except ImportError:
         logger.error("MVP Gate: 熔断优先级函数缺失")
@@ -83,6 +88,7 @@ def check_gap_pain_rule_version() -> bool:
     """隔夜跳空防护版本正确 (label_engine 含 gap_pain 标签)."""
     try:
         from app.pipeline1.label_engine import LabelEngine  # noqa: F811
+
         return True
     except ImportError:
         logger.error("MVP Gate: label_engine 缺失")
@@ -93,6 +99,7 @@ def check_trade_log_schema() -> bool:
     """交易日志 schema 落地 (worm_logger 存在)."""
     try:
         from app.intraday.v51.worm_logger import WormLogger  # noqa: F811
+
         return True
     except ImportError:
         logger.error("MVP Gate: worm_logger 缺失")
@@ -103,13 +110,13 @@ def check_trade_log_schema() -> bool:
 # 主入口
 # ---------------------------------------------------------------------------
 MVP_REQUIRED = {
-    "rank_ic_verified":    check_rank_ic,
-    "hard_stop_loss":      check_stop_loss_hooked,
-    "daily_fuse":          check_daily_fuse_hooked,
-    "halt_line":           check_halt_line_hooked,
-    "circuit_breaker":     check_circuit_breaker_p1_p2_p7,
-    "gap_pain_rule":       check_gap_pain_rule_version,
-    "trade_log_schema":    check_trade_log_schema,
+    "rank_ic_verified": check_rank_ic,
+    "hard_stop_loss": check_stop_loss_hooked,
+    "daily_fuse": check_daily_fuse_hooked,
+    "halt_line": check_halt_line_hooked,
+    "circuit_breaker": check_circuit_breaker_p1_p2_p7,
+    "gap_pain_rule": check_gap_pain_rule_version,
+    "trade_log_schema": check_trade_log_schema,
 }
 
 

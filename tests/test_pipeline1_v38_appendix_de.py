@@ -20,7 +20,13 @@ from app.pipeline1.trade_discipline import (
 # ============================================================
 class TestProfiles:
     def test_three_profiles_exist(self):
-        assert set(PROFILES) >= {"stable", "aggressive", "aggressive_b", "aggressive_main", "aggressive_chinext"}
+        assert set(PROFILES) >= {
+            "stable",
+            "aggressive",
+            "aggressive_b",
+            "aggressive_main",
+            "aggressive_chinext",
+        }
         assert PROFILES["aggressive"]["single_cap"] == 1.00
         assert PROFILES["aggressive"]["stop_loss"] == -0.04
         assert PROFILES["stable"]["stop_loss"] is None

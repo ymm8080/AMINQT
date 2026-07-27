@@ -82,6 +82,7 @@ class FundManager:
         daily_dds = getattr(self, "_daily_drawdowns", [])
         if FUSE_2SIGMA_ENABLED and len(daily_dds) >= 5:
             import numpy as np
+
             mu = float(np.mean(daily_dds[-20:]))
             sigma = float(np.std(daily_dds[-20:]))
             threshold = mu - 2 * sigma
@@ -89,13 +90,17 @@ class FundManager:
                 fused = True
                 logger.error(
                     "日内保险丝(2σ): 当日亏损 %.1f%% < μ-2σ (μ=%.1f%%, σ=%.1f%%, th=%.1f%%), 暂停新买入",
-                    -self._daily_pnl * 100, mu * 100, sigma * 100, threshold * 100,
+                    -self._daily_pnl * 100,
+                    mu * 100,
+                    sigma * 100,
+                    threshold * 100,
                 )
         if not fused and self._daily_pnl <= -self.daily_fuse:
             fused = True
             logger.error(
                 "日内保险丝: 当日亏损 %.1f%% ≥ %.0f%%, 暂停新买入",
-                -self._daily_pnl * 100, self.daily_fuse * 100,
+                -self._daily_pnl * 100,
+                self.daily_fuse * 100,
             )
         if fused:
             self._fuse_triggered = True

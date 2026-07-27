@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """预测准确度评估 (IMPLEMENTATION_PLAN_v3.2 P25.1-P25.2)
 ========================================================
 v3.2 变更:
@@ -31,12 +31,16 @@ logger = logging.getLogger(__name__)
 HORIZONS = (1, 3, 5)
 ACCURACY_DIR = os.path.join("data", "forecast_accuracy")
 
+
 # ---- deprecated ----
 def wmape(actual, pred):
     """[DEPRECATED v3.2] 加权平均绝对百分比误差; 分母爆炸, 改用 MAE.
     保留仅向后兼容, 禁止新代码引用."""
-    warnings.warn("wmape is deprecated since v3.2, use compute_quality_metrics instead",
-                  DeprecationWarning, stacklevel=2)
+    warnings.warn(
+        "wmape is deprecated since v3.2, use compute_quality_metrics instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     denom = float(actual.abs().sum())
     if denom < 1e-12:
         return float("nan")
@@ -63,8 +67,12 @@ def compute_quality_metrics(actual, predicted):
     errors = predicted - actual
     n = len(actual)
     if n == 0:
-        return {"mae_1d": float("nan"), "bias_1d": float("nan"),
-                "direction_accuracy": float("nan"), "n_samples": 0}
+        return {
+            "mae_1d": float("nan"),
+            "bias_1d": float("nan"),
+            "direction_accuracy": float("nan"),
+            "n_samples": 0,
+        }
     dir_acc = np.mean(np.sign(predicted) == np.sign(actual))
     return {
         "mae_1d": float(np.mean(np.abs(errors))),
@@ -118,8 +126,11 @@ def score_forecast(forecast_df, labeled_panel, forecast_date, horizons=HORIZONS)
         actual_col = f"label_pm_{k}d_net"
         if actual_col not in rows.columns:
             actual_col = f"label_{k}d_net"
-        actuals = (rows.set_index("symbol")[actual_col]
-                   if len(rows) else pd.Series(dtype=float))
+        actuals = (
+            rows.set_index("symbol")[actual_col]
+            if len(rows)
+            else pd.Series(dtype=float)
+        )
         detail[f"actual_{k}d"] = detail["symbol"].map(actuals)
         detail[f"pred_{k}d"] = forecast_df[f"pred_ret_{k}d"].values
 
@@ -134,10 +145,18 @@ def score_forecast(forecast_df, labeled_panel, forecast_date, horizons=HORIZONS)
             q = compute_quality_metrics(act, pred)
             buckets = compute_bias_buckets(act, pred)
         else:
-            q = {"mae_1d": float("nan"), "bias_1d": float("nan"),
-                 "direction_accuracy": float("nan"), "n_samples": 0}
-            buckets = {"bias_big_up": float("nan"), "bias_small_up": float("nan"),
-                       "bias_small_down": float("nan"), "bias_big_down": float("nan")}
+            q = {
+                "mae_1d": float("nan"),
+                "bias_1d": float("nan"),
+                "direction_accuracy": float("nan"),
+                "n_samples": 0,
+            }
+            buckets = {
+                "bias_big_up": float("nan"),
+                "bias_small_up": float("nan"),
+                "bias_small_down": float("nan"),
+                "bias_big_down": float("nan"),
+            }
         out["horizons"][k] = {**q, **buckets}
     out["mature"] = mature
     return out
@@ -173,8 +192,13 @@ def score_matured_forecasts(list_dir, panel, out_dir=ACCURACY_DIR):
             json.dump(result, fh, ensure_ascii=False, indent=2)
         detail.to_parquet(os.path.join(out_dir, f"detail_{fdate}.parquet"), index=False)
         h1 = result["horizons"][1]
-        logger.info("预测 %s 准确度: MAE(1d)=%.4f bias(1d)=%+.4f dir_acc=%.2f n=%d",
-                    fdate, h1["mae_1d"], h1["bias_1d"],
-                    h1.get("direction_accuracy", float("nan")), h1["n_samples"])
+        logger.info(
+            "预测 %s 准确度: MAE(1d)=%.4f bias(1d)=%+.4f dir_acc=%.2f n=%d",
+            fdate,
+            h1["mae_1d"],
+            h1["bias_1d"],
+            h1.get("direction_accuracy", float("nan")),
+            h1["n_samples"],
+        )
         scored.append(result)
     return scored

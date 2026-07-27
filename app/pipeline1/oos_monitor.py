@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 OOS 监控 + Kill Switch + BIAS 红灯规则 (IMPLEMENTATION_PLAN_v3.2 P25.3)
 ========================================================================
@@ -50,9 +50,13 @@ def bias_traffic_light(quality):
         'GREEN' | 'YELLOW' | 'RED'
     """
     bias_big_down = quality.get("bias_big_down", 0)
-    if bias_big_down and not (isinstance(bias_big_down, float) and np.isnan(bias_big_down)):
+    if bias_big_down and not (
+        isinstance(bias_big_down, float) and np.isnan(bias_big_down)
+    ):
         if bias_big_down > 0.02:
-            logger.critical("BIAS 红灯: bias_big_down=%.4f > 0.02, 大跌日模型高估!", bias_big_down)
+            logger.critical(
+                "BIAS 红灯: bias_big_down=%.4f > 0.02, 大跌日模型高估!", bias_big_down
+            )
             trigger_e4_l1("BIAS_BIG_DOWN_RED", bias_big_down)
             return "RED"
 
@@ -126,8 +130,13 @@ class OOSMonitor:
                 self.state = STATE_RED_SIM
                 action = "🔴 BIAS_RED: bias_big_down>0.02, E4-L1 模型降级"
                 logger.error(action)
-                return {"state": self.state, "action": action,
-                        "rolling_ic_5d": round(rolling, 4), "light": light, "bias_light": bias_light}
+                return {
+                    "state": self.state,
+                    "action": action,
+                    "rolling_ic_5d": round(rolling, 4),
+                    "light": light,
+                    "bias_light": bias_light,
+                }
 
         # E4 三色灯裁决
         if light == "RED":
@@ -135,16 +144,26 @@ class OOSMonitor:
             self.state = STATE_RED_SIM
             action = "🔴 L1: IC < u-2o, 模型失效嫌疑, 立即降级模拟盘"
             logger.error(action)
-            return {"state": self.state, "action": action,
-                    "rolling_ic_5d": round(rolling, 4), "light": light, "bias_light": bias_light}
+            return {
+                "state": self.state,
+                "action": action,
+                "rolling_ic_5d": round(rolling, 4),
+                "light": light,
+                "bias_light": bias_light,
+            }
         if light == "YELLOW":
             self._yellow_streak += 1
             if self._yellow_streak >= YELLOW_STREAK_L1:
                 self.state = STATE_RED_SIM
                 action = f"🟡x{self._yellow_streak} → L1: 连续黄灯, 降级模拟盘"
                 logger.error(action)
-                return {"state": self.state, "action": action,
-                        "rolling_ic_5d": round(rolling, 4), "light": light, "bias_light": bias_light}
+                return {
+                    "state": self.state,
+                    "action": action,
+                    "rolling_ic_5d": round(rolling, 4),
+                    "light": light,
+                    "bias_light": bias_light,
+                }
         else:
             self._yellow_streak = 0
 
@@ -176,18 +195,35 @@ class OOSMonitor:
             else:
                 self.state = STATE_YELLOW
                 action = "黄色预警: 人工复核"
-        return {"state": self.state, "action": action,
-                "rolling_ic_5d": round(rolling, 4), "light": light, "bias_light": bias_light}
+        return {
+            "state": self.state,
+            "action": action,
+            "rolling_ic_5d": round(rolling, 4),
+            "light": light,
+            "bias_light": bias_light,
+        }
 
     def kill_switch_check(self):
         if len(self.ic_history) < KILL_WINDOW * KILL_MONTHS:
             return {"retire": False, "reason": "样本不足"}
-        recent_2m = self.ic_history[-KILL_WINDOW * KILL_MONTHS:]
+        recent_2m = self.ic_history[-KILL_WINDOW * KILL_MONTHS :]
         m1 = float(np.mean(recent_2m[:KILL_WINDOW]))
         m2 = float(np.mean(recent_2m[KILL_WINDOW:]))
         if m1 < IC_WARN and m2 < IC_WARN:
             self.state = STATE_RETIRED
-            logger.critical("KILL SWITCH: 连续2月滚动20日 IC 均值 %.4f/%.4f < 0.01, 模型退役", m1, m2)
-            return {"retire": True, "month_ic": [round(m1, 4), round(m2, 4)],
-                    "procedure": ["停止实盘交易", "排查原因", "重新训练或调整特征", "通过 OOS 验收后才可重新上线"]}
+            logger.critical(
+                "KILL SWITCH: 连续2月滚动20日 IC 均值 %.4f/%.4f < 0.01, 模型退役",
+                m1,
+                m2,
+            )
+            return {
+                "retire": True,
+                "month_ic": [round(m1, 4), round(m2, 4)],
+                "procedure": [
+                    "停止实盘交易",
+                    "排查原因",
+                    "重新训练或调整特征",
+                    "通过 OOS 验收后才可重新上线",
+                ],
+            }
         return {"retire": False, "month_ic": [round(m1, 4), round(m2, 4)]}

@@ -169,38 +169,46 @@ class DailySelectionPipeline:
         import json
         import os
 
-        actual = actual_returns.get('label_pm_1d_net', actual_returns.get('label_1d_net', None))
+        actual = actual_returns.get(
+            "label_pm_1d_net", actual_returns.get("label_1d_net", None)
+        )
         if actual is None or len(forecast_df) == 0:
             return None
 
-        pred = forecast_df['pred_ret_1d'].values
-        act = actual.values if hasattr(actual, 'values') else actual
+        pred = forecast_df["pred_ret_1d"].values
+        act = actual.values if hasattr(actual, "values") else actual
 
         metrics = compute_quality_metrics(act, pred)
         buckets = compute_bias_buckets(act, pred)
         from .oos_monitor import bias_traffic_light
+
         light = bias_traffic_light({**metrics, **buckets})
 
         report = {
-            'date': trade_date,
+            "date": trade_date,
             **metrics,
             **buckets,
-            'traffic_light': light,
+            "traffic_light": light,
         }
 
         # WORM 入库
-        worm_dir = os.path.join('data', 'quality_reports')
+        worm_dir = os.path.join("data", "quality_reports")
         os.makedirs(worm_dir, exist_ok=True)
-        path = os.path.join(worm_dir, f'quality_{trade_date}.json')
-        with open(path, 'w', encoding='utf-8') as fh:
+        path = os.path.join(worm_dir, f"quality_{trade_date}.json")
+        with open(path, "w", encoding="utf-8") as fh:
             json.dump(report, fh, ensure_ascii=False, indent=2)
 
-        if light == 'RED':
-            logger.critical('BIAS 红灯触发: %s → E4-L1 模型降级', trade_date)
+        if light == "RED":
+            logger.critical("BIAS 红灯触发: %s → E4-L1 模型降级", trade_date)
 
-        logger.info('预测质量报告 %s: MAE=%.4f BIAS=%+.4f DirAcc=%.2f%% Light=%s',
-                    trade_date, metrics['mae_1d'], metrics['bias_1d'],
-                    metrics['direction_accuracy'] * 100, light)
+        logger.info(
+            "预测质量报告 %s: MAE=%.4f BIAS=%+.4f DirAcc=%.2f%% Light=%s",
+            trade_date,
+            metrics["mae_1d"],
+            metrics["bias_1d"],
+            metrics["direction_accuracy"] * 100,
+            light,
+        )
         return report
 
     # ---------------- 周度重训 (解耦) ----------------
