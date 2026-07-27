@@ -17,14 +17,12 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import logging
 import os
 import sys
 import time
 from datetime import datetime, timedelta
 
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -64,7 +62,9 @@ def fetch_all_stocks(limit: int = 0) -> pd.DataFrame | None:
 
     os.makedirs(CACHE_DIR, exist_ok=True)
     today = datetime.now().strftime("%Y%m%d")
-    start_date = (datetime.now() - timedelta(days=int(365 * YEARS + 60))).strftime("%Y%m%d")
+    start_date = (datetime.now() - timedelta(days=int(365 * YEARS + 60))).strftime(
+        "%Y%m%d"
+    )
 
     # 全 A 列表
     logger.info("Fetching stock list...")
@@ -79,10 +79,17 @@ def fetch_all_stocks(limit: int = 0) -> pd.DataFrame | None:
     # Backup: 中证1000 + 沪深300 成分股
     if not all_symbols:
         try:
-            for index_name, index_code in [("中证1000", "000852"), ("沪深300", "000300")]:
+            for index_name, index_code in [
+                ("中证1000", "000852"),
+                ("沪深300", "000300"),
+            ]:
                 try:
                     df = ak.index_stock_cons(symbol=index_code)
-                    symbols = df["品种代码"].tolist() if "品种代码" in df.columns else df["成分券代码"].tolist()
+                    symbols = (
+                        df["品种代码"].tolist()
+                        if "品种代码" in df.columns
+                        else df["成分券代码"].tolist()
+                    )
                     all_symbols.extend(symbols)
                     logger.info("Got %d stocks from %s", len(symbols), index_name)
                 except Exception:
@@ -93,6 +100,7 @@ def fetch_all_stocks(limit: int = 0) -> pd.DataFrame | None:
     # Last resort: local CSI 1000 proxy list
     if not all_symbols:
         import json
+
         proxy_path = os.path.join("data", "csi1000_stocks.json")
         if os.path.exists(proxy_path):
             with open(proxy_path) as f:
@@ -100,7 +108,9 @@ def fetch_all_stocks(limit: int = 0) -> pd.DataFrame | None:
             logger.warning("Using proxy stock list: %d symbols", len(all_symbols))
         else:
             # Bare minimum: top 500 liquid stocks
-            all_symbols = [f"60{i:04d}" for i in range(0, 500)] + [f"00{i:04d}" for i in range(1, 501)]
+            all_symbols = [f"60{i:04d}" for i in range(0, 500)] + [
+                f"00{i:04d}" for i in range(1, 501)
+            ]
             logger.warning("Using generated stock list: %d symbols", len(all_symbols))
 
     if not all_symbols:
@@ -134,8 +144,12 @@ def fetch_all_stocks(limit: int = 0) -> pd.DataFrame | None:
         for attempt in range(3):
             try:
                 df = ak.stock_zh_a_hist(
-                    symbol=sym, period="daily", start_date=start_date,
-                    end_date=today, adjust="qfq", timeout=30,
+                    symbol=sym,
+                    period="daily",
+                    start_date=start_date,
+                    end_date=today,
+                    adjust="qfq",
+                    timeout=30,
                 )
                 if df is not None and len(df) > 0:
                     break
@@ -154,16 +168,25 @@ def fetch_all_stocks(limit: int = 0) -> pd.DataFrame | None:
             time.sleep(0.05)
             continue
 
-        df = df.rename(columns={
-            "日期": "date", "开盘": "open", "最高": "high",
-            "最低": "low", "收盘": "close", "成交量": "volume",
-            "成交额": "amount", "换手率": "turnover_rate",
-        })
+        df = df.rename(
+            columns={
+                "日期": "date",
+                "开盘": "open",
+                "最高": "high",
+                "最低": "low",
+                "收盘": "close",
+                "成交量": "volume",
+                "成交额": "amount",
+                "换手率": "turnover_rate",
+            }
+        )
         df["date"] = pd.to_datetime(df["date"])
         for col in ["open", "high", "low", "close", "volume", "amount"]:
             df[col] = pd.to_numeric(df[col], errors="coerce")
         if "turnover_rate" in df.columns:
-            df["turnover_rate"] = pd.to_numeric(df["turnover_rate"], errors="coerce") / 100
+            df["turnover_rate"] = (
+                pd.to_numeric(df["turnover_rate"], errors="coerce") / 100
+            )
         else:
             df["turnover_rate"] = 0.02
 
@@ -174,8 +197,11 @@ def fetch_all_stocks(limit: int = 0) -> pd.DataFrame | None:
         df["pre_close"] = df["close"].shift(1).fillna(df["close"])
         df["close_hfq"] = df["close"]
         df["board"] = (
-            "STAR" if sym.startswith("688") else
-            "GEM" if sym.startswith(("300", "301")) else "main"
+            "STAR"
+            if sym.startswith("688")
+            else "GEM"
+            if sym.startswith(("300", "301"))
+            else "main"
         )
         df["industry"] = "ALL"
         df["is_st"] = False
@@ -198,8 +224,17 @@ def fetch_all_stocks(limit: int = 0) -> pd.DataFrame | None:
 
         # 进度
         if (i + 1) % 100 == 0:
-            logger.info("Fetch: %d/%d (cached=%d errors=%d)", i + 1, total,
-                        sum(1 for s in all_symbols[:i+1] if os.path.exists(os.path.join(CACHE_DIR, f"{s}.parquet"))), errors)
+            logger.info(
+                "Fetch: %d/%d (cached=%d errors=%d)",
+                i + 1,
+                total,
+                sum(
+                    1
+                    for s in all_symbols[: i + 1]
+                    if os.path.exists(os.path.join(CACHE_DIR, f"{s}.parquet"))
+                ),
+                errors,
+            )
         time.sleep(0.15)  # 反限流
 
     logger.info("Fetch done: %d/%d stocks, %d errors", len(frames), total, errors)
@@ -210,8 +245,12 @@ def fetch_all_stocks(limit: int = 0) -> pd.DataFrame | None:
     panel = pd.concat(frames, ignore_index=True)
     panel = panel.sort_values(["symbol", "date"]).reset_index(drop=True)
     panel.to_parquet(PANEL_PATH, index=False)
-    logger.info("Panel saved: %s (%d stocks, %d rows)", PANEL_PATH,
-                panel["symbol"].nunique(), len(panel))
+    logger.info(
+        "Panel saved: %s (%d stocks, %d rows)",
+        PANEL_PATH,
+        panel["symbol"].nunique(),
+        len(panel),
+    )
     return panel
 
 
@@ -224,25 +263,37 @@ def run_training(panel: pd.DataFrame, tag: str | None = None) -> dict:
 
     if tag is None:
         from datetime import date
+
         iso = date.today().isocalendar()
         tag = f"{iso[0]}W{iso[1]:02d}"
 
     os.makedirs(MODEL_DIR, exist_ok=True)
-    logger.info("Starting training: tag=%s stocks=%d rows=%d",
-                tag, panel["symbol"].nunique(), len(panel))
+    logger.info(
+        "Starting training: tag=%s stocks=%d rows=%d",
+        tag,
+        panel["symbol"].nunique(),
+        len(panel),
+    )
 
     t0 = time.time()
     results = train(
-        panel, tag=tag, model_dir=MODEL_DIR,
+        panel,
+        tag=tag,
+        model_dir=MODEL_DIR,
         use_ic_screen=True,
     )
     elapsed = time.time() - t0
 
     for board, res in results.items():
         oos_1d = res["oos"]["ics"].get("1d_reg", 0)
-        logger.info("[%s] model=%s OOS_IC(1d)=%.4f switched=%s time=%.0fs",
-                    board, os.path.basename(res["path"]),
-                    oos_1d, res["switched"], elapsed)
+        logger.info(
+            "[%s] model=%s OOS_IC(1d)=%.4f switched=%s time=%.0fs",
+            board,
+            os.path.basename(res["path"]),
+            oos_1d,
+            res["switched"],
+            elapsed,
+        )
     return results
 
 
@@ -278,9 +329,11 @@ def run_prediction(trade_date: str | None = None) -> pd.DataFrame | None:
     logger.info("Filtering to CSI 1000 constituents for prediction...")
     try:
         import akshare as ak
+
         csi1000 = ak.index_stock_cons(symbol="000852")
         csi1000_syms = set(
-            csi1000["品种代码"].tolist() if "品种代码" in csi1000.columns
+            csi1000["品种代码"].tolist()
+            if "品种代码" in csi1000.columns
             else csi1000["成分券代码"].tolist()
         )
         panel = panel[panel["symbol"].isin(csi1000_syms)]
@@ -305,9 +358,9 @@ def run_prediction(trade_date: str | None = None) -> pd.DataFrame | None:
             continue
         feats = features.build(df)
         latest = df["date"].max()
-        today_feat = feats[feats["symbol"].isin(
-            set(df[df["date"] == latest]["symbol"])
-        )]
+        today_feat = feats[
+            feats["symbol"].isin(set(df[df["date"] == latest]["symbol"]))
+        ]
         if len(today_feat) == 0:
             continue
         pred = predictor.predict(today_feat, board)
@@ -334,6 +387,7 @@ def run_prediction(trade_date: str | None = None) -> pd.DataFrame | None:
 
         # sync priority
         import json
+
         pq_path = os.path.join("data", "priority.json")
         existing = set()
         if os.path.exists(pq_path):
@@ -346,6 +400,7 @@ def run_prediction(trade_date: str | None = None) -> pd.DataFrame | None:
         # prediction DB
         try:
             from app.pipeline1.prediction_db import PredictionDB
+
             PredictionDB().insert_run(trade_date, result["list"])
         except Exception:
             pass
@@ -375,9 +430,9 @@ def main():
 
     # 1. Fetch
     if args.fetch_only or do_all:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  STAGE 1: Fetch {args.stocks or 'ALL'} A-stocks, {YEARS}yr data")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         panel = fetch_all_stocks(limit=args.stocks)
         if panel is None:
             print("ERROR: Data fetch failed")
@@ -386,9 +441,9 @@ def main():
 
     # 2. Train
     if args.train_only or do_all:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  STAGE 2: Train models (tag={tag})")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         if not os.path.exists(PANEL_PATH):
             print("ERROR: Panel not found. Run --fetch first.")
             sys.exit(1)
@@ -400,15 +455,19 @@ def main():
 
     # 3. Predict
     if args.predict_only or do_all:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  STAGE 3: Predict {trade_date}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         lst = run_prediction(trade_date)
         if lst is not None and len(lst):
-            print(f"\n{'Symbol':<8s} {'Board':<6s} {'Prob':<6s} {'Score':<10s} {'Pred1d':<9s}")
+            print(
+                f"\n{'Symbol':<8s} {'Board':<6s} {'Prob':<6s} {'Score':<10s} {'Pred1d':<9s}"
+            )
             print("-" * 50)
             for _, r in lst.head(20).iterrows():
-                print(f"{r['symbol']:<8s} {r['board']:<6s} {float(r['prob_up']):.0%}     {float(r['score']):.4f}     {float(r['pred_ret_1d']):+.4f}")
+                print(
+                    f"{r['symbol']:<8s} {r['board']:<6s} {float(r['prob_up']):.0%}     {float(r['score']):.4f}     {float(r['pred_ret_1d']):+.4f}"
+                )
         else:
             print("No stocks in list (safety valve or no candidates)")
 
