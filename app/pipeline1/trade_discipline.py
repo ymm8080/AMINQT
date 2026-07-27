@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 附录D.3/D.5 交易纪律状态机 + 交易日志 (IMPLEMENTATION_PLAN_v3.2 P23.5-P23.7)
 ============================================================================
@@ -111,8 +111,13 @@ def daily_fuse(portfolio):
 class TradingDiscipline:
     """D.3 硬规则状态机. P23.5-P23.7: 止损/时间止损/日保险丝支持 profile 覆盖."""
 
-    def __init__(self, hard_stop=HARD_STOP, daily_loss_limit=DAILY_LOSS_LIMIT,
-                 drawdown_limit=DRAWDOWN_LIMIT, profile=None):
+    def __init__(
+        self,
+        hard_stop=HARD_STOP,
+        daily_loss_limit=DAILY_LOSS_LIMIT,
+        drawdown_limit=DRAWDOWN_LIMIT,
+        profile=None,
+    ):
         self.hard_stop = hard_stop
         self.daily_loss_limit = daily_loss_limit
         self.daily_loss_limit_fixed = daily_loss_limit
@@ -133,7 +138,9 @@ class TradingDiscipline:
     def check_hard_stop(self, pnl):
         return bool(pnl <= self.hard_stop)
 
-    def check_time_stop(self, hold_days, ret, stock=None, entry_price=0.0, current_price=0.0):
+    def check_time_stop(
+        self, hold_days, ret, stock=None, entry_price=0.0, current_price=0.0
+    ):
         if hold_days < TIME_STOP_DAYS:
             return False
         if stock and entry_price > 0 and current_price > 0:
@@ -146,8 +153,13 @@ class TradingDiscipline:
             self._daily_drawdowns = self._daily_drawdowns[-60:]
         fused = False
         label = "NORMAL"
-        hist_dd_list = list(daily_drawdown_20d) if daily_drawdown_20d else (
-            self._daily_drawdowns[-20:] if len(self._daily_drawdowns) >= 5 else [])
+        hist_dd_list = (
+            list(daily_drawdown_20d)
+            if daily_drawdown_20d
+            else (
+                self._daily_drawdowns[-20:] if len(self._daily_drawdowns) >= 5 else []
+            )
+        )
         portfolio = {
             "daily_realized_pnl": daily_pnl_pct,
             "daily_drawdown_20d": hist_dd_list,
@@ -163,8 +175,17 @@ class TradingDiscipline:
         if fused and self.state == STATE_ACTIVE:
             self.state = STATE_LOCKED_TODAY
             self._locked_day = day
-            self._worm.append({"day": day, "event": "DAILY_FUSE", "pnl": round(daily_pnl_pct, 4), "label": label})
-            logger.error("D.3 日保险丝: 日亏 %.1f%% (%s), 当日锁仓", -daily_pnl_pct * 100, label)
+            self._worm.append(
+                {
+                    "day": day,
+                    "event": "DAILY_FUSE",
+                    "pnl": round(daily_pnl_pct, 4),
+                    "label": label,
+                }
+            )
+            logger.error(
+                "D.3 日保险丝: 日亏 %.1f%% (%s), 当日锁仓", -daily_pnl_pct * 100, label
+            )
             return {"state": self.state, "action": "LOCK_TODAY", "label": label}
         if self.state == STATE_LOCKED_TODAY and day > self._locked_day:
             self.state = STATE_ACTIVE
@@ -180,9 +201,15 @@ class TradingDiscipline:
             if dd <= -self.drawdown_limit:
                 self.state = STATE_HALTED
                 self.halt_day = day
-                self._worm.append({"day": day, "event": "HALT", "drawdown": round(dd, 4)})
-                logger.critical("D.3 停机线: 回撤 %.1f%% 触及 %.0f%%, 停机 %d 天复盘",
-                                -dd * 100, self.drawdown_limit * 100, HALT_DAYS)
+                self._worm.append(
+                    {"day": day, "event": "HALT", "drawdown": round(dd, 4)}
+                )
+                logger.critical(
+                    "D.3 停机线: 回撤 %.1f%% 触及 %.0f%%, 停机 %d 天复盘",
+                    -dd * 100,
+                    self.drawdown_limit * 100,
+                    HALT_DAYS,
+                )
                 return {"state": self.state, "action": "HALT"}
         return {"state": self.state, "action": "HOLD"}
 
@@ -200,7 +227,9 @@ class TradingDiscipline:
             return {"resumed": False, "reason": "未归因前不得重启"}
         self.attribution = attribution
         self.state = STATE_ACTIVE
-        self._worm.append({"day": day, "event": "RESUME", "attribution": attribution[:200]})
+        self._worm.append(
+            {"day": day, "event": "RESUME", "attribution": attribution[:200]}
+        )
         logger.warning("D.3 停机复盘完成, 重启交易")
         return {"resumed": True}
 
@@ -252,27 +281,38 @@ class TradeJournal:
             return {"n_trades": 0}
         wins, losses = pnls[pnls > 0], pnls[pnls <= 0]
         win_rate = float(len(wins) / n)
-        pl_ratio = (float(wins.mean() / abs(losses.mean()))
-                    if len(losses) and len(wins) else 0.0)
+        pl_ratio = (
+            float(wins.mean() / abs(losses.mean()))
+            if len(losses) and len(wins)
+            else 0.0
+        )
         max_streak = streak = 0
         for p in pnls:
             streak = streak + 1 if p <= 0 else 0
             max_streak = max(max_streak, streak)
-        return {"n_trades": n, "win_rate": round(win_rate, 4),
-                "pl_ratio": round(pl_ratio, 4),
-                "expectancy": round(float(pnls.mean()), 5),
-                "max_consec_loss": max_streak}
+        return {
+            "n_trades": n,
+            "win_rate": round(win_rate, 4),
+            "pl_ratio": round(pl_ratio, 4),
+            "expectancy": round(float(pnls.mean()), 5),
+            "max_consec_loss": max_streak,
+        }
 
     def unlock_check(self):
         s = self.sample_stats()
         n = s.get("n_trades", 0)
         if n < UNLOCK_MIN_TRADES:
             return {"unlock": False, "reason": f"样本不足 {n}/{UNLOCK_MIN_TRADES}", **s}
-        ok = (s["expectancy"] > UNLOCK_MIN_EXPECTANCY
-              and s["max_consec_loss"] <= UNLOCK_MAX_CONSEC_LOSS)
+        ok = (
+            s["expectancy"] > UNLOCK_MIN_EXPECTANCY
+            and s["max_consec_loss"] <= UNLOCK_MAX_CONSEC_LOSS
+        )
         if not ok:
-            logger.warning("D.10 解锁否决: 期望 %.3f%% / 最大连亏 %d",
-                           s["expectancy"] * 100, s["max_consec_loss"])
+            logger.warning(
+                "D.10 解锁否决: 期望 %.3f%% / 最大连亏 %d",
+                s["expectancy"] * 100,
+                s["max_consec_loss"],
+            )
         return {"unlock": ok, **s}
 
     def stage3_gate(self):
@@ -280,9 +320,14 @@ class TradeJournal:
         n = s.get("n_trades", 0)
         if n < STAGE3_MIN_TRADES:
             return {"pass": False, "reason": f"样本不足 {n}/{STAGE3_MIN_TRADES}", **s}
-        ok = (s["expectancy"] > STAGE3_MIN_EXPECTANCY
-              and s["max_consec_loss"] <= STAGE3_MAX_CONSEC_LOSS)
+        ok = (
+            s["expectancy"] > STAGE3_MIN_EXPECTANCY
+            and s["max_consec_loss"] <= STAGE3_MAX_CONSEC_LOSS
+        )
         if not ok:
-            logger.warning("P19.2 阶段三裁决否决: 期望 %.3f%% / 最大连亏 %d",
-                           s["expectancy"] * 100, s["max_consec_loss"])
+            logger.warning(
+                "P19.2 阶段三裁决否决: 期望 %.3f%% / 最大连亏 %d",
+                s["expectancy"] * 100,
+                s["max_consec_loss"],
+            )
         return {"pass": ok, **s}

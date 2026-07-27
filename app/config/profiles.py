@@ -71,28 +71,28 @@ PROFILES: dict[str, dict] = {
             "prob_up_calibrated": 0.68,
             "rank_score_top": 2,
             "pain_prob_max": 0.15,
-            "gap_pain_prob_max": 0.20,              # v3.2 新增
+            "gap_pain_prob_max": 0.20,  # v3.2 新增
             "sector_resonance_top": 5,
-            "sector_min_return": "median_250d",      # D-14, v3.2 新增
+            "sector_min_return": "median_250d",  # D-14, v3.2 新增
             "main_board_only": True,
             "event_window_blacklist": True,
-            "trend_filter": "VWAP_SUPPORT",          # D-12, v3.2 新增
+            "trend_filter": "VWAP_SUPPORT",  # D-12, v3.2 新增
         },
         "stop_loss_fixed": -0.04,
-        "stop_loss_atr_mult": 1.5,                   # D-20, v3.2 新增
-        "daily_loss_limit": "2sigma_20d",            # D-22, v3.2 改
-        "time_stop_baseline": "median_2d_return_20d",# D-21, v3.2 新增
+        "stop_loss_atr_mult": 1.5,  # D-20, v3.2 新增
+        "daily_loss_limit": "2sigma_20d",  # D-22, v3.2 改
+        "time_stop_baseline": "median_2d_return_20d",  # D-21, v3.2 新增
         "drawdown_limit": 0.15,
         "target_holding_days": (1, 2),
         "leverage": 1.0,
     },
     "aggressive_chinext": {
-        "_status": "CANDIDATE_PENDING_D10",          # 明确标注未解锁
+        "_status": "CANDIDATE_PENDING_D10",  # 明确标注未解锁
         "board_type": "chinext",
         "max_positions": 1,
-        "single_cap": 0.50,                          # 双创半仓
+        "single_cap": 0.50,  # 双创半仓
         "grade_A_entry": {
-            "prob_up_calibrated": 0.72,              # 门槛提高
+            "prob_up_calibrated": 0.72,  # 门槛提高
             "rank_score_top": 2,
             "pain_prob_max": 0.15,
             "gap_pain_prob_max": 0.20,
@@ -102,7 +102,7 @@ PROFILES: dict[str, dict] = {
             "event_window_blacklist": True,
             "trend_filter": "VWAP_SUPPORT",
         },
-        "stop_loss_fixed": -0.06,                    # 放宽
+        "stop_loss_fixed": -0.06,  # 放宽
         "stop_loss_atr_mult": 1.5,
         "daily_loss_limit": "2sigma_20d",
         "time_stop_baseline": "median_2d_return_20d",
@@ -135,9 +135,13 @@ def get_profile(name: str | None = None, allow_deprecated: bool = True) -> dict:
         raise KeyError(f"废弃档位禁止使用: {key}")
     if profile.get("_status") == "DEPRECATED":
         import logging
-        logging.getLogger(__name__).warning("使用废弃档位: %s, 请迁移至 aggressive_main", key)
+
+        logging.getLogger(__name__).warning(
+            "使用废弃档位: %s, 请迁移至 aggressive_main", key
+        )
     if profile.get("_status") == "CANDIDATE_PENDING_D10":
         import logging
+
         logging.getLogger(__name__).warning("双创攻击档 %s 待 D.10 裁决解锁", key)
     return profile
 
