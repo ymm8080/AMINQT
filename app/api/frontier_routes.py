@@ -72,147 +72,134 @@ def get_sectors() -> dict:
 
 @router.get("/signals/{symbol}")
 def get_signals(symbol: str) -> dict:
-    """买卖建议信号: 优先从 Pipeline1 清单生成, fallback demo.
+    """买卖信号: Pipeline2 V5.1 引擎生成 (买/卖纯函数 trigger).
 
-    真实信号: 从最新清单读 pred_ret/prob_up/score → 生成买入建议 +
-    止损价/止盈价/时间止损.
+    Pipeline1 提供候选池 + stop_price/pred_q50 → Pipeline2 V5.1 决策.
     """
     items = []
     demo = True
 
-    # 1. 尝试从最新清单生成真实信号
+    # 1. 检查是否在 Pipeline1 清单中
     lst_df, _ = ds.load_latest_list()
+    in_pool = False
+    stock_info = {}
     if lst_df is not None and len(lst_df):
         row = lst_df[lst_df["symbol"] == symbol]
         if len(row):
+            in_pool = True
             demo = False
             r = row.iloc[0]
-            score = float(r.get("score", 0))
-            prob = float(r.get("prob_up", 0.5))
-            pred_1d = float(r.get("pred_ret_1d", 0))
-            momentum = str(r.get("momentum", "medium"))
-            weight = float(r.get("weight", 0.1))
+            stock_info = {
+                "pred_q50": float(r.get("pred_q50", 0.005)),
+                "prob_up": float(r.get("prob_up", 0.5)),
+                "score": float(r.get("score", 0)),
+                "weight": float(r.get("weight", 0.1)),
+                "board": str(r.get("board", "main")),
+                "momentum": str(r.get("momentum", "medium")),
+            }
 
-            # 买入建议 — 在 Pipeline1 清单中即生成建议 (选股逻辑已在 pipeline 完成)
-            grade = (
-                "A"
-                if score > 0.15 and momentum == "high"
-                else "B"
-                if score > 0.05
-                else "C"
+    if in_pool:
+        # 2. Pipeline2 V5.1 买入引擎
+        try:
+            ohlc = ds.fetch_real_ohlc(symbol, days=30)
+            if ohlc is None:
+                ohlc = ds.demo_ohlc(symbol, days=30)
+            last_bar = ohlc.iloc[-1]
+            prev_bar = ohlc.iloc[-2] if len(ohlc) > 1 else last_bar
+            atr_pct = 0.02
+            if len(ohlc) >= 15:
+                tr = np.maximum(
+                    ohlc["high"].values - ohlc["low"].values,
+                    np.abs(ohlc["high"].values - np.roll(ohlc["close"].values, 1)),
+                )
+                atr_pct = float(np.mean(tr[-14:]) / last_bar["close"])
+            stop_price = last_bar["close"] * (1 + max(-0.04, -1.5 * atr_pct))
+
+            # Pipeline2 买入信号
+            from app.intraday.v51.buy_engine import BuyContext, trigger as buy_trigger
+            from app.intraday.v51.buy_engine import Bar as BuyBar
+
+            ctx = BuyContext(
+                symbol=symbol,
+                t="09:35",
+                price=float(last_bar["close"]),
+                pre_close=float(prev_bar["close"]),
+                pred_q50=stock_info["pred_q50"],
+                atr_pct=atr_pct,
+                stop_price=stop_price,
+                adv_20d=float(ohlc["volume"].tail(20).mean() * last_bar["close"]),
+                order_value=100000,
+                bar_amount=float(last_bar["volume"] * last_bar["close"]) if "volume" in last_bar.index else 2e6,
             )
-            items.append(
-                {
-                    "time": "09:35",
-                    "symbol": symbol,
-                    "side": "buy",
-                    "price": 0,
-                    "priority": f"P1-{grade}",
-                    "reason": f"prob={prob:.0%} pred_1d={pred_1d:+.2%} score={score:.3f} w={weight:.0%} {momentum}",
-                    "qty": 100,
-                    "executed": False,
-                }
+            bars = tuple(
+                BuyBar(t=str(row_date)[:16] if hasattr(row_date, '__str__') else str(row_date),
+                       close=float(row["close"]), volume=float(row.get("volume", 1e6)),
+                       amount=float(row["close"] * row.get("volume", 1e6)))
+                for row_date, row in ohlc.tail(5).iterrows()
             )
+            buy_signal = buy_trigger(ctx, bars)
+            if buy_signal["pass"]:
+                items.append({
+                    "time": "09:35", "symbol": symbol, "side": "buy",
+                    "price": round(float(last_bar["close"]), 2),
+                    "priority": f"P2-{buy_signal.get('positive', 'B1')}",
+                    "reason": f"V5.1买入·{buy_signal.get('positive', 'B1')} pred_q50={stock_info['pred_q50']:+.3f}",
+                    "qty": 100, "executed": False,
+                })
+            else:
+                veto_str = ", ".join(buy_signal.get("vetoes", ["未知"])) or "无否决"
+                items.append({
+                    "time": "09:35", "symbol": symbol, "side": "buy",
+                    "price": 0, "priority": "P2-BLOCKED",
+                    "reason": f"V5.1否决: {veto_str}",
+                    "qty": 0, "executed": False,
+                })
+        except Exception:
+            logger.warning("Pipeline2 buy_engine 失败", exc_info=True)
 
-            # 止损建议
-            stop_loss = -0.04
-            try:
-                from app.pipeline1.trade_discipline import adaptive_stop_loss
+        # 3. Pipeline2 V5.1 卖出信号
+        try:
+            from app.intraday.v51.sell_engine import SellContext, trigger as sell_trigger
+            from app.intraday.v51.position import Position
 
-                board = str(r.get("board", "main"))
-                stock = {"ATR_14": 0.02 * 100, "close": 100}
-                stop_loss = adaptive_stop_loss(stock, board)
-            except Exception:
-                pass
+            intraday = ds.fetch_real_intraday(symbol)
+            if intraday is None:
+                intraday = ds.demo_intraday(symbol)
+            latest_px = float(intraday["price"].iloc[-1]) if len(intraday) else float(last_bar["close"])
+            ld_price = round(float(prev_bar["close"]) * 0.9, 2)
 
-            items.append(
-                {
-                    "time": "14:50",
-                    "symbol": symbol,
-                    "side": "sell",
-                    "priority": "S1-止损",
-                    "reason": f"硬止损 {stop_loss:.1%} · 时间止损 2日",
-                    "qty": 0,
-                    "executed": False,
-                }
+            sctx = SellContext(
+                t="14:50", price=latest_px, limit_down_price=ld_price,
+                limit_up_price=round(float(prev_bar["close"]) * 1.1, 2),
+                atr_pct=atr_pct,
             )
-
-            # 移动止盈
-            items.append(
-                {
-                    "time": "14:50",
-                    "symbol": symbol,
-                    "side": "sell",
-                    "priority": "S2-止盈",
-                    "reason": "浮盈≥3%激活 · 回撤>3%卖出",
-                    "qty": 0,
-                    "executed": False,
-                }
+            pos = Position(
+                symbol=symbol, total_qty=100, sellable_qty=100,
+                entry_price=float(last_bar["close"]),
+                entry_date=str(ohlc.index[-1])[:10] if hasattr(ohlc.index[-1], '__str__') else str(ohlc.iloc[-1]["date"])[:10],
+                hold_days=1, max_price_since_entry=float(last_bar["high"]),
+                stop_price=stop_price,
             )
+            sell_signal = sell_trigger(sctx, pos)
+            if sell_signal["action"] != "HOLD":
+                items.append({
+                    "time": sell_signal.get("time", "14:50"), "symbol": symbol,
+                    "side": "sell", "price": round(latest_px, 2),
+                    "priority": sell_signal.get("rule", "S0"),
+                    "reason": sell_signal.get("reason", sell_signal["action"]),
+                    "qty": sell_signal.get("qty", 0), "executed": False,
+                })
+        except Exception:
+            logger.warning("Pipeline2 sell_engine 失败", exc_info=True)
 
-            # 持仓到期
-            items.append(
-                {
-                    "time": "14:55",
-                    "symbol": symbol,
-                    "side": "sell",
-                    "priority": "S5-到期",
-                    "reason": "持仓满2日尾盘轮动",
-                    "qty": 0,
-                    "executed": False,
-                }
-            )
-
-    # 2. Fallback: demo 信号
-    if demo:
-
-        def _minutes(t):
-            h, m = map(int, t.split(":"))
-            return h * 60 + m
-
-        def _price_at(sym, target):
-            df = ds.demo_intraday(sym)
-            tm = _minutes(target)
-            df["_tm"] = df["time"].apply(_minutes)
-            idx = (df["_tm"] - tm).abs().idxmin()
-            return float(df.loc[idx, "price"])
-
-        raw = [
-            {
-                "time": "09:44",
-                "symbol": "600519",
-                "side": "buy",
-                "priority": "L4-形态",
-                "reason": "下探后低峰确认回升",
-                "qty": 100,
-                "executed": True,
-            },
-            {
-                "time": "10:12",
-                "symbol": "300750",
-                "side": "sell",
-                "priority": "P7",
-                "reason": "涨7%+高换手减半",
-                "qty": 200,
-                "executed": False,
-            },
-            {
-                "time": "13:05",
-                "symbol": "601318",
-                "side": "sell",
-                "priority": "P10",
-                "reason": "浮盈≥20%人工复核",
-                "qty": 500,
-                "executed": True,
-            },
-        ]
+    # 4. Fallback: 不在清单中 → demo
+    if not in_pool:
         items = [
-            {**s, "price": round(_price_at(s["symbol"], s["time"]), 2)}
-            for s in raw
-            if s["symbol"] == symbol
+            {"time": "09:44", "symbol": symbol, "side": "buy", "priority": "L4-DEMO",
+             "reason": "不在Pipeline1清单中, 演示数据", "qty": 0, "price": 0, "executed": False},
         ]
 
-    return {"demo": demo, "symbol": symbol, "items": items}
+    return {"demo": not in_pool, "symbol": symbol, "items": items, "pipeline2": True}
 
 
 # ============================================================
@@ -236,16 +223,23 @@ def toggle_priority(item: WatchItem) -> dict:
 # ============================================================
 @router.get("/ohlc/{symbol}")
 def get_ohlc(symbol: str, days: int = 120) -> dict:
-    """K线数据 (生产: 历史库; 当前演示合成)."""
-    df = ds.demo_ohlc(symbol, days=min(days, 500))
+    """K线数据: 真实优先 (akshare), 失败回退 demo."""
+    df = ds.fetch_real_ohlc(symbol, days=min(days, 500))
+    demo = df is None
+    if demo:
+        df = ds.demo_ohlc(symbol, days=min(days, 500))
     df["date"] = df["date"].astype(str)
-    return {"symbol": symbol, "demo": True, "items": df.to_dict("records")}
+    return {"symbol": symbol, "demo": demo, "items": df.to_dict("records")}
 
 
 @router.get("/intraday/{symbol}")
 def get_intraday(symbol: str) -> dict:
-    df = ds.demo_intraday(symbol)
-    return {"symbol": symbol, "demo": True, "items": df.to_dict("records")}
+    """分时数据: 真实优先 (akshare 5min), 失败回退 demo."""
+    df = ds.fetch_real_intraday(symbol)
+    demo = df is None
+    if demo:
+        df = ds.demo_intraday(symbol)
+    return {"symbol": symbol, "demo": demo, "items": df.to_dict("records")}
 
 
 # ============================================================
@@ -491,7 +485,6 @@ def get_prediction_runs(limit: int = 60) -> dict:
     """预测运行日期列表."""
     try:
         from app.pipeline1.prediction_db import PredictionDB
-
         return {"runs": PredictionDB().list_runs(limit)}
     except Exception:
         return {"runs": []}
@@ -502,7 +495,6 @@ def get_prediction_run(date: str) -> dict:
     """单个预测日期完整记录 (stocks + outcomes)."""
     try:
         from app.pipeline1.prediction_db import PredictionDB
-
         run = PredictionDB().get_run(date)
     except Exception:
         run = None
@@ -516,7 +508,6 @@ def get_prediction_quality(limit: int = 60) -> dict:
     """所有日期预测质量汇总 (趋势)."""
     try:
         from app.pipeline1.prediction_db import PredictionDB
-
         return {"items": PredictionDB().all_quality(limit)}
     except Exception:
         return {"items": []}

@@ -44,6 +44,7 @@ export function SelectionPage({ onJumpToTrading }: { onJumpToTrading?: (symbol: 
   const [detailIdx, setDetailIdx] = useState(0)
   const [ohlc, setOhlc] = useState<OhlcBar[]>([])
   const [intraday, setIntraday] = useState<IntradayPoint[]>([])
+  const [chartDemo, setChartDemo] = useState(false)
   const [priority, setPriority] = useState<Set<string>>(new Set())
   const [sectors, setSectors] = useState<SectorItem[]>([])
   const [addSymbol, setAddSymbol] = useState('')
@@ -120,8 +121,8 @@ export function SelectionPage({ onJumpToTrading }: { onJumpToTrading?: (symbol: 
 
   useEffect(() => {
     if (!detail) return
-    api.ohlc(detail.symbol).then((r) => setOhlc(r.items)).catch(() => setOhlc([]))
-    api.intraday(detail.symbol).then((r) => setIntraday(r.items)).catch(() => setIntraday([]))
+    api.ohlc(detail.symbol).then((r) => { setOhlc(r.items); setChartDemo(r.demo) }).catch(() => setOhlc([]))
+    api.intraday(detail.symbol).then((r) => { setIntraday(r.items); if (r.demo) setChartDemo(true) }).catch(() => setIntraday([]))
   }, [detail])
 
 
@@ -297,9 +298,10 @@ export function SelectionPage({ onJumpToTrading }: { onJumpToTrading?: (symbol: 
               )}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
             <button className={tab === 'kline' ? 'primary' : ''} onClick={() => setTab('kline')}>日K</button>
             <button className={tab === 'intraday' ? 'primary' : ''} onClick={() => setTab('intraday')}>分时</button>
+            {chartDemo && <span className="badge">演示数据</span>}
           </div>
           {tab === 'kline' ? (
             <>
