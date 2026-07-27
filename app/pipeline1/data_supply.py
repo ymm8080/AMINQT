@@ -11,12 +11,61 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+FETCH_TIMEOUT = 120  # 单源单股拉取硬超时 (秒) — 防接口挂起卡死整个回填
+
+
+def _with_timeout(fn, timeout: float = FETCH_TIMEOUT):
+    """硬超时包装: 接口挂起 (无 timeout 的 requests/socket) 时按失败处理.
+
+    守护线程执行, 超时被遗弃 (不阻塞主流程与进程退出); 线程内异常原样抛出.
+    """
+    import threading
+
+    box: dict = {}
+
+    def runner() -> None:
+        try:
+            box["value"] = fn()
+        except Exception as exc:  # noqa: BLE001 — 透传给主线程
+            box["error"] = exc
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    thread.join(timeout)
+    if thread.is_alive():
+        raise TimeoutError(f"拉取超过 {timeout}s 挂起")
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+
+def _ak_call(fn, *args, retries: int = 3, backoff: float = 2.0, **kwargs):
+    """akshare 调用重试 (东财接口频繁断连/限流, 指数退避)."""
+    last: Exception | None = None
+    for attempt in range(retries):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001 — 网络层异常类型多样, 统一重试
+            last = exc
+            wait = backoff * (attempt + 1)
+            logger.warning(
+                "akshare 调用失败 (%s), %.1fs 后重试 %d/%d",
+                exc,
+                wait,
+                attempt + 1,
+                retries,
+            )
+            time.sleep(wait)
+    raise last
+
 
 # 标准列: symbol, date, board, open/high/low/close (raw), open_hfq..close_hfq,
 #         volume, amount, turnover_rate, pre_close, is_suspended, is_st,
@@ -58,7 +107,7 @@ class DataSupplyChain:
         self.cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
         self._fetcher = fetcher or self._akshare_fetch_daily
-        self._fetcher_hist = fetcher_hist or self._akshare_fetch_hist
+        self._fetcher_hist = fetcher_hist or self._default_fetch_hist
 
     # ---------------- 生产数据源 (akshare) ----------------
     def _akshare_fetch_daily(self, trade_date: str) -> pd.DataFrame:
@@ -87,6 +136,188 @@ class DataSupplyChain:
         df["pre_close"] = df["close"]  # spot 无昨收列时降级, 生产应用历史缓存回填
         return df
 
+    # ---------------- 历史数据: akshare 主源 + baostock 回退 ----------------
+    def _default_fetch_hist(self, symbol: str, start: str, end: str) -> pd.DataFrame:
+        """历史日线多源级联: akshare(东财) → sina → baostock.
+
+        东财对批量调用会临时封 IP (RemoteDisconnected), baostock 高频 login 会挂起;
+        某源一次失败后本次运行内跳过该源 (封禁是 IP 级且持续一段时间), 直接走下一源.
+        口径对齐: volume 统一为手 (sina/baostock 股 ÷100), turnover_rate 统一为 %
+        (sina turnover 是小数 ×100); close 跨源已校验精确一致 (hfq 基点各源不同,
+        但特征只用收益率/比值, 不受影响).
+        """
+        down = getattr(self, "_hist_sources_down", set())
+        self._hist_sources_down = down
+        last: Exception | None = None
+        for name, fn in (
+            ("akshare", self._akshare_fetch_hist),
+            ("sina", self._sina_fetch_hist),
+            ("baostock", self._baostock_fetch_hist),
+        ):
+            if name in down:
+                continue
+            try:
+                return _with_timeout(lambda: fn(symbol, start, end), FETCH_TIMEOUT)
+            except Exception as exc:
+                logger.warning(
+                    "%s 历史拉取失败 %s (%s) → 本次运行内切换下一源", name, symbol, exc
+                )
+                down.add(name)
+                last = exc
+        raise DataSupplyError(f"全部数据源失败 {symbol}: {last}")
+
+    @staticmethod
+    def _sina_fetch_hist(symbol: str, start: str, end: str) -> pd.DataFrame:
+        """sina 个股日线: raw (adjust="") + hfq 双价格合并.
+
+        产出列与 _akshare_fetch_hist 相同; volume 股→手 (÷100),
+        turnover 小数→% (×100) 对齐东财口径.
+        """
+        import akshare as ak
+
+        code6 = str(symbol).split(".")[0]
+        exchange = "sh" if code6.startswith(("6", "9")) else "sz"
+        sina_code = f"{exchange}{code6}"
+        raw = _ak_call(
+            ak.stock_zh_a_daily,
+            symbol=sina_code,
+            start_date=start,
+            end_date=end,
+            adjust="",
+        )
+        hfq = _ak_call(
+            ak.stock_zh_a_daily,
+            symbol=sina_code,
+            start_date=start,
+            end_date=end,
+            adjust="hfq",
+        )
+        if raw is None or len(raw) == 0:
+            raise DataSupplyError(f"sina 无数据: {symbol}")
+        hfq = hfq[["date", "open", "high", "low", "close"]]
+        hfq.columns = ["date", "open_hfq", "high_hfq", "low_hfq", "close_hfq"]
+        df = raw.merge(hfq, on="date", how="left")
+        df = df.rename(columns={"turnover": "turnover_rate"})
+        df["volume"] = df["volume"] / 100  # 股 → 手
+        df["turnover_rate"] = df["turnover_rate"] * 100  # 小数 → %
+        df["date"] = pd.to_datetime(df["date"])
+        df["symbol"] = code6
+        df["pre_close"] = df["close"].shift(1)
+        return df[
+            [
+                "symbol",
+                "date",
+                "open",
+                "high",
+                "low",
+                "close",
+                "open_hfq",
+                "high_hfq",
+                "low_hfq",
+                "close_hfq",
+                "volume",
+                "amount",
+                "turnover_rate",
+                "pre_close",
+            ]
+        ]
+
+    # baostock 会话复用: login 一次 (~5s), atexit 统一 logout;
+    # 逐股 login/logout 会让 300 只回填多花 ~40 分钟
+    _bs_session = None
+
+    def _baostock_login(self):
+        import baostock as bs
+
+        if DataSupplyChain._bs_session is None:
+            rs = bs.login()
+            if rs.error_code != "0":
+                raise DataSupplyError(f"baostock login 失败: {rs.error_msg}")
+            DataSupplyChain._bs_session = bs
+            import atexit
+
+            atexit.register(self._baostock_logout)
+        return DataSupplyChain._bs_session
+
+    @staticmethod
+    def _baostock_logout() -> None:
+        if DataSupplyChain._bs_session is not None:
+            try:
+                DataSupplyChain._bs_session.logout()
+            except Exception:  # 退出阶段异常忽略
+                pass
+            DataSupplyChain._bs_session = None
+
+    def _baostock_fetch_hist(self, symbol: str, start: str, end: str) -> pd.DataFrame:
+        """baostock 个股日线: raw (adjustflag=3) + hfq (adjustflag=1) 双价格合并.
+
+        产出列与 _akshare_fetch_hist 相同; volume 股→手 (÷100) 对齐 akshare 口径.
+        """
+        bs = self._baostock_login()
+        code6 = str(symbol).split(".")[0]
+        exchange = "sh" if code6.startswith(("6", "9")) else "sz"
+        bs_code = f"{exchange}.{code6}"
+        fields = "date,open,high,low,close,volume,amount,turn"
+
+        def query(adjustflag: str) -> pd.DataFrame:
+            rs = bs.query_history_k_data_plus(
+                bs_code,
+                fields,
+                start_date=start,
+                end_date=end,
+                frequency="d",
+                adjustflag=adjustflag,
+            )
+            rows = []
+            while rs.error_code == "0" and rs.next():
+                rows.append(rs.get_row_data())
+            df = pd.DataFrame(
+                rows,
+                columns=[
+                    "date",
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "volume",
+                    "amount",
+                    "turnover_rate",
+                ],
+            )
+            return df
+
+        raw = query("3")
+        if raw.empty:
+            raise DataSupplyError(f"baostock 无数据: {symbol}")
+        hfq = query("1")[["date", "open", "high", "low", "close"]]
+        hfq.columns = ["date", "open_hfq", "high_hfq", "low_hfq", "close_hfq"]
+        df = raw.merge(hfq, on="date", how="left")
+        for col in df.columns:
+            if col != "date":
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        df["volume"] = df["volume"] / 100  # baostock 股 → akshare 手
+        df["date"] = pd.to_datetime(df["date"])
+        df["symbol"] = code6
+        df["pre_close"] = df["close"].shift(1)
+        return df[
+            [
+                "symbol",
+                "date",
+                "open",
+                "high",
+                "low",
+                "close",
+                "open_hfq",
+                "high_hfq",
+                "low_hfq",
+                "close_hfq",
+                "volume",
+                "amount",
+                "turnover_rate",
+                "pre_close",
+            ]
+        ]
+
     @staticmethod
     def _akshare_fetch_hist(symbol: str, start: str, end: str) -> pd.DataFrame:
         """akshare 个股日线: raw (adjust="") + hfq (adjust="hfq") 双价格合并 (安全网 #0).
@@ -101,14 +332,16 @@ class DataSupplyChain:
         def fmt(d):
             return str(d).replace("-", "")
 
-        raw = ak.stock_zh_a_hist(
+        raw = _ak_call(
+            ak.stock_zh_a_hist,
             symbol=code6,
             period="daily",
             start_date=fmt(start),
             end_date=fmt(end),
             adjust="",
         )
-        hfq = ak.stock_zh_a_hist(
+        hfq = _ak_call(
+            ak.stock_zh_a_hist,
             symbol=code6,
             period="daily",
             start_date=fmt(start),
@@ -284,23 +517,28 @@ class DataSupplyChain:
         years: int = 5,
         end: str | None = None,
         refresh: bool = False,
+        throttle: float = 0.5,
     ) -> pd.DataFrame:
         """[B11] OHLCV 回填 ≥5 年 (≥1250 交易日, akshare/Tushare, 不受 iFinD 3 年限制).
 
         逐股拉取历史日线 (hfq+raw 双价格), 合并为面板; 单股失败告警并跳过
         (不中断整体回填). 筹码/资金流维持可得深度, 不足按缺失处理
-        (NaN 不参与缩尾分位计算).
+        (NaN 不参与缩尾分位计算). throttle: 每股间隔秒数 (东财限流防护).
         """
         end_dt = pd.Timestamp(end) if end else pd.Timestamp.now()
         start_dt = end_dt - pd.DateOffset(years=years) - pd.Timedelta(days=30)
         start = start_dt.strftime("%Y-%m-%d")  # API 边界: 转字符串
         end = end_dt.strftime("%Y-%m-%d")
         frames = []
-        for sym in symbols:
+        for i, sym in enumerate(symbols):
             try:
                 frames.append(self.fetch_history(sym, start, end, refresh=refresh))
             except DataSupplyError as exc:
                 logger.warning("B11 回填跳过 %s: %s", sym, exc)
+            if throttle and i < len(symbols) - 1:
+                time.sleep(throttle)
+            if (i + 1) % 50 == 0:
+                logger.info("B11 回填进度: %d/%d", i + 1, len(symbols))
         if not frames:
             raise DataSupplyError("B11 回填失败: 全部标的无数据")
         panel = pd.concat(frames, ignore_index=True)

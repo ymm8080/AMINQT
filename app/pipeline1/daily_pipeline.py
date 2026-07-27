@@ -1,9 +1,9 @@
 """
 Pipeline-1 每日选股编排 (P14 端到端, 生产主循环)
 =====================================================
-执行时序 (V3.5 月度重训解耦):
+执行时序 (V3.5 周度重训解耦, 用户 2026-07-22 裁决: 周频):
   15:00 前   数据拉取 (DataSupplyChain, 失败 → 三档降级)
-  15:30      每月第一个交易日启动重训 (T-1 数据, 与清单生成并行)
+  15:30      每周第一个交易日启动重训 (T-1 数据, 与清单生成并行)
   16:00      用当前模型生成当日清单 (绝不让重训阻塞清单)
   18:00 前   重训完成, OOS 合格切换, 次日生效
 
@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime
 
 import pandas as pd
 
@@ -94,20 +95,15 @@ class DailySelectionPipeline:
             logger.error("流动性安全阀强制空清单")
             return {"mode": "valve_empty", "list": pd.DataFrame(), "empty": True}
 
-        # 特征 (只需清洗后幸存股票的历史)
+        # 特征 (在清洗输出上构建: 清洗附加列如 turnover_stability_5 是模型特征,
+        # 用原始面板切片会导致训练/推理特征列不一致)
         feat_main = (
-            self.features.build(
-                panel[panel["symbol"].isin(main_df["symbol"].unique())],
-                self.float_shares_map,
-            )
+            self.features.build(main_df, self.float_shares_map)
             if len(main_df)
             else pd.DataFrame()
         )
         feat_dual = (
-            self.features.build(
-                panel[panel["symbol"].isin(dual_df["symbol"].unique())],
-                self.float_shares_map,
-            )
+            self.features.build(dual_df, self.float_shares_map)
             if len(dual_df)
             else pd.DataFrame()
         )
@@ -162,21 +158,28 @@ class DailySelectionPipeline:
         prev = [d for d in dates if d < trade_date]
         return self.load_list(prev[-1]) if prev else None
 
-    # ---------------- 月度重训 (解耦) ----------------
+    # ---------------- 周度重训 (解耦) ----------------
     @staticmethod
     def is_retrain_day(trade_date: str, trade_calendar: list[str]) -> bool:
-        """每月第一个交易日 → 15:30 启动重训."""
+        """每周第一个交易日 → 15:30 启动重训 (用户 2026-07-22 裁决: 周频).
+
+        判定: 当日与上一交易日分属不同 ISO 周.
+        """
         idx = trade_calendar.index(trade_date) if trade_date in trade_calendar else -1
         if idx <= 0:
             return False
-        return trade_date[:6] != trade_calendar[idx - 1][:6]
 
-    def monthly_retrain(
+        def iso_week(d: str) -> tuple[int, int]:
+            return datetime.strptime(d, "%Y%m%d").isocalendar()[:2]
+
+        return iso_week(trade_date) != iso_week(trade_calendar[idx - 1])
+
+    def weekly_retrain(
         self,
         panels: dict[str, pd.DataFrame],
         feature_cols_by_board: dict[str, list[str]],
         tag: str,
     ) -> dict:
-        """委托 DualTrackTrainer.monthly_retrain; 与 16:00 清单生成并行 (调用方排程)."""
+        """委托 DualTrackTrainer.weekly_retrain; 与 16:00 清单生成并行 (调用方排程)."""
         trainer = DualTrackTrainer()
-        return trainer.monthly_retrain(panels, feature_cols_by_board, tag)
+        return trainer.weekly_retrain(panels, feature_cols_by_board, tag)
