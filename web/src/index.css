@@ -1,13 +1,13 @@
 :root {
-  color-scheme: dark;
-  --bg: #0d1117;
-  --panel: #161b22;
-  --border: #30363d;
-  --text: #e6edf3;
-  --dim: #8b949e;
-  --up: #e54545;
-  --down: #26a69a;
-  --accent: #4f8ef7;
+  color-scheme: light;
+  --bg: #ffffff;
+  --panel: #f6f8fa;
+  --border: #d0d7de;
+  --text: #1f2328;
+  --dim: #636c76;
+  --up: #cf222e;
+  --down: #1a7f37;
+  --accent: #0969da;
 }
 * { box-sizing: border-box; }
 body {
@@ -37,7 +37,7 @@ nav button {
   cursor: pointer;
   font-size: 14px;
 }
-nav button.active { background: #21262d; color: var(--text); border-color: var(--border); }
+nav button.active { background: #ddf4ff; color: var(--accent); border-color: var(--border); }
 nav button:hover { color: var(--text); }
 main { flex: 1; padding: 24px 32px; overflow-y: auto; }
 .badge {
@@ -60,11 +60,11 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border); }
 th:first-child, td:first-child { text-align: left; }
 th { color: var(--dim); font-weight: 500; }
-tr:hover td { background: #1c2128; cursor: pointer; }
+tr:hover td { background: #f0f3f6; cursor: pointer; }
 .up { color: var(--up); }
 .down { color: var(--down); }
 .dim { color: var(--dim); }
-.selected-row td { background: #1f6feb22 !important; }
+.selected-row td { background: #0969da1a !important; }
 .grid { display: grid; gap: 16px; }
 .grid-2 { grid-template-columns: 1fr 1fr; }
 .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
@@ -81,7 +81,7 @@ button.primary {
 }
 button.primary:disabled { opacity: 0.5; cursor: default; }
 input, select {
-  background: #0d1117;
+  background: #ffffff;
   border: 1px solid var(--border);
   color: var(--text);
   padding: 6px 10px;

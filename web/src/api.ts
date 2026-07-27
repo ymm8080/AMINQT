@@ -79,7 +79,7 @@ export interface BacktestResult {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(`${BASE}${path}`, init)
+  const r = await fetch(`${BASE}${path}`, { cache: 'no-store', ...init })
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
   return r.json()
 }
