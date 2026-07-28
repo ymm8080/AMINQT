@@ -74,9 +74,9 @@ TRAIN_DAYS = 620
 ES_DAYS = SEG_MIN_DAYS["es"]
 CALIB_DAYS = SEG_MIN_DAYS["calib"]
 TEST_DAYS = SEG_MIN_DAYS["test"]  # 仅归因, 严禁反向调参
-HALF_YEAR_DAYS = 126  # 半年≈126交易日, 半年度阶梯加权: 每过一个半年权重折半
+HALF_LIFE = 250  # 半衰期加权 (天)
 ES_PATIENCE = 100  # [V3.8 §2.1] patience=100
-OOS_IC_MIN = 0.015  # 新模型切换门槛 (signed mean IC)
+OOS_IC_MIN = 0.01  # 新模型切换门槛 (signed mean IC, >0.01 即有效)
 
 LGB_PARAMS_REG = {
     "objective": "huber",
@@ -89,6 +89,33 @@ LGB_PARAMS_CLS = {
     "objective": "binary",
     "n_estimators": 1000,
     "learning_rate": 0.05,
+    "random_state": 42,
+    "verbosity": -1,
+}
+# 1d 预测信噪比极低 (日波动~3.4% vs 信号~0.1%), 全量树过拟合噪声
+LGB_PARAMS_REG_1D = {
+    "objective": "huber",
+    "n_estimators": 300,
+    "learning_rate": 0.03,
+    "max_depth": 4,
+    "num_leaves": 15,
+    "min_child_samples": 200,
+    "reg_alpha": 0.5,
+    "reg_lambda": 1.0,
+    "subsample": 0.7,
+    "random_state": 42,
+    "verbosity": -1,
+}
+LGB_PARAMS_CLS_1D = {
+    "objective": "binary",
+    "n_estimators": 300,
+    "learning_rate": 0.03,
+    "max_depth": 4,
+    "num_leaves": 15,
+    "min_child_samples": 200,
+    "reg_alpha": 0.5,
+    "reg_lambda": 1.0,
+    "subsample": 0.7,
     "random_state": 42,
     "verbosity": -1,
 }
@@ -129,25 +156,17 @@ class DualTrackTrainer:
         dates = sorted(df["date"].unique())[-window_total:]
         n = len(dates)
         seg_lens = _derive_seg_min_days(n)
-        # train 段补齐: 保证各段之和 = n (_derive_seg_min_days 已保证 train >= MIN_TRAIN_DAYS)
-        seg_lens["train"] = max(n - seg_lens["es"] - seg_lens["calib"] - seg_lens["test"], MIN_TRAIN_DAYS)
-        # 切片: test 取最后, es/calib 紧贴 test 前方, train 取最前
-        # 顺序: [train ... | es | calib | test]
-        t_len = seg_lens["test"]
-        c_len = seg_lens["calib"]
-        e_len = seg_lens["es"]
-        tr_len = n - e_len - c_len - t_len
-        if tr_len < MIN_TRAIN_DAYS:
-            raise RuntimeError(
-                f"窗口深度不足: {n} 交易日, train 仅剩 {tr_len} (< {MIN_TRAIN_DAYS})"
-            )
-        seg_dates = {
-            "train": dates[:tr_len],
-            "es": dates[tr_len : tr_len + e_len],
-            "calib": dates[tr_len + e_len : tr_len + e_len + c_len],
-            "test": dates[-t_len:],
-        }
-        seg_lens["train"] = tr_len
+        # train 段补齐: 保证各段之和 = n
+        seg_lens["train"] = n - seg_lens["es"] - seg_lens["calib"] - seg_lens["test"]
+        seg_lens["train"] = max(seg_lens["train"], MIN_TRAIN_DAYS)
+        # 切片: train → es → calib → test (时序)
+        pos = 0
+        seg_dates = {}
+        for k in ("train", "es", "calib", "test"):
+            seg_dates[k] = dates[pos : pos + seg_lens[k]]
+            pos += seg_lens[k]
+        # test 取最后一段 (保证是最近期数据)
+        seg_dates["test"] = dates[-seg_lens["test"] :]
         logger.info(
             "窗口切分: total=%d train=%d es=%d calib=%d test=%d",
             n,
@@ -159,35 +178,22 @@ class DualTrackTrainer:
         return {k: df[df["date"].isin(v)] for k, v in seg_dates.items()}
 
     @staticmethod
-    def time_weights(df: pd.DataFrame, half_year_days: int = HALF_YEAR_DAYS) -> np.ndarray:
-        """半年度阶梯加权: 同一半年段内权重恒定, 每过半年度权重折半.
+    def time_weights(df: pd.DataFrame, half_life: int = HALF_LIFE) -> np.ndarray:
+        """半衰期加权: 旧样本权重指数衰减, 让模型贴近近期市场结构.
 
-        0~126天前:    weight=1.000
-        126~252天前:  weight=0.500
-        252~378天前:  weight=0.250
-        378~504天前:  weight=0.125
-        504天以上:     weight=0.0625 (每再加126天再折半)
-
-        日历换算: 126交易日 ≈ 176自然日, 用 Timedelta 跨周末/假期保序.
-
-        [B10] 方向断言: 日期升序轴上 weights[-1] >= weights[0].
+        [B10] 方向断言: 日期升序轴上 weights[-1] > weights[0]
+        (最新样本权重=1.0), 写反即中止 — 训练前强制检查.
         """
         dates = sorted(df["date"].unique())
-        latest = dates[-1]
-        half_year = pd.Timedelta(days=int(half_year_days * 1.4))  # 126交易日→176自然日
-
-        def bucket(d: pd.Timestamp) -> int:
-            return int((latest - d) / half_year)
-
-        age_bucket = {d: bucket(d) for d in dates}
+        age = {d: len(dates) - 1 - i for i, d in enumerate(dates)}
         if len(dates) > 1:
-            w_first = 0.5 ** age_bucket[dates[0]]
-            w_last = 0.5 ** age_bucket[dates[-1]]
-            assert w_last >= w_first, (
-                "B10 权重方向错误: 最新样本权重必须最大 "
-                f"(w_last={w_last:.4f} < w_first={w_first:.4f})"
+            w_first = 0.5 ** (age[dates[0]] / half_life)
+            w_last = 0.5 ** (age[dates[-1]] / half_life)
+            assert w_last > w_first, (
+                "B10 半衰期权重方向错误: 最新样本权重必须最大 "
+                f"(w_last={w_last:.4f} <= w_first={w_first:.4f})"
             )
-        return np.array([0.5 ** age_bucket[d] for d in df["date"]])
+        return np.array([0.5 ** (age[d] / half_life) for d in df["date"]])
 
     # ---------------- 单模型训练 ----------------
     def _train_one(
@@ -221,10 +227,14 @@ class DualTrackTrainer:
         y_es = es[label].values
         w = self.time_weights(train)
 
-        if kind.endswith("cls"):
-            model = lgb.LGBMClassifier(**LGB_PARAMS_CLS)
+        if kind.startswith("1d"):
+            params = LGB_PARAMS_CLS_1D if kind.endswith("cls") else LGB_PARAMS_REG_1D
         else:
-            model = lgb.LGBMRegressor(**LGB_PARAMS_REG)
+            params = LGB_PARAMS_CLS if kind.endswith("cls") else LGB_PARAMS_REG
+        if kind.endswith("cls"):
+            model = lgb.LGBMClassifier(**params)
+        else:
+            model = lgb.LGBMRegressor(**params)
         # ES 段长度由 split_window 按统计下限推导, 保证 >= MIN_ES_DATES
         es_dates = es["date"].nunique() if "date" in es.columns else len(es)
         use_es = es_dates >= MIN_ES_DATES
@@ -257,21 +267,17 @@ class DualTrackTrainer:
     ) -> dict:
         """训练一个板块的 4 个模型 + E1 分位数五模型 + E2 痛苦预警 (标签齐备时).
 
-        窗口深度自适应: ≥1250 交易日 (B11 达标) → WINDOW_TOTAL; 否则 min(WINDOW_TRANSITION, 实际深度).
+        固定使用 WINDOW_TOTAL 窗口 (B11 过渡逻辑已废弃).
         段长按比例动态分配 (split_window), 保证 es/calib/test 各 >= 最小值.
         """
         depth = int(df["date"].nunique()) if len(df) else 0
-        window = (
-            WINDOW_TOTAL if depth >= B11_FULL_DEPTH else min(WINDOW_TRANSITION, depth)
-        )
+        window = WINDOW_TOTAL  # B11 过渡逻辑已废弃, 始终使用全窗口
         min_non_train = sum(v for k, v in SEG_MIN_DAYS.items() if k != "train")
         if window - min_non_train < MIN_TRAIN_DAYS:
             raise RuntimeError(
                 f"[{board}] 训练样本深度不足: {depth} 交易日 "
                 f"(需 ≥ {ES_DAYS + CALIB_DAYS + TEST_DAYS + MIN_TRAIN_DAYS})"
             )
-        if window != WINDOW_TOTAL:
-            logger.info("[%s] B11 过渡窗口: 深度 %d 日 → 窗口 %d", board, depth, window)
         segs = self.split_window(df, window)
         out = {"board": board, "feature_cols": feature_cols, "models": {}, "segs": segs}
         for kind in MODEL_KINDS:
@@ -424,8 +430,13 @@ class DualTrackTrainer:
         n_calib_dates = (
             calib["date"].nunique() if "date" in calib.columns else len(calib)
         )
-        # 统一用 Platt Scaling: Isotonic 在高低端会饱和到 0/1 (非真实概率)
-        method = "platt"
+        method = "platt" if n_calib_dates < MIN_ES_DATES else "isotonic"
+        if n_calib_dates < MIN_ES_DATES:
+            logger.warning(
+                "[%s] 校准集仅 %d 交易日, 使用 Platt (Isotonic 小样本退化为阶跃函数)",
+                trained["board"],
+                n_calib_dates,
+            )
         calibrator = ProbCalibrator(method=method).fit(raw, calib[label].values)
         trained["calibrator"] = calibrator
         return calibrator

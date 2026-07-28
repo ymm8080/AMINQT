@@ -15,6 +15,7 @@ import pandas as pd
 from .cleaning_pipeline import get_limit_pct
 
 MA_WINDOWS = (5, 10, 20, 60, 120, 250)
+BIAS_PERIODS = (5, 10, 20, 60, 120, 250)  # 乖离率周期 (与 MA_WINDOWS 一致, 独立常量防耦合)
 # 行业中性化目标列 (申万一级行业内 rank)
 NEUTRALIZE_COLS = ["PE_log", "PB_LF", "turnover_rate", "chip_concentration"]
 # 关键因子 missingness 指示
@@ -63,6 +64,7 @@ class FeatureEngineV35:
         df = self.dim15_alpha_factors(df)
         df = self.dim16_candlestick(df)
         df = self.dim17_extended_factors(df)
+        df = self.dim20_short_horizon(df)  # 短周期特征 (专攻 1d 预测信噪比)
         df = self.dim18_lhb(df)
         df = self.dim19_amihud(df)  # E6
         df = self.industry_neutralize(df)
@@ -84,15 +86,19 @@ class FeatureEngineV35:
         if "board" not in df.columns:
             df["board"] = df["symbol"].map(board_of)
 
-        skip_prefix = ("label_", "is_limit_up", "is_one_word", "limit_up_",
-                       "is_missing_", "is_pre_", "is_post_", "is_st", "is_suspended")
-        skip_exact = {"symbol", "date", "board", "industry", "name", "tradestatus",
-                       "close_hfq", "open_hfq", "high_hfq", "low_hfq",
-                       "list_days", "announce_date", "churn_suspect",
-                       "score_rank", "rank_amount", "rank_ff_turnover",
-                       "liquidity_score", "market_state", "schema_version",
-                       "PE_TTM", "is_virtual", "price_1455", "adv20",
-                       "limit_pct", "touched_limit_up", "time", "VAR5", "VAR51"}
+        skip_prefix = (
+            "label_", "is_limit_up", "is_one_word", "limit_up_",
+            "is_missing_", "is_pre_", "is_post_", "is_st", "is_suspended",
+        )
+        skip_exact = {
+            "symbol", "date", "board", "industry", "name", "tradestatus",
+            "close_hfq", "open_hfq", "high_hfq", "low_hfq",
+            "list_days", "announce_date", "churn_suspect",
+            "score_rank", "rank_amount", "rank_ff_turnover",
+            "liquidity_score", "market_state", "schema_version",
+            "PE_TTM", "is_virtual", "price_1455", "adv20",
+            "limit_pct", "touched_limit_up", "time", "VAR5", "VAR51",
+        }
 
         src_cols = [
             c for c in df.columns
@@ -116,7 +122,16 @@ class FeatureEngineV35:
 
     # ---------------- ①价量动能 ----------------
     def dim01_price_volume(self, df: pd.DataFrame) -> pd.DataFrame:
-        """MACD(12,26,9) / RSI(14) / KDJ(9,3,3) / 60日乖离率 / 量价背离."""
+        """MACD(12,26,9) / RSI(14) / KDJ(9,3,3) / 乖离率 (5/10/20/60/120/250) / 量价背离 / 交叉信号 / 量比.
+
+        乖离率/bias 列如果面板已预计算 (Agent 1 enrichment), 直接使用, 跳过重算.
+        """
+
+        # 检查哪些列已预计算 (逐周期, 灵活兼容部分预计算)
+        _needed_bias = [w for w in BIAS_PERIODS if f"bias_{w}" not in df.columns]
+        _need_5_20_cross = "bias_5_20_cross" not in df.columns
+        _need_20_60_cross = "bias_20_60_cross" not in df.columns
+        _need_vol_ratio = "ma_vol_ratio_5_20" not in df.columns
 
         def per_stock(g: pd.DataFrame) -> pd.DataFrame:
             c = g["close_hfq"]
@@ -144,21 +159,39 @@ class FeatureEngineV35:
             g["K"] = rsv.ewm(alpha=1 / 3, adjust=False).mean()
             g["D"] = g["K"].ewm(alpha=1 / 3, adjust=False).mean()
             g["J"] = 3 * g["K"] - 2 * g["D"]
-            # 60日乖离率 (需上市>=250天才有完整值 → 步骤1 已保证)
-            g["bias_60"] = c / c.rolling(60, min_periods=60).mean() - 1
+            # 乖离率 (bias) — 仅补预计算未覆盖的周期
+            for w in _needed_bias:
+                g[f"bias_{w}"] = c / c.rolling(w, min_periods=w).mean() - 1
+            # 交叉信号 (依赖 bias 列, 已确保存在)
+            if _need_5_20_cross:
+                g["bias_5_20_cross"] = np.sign(g["bias_5"] - g["bias_20"]).diff().fillna(0)
+            if _need_20_60_cross:
+                g["bias_20_60_cross"] = np.sign(g["bias_20"] - g["bias_60"]).diff().fillna(0)
             # 量价背离: 价涨量缩=1 / 价跌量增=-1
             pc = c.pct_change()
             vc = g["volume"].pct_change()
             g["pv_divergence"] = np.where(
                 (pc > 0) & (vc < 0), 1, np.where((pc < 0) & (vc > 0), -1, 0)
             )
+            # 量比 (5日均量 / 20日均量)
+            if _need_vol_ratio:
+                v = g["volume"]
+                g["ma_vol_ratio_5_20"] = _safe_divide(
+                    v.rolling(5, min_periods=3).mean(),
+                    v.rolling(20, min_periods=10).mean(),
+                )
             return g
 
         return _apply_per_stock(df, per_stock)
 
     # ---------------- ②波动率 ----------------
     def dim02_volatility(self, df: pd.DataFrame) -> pd.DataFrame:
-        """ATR(14)/收盘价 (归一化) + 布林带宽度 (20日, 2σ). 振幅已删 (与 ATR 共线)."""
+        """ATR(14)/收盘价 (归一化) + 布林带宽度 (20日, 2σ) + 5日振幅.
+
+        amplitude_5d 如面板已预计算则跳过重算.
+        """
+
+        _need_amplitude_5d = "amplitude_5d" not in df.columns
 
         def per_stock(g: pd.DataFrame) -> pd.DataFrame:
             h = g.get("high_hfq", g["high"])
@@ -171,6 +204,10 @@ class FeatureEngineV35:
             ma20 = c.rolling(20, min_periods=20).mean()
             sd20 = c.rolling(20, min_periods=20).std()
             g["BB_width"] = (4 * sd20) / ma20
+            # 5日振幅均值 (预计算则跳过)
+            if _need_amplitude_5d:
+                amp = (g["high"] - g["low"]) / g["pre_close"].replace(0, np.nan)
+                g["amplitude_5d"] = amp.rolling(5, min_periods=3).mean()
             return g
 
         return _apply_per_stock(df, per_stock)
@@ -528,6 +565,57 @@ class FeatureEngineV35:
             return g
 
         return _apply_per_stock(df, per_stock)
+
+    # ---------------- ⑳ 短周期特征 (专攻 1d 预测信噪比) ----------------
+    def dim20_short_horizon(self, df: pd.DataFrame) -> pd.DataFrame:
+        """短周期特征: 隔夜跳空/日内动量/连涨连跌/均值回复 — 1d 预测专用信号.
+
+        1d 预测信噪比极低 (日波动 ~3.4% vs 信号 ~0.1%), 需要捕捉日内微观结构.
+        全量计算用 groupby("symbol") rolling, 无前瞻偏差.
+        """
+        def _per_stock(g: pd.DataFrame) -> pd.DataFrame:
+            g = g.sort_values("date")
+            c, o, h, l, v = g["close"], g["open"], g["high"], g["low"], g["volume"]
+            pc = c.shift(1)
+
+            # 隔夜跳空方向 (前收→今开)
+            g["overnight_ret"] = (o / pc - 1).replace([np.inf, -np.inf], np.nan) * 100
+
+            # 日内动量 (今开→今收)
+            g["intraday_momentum"] = (c / o - 1).replace([np.inf, -np.inf], np.nan) * 100
+
+            # 日内振幅 (high-low spread, 反映日内博弈烈度)
+            g["intraday_amplitude"] = (h / l - 1).replace([np.inf, -np.inf], np.nan) * 100
+
+            # 连涨/连跌天数 (最近 5 日)
+            up = (c > pc).astype(int)
+            streak = up.copy()
+            for i in range(1, min(6, len(g))):
+                streak.iloc[i:] = (streak.iloc[i:] + 1) * (up.iloc[i:] == up.iloc[i:].shift(i))
+            g["up_streak"] = up * streak  # 正=连涨天数, 0=当日下跌
+            g["dn_streak"] = (1 - up) * streak  # 正=连跌天数, 0=当日上涨
+
+            # 5 日收益率均值回复信号 (反转效应)
+            ret_5d = c / c.shift(5) - 1
+            g["ret_reversal_5d"] = -ret_5d  # 正=超跌反弹预期, 负=超涨回调预期
+
+            # 隔夜跳空 vs 5日均值 (异常跳空检测)
+            gap_ma5 = (o / pc - 1).rolling(5, min_periods=5).mean()
+            g["gap_vs_ma5"] = ((o / pc - 1) - gap_ma5).replace([np.inf, -np.inf], np.nan) * 100
+
+            # 尾盘拉升检测 (最后30分钟无法直接计算, 用日内动量+次日开盘代理)
+            # close vs high of day: 收盘在日内高位 → 尾盘强势
+            g["close_vs_high"] = (c / h - 1).replace([np.inf, -np.inf], np.nan) * 100
+            g["close_vs_low"] = (c / l - 1).replace([np.inf, -np.inf], np.nan) * 100
+
+            # 量价背离: 涨但缩量 / 跌但放量 (1d 反转信号)
+            ret = c / pc - 1
+            vol_chg = v / v.shift(1).replace(0, np.nan)
+            g["vol_price_divergence"] = np.sign(ret) * (1.0 / vol_chg.clip(0.1, 10) - 1)
+
+            return g
+
+        return _apply_per_stock(df, _per_stock)
 
     # ---------------- ⑱ 龙虎榜特征 (源自 uzi-skill lhb-analyzer) ----------------
     def dim18_lhb(self, df: pd.DataFrame) -> pd.DataFrame:

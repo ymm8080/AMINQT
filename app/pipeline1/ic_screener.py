@@ -23,12 +23,13 @@ from app.utils.daily_rank_ic import daily_rank_ic_series, mean_rank_ic
 
 logger = logging.getLogger(__name__)
 
-IC_STRONG = 0.015  # 有效因子 (signed mean IC)
+IC_STRONG = 0.01  # 有效因子 (signed mean IC, >0.01 即有效)
 IC_WEAK = 0.005  # 弱因子 (观察)
 ROLLING_WINDOW = 60  # 滚动 IC 窗口 (交易日)
 ROLLING_MEAN_MIN = 0.01  # 60日滚动IC均值下限 (原0.02太严, IC>0.01即有微弱预测力)
 ROLLING_POS_RATIO_MIN = 0.50  # 滚动IC正值比例 (原0.60太严, 过半即可)
-L2_NEG_PERIODS = 6  # [E4-L2] 连续 6 期滚动 IC 为负 → 自动剔除 (原3期太严格, 错杀太多)
+L2_NEG_PERIODS = 10  # [E4-L2] 连续 N 期滚动 IC 为负 → 自动剔除 (提高至10期, 允许周期性回撤)
+L2_RECOVERY_PERIODS = 3  # 连续 N 期正向 IC → 解除剔除, 恢复候选资格
 ICIR_MIN = 0.30  # [P18] IC 稳定性: |IC| / IC_std < 0.3 → 信号不稳, 降级 (杀稀疏/噪声因子)
 
 
@@ -199,11 +200,30 @@ class ICScreener:
                 grade = "weak"
             else:
                 grade = "dead"
-            # [E4-L2] 连续 3 期窗口 IC 为负 (带符号) → 自动剔除
+            # [E4-L2] 连续 N 期窗口 IC 为负 → 自动剔除; 连续 M 期正向 → 恢复
             signed_ic = self._signed_daily_ic_mean(train_df, f, label_of[1])
-            neg_streak = l2_history.get(f, 0)
-            neg_streak = neg_streak + 1 if signed_ic < 0 else 0
-            l2_history[f] = neg_streak
+            entry = l2_history.get(f, {})
+            if isinstance(entry, (int, float)):
+                entry = {"neg": int(entry), "pos": 0}  # migrate old format
+            neg_streak = entry.get("neg", 0)
+            pos_streak = entry.get("pos", 0)
+            if signed_ic < 0:
+                neg_streak += 1
+                pos_streak = 0
+            else:
+                pos_streak += 1
+                if neg_streak >= L2_NEG_PERIODS:
+                    # was evicted — need L2_RECOVERY_PERIODS positive windows to revive
+                    if pos_streak < L2_RECOVERY_PERIODS:
+                        pass  # still evicted, waiting for recovery
+                    else:
+                        neg_streak = 0
+                        pos_streak = 0
+                        logger.info("E4-L2: 因子 %s 连续 %d 期正向 IC, 恢复候选资格", f, L2_RECOVERY_PERIODS)
+                else:
+                    neg_streak = 0
+                    pos_streak = 0
+            l2_history[f] = {"neg": neg_streak, "pos": pos_streak}
             l2_evicted = neg_streak >= L2_NEG_PERIODS
             if l2_evicted and grade != "dead":
                 grade = "dead"
