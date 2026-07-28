@@ -23,12 +23,13 @@ from app.utils.daily_rank_ic import daily_rank_ic_series, mean_rank_ic
 
 logger = logging.getLogger(__name__)
 
-IC_STRONG = 0.03  # 有效因子
-IC_WEAK = 0.01  # 弱因子 (观察)
+IC_STRONG = 0.015  # 有效因子 (signed mean IC)
+IC_WEAK = 0.005  # 弱因子 (观察)
 ROLLING_WINDOW = 60  # 滚动 IC 窗口 (交易日)
 ROLLING_MEAN_MIN = 0.01  # 60日滚动IC均值下限 (原0.02太严, IC>0.01即有微弱预测力)
 ROLLING_POS_RATIO_MIN = 0.50  # 滚动IC正值比例 (原0.60太严, 过半即可)
 L2_NEG_PERIODS = 6  # [E4-L2] 连续 6 期滚动 IC 为负 → 自动剔除 (原3期太严格, 错杀太多)
+ICIR_MIN = 0.30  # [P18] IC 稳定性: |IC| / IC_std < 0.3 → 信号不稳, 降级 (杀稀疏/噪声因子)
 
 
 class ICScreener:
@@ -41,8 +42,27 @@ class ICScreener:
     # ---------------- 单因子 IC ----------------
     @staticmethod
     def rank_ic(df: pd.DataFrame, factor: str, label: str) -> float:
-        """横截面 Rank IC 均值 (按 date 分组 Spearman, 再取时间均值)."""
-        return mean_rank_ic(df, factor, label, abs_mean=True)
+        """横截面 Rank IC 均值 (带符号, 日度 Spearman 时间均值)."""
+        return mean_rank_ic(df, factor, label, abs_mean=False)
+
+    # ---------------- IC 稳定性 (P18) ----------------
+    @staticmethod
+    def ic_stability(df: pd.DataFrame, factor: str, label: str) -> float:
+        """ICIR = |IC_mean| / IC_std — 信号稳定性 (杀稀疏/噪声因子).
+
+        IC 高但日间波动剧烈 → ICIR 低 → 不可靠.
+        IC 中等但稳定正 → ICIR 高 → 可靠.
+        阈值: ICIR < 0.3 → 降级.
+        """
+        sub = df[["date", factor, label]].dropna()
+        if len(sub) < 30:
+            return 0.0
+        ic_series = daily_rank_ic_series(sub, factor, label)
+        if len(ic_series) < 10:
+            return 0.0
+        ic_std = float(ic_series.std())
+        ic_mean = float(ic_series.mean())
+        return abs(ic_mean) / ic_std if ic_std > 0 else 0.0
 
     # ---------------- Newey-West HAC t 统计量 (B6) ----------------
     @staticmethod
@@ -81,7 +101,10 @@ class ICScreener:
     def rolling_ic_dual(
         df: pd.DataFrame, factor: str, label: str, window: int = ROLLING_WINDOW
     ) -> tuple[float, float]:
-        """滚动 IC 双指标 (D13): (滚动 IC 均值, 滚动 IC 正值比例)."""
+        """滚动 IC 双指标 (D13): (滚动 IC 均值, 主导方向日占比).
+
+        主导方向日占比 = max(IC>0天数, IC<0天数) / 总天数, 衡量方向一致性.
+        """
         sub = df[["date", factor, label]].dropna()
         dates = sorted(sub["date"].unique())
         if len(dates) < window:
@@ -95,15 +118,20 @@ class ICScreener:
         if len(rolls) == 0:
             return 0.0, 0.0
         return float(rolls.mean()), float(
-            (daily_ic.abs() > 0).mean() if len(daily_ic) else 0.0
+            max((daily_ic > 0).mean(), (daily_ic < 0).mean()) if len(daily_ic) else 0.0
         )
 
     # ---------------- 分类模型 AUC 筛选 ----------------
     @staticmethod
     def auc_score(df: pd.DataFrame, factor: str, label: str = "label_cls") -> float:
-        """单因子对分类标签的 AUC (方向无关: max(auc, 1-auc))."""
+        """单因子对分类标签的 AUC (方向无关: max(auc, 1-auc)).
+        [B9] label_pm_cls 优先于 label_cls, 调用方应显式传入.
+        """
         from sklearn.metrics import roc_auc_score
 
+        # [B9] PM 执行口径分类标签优先
+        if label == "label_cls" and "label_pm_cls" in df.columns:
+            label = "label_pm_cls"
         sub = df[[factor, label]].dropna()
         if sub[label].nunique() < 2 or len(sub) < 50:
             return 0.5
@@ -124,15 +152,21 @@ class ICScreener:
             {window_id, factors: [...], detail: {factor: {ic_1d, ..., grade}}}
             grade: 'strong' 保留 / 'weak' 观察 / 'dead' 剔除
         """
-        # [E5] 净收益标签优先 (分层滑点口径)
-        label_of = {
-            k: (
-                f"label_{k}d_net"
-                if f"label_{k}d_net" in train_df.columns
-                else f"label_{k}d"
-            )
-            for k in (1, 3, 5)
-        }
+        # [B9] PM 执行口径验收标签优先; [E5] 净收益标签优先 (分层滑点口径)
+        label_of = {}
+        for k in (1, 3, 5):
+            pm_net = f"label_pm_{k}d_net"
+            reg_net = f"label_{k}d_net"
+            pm_raw = f"label_pm_{k}d"
+            reg_raw = f"label_{k}d"
+            if pm_net in train_df.columns:
+                label_of[k] = pm_net
+            elif reg_net in train_df.columns:
+                label_of[k] = reg_net
+            elif pm_raw in train_df.columns:
+                label_of[k] = pm_raw
+            else:
+                label_of[k] = reg_raw
         has_mdd = "label_mdd_3d" in train_df.columns  # [E2]
         l2_history = self._load_l2_history()
         result = {"window_id": window_id, "factors": [], "detail": {}}
@@ -140,10 +174,11 @@ class ICScreener:
             ic_by_label = {
                 k: self.rank_ic(train_df, f, lbl) for k, lbl in label_of.items()
             }
-            best_ic = max(ic_by_label.values())
+            # [P19] best_ic 取绝对值最大 (方向无关; 负向强预测因子同样有效)
+            best_ic = max((abs(v) for v in ic_by_label.values()), default=0.0)
             ic_mdd = self.rank_ic(train_df, f, "label_mdd_3d") if has_mdd else None
             if ic_mdd is not None:
-                best_ic = max(best_ic, ic_mdd)  # [E2] mdd 独立筛选并入并集
+                best_ic = max(best_ic, abs(ic_mdd))  # [E2] mdd 独立筛选并入并集
             auc = self.auc_score(train_df, f)
             roll_mean, roll_pos = self.rolling_ic_dual(train_df, f, label_of[1])
             dual_ok = roll_mean > ROLLING_MEAN_MIN and roll_pos > ROLLING_POS_RATIO_MIN
@@ -153,8 +188,13 @@ class ICScreener:
             nw_significant = (
                 abs(t_3d) > 1.28 or abs(t_5d) > 1.28
             )  # 90%置信 (原1.96/95%太严)
-            if (best_ic > IC_STRONG or auc > 0.55) and dual_ok and nw_significant:
+            # [P18] IC 稳定性: 杀稀疏/噪声因子 (N<30 或 ICIR<0.3)
+            icir = self.ic_stability(train_df, f, label_of[1])
+            icir_ok = icir >= ICIR_MIN
+            if (best_ic > IC_STRONG or auc > 0.55) and dual_ok and nw_significant and icir_ok:
                 grade = "strong"
+            elif (best_ic > IC_STRONG or auc > 0.55) and dual_ok and nw_significant:
+                grade = "weak"  # [P18] IC够但ICIR不足 → 降级为weak
             elif best_ic > IC_WEAK or auc > 0.52:
                 grade = "weak"
             else:
@@ -177,6 +217,7 @@ class ICScreener:
                 "rolling_pos_ratio": round(roll_pos, 4),
                 "nw_t_3d": round(t_3d, 4),  # B6
                 "nw_t_5d": round(t_5d, 4),  # B6
+                "icir": round(icir, 4),  # [P18] IC 稳定性
                 "grade": grade,
             }
             if ic_mdd is not None:
@@ -192,9 +233,9 @@ class ICScreener:
     # ---------------- E4-L2 跨窗口负 IC 追踪 ----------------
     @staticmethod
     def _signed_daily_ic_mean(df: pd.DataFrame, factor: str, label: str) -> float:
-        """窗口内日度 Rank IC 均值 (带符号) — L2 "连续3期为负" 判定输入.
+        """窗口内日度 Rank IC 均值 (带符号) — L2 "连续N期为负" 判定输入.
 
-        rank_ic/rolling_ic_dual 取绝对值 (方向无关筛强度), 不能用于符号判定.
+        L2 追踪用带符号均值判断方向 (与 rank_ic 返回值相同, 语义区分保留)。
         """
         ics = daily_rank_ic_series(df, factor, label)
         if ics.empty:

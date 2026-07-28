@@ -110,6 +110,10 @@ class LabelEngine:
             for k in LABEL_HORIZONS:
                 future_close = g.transform(lambda s, kk=k + 1: _label_reference(s, kk))
                 df[f"label_pm_{k}d"] = _safe_divide(future_close, exec_px) - 1
+            # [B9] PM 执行口径分类标签: label_pm_cls 基于 PM 验收标签, 非研究口径 label_1d
+            df["label_pm_cls"] = (df["label_pm_1d"] > CLS_THRESHOLD).astype("float")
+            df.loc[df["label_pm_1d"].isna(), "label_pm_cls"] = np.nan
+        # 研究口径分类标签 (PM 存在时 label_pm_cls 优先; 仅作回退)
         df["label_cls"] = (df["label_1d"] > CLS_THRESHOLD).astype("float")
         df.loc[df["label_1d"].isna(), "label_cls"] = np.nan
         df = LabelEngine.add_net_labels(df)
@@ -138,6 +142,13 @@ class LabelEngine:
             for prefix in (f"label_{k}d", f"label_pm_{k}d"):
                 if prefix in df.columns:
                     df[f"{prefix}_net"] = df[prefix] - cost_total
+        # [B9] PM 执行口径分类净标签 (label_pm_1d_net > 0 → 净收益为正)
+        if "label_pm_1d_net" in df.columns:
+            df["label_pm_cls_net"] = (df["label_pm_1d_net"] > 0).astype("float")
+            df.loc[df["label_pm_1d_net"].isna(), "label_pm_cls_net"] = np.nan
+        if "label_1d_net" in df.columns:
+            df["label_cls_net"] = (df["label_1d_net"] > 0).astype("float")
+            df.loc[df["label_1d_net"].isna(), "label_cls_net"] = np.nan
         return df
 
     # ---------------- E2: 路径依赖标签 (期间最大浮亏) ----------------
@@ -242,6 +253,12 @@ class LabelEngine:
             df["label_pain"] = (df["label_mdd_3d"] < PAIN_THRESHOLD).astype("float")
             df.loc[df["label_mdd_3d"].isna(), "label_pain"] = np.nan
         df["label_cls"] = df["label_cls"].where(df["label_1d"].notna(), np.nan)
+        if "label_pm_cls" in df.columns:
+            df["label_pm_cls"] = df["label_pm_cls"].where(df["label_pm_1d"].notna(), np.nan)
+        if "label_cls_net" in df.columns:
+            df["label_cls_net"] = df["label_cls_net"].where(df["label_1d_net"].notna(), np.nan)
+        if "label_pm_cls_net" in df.columns:
+            df["label_pm_cls_net"] = df["label_pm_cls_net"].where(df["label_pm_1d_net"].notna(), np.nan)
         return df
 
     # ---------------- 实盘标签遮蔽 ----------------
@@ -251,7 +268,8 @@ class LabelEngine:
         df["date"].max() - pd.Timedelta(days=days * 2)  # 自然日宽松上界
         recent_dates = sorted(df["date"].unique())[-days:]
         mask = df["date"].isin(recent_dates)
-        cols = [f"label_{k}d" for k in LABEL_HORIZONS] + ["label_cls"]
+        cols = [f"label_{k}d" for k in LABEL_HORIZONS] + ["label_cls", "label_pm_cls"]
+        cols += [f"label_pm_{k}d" for k in LABEL_HORIZONS if f"label_pm_{k}d" in df.columns]
         cols += [c for c in df.columns if c.endswith("_net")]
         cols += [c for c in df.columns if c.startswith("label_mdd_")] + ["label_pain"]
         for col in [c for c in cols if c in df.columns]:
@@ -267,11 +285,12 @@ class LabelEngine:
             {'1d': df_1d, '3d': df_3d, '5d': df_5d, 'cls': df_cls,
              'pain': df_pain (E2, 若 label_pain 存在)}
         """
+        cls_label = "label_pm_cls" if "label_pm_cls" in df.columns else "label_cls"
         out = {
             "1d": df.dropna(subset=["label_1d"]),
             "3d": df.dropna(subset=["label_3d"]),
             "5d": df.dropna(subset=["label_5d"]),
-            "cls": df.dropna(subset=["label_cls"]),
+            "cls": df.dropna(subset=[cls_label]),
         }
         if "label_pain" in df.columns:  # E2 痛苦预警模型
             out["pain"] = df.dropna(subset=["label_pain"])

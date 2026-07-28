@@ -74,9 +74,9 @@ TRAIN_DAYS = 620
 ES_DAYS = SEG_MIN_DAYS["es"]
 CALIB_DAYS = SEG_MIN_DAYS["calib"]
 TEST_DAYS = SEG_MIN_DAYS["test"]  # 仅归因, 严禁反向调参
-HALF_LIFE = 250  # 半衰期加权 (天)
+HALF_YEAR_DAYS = 126  # 半年≈126交易日, 半年度阶梯加权: 每过一个半年权重折半
 ES_PATIENCE = 100  # [V3.8 §2.1] patience=100
-OOS_IC_MIN = 0.03  # 新模型切换门槛
+OOS_IC_MIN = 0.015  # 新模型切换门槛 (signed mean IC)
 
 LGB_PARAMS_REG = {
     "objective": "huber",
@@ -129,17 +129,25 @@ class DualTrackTrainer:
         dates = sorted(df["date"].unique())[-window_total:]
         n = len(dates)
         seg_lens = _derive_seg_min_days(n)
-        # train 段补齐: 保证各段之和 = n
-        seg_lens["train"] = n - seg_lens["es"] - seg_lens["calib"] - seg_lens["test"]
-        seg_lens["train"] = max(seg_lens["train"], SEG_MIN_DAYS["train"])
-        # 切片: train → es → calib → test (时序)
-        pos = 0
-        seg_dates = {}
-        for k in ("train", "es", "calib", "test"):
-            seg_dates[k] = dates[pos : pos + seg_lens[k]]
-            pos += seg_lens[k]
-        # test 取最后一段 (保证是最近期数据)
-        seg_dates["test"] = dates[-seg_lens["test"] :]
+        # train 段补齐: 保证各段之和 = n (_derive_seg_min_days 已保证 train >= MIN_TRAIN_DAYS)
+        seg_lens["train"] = max(n - seg_lens["es"] - seg_lens["calib"] - seg_lens["test"], MIN_TRAIN_DAYS)
+        # 切片: test 取最后, es/calib 紧贴 test 前方, train 取最前
+        # 顺序: [train ... | es | calib | test]
+        t_len = seg_lens["test"]
+        c_len = seg_lens["calib"]
+        e_len = seg_lens["es"]
+        tr_len = n - e_len - c_len - t_len
+        if tr_len < MIN_TRAIN_DAYS:
+            raise RuntimeError(
+                f"窗口深度不足: {n} 交易日, train 仅剩 {tr_len} (< {MIN_TRAIN_DAYS})"
+            )
+        seg_dates = {
+            "train": dates[:tr_len],
+            "es": dates[tr_len : tr_len + e_len],
+            "calib": dates[tr_len + e_len : tr_len + e_len + c_len],
+            "test": dates[-t_len:],
+        }
+        seg_lens["train"] = tr_len
         logger.info(
             "窗口切分: total=%d train=%d es=%d calib=%d test=%d",
             n,
@@ -151,22 +159,35 @@ class DualTrackTrainer:
         return {k: df[df["date"].isin(v)] for k, v in seg_dates.items()}
 
     @staticmethod
-    def time_weights(df: pd.DataFrame, half_life: int = HALF_LIFE) -> np.ndarray:
-        """半衰期加权: 旧样本权重指数衰减, 让模型贴近近期市场结构.
+    def time_weights(df: pd.DataFrame, half_year_days: int = HALF_YEAR_DAYS) -> np.ndarray:
+        """半年度阶梯加权: 同一半年段内权重恒定, 每过半年度权重折半.
 
-        [B10] 方向断言: 日期升序轴上 weights[-1] > weights[0]
-        (最新样本权重=1.0), 写反即中止 — 训练前强制检查.
+        0~126天前:    weight=1.000
+        126~252天前:  weight=0.500
+        252~378天前:  weight=0.250
+        378~504天前:  weight=0.125
+        504天以上:     weight=0.0625 (每再加126天再折半)
+
+        日历换算: 126交易日 ≈ 176自然日, 用 Timedelta 跨周末/假期保序.
+
+        [B10] 方向断言: 日期升序轴上 weights[-1] >= weights[0].
         """
         dates = sorted(df["date"].unique())
-        age = {d: len(dates) - 1 - i for i, d in enumerate(dates)}
+        latest = dates[-1]
+        half_year = pd.Timedelta(days=int(half_year_days * 1.4))  # 126交易日→176自然日
+
+        def bucket(d: pd.Timestamp) -> int:
+            return int((latest - d) / half_year)
+
+        age_bucket = {d: bucket(d) for d in dates}
         if len(dates) > 1:
-            w_first = 0.5 ** (age[dates[0]] / half_life)
-            w_last = 0.5 ** (age[dates[-1]] / half_life)
-            assert w_last > w_first, (
-                "B10 半衰期权重方向错误: 最新样本权重必须最大 "
-                f"(w_last={w_last:.4f} <= w_first={w_first:.4f})"
+            w_first = 0.5 ** age_bucket[dates[0]]
+            w_last = 0.5 ** age_bucket[dates[-1]]
+            assert w_last >= w_first, (
+                "B10 权重方向错误: 最新样本权重必须最大 "
+                f"(w_last={w_last:.4f} < w_first={w_first:.4f})"
             )
-        return np.array([0.5 ** (age[d] / half_life) for d in df["date"]])
+        return np.array([0.5 ** age_bucket[d] for d in df["date"]])
 
     # ---------------- 单模型训练 ----------------
     def _train_one(
@@ -180,14 +201,16 @@ class DualTrackTrainer:
             "3d_reg": "label_3d",
             "5d_reg": "label_5d",
         }[kind]
-        # [B9] PM 执行口径验收标签优先 (label_pm_kd), 缺失时回退研究口径 label_kd
-        if kind != "1d_cls":
+        # [B9] PM 执行口径验收标签优先 (label_pm_kd / label_pm_cls), 缺失时回退研究口径
+        if kind == "1d_cls":
+            pm_label = "label_pm_cls"
+        else:
             pm_label = f"label_pm_{kind[0]}d"
-            if pm_label in segs["train"].columns:
-                label = pm_label
-            # [E5] 净收益标签 (分层滑点) 优先于毛收益 — 训练/验收主标签口径 (D1)
-            if f"{label}_net" in segs["train"].columns:
-                label = f"{label}_net"
+        if pm_label in segs["train"].columns:
+            label = pm_label
+        # [E5] 净收益标签 (分层滑点) 优先于毛收益 — 训练/验收主标签口径 (D1)
+        if f"{label}_net" in segs["train"].columns:
+            label = f"{label}_net"
         train = segs["train"].dropna(subset=[label])  # per-model dropna (安全网 #7)
         es = segs["es"].dropna(subset=[label])
         train = risk_filter(train)
@@ -389,17 +412,20 @@ class DualTrackTrainer:
         model, label = trained["models"]["1d_cls"]
         calib = trained["segs"]["calib"].dropna(subset=[label])
         cols = trained["feature_cols"]
+        # 校准集可能为空 (小窗口 + 多特征列 NaN), 此时跳过校准用原始 prob
+        if len(calib) == 0:
+            logger.warning(
+                "[%s] 校准集为空 (label=%s), 跳过校准, 使用原始 predict_proba",
+                trained.get("board", "?"), label,
+            )
+            trained["calibrator"] = None
+            return None
         raw = model.predict_proba(np.nan_to_num(calib[cols].values, nan=0.0))[:, 1]
         n_calib_dates = (
             calib["date"].nunique() if "date" in calib.columns else len(calib)
         )
-        method = "platt" if n_calib_dates < MIN_ES_DATES else "isotonic"
-        if n_calib_dates < MIN_ES_DATES:
-            logger.warning(
-                "[%s] 校准集仅 %d 交易日, 使用 Platt (Isotonic 小样本退化为阶跃函数)",
-                trained["board"],
-                n_calib_dates,
-            )
+        # 统一用 Platt Scaling: Isotonic 在高低端会饱和到 0/1 (非真实概率)
+        method = "platt"
         calibrator = ProbCalibrator(method=method).fit(raw, calib[label].values)
         trained["calibrator"] = calibrator
         return calibrator
