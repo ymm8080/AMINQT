@@ -111,8 +111,10 @@ class FeatureEngineV35:
         df = self.add_missingness_flags(df)
         # 时序变化特征: 对每个非标识列自动计算 N 日变化 (_chgN)
         df = self._add_time_series_changes(df)
-        # 清理 inf
-        df = df.replace([np.inf, -np.inf], np.nan)
+        # 清理 inf (逐列替换, 避免全 DataFrame replace 触发 numpy vstack OOM)
+        for col in df.columns:
+            if df[col].dtype in ("float64", "float32"):
+                df[col] = df[col].replace([np.inf, -np.inf], np.nan)
         if cross_sectional_rank:
             df = self._add_cross_sectional_ranks(df)
         return df
@@ -1070,6 +1072,12 @@ class FeatureEngineV35:
 
             bullish_raw = bullish_engulfing + hammer + morning_star
             bearish_raw = bearish_engulfing + shooting_star + evening_star
+            g["bullish_engulfing"] = bullish_engulfing
+            g["bearish_engulfing"] = bearish_engulfing
+            g["hammer"] = hammer
+            g["shooting_star"] = shooting_star
+            g["morning_star"] = morning_star
+            g["evening_star"] = evening_star
 
             # --- 半衰期累积密度 (10/20/60 日, half-life=5) ---
             decay = 0.5 ** (1.0 / 5)  # 5日半衰

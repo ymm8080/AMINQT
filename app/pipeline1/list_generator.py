@@ -249,12 +249,26 @@ class ListGenerator:
              'cap_position': float 仓位比例,
              'empty': bool}
         """
+        # [D18] 空仓触发: HS300 单日跌幅 > 3%
+        if env is not None and isinstance(env, MarketEnv):
+            if env.hs300_drop_today > 0.03:
+                logger.warning(
+                    "D18 空仓触发: HS300 跌幅 %.2f%%", env.hs300_drop_today * 100
+                )
+                return {
+                    "mode": "empty",
+                    "list": pd.DataFrame(columns=SCHEMA_FIELDS),
+                    "cap_position": 0.0,
+                    "empty": True,
+                    "schema_version": SCHEMA_VERSION,
+                }
         if len(candidates) == 0:
             return {
                 "mode": "empty",
-                "list": pd.DataFrame(),
+                "list": pd.DataFrame(columns=SCHEMA_FIELDS),
                 "cap_position": 0.0,
                 "empty": True,
+                "schema_version": SCHEMA_VERSION,
             }
         # 计算排序分
         scored = self.compute_scores(candidates)
@@ -264,9 +278,10 @@ class ListGenerator:
             logger.warning("E7 准入过滤后无候选, 输出空清单")
             return {
                 "mode": "empty",
-                "list": pd.DataFrame(),
+                "list": pd.DataFrame(columns=SCHEMA_FIELDS),
                 "cap_position": 0.0,
                 "empty": True,
+                "schema_version": SCHEMA_VERSION,
             }
         # 按 score 降序取 TOP_N (行业分散在 list_generator 层面处理)
         passed = passed.sort_values("score", ascending=False)
@@ -284,6 +299,8 @@ class ListGenerator:
         )
         # [E1] 分布权重: 基于 uncertainty_width 的逆权重, 单票上限 0.10
         final["weight"] = self._compute_weights(final)
+        if "prob_up" in final.columns:
+            final["prob_up"] = final["prob_up"].round(3)
         for col in ("is_limit_up_close", "is_one_word_limit"):
             if col not in final.columns:
                 final[col] = 0

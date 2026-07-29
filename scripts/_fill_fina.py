@@ -45,6 +45,17 @@ def normalize_fina(df: pd.DataFrame) -> pd.DataFrame:
     if "ann_date" in df.columns and "announce_date" not in df.columns:
         df = df.rename(columns=RAW_TO_NORM)
         logger.info("  raw Tushare format → normalized (%d cols)", len(df.columns))
+    else:
+        # Already-normalized files may still have raw column names
+        # that weren't caught by the ann_date check (e.g. per-stock files
+        # with announce_date but also ts_code/end_date)
+        rename_safe = {
+            k: v
+            for k, v in RAW_TO_NORM.items()
+            if k in df.columns and v not in df.columns
+        }
+        if rename_safe:
+            df = df.rename(columns=rename_safe)
 
     # Ensure symbol exists
     if "symbol" not in df.columns and "_ts_code" in df.columns:
@@ -62,9 +73,18 @@ def normalize_fina(df: pd.DataFrame) -> pd.DataFrame:
             df["report_period"], format="mixed", errors="coerce"
         )
 
-    # Ensure numeric columns
+    # Ensure numeric columns (skip metadata + leaked raw cols)
+    skip_numeric = {
+        "symbol",
+        "_ts_code",
+        "ts_code",
+        "announce_date",
+        "report_period",
+        "end_date",
+        "date",
+    }
     for c in df.columns:
-        if c not in ("symbol", "_ts_code", "announce_date", "report_period"):
+        if c not in skip_numeric:
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
     return df
@@ -117,7 +137,15 @@ def main():
     fina = fina.sort_values(["symbol", "date"])
 
     # 只保留需要的列
-    skip = {"symbol", "_ts_code", "announce_date", "report_period", "date"}
+    skip = {
+        "symbol",
+        "_ts_code",
+        "ts_code",
+        "announce_date",
+        "report_period",
+        "end_date",
+        "date",
+    }
     data_cols = [c for c in fina.columns if c not in skip]
     logger.info("数据列: %s", data_cols)
 
