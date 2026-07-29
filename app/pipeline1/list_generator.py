@@ -352,3 +352,29 @@ class ListDeliveryGuard:
             return {"mode": "sell_only", "list": None}
         logger.critical("清单推送失败 (连续%d日): 人工介入 (检查数据源/模型/服务器)", n)
         return {"mode": "manual_intervention", "list": None}
+
+
+# ============================================================
+# 清单失效条件 (T+1 盘中, 5 分钟模型执行)
+# ============================================================
+def check_invalidation(
+    open_gap_pct: float,
+    limit_down_within_30min: bool,
+    sector_drop_pct: float,
+    surge_5min_pct: float,
+) -> str | None:
+    """任一触发 → 从清单移除, 5 分钟模型不得买入.
+
+    1. 开盘跳空 > ±5% (相对 T 日收盘价)
+    2. 开盘后 30 分钟内触发跌停
+    3. 板块指数跌幅 > 3% (系统性风险)
+    4. 个股开盘后 5 分钟内涨幅 > 7% (防追高)
+    """
+    if abs(open_gap_pct) > 5.0:
+        return f"开盘跳空{open_gap_pct:+.1f}%>±5%"
+    if limit_down_within_30min:
+        return "开盘30分钟内跌停"
+    if sector_drop_pct < -3.0:
+        return f"板块指数跌{sector_drop_pct:.1f}%>3%"
+    if surge_5min_pct > 7.0:
+        return f"开盘5分钟涨{surge_5min_pct:.1f}%>7%"
