@@ -107,6 +107,7 @@ class FeatureEngineV35:
         df = self.dim28_sector_index(df)  # [Alt-7b] 申万行业指数动量/轮动
         df = self.dim29_holdertrade(df)  # [Alt-6] 股东增减持
         df = self.dim30_kline_geometry(df)  # K线几何特征 (缺口/实体/影线/连续)
+        df = self.dim31_announcement(df)  # 公告事件特征 (距上次公告天数/公告频率)
         df = self.industry_neutralize(df)
         df = self.add_missingness_flags(df)
         # 时序变化特征: 对每个非标识列自动计算 N 日变化 (_chgN)
@@ -1851,22 +1852,16 @@ class FeatureEngineV35:
                 .reset_index()
             )
             ind_mb = ind_mb.sort_values(["industry", "date"])
-
-            def ind_rolling(g):
-                g = g.sort_values("date")
-                g["ind_margin_chg_5d"] = (
-                    g["_mb_chg_1d"].rolling(5, min_periods=3).mean()
-                )
-                g["ind_margin_accel"] = g["ind_margin_chg_5d"] - g[
-                    "ind_margin_chg_5d"
-                ].shift(10)
-                return g
-
-            ind_mb = (
-                ind_mb.groupby("industry", observed=True)
-                .apply(ind_rolling)
-                .reset_index(drop=True)
+            ind_mb["ind_margin_chg_5d"] = (
+                ind_mb.groupby("industry", observed=True)["_mb_chg_1d"]
+                .rolling(5, min_periods=3)
+                .mean()
+                .reset_index(level=0, drop=True)
             )
+            ind_mb["ind_margin_accel"] = ind_mb.groupby("industry", observed=True)[
+                "ind_margin_chg_5d"
+            ].shift(10)
+            ind_mb = ind_mb.reset_index(drop=True)
             df = df.merge(
                 ind_mb[["date", "industry", "ind_margin_chg_5d", "ind_margin_accel"]],
                 on=["date", "industry"],
@@ -1885,19 +1880,13 @@ class FeatureEngineV35:
                 .reset_index()
             )
             ind_hc = ind_hc.sort_values(["industry", "date"])
-
-            def hc_roll(g):
-                g = g.sort_values("date")
-                g["ind_holder_trend_20d"] = (
-                    g["holder_count_qoq"].rolling(20, min_periods=5).mean()
-                )
-                return g
-
-            ind_hc = (
-                ind_hc.groupby("industry", observed=True)
-                .apply(hc_roll)
-                .reset_index(drop=True)
+            ind_hc["ind_holder_trend_20d"] = (
+                ind_hc.groupby("industry", observed=True)["holder_count_qoq"]
+                .rolling(20, min_periods=5)
+                .mean()
+                .reset_index(level=0, drop=True)
             )
+            ind_hc = ind_hc.reset_index(drop=True)
             df = df.merge(
                 ind_hc[["date", "industry", "ind_holder_trend_20d"]],
                 on=["date", "industry"],
@@ -1914,17 +1903,10 @@ class FeatureEngineV35:
                 .reset_index()
             )
             ind_nb = ind_nb.sort_values(["industry", "date"])
-
-            def nb_roll(g):
-                g = g.sort_values("date")
-                g["ind_north_chg_5d"] = g["north_net_buy"].diff(5)
-                return g
-
-            ind_nb = (
-                ind_nb.groupby("industry", observed=True)
-                .apply(nb_roll)
-                .reset_index(drop=True)
-            )
+            ind_nb["ind_north_chg_5d"] = ind_nb.groupby("industry", observed=True)[
+                "north_net_buy"
+            ].diff(5)
+            ind_nb = ind_nb.reset_index(drop=True)
             df = df.merge(
                 ind_nb[["date", "industry", "ind_north_chg_5d"]],
                 on=["date", "industry"],
@@ -1946,17 +1928,13 @@ class FeatureEngineV35:
                 .reset_index()
             )
             ind_lhb = ind_lhb.sort_values(["industry", "date"])
-
-            def lhb_roll(g):
-                g = g.sort_values("date")
-                g["ind_lhb_net_flow_5d"] = g[lhb_col].rolling(5, min_periods=1).sum()
-                return g
-
-            ind_lhb = (
-                ind_lhb.groupby("industry", observed=True)
-                .apply(lhb_roll)
-                .reset_index(drop=True)
+            ind_lhb["ind_lhb_net_flow_5d"] = (
+                ind_lhb.groupby("industry", observed=True)[lhb_col]
+                .rolling(5, min_periods=1)
+                .sum()
+                .reset_index(level=0, drop=True)
             )
+            ind_lhb = ind_lhb.reset_index(drop=True)
             df = df.merge(
                 ind_lhb[["date", "industry", "ind_lhb_net_flow_5d"]],
                 on=["date", "industry"],
@@ -2275,6 +2253,39 @@ class FeatureEngineV35:
                     pct=True
                 )
         return df
+
+    # ---------------- ㉛ 公告事件特征 ----------------
+    @staticmethod
+    def dim31_announcement(df: pd.DataFrame) -> pd.DataFrame:
+        """从 announce_date 派生公告事件特征 (PIT 安全).
+
+        产出:
+          1. days_since_last_ann — 距上次公告天数 (正=越久未公告, NaT → NaN)
+          2. ann_count_60d       — 近 60 日公告次数
+          3. is_ann_day          — 当日是否有公告 (二元)
+
+        上游列: announce_date (datetime64[ns])
+        NaN 率高时 (当前 ~99%) 特征填 NaN, LightGBM 自行处理.
+        """
+        if "announce_date" not in df.columns:
+            for c in ("days_since_last_ann", "ann_count_60d", "is_ann_day"):
+                df[c] = np.nan
+            return df
+
+        def _per_stock(g: pd.DataFrame) -> pd.DataFrame:
+            g = g.sort_values("date")
+            ann_dt = pd.to_datetime(g["announce_date"])
+            # PIT: 仅用 <=当前日期 的公告
+            last_ann = ann_dt.where(ann_dt <= g["date"]).ffill()
+            g["days_since_last_ann"] = (g["date"] - last_ann).dt.days
+            # 公告频率: 近 60 日有公告的交易日数
+            g["ann_count_60d"] = (
+                ann_dt.notna().astype(int).rolling(60, min_periods=1).sum()
+            )
+            g["is_ann_day"] = ann_dt.notna().astype(int)
+            return g
+
+        return _apply_per_stock(df, _per_stock)
 
     # ---------------- 缺失值策略 ----------------
     @staticmethod

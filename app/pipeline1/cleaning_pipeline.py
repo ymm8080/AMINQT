@@ -38,8 +38,7 @@ def get_limit_pct(board: str, date: pd.Timestamp) -> float:
         return 0.20
     if board == "GEM":
         return 0.10 if date < pd.Timestamp("2020-08-24") else 0.20
-    # Unknown/legacy board labels (e.g., "SZ") default to main 10% limit
-    return 0.10
+    raise ValueError(f"Unknown board: {board}")
 
 
 def limit_up_price(pre_close: float, limit_pct: float) -> float:

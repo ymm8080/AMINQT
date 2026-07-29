@@ -194,7 +194,9 @@ class LabelEngine:
         label_cols += [
             f"label_pm_{k}d" for k in LABEL_HORIZONS if f"label_pm_{k}d" in df
         ]
-        label_cols += [c for c in df.columns if c.endswith("_net")]  # E5 净标签
+        label_cols += [
+            c for c in df.columns if c.endswith("_net") and "_cls" not in c
+        ]  # E5 净标签 (排除二分类 *_cls_net)
         label_cols += [
             f"label_mdd_{k}d" for k in LABEL_HORIZONS if f"label_mdd_{k}d" in df
         ]

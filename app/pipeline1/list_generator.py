@@ -29,6 +29,16 @@ HOLDING_DAY_WEIGHTS = {0: 0.0, 1: 1.0, 2: 0.5, 3: 0.0}
 BASE_RATE_WINDOW = 20  # B4: base_rate 滚动窗口
 # [E10] 破净资产阈值
 SSE_BREAK_PCT_THRESHOLD = 0.12
+# 动量阈值 (V3.4 陷阱修复)
+FW_HARD = -0.03  # 预测跌幅 > 3% → 强制 low
+FW_EPS = 0.001  # 预测值太小无法算比率
+RATIO_UP = 1.0
+RATIO_DOWN = 0.8
+# D18 空仓触发
+HS300_DROP_EMPTY = 0.03
+MARKET_LIMIT_DOWN_EMPTY = 50
+HS300_CONSEC_DOWN_CAP = 3
+CAP_POSITION_REDUCED = 0.3
 
 
 SCHEMA_FIELDS = [
@@ -144,8 +154,8 @@ class ListGenerator:
                 )
                 use_rank = True
         if not use_rank:
-            # V3.5 回退: compound_ret × prob_adjust (简单有效)
-            df["score"] = df["compound_ret"] * prob_adjust
+            # V3.5 回退: pred_ret_1d 横截面 rank(pct=True) × prob_adjust
+            df["score"] = df["pred_ret_1d"].rank(pct=True) * prob_adjust
         # [E2] 痛苦惩罚
         if "pain_prob" in df.columns:
             pain_penalty = 1 - 0.5 * df["pain_prob"].fillna(0).clip(0, 1)
@@ -159,8 +169,12 @@ class ListGenerator:
         if "announce_score" in df.columns:
             df["score"] = df["score"] * (1 + 0.3 * df["announce_score"].fillna(0))
         # B3: Holding Bonus 衰减
-        if "is_in_yesterday_list" in df.columns and "holding_day" in df.columns:
-            hw = df["holding_day"].map(HOLDING_DAY_WEIGHTS).fillna(0)
+        if "is_in_yesterday_list" in df.columns:
+            if "holding_day" in df.columns:
+                hw = df["holding_day"].map(HOLDING_DAY_WEIGHTS).fillna(0)
+            else:
+                # 向后兼容: 无 holding_day 列时, is_in_yesterday_list=1 视为 day1 (weight=1.0)
+                hw = df.get("is_in_yesterday_list", 0)
             df["score"] = df["score"] + HOLDING_BONUS * hw * df.get(
                 "is_in_yesterday_list", 0
             )
@@ -171,6 +185,75 @@ class ListGenerator:
                 ascending=False, pct=True
             )
         return df
+
+    # ---------------- 动量持续性 ----------------
+    @staticmethod
+    def compute_momentum(pred_1d: float, pred_3d: float, pred_5d: float) -> str:
+        """盈亏防火墙优先, 否则日均衰减比率 (量纲对齐, 不用绝对值比较).
+
+        pred_1d < -3% → 强制 low;  < 0 → 最高 medium;  |pred_1d| < 0.1% → medium.
+        ratio_kd = (pred_kd/k)/pred_1d:  3d>1 且 5d>1 → high;  3d<0.8 → low;  余 medium.
+        """
+        if pred_1d < FW_HARD:
+            return "low"
+        if pred_1d < 0:
+            return "medium"
+        if abs(pred_1d) < FW_EPS:
+            return "medium"
+        ratio_3d = (pred_3d / 3) / pred_1d
+        ratio_5d = (pred_5d / 5) / pred_1d
+        if ratio_3d > RATIO_UP and ratio_5d > RATIO_UP:
+            return "high"
+        if ratio_3d < RATIO_DOWN:
+            return "low"
+        return "medium"
+
+    # ---------------- 行业集中度 ----------------
+    @staticmethod
+    def apply_industry_limit(
+        ranked: pd.DataFrame, max_per_industry: int = MAX_PER_INDUSTRY
+    ) -> pd.DataFrame:
+        """同一申万一级行业 <= 4 只, 超出顺延; 顺延后 < 10 只则接受不足 (不强凑数)."""
+        if "industry" not in ranked.columns:
+            return ranked
+        counts: dict[str, int] = {}
+        keep = []
+        for _, row in ranked.iterrows():
+            ind = row.get("industry", "UNKNOWN")
+            if counts.get(ind, 0) < max_per_industry:
+                counts[ind] = counts.get(ind, 0) + 1
+                keep.append(True)
+            else:
+                keep.append(False)
+        return ranked[keep]
+
+    # ---------------- D18 空仓触发 (安全网 #12) ----------------
+    @staticmethod
+    def check_empty_triggers(env) -> tuple[bool, float]:
+        """返回 (是否强制空清单, 仓位上限).
+
+        沪深300 跌>3% 或 全市场跌停>50 → 空清单;  连跌3日 → 仓位上限 30% (仅 Top 5).
+        """
+        if not isinstance(env, MarketEnv):
+            return False, 1.0
+        if env.hs300_drop_today > HS300_DROP_EMPTY:
+            logger.error(
+                "D18 空仓触发: 沪深300 当日跌幅 %.1f%% > 3%%",
+                env.hs300_drop_today * 100,
+            )
+            return True, 0.0
+        if env.count_limit_down_market > MARKET_LIMIT_DOWN_EMPTY:
+            logger.error(
+                "D18 空仓触发: 全市场跌停 %d 只 > 50", env.count_limit_down_market
+            )
+            return True, 0.0
+        if env.hs300_consecutive_down >= HS300_CONSEC_DOWN_CAP:
+            logger.warning(
+                "D18 降仓: 沪深300 连跌 %d 日, 仓位上限 30%%",
+                env.hs300_consecutive_down,
+            )
+            return False, CAP_POSITION_REDUCED
+        return False, 1.0
 
     # ---------------- 准入 ---------------
     @staticmethod
@@ -249,19 +332,16 @@ class ListGenerator:
              'cap_position': float 仓位比例,
              'empty': bool}
         """
-        # [D18] 空仓触发: HS300 单日跌幅 > 3%
-        if env is not None and isinstance(env, MarketEnv):
-            if env.hs300_drop_today > 0.03:
-                logger.warning(
-                    "D18 空仓触发: HS300 跌幅 %.2f%%", env.hs300_drop_today * 100
-                )
-                return {
-                    "mode": "empty",
-                    "list": pd.DataFrame(columns=SCHEMA_FIELDS),
-                    "cap_position": 0.0,
-                    "empty": True,
-                    "schema_version": SCHEMA_VERSION,
-                }
+        # [D18] 空仓触发: HS300 单日跌幅 > 3% / 全市场跌停 > 50 / 连跌 3 日降仓
+        empty, cap = self.check_empty_triggers(env)
+        if empty or len(candidates) == 0:
+            return {
+                "mode": "empty",
+                "list": pd.DataFrame(columns=SCHEMA_FIELDS),
+                "cap_position": 0.0 if empty else cap,
+                "empty": True,
+                "schema_version": SCHEMA_VERSION,
+            }
         if len(candidates) == 0:
             return {
                 "mode": "empty",
@@ -285,11 +365,28 @@ class ListGenerator:
             }
         # 按 score 降序取 TOP_N (行业分散在 list_generator 层面处理)
         passed = passed.sort_values("score", ascending=False)
-        final = passed.head(TOP_N).reset_index(drop=True)
+        # 行业集中度限制: 同一行业 <= MAX_PER_INDUSTRY 只
+        final = self.apply_industry_limit(passed).reset_index(drop=True)
+        # D18 降仓 → 仅 Top 5; 正常 → Top 15
+        top_n = TOP_N if cap >= 1.0 else 5
+        final = final.head(top_n)
+        # 动量持续性 (盈亏防火墙)
+        if len(final) and {"pred_ret_1d", "pred_ret_3d", "pred_ret_5d"} <= set(
+            final.columns
+        ):
+            final["momentum"] = [
+                self.compute_momentum(a, b, c)
+                for a, b, c in zip(
+                    final["pred_ret_1d"], final["pred_ret_3d"], final["pred_ret_5d"]
+                )
+            ]
         # 决定 mode
         mode = market_state if market_state in ("bear", "value") else "normal"
-        # 仓位: [E11] bear 半仓; [E10] 破净价值全仓
-        cap_position = 0.5 if mode == "bear" else 1.0
+        # 仓位: [E11] bear 半仓; [E10] 破净价值全仓; [D18] 连跌降仓 30%
+        if cap < 1.0:
+            cap_position = cap  # D18 降仓
+        else:
+            cap_position = 0.5 if mode == "bear" else 1.0
         logger.info(
             "清单: mode=%s, %d 只, cap=%.2f, top_score=%.4f",
             mode,

@@ -128,9 +128,9 @@ class DualTrackTrainer:
         """
         dates = sorted(df["date"].unique())[-window_total:]
         n = len(dates)
-        seg_lens = _derive_seg_min_days(n)
-        # train 段补齐: 保证各段之和 = n
-        seg_lens["train"] = n - seg_lens["es"] - seg_lens["calib"] - seg_lens["test"]
+        # B11: 窗口不足时用过渡窗口推导段长 (train 段吸收余量, 可超出实际数据)
+        seg_lens = _derive_seg_min_days(max(n, WINDOW_TRANSITION))
+        # train 段补齐: 保证各段之和 ≥ n (train 可与 calib 重叠, test 取最后一段)
         seg_lens["train"] = max(seg_lens["train"], MIN_TRAIN_DAYS)
         # 切片: train → es → calib → test (时序)
         pos = 0
@@ -242,7 +242,7 @@ class DualTrackTrainer:
         depth = int(df["date"].nunique()) if len(df) else 0
         window = WINDOW_TOTAL  # B11 过渡逻辑已废弃, 始终使用全窗口
         min_non_train = sum(v for k, v in SEG_MIN_DAYS.items() if k != "train")
-        if window - min_non_train < MIN_TRAIN_DAYS:
+        if depth < min_non_train + MIN_TRAIN_DAYS:
             raise RuntimeError(
                 f"[{board}] 训练样本深度不足: {depth} 交易日 "
                 f"(需 ≥ {ES_DAYS + CALIB_DAYS + TEST_DAYS + MIN_TRAIN_DAYS})"
