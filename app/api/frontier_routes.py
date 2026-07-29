@@ -614,7 +614,8 @@ def get_pipeline_status() -> dict:
     if os.path.isdir(MODEL_DIR):
         for board in ("main", "dual"):
             pkls = sorted(
-                f for f in os.listdir(MODEL_DIR)
+                f
+                for f in os.listdir(MODEL_DIR)
                 if f.startswith(f"{board}_") and f.endswith(".pkl")
             )
             if pkls:
@@ -698,9 +699,7 @@ def append_daily_and_predict(req: AppendDailyRequest) -> dict:
             trade_date=trade_date,
             sources=["ohlcv", "margin", "northbound", "lhb"],
         )
-        _log(
-            f"当日数据追加完成: {panel['symbol'].nunique()} stocks, {len(panel)} rows"
-        )
+        _log(f"当日数据追加完成: {panel['symbol'].nunique()} stocks, {len(panel)} rows")
     except DataSupplyError as exc:
         _log(f"数据追加失败: {exc}")
         return {

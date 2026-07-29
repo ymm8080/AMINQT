@@ -72,9 +72,7 @@ def main():
     logger.info("缓存最新日期: %s, 今日: %s", max_date, today_str)
 
     if max_date < today_str:
-        logger.info(
-            "追加今日 (%s) OHLCV + margin + lhb 数据...", today_str
-        )
+        logger.info("追加今日 (%s) OHLCV + margin + lhb 数据...", today_str)
         try:
             supply = DataSupplyChain()
             panel = panel[panel["date"] < pd.to_datetime(today_str)]

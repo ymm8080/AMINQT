@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 import logging
-import numpy as np
 import pandas as pd
 import streamlit as st
 from datetime import datetime
@@ -21,8 +20,10 @@ TAG = "2026W31_3y"
 
 def _load_panel(symbols: list[str] | None = None) -> pd.DataFrame | None:
     """加载面板, 可选按股票代码过滤."""
-    for path in ("data/panel_full_enriched_v3.parquet",
-                 "data/panel_full_enriched_v3.parquet"):
+    for path in (
+        "data/panel_full_enriched_v3.parquet",
+        "data/panel_full_enriched_v3.parquet",
+    ):
         if os.path.exists(path):
             panel = pd.read_parquet(path)
             if symbols:
@@ -79,9 +80,9 @@ def _run_prediction(symbols: list[str] | None = None) -> dict | None:
         latest = feats.sort_values("date").groupby("symbol").tail(1)
         for col in ["ATR_pct", "adv20", "turnover_rate", "amount", "close"]:
             if col in latest.columns:
-                pred[col] = latest.set_index("symbol").reindex(
-                    pred["symbol"]
-                )[col].values
+                pred[col] = (
+                    latest.set_index("symbol").reindex(pred["symbol"])[col].values
+                )
 
         all_preds.append(pred)
 
@@ -108,9 +109,7 @@ def _run_prediction(symbols: list[str] | None = None) -> dict | None:
         * filtered["pred_ret_3d"]
         / (1 + filtered["pain_prob"].fillna(0.3))
     )
-    filtered = filtered.sort_values("score", ascending=False).reset_index(
-        drop=True
-    )
+    filtered = filtered.sort_values("score", ascending=False).reset_index(drop=True)
 
     # 写报告
     trade_date = datetime.now().strftime("%Y%m%d")
@@ -139,13 +138,15 @@ def _display_results(results: dict) -> None:
     ic_rows = []
     for board, ics in ic_by_board.items():
         best_key = max(ics, key=lambda k: ics[k])
-        ic_rows.append({
-            "Board": board,
-            "IC_1d": f"{ics['1d_reg']:+.4f}",
-            "IC_3d": f"{ics['3d_reg']:+.4f}",
-            "IC_5d": f"{ics['5d_reg']:+.4f}",
-            "Best": f"{best_key}={ics[best_key]:+.4f}",
-        })
+        ic_rows.append(
+            {
+                "Board": board,
+                "IC_1d": f"{ics['1d_reg']:+.4f}",
+                "IC_3d": f"{ics['3d_reg']:+.4f}",
+                "IC_5d": f"{ics['5d_reg']:+.4f}",
+                "Best": f"{best_key}={ics[best_key]:+.4f}",
+            }
+        )
     st.dataframe(pd.DataFrame(ic_rows), use_container_width=True, hide_index=True)
 
     # ---- Filtered candidates ----
@@ -156,18 +157,32 @@ def _display_results(results: dict) -> None:
     )
     if len(filtered):
         display_cols = [
-            c for c in [
-                "symbol", "board", "industry",
-                "pred_ret_1d", "pred_ret_3d", "pred_ret_5d",
-                "prob_up", "pain_prob",
-                "pred_q10", "pred_q50", "pred_q90",
-                "uncertainty_width", "score", "ATR_pct",
-            ] if c in filtered.columns
+            c
+            for c in [
+                "symbol",
+                "board",
+                "industry",
+                "pred_ret_1d",
+                "pred_ret_3d",
+                "pred_ret_5d",
+                "prob_up",
+                "pain_prob",
+                "pred_q10",
+                "pred_q50",
+                "pred_q90",
+                "uncertainty_width",
+                "score",
+                "ATR_pct",
+            ]
+            if c in filtered.columns
         ]
         st.dataframe(
             filtered[display_cols].style.format(
-                {c: "{:.4f}" for c in display_cols if c not in
-                 ("symbol", "board", "industry")}
+                {
+                    c: "{:.4f}"
+                    for c in display_cols
+                    if c not in ("symbol", "board", "industry")
+                }
             ),
             use_container_width=True,
             height=min(400, 35 * len(filtered) + 40),
@@ -176,26 +191,41 @@ def _display_results(results: dict) -> None:
         # ---- Per-stock reasons ----
         st.subheader("入选原因分析")
         import predict_only
+
         for _, row in filtered.iterrows():
             with st.expander(
                 f"{row['symbol']} ({row.get('board', '')} / "
                 f"{row.get('industry', '')}) — score={row.get('score', 0):.4f}"
             ):
                 param_cols = [
-                    "pred_ret_1d", "pred_ret_3d", "pred_ret_5d", "prob_up",
-                    "pain_prob", "pred_q10", "pred_q50", "pred_q90",
-                    "uncertainty_width", "score", "ATR_pct", "adv20",
-                    "turnover_rate", "close", "amount",
-                    "composite_score", "rank_score",
+                    "pred_ret_1d",
+                    "pred_ret_3d",
+                    "pred_ret_5d",
+                    "prob_up",
+                    "pain_prob",
+                    "pred_q10",
+                    "pred_q50",
+                    "pred_q90",
+                    "uncertainty_width",
+                    "score",
+                    "ATR_pct",
+                    "adv20",
+                    "turnover_rate",
+                    "close",
+                    "amount",
+                    "composite_score",
+                    "rank_score",
                 ]
                 param_data = []
                 for c in param_cols:
                     if c in row.index and not pd.isna(row[c]):
                         v = row[c]
-                        param_data.append({
-                            "参数": c,
-                            "值": f"{v:.6f}" if isinstance(v, float) else v,
-                        })
+                        param_data.append(
+                            {
+                                "参数": c,
+                                "值": f"{v:.6f}" if isinstance(v, float) else v,
+                            }
+                        )
                 if param_data:
                     st.dataframe(
                         pd.DataFrame(param_data),

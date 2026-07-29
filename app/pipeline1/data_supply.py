@@ -969,17 +969,25 @@ class DataSupplyChain:
 
         pro = self._tushare_pro()
         if pro is None:
-            msg = ("Tushare hk_hold 接口不可用 (hk_hold 需 ≥2000 积分). "
-                   "请确认: (1) tushare pro token 已配置; (2) 积分 ≥2000; "
-                   "(3) 接口权限已开通 (https://tushare.pro/document/2?doc_id=188)")
+            msg = (
+                "Tushare hk_hold 接口不可用 (hk_hold 需 ≥2000 积分). "
+                "请确认: (1) tushare pro token 已配置; (2) 积分 ≥2000; "
+                "(3) 接口权限已开通 (https://tushare.pro/document/2?doc_id=188)"
+            )
             logger.warning(msg)
             return pd.DataFrame(
-                {"ts_code": [], "trade_date": [], "name": [], "vol": [],
-                 "ratio": [], "exchange": []}
+                {
+                    "ts_code": [],
+                    "trade_date": [],
+                    "name": [],
+                    "vol": [],
+                    "ratio": [],
+                    "exchange": [],
+                }
             )
 
         all_frames = []
-        for ex in ([exchange] if exchange else ["SH", "SZ"]):
+        for ex in [exchange] if exchange else ["SH", "SZ"]:
             try:
                 kwargs = {"exchange": ex}
                 if ts_code:
@@ -998,15 +1006,20 @@ class DataSupplyChain:
                 raw = _with_timeout(_call)
                 if raw is not None and len(raw) > 0:
                     frame = pd.DataFrame(raw)
-                    frame = frame.rename(columns={
-                        "vol": "hk_vol",
-                        "ratio": "hk_ratio",
-                    })
+                    frame = frame.rename(
+                        columns={
+                            "vol": "hk_vol",
+                            "ratio": "hk_ratio",
+                        }
+                    )
                     all_frames.append(frame)
                     logger.info(
                         "Tushare hk_hold(%s): %d 行 (日期 %s)",
-                        ex, len(frame),
-                        raw["trade_date"].iloc[0] if "trade_date" in raw.columns else "?",
+                        ex,
+                        len(frame),
+                        raw["trade_date"].iloc[0]
+                        if "trade_date" in raw.columns
+                        else "?",
                     )
             except Exception as exc:
                 logger.warning("Tushare hk_hold(%s) 失败: %s", ex, exc)
