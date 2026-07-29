@@ -30,6 +30,13 @@ from app.pipeline1.label_engine import slippage_tier
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_divide(numerator: float, denominator: float, default: float = 0.0) -> float:
+    """安全除法: 分母为零时返回 default, 避免 ZeroDivisionError."""
+    if abs(denominator) < 1e-8:
+        return default
+    return numerator / denominator
+
 COMMISSION = 0.00025  # 万2.5 双边
 STAMP_TAX = 0.0005  # 印花税 0.05% 仅卖出
 SLIPPAGE = 0.0005  # 固定滑点 0.05% 双边 (panel 无 adv20 时回退)
@@ -177,8 +184,8 @@ class BacktestEngineV35:
                 pos["hold_days"] += 1
                 pos["high"] = max(pos["high"], bar["high"])
                 px = self._px_close(bar)
-                pnl = px / pos["cost_hfq"] - 1 if pos["cost_hfq"] != 0 else 0.0
-                dd_high = px / pos["high_hfq"] - 1 if pos["high_hfq"] != 0 else 0.0
+                pnl = _safe_divide(px, pos["cost_hfq"]) - 1
+                dd_high = _safe_divide(px, pos["high_hfq"]) - 1
                 prob = pos.get("prob_up", 1.0)
                 reason = None
                 if pnl <= cfg.hard_stop:
