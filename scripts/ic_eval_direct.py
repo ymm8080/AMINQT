@@ -62,11 +62,28 @@ if os.path.exists(hn_cache):
         "Holdernumber merged: cov=%.1f%%", (1 - df["holder_count"].isna().mean()) * 100
     )
 
-# ==== Build features ====
-df["is_st"] = False
-df["is_suspended"] = False
-df["list_days"] = df.groupby("symbol").cumcount() + 1
-df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
+# ==== Risk flags: prefer panel columns; fill gaps from DataSupplyChain ====
+if "is_st" not in df.columns:
+    try:
+        names = pro.stock_basic(
+            exchange="", list_status="L", fields="ts_code,name"
+        )
+        names["symbol"] = names["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
+        st_set = set(
+            names.loc[
+                names["name"].str.contains("ST", case=False, na=False), "symbol"
+            ]
+        )
+        df["is_st"] = df["symbol"].isin(st_set).astype(int)
+    except Exception:
+        logger.warning("is_st fallback failed, marking all clean")
+        df["is_st"] = 0
+if "is_suspended" not in df.columns:
+    df["is_suspended"] = 0  # panel enriched 已处理, 此处安全回退
+if "list_days" not in df.columns:
+    df["list_days"] = df.groupby("symbol").cumcount() + 1
+if "limit_pct" not in df.columns:
+    df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
 
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35  # noqa: E402
 from app.pipeline1.label_engine import LabelEngine  # noqa: E402
@@ -81,22 +98,51 @@ df = LabelEngine.mask_recent_days(df, days=6)
 logger.info("Features: %d cols in %.1fs", len(df.columns), time.time() - t0)
 
 # ==== IC eval ====
-label_1d = "label_1d_net" if "label_1d_net" in df.columns else "label_1d"
+# ==== IC-safe filtering: 剔除不可交易/异常样本后再算 IC ====
+def _ic_tradable_mask(df: pd.DataFrame) -> pd.Series:
+    """返回可用于 IC 计算的样本 mask (剔除 ST/停牌/涨跌停/次新股)."""
+    mask = pd.Series(True, index=df.index)
+    # ST + 停牌
+    for col in ("is_st", "is_suspended"):
+        if col in df.columns:
+            mask &= ~df[col].astype(bool)
+    # 涨停买不到 (close ≈ high ≈ limit_up_price): 次日收益不是可实现的 alpha
+    if "limit_pct" in df.columns and "pre_close" in df.columns:
+        limit_up = df["pre_close"] * (1 + df["limit_pct"] / 100)
+        at_limit_up = df["close"] >= limit_up * 0.995  # 允许成交价接近涨停
+        mask &= ~at_limit_up
+    # 跌停卖不出: 持有期收益被截断, 不是真实的 alpha 衰减
+    if "limit_pct" in df.columns and "pre_close" in df.columns:
+        limit_down = df["pre_close"] * (1 - df["limit_pct"] / 100)
+        at_limit_down = df["close"] <= limit_down * 1.005
+        mask &= ~at_limit_down
+    # 次新股: 上市不足 60 个交易日, 收益分布异常
+    if "list_days" in df.columns:
+        mask &= df["list_days"] >= 60
+    return mask
+
+
+_ic_mask = _ic_tradable_mask(df)
+_removed = (~_ic_mask).sum()
+logger.info(
+    "IC-sample filter: removed %d / %d rows (%.1f%%) — ST/停牌/涨跌停/次新股",
+    _removed, len(df), _removed / len(df) * 100,
+)
+df_ic = df[_ic_mask].copy()
 label_3d = "label_3d_net" if "label_3d_net" in df.columns else "label_3d"
 label_5d = "label_5d_net" if "label_5d_net" in df.columns else "label_5d"
 
 
 def rank_ic(df, factor, label):
-    sub = df[[factor, "date", label]].dropna()
-    if len(sub) < 500:
-        return 0.0
-    ics = [
-        g[[factor, label]].corr(method="spearman").iloc[0, 1]
-        for _, g in sub.groupby("date")
-        if len(g) >= 10
-    ]
-    ics = [i for i in ics if not np.isnan(i)]
-    return float(np.mean(np.abs(ics))) if ics else 0.0
+    """日度 Rank IC 均值 (带符号, Spearman 时间均值). 返回 signed IC. 使用公共模块保证口径一致."""
+    from app.utils.daily_rank_ic import mean_rank_ic
+    return mean_rank_ic(df, factor, label, abs_mean=False)
+
+
+def abs_rank_ic(df, factor, label):
+    """日度 |Rank IC| 均值 (方向无关, 用于筛选强度)."""
+    from app.utils.daily_rank_ic import mean_rank_ic
+    return mean_rank_ic(df, factor, label, abs_mean=True)
 
 
 # dim21-28 feature prefixes
@@ -185,60 +231,72 @@ chg_check = [
 dims["_time_series_chg"] = [f"{c}_chg{w}" for c in chg_check for w in [1, 3, 5]]
 
 print()
-print("=" * 100)
+# Header: show signed IC + direction, plus |IC| for magnitude
+DIR_MAP = {1: "+", -1: "-", 0: "·"}  # direction indicator
+
+print("=" * 120)
 print(
-    f"{'Dim':<20s} {'Factor':<35s} {'IC_1d':<8s} {'IC_3d':<8s} {'IC_5d':<8s} {'NaN%':<7s} {'Signal'}"
+    f"{'Dim':<20s} {'Factor':<35s} {'IC_1d':>8s} {'IC_3d':>8s} {'IC_5d':>8s} {'|IC|max':>8s} {'Dir':>4s} {'NaN%':>6s} {'Signal'}"
 )
-print("-" * 100)
+print("-" * 120)
 
 results = {}
 for dim, feats in dims.items():
-    best_ic1, best_ic3, best_ic5 = 0, 0, 0
-    best_f, best_nan = "", 100
+    best_abs_ic1, best_abs_ic3, best_abs_ic5 = 0.0, 0.0, 0.0
+    best_signed_ic1, best_signed_ic3, best_signed_ic5 = 0.0, 0.0, 0.0
+    best_f, best_nan = "", 100.0
     shown = 0
     for f in feats:
         if f not in df.columns:
             continue
-        nan_r = df[f].isna().mean()
+        nan_r = df_ic[f].isna().mean()
         if nan_r > 0.95:
             continue
-        ic1 = rank_ic(df, f, label_1d)
-        ic3 = rank_ic(df, f, label_3d)
-        ic5 = rank_ic(df, f, label_5d)
-        best = max(ic1, ic3, ic5)
-        if best > 0.005:
+        ic1 = rank_ic(df_ic, f, label_1d)
+        ic3 = rank_ic(df_ic, f, label_3d)
+        ic5 = rank_ic(df_ic, f, label_5d)
+        best_abs = max(abs(ic1), abs(ic3), abs(ic5))
+        # Direction: sign of the strongest label (1d priority)
+        dominant = ic1 if abs(ic1) >= abs(ic3) and abs(ic1) >= abs(ic5) else (
+            ic3 if abs(ic3) >= abs(ic5) else ic5
+        )
+        direction = "+" if dominant > 0 else ("-" if dominant < 0 else "·")
+        if best_abs > 0.005:
             sig = (
                 "STRONG"
-                if best >= 0.03
-                else ("OK" if best >= 0.02 else ("weak" if best >= 0.01 else "-"))
+                if best_abs >= 0.03
+                else ("OK" if best_abs >= 0.02 else ("weak" if best_abs >= 0.01 else "-"))
             )
             print(
-                f"{dim:<20s} {f:<35s} {ic1:<8.4f} {ic3:<8.4f} {ic5:<8.4f} {nan_r * 100:<7.1f} {sig}"
+                f"{dim:<20s} {f:<35s} {ic1:>8.4f} {ic3:>8.4f} {ic5:>8.4f} {best_abs:>8.4f} {direction:>4s} {nan_r * 100:>6.1f} {sig}"
             )
             shown += 1
-        if best > best_ic1:
-            best_ic1, best_ic3, best_ic5 = ic1, ic3, ic5
+        if best_abs > best_abs_ic1:
+            best_abs_ic1, best_abs_ic3, best_abs_ic5 = abs(ic1), abs(ic3), abs(ic5)
+            best_signed_ic1, best_signed_ic3, best_signed_ic5 = ic1, ic3, ic5
             best_f, best_nan = f, nan_r
     verdict = (
-        "INCLUDE" if best_ic1 >= 0.02 else ("WATCH" if best_ic1 >= 0.01 else "SKIP")
+        "INCLUDE" if best_abs_ic1 >= 0.02 else ("WATCH" if best_abs_ic1 >= 0.01 else "SKIP")
     )
     results[dim] = {
         "best": best_f,
-        "ic1": round(best_ic1, 5),
-        "ic3": round(best_ic3, 5),
-        "ic5": round(best_ic5, 5),
+        "ic1": round(best_signed_ic1, 5),
+        "ic3": round(best_signed_ic3, 5),
+        "ic5": round(best_signed_ic5, 5),
+        "abs_ic1": round(best_abs_ic1, 5),
         "nan": round(best_nan * 100, 1),
         "shown": shown,
         "verdict": verdict,
     }
 
-print("-" * 100)
+print("-" * 120)
 print()
 print("=== VERDICT ===")
 for dim, r in results.items():
     status = ">> INCLUDE <<" if r["verdict"] == "INCLUDE" else ""
+    direction = "+" if r["ic1"] > 0 else ("-" if r["ic1"] < 0 else "·")
     print(
-        f"  {dim:<22s}: {r['best']:<35s} IC1={r['ic1']:.5f} IC3={r['ic3']:.5f} IC5={r['ic5']:.5f} NaN={r['nan']:.1f}% shown={r['shown']} -> {r['verdict']} {status}"
+        f"  {dim:<22s}: {r['best']:<35s} IC1={r['ic1']:+.5f} IC3={r['ic3']:+.5f} IC5={r['ic5']:+.5f} |IC1|={r['abs_ic1']:.5f} NaN={r['nan']:.1f}% shown={r['shown']} -> {r['verdict']} {status}"
     )
 
 os.makedirs("data/factor_registry", exist_ok=True)

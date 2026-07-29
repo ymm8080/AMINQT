@@ -697,7 +697,7 @@ def append_daily_and_predict(req: AppendDailyRequest) -> dict:
         panel = supply.append_today_to_panel(
             panel,
             trade_date=trade_date,
-            sources=["ohlcv", "margin", "northbound", "lhb"],
+            sources=["ohlcv", "margin", "lhb"],
         )
         _log(f"当日数据追加完成: {panel['symbol'].nunique()} stocks, {len(panel)} rows")
     except DataSupplyError as exc:
