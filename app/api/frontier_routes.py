@@ -8,6 +8,7 @@ Frontier 前端数据 API (React SPA 后端)
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -565,3 +566,210 @@ def get_prediction_quality(limit: int = 60) -> dict:
         return {"items": PredictionDB().all_quality(limit)}
     except Exception:
         return {"items": []}
+
+
+# ============================================================
+# Pipeline 触发 (每日数据追加 + 预测)
+# ============================================================
+PANEL_PATHS = [
+    "data/panel_full_enriched_v3.parquet",
+    "data/panel_full_enriched_v2.parquet",
+]
+MODEL_DIR = "models/pipeline1"
+
+
+class AppendDailyRequest(BaseModel):
+    trade_date: str | None = None  # YYYYMMDD, None=今天
+    market_state: str = "range"  # bull / bear / range
+    save_panel: bool = True  # 追加后保存面板 (WORM 备份)
+
+
+@router.get("/pipeline/status")
+def get_pipeline_status() -> dict:
+    """面板 + 模型 + 清单状态快照."""
+    import os
+
+    # 面板状态
+    panel_info = {"exists": False}
+    for path in PANEL_PATHS:
+        if os.path.exists(path):
+            try:
+                df = pd.read_parquet(path, columns=["symbol", "date"])
+                panel_info = {
+                    "exists": True,
+                    "path": path,
+                    "n_stocks": int(df["symbol"].nunique()),
+                    "n_rows": len(df),
+                    "last_date": str(df["date"].max().strftime("%Y-%m-%d")),
+                    "first_date": str(df["date"].min().strftime("%Y-%m-%d")),
+                    "size_mb": round(os.path.getsize(path) / 1e6, 1),
+                }
+                break
+            except Exception as exc:
+                panel_info = {"exists": False, "error": str(exc)}
+                break
+
+    # 模型状态
+    model_info: dict[str, dict] = {}
+    if os.path.isdir(MODEL_DIR):
+        for board in ("main", "dual"):
+            pkls = sorted(
+                f
+                for f in os.listdir(MODEL_DIR)
+                if f.startswith(f"{board}_") and f.endswith(".pkl")
+            )
+            if pkls:
+                latest = pkls[-1]
+                model_info[board] = {
+                    "file": latest,
+                    "path": os.path.join(MODEL_DIR, latest),
+                    "modified": datetime.fromtimestamp(
+                        os.path.getmtime(os.path.join(MODEL_DIR, latest))
+                    ).strftime("%Y-%m-%d %H:%M"),
+                }
+
+    # 最新清单
+    list_dates = ds.list_available_dates()
+
+    return {
+        "panel": panel_info,
+        "models": model_info,
+        "latest_list_date": list_dates[0] if list_dates else None,
+        "list_count": len(list_dates),
+    }
+
+
+@router.post("/pipeline/append-daily")
+def append_daily_and_predict(req: AppendDailyRequest) -> dict:
+    """触发每日数据追加到 V3 面板 + 推理预测.
+
+    流程:
+      1. 加载 panel_full_enriched_v3.parquet (历史面板)
+      2. 追加当日 OHLCV + margin/northbound/lhb
+      3. (可选) 保存更新后的面板 (WORM: 先备份)
+      4. 加载最新模型包 → 推理 → 清单生成 → 持久化
+      5. 返回结果摘要
+    """
+    import os
+    import shutil
+
+    from app.pipeline1.daily_pipeline import DailySelectionPipeline
+    from app.pipeline1.data_supply import DataSupplyChain, DataSupplyError
+    from app.pipeline1.panel_builder import enrich_cyq
+    from app.pipeline1.predict_runner import find_bundles
+
+    trade_date = req.trade_date or datetime.now().strftime("%Y%m%d")
+    log_lines: list[str] = []
+
+    def _log(msg: str):
+        logger.info("[pipeline/append-daily] %s", msg)
+        log_lines.append(f"{datetime.now():%H:%M:%S} {msg}")
+
+    # 1. 定位历史面板
+    panel_path = None
+    for p in PANEL_PATHS:
+        if os.path.exists(p):
+            panel_path = p
+            break
+    if panel_path is None:
+        raise HTTPException(500, "无可用历史面板 (panel_full_enriched_v3.parquet)")
+
+    _log(f"加载面板: {panel_path}")
+    panel = pd.read_parquet(panel_path)
+    _log(
+        f"面板: {panel['symbol'].nunique()} stocks, {len(panel)} rows, "
+        f"{panel['date'].min()} ~ {panel['date'].max()}"
+    )
+
+    # 去除当日数据 (避免重复)
+    panel = panel[panel["date"] < pd.to_datetime(trade_date)]
+
+    # 2. CYQ enrich
+    try:
+        panel = enrich_cyq(panel, cyq_cache="data/cyq_panel.parquet")
+        _log("CYQ enrich 完成")
+    except Exception as exc:
+        _log(f"CYQ enrich 跳过: {exc}")
+
+    # 3. 追加当日数据
+    supply = DataSupplyChain()
+    try:
+        panel = supply.append_today_to_panel(
+            panel,
+            trade_date=trade_date,
+            sources=["ohlcv", "margin", "northbound", "lhb"],
+        )
+        _log(f"当日数据追加完成: {panel['symbol'].nunique()} stocks, {len(panel)} rows")
+    except DataSupplyError as exc:
+        _log(f"数据追加失败: {exc}")
+        return {
+            "success": False,
+            "trade_date": trade_date,
+            "error": str(exc),
+            "logs": log_lines,
+        }
+
+    # 4. 保存面板 (WORM: 先备份)
+    if req.save_panel:
+        backup_path = panel_path.replace(
+            ".parquet", f"_backup_{datetime.now():%Y%m%d_%H%M%S}.parquet"
+        )
+        shutil.copy2(panel_path, backup_path)
+        _log(f"面板备份: {backup_path}")
+        panel.to_parquet(panel_path, index=False)
+        _log(f"面板已保存: {panel_path}")
+
+    # 5. 推理预测
+    bundles = find_bundles(model_dir=MODEL_DIR)
+    if not bundles:
+        raise HTTPException(500, "无可用模型包, 请先训练 (scripts/train_pipeline1.py)")
+
+    _log(f"模型包: { {k: os.path.basename(v) for k, v in bundles.items()} }")
+
+    pipe = DailySelectionPipeline(
+        supply=supply,
+        bundle_paths=bundles,
+    )
+    try:
+        result = pipe.run(trade_date, panel=panel, market_state=req.market_state)
+    except Exception as exc:
+        _log(f"推理失败: {exc}")
+        return {
+            "success": False,
+            "trade_date": trade_date,
+            "error": str(exc),
+            "logs": log_lines,
+        }
+
+    lst = result.get("list")
+    n = 0 if lst is None or result.get("empty") else len(lst)
+    _log(f"清单生成: mode={result.get('mode')}, {n} stocks")
+
+    # 返回摘要
+    list_summary = []
+    if lst is not None and n > 0:
+        for _, row in lst.head(20).iterrows():
+            list_summary.append(
+                {
+                    "symbol": str(row.get("symbol", "")),
+                    "board": str(row.get("board", "")),
+                    "prob_up": round(float(row.get("prob_up", 0)), 4),
+                    "pred_ret_1d": round(float(row.get("pred_ret_1d", 0)), 4),
+                    "pred_ret_3d": round(float(row.get("pred_ret_3d", 0)), 4),
+                    "pred_ret_5d": round(float(row.get("pred_ret_5d", 0)), 4),
+                    "score": round(float(row.get("score", 0)), 4),
+                    "weight": round(float(row.get("weight", 0)), 4),
+                }
+            )
+
+    return {
+        "success": True,
+        "trade_date": trade_date,
+        "mode": result.get("mode"),
+        "n_stocks": n,
+        "empty": result.get("empty", False),
+        "cap_position": result.get("cap_position", 0.0),
+        "valve_state": result.get("valve_state"),
+        "list_preview": list_summary,
+        "logs": log_lines,
+    }

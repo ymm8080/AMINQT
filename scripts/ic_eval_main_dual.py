@@ -72,16 +72,14 @@ def main():
     logger.info("缓存最新日期: %s, 今日: %s", max_date, today_str)
 
     if max_date < today_str:
-        logger.info(
-            "追加今日 (%s) OHLCV + margin + northbound + lhb 数据...", today_str
-        )
+        logger.info("追加今日 (%s) OHLCV + margin + lhb 数据...", today_str)
         try:
             supply = DataSupplyChain()
             panel = panel[panel["date"] < pd.to_datetime(today_str)]
             panel = supply.append_today_to_panel(
                 panel,
                 trade_date=today_str,
-                sources=["ohlcv", "margin", "northbound", "lhb"],
+                sources=["ohlcv", "margin", "lhb"],  # northbound 已移除
             )
             logger.info(
                 "追加完成: %d rows, %d stocks", len(panel), panel["symbol"].nunique()

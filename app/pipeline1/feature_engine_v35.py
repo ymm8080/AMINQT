@@ -32,7 +32,6 @@ MISSINGNESS_COLS = [
     "conc_90",
     "benefit_part",
     "margin_balance",
-    "north_net_buy_sh",
     "holder_count",
 ]
 
@@ -101,7 +100,7 @@ class FeatureEngineV35:
         df = self.dim22_fundamental_pit(df)  # [Alt-3] 基本面PIT (fina_indicator)
         df = self.dim23_shareholder_structure(df)  # [Alt-5] 股东户数+户均持股
         df = self.dim24_margin_trading(df)  # [Alt-2] 融资融券
-        df = self.dim25_northbound(df)  # [Alt-1] 北向资金
+        # dim25_northbound 已移除 — 上游 north_* 数据覆盖率 0.016%, IC=IR=0
         df = self.dim26_lhb_enhanced(df)  # [Alt-4] 龙虎榜增强
         df = self.dim27_industry_flow(df)  # [Alt-7a] 行业级 alt 数据聚合
         df = self.dim28_sector_index(df)  # [Alt-7b] 申万行业指数动量/轮动

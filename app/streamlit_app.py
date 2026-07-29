@@ -23,6 +23,7 @@ from app.streamlit import (  # noqa: E402
     page_backtest,
     page_config,
     page_data_feed,
+    page_prediction,
     page_selection,
     page_trading,
 )
@@ -31,6 +32,7 @@ st.set_page_config(page_title="A股量化交易系统", page_icon="📈", layout
 
 PAGES = {
     "选股看板": page_selection.render,
+    "预测中心": page_prediction.render,
     "交易看板": page_trading.render,
     "回测中心": page_backtest.render,
     "数据管理": page_data_feed.render,

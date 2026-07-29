@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BacktestPage } from './pages/BacktestPage'
 import { ConfigPage } from './pages/ConfigPage'
+import { DataPipelinePage } from './pages/DataPipelinePage'
 import { SelectionPage } from './pages/SelectionPage'
 import { TradingPage } from './pages/TradingPage'
 
@@ -8,6 +9,7 @@ const PAGES: Record<string, (props: Record<string, unknown>) => JSX.Element> = {
   选股看板: SelectionPage,
   交易看板: TradingPage,
   回测中心: BacktestPage,
+  数据管道: DataPipelinePage,
   配置中心: ConfigPage,
 }
 
