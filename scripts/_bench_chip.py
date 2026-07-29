@@ -8,9 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import pandas as pd
-import numpy as np
-from app.indicators.chip_distribution import ChipDistribution
+import pandas as pd  # noqa: E402
+import numpy as np  # noqa: E402
+from app.indicators.chip_distribution import ChipDistribution  # noqa: E402
 
 V3_PATH = "data/panel_full_enriched_v3.parquet"
 

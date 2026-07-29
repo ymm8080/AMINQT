@@ -8,8 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-import pandas as pd
-import logging
+import pandas as pd  # noqa: E402
+import logging  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -17,6 +17,57 @@ logging.basicConfig(
 logger = logging.getLogger("fina_fill")
 
 V3_PATH = "data/panel_full_enriched_v3.parquet"
+
+# Tushare raw → normalized column mapping (per data_supply.py col_rename)
+RAW_TO_NORM = {
+    "ann_date": "announce_date",
+    "end_date": "report_period",
+    "ts_code": "_ts_code",
+    "roe_dt": "roe_deducted",
+    "np_margin": "net_margin",
+    "netprofit_margin": "net_margin",
+    "dt_eps_yoy": "eps_yoy",
+    "or_yoy": "rev_yoy",
+    "netprofit_yoy": "profit_yoy",
+    "cf_sales": "op_cf_ratio",
+    "debt_to_assets": "debt_ratio",
+    "assets_turn": "asset_turnover",
+    "ar_turn": "ar_turnover",
+    "inv_turn": "inventory_turnover",
+    # these already match, no rename needed:
+    # roe, roa, gross_margin, current_ratio, ocf_to_or
+}
+
+
+def normalize_fina(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize raw Tushare column names to v3 panel convention."""
+    # Detect raw format: has 'ann_date' but not 'announce_date'
+    if "ann_date" in df.columns and "announce_date" not in df.columns:
+        df = df.rename(columns=RAW_TO_NORM)
+        logger.info("  raw Tushare format → normalized (%d cols)", len(df.columns))
+
+    # Ensure symbol exists
+    if "symbol" not in df.columns and "_ts_code" in df.columns:
+        df["symbol"] = df["_ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
+
+    # Convert announce_date to datetime (may be YYYYMMDD string or ISO date)
+    if "announce_date" in df.columns:
+        df["announce_date"] = pd.to_datetime(
+            df["announce_date"], format="mixed", errors="coerce"
+        )
+
+    # Convert report_period similarly
+    if "report_period" in df.columns:
+        df["report_period"] = pd.to_datetime(
+            df["report_period"], format="mixed", errors="coerce"
+        )
+
+    # Ensure numeric columns
+    for c in df.columns:
+        if c not in ("symbol", "_ts_code", "announce_date", "report_period"):
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    return df
 
 
 def main():
@@ -36,17 +87,23 @@ def main():
     for f in files:
         try:
             df = pd.read_parquet(os.path.join(fina_dir, f))
-            if len(df) and "symbol" in df.columns:
+            if len(df) == 0:
+                continue
+            df = normalize_fina(df)
+            if "symbol" in df.columns:
                 frames.append(df)
-        except:
-            pass
+        except Exception as e:
+            logger.debug("  %s 跳过: %s", f, e)
     if not frames:
         logger.error("无 fina_indicator 数据")
         return
 
     fina = pd.concat(frames, ignore_index=True)
-    # 去重: 同一 symbol + announce_date 保留最新
-    fina = fina.drop_duplicates(subset=["symbol", "announce_date"], keep="last")
+    # 合并: 同一 symbol + announce_date, 取各列首个非 NaN 值
+    # (per-stock 文件有 roe/gross_margin 等, all_ 文件有 eps_yoy/net_margin 等)
+    fina = fina.sort_values(["symbol", "announce_date"])
+    # all_ 文件排在前面 (字母序), 其列优先; per-stock 文件补缺
+    fina = fina.groupby(["symbol", "announce_date"], sort=False).first().reset_index()
     logger.info(
         "fina_indicator: %d 行 %d 列, %d 股",
         len(fina),

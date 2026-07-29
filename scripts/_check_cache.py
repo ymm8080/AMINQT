@@ -40,6 +40,6 @@ for root, dirs, files in os.walk(alt_dir):
             df = pd.read_parquet(first)
             print(f"  schema: {list(df.columns)[:8]}...")
             print(f"  rows: {len(df)}")
-        except:
+        except:  # noqa: E722
             pass
         print()

@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 
 load_dotenv()
-import tushare as ts
+import tushare as ts  # noqa: E402
 
 token = os.getenv("TUSHARE_TOKEN")
 ts.set_token(token)

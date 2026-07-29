@@ -22,8 +22,8 @@ syms = rng.choice(df["symbol"].unique(), 500, replace=False)
 df = df[df["symbol"].isin(syms)].sort_values(["symbol", "date"]).reset_index(drop=True)
 logger.info("Panel: %d stocks, %d rows", df["symbol"].nunique(), len(df))
 
-from app.pipeline1.data_supply import DataSupplyChain
-from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
+from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
+from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct  # noqa: E402
 
 supply = DataSupplyChain()
 pro = supply._tushare_pro()
@@ -55,7 +55,7 @@ for sym in test_syms:
         if raw is not None and len(raw) > 0:
             raw["symbol"] = sym
             fin_frames.append(raw)
-    except:
+    except:  # noqa: E722
         pass
     time.sleep(0.05)
 if fin_frames:
@@ -140,7 +140,7 @@ for sym in df["symbol"].unique():
                 raw.get("holder_num", 0), errors="coerce"
             )
             hn_all.append(raw[["symbol", "announce_date", "holder_count"]])
-    except:
+    except:  # noqa: E722
         pass
     time.sleep(0.03)
 if hn_all:
@@ -175,7 +175,7 @@ for d in sample_dates:
                 if c in raw.columns:
                     raw[c] = pd.to_numeric(raw[c], errors="coerce")
             mg_frames.append(raw[["symbol", "date", "rzye", "rqye", "rzmre", "rqmcl"]])
-    except:
+    except:  # noqa: E722
         pass
     time.sleep(0.3)
 if mg_frames:
@@ -222,7 +222,7 @@ for d in sample_dates:
                     ]
                 ]
             )
-    except:
+    except:  # noqa: E722
         pass
     time.sleep(0.3)
 if mf_frames:
@@ -249,8 +249,8 @@ df["is_suspended"] = False
 df["list_days"] = df.groupby("symbol").cumcount() + 1
 df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
 
-from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from app.pipeline1.label_engine import LabelEngine
+from app.pipeline1.feature_engine_v35 import FeatureEngineV35  # noqa: E402
+from app.pipeline1.label_engine import LabelEngine  # noqa: E402
 
 t0 = time.time()
 fe = FeatureEngineV35()

@@ -51,7 +51,7 @@ for code in test10:
         df = ak.stock_cyq_em(symbol=code, adjust="qfq")
         if df is not None and len(df) > 0:
             ok += 1
-    except:
+    except:  # noqa: E722
         pass
 elapsed = time.time() - t0
 print(f"  成功 {ok}/10, 总耗时 {elapsed:.1f}s, 平均 {elapsed / 10:.2f}s/股")

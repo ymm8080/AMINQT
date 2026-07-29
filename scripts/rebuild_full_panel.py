@@ -11,12 +11,12 @@ Handles edge cases:
 import warnings
 
 warnings.filterwarnings("ignore")
-import pandas as pd
-import numpy as np
-import logging
-import os
-import time
-import sys
+import pandas as pd  # noqa: E402
+import numpy as np  # noqa: E402
+import logging  # noqa: E402
+import os  # noqa: E402
+import time  # noqa: E402
+import sys  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -24,7 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger()
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app.pipeline1.cleaning_pipeline import board_of
+from app.pipeline1.cleaning_pipeline import board_of  # noqa: E402
 
 # ── 1. Load base panel ──
 panel = pd.read_parquet("data/panel_full_enriched.parquet")
@@ -114,6 +114,8 @@ has_cyq = all(c in panel.columns for c in CYQ_COLS)
 if has_cyq:
     logger.info("CYQ already in base (%d cols) -- skipping enrich", len(CYQ_COLS))
 else:
+    from app.pipeline1.panel_builder import enrich_cyq  # noqa: E402
+
     panel = enrich_cyq(panel, cyq_cache="data/cyq_panel.parquet")
     logger.info("After CYQ enrich: %d cols", len(panel.columns))
 

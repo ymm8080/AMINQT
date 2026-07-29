@@ -6,11 +6,11 @@ Simplified: use existing cache, sample to 1500 stocks.
 import warnings
 
 warnings.filterwarnings("ignore")
-import pandas as pd
-import numpy as np
-import time
-import os
-import sys
+import pandas as pd  # noqa: E402
+import numpy as np  # noqa: E402
+import time  # noqa: E402
+import os  # noqa: E402
+import sys  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
@@ -28,7 +28,7 @@ panel = panel[panel["symbol"].isin(sampled)].copy()
 print(f"Panel after sampling: {panel['symbol'].nunique()} stocks, {len(panel)} rows")
 
 # Basic columns
-from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
+from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct  # noqa: E402
 
 panel["board"] = panel["symbol"].map(board_of)
 panel["limit_pct"] = [
@@ -120,8 +120,8 @@ for label, col in [
 panel = panel.sort_values(["symbol", "date"]).reset_index(drop=True)
 panel["list_days"] = panel.groupby("symbol").cumcount() + 1
 
-from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from app.pipeline1.label_engine import LabelEngine
+from app.pipeline1.feature_engine_v35 import FeatureEngineV35  # noqa: E402
+from app.pipeline1.label_engine import LabelEngine  # noqa: E402
 
 t0 = time.time()
 fe = FeatureEngineV35()

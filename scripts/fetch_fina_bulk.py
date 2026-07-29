@@ -24,7 +24,7 @@ PROJ = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJ not in sys.path:
     sys.path.insert(0, PROJ)
 
-from app.pipeline1.data_supply import DataSupplyChain
+from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,

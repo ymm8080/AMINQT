@@ -39,8 +39,8 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.pipeline1.data_supply import DataSupplyChain
-from app.pipeline1.panel_builder import enrich_alt_data
+from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
+from app.pipeline1.panel_builder import enrich_alt_data  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,

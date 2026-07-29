@@ -9,8 +9,8 @@ _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-import pandas as pd
-from app.pipeline1.data_supply import DataSupplyChain
+import pandas as pd  # noqa: E402
+from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 
 out_dir = "data/supply_cache/alt_data/fina_indicator"
 os.makedirs(out_dir, exist_ok=True)

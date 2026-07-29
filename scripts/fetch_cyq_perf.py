@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 
 load_dotenv()  # noqa: E402
 
-from app.pipeline1.data_supply import DataSupplyChain, DataSupplyError
+from app.pipeline1.data_supply import DataSupplyChain, DataSupplyError  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)

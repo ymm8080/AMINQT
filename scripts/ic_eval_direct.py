@@ -21,8 +21,8 @@ df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
 logger.info("Panel: %d stocks, %d rows", df["symbol"].nunique(), len(df))
 
 # Industry + board
-from app.pipeline1.data_supply import DataSupplyChain
-from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
+from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
+from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct  # noqa: E402
 
 supply = DataSupplyChain()
 pro = supply._tushare_pro()
@@ -68,8 +68,8 @@ df["is_suspended"] = False
 df["list_days"] = df.groupby("symbol").cumcount() + 1
 df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
 
-from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from app.pipeline1.label_engine import LabelEngine
+from app.pipeline1.feature_engine_v35 import FeatureEngineV35  # noqa: E402
+from app.pipeline1.label_engine import LabelEngine  # noqa: E402
 
 t0 = time.time()
 fe = FeatureEngineV35()
