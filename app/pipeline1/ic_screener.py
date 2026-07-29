@@ -23,17 +23,23 @@ from app.utils.daily_rank_ic import daily_rank_ic_series, mean_rank_ic
 
 logger = logging.getLogger(__name__)
 
-IC_STRONG = 0.01  # 有效因子 (signed mean IC, >0.01 即有效)
-IC_WEAK = 0.005  # 弱因子 (观察)
+# ── P19 两阶门禁: Factor Gate (此处) vs Model Gate (metrics.py) ──
+# Factor Gate: 单因子初筛 — 门槛宽松, 靠模型组合提纯 (ICIR≥0.05 即可).
+#   单因子天生噪声大, ICIR 0.10-0.25 是正常范围, 不能套用模型分数的 0.30 门槛.
+# Model Gate (metrics.ignition_gate): 组合模型分数 — 门槛严格 (ICIR≥0.30),
+#   因为模型分数的任务是把多个 noisy 因子组合成一个稳定信号.
+# 参考: FEATURE ADOPTION ANALYSIS 20260729, 全量 2.7M 行截面 IC 实测.
+IC_STRONG = 0.02  # 有效因子 |IC| 下限 (因子级: ≥0.02 即有效; 模型级: ≥0.03)
+IC_WEAK = 0.01    # 弱因子 |IC| 下限 (0.01-0.02: 正交信息可被模型组合利用)
 ROLLING_WINDOW = 60  # 滚动 IC 窗口 (交易日)
-ROLLING_MEAN_MIN = 0.01  # 60日滚动IC均值下限 (原0.02太严, IC>0.01即有微弱预测力)
-ROLLING_POS_RATIO_MIN = 0.50  # 滚动IC正值比例 (原0.60太严, 过半即可)
+ROLLING_MEAN_MIN = 0.01  # 60日滚动IC均值下限
+ROLLING_POS_RATIO_MIN = 0.50  # 滚动IC正值比例 (过半即可, 原0.60太严)
 L2_NEG_PERIODS = (
     10  # [E4-L2] 连续 N 期滚动 IC 为负 → 自动剔除 (提高至10期, 允许周期性回撤)
 )
 L2_RECOVERY_PERIODS = 1  # 连续 N 期正向 IC → 解除剔除, 恢复候选资格
 ICIR_MIN = (
-    0.30  # [P18] IC 稳定性: |IC| / IC_std < 0.3 → 信号不稳, 降级 (杀稀疏/噪声因子)
+    0.05  # [P19 两阶门禁] 因子级 ICIR 下限: |IC|/IC_std ≥ 0.05 (原0.30为模型级门槛)
 )
 
 
@@ -179,7 +185,7 @@ class ICScreener:
             ic_by_label = {
                 k: self.rank_ic(train_df, f, lbl) for k, lbl in label_of.items()
             }
-            # [P19] best_ic 取绝对值最大 (方向无关; 负向强预测因子同样有效)
+            # [P19 Factor Gate] best_ic 取绝对值最大 (方向无关; 负向强预测因子同样有效)
             best_ic = max((abs(v) for v in ic_by_label.values()), default=0.0)
             ic_mdd = self.rank_ic(train_df, f, "label_mdd_3d") if has_mdd else None
             if ic_mdd is not None:
@@ -198,9 +204,9 @@ class ICScreener:
             nw_significant = (
                 abs(t_3d) > 1.28 or abs(t_5d) > 1.28
             )  # 90%置信 (原1.96/95%太严)
-            # [P18] IC 稳定性: 取各标签最佳 ICIR (非仅 1d)
+            # [P19 Factor Gate] IC 稳定性: 取各标签最佳 ICIR
             icir = max(self.ic_stability(train_df, f, lbl) for lbl in label_of.values())
-            icir_ok = icir >= ICIR_MIN
+            icir_ok = icir >= ICIR_MIN  # 因子级门槛 0.05 (模型级见 metrics.ignition_gate)
             if (
                 (best_ic > IC_STRONG or auc > 0.55)
                 and dual_ok
@@ -209,7 +215,7 @@ class ICScreener:
             ):
                 grade = "strong"
             elif (best_ic > IC_STRONG or auc > 0.55) and dual_ok and nw_significant:
-                grade = "weak"  # [P18] IC够但ICIR不足 → 降级为weak
+                grade = "weak"  # IC够但ICIR不足 → 降级为weak
             elif best_ic > IC_WEAK or auc > 0.52:
                 grade = "weak"
             else:

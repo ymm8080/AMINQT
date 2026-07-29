@@ -21,6 +21,8 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 FETCH_TIMEOUT = 120  # 单源单股拉取硬超时 (秒) — 防接口挂起卡死整个回填
+FETCH_RETRY_INTERVAL = 60  # 源失败后重试间隔 (秒)
+FETCH_MAX_RETRIES = 10  # 最大重试次数 (10 × 60s = 10 分钟)
 
 
 def _with_timeout(fn, timeout: float = FETCH_TIMEOUT):
@@ -112,14 +114,18 @@ class DataSupplyChain:
 
     # ---------------- 生产数据源 (Tushare primary, akshare fallback) ----------------
     def _tushare_fetch_daily(self, trade_date: str) -> pd.DataFrame:
-        """全市场当日截面: Tushare pro.daily() (主力源, akshare 永久封 IP).
+        """全市场当日截面: Tushare pro.daily() + adj_factor + daily_basic + stock_basic.
 
-        产出与 _akshare_fetch_daily 同 schema: symbol, date, open..close,
-        close_hfq, volume, amount, turnover_rate, pre_close.
+        产出 v3 面板完整 OHLCV schema:
+        symbol, date, board, open/high/low/close (raw), open_hfq..close_hfq,
+        volume, amount, turnover_rate, pre_close, is_suspended, is_st,
+        industry, list_days
         """
         pro = self._tushare_pro()
         if pro is None:
             raise DataSupplyError("Tushare 不可用, 无法拉取当日全市场截面")
+
+        # 1. pro.daily — raw OHLCV
         try:
             raw = _with_timeout(lambda: pro.daily(trade_date=trade_date))
         except Exception as exc:
@@ -128,22 +134,124 @@ class DataSupplyChain:
             ) from exc
         if raw is None or len(raw) == 0:
             raise DataSupplyError(f"Tushare daily 拉取失败: {trade_date}")
-        df = pd.DataFrame(
+
+        # 2. pro.adj_factor — 后复权因子 (批量)
+        try:
+            adj = _with_timeout(lambda: pro.adj_factor(trade_date=trade_date))
+        except Exception as exc:
+            logger.warning("Tushare adj_factor 失败, hfq 降级为 raw: %s", exc)
+            adj = None
+
+        # 3. pro.daily_basic — 换手率 (批量)
+        try:
+            basic = _with_timeout(
+                lambda: pro.daily_basic(
+                    trade_date=trade_date,
+                    fields="ts_code,turnover_rate",
+                )
+            )
+        except Exception as exc:
+            logger.warning("Tushare daily_basic 换手率拉取失败: %s", exc)
+            basic = None
+
+        # 4. pro.stock_basic — 板块/行业/上市日/ST (静态, 缓存)
+        stock_info = self._get_stock_basic_cached(pro)
+
+        # 合并
+        df = raw.copy()
+        df["symbol"] = df["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
+        df["date"] = pd.to_datetime(trade_date)
+
+        # 后复权价 = raw × adj_factor
+        if adj is not None and len(adj) > 0:
+            adj_map = adj.set_index("ts_code")["adj_factor"]
+            factor = df["ts_code"].map(adj_map).fillna(1.0)
+        else:
+            factor = 1.0
+        for col, hfq_col in [
+            ("open", "open_hfq"),
+            ("high", "high_hfq"),
+            ("low", "low_hfq"),
+            ("close", "close_hfq"),
+        ]:
+            df[hfq_col] = pd.to_numeric(df[col], errors="coerce") * factor
+
+        # 换手率
+        if basic is not None and len(basic) > 0:
+            tr_map = basic.set_index("ts_code")["turnover_rate"]
+            df["turnover_rate"] = df["ts_code"].map(tr_map)
+        else:
+            df["turnover_rate"] = np.nan
+
+        # stock_basic: board / industry / list_days / is_st
+        if stock_info is not None and len(stock_info) > 0:
+            info = stock_info.set_index("ts_code")
+            df["board"] = df["ts_code"].map(info["market"])
+            df["industry"] = df["ts_code"].map(info["industry"])
+            list_dates = pd.to_datetime(
+                df["ts_code"].map(info["list_date"]), format="%Y%m%d", errors="coerce"
+            )
+            df["list_days"] = (
+                pd.to_datetime(trade_date, format="%Y%m%d") - list_dates
+            ).dt.days
+            # ST 标记: name 含 ST/*ST
+            names = df["ts_code"].map(info["name"]).fillna("")
+            df["is_st"] = names.str.contains("ST", case=False, na=False).astype(int)
+        else:
+            df["board"] = np.nan
+            df["industry"] = np.nan
+            df["list_days"] = np.nan
+            df["is_st"] = 0
+
+        # 停牌: vol == 0 或 open 为空 → 停牌
+        df["is_suspended"] = (
+            (pd.to_numeric(df["vol"], errors="coerce").fillna(0) == 0)
+            | (pd.to_numeric(df["open"], errors="coerce").isna())
+        ).astype(int)
+
+        # 重命名 + 输出
+        out = pd.DataFrame(
             {
-                "symbol": raw["ts_code"].str.replace(".SZ", "").str.replace(".SH", ""),
-                "date": pd.to_datetime(trade_date),
-                "open": pd.to_numeric(raw["open"], errors="coerce"),
-                "high": pd.to_numeric(raw["high"], errors="coerce"),
-                "low": pd.to_numeric(raw["low"], errors="coerce"),
-                "close": pd.to_numeric(raw["close"], errors="coerce"),
-                "close_hfq": pd.to_numeric(raw["close"], errors="coerce"),
-                "volume": pd.to_numeric(raw["vol"], errors="coerce"),
-                "amount": pd.to_numeric(raw["amount"], errors="coerce"),
-                "turnover_rate": np.nan,
-                "pre_close": pd.to_numeric(raw["pre_close"], errors="coerce"),
+                "symbol": df["symbol"],
+                "date": df["date"],
+                "board": df["board"],
+                "open": pd.to_numeric(df["open"], errors="coerce"),
+                "high": pd.to_numeric(df["high"], errors="coerce"),
+                "low": pd.to_numeric(df["low"], errors="coerce"),
+                "close": pd.to_numeric(df["close"], errors="coerce"),
+                "open_hfq": df["open_hfq"],
+                "high_hfq": df["high_hfq"],
+                "low_hfq": df["low_hfq"],
+                "close_hfq": df["close_hfq"],
+                "volume": pd.to_numeric(df["vol"], errors="coerce"),
+                "amount": pd.to_numeric(df["amount"], errors="coerce"),
+                "turnover_rate": pd.to_numeric(df["turnover_rate"], errors="coerce"),
+                "pre_close": pd.to_numeric(df["pre_close"], errors="coerce"),
+                "is_suspended": df["is_suspended"],
+                "is_st": df["is_st"],
+                "industry": df["industry"],
+                "list_days": df["list_days"],
             }
         )
-        return df
+        return out
+
+    _stock_basic_cache: pd.DataFrame | None = None
+
+    def _get_stock_basic_cached(self, pro) -> pd.DataFrame | None:
+        """缓存 stock_basic (静态数据, 每日不变)."""
+        if self._stock_basic_cache is not None:
+            return self._stock_basic_cache
+        try:
+            df = _with_timeout(
+                lambda: pro.stock_basic(
+                    fields="ts_code,symbol,name,industry,market,list_date"
+                )
+            )
+            self._stock_basic_cache = df
+            return df
+        except Exception as exc:
+            logger.warning("Tushare stock_basic 失败: %s", exc)
+            return None
 
     def _akshare_fetch_daily(self, trade_date: str) -> pd.DataFrame:
         """全市场当日截面: 东财 spot (raw) + 缓存 hist 补 hfq 收盘价.
@@ -1209,7 +1317,8 @@ class DataSupplyChain:
 
         Returns:
             DataFrame [symbol, ann_date, end_date, roe, roa, gross_margin,
-                       net_margin, eps_yoy, rev_yoy, profit_yoy, ...]
+                       net_margin, eps_yoy, rev_yoy, profit_yoy,
+                       eps, ocfps, bps, revenue_ps, ...]
         """
         key = f"{ts_code or 'all'}_{period or ''}_{start_date or ''}_{end_date or ''}"
         path = self._alt_cache_path("fina_indicator", key)
@@ -1219,11 +1328,12 @@ class DataSupplyChain:
         pro = self._tushare_pro()
         if pro is not None:
             kwargs: dict = {
-                "fields": (
-                    "ts_code,ann_date,end_date,roe,roe_dt,roa,np_margin,gross_margin,"
-                    "eps_yoy,or_yoy,profit_yoy,cf_sales,debt_to_assets,current_ratio,"
-                    "assets_turn,ar_turn,inv_turn,ocf_to_or"
-                ),
+            "fields": (
+                "ts_code,ann_date,end_date,roe,roe_dt,roa,np_margin,gross_margin,"
+                "eps,ocfps,bps,revenue_ps,"
+                "eps_yoy,or_yoy,profit_yoy,cf_sales,debt_to_assets,current_ratio,"
+                "assets_turn,ar_turn,inv_turn,ocf_to_or"
+            ),
             }
             if ts_code:
                 kwargs["ts_code"] = ts_code
@@ -1259,6 +1369,10 @@ class DataSupplyChain:
                     "roa": "roa",
                     "np_margin": "net_margin",
                     "gross_margin": "gross_margin",
+                    "eps": "eps",
+                    "ocfps": "ocfps",
+                    "bps": "bps",
+                    "revenue_ps": "revenue_ps",
                     "eps_yoy": "eps_yoy",
                     "or_yoy": "rev_yoy",
                     "profit_yoy": "profit_yoy",
@@ -2046,41 +2160,106 @@ class DataSupplyChain:
         trade_date: str | None = None,
         sources: list[str] | None = None,
     ) -> dict[str, pd.DataFrame]:
-        """拉取当日全量数据 (OHLCV + alt data), 各源独立失败不阻断.
+        """拉取当日全量数据 (OHLCV + alt data), 失败重试至全部成功.
+
+        每个源独立拉取; 失败 (异常或结果为空) 的源隔 60s 重试,
+        最多 10 轮 (共 10 分钟). OHLCV 经全部重试仍失败 → raise
+        DataSupplyError (不允许跳过). margin/lhb 经全部重试仍为空 →
+        视为当日无数据, 返回空 DataFrame (不阻断).
 
         Args:
             trade_date: 'YYYYMMDD', None=今天
             sources: 要拉取的数据源, None=全部 ['ohlcv','margin','lhb']
 
         Returns:
-            {source_name: DataFrame}, 失败的源为空的 DataFrame
+            {source_name: DataFrame}
+
+        Raises:
+            DataSupplyError: OHLCV 经最大重试后仍失败.
         """
         if trade_date is None:
             trade_date = datetime.now().strftime("%Y%m%d")
         if sources is None:
-            sources = ["ohlcv", "margin", "lhb"]  # northbound 已移除
+            sources = ["ohlcv", "margin", "lhb"]
 
         results: dict[str, pd.DataFrame] = {}
-        for src in sources:
-            try:
-                if src == "ohlcv":
-                    results[src] = self._akshare_fetch_daily(trade_date)
-                elif src == "margin":
-                    results[src] = self.fetch_margin(
-                        trade_date=trade_date, refresh=True
+        pending = list(sources)
+
+        for attempt in range(1, FETCH_MAX_RETRIES + 1):
+            failed: list[str] = []
+            for src in pending:
+                try:
+                    if src == "ohlcv":
+                        df = self._tushare_fetch_daily(trade_date)
+                    elif src == "margin":
+                        df = self.fetch_margin(
+                            trade_date=trade_date, refresh=True
+                        )
+                    elif src == "lhb":
+                        df = self.fetch_lhb(
+                            trade_date=trade_date, refresh=True
+                        )
+                    else:
+                        logger.warning("fetch_today: 未知源 %s, 跳过", src)
+                        results[src] = pd.DataFrame()
+                        continue
+
+                    # 空结果视为失败 → 进入重试 (交易日必有 OHLCV/两融数据)
+                    if len(df) == 0:
+                        raise DataSupplyError(
+                            f"{src} 拉取为空 (数据源可能不可用)"
+                        )
+
+                    results[src] = df
+                    logger.info(
+                        "fetch_today %s: %d rows (尝试 %d/%d)",
+                        src,
+                        len(df),
+                        attempt,
+                        FETCH_MAX_RETRIES,
                     )
-                elif src == "lhb":
-                    results[src] = self.fetch_lhb(trade_date=trade_date, refresh=True)
-                else:
-                    results[src] = pd.DataFrame()
-                logger.info(
-                    "fetch_today %s: %d rows",
-                    src,
-                    len(results.get(src, pd.DataFrame())),
+                except Exception as exc:
+                    logger.error(
+                        "fetch_today %s 失败 (尝试 %d/%d): %s",
+                        src,
+                        attempt,
+                        FETCH_MAX_RETRIES,
+                        exc,
+                    )
+                    failed.append(src)
+
+            pending = failed
+            if not pending:
+                break
+
+            if attempt < FETCH_MAX_RETRIES:
+                logger.warning(
+                    "fetch_today: %d 个源失败 {%s}, %ds 后重试 (%d/%d)",
+                    len(pending),
+                    ", ".join(pending),
+                    FETCH_RETRY_INTERVAL,
+                    attempt + 1,
+                    FETCH_MAX_RETRIES,
                 )
-            except Exception as exc:
-                logger.warning("fetch_today %s 失败 (非阻断): %s", src, exc)
+                time.sleep(FETCH_RETRY_INTERVAL)
+
+        if pending:
+            # 非关键源 (margin/lhb) 失败 → 填空, 不阻断
+            for src in pending:
                 results[src] = pd.DataFrame()
+            # OHLCV 失败 → 不允许跳过
+            if "ohlcv" in pending:
+                raise DataSupplyError(
+                    f"OHLCV 经过 {FETCH_MAX_RETRIES} 次重试 "
+                    f"(共 {FETCH_MAX_RETRIES * FETCH_RETRY_INTERVAL}s) 仍失败, "
+                    f"无法追加面板 — 请检查 Tushare 连接/TUSHARE_TOKEN"
+                )
+            logger.error(
+                "fetch_today: 非关键源经过 %d 次重试仍为空: %s",
+                FETCH_MAX_RETRIES,
+                ", ".join(pending),
+            )
+
         return results
 
     def append_today_to_panel(
@@ -2112,10 +2291,12 @@ class DataSupplyChain:
         today_data = self.fetch_today(trade_date=trade_date, sources=sources)
 
         # 1. OHLCV: 只取面板中已有的 symbol, 补齐缺失列
+        #    fetch_today 已保证 OHLCV 非空 (失败会 raise DataSupplyError)
         ohlcv = today_data.get("ohlcv", pd.DataFrame())
         if len(ohlcv) == 0:
-            logger.warning("当日 OHLCV 拉取为空, 跳过 append")
-            return panel
+            raise DataSupplyError(
+                "当日 OHLCV 拉取为空, 不允许跳过 — 请检查数据源"
+            )
 
         existing_symbols = set(panel["symbol"].unique())
         ohlcv = ohlcv[ohlcv["symbol"].isin(existing_symbols)].copy()

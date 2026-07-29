@@ -50,7 +50,7 @@ for sym in test_syms:
         ts_code = sym + (".SZ" if sym.startswith(("0", "3", "1")) else ".SH")
         raw = pro.fina_indicator(
             ts_code=ts_code,
-            fields="ts_code,ann_date,end_date,roe,roe_dt,roa,np_margin,gross_margin,eps_yoy,or_yoy,profit_yoy,cf_sales,debt_to_assets,current_ratio,assets_turn,inv_turn,ocf_to_or",
+            fields="ts_code,ann_date,end_date,roe,roe_dt,roa,np_margin,gross_margin,eps,ocfps,bps,revenue_ps,eps_yoy,or_yoy,profit_yoy,cf_sales,debt_to_assets,current_ratio,assets_turn,inv_turn,ocf_to_or",
         )
         if raw is not None and len(raw) > 0:
             raw["symbol"] = sym

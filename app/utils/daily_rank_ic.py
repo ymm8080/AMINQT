@@ -37,6 +37,10 @@ def cross_sectional_rank_ic(
     """
     if len(x) < 2 or x.nunique() < min_x_unique or y.nunique() < min_y_unique:
         return float(np.nan)
+    # 防御性对齐 (spearmanr 按位置配对, 非按 index; 防止调用方传入了不同 index 的 x/y)
+    x, y = x.align(y, join="inner")
+    if len(x) < 2 or x.nunique() < min_x_unique or y.nunique() < min_y_unique:
+        return float(np.nan)
     try:
         return float(spearmanr(x, y).statistic)
     except (ValueError, TypeError):
@@ -138,3 +142,57 @@ def icir(
     if len(ics) < 5 or ics.std() == 0:
         return 0.0
     return float(ics.mean() / ics.std() * np.sqrt(annual_factor))
+
+
+def random_baseline_check(
+    df: pd.DataFrame,
+    y_col: str,
+    date_col: str = "date",
+    n_trials: int = 10,
+    threshold: float = 0.01,
+    seed: int = 42,
+) -> dict:
+    """随机因子基准检验 (安全网 #14).
+
+    生成 n_trials 列随机数作为伪因子, 分别计算 IC.
+    如果任一随机因子的 |IC| > threshold → 样本/计算方法可能有系统偏差,
+    真实因子的 IC 不可直接采信.
+
+    Args:
+        df: 含 date / label 的长格式数据。
+        y_col: 标签列名。
+        date_col: 日期列名。
+        n_trials: 随机因子数量 (≥5 建议)。
+        threshold: 随机 IC 上限 (A股日频应在 ±0.005 以内, 宽松设 0.01)。
+        seed: 随机种子 (可复现)。
+
+    Returns:
+        {'pass': bool, 'max_abs_ic': float, 'trials': [float, ...],
+         'warning': str | None}
+    """
+    rng = np.random.default_rng(seed)
+    trials = []
+    for i in range(n_trials):
+        rand_col = f"__rand_baseline_{i}__"
+        df_eval = df.copy()
+        df_eval[rand_col] = rng.uniform(0, 1, len(df_eval))
+        ic = mean_rank_ic(df_eval, rand_col, y_col, date_col=date_col, abs_mean=True)
+        trials.append(round(ic, 6))
+    max_abs = max(trials)
+    passed = max_abs <= threshold
+    warning = (
+        None
+        if passed
+        else (
+            f"随机因子 |IC|={max_abs:.6f} > {threshold}. "
+            f"样本或 IC 计算方法可能有系统偏差, 真实 IC 不可直接采信. "
+            f"检查: 1) 是否含停牌/ST/涨跌停样本; 2) 是否未来函数; "
+            f"3) 标签计算方向是否正确."
+        )
+    )
+    return {
+        "pass": passed,
+        "max_abs_ic": max_abs,
+        "trials": trials,
+        "warning": warning,
+    }
