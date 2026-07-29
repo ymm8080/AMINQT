@@ -12,6 +12,7 @@ Pipeline-1 每日选股清单生成器 (DESIGN §14.5, §14.6, [E7] 动态准入
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -30,10 +31,45 @@ BASE_RATE_WINDOW = 20  # B4: base_rate 滚动窗口
 SSE_BREAK_PCT_THRESHOLD = 0.12
 
 
+SCHEMA_FIELDS = [
+    "symbol",
+    "board",
+    "pred_ret_1d",
+    "pred_ret_3d",
+    "pred_ret_5d",
+    "prob_up",
+    "momentum",
+    "consensus_score",
+    "signal_conflict",
+    "is_limit_up_close",
+    "is_one_word_limit",
+    "market_state",
+    "score",
+    # V1.2 新增 (E1/E2/公告/分布权重)
+    "pred_q10",
+    "pred_q50",
+    "pred_q90",
+    "uncertainty_width",
+    "pain_prob",
+    "announce_score",
+    "weight",
+    "schema_version",
+]
+
+
+@dataclass
+class MarketEnv:
+    """大盘环境 (D18 空仓触发输入, E11 Bear 模式)."""
+
+    hs300_drop_today: float = 0.0
+    count_limit_down_market: int = 0
+    hs300_consecutive_down: int = 0
+    bear_mode: bool = False
+    sse_break_pct: float = 0.0
+
+
 def _is_bear(env) -> bool:
     """E11 Bear 模式判定: 大盘连跌 3 日."""
-    from .list_generator import MarketEnv
-
     if not isinstance(env, MarketEnv):
         return False
     return env.bear_mode
@@ -256,3 +292,63 @@ class ListGenerator:
             "empty": False,
             "schema_version": SCHEMA_VERSION,
         }
+
+
+# ============================================================
+# 清单溯源追踪 (源自 a-share-selection-strategy, provenance)
+# ============================================================
+@dataclass
+class ProvenanceTracker:
+    """记录每只候选股的数据来源/模型版本/计算时间戳."""
+
+    _records: dict[str, dict] = field(default_factory=dict)
+
+    def record(
+        self,
+        symbol: str,
+        data_source: str = "",
+        model_tag: str = "",
+        feature_version: str = "",
+    ) -> None:
+        self._records[symbol] = {
+            "data_source": data_source,
+            "model_tag": model_tag,
+            "feature_version": feature_version,
+        }
+
+    def get(self, symbol: str) -> dict:
+        return self._records.get(symbol, {})
+
+    def to_frame(self) -> pd.DataFrame:
+        if not self._records:
+            return pd.DataFrame()
+        rows = [{"symbol": k, **v} for k, v in self._records.items()]
+        return pd.DataFrame(rows)
+
+
+# ============================================================
+# 清单推送失败三档降级 (安全网, §14.4)
+# ============================================================
+@dataclass
+class ListDeliveryGuard:
+    """1 日失败: 沿用昨日清单(1日)+告警; 连续 2 日: 只卖不买; 连续 3 日: 人工介入."""
+
+    consecutive_failures: int = 0
+    last_list: pd.DataFrame | None = field(default=None)
+
+    def on_success(self, lst: pd.DataFrame) -> dict:
+        self.consecutive_failures = 0
+        self.last_list = lst
+        return {"mode": "normal", "list": lst}
+
+    def on_failure(self) -> dict:
+        self.consecutive_failures += 1
+        n = self.consecutive_failures
+        if n == 1:
+            logger.error("清单推送失败 (1日): 沿用昨日清单 + 告警")
+            return {"mode": "reuse_yesterday", "list": self.last_list}
+        if n == 2:
+            logger.error("清单推送失败 (连续2日): 只卖不买")
+            return {"mode": "sell_only", "list": None}
+        logger.critical("清单推送失败 (连续%d日): 人工介入 (检查数据源/模型/服务器)", n)
+        return {"mode": "manual_intervention", "list": None}
