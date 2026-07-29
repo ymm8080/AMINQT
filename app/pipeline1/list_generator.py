@@ -287,7 +287,17 @@ class ListGenerator:
         for col in ("is_limit_up_close", "is_one_word_limit"):
             if col not in final.columns:
                 final[col] = 0
-        for col in ("pred_q10", "pred_q50", "pred_q90", "uncertainty_width", "pain_prob", "announce_score", "momentum", "consensus_score", "signal_conflict"):
+        for col in (
+            "pred_q10",
+            "pred_q50",
+            "pred_q90",
+            "uncertainty_width",
+            "pain_prob",
+            "announce_score",
+            "momentum",
+            "consensus_score",
+            "signal_conflict",
+        ):
             if col not in final.columns:
                 final[col] = np.nan
         final["market_state"] = market_state
