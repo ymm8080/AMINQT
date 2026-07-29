@@ -60,7 +60,9 @@ def _compute_cyq_one_day(
 
         H = math.floor((h - minprice) / accuracy)
         L_idx = math.ceil((l - minprice) / accuracy)
-        density = factor - 1 if h == l else _safe_div(2.0, h - l, factor - 1)  # GPoint[0]
+        density = (
+            factor - 1 if h == l else _safe_div(2.0, h - l, factor - 1)
+        )  # GPoint[0]
         avg_bucket = math.floor((avg - minprice) / accuracy)  # GPoint[1]
 
         # ---- 衰减旧筹码 ----
@@ -79,9 +81,13 @@ def _compute_cyq_one_day(
                     continue
                 curprice = minprice + accuracy * j
                 if curprice <= avg:
-                    xdata[j] += _safe_div(curprice - l, avg - l, 1.0) * density * hsl_val
+                    xdata[j] += (
+                        _safe_div(curprice - l, avg - l, 1.0) * density * hsl_val
+                    )
                 else:
-                    xdata[j] += _safe_div(h - curprice, h - avg, 1.0) * density * hsl_val
+                    xdata[j] += (
+                        _safe_div(h - curprice, h - avg, 1.0) * density * hsl_val
+                    )
 
     # xdata 非负剪裁
     for n in range(factor):
