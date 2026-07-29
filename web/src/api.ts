@@ -103,6 +103,52 @@ export interface ForecastQuality {
   bias_big_down: number | null
 }
 
+export interface PipelinePanelStatus {
+  exists: boolean
+  path?: string
+  n_stocks?: number
+  n_rows?: number
+  last_date?: string
+  first_date?: string
+  size_mb?: number
+  error?: string
+}
+
+export interface PipelineModelStatus {
+  file: string
+  path: string
+  modified: string
+}
+
+export interface PipelineStatus {
+  panel: PipelinePanelStatus
+  models: Record<string, PipelineModelStatus>
+  latest_list_date: string | null
+  list_count: number
+}
+
+export interface AppendDailyResult {
+  success: boolean
+  trade_date: string
+  mode?: string
+  n_stocks?: number
+  empty?: boolean
+  cap_position?: number
+  valve_state?: string
+  list_preview?: {
+    symbol: string
+    board: string
+    prob_up: number
+    pred_ret_1d: number
+    pred_ret_3d: number
+    pred_ret_5d: number
+    score: number
+    weight: number
+  }[]
+  error?: string
+  logs: string[]
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`${BASE}${path}`, { cache: 'no-store', ...init })
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
@@ -159,4 +205,12 @@ export const api = {
     })[]
   }>('/prediction/run/' + date),
   predictionQuality: () => req<{ items: { date: string; n: number; direction_accuracy: number; bias_1d: number; mae_1d: number }[] }>('/prediction/quality'),
+  // pipeline trigger
+  pipelineStatus: () => req<PipelineStatus>('/pipeline/status'),
+  appendDaily: (params: { trade_date?: string; market_state?: string; save_panel?: boolean }) =>
+    req<AppendDailyResult>('/pipeline/append-daily', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    }),
 }

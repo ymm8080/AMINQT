@@ -178,7 +178,7 @@ class DailySelectionPipeline:
         """生产路径: 加载历史面板 + 追加当日数据.
 
         1. 加载缓存的 panel_full_enriched.parquet (历史面板)
-        2. 拉取当日 OHLCV + margin + northbound + lhb
+        2. 拉取当日 OHLCV + margin + lhb
         3. 追加当日行并合并 alt data
         4. 返回完整面板 (含当日)
         """
@@ -211,7 +211,7 @@ class DailySelectionPipeline:
         panel = self.supply.append_today_to_panel(
             panel,
             trade_date=trade_date,
-            sources=["ohlcv", "margin", "northbound", "lhb"],
+            sources=["ohlcv", "margin", "lhb"],  # northbound 已移除
         )
 
         logger.info(

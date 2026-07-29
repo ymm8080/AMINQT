@@ -263,7 +263,7 @@ def enrich_alt_data(
     """
     if sources is None:
         sources = [
-            "northbound",
+            # northbound 已移除 — 港交所 2024-08-20 停止日度披露
             "lhb",
             "holdertrade",
             "sector_index",
@@ -290,42 +290,8 @@ def enrich_alt_data(
     for src in sources:
         try:
             df = None
-            if src == "northbound":
-                df = supply.fetch_northbound(
-                    start_date=start_date,
-                    end_date=end_date,
-                    refresh=refresh,
-                )
-                if len(df):
-                    # 北向资金是市场级数据 (日频总量), 按 date 广播到所有个股
-                    has_symbol = "symbol" in df.columns
-                    is_market_level = not has_symbol or (
-                        df["symbol"].nunique() == 1 and df["symbol"].iloc[0] == "MARKET"
-                    )
-                    if is_market_level:
-                        date_cols = [
-                            c
-                            for c in df.columns
-                            if c not in ("symbol", "date") and not c.startswith("_")
-                        ]
-                        nb_by_date = df[["date"] + date_cols].drop_duplicates(
-                            subset=["date"]
-                        )
-                        panel = panel.merge(nb_by_date, on="date", how="left")
-                    else:
-                        merge_cols = ["symbol", "date"]
-                        avail = [
-                            c
-                            for c in df.columns
-                            if c not in merge_cols and not c.startswith("_")
-                        ]
-                        panel = panel.merge(
-                            df[merge_cols + avail],
-                            on=merge_cols,
-                            how="left",
-                        )
-
-            elif src == "margin":
+            # northbound 已移除
+            if src == "margin":
                 df = supply.fetch_margin(
                     start_date=start_date,
                     end_date=end_date,
@@ -681,7 +647,7 @@ def assemble_panel(
             panel,
             supply,
             sources=[
-                "northbound",
+                # northbound 已移除
                 "lhb",
                 "sector_index",
                 "margin",
