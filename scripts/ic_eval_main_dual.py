@@ -73,7 +73,7 @@ def main():
 
     if max_date < today_str:
         logger.info(
-            "追加今日 (%s) OHLCV + margin + northbound + lhb 数据...", today_str
+            "追加今日 (%s) OHLCV + margin + lhb 数据...", today_str
         )
         try:
             supply = DataSupplyChain()
@@ -81,7 +81,7 @@ def main():
             panel = supply.append_today_to_panel(
                 panel,
                 trade_date=today_str,
-                sources=["ohlcv", "margin", "northbound", "lhb"],
+                sources=["ohlcv", "margin", "lhb"],  # northbound 已移除
             )
             logger.info(
                 "追加完成: %d rows, %d stocks", len(panel), panel["symbol"].nunique()

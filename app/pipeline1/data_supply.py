@@ -933,6 +933,90 @@ class DataSupplyChain:
         df.to_parquet(path, index=False)
         return df
 
+    # ── 1b. 北向持股明细 (hk_hold, 个股级) ──
+
+    def fetch_hk_hold(
+        self,
+        ts_code: str | None = None,
+        trade_date: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        exchange: str = "SH",
+        refresh: bool = False,
+    ) -> pd.DataFrame:
+        """[Alt-1b] 北向持股明细 — Tushare hk_hold (港交所来源, 个股级).
+
+        注意: 港交所 2024-08-20 起停止日度披露, 改为季度. 2024-08-19 前为日频.
+
+        Args:
+            ts_code: 个股代码 (如 '000001.SZ'), None=全量
+            trade_date: 单日 'YYYYMMDD'
+            start_date/end_date: 日期范围
+            exchange: 'SH' 沪股通 / 'SZ' 深股通
+
+        Returns:
+            DataFrame [ts_code, trade_date, name, vol, ratio, exchange]
+            vol=持股数量(股), ratio=持股占比(%)
+        """
+        key = ts_code or "all"
+        if trade_date:
+            key += f"_{trade_date}"
+        else:
+            key += f"_{start_date or 'all'}_{end_date or 'all'}"
+        path = self._alt_cache_path("hk_hold", key)
+        if not refresh and os.path.exists(path):
+            return pd.read_parquet(path)
+
+        pro = self._tushare_pro()
+        if pro is None:
+            msg = ("Tushare hk_hold 接口不可用 (hk_hold 需 ≥2000 积分). "
+                   "请确认: (1) tushare pro token 已配置; (2) 积分 ≥2000; "
+                   "(3) 接口权限已开通 (https://tushare.pro/document/2?doc_id=188)")
+            logger.warning(msg)
+            return pd.DataFrame(
+                {"ts_code": [], "trade_date": [], "name": [], "vol": [],
+                 "ratio": [], "exchange": []}
+            )
+
+        all_frames = []
+        for ex in ([exchange] if exchange else ["SH", "SZ"]):
+            try:
+                kwargs = {"exchange": ex}
+                if ts_code:
+                    kwargs["ts_code"] = ts_code
+                if trade_date:
+                    kwargs["trade_date"] = trade_date
+                else:
+                    if start_date:
+                        kwargs["start_date"] = start_date
+                    if end_date:
+                        kwargs["end_date"] = end_date
+
+                def _call():
+                    return pro.hk_hold(**kwargs)
+
+                raw = _with_timeout(_call)
+                if raw is not None and len(raw) > 0:
+                    frame = pd.DataFrame(raw)
+                    frame = frame.rename(columns={
+                        "vol": "hk_vol",
+                        "ratio": "hk_ratio",
+                    })
+                    all_frames.append(frame)
+                    logger.info(
+                        "Tushare hk_hold(%s): %d 行 (日期 %s)",
+                        ex, len(frame),
+                        raw["trade_date"].iloc[0] if "trade_date" in raw.columns else "?",
+                    )
+            except Exception as exc:
+                logger.warning("Tushare hk_hold(%s) 失败: %s", ex, exc)
+
+        if not all_frames:
+            return pd.DataFrame()
+        df = pd.concat(all_frames, ignore_index=True)
+        df.to_parquet(path, index=False)
+        return df
+
     # ── 2. 融资融券 ──
 
     @staticmethod
@@ -1953,7 +2037,7 @@ class DataSupplyChain:
 
         Args:
             trade_date: 'YYYYMMDD', None=今天
-            sources: 要拉取的数据源, None=全部 ['ohlcv','margin','northbound','lhb']
+            sources: 要拉取的数据源, None=全部 ['ohlcv','margin','lhb']
 
         Returns:
             {source_name: DataFrame}, 失败的源为空的 DataFrame
@@ -1961,7 +2045,7 @@ class DataSupplyChain:
         if trade_date is None:
             trade_date = datetime.now().strftime("%Y%m%d")
         if sources is None:
-            sources = ["ohlcv", "margin", "northbound", "lhb"]
+            sources = ["ohlcv", "margin", "lhb"]  # northbound 已移除
 
         results: dict[str, pd.DataFrame] = {}
         for src in sources:
@@ -1970,10 +2054,6 @@ class DataSupplyChain:
                     results[src] = self._akshare_fetch_daily(trade_date)
                 elif src == "margin":
                     results[src] = self.fetch_margin(
-                        trade_date=trade_date, refresh=True
-                    )
-                elif src == "northbound":
-                    results[src] = self.fetch_northbound(
                         trade_date=trade_date, refresh=True
                     )
                 elif src == "lhb":
@@ -2014,7 +2094,7 @@ class DataSupplyChain:
         if trade_date is None:
             trade_date = datetime.now().strftime("%Y%m%d")
         if sources is None:
-            sources = ["ohlcv", "margin", "northbound", "lhb"]
+            sources = ["ohlcv", "margin", "lhb"]  # northbound 已移除
 
         today_data = self.fetch_today(trade_date=trade_date, sources=sources)
 
@@ -2070,21 +2150,8 @@ class DataSupplyChain:
             ):
                 alt["date"] = pd.to_datetime(alt["date"])
 
-            if src == "northbound":
-                # 市场级数据: 按 date 广播
-                date_cols = [
-                    c
-                    for c in alt.columns
-                    if c not in ("symbol", "date") and not c.startswith("_")
-                ]
-                alt_subset = alt[["date"] + date_cols].drop_duplicates(subset=["date"])
-                # 只更新当日行
-                mask = panel["date"] == today_dt
-                for col in date_cols:
-                    if col in alt_subset.columns:
-                        val_map = dict(zip(alt_subset["date"], alt_subset[col]))
-                        panel.loc[mask, col] = panel.loc[mask, "date"].map(val_map)
-            elif "symbol" in alt.columns:
+            # northbound 已移除
+            if "symbol" in alt.columns:
                 merge_cols = ["symbol", "date"]
                 alt_cols = [
                     c
