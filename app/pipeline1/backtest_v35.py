@@ -37,6 +37,7 @@ def _safe_divide(numerator: float, denominator: float, default: float = 0.0) -> 
         return default
     return numerator / denominator
 
+
 COMMISSION = 0.00025  # 万2.5 双边
 STAMP_TAX = 0.0005  # 印花税 0.05% 仅卖出
 SLIPPAGE = 0.0005  # 固定滑点 0.05% 双边 (panel 无 adv20 时回退)
