@@ -23,6 +23,13 @@ FACTOR = 150  # 价格分桶数
 RANGE_DAYS = 120  # 筹码计算回溯窗口
 
 
+def _safe_div(numerator: float, denominator: float, default: float = 0.0) -> float:
+    """安全除法: 分母为零时返回 default, 避免 ZeroDivisionError."""
+    if abs(denominator) < 1e-8:
+        return default
+    return numerator / denominator
+
+
 def _compute_cyq_one_day(
     index: int,
     records: list[dict],
@@ -53,7 +60,7 @@ def _compute_cyq_one_day(
 
         H = math.floor((h - minprice) / accuracy)
         L_idx = math.ceil((l - minprice) / accuracy)
-        density = factor - 1 if h == l else 2.0 / (h - l)  # GPoint[0]
+        density = factor - 1 if h == l else _safe_div(2.0, h - l, factor - 1)  # GPoint[0]
         avg_bucket = math.floor((avg - minprice) / accuracy)  # GPoint[1]
 
         # ---- 衰减旧筹码 ----
@@ -72,15 +79,9 @@ def _compute_cyq_one_day(
                     continue
                 curprice = minprice + accuracy * j
                 if curprice <= avg:
-                    if abs(avg - l) < 1e-8:
-                        xdata[j] += density * hsl_val
-                    else:
-                        xdata[j] += (curprice - l) / (avg - l) * density * hsl_val
+                    xdata[j] += _safe_div(curprice - l, avg - l, 1.0) * density * hsl_val
                 else:
-                    if abs(h - avg) < 1e-8:
-                        xdata[j] += density * hsl_val
-                    else:
-                        xdata[j] += (h - curprice) / (h - avg) * density * hsl_val
+                    xdata[j] += _safe_div(h - curprice, h - avg, 1.0) * density * hsl_val
 
     # xdata 非负剪裁
     for n in range(factor):
@@ -107,7 +108,7 @@ def _compute_cyq_one_day(
         denom = pr[0] + pr[1]
         return {
             "priceRange": pr,
-            "concentration": (pr[1] - pr[0]) / denom if denom != 0 else 0.0,
+            "concentration": _safe_div(pr[1] - pr[0], denom, 0.0),
         }
 
     # ---- 输出 ----
