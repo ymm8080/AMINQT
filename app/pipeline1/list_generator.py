@@ -284,10 +284,17 @@ class ListGenerator:
         )
         # [E1] 分布权重: 基于 uncertainty_width 的逆权重, 单票上限 0.10
         final["weight"] = self._compute_weights(final)
-        # 返回标准 schema (V1.2)
+        for col in ("is_limit_up_close", "is_one_word_limit"):
+            if col not in final.columns:
+                final[col] = 0
+        for col in ("pred_q10", "pred_q50", "pred_q90", "uncertainty_width", "pain_prob", "announce_score", "momentum", "consensus_score", "signal_conflict"):
+            if col not in final.columns:
+                final[col] = np.nan
+        final["market_state"] = market_state
+        final["schema_version"] = SCHEMA_VERSION
         return {
             "mode": mode,
-            "list": final,
+            "list": final[SCHEMA_FIELDS].reset_index(drop=True),
             "cap_position": cap_position,
             "empty": False,
             "schema_version": SCHEMA_VERSION,
