@@ -35,7 +35,9 @@ logging.basicConfig(
 logger = logging.getLogger("train_predict")
 
 MODEL_DIR = "models/pipeline1"
-PANEL_PATH = "data/panel_full_enriched_v3.parquet"  # enriched v3 (3,244 stocks, 863 dates)
+PANEL_PATH = (
+    "data/panel_full_enriched_v3.parquet"  # enriched v3 (3,244 stocks, 863 dates)
+)
 LIST_DIR = "data/lists"
 CACHE_DIR = "data/stock_cache"
 YEARS = 3.0

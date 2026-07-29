@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """检查 Tushare token 权限等级."""
-import os, sys
+
+import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
+
 load_dotenv()
 import tushare as ts
 
@@ -18,7 +22,8 @@ pro = ts.pro_api()
 try:
     # 尝试获取用户信息
     import requests
-    url = f"http://api.tushare.pro"
+
+    url = "http://api.tushare.pro"
     payload = {
         "api_name": "user",
         "token": token,

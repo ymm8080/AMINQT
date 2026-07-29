@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """一次性脚本: 将 holdertrade (股东增减持) 数据 enrich 到 panel_full_enriched.parquet"""
+
 from __future__ import annotations
 
 import logging
@@ -27,10 +28,13 @@ def main():
     # 1. 加载已有面板
     logger.info("加载面板: %s", panel_path)
     panel = pd.read_parquet(panel_path)
-    logger.info("面板: %s 行, %s symbols, 日期 %s ~ %s",
-                panel.shape[0], panel["symbol"].nunique(),
-                panel["date"].min().strftime("%Y%m%d"),
-                panel["date"].max().strftime("%Y%m%d"))
+    logger.info(
+        "面板: %s 行, %s symbols, 日期 %s ~ %s",
+        panel.shape[0],
+        panel["symbol"].nunique(),
+        panel["date"].min().strftime("%Y%m%d"),
+        panel["date"].max().strftime("%Y%m%d"),
+    )
 
     # 检查是否已有 holdertrade 列
     existing_ht_cols = [c for c in panel.columns if c.startswith("sh_")]
@@ -49,7 +53,8 @@ def main():
     t0 = time.time()
 
     panel = enrich_alt_data(
-        panel, supply,
+        panel,
+        supply,
         sources=["holdertrade"],
         start_date=start_date,
         end_date=end_date,

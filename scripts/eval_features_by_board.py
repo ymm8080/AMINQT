@@ -6,6 +6,7 @@
   python scripts/eval_features_by_board.py --top 50            # 只输出 top/bottom 50
   python scripts/eval_features_by_board.py --board main        # 只评估主板
 """
+
 from __future__ import annotations
 
 import argparse
@@ -20,7 +21,9 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 PANEL_PATHS = [
@@ -35,7 +38,12 @@ def load_panel() -> pd.DataFrame:
         if os.path.exists(p):
             logger.info("加载面板: %s", p)
             panel = pd.read_parquet(p)
-            logger.info("  %d stocks, %d rows, %d cols", panel["symbol"].nunique(), len(panel), len(panel.columns))
+            logger.info(
+                "  %d stocks, %d rows, %d cols",
+                panel["symbol"].nunique(),
+                len(panel),
+                len(panel.columns),
+            )
             return panel
     raise FileNotFoundError(f"无可用面板: {PANEL_PATHS}")
 
@@ -47,7 +55,7 @@ def eval_board(board_name: str, board_df: pd.DataFrame, top_n: int = 50) -> dict
     from app.utils.daily_rank_ic import daily_rank_ic_series, mean_rank_ic
 
     features = FeatureEngineV35()
-    cross_sectional_rank = (board_name != "main")
+    cross_sectional_rank = board_name != "main"
 
     logger.info("[%s] 构建特征...", board_name)
     df = features.build(board_df, cross_sectional_rank=cross_sectional_rank)
@@ -57,7 +65,9 @@ def eval_board(board_name: str, board_df: pd.DataFrame, top_n: int = 50) -> dict
 
     feature_cols = FeatureEngineV35.feature_columns(df)
     # 只保留数值列, 排除 label/mask/标识列
-    feature_cols = [c for c in feature_cols if c in df.columns and df[c].dtype != object]
+    feature_cols = [
+        c for c in feature_cols if c in df.columns and df[c].dtype != object
+    ]
     # NaN 率 > 95% 的列跳过 (无意义)
     feature_cols = [c for c in feature_cols if df[c].isna().mean() < 0.95]
 
@@ -79,20 +89,24 @@ def eval_board(board_name: str, board_df: pd.DataFrame, top_n: int = 50) -> dict
             icir = ic_mean / ic_std if ic_std > 0 else 0.0
             pos_ratio = (ic_series > 0).mean()
             nan_rate = board_df[col].isna().mean() if col in board_df.columns else 1.0
-            results.append({
-                "factor": col,
-                "ic_mean": round(float(ic_mean), 6),
-                "ic_abs": round(float(ic_abs), 6),
-                "ic_std": round(float(ic_std), 6),
-                "icir": round(float(icir), 4),
-                "pos_ratio": round(float(pos_ratio), 4),
-                "nan_rate": round(float(nan_rate), 4),
-                "n_dates": len(ic_series),
-            })
+            results.append(
+                {
+                    "factor": col,
+                    "ic_mean": round(float(ic_mean), 6),
+                    "ic_abs": round(float(ic_abs), 6),
+                    "ic_std": round(float(ic_std), 6),
+                    "icir": round(float(icir), 4),
+                    "pos_ratio": round(float(pos_ratio), 4),
+                    "nan_rate": round(float(nan_rate), 4),
+                    "n_dates": len(ic_series),
+                }
+            )
         except Exception:
             pass
         if (i + 1) % 100 == 0:
-            logger.info("[%s]  %d/%d features evaluated", board_name, i + 1, len(feature_cols))
+            logger.info(
+                "[%s]  %d/%d features evaluated", board_name, i + 1, len(feature_cols)
+            )
 
     results_df = pd.DataFrame(results).sort_values("ic_abs", ascending=False)
     logger.info("[%s] 完成: %d features with valid IC", board_name, len(results_df))
@@ -101,27 +115,37 @@ def eval_board(board_name: str, board_df: pd.DataFrame, top_n: int = 50) -> dict
     top = results_df.head(top_n)
     bottom = results_df.tail(top_n).iloc[::-1]
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"  {board_name.upper()} — Top {top_n} features by |IC|")
-    print(f"{'='*80}")
-    print(f"{'Factor':<40s} {'IC':>8s} {'|IC|':>8s} {'ICIR':>8s} {'Pos%':>7s} {'NaN%':>7s}")
+    print(f"{'=' * 80}")
+    print(
+        f"{'Factor':<40s} {'IC':>8s} {'|IC|':>8s} {'ICIR':>8s} {'Pos%':>7s} {'NaN%':>7s}"
+    )
     print("-" * 80)
     for _, r in top.iterrows():
-        print(f"{r['factor']:<40s} {r['ic_mean']:>+8.4f} {r['ic_abs']:>8.4f} {r['icir']:>8.2f} {r['pos_ratio']:>7.1%} {r['nan_rate']:>7.1%}")
+        print(
+            f"{r['factor']:<40s} {r['ic_mean']:>+8.4f} {r['ic_abs']:>8.4f} {r['icir']:>8.2f} {r['pos_ratio']:>7.1%} {r['nan_rate']:>7.1%}"
+        )
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"  {board_name.upper()} — Bottom {top_n} features by |IC|")
-    print(f"{'='*80}")
-    print(f"{'Factor':<40s} {'IC':>8s} {'|IC|':>8s} {'ICIR':>8s} {'Pos%':>7s} {'NaN%':>7s}")
+    print(f"{'=' * 80}")
+    print(
+        f"{'Factor':<40s} {'IC':>8s} {'|IC|':>8s} {'ICIR':>8s} {'Pos%':>7s} {'NaN%':>7s}"
+    )
     print("-" * 80)
     for _, r in bottom.iterrows():
-        print(f"{r['factor']:<40s} {r['ic_mean']:>+8.4f} {r['ic_abs']:>8.4f} {r['icir']:>8.2f} {r['pos_ratio']:>7.1%} {r['nan_rate']:>7.1%}")
+        print(
+            f"{r['factor']:<40s} {r['ic_mean']:>+8.4f} {r['ic_abs']:>8.4f} {r['icir']:>8.2f} {r['pos_ratio']:>7.1%} {r['nan_rate']:>7.1%}"
+        )
 
     # Summary stats
     strong = (results_df["ic_abs"] >= 0.03).sum()
     weak = ((results_df["ic_abs"] >= 0.01) & (results_df["ic_abs"] < 0.03)).sum()
     noise = (results_df["ic_abs"] < 0.01).sum()
-    print(f"\n  Summary: {strong} strong (|IC|>=0.03) | {weak} weak (0.01-0.03) | {noise} noise (<0.01)")
+    print(
+        f"\n  Summary: {strong} strong (|IC|>=0.03) | {weak} weak (0.01-0.03) | {noise} noise (<0.01)"
+    )
 
     return {
         "board": board_name,
@@ -143,6 +167,7 @@ def main():
     panel = load_panel()
 
     from app.pipeline1.cleaning_pipeline import CleaningPipeline
+
     cleaner = CleaningPipeline()
     main_df, dual_df = cleaner.run_train(panel)
     logger.info("清洗后: main=%d rows, dual=%d rows", len(main_df), len(dual_df))

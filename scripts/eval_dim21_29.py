@@ -157,6 +157,7 @@ DIM_FEATURES: dict[str, list[str]] = {
     "dim29_reserved": [],
 }
 
+
 # ──────────────────────────────────────────────
 # Rank IC computation (lightweight, using scipy.stats.spearmanr)
 # ──────────────────────────────────────────────
@@ -235,12 +236,8 @@ def add_industry_board(
     pro = supply._tushare_pro()
 
     try:
-        basic = pro.stock_basic(
-            exchange="", list_status="L", fields="ts_code,industry"
-        )
-        basic["symbol"] = basic["ts_code"].str.replace(".SZ", "").str.replace(
-            ".SH", ""
-        )
+        basic = pro.stock_basic(exchange="", list_status="L", fields="ts_code,industry")
+        basic["symbol"] = basic["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
         ind_map = dict(zip(basic["symbol"], basic["industry"].fillna("综合")))
         df["industry"] = df["symbol"].map(ind_map).fillna("综合")
     except Exception as exc:
@@ -265,12 +262,11 @@ def try_enrich_cyq(df: pd.DataFrame) -> pd.DataFrame:
         cyq_cols = [
             c
             for c in df.columns
-            if c.startswith("pct_") or c.startswith("cost_")
+            if c.startswith("pct_")
+            or c.startswith("cost_")
             or c in ("benefit_part", "weight_avg")
         ]
-        logger.info(
-            "CYQ enriched: +%d cols, %.1fs", len(cyq_cols), time.time() - t0
-        )
+        logger.info("CYQ enriched: +%d cols, %.1fs", len(cyq_cols), time.time() - t0)
     except Exception as exc:
         logger.warning("CYQ enrichment skipped: %s", exc)
         for c in DIM_FEATURES["dim21_cyq"]:
@@ -293,10 +289,7 @@ def _ensure_scaffold(df: pd.DataFrame) -> pd.DataFrame:
     if "list_days" not in df.columns:
         df["list_days"] = df.groupby("symbol").cumcount() + 1
     if "limit_pct" not in df.columns:
-        df["limit_pct"] = [
-            get_limit_pct(b, d)
-            for b, d in zip(df["board"], df["date"])
-        ]
+        df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
     return df
 
 
@@ -307,7 +300,6 @@ def _add_basic_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     from app.pipeline1.feature_engine_v35 import (
         FeatureEngineV35,
-        _apply_per_stock,
     )
 
     df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
@@ -336,7 +328,7 @@ def build_dim21_29_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # Build DIM21-DIM28 features
     t0 = time.time()
-    fe = FeatureEngineV35()
+    FeatureEngineV35()
     # Call each dim21-28 directly (they're all @staticmethod)
     df = FeatureEngineV35.dim21_chip_tushare(df)
     df = FeatureEngineV35.dim22_fundamental_pit(df)
@@ -598,14 +590,22 @@ def main():
 
     # 1. Load panel (enriched panel has alt data pre-merged)
     #    Use sampling to fit memory constraints
-    base_path = PANEL_ENRICHED_PATH if os.path.exists(PANEL_ENRICHED_PATH) else PANEL_PATH
+    base_path = (
+        PANEL_ENRICHED_PATH if os.path.exists(PANEL_ENRICHED_PATH) else PANEL_PATH
+    )
     df = load_panel(base_path)
 
     # Sample to control memory usage (environment is memory-constrained)
     MAX_STOCKS = 300
     rng = np.random.RandomState(42)
-    syms = rng.choice(df["symbol"].unique(), min(MAX_STOCKS, df["symbol"].nunique()), replace=False)
-    df = df[df["symbol"].isin(syms)].sort_values(["symbol", "date"]).reset_index(drop=True)
+    syms = rng.choice(
+        df["symbol"].unique(), min(MAX_STOCKS, df["symbol"].nunique()), replace=False
+    )
+    df = (
+        df[df["symbol"].isin(syms)]
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
     logger.info(
         "Sampled to %d stocks (%d rows) for memory",
         df["symbol"].nunique(),
@@ -644,9 +644,11 @@ def main():
             try:
                 t_src = time.time()
                 df = panel_enrich_alt(
-                    df, supply,
+                    df,
+                    supply,
                     sources=[src],
-                    start_date=start_date, end_date=end_date,
+                    start_date=start_date,
+                    end_date=end_date,
                     refresh=refresh,
                 )
                 elapsed = time.time() - t_src
@@ -708,9 +710,7 @@ def main():
             logger.info("  %s: NOT_IMPLEMENTED (no feature definitions)", dim_name)
             continue
 
-        dim_results[dim_name] = evaluate_dimension(
-            df_main, dim_name, feats, label_cols
-        )
+        dim_results[dim_name] = evaluate_dimension(df_main, dim_name, feats, label_cols)
 
     # 10. Time-series analysis
     ts_analysis = compute_timeseries_analysis(dim_results)
@@ -742,7 +742,9 @@ def main():
     print("=" * 100)
     print("DIM21-29 IC EVALUATION SUMMARY")
     print("=" * 100)
-    print(f"  Panel: {panel_info['stocks']} stocks x {panel_info['dates']} dates = {panel_info['rows']} rows")
+    print(
+        f"  Panel: {panel_info['stocks']} stocks x {panel_info['dates']} dates = {panel_info['rows']} rows"
+    )
     print(f"  Features: {panel_info['total_cols']} total columns")
     print(f"  Elapsed: {elapsed:.1f}s")
     print()
@@ -771,7 +773,9 @@ def main():
         for f in ts_analysis["features_with_positive_chg"][:10]:
             print(f"    - {f}")
         if len(ts_analysis["features_with_positive_chg"]) > 10:
-            print(f"    ... +{len(ts_analysis['features_with_positive_chg']) - 10} more")
+            print(
+                f"    ... +{len(ts_analysis['features_with_positive_chg']) - 10} more"
+            )
     print("=" * 100)
 
 

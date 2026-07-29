@@ -9,6 +9,7 @@ Usage:
 Output:
     data/supply_cache/alt_data/fina_indicator/all_20240102_20260727.parquet
 """
+
 from __future__ import annotations
 
 import logging
@@ -55,21 +56,27 @@ def main() -> None:
     log.info("Loading panel from %s", PANEL_PATH)
     panel = pd.read_parquet(PANEL_PATH)
     symbols = sorted(panel["symbol"].unique())
-    log.info("Panel has %d unique symbols, date range %s ~ %s",
-             len(symbols), panel["date"].min(), panel["date"].max())
-
-    supply = DataSupplyChain(
-        cache_dir=os.path.join(PROJ, "data/supply_cache")
+    log.info(
+        "Panel has %d unique symbols, date range %s ~ %s",
+        len(symbols),
+        panel["date"].min(),
+        panel["date"].max(),
     )
+
+    supply = DataSupplyChain(cache_dir=os.path.join(PROJ, "data/supply_cache"))
 
     # 2. Test a bare-period query (no ts_code) — faster if it works
     log.info("Testing bare-period query (no ts_code)...")
     try:
         df_test = supply.fetch_fina_indicator(
-            period=None, start_date=START_DATE, end_date=END_DATE,
+            period=None,
+            start_date=START_DATE,
+            end_date=END_DATE,
         )
         if df_test is not None and len(df_test) > 0:
-            log.info("Bare-period query returned %d rows — saving directly!", len(df_test))
+            log.info(
+                "Bare-period query returned %d rows — saving directly!", len(df_test)
+            )
             os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
             df_test.to_parquet(OUTPUT, index=False)
             _report(df_test)
@@ -80,7 +87,9 @@ def main() -> None:
     # Alternate: try period='20241231' (single-period) without ts_code
     try:
         df_test2 = supply.fetch_fina_indicator(
-            period="20241231", start_date=None, end_date=None,
+            period="20241231",
+            start_date=None,
+            end_date=None,
         )
         if df_test2 is not None and len(df_test2) > 0:
             log.info("Single-period query returned %d rows!", len(df_test2))
@@ -108,8 +117,13 @@ def main() -> None:
         except Exception as exc:
             # Try without .SZ/.SH suffix (just 6-digit code)
             try:
-                log.warning("  [%d/%d] %s failed with suffix, trying bare code: %s",
-                           i, len(symbols), tsc, exc)
+                log.warning(
+                    "  [%d/%d] %s failed with suffix, trying bare code: %s",
+                    i,
+                    len(symbols),
+                    tsc,
+                    exc,
+                )
                 df_one = supply.fetch_fina_indicator(
                     ts_code=sym,
                     start_date=START_DATE,
@@ -130,9 +144,15 @@ def main() -> None:
             elapsed = time.time() - t0
             rate = i / elapsed if elapsed > 0 else 0
             have = sum(len(f) for f in frames)
-            log.info("  Progress %d/%d (%.0f%%) — %d rows collected, %d errors, %.1f stocks/sec",
-                     i, len(symbols), 100 * i / len(symbols),
-                     have, len(errors), rate)
+            log.info(
+                "  Progress %d/%d (%.0f%%) — %d rows collected, %d errors, %.1f stocks/sec",
+                i,
+                len(symbols),
+                100 * i / len(symbols),
+                have,
+                len(errors),
+                rate,
+            )
 
         time.sleep(RATE_LIMIT_S)
 

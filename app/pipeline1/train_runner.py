@@ -36,7 +36,9 @@ def prepare_board_frame(
 
     cross_sectional_rank: 仅双创开启截面排名 (主板大票定价效率高, 截面因子负贡献).
     """
-    df = features.build(board_df, float_shares_map, cross_sectional_rank=cross_sectional_rank)
+    df = features.build(
+        board_df, float_shares_map, cross_sectional_rank=cross_sectional_rank
+    )
     df = LabelEngine.build_path_labels(df)  # [E2] label_mdd_* + label_pain
     df = LabelEngine.build_labels(df)  # 主标签 label_*d + label_pm_*d + *_net
     df = LabelEngine.mask_suspension(df)
@@ -122,7 +124,9 @@ def run_training(
             logger.warning("[%s] 清洗后无样本, 跳过该板块训练", board)
             continue
         use_xrank = board != "main"  # 仅双创加截面排名 (主板大票定价有效, 截面负贡献)
-        df = prepare_board_frame(board_df, features, float_shares_map, cross_sectional_rank=use_xrank)
+        df = prepare_board_frame(
+            board_df, features, float_shares_map, cross_sectional_rank=use_xrank
+        )
         panels[board] = df
         cols_by_board[board] = select_features(df, board, tag, screener)
 

@@ -9,13 +9,21 @@ Usage:
     python scripts/pull_bs_extra_fields.py --resume        # 断点续传
     python scripts/pull_bs_extra_fields.py --dry-run       # 预览
 """
-import argparse, logging, os, sys, time
-import numpy as np
+
+import argparse
+import logging
+import os
+import sys
+import time
 import pandas as pd
 import baostock as bs
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
-                    force=True, stream=sys.stderr)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    force=True,
+    stream=sys.stderr,
+)
 logger = logging.getLogger(__name__)
 
 # ── 路径 ──────────────────────────────────────────────
@@ -61,8 +69,10 @@ def query_pcf_batch(symbols: list[str]) -> list[pd.DataFrame]:
             rs = bs.query_history_k_data_plus(
                 code,
                 "date,code,pcfNcfTTM",
-                start_date=PCF_START, end_date=PCF_END,
-                frequency="d", adjustflag="2",
+                start_date=PCF_START,
+                end_date=PCF_END,
+                frequency="d",
+                adjustflag="2",
             )
             rows = []
             while rs.next():
@@ -127,7 +137,7 @@ def main():
     failed = []
     n_done = 0
     for batch_start in range(0, len(todo), BATCH_SIZE):
-        batch = todo[batch_start:batch_start + BATCH_SIZE]
+        batch = todo[batch_start : batch_start + BATCH_SIZE]
         try:
             batch_frames = query_pcf_batch(batch)
             frames.extend(batch_frames)
@@ -136,15 +146,19 @@ def main():
             n_done += len(batch)
         except Exception as e:
             # 某批失败, 逐只重试 (单 stock login)
-            logger.warning(f"Batch failed for {batch[0]}..{batch[-1]}: {e}, retrying individually...")
+            logger.warning(
+                f"Batch failed for {batch[0]}..{batch[-1]}: {e}, retrying individually..."
+            )
             for sym in batch:
                 try:
                     bs.login()
                     rs = bs.query_history_k_data_plus(
                         _code_of(sym),
                         "date,code,pcfNcfTTM",
-                        start_date=PCF_START, end_date=PCF_END,
-                        frequency="d", adjustflag="2",
+                        start_date=PCF_START,
+                        end_date=PCF_END,
+                        frequency="d",
+                        adjustflag="2",
                     )
                     rows = []
                     while rs.next():
@@ -152,7 +166,9 @@ def main():
                     bs.logout()
                     if rows:
                         df = pd.DataFrame(rows, columns=rs.fields)
-                        df["pcfNcfTTM"] = pd.to_numeric(df["pcfNcfTTM"], errors="coerce")
+                        df["pcfNcfTTM"] = pd.to_numeric(
+                            df["pcfNcfTTM"], errors="coerce"
+                        )
                         df["symbol"] = sym
                         df["date"] = pd.to_datetime(df["date"])
                         df = df.dropna(subset=["pcfNcfTTM"])
@@ -168,20 +184,24 @@ def main():
         rate = n_done / elapsed * 3600 if elapsed > 0 else 0
         pct = n_done / len(todo) * 100 if todo else 100
         eta_h = (len(todo) - n_done) / rate if rate > 0 else 0
-        logger.info(f"pcfNcfTTM [{n_done}/{len(todo)}] {pct:.0f}% "
-                    f"rate={rate:.0f}/hr eta={eta_h:.1f}hr")
+        logger.info(
+            f"pcfNcfTTM [{n_done}/{len(todo)}] {pct:.0f}% "
+            f"rate={rate:.0f}/hr eta={eta_h:.1f}hr"
+        )
 
     elapsed = time.time() - t0
     n_ok = len(todo) - len(failed)
-    logger.info(f"pcfNcfTTM pull done: {n_ok}/{len(todo)} in {elapsed/3600:.1f}hr")
+    logger.info(f"pcfNcfTTM pull done: {n_ok}/{len(todo)} in {elapsed / 3600:.1f}hr")
 
     if frames:
         panel = pd.concat(frames, ignore_index=True)
         panel = panel.sort_values(["symbol", "date"]).reset_index(drop=True)
         panel.to_parquet(OUTPUT, index=False)
-        logger.info(f"Saved {OUTPUT}: {len(panel)} rows, "
-                    f"{panel['symbol'].nunique()} stocks, "
-                    f"pcfNcfTTM coverage={panel['pcfNcfTTM'].notna().sum()}")
+        logger.info(
+            f"Saved {OUTPUT}: {len(panel)} rows, "
+            f"{panel['symbol'].nunique()} stocks, "
+            f"pcfNcfTTM coverage={panel['pcfNcfTTM'].notna().sum()}"
+        )
     else:
         logger.info("No pcfNcfTTM data collected.")
 

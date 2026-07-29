@@ -138,14 +138,22 @@ DIM_FEATURES: dict[str, list[str]] = {
 
 # 需要丢弃的空稠列 (>95% NaN, 无有效信号)
 HIGH_NAN_COLS = [
-    "north_net_buy_sh", "north_buy_amt_sh", "north_sell_amt_sh",
-    "north_net_buy_sz", "north_buy_amt_sz", "north_sell_amt_sz",
-    "margin_balance", "short_balance", "margin_buy_amt", "short_sell_vol",
+    "north_net_buy_sh",
+    "north_buy_amt_sh",
+    "north_sell_amt_sh",
+    "north_net_buy_sz",
+    "north_buy_amt_sz",
+    "north_sell_amt_sz",
+    "margin_balance",
+    "short_balance",
+    "margin_buy_amt",
+    "short_sell_vol",
     "holder_count",
 ]
 
 # 乱码列名 (AKShare 中文名称被编码破坏, >98% NaN)
 GARBLED_COL_PATTERNS = []  # 将通过名称探测
+
 
 # ──────────────────────────────────────────────
 # Rank IC computation (lightweight)
@@ -251,7 +259,13 @@ def timeseries_ic_details(
     """时序 IC 详情: mean, std, pos_ratio, n_stocks."""
     ics = _stock_ic_series(df, x_col, y_col, symbol_col)
     if ics.empty:
-        return {"mean": 0.0, "abs_mean": 0.0, "std": 0.0, "pos_ratio": 0.0, "n_stocks": 0}
+        return {
+            "mean": 0.0,
+            "abs_mean": 0.0,
+            "std": 0.0,
+            "pos_ratio": 0.0,
+            "n_stocks": 0,
+        }
     return {
         "mean": round(float(ics.mean()), 5),
         "abs_mean": round(float(ics.abs().mean()), 5),
@@ -269,9 +283,12 @@ def clean_panel(df: pd.DataFrame) -> pd.DataFrame:
     orig_cols = len(df.columns)
 
     # 1. Drop garbled Chinese columns (>95% NaN, unknown meaning)
-    garbled = [c for c in df.columns
-               if any(b > 127 for b in c.encode('utf-8', errors='replace'))
-               and df[c].isna().mean() > 0.95]
+    garbled = [
+        c
+        for c in df.columns
+        if any(b > 127 for b in c.encode("utf-8", errors="replace"))
+        and df[c].isna().mean() > 0.95
+    ]
     if garbled:
         df = df.drop(columns=garbled)
         logger.info("Dropped %d garbled columns: %s", len(garbled), garbled[:5])
@@ -283,9 +300,12 @@ def clean_panel(df: pd.DataFrame) -> pd.DataFrame:
         logger.info("Dropped %d high-NaN alt columns", len(existing_high_nan))
 
     # 3. Drop any other column with >98% NaN (likely unsalvageable)
-    extra_drop = [c for c in df.columns
-                  if df[c].isna().mean() > 0.98
-                  and c not in ("symbol", "date", "industry", "board")]
+    extra_drop = [
+        c
+        for c in df.columns
+        if df[c].isna().mean() > 0.98
+        and c not in ("symbol", "date", "industry", "board")
+    ]
     if extra_drop:
         df = df.drop(columns=extra_drop)
         logger.info("Dropped %d extra >98%% NaN columns", len(extra_drop))
@@ -301,10 +321,8 @@ def clean_panel(df: pd.DataFrame) -> pd.DataFrame:
     # 5. Ensure limit_pct
     if "limit_pct" not in df.columns:
         from app.pipeline1.cleaning_pipeline import get_limit_pct
-        df["limit_pct"] = [
-            get_limit_pct(b, d)
-            for b, d in zip(df["board"], df["date"])
-        ]
+
+        df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
 
     logger.info("Cleaned panel: %d cols -> %d cols", orig_cols, len(df.columns))
     return df
@@ -316,8 +334,14 @@ def maybe_drop_sparse_rows(df: pd.DataFrame) -> pd.DataFrame:
     Defines 'alt columns' as financial/CYQ/north/margin/holder columns.
     If a row has no alt data at all, it's not useful for dim21-28 eval.
     """
-    alt_markers = {"benefit_part", "pct_90_con", "roe", "gross_margin",
-                   "margin_balance_chg_1d", "north_net_buy_5d"}
+    alt_markers = {
+        "benefit_part",
+        "pct_90_con",
+        "roe",
+        "gross_margin",
+        "margin_balance_chg_1d",
+        "north_net_buy_5d",
+    }
     present_markers = [c for c in alt_markers if c in df.columns]
 
     if not present_markers:
@@ -329,8 +353,11 @@ def maybe_drop_sparse_rows(df: pd.DataFrame) -> pd.DataFrame:
 
     if n_sparse > 0:
         df = df[~all_nan].copy()
-        logger.info("Dropped %d sparse rows (all alt data NaN), remaining: %d",
-                     n_sparse, len(df))
+        logger.info(
+            "Dropped %d sparse rows (all alt data NaN), remaining: %d",
+            n_sparse,
+            len(df),
+        )
 
     return df
 
@@ -349,10 +376,7 @@ def _ensure_scaffold(df: pd.DataFrame) -> pd.DataFrame:
     if "list_days" not in df.columns:
         df["list_days"] = df.groupby("symbol").cumcount() + 1
     if "limit_pct" not in df.columns:
-        df["limit_pct"] = [
-            get_limit_pct(b, d)
-            for b, d in zip(df["board"], df["date"])
-        ]
+        df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
     return df
 
 
@@ -372,7 +396,9 @@ def build_dim21_29_features(df: pd.DataFrame) -> pd.DataFrame:
     from app.pipeline1.label_engine import LabelEngine
 
     df = _ensure_scaffold(df)
-    logger.info("Starting feature build with %d rows, %d cols", len(df), len(df.columns))
+    logger.info(
+        "Starting feature build with %d rows, %d cols", len(df), len(df.columns)
+    )
 
     # Build upstream support features (minimal set)
     t0 = time.time()
@@ -402,7 +428,8 @@ def build_dim21_29_features(df: pd.DataFrame) -> pd.DataFrame:
     df = FeatureEngineV35._add_time_series_changes(df)
     logger.info(
         "DIM21-28 features: +%d cols in %.1fs",
-        len(df.columns), time.time() - t0,
+        len(df.columns),
+        time.time() - t0,
     )
 
     # Build labels
@@ -422,7 +449,8 @@ def build_dim21_29_features(df: pd.DataFrame) -> pd.DataFrame:
 def determine_dim_status(features: list[dict]) -> tuple[str, dict | None, float]:
     """Determine dimension status + best feature."""
     valid = [
-        f for f in features
+        f
+        for f in features
         if f.get("ic_1d", 0) > 0 or f.get("ic_3d", 0) > 0 or f.get("ic_5d", 0) > 0
     ]
     if not valid:
@@ -522,14 +550,18 @@ def evaluate_dimension(
     for f in available:
         nan_pct = float(df[f].isna().mean() * 100)
         if nan_pct > 95:
-            feature_results.append({
-                "name": f,
-                "ic_1d": 0.0, "ic_3d": 0.0, "ic_5d": 0.0,
-                "ts_ic": {"abs_mean": 0.0, "pos_ratio": 0.0, "n_stocks": 0},
-                "nan_pct": nan_pct,
-                "best_chg": None,
-                "chg_vs_level": "level_wins",
-            })
+            feature_results.append(
+                {
+                    "name": f,
+                    "ic_1d": 0.0,
+                    "ic_3d": 0.0,
+                    "ic_5d": 0.0,
+                    "ts_ic": {"abs_mean": 0.0, "pos_ratio": 0.0, "n_stocks": 0},
+                    "nan_pct": nan_pct,
+                    "best_chg": None,
+                    "chg_vs_level": "level_wins",
+                }
+            )
             continue
 
         # === 截面 IC (cross-sectional per date) ===
@@ -552,16 +584,18 @@ def evaluate_dimension(
         else:
             chg_vs_level = "no_chg_signal"
 
-        feature_results.append({
-            "name": f,
-            "ic_1d": round(float(ic1), 5),
-            "ic_3d": round(float(ic3), 5),
-            "ic_5d": round(float(ic5), 5),
-            "ts_ic": ts_ic,
-            "nan_pct": round(float(nan_pct), 2),
-            "best_chg": best_chg,
-            "chg_vs_level": chg_vs_level,
-        })
+        feature_results.append(
+            {
+                "name": f,
+                "ic_1d": round(float(ic1), 5),
+                "ic_3d": round(float(ic3), 5),
+                "ic_5d": round(float(ic5), 5),
+                "ts_ic": ts_ic,
+                "nan_pct": round(float(nan_pct), 2),
+                "best_chg": best_chg,
+                "chg_vs_level": chg_vs_level,
+            }
+        )
 
     status, best, best_nan = determine_dim_status(feature_results)
     best_ic = {"1d": 0.0, "3d": 0.0, "5d": 0.0}
@@ -572,9 +606,14 @@ def evaluate_dimension(
 
     logger.info(
         "  %s: %d/%d features, best=%s ic=%.4f/%.4f/%.4f -> %s  (NaN%%=%.1f)",
-        dim_name, len(available), len(feature_names),
+        dim_name,
+        len(available),
+        len(feature_names),
         best_feat_name or "N/A",
-        best_ic["1d"], best_ic["3d"], best_ic["5d"], status,
+        best_ic["1d"],
+        best_ic["3d"],
+        best_ic["5d"],
+        status,
         best_nan if best_nan else 100.0,
     )
 
@@ -636,8 +675,11 @@ def _update_eval_log(output: dict) -> None:
             bk: {
                 "stocks": br["panel_info"]["stocks"],
                 "dimensions": {
-                    dim: {"status": data["status"], "best_feature": data.get("best_feature"),
-                          "best_ic": data.get("best_ic")}
+                    dim: {
+                        "status": data["status"],
+                        "best_feature": data.get("best_feature"),
+                        "best_ic": data.get("best_ic"),
+                    }
                     for dim, data in br["dimensions"].items()
                 },
                 "chg_win_rate": br["timeseries_analysis"]["chg_win_rate"],
@@ -662,8 +704,13 @@ def main():
     # 1. Load the enriched panel
     logger.info("Loading panel from %s ...", PANEL_PATH)
     df = pd.read_parquet(PANEL_PATH)
-    logger.info("Panel loaded: %d stocks, %d dates, %d rows, %d cols",
-                df["symbol"].nunique(), df["date"].nunique(), len(df), len(df.columns))
+    logger.info(
+        "Panel loaded: %d stocks, %d dates, %d rows, %d cols",
+        df["symbol"].nunique(),
+        df["date"].nunique(),
+        len(df),
+        len(df.columns),
+    )
 
     # 2. Clean panel: drop garbled/near-empty columns
     df = clean_panel(df)
@@ -698,8 +745,10 @@ def main():
             "end": str(df["date"].max()),
         },
         "board_distribution": {
-            k: {"stocks": int(df[df["board"] == k]["symbol"].nunique()),
-                "rows": int((df["board"] == k).sum())}
+            k: {
+                "stocks": int(df[df["board"] == k]["symbol"].nunique()),
+                "rows": int((df["board"] == k).sum()),
+            }
             for k in sorted(board_counts)
         },
     }
@@ -715,7 +764,9 @@ def main():
         n_stocks = df_board["symbol"].nunique()
         n_rows = len(df_board)
         if n_stocks < 10:
-            logger.info("Board group %s: %d stocks, %d rows — SKIP", board_key, n_stocks, n_rows)
+            logger.info(
+                "Board group %s: %d stocks, %d rows — SKIP", board_key, n_stocks, n_rows
+            )
             continue
         logger.info("=== %s: %d stocks, %d rows ===", board_key, n_stocks, n_rows)
 
@@ -730,7 +781,9 @@ def main():
                     "features": [],
                 }
                 continue
-            dim_results[dim_name] = evaluate_dimension(df_board, dim_name, feats, label_cols)
+            dim_results[dim_name] = evaluate_dimension(
+                df_board, dim_name, feats, label_cols
+            )
 
         ts_analysis = compute_timeseries_analysis(dim_results)
         all_results[board_key] = {
@@ -769,8 +822,12 @@ def main():
     print("=" * 130)
     print("DIM21-29 FULL PANEL IC EVALUATION (PER-BOARD)")
     print("=" * 130)
-    print(f"  Total: {full_panel_info['stocks']} stocks x {full_panel_info['dates']} dates = {full_panel_info['rows']} rows")
-    print(f"  Columns: {full_panel_info['total_cols']} (from {full_panel_info['pre_clean_cols']} pre-clean)")
+    print(
+        f"  Total: {full_panel_info['stocks']} stocks x {full_panel_info['dates']} dates = {full_panel_info['rows']} rows"
+    )
+    print(
+        f"  Columns: {full_panel_info['total_cols']} (from {full_panel_info['pre_clean_cols']} pre-clean)"
+    )
     print(f"  Elapsed: {elapsed:.1f}s")
     print(f"  Boards: {full_panel_info['board_distribution']}")
 
@@ -783,7 +840,9 @@ def main():
         ts = br["timeseries_analysis"]
         print()
         print(f"  ── {board_key.upper()} ({pi['stocks']} stocks, {pi['rows']} rows) ──")
-        print(f"  {'Dimension':<22s} {'Status':<10s} {'Best Feature':<28s} {'CS_1d':<8s} {'CS_3d':<8s} {'CS_5d':<8s} {'TS_IC':<8s} {'NaN%':<7s}")
+        print(
+            f"  {'Dimension':<22s} {'Status':<10s} {'Best Feature':<28s} {'CS_1d':<8s} {'CS_3d':<8s} {'CS_5d':<8s} {'TS_IC':<8s} {'NaN%':<7s}"
+        )
         print("-" * 130)
         for dim_name, dim_data in dims.items():
             if dim_data["status"] == "SKIP" and dim_data.get("nan_pct", 0) >= 100:
@@ -796,18 +855,28 @@ def main():
                 if feat["name"] == bf:
                     ts_ic_str = f"{feat.get('ts_ic', {}).get('abs_mean', 0):.4f}"
                     break
-            mark = " <<" if dim_data["status"] == "INCLUDE" else (" ?" if dim_data["status"] == "WATCH" else "")
-            print(f"  {dim_name:<22s} {dim_data['status']:<10s} {bf:<28s} "
-                  f"{ic['1d']:<8.4f} {ic['3d']:<8.4f} {ic['5d']:<8.4f} {ts_ic_str:<8s} {npct:<7.1f}{mark}")
+            mark = (
+                " <<"
+                if dim_data["status"] == "INCLUDE"
+                else (" ?" if dim_data["status"] == "WATCH" else "")
+            )
+            print(
+                f"  {dim_name:<22s} {dim_data['status']:<10s} {bf:<28s} "
+                f"{ic['1d']:<8.4f} {ic['3d']:<8.4f} {ic['5d']:<8.4f} {ts_ic_str:<8s} {npct:<7.1f}{mark}"
+            )
         print("-" * 130)
         print(f"  chg wins (abs/pct): {ts['chg_win_rate']}")
         print(f"  TS_IC positive:     {ts['ts_ic_win_rate']} (pos>0.55 & abs>0.02)")
         pos_chg = ts.get("features_with_chg_win", [])
         if pos_chg:
-            print(f"  chg>level: {', '.join(pos_chg[:8])}{' ...' if len(pos_chg)>8 else ''}")
+            print(
+                f"  chg>level: {', '.join(pos_chg[:8])}{' ...' if len(pos_chg) > 8 else ''}"
+            )
         ts_pos = ts.get("features_with_ts_ic_positive", [])
         if ts_pos:
-            print(f"  TS_IC stable: {', '.join(ts_pos[:8])}{' ...' if len(ts_pos)>8 else ''}")
+            print(
+                f"  TS_IC stable: {', '.join(ts_pos[:8])}{' ...' if len(ts_pos) > 8 else ''}"
+            )
 
     print()
     print("=" * 130)
@@ -817,7 +886,7 @@ def main():
     header = f"  {'Dim':<20s}"
     for bk in ["main", "gem_star"]:
         if bk in all_results:
-            header += f" {bk+' CS_3d':>14s} {bk+' TS':>10s}"
+            header += f" {bk + ' CS_3d':>14s} {bk + ' TS':>10s}"
     print(header)
     for dim_name in DIM_FEATURES:
         # 全量 SKIP 的维度不展示 (两板都没有数据)
@@ -860,22 +929,36 @@ def main():
             nf = len(dim_data.get("features", []))
             if s == "SKIP" and dim_data.get("nan_pct", 0) >= 100:
                 continue  # 全量 NaN 的维度不展示
-            best_ic_str = f"IC={max(dim_data['best_ic'].values()):.4f}" if dim_data.get("best_ic") else "IC=0"
+            best_ic_str = (
+                f"IC={max(dim_data['best_ic'].values()):.4f}"
+                if dim_data.get("best_ic")
+                else "IC=0"
+            )
             if s == "INCLUDE":
-                ready.append(f"  {dim_name}: {dim_data['best_feature']} ({best_ic_str}, {nf} feats)")
+                ready.append(
+                    f"  {dim_name}: {dim_data['best_feature']} ({best_ic_str}, {nf} feats)"
+                )
             elif s in ("WATCH", "PARTIAL"):
-                watch.append(f"  {dim_name}: {dim_data['best_feature']} ({best_ic_str}, {nf} feats)")
+                watch.append(
+                    f"  {dim_name}: {dim_data['best_feature']} ({best_ic_str}, {nf} feats)"
+                )
             else:
                 skip.append(f"  {dim_name}: ({nf} feats)")
         print("READY:")
-        for r in ready: print(r)
-        if not ready: print("  None")
+        for r in ready:
+            print(r)
+        if not ready:
+            print("  None")
         print("WATCH:")
-        for w in watch: print(w)
-        if not watch: print("  None")
+        for w in watch:
+            print(w)
+        if not watch:
+            print("  None")
         print("SKIP:")
-        for s in skip: print(s)
-        if not skip: print("  None")
+        for s in skip:
+            print(s)
+        if not skip:
+            print("  None")
         print("=" * 50)
 
 

@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
 """Quick IC eval for new bias/derived features — works directly on panel data."""
-import sys, os, json
+
+import sys
+import os
+import json
+
 sys.path.insert(0, ".")
 
 import pandas as pd
-import numpy as np
 from datetime import datetime
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.label_engine import LabelEngine
@@ -13,9 +16,16 @@ from app.utils.daily_rank_ic import mean_rank_ic, daily_rank_ic_series
 
 tag = datetime.now().strftime("%Y%m%d_%H%M%S")
 NEW_FEATURES = [
-    "bias_5", "bias_10", "bias_20", "bias_60", "bias_120", "bias_250",
-    "bias_5_20_cross", "bias_20_60_cross",
-    "ma_vol_ratio_5_20", "amplitude_5d",
+    "bias_5",
+    "bias_10",
+    "bias_20",
+    "bias_60",
+    "bias_120",
+    "bias_250",
+    "bias_5_20_cross",
+    "bias_20_60_cross",
+    "ma_vol_ratio_5_20",
+    "amplitude_5d",
 ]
 
 # Load panel, restrict to recent dates
@@ -29,9 +39,9 @@ cleaner = CleaningPipeline()
 main_df, dual_df = cleaner.run_train(panel)
 
 for board, board_df in [("main", main_df), ("dual", dual_df)]:
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {board.upper()}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     if len(board_df) == 0:
         continue
 
@@ -43,7 +53,9 @@ for board, board_df in [("main", main_df), ("dual", dual_df)]:
 
     label_col = "label_1d_net" if "label_1d_net" in df.columns else "label_1d"
     print(f"\nNew Feature IC vs {label_col}:")
-    print(f"{'Feature':25s} {'IC_1d':>8s} {'IC_3d':>8s} {'IC_5d':>8s} {'ICIR':>6s} {'Pos%':>6s} {'NaN%':>6s}")
+    print(
+        f"{'Feature':25s} {'IC_1d':>8s} {'IC_3d':>8s} {'IC_5d':>8s} {'ICIR':>6s} {'Pos%':>6s} {'NaN%':>6s}"
+    )
     print("-" * 75)
 
     results = []
@@ -55,7 +67,11 @@ for board, board_df in [("main", main_df), ("dual", dual_df)]:
 
         ic_vals = {}
         for k, lbl_sfx in [(1, "1d"), (3, "3d"), (5, "5d")]:
-            lbl = f"label_{lbl_sfx}_net" if f"label_{lbl_sfx}_net" in df.columns else f"label_{lbl_sfx}"
+            lbl = (
+                f"label_{lbl_sfx}_net"
+                if f"label_{lbl_sfx}_net" in df.columns
+                else f"label_{lbl_sfx}"
+            )
             sub = df[[col, lbl, "date"]].dropna()
             if len(sub) > 50:
                 ic = mean_rank_ic(sub, col, lbl, abs_mean=False)
@@ -67,14 +83,25 @@ for board, board_df in [("main", main_df), ("dual", dual_df)]:
         sub1 = df[[col, label_col, "date"]].dropna()
         if len(sub1) > 50:
             ic_series = daily_rank_ic_series(sub1, col, label_col)
-            pos_ratio = round(float((ic_series > 0).mean()), 4) if len(ic_series) > 5 else 0.0
+            pos_ratio = (
+                round(float((ic_series > 0).mean()), 4) if len(ic_series) > 5 else 0.0
+            )
             ic_std = float(ic_series.std())
             icir = round(abs(ic_vals["ic_1d"]) / ic_std if ic_std > 0 else 0, 4)
         else:
             pos_ratio, icir = 0.0, 0.0
 
-        results.append({**ic_vals, "pos_ratio": pos_ratio, "icir": icir, "nan_rate": round(float(nan_rate), 4)})
-        print(f"{col:25s} {ic_vals['ic_1d']:>+8.4f} {ic_vals['ic_3d']:>+8.4f} {ic_vals['ic_5d']:>+8.4f} {icir:>6.4f} {pos_ratio:>6.1%} {nan_rate:>6.1%}")
+        results.append(
+            {
+                **ic_vals,
+                "pos_ratio": pos_ratio,
+                "icir": icir,
+                "nan_rate": round(float(nan_rate), 4),
+            }
+        )
+        print(
+            f"{col:25s} {ic_vals['ic_1d']:>+8.4f} {ic_vals['ic_3d']:>+8.4f} {ic_vals['ic_5d']:>+8.4f} {icir:>6.4f} {pos_ratio:>6.1%} {nan_rate:>6.1%}"
+        )
 
     # Save
     out = {

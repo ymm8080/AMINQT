@@ -15,12 +15,26 @@ import pandas as pd
 from .cleaning_pipeline import get_limit_pct
 
 MA_WINDOWS = (5, 10, 20, 60, 120, 250)
-BIAS_PERIODS = (5, 10, 20, 60, 120, 250)  # 乖离率周期 (与 MA_WINDOWS 一致, 独立常量防耦合)
+BIAS_PERIODS = (
+    5,
+    10,
+    20,
+    60,
+    120,
+    250,
+)  # 乖离率周期 (与 MA_WINDOWS 一致, 独立常量防耦合)
 # 行业中性化目标列 (申万一级行业内 rank)
 NEUTRALIZE_COLS = ["turnover_rate", "chip_concentration", "conc_90", "benefit_part"]
 # 关键因子 missingness 指示
-MISSINGNESS_COLS = ["main_money_flow", "chip_concentration", "conc_90", "benefit_part",
-                    "margin_balance", "north_net_buy_sh", "holder_count"]
+MISSINGNESS_COLS = [
+    "main_money_flow",
+    "chip_concentration",
+    "conc_90",
+    "benefit_part",
+    "margin_balance",
+    "north_net_buy_sh",
+    "holder_count",
+]
 
 
 def _ema(s: pd.Series, n: int) -> pd.Series:
@@ -47,7 +61,9 @@ class FeatureEngineV35:
 
     # ---------------- 总装 ----------------
     def build(
-        self, df: pd.DataFrame, float_shares_map: dict | None = None,
+        self,
+        df: pd.DataFrame,
+        float_shares_map: dict | None = None,
         cross_sectional_rank: bool = False,
     ) -> pd.DataFrame:
         """构建特征面板.
@@ -66,7 +82,9 @@ class FeatureEngineV35:
         df = self.dim08_calendar_month(df)
         df = self.dim09_custom_formulas(df, float_shares_map)
         df = self.dim10_money_flow(df)
-        df = self.dim11_float_limits(df)  # Tushare stk_limit 涨跌停价 + daily_basic 流通股本
+        df = self.dim11_float_limits(
+            df
+        )  # Tushare stk_limit 涨跌停价 + daily_basic 流通股本
         df = self.dim12_ma_system(df)
         df = self.dim13_holiday(df)
         df = self.dim14_market_sentiment(df)
@@ -76,7 +94,9 @@ class FeatureEngineV35:
         df = self.dim20_short_horizon(df)  # 短周期特征 (专攻 1d 预测信噪比)
         df = self.dim18_lhb(df)
         df = self.dim19_amihud(df)  # E6
-        df = self.dim21_chip_tushare(df)  # 真实筹码分布 (Tushare cyq_perf), 无CYQ时用OHLCV代理补位 (DIM20)
+        df = self.dim21_chip_tushare(
+            df
+        )  # 真实筹码分布 (Tushare cyq_perf), 无CYQ时用OHLCV代理补位 (DIM20)
         # dim20_chip_proxy 已合并到 dim21 — CYQ NaN 时自动回退 OHLCV 推导
         df = self.dim22_fundamental_pit(df)  # [Alt-3] 基本面PIT (fina_indicator)
         df = self.dim23_shareholder_structure(df)  # [Alt-5] 股东户数+户均持股
@@ -112,20 +132,55 @@ class FeatureEngineV35:
         每次滚动重训时由 ICScreener.screen() 重新评估, 窗口内 IC 决定去留,
         不依赖历史结论。若某窗口全量 dead → 等效不生效。
         """
-        skip_prefix = ("label_", "is_", "limit_up_", "churn_", "market_state",
-                       "schema_version", "name", "tradestatus")
-        skip_suffix = ("_xrank",
-                       "_chg1", "_chg3", "_chg5", "_chg10", "_chg20",
-                       "_pct_chg1", "_pct_chg3", "_pct_chg5", "_pct_chg10", "_pct_chg20")
-        skip_exact = {"symbol", "date", "board", "industry", "month",
-                      "is_pre_holiday", "is_post_holiday", "list_days",
-                      "announce_date", "touched_limit_up", "is_virtual",
-                      "price_1455", "adv20", "limit_pct", "time",
-                      "PE_TTM", "score_rank", "rank_amount", "rank_ff_turnover",
-                      "liquidity_score"}
+        skip_prefix = (
+            "label_",
+            "is_",
+            "limit_up_",
+            "churn_",
+            "market_state",
+            "schema_version",
+            "name",
+            "tradestatus",
+        )
+        skip_suffix = (
+            "_xrank",
+            "_chg1",
+            "_chg3",
+            "_chg5",
+            "_chg10",
+            "_chg20",
+            "_pct_chg1",
+            "_pct_chg3",
+            "_pct_chg5",
+            "_pct_chg10",
+            "_pct_chg20",
+        )
+        skip_exact = {
+            "symbol",
+            "date",
+            "board",
+            "industry",
+            "month",
+            "is_pre_holiday",
+            "is_post_holiday",
+            "list_days",
+            "announce_date",
+            "touched_limit_up",
+            "is_virtual",
+            "price_1455",
+            "adv20",
+            "limit_pct",
+            "time",
+            "PE_TTM",
+            "score_rank",
+            "rank_amount",
+            "rank_ff_turnover",
+            "liquidity_score",
+        }
 
         src_cols = [
-            c for c in df.columns
+            c
+            for c in df.columns
             if c not in skip_exact
             and not any(c.startswith(p) for p in skip_prefix)
             and not any(c.endswith(s) for s in skip_suffix)
@@ -168,21 +223,50 @@ class FeatureEngineV35:
             df["board"] = df["symbol"].map(board_of)
 
         skip_prefix = (
-            "label_", "is_limit_up", "is_one_word", "limit_up_",
-            "is_missing_", "is_pre_", "is_post_", "is_st", "is_suspended",
+            "label_",
+            "is_limit_up",
+            "is_one_word",
+            "limit_up_",
+            "is_missing_",
+            "is_pre_",
+            "is_post_",
+            "is_st",
+            "is_suspended",
         )
         skip_exact = {
-            "symbol", "date", "board", "industry", "name", "tradestatus",
-            "close_hfq", "open_hfq", "high_hfq", "low_hfq",
-            "list_days", "announce_date", "churn_suspect",
-            "score_rank", "rank_amount", "rank_ff_turnover",
-            "liquidity_score", "market_state", "schema_version",
-            "PE_TTM", "is_virtual", "price_1455", "adv20",
-            "limit_pct", "touched_limit_up", "time", "VAR5", "VAR51",
+            "symbol",
+            "date",
+            "board",
+            "industry",
+            "name",
+            "tradestatus",
+            "close_hfq",
+            "open_hfq",
+            "high_hfq",
+            "low_hfq",
+            "list_days",
+            "announce_date",
+            "churn_suspect",
+            "score_rank",
+            "rank_amount",
+            "rank_ff_turnover",
+            "liquidity_score",
+            "market_state",
+            "schema_version",
+            "PE_TTM",
+            "is_virtual",
+            "price_1455",
+            "adv20",
+            "limit_pct",
+            "touched_limit_up",
+            "time",
+            "VAR5",
+            "VAR51",
         }
 
         src_cols = [
-            c for c in df.columns
+            c
+            for c in df.columns
             if c not in skip_exact
             and not c.startswith(skip_prefix)
             and not c.endswith("_xrank")  # 不做二阶排名
@@ -231,10 +315,9 @@ class FeatureEngineV35:
             for w in (5, 20):
                 g[f"ROC_{w}d_accel"] = g[f"ROC_{w}d"] - g[f"ROC_{w}d"].shift(w)
             # 动量一致性: 短-长ROC符号一致度
-            g["momentum_consistency"] = (
-                ((g["ROC_5d"] > 0) & (g["ROC_20d"] > 0)).astype(float)
-                - ((g["ROC_5d"] < 0) & (g["ROC_20d"] < 0)).astype(float)
-            )
+            g["momentum_consistency"] = ((g["ROC_5d"] > 0) & (g["ROC_20d"] > 0)).astype(
+                float
+            ) - ((g["ROC_5d"] < 0) & (g["ROC_20d"] < 0)).astype(float)
 
             # ── 2. 经典振荡器 ──
             # MACD(12,26,9)
@@ -244,24 +327,28 @@ class FeatureEngineV35:
             g["MACD_hist"] = g["MACD"] - g["MACD_signal"]
             # RSI(14)
             delta = hfq_c.diff()
-            up = delta.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
-            dn = (-delta.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean()
+            up = delta.clip(lower=0).ewm(alpha=1 / 14, adjust=False).mean()
+            dn = (-delta.clip(upper=0)).ewm(alpha=1 / 14, adjust=False).mean()
             g["RSI"] = 100 - 100 / (1 + up / dn.replace(0, np.nan))
             # KDJ(9,3,3)
             hhv9 = hfq_h.rolling(9, min_periods=9).max()
             llv9 = hfq_l.rolling(9, min_periods=9).min()
             rsv = (hfq_c - llv9) / (hhv9 - llv9).replace(0, np.nan) * 100
-            g["K"] = rsv.ewm(alpha=1/3, adjust=False).mean()
-            g["D"] = g["K"].ewm(alpha=1/3, adjust=False).mean()
+            g["K"] = rsv.ewm(alpha=1 / 3, adjust=False).mean()
+            g["D"] = g["K"].ewm(alpha=1 / 3, adjust=False).mean()
             g["J"] = 3 * g["K"] - 2 * g["D"]
             # 乖离率 (bias) — 仅补预计算未覆盖的周期
             for w in _needed_bias:
                 g[f"bias_{w}"] = c / c.rolling(w, min_periods=w).mean() - 1
             # 交叉信号 (依赖 bias 列, 已确保存在)
             if _need_5_20_cross:
-                g["bias_5_20_cross"] = np.sign(g["bias_5"] - g["bias_20"]).diff().fillna(0)
+                g["bias_5_20_cross"] = (
+                    np.sign(g["bias_5"] - g["bias_20"]).diff().fillna(0)
+                )
             if _need_20_60_cross:
-                g["bias_20_60_cross"] = np.sign(g["bias_20"] - g["bias_60"]).diff().fillna(0)
+                g["bias_20_60_cross"] = (
+                    np.sign(g["bias_20"] - g["bias_60"]).diff().fillna(0)
+                )
             # 量价背离: 价涨量缩=1 / 价跌量增=-1
             pc = c.pct_change()
             vc = g["volume"].pct_change()
@@ -282,14 +369,18 @@ class FeatureEngineV35:
             # CCI(20): (typical_price - SMA) / (0.015 * mean_deviation)
             tp = (hfq_h + hfq_l + hfq_c) / 3
             sma20 = tp.rolling(20, min_periods=20).mean()
-            md20 = tp.rolling(20, min_periods=20).apply(lambda x: np.abs(x - x.mean()).mean())
+            md20 = tp.rolling(20, min_periods=20).apply(
+                lambda x: np.abs(x - x.mean()).mean()
+            )
             g["CCI"] = (tp - sma20) / (0.015 * md20.replace(0, np.nan))
             # Bollinger %B(20): (close - lower) / (upper - lower)
             bb_ma = hfq_c.rolling(20, min_periods=20).mean()
             bb_std = hfq_c.rolling(20, min_periods=20).std()
             g["BB_upper"] = bb_ma + 2 * bb_std
             g["BB_lower"] = bb_ma - 2 * bb_std
-            g["BB_pctB"] = (hfq_c - g["BB_lower"]) / (g["BB_upper"] - g["BB_lower"]).replace(0, np.nan)
+            g["BB_pctB"] = (hfq_c - g["BB_lower"]) / (
+                g["BB_upper"] - g["BB_lower"]
+            ).replace(0, np.nan)
             g["BB_width"] = (g["BB_upper"] - g["BB_lower"]) / bb_ma.replace(0, np.nan)
 
             # ── 3. 动量质量 ──
@@ -303,8 +394,12 @@ class FeatureEngineV35:
             g["intra_strength"] = intra_strength
             g["intra_strength_ma5"] = intra_strength.rolling(5, min_periods=1).mean()
             # 新高/新低计数
-            g["new_high_20d"] = ((hfq_c == hfq_c.rolling(20, min_periods=20).max())).astype(float)
-            g["new_low_20d"] = ((hfq_c == hfq_c.rolling(20, min_periods=20).min())).astype(float)
+            g["new_high_20d"] = (
+                hfq_c == hfq_c.rolling(20, min_periods=20).max()
+            ).astype(float)
+            g["new_low_20d"] = (
+                hfq_c == hfq_c.rolling(20, min_periods=20).min()
+            ).astype(float)
             g["new_high_ratio_20d"] = g["new_high_20d"].rolling(20, min_periods=1).sum()
 
             # ── 4. 量价确认 ──
@@ -327,10 +422,12 @@ class FeatureEngineV35:
                 vol_roc = v / v.shift(w) - 1
                 g[f"pv_sync_direct_{w}d"] = np.sign(g[f"ROC_{w}d"]) * np.sign(vol_roc)
             # 放量上涨/缩量下跌 (A股特有信号)
-            g["vol_breakout"] = ((v > v.rolling(20, min_periods=20).mean() * 1.5)
-                                 & (g["ROC_5d"] > 0.02)).astype(float)
-            g["vol_dry_up"] = ((v < v.rolling(20, min_periods=20).mean() * 0.5)
-                               & (g["ROC_5d"] < -0.02)).astype(float)
+            g["vol_breakout"] = (
+                (v > v.rolling(20, min_periods=20).mean() * 1.5) & (g["ROC_5d"] > 0.02)
+            ).astype(float)
+            g["vol_dry_up"] = (
+                (v < v.rolling(20, min_periods=20).mean() * 0.5) & (g["ROC_5d"] < -0.02)
+            ).astype(float)
             return g
 
         return _apply_per_stock(df, per_stock)
@@ -378,8 +475,12 @@ class FeatureEngineV35:
             df = df.sort_values("date")
             f = f.sort_values("announce_date")
             df = pd.merge_asof(
-                df, f, left_on="date", right_on="announce_date",
-                by="symbol", direction="backward",
+                df,
+                f,
+                left_on="date",
+                right_on="announce_date",
+                by="symbol",
+                direction="backward",
             )
         close_col = "close_hfq" if "close_hfq" in df.columns else "close"
         df["ret_pct"] = df.groupby("symbol")[close_col].pct_change()
@@ -443,9 +544,17 @@ class FeatureEngineV35:
           5. dv_ratio_signal      — 股息率信号 (dv_ratio > 2% = 高股息)
           6. liquidity_score      — 综合流动性得分 (换手率+量比标准化)
         """
-        out_cols = ["turnover_f_chg_5d", "vol_ratio_ma5", "vol_ratio_extreme",
-                     "turnover_f_vs_ma20", "dv_ratio_signal", "liquidity_score_v2"]
-        has_data = any(c in df.columns for c in ["turnover_rate_f", "volume_ratio", "dv_ratio"])
+        out_cols = [
+            "turnover_f_chg_5d",
+            "vol_ratio_ma5",
+            "vol_ratio_extreme",
+            "turnover_f_vs_ma20",
+            "dv_ratio_signal",
+            "liquidity_score_v2",
+        ]
+        has_data = any(
+            c in df.columns for c in ["turnover_rate_f", "volume_ratio", "dv_ratio"]
+        )
         if not has_data:
             for c in out_cols:
                 df[c] = np.nan
@@ -457,7 +566,9 @@ class FeatureEngineV35:
             if "turnover_rate_f" in g.columns:
                 tff = g["turnover_rate_f"]
                 g["turnover_f_chg_5d"] = tff - tff.shift(5)
-                g["turnover_f_vs_ma20"] = tff / tff.rolling(20, min_periods=5).mean() - 1
+                g["turnover_f_vs_ma20"] = (
+                    tff / tff.rolling(20, min_periods=5).mean() - 1
+                )
             else:
                 g["turnover_f_chg_5d"] = np.nan
                 g["turnover_f_vs_ma20"] = np.nan
@@ -509,8 +620,15 @@ class FeatureEngineV35:
           6. small_mv_premium — 小市值溢价 (截面市值倒数 rank)
           7. value_composite  — 价值综合得分 (低PE+低PB+高股息)
         """
-        out_cols = ["pe_pct", "pb_pct", "pe_pb_ratio", "mv_log",
-                     "mv_ma20_dev", "small_mv_premium", "value_composite"]
+        out_cols = [
+            "pe_pct",
+            "pb_pct",
+            "pe_pb_ratio",
+            "mv_log",
+            "mv_ma20_dev",
+            "small_mv_premium",
+            "value_composite",
+        ]
         has_data = any(c in df.columns for c in ["pe_ttm", "pb", "total_mv"])
         if not has_data:
             for c in out_cols:
@@ -537,7 +655,9 @@ class FeatureEngineV35:
         def per_stock(g: pd.DataFrame) -> pd.DataFrame:
             g = g.sort_values("date")
             if "total_mv" in g.columns:
-                g["mv_ma20_dev"] = g["total_mv"] / g["total_mv"].rolling(20, min_periods=5).mean() - 1
+                g["mv_ma20_dev"] = (
+                    g["total_mv"] / g["total_mv"].rolling(20, min_periods=5).mean() - 1
+                )
             else:
                 g["mv_ma20_dev"] = np.nan
             return g
@@ -631,9 +751,17 @@ class FeatureEngineV35:
 
             # ── 二元信号 → 连续密度 (唯一经 IC 验证有增益的变换) ──
             density_sigs = [
-                "吸筹", "洗盘", "拉高", "出货",
-                "见顶", "顶部", "底部区域", "低位金叉",
-                "SS", "多头排列", "A0A",
+                "吸筹",
+                "洗盘",
+                "拉高",
+                "出货",
+                "见顶",
+                "顶部",
+                "底部区域",
+                "低位金叉",
+                "SS",
+                "多头排列",
+                "A0A",
             ]
             for sig in density_sigs:
                 if sig not in g.columns:
@@ -644,12 +772,24 @@ class FeatureEngineV35:
 
             # ── 剔除死权重列: 原始布尔信号 (IC=0) + 中间量 + 冗余列 ──
             drop_cols = [
-                "吸筹", "洗盘", "拉高", "出货",
-                "见顶", "顶部", "底部区域", "低位金叉",
-                "轨迹死叉", "上方死叉出货", "红在蓝上",
-                "SS", "多头排列", "A0A",
+                "吸筹",
+                "洗盘",
+                "拉高",
+                "出货",
+                "见顶",
+                "顶部",
+                "底部区域",
+                "低位金叉",
+                "轨迹死叉",
+                "上方死叉出货",
+                "红在蓝上",
+                "SS",
+                "多头排列",
+                "A0A",
                 "吸筹峰",  # 含 REF(X,-1) 前瞻, 严禁入特征
-                "A01", "A02", "A03",  # chip 中间量 (A04=A03 副本)
+                "A01",
+                "A02",
+                "A03",  # chip 中间量 (A04=A03 副本)
             ]
             g = g.drop(columns=[c for c in drop_cols if c in g.columns])
 
@@ -694,8 +834,13 @@ class FeatureEngineV35:
           4. limit_down_dist_pct — 现价距跌停价距离 (%)
           5. limit_asymmetry     — 涨跌停距离不对称 (涨停距/跌停距, >1=偏多)
         """
-        out_cols = ["float_share_ratio", "free_float_pct",
-                     "limit_dist_pct", "limit_down_dist_pct", "limit_asymmetry"]
+        out_cols = [
+            "float_share_ratio",
+            "free_float_pct",
+            "limit_dist_pct",
+            "limit_down_dist_pct",
+            "limit_asymmetry",
+        ]
         has_data = any(c in df.columns for c in ["float_share", "up_limit_raw"])
         if not has_data:
             for c in out_cols:
@@ -704,26 +849,37 @@ class FeatureEngineV35:
 
         # 流通股本/总股本比
         if "float_share" in df.columns and "total_share" in df.columns:
-            df["float_share_ratio"] = df["float_share"] / df["total_share"].replace(0, np.nan)
+            df["float_share_ratio"] = df["float_share"] / df["total_share"].replace(
+                0, np.nan
+            )
         elif "float_share" in df.columns:
             df["float_share_ratio"] = np.nan
 
         # 自由流通占比
         if "free_share" in df.columns and "total_share" in df.columns:
-            df["free_float_pct"] = df["free_share"] / df["total_share"].replace(0, np.nan)
+            df["free_float_pct"] = df["free_share"] / df["total_share"].replace(
+                0, np.nan
+            )
         elif "free_share" in df.columns:
             df["free_float_pct"] = np.nan
 
         # 涨跌停距离
         if "up_limit_raw" in df.columns and "down_limit_raw" in df.columns:
             close = df["close"] if "close" in df.columns else df["close_hfq"]
-            df["limit_dist_pct"] = (df["up_limit_raw"] - close) / close.replace(0, np.nan)
-            df["limit_down_dist_pct"] = (close - df["down_limit_raw"]) / close.replace(0, np.nan)
+            df["limit_dist_pct"] = (df["up_limit_raw"] - close) / close.replace(
+                0, np.nan
+            )
+            df["limit_down_dist_pct"] = (close - df["down_limit_raw"]) / close.replace(
+                0, np.nan
+            )
             df["limit_asymmetry"] = (df["up_limit_raw"] - close) / (
-                close - df["down_limit_raw"]).replace(0, np.nan)
+                close - df["down_limit_raw"]
+            ).replace(0, np.nan)
         elif "up_limit_raw" in df.columns:
             close = df["close"] if "close" in df.columns else df["close_hfq"]
-            df["limit_dist_pct"] = (df["up_limit_raw"] - close) / close.replace(0, np.nan)
+            df["limit_dist_pct"] = (df["up_limit_raw"] - close) / close.replace(
+                0, np.nan
+            )
 
         return df
 
@@ -761,7 +917,6 @@ class FeatureEngineV35:
             return g
 
         return _apply_per_stock(df, per_stock)
-
 
     # ---------------- ⑬日历效应-长假 ----------------
     @staticmethod
@@ -878,12 +1033,16 @@ class FeatureEngineV35:
 
             # --- 日频二值检测 (仅中间变量, 不输出) ---
             bullish_engulfing = (
-                (is_black.shift(1) == 1) & (is_white == 1)
-                & (o <= c.shift(1)) & (c >= o.shift(1))
+                (is_black.shift(1) == 1)
+                & (is_white == 1)
+                & (o <= c.shift(1))
+                & (c >= o.shift(1))
             ).astype(float)
             bearish_engulfing = (
-                (is_white.shift(1) == 1) & (is_black == 1)
-                & (o >= c.shift(1)) & (c <= o.shift(1))
+                (is_white.shift(1) == 1)
+                & (is_black == 1)
+                & (o >= c.shift(1))
+                & (c <= o.shift(1))
             ).astype(float)
             hammer = (
                 (body < 0.3 * total_range)
@@ -897,12 +1056,16 @@ class FeatureEngineV35:
             ).astype(float)
             mid_prev = (o.shift(2) + c.shift(2)) / 2
             morning_star = (
-                (is_black.shift(2) == 1) & (body.shift(1) < 0.5 * body.shift(2))
-                & (is_white == 1) & (c > mid_prev)
+                (is_black.shift(2) == 1)
+                & (body.shift(1) < 0.5 * body.shift(2))
+                & (is_white == 1)
+                & (c > mid_prev)
             ).astype(float)
             evening_star = (
-                (is_white.shift(2) == 1) & (body.shift(1) < 0.5 * body.shift(2))
-                & (is_black == 1) & (c < mid_prev)
+                (is_white.shift(2) == 1)
+                & (body.shift(1) < 0.5 * body.shift(2))
+                & (is_black == 1)
+                & (c < mid_prev)
             ).astype(float)
 
             bullish_raw = bullish_engulfing + hammer + morning_star
@@ -910,16 +1073,28 @@ class FeatureEngineV35:
 
             # --- 半衰期累积密度 (10/20/60 日, half-life=5) ---
             decay = 0.5 ** (1.0 / 5)  # 5日半衰
-            bull_density = bullish_raw.ewm(alpha=1 - decay, min_periods=1, adjust=False).mean()
-            bear_density = bearish_raw.ewm(alpha=1 - decay, min_periods=1, adjust=False).mean()
+            bull_density = bullish_raw.ewm(
+                alpha=1 - decay, min_periods=1, adjust=False
+            ).mean()
+            bear_density = bearish_raw.ewm(
+                alpha=1 - decay, min_periods=1, adjust=False
+            ).mean()
             for w in (10, 20, 60):
-                g[f"bullish_intensity_{w}d"] = bull_density.rolling(w, min_periods=1).mean()
-                g[f"bearish_intensity_{w}d"] = bear_density.rolling(w, min_periods=1).mean()
-                g[f"net_intensity_{w}d"] = g[f"bullish_intensity_{w}d"] - g[f"bearish_intensity_{w}d"]
+                g[f"bullish_intensity_{w}d"] = bull_density.rolling(
+                    w, min_periods=1
+                ).mean()
+                g[f"bearish_intensity_{w}d"] = bear_density.rolling(
+                    w, min_periods=1
+                ).mean()
+                g[f"net_intensity_{w}d"] = (
+                    g[f"bullish_intensity_{w}d"] - g[f"bearish_intensity_{w}d"]
+                )
 
             # --- 反转形态密度 (hammer+shooting_star 总活跃度) ---
             reversal_raw = hammer + shooting_star
-            rev_density = reversal_raw.ewm(alpha=1 - decay, min_periods=1, adjust=False).mean()
+            rev_density = reversal_raw.ewm(
+                alpha=1 - decay, min_periods=1, adjust=False
+            ).mean()
             g["reversal_intensity_20d"] = rev_density.rolling(20, min_periods=1).mean()
 
             # --- 实体/影线均值 (K线质量 + 波动率特征) ---
@@ -975,6 +1150,7 @@ class FeatureEngineV35:
         1d 预测信噪比极低 (日波动 ~3.4% vs 信号 ~0.1%), 需要捕捉日内微观结构.
         全量计算用 groupby("symbol") rolling, 无前瞻偏差.
         """
+
         def _per_stock(g: pd.DataFrame) -> pd.DataFrame:
             g = g.sort_values("date")
             c, o, h, l, v = g["close"], g["open"], g["high"], g["low"], g["volume"]  # noqa: E741
@@ -984,16 +1160,22 @@ class FeatureEngineV35:
             g["overnight_ret"] = (o / pc - 1).replace([np.inf, -np.inf], np.nan) * 100
 
             # 日内动量 (今开→今收)
-            g["intraday_momentum"] = (c / o - 1).replace([np.inf, -np.inf], np.nan) * 100
+            g["intraday_momentum"] = (c / o - 1).replace(
+                [np.inf, -np.inf], np.nan
+            ) * 100
 
             # 日内振幅 (high-low spread, 反映日内博弈烈度)
-            g["intraday_amplitude"] = (h / l - 1).replace([np.inf, -np.inf], np.nan) * 100
+            g["intraday_amplitude"] = (h / l - 1).replace(
+                [np.inf, -np.inf], np.nan
+            ) * 100
 
             # 连涨/连跌天数 (最近 5 日)
             up = (c > pc).astype(int)
             streak = up.copy()
             for i in range(1, min(6, len(g))):
-                streak.iloc[i:] = (streak.iloc[i:] + 1) * (up.iloc[i:] == up.iloc[i:].shift(i))
+                streak.iloc[i:] = (streak.iloc[i:] + 1) * (
+                    up.iloc[i:] == up.iloc[i:].shift(i)
+                )
             g["up_streak"] = up * streak  # 正=连涨天数, 0=当日下跌
             g["dn_streak"] = (1 - up) * streak  # 正=连跌天数, 0=当日上涨
 
@@ -1003,7 +1185,9 @@ class FeatureEngineV35:
 
             # 隔夜跳空 vs 5日均值 (异常跳空检测)
             gap_ma5 = (o / pc - 1).rolling(5, min_periods=5).mean()
-            g["gap_vs_ma5"] = ((o / pc - 1) - gap_ma5).replace([np.inf, -np.inf], np.nan) * 100
+            g["gap_vs_ma5"] = ((o / pc - 1) - gap_ma5).replace(
+                [np.inf, -np.inf], np.nan
+            ) * 100
 
             # 尾盘拉升检测 (最后30分钟无法直接计算, 用日内动量+次日开盘代理)
             # close vs high of day: 收盘在日内高位 → 尾盘强势
@@ -1113,11 +1297,15 @@ class FeatureEngineV35:
             g["benefit_trend_5d"] = bp - bp.shift(5)
 
             is_shrinking = (conc90 < conc90.shift(1)).astype(int)
-            g["conc_streak"] = is_shrinking.groupby((is_shrinking == 0).cumsum()).cumsum()
+            g["conc_streak"] = is_shrinking.groupby(
+                (is_shrinking == 0).cumsum()
+            ).cumsum()
             g["conc_streak_3d"] = (g["conc_streak"] >= 3).astype(int)
             pct70 = g.get("pct_70_con", conc90)
             is_shrinking_70 = (pct70 < pct70.shift(1)).astype(int)
-            g["conc70_streak"] = is_shrinking_70.groupby((is_shrinking_70 == 0).cumsum()).cumsum()
+            g["conc70_streak"] = is_shrinking_70.groupby(
+                (is_shrinking_70 == 0).cumsum()
+            ).cumsum()
             g["conc70_streak_3d"] = (g["conc70_streak"] >= 3).astype(int)
             was_streak3 = (g["conc_streak"].shift(1) >= 3).astype(int)
             g["conc_reversal"] = was_streak3 * (1 - is_shrinking)
@@ -1132,7 +1320,9 @@ class FeatureEngineV35:
             g = g.sort_values("date")
             c, v = g["close"], g["volume"]
             to = g.get("turnover_rate", v / v.rolling(20).mean())
-            g["conc_90"] = 1 - to.rolling(20).std() / to.rolling(20).mean().replace(0, 1)
+            g["conc_90"] = 1 - to.rolling(20).std() / to.rolling(20).mean().replace(
+                0, 1
+            )
             g["benefit_part"] = np.nan  # OHLCV 无法推导获利盘
             g["cost_bias"] = c / c.rolling(60).mean() - 1  # 价格偏离60日均线替代
             g["cost_spread"] = np.nan
@@ -1140,9 +1330,15 @@ class FeatureEngineV35:
             g["conc_trend_20d"] = g["conc_90"] / g["conc_90"].shift(20).replace(0, 1)
             g["benefit_trend_5d"] = np.nan
             # streak/拐点 对 OHLCV 代理无意义, 填 NaN
-            for col in ["conc_streak", "conc_streak_3d", "conc70_streak",
-                        "conc70_streak_3d", "conc_reversal",
-                        "benefit_vs_ma60", "benefit_dir_5d"]:
+            for col in [
+                "conc_streak",
+                "conc_streak_3d",
+                "conc70_streak",
+                "conc70_streak_3d",
+                "conc_reversal",
+                "benefit_vs_ma60",
+                "benefit_dir_5d",
+            ]:
                 g[col] = np.nan
             g["cost50_rank"] = 0.0
             return g
@@ -1152,7 +1348,9 @@ class FeatureEngineV35:
             if "benefit_part" not in df.columns:
                 df["benefit_part"] = df["winner_rate"] / 100.0
             if "pct_90_con" not in df.columns:
-                df["pct_90_con"] = (df["cost_95pct"] - df["cost_5pct"]) / df["cost_50pct"].replace(0, np.nan)
+                df["pct_90_con"] = (df["cost_95pct"] - df["cost_5pct"]) / df[
+                    "cost_50pct"
+                ].replace(0, np.nan)
             df = _apply_per_stock(df, per_stock_cyq)
         elif has_calc:
             # 旧 calculator 列 (无 Tushare 时的降级)
@@ -1167,7 +1365,9 @@ class FeatureEngineV35:
                 grp = df.groupby(["date", "board"], observed=True)
                 df["cost50_rank"] = grp["cost_50pct"].rank(pct=True).fillna(0.5)
             else:
-                df["cost50_rank"] = df.groupby("date")["cost_50pct"].rank(pct=True).fillna(0.5)
+                df["cost50_rank"] = (
+                    df.groupby("date")["cost_50pct"].rank(pct=True).fillna(0.5)
+                )
 
         # NaN 列的 OHLCV 回退: 对每个 stock, conc_90/cost_bias 等为 NaN 时用 proxy 值
         nan_mask = df["conc_90"].isna()
@@ -1212,13 +1412,34 @@ class FeatureEngineV35:
          11. rev_yoy_trend      — 营收增速 4季趋势斜率
          12. quality_momentum   — 质量动量: ROE趋势 + 毛利率趋势 - 负债趋势
         """
-        fin_cols = ["roe", "roa", "gross_margin", "net_margin", "eps_yoy",
-                     "rev_yoy", "profit_yoy", "op_cf_ratio", "debt_ratio",
-                     "current_ratio", "asset_turnover", "inventory_turnover"]
-        out_cols = ["roe_qoq", "roa_qoq", "margin_chg", "growth_accel",
-                     "profit_accel", "debt_leveraging", "efficiency_chg",
-                     "ocf_stability", "roe_trend_4q", "margin_trend_4q",
-                     "rev_yoy_trend", "quality_momentum"]
+        fin_cols = [
+            "roe",
+            "roa",
+            "gross_margin",
+            "net_margin",
+            "eps_yoy",
+            "rev_yoy",
+            "profit_yoy",
+            "op_cf_ratio",
+            "debt_ratio",
+            "current_ratio",
+            "asset_turnover",
+            "inventory_turnover",
+        ]
+        out_cols = [
+            "roe_qoq",
+            "roa_qoq",
+            "margin_chg",
+            "growth_accel",
+            "profit_accel",
+            "debt_leveraging",
+            "efficiency_chg",
+            "ocf_stability",
+            "roe_trend_4q",
+            "margin_trend_4q",
+            "rev_yoy_trend",
+            "quality_momentum",
+        ]
         has_fin = any(c in df.columns for c in fin_cols)
         if not has_fin:
             for c in out_cols:
@@ -1231,24 +1452,34 @@ class FeatureEngineV35:
 
             # === 时序变化 (PRIMARY) ===
             # QoQ changes (季环比)
-            for col, out in [("roe","roe_qoq"), ("roa","roa_qoq"),
-                             ("gross_margin","margin_chg"), ("debt_ratio","debt_leveraging"),
-                             ("asset_turnover","efficiency_chg")]:
+            for col, out in [
+                ("roe", "roe_qoq"),
+                ("roa", "roa_qoq"),
+                ("gross_margin", "margin_chg"),
+                ("debt_ratio", "debt_leveraging"),
+                ("asset_turnover", "efficiency_chg"),
+            ]:
                 if col in g.columns:
                     g[out] = g[col] - g[col].shift(q)
 
             # Growth acceleration (增速加速度)
-            for col, out in [("rev_yoy","growth_accel"), ("profit_yoy","profit_accel")]:
+            for col, out in [
+                ("rev_yoy", "growth_accel"),
+                ("profit_yoy", "profit_accel"),
+            ]:
                 if col in g.columns:
                     g[out] = g[col] - g[col].shift(q)
 
             # === 趋势 (4季窗口) ===
-            for col, out in [("roe","roe_trend_4q"), ("gross_margin","margin_trend_4q"),
-                             ("rev_yoy","rev_yoy_trend")]:
+            for col, out in [
+                ("roe", "roe_trend_4q"),
+                ("gross_margin", "margin_trend_4q"),
+                ("rev_yoy", "rev_yoy_trend"),
+            ]:
                 if col in g.columns:
                     # Linear regression slope over last 4 quarters
                     s = g[col]
-                    g[out] = (s - s.shift(4*q)) / 4  # simple proxy: total change / 4
+                    g[out] = (s - s.shift(4 * q)) / 4  # simple proxy: total change / 4
 
             # === 稳定性 (20 季度滚动 CV, 约 20*63=1260 个交易日) ===
             # 数据经 merge_asof(direction=backward) 为日频填充, 常量段内 rolling 无意义,
@@ -1290,11 +1521,18 @@ class FeatureEngineV35:
           7. avg_shares_yoy      — 户均持股同比
           8. holder_concentration_zscore — 截面集中度标准化
         """
-        has_holder = "holder_count" in df.columns or "avg_shares_per_holder" in df.columns
+        has_holder = (
+            "holder_count" in df.columns or "avg_shares_per_holder" in df.columns
+        )
         out_cols = [
-            "holder_count_log", "holder_count_qoq", "holder_count_yoy",
-            "holder_qoq_accel", "avg_shares_log", "avg_shares_qoq",
-            "avg_shares_yoy", "holder_concentration_zscore",
+            "holder_count_log",
+            "holder_count_qoq",
+            "holder_count_yoy",
+            "holder_qoq_accel",
+            "avg_shares_log",
+            "avg_shares_qoq",
+            "avg_shares_yoy",
+            "holder_concentration_zscore",
         ]
         if not has_holder:
             for c in out_cols:
@@ -1308,16 +1546,26 @@ class FeatureEngineV35:
                 hc = g["holder_count"]
                 g["holder_count_log"] = np.log(hc.replace(0, np.nan))
                 # 环比: 需 shift 约 63 个交易日 (一个季度)
-                g["holder_count_qoq"] = (hc - hc.shift(63)) / hc.shift(63).replace(0, np.nan)
-                g["holder_count_yoy"] = (hc - hc.shift(252)) / hc.shift(252).replace(0, np.nan)
+                g["holder_count_qoq"] = (hc - hc.shift(63)) / hc.shift(63).replace(
+                    0, np.nan
+                )
+                g["holder_count_yoy"] = (hc - hc.shift(252)) / hc.shift(252).replace(
+                    0, np.nan
+                )
                 # 二阶导: QoQ 的变化
-                g["holder_qoq_accel"] = g["holder_count_qoq"] - g["holder_count_qoq"].shift(63)
+                g["holder_qoq_accel"] = g["holder_count_qoq"] - g[
+                    "holder_count_qoq"
+                ].shift(63)
 
             if "avg_shares_per_holder" in g.columns:
                 ash = g["avg_shares_per_holder"]
                 g["avg_shares_log"] = np.log(ash.replace(0, np.nan))
-                g["avg_shares_qoq"] = (ash - ash.shift(63)) / ash.shift(63).replace(0, np.nan)
-                g["avg_shares_yoy"] = (ash - ash.shift(252)) / ash.shift(252).replace(0, np.nan)
+                g["avg_shares_qoq"] = (ash - ash.shift(63)) / ash.shift(63).replace(
+                    0, np.nan
+                )
+                g["avg_shares_yoy"] = (ash - ash.shift(252)) / ash.shift(252).replace(
+                    0, np.nan
+                )
 
             return g
 
@@ -1327,7 +1575,9 @@ class FeatureEngineV35:
         if "holder_count_log" in df.columns:
             mu = df.groupby("date")["holder_count_log"].transform("mean")
             sd = df.groupby("date")["holder_count_log"].transform("std")
-            df["holder_concentration_zscore"] = -(df["holder_count_log"] - mu) / sd.replace(0, np.nan)
+            df["holder_concentration_zscore"] = -(
+                df["holder_count_log"] - mu
+            ) / sd.replace(0, np.nan)
 
         return df
 
@@ -1349,9 +1599,12 @@ class FeatureEngineV35:
         """
         has_margin = "margin_balance" in df.columns
         out_cols = [
-            "margin_balance_chg_1d", "margin_balance_chg_5d",
-            "short_balance_ratio", "margin_buy_ratio",
-            "margin_balance_ma20_dev", "margin_balance_yoy",
+            "margin_balance_chg_1d",
+            "margin_balance_chg_5d",
+            "short_balance_ratio",
+            "margin_buy_ratio",
+            "margin_balance_ma20_dev",
+            "margin_balance_yoy",
             "margin_pressure_score",
         ]
         if not has_margin:
@@ -1403,8 +1656,12 @@ class FeatureEngineV35:
         """
         has_north = any(c in df.columns for c in ["north_net_buy", "north_net_buy_sh"])
         out_cols = [
-            "north_net_buy_5d", "north_net_buy_20d", "north_net_buy_streak",
-            "north_buy_ratio", "north_sh_sz_divergence", "north_momentum_5d",
+            "north_net_buy_5d",
+            "north_net_buy_20d",
+            "north_net_buy_streak",
+            "north_buy_ratio",
+            "north_sh_sz_divergence",
+            "north_momentum_5d",
             "north_flow_zscore",
         ]
         if not has_north:
@@ -1426,7 +1683,9 @@ class FeatureEngineV35:
             g["north_net_buy_20d"] = nb.rolling(20, min_periods=1).sum()
             # 连续净买入天数: 正号分组累计, 负号/零归零 (向量化)
             sign_pos = (np.sign(nb.fillna(0)) > 0).astype(int)
-            g["north_net_buy_streak"] = sign_pos.groupby((sign_pos == 0).cumsum()).cumsum()
+            g["north_net_buy_streak"] = sign_pos.groupby(
+                (sign_pos == 0).cumsum()
+            ).cumsum()
             # 动量加速度
             g["north_momentum_5d"] = nb.diff(5) - nb.diff(10).shift(5)
             return g
@@ -1435,15 +1694,15 @@ class FeatureEngineV35:
 
         # 沪深分化 (全市场日频列, 非 stock-level — 需按日期广播)
         if "north_net_buy_sh" in df.columns and "north_net_buy_sz" in df.columns:
-            df["north_sh_sz_divergence"] = (
-                df["north_net_buy_sh"].fillna(0) - df["north_net_buy_sz"].fillna(0)
-            )
+            df["north_sh_sz_divergence"] = df["north_net_buy_sh"].fillna(0) - df[
+                "north_net_buy_sz"
+            ].fillna(0)
 
         # 北向买入比 (代理: 净买入绝对值/全市场成交额)
         if "north_net_buy" in df.columns and "amount" in df.columns:
             daily_total_amt = df.groupby("date")["amount"].transform("sum")
-            df["north_buy_ratio"] = (
-                df["north_net_buy"].abs() / daily_total_amt.replace(0, np.nan)
+            df["north_buy_ratio"] = df["north_net_buy"].abs() / daily_total_amt.replace(
+                0, np.nan
             )
 
         # 北向是市场级数据 (所有个股同值), 截面 zscore = 0/0 = NaN.
@@ -1453,7 +1712,7 @@ class FeatureEngineV35:
             nb_by_date = nb_by_date.sort_index()
             nb_mu = nb_by_date.rolling(20, min_periods=5).mean()
             nb_sd = nb_by_date.rolling(20, min_periods=5).std()
-            ts_z = ((nb_by_date - nb_mu) / nb_sd.replace(0, np.nan))
+            ts_z = (nb_by_date - nb_mu) / nb_sd.replace(0, np.nan)
             df["north_flow_zscore"] = df["date"].map(ts_z)
 
         return df
@@ -1473,10 +1732,15 @@ class FeatureEngineV35:
           4. lhb_inst_buy_ratio    — 机构买入/总上榜买入
           5. lhb_abnormal_score    — 异常上榜得分 (偏离均值 2σ)
         """
-        has_lhb = any(c in df.columns for c in ["lhb_net_buy", "lhb_institutional_net_buy"])
+        has_lhb = any(
+            c in df.columns for c in ["lhb_net_buy", "lhb_institutional_net_buy"]
+        )
         out_cols = [
-            "lhb_inst_net_buy_5d", "lhb_inst_net_buy_20d",
-            "lhb_inst_count_5d", "lhb_inst_buy_ratio", "lhb_abnormal_score",
+            "lhb_inst_net_buy_5d",
+            "lhb_inst_net_buy_20d",
+            "lhb_inst_count_5d",
+            "lhb_inst_buy_ratio",
+            "lhb_abnormal_score",
         ]
         if not has_lhb:
             for c in out_cols:
@@ -1498,8 +1762,10 @@ class FeatureEngineV35:
             # 机构席位出现次数
             if "lhb_institutional_count" in g.columns:
                 g["lhb_inst_count_5d"] = (
-                    g["lhb_institutional_count"].fillna(0)
-                    .rolling(5, min_periods=1).sum()
+                    g["lhb_institutional_count"]
+                    .fillna(0)
+                    .rolling(5, min_periods=1)
+                    .sum()
                 )
             else:
                 g["lhb_inst_count_5d"] = np.nan
@@ -1507,7 +1773,9 @@ class FeatureEngineV35:
             # 机构买入占比
             if "lhb_buy_amt" in g.columns and "lhb_institutional_buy" in g.columns:
                 total_buy = g["lhb_buy_amt"].replace(0, np.nan).ffill()
-                inst_buy = g.get("lhb_institutional_buy", pd.Series(np.nan, index=g.index)).fillna(0)
+                inst_buy = g.get(
+                    "lhb_institutional_buy", pd.Series(np.nan, index=g.index)
+                ).fillna(0)
                 g["lhb_inst_buy_ratio"] = inst_buy / total_buy.replace(0, np.nan)
             elif "lhb_inst_buy_ratio" in g.columns:
                 pass  # 已由 upstream 提供
@@ -1545,9 +1813,14 @@ class FeatureEngineV35:
           5. ind_lhb_net_flow_5d   — 行业龙虎榜机构净买入 5 日累计
           6. ind_capital_flow      — 行业资金流综合: 融资+北向+股东方向
         """
-        out_cols = ["ind_margin_chg_5d", "ind_margin_accel",
-                     "ind_holder_trend_20d", "ind_north_chg_5d",
-                     "ind_lhb_net_flow_5d", "ind_capital_flow"]
+        out_cols = [
+            "ind_margin_chg_5d",
+            "ind_margin_accel",
+            "ind_holder_trend_20d",
+            "ind_north_chg_5d",
+            "ind_lhb_net_flow_5d",
+            "ind_capital_flow",
+        ]
         if "industry" not in df.columns:
             for c in out_cols:
                 df[c] = np.nan
@@ -1555,23 +1828,42 @@ class FeatureEngineV35:
 
         # 1. 融资融券行业时序
         if "margin_balance" in df.columns:
+
             def mb_stock(g):
                 g = g.sort_values("date")
                 mb = g["margin_balance"]
                 g["_mb_chg_1d"] = (mb - mb.shift(1)) / mb.shift(1).replace(0, np.nan)
                 return g
+
             df = _apply_per_stock(df, mb_stock)
             # Aggregate to industry
-            ind_mb = df.groupby(["date", "industry"], observed=True)["_mb_chg_1d"].mean().reset_index()
+            ind_mb = (
+                df.groupby(["date", "industry"], observed=True)["_mb_chg_1d"]
+                .mean()
+                .reset_index()
+            )
             ind_mb = ind_mb.sort_values(["industry", "date"])
+
             def ind_rolling(g):
                 g = g.sort_values("date")
-                g["ind_margin_chg_5d"] = g["_mb_chg_1d"].rolling(5, min_periods=3).mean()
-                g["ind_margin_accel"] = g["ind_margin_chg_5d"] - g["ind_margin_chg_5d"].shift(10)
+                g["ind_margin_chg_5d"] = (
+                    g["_mb_chg_1d"].rolling(5, min_periods=3).mean()
+                )
+                g["ind_margin_accel"] = g["ind_margin_chg_5d"] - g[
+                    "ind_margin_chg_5d"
+                ].shift(10)
                 return g
-            ind_mb = ind_mb.groupby("industry", observed=True).apply(ind_rolling).reset_index(drop=True)
-            df = df.merge(ind_mb[["date","industry","ind_margin_chg_5d","ind_margin_accel"]],
-                         on=["date","industry"], how="left")
+
+            ind_mb = (
+                ind_mb.groupby("industry", observed=True)
+                .apply(ind_rolling)
+                .reset_index(drop=True)
+            )
+            df = df.merge(
+                ind_mb[["date", "industry", "ind_margin_chg_5d", "ind_margin_accel"]],
+                on=["date", "industry"],
+                how="left",
+            )
             df = df.drop(columns=["_mb_chg_1d"], errors="ignore")
         else:
             df["ind_margin_chg_5d"] = np.nan
@@ -1579,42 +1871,89 @@ class FeatureEngineV35:
 
         # 2. 股东户数行业时序
         if "holder_count_qoq" in df.columns:
-            ind_hc = df.groupby(["date", "industry"], observed=True)["holder_count_qoq"].mean().reset_index()
+            ind_hc = (
+                df.groupby(["date", "industry"], observed=True)["holder_count_qoq"]
+                .mean()
+                .reset_index()
+            )
             ind_hc = ind_hc.sort_values(["industry", "date"])
+
             def hc_roll(g):
                 g = g.sort_values("date")
-                g["ind_holder_trend_20d"] = g["holder_count_qoq"].rolling(20, min_periods=5).mean()
+                g["ind_holder_trend_20d"] = (
+                    g["holder_count_qoq"].rolling(20, min_periods=5).mean()
+                )
                 return g
-            ind_hc = ind_hc.groupby("industry", observed=True).apply(hc_roll).reset_index(drop=True)
-            df = df.merge(ind_hc[["date","industry","ind_holder_trend_20d"]], on=["date","industry"], how="left")
+
+            ind_hc = (
+                ind_hc.groupby("industry", observed=True)
+                .apply(hc_roll)
+                .reset_index(drop=True)
+            )
+            df = df.merge(
+                ind_hc[["date", "industry", "ind_holder_trend_20d"]],
+                on=["date", "industry"],
+                how="left",
+            )
         else:
             df["ind_holder_trend_20d"] = np.nan
 
         # 3. 北向资金行业时序
         if "north_net_buy" in df.columns:
-            ind_nb = df.groupby(["date", "industry"], observed=True)["north_net_buy"].sum().reset_index()
+            ind_nb = (
+                df.groupby(["date", "industry"], observed=True)["north_net_buy"]
+                .sum()
+                .reset_index()
+            )
             ind_nb = ind_nb.sort_values(["industry", "date"])
+
             def nb_roll(g):
                 g = g.sort_values("date")
                 g["ind_north_chg_5d"] = g["north_net_buy"].diff(5)
                 return g
-            ind_nb = ind_nb.groupby("industry", observed=True).apply(nb_roll).reset_index(drop=True)
-            df = df.merge(ind_nb[["date","industry","ind_north_chg_5d"]], on=["date","industry"], how="left")
+
+            ind_nb = (
+                ind_nb.groupby("industry", observed=True)
+                .apply(nb_roll)
+                .reset_index(drop=True)
+            )
+            df = df.merge(
+                ind_nb[["date", "industry", "ind_north_chg_5d"]],
+                on=["date", "industry"],
+                how="left",
+            )
         else:
             df["ind_north_chg_5d"] = np.nan
 
         # 4. 龙虎榜行业时序
-        lhb_col = "lhb_institutional_net_buy" if "lhb_institutional_net_buy" in df.columns else (
-            "lhb_net_buy" if "lhb_net_buy" in df.columns else None)
+        lhb_col = (
+            "lhb_institutional_net_buy"
+            if "lhb_institutional_net_buy" in df.columns
+            else ("lhb_net_buy" if "lhb_net_buy" in df.columns else None)
+        )
         if lhb_col:
-            ind_lhb = df.groupby(["date", "industry"], observed=True)[lhb_col].sum().reset_index()
+            ind_lhb = (
+                df.groupby(["date", "industry"], observed=True)[lhb_col]
+                .sum()
+                .reset_index()
+            )
             ind_lhb = ind_lhb.sort_values(["industry", "date"])
+
             def lhb_roll(g):
                 g = g.sort_values("date")
                 g["ind_lhb_net_flow_5d"] = g[lhb_col].rolling(5, min_periods=1).sum()
                 return g
-            ind_lhb = ind_lhb.groupby("industry", observed=True).apply(lhb_roll).reset_index(drop=True)
-            df = df.merge(ind_lhb[["date","industry","ind_lhb_net_flow_5d"]], on=["date","industry"], how="left")
+
+            ind_lhb = (
+                ind_lhb.groupby("industry", observed=True)
+                .apply(lhb_roll)
+                .reset_index(drop=True)
+            )
+            df = df.merge(
+                ind_lhb[["date", "industry", "ind_lhb_net_flow_5d"]],
+                on=["date", "industry"],
+                how="left",
+            )
         else:
             df["ind_lhb_net_flow_5d"] = np.nan
 
@@ -1623,7 +1962,15 @@ class FeatureEngineV35:
         if "ind_margin_chg_5d" in df.columns:
             comps.append(df["ind_margin_chg_5d"].fillna(0))
         if "ind_north_chg_5d" in df.columns:
-            comps.append(df["ind_north_chg_5d"].fillna(0) / df["ind_north_chg_5d"].abs().replace(0, 1).rolling(20).mean().fillna(1))
+            comps.append(
+                df["ind_north_chg_5d"].fillna(0)
+                / df["ind_north_chg_5d"]
+                .abs()
+                .replace(0, 1)
+                .rolling(20)
+                .mean()
+                .fillna(1)
+            )
         if comps:
             df["ind_capital_flow"] = sum(comps) / len(comps)
         else:
@@ -1654,9 +2001,14 @@ class FeatureEngineV35:
         # 如果面板中存在行业指数列 (index_code match → industry match), 直接使用
         # 否则尝试从 OHLCV 计算行业平均回报作为代理
         out_cols = [
-            "sw_ret_1d", "sw_ret_5d", "sw_ret_20d", "sw_vol_20d",
-            "sw_relative_strength", "sw_rotation_position",
-            "sw_momentum_accel", "sw_turnover_anomaly",
+            "sw_ret_1d",
+            "sw_ret_5d",
+            "sw_ret_20d",
+            "sw_vol_20d",
+            "sw_relative_strength",
+            "sw_rotation_position",
+            "sw_momentum_accel",
+            "sw_turnover_anomaly",
         ]
 
         # 方案 A: 面板已有行业指数 merge 列 (上游已处理, sw_ret_1d 来自 sector_index)
@@ -1689,7 +2041,11 @@ class FeatureEngineV35:
             ind = ind.sort_values(["industry", "date"])
             # 成交额代理: 行业内个股 amount 之和
             if "amount" in df.columns:
-                ind_amt = df.groupby(["date", "industry"], observed=True)["amount"].sum().reset_index()
+                ind_amt = (
+                    df.groupby(["date", "industry"], observed=True)["amount"]
+                    .sum()
+                    .reset_index()
+                )
                 ind_amt = ind_amt.rename(columns={"amount": "_ind_amount"})
                 ind = ind.merge(ind_amt, on=["date", "industry"], how="left")
 
@@ -1702,7 +2058,9 @@ class FeatureEngineV35:
             # 成交额异常
             if "_ind_amount" in g.columns:
                 amt_ma = g["_ind_amount"].rolling(20, min_periods=10).mean()
-                g["sw_turnover_anomaly"] = g["_ind_amount"] / amt_ma.replace(0, np.nan) - 1
+                g["sw_turnover_anomaly"] = (
+                    g["_ind_amount"] / amt_ma.replace(0, np.nan) - 1
+                )
             else:
                 g["sw_turnover_anomaly"] = np.nan
             # 动量加速度
@@ -1747,11 +2105,16 @@ class FeatureEngineV35:
           6. sh_change_frequency  — 近 60 日公告次数 (活跃度指标)
           7. sh_amt_vs_amount     — 增减持金额/日成交额 (影响规模)
         """
-        has_ht = any(c in df.columns for c in ["sh_net_change_sign", "sh_change_amt_total"])
+        has_ht = any(
+            c in df.columns for c in ["sh_net_change_sign", "sh_change_amt_total"]
+        )
         out_cols = [
-            "sh_net_sign_20d", "sh_net_sign_60d",
-            "sh_change_amt_20d", "sh_change_amt_60d",
-            "sh_insider_signal", "sh_change_frequency",
+            "sh_net_sign_20d",
+            "sh_net_sign_60d",
+            "sh_change_amt_20d",
+            "sh_change_amt_60d",
+            "sh_insider_signal",
+            "sh_change_frequency",
             "sh_amt_vs_amount",
         ]
         if not has_ht:
@@ -1839,11 +2202,11 @@ class FeatureEngineV35:
             g["big_black_density_20d"] = big_black.rolling(20, min_periods=1).sum()
             # 实体方向一致性 (连续同向实体=趋势确定, 频繁切换=震荡)
             body_dir = np.sign(c - o)
-            g["body_dir_consistency_5d"] = (
-                body_dir.rolling(5, min_periods=1).apply(lambda x: (x == x.iloc[-1]).mean())
+            g["body_dir_consistency_5d"] = body_dir.rolling(5, min_periods=1).apply(
+                lambda x: (x == x.iloc[-1]).mean()
             )
-            g["body_dir_consistency_20d"] = (
-                body_dir.rolling(20, min_periods=1).apply(lambda x: (x == x.iloc[-1]).mean())
+            g["body_dir_consistency_20d"] = body_dir.rolling(20, min_periods=1).apply(
+                lambda x: (x == x.iloc[-1]).mean()
             )
 
             # ── 3. 影线 ──
@@ -1851,20 +2214,32 @@ class FeatureEngineV35:
             lower_shadow = np.minimum(o, c) - l
             g["upper_shadow_pct"] = upper_shadow / total_range
             g["lower_shadow_pct"] = lower_shadow / total_range
-            g["upper_shadow_ma5"] = g["upper_shadow_pct"].rolling(5, min_periods=1).mean()
-            g["lower_shadow_ma5"] = g["lower_shadow_pct"].rolling(5, min_periods=1).mean()
+            g["upper_shadow_ma5"] = (
+                g["upper_shadow_pct"].rolling(5, min_periods=1).mean()
+            )
+            g["lower_shadow_ma5"] = (
+                g["lower_shadow_pct"].rolling(5, min_periods=1).mean()
+            )
             # 影线比率 (上/下影平衡 → 多空博弈强度)
-            g["shadow_ratio"] = (upper_shadow / lower_shadow.replace(0, np.nan)).clip(0, 10)
+            g["shadow_ratio"] = (upper_shadow / lower_shadow.replace(0, np.nan)).clip(
+                0, 10
+            )
             g["shadow_ratio_ma5"] = g["shadow_ratio"].rolling(5, min_periods=1).mean()
             # 攻击力: 上影增长=空方反击, 下影增长=多方支撑
-            g["upper_shadow_chg_5d"] = g["upper_shadow_pct"] - g["upper_shadow_pct"].shift(5)
-            g["lower_shadow_chg_5d"] = g["lower_shadow_pct"] - g["lower_shadow_pct"].shift(5)
+            g["upper_shadow_chg_5d"] = g["upper_shadow_pct"] - g[
+                "upper_shadow_pct"
+            ].shift(5)
+            g["lower_shadow_chg_5d"] = g["lower_shadow_pct"] - g[
+                "lower_shadow_pct"
+            ].shift(5)
 
             # ── 4. 连续 ──
             is_white = (c > o).astype(int)
             # 连阳/连阴天数
             g["white_streak"] = is_white.groupby((is_white == 0).cumsum()).cumsum()
-            g["black_streak"] = (1 - is_white).groupby((is_white == 1).cumsum()).cumsum()
+            g["black_streak"] = (
+                (1 - is_white).groupby((is_white == 1).cumsum()).cumsum()
+            )
             # 连创新高/新低天数
             new_high = (h > h.shift(1)).astype(int)
             new_low = (l < l.shift(1)).astype(int)

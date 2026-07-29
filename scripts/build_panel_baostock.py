@@ -6,9 +6,11 @@ Usage:
     python scripts/build_panel_baostock.py
     python scripts/build_panel_baostock.py --resume
 """
-import argparse, logging, os, sys, time
-from pathlib import Path
-import numpy as np
+
+import argparse
+import logging
+import os
+import time
 import pandas as pd
 import baostock as bs
 
@@ -32,29 +34,31 @@ def get_all_symbols() -> list[str]:
     df = pd.DataFrame(data, columns=rs.fields)
     bs.logout()
     # code format: sh.600000, sz.000001
-    df['symbol'] = df['code'].str.split('.').str[1]
+    df["symbol"] = df["code"].str.split(".").str[1]
     # 排除北交所(8/4开头), 排除指数/ETF
-    mask = df['symbol'].str.match(r'^[0-9]{6}$')
+    mask = df["symbol"].str.match(r"^[0-9]{6}$")
     df = df[mask]
     # 排除 8/4 开头 (北交所)
-    df = df[~df['symbol'].str.startswith(('8', '4'))]
+    df = df[~df["symbol"].str.startswith(("8", "4"))]
     # 取上市日期在 2024 年前
-    if 'ipoDate' in df.columns:
-        df = df[df['ipoDate'] < '2024-01-01']
-    symbols = sorted(df['symbol'].unique())
+    if "ipoDate" in df.columns:
+        df = df[df["ipoDate"] < "2024-01-01"]
+    symbols = sorted(df["symbol"].unique())
     logger.info(f"Stock list: {len(symbols)}")
     return symbols
 
 
 def pull_one_stock(symbol: str) -> pd.DataFrame | None:
     """拉一只股票全量日线."""
-    code = f"{'sh' if symbol.startswith(('6','5','9')) else 'sz'}.{symbol}"
+    code = f"{'sh' if symbol.startswith(('6', '5', '9')) else 'sz'}.{symbol}"
     bs.login()
     rs = bs.query_history_k_data_plus(
         code,
         "date,code,open,high,low,close,preclose,volume,amount,turn,tradestatus,isST",
-        start_date=START_DATE, end_date=END_DATE,
-        frequency="d", adjustflag="2",  # 前复权
+        start_date=START_DATE,
+        end_date=END_DATE,
+        frequency="d",
+        adjustflag="2",  # 前复权
     )
     rows = []
     while rs.next():
@@ -65,17 +69,29 @@ def pull_one_stock(symbol: str) -> pd.DataFrame | None:
         return None
     df = pd.DataFrame(rows, columns=rs.fields)
     # 类型转换
-    for col in ['open','high','low','close','preclose','volume','amount','turn']:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-    df['symbol'] = symbol
-    df['date'] = pd.to_datetime(df['date'])
-    df['tradestatus'] = df['tradestatus'].astype(int)
-    df['isST'] = df['isST'].astype(int)
+    for col in ["open", "high", "low", "close", "preclose", "volume", "amount", "turn"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df["symbol"] = symbol
+    df["date"] = pd.to_datetime(df["date"])
+    df["tradestatus"] = df["tradestatus"].astype(int)
+    df["isST"] = df["isST"].astype(int)
     # 只保留正常交易日
-    df = df[df['tradestatus'] == 1]
-    df = df[df['isST'] == 0]
-    return df[['symbol','date','open','high','low','close','preclose',
-               'volume','amount','turn']].dropna(subset=['open','close'])
+    df = df[df["tradestatus"] == 1]
+    df = df[df["isST"] == 0]
+    return df[
+        [
+            "symbol",
+            "date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "preclose",
+            "volume",
+            "amount",
+            "turn",
+        ]
+    ].dropna(subset=["open", "close"])
 
 
 def load_progress() -> set:
@@ -125,11 +141,15 @@ def main():
         if (i + 1) % 500 == 0:
             elapsed = time.time() - t0
             rate = (i + 1) / elapsed * 3600
-            logger.info(f"Progress: {i+1}/{len(todo)} ({(i+1)/len(todo)*100:.0f}%) "
-                        f"rate={rate:.0f}/hr ETA={(len(todo)-i-1)/rate:.1f}hr")
+            logger.info(
+                f"Progress: {i + 1}/{len(todo)} ({(i + 1) / len(todo) * 100:.0f}%) "
+                f"rate={rate:.0f}/hr ETA={(len(todo) - i - 1) / rate:.1f}hr"
+            )
 
     elapsed = time.time() - t0
-    logger.info(f"Pull done: {len(todo)-len(failed)}/{len(todo)} in {elapsed/3600:.1f}hr")
+    logger.info(
+        f"Pull done: {len(todo) - len(failed)}/{len(todo)} in {elapsed / 3600:.1f}hr"
+    )
 
     if frames:
         panel = pd.concat(frames, ignore_index=True)
@@ -149,9 +169,11 @@ def main():
         panel["volume"] = panel["volume"] * 100  # baostock volume: 手→股 (待确认)
 
         panel.to_parquet(OUTPUT, index=False)
-        logger.info(f"Saved {OUTPUT}: {len(panel)} rows, "
-                    f"{panel['symbol'].nunique()} stocks, "
-                    f"{panel['date'].min()} ~ {panel['date'].max()}")
+        logger.info(
+            f"Saved {OUTPUT}: {len(panel)} rows, "
+            f"{panel['symbol'].nunique()} stocks, "
+            f"{panel['date'].min()} ~ {panel['date'].max()}"
+        )
     else:
         logger.error("No data!")
 

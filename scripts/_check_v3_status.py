@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """检查 v3 最新状态和数据覆盖率."""
-import sys, os
+
+import sys
+import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
-import numpy as np
 import pyarrow.parquet as pq
 
 V3_PATH = "data/panel_full_enriched_v3.parquet"
@@ -33,7 +35,11 @@ print("-" * 65)
 for c in df.columns:
     non_null = df[c].notna().sum()
     ratio = non_null / total * 100
-    latest = df.loc[df["date"] == last_5[-1], c].notna().sum() if last_5[-1] in df["date"].values else 0
+    latest = (
+        df.loc[df["date"] == last_5[-1], c].notna().sum()
+        if last_5[-1] in df["date"].values
+        else 0
+    )
     if ratio < 100:
         print(f"{c:<30} {non_null:>10} {ratio:>9.1f}% {latest:>10}")
 

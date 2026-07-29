@@ -19,8 +19,8 @@ import math
 
 import pandas as pd
 
-FACTOR = 150       # 价格分桶数
-RANGE_DAYS = 120   # 筹码计算回溯窗口
+FACTOR = 150  # 价格分桶数
+RANGE_DAYS = 120  # 筹码计算回溯窗口
 
 
 def _compute_cyq_one_day(
@@ -31,7 +31,7 @@ def _compute_cyq_one_day(
 ) -> dict:
     """计算单日筹码分布 (对应 JS CYQCalculator)."""
     start = max(0, index - range_days + 1)
-    kdata = records[start:max(1, index + 1)]
+    kdata = records[start : max(1, index + 1)]
 
     # ---- 价格范围 (窗口内最高/最低) ----
     maxprice = 0.0
@@ -58,7 +58,7 @@ def _compute_cyq_one_day(
 
         # ---- 衰减旧筹码 ----
         for n in range(factor):
-            xdata[n] *= (1.0 - hsl_val)
+            xdata[n] *= 1.0 - hsl_val
 
         # ---- 加新筹码 (三角形分布) ----
         if h == l:
@@ -125,9 +125,10 @@ def _compute_cyq_one_day(
 
     # 加权平均成本
     if total_chips > 0:
-        weighted_avg = sum(
-            (minprice + i * accuracy) * xdata[i] for i in range(factor)
-        ) / total_chips
+        weighted_avg = (
+            sum((minprice + i * accuracy) * xdata[i] for i in range(factor))
+            / total_chips
+        )
     else:
         weighted_avg = current_price
 
@@ -179,21 +180,43 @@ def _compute_cyq_for_stock(
     if not rows:
         # 返回空结构
         cols = [
-            "date", "benefit_part", "avg_cost",
-            "pct_70_low", "pct_70_high", "pct_70_con",
-            "pct_90_low", "pct_90_high", "pct_90_con",
-            "cost_5pct", "cost_15pct", "cost_50pct", "cost_85pct", "cost_95pct",
+            "date",
+            "benefit_part",
+            "avg_cost",
+            "pct_70_low",
+            "pct_70_high",
+            "pct_70_con",
+            "pct_90_low",
+            "pct_90_high",
+            "pct_90_con",
+            "cost_5pct",
+            "cost_15pct",
+            "cost_50pct",
+            "cost_85pct",
+            "cost_95pct",
             "weight_avg",
         ]
         return pd.DataFrame(columns=cols)
 
-    return pd.DataFrame(rows)[[
-        "date", "benefit_part", "avg_cost",
-        "pct_70_low", "pct_70_high", "pct_70_con",
-        "pct_90_low", "pct_90_high", "pct_90_con",
-        "cost_5pct", "cost_15pct", "cost_50pct", "cost_85pct", "cost_95pct",
-        "weight_avg",
-    ]]
+    return pd.DataFrame(rows)[
+        [
+            "date",
+            "benefit_part",
+            "avg_cost",
+            "pct_70_low",
+            "pct_70_high",
+            "pct_70_con",
+            "pct_90_low",
+            "pct_90_high",
+            "pct_90_con",
+            "cost_5pct",
+            "cost_15pct",
+            "cost_50pct",
+            "cost_85pct",
+            "cost_95pct",
+            "weight_avg",
+        ]
+    ]
 
 
 def compute_cyq_panel(panel: pd.DataFrame) -> pd.DataFrame:
@@ -208,9 +231,9 @@ def compute_cyq_panel(panel: pd.DataFrame) -> pd.DataFrame:
         cyq["symbol"] = sym
         parts.append(cyq)
     result = pd.concat(parts, ignore_index=True)
-    return result[["symbol", "date"] + [
-        c for c in result.columns if c not in ("symbol", "date")
-    ]]
+    return result[
+        ["symbol", "date"] + [c for c in result.columns if c not in ("symbol", "date")]
+    ]
 
 
 # ---- 快速验证入口 ----
@@ -228,8 +251,8 @@ if __name__ == "__main__":
     for _, row in recent.iterrows():
         d = str(row["date"])[:10]
         print(
-            f"{d} | 90%集中度={row['pct_90_con']*100:.2f}% | "
-            f"获利盘={row['benefit_part']*100:.1f}% | "
+            f"{d} | 90%集中度={row['pct_90_con'] * 100:.2f}% | "
+            f"获利盘={row['benefit_part'] * 100:.1f}% | "
             f"90%区间=[{row['pct_90_low']:.2f}, {row['pct_90_high']:.2f}] | "
             f"均价={row['weight_avg']:.2f}"
         )

@@ -35,17 +35,21 @@ logger = logging.getLogger("assemble")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Assemble enriched panel from partials")
+    parser = argparse.ArgumentParser(
+        description="Assemble enriched panel from partials"
+    )
     parser.add_argument("--panel", default=DEFAULT_PANEL, help="Base panel path")
     parser.add_argument("--output", default=DEFAULT_OUTPUT, help="Output path")
-    parser.add_argument("--parts-dir", default=PARTS_DIR, help="Directory with source partials")
+    parser.add_argument(
+        "--parts-dir", default=PARTS_DIR, help="Directory with source partials"
+    )
     args = parser.parse_args()
 
     # ── Load base panel ──
     logger.info("Loading base panel: %s", args.panel)
     panel = pd.read_parquet(args.panel)
-    base_rows = len(panel)
-    base_symbols = panel["symbol"].nunique()
+    len(panel)
+    panel["symbol"].nunique()
     base_cols = len(panel.columns)
 
     # Deduplicate / clean base
@@ -60,7 +64,9 @@ def main():
 
     logger.info(
         "Base panel: %d rows, %d symbols, %d cols (loaded %d, cleaned)",
-        len(panel), panel["symbol"].nunique(), len(panel.columns),
+        len(panel),
+        panel["symbol"].nunique(),
+        len(panel.columns),
         base_cols,
     )
 
@@ -69,8 +75,11 @@ def main():
     if not parts:
         logger.warning("No partial files found in %s", args.parts_dir)
     else:
-        logger.info("Found %d partial files: %s", len(parts),
-                    [os.path.basename(p) for p in parts])
+        logger.info(
+            "Found %d partial files: %s",
+            len(parts),
+            [os.path.basename(p) for p in parts],
+        )
 
     total_new_cols = 0
     for part_path in parts:
@@ -106,7 +115,8 @@ def main():
         before = len(panel.columns)
         panel = panel.merge(
             part[["symbol", "date"] + new_cols],
-            on=["symbol", "date"], how="left",
+            on=["symbol", "date"],
+            how="left",
         )
         added = len(panel.columns) - before
         total_new_cols += added
@@ -117,9 +127,16 @@ def main():
     logger.info("ASSEMBLY COMPLETE")
     logger.info("  Rows:    %d", len(panel))
     logger.info("  Symbols: %d", panel["symbol"].nunique())
-    logger.info("  Columns: %d (base: %d, +%d new)",
-                len(panel.columns), base_cols - len(stale) - len(dupes), total_new_cols)
-    logger.info("  NaN%%:   %.2f%%", panel.isna().sum().sum() / (len(panel) * len(panel.columns)) * 100)
+    logger.info(
+        "  Columns: %d (base: %d, +%d new)",
+        len(panel.columns),
+        base_cols - len(stale) - len(dupes),
+        total_new_cols,
+    )
+    logger.info(
+        "  NaN%%:   %.2f%%",
+        panel.isna().sum().sum() / (len(panel) * len(panel.columns)) * 100,
+    )
 
     # Check key markers
     markers = {
@@ -136,11 +153,17 @@ def main():
     }
     present = {k: v for k, v in markers.items() if v in panel.columns}
     missing = {k: v for k, v in markers.items() if v not in panel.columns}
-    logger.info("  Markers present (%d): %s", len(present),
-                ", ".join(f"{k}({v})" for k, v in present.items()))
+    logger.info(
+        "  Markers present (%d): %s",
+        len(present),
+        ", ".join(f"{k}({v})" for k, v in present.items()),
+    )
     if missing:
-        logger.warning("  Markers MISSING (%d): %s", len(missing),
-                       ", ".join(f"{k}({v})" for k, v in missing.items()))
+        logger.warning(
+            "  Markers MISSING (%d): %s",
+            len(missing),
+            ", ".join(f"{k}({v})" for k, v in missing.items()),
+        )
 
     # ── Save ──
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)

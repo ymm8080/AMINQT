@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """Bulk fetch fina_indicator with per-thread API clients for thread-safety."""
 
-import os, time, sys
+import os
+import time
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -39,13 +41,13 @@ out_path = f"{out_dir}/all_20230701_20260727.parquet"
 
 # Thread-safe state
 import threading
-import queue
 
 results = []
 errors = []
 done = 0
 _lock = threading.Lock()
 _start = time.time()
+
 
 def fetch_one(ts):
     """Create a per-thread API client to avoid thread-safety issues."""
@@ -72,6 +74,7 @@ def fetch_one(ts):
                     flush=True,
                 )
 
+
 with ThreadPoolExecutor(max_workers=4) as exe:
     futs = {exe.submit(fetch_one, ts): ts for ts in ts_list}
     for f in as_completed(futs):
@@ -85,7 +88,10 @@ with ThreadPoolExecutor(max_workers=4) as exe:
                 errors.append((futs[f], str(e)))
 
 elapsed = time.time() - _start
-print(f"\nDone in {elapsed:.0f}s | {len(results)}/{total} OK | {len(errors)} err", flush=True)
+print(
+    f"\nDone in {elapsed:.0f}s | {len(results)}/{total} OK | {len(errors)} err",
+    flush=True,
+)
 
 if errors:
     print(f"\nErrors (showing {min(20, len(errors))}):")

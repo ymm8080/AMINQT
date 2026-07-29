@@ -30,13 +30,10 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -88,10 +85,21 @@ SOURCE_COL_PREFIXES = {
     "northbound": ["north_"],
     "margin": ["margin_", "short_"],
     "fina_indicator": [
-        "roe", "roe_deducted", "roa", "gross_margin", "net_margin",
-        "eps_yoy", "rev_yoy", "profit_yoy", "op_cf_ratio",
-        "debt_ratio", "current_ratio", "asset_turnover",
-        "ar_turnover", "inventory_turnover", "ocf_to_or",
+        "roe",
+        "roe_deducted",
+        "roa",
+        "gross_margin",
+        "net_margin",
+        "eps_yoy",
+        "rev_yoy",
+        "profit_yoy",
+        "op_cf_ratio",
+        "debt_ratio",
+        "current_ratio",
+        "asset_turnover",
+        "ar_turnover",
+        "inventory_turnover",
+        "ocf_to_or",
         "announce_date",
     ],
     "lhb": ["lhb_"],
@@ -99,16 +107,35 @@ SOURCE_COL_PREFIXES = {
     "holdertrade": ["sh_"],
     "sector_index": ["sw_"],
     "daily_basic": [
-        "turnover_rate_f", "volume_ratio", "pe_ttm", "pb",
-        "ps_ttm", "dv_ratio", "dv_ttm", "total_mv", "circ_mv",
-        "total_share", "float_share", "free_share",
+        "turnover_rate_f",
+        "volume_ratio",
+        "pe_ttm",
+        "pb",
+        "ps_ttm",
+        "dv_ratio",
+        "dv_ttm",
+        "total_mv",
+        "circ_mv",
+        "total_share",
+        "float_share",
+        "free_share",
     ],
     "stk_limit": ["up_limit_raw", "down_limit_raw"],
     "cyq_tushare": [
-        "benefit_part", "avg_cost", "pct_70_low", "pct_70_high", "pct_70_con",
-        "pct_90_low", "pct_90_high", "pct_90_con",
-        "cost_5pct", "cost_15pct", "cost_50pct",
-        "cost_85pct", "cost_95pct", "weight_avg",
+        "benefit_part",
+        "avg_cost",
+        "pct_70_low",
+        "pct_70_high",
+        "pct_70_con",
+        "pct_90_low",
+        "pct_90_high",
+        "pct_90_con",
+        "cost_5pct",
+        "cost_15pct",
+        "cost_50pct",
+        "cost_85pct",
+        "cost_95pct",
+        "weight_avg",
     ],
 }
 
@@ -119,8 +146,10 @@ def load_v3() -> pd.DataFrame:
     panel = pd.read_parquet(V3_PATH)
     logger.info(
         "  形状: %s, %d 只股票, 日期: %s ~ %s",
-        panel.shape, panel["symbol"].nunique(),
-        panel["date"].min(), panel["date"].max(),
+        panel.shape,
+        panel["symbol"].nunique(),
+        panel["date"].min(),
+        panel["date"].max(),
     )
     return panel
 
@@ -134,7 +163,13 @@ def save_v3(panel: pd.DataFrame) -> None:
 
     panel.to_parquet(V3_PATH, index=False)
     size_mb = V3_PATH.stat().st_size / 1024 / 1024
-    logger.info("保存完成: %s (%.1f MB, %d 行, %d 列)", V3_PATH, size_mb, len(panel), len(panel.columns))
+    logger.info(
+        "保存完成: %s (%.1f MB, %d 行, %d 列)",
+        V3_PATH,
+        size_mb,
+        len(panel),
+        len(panel.columns),
+    )
 
 
 def drop_stale_source_columns(panel: pd.DataFrame, source: str) -> pd.DataFrame:
@@ -197,8 +232,10 @@ def print_coverage_report(report: dict) -> None:
         else:
             logger.info(
                 "  %-20s: %5.1f%% (%s / %s 行)",
-                label, info["coverage_pct"],
-                info["non_na"], info["total"],
+                label,
+                info["coverage_pct"],
+                info["non_na"],
+                info["total"],
             )
 
 
@@ -216,7 +253,8 @@ def fetch_source(
 
     # 使用 panel_builder 的 enrich_alt_data 进行 merge
     panel = enrich_alt_data(
-        panel, supply,
+        panel,
+        supply,
         sources=[source],
         start_date=start_date,
         end_date=end_date,
@@ -302,7 +340,9 @@ def run_pipeline(
     for src in sources:
         try:
             panel = fetch_source(
-                panel, supply, src,
+                panel,
+                supply,
+                src,
                 start_date=start_date,
                 end_date=end_date,
                 refresh=refresh,
@@ -353,7 +393,9 @@ def main():
     parser.add_argument("--start", help="起始日期 YYYYMMDD")
     parser.add_argument("--end", help="截止日期 YYYYMMDD")
     parser.add_argument(
-        "--sources", nargs="+", choices=ALL_SOURCES,
+        "--sources",
+        nargs="+",
+        choices=ALL_SOURCES,
         help="数据源列表 (默认全部)",
     )
     parser.add_argument("--refresh", action="store_true", help="强制刷新缓存")
@@ -371,7 +413,9 @@ def main():
     )
 
     print(f"\n管道状态: {result['status']}")
-    print(f"面板: {result['panel_shape'][0]} 行, {result['panel_shape'][1]} 列, {result['symbols']} 只股票")
+    print(
+        f"面板: {result['panel_shape'][0]} 行, {result['panel_shape'][1]} 列, {result['symbols']} 只股票"
+    )
     print(f"耗时: {result['elapsed']:.1f} 秒")
 
 
