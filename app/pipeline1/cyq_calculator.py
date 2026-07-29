@@ -247,7 +247,11 @@ def compute_cyq_panel(panel: pd.DataFrame) -> pd.DataFrame:
 if __name__ == "__main__":
     import sys
 
-    panel = pd.read_parquet("data/panel_3y.parquet")
+    try:
+        panel = pd.read_parquet("data/panel_3y.parquet")
+    except Exception as exc:
+        print(f"读取 parquet 失败: {exc}")
+        sys.exit(1)
     stock = panel[panel["symbol"] == "002881"].copy()
     if len(stock) == 0:
         print("002881 not in panel")
