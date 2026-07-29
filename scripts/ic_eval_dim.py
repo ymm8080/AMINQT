@@ -41,9 +41,7 @@ def merge_from_caches(df: pd.DataFrame) -> pd.DataFrame:
 
     # Drop columns known to cause merge conflicts (will be replaced from cache)
     def _drop_if_exists(df, cols):
-        return df.drop(
-            columns=[c for c in cols if c in df.columns], errors="ignore"
-        )
+        return df.drop(columns=[c for c in cols if c in df.columns], errors="ignore")
 
     # 1. Margin — consolidated (228k rows, 4911 symbols - good coverage)
     mg_path = os.path.join(CACHE_DIR, "margin_panel.parquet")

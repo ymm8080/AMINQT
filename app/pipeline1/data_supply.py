@@ -123,7 +123,9 @@ class DataSupplyChain:
         try:
             raw = _with_timeout(lambda: pro.daily(trade_date=trade_date))
         except Exception as exc:
-            raise DataSupplyError(f"Tushare daily 拉取失败 {trade_date}: {exc}") from exc
+            raise DataSupplyError(
+                f"Tushare daily 拉取失败 {trade_date}: {exc}"
+            ) from exc
         if raw is None or len(raw) == 0:
             raise DataSupplyError(f"Tushare daily 拉取失败: {trade_date}")
         df = pd.DataFrame(
@@ -394,7 +396,9 @@ class DataSupplyChain:
                 backoff=1.0,
             )
         except Exception as exc:
-            raise DataSupplyError(f"Tushare daily 历史拉取失败 {symbol}: {exc}") from exc
+            raise DataSupplyError(
+                f"Tushare daily 历史拉取失败 {symbol}: {exc}"
+            ) from exc
         if raw is None or len(raw) == 0:
             raise DataSupplyError(f"Tushare 无数据: {symbol}")
         rename = {
@@ -744,6 +748,7 @@ class DataSupplyChain:
             return None
         try:
             import tushare as ts
+
             return ts.pro_api(token)
         except Exception as exc:
             logger.warning("Tushare pro_api 初始化失败: %s", exc)
