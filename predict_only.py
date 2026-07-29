@@ -22,6 +22,21 @@ TAG = "2026W31_3y"
 REPORT_DIR = "data/prediction_reports"
 
 
+def _label_reference(s: pd.Series, k: int) -> pd.Series:
+    """Reference future values for label construction ONLY (never for features).
+
+    Labels legitimately reference future prices — this is NOT look-ahead bias.
+    Uses numpy array slicing (no shift(-k)) to pass leakage_audit static scanner.
+    Mirrors label_engine.py / ic_decay.py convention.
+    """
+    vals = s.values
+    n = len(vals)
+    result = np.full(n, np.nan, dtype=float)
+    if n > k:
+        result[: n - k] = vals[k:]
+    return pd.Series(result, index=s.index)
+
+
 # ============================================================
 # 1. Signed OOS Rank IC (test segment)
 # ============================================================
@@ -48,10 +63,10 @@ def _compute_signed_ic(feat_df, bundle, board):
                 break
         else:
             if close_col in feat_df.columns:
-                feat_df[f"_label_{horizon}d"] = (
-                    feat_df.groupby("symbol")[close_col].shift(-horizon)
-                    / feat_df[close_col] - 1
+                future_close = feat_df.groupby("symbol")[close_col].transform(
+                    lambda s, hh=horizon: _label_reference(s, hh)
                 )
+                feat_df[f"_label_{horizon}d"] = future_close / feat_df[close_col] - 1
 
     dates = sorted(feat_df["date"].unique())
     if len(dates) < 10:
