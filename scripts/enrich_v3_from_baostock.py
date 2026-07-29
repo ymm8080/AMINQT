@@ -36,11 +36,20 @@ BS_PATH = ROOT / "data" / "panel_full.parquet"
 
 HFQ_COLS = ["open_hfq", "high_hfq", "low_hfq", "close_hfq"]
 CYQ_COLS = [
-    "benefit_part", "avg_cost",
-    "pct_70_low", "pct_70_high", "pct_70_con",
-    "pct_90_low", "pct_90_high", "pct_90_con",
-    "cost_5pct", "cost_15pct", "cost_50pct",
-    "cost_85pct", "cost_95pct", "weight_avg",
+    "benefit_part",
+    "avg_cost",
+    "pct_70_low",
+    "pct_70_high",
+    "pct_70_con",
+    "pct_90_low",
+    "pct_90_high",
+    "pct_90_con",
+    "cost_5pct",
+    "cost_15pct",
+    "cost_50pct",
+    "cost_85pct",
+    "cost_95pct",
+    "weight_avg",
 ]
 BIAS_WINDOWS = [5, 10, 20, 60, 120, 250]
 
@@ -49,13 +58,23 @@ def main():
     # ── 1. Load ──
     logger.info("Loading v3 panel: %s", V3_PATH)
     v3 = pd.read_parquet(V3_PATH)
-    logger.info("  shape=%s, symbols=%d, date_range=%s ~ %s",
-                v3.shape, v3["symbol"].nunique(), v3["date"].min(), v3["date"].max())
+    logger.info(
+        "  shape=%s, symbols=%d, date_range=%s ~ %s",
+        v3.shape,
+        v3["symbol"].nunique(),
+        v3["date"].min(),
+        v3["date"].max(),
+    )
 
     logger.info("Loading baostock panel: %s", BS_PATH)
     bs = pd.read_parquet(BS_PATH)
-    logger.info("  shape=%s, symbols=%d, date_range=%s ~ %s",
-                bs.shape, bs["symbol"].nunique(), bs["date"].min(), bs["date"].max())
+    logger.info(
+        "  shape=%s, symbols=%d, date_range=%s ~ %s",
+        bs.shape,
+        bs["symbol"].nunique(),
+        bs["date"].min(),
+        bs["date"].max(),
+    )
 
     # ── 2. Pre-merge HFQ / CYQ NaN stats ──
     for col in HFQ_COLS:
@@ -89,8 +108,12 @@ def main():
             still_na = v3[col].isna().sum()
             filled_now = filled - still_na
             if filled_now > 0:
-                logger.info("  %s: filled %d rows from baostock, %d still NaN",
-                            col, filled_now, still_na)
+                logger.info(
+                    "  %s: filled %d rows from baostock, %d still NaN",
+                    col,
+                    filled_now,
+                    still_na,
+                )
             v3.drop(columns=[bs_col], inplace=True)
 
     # ── 4. Fallback: for 2023 dates, close_hfq ≈ close ──
@@ -104,16 +127,24 @@ def main():
     before = v3["close_hfq"].isna().sum()
     v3["close_hfq"] = v3["close_hfq"].fillna(v3["close"])
     after = v3["close_hfq"].isna().sum()
-    logger.info("  close_hfq: filled %d more rows from close, %d still NaN",
-                before - after, after)
+    logger.info(
+        "  close_hfq: filled %d more rows from close, %d still NaN",
+        before - after,
+        after,
+    )
 
     # open_hfq: fallback to open
     for raw, hfq in [("open", "open_hfq"), ("high", "high_hfq"), ("low", "low_hfq")]:
         before = v3[hfq].isna().sum()
         v3[hfq] = v3[hfq].fillna(v3[raw])
         after = v3[hfq].isna().sum()
-        logger.info("  %s: filled %d rows from %s, %d still NaN",
-                    hfq, before - after, raw, after)
+        logger.info(
+            "  %s: filled %d rows from %s, %d still NaN",
+            hfq,
+            before - after,
+            raw,
+            after,
+        )
 
     # ── 5. Verify HFQ fill ──
     logger.info("HFQ fill summary:")
@@ -170,8 +201,10 @@ def main():
 
     # ── 8. Print final summary ──
     new_cols = [f"bias_{w}" for w in BIAS_WINDOWS] + [
-        "bias_5_20_cross", "bias_20_60_cross",
-        "ma_vol_ratio_5_20", "amplitude_5d",
+        "bias_5_20_cross",
+        "bias_20_60_cross",
+        "ma_vol_ratio_5_20",
+        "amplitude_5d",
     ]
     logger.info("=" * 60)
     logger.info("FINAL SUMMARY")

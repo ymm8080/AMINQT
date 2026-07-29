@@ -14,7 +14,6 @@ import sys
 import time
 from datetime import datetime
 
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -52,9 +51,8 @@ def main():
     logger.info("面板: %d rows, %d cols", len(panel), len(panel.columns))
 
     # ---- 基础清洗 (历史成交额+上市天数+ST+停牌过滤) ----
-    MIN_AMOUNT = 200_000      # 日成交额 >= 20万 (元), 剔除僵尸股/仙股
-    MIN_LIST_DAYS = 60        # 至少60个交易日 (滚动IC窗口需要)
-    BOTTOM_AMOUNT_PCT = 0.0   # 不额外剔除底部 (IC评估用全量)
+    MIN_AMOUNT = 200_000  # 日成交额 >= 20万 (元), 剔除僵尸股/仙股
+    MIN_LIST_DAYS = 60  # 至少60个交易日 (滚动IC窗口需要)
 
     if "board" not in panel.columns:
         panel = panel.copy()
@@ -71,7 +69,11 @@ def main():
     clean = clean[clean["amount"] >= MIN_AMOUNT]
     logger.info(
         "[%s] 成交额过滤 (>=%.0f万): %d → %d rows (保留%.1f%%)",
-        board, MIN_AMOUNT / 1e4, n_before, len(clean), len(clean) / n_before * 100,
+        board,
+        MIN_AMOUNT / 1e4,
+        n_before,
+        len(clean),
+        len(clean) / n_before * 100,
     )
 
     if board == "main":
@@ -81,7 +83,9 @@ def main():
 
     logger.info(
         "[%s] 清洗后: %d rows, %d stocks",
-        board, len(board_df), board_df["symbol"].nunique(),
+        board,
+        len(board_df),
+        board_df["symbol"].nunique(),
     )
 
     if len(board_df) < 5000:
@@ -102,7 +106,9 @@ def main():
 
     logger.info(
         "[%s] 特征工程完成: %d cols, %.1fs",
-        board, len(df.columns), time.time() - t_fe,
+        board,
+        len(df.columns),
+        time.time() - t_fe,
     )
 
     # ---- IC screening ----
@@ -119,13 +125,18 @@ def main():
 
     logger.info(
         "[%s] 候选因子: %d → 预筛后: %d (剔除 %d)",
-        board, len(candidates), len(valid), len(candidates) - len(valid),
+        board,
+        len(candidates),
+        len(valid),
+        len(candidates) - len(valid),
     )
 
     # 标签覆盖
     for lc in ["label_1d_net", "label_3d_net", "label_5d_net"]:
         if lc in df.columns:
-            logger.info("[%s] %s non-null: %.1f%%", board, lc, df[lc].notna().mean() * 100)
+            logger.info(
+                "[%s] %s non-null: %.1f%%", board, lc, df[lc].notna().mean() * 100
+            )
 
     t_ic = time.time()
     screener = ICScreener(registry_path=REGISTRY_DIR)
@@ -137,27 +148,36 @@ def main():
 
     logger.info(
         "[%s] IC 筛选完成 (%.1fs): strong=%d weak=%d dead=%d → selected=%d",
-        board, time.time() - t_ic, strong, weak, dead, len(result["factors"]),
+        board,
+        time.time() - t_ic,
+        strong,
+        weak,
+        dead,
+        len(result["factors"]),
     )
 
     # ---- Top-30 输出 ----
     top_ic = sorted(
         result["detail"].items(),
-        key=lambda kv: max(kv[1].get("ic_1d", 0), kv[1].get("ic_3d", 0), kv[1].get("ic_5d", 0)),
+        key=lambda kv: max(
+            kv[1].get("ic_1d", 0), kv[1].get("ic_3d", 0), kv[1].get("ic_5d", 0)
+        ),
         reverse=True,
     )[:30]
 
-    print(f"\n{'='*90}")
+    print(f"\n{'=' * 90}")
     print(f"  [{board.upper()}] Top-30 因子 (best IC 1d/3d/5d)")
-    print(f"{'='*90}")
-    print(f"{'Factor':<38s} {'IC_1d':>7s} {'IC_3d':>7s} {'IC_5d':>7s} {'AUC':>7s} {'RollM':>7s} {'Roll+%':>7s} {'ICIR':>6s} {'Grade'}")
+    print(f"{'=' * 90}")
+    print(
+        f"{'Factor':<38s} {'IC_1d':>7s} {'IC_3d':>7s} {'IC_5d':>7s} {'AUC':>7s} {'RollM':>7s} {'Roll+%':>7s} {'ICIR':>6s} {'Grade'}"
+    )
     print("-" * 90)
     for fname, detail in top_ic:
         print(
-            f"{fname:<38s} {detail.get('ic_1d',0):>7.4f} {detail.get('ic_3d',0):>7.4f} "
-            f"{detail.get('ic_5d',0):>7.4f} {detail.get('auc',0):>7.4f} "
-            f"{detail.get('rolling_mean',0):>7.4f} {detail.get('rolling_pos_ratio',0):>7.4f} "
-            f"{detail.get('icir',0):>6.4f} {detail['grade']:>7s}"
+            f"{fname:<38s} {detail.get('ic_1d', 0):>7.4f} {detail.get('ic_3d', 0):>7.4f} "
+            f"{detail.get('ic_5d', 0):>7.4f} {detail.get('auc', 0):>7.4f} "
+            f"{detail.get('rolling_mean', 0):>7.4f} {detail.get('rolling_pos_ratio', 0):>7.4f} "
+            f"{detail.get('icir', 0):>6.4f} {detail['grade']:>7s}"
         )
 
     # ---- 摘要 ----
@@ -175,12 +195,30 @@ def main():
         "n_dead": dead,
         "n_selected": len(result["factors"]),
         "top_30": [
-            {"factor": f, "ic_1d": d.get("ic_1d", 0), "ic_3d": d.get("ic_3d", 0),
-             "ic_5d": d.get("ic_5d", 0), "auc": d.get("auc", 0), "grade": d.get("grade", "")}
+            {
+                "factor": f,
+                "ic_1d": d.get("ic_1d", 0),
+                "ic_3d": d.get("ic_3d", 0),
+                "ic_5d": d.get("ic_5d", 0),
+                "auc": d.get("auc", 0),
+                "grade": d.get("grade", ""),
+            }
             for f, d in top_ic
         ],
-        "n_strong_factors": len([f for f in result["factors"] if result["detail"].get(f, {}).get("grade") == "strong"]),
-        "n_weak_factors": len([f for f in result["factors"] if result["detail"].get(f, {}).get("grade") == "weak"]),
+        "n_strong_factors": len(
+            [
+                f
+                for f in result["factors"]
+                if result["detail"].get(f, {}).get("grade") == "strong"
+            ]
+        ),
+        "n_weak_factors": len(
+            [
+                f
+                for f in result["factors"]
+                if result["detail"].get(f, {}).get("grade") == "weak"
+            ]
+        ),
     }
 
     summary_path = os.path.join(REGISTRY_DIR, f"ic_summary_{window_id}.json")
@@ -188,7 +226,9 @@ def main():
         json.dump(summary, fh, ensure_ascii=False, indent=2)
 
     print(f"\n[{board.upper()}] DONE ({elapsed:.0f}s)")
-    print(f"  strong={strong} weak={weak} dead={dead} selected={len(result['factors'])}")
+    print(
+        f"  strong={strong} weak={weak} dead={dead} selected={len(result['factors'])}"
+    )
     print(f"  注册表: data/factor_registry/factors_{window_id}.json")
     print(f"  摘要:   {summary_path}")
 

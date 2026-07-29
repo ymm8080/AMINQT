@@ -10,7 +10,10 @@ Usage:
     python scripts/merge_extra_fields_to_v3.py
     python scripts/merge_extra_fields_to_v3.py --dry-run
 """
-import argparse, logging, os
+
+import argparse
+import logging
+import os
 import pandas as pd
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -24,14 +27,18 @@ FF_PATH = "data/bs_fundamentals_ff.parquet"
 NEW_COLS = [
     "pctChg",
     "pcfNcfTTM",
-    "quickRatio", "cashRatio", "assetToEquity",
-    "tangibleAssetToAsset", "ebitToInterest", "CFOToNP", "CFOToGr",
+    "quickRatio",
+    "cashRatio",
+    "assetToEquity",
+    "tangibleAssetToAsset",
+    "ebitToInterest",
+    "CFOToNP",
+    "CFOToGr",
 ]
 
 
 def dry_run_check():
     """检查所有输入文件是否存在."""
-    files = [V3_PANEL]
     for f in [PCF_PATH, PCTG_PATH, FF_PATH]:
         if os.path.exists(f):
             df = pd.read_parquet(f, columns=["symbol"] if f != FF_PATH else None)
@@ -44,8 +51,9 @@ def dry_run_check():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--backup", action="store_true",
-                        help="合并前创建 v3 备份 (默认跳过)")
+    parser.add_argument(
+        "--backup", action="store_true", help="合并前创建 v3 备份 (默认跳过)"
+    )
     args = parser.parse_args()
 
     if args.dry_run:
@@ -78,7 +86,9 @@ def main():
     # ── 2. 合并 pcfNcfTTM ──
     if os.path.exists(PCF_PATH):
         pcf = pd.read_parquet(PCF_PATH)
-        logger.info(f"pcfNcfTTM: {len(pcf)} rows, coverage={pcf['pcfNcfTTM'].notna().sum()}")
+        logger.info(
+            f"pcfNcfTTM: {len(pcf)} rows, coverage={pcf['pcfNcfTTM'].notna().sum()}"
+        )
         panel = panel.merge(pcf, on=["symbol", "date"], how="left")
     else:
         logger.warning(f"  {PCF_PATH} not found, skipping pcfNcfTTM")
@@ -93,13 +103,15 @@ def main():
 
     # ── 统计 ──
     new_shape = panel.shape
-    logger.info(f"Final: {new_shape[0]} rows, {new_shape[1]} cols "
-                f"(added {new_shape[1] - orig_shape[1]} cols)")
+    logger.info(
+        f"Final: {new_shape[0]} rows, {new_shape[1]} cols "
+        f"(added {new_shape[1] - orig_shape[1]} cols)"
+    )
 
     for col in NEW_COLS:
         if col in panel.columns:
             nna = panel[col].notna().sum()
-            logger.info(f"  {col}: {nna} ({nna/len(panel)*100:.1f}%)")
+            logger.info(f"  {col}: {nna} ({nna / len(panel) * 100:.1f}%)")
         else:
             logger.info(f"  {col}: NOT PRESENT")
 

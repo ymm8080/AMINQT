@@ -28,9 +28,13 @@ IC_WEAK = 0.005  # 弱因子 (观察)
 ROLLING_WINDOW = 60  # 滚动 IC 窗口 (交易日)
 ROLLING_MEAN_MIN = 0.01  # 60日滚动IC均值下限 (原0.02太严, IC>0.01即有微弱预测力)
 ROLLING_POS_RATIO_MIN = 0.50  # 滚动IC正值比例 (原0.60太严, 过半即可)
-L2_NEG_PERIODS = 10  # [E4-L2] 连续 N 期滚动 IC 为负 → 自动剔除 (提高至10期, 允许周期性回撤)
+L2_NEG_PERIODS = (
+    10  # [E4-L2] 连续 N 期滚动 IC 为负 → 自动剔除 (提高至10期, 允许周期性回撤)
+)
 L2_RECOVERY_PERIODS = 1  # 连续 N 期正向 IC → 解除剔除, 恢复候选资格
-ICIR_MIN = 0.30  # [P18] IC 稳定性: |IC| / IC_std < 0.3 → 信号不稳, 降级 (杀稀疏/噪声因子)
+ICIR_MIN = (
+    0.30  # [P18] IC 稳定性: |IC| / IC_std < 0.3 → 信号不稳, 降级 (杀稀疏/噪声因子)
+)
 
 
 class ICScreener:
@@ -197,7 +201,12 @@ class ICScreener:
             # [P18] IC 稳定性: 取各标签最佳 ICIR (非仅 1d)
             icir = max(self.ic_stability(train_df, f, lbl) for lbl in label_of.values())
             icir_ok = icir >= ICIR_MIN
-            if (best_ic > IC_STRONG or auc > 0.55) and dual_ok and nw_significant and icir_ok:
+            if (
+                (best_ic > IC_STRONG or auc > 0.55)
+                and dual_ok
+                and nw_significant
+                and icir_ok
+            ):
                 grade = "strong"
             elif (best_ic > IC_STRONG or auc > 0.55) and dual_ok and nw_significant:
                 grade = "weak"  # [P18] IC够但ICIR不足 → 降级为weak
@@ -229,7 +238,11 @@ class ICScreener:
                     else:
                         neg_streak = 0
                         pos_streak = 0
-                        logger.info("E4-L2: 因子 %s 连续 %d 期正向 IC, 恢复候选资格", f, L2_RECOVERY_PERIODS)
+                        logger.info(
+                            "E4-L2: 因子 %s 连续 %d 期正向 IC, 恢复候选资格",
+                            f,
+                            L2_RECOVERY_PERIODS,
+                        )
                 else:
                     neg_streak = 0
                     pos_streak = 0

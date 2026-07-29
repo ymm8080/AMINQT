@@ -11,6 +11,7 @@ Strategy:
 Usage:
     python scripts/fetch_alt_bulk.py
 """
+
 import logging
 import os
 import sys
@@ -64,7 +65,12 @@ def _stats(df: pd.DataFrame, label: str) -> None:
     n_dates = df["date"].nunique() if "date" in df.columns else "N/A"
     logger.info(
         "  [%s] %d rows  |  %s stocks  |  %s dates  |  range [%s, %s]",
-        label, rows, n_stocks, n_dates, date_min, date_max,
+        label,
+        rows,
+        n_stocks,
+        n_dates,
+        date_min,
+        date_max,
     )
 
 
@@ -153,8 +159,12 @@ def fetch_lhb_akshare_direct() -> pd.DataFrame:
     df_full = _parse_lhb_akshare(raw_full)
     _stats(df_full, "LHB-full")
     df_full.to_parquet(out_path, index=False)
-    logger.info("  LHB saved to %s  (%d rows, %.1f MB)",
-                out_path, len(df_full), os.path.getsize(out_path) / 1024 / 1024)
+    logger.info(
+        "  LHB saved to %s  (%d rows, %.1f MB)",
+        out_path,
+        len(df_full),
+        os.path.getsize(out_path) / 1024 / 1024,
+    )
     return df_full
 
 
@@ -172,8 +182,12 @@ def fetch_northbound(dsc: DataSupplyChain) -> pd.DataFrame:
     df = dsc.fetch_northbound(start_date=START, end_date=END, refresh=True)
     _stats(df, "Northbound")
     df.to_parquet(out_path, index=False)
-    logger.info("  Northbound saved to %s  (%d rows, %.1f MB)",
-                out_path, len(df), os.path.getsize(out_path) / 1024 / 1024)
+    logger.info(
+        "  Northbound saved to %s  (%d rows, %.1f MB)",
+        out_path,
+        len(df),
+        os.path.getsize(out_path) / 1024 / 1024,
+    )
     return df
 
 
@@ -191,13 +205,17 @@ def main():
     elapsed = (datetime.now() - t0).total_seconds()
     logger.info("=" * 55)
     logger.info("DONE in %.1f seconds.", elapsed)
-    logger.info("  LHB:  %s rows  (%s stocks, %s dates)",
-                len(lhb_df) if not lhb_df.empty else 0,
-                lhb_df["symbol"].nunique() if not lhb_df.empty and "symbol" in lhb_df else "?",
-                lhb_df["date"].nunique() if not lhb_df.empty and "date" in lhb_df else "?")
-    logger.info("  Northbound: %s rows  (%s dates)",
-                len(nb_df) if not nb_df.empty else 0,
-                nb_df["date"].nunique() if not nb_df.empty and "date" in nb_df else "?")
+    logger.info(
+        "  LHB:  %s rows  (%s stocks, %s dates)",
+        len(lhb_df) if not lhb_df.empty else 0,
+        lhb_df["symbol"].nunique() if not lhb_df.empty and "symbol" in lhb_df else "?",
+        lhb_df["date"].nunique() if not lhb_df.empty and "date" in lhb_df else "?",
+    )
+    logger.info(
+        "  Northbound: %s rows  (%s dates)",
+        len(nb_df) if not nb_df.empty else 0,
+        nb_df["date"].nunique() if not nb_df.empty and "date" in nb_df else "?",
+    )
     logger.info("=" * 55)
 
 

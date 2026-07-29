@@ -149,9 +149,7 @@ def enrich_cyq(
                 return panel.merge(cyq, on=["symbol", "date"], how="left")
             # 部分缺失: 只计算缺失的股票
             need = [s for s in panel["symbol"].unique() if s in missing]
-            new_cyq = compute_cyq_panel(
-                panel[panel["symbol"].isin(need)]
-            )
+            new_cyq = compute_cyq_panel(panel[panel["symbol"].isin(need)])
             cyq = pd.concat([cyq, new_cyq], ignore_index=True)
             cyq.to_parquet(cyq_cache, index=False)
             return panel.merge(cyq, on=["symbol", "date"], how="left")
@@ -221,7 +219,9 @@ def _parallel_fetch(
         for future in as_completed(futures):
             try:
                 result = future.result()
-                if result is not None and (not hasattr(result, "__len__") or len(result)):
+                if result is not None and (
+                    not hasattr(result, "__len__") or len(result)
+                ):
                     results.append(result)
             except Exception:
                 pass
@@ -262,9 +262,18 @@ def enrich_alt_data(
         merge 后的面板 (新增各数据源的特征列)
     """
     if sources is None:
-        sources = ["northbound", "lhb", "holdertrade", "sector_index",
-                   "margin", "fina_indicator", "holdernumber",
-                   "daily_basic", "stk_limit", "cyq_tushare"]
+        sources = [
+            "northbound",
+            "lhb",
+            "holdertrade",
+            "sector_index",
+            "margin",
+            "fina_indicator",
+            "holdernumber",
+            "daily_basic",
+            "stk_limit",
+            "cyq_tushare",
+        ]
 
     if start_date is None:
         start_date = panel["date"].min().strftime("%Y%m%d")
@@ -273,7 +282,9 @@ def enrich_alt_data(
 
     logger.info(
         "替代数据源 enrich: %s, 日期范围: %s - %s",
-        sources, start_date, end_date,
+        sources,
+        start_date,
+        end_date,
     )
 
     for src in sources:
@@ -281,38 +292,56 @@ def enrich_alt_data(
             df = None
             if src == "northbound":
                 df = supply.fetch_northbound(
-                    start_date=start_date, end_date=end_date, refresh=refresh,
+                    start_date=start_date,
+                    end_date=end_date,
+                    refresh=refresh,
                 )
                 if len(df):
                     # 北向资金是市场级数据 (日频总量), 按 date 广播到所有个股
                     has_symbol = "symbol" in df.columns
-                    is_market_level = (
-                        not has_symbol
-                        or (df["symbol"].nunique() == 1 and df["symbol"].iloc[0] == "MARKET")
+                    is_market_level = not has_symbol or (
+                        df["symbol"].nunique() == 1 and df["symbol"].iloc[0] == "MARKET"
                     )
                     if is_market_level:
-                        date_cols = [c for c in df.columns
-                                     if c not in ("symbol", "date") and not c.startswith("_")]
-                        nb_by_date = df[["date"] + date_cols].drop_duplicates(subset=["date"])
+                        date_cols = [
+                            c
+                            for c in df.columns
+                            if c not in ("symbol", "date") and not c.startswith("_")
+                        ]
+                        nb_by_date = df[["date"] + date_cols].drop_duplicates(
+                            subset=["date"]
+                        )
                         panel = panel.merge(nb_by_date, on="date", how="left")
                     else:
                         merge_cols = ["symbol", "date"]
-                        avail = [c for c in df.columns
-                                if c not in merge_cols and not c.startswith("_")]
+                        avail = [
+                            c
+                            for c in df.columns
+                            if c not in merge_cols and not c.startswith("_")
+                        ]
                         panel = panel.merge(
-                            df[merge_cols + avail], on=merge_cols, how="left",
+                            df[merge_cols + avail],
+                            on=merge_cols,
+                            how="left",
                         )
 
             elif src == "margin":
                 df = supply.fetch_margin(
-                    start_date=start_date, end_date=end_date, refresh=refresh,
+                    start_date=start_date,
+                    end_date=end_date,
+                    refresh=refresh,
                 )
                 if len(df):
                     merge_cols = ["symbol", "date"]
-                    avail = [c for c in df.columns
-                            if c not in merge_cols and not c.startswith("_")]
+                    avail = [
+                        c
+                        for c in df.columns
+                        if c not in merge_cols and not c.startswith("_")
+                    ]
                     panel = panel.merge(
-                        df[merge_cols + avail], on=merge_cols, how="left",
+                        df[merge_cols + avail],
+                        on=merge_cols,
+                        how="left",
                     )
 
             elif src == "fina_indicator":
@@ -320,15 +349,21 @@ def enrich_alt_data(
                 symbols = panel["symbol"].unique().tolist()
 
                 def _fetch_one_fina(sym):
-                    ts_code = f"{sym}.{'SZ' if sym.startswith(('0','3','1')) else 'SH'}"
+                    ts_code = (
+                        f"{sym}.{'SZ' if sym.startswith(('0', '3', '1')) else 'SH'}"
+                    )
                     df_one = supply.fetch_fina_indicator(
-                        ts_code=ts_code, start_date=start_date,
-                        end_date=end_date, refresh=refresh,
+                        ts_code=ts_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        refresh=refresh,
                     )
                     return df_one if len(df_one) else None
 
                 frames = _parallel_fetch(
-                    _fetch_one_fina, symbols, desc="fina",
+                    _fetch_one_fina,
+                    symbols,
+                    desc="fina",
                     progress_file="data/enrich_progress.txt",
                 )
                 if frames:
@@ -338,90 +373,136 @@ def enrich_alt_data(
                     df = pd.DataFrame()
                 if len(df) and "announce_date" in df.columns:
                     # 基本面PIT: 按 announce_date 做 merge_asof (严禁直接用 report_period)
-                    fin_cols = [c for c in df.columns
-                               if c not in ("symbol", "announce_date", "report_period", "_ts_code")]
+                    fin_cols = [
+                        c
+                        for c in df.columns
+                        if c
+                        not in ("symbol", "announce_date", "report_period", "_ts_code")
+                    ]
                     f = df[["symbol", "announce_date"] + fin_cols].copy()
                     f = f.sort_values("announce_date")
                     panel = panel.sort_values("date")
                     panel = pd.merge_asof(
-                        panel, f, left_on="date", right_on="announce_date",
-                        by="symbol", direction="backward",
+                        panel,
+                        f,
+                        left_on="date",
+                        right_on="announce_date",
+                        by="symbol",
+                        direction="backward",
                     )
 
             elif src == "lhb":
                 df = supply.fetch_lhb(
-                    start_date=start_date, end_date=end_date, refresh=refresh,
+                    start_date=start_date,
+                    end_date=end_date,
+                    refresh=refresh,
                 )
                 if len(df) and "symbol" in df.columns and "date" in df.columns:
                     merge_cols = ["symbol", "date"]
-                    avail = [c for c in df.columns
-                            if c not in merge_cols and not c.startswith("_")]
+                    avail = [
+                        c
+                        for c in df.columns
+                        if c not in merge_cols and not c.startswith("_")
+                    ]
                     panel = panel.merge(
-                        df[merge_cols + avail], on=merge_cols, how="left",
+                        df[merge_cols + avail],
+                        on=merge_cols,
+                        how="left",
                     )
 
             elif src == "holdernumber":
                 symbols = panel["symbol"].unique().tolist()
 
                 def _fetch_one_holder(sym):
-                    ts_code = f"{sym}.{'SZ' if sym.startswith(('0','3','1')) else 'SH'}"
+                    ts_code = (
+                        f"{sym}.{'SZ' if sym.startswith(('0', '3', '1')) else 'SH'}"
+                    )
                     df_one = supply.fetch_holdernumber(
-                        ts_code=ts_code, start_date=start_date,
-                        end_date=end_date, refresh=refresh,
+                        ts_code=ts_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        refresh=refresh,
                     )
                     return df_one if len(df_one) else None
 
                 frames = _parallel_fetch(
-                    _fetch_one_holder, symbols, desc="holdernumber",
+                    _fetch_one_holder,
+                    symbols,
+                    desc="holdernumber",
                     progress_file="data/enrich_progress.txt",
                 )
                 if frames:
                     df = pd.concat(frames, ignore_index=True)
                     # PIT: 按 announce_date 做 merge_asof 到日频面板
                     if "announce_date" in df.columns:
-                        hn_cols = [c for c in df.columns
-                                  if c not in ("symbol", "date", "_ts_code")]
+                        hn_cols = [
+                            c
+                            for c in df.columns
+                            if c not in ("symbol", "date", "_ts_code")
+                        ]
                         f = df[["symbol", "announce_date"] + hn_cols].copy()
                         f = f.sort_values("announce_date")
                         panel = panel.sort_values("date")
                         panel = pd.merge_asof(
-                            panel, f, left_on="date", right_on="announce_date",
-                            by="symbol", direction="backward",
+                            panel,
+                            f,
+                            left_on="date",
+                            right_on="announce_date",
+                            by="symbol",
+                            direction="backward",
                         )
 
             elif src == "holdertrade":
                 # 全量拉取 (dim29 依赖此数据源) — bulk 模式带自动分页
                 df = supply.fetch_holdertrade(
-                    start_date=start_date, end_date=end_date, refresh=refresh,
+                    start_date=start_date,
+                    end_date=end_date,
+                    refresh=refresh,
                 )
-                if len(df) and "announce_date" in df.columns and "sh_net_sign" in df.columns:
+                if (
+                    len(df)
+                    and "announce_date" in df.columns
+                    and "sh_net_sign" in df.columns
+                ):
                     # 按公告日期聚合: 日频面板上当日净增减持
-                    daily_net = df.groupby(["symbol", "announce_date"]).agg(
-                        sh_net_change_sign=("sh_net_sign", "sum"),
-                        sh_change_amt_total=("sh_change_amt", "sum"),
-                    ).reset_index()
+                    daily_net = (
+                        df.groupby(["symbol", "announce_date"])
+                        .agg(
+                            sh_net_change_sign=("sh_net_sign", "sum"),
+                            sh_change_amt_total=("sh_change_amt", "sum"),
+                        )
+                        .reset_index()
+                    )
                     daily_net = daily_net.rename(columns={"announce_date": "date"})
                     daily_net["date"] = pd.to_datetime(daily_net["date"])
                     # merge 到面板
                     panel = panel.merge(
-                        daily_net, on=["symbol", "date"], how="left",
+                        daily_net,
+                        on=["symbol", "date"],
+                        how="left",
                     )
                     logger.info(
                         "holdertrade: %d records, %d unique symbols, %d unique dates",
-                        len(df), daily_net["symbol"].nunique(), daily_net["date"].nunique(),
+                        len(df),
+                        daily_net["symbol"].nunique(),
+                        daily_net["date"].nunique(),
                     )
 
             elif src == "sector_index":
                 df = supply.fetch_sector_index(
-                    start_date=start_date, end_date=end_date, refresh=refresh,
+                    start_date=start_date,
+                    end_date=end_date,
+                    refresh=refresh,
                 )
                 if len(df) and "industry" in panel.columns:
                     # 行业指数按 date+industry 广播到个股:
                     # panel.industry 是东财行业名, sector index 是申万行业名
                     # 需要 industry 映射表; 无映射时用模糊匹配降级
                     name_to_code = {
-                        name: code for code, name in df[["index_code", "index_name"]]
-                        .drop_duplicates().itertuples(index=False)
+                        name: code
+                        for code, name in df[["index_code", "index_name"]]
+                        .drop_duplicates()
+                        .itertuples(index=False)
                     }
                     # 如果 industry_map 包含 SW→DFCF 映射, 直接用; 否则尝试模糊匹配
                     # 简单策略: 取包含关系 (e.g. "电子" in "电子设备" or vice versa)
@@ -436,20 +517,27 @@ def enrich_alt_data(
                                     break
                     if ind_map:
                         panel["_sw_name"] = panel["industry"].map(ind_map)
-                        sw_data = df.rename(columns={
-                            "ret_pct": "sw_ret_1d",
-                            "close": "sw_index_close",
-                            "volume": "sw_index_vol",
-                        })
-                        avail = [c for c in sw_data.columns
-                                if c not in ("index_code", "date")]
+                        sw_data = df.rename(
+                            columns={
+                                "ret_pct": "sw_ret_1d",
+                                "close": "sw_index_close",
+                                "volume": "sw_index_vol",
+                            }
+                        )
+                        avail = [
+                            c
+                            for c in sw_data.columns
+                            if c not in ("index_code", "date")
+                        ]
                         panel = panel.merge(
                             sw_data[["index_name", "date"] + avail],
                             left_on=["_sw_name", "date"],
                             right_on=["index_name", "date"],
                             how="left",
                         )
-                        panel = panel.drop(columns=["_sw_name", "index_name"], errors="ignore")
+                        panel = panel.drop(
+                            columns=["_sw_name", "index_name"], errors="ignore"
+                        )
 
             elif src == "daily_basic":
                 # 逐日拉取全市场 daily_basic, 多线程并发
@@ -458,21 +546,29 @@ def enrich_alt_data(
                 def _fetch_one_date(d):
                     ds = d.strftime("%Y%m%d")
                     df_one = supply.fetch_daily_basic(
-                        trade_date=ds, refresh=refresh,
+                        trade_date=ds,
+                        refresh=refresh,
                     )
                     return df_one if len(df_one) else None
 
                 frames = _parallel_fetch(
-                    _fetch_one_date, dates.tolist(), desc="daily_basic",
+                    _fetch_one_date,
+                    dates.tolist(),
+                    desc="daily_basic",
                     progress_file="data/enrich_progress.txt",
                 )
                 if frames:
                     df = pd.concat(frames, ignore_index=True)
                     merge_cols = ["symbol", "date"]
-                    avail = [c for c in df.columns
-                            if c not in merge_cols and not c.startswith("_")]
+                    avail = [
+                        c
+                        for c in df.columns
+                        if c not in merge_cols and not c.startswith("_")
+                    ]
                     panel = panel.merge(
-                        df[merge_cols + avail], on=merge_cols, how="left",
+                        df[merge_cols + avail],
+                        on=merge_cols,
+                        how="left",
                     )
 
             elif src == "stk_limit":
@@ -481,21 +577,29 @@ def enrich_alt_data(
                 def _fetch_one_limit_date(d):
                     ds = d.strftime("%Y%m%d")
                     df_one = supply.fetch_stk_limit(
-                        trade_date=ds, refresh=refresh,
+                        trade_date=ds,
+                        refresh=refresh,
                     )
                     return df_one if len(df_one) else None
 
                 frames = _parallel_fetch(
-                    _fetch_one_limit_date, dates.tolist(), desc="stk_limit",
+                    _fetch_one_limit_date,
+                    dates.tolist(),
+                    desc="stk_limit",
                     progress_file="data/enrich_progress.txt",
                 )
                 if frames:
                     df = pd.concat(frames, ignore_index=True)
                     merge_cols = ["symbol", "date"]
-                    avail = [c for c in df.columns
-                            if c not in merge_cols and not c.startswith("_")]
+                    avail = [
+                        c
+                        for c in df.columns
+                        if c not in merge_cols and not c.startswith("_")
+                    ]
                     panel = panel.merge(
-                        df[merge_cols + avail], on=merge_cols, how="left",
+                        df[merge_cols + avail],
+                        on=merge_cols,
+                        how="left",
                     )
 
             elif src == "cyq_tushare":
@@ -503,21 +607,31 @@ def enrich_alt_data(
                 # + cost_5pct..95pct/weight_avg) — 比 OHLCV 推导精确
                 symbols = panel["symbol"].unique().tolist()
                 df = supply.fetch_chip_distribution_batch(
-                    symbols, start_date=start_date, end_date=end_date,
+                    symbols,
+                    start_date=start_date,
+                    end_date=end_date,
                     refresh=refresh,
                 )
                 if len(df):
                     merge_cols = ["symbol", "date"]
-                    avail = [c for c in df.columns
-                            if c not in merge_cols and not c.startswith("_")]
+                    avail = [
+                        c
+                        for c in df.columns
+                        if c not in merge_cols and not c.startswith("_")
+                    ]
                     panel = panel.merge(
-                        df[merge_cols + avail], on=merge_cols, how="left",
+                        df[merge_cols + avail],
+                        on=merge_cols,
+                        how="left",
                     )
 
             n_new_cols = len(df.columns) - 2 if df is not None and len(df) else 0
             n_rows = len(df) if df is not None else 0
             logger.info(
-                "  %s: %d 行, %d 新列 -> panel", src, n_rows, n_new_cols,
+                "  %s: %d 行, %d 新列 -> panel",
+                src,
+                n_rows,
+                n_new_cols,
             )
         except Exception as exc:
             logger.warning("替代数据源 %s 跳过: %s", src, exc)
@@ -564,11 +678,23 @@ def assemble_panel(
     try:
         _start = panel["date"].min().strftime("%Y%m%d")
         panel = enrich_alt_data(
-            panel, supply,
-            sources=["northbound", "lhb", "sector_index",
-                     "margin", "fina_indicator", "holdernumber", "holdertrade",
-                     "daily_basic", "stk_limit", "cyq_tushare"],
-            start_date=_start, end_date=end_str, refresh=refresh,
+            panel,
+            supply,
+            sources=[
+                "northbound",
+                "lhb",
+                "sector_index",
+                "margin",
+                "fina_indicator",
+                "holdernumber",
+                "holdertrade",
+                "daily_basic",
+                "stk_limit",
+                "cyq_tushare",
+            ],
+            start_date=_start,
+            end_date=end_str,
+            refresh=refresh,
         )
         logger.info("替代数据 enrich 完成, 面板列数: %d", len(panel.columns))
     except Exception as e:

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import sys
 import os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np
@@ -27,7 +28,13 @@ def mean_abs_rank_ic(df: pd.DataFrame, factor: str, label: str) -> dict:
     """计算单因子的 |Rank IC| 均值 + 相关统计."""
     sub = df[["date", factor, label]].dropna()
     if len(sub) < 100:
-        return {"mean_abs_ic": 0.0, "mean_ic": 0.0, "pos_ratio": 0.0, "n_dates": 0, "n_samples": len(sub)}
+        return {
+            "mean_abs_ic": 0.0,
+            "mean_ic": 0.0,
+            "pos_ratio": 0.0,
+            "n_dates": 0,
+            "n_samples": len(sub),
+        }
 
     daily_ics = []
     for _, g in sub.groupby("date"):
@@ -41,7 +48,13 @@ def mean_abs_rank_ic(df: pd.DataFrame, factor: str, label: str) -> dict:
             pass
 
     if not daily_ics:
-        return {"mean_abs_ic": 0.0, "mean_ic": 0.0, "pos_ratio": 0.0, "n_dates": 0, "n_samples": len(sub)}
+        return {
+            "mean_abs_ic": 0.0,
+            "mean_ic": 0.0,
+            "pos_ratio": 0.0,
+            "n_dates": 0,
+            "n_samples": len(sub),
+        }
 
     ics = np.array(daily_ics)
     return {
@@ -52,7 +65,9 @@ def mean_abs_rank_ic(df: pd.DataFrame, factor: str, label: str) -> dict:
         "n_dates": len(daily_ics),
         "n_samples": len(sub),
         # Newey-West 近似 t (lag=5)
-        "nw_t": float(ics.mean() / (ics.std() / np.sqrt(len(ics))) if ics.std() > 0 else 0),
+        "nw_t": float(
+            ics.mean() / (ics.std() / np.sqrt(len(ics))) if ics.std() > 0 else 0
+        ),
     }
 
 
@@ -67,8 +82,10 @@ def main():
         panel_path = "data/panel_full.parquet"
     print(f"\n[1] 加载面板: {panel_path}")
     df = pd.read_parquet(panel_path)
-    print(f"    行数: {len(df):,}, 股票数: {df['symbol'].nunique()}, "
-          f"日期: {pd.to_datetime(df['date']).min().date()} ~ {pd.to_datetime(df['date']).max().date()}")
+    print(
+        f"    行数: {len(df):,}, 股票数: {df['symbol'].nunique()}, "
+        f"日期: {pd.to_datetime(df['date']).min().date()} ~ {pd.to_datetime(df['date']).max().date()}"
+    )
 
     # 2. 构建标签
     print("\n[2] 构建标签 (1d/3d/5d)...")
@@ -82,10 +99,12 @@ def main():
     print(f"    特征列总数: {len(df.columns)}")
 
     # 4. 提取所有 _chg 特征
-    chg_cols = [c for c in df.columns if any(c.endswith(f"_chg{w}") for w in (1, 3, 5, 10))]
+    chg_cols = [
+        c for c in df.columns if any(c.endswith(f"_chg{w}") for w in (1, 3, 5, 10))
+    ]
     # 也单独看 chg20 (如果还在)
     chg20_cols = [c for c in df.columns if c.endswith("_chg20")]
-    print(f"\n[4] CHG 特征统计:")
+    print("\n[4] CHG 特征统计:")
     print(f"    _chg1 特征: {len([c for c in chg_cols if c.endswith('_chg1')])}")
     print(f"    _chg3 特征: {len([c for c in chg_cols if c.endswith('_chg3')])}")
     print(f"    _chg5 特征: {len([c for c in chg_cols if c.endswith('_chg5')])}")
@@ -120,8 +139,13 @@ def main():
             abs_ics = [r["mean_abs_ic"] for r in label_results if r["n_dates"] > 10]
             if abs_ics:
                 mean_ic_val = np.mean(abs_ics)
-                top3 = sorted(label_results, key=lambda x: x["mean_abs_ic"], reverse=True)[:3]
-                top_names = ", ".join(f"{r['feature'].replace(suffix,'')}({r['mean_abs_ic']:.4f})" for r in top3)
+                top3 = sorted(
+                    label_results, key=lambda x: x["mean_abs_ic"], reverse=True
+                )[:3]
+                top_names = ", ".join(
+                    f"{r['feature'].replace(suffix, '')}({r['mean_abs_ic']:.4f})"
+                    for r in top3
+                )
                 print(f"    {label}: mean|IC|={mean_ic_val:.4f}, top3: {top_names}")
             else:
                 print(f"    {label}: 无有效 IC")
@@ -129,11 +153,21 @@ def main():
     # 6. 关键对比: 核心特征在各窗口的 IC 表现
     print("\n[6] 核心特征跨窗口 IC 对比 (label_3d):")
     print("-" * 80)
-    important_bases = ["ret_pct", "close_hfq", "RSI", "MACD", "MA5_dist", "volume",
-                       "turnover_rate", "chip_concentration", "ATR_pct", "bias_60",
-                       "amihud_illiquidity"]
+    important_bases = [
+        "ret_pct",
+        "close_hfq",
+        "RSI",
+        "MACD",
+        "MA5_dist",
+        "volume",
+        "turnover_rate",
+        "chip_concentration",
+        "ATR_pct",
+        "bias_60",
+        "amihud_illiquidity",
+    ]
     print(f"    {'基础特征':<25} {'chg1':>8} {'chg3':>8} {'chg5':>8} {'chg10':>8}")
-    print(f"    {'-'*25} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+    print(f"    {'-' * 25} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
     for base in important_bases:
         row = f"    {base:<25}"
         for w in WINDOWS:
@@ -156,10 +190,16 @@ def main():
                 if r["n_dates"] > 10:
                     abs_ics.append(r["mean_abs_ic"])
             if abs_ics:
-                print(f"    {label}: mean|IC|={np.mean(abs_ics):.4f}, max|IC|={np.max(abs_ics):.4f}")
+                print(
+                    f"    {label}: mean|IC|={np.mean(abs_ics):.4f}, max|IC|={np.max(abs_ics):.4f}"
+                )
         # 与 chg10 对比
         chg10_cols = [c for c in df.columns if c.endswith("_chg10")]
-        paired_10 = [c.replace("_chg20", "") for c in chg20_cols if c.replace("_chg20", "") + "_chg10" in chg10_cols]
+        paired_10 = [
+            c.replace("_chg20", "")
+            for c in chg20_cols
+            if c.replace("_chg20", "") + "_chg10" in chg10_cols
+        ]
         better_20 = 0
         worse_20 = 0
         for base in paired_10:
@@ -171,7 +211,7 @@ def main():
                 worse_20 += 1
         print(f"    vs chg10 (label_3d): chg20 更好={better_20}, chg10 更好={worse_20}")
     else:
-        print(f"\n[7] CHG20 已被移除 — 当前 WINDOWS = (1, 3, 5, 10)")
+        print("\n[7] CHG20 已被移除 — 当前 WINDOWS = (1, 3, 5, 10)")
 
     # 8. 结论
     print("\n" + "=" * 80)
@@ -191,14 +231,14 @@ def main():
                     all_ics.append(r["mean_abs_ic"])
         window_scores[window] = np.mean(all_ics) if all_ics else 0.0
 
-    print(f"\n  各窗口平均 |IC| (跨所有特征+标签):")
+    print("\n  各窗口平均 |IC| (跨所有特征+标签):")
     for w in sorted(window_scores.keys()):
         bar = "█" * int(window_scores[w] * 1000)
         print(f"    chg{w:>2}: {window_scores[w]:.4f} {bar}")
-    print(f"\n  → CHG1 通常是 IC 最强的窗口 (短周期动量/反转信号最强)")
-    print(f"  → CHG3/CHG5 提供中期补充信号")
-    print(f"  → CHG10/CHG20 的 |IC| 通常递减 (远周期变化信号衰减)")
-    print(f"  → 结论: CHG20 对 IC 贡献最小, 移除合理; CHG10 保留作为中期趋势锚点")
+    print("\n  → CHG1 通常是 IC 最强的窗口 (短周期动量/反转信号最强)")
+    print("  → CHG3/CHG5 提供中期补充信号")
+    print("  → CHG10/CHG20 的 |IC| 通常递减 (远周期变化信号衰减)")
+    print("  → 结论: CHG20 对 IC 贡献最小, 移除合理; CHG10 保留作为中期趋势锚点")
 
 
 if __name__ == "__main__":

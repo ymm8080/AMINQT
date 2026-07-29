@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """检查所有缓存目录的可填充数据源."""
-import os, sys
+
+import os
 from pathlib import Path
 
 ROOT = Path("d:/AMINQT/AMINQT CODES")
@@ -32,7 +33,15 @@ if enrich_dir.exists():
 # 3) 列举 v3 应该有的数据源列前缀
 print("\n=== v3 期望数据源列前缀 ===")
 expected = {
-    "daily_basic": ["turnover_rate_f", "pe_ttm", "pb", "ps_ttm", "dv_ratio", "total_mv", "circ_mv"],
+    "daily_basic": [
+        "turnover_rate_f",
+        "pe_ttm",
+        "pb",
+        "ps_ttm",
+        "dv_ratio",
+        "total_mv",
+        "circ_mv",
+    ],
     "stk_limit": ["up_limit_raw", "down_limit_raw"],
     "margin": ["margin_", "short_"],
     "northbound": ["north_"],

@@ -15,7 +15,6 @@ import sys
 import time
 from datetime import datetime
 
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -73,15 +72,20 @@ def main():
     logger.info("缓存最新日期: %s, 今日: %s", max_date, today_str)
 
     if max_date < today_str:
-        logger.info("追加今日 (%s) OHLCV + margin + northbound + lhb 数据...", today_str)
+        logger.info(
+            "追加今日 (%s) OHLCV + margin + northbound + lhb 数据...", today_str
+        )
         try:
             supply = DataSupplyChain()
             panel = panel[panel["date"] < pd.to_datetime(today_str)]
             panel = supply.append_today_to_panel(
-                panel, trade_date=today_str,
+                panel,
+                trade_date=today_str,
                 sources=["ohlcv", "margin", "northbound", "lhb"],
             )
-            logger.info("追加完成: %d rows, %d stocks", len(panel), panel["symbol"].nunique())
+            logger.info(
+                "追加完成: %d rows, %d stocks", len(panel), panel["symbol"].nunique()
+            )
         except Exception as e:
             logger.warning("追加今日数据失败 (%s), 继续使用缓存数据", e)
     else:
@@ -111,8 +115,10 @@ def main():
 
     logger.info(
         "全量清洗 (无流动性过滤): 主板=%d rows/%d stocks | 双创=%d rows/%d stocks",
-        len(main_df), main_df["symbol"].nunique(),
-        len(dual_df), dual_df["symbol"].nunique(),
+        len(main_df),
+        main_df["symbol"].nunique(),
+        len(dual_df),
+        dual_df["symbol"].nunique(),
     )
 
     if len(main_df) < 5000:
@@ -131,14 +137,14 @@ def main():
         logger.info("=" * 60)
         logger.info(
             "[%s] 开始特征工程 (%d rows, %d stocks)...",
-            board, len(board_df), board_df["symbol"].nunique(),
+            board,
+            len(board_df),
+            board_df["symbol"].nunique(),
         )
 
         use_xrank = board != "main"
         t_board = time.time()
-        df = prepare_board_frame(
-            board_df, features, cross_sectional_rank=use_xrank
-        )
+        df = prepare_board_frame(board_df, features, cross_sectional_rank=use_xrank)
         logger.info(
             "[%s] 特征工程完成: %d cols, %.1fs",
             board,
@@ -165,11 +171,14 @@ def main():
         if dropped:
             logger.info(
                 "[%s] NaN/类型预筛剔除 %d/%d, 保留 %d",
-                board, dropped, len(candidates), len(valid),
+                board,
+                dropped,
+                len(candidates),
+                len(valid),
             )
 
         # 验证标签可用
-        label_cols = [c for c in df.columns if c.startswith("label_")]
+        [c for c in df.columns if c.startswith("label_")]
         for lc in ["label_1d_net", "label_1d", "label_3d_net", "label_5d_net"]:
             if lc in df.columns:
                 nn = df[lc].notna().mean()
@@ -186,7 +195,9 @@ def main():
             "[%s] IC 筛选完成 (%.1fs): strong=%d, weak=%d, dead=%d, selected=%d",
             board,
             time.time() - t_ic,
-            strong, weak, dead,
+            strong,
+            weak,
+            dead,
             len(result["factors"]),
         )
 
@@ -201,9 +212,9 @@ def main():
             reverse=True,
         )[:30]
 
-        print(f"\n{'='*90}")
+        print(f"\n{'=' * 90}")
         print(f"  [{board.upper()}] Top-30 因子 by best IC (1d/3d/5d)")
-        print(f"{'='*90}")
+        print(f"{'=' * 90}")
         print(
             f"{'Factor':<38s} {'IC_1d':>7s} {'IC_3d':>7s} {'IC_5d':>7s} "
             f"{'AUC':>7s} {'RollM':>7s} {'Roll+%':>7s} {'ICIR':>6s} {'NW_t3d':>7s} {'Grade'}"
@@ -211,10 +222,10 @@ def main():
         print("-" * 90)
         for fname, detail in top_ic:
             print(
-                f"{fname:<38s} {detail.get('ic_1d',0):>7.4f} {detail.get('ic_3d',0):>7.4f} "
-                f"{detail.get('ic_5d',0):>7.4f} {detail.get('auc',0):>7.4f} "
-                f"{detail.get('rolling_mean',0):>7.4f} {detail.get('rolling_pos_ratio',0):>7.4f} "
-                f"{detail.get('icir',0):>6.4f} {detail.get('nw_t_3d',0):>7.4f} "
+                f"{fname:<38s} {detail.get('ic_1d', 0):>7.4f} {detail.get('ic_3d', 0):>7.4f} "
+                f"{detail.get('ic_5d', 0):>7.4f} {detail.get('auc', 0):>7.4f} "
+                f"{detail.get('rolling_mean', 0):>7.4f} {detail.get('rolling_pos_ratio', 0):>7.4f} "
+                f"{detail.get('icir', 0):>6.4f} {detail.get('nw_t_3d', 0):>7.4f} "
                 f"{detail['grade']:>7s}"
             )
 
@@ -240,9 +251,9 @@ def main():
 
     # ---- Step 4: 输出摘要 ----
     elapsed = time.time() - t0
-    print(f"\n{'='*90}")
+    print(f"\n{'=' * 90}")
     print(f"  SUMMARY — IC Evaluation Complete ({elapsed:.0f}s)")
-    print(f"{'='*90}")
+    print(f"{'=' * 90}")
     for board in ("main", "dual"):
         r = results[board]
         print(
@@ -259,7 +270,11 @@ def main():
                 "timestamp": datetime.now().isoformat(),
                 "panel": PANEL_PATH,
                 "elapsed_s": round(elapsed, 1),
-                "config": {"min_list_days": 60, "mask_recent_days": MASK_RECENT_DAYS, "note": "全量数据IC评估, 无流动性/成交额过滤"},
+                "config": {
+                    "min_list_days": 60,
+                    "mask_recent_days": MASK_RECENT_DAYS,
+                    "note": "全量数据IC评估, 无流动性/成交额过滤",
+                },
                 "results": results,
             },
             fh,
@@ -269,7 +284,7 @@ def main():
     logger.info("摘要: %s", summary_path)
 
     # 列出本次生成的文件
-    print(f"\n本次生成的文件:")
+    print("\n本次生成的文件:")
     for f in sorted(os.listdir(REGISTRY_DIR)):
         if TAG in f:
             print(f"  data/factor_registry/{f}")

@@ -11,14 +11,12 @@
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
 import sys
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -44,16 +42,16 @@ SOURCE_GROUPS_CN = {k: f"{v}" for k, v in SOURCE_GROUPS.items()}
 
 # 数据源颜色
 SOURCE_COLORS = {
-    "daily_basic": "#1f77b4",   # 蓝
-    "stk_limit": "#ff7f0e",     # 橙
-    "margin": "#2ca02c",        # 绿
-    "northbound": "#d62728",    # 红
-    "lhb": "#9467bd",           # 紫
-    "fina_indicator": "#8c564b", # 棕
+    "daily_basic": "#1f77b4",  # 蓝
+    "stk_limit": "#ff7f0e",  # 橙
+    "margin": "#2ca02c",  # 绿
+    "northbound": "#d62728",  # 红
+    "lhb": "#9467bd",  # 紫
+    "fina_indicator": "#8c564b",  # 棕
     "holdernumber": "#e377c2",  # 粉
-    "holdertrade": "#7f7f7f",   # 灰
+    "holdertrade": "#7f7f7f",  # 灰
     "sector_index": "#bcbd22",  # 黄绿
-    "cyq_tushare": "#17becf",   # 青
+    "cyq_tushare": "#17becf",  # 青
 }
 
 
@@ -91,7 +89,10 @@ def _render_status_card(info: dict) -> None:
     with col3:
         st.metric("特征列数", info["shape"][1])
     with col4:
-        st.metric("日期范围", f"{info['date_min'].strftime('%Y%m%d')} ~ {info['date_max'].strftime('%Y%m%d')}")
+        st.metric(
+            "日期范围",
+            f"{info['date_min'].strftime('%Y%m%d')} ~ {info['date_max'].strftime('%Y%m%d')}",
+        )
 
 
 def _render_coverage_chart(info: dict) -> None:
@@ -104,11 +105,13 @@ def _render_coverage_chart(info: dict) -> None:
     rows = []
     for src, data in coverage.items():
         label = SOURCE_GROUPS.get(src, src)
-        rows.append({
-            "数据源": label,
-            "覆盖率 (%)": data.get("coverage_pct", 0),
-            "color": SOURCE_COLORS.get(src, "#636efa"),
-        })
+        rows.append(
+            {
+                "数据源": label,
+                "覆盖率 (%)": data.get("coverage_pct", 0),
+                "color": SOURCE_COLORS.get(src, "#636efa"),
+            }
+        )
     df = pd.DataFrame(rows)
 
     fig = px.bar(
@@ -117,8 +120,7 @@ def _render_coverage_chart(info: dict) -> None:
         y="覆盖率 (%)",
         color="数据源",
         color_discrete_map={
-            SOURCE_GROUPS.get(src, src): color
-            for src, color in SOURCE_COLORS.items()
+            SOURCE_GROUPS.get(src, src): color for src, color in SOURCE_COLORS.items()
         },
         text="覆盖率 (%)",
         height=400,
@@ -140,16 +142,20 @@ def _render_coverage_detail(info: dict) -> None:
 
     rows = []
     for src, data in coverage.items():
-        rows.append({
-            "数据源": SOURCE_GROUPS.get(src, src),
-            "标识列": data.get("marker", "-"),
-            "非空行数": f"{data.get('non_na', 0):,}",
-            "总行数": f"{data.get('total', 0):,}",
-            "覆盖率": f"{data.get('coverage_pct', 0):.1f}%",
-            "状态": "✅ 正常" if data.get("coverage_pct", 0) > 50
-                   else "⚠️ 不足" if data.get("coverage_pct", 0) > 0
-                   else "❌ 缺失",
-        })
+        rows.append(
+            {
+                "数据源": SOURCE_GROUPS.get(src, src),
+                "标识列": data.get("marker", "-"),
+                "非空行数": f"{data.get('non_na', 0):,}",
+                "总行数": f"{data.get('total', 0):,}",
+                "覆盖率": f"{data.get('coverage_pct', 0):.1f}%",
+                "状态": "✅ 正常"
+                if data.get("coverage_pct", 0) > 50
+                else "⚠️ 不足"
+                if data.get("coverage_pct", 0) > 0
+                else "❌ 缺失",
+            }
+        )
 
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True, hide_index=True)
@@ -166,8 +172,10 @@ def _run_pipeline(
     cmd = [
         sys.executable,
         str(_PROJECT_ROOT / "scripts" / "data_fetch_pipeline.py"),
-        "--start", start_date,
-        "--end", end_date,
+        "--start",
+        start_date,
+        "--end",
+        end_date,
     ]
     if sources:
         cmd.extend(["--sources"] + sources)
@@ -243,7 +251,7 @@ def _render_run_pipeline_tab() -> None:
     # 高级选项
     with st.expander("高级选项"):
         refresh = st.checkbox("强制刷新缓存 (重新拉取所有数据)", value=False)
-        backup = st.checkbox("保存前备份旧文件", value=True)
+        st.checkbox("保存前备份旧文件", value=True)
 
     # 运行按钮
     col1, col2, col3 = st.columns([1, 1, 2])
@@ -269,6 +277,7 @@ def _render_run_pipeline_tab() -> None:
                 for i in range(1, 100):
                     time.sleep(0.1)
                     progress_bar.progress(i, text=f"运行中... {i}%")
+
             import time
 
             if run_clicked:
@@ -315,9 +324,7 @@ def render() -> None:
     # ---------- Tab 1: 面板状态 ----------
     with tab_status:
         if not _check_v3_exists():
-            st.warning(
-                "v3 面板不存在! 请先运行数据获取管道生成面板。"
-            )
+            st.warning("v3 面板不存在! 请先运行数据获取管道生成面板。")
             return
 
         info = _get_panel_info()
@@ -338,7 +345,7 @@ def render() -> None:
             cols_per_row = 4
             for i in range(0, len(info["columns"]), cols_per_row):
                 cols = st.columns(cols_per_row)
-                for j, col_name in enumerate(info["columns"][i:i + cols_per_row]):
+                for j, col_name in enumerate(info["columns"][i : i + cols_per_row]):
                     with cols[j]:
                         is_na_high = any(
                             info["coverage"].get(src, {}).get("coverage_pct", 100) < 50
@@ -353,9 +360,7 @@ def render() -> None:
     # ---------- Tab 2: 数据获取 ----------
     with tab_fetch:
         if not _check_v3_exists():
-            st.info(
-                "v3 面板尚不存在。首次运行将自动创建面板并填充数据。"
-            )
+            st.info("v3 面板尚不存在。首次运行将自动创建面板并填充数据。")
         _render_run_pipeline_tab()
 
 

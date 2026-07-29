@@ -50,7 +50,9 @@ def main() -> None:
     _v3_path = "data/panel_full_enriched_v3.parquet"
     if os.path.exists(_v3_path):
         _pf = pd.read_parquet(_v3_path)
-        st.sidebar.caption("v3 面板: {} 列 {} 只股票".format(len(_pf.columns), _pf["symbol"].nunique()))
+        st.sidebar.caption(
+            "v3 面板: {} 列 {} 只股票".format(len(_pf.columns), _pf["symbol"].nunique())
+        )
     else:
         st.sidebar.caption("v3 面板: 未创建")
     PAGES[page]()

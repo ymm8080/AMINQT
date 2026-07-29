@@ -1,4 +1,5 @@
 """Quick analysis of panel symbols vs fina_indicator cache coverage."""
+
 import pandas as pd
 import os
 import re
@@ -21,7 +22,7 @@ for f in cache_files:
 cached_symbols = set()
 missing_symbols = set()
 for sym in panel_symbols:
-    if sym.startswith(("0","3","1")):
+    if sym.startswith(("0", "3", "1")):
         tsc = f"{sym}.SZ"
     else:
         tsc = f"{sym}.SH"
@@ -38,5 +39,7 @@ if missing_symbols:
 print("\n--- Sample cache data ---")
 for f in sorted(os.listdir(cache_dir))[:3]:
     df = pd.read_parquet(os.path.join(cache_dir, f))
-    print(f"{f}: {len(df)} rows, announce {df['announce_date'].min()} ~ {df['announce_date'].max()}, "
-          f"report_period {df['report_period'].min()} ~ {df['report_period'].max()}")
+    print(
+        f"{f}: {len(df)} rows, announce {df['announce_date'].min()} ~ {df['announce_date'].max()}, "
+        f"report_period {df['report_period'].min()} ~ {df['report_period'].max()}"
+    )

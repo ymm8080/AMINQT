@@ -246,7 +246,12 @@ Review the code and identify:
 Respond in JSON format:
 {{"issues": [{{"severity": "critical|warning|info", "message": "..."}}], "summary": "..."}}"""
             result = _call_deepseek(
-                messages=[{"role": "user", "content": f"Review this {lang} code:\n\n```{lang}\n{code}\n```"}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"Review this {lang} code:\n\n```{lang}\n{code}\n```",
+                    }
+                ],
                 system_prompt=system,
                 temperature=0.1,
                 response_format={"type": "json_object"},
@@ -258,7 +263,11 @@ Respond in JSON format:
             system = """You are a financial sentiment analyst.
 Analyze the sentiment of the given text about A-share stocks.
 Output JSON: {"sentiment": "bullish|neutral|bearish", "confidence": 0.0-1.0, "reasoning": "..."}"""
-            user = f"Analyze sentiment for stock {stock}:\n\n{text}" if stock else f"Analyze sentiment:\n\n{text}"
+            user = (
+                f"Analyze sentiment for stock {stock}:\n\n{text}"
+                if stock
+                else f"Analyze sentiment:\n\n{text}"
+            )
             result = _call_deepseek(
                 messages=[{"role": "user", "content": user}],
                 system_prompt=system,
@@ -273,7 +282,11 @@ Output JSON: {"sentiment": "bullish|neutral|bearish", "confidence": 0.0-1.0, "re
             system = f"""You are a quant trading signal explainer.
 Explain why the signal is '{signal}' based on the given features.
 Output JSON: {{"signal": "{signal}", "key_factors": [...], "confidence": 0.0-1.0, "explanation": "..."}}"""
-            user = f"Stock: {stock}\nSignal: {signal}\nFeatures:\n{features}" if stock else f"Signal: {signal}\nFeatures:\n{features}"
+            user = (
+                f"Stock: {stock}\nSignal: {signal}\nFeatures:\n{features}"
+                if stock
+                else f"Signal: {signal}\nFeatures:\n{features}"
+            )
             result = _call_deepseek(
                 messages=[{"role": "user", "content": user}],
                 system_prompt=system,
@@ -289,7 +302,12 @@ Generate {n} testable factor hypotheses based on the given context.
 Each hypothesis should include: factor_name, formula, hypothesis, expected_ic_sign.
 Output JSON: {{"hypotheses": [{{"factor_name": "...", "formula": "...", "hypothesis": "...", "expected_ic_sign": "positive|negative"}}]}}"""
             result = _call_deepseek(
-                messages=[{"role": "user", "content": f"Market context:\n{ctx}\n\nGenerate {n} factor hypotheses."}],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"Market context:\n{ctx}\n\nGenerate {n} factor hypotheses.",
+                    }
+                ],
                 system_prompt=system,
                 temperature=0.5,
                 response_format={"type": "json_object"},
@@ -301,7 +319,11 @@ Output JSON: {{"hypotheses": [{{"factor_name": "...", "formula": "...", "hypothe
             system = """You are a senior DevOps engineer for a quant trading system.
 Analyze the error log, identify root cause and suggest fixes.
 Output JSON: {"root_cause": "...", "severity": "critical|warning|info", "fix": "...", "prevention": "..."}"""
-            user = f"Error log:\n{error_log}\n\nContext: {ctx}" if ctx else f"Error log:\n{error_log}"
+            user = (
+                f"Error log:\n{error_log}\n\nContext: {ctx}"
+                if ctx
+                else f"Error log:\n{error_log}"
+            )
             result = _call_deepseek(
                 messages=[{"role": "user", "content": user}],
                 system_prompt=system,
@@ -330,7 +352,9 @@ Output JSON: {"root_cause": "...", "severity": "critical|warning|info", "fix": "
 # ── Entrypoint ────────────────────────────────────────────────
 async def main():
     async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+        await server.run(
+            read_stream, write_stream, server.create_initialization_options()
+        )
 
 
 if __name__ == "__main__":

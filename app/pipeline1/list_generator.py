@@ -214,14 +214,24 @@ class ListGenerator:
              'empty': bool}
         """
         if len(candidates) == 0:
-            return {"mode": "empty", "list": pd.DataFrame(), "cap_position": 0.0, "empty": True}
+            return {
+                "mode": "empty",
+                "list": pd.DataFrame(),
+                "cap_position": 0.0,
+                "empty": True,
+            }
         # 计算排序分
         scored = self.compute_scores(candidates)
         # 准入过滤
         passed = self.entry_filter(scored, market_state=market_state)
         if len(passed) == 0:
             logger.warning("E7 准入过滤后无候选, 输出空清单")
-            return {"mode": "empty", "list": pd.DataFrame(), "cap_position": 0.0, "empty": True}
+            return {
+                "mode": "empty",
+                "list": pd.DataFrame(),
+                "cap_position": 0.0,
+                "empty": True,
+            }
         # 按 score 降序取 TOP_N (行业分散在 list_generator 层面处理)
         passed = passed.sort_values("score", ascending=False)
         final = passed.head(TOP_N).reset_index(drop=True)

@@ -7,6 +7,7 @@ Usage:
     python scripts/fetch_cyq_perf.py --resume                 # 断点续传
     python scripts/fetch_cyq_perf.py --dry-run                # 只显示范围不拉取
 """
+
 import argparse
 import logging
 import os
@@ -17,7 +18,9 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from dotenv import load_dotenv; load_dotenv()  # noqa: E402
+from dotenv import load_dotenv
+
+load_dotenv()  # noqa: E402
 
 from app.pipeline1.data_supply import DataSupplyChain, DataSupplyError
 
@@ -49,14 +52,24 @@ def save_done(symbol: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="批量拉取 Tushare cyq_perf 筹码分布")
-    parser.add_argument("--symbols", type=str, default=None,
-                        help="逗号分隔的股票代码 (默认: 从 panel_3y.parquet 读取全量)")
-    parser.add_argument("--start", type=str, default=START_DATE, help="起始日期 YYYYMMDD")
+    parser.add_argument(
+        "--symbols",
+        type=str,
+        default=None,
+        help="逗号分隔的股票代码 (默认: 从 panel_3y.parquet 读取全量)",
+    )
+    parser.add_argument(
+        "--start", type=str, default=START_DATE, help="起始日期 YYYYMMDD"
+    )
     parser.add_argument("--end", type=str, default=END_DATE, help="截止日期 YYYYMMDD")
     parser.add_argument("--resume", action="store_true", help="断点续传 (跳过已完成的)")
     parser.add_argument("--dry-run", action="store_true", help="只显示范围不拉取")
-    parser.add_argument("--throttle", type=float, default=0.35,
-                        help="每股间隔秒数 (免费 token 限流 ~200次/分钟, 默认0.35s)")
+    parser.add_argument(
+        "--throttle",
+        type=float,
+        default=0.35,
+        help="每股间隔秒数 (免费 token 限流 ~200次/分钟, 默认0.35s)",
+    )
     args = parser.parse_args()
 
     if args.symbols:
@@ -74,7 +87,9 @@ def main():
     logger.info(f"  待拉取:   {len(todo)}")
     logger.info(f"  时间范围: {args.start} ~ {args.end}")
     logger.info(f"  输出:     {OUTPUT}")
-    logger.info(f"  限流:     {args.throttle}s/股 (预估 {len(todo) * args.throttle / 60:.0f} 分钟)")
+    logger.info(
+        f"  限流:     {args.throttle}s/股 (预估 {len(todo) * args.throttle / 60:.0f} 分钟)"
+    )
     logger.info("=" * 60)
 
     if args.dry_run:
@@ -118,8 +133,12 @@ def main():
             eta = (len(todo) - i - 1) / rate
             logger.info(
                 "进度: %d/%d (%.1f%%) | 速率 %.1f/min | ETA %.0fmin | 失败 %d",
-                i + 1, len(todo), (i + 1) / len(todo) * 100,
-                rate, eta, len(failed),
+                i + 1,
+                len(todo),
+                (i + 1) / len(todo) * 100,
+                rate,
+                eta,
+                len(failed),
             )
             # 每50只存一次中间结果
             if frames:
@@ -129,8 +148,12 @@ def main():
 
     elapsed = time.time() - t0
     logger.info("=" * 60)
-    logger.info("拉取完成: %d 成功 / %d 失败 | 耗时 %.0f 分钟",
-                 len(todo) - len(failed), len(failed), elapsed / 60)
+    logger.info(
+        "拉取完成: %d 成功 / %d 失败 | 耗时 %.0f 分钟",
+        len(todo) - len(failed),
+        len(failed),
+        elapsed / 60,
+    )
 
     if frames:
         panel = pd.concat(frames, ignore_index=True)
@@ -138,7 +161,9 @@ def main():
         panel.to_parquet(OUTPUT, index=False)
         logger.info(
             "已保存 %s: %d 行, %d 只股票, %s ~ %s",
-            OUTPUT, len(panel), panel["symbol"].nunique(),
+            OUTPUT,
+            len(panel),
+            panel["symbol"].nunique(),
             panel["date"].min().strftime("%Y-%m-%d"),
             panel["date"].max().strftime("%Y-%m-%d"),
         )

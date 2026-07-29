@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """Retry missing fina_indicator stocks with incremental checkpointing."""
 
-import os, time, sys
+import os
+import time
+import sys
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root not in sys.path:
@@ -56,7 +58,9 @@ errors = []
 
 for i, ts in enumerate(missing):
     try:
-        raw = pro.fina_indicator(ts_code=ts, start_date="20230701", end_date="20260727", fields=fields)
+        raw = pro.fina_indicator(
+            ts_code=ts, start_date="20230701", end_date="20260727", fields=fields
+        )
         if len(raw) > 0:
             raw["symbol"] = ts.split(".")[0]
             batch.append(raw)
@@ -71,7 +75,7 @@ for i, ts in enumerate(missing):
         eta = (total - i - 1) / rate if rate > 0 else 0
         ok_r = sum(len(r) for r in batch)
         print(
-            f"[{i+1}/{total}] {len(batch)} OK, {ok_r} rows, "
+            f"[{i + 1}/{total}] {len(batch)} OK, {ok_r} rows, "
             f"{len(errors)} err | {elapsed:.0f}s ETA {eta:.0f}s",
             flush=True,
         )

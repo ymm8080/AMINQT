@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """修复 v3: 重命名被 merge 冲突的列, 删除无关的 lhb 列."""
+
 import pandas as pd
 import logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("fix")
 
 V3_PATH = "data/panel_full_enriched_v3.parquet"
@@ -28,11 +32,22 @@ logger.info("重命名: %s", renames)
 # 2. 删除 lhb merge 带来的无关列
 drop_cols = [
     # _y 后缀 (来自 lhb 缓存)
-    "close_y", "amount_y", "turnover_rate_y",
+    "close_y",
+    "amount_y",
+    "turnover_rate_y",
     # lhb 原始字段
-    "trade_date", "ts_code", "name", "pct_change",
-    "l_sell", "l_buy", "l_amount", "net_amount", "net_rate",
-    "amount_rate", "float_values", "reason",
+    "trade_date",
+    "ts_code",
+    "name",
+    "pct_change",
+    "l_sell",
+    "l_buy",
+    "l_amount",
+    "net_amount",
+    "net_rate",
+    "amount_rate",
+    "float_values",
+    "reason",
 ]
 
 # 删除所有中文列名

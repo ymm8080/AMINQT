@@ -50,8 +50,10 @@ logger = logging.getLogger("enrich_one")
 # Per-source merge functions (adapted from build_full_panel.py)
 # ---------------------------------------------------------------------------
 
+
 def _load_supply():
     from app.pipeline1.data_supply import DataSupplyChain
+
     return DataSupplyChain()
 
 
@@ -71,11 +73,15 @@ def merge_northbound(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame
     if len(df) == 0:
         logger.warning("northbound: empty result")
         return panel
-    date_cols = [c for c in df.columns if c not in ("symbol", "date") and not c.startswith("_")]
+    date_cols = [
+        c for c in df.columns if c not in ("symbol", "date") and not c.startswith("_")
+    ]
     nb = df[["date"] + date_cols].drop_duplicates(subset=["date"])
     before = len(panel.columns)
     panel = panel.merge(nb, on="date", how="left")
-    logger.info("northbound: %d rows, +%d cols → panel", len(df), len(panel.columns) - before)
+    logger.info(
+        "northbound: %d rows, +%d cols → panel", len(df), len(panel.columns) - before
+    )
     return panel
 
 
@@ -91,7 +97,9 @@ def merge_margin(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame:
     avail = [c for c in df.columns if c not in merge_cols and not c.startswith("_")]
     before = len(panel.columns)
     panel = panel.merge(df[merge_cols + avail], on=merge_cols, how="left")
-    logger.info("margin: %d rows, +%d cols → panel", len(df), len(panel.columns) - before)
+    logger.info(
+        "margin: %d rows, +%d cols → panel", len(df), len(panel.columns) - before
+    )
     return panel
 
 
@@ -104,17 +112,24 @@ def merge_fina_indicator(panel: pd.DataFrame, refresh: bool = False) -> pd.DataF
 
     # ── 1. Try full-market query first ──
     try:
-        df = supply.fetch_fina_indicator(start_date=start, end_date=end, refresh=refresh)
+        df = supply.fetch_fina_indicator(
+            start_date=start, end_date=end, refresh=refresh
+        )
         if len(df) > 0:
             logger.info("fina_indicator: full-market returned %d rows", len(df))
             return _merge_fina_asof(panel, df)
     except Exception as exc:
-        logger.info("fina_indicator: full-market failed (%s), using per-stock cache", exc)
+        logger.info(
+            "fina_indicator: full-market failed (%s), using per-stock cache", exc
+        )
 
     # ── 2. Load from per-stock cache ──
     cache_dir = os.path.join(ALT_CACHE_DIR, "fina_indicator")
-    caches = [f for f in glob.glob(os.path.join(cache_dir, "*.parquet"))
-              if not os.path.basename(f).startswith("all_")]
+    caches = [
+        f
+        for f in glob.glob(os.path.join(cache_dir, "*.parquet"))
+        if not os.path.basename(f).startswith("all_")
+    ]
     cached_symbols: set[str] = set()
     frames = []
     for fpath in caches:
@@ -129,7 +144,8 @@ def merge_fina_indicator(panel: pd.DataFrame, refresh: bool = False) -> pd.DataF
     missing = panel_symbols - cached_symbols
     logger.info(
         "fina_indicator: %d cached symbols, %d missing → fetching",
-        len(cached_symbols), len(missing),
+        len(cached_symbols),
+        len(missing),
     )
 
     # ── 3. Fetch missing stocks ──
@@ -137,15 +153,20 @@ def merge_fina_indicator(panel: pd.DataFrame, refresh: bool = False) -> pd.DataF
         from app.pipeline1.panel_builder import _parallel_fetch
 
         def _fetch_one(sym: str):
-            ts_code = f"{sym}.{'SZ' if sym.startswith(('0','3','1')) else 'SH'}"
+            ts_code = f"{sym}.{'SZ' if sym.startswith(('0', '3', '1')) else 'SH'}"
             df_one = supply.fetch_fina_indicator(
-                ts_code=ts_code, start_date=start, end_date=end, refresh=True,
+                ts_code=ts_code,
+                start_date=start,
+                end_date=end,
+                refresh=True,
             )
             return df_one if len(df_one) else None
 
         t0 = time.time()
         new_frames = _parallel_fetch(
-            _fetch_one, sorted(missing), desc="fina_indicator",
+            _fetch_one,
+            sorted(missing),
+            desc="fina_indicator",
             progress_file=PROGRESS_FILE,
         )
         elapsed = time.time() - t0
@@ -153,10 +174,14 @@ def merge_fina_indicator(panel: pd.DataFrame, refresh: bool = False) -> pd.DataF
             frames.extend(new_frames)
             logger.info(
                 "fina_indicator: fetched %d/%d missing stocks in %.0fs",
-                len(new_frames), len(missing), elapsed,
+                len(new_frames),
+                len(missing),
+                elapsed,
             )
         else:
-            logger.warning("fina_indicator: no new data for %d missing stocks", len(missing))
+            logger.warning(
+                "fina_indicator: no new data for %d missing stocks", len(missing)
+            )
 
     if not frames:
         logger.warning("fina_indicator: no data at all")
@@ -172,8 +197,11 @@ def _merge_fina_asof(panel: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
     if "announce_date" not in df.columns:
         logger.warning("fina_indicator: no announce_date column")
         return panel
-    fin_cols = [c for c in df.columns
-                if c not in ("symbol", "report_period", "_ts_code", "announce_date")]
+    fin_cols = [
+        c
+        for c in df.columns
+        if c not in ("symbol", "report_period", "_ts_code", "announce_date")
+    ]
     f = df[["symbol", "announce_date"] + fin_cols].copy()
     f["announce_date"] = pd.to_datetime(f["announce_date"])
     f = f.dropna(subset=["announce_date"])
@@ -183,10 +211,16 @@ def _merge_fina_asof(panel: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
     panel_p = panel.sort_values("date").copy()
     before = len(panel_p.columns)
     panel_p = pd.merge_asof(
-        panel_p, f, left_on="date", right_on="announce_date",
-        by="symbol", direction="backward",
+        panel_p,
+        f,
+        left_on="date",
+        right_on="announce_date",
+        by="symbol",
+        direction="backward",
     )
-    logger.info("fina_indicator (merge_asof): +%d cols → panel", len(panel_p.columns) - before)
+    logger.info(
+        "fina_indicator (merge_asof): +%d cols → panel", len(panel_p.columns) - before
+    )
     return panel_p
 
 
@@ -198,10 +232,14 @@ def merge_lhb(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame:
         df = supply.fetch_lhb(start_date=start, end_date=end, refresh=refresh)
         if len(df) > 0 and "date" in df.columns and "symbol" in df.columns:
             merge_cols = ["symbol", "date"]
-            avail = [c for c in df.columns if c not in merge_cols and not c.startswith("_")]
+            avail = [
+                c for c in df.columns if c not in merge_cols and not c.startswith("_")
+            ]
             before = len(panel.columns)
             panel = panel.merge(df[merge_cols + avail], on=merge_cols, how="left")
-            logger.info("lhb: %d rows, +%d cols → panel", len(df), len(panel.columns) - before)
+            logger.info(
+                "lhb: %d rows, +%d cols → panel", len(df), len(panel.columns) - before
+            )
             return panel
     except Exception as exc:
         logger.info("lhb: fetch failed (%s), trying cache", exc)
@@ -217,7 +255,9 @@ def merge_lhb(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame:
     if "date" in raw.columns and "symbol" in raw.columns:
         raw = raw.dropna(subset=["date"])
         merge_cols = ["symbol", "date"]
-        avail = [c for c in raw.columns if c not in merge_cols and not str(c).startswith("_")]
+        avail = [
+            c for c in raw.columns if c not in merge_cols and not str(c).startswith("_")
+        ]
         before = len(panel.columns)
         panel = panel.merge(raw[merge_cols + avail], on=merge_cols, how="left")
         logger.info("lhb: +%d cols → panel", len(panel.columns) - before)
@@ -237,8 +277,10 @@ def merge_sector_index(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFra
         return panel
 
     name_to_code = {
-        name: code for code, name in
-        df[["index_code", "index_name"]].drop_duplicates().itertuples(index=False)
+        name: code
+        for code, name in df[["index_code", "index_name"]]
+        .drop_duplicates()
+        .itertuples(index=False)
     }
     ind_map: dict[str, str] = {}
     for ind_name in panel["industry"].dropna().unique():
@@ -255,11 +297,13 @@ def merge_sector_index(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFra
         return panel
 
     panel["_sw_name"] = panel["industry"].map(ind_map)
-    sw_data = df.rename(columns={
-        "ret_pct": "sw_ret_1d",
-        "close": "sw_index_close",
-        "volume": "sw_index_vol",
-    })
+    sw_data = df.rename(
+        columns={
+            "ret_pct": "sw_ret_1d",
+            "close": "sw_index_close",
+            "volume": "sw_index_vol",
+        }
+    )
     avail = [c for c in sw_data.columns if c not in ("index_code", "date")]
     before = len(panel.columns)
     panel = panel.merge(
@@ -296,28 +340,39 @@ def merge_holdernumber(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFra
     missing = panel_symbols - cached_symbols
     logger.info(
         "holdernumber: %d cached symbols, %d missing",
-        len(cached_symbols), len(missing),
+        len(cached_symbols),
+        len(missing),
     )
 
     if missing:
         from app.pipeline1.panel_builder import _parallel_fetch
 
         def _fetch_one(sym: str):
-            ts_code = f"{sym}.{'SZ' if sym.startswith(('0','3','1')) else 'SH'}"
+            ts_code = f"{sym}.{'SZ' if sym.startswith(('0', '3', '1')) else 'SH'}"
             df_one = supply.fetch_holdernumber(
-                ts_code=ts_code, start_date=start, end_date=end, refresh=True,
+                ts_code=ts_code,
+                start_date=start,
+                end_date=end,
+                refresh=True,
             )
             return df_one if len(df_one) else None
 
         t0 = time.time()
         new_frames = _parallel_fetch(
-            _fetch_one, sorted(missing), desc="holdernumber",
+            _fetch_one,
+            sorted(missing),
+            desc="holdernumber",
             progress_file=PROGRESS_FILE,
         )
         elapsed = time.time() - t0
         if new_frames:
             frames.extend(new_frames)
-            logger.info("holdernumber: fetched %d/%d in %.0fs", len(new_frames), len(missing), elapsed)
+            logger.info(
+                "holdernumber: fetched %d/%d in %.0fs",
+                len(new_frames),
+                len(missing),
+                elapsed,
+            )
 
     if not frames:
         logger.warning("holdernumber: no data")
@@ -330,8 +385,11 @@ def merge_holdernumber(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFra
         logger.warning("holdernumber: no announce_date")
         return panel
 
-    hn_cols = [c for c in df.columns
-               if c not in ("symbol", "date", "_ts_code", "announce_date")]
+    hn_cols = [
+        c
+        for c in df.columns
+        if c not in ("symbol", "date", "_ts_code", "announce_date")
+    ]
     f = df[["symbol", "announce_date"] + hn_cols].copy()
     f["announce_date"] = pd.to_datetime(f["announce_date"])
     f = f.dropna(subset=["announce_date"])
@@ -342,8 +400,12 @@ def merge_holdernumber(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFra
     panel_p = panel.sort_values("date").copy()
     before = len(panel_p.columns)
     panel_p = pd.merge_asof(
-        panel_p, f, left_on="date", right_on="announce_date",
-        by="symbol", direction="backward",
+        panel_p,
+        f,
+        left_on="date",
+        right_on="announce_date",
+        by="symbol",
+        direction="backward",
     )
     logger.info("holdernumber: +%d cols → panel", len(panel_p.columns) - before)
     return panel_p
@@ -368,10 +430,14 @@ def merge_holdertrade(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFram
             return panel
 
     if len(df) and "announce_date" in df.columns and "sh_net_sign" in df.columns:
-        daily_net = df.groupby(["symbol", "announce_date"]).agg(
-            sh_net_change_sign=("sh_net_sign", "sum"),
-            sh_change_amt_total=("sh_change_amt", "sum"),
-        ).reset_index()
+        daily_net = (
+            df.groupby(["symbol", "announce_date"])
+            .agg(
+                sh_net_change_sign=("sh_net_sign", "sum"),
+                sh_change_amt_total=("sh_change_amt", "sum"),
+            )
+            .reset_index()
+        )
         daily_net = daily_net.rename(columns={"announce_date": "date"})
         daily_net["date"] = pd.to_datetime(daily_net["date"])
         before = len(panel.columns)
@@ -383,8 +449,8 @@ def merge_holdertrade(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFram
 def merge_daily_basic(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame:
     """Fetch daily_basic per date, merge by symbol+date."""
     supply = _load_supply()
-    start = panel["date"].min().strftime("%Y%m%d")
-    end = panel["date"].max().strftime("%Y%m%d")
+    panel["date"].min().strftime("%Y%m%d")
+    panel["date"].max().strftime("%Y%m%d")
     dates = panel["date"].drop_duplicates().sort_values()
 
     from app.pipeline1.panel_builder import _parallel_fetch
@@ -395,7 +461,9 @@ def merge_daily_basic(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFram
         return df_one if len(df_one) else None
 
     frames = _parallel_fetch(
-        _fetch_one_date, dates.tolist(), desc="daily_basic",
+        _fetch_one_date,
+        dates.tolist(),
+        desc="daily_basic",
         progress_file=PROGRESS_FILE,
     )
     if not frames:
@@ -407,7 +475,9 @@ def merge_daily_basic(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFram
     avail = [c for c in df.columns if c not in merge_cols and not c.startswith("_")]
     before = len(panel.columns)
     panel = panel.merge(df[merge_cols + avail], on=merge_cols, how="left")
-    logger.info("daily_basic: %d rows, +%d cols → panel", len(df), len(panel.columns) - before)
+    logger.info(
+        "daily_basic: %d rows, +%d cols → panel", len(df), len(panel.columns) - before
+    )
     return panel
 
 
@@ -424,7 +494,9 @@ def merge_stk_limit(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame:
         return df_one if len(df_one) else None
 
     frames = _parallel_fetch(
-        _fetch_one_date, dates.tolist(), desc="stk_limit",
+        _fetch_one_date,
+        dates.tolist(),
+        desc="stk_limit",
         progress_file=PROGRESS_FILE,
     )
     if not frames:
@@ -436,7 +508,9 @@ def merge_stk_limit(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame:
     avail = [c for c in df.columns if c not in merge_cols and not c.startswith("_")]
     before = len(panel.columns)
     panel = panel.merge(df[merge_cols + avail], on=merge_cols, how="left")
-    logger.info("stk_limit: %d rows, +%d cols → panel", len(df), len(panel.columns) - before)
+    logger.info(
+        "stk_limit: %d rows, +%d cols → panel", len(df), len(panel.columns) - before
+    )
     return panel
 
 
@@ -450,7 +524,10 @@ def merge_cyq_tushare(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFram
     _write_progress(f"cyq_tushare: starting {len(symbols)} symbols")
     t0 = time.time()
     df = supply.fetch_chip_distribution_batch(
-        symbols, start_date=start, end_date=end, refresh=refresh,
+        symbols,
+        start_date=start,
+        end_date=end,
+        refresh=refresh,
     )
     elapsed = time.time() - t0
     if len(df):
@@ -464,7 +541,9 @@ def merge_cyq_tushare(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFram
         )
         logger.info(
             "cyq_tushare: %d rows, +%d cols → panel (%.0fs)",
-            len(df), len(panel.columns) - before, elapsed,
+            len(df),
+            len(panel.columns) - before,
+            elapsed,
         )
     else:
         logger.warning("cyq_tushare: no data returned")
@@ -475,16 +554,16 @@ def merge_cyq_tushare(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFram
 # Source registry
 # ---------------------------------------------------------------------------
 SOURCES = {
-    "northbound":     merge_northbound,
-    "margin":         merge_margin,
+    "northbound": merge_northbound,
+    "margin": merge_margin,
     "fina_indicator": merge_fina_indicator,
-    "lhb":            merge_lhb,
-    "holdernumber":   merge_holdernumber,
-    "holdertrade":    merge_holdertrade,
-    "sector_index":   merge_sector_index,
-    "daily_basic":    merge_daily_basic,
-    "stk_limit":      merge_stk_limit,
-    "cyq_tushare":    merge_cyq_tushare,
+    "lhb": merge_lhb,
+    "holdernumber": merge_holdernumber,
+    "holdertrade": merge_holdertrade,
+    "sector_index": merge_sector_index,
+    "daily_basic": merge_daily_basic,
+    "stk_limit": merge_stk_limit,
+    "cyq_tushare": merge_cyq_tushare,
 }
 
 
@@ -492,28 +571,61 @@ SOURCES = {
 # Column lists for partial output (only keep NEW columns per source)
 # ---------------------------------------------------------------------------
 SOURCE_COL_PREFIXES: dict[str, list[str]] = {
-    "northbound":     ["north_"],
-    "margin":         ["margin_", "short_"],
-    "fina_indicator": ["roe", "roe_deducted", "roa", "gross_margin", "net_margin",
-                       "eps_yoy", "rev_yoy", "profit_yoy", "op_cf_ratio",
-                       "debt_ratio", "current_ratio", "asset_turnover",
-                       "ar_turnover", "inventory_turnover", "ocf_to_or",
-                       "announce_date", "report_period"],
-    "lhb":            ["lhb_"],
-    "holdernumber":   ["holder_count", "avg_shares_per_holder", "announce_date"],
-    "holdertrade":    ["sh_net_change_sign", "sh_change_amt_total"],
-    "sector_index":   ["sw_"],
-    "daily_basic":    ["pe_ttm", "pb", "total_mv", "circ_mv", "total_share",
-                       "float_share", "free_share"],
-    "stk_limit":      ["up_limit", "down_limit"],
-    "cyq_tushare":    ["winner_rate", "his_low", "his_high",
-                       "cost_5pct", "cost_15pct", "cost_50pct",
-                       "cost_85pct", "cost_95pct", "weight_avg",
-                       "benefit_part", "pct_90_con", "pct_70_con"],
+    "northbound": ["north_"],
+    "margin": ["margin_", "short_"],
+    "fina_indicator": [
+        "roe",
+        "roe_deducted",
+        "roa",
+        "gross_margin",
+        "net_margin",
+        "eps_yoy",
+        "rev_yoy",
+        "profit_yoy",
+        "op_cf_ratio",
+        "debt_ratio",
+        "current_ratio",
+        "asset_turnover",
+        "ar_turnover",
+        "inventory_turnover",
+        "ocf_to_or",
+        "announce_date",
+        "report_period",
+    ],
+    "lhb": ["lhb_"],
+    "holdernumber": ["holder_count", "avg_shares_per_holder", "announce_date"],
+    "holdertrade": ["sh_net_change_sign", "sh_change_amt_total"],
+    "sector_index": ["sw_"],
+    "daily_basic": [
+        "pe_ttm",
+        "pb",
+        "total_mv",
+        "circ_mv",
+        "total_share",
+        "float_share",
+        "free_share",
+    ],
+    "stk_limit": ["up_limit", "down_limit"],
+    "cyq_tushare": [
+        "winner_rate",
+        "his_low",
+        "his_high",
+        "cost_5pct",
+        "cost_15pct",
+        "cost_50pct",
+        "cost_85pct",
+        "cost_95pct",
+        "weight_avg",
+        "benefit_part",
+        "pct_90_con",
+        "pct_70_con",
+    ],
 }
 
 
-def _filter_new_cols(panel: pd.DataFrame, source: str, base_cols: set[str]) -> pd.DataFrame:
+def _filter_new_cols(
+    panel: pd.DataFrame, source: str, base_cols: set[str]
+) -> pd.DataFrame:
     """Extract only the new columns this source added, plus symbol+date keys."""
     new_cols = [c for c in panel.columns if c not in base_cols]
     keep = ["symbol", "date"] + [c for c in new_cols if not c.startswith("_")]
@@ -537,14 +649,18 @@ def _filter_new_cols(panel: pd.DataFrame, source: str, base_cols: set[str]) -> p
 # ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(description="Enrich one alt-data source")
-    parser.add_argument("--source", required=True, choices=list(SOURCES),
-                        help="Data source to enrich")
-    parser.add_argument("--panel", default=DEFAULT_PANEL,
-                        help="Path to base panel parquet")
-    parser.add_argument("--refresh", action="store_true",
-                        help="Force re-fetch (skip cache)")
-    parser.add_argument("--workers", type=int, default=None,
-                        help="Override ENRICH_WORKERS env var")
+    parser.add_argument(
+        "--source", required=True, choices=list(SOURCES), help="Data source to enrich"
+    )
+    parser.add_argument(
+        "--panel", default=DEFAULT_PANEL, help="Path to base panel parquet"
+    )
+    parser.add_argument(
+        "--refresh", action="store_true", help="Force re-fetch (skip cache)"
+    )
+    parser.add_argument(
+        "--workers", type=int, default=None, help="Override ENRICH_WORKERS env var"
+    )
     args = parser.parse_args()
 
     if args.workers:
@@ -561,7 +677,12 @@ def main():
     logger.info("=" * 60)
     logger.info("Loading panel: %s", panel_path)
     panel = pd.read_parquet(panel_path)
-    logger.info("Panel: %d rows, %d symbols, %d cols", len(panel), panel["symbol"].nunique(), len(panel.columns))
+    logger.info(
+        "Panel: %d rows, %d symbols, %d cols",
+        len(panel),
+        panel["symbol"].nunique(),
+        len(panel.columns),
+    )
 
     # ── Deduplicate column names (parquet can carry duplicates from bad merges) ──
     dupes = panel.columns[panel.columns.duplicated()].tolist()
@@ -570,21 +691,38 @@ def main():
         panel = panel.loc[:, ~panel.columns.duplicated()]
 
     # ── Clean up stale _x/_y columns from previous partial merges ──
-    stale_suffix_cols = [c for c in panel.columns if c.endswith("_x") or c.endswith("_y")]
+    stale_suffix_cols = [
+        c for c in panel.columns if c.endswith("_x") or c.endswith("_y")
+    ]
     if stale_suffix_cols:
-        logger.info("Dropping %d stale _x/_y columns: %s", len(stale_suffix_cols), stale_suffix_cols)
+        logger.info(
+            "Dropping %d stale _x/_y columns: %s",
+            len(stale_suffix_cols),
+            stale_suffix_cols,
+        )
         panel = panel.drop(columns=stale_suffix_cols)
 
     base_cols = set(panel.columns)
 
     # ── Check if source already present ──
     prefixes = SOURCE_COL_PREFIXES.get(source, [])
-    existing_raw = [c for c in panel.columns for pfx in prefixes
-                    if (c.startswith(pfx) or pfx in c)
-                    and not c.endswith("_x") and not c.endswith("_y")]
-    existing = list(dict.fromkeys(existing_raw))  # dedup (a col may match multiple prefixes)
+    existing_raw = [
+        c
+        for c in panel.columns
+        for pfx in prefixes
+        if (c.startswith(pfx) or pfx in c)
+        and not c.endswith("_x")
+        and not c.endswith("_y")
+    ]
+    existing = list(
+        dict.fromkeys(existing_raw)
+    )  # dedup (a col may match multiple prefixes)
     if existing and not args.refresh:
-        logger.info("Source %s already has columns: %s — skipping (use --refresh to force)", source, existing)
+        logger.info(
+            "Source %s already has columns: %s — skipping (use --refresh to force)",
+            source,
+            existing,
+        )
         # Still write partial output for assembly
         os.makedirs(PARTS_DIR, exist_ok=True)
         out_path = os.path.join(PARTS_DIR, f"{source}.parquet")
@@ -609,7 +747,10 @@ def main():
     new_cols = [c for c in panel.columns if c not in base_cols]
     logger.info(
         "%s: done in %.0fs, +%d new cols: %s",
-        source, elapsed, len(new_cols), sorted(new_cols),
+        source,
+        elapsed,
+        len(new_cols),
+        sorted(new_cols),
     )
 
     # ── Write partial output ──

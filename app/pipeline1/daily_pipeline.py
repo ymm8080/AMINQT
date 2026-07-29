@@ -185,12 +185,18 @@ class DailySelectionPipeline:
         from .panel_builder import enrich_cyq
 
         # 加载历史面板 (优先 enriched 版本)
-        for path in ("data/panel_full_enriched_v3.parquet",
-                     "data/panel_full_enriched_v2.parquet"):
+        for path in (
+            "data/panel_full_enriched_v3.parquet",
+            "data/panel_full_enriched_v2.parquet",
+        ):
             if os.path.exists(path):
                 panel = pd.read_parquet(path)
-                logger.info("加载历史面板: %s (%d stocks, %d rows)", path,
-                            panel["symbol"].nunique(), len(panel))
+                logger.info(
+                    "加载历史面板: %s (%d stocks, %d rows)",
+                    path,
+                    panel["symbol"].nunique(),
+                    len(panel),
+                )
                 break
         else:
             raise DataSupplyError("无可用历史面板缓存 (panel_*.parquet)")
@@ -203,12 +209,17 @@ class DailySelectionPipeline:
 
         # 追加当日数据
         panel = self.supply.append_today_to_panel(
-            panel, trade_date=trade_date,
+            panel,
+            trade_date=trade_date,
             sources=["ohlcv", "margin", "northbound", "lhb"],
         )
 
-        logger.info("面板装配完成: %d stocks, %d rows, %d cols",
-                    panel["symbol"].nunique(), len(panel), len(panel.columns))
+        logger.info(
+            "面板装配完成: %d stocks, %d rows, %d cols",
+            panel["symbol"].nunique(),
+            len(panel),
+            len(panel.columns),
+        )
         return panel
 
     def _load_yesterday(self, trade_date: str) -> pd.DataFrame | None:

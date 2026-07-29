@@ -254,11 +254,17 @@ class LabelEngine:
             df.loc[df["label_mdd_3d"].isna(), "label_pain"] = np.nan
         df["label_cls"] = df["label_cls"].where(df["label_1d"].notna(), np.nan)
         if "label_pm_cls" in df.columns:
-            df["label_pm_cls"] = df["label_pm_cls"].where(df["label_pm_1d"].notna(), np.nan)
+            df["label_pm_cls"] = df["label_pm_cls"].where(
+                df["label_pm_1d"].notna(), np.nan
+            )
         if "label_cls_net" in df.columns:
-            df["label_cls_net"] = df["label_cls_net"].where(df["label_1d_net"].notna(), np.nan)
+            df["label_cls_net"] = df["label_cls_net"].where(
+                df["label_1d_net"].notna(), np.nan
+            )
         if "label_pm_cls_net" in df.columns:
-            df["label_pm_cls_net"] = df["label_pm_cls_net"].where(df["label_pm_1d_net"].notna(), np.nan)
+            df["label_pm_cls_net"] = df["label_pm_cls_net"].where(
+                df["label_pm_1d_net"].notna(), np.nan
+            )
         return df
 
     # ---------------- 实盘标签遮蔽 ----------------
@@ -269,7 +275,9 @@ class LabelEngine:
         recent_dates = sorted(df["date"].unique())[-days:]
         mask = df["date"].isin(recent_dates)
         cols = [f"label_{k}d" for k in LABEL_HORIZONS] + ["label_cls", "label_pm_cls"]
-        cols += [f"label_pm_{k}d" for k in LABEL_HORIZONS if f"label_pm_{k}d" in df.columns]
+        cols += [
+            f"label_pm_{k}d" for k in LABEL_HORIZONS if f"label_pm_{k}d" in df.columns
+        ]
         cols += [c for c in df.columns if c.endswith("_net")]
         cols += [c for c in df.columns if c.startswith("label_mdd_")] + ["label_pain"]
         for col in [c for c in cols if c in df.columns]:

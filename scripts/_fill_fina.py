@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
 """填充 fina_indicator: 季度数据, 用 announce_date forward-fill 到交易日."""
-import sys, os, time
+
+import sys
+import os
+import time
 from pathlib import Path
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 import pandas as pd
-import numpy as np
 import logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("fina_fill")
 
 V3_PATH = "data/panel_full_enriched_v3.parquet"
+
 
 def main():
     t0 = time.time()
@@ -40,8 +47,12 @@ def main():
     fina = pd.concat(frames, ignore_index=True)
     # 去重: 同一 symbol + announce_date 保留最新
     fina = fina.drop_duplicates(subset=["symbol", "announce_date"], keep="last")
-    logger.info("fina_indicator: %d 行 %d 列, %d 股",
-                len(fina), len(fina.columns), fina["symbol"].nunique())
+    logger.info(
+        "fina_indicator: %d 行 %d 列, %d 股",
+        len(fina),
+        len(fina.columns),
+        fina["symbol"].nunique(),
+    )
 
     # 用 announce_date 作为 date, 然后 forward-fill
     fina["date"] = pd.to_datetime(fina["announce_date"])
@@ -78,7 +89,10 @@ def main():
     # 保存
     logger.info("保存 v3...")
     v3.to_parquet(V3_PATH, index=False)
-    logger.info("完成: %d 行 %d 列, 耗时 %.1f 秒", len(v3), len(v3.columns), time.time() - t0)
+    logger.info(
+        "完成: %d 行 %d 列, 耗时 %.1f 秒", len(v3), len(v3.columns), time.time() - t0
+    )
+
 
 if __name__ == "__main__":
     main()

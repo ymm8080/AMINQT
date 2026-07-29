@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """检查 fina_indicator 缓存结构."""
-import os, sys
+
+import os
 import pandas as pd
 
 fina_dir = "data/supply_cache/alt_data/fina_indicator"

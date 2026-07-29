@@ -391,7 +391,8 @@ class DualTrackTrainer:
         if len(calib) == 0:
             logger.warning(
                 "[%s] 校准集为空 (label=%s), 跳过校准, 使用原始 predict_proba",
-                trained.get("board", "?"), label,
+                trained.get("board", "?"),
+                label,
             )
             trained["calibrator"] = None
             return None
@@ -429,7 +430,11 @@ class DualTrackTrainer:
             )
         # 开关门阈值: max(1d, 3d, 5d) IC — 任意标签达标即可切换
         best_ic = max(ics.get(k, 0.0) for k in ("1d_reg", "3d_reg", "5d_reg"))
-        return {"ics": ics, "pass": best_ic >= ic_min, "best_ic_key": max(ics, key=lambda k: ics.get(k, 0.0))}
+        return {
+            "ics": ics,
+            "pass": best_ic >= ic_min,
+            "best_ic_key": max(ics, key=lambda k: ics.get(k, 0.0)),
+        }
 
     def save(self, trained: dict, tag: str) -> str:
         """保存模型包 (含校准器; 若无则先拟合)."""
