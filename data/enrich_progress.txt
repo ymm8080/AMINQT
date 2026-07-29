@@ -1,0 +1,1 @@
+fina_indicator: skipped (already present)

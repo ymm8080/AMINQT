@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 # CLAUDE.md — Claude Code 协作约定
 
+机器学习PIPELINE 特征因子大多看连续交易日时序变化，而不是看某一天的截面
+
+所有特征因子数据都需要日频，或者分钟级别得全量数据。
+如果取不到就弹出信息让我确认是放弃还是继续寻找数据源
+
 > **主上下文在 `AGENTS.md`**。本文件不重复其内容，仅补充 Claude Code 专属约定。
 > 会话开始时：先读 `AGENTS.md`（铁律/架构/协议），再读本文件。
 
@@ -46,6 +51,16 @@ Single-context: ADRs in `10_adr/`, no `CONTEXT.md` yet. See `docs/agents/domain.
 | `gh` CLI | GitHub Issues / PR 操作 |
 | `ruff` | Python lint |
 | `pytest` | 测试 |
+
+## Sub-Agent 模块
+
+| 模块 | 模型 | 协议 | 工具 |
+|------|------|------|------|
+| `deepseek-sub-agent` | DeepSeek V4 Flash | MCP stdio | 6 个工具: `deepseek_ask`, `deepseek_review_code`, `deepseek_analyze_sentiment`, `deepseek_explain_signal`, `deepseek_factor_hypothesis`, `deepseek_diagnose` |
+
+- 注册在 `.claude/mcp.json`，Claude Code 启动时自动发现
+- 需在 `.env` 中设置 `DEEPSEEK_API_KEY`
+- 详见 `docs/agents/deepseek-sub-agent.md`
 
 ## 文件优先级（冲突时）
 

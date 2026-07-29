@@ -15,11 +15,14 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+import os  # noqa: E402
+import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from app.streamlit import (  # noqa: E402
     page_backtest,
     page_config,
+    page_data_feed,
     page_selection,
     page_trading,
 )
@@ -30,6 +33,7 @@ PAGES = {
     "选股看板": page_selection.render,
     "交易看板": page_trading.render,
     "回测中心": page_backtest.render,
+    "数据管理": page_data_feed.render,
     "配置中心": page_config.render,
 }
 
@@ -42,6 +46,15 @@ def main() -> None:
     )
     st.sidebar.divider()
     st.sidebar.caption("数据: akshare | 执行: miniQMT (sim) | 模型: 本地 LightGBM")
+    st.sidebar.divider()
+    _v3_path = "data/panel_full_enriched_v3.parquet"
+    if os.path.exists(_v3_path):
+        _pf = pd.read_parquet(_v3_path)
+        st.sidebar.caption(
+            "v3 面板: {} 列 {} 只股票".format(len(_pf.columns), _pf["symbol"].nunique())
+        )
+    else:
+        st.sidebar.caption("v3 面板: 未创建")
     PAGES[page]()
 
 

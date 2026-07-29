@@ -4,6 +4,7 @@ deepseek:
   enabled: true
   base_url: "https://api.deepseek.com"
   model: "deepseek-chat"              # 复杂推理用 deepseek-reasoner
+  v4_flash_model: "deepseek-v4-flash" # Claude Code sub-agent 模式
   timeout_sec: 10
   daily_token_limit: 500000           # 日限额熔断
   cache_ttl: "market_close"           # 当日有效
@@ -20,3 +21,19 @@ deepseek:
     block_trade: true
     order_book: true
     ai_report: true
+
+# ══ Claude Code Sub-Agent (MCP) ══
+# 通过 MCP 协议暴露为 Claude Code 可调用的工具集
+# 详见 docs/agents/deepseek-sub-agent.md
+sub_agent:
+  enabled: true
+  mcp_server: "deepseek-sub-agent"
+  transport: "stdio"
+  register_in: ".claude/mcp.json"
+  tools:
+    - deepseek_ask
+    - deepseek_review_code
+    - deepseek_analyze_sentiment
+    - deepseek_explain_signal
+    - deepseek_factor_hypothesis
+    - deepseek_diagnose
