@@ -30,7 +30,10 @@ class TestFrontierAPI:
         r = client.get("/api/frontier/list/20990101")
         assert r.status_code == 404
 
-    def test_ohlc_and_intraday(self):
+    def test_ohlc_and_intraday(self, monkeypatch):
+        from app.streamlit import data_service as ds
+
+        monkeypatch.setattr(ds, "fetch_real_intraday", lambda s: None)
         r = client.get("/api/frontier/ohlc/600519?days=60")
         assert r.status_code == 200 and len(r.json()["items"]) == 60
         r = client.get("/api/frontier/intraday/600519")

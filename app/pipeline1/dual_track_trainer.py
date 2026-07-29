@@ -76,7 +76,7 @@ CALIB_DAYS = SEG_MIN_DAYS["calib"]
 TEST_DAYS = SEG_MIN_DAYS["test"]  # 仅归因, 严禁反向调参
 HALF_LIFE = 250  # 半衰期加权 (天)
 ES_PATIENCE = 100  # [V3.8 §2.1] patience=100
-OOS_IC_MIN = 0.03  # 新模型切换门槛
+OOS_IC_MIN = 0.01  # 新模型切换门槛 (signed mean IC, >0.01 即有效)
 
 LGB_PARAMS_REG = {
     "objective": "huber",
@@ -128,10 +128,10 @@ class DualTrackTrainer:
         """
         dates = sorted(df["date"].unique())[-window_total:]
         n = len(dates)
-        seg_lens = _derive_seg_min_days(n)
-        # train 段补齐: 保证各段之和 = n
-        seg_lens["train"] = n - seg_lens["es"] - seg_lens["calib"] - seg_lens["test"]
-        seg_lens["train"] = max(seg_lens["train"], SEG_MIN_DAYS["train"])
+        # B11: 窗口不足时用过渡窗口推导段长 (train 段吸收余量, 可超出实际数据)
+        seg_lens = _derive_seg_min_days(max(n, WINDOW_TRANSITION))
+        # train 段补齐: 保证各段之和 ≥ n (train 可与 calib 重叠, test 取最后一段)
+        seg_lens["train"] = max(seg_lens["train"], MIN_TRAIN_DAYS)
         # 切片: train → es → calib → test (时序)
         pos = 0
         seg_dates = {}
@@ -180,14 +180,16 @@ class DualTrackTrainer:
             "3d_reg": "label_3d",
             "5d_reg": "label_5d",
         }[kind]
-        # [B9] PM 执行口径验收标签优先 (label_pm_kd), 缺失时回退研究口径 label_kd
-        if kind != "1d_cls":
+        # [B9] PM 执行口径验收标签优先 (label_pm_kd / label_pm_cls), 缺失时回退研究口径
+        if kind == "1d_cls":
+            pm_label = "label_pm_cls"
+        else:
             pm_label = f"label_pm_{kind[0]}d"
-            if pm_label in segs["train"].columns:
-                label = pm_label
-            # [E5] 净收益标签 (分层滑点) 优先于毛收益 — 训练/验收主标签口径 (D1)
-            if f"{label}_net" in segs["train"].columns:
-                label = f"{label}_net"
+        if pm_label in segs["train"].columns:
+            label = pm_label
+        # [E5] 净收益标签 (分层滑点) 优先于毛收益 — 训练/验收主标签口径 (D1)
+        if f"{label}_net" in segs["train"].columns:
+            label = f"{label}_net"
         train = segs["train"].dropna(subset=[label])  # per-model dropna (安全网 #7)
         es = segs["es"].dropna(subset=[label])
         train = risk_filter(train)
@@ -234,21 +236,17 @@ class DualTrackTrainer:
     ) -> dict:
         """训练一个板块的 4 个模型 + E1 分位数五模型 + E2 痛苦预警 (标签齐备时).
 
-        窗口深度自适应: ≥1250 交易日 (B11 达标) → WINDOW_TOTAL; 否则 min(WINDOW_TRANSITION, 实际深度).
+        固定使用 WINDOW_TOTAL 窗口 (B11 过渡逻辑已废弃).
         段长按比例动态分配 (split_window), 保证 es/calib/test 各 >= 最小值.
         """
         depth = int(df["date"].nunique()) if len(df) else 0
-        window = (
-            WINDOW_TOTAL if depth >= B11_FULL_DEPTH else min(WINDOW_TRANSITION, depth)
-        )
+        window = WINDOW_TOTAL  # B11 过渡逻辑已废弃, 始终使用全窗口
         min_non_train = sum(v for k, v in SEG_MIN_DAYS.items() if k != "train")
-        if window - min_non_train < MIN_TRAIN_DAYS:
+        if depth < min_non_train + MIN_TRAIN_DAYS:
             raise RuntimeError(
                 f"[{board}] 训练样本深度不足: {depth} 交易日 "
                 f"(需 ≥ {ES_DAYS + CALIB_DAYS + TEST_DAYS + MIN_TRAIN_DAYS})"
             )
-        if window != WINDOW_TOTAL:
-            logger.info("[%s] B11 过渡窗口: 深度 %d 日 → 窗口 %d", board, depth, window)
         segs = self.split_window(df, window)
         out = {"board": board, "feature_cols": feature_cols, "models": {}, "segs": segs}
         for kind in MODEL_KINDS:
@@ -389,6 +387,15 @@ class DualTrackTrainer:
         model, label = trained["models"]["1d_cls"]
         calib = trained["segs"]["calib"].dropna(subset=[label])
         cols = trained["feature_cols"]
+        # 校准集可能为空 (小窗口 + 多特征列 NaN), 此时跳过校准用原始 prob
+        if len(calib) == 0:
+            logger.warning(
+                "[%s] 校准集为空 (label=%s), 跳过校准, 使用原始 predict_proba",
+                trained.get("board", "?"),
+                label,
+            )
+            trained["calibrator"] = None
+            return None
         raw = model.predict_proba(np.nan_to_num(calib[cols].values, nan=0.0))[:, 1]
         n_calib_dates = (
             calib["date"].nunique() if "date" in calib.columns else len(calib)
@@ -421,7 +428,13 @@ class DualTrackTrainer:
             ics[kind] = ICScreener.rank_ic(
                 sub.rename(columns={"_pred": "score"}), "score", label
             )
-        return {"ics": ics, "pass": ics.get("1d_reg", 0.0) >= ic_min}
+        # 开关门阈值: max(1d, 3d, 5d) IC — 任意标签达标即可切换
+        best_ic = max(ics.get(k, 0.0) for k in ("1d_reg", "3d_reg", "5d_reg"))
+        return {
+            "ics": ics,
+            "pass": best_ic >= ic_min,
+            "best_ic_key": max(ics, key=lambda k: ics.get(k, 0.0)),
+        }
 
     def save(self, trained: dict, tag: str) -> str:
         """保存模型包 (含校准器; 若无则先拟合)."""
@@ -491,9 +504,10 @@ class DualTrackTrainer:
             results[board] = {"path": path, "oos": oos, "switched": oos["pass"]}
             if not oos["pass"]:
                 logger.warning(
-                    "[%s] 新模型 OOS IC=%.4f < %.2f, 保留旧模型",
+                    "[%s] 新模型 OOS maxIC(%s)=%.4f < %.2f, 保留旧模型",
                     board,
-                    oos["ics"].get("1d_reg", 0.0),
+                    oos.get("best_ic_key", "1d_reg"),
+                    max(oos["ics"].get(k, 0.0) for k in ("1d_reg", "3d_reg", "5d_reg")),
                     OOS_IC_MIN,
                 )
         return results

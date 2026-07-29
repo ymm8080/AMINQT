@@ -103,8 +103,12 @@ class BacktestEngine:
         end_ts = pd.Timestamp(end)
         frames: list[pd.DataFrame] = []
         for symbol, df in data.items():
-            if df is None or df.empty or "close" not in df.columns:
-                logger.warning("跳过无 close 列的数据: %s", symbol)
+            if df is None or df.empty:
+                logger.warning("跳过空数据: %s", symbol)
+                continue
+            close_col = "close_hfq" if "close_hfq" in df.columns else "close"
+            if close_col not in df.columns:
+                logger.warning("跳过无 %s 列的数据: %s", close_col, symbol)
                 continue
             d = df.copy()
             if "date" in d.columns:
@@ -116,8 +120,8 @@ class BacktestEngine:
             if d.empty:
                 continue
             d["symbol"] = symbol
-            # 标签: holding_days 日前向收益 (允许使用未来价格 — 仅作标签)
-            d["fwd_ret"] = d["close"].shift(-self.holding_days) / d["close"] - 1.0
+            # 标签: holding_days 日前向收益 (使用 close_hfq 含分红总回报, 缺省回退 close)
+            d["fwd_ret"] = d[close_col].shift(-self.holding_days) / d[close_col] - 1.0
             if self.signal_col in d.columns:
                 d["_signal"] = d[self.signal_col].fillna(False).astype(bool)
             elif self.score_col in d.columns:

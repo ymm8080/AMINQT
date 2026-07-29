@@ -19,7 +19,7 @@ from tests.test_daily_pipeline import make_panel
 # ---------------- 数据源级联 + 硬超时 ----------------
 class TestFetchCascade:
     def test_fallback_order_and_down_flag(self, tmp_path):
-        """akshare 失败 → sina; 失败后本次运行内跳过该源."""
+        """akshare 失败 → sina; 连续失败后本次运行内跳过该源."""
         from app.pipeline1.data_supply import DataSupplyChain
 
         supply = DataSupplyChain(cache_dir=str(tmp_path))
@@ -32,13 +32,17 @@ class TestFetchCascade:
             calls.append("fail")
             raise ConnectionError("boom")
 
+        supply._tushare_fetch_hist = fail
         supply._akshare_fetch_hist = fail
         supply._sina_fetch_hist = lambda s, a, b: (calls.append("sina"), good)[1]
-        df = supply._default_fetch_hist("600519", "2023-01-01", "2026-07-24")
-        assert len(df) == 1 and calls == ["fail", "sina"]
-        # 第二次: akshare 已被标记 down, 直走 sina
+        # 连续失败 _MAX_CONSECUTIVE_FAILS 次后源被标记 down
+        for _ in range(supply._MAX_CONSECUTIVE_FAILS):
+            df = supply._default_fetch_hist("600519", "2023-01-01", "2026-07-24")
+            assert len(df) == 1
+        # 源已 down → 直走 sina (不再调 fail)
+        calls.clear()
         supply._default_fetch_hist("600519", "2023-01-01", "2026-07-24")
-        assert calls == ["fail", "sina", "sina"]
+        assert calls == ["sina"]
 
     def test_all_sources_fail_raises(self, tmp_path):
         from app.pipeline1.data_supply import DataSupplyChain, DataSupplyError

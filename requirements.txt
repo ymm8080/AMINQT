@@ -26,6 +26,10 @@ plotly>=5.20
 pyyaml
 python-dotenv
 
+# ── MCP (Claude Code Sub-Agent) ───────────────────────────────
+mcp>=1.0.0
+httpx>=0.27
+
 # ── Test ──────────────────────────────────────────────────────
 pytest>=7.4
 httpx>=0.25
