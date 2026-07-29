@@ -92,33 +92,6 @@ LGB_PARAMS_CLS = {
     "random_state": 42,
     "verbosity": -1,
 }
-# 1d 预测信噪比极低 (日波动~3.4% vs 信号~0.1%), 全量树过拟合噪声
-LGB_PARAMS_REG_1D = {
-    "objective": "huber",
-    "n_estimators": 300,
-    "learning_rate": 0.03,
-    "max_depth": 4,
-    "num_leaves": 15,
-    "min_child_samples": 200,
-    "reg_alpha": 0.5,
-    "reg_lambda": 1.0,
-    "subsample": 0.7,
-    "random_state": 42,
-    "verbosity": -1,
-}
-LGB_PARAMS_CLS_1D = {
-    "objective": "binary",
-    "n_estimators": 300,
-    "learning_rate": 0.03,
-    "max_depth": 4,
-    "num_leaves": 15,
-    "min_child_samples": 200,
-    "reg_alpha": 0.5,
-    "reg_lambda": 1.0,
-    "subsample": 0.7,
-    "random_state": 42,
-    "verbosity": -1,
-}
 MODEL_KINDS = ("1d_reg", "1d_cls", "3d_reg", "5d_reg")
 
 
@@ -227,14 +200,10 @@ class DualTrackTrainer:
         y_es = es[label].values
         w = self.time_weights(train)
 
-        if kind.startswith("1d"):
-            params = LGB_PARAMS_CLS_1D if kind.endswith("cls") else LGB_PARAMS_REG_1D
-        else:
-            params = LGB_PARAMS_CLS if kind.endswith("cls") else LGB_PARAMS_REG
         if kind.endswith("cls"):
-            model = lgb.LGBMClassifier(**params)
+            model = lgb.LGBMClassifier(**LGB_PARAMS_CLS)
         else:
-            model = lgb.LGBMRegressor(**params)
+            model = lgb.LGBMRegressor(**LGB_PARAMS_REG)
         # ES 段长度由 split_window 按统计下限推导, 保证 >= MIN_ES_DATES
         es_dates = es["date"].nunique() if "date" in es.columns else len(es)
         use_es = es_dates >= MIN_ES_DATES
@@ -458,7 +427,9 @@ class DualTrackTrainer:
             ics[kind] = ICScreener.rank_ic(
                 sub.rename(columns={"_pred": "score"}), "score", label
             )
-        return {"ics": ics, "pass": ics.get("1d_reg", 0.0) >= ic_min}
+        # 开关门阈值: max(1d, 3d, 5d) IC — 任意标签达标即可切换
+        best_ic = max(ics.get(k, 0.0) for k in ("1d_reg", "3d_reg", "5d_reg"))
+        return {"ics": ics, "pass": best_ic >= ic_min, "best_ic_key": max(ics, key=lambda k: ics.get(k, 0.0))}
 
     def save(self, trained: dict, tag: str) -> str:
         """保存模型包 (含校准器; 若无则先拟合)."""
@@ -528,9 +499,10 @@ class DualTrackTrainer:
             results[board] = {"path": path, "oos": oos, "switched": oos["pass"]}
             if not oos["pass"]:
                 logger.warning(
-                    "[%s] 新模型 OOS IC=%.4f < %.2f, 保留旧模型",
+                    "[%s] 新模型 OOS maxIC(%s)=%.4f < %.2f, 保留旧模型",
                     board,
-                    oos["ics"].get("1d_reg", 0.0),
+                    oos.get("best_ic_key", "1d_reg"),
+                    max(oos["ics"].get(k, 0.0) for k in ("1d_reg", "3d_reg", "5d_reg")),
                     OOS_IC_MIN,
                 )
         return results

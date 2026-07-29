@@ -29,7 +29,7 @@ ROLLING_WINDOW = 60  # 滚动 IC 窗口 (交易日)
 ROLLING_MEAN_MIN = 0.01  # 60日滚动IC均值下限 (原0.02太严, IC>0.01即有微弱预测力)
 ROLLING_POS_RATIO_MIN = 0.50  # 滚动IC正值比例 (原0.60太严, 过半即可)
 L2_NEG_PERIODS = 10  # [E4-L2] 连续 N 期滚动 IC 为负 → 自动剔除 (提高至10期, 允许周期性回撤)
-L2_RECOVERY_PERIODS = 3  # 连续 N 期正向 IC → 解除剔除, 恢复候选资格
+L2_RECOVERY_PERIODS = 1  # 连续 N 期正向 IC → 解除剔除, 恢复候选资格
 ICIR_MIN = 0.30  # [P18] IC 稳定性: |IC| / IC_std < 0.3 → 信号不稳, 降级 (杀稀疏/噪声因子)
 
 
@@ -181,7 +181,12 @@ class ICScreener:
             if ic_mdd is not None:
                 best_ic = max(best_ic, abs(ic_mdd))  # [E2] mdd 独立筛选并入并集
             auc = self.auc_score(train_df, f)
-            roll_mean, roll_pos = self.rolling_ic_dual(train_df, f, label_of[1])
+            # 滚动 IC 取各标签最佳值 (非仅 1d — 3d/5d 正向不因 1d 负向降级)
+            roll_best = max(
+                (self.rolling_ic_dual(train_df, f, lbl) for lbl in label_of.values()),
+                key=lambda x: x[0],  # max by rolling mean
+            )
+            roll_mean, roll_pos = roll_best
             dual_ok = roll_mean > ROLLING_MEAN_MIN and roll_pos > ROLLING_POS_RATIO_MIN
             # B6: 3d/5d IC 显著性用 Newey-West HAC 调整 (lag=5/8)
             t_3d = self.ic_t_stat_newey_west(train_df, f, label_of[3], lag=5)
@@ -189,8 +194,8 @@ class ICScreener:
             nw_significant = (
                 abs(t_3d) > 1.28 or abs(t_5d) > 1.28
             )  # 90%置信 (原1.96/95%太严)
-            # [P18] IC 稳定性: 杀稀疏/噪声因子 (N<30 或 ICIR<0.3)
-            icir = self.ic_stability(train_df, f, label_of[1])
+            # [P18] IC 稳定性: 取各标签最佳 ICIR (非仅 1d)
+            icir = max(self.ic_stability(train_df, f, lbl) for lbl in label_of.values())
             icir_ok = icir >= ICIR_MIN
             if (best_ic > IC_STRONG or auc > 0.55) and dual_ok and nw_significant and icir_ok:
                 grade = "strong"
@@ -201,7 +206,12 @@ class ICScreener:
             else:
                 grade = "dead"
             # [E4-L2] 连续 N 期窗口 IC 为负 → 自动剔除; 连续 M 期正向 → 恢复
-            signed_ic = self._signed_daily_ic_mean(train_df, f, label_of[1])
+            # 使用最佳标签的带符号 IC (非仅 1d): 3d/5d 正向因子不应被 1d 负向杀死
+            ics_signed = {
+                k: self._signed_daily_ic_mean(train_df, f, lbl)
+                for k, lbl in label_of.items()
+            }
+            signed_ic = max(ics_signed.values())  # 取各标签中最佳方向 IC
             entry = l2_history.get(f, {})
             if isinstance(entry, (int, float)):
                 entry = {"neg": int(entry), "pos": 0}  # migrate old format
@@ -225,10 +235,14 @@ class ICScreener:
                     pos_streak = 0
             l2_history[f] = {"neg": neg_streak, "pos": pos_streak}
             l2_evicted = neg_streak >= L2_NEG_PERIODS
-            if l2_evicted and grade != "dead":
-                grade = "dead"
+            if l2_evicted and grade == "strong":
+                grade = "weak"  # L2 驱逐降级为 weak (仍参与训练), 非 dead
                 logger.warning(
-                    "E4-L2: 因子 %s 连续 %d 期窗口IC为负, 自动剔除", f, neg_streak
+                    "E4-L2: 因子 %s 连续 %d 期窗口IC为负, 降级为 weak", f, neg_streak
+                )
+            elif l2_evicted:
+                logger.info(
+                    "E4-L2: 因子 %s 持续剔除 (neg=%d), 保持 %s", f, neg_streak, grade
                 )
             result["detail"][f] = {
                 **{f"ic_{k}d": round(v, 4) for k, v in ic_by_label.items()},

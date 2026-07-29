@@ -56,7 +56,7 @@ def is_limit_up(close: float, pre_close: float, limit_pct: float) -> bool:
 class CleaningConfig:
     """清洗阈值 (边界+初始值, 可被调参层覆盖)."""
 
-    min_list_days: int = 250  # 上市 >= 250 交易日 (>= 最长特征窗口)
+    min_list_days: int = 180  # 上市 >= 180 交易日 (适配200天训练面板, 原250)
     min_amount: float = 5e7  # T 日成交额 >= 5000 万
     liquidity_top_n: int = (
         400  # 板块内流动性 Score 前 N (原200太保守, 3年数据可支撑更大池)

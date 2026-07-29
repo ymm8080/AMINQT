@@ -533,7 +533,7 @@ class TestBacktestV38:
 # E4-L2 因子剔除 + Isotonic 校准默认
 # ============================================================
 class TestScreenerL2:
-    def test_l2_evicts_after_six_negative_periods(self, tmp_path):
+    def test_l2_evicts_after_ten_negative_periods(self, tmp_path):
         from app.pipeline1.ic_screener import ICScreener
 
         dates = pd.bdate_range("2024-01-01", periods=70)
@@ -557,13 +557,14 @@ class TestScreenerL2:
         sc = ICScreener(registry_path=str(tmp_path))
         r1 = sc.screen(df, ["factor"], "w1")
         assert r1["detail"]["factor"]["grade"] == "strong"  # 强度(绝对值)仍强
-        # L2_NEG_PERIODS=6: 连续 6 期窗口 IC 为负才剔除
+        # L2_NEG_PERIODS=10: 连续 10 期窗口 IC 为负才剔除
         r = None
-        for w in range(2, 7):
+        for w in range(2, 12):
             r = sc.screen(df, ["factor"], f"w{w}")
-        assert r["detail"]["factor"]["grade"] == "dead"
+        # L2 驱逐: strong → weak (仍参与训练, 非 dead)
+        assert r["detail"]["factor"]["grade"] == "weak"
         assert r["detail"]["factor"]["l2_evicted"] is True
-        assert "factor" not in r["factors"]
+        assert "factor" in r["factors"]
 
 
 class TestIsotonicDefault:

@@ -175,8 +175,41 @@ class DailySelectionPipeline:
         return result
 
     def _assemble_panel(self, trade_date: str) -> pd.DataFrame:
-        """生产路径: 由 supply 装配全市场历史面板 (720 日窗口)."""
-        raise DataSupplyError("生产装配: 需接入全市场历史库 (fetch_history 批量)")
+        """生产路径: 加载历史面板 + 追加当日数据.
+
+        1. 加载缓存的 panel_full_enriched.parquet (历史面板)
+        2. 拉取当日 OHLCV + margin + northbound + lhb
+        3. 追加当日行并合并 alt data
+        4. 返回完整面板 (含当日)
+        """
+        from .panel_builder import enrich_cyq
+
+        # 加载历史面板 (优先 enriched 版本)
+        for path in ("data/panel_full_enriched_v3.parquet",
+                     "data/panel_full_enriched_v2.parquet"):
+            if os.path.exists(path):
+                panel = pd.read_parquet(path)
+                logger.info("加载历史面板: %s (%d stocks, %d rows)", path,
+                            panel["symbol"].nunique(), len(panel))
+                break
+        else:
+            raise DataSupplyError("无可用历史面板缓存 (panel_*.parquet)")
+
+        # 确保历史面板不含当日 (避免重复)
+        panel = panel[panel["date"] < pd.to_datetime(trade_date)]
+
+        # CYQ enrich (增量: 只算新股票)
+        panel = enrich_cyq(panel, cyq_cache="data/cyq_panel.parquet")
+
+        # 追加当日数据
+        panel = self.supply.append_today_to_panel(
+            panel, trade_date=trade_date,
+            sources=["ohlcv", "margin", "northbound", "lhb"],
+        )
+
+        logger.info("面板装配完成: %d stocks, %d rows, %d cols",
+                    panel["symbol"].nunique(), len(panel), len(panel.columns))
+        return panel
 
     def _load_yesterday(self, trade_date: str) -> pd.DataFrame | None:
         """加载上一交易日清单 (Holding Bonus)."""

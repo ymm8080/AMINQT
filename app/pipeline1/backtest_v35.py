@@ -104,7 +104,7 @@ class BacktestEngineV35:
         limit = get_limit_pct(board_of(symbol), pd.Timestamp(date))
         lu = round(bar["pre_close"] * (1 + limit), 2)
         open_px = bar["open"] if self.cfg.exec_session == "AM" else bar["close"]
-        if abs(open_px - lu) < 0.01:
+        if abs(open_px - lu) < max(0.01, lu * 0.001):
             return None  # 一字涨停, 买单放弃
         return open_px * (1 + self._slippage_for(bar))
 
@@ -116,9 +116,19 @@ class BacktestEngineV35:
         limit = get_limit_pct(board_of(symbol), pd.Timestamp(date))
         ld = round(bar["pre_close"] * (1 - limit), 2)
         px = bar["open"] if self.cfg.exec_session == "AM" else bar["close"]
-        if abs(px - ld) < 0.01:
+        if abs(px - ld) < max(0.01, ld * 0.001):
             return None  # 跌停, 卖单顺延
         return px * (1 - self._slippage_for(bar))
+
+    @staticmethod
+    def _px_close(bar: pd.Series) -> float:
+        """估值用收盘价: 优先 close_hfq (总回报含分红), 缺省回退 close.
+
+        close_hfq 消除除权除息日的价格断层, PnL/NAV 基于此计算
+        才能反映实盘总回报 (价格+分红), 避免除权日假亏损误触止损。
+        执行价仍用原始 open/close (实际成交价), 不受此影响。
+        """
+        return float(bar.get("close_hfq", bar["close"]))
 
     @staticmethod
     def _costs(buy_amount: float, sell_amount: float, cfg: BacktestProtocol) -> float:
@@ -166,9 +176,9 @@ class BacktestEngineV35:
                     continue
                 pos["hold_days"] += 1
                 pos["high"] = max(pos["high"], bar["high"])
-                px = bar["close"]
-                pnl = px / pos["cost"] - 1
-                dd_high = px / pos["high"] - 1
+                px = self._px_close(bar)
+                pnl = px / pos["cost_hfq"] - 1
+                dd_high = px / pos["high_hfq"] - 1
                 prob = pos.get("prob_up", 1.0)
                 reason = None
                 if pnl <= cfg.hard_stop:
@@ -220,9 +230,9 @@ class BacktestEngineV35:
                 nav_now = cash + sum(
                     p["shares"]
                     * (
-                        self._bar(date, s)["close"]
+                        self._px_close(self._bar(date, s))
                         if self._bar(date, s) is not None
-                        else p["cost"]
+                        else p["cost_hfq"]
                     )
                     for s, p in positions.items()
                 )
@@ -237,10 +247,14 @@ class BacktestEngineV35:
                         continue
                     amount = shares * px
                     cash -= amount + self._costs(amount, 0, cfg)
+                    buy_bar = self._bar(date, row["symbol"])
+                    cost_hfq = self._px_close(buy_bar) if buy_bar is not None else px
                     positions[row["symbol"]] = {
                         "cost": px,
+                        "cost_hfq": cost_hfq,
                         "shares": shares,
                         "high": px,
+                        "high_hfq": cost_hfq,
                         "hold_days": 0,
                         "industry": row.get("industry", "UNKNOWN"),
                         "prob_up": row.get("prob_up", 1.0),
@@ -261,9 +275,9 @@ class BacktestEngineV35:
             nav = cash + sum(
                 p["shares"]
                 * (
-                    self._bar(date, s)["close"]
+                    self._px_close(self._bar(date, s))
                     if self._bar(date, s) is not None
-                    else p["cost"]
+                    else p["cost_hfq"]
                 )
                 for s, p in positions.items()
             )

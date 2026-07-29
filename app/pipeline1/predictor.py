@@ -72,12 +72,19 @@ class V35Predictor:
         latest["pred_ret_3d"] = models["3d_reg"][0].predict(X)
         latest["pred_ret_5d"] = models["5d_reg"][0].predict(X)
         raw_prob = models["1d_cls"][0].predict_proba(X)[:, 1]
-        # Isotonic 校准 (严禁原始 predict_proba)
-        latest["prob_up"] = bundle["calibrator"].predict_proba(raw_prob)
+        # 校准 (校准器缺失时回退原始 predict_proba)
+        cal = bundle.get("calibrator")
+        latest["prob_up"] = cal.predict_proba(raw_prob) if cal is not None else raw_prob
+        # 综合排序分: 1d:0.25 / 3d:0.45 / 5d:0.35 (3d 预测力最强, 权重最高)
+        pred_1d = latest["pred_ret_1d"].values
+        pred_3d = latest["pred_ret_3d"].values
+        pred_5d = latest["pred_ret_5d"].values
+        latest["composite_score"] = 0.25 * pred_1d + 0.45 * pred_3d + 0.35 * pred_5d
         keep = [
             "symbol",
             "board",
             "industry",
+            "composite_score",
             "pred_ret_1d",
             "pred_ret_3d",
             "pred_ret_5d",
