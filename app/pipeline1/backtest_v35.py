@@ -177,8 +177,8 @@ class BacktestEngineV35:
                 pos["hold_days"] += 1
                 pos["high"] = max(pos["high"], bar["high"])
                 px = self._px_close(bar)
-                pnl = px / pos["cost_hfq"] - 1
-                dd_high = px / pos["high_hfq"] - 1
+                pnl = px / pos["cost_hfq"] - 1 if pos["cost_hfq"] != 0 else 0.0
+                dd_high = px / pos["high_hfq"] - 1 if pos["high_hfq"] != 0 else 0.0
                 prob = pos.get("prob_up", 1.0)
                 reason = None
                 if pnl <= cfg.hard_stop:
