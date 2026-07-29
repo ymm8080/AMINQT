@@ -120,7 +120,10 @@ class DataSupplyChain:
         pro = self._tushare_pro()
         if pro is None:
             raise DataSupplyError("Tushare 不可用, 无法拉取当日全市场截面")
-        raw = _with_timeout(lambda: pro.daily(trade_date=trade_date))
+        try:
+            raw = _with_timeout(lambda: pro.daily(trade_date=trade_date))
+        except Exception as exc:
+            raise DataSupplyError(f"Tushare daily 拉取失败 {trade_date}: {exc}") from exc
         if raw is None or len(raw) == 0:
             raise DataSupplyError(f"Tushare daily 拉取失败: {trade_date}")
         df = pd.DataFrame({
@@ -372,11 +375,14 @@ class DataSupplyChain:
             raise DataSupplyError("Tushare 不可用")
         code6 = str(symbol).split(".")[0]
         ts_code = f"{code6}.{'SZ' if code6.startswith(('0','3','1')) else 'SH'}"
-        raw = _ak_call(
-            lambda: pro.daily(ts_code=ts_code, start_date=start.replace("-", ""),
-                              end_date=end.replace("-", "")),
-            retries=3, backoff=1.0,
-        )
+        try:
+            raw = _ak_call(
+                lambda: pro.daily(ts_code=ts_code, start_date=start.replace("-", ""),
+                                  end_date=end.replace("-", "")),
+                retries=3, backoff=1.0,
+            )
+        except Exception as exc:
+            raise DataSupplyError(f"Tushare daily 历史拉取失败 {symbol}: {exc}") from exc
         if raw is None or len(raw) == 0:
             raise DataSupplyError(f"Tushare 无数据: {symbol}")
         rename = {
@@ -696,25 +702,16 @@ class DataSupplyChain:
         return os.path.join(d, f"{key}.parquet")
 
     def _tushare_pro(self):
-        """懒加载 Tushare pro_api; 优先级: TUSHARE_TOKEN 环境变量 > .tushare_token 文件."""
+        """懒加载 Tushare pro_api; 仅从环境变量 TUSHARE_TOKEN 读取 (禁止文件存储凭据)."""
         token = os.environ.get("TUSHARE_TOKEN")
         if not token:
-            token_file = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-                ".tushare_token",
-            )
-            if os.path.exists(token_file):
-                with open(token_file) as fh:
-                    for line in fh:
-                        line = line.strip()
-                        if line.startswith("TUSHARE_TOKEN="):
-                            token = line.split("=", 1)[1].strip()
-                            if token:
-                                break
-        if not token:
             return None
-        import tushare as ts
-        return ts.pro_api(token)
+        try:
+            import tushare as ts
+            return ts.pro_api(token)
+        except Exception as exc:
+            logger.warning("Tushare pro_api 初始化失败: %s", exc)
+            return None
 
     # ── 1. 北向资金 ──
     def fetch_northbound(
