@@ -225,8 +225,6 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
             total_new_cols = 0
             for fam in FAMILIES:
                 new = gen.generate_family(df, fam, raw_cols=raw_cols, dtype="float32")
-                for c in new.columns:
-                    new[c] = new[c].replace([np.inf, -np.inf], np.nan).astype("float32")
                 fam_path = os.path.join(tmp_dir, f"{fam}.parquet")
                 new.to_parquet(fam_path, index=False)
                 n_cols = len(new.columns)
