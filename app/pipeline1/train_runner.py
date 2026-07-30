@@ -119,7 +119,9 @@ def select_features(
                 df = df.join(new_feats[keep_cols])
                 logger.info(
                     "[%s] BruteForce 后注入 %d 个选中特征 (缺失 %d)",
-                    board, len(keep_cols), len(missing),
+                    board,
+                    len(keep_cols),
+                    len(missing),
                 )
 
         df_col_set = set(df.columns)
@@ -127,12 +129,17 @@ def select_features(
         if picked:
             logger.info(
                 "[%s] FeatureSelector(%s) 精选 %d/%d 因子 (pool=%d)",
-                board, pipeline, len(picked), len(candidates), len(selected),
+                board,
+                pipeline,
+                len(picked),
+                len(candidates),
+                len(selected),
             )
             return picked, df
         logger.warning(
             "[%s] FeatureSelector 全部淘汰, 回退全量 %d 因子",
-            board, len(candidates),
+            board,
+            len(candidates),
         )
     except Exception as exc:  # 精选失败不阻断训练 (降级全量)
         logger.error("[%s] FeatureSelector 失败 (%s), 回退全量因子", board, exc)
