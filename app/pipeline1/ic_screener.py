@@ -24,22 +24,20 @@ from app.utils.daily_rank_ic import daily_rank_ic_series, mean_rank_ic
 logger = logging.getLogger(__name__)
 
 # ── P19 两阶门禁: Factor Gate (此处) vs Model Gate (metrics.py) ──
-# Factor Gate: 单因子初筛 — 门槛宽松, 靠模型组合提纯 (ICIR≥0.05 即可).
-#   单因子天生噪声大, ICIR 0.10-0.25 是正常范围, 不能套用模型分数的 0.30 门槛.
+# Factor Gate: 单因子初筛 — 门槛收紧, |IC|≥0.015 & ICIR≥0.10.
+# ICIR 0.10-0.25 is still normal range for single factors.
 # Model Gate (metrics.ignition_gate): 组合模型分数 — 门槛严格 (ICIR≥0.30),
-#   因为模型分数的任务是把多个 noisy 因子组合成一个稳定信号.
-# 参考: FEATURE ADOPTION ANALYSIS 20260729, 全量 2.7M 行截面 IC 实测.
 IC_STRONG = 0.02  # 有效因子 |IC| 下限 (因子级: ≥0.02 即有效; 模型级: ≥0.03)
-IC_WEAK = 0.01    # 弱因子 |IC| 下限 (0.01-0.02: 正交信息可被模型组合利用)
+IC_WEAK = 0.015   # 弱因子 |IC| 下限 (≥0.015 方可通过因子门禁)
 ROLLING_WINDOW = 60  # 滚动 IC 窗口 (交易日)
-ROLLING_MEAN_MIN = 0.01  # 60日滚动IC均值下限
+ROLLING_MEAN_MIN = 0.015  # 60日滚动IC均值下限 (与 IC_WEAK 对齐)
 ROLLING_POS_RATIO_MIN = 0.50  # 滚动IC正值比例 (过半即可, 原0.60太严)
 L2_NEG_PERIODS = (
     10  # [E4-L2] 连续 N 期滚动 IC 为负 → 自动剔除 (提高至10期, 允许周期性回撤)
 )
 L2_RECOVERY_PERIODS = 1  # 连续 N 期正向 IC → 解除剔除, 恢复候选资格
 ICIR_MIN = (
-    0.05  # [P19 两阶门禁] 因子级 ICIR 下限: |IC|/IC_std ≥ 0.05 (原0.30为模型级门槛)
+    0.10  # [P19 两阶门禁] 因子级 ICIR 下限: |IC|/IC_std ≥ 0.10 (与 ADOPTION ANALYSIS WEAK 对齐)
 )
 
 
@@ -151,7 +149,8 @@ class ICScreener:
 
     # ---------------- 主筛选 ----------------
     def screen(
-        self, train_df: pd.DataFrame, feature_cols: list[str], window_id: str
+        self, train_df: pd.DataFrame, feature_cols: list[str], window_id: str,
+        registry=None,  # FeatureRegistry | None
     ) -> dict:
         """窗口内重算 IC 并筛因子.
 
@@ -159,9 +158,13 @@ class ICScreener:
         [E2] label_mdd_3d 独立筛选, 并入并集;
         [E4-L2] 连续 3 期滚动 IC 为负 → 强制 grade='dead'.
 
+        Args:
+            registry: FeatureRegistry 实例 (P19 auto-adoption).
+                      None=向后兼容, 不更新注册中心.
+
         Returns:
             {window_id, factors: [...], detail: {factor: {ic_1d, ..., grade}}}
-            grade: 'strong' 保留 / 'weak' 观察 / 'dead' 剔除
+            grade: 'strong' 保留 / 'weak' 观察 / 'dead' 剔除 / 'trial' 考察中
         """
         # [B9] PM 执行口径验收标签优先; [E5] 净收益标签优先 (分层滑点口径)
         label_of = {}
@@ -220,6 +223,26 @@ class ICScreener:
                 grade = "weak"
             else:
                 grade = "dead"
+
+            # ── P19 Trial grace period: auto-adopted features get 3 windows ──
+            if registry is not None and f in registry.get_all():
+                reg_meta = registry.get_meta(f)
+                if reg_meta and reg_meta.get("grade") == "trial" and grade == "dead":
+                    trial_windows = reg_meta.get("trial_windows", 0) + 1
+                    registry.get_all()[f]["trial_windows"] = trial_windows
+                    if trial_windows < 3:
+                        grade = "trial"  # Keep as trial, not dead yet
+                        logger.info(
+                            "P19 trial: %s IC=%.4f below threshold, "
+                            "grace window %d/3",
+                            f, best_ic, trial_windows,
+                        )
+                    else:
+                        logger.info(
+                            "P19 trial: %s failed after %d windows, marking dead",
+                            f, trial_windows,
+                        )
+
             # [E4-L2] 连续 N 期窗口 IC 为负 → 自动剔除; 连续 M 期正向 → 恢复
             # 使用最佳标签的带符号 IC (非仅 1d): 3d/5d 正向因子不应被 1d 负向杀死
             ics_signed = {
@@ -281,6 +304,15 @@ class ICScreener:
                 result["factors"].append(f)
         self._persist(window_id, result)
         self._save_l2_history(l2_history)
+
+        # ── P19: Sync results to FeatureRegistry ──
+        if registry is not None:
+            try:
+                registry.update_from_screen(result, window_id)
+                registry.save()
+            except Exception as exc:
+                logger.warning("ICScreener: registry update failed: %s", exc)
+
         return result
 
     # ---------------- E4-L2 跨窗口负 IC 追踪 ----------------

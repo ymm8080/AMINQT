@@ -2,7 +2,7 @@
 """Pipeline-1 训练编排 (周频重训主链路)
 =====================================================
 面板 → 训练端清洗 (步骤0→3+5) → 特征 (FeatureEngineV35) →
-标签 (路径标签 → 主标签 → 停牌/近端掩码) → IC 筛选 (ICScreener) →
+标签 (路径标签 → 主标签 → 停牌/近端掩码) → FeatureSelector (Layer2 精选) →
 双轨训练 (DualTrackTrainer.weekly_retrain) → 模型包落盘.
 
 重训频率: **每周一次** (用户 2026-07-22 裁决: 周频, 非月频;
@@ -12,13 +12,14 @@
 from __future__ import annotations
 
 import logging
+import os
 
 import pandas as pd
 
 from .cleaning_pipeline import CleaningPipeline
 from .dual_track_trainer import DualTrackTrainer
 from .feature_engine_v35 import FeatureEngineV35
-from .ic_screener import ICScreener
+from .feature_selector import BruteForceGenerator, FeatureSelector
 from .label_engine import LabelEngine
 
 logger = logging.getLogger(__name__)
@@ -31,13 +32,15 @@ def prepare_board_frame(
     features: FeatureEngineV35,
     float_shares_map: dict | None = None,
     cross_sectional_rank: bool = False,
+    registry=None,  # FeatureRegistry | None
 ) -> pd.DataFrame:
     """单板块: 特征 → 路径标签 → 主标签 → 停牌/近端掩码 (训练准备标准序列).
 
     cross_sectional_rank: 仅双创开启截面排名 (主板大票定价效率高, 截面因子负贡献).
     """
     df = features.build(
-        board_df, float_shares_map, cross_sectional_rank=cross_sectional_rank
+        board_df, float_shares_map, cross_sectional_rank=cross_sectional_rank,
+        registry=registry,
     )
     df = LabelEngine.build_path_labels(df)  # [E2] label_mdd_* + label_pain
     df = LabelEngine.build_labels(df)  # 主标签 label_*d + label_pm_*d + *_net
@@ -50,9 +53,18 @@ def select_features(
     df: pd.DataFrame,
     board: str,
     tag: str,
-    screener: ICScreener | None = None,
-) -> list[str]:
-    """IC 筛选当期因子; 全部被淘汰时回退全量特征列 (告警, 不中断训练)."""
+    selector: FeatureSelector | None = None,
+    registry=None,  # FeatureRegistry | None
+) -> tuple[list[str], pd.DataFrame]:
+    """Layer2 特征精选 (FeatureSelector) → 训练特征列表 + 增强面板.
+
+    selector=None → 全量 FeatureEngine 特征 (测试/回退兼容).
+    selector 存在 → bruteforce_dedup (MAIN) 或 gate_d (DUAL) 精选.
+
+    Returns:
+        (selected_feature_names, augmented_df)
+        augmented_df 可能包含 bruteforce_dedup 注入的 BruteForce 特征列.
+    """
     candidates = FeatureEngineV35.feature_columns(df)
 
     # ---- NaN-rate 预筛 + 类型过滤 (工程强制, 铁律 #1) ----
@@ -79,20 +91,45 @@ def select_features(
     candidates = valid_candidates
     # ----------------------------------------------------------------
 
-    if screener is None:
-        return candidates
+    if selector is None:
+        logger.info("[%s] 无 FeatureSelector, 使用全量 %d 特征", board, len(candidates))
+        return candidates, df
+
+    board_cfg = selector.config.get(board, selector.config.get("fallback", {}))
+    pipeline = board_cfg.get("pipeline", "ic_screener")
+
+    # ── bruteforce_dedup pipeline: pre-generate BruteForce features ──
+    # FeatureSelector._run_bruteforce_dedup generates them internally for
+    # correlation computation, but we also need them in the training df.
+    if pipeline == "bruteforce_dedup":
+        gen = BruteForceGenerator()
+        raw_cols = gen._eligible(df)
+        new_feats = gen.generate(df, raw_cols=raw_cols)
+        n_before = len(df.columns)
+        df = df.join(new_feats)
+        logger.info(
+            "[%s] BruteForce 特征注入: %d → %d 列",
+            board, n_before, len(df.columns),
+        )
+
     try:
-        result = screener.screen(df, candidates, window_id=f"{board}_{tag}")
-        picked = [f for f in result["factors"] if f in candidates]
+        selected = selector.select(df, board)
+        # Intersect with available columns and valid candidates
+        df_col_set = set(df.columns)
+        picked = [f for f in selected if f in df_col_set]
         if picked:
             logger.info(
-                "[%s] IC 筛选保留 %d/%d 因子", board, len(picked), len(candidates)
+                "[%s] FeatureSelector(%s) 精选 %d/%d 因子 (pool=%d)",
+                board, pipeline, len(picked), len(candidates), len(selected),
             )
-            return picked
-        logger.warning("[%s] IC 筛选全部淘汰, 回退全量 %d 因子", board, len(candidates))
-    except Exception as exc:  # 筛选失败不阻断训练 (降级全量)
-        logger.error("[%s] IC 筛选失败 (%s), 回退全量因子", board, exc)
-    return candidates
+            return picked, df
+        logger.warning(
+            "[%s] FeatureSelector 全部淘汰, 回退全量 %d 因子",
+            board, len(candidates),
+        )
+    except Exception as exc:  # 精选失败不阻断训练 (降级全量)
+        logger.error("[%s] FeatureSelector 失败 (%s), 回退全量因子", board, exc)
+    return candidates, df
 
 
 def run_training(
@@ -102,20 +139,62 @@ def run_training(
     registry_path: str = "data/factor_registry",
     float_shares_map: dict | None = None,
     use_ic_screen: bool = True,
+    use_registry: bool = True,
+    enable_adoption: bool = False,
+    feature_list_path: str | None = None,
+    selector_config: dict | None = None,
 ) -> dict:
     """周频重训主入口: 面板 → 双板块模型包.
 
     Args:
         panel: enrich 后的全市场面板 (panel_builder.assemble_panel 输出)
         tag: 模型包标签 (如 '2026W30'), 落盘 {board}_{tag}.pkl
-        use_ic_screen: False 跳过 IC 筛选 (全量特征)
+        use_ic_screen: True → FeatureSelector (Layer2 精选);
+                       False → 全量特征 (测试/回退)
+        use_registry: True → 启用 FeatureRegistry 驱动的 dim 门控 + 特征裁剪
+        enable_adoption: True → 启用自动采纳新面板列 (需 use_registry=True)
+        feature_list_path: [已废弃] 忽略; FeatureSelector 直接运行, 不再从文件加载
+        selector_config: FeatureSelector 配置覆盖 (None → 用默认 config)
 
     Returns:
         {board: {'path', 'oos': {...}, 'switched': bool, 'n_features': int}}
     """
+    from .feature_registry import FeatureRegistry
+
     cleaner = CleaningPipeline()
     features = FeatureEngineV35()
-    screener = ICScreener(registry_path=registry_path) if use_ic_screen else None
+
+    # ── FeatureSelector (Layer2) — 替代 ICScreener ──
+    selector = None
+    if use_ic_screen:
+        selector = FeatureSelector(
+            config=selector_config,
+            registry_dir=registry_path,
+        )
+        logger.info(
+            "FeatureSelector 已初始化: MAIN=%s DUAL=%s",
+            selector.config.get("main", {}).get("pipeline", "?"),
+            selector.config.get("dual", {}).get("pipeline", "?"),
+        )
+
+    # ── P19 Registry setup ──
+    registry = None
+    if use_registry:
+        reg_file = os.path.join(registry_path, "feature_registry.json")
+        registry = FeatureRegistry(path=reg_file)
+        if enable_adoption:
+            registry.enable_adoption()
+        # Auto-seed if empty
+        if not registry.features:
+            logger.info("Registry empty, seeding from panel sample...")
+            try:
+                sample = panel.groupby("symbol").apply(
+                    lambda g: g.head(min(50, len(g)))
+                ).reset_index(drop=True)
+                registry._seed(sample)
+            except Exception as exc:
+                logger.warning("Registry seed failed (%s), continuing without registry", exc)
+                registry = None
 
     main_df, dual_df = cleaner.run_train(panel)
     panels, cols_by_board = {}, {}
@@ -125,10 +204,12 @@ def run_training(
             continue
         use_xrank = board != "main"  # 仅双创加截面排名 (主板大票定价有效, 截面负贡献)
         df = prepare_board_frame(
-            board_df, features, float_shares_map, cross_sectional_rank=use_xrank
+            board_df, features, float_shares_map, cross_sectional_rank=use_xrank,
+            registry=registry,
         )
-        panels[board] = df
-        cols_by_board[board] = select_features(df, board, tag, screener)
+        cols, augmented_df = select_features(df, board, tag, selector, registry=registry)
+        cols_by_board[board] = cols
+        panels[board] = augmented_df
 
     if not panels:
         raise RuntimeError("训练面板为空: 主板/双创清洗后均无样本")
