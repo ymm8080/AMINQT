@@ -551,7 +551,8 @@ class FeatureEngineV35:
 
         df = _apply_per_stock(df, _per_stock_zscore)
         if zscore_col in df.columns:
-            self._safe_register(registry, 
+            self._safe_register(
+                registry,
                 zscore_col,
                 {
                     "dim_group": "_auto_adopted",
@@ -572,7 +573,8 @@ class FeatureEngineV35:
         chg5 = grp.diff(5)
         if chg5.notna().sum() > 100:
             df[chg5_col] = chg5
-            self._safe_register(registry, 
+            self._safe_register(
+                registry,
                 chg5_col,
                 {
                     "dim_group": "_auto_adopted",
@@ -592,7 +594,8 @@ class FeatureEngineV35:
         chg20 = grp.diff(20)
         if chg20.notna().sum() > 100:
             df[chg20_col] = chg20
-            self._safe_register(registry, 
+            self._safe_register(
+                registry,
                 chg20_col,
                 {
                     "dim_group": "_auto_adopted",
@@ -613,7 +616,8 @@ class FeatureEngineV35:
             df[rank_col] = df.groupby(["date", "industry"], observed=True)[col].rank(
                 pct=True
             )
-            self._safe_register(registry, 
+            self._safe_register(
+                registry,
                 rank_col,
                 {
                     "dim_group": "_auto_adopted",
@@ -640,7 +644,8 @@ class FeatureEngineV35:
 
         df = _apply_per_stock(df, _per_stock_ma5_cross)
         if ma5_cross_col in df.columns:
-            self._safe_register(registry, 
+            self._safe_register(
+                registry,
                 ma5_cross_col,
                 {
                     "dim_group": "_auto_adopted",
@@ -670,7 +675,8 @@ class FeatureEngineV35:
 
             df = _apply_per_stock(df, _per_stock_vol_adj)
             if vol_adj_col in df.columns:
-                self._safe_register(registry, 
+                self._safe_register(
+                    registry,
                     vol_adj_col,
                     {
                         "dim_group": "_auto_adopted",
