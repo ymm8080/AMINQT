@@ -1,0 +1,43 @@
+{
+  "board": "dual",
+  "pipeline": "gate_d",
+  "created": "2026-07-30T11:58:34.418755",
+  "pool_size": 265,
+  "selected_count": 30,
+  "params": {
+    "min_features": 30,
+    "saturation_pct": 0.95
+  },
+  "features": [
+    "market_turnover",
+    "market_turnover_ratio_5d",
+    "market_turnover_ratio_20d",
+    "sw_ret_20d",
+    "sw_momentum_accel",
+    "ind_holder_trend_20d",
+    "sw_vol_20d",
+    "sw_ret_5d",
+    "sector_return",
+    "ATR_pct",
+    "sw_ret_1d_x",
+    "sw_turnover_anomaly",
+    "sector_return_5d",
+    "free_float_turnover_rate_xrank",
+    "ind_margin_chg_5d",
+    "ind_margin_accel",
+    "amihud_illiq",
+    "amount_xrank",
+    "month",
+    "market_limit_up",
+    "sw_relative_strength",
+    "sw_rotation_position",
+    "gap_strength_20d",
+    "gap_vs_ma5",
+    "turnover_f_chg_5d",
+    "amihud_illiquidity",
+    "close_vs_low",
+    "ROC_3d",
+    "gap_strength_5d",
+    "overnight_ret"
+  ]
+}

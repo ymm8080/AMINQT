@@ -149,7 +149,7 @@ def rank_ic(df, factor, label, min_stocks=30):
     ics = np.array(ics)
     if len(ics) == 0:
         return 0.0, 0.0, 0
-    return float(np.mean(np.abs(ics))), float(np.mean(ics > 0)), len(ics)
+    return float(np.mean(ics)), float(np.mean(ics > 0)), len(ics)
 
 
 dims = {
