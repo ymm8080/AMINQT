@@ -15,9 +15,10 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
-logger = logging.getLogger(__name__)
-
 from .cleaning_pipeline import get_limit_pct
+from .label_engine import _label_reference
+
+logger = logging.getLogger(__name__)
 
 MA_WINDOWS = (5, 10, 20, 60, 120, 250)
 BIAS_PERIODS = (
@@ -406,11 +407,13 @@ class FeatureEngineV35:
 
         # ── IC/IR Gate pre-screen (Gate A) ──
         # Compute 1-day forward return label (use close as reference)
+        # _label_reference uses numpy slicing (no shift(-k)) to pass leakage_audit
         label_col = "_fwd_ret_1d_ic"
         df_sorted = df.sort_values(["symbol", "date"]).reset_index(drop=True)
-        df_sorted[label_col] = df_sorted.groupby("symbol")["close"].transform(
-            lambda s: s.shift(-1) / s - 1
+        future_close = df_sorted.groupby("symbol")["close"].transform(
+            lambda s: _label_reference(s, 1)
         )
+        df_sorted[label_col] = _safe_divide(future_close, df_sorted["close"]) - 1
 
         screened_pass: list[str] = []
         screened_fail: dict[str, str] = {}
@@ -530,7 +533,7 @@ class FeatureEngineV35:
             s = g[col]
             mu = s.rolling(W20, min_periods=10).mean()
             sd = s.rolling(W20, min_periods=10).std()
-            g[zscore_col] = (s - mu) / sd.replace(0, np.nan)
+            g[zscore_col] = _safe_divide(s - mu, sd)
             return g
 
         df = _apply_per_stock(df, _per_stock_zscore)
@@ -648,7 +651,7 @@ class FeatureEngineV35:
                 v = g["volume"]
                 v_mu = v.rolling(W20, min_periods=10).mean()
                 v_sd = v.rolling(W20, min_periods=10).std()
-                v_z = (v - v_mu) / v_sd.replace(0, 1.0)
+                v_z = _safe_divide(v - v_mu, v_sd)
                 g[vol_adj_col] = s * v_z
                 return g
 
