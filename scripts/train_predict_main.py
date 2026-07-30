@@ -11,7 +11,14 @@ Usage:
   python scripts/train_predict_main.py --predict-only
   python scripts/train_predict_main.py --max-stocks 100  # Test subset
 """
-import argparse, glob, json, os, sys, time, logging
+
+import argparse
+import glob
+import json
+import os
+import sys
+import time
+import logging
 from datetime import datetime
 
 import numpy as np
@@ -22,7 +29,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.pipeline1.dual_track_trainer import DualTrackTrainer
 from app.pipeline1.predict_runner import find_bundles, run_prediction
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("train_predict_main")
 
 REGISTRY_DIR = "data/factor_registry"
@@ -37,7 +46,9 @@ def find_latest_selection(board):
         reverse=True,
     )
     if not sel_files:
-        raise FileNotFoundError(f"No selected_{board}_*.json. Run select_features.py first.")
+        raise FileNotFoundError(
+            f"No selected_{board}_*.json. Run select_features.py first."
+        )
     return sel_files[0]
 
 
@@ -47,29 +58,37 @@ def load_features_for_training(board, features_path, selected_features, max_stoc
     Avoids loading all 3,300 cols for MAIN — only reads ~1,000 selected + overhead.
     """
     import pyarrow.parquet as pq
+
     schema = pq.read_schema(features_path)
     all_names = [f.name for f in schema]
 
     # Always load: id cols, labels, selected features
     label_cols = [c for c in all_names if c.startswith("label_")]
     id_cols = ["symbol", "date", "board", "industry"]
-    read_cols = [c for c in id_cols + label_cols + list(selected_features) if c in all_names]
+    read_cols = [
+        c for c in id_cols + label_cols + list(selected_features) if c in all_names
+    ]
     missing = set(selected_features) - set(read_cols)
     if missing:
-        logger.warning(f"  {len(missing)} selected features missing from parquet, will be skipped")
+        logger.warning(
+            f"  {len(missing)} selected features missing from parquet, will be skipped"
+        )
 
     logger.info(
         f"  Loading {len(read_cols)} cols from {os.path.basename(features_path)} "
-        f"({os.path.getsize(features_path)/1024/1024:.0f}MB)"
+        f"({os.path.getsize(features_path) / 1024 / 1024:.0f}MB)"
     )
     df = pd.read_parquet(features_path, columns=read_cols)
 
     if max_stocks and max_stocks > 0 and df["symbol"].nunique() > max_stocks:
-        stocks = sorted(np.random.choice(
-            df["symbol"].unique(), size=max_stocks, replace=False))
+        stocks = sorted(
+            np.random.choice(df["symbol"].unique(), size=max_stocks, replace=False)
+        )
         df = df[df["symbol"].isin(stocks)]
 
-    logger.info(f"  Training data: {len(df):,} rows, {df['symbol'].nunique()} stocks, {len(read_cols)} cols")
+    logger.info(
+        f"  Training data: {len(df):,} rows, {df['symbol'].nunique()} stocks, {len(read_cols)} cols"
+    )
     return df
 
 
@@ -80,7 +99,9 @@ def train_main(features_path, sel_path, tag, max_stocks=0):
     feature_cols = sel["features"]
     logger.info(
         "MAIN: %d features (%s), pool=%d",
-        len(feature_cols), sel.get("pipeline", "?"), sel.get("pool_size", 0),
+        len(feature_cols),
+        sel.get("pipeline", "?"),
+        sel.get("pool_size", 0),
     )
 
     df = load_features_for_training("main", features_path, feature_cols, max_stocks)
@@ -96,8 +117,12 @@ def train_main(features_path, sel_path, tag, max_stocks=0):
         oos_1d = res["oos"]["ics"].get("1d_reg", 0)
         logger.info(
             "[%s] model=%s OOS_IC(1d)=%.4f switched=%s n_feats=%d time=%.0fs",
-            b, os.path.basename(res["path"]), oos_1d,
-            res["switched"], len(feature_cols), elapsed,
+            b,
+            os.path.basename(res["path"]),
+            oos_1d,
+            res["switched"],
+            len(feature_cols),
+            elapsed,
         )
     return results
 
@@ -115,19 +140,27 @@ def predict_main(trade_date, max_stocks=0):
     main_panel = panel[~panel["board"].isin(["GEM", "STAR"])]
 
     if max_stocks and max_stocks > 0:
-        stocks = sorted(np.random.choice(
-            main_panel["symbol"].unique(), size=max_stocks, replace=False))
+        stocks = sorted(
+            np.random.choice(
+                main_panel["symbol"].unique(), size=max_stocks, replace=False
+            )
+        )
         main_panel = main_panel[main_panel["symbol"].isin(stocks)]
 
     logger.info(
         "Prediction panel: %d stocks, %d rows",
-        main_panel["symbol"].nunique(), len(main_panel),
+        main_panel["symbol"].nunique(),
+        len(main_panel),
     )
 
     # Pass only the "main" bundle — prediction pipeline handles main board
     result = run_prediction(
-        main_panel, trade_date, bundles,
-        list_dir="data/lists", market_state="range", supply=None,
+        main_panel,
+        trade_date,
+        bundles,
+        list_dir="data/lists",
+        market_state="range",
+        supply=None,
     )
     return result.get("list")
 
@@ -145,21 +178,28 @@ def main():
     if tag is None:
         iso = datetime.now().isocalendar()
         tag = f"{iso[0]}W{iso[1]:02d}"
-    logger.info("MAIN pipeline: tag=%s trade_date=%s max_stocks=%s", tag, trade_date, args.max_stocks or "all")
+    logger.info(
+        "MAIN pipeline: tag=%s trade_date=%s max_stocks=%s",
+        tag,
+        trade_date,
+        args.max_stocks or "all",
+    )
 
     do_all = not (args.train_only or args.predict_only)
 
     if args.train_only or do_all:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  MAIN Train (tag={tag})")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         feat_files = sorted(
             glob.glob(os.path.join(REGISTRY_DIR, "features_main_*.parquet")),
             reverse=True,
         )
         if not feat_files:
-            print("ERROR: No feature parquet. Run: python scripts/build_features.py --board main")
+            print(
+                "ERROR: No feature parquet. Run: python scripts/build_features.py --board main"
+            )
             sys.exit(1)
 
         sel_path = find_latest_selection("main")
@@ -168,9 +208,9 @@ def main():
         train_main(feat_files[0], sel_path, tag, args.max_stocks)
 
     if args.predict_only or do_all:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  MAIN Predict ({trade_date})")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         lst = predict_main(trade_date, args.max_stocks)
         if lst is not None and len(lst):
             cols = ["symbol", "board", "pred_ret_1d", "prob_up", "score"]
