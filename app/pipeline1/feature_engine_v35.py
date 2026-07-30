@@ -13,10 +13,8 @@ import logging
 
 import numpy as np
 import pandas as pd
-from scipy.stats import spearmanr
 
 from .cleaning_pipeline import get_limit_pct
-from .label_engine import compute_forward_return_label
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +217,15 @@ class FeatureEngineV35:
             df = self.dim31_announcement(df)  # 公告事件特征 (距上次公告天数/公告频率)
 
         # ── Phase 2: Auto-adopt new panel columns ──
-        if registry is not None and registry.is_adoption_enabled():
+        # IRON RULE #1: Auto-adoption with IC pre-screen uses forward return
+        # labels (shift(-1)) which is a FUTURE FUNCTION. This is forbidden
+        # inside feature computation. Auto-adoption only runs during training
+        # (inference_cols=None); during inference we skip it entirely.
+        if (
+            registry is not None
+            and registry.is_adoption_enabled()
+            and inference_cols is None  # training only, never inference
+        ):
             df = self._auto_adopt_new_columns(df, registry)
 
         if _ok_raw("_industry_neutralize"):
@@ -273,50 +279,6 @@ class FeatureEngineV35:
         if registry is None:
             return True
         return registry.has_dim_group(dim_name)
-
-    # ---------------- IC/IR Gate (Gate A) — quick pre-screen ----------------
-    @staticmethod
-    def _quick_ic_check(
-        df: pd.DataFrame, col: str, label_col: str
-    ) -> tuple[float, float, int]:
-        """Compute |mean IC|, ICIR, and number of valid trading days.
-
-        Groups by date, computes Spearman Rank IC against label_col per day,
-        then aggregates across days.
-
-        Returns
-        -------
-        abs_mean_ic : float
-            Absolute mean of daily rank IC values.
-        icir : float
-            |IC_mean| / IC_std (using sample std, ddof=1).
-        n_days : int
-            Number of trading days with >= 10 valid observations.
-        """
-        daily_ics: list[float] = []
-        for date_val, grp in df.groupby("date"):
-            valid = grp[[col, label_col]].dropna()
-            if len(valid) < 10:
-                continue
-            try:
-                ic, _ = spearmanr(valid[col], valid[label_col])
-            except Exception:
-                continue
-            if np.isnan(ic):
-                continue
-            daily_ics.append(ic)
-
-        n_days = len(daily_ics)
-        if n_days < 20:
-            return 0.0, 0.0, n_days
-
-        ic_arr = np.array(daily_ics)
-        ic_mean = ic_arr.mean()
-        ic_std = ic_arr.std(ddof=1)
-        if ic_std == 0.0:
-            return 0.0, 0.0, n_days
-
-        return abs(ic_mean), abs(ic_mean) / ic_std, n_days
 
     # ---------------- Auto-Adoption (Phase 2) ----------------
     def _auto_adopt_new_columns(self, df: pd.DataFrame, registry) -> pd.DataFrame:
@@ -409,61 +371,18 @@ class FeatureEngineV35:
             )
 
         # ── IC/IR Gate pre-screen (Gate A) ──
-        # Forward return label computed via label_engine (LABEL construction ONLY,
-        # not a feature). Dropped before returning df. Delegated to label_engine
-        # to keep feature_engine free of future-reference calls.
-        label_col = "_fwd_ret_1d_ic"
-        df_sorted = df.sort_values(["symbol", "date"]).reset_index(drop=True)
-        df_sorted[label_col] = compute_forward_return_label(df_sorted, horizon=1)
-
-        screened_pass: list[str] = []
-        screened_fail: dict[str, str] = {}
-        for col in adoptable:
-            # Check data overlap with the forward return label
-            overlap = df_sorted[[col, label_col]].dropna()
-            if len(overlap) == 0:
-                screened_fail[col] = "no overlap with forward return label"
-                continue
-            overlap_nan = 1.0 - overlap[col].notna().mean()
-            if overlap_nan > 0.5:
-                screened_fail[col] = (
-                    f"insufficient overlap with label (source NaN={overlap_nan:.1%})"
-                )
-                continue
-
-            abs_ic, icir_val, n_days = self._quick_ic_check(
-                df_sorted,
-                col,
-                label_col,
-            )
-            if n_days < 20:
-                screened_fail[col] = f"too few trading days ({n_days})"
-                continue
-            if abs_ic < self._ADOPTION_IC_MIN or icir_val < self._ADOPTION_ICIR_MIN:
-                screened_fail[col] = (
-                    f"IC/IR too weak (|IC|={abs_ic:.4f}, ICIR={icir_val:.4f})"
-                )
-                continue
-            screened_pass.append(col)
-
-        # Clean up temporary label column
-        df_sorted.drop(columns=[label_col], inplace=True)
-        df = df_sorted
-
-        # Log IC gate summary
+        # IRON RULE #1: prescreen_columns() calls compute_forward_return_label()
+        # which uses _label_reference (shift(-1)) — a FUTURE FUNCTION.
+        # This is forbidden inside feature computation (FeatureEngineV35.build).
+        # IC/IR evaluation must happen in the training pipeline (LabelEngine /
+        # FeatureSelector) where labels are legitimately available, NOT here.
+        # All adoptable columns are accepted without IC pre-screen; the
+        # FeatureSelector (Layer2) handles IC-based filtering during training.
         logger.info(
-            "Auto-Adopt IC Gate: %d/%d pass (|IC|>=%.2f & ICIR>=%.2f), %d fail",
-            len(screened_pass),
+            "Auto-Adopt IC Gate: SKIPPED (future function prohibition) — "
+            "all %d adoptable columns accepted",
             len(adoptable),
-            self._ADOPTION_IC_MIN,
-            self._ADOPTION_ICIR_MIN,
-            len(screened_fail),
         )
-        if screened_fail:
-            for col, reason in sorted(screened_fail.items()):
-                logger.info("Auto-Adopt IC Gate REJECT: %s → %s", col, reason)
-
-        adoptable = screened_pass
 
         # ── Generate features per adopted column ──
         adopted: list[str] = []
