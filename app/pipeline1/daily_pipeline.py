@@ -98,13 +98,28 @@ class DailySelectionPipeline:
 
         # 特征 (在清洗输出上构建: 清洗附加列如 turnover_stability_5 是模型特征,
         # 用原始面板切片会导致训练/推理特征列不一致)
+        # 推理模式: 只生成模型需要的派生列, 跳过 5000→~200 列的无用计算
+        main_cols = (
+            self.predictor.bundles["main"]["feature_cols"]
+            if "main" in self.predictor.bundles
+            else None
+        )
+        dual_cols = (
+            self.predictor.bundles["dual"]["feature_cols"]
+            if "dual" in self.predictor.bundles
+            else None
+        )
         feat_main = (
-            self.features.build(main_df, self.float_shares_map)
+            self.features.build(
+                main_df, self.float_shares_map, inference_cols=main_cols
+            )
             if len(main_df)
             else pd.DataFrame()
         )
         feat_dual = (
-            self.features.build(dual_df, self.float_shares_map)
+            self.features.build(
+                dual_df, self.float_shares_map, inference_cols=dual_cols
+            )
             if len(dual_df)
             else pd.DataFrame()
         )

@@ -9,8 +9,13 @@
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pandas as pd
+from scipy.stats import spearmanr
+
+logger = logging.getLogger(__name__)
 
 from .cleaning_pipeline import get_limit_pct
 
@@ -58,137 +63,549 @@ def _safe_divide(numerator, denominator) -> pd.Series:
 class FeatureEngineV35:
     """14 维特征. 输入: 清洗后的面板 (含 hfq+raw 双价格 + 财务/筹码/资金流已 merge 的列)."""
 
+    # ── Auto-adoption IC/IR gate thresholds (Gate A) ──
+    _ADOPTION_IC_MIN = 0.01  # |mean IC| threshold for auto-adoption
+    _ADOPTION_ICIR_MIN = 0.10  # ICIR threshold for auto-adoption
+
+    # ── Non-feature columns (identifier / raw prices / intermediate) ──
+    _NON_FEATURE_ID_COLS = {
+        "symbol", "date", "board", "industry", "name", "tradestatus",
+        "announce_date", "report_period", "time", "market_state",
+        "schema_version", "ts_code",
+    }
+
+    # ── Dim gating names (must match method names in build) ──
+    _DIM_GATE_MAP = {
+        "dim01": "dim01_price_volume",
+        "dim02": "dim02_volatility",
+        "dim03": "dim03_fundamentals",
+        "dim07": "dim07_limit_gene",
+        "dim04": "dim04_sector_effect",
+        "dim05": "dim05_turnover_liquidity",
+        "dim06": "dim06_valuation_size",
+        "dim_active_pit": "dim_active_pit",
+        "dim08": "dim08_calendar_month",
+        "dim09": "dim09_custom_formulas",
+        "dim10": "dim10_money_flow",
+        "dim11": "dim11_float_limits",
+        "dim12": "dim12_ma_system",
+        "dim13": "dim13_holiday",
+        "dim14": "dim14_market_sentiment",
+        "dim15": "dim15_alpha_factors",
+        "dim16": "dim16_candlestick",
+        "dim17": "dim17_extended_factors",
+        "dim20": "dim20_short_horizon",
+        "dim18": "dim18_lhb",
+        "dim19": "dim19_amihud",
+        "dim21": "dim21_chip_tushare",
+        "dim22": "dim22_fundamental_pit",
+        "dim23": "dim23_shareholder_structure",
+        "dim24": "dim24_margin_trading",
+        "dim26": "dim26_lhb_enhanced",
+        "dim27": "dim27_industry_flow",
+        "dim28": "dim28_sector_index",
+        "dim29": "dim29_holdertrade",
+        "dim30": "dim30_kline_geometry",
+        "dim31": "dim31_announcement",
+    }
+
     # ---------------- 总装 ----------------
     def build(
         self,
         df: pd.DataFrame,
         float_shares_map: dict | None = None,
         cross_sectional_rank: bool = False,
+        inference_cols: list[str] | None = None,
+        registry=None,  # FeatureRegistry | None
     ) -> pd.DataFrame:
         """构建特征面板.
 
         cross_sectional_rank: 主板 IC 对截面排名负敏感, 默认关闭, 仅双创开启.
+        inference_cols: 推理时传入模型 feature_cols, 只生成需要的派生列 (跳过
+            无用的 _chgN/_pct_chgN/_xrank), 大幅减少内存和时间.
+            训练时传 None → 全量生成 (IC 筛选器需要).
+        registry: FeatureRegistry 实例, None=全量执行 (向后兼容).
         """
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)  # 安全网 #13
-        df = self.dim01_price_volume(df)
-        df = self.dim02_volatility(df)
-        df = self.dim03_fundamentals(df)
-        df = self.dim07_limit_gene(df)
-        df = self.dim04_sector_effect(df)
-        df = self.dim05_turnover_liquidity(df)  # Tushare daily_basic 换手率/量比/股息率
-        df = self.dim06_valuation_size(df)  # Tushare daily_basic PE/PB/PS/市值
-        df = self.dim_active_pit(df)  # §14.2.2 安全网 #15
-        df = self.dim08_calendar_month(df)
-        df = self.dim09_custom_formulas(df, float_shares_map)
-        df = self.dim10_money_flow(df)
-        df = self.dim11_float_limits(
-            df
-        )  # Tushare stk_limit 涨跌停价 + daily_basic 流通股本
-        df = self.dim12_ma_system(df)
-        df = self.dim13_holiday(df)
-        df = self.dim14_market_sentiment(df)
-        df = self.dim15_alpha_factors(df)
-        df = self.dim16_candlestick(df)
-        df = self.dim17_extended_factors(df)
-        df = self.dim20_short_horizon(df)  # 短周期特征 (专攻 1d 预测信噪比)
-        df = self.dim18_lhb(df)
-        df = self.dim19_amihud(df)  # E6
-        df = self.dim21_chip_tushare(
-            df
-        )  # 真实筹码分布 (Tushare cyq_perf), 无CYQ时用OHLCV代理补位 (DIM20)
+
+        # ── Dim gating: skip dims with zero active features ──
+        _ok = lambda dim_key: registry is None or self._dim_active(registry, self._DIM_GATE_MAP[dim_key])
+        _ok_raw = lambda dim_name: registry is None or self._dim_active(registry, dim_name)
+
+        if _ok("dim01"):
+            df = self.dim01_price_volume(df)
+        if _ok("dim02"):
+            df = self.dim02_volatility(df)
+        if _ok("dim03"):
+            df = self.dim03_fundamentals(df)
+        if _ok("dim07"):
+            df = self.dim07_limit_gene(df)
+        if _ok("dim04"):
+            df = self.dim04_sector_effect(df)
+        if _ok("dim05"):
+            df = self.dim05_turnover_liquidity(df)  # Tushare daily_basic 换手率/量比/股息率
+        if _ok("dim06"):
+            df = self.dim06_valuation_size(df)  # Tushare daily_basic PE/PB/PS/市值
+        if _ok_raw("dim_active_pit"):
+            df = self.dim_active_pit(df)  # §14.2.2 安全网 #15
+        if _ok("dim08"):
+            df = self.dim08_calendar_month(df)
+        if _ok("dim09"):
+            df = self.dim09_custom_formulas(df, float_shares_map)
+        if _ok("dim10"):
+            df = self.dim10_money_flow(df)
+        if _ok("dim11"):
+            df = self.dim11_float_limits(df)  # Tushare stk_limit 涨跌停价 + daily_basic 流通股本
+        if _ok("dim12"):
+            df = self.dim12_ma_system(df)
+        if _ok("dim13"):
+            df = self.dim13_holiday(df)
+        if _ok("dim14"):
+            df = self.dim14_market_sentiment(df)
+        if _ok("dim15"):
+            df = self.dim15_alpha_factors(df)
+        if _ok("dim16"):
+            df = self.dim16_candlestick(df)
+        if _ok("dim17"):
+            df = self.dim17_extended_factors(df)
+        if _ok("dim20"):
+            df = self.dim20_short_horizon(df)  # 短周期特征 (专攻 1d 预测信噪比)
+        if _ok("dim18"):
+            df = self.dim18_lhb(df)
+        if _ok("dim19"):
+            df = self.dim19_amihud(df)  # E6
+        if _ok("dim21"):
+            df = self.dim21_chip_tushare(df)  # 真实筹码分布 (Tushare cyq_perf), 无CYQ时用OHLCV代理补位
         # dim20_chip_proxy 已合并到 dim21 — CYQ NaN 时自动回退 OHLCV 推导
-        df = self.dim22_fundamental_pit(df)  # [Alt-3] 基本面PIT (fina_indicator)
-        df = self.dim23_shareholder_structure(df)  # [Alt-5] 股东户数+户均持股
-        df = self.dim24_margin_trading(df)  # [Alt-2] 融资融券
+        if _ok("dim22"):
+            df = self.dim22_fundamental_pit(df)  # [Alt-3] 基本面PIT (fina_indicator)
+        if _ok("dim23"):
+            df = self.dim23_shareholder_structure(df)  # [Alt-5] 股东户数+户均持股
+        if _ok("dim24"):
+            df = self.dim24_margin_trading(df)  # [Alt-2] 融资融券
         # dim25_northbound 已移除 — 上游 north_* 数据覆盖率 0.016%, IC=IR=0
-        df = self.dim26_lhb_enhanced(df)  # [Alt-4] 龙虎榜增强
-        df = self.dim27_industry_flow(df)  # [Alt-7a] 行业级 alt 数据聚合
-        df = self.dim28_sector_index(df)  # [Alt-7b] 申万行业指数动量/轮动
-        df = self.dim29_holdertrade(df)  # [Alt-6] 股东增减持
-        df = self.dim30_kline_geometry(df)  # K线几何特征 (缺口/实体/影线/连续)
-        df = self.dim31_announcement(df)  # 公告事件特征 (距上次公告天数/公告频率)
-        df = self.industry_neutralize(df)
-        df = self.add_missingness_flags(df)
+        if _ok("dim26"):
+            df = self.dim26_lhb_enhanced(df)  # [Alt-4] 龙虎榜增强
+        if _ok("dim27"):
+            df = self.dim27_industry_flow(df)  # [Alt-7a] 行业级 alt 数据聚合
+        if _ok("dim28"):
+            df = self.dim28_sector_index(df)  # [Alt-7b] 申万行业指数动量/轮动
+        if _ok("dim29"):
+            df = self.dim29_holdertrade(df)  # [Alt-6] 股东增减持
+        if _ok("dim30"):
+            df = self.dim30_kline_geometry(df)  # K线几何特征 (缺口/实体/影线/连续)
+        if _ok("dim31"):
+            df = self.dim31_announcement(df)  # 公告事件特征 (距上次公告天数/公告频率)
+
+        # ── Phase 2: Auto-adopt new panel columns ──
+        if registry is not None and registry.is_adoption_enabled():
+            df = self._auto_adopt_new_columns(df, registry)
+
+        if _ok_raw("_industry_neutralize"):
+            df = self.industry_neutralize(df)
+        if _ok_raw("_missingness_flags"):
+            df = self.add_missingness_flags(df)
         # 时序变化特征: 对每个非标识列自动计算 N 日变化 (_chgN)
-        df = self._add_time_series_changes(df)
+        df = self._add_time_series_changes(df, inference_cols=inference_cols)
         # 清理 inf (逐列替换, 避免全 DataFrame replace 触发 numpy vstack OOM)
         for col in df.columns:
             if df[col].dtype in ("float64", "float32"):
                 df[col] = df[col].replace([np.inf, -np.inf], np.nan)
-        if cross_sectional_rank:
-            df = self._add_cross_sectional_ranks(df)
+        if cross_sectional_rank and _ok_raw("_cross_sectional_ranks"):
+            df = self._add_cross_sectional_ranks(df, inference_cols=inference_cols)
+
+        # ── Post-build pruning: drop feature columns not in active registry ──
+        if registry is not None:
+            active_set = set(registry.get_active())
+            all_feat_cols = set(self.feature_columns(df))
+            drop_cols = [c for c in df.columns if c in all_feat_cols and c not in active_set]
+            if drop_cols:
+                # Log per-dim-group breakdown of dropped features
+                by_dim: dict[str, list[str]] = {}
+                for c in drop_cols:
+                    meta = registry.get_meta(c)
+                    dg = meta.get("dim_group", "unknown") if meta else "unknown"
+                    by_dim.setdefault(dg, []).append(c)
+                total_before = len(all_feat_cols)
+                total_after = total_before - len(drop_cols)
+                logger.info(
+                    "Registry prune: %d -> %d features (dropped %d across %d dims)",
+                    total_before, total_after, len(drop_cols), len(by_dim),
+                )
+                for dg, names in sorted(by_dim.items()):
+                    logger.info("  Pruned [%s]: %d features — %s", dg, len(names), names[:5])
+                df = df.drop(columns=drop_cols)
+
+        return df
+
+    # ---------------- Registry helpers ----------------
+    @staticmethod
+    def _dim_active(registry, dim_name: str) -> bool:
+        """registry.has_dim_group(dim_name) — True = 至少有一个 active 特征."""
+        if registry is None:
+            return True
+        return registry.has_dim_group(dim_name)
+
+    # ---------------- IC/IR Gate (Gate A) — quick pre-screen ----------------
+    @staticmethod
+    def _quick_ic_check(df: pd.DataFrame, col: str, label_col: str) -> tuple[float, float, int]:
+        """Compute |mean IC|, ICIR, and number of valid trading days.
+
+        Groups by date, computes Spearman Rank IC against label_col per day,
+        then aggregates across days.
+
+        Returns
+        -------
+        abs_mean_ic : float
+            Absolute mean of daily rank IC values.
+        icir : float
+            |IC_mean| / IC_std (using sample std, ddof=1).
+        n_days : int
+            Number of trading days with >= 10 valid observations.
+        """
+        daily_ics: list[float] = []
+        for date_val, grp in df.groupby("date"):
+            valid = grp[[col, label_col]].dropna()
+            if len(valid) < 10:
+                continue
+            ic, _ = spearmanr(valid[col], valid[label_col])
+            if np.isnan(ic):
+                continue
+            daily_ics.append(ic)
+
+        n_days = len(daily_ics)
+        if n_days < 20:
+            return 0.0, 0.0, n_days
+
+        ic_arr = np.array(daily_ics)
+        ic_mean = ic_arr.mean()
+        ic_std = ic_arr.std(ddof=1)
+        if ic_std == 0.0:
+            return 0.0, 0.0, n_days
+
+        return abs(ic_mean), abs(ic_mean) / ic_std, n_days
+
+    # ---------------- Auto-Adoption (Phase 2) ----------------
+    def _auto_adopt_new_columns(self, df: pd.DataFrame, registry) -> pd.DataFrame:
+        """发现面板中新列, 自动生成模板特征, 注册为 trial 级.
+
+        只处理: 数值型、缺失率 < 70%、不在 NON_FEATURE_COLS 中、尚未注册的列。
+        每个新列生成最多 6 个模板特征 (zscore_20d, chg5d, chg20d,
+        sector_rank, ma5_cross, vol_adj).
+        """
+        if registry is None:
+            return df
+
+        registered_cols = registry.get_registered_source_cols()
+        # Collect all source columns from registered features
+        for _name, meta in registry.get_all().items():
+            for sc in meta.get("source_cols", []):
+                registered_cols.add(sc)
+
+        # Find new panel columns
+        panel_cols = set(df.columns)
+        skip_set = self._NON_FEATURE_ID_COLS | {
+            "open", "high", "low", "close", "volume", "amount",
+            "pre_close", "open_hfq", "high_hfq", "low_hfq", "close_hfq",
+            "turnover_rate",
+        }
+        candidates = panel_cols - registered_cols - skip_set
+
+        if not candidates:
+            return df
+
+        # ── BEFORE snapshot ──
+        n_features_before = len(registry.features)
+        n_cols_before = len(df.columns)
+        active_before = len(registry.get_active())
+
+        # Filter to adoptable columns
+        adoptable: list[str] = []
+        skipped: dict[str, str] = {}  # col → reason
+        for col in sorted(candidates):
+            if col not in df.columns:
+                continue
+            if df[col].dtype not in ("float64", "float32", "int64", "int32"):
+                skipped[col] = f"non-numeric ({df[col].dtype})"
+                continue
+            nan_rate = df[col].isna().mean()
+            if nan_rate > 0.7:
+                skipped[col] = f"too sparse (NaN={nan_rate:.1%})"
+                continue
+            if any(col.endswith(s) for s in ("_chg1", "_chg3", "_chg5", "_chg10", "_chg20",
+                                                "_pct_chg1", "_pct_chg3", "_pct_chg5",
+                                                "_xrank", "_industry_rank")):
+                skipped[col] = "derived column (skip)"
+                continue
+            adoptable.append(col)
+
+        logger.info(
+            "Auto-Adopt [BEFORE]: %d registered features (%d active), "
+            "%d panel columns, %d candidate new cols (%d adoptable, %d skipped)",
+            n_features_before, active_before, len(panel_cols),
+            len(candidates), len(adoptable), len(skipped),
+        )
+        if skipped:
+            logger.info("Auto-Adopt skipped: %s",
+                        {c: r for c, r in sorted(skipped.items())})
+
+        # ── IC/IR Gate pre-screen (Gate A) ──
+        # Compute 1-day forward return label (use close as reference)
+        label_col = "_fwd_ret_1d_ic"
+        df_sorted = df.sort_values(["symbol", "date"]).reset_index(drop=True)
+        df_sorted[label_col] = df_sorted.groupby("symbol")["close"].transform(
+            lambda s: s.shift(-1) / s - 1
+        )
+
+        screened_pass: list[str] = []
+        screened_fail: dict[str, str] = {}
+        for col in adoptable:
+            # Check data overlap with the forward return label
+            overlap = df_sorted[[col, label_col]].dropna()
+            if len(overlap) == 0:
+                screened_fail[col] = "no overlap with forward return label"
+                continue
+            overlap_nan = 1.0 - overlap[col].notna().mean()
+            if overlap_nan > 0.5:
+                screened_fail[col] = (
+                    f"insufficient overlap with label (source NaN={overlap_nan:.1%})"
+                )
+                continue
+
+            abs_ic, icir_val, n_days = self._quick_ic_check(
+                df_sorted, col, label_col,
+            )
+            if n_days < 20:
+                screened_fail[col] = f"too few trading days ({n_days})"
+                continue
+            if abs_ic < self._ADOPTION_IC_MIN or icir_val < self._ADOPTION_ICIR_MIN:
+                screened_fail[col] = (
+                    f"IC/IR too weak (|IC|={abs_ic:.4f}, ICIR={icir_val:.4f})"
+                )
+                continue
+            screened_pass.append(col)
+
+        # Clean up temporary label column
+        df_sorted.drop(columns=[label_col], inplace=True)
+        df = df_sorted
+
+        # Log IC gate summary
+        logger.info(
+            "Auto-Adopt IC Gate: %d/%d pass (|IC|>=%.2f & ICIR>=%.2f), %d fail",
+            len(screened_pass), len(adoptable),
+            self._ADOPTION_IC_MIN, self._ADOPTION_ICIR_MIN,
+            len(screened_fail),
+        )
+        if screened_fail:
+            for col, reason in sorted(screened_fail.items()):
+                logger.info("Auto-Adopt IC Gate REJECT: %s → %s", col, reason)
+
+        adoptable = screened_pass
+
+        # ── Generate features per adopted column ──
+        adopted: list[str] = []
+        features_added: dict[str, list[str]] = {}  # col → [feature names]
+        for col in adoptable:
+            feats_before_this = set(df.columns)
+            try:
+                df = self._generate_adopted_features(df, col, registry)
+                new_for_col = sorted(set(df.columns) - feats_before_this)
+                if new_for_col:
+                    features_added[col] = new_for_col
+                    adopted.append(col)
+            except Exception as exc:
+                logger.warning("Auto-adopt: column %s generation failed: %s", col, exc)
+
+        if adopted:
+            registry.mark_source_cols_registered(adopted)
+            registry.save()
+
+            # ── AFTER summary ──
+            n_features_after = len(registry.features)
+            n_cols_after = len(df.columns)
+            total_added = n_features_after - n_features_before
+            active_after = len(registry.get_active())
+
+            logger.info(
+                "Auto-Adopt [AFTER]: %d -> %d features (+%d), "
+                "%d -> %d active (+%d), %d -> %d df columns (+%d)",
+                n_features_before, n_features_after, total_added,
+                active_before, active_after, active_after - active_before,
+                n_cols_before, n_cols_after, n_cols_after - n_cols_before,
+            )
+            # Per-column detail
+            for col, feat_list in sorted(features_added.items()):
+                logger.info(
+                    "Auto-Adopt: %s → %d trial features: %s",
+                    col, len(feat_list), feat_list,
+                )
+        else:
+            logger.info("Auto-Adopt [AFTER]: no columns adopted (all %d candidates skipped/rejected)",
+                        len(candidates))
+
+        return df
+
+    def _generate_adopted_features(
+        self, df: pd.DataFrame, col: str, registry
+    ) -> pd.DataFrame:
+        """为一个新面板列生成 6 个模板特征, 并注册到 registry."""
+        from datetime import datetime  # noqa: F811
+
+        W20 = 20
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        # 1. Rolling 20d z-score
+        zscore_col = f"{col}_zscore_20d"
+        def _per_stock_zscore(g):
+            s = g[col]
+            mu = s.rolling(W20, min_periods=10).mean()
+            sd = s.rolling(W20, min_periods=10).std()
+            g[zscore_col] = (s - mu) / sd.replace(0, np.nan)
+            return g
+        df = _apply_per_stock(df, _per_stock_zscore)
+        if zscore_col in df.columns:
+            registry.register_new(zscore_col, {
+                "dim_group": "_auto_adopted", "active": True, "grade": "trial",
+                "source_cols": [col], "transform": "zscore_20d",
+                "created": today, "last_eval": "", "icir": 0.0, "ic_abs": 0.0,
+            })
+
+        # 2. 5-day change
+        chg5_col = f"{col}_chg5d"
+        grp = df.groupby("symbol")[col]
+        chg5 = grp.diff(5)
+        if chg5.notna().sum() > 100:
+            df[chg5_col] = chg5
+            registry.register_new(chg5_col, {
+                "dim_group": "_auto_adopted", "active": True, "grade": "trial",
+                "source_cols": [col], "transform": "chg5d",
+                "created": today, "last_eval": "", "icir": 0.0, "ic_abs": 0.0,
+            })
+
+        # 3. 20-day change
+        chg20_col = f"{col}_chg20d"
+        chg20 = grp.diff(20)
+        if chg20.notna().sum() > 100:
+            df[chg20_col] = chg20
+            registry.register_new(chg20_col, {
+                "dim_group": "_auto_adopted", "active": True, "grade": "trial",
+                "source_cols": [col], "transform": "chg20d",
+                "created": today, "last_eval": "", "icir": 0.0, "ic_abs": 0.0,
+            })
+
+        # 4. Cross-sectional rank within industry
+        if "industry" in df.columns:
+            rank_col = f"{col}_sector_rank"
+            df[rank_col] = df.groupby(["date", "industry"], observed=True)[col].rank(pct=True)
+            registry.register_new(rank_col, {
+                "dim_group": "_auto_adopted", "active": True, "grade": "trial",
+                "source_cols": [col], "transform": "sector_rank",
+                "created": today, "last_eval": "", "icir": 0.0, "ic_abs": 0.0,
+            })
+
+        # 5. MA5 crossover signal
+        ma5_cross_col = f"{col}_ma5_cross"
+        def _per_stock_ma5_cross(g):
+            s = g[col]
+            ma5 = s.rolling(5, min_periods=3).mean()
+            prev_cross = np.sign(s.shift(1) - ma5.shift(1))
+            g[ma5_cross_col] = np.sign(s - ma5) - prev_cross
+            return g
+        df = _apply_per_stock(df, _per_stock_ma5_cross)
+        if ma5_cross_col in df.columns:
+            registry.register_new(ma5_cross_col, {
+                "dim_group": "_auto_adopted", "active": True, "grade": "trial",
+                "source_cols": [col], "transform": "ma5_cross",
+                "created": today, "last_eval": "", "icir": 0.0, "ic_abs": 0.0,
+            })
+
+        # 6. Volume-adjusted variant
+        if "volume" in df.columns:
+            vol_adj_col = f"{col}_vol_adj"
+            def _per_stock_vol_adj(g):
+                s = g[col]
+                v = g["volume"]
+                v_mu = v.rolling(W20, min_periods=10).mean()
+                v_sd = v.rolling(W20, min_periods=10).std()
+                v_z = (v - v_mu) / v_sd.replace(0, 1.0)
+                g[vol_adj_col] = s * v_z
+                return g
+            df = _apply_per_stock(df, _per_stock_vol_adj)
+            if vol_adj_col in df.columns:
+                registry.register_new(vol_adj_col, {
+                    "dim_group": "_auto_adopted", "active": True, "grade": "trial",
+                    "source_cols": [col, "volume"], "transform": "vol_adj",
+                    "created": today, "last_eval": "", "icir": 0.0, "ic_abs": 0.0,
+                })
+
         return df
 
     # ---------------- 时序变化特征 (IC 筛选器逐因子裁决) ----------------
-    @staticmethod
-    def _add_time_series_changes(df: pd.DataFrame) -> pd.DataFrame:
-        """对每个数值特征生成 N 日时序变化 (_chgN / _pct_chgN).
+    # ── Columns eligible for time_series_changes (whitelist) ──
+    # Only CYQ chip-distribution columns benefit from _chgN / _pct_chgN.
+    # Raw OHLCV derivatives are already covered by dim methods
+    # (close_chg5 ≈ bias_5), and dim-generated features should not get
+    # uninformed second-order diffs.
+    _TS_WHITELIST: set[str] = {
+        "cost_5pct", "cost_15pct", "cost_50pct", "cost_85pct", "cost_95pct",
+        "avg_cost", "weight_avg", "benefit_part",
+        "pct_70_low", "pct_70_high", "pct_90_low", "pct_90_high",
+        "pct_70_con", "pct_90_con",
+    }
 
-        _chgN     = X(t) - X(t-N)        绝对值差分 (适合价格/量级特征)
-        _pct_chgN = X(t)/X(t-N) - 1      百分比变化 (适合 ratio-scale 特征如 conc_90/benefit_part)
+    # ── Columns eligible for _xrank (whitelist) ──
+    # OHLCV raw columns benefit from cross-sectional percentile ranking
+    # by normalizing for LightGBM. CYQ chip-distribution columns also
+    # benefit. Dim-generated features are excluded because their IC is
+    # invariant to monotonic transforms (Spearman IC unchanged).
+    _XRANK_WHITELIST: set[str] = {
+        # OHLCV raw
+        "open", "high", "low", "close",
+        "pre_close",
+        "open_hfq", "high_hfq", "low_hfq", "close_hfq",
+        "volume", "amount",
+        "turnover_rate", "free_float_turnover_rate",
+        # CYQ chip distribution
+        "cost_5pct", "cost_15pct", "cost_50pct", "cost_85pct", "cost_95pct",
+        "avg_cost", "weight_avg", "benefit_part",
+        "pct_70_low", "pct_70_high", "pct_90_low", "pct_90_high",
+        "pct_70_con", "pct_90_con",
+    }
 
-        全量产出, IC 筛选器逐因子评估:
-          - IC 正且显著 (grade=strong/weak) → 参与训练 & 推理
-          - IC 为负或不显著 (grade=dead)    → 自动排除, 不参与训练/推理
+    @classmethod
+    def _add_time_series_changes(
+        cls, df: pd.DataFrame, inference_cols: list[str] | None = None
+    ) -> pd.DataFrame:
+        """对 CYQ 筹码分布列生成 N 日时序变化 (_chgN / _pct_chgN).
 
-        每次滚动重训时由 ICScreener.screen() 重新评估, 窗口内 IC 决定去留,
-        不依赖历史结论。若某窗口全量 dead → 等效不生效。
+        _chgN     = X(t) - X(t-N)        绝对值差分 (筹码中枢漂移速度)
+        _pct_chgN = X(t)/X(t-N) - 1      百分比变化 (获利盘/集中度变化率)
+
+        仅处理白名单 _TS_WHITELIST 中的列:
+          - CYQ 列的时序变化捕捉筹码结构迁移, 提供独立于 raw 的信号
+          - OHLCV 列的等价衍生已由 dim 方法覆盖 (close_chg5 ≈ bias_5)
+          - dim 生成的加工特征不需要无脑二阶差分 (IC 增量 ≈ 0)
+
+        IC 筛选器逐因子评估, 不显著者自动淘汰, 不依赖历史结论.
         """
-        skip_prefix = (
-            "label_",
-            "is_",
-            "limit_up_",
-            "churn_",
-            "market_state",
-            "schema_version",
-            "name",
-            "tradestatus",
-        )
-        skip_suffix = (
-            "_xrank",
-            "_chg1",
-            "_chg3",
-            "_chg5",
-            "_chg10",
-            "_chg20",
-            "_pct_chg1",
-            "_pct_chg3",
-            "_pct_chg5",
-            "_pct_chg10",
-            "_pct_chg20",
-        )
-        skip_exact = {
-            "symbol",
-            "date",
-            "board",
-            "industry",
-            "month",
-            "is_pre_holiday",
-            "is_post_holiday",
-            "list_days",
-            "announce_date",
-            "touched_limit_up",
-            "is_virtual",
-            "price_1455",
-            "adv20",
-            "limit_pct",
-            "time",
-            "PE_TTM",
-            "score_rank",
-            "rank_amount",
-            "rank_ff_turnover",
-            "liquidity_score",
-        }
-
+        # Only process columns in the whitelist that exist in the panel
+        whitelist_in_panel = cls._TS_WHITELIST & set(df.columns)
         src_cols = [
-            c
-            for c in df.columns
-            if c not in skip_exact
-            and not any(c.startswith(p) for p in skip_prefix)
-            and not any(c.endswith(s) for s in skip_suffix)
-            and df[c].dtype in ("float64", "float32", "int64", "int32")
+            c for c in whitelist_in_panel
+            if df[c].dtype in ("float64", "float32", "int64", "int32")
             and df[c].isna().mean() < 0.7
         ]
+        # 推理模式: 只生成模型需要的 _chgN/_pct_chgN 列
+        if inference_cols is not None:
+            WINDOWS = (1, 3, 5, 10, 20)
+            needed_bases = set()
+            for ic in inference_cols:
+                for w in WINDOWS:
+                    if ic == f"_chg{w}" or ic.endswith(f"_chg{w}"):
+                        needed_bases.add(ic[: -len(f"_chg{w}")])
+                    if ic == f"_pct_chg{w}" or ic.endswith(f"_pct_chg{w}"):
+                        needed_bases.add(ic[: -len(f"_pct_chg{w}")])
+            src_cols = [c for c in src_cols if c in needed_bases]
 
         if not src_cols:
             return df
@@ -211,9 +628,13 @@ class FeatureEngineV35:
         return df
 
     # ---------------- ⑳ 截面排名特征 (IC提升最快路径) ----------------
-    @staticmethod
-    def _add_cross_sectional_ranks(df: pd.DataFrame) -> pd.DataFrame:
-        """对每个数值特征生成同板块同日内的百分位排名 (_xrank).
+    # 白名单 _XRANK_WHITELIST 控制哪些列进入截面排名.
+    # OHLCV / CYQ 原始列受益于正态化; dim 衍生列的 Spearman IC 对单调变换不变, 故排除.
+    @classmethod
+    def _add_cross_sectional_ranks(
+        cls, df: pd.DataFrame, inference_cols: list[str] | None = None
+    ) -> pd.DataFrame:
+        """对 WHITELIST 内的数值特征生成同板块同日内的百分位排名 (_xrank).
 
         原始特征提供绝对量纲, 截面排名提供相对位置 — 两者互补.
         仅对已有 >50% 非 NaN 且 std>0 的列生成排名.
@@ -224,58 +645,21 @@ class FeatureEngineV35:
         if "board" not in df.columns:
             df["board"] = df["symbol"].map(board_of)
 
-        skip_prefix = (
-            "label_",
-            "is_limit_up",
-            "is_one_word",
-            "limit_up_",
-            "is_missing_",
-            "is_pre_",
-            "is_post_",
-            "is_st",
-            "is_suspended",
-        )
-        skip_exact = {
-            "symbol",
-            "date",
-            "board",
-            "industry",
-            "name",
-            "tradestatus",
-            "close_hfq",
-            "open_hfq",
-            "high_hfq",
-            "low_hfq",
-            "list_days",
-            "announce_date",
-            "churn_suspect",
-            "score_rank",
-            "rank_amount",
-            "rank_ff_turnover",
-            "liquidity_score",
-            "market_state",
-            "schema_version",
-            "PE_TTM",
-            "is_virtual",
-            "price_1455",
-            "adv20",
-            "limit_pct",
-            "touched_limit_up",
-            "time",
-            "VAR5",
-            "VAR51",
-        }
-
+        # Only process columns in the whitelist that exist in the panel
+        whitelist_in_panel = cls._XRANK_WHITELIST & set(df.columns)
         src_cols = [
-            c
-            for c in df.columns
-            if c not in skip_exact
-            and not c.startswith(skip_prefix)
-            and not c.endswith("_xrank")  # 不做二阶排名
-            and df[c].dtype in ("float64", "float32", "int64", "int32")
+            c for c in whitelist_in_panel
+            if df[c].dtype in ("float64", "float32", "int64", "int32")
+            and not c.endswith("_xrank")
         ]
         # 只对非NaN率>50%的列生成排名 (全NaN列排名无意义)
         valid = [c for c in src_cols if df[c].isna().mean() < 0.5 and df[c].std() > 0]
+        # 推理模式: 只生成模型需要的 _xrank 列
+        if inference_cols is not None:
+            needed_bases = {
+                ic[: -len("_xrank")] for ic in inference_cols if ic.endswith("_xrank")
+            }
+            valid = [c for c in valid if c in needed_bases]
 
         if not valid:
             return df
