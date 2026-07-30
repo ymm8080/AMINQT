@@ -261,6 +261,7 @@ class CleaningPipeline:
             'dual' → 只清洗双创板, 主板返回空 df.
         """
         import gc
+
         main, dual = self.step0_board_split(df)
         del df
         gc.collect()

@@ -118,7 +118,9 @@ class DailySelectionPipeline:
         )
         feat_dual = (
             self.features.build(
-                dual_df, self.float_shares_map, inference_cols=dual_cols,
+                dual_df,
+                self.float_shares_map,
+                inference_cols=dual_cols,
                 cross_sectional_rank=True,
             )
             if len(dual_df)
