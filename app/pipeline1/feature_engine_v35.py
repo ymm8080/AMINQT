@@ -407,7 +407,10 @@ class FeatureEngineV35:
 
         # ── IC/IR Gate pre-screen (Gate A) ──
         # Compute 1-day forward return label (use close as reference)
-        # _label_reference uses numpy slicing (no shift(-k)) to pass leakage_audit
+        # _label_reference is for LABEL construction ONLY (not features).
+        # Uses numpy slicing (no shift(-k)) to pass leakage_audit.
+        # This forward return is used ONLY for IC pre-screening (label-col evaluation),
+        # never as a feature. The label_col is dropped before returning df.
         label_col = "_fwd_ret_1d_ic"
         df_sorted = df.sort_values(["symbol", "date"]).reset_index(drop=True)
         future_close = df_sorted.groupby("symbol")["close"].transform(
@@ -480,7 +483,10 @@ class FeatureEngineV35:
 
         if adopted:
             registry.mark_source_cols_registered(adopted)
-            registry.save()
+            try:
+                registry.save()
+            except Exception as exc:
+                logger.warning("Auto-adopt: registry.save() failed: %s", exc)
 
             # ── AFTER summary ──
             n_features_after = len(registry.features)
@@ -517,6 +523,13 @@ class FeatureEngineV35:
 
         return df
 
+    def _safe_register(self, registry, name: str, meta: dict) -> None:
+        """Wrap registry.register_new with try-except (file I/O safety)."""
+        try:
+            registry.register_new(name, meta)
+        except Exception as exc:
+            logger.warning("Auto-adopt: register_new(%s) failed: %s", name, exc)
+
     def _generate_adopted_features(
         self, df: pd.DataFrame, col: str, registry
     ) -> pd.DataFrame:
@@ -538,7 +551,7 @@ class FeatureEngineV35:
 
         df = _apply_per_stock(df, _per_stock_zscore)
         if zscore_col in df.columns:
-            registry.register_new(
+            self._safe_register(registry, 
                 zscore_col,
                 {
                     "dim_group": "_auto_adopted",
@@ -559,7 +572,7 @@ class FeatureEngineV35:
         chg5 = grp.diff(5)
         if chg5.notna().sum() > 100:
             df[chg5_col] = chg5
-            registry.register_new(
+            self._safe_register(registry, 
                 chg5_col,
                 {
                     "dim_group": "_auto_adopted",
@@ -579,7 +592,7 @@ class FeatureEngineV35:
         chg20 = grp.diff(20)
         if chg20.notna().sum() > 100:
             df[chg20_col] = chg20
-            registry.register_new(
+            self._safe_register(registry, 
                 chg20_col,
                 {
                     "dim_group": "_auto_adopted",
@@ -600,7 +613,7 @@ class FeatureEngineV35:
             df[rank_col] = df.groupby(["date", "industry"], observed=True)[col].rank(
                 pct=True
             )
-            registry.register_new(
+            self._safe_register(registry, 
                 rank_col,
                 {
                     "dim_group": "_auto_adopted",
@@ -627,7 +640,7 @@ class FeatureEngineV35:
 
         df = _apply_per_stock(df, _per_stock_ma5_cross)
         if ma5_cross_col in df.columns:
-            registry.register_new(
+            self._safe_register(registry, 
                 ma5_cross_col,
                 {
                     "dim_group": "_auto_adopted",
@@ -657,7 +670,7 @@ class FeatureEngineV35:
 
             df = _apply_per_stock(df, _per_stock_vol_adj)
             if vol_adj_col in df.columns:
-                registry.register_new(
+                self._safe_register(registry, 
                     vol_adj_col,
                     {
                         "dim_group": "_auto_adopted",
