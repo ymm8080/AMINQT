@@ -308,11 +308,13 @@ def gate_d_ablation(
 
 def nan_filter(feats, df, threshold=0.95):
     """Drop features with NaN rate >= threshold."""
+    from pandas.api.types import is_numeric_dtype
+
     good = []
     for c in feats:
         if (
             c in df.columns
-            and df[c].dtype != object
+            and is_numeric_dtype(df[c])
             and df[c].isna().mean() < threshold
         ):
             good.append(c)
