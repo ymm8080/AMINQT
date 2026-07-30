@@ -8,6 +8,7 @@ ensure clean separation between label construction and feature computation.
 
 Uses _label_reference (numpy slicing, no shift(-k)) to pass leakage_audit.
 """
+
 from __future__ import annotations
 
 import logging

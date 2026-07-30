@@ -8,7 +8,13 @@ Usage:
   python scripts/build_features.py --adoption-only             # Only sync registry
   python scripts/build_features.py --data-window 3Y            # Data window (1Y/3Y/ALL)
 """
-import argparse, json, os, sys, time, logging
+
+import argparse
+import json
+import os
+import sys
+import time
+import logging
 from datetime import datetime
 
 import numpy as np
@@ -22,7 +28,9 @@ from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.feature_selector import BruteForceGenerator
 from app.pipeline1.feature_registry import FeatureRegistry
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("build_features")
 
 REGISTRY_DIR = "data/factor_registry"
@@ -56,9 +64,11 @@ def step1_update_registry(panel):
     # Auto-seed if empty
     if not registry.features:
         logger.info("Registry empty, seeding from panel sample...")
-        sample = panel.groupby("symbol", group_keys=False).apply(
-            lambda g: g.head(min(30, len(g)))
-        ).reset_index(drop=True)
+        sample = (
+            panel.groupby("symbol", group_keys=False)
+            .apply(lambda g: g.head(min(30, len(g))))
+            .reset_index(drop=True)
+        )
         registry._seed(sample)
 
     # Adoption: add new
@@ -73,24 +83,45 @@ def step1_update_registry(panel):
             registered_cols.add(sc)
 
     # Discover new numeric columns
-    skip = {"symbol", "date", "board", "industry", "announce_date",
-            "is_suspended", "is_st", "tradestatus", "open", "high", "low",
-            "close", "volume", "amount", "pre_close", "turnover_rate"}
-    panel_cols = [c for c in panel.columns
-                  if c not in skip
-                  and not c.startswith("label_")
-                  and panel[c].dtype in ("float64", "int64")
-                  and panel[c].isna().mean() < 0.70]
+    skip = {
+        "symbol",
+        "date",
+        "board",
+        "industry",
+        "announce_date",
+        "is_suspended",
+        "is_st",
+        "tradestatus",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "amount",
+        "pre_close",
+        "turnover_rate",
+    }
+    panel_cols = [
+        c
+        for c in panel.columns
+        if c not in skip
+        and not c.startswith("label_")
+        and panel[c].dtype in ("float64", "int64")
+        and panel[c].isna().mean() < 0.70
+    ]
 
     for col in panel_cols:
         if col not in registered_cols and col not in registry.get_all():
-            registry.register_new(col, {
-                "dim_group": "_auto_adopted",
-                "source_cols": [col],
-                "status": "active",
-                "grade": "trial",
-                "registered_at": datetime.now().isoformat(),
-            })
+            registry.register_new(
+                col,
+                {
+                    "dim_group": "_auto_adopted",
+                    "source_cols": [col],
+                    "status": "active",
+                    "grade": "trial",
+                    "registered_at": datetime.now().isoformat(),
+                },
+            )
             added += 1
             logger.info(f"  + {col}")
 
@@ -129,7 +160,9 @@ def step2_build_board(panel, board="main", window="3Y"):
     if board == "main":
         with open(CSI300_PATH) as f:
             csi300 = set(json.load(f))
-        board_panel = panel[panel["symbol"].isin(csi300 & set(panel["symbol"].unique()))].copy()
+        board_panel = panel[
+            panel["symbol"].isin(csi300 & set(panel["symbol"].unique()))
+        ].copy()
     else:
         dual = panel[panel["board"].isin(["GEM", "STAR"])].copy()
         if dual["symbol"].nunique() > 300:
@@ -140,8 +173,12 @@ def step2_build_board(panel, board="main", window="3Y"):
     # Clean
     cleaner = CleaningPipeline()
     main_d, dual_d = cleaner.run_train(board_panel)
-    board_df = main_d if board == "main" else (dual_d if len(dual_d) > len(main_d) else main_d)
-    logger.info(f"  Cleaned: {len(board_df):,} rows, {board_df['symbol'].nunique()} stocks")
+    board_df = (
+        main_d if board == "main" else (dual_d if len(dual_d) > len(main_d) else main_d)
+    )
+    logger.info(
+        f"  Cleaned: {len(board_df):,} rows, {board_df['symbol'].nunique()} stocks"
+    )
 
     # Labels
     df = LabelEngine.build_path_labels(board_df)
@@ -158,11 +195,16 @@ def step2_build_board(panel, board="main", window="3Y"):
         # DUAL: FeatureEngineV35 curated features
         fe = FeatureEngineV35()
         from app.pipeline1.train_runner import prepare_board_frame
-        import tempfile, shutil
+        import tempfile
+        import shutil
+
         reg_dir = tempfile.mkdtemp()
         registry = FeatureRegistry(path=os.path.join(reg_dir, "feature_registry.json"))
-        sample = df.groupby("symbol", group_keys=False).apply(
-            lambda g: g.head(min(30, len(g)))).reset_index(drop=True)
+        sample = (
+            df.groupby("symbol", group_keys=False)
+            .apply(lambda g: g.head(min(30, len(g))))
+            .reset_index(drop=True)
+        )
         registry._seed(sample)
         df = prepare_board_frame(df, fe, cross_sectional_rank=True, registry=registry)
         shutil.rmtree(reg_dir)
@@ -171,11 +213,23 @@ def step2_build_board(panel, board="main", window="3Y"):
     out_path = os.path.join(REGISTRY_DIR, f"features_{board}_{ts}.parquet")
     df.to_parquet(out_path)
 
-    n_feat = len(FeatureEngineV35.feature_columns(df)) if board == "dual" else len(
-        [c for c in df.columns if c not in BruteForceGenerator.EXCLUDE_COLS and not c.startswith("label_")
-         and df[c].dtype in ("float64", "int64")])
+    n_feat = (
+        len(FeatureEngineV35.feature_columns(df))
+        if board == "dual"
+        else len(
+            [
+                c
+                for c in df.columns
+                if c not in BruteForceGenerator.EXCLUDE_COLS
+                and not c.startswith("label_")
+                and df[c].dtype in ("float64", "int64")
+            ]
+        )
+    )
 
-    logger.info(f"  Saved: {out_path} ({n_feat} features, {os.path.getsize(out_path)/1024/1024:.0f}MB, {time.time()-t0:.0f}s)")
+    logger.info(
+        f"  Saved: {out_path} ({n_feat} features, {os.path.getsize(out_path) / 1024 / 1024:.0f}MB, {time.time() - t0:.0f}s)"
+    )
     return out_path
 
 
@@ -187,10 +241,12 @@ def main():
     args = ap.parse_args()
 
     panel = load_panel(args.data_window)
-    logger.info(f"Panel loaded: {len(panel):,} rows, {panel['symbol'].nunique()} stocks")
+    logger.info(
+        f"Panel loaded: {len(panel):,} rows, {panel['symbol'].nunique()} stocks"
+    )
 
     # Step 1: Registry update
-    reg_path = step1_update_registry(panel)
+    step1_update_registry(panel)
 
     if args.adoption_only:
         logger.info("Adoption-only mode. Done.")
