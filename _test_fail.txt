@@ -1,0 +1,118 @@
+﻿Test	Run pytest with coverage	﻿2026-07-29T02:55:55.7846384Z ##[group]Run if [ -d tests ] && find tests -name '*.py' -print -quit | grep -q .; then
+Test	Run pytest with coverage	2026-07-29T02:55:55.7847030Z ^[[36;1mif [ -d tests ] && find tests -name '*.py' -print -quit | grep -q .; then^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7847458Z ^[[36;1m  python -m pytest tests/ \^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7848143Z ^[[36;1m    --cov=app \^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7848420Z ^[[36;1m    --cov=services \^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7848706Z ^[[36;1m    --cov-report=term-missing \^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7849038Z ^[[36;1m    --cov-report=xml:coverage.xml \^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7849338Z ^[[36;1m    -v || RET=$?^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7849614Z ^[[36;1m  if [ "${RET:-0}" = "5" ]; then^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7850006Z ^[[36;1m    echo "All tests skipped - pre-implementation phase - passing"^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7850414Z ^[[36;1m    exit 0^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7850686Z ^[[36;1m  elif [ -n "${RET:-}" ] && [ "$RET" != "0" ]; then^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7851007Z ^[[36;1m    exit $RET^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7851227Z ^[[36;1m  fi^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7851471Z ^[[36;1melse^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7851733Z ^[[36;1m  echo "No test files found yet - skipping pytest"^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7852060Z ^[[36;1mfi^[[0m
+Test	Run pytest with coverage	2026-07-29T02:55:55.7899327Z shell: /usr/bin/bash -e {0}
+Test	Run pytest with coverage	2026-07-29T02:55:55.7899595Z env:
+Test	Run pytest with coverage	2026-07-29T02:55:55.7899804Z   PYTHON_VERSION: 3.11
+Test	Run pytest with coverage	2026-07-29T02:55:55.7900115Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.15/x64
+Test	Run pytest with coverage	2026-07-29T02:55:55.7900586Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib/pkgconfig
+Test	Run pytest with coverage	2026-07-29T02:55:55.7901029Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+Test	Run pytest with coverage	2026-07-29T02:55:55.7901443Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+Test	Run pytest with coverage	2026-07-29T02:55:55.7901847Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+Test	Run pytest with coverage	2026-07-29T02:55:55.7902251Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib
+Test	Run pytest with coverage	2026-07-29T02:55:55.7902606Z ##[endgroup]
+Test	Run pytest with coverage	2026-07-29T02:56:03.5653069Z ============================= test session starts ==============================
+Test	Run pytest with coverage	2026-07-29T02:56:03.5653937Z platform linux -- Python 3.11.15, pytest-9.1.1, pluggy-1.6.0
+Test	Run pytest with coverage	2026-07-29T02:56:03.5654616Z rootdir: /home/runner/work/AMINQT/AMINQT
+Test	Run pytest with coverage	2026-07-29T02:56:03.5655177Z configfile: pytest.ini
+Test	Run pytest with coverage	2026-07-29T02:56:03.5655674Z plugins: cov-7.1.0, anyio-4.14.2
+Test	Run pytest with coverage	2026-07-29T02:56:03.5656251Z collected 704 items / 5 errors / 7 skipped
+Test	Run pytest with coverage	2026-07-29T02:56:03.5656675Z 
+Test	Run pytest with coverage	2026-07-29T02:56:03.5656962Z ==================================== ERRORS ====================================
+Test	Run pytest with coverage	2026-07-29T02:56:03.5658380Z ________________ ERROR collecting tests/test_daily_pipeline.py _________________
+Test	Run pytest with coverage	2026-07-29T02:56:03.5660097Z ImportError while importing test module '/home/runner/work/AMINQT/AMINQT/tests/test_daily_pipeline.py'.
+Test	Run pytest with coverage	2026-07-29T02:56:03.5661344Z Hint: make sure your test modules/packages have valid Python names.
+Test	Run pytest with coverage	2026-07-29T02:56:03.5661954Z Traceback:
+Test	Run pytest with coverage	2026-07-29T02:56:03.5662822Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+Test	Run pytest with coverage	2026-07-29T02:56:03.5664040Z     return _bootstrap._gcd_import(name[level:], package, level)
+Test	Run pytest with coverage	2026-07-29T02:56:03.5664848Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T02:56:03.5665597Z tests/test_daily_pipeline.py:11: in <module>
+Test	Run pytest with coverage	2026-07-29T02:56:03.5666437Z     from app.pipeline1.daily_pipeline import DailySelectionPipeline
+Test	Run pytest with coverage	2026-07-29T02:56:03.5667152Z app/pipeline1/daily_pipeline.py:27: in <module>
+Test	Run pytest with coverage	2026-07-29T02:56:03.5667980Z     from .list_generator import ListDeliveryGuard, ListGenerator, MarketEnv
+Test	Run pytest with coverage	2026-07-29T02:56:03.5669135Z E   ImportError: cannot import name 'ListDeliveryGuard' from 'app.pipeline1.list_generator' (/home/runner/work/AMINQT/AMINQT/app/pipeline1/list_generator.py)
+Test	Run pytest with coverage	2026-07-29T02:56:03.5670279Z ___________________ ERROR collecting tests/test_dashboard.py ___________________
+Test	Run pytest with coverage	2026-07-29T02:56:03.5671107Z ImportError while importing test module '/home/runner/work/AMINQT/AMINQT/tests/test_dashboard.py'.
+Test	Run pytest with coverage	2026-07-29T02:56:03.5671892Z Hint: make sure your test modules/packages have valid Python names.
+Test	Run pytest with coverage	2026-07-29T02:56:03.5672531Z Traceback:
+Test	Run pytest with coverage	2026-07-29T02:56:03.5672921Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+Test	Run pytest with coverage	2026-07-29T02:56:03.5673470Z     return _bootstrap._gcd_import(name[level:], package, level)
+Test	Run pytest with coverage	2026-07-29T02:56:03.5673844Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T02:56:03.5674158Z tests/test_dashboard.py:8: in <module>
+Test	Run pytest with coverage	2026-07-29T02:56:03.5674500Z     from app.pipeline1.list_generator import SCHEMA_FIELDS
+Test	Run pytest with coverage	2026-07-29T02:56:03.5675216Z E   ImportError: cannot import name 'SCHEMA_FIELDS' from 'app.pipeline1.list_generator' (/home/runner/work/AMINQT/AMINQT/app/pipeline1/list_generator.py)
+Test	Run pytest with coverage	2026-07-29T02:56:03.5675977Z ________________ ERROR collecting tests/test_end_to_end_v35.py _________________
+Test	Run pytest with coverage	2026-07-29T02:56:03.5676577Z ImportError while importing test module '/home/runner/work/AMINQT/AMINQT/tests/test_end_to_end_v35.py'.
+Test	Run pytest with coverage	2026-07-29T02:56:03.5677158Z Hint: make sure your test modules/packages have valid Python names.
+Test	Run pytest with coverage	2026-07-29T02:56:03.5677524Z Traceback:
+Test	Run pytest with coverage	2026-07-29T02:56:03.5678215Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+Test	Run pytest with coverage	2026-07-29T02:56:03.5678759Z     return _bootstrap._gcd_import(name[level:], package, level)
+Test	Run pytest with coverage	2026-07-29T02:56:03.5679121Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T02:56:03.5679436Z tests/test_end_to_end_v35.py:23: in <module>
+Test	Run pytest with coverage	2026-07-29T02:56:03.5679821Z     from app.pipeline1.daily_pipeline import DailySelectionPipeline
+Test	Run pytest with coverage	2026-07-29T02:56:03.5680226Z app/pipeline1/daily_pipeline.py:27: in <module>
+Test	Run pytest with coverage	2026-07-29T02:56:03.5680644Z     from .list_generator import ListDeliveryGuard, ListGenerator, MarketEnv
+Test	Run pytest with coverage	2026-07-29T02:56:03.5681430Z E   ImportError: cannot import name 'ListDeliveryGuard' from 'app.pipeline1.list_generator' (/home/runner/work/AMINQT/AMINQT/app/pipeline1/list_generator.py)
+Test	Run pytest with coverage	2026-07-29T02:56:03.5682203Z _________________ ERROR collecting tests/test_pipeline1_v35.py _________________
+Test	Run pytest with coverage	2026-07-29T02:56:03.5682800Z ImportError while importing test module '/home/runner/work/AMINQT/AMINQT/tests/test_pipeline1_v35.py'.
+Test	Run pytest with coverage	2026-07-29T02:56:03.5683369Z Hint: make sure your test modules/packages have valid Python names.
+Test	Run pytest with coverage	2026-07-29T02:56:03.5683716Z Traceback:
+Test	Run pytest with coverage	2026-07-29T02:56:03.5684102Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+Test	Run pytest with coverage	2026-07-29T02:56:03.5684635Z     return _bootstrap._gcd_import(name[level:], package, level)
+Test	Run pytest with coverage	2026-07-29T02:56:03.5684994Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T02:56:03.5685473Z tests/test_pipeline1_v35.py:20: in <module>
+Test	Run pytest with coverage	2026-07-29T02:56:03.5685792Z     from app.pipeline1.list_generator import (
+Test	Run pytest with coverage	2026-07-29T02:56:03.5686459Z E   ImportError: cannot import name 'SCHEMA_FIELDS' from 'app.pipeline1.list_generator' (/home/runner/work/AMINQT/AMINQT/app/pipeline1/list_generator.py)
+Test	Run pytest with coverage	2026-07-29T02:56:03.5687217Z _____________ ERROR collecting tests/test_train_predict_runner.py ______________
+Test	Run pytest with coverage	2026-07-29T02:56:03.5688179Z ImportError while importing test module '/home/runner/work/AMINQT/AMINQT/tests/test_train_predict_runner.py'.
+Test	Run pytest with coverage	2026-07-29T02:56:03.5688783Z Hint: make sure your test modules/packages have valid Python names.
+Test	Run pytest with coverage	2026-07-29T02:56:03.5689134Z Traceback:
+Test	Run pytest with coverage	2026-07-29T02:56:03.5689524Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+Test	Run pytest with coverage	2026-07-29T02:56:03.5690058Z     return _bootstrap._gcd_import(name[level:], package, level)
+Test	Run pytest with coverage	2026-07-29T02:56:03.5690416Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T02:56:03.5690753Z tests/test_train_predict_runner.py:12: in <module>
+Test	Run pytest with coverage	2026-07-29T02:56:03.5691119Z     from app.pipeline1.list_generator import SCHEMA_FIELDS
+Test	Run pytest with coverage	2026-07-29T02:56:03.5691831Z E   ImportError: cannot import name 'SCHEMA_FIELDS' from 'app.pipeline1.list_generator' (/home/runner/work/AMINQT/AMINQT/app/pipeline1/list_generator.py)
+Test	Run pytest with coverage	2026-07-29T02:56:03.5692558Z =============================== warnings summary ===============================
+Test	Run pytest with coverage	2026-07-29T02:56:03.5693057Z app/main.py:33
+Test	Run pytest with coverage	2026-07-29T02:56:03.5693393Z   /home/runner/work/AMINQT/AMINQT/app/main.py:33: DeprecationWarning: 
+Test	Run pytest with coverage	2026-07-29T02:56:03.5693864Z           on_event is deprecated, use lifespan event handlers instead.
+Test	Run pytest with coverage	2026-07-29T02:56:03.5694232Z   
+Test	Run pytest with coverage	2026-07-29T02:56:03.5694521Z           Read more about it in the
+Test	Run pytest with coverage	2026-07-29T02:56:03.5694962Z           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+Test	Run pytest with coverage	2026-07-29T02:56:03.5695754Z           
+Test	Run pytest with coverage	2026-07-29T02:56:03.5696102Z     @app.on_event("startup")
+Test	Run pytest with coverage	2026-07-29T02:56:03.5696386Z 
+Test	Run pytest with coverage	2026-07-29T02:56:03.5696922Z ../../../../../opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/fastapi/applications.py:4675
+Test	Run pytest with coverage	2026-07-29T02:56:03.5698530Z   /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/fastapi/applications.py:4675: DeprecationWarning: 
+Test	Run pytest with coverage	2026-07-29T02:56:03.5699595Z           on_event is deprecated, use lifespan event handlers instead.
+Test	Run pytest with coverage	2026-07-29T02:56:03.5699962Z   
+Test	Run pytest with coverage	2026-07-29T02:56:03.5700175Z           Read more about it in the
+Test	Run pytest with coverage	2026-07-29T02:56:03.5700604Z           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+Test	Run pytest with coverage	2026-07-29T02:56:03.5701034Z           
+Test	Run pytest with coverage	2026-07-29T02:56:03.5701331Z     return self.router.on_event(event_type)  # ty: ignore[deprecated]
+Test	Run pytest with coverage	2026-07-29T02:56:03.5701605Z 
+Test	Run pytest with coverage	2026-07-29T02:56:03.5701820Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+Test	Run pytest with coverage	2026-07-29T02:56:03.5702299Z =========================== short test summary info ============================
+Test	Run pytest with coverage	2026-07-29T02:56:03.5703027Z ERROR tests/test_daily_pipeline.py
+Test	Run pytest with coverage	2026-07-29T02:56:03.5703513Z ERROR tests/test_dashboard.py
+Test	Run pytest with coverage	2026-07-29T02:56:03.5703976Z ERROR tests/test_end_to_end_v35.py
+Test	Run pytest with coverage	2026-07-29T02:56:03.5704462Z ERROR tests/test_pipeline1_v35.py
+Test	Run pytest with coverage	2026-07-29T02:56:03.5704910Z ERROR tests/test_train_predict_runner.py
+Test	Run pytest with coverage	2026-07-29T02:56:03.5705298Z !!!!!!!!!!!!!!!!!!! Interrupted: 5 errors during collection !!!!!!!!!!!!!!!!!!!!
+Test	Run pytest with coverage	2026-07-29T02:56:03.5705750Z =================== 7 skipped, 2 warnings, 5 errors in 6.70s ===================
+Test	Run pytest with coverage	2026-07-29T02:56:03.9105502Z ##[error]Process completed with exit code 2.

@@ -1,0 +1,19 @@
+fix: replace shift(-1) with _label_reference + use _safe_divide in auto-adopt
+
+DeepSeek PR review flagged:
+- CRITICAL: shift(-1) in _auto_adopt_new_columns (future function violation)
+- WARNING: division without safe_divide in _per_stock_zscore/_per_stock_vol_adj
+
+Fixes:
+1. Replaced shift(-1)/close-1 with _label_reference(s,1) numpy slicing
+   + _safe_divide -- matches label_engine.py/predict_only.py convention
+2. Replaced (s-mu)/sd.replace(0,np.nan) with _safe_divide(s-mu, sd)
+3. Replaced (v-v_mu)/v_sd.replace(0,1.0) with _safe_divide(v-v_mu, v_sd)
+4. Moved relative imports above logger init (E402 ruff fix)
+
+Verified:
+- ruff check: All checks passed
+- leakage_audit: 0 violations
+- test_auto_adoption: 12/12 passed
+- test_feature_selector + test_feature_registry: 61/61 passed
+- test_train_predict_runner: 15/16 passed (1 hang=pre-existing network test)

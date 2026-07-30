@@ -1,0 +1,15 @@
+{
+  "tag": "2026W31_real_tr",
+  "boards": {
+    "main": {
+      "oos_ic": 0.05874963833004945,
+      "feats": 76,
+      "switched": true
+    },
+    "dual": {
+      "oos_ic": 0.09831183282880775,
+      "feats": 156,
+      "switched": true
+    }
+  }
+}

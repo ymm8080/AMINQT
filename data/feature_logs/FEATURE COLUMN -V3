@@ -1,0 +1,48 @@
+
+DIM CHIP TUSHA
+plain text
+Apply
+benefit_part
+avg_cost
+weight_avg
+cost_5pct
+cost_15pct
+cost_50pct
+cost_85pct
+cost_95pct
+pct_70_low
+pct_70_high
+pct_70_con
+pct_90_low
+pct_90_high
+pct_90_con
+
+
+DIM22 基本面
+roe
+roe_deducted
+roa
+gross_margin
+rev_yoy
+debt_ratio
+current_ratio
+asset_turnover
+ar_turnover
+inventory_turnover
+ocf_to_or
+net_margin
+eps_yoy
+profit_yoy
+ocfps
+revenue_ps
+bps
+eps
+
+
+  pre_close                
+  margin_buy_amt          
+  short_sell_vol          
+  holder_count             
+  sh_net_change_sign      
+  sh_change_vol            
+  lhb_net_buy              

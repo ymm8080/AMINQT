@@ -1,0 +1,32 @@
+{
+  "dim22_finPIT": {
+    "best_factor": "",
+    "best_ic": 0,
+    "nan_pct": 0,
+    "verdict": "‘›ª∫"
+  },
+  "dim23_shareholder": {
+    "best_factor": "",
+    "best_ic": 0,
+    "nan_pct": 0,
+    "verdict": "‘›ª∫"
+  },
+  "dim24_margin": {
+    "best_factor": "",
+    "best_ic": 0,
+    "nan_pct": 0,
+    "verdict": "‘›ª∫"
+  },
+  "dim27_indflow": {
+    "best_factor": "",
+    "best_ic": 0,
+    "nan_pct": 0,
+    "verdict": "‘›ª∫"
+  },
+  "dim28_sector": {
+    "best_factor": "sw_ret_5d",
+    "best_ic": 0.08973,
+    "nan_pct": 0.2,
+    "verdict": "ƒ…»Î"
+  }
+}

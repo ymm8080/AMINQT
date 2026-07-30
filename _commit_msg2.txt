@@ -1,0 +1,17 @@
+fix: add try-except around registry I/O + clarify label-only usage
+
+Round 2 fixes for DeepSeek PR review:
+1. Added _safe_register() wrapper with try-except around all
+   registry.register_new() calls in _generate_adopted_features
+2. Wrapped registry.save() in _auto_adopt_new_columns with try-except
+3. Broadened exception handling in feature_registry.py load()/save()
+   from OSError/JSONDecodeError to Exception (catches PermissionError etc)
+4. Added clarifying comment: _label_reference is for LABEL construction
+   ONLY (not features), dropped before returning df
+
+Verified:
+- ruff check: All checks passed
+- leakage_audit: 0 violations
+- test_auto_adoption: 12/12 passed
+- test_feature_registry: 15/15 passed
+- test_feature_selector: 46/46 passed

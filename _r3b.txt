@@ -1,0 +1,24 @@
+﻿## DeepSeek PR Review
+
+**Critical:** 4 | **Warnings:** 3 | **Info:** 1
+
+> Reviewed 0 files / 634 changed lines, found 8 issues: 4 critical division-by-zero risks in backtest_v35.py, 3 missing try-except for network calls in data_supply.py, and 1 info about hardcoded credentials.
+
+### Critical Issues
+- `app/pipeline1/backtest_v35.py` L179: Division by zero risk: pnl = px / pos["cost_hfq"] - 1 without safe_divide.
+- `app/pipeline1/backtest_v35.py` L180: Division by zero risk: dd_high = px / pos["high_hfq"] - 1 without safe_divide.
+- `app/pipeline1/backtest_v35.py` L233: Division by zero risk: p["shares"] * (self._px_close(...) if ... else p["cost_hfq"]) may divide by zero if cost_hfq is 0.
+- `app/pipeline1/backtest_v35.py` L278: Division by zero risk: p["shares"] * (self._px_close(...) if ... else p["cost_hfq"]) may divide by zero if cost_hfq is 0.
+
+### Warnings
+- `app/pipeline1/data_supply.py` L118: Missing try-except for network call to Tushare pro.daily() in _tushare_fetch_daily.
+- `app/pipeline1/data_supply.py` L395: Missing try-except for network call to Tushare pro.daily() in _tushare_fetch_hist.
+- `app/pipeline1/data_supply.py` L620: Missing try-except for network call to Tushare pro.cyq_perf() in fetch_chip_distribution.
+
+### Info
+- `app/pipeline1/data_supply.py` L118: Hardcoded Tushare token not visible in diff, but ensure TUSHARE_TOKEN is set via env var, not hardcoded.
+
+<!--AUTOFIX:HAS_ISSUES-->
+
+---
+*Automated review by DeepSeek (deepseek-v4-flash)*

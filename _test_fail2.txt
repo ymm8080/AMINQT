@@ -1,0 +1,70 @@
+﻿Test	Run pytest with coverage	﻿2026-07-29T03:28:41.0938937Z ##[group]Run if [ -d tests ] && find tests -name '*.py' -print -quit | grep -q .; then
+Test	Run pytest with coverage	2026-07-29T03:28:41.0939559Z ^[[36;1mif [ -d tests ] && find tests -name '*.py' -print -quit | grep -q .; then^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0939972Z ^[[36;1m  python -m pytest tests/ \^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0940240Z ^[[36;1m    --cov=app \^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0940843Z ^[[36;1m    --cov=services \^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0941139Z ^[[36;1m    --cov-report=term-missing \^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0941439Z ^[[36;1m    --cov-report=xml:coverage.xml \^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0941727Z ^[[36;1m    -v || RET=$?^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0941981Z ^[[36;1m  if [ "${RET:-0}" = "5" ]; then^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0942349Z ^[[36;1m    echo "All tests skipped - pre-implementation phase - passing"^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0942713Z ^[[36;1m    exit 0^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0942960Z ^[[36;1m  elif [ -n "${RET:-}" ] && [ "$RET" != "0" ]; then^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0943254Z ^[[36;1m    exit $RET^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0943456Z ^[[36;1m  fi^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0943682Z ^[[36;1melse^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0943926Z ^[[36;1m  echo "No test files found yet - skipping pytest"^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0944228Z ^[[36;1mfi^[[0m
+Test	Run pytest with coverage	2026-07-29T03:28:41.0989029Z shell: /usr/bin/bash -e {0}
+Test	Run pytest with coverage	2026-07-29T03:28:41.0989277Z env:
+Test	Run pytest with coverage	2026-07-29T03:28:41.0989461Z   PYTHON_VERSION: 3.11
+Test	Run pytest with coverage	2026-07-29T03:28:41.0989752Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.15/x64
+Test	Run pytest with coverage	2026-07-29T03:28:41.0990182Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib/pkgconfig
+Test	Run pytest with coverage	2026-07-29T03:28:41.0991068Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+Test	Run pytest with coverage	2026-07-29T03:28:41.0991470Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+Test	Run pytest with coverage	2026-07-29T03:28:41.0991850Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+Test	Run pytest with coverage	2026-07-29T03:28:41.0992228Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib
+Test	Run pytest with coverage	2026-07-29T03:28:41.0992554Z ##[endgroup]
+Test	Run pytest with coverage	2026-07-29T03:28:48.8448780Z ============================= test session starts ==============================
+Test	Run pytest with coverage	2026-07-29T03:28:48.8449731Z platform linux -- Python 3.11.15, pytest-9.1.1, pluggy-1.6.0
+Test	Run pytest with coverage	2026-07-29T03:28:48.8450749Z rootdir: /home/runner/work/AMINQT/AMINQT
+Test	Run pytest with coverage	2026-07-29T03:28:48.8451326Z configfile: pytest.ini
+Test	Run pytest with coverage	2026-07-29T03:28:48.8451787Z plugins: cov-7.1.0, anyio-4.14.2
+Test	Run pytest with coverage	2026-07-29T03:28:48.8452302Z collected 736 items / 1 error / 7 skipped
+Test	Run pytest with coverage	2026-07-29T03:28:48.8452701Z 
+Test	Run pytest with coverage	2026-07-29T03:28:48.8452968Z ==================================== ERRORS ====================================
+Test	Run pytest with coverage	2026-07-29T03:28:48.8453501Z _________________ ERROR collecting tests/test_pipeline1_v35.py _________________
+Test	Run pytest with coverage	2026-07-29T03:28:48.8455472Z ImportError while importing test module '/home/runner/work/AMINQT/AMINQT/tests/test_pipeline1_v35.py'.
+Test	Run pytest with coverage	2026-07-29T03:28:48.8456575Z Hint: make sure your test modules/packages have valid Python names.
+Test	Run pytest with coverage	2026-07-29T03:28:48.8457190Z Traceback:
+Test	Run pytest with coverage	2026-07-29T03:28:48.8457871Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+Test	Run pytest with coverage	2026-07-29T03:28:48.8458663Z     return _bootstrap._gcd_import(name[level:], package, level)
+Test	Run pytest with coverage	2026-07-29T03:28:48.8459038Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T03:28:48.8459346Z tests/test_pipeline1_v35.py:20: in <module>
+Test	Run pytest with coverage	2026-07-29T03:28:48.8459663Z     from app.pipeline1.list_generator import (
+Test	Run pytest with coverage	2026-07-29T03:28:48.8460367Z E   ImportError: cannot import name 'check_invalidation' from 'app.pipeline1.list_generator' (/home/runner/work/AMINQT/AMINQT/app/pipeline1/list_generator.py)
+Test	Run pytest with coverage	2026-07-29T03:28:48.8461377Z =============================== warnings summary ===============================
+Test	Run pytest with coverage	2026-07-29T03:28:48.8461715Z app/main.py:33
+Test	Run pytest with coverage	2026-07-29T03:28:48.8462021Z   /home/runner/work/AMINQT/AMINQT/app/main.py:33: DeprecationWarning: 
+Test	Run pytest with coverage	2026-07-29T03:28:48.8462473Z           on_event is deprecated, use lifespan event handlers instead.
+Test	Run pytest with coverage	2026-07-29T03:28:48.8462809Z   
+Test	Run pytest with coverage	2026-07-29T03:28:48.8462997Z           Read more about it in the
+Test	Run pytest with coverage	2026-07-29T03:28:48.8463452Z           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+Test	Run pytest with coverage	2026-07-29T03:28:48.8464170Z           
+Test	Run pytest with coverage	2026-07-29T03:28:48.8464372Z     @app.on_event("startup")
+Test	Run pytest with coverage	2026-07-29T03:28:48.8464527Z 
+Test	Run pytest with coverage	2026-07-29T03:28:48.8464855Z ../../../../../opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/fastapi/applications.py:4675
+Test	Run pytest with coverage	2026-07-29T03:28:48.8465621Z   /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/fastapi/applications.py:4675: DeprecationWarning: 
+Test	Run pytest with coverage	2026-07-29T03:28:48.8466246Z           on_event is deprecated, use lifespan event handlers instead.
+Test	Run pytest with coverage	2026-07-29T03:28:48.8466576Z   
+Test	Run pytest with coverage	2026-07-29T03:28:48.8466763Z           Read more about it in the
+Test	Run pytest with coverage	2026-07-29T03:28:48.8467177Z           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+Test	Run pytest with coverage	2026-07-29T03:28:48.8467594Z           
+Test	Run pytest with coverage	2026-07-29T03:28:48.8467872Z     return self.router.on_event(event_type)  # ty: ignore[deprecated]
+Test	Run pytest with coverage	2026-07-29T03:28:48.8468137Z 
+Test	Run pytest with coverage	2026-07-29T03:28:48.8468338Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+Test	Run pytest with coverage	2026-07-29T03:28:48.8468783Z =========================== short test summary info ============================
+Test	Run pytest with coverage	2026-07-29T03:28:48.8469125Z ERROR tests/test_pipeline1_v35.py
+Test	Run pytest with coverage	2026-07-29T03:28:48.8469459Z !!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+Test	Run pytest with coverage	2026-07-29T03:28:48.8469867Z =================== 7 skipped, 2 warnings, 1 error in 6.74s ====================
+Test	Run pytest with coverage	2026-07-29T03:28:49.2193429Z ##[error]Process completed with exit code 2.

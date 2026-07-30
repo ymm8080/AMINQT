@@ -1,0 +1,23 @@
+﻿## DeepSeek PR Review
+
+**Critical:** 1 | **Warnings:** 8 | **Info:** 0
+
+> Reviewed 0 files / 630 changed lines, found 9 issues: 1 critical (hardcoded credentials) and 8 warnings (missing try-except for API calls and division by zero risks).
+
+### Critical Issues
+- `app/pipeline1/data_supply.py` L~120: Hardcoded Tushare token in .tushare_token file; use environment variable TUSHARE_TOKEN instead.
+
+### Warnings
+- `app/pipeline1/data_supply.py` L~120: Missing try-except around Tushare API call pro.daily() which may raise network errors.
+- `app/pipeline1/data_supply.py` L~400: Missing try-except around Tushare API call pro.daily() in _tushare_fetch_hist.
+- `app/pipeline1/data_supply.py` L~600: Missing try-except around Tushare API call pro.cyq_perf() which may raise network errors.
+- `app/pipeline1/data_supply.py` L~650: Missing try-except around Tushare API call pro.cyq_perf() in batch fetch.
+- `app/pipeline1/cyq_calculator.py` L~100: Division by zero risk: density = 2.0 / (h - l) without safe_divide; h-l could be zero.
+- `app/pipeline1/cyq_calculator.py` L~110: Division by zero risk: (curprice - l) / (avg - l) without safe_divide; avg-l could be zero.
+- `app/pipeline1/cyq_calculator.py` L~115: Division by zero risk: (h - curprice) / (h - avg) without safe_divide; h-avg could be zero.
+- `app/pipeline1/cyq_calculator.py` L~130: Division by zero risk: (pr[1] - pr[0]) / denom without safe_divide; denom could be zero.
+
+<!--AUTOFIX:HAS_ISSUES-->
+
+---
+*Automated review by DeepSeek (deepseek-v4-flash)*

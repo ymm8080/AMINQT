@@ -1,0 +1,19 @@
+﻿## DeepSeek PR Review
+
+**Critical:** 2 | **Warnings:** 3 | **Info:** 0
+
+> Reviewed 0 files / 631 changed lines, found 5 issues: 2 critical division-by-zero risks and 3 missing try-except for external API calls.
+
+### Critical Issues
+- `app/pipeline1/backtest_v35.py` L179: Division by zero risk: pos['cost_hfq'] may be 0, causing ZeroDivisionError; use safe_divide.
+- `app/pipeline1/backtest_v35.py` L180: Division by zero risk: pos['high_hfq'] may be 0, causing ZeroDivisionError; use safe_divide.
+
+### Warnings
+- `app/pipeline1/data_supply.py` L118: Missing try-except for Tushare API call pro.daily() which may raise network errors.
+- `app/pipeline1/data_supply.py` L395: Missing try-except for Tushare API call pro.daily() which may raise network errors.
+- `app/pipeline1/data_supply.py` L620: Missing try-except for Tushare API call pro.cyq_perf() which may raise network errors.
+
+<!--AUTOFIX:HAS_ISSUES-->
+
+---
+*Automated review by DeepSeek (deepseek-v4-flash)*
