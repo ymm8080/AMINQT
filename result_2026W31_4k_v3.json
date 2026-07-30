@@ -1,0 +1,15 @@
+{
+  "tag": "2026W31_4k_v3",
+  "boards": {
+    "main": {
+      "oos_ic": 0.08685065631659251,
+      "feats": 72,
+      "switched": true
+    },
+    "dual": {
+      "oos_ic": 0.1431842635099374,
+      "feats": 150,
+      "switched": true
+    }
+  }
+}

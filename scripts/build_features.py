@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import os
+import shutil
 import sys
 import time
 import logging
@@ -152,8 +153,6 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
     (pct_change→rolling_mean→...), joins incrementally. Peak ~3GB for 2k stocks.
     max_stocks=0 → all MAIN stocks.
     """
-    import shutil as _shutil
-
     logger.info(f"Building {board} board features (window={window})...")
     t0 = time.time()
 
@@ -200,16 +199,14 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
     df = LabelEngine.mask_recent_days(df, days=6)
 
     if board == "main":
-        # Family-based batching: generate one transform family at a time,
-        # join to df incrementally. Peak: base + largest family ≈ 3GB.
+        # Family-based batching with pyarrow merge.
+        # Write each family to a temp parquet, then use pyarrow columnar
+        # concat to avoid pandas block consolidation OOM (needs 5GB+ contiguous).
+        import tempfile, pyarrow.parquet as pq, pyarrow as pa
+
         FAMILIES = [
-            "pct_change",
-            "rolling_mean",
-            "rolling_std",
-            "rolling_max",
-            "diff",
-            "momentum",
-            "EMA",
+            "pct_change", "rolling_mean", "rolling_std",
+            "rolling_max", "diff", "momentum", "EMA",
         ]
         gen = BruteForceGenerator()
         raw_cols = gen._eligible(df)
@@ -217,19 +214,47 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
             f"  BruteForce: {len(raw_cols)} eligible raw cols x {len(FAMILIES)} families"
         )
 
-        total_new_cols = 0
-        for fam in FAMILIES:
-            new = gen.generate_family(df, fam, raw_cols=raw_cols, dtype="float32")
-            for c in new.columns:
-                new[c] = new[c].replace([np.inf, -np.inf], np.nan).astype("float32")
-            n_cols = len(new.columns)
-            df = df.join(new)
-            total_new_cols += n_cols
-            del new
+        tmp_dir = tempfile.mkdtemp(prefix="brute_main_")
+        try:
+            # Save base DataFrame (id cols + labels) to temp parquet
+            base_path = os.path.join(tmp_dir, "base.parquet")
+            df.to_parquet(base_path, index=False)
+            base_table = pq.read_table(base_path)
+            logger.info(f"  Base saved: {base_table.num_columns} cols, {base_table.num_rows:,} rows")
+
+            total_new_cols = 0
+            for fam in FAMILIES:
+                new = gen.generate_family(df, fam, raw_cols=raw_cols, dtype="float32")
+                for c in new.columns:
+                    new[c] = new[c].replace([np.inf, -np.inf], np.nan).astype("float32")
+                fam_path = os.path.join(tmp_dir, f"{fam}.parquet")
+                new.to_parquet(fam_path, index=False)
+                n_cols = len(new.columns)
+                total_new_cols += n_cols
+                # Append to base table (columnar, no block consolidation)
+                fam_table = pq.read_table(fam_path)
+                for i in range(fam_table.num_columns):
+                    base_table = base_table.append_column(
+                        fam_table.column_names[i], fam_table.column(i))
+                del new, fam_table
+                logger.info(
+                    f"  Family [{fam}]: {n_cols} cols, "
+                    f"accumulated {total_new_cols} brute-force features"
+                )
+
+            # Write final merged parquet
+            ts = datetime.now().strftime("%Y%m%dT%H%M%S")
+            out_path = os.path.join(REGISTRY_DIR, f"features_{board}_{ts}.parquet")
+            pq.write_table(base_table, out_path)
+            n_feat = total_new_cols
             logger.info(
-                f"  Family [{fam}]: {n_cols} cols, "
-                f"accumulated {total_new_cols} brute-force features"
+                f"  Saved: {out_path} ({n_feat} features, "
+                f"{os.path.getsize(out_path) / 1024 / 1024:.0f}MB, "
+                f"{time.time() - t0:.0f}s)"
             )
+            return out_path
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
     else:
         fe = FeatureEngineV35()
         import tempfile
@@ -243,7 +268,7 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
         )
         registry._seed(sample)
         df = prepare_board_frame(df, fe, cross_sectional_rank=True, registry=registry)
-        _shutil.rmtree(reg_dir)
+        shutil.rmtree(reg_dir)
 
     ts = datetime.now().strftime("%Y%m%dT%H%M%S")
     out_path = os.path.join(REGISTRY_DIR, f"features_{board}_{ts}.parquet")

@@ -1,0 +1,161 @@
+{
+  "board": "main",
+  "dim_group": "g1_price_vol",
+  "dims": [
+    "dim01",
+    "dim02",
+    "dim03",
+    "dim07"
+  ],
+  "window_id": "main_g1_price_vol_20260728_072925",
+  "elapsed_s": 477.3,
+  "n_rows": 157680,
+  "n_stocks": 2003,
+  "n_candidates": 92,
+  "n_strong": 0,
+  "n_weak": 82,
+  "n_dead": 10,
+  "n_selected": 82,
+  "top_20": [
+    {
+      "factor": "bias_120d",
+      "ic_1d": 0.2838,
+      "ic_3d": 0.3023,
+      "ic_5d": 0.3213,
+      "grade": "weak"
+    },
+    {
+      "factor": "ATR_pct",
+      "ic_1d": 0.1981,
+      "ic_3d": 0.1886,
+      "ic_5d": 0.2069,
+      "grade": "weak"
+    },
+    {
+      "factor": "MACD_signal",
+      "ic_1d": 0.1772,
+      "ic_3d": 0.1866,
+      "ic_5d": 0.2028,
+      "grade": "weak"
+    },
+    {
+      "factor": "dv_ttm",
+      "ic_1d": 0.1895,
+      "ic_3d": 0.1903,
+      "ic_5d": 0.2012,
+      "grade": "weak"
+    },
+    {
+      "factor": "pe_ttm",
+      "ic_1d": 0.195,
+      "ic_3d": 0.181,
+      "ic_5d": 0.1989,
+      "grade": "weak"
+    },
+    {
+      "factor": "dv_ratio",
+      "ic_1d": 0.1949,
+      "ic_3d": 0.1872,
+      "ic_5d": 0.1932,
+      "grade": "weak"
+    },
+    {
+      "factor": "benefit_part",
+      "ic_1d": 0.155,
+      "ic_3d": 0.1779,
+      "ic_5d": 0.1943,
+      "grade": "weak"
+    },
+    {
+      "factor": "margin_buy_amt",
+      "ic_1d": 0.1559,
+      "ic_3d": 0.1867,
+      "ic_5d": 0.1937,
+      "grade": "weak"
+    },
+    {
+      "factor": "turnover_rate_f",
+      "ic_1d": 0.1923,
+      "ic_3d": 0.1858,
+      "ic_5d": 0.1876,
+      "grade": "weak"
+    },
+    {
+      "factor": "pct_90_con",
+      "ic_1d": 0.1716,
+      "ic_3d": 0.1836,
+      "ic_5d": 0.1906,
+      "grade": "weak"
+    },
+    {
+      "factor": "total_share",
+      "ic_1d": 0.1703,
+      "ic_3d": 0.1686,
+      "ic_5d": 0.1872,
+      "grade": "weak"
+    },
+    {
+      "factor": "pct_70_con",
+      "ic_1d": 0.1688,
+      "ic_3d": 0.1716,
+      "ic_5d": 0.184,
+      "grade": "weak"
+    },
+    {
+      "factor": "MACD",
+      "ic_1d": 0.1652,
+      "ic_3d": 0.1698,
+      "ic_5d": 0.1831,
+      "grade": "weak"
+    },
+    {
+      "factor": "ROC_60d",
+      "ic_1d": 0.1733,
+      "ic_3d": 0.1714,
+      "ic_5d": 0.1774,
+      "grade": "weak"
+    },
+    {
+      "factor": "bias_60d",
+      "ic_1d": 0.1772,
+      "ic_3d": 0.1668,
+      "ic_5d": 0.166,
+      "grade": "weak"
+    },
+    {
+      "factor": "intra_strength_ma5",
+      "ic_1d": 0.1443,
+      "ic_3d": 0.1513,
+      "ic_5d": 0.1763,
+      "grade": "weak"
+    },
+    {
+      "factor": "pb",
+      "ic_1d": 0.1762,
+      "ic_3d": 0.1574,
+      "ic_5d": 0.17,
+      "grade": "weak"
+    },
+    {
+      "factor": "ROC_5d",
+      "ic_1d": 0.1559,
+      "ic_3d": 0.1636,
+      "ic_5d": 0.1742,
+      "grade": "weak"
+    },
+    {
+      "factor": "bias_10d",
+      "ic_1d": 0.1594,
+      "ic_3d": 0.1737,
+      "ic_5d": 0.1687,
+      "grade": "weak"
+    },
+    {
+      "factor": "vol_adj_mom_5d",
+      "ic_1d": 0.1546,
+      "ic_3d": 0.1569,
+      "ic_5d": 0.1725,
+      "grade": "weak"
+    }
+  ]
+}

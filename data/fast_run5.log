@@ -1,0 +1,37 @@
+2026-07-29 10:54:43,511 [INFO] run_daily_fast: Loading panel (filtered to 2026-01-01+): data/panel_full_enriched_v3.parquet
+2026-07-29 10:54:46,552 [INFO] run_daily_fast: Panel: 3244 stocks, 441541 rows, 102 cols, dates 2026-01-05 00:00:00 ~ 2026-07-28 00:00:00
+2026-07-29 10:54:46,725 [INFO] run_daily_fast: Appending today's data for 20260729 ...
+2026-07-29 10:54:48,551 [INFO] app.pipeline1.data_supply: fetch_today ohlcv: 5524 rows (³¢ÊÔ 1/10)
+2026-07-29 10:54:48,807 [WARNING] app.pipeline1.data_supply: Tushare top_inst Ê§°Ü (»ý·Ö²»×ã?): "Column(s) ['buy_amount', 'sell_amount'] do not exist"
+2026-07-29 10:54:48,858 [INFO] app.pipeline1.data_supply: fetch_today lhb: 81 rows (³¢ÊÔ 1/10)
+D:\AMINQT\AMINQT CODES\app\pipeline1\data_supply.py:2332: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  panel = pd.concat([panel, ohlcv], ignore_index=True)
+D:\AMINQT\AMINQT CODES\app\pipeline1\data_supply.py:2332: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  panel = pd.concat([panel, ohlcv], ignore_index=True)
+2026-07-29 10:54:54,431 [INFO] app.pipeline1.data_supply: append_today: +3242 stocks, panel now 444790 rows 114 cols
+2026-07-29 10:54:54,608 [INFO] run_daily_fast: After append: 3244 stocks, 444790 rows, dates 2026-01-05 00:00:00 ~ 2026-07-29 00:00:00
+2026-07-29 10:54:54,927 [INFO] run_daily_fast: CYQ merge: 14 cols updated for 3249 rows
+2026-07-29 10:54:54,928 [INFO] run_daily_fast: Bundles: {'main': 'main_current.pkl', 'dual': 'dual_current.pkl'}
+2026-07-29 10:54:54,929 [INFO] run_daily_fast: Importing DailySelectionPipeline...
+2026-07-29 10:54:54,929 [INFO] run_daily_fast: Constructing DailySelectionPipeline...
+2026-07-29 10:54:59,065 [INFO] run_daily_fast: Running pipeline.run()...
+Traceback (most recent call last):
+  File "D:\AMINQT\AMINQT CODES\scripts\_run_daily_fast.py", line 129, in <module>
+    main(td)
+  File "D:\AMINQT\AMINQT CODES\scripts\_run_daily_fast.py", line 112, in main
+    result = pipeline.run(trade_date, panel=panel, market_state="range")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AMINQT\AMINQT CODES\app\pipeline1\daily_pipeline.py", line 141, in run
+    frames.append(self.predictor.predict(today_feat, board))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AMINQT\AMINQT CODES\app\pipeline1\predictor.py", line 68, in predict
+    latest[cols].to_numpy(dtype=float), nan=0.0, posinf=0.0, neginf=0.0
+    ~~~~~~^^^^^^
+  File "C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\pandas\core\frame.py", line 4119, in __getitem__
+    indexer = self.columns._get_indexer_strict(key, "columns")[1]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\pandas\core\indexes\base.py", line 6212, in _get_indexer_strict
+    self._raise_if_missing(keyarr, indexer, axis_name)
+  File "C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\pandas\core\indexes\base.py", line 6264, in _raise_if_missing
+    raise KeyError(f"{not_found} not in index")
+KeyError: "['sw_ret_1d', 'relative_limit_strength', 'open_xrank', 'high_xrank', 'low_xrank', 'close_xrank', 'free_float_turnover_rate_xrank', 'pb_xrank', 'ps_ttm_xrank', 'total_mv_xrank', 'circ_mv_xrank', 'total_share_xrank', 'float_share_xrank', 'free_share_xrank', 'turnover_rate_f_xrank', 'volume_ratio_xrank', 'up_limit_raw_xrank', 'down_limit_raw_xrank', 'sw_ret_1d_xrank', 'sw_index_close_xrank', 'sw_index_vol_xrank', 'bias_5_xrank', 'bias_10_xrank', 'bias_20_xrank', 'bias_120_xrank', 'bias_250_xrank', 'bias_5_20_cross_xrank', 'bias_20_60_cross_xrank', 'ma_vol_ratio_5_20_xrank', 'amplitude_5d_xrank', 'pctChg_xrank', 'intraday_range_xrank', 'vol_surge_xrank', 'amt_surge_xrank', 'ret_pct_xrank', 'relative_limit_strength_xrank', 'sector_return_xrank', 'sector_return_5d_xrank', 'A1_xrank', 'A2_xrank', 'A3_xrank', 'A4_xrank', 'A5_xrank', 'A6_xrank', 'MA5_dist_xrank', 'MA120_dist_xrank', 'alpha006_xrank', 'alpha012_xrank', 'alpha042_ts_xrank', 'alpha054_ts_xrank', 'gtja_001_ts_xrank', 'gtja_004_xrank', 'bullish_engulfing_xrank', 'hammer_xrank', 'morning_star_xrank', 'amihud_illiq_xrank'] not in index"
