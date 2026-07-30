@@ -27,6 +27,7 @@ from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.feature_selector import BruteForceGenerator
 from app.pipeline1.feature_registry import FeatureRegistry
+from app.pipeline1.train_runner import prepare_board_frame
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
