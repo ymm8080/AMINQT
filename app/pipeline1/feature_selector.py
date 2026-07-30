@@ -244,7 +244,7 @@ def gate_d_ablation(
 
     # Full model importance
     full = lgb.LGBMRegressor(**base_params)
-    full.fit(tr[avail].fillna(0), tr[label_col])
+    full.fit(tr[avail], tr[label_col])
     imp = pd.DataFrame(
         {
             "feature": avail,
@@ -275,8 +275,8 @@ def gate_d_ablation(
             continue
         top = imp.head(n)["feature"].tolist()
         m = lgb.LGBMRegressor(**ab_params)
-        m.fit(tr[top].fillna(0), tr[label_col])
-        ir = _eval_icir(m.predict(te[top].fillna(0)))
+        m.fit(tr[top], tr[label_col])
+        ir = _eval_icir(m.predict(te[top]))
         ablation_log.append({"n": n, "icir": ir})
         if ir > best_ir:
             best_n, best_ir = n, ir
