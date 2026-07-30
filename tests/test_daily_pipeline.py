@@ -56,7 +56,7 @@ def make_panel(symbols=("600519", "601318"), days=760, seed=21) -> pd.DataFrame:
 class _StubFeatures:
     """跳过真实特征工程, 直接透传 (f1/f2 已在面板上)."""
 
-    def build(self, df, float_shares_map=None):
+    def build(self, df, float_shares_map=None, **kwargs):
         return df
 
 

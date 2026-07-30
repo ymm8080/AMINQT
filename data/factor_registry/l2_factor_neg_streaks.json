@@ -1599,10 +1599,22 @@
   "neg": 0,
   "pos": 0
  },
- "bias_5d": 0,
- "bias_10d": 0,
- "bias_20d": 0,
- "bias_60d": 0,
+ "bias_5d": {
+  "neg": 0,
+  "pos": 0
+ },
+ "bias_10d": {
+  "neg": 0,
+  "pos": 0
+ },
+ "bias_20d": {
+  "neg": 0,
+  "pos": 0
+ },
+ "bias_60d": {
+  "neg": 0,
+  "pos": 0
+ },
  "bias_120d": 1,
  "ROC_3d": 0,
  "ROC_5d": 0,
@@ -2790,5 +2802,9 @@
  "benefit_part_industry_rank_pct_chg3": 0,
  "benefit_part_industry_rank_pct_chg5": 0,
  "benefit_part_industry_rank_pct_chg10": 0,
- "benefit_part_industry_rank_pct_chg20": 0
+ "benefit_part_industry_rank_pct_chg20": 0,
+ "sw_ret_1d_x": {
+  "neg": 0,
+  "pos": 0
+ }
 }
