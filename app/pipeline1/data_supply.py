@@ -1328,12 +1328,12 @@ class DataSupplyChain:
         pro = self._tushare_pro()
         if pro is not None:
             kwargs: dict = {
-            "fields": (
-                "ts_code,ann_date,end_date,roe,roe_dt,roa,np_margin,gross_margin,"
-                "eps,ocfps,bps,revenue_ps,"
-                "eps_yoy,or_yoy,profit_yoy,cf_sales,debt_to_assets,current_ratio,"
-                "assets_turn,ar_turn,inv_turn,ocf_to_or"
-            ),
+                "fields": (
+                    "ts_code,ann_date,end_date,roe,roe_dt,roa,np_margin,gross_margin,"
+                    "eps,ocfps,bps,revenue_ps,"
+                    "eps_yoy,or_yoy,profit_yoy,cf_sales,debt_to_assets,current_ratio,"
+                    "assets_turn,ar_turn,inv_turn,ocf_to_or"
+                ),
             }
             if ts_code:
                 kwargs["ts_code"] = ts_code
@@ -2192,13 +2192,9 @@ class DataSupplyChain:
                     if src == "ohlcv":
                         df = self._tushare_fetch_daily(trade_date)
                     elif src == "margin":
-                        df = self.fetch_margin(
-                            trade_date=trade_date, refresh=True
-                        )
+                        df = self.fetch_margin(trade_date=trade_date, refresh=True)
                     elif src == "lhb":
-                        df = self.fetch_lhb(
-                            trade_date=trade_date, refresh=True
-                        )
+                        df = self.fetch_lhb(trade_date=trade_date, refresh=True)
                     else:
                         logger.warning("fetch_today: 未知源 %s, 跳过", src)
                         results[src] = pd.DataFrame()
@@ -2206,9 +2202,7 @@ class DataSupplyChain:
 
                     # 空结果视为失败 → 进入重试 (交易日必有 OHLCV/两融数据)
                     if len(df) == 0:
-                        raise DataSupplyError(
-                            f"{src} 拉取为空 (数据源可能不可用)"
-                        )
+                        raise DataSupplyError(f"{src} 拉取为空 (数据源可能不可用)")
 
                     results[src] = df
                     logger.info(
@@ -2294,9 +2288,7 @@ class DataSupplyChain:
         #    fetch_today 已保证 OHLCV 非空 (失败会 raise DataSupplyError)
         ohlcv = today_data.get("ohlcv", pd.DataFrame())
         if len(ohlcv) == 0:
-            raise DataSupplyError(
-                "当日 OHLCV 拉取为空, 不允许跳过 — 请检查数据源"
-            )
+            raise DataSupplyError("当日 OHLCV 拉取为空, 不允许跳过 — 请检查数据源")
 
         existing_symbols = set(panel["symbol"].unique())
         ohlcv = ohlcv[ohlcv["symbol"].isin(existing_symbols)].copy()
