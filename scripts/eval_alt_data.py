@@ -47,7 +47,7 @@ def daily_rank_ic(df: pd.DataFrame, factor: str, label: str) -> float:
             continue
         ic = g[[factor, label]].corr(method="spearman").iloc[0, 1]
         ics.append(ic if not np.isnan(ic) else 0.0)
-    return float(np.mean(np.abs(ics))) if ics else 0.0
+    return float(np.mean(ics)) if ics else 0.0
 
 
 def rolling_ic_stats(df: pd.DataFrame, factor: str, label: str, window: int = 60):

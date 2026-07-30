@@ -81,12 +81,17 @@ class CleaningPipeline:
     # ---------------- 步骤 0: 板块分治 ----------------
     @staticmethod
     def step0_board_split(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """主板 / 双创板 (GEM+STAR) 拆分 — 后续全流程独立."""
-        if "board" not in df.columns:
-            df = df.copy()
-            df["board"] = df["symbol"].map(board_of)
-        main = df[df["board"] == "main"]
-        dual = df[df["board"].isin(["GEM", "STAR"])]
+        """主板 / 双创板 (GEM+STAR) 拆分 — 后续全流程独立.
+
+        始终从 symbol 重新计算 board 字段，忽略输入中可能存在的旧 board 列
+        (例如 V3 面板中的 'SZ'/'SH' 等错误分类)。直接筛选 + .copy() 避免
+        复制全量面板（2.7 GB）导致的 OOM。
+        """
+        board_s = df["symbol"].map(board_of)
+        main = df[board_s.eq("main")].copy()
+        main["board"] = "main"
+        dual = df[board_s.isin(["GEM", "STAR"])].copy()
+        dual["board"] = board_s[board_s.isin(["GEM", "STAR"])]
         return main, dual
 
     # ---------------- 步骤 1: 基础状态 ----------------
@@ -236,26 +241,51 @@ class CleaningPipeline:
         return df.sort_values(["symbol", "date"]).reset_index(drop=True)
 
     # ---------------- 总装 ----------------
-    def run_train(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    def run_train(
+        self, df: pd.DataFrame, board: str | None = None
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """训练端清洗 (步骤 0→3 + 步骤5[E6], 不做步骤 4). 返回 (主板, 双创).
 
         训练端 step2 不截取 top-N: 模型需学习全谱股票 (含中小流动性),
         仅推理端需要候选清单收敛 (run_inference 保留 top-N).
+
+        内存优化: 先拆分再排序, 避免全量面板排序 (2x 2.7 GB) 导致 OOM.
+        downstream (FeatureEngineV35 / LabelEngine) 会自己做 sort + reset_index,
+        因此这里只 sort 不做 reset_index 以节省一次深拷贝.
+
+        Parameters
+        ----------
+        board : str or None
+            None → 清洗两个板块 (原行为).
+            'main' → 只清洗主板, 双创返回空 df.
+            'dual' → 只清洗双创板, 主板返回空 df.
         """
-        df = df.sort_values(["symbol", "date"]).reset_index(drop=True)  # 安全网 #13
+        import gc
+
         main, dual = self.step0_board_split(df)
-        return (
-            self.step5_amount_bottom(
+        del df
+        gc.collect()
+        skip_main = board == "dual"
+        skip_dual = board == "main"
+        if not skip_main:
+            main = main.sort_values(["symbol", "date"])
+            main = self.step5_amount_bottom(
                 self.step3_extreme(
                     self.step2_liquidity(self.step1_base_state(main), apply_top_n=False)
                 )
-            ),
-            self.step5_amount_bottom(
+            )
+        else:
+            main = pd.DataFrame()
+        if not skip_dual:
+            dual = dual.sort_values(["symbol", "date"])
+            dual = self.step5_amount_bottom(
                 self.step3_extreme(
                     self.step2_liquidity(self.step1_base_state(dual), apply_top_n=False)
                 )
-            ),
-        )
+            )
+        else:
+            dual = pd.DataFrame()
+        return main, dual
 
     def run_inference(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, str]:
         """推理端清洗 (步骤 0→4 + 步骤5[E6]). 返回 (主板, 双创, 阀门状态).

@@ -276,7 +276,7 @@ def rank_ic(df, factor, label):
             ic = g[[factor, label]].corr(method="spearman").iloc[0, 1]
             if not np.isnan(ic):
                 ics.append(ic)
-    return float(np.mean(np.abs(ics))) if ics else 0.0
+    return float(np.mean(ics)) if ics else 0.0
 
 
 # Test each new dimension

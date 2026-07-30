@@ -55,11 +55,10 @@ class ICScreener:
     # ---------------- IC 稳定性 (P18) ----------------
     @staticmethod
     def ic_stability(df: pd.DataFrame, factor: str, label: str) -> float:
-        """ICIR = |IC_mean| / IC_std — 信号稳定性 (杀稀疏/噪声因子).
+        """Signed ICIR = IC_mean / IC_std — 信号稳定性 (杀稀疏/噪声因子).
 
-        IC 高但日间波动剧烈 → ICIR 低 → 不可靠.
-        IC 中等但稳定正 → ICIR 高 → 可靠.
-        阈值: ICIR < 0.3 → 降级.
+        返回带符号 ICIR: 正 → 稳定正向预测, 负 → 稳定反向预测.
+        Grade 判定用 abs(icir) 做方向无关的强度评估.
         """
         sub = df[["date", factor, label]].dropna()
         if len(sub) < 30:
@@ -69,7 +68,7 @@ class ICScreener:
             return 0.0
         ic_std = float(ic_series.std())
         ic_mean = float(ic_series.mean())
-        return abs(ic_mean) / ic_std if ic_std > 0 else 0.0
+        return ic_mean / ic_std if ic_std > 0 else 0.0  # signed ICIR
 
     # ---------------- Newey-West HAC t 统计量 (B6) ----------------
     @staticmethod
@@ -121,10 +120,10 @@ class ICScreener:
             daily_ic.loc[d0:d1].mean()
             for d0, d1 in zip(dates[:-window], dates[window:])
         ]
-        rolls = pd.Series(rolls).dropna().abs()
+        rolls = pd.Series(rolls).dropna()
         if len(rolls) == 0:
             return 0.0, 0.0
-        return float(rolls.mean()), float(
+        return float(rolls.mean()), float(  # signed rolling IC mean
             max((daily_ic > 0).mean(), (daily_ic < 0).mean()) if len(daily_ic) else 0.0
         )
 
@@ -195,24 +194,27 @@ class ICScreener:
             if ic_mdd is not None:
                 best_ic = max(best_ic, abs(ic_mdd))  # [E2] mdd 独立筛选并入并集
             auc = self.auc_score(train_df, f)
-            # 滚动 IC 取各标签最佳值 (非仅 1d — 3d/5d 正向不因 1d 负向降级)
+            # 滚动 IC 取各标签最佳值 (按绝对值选最强方向)
             roll_best = max(
                 (self.rolling_ic_dual(train_df, f, lbl) for lbl in label_of.values()),
-                key=lambda x: x[0],  # max by rolling mean
+                key=lambda x: abs(x[0]),  # strongest direction wins
             )
             roll_mean, roll_pos = roll_best
-            dual_ok = roll_mean > ROLLING_MEAN_MIN and roll_pos > ROLLING_POS_RATIO_MIN
+            dual_ok = (
+                abs(roll_mean) > ROLLING_MEAN_MIN and roll_pos > ROLLING_POS_RATIO_MIN
+            )
             # B6: 3d/5d IC 显著性用 Newey-West HAC 调整 (lag=5/8)
             t_3d = self.ic_t_stat_newey_west(train_df, f, label_of[3], lag=5)
             t_5d = self.ic_t_stat_newey_west(train_df, f, label_of[5], lag=8)
             nw_significant = (
                 abs(t_3d) > 1.28 or abs(t_5d) > 1.28
             )  # 90%置信 (原1.96/95%太严)
-            # [P19 Factor Gate] IC 稳定性: 取各标签最佳 ICIR
-            icir = max(self.ic_stability(train_df, f, lbl) for lbl in label_of.values())
-            icir_ok = (
-                icir >= ICIR_MIN
-            )  # 因子级门槛 0.05 (模型级见 metrics.ignition_gate)
+            # [P19 Factor Gate] IC 稳定性: 取各标签最佳 ICIR (按绝对值选最强)
+            icir = max(
+                (self.ic_stability(train_df, f, lbl) for lbl in label_of.values()),
+                key=abs,
+            )
+            icir_ok = abs(icir) >= ICIR_MIN  # 因子级门槛 |ICIR|≥0.10 (方向无关)
             if (
                 (best_ic > IC_STRONG or auc > 0.55)
                 and dual_ok
