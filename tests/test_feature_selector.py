@@ -31,20 +31,28 @@ def _make_panel(n_symbols=10, n_dates=60, seed=42):
         base = 10.0 + hash(sym) % 50
         for i, d in enumerate(dates):
             close = base + np.cumsum(np.random.randn(n_dates) * 0.3)[i]
-            rows.append({
-                "symbol": sym, "date": d,
-                "open": close * 0.99, "high": close * 1.02,
-                "low": close * 0.98, "close": close,
-                "volume": np.random.uniform(5e5, 5e6),
-                "amount": close * np.random.uniform(5e5, 5e6),
-                "turnover_rate": np.random.uniform(0.5, 5.0),
-                "pre_close": close * 0.995,
-                "board": "main", "industry": "银行", "is_st": 0,
-                "is_suspended": 0, "list_days": 500,
-                "eps": np.random.normal(1.5, 0.3),
-                "bps": np.random.normal(8.0, 1.0),
-                "ocfps": np.random.normal(0.5, 0.2),
-            })
+            rows.append(
+                {
+                    "symbol": sym,
+                    "date": d,
+                    "open": close * 0.99,
+                    "high": close * 1.02,
+                    "low": close * 0.98,
+                    "close": close,
+                    "volume": np.random.uniform(5e5, 5e6),
+                    "amount": close * np.random.uniform(5e5, 5e6),
+                    "turnover_rate": np.random.uniform(0.5, 5.0),
+                    "pre_close": close * 0.995,
+                    "board": "main",
+                    "industry": "银行",
+                    "is_st": 0,
+                    "is_suspended": 0,
+                    "list_days": 500,
+                    "eps": np.random.normal(1.5, 0.3),
+                    "bps": np.random.normal(8.0, 1.0),
+                    "ocfps": np.random.normal(0.5, 0.2),
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -59,15 +67,21 @@ def _make_small_df(n_symbols=3, n_dates=30, n_extra_feats=0, seed=123):
         for i, d in enumerate(dates):
             close = base + np.cumsum(np.random.randn(n_dates) * 0.2)[i]
             row = {
-                "symbol": sym, "date": d,
-                "open": close * 0.99, "high": close * 1.02,
-                "low": close * 0.98, "close": close,
+                "symbol": sym,
+                "date": d,
+                "open": close * 0.99,
+                "high": close * 1.02,
+                "low": close * 0.98,
+                "close": close,
                 "volume": np.random.uniform(5e5, 5e6),
                 "amount": close * np.random.uniform(5e5, 5e6),
                 "turnover_rate": np.random.uniform(0.5, 5.0),
                 "pre_close": close * 0.995,
-                "board": "main", "industry": "银行",
-                "is_st": 0, "is_suspended": 0, "list_days": 500,
+                "board": "main",
+                "industry": "银行",
+                "is_st": 0,
+                "is_suspended": 0,
+                "list_days": 500,
             }
             for j in range(n_extra_feats):
                 row[f"extra_{j}"] = np.random.normal(0, 1)
@@ -88,7 +102,9 @@ class TestBruteForceGenerator:
         df = _make_small_df(n_symbols=5, n_dates=40)
         gen = BruteForceGenerator()
         new = gen.generate(df)
-        assert len(new.columns) > 50, f"Expected >50 brute columns, got {len(new.columns)}"
+        assert len(new.columns) > 50, (
+            f"Expected >50 brute columns, got {len(new.columns)}"
+        )
         # All new columns should have '_brute_' in name
         for c in new.columns:
             assert "_brute_" in c, f"Column {c} missing _brute_ marker"
@@ -170,11 +186,13 @@ class TestNanFilter:
 
     def test_filters_high_nan(self):
         """Features with >=threshold NaN are dropped."""
-        df = pd.DataFrame({
-            "good": [1.0, 2.0, 3.0, 4.0, 5.0],
-            "half": [1.0, np.nan, 3.0, np.nan, 5.0],
-            "bad": [1.0, np.nan, np.nan, np.nan, np.nan],
-        })
+        df = pd.DataFrame(
+            {
+                "good": [1.0, 2.0, 3.0, 4.0, 5.0],
+                "half": [1.0, np.nan, 3.0, np.nan, 5.0],
+                "bad": [1.0, np.nan, np.nan, np.nan, np.nan],
+            }
+        )
         feats = ["good", "half", "bad"]
         result = nan_filter(feats, df, threshold=0.5)
         assert "good" in result
@@ -188,8 +206,12 @@ class TestNanFilter:
 
     def test_all_pass_high_threshold(self):
         """Threshold of 1.0 keeps columns with <100% NaN (strict inequality)."""
-        df = pd.DataFrame({"a": [np.nan, 1.0, 2.0, 3.0, 4.0],  # 20% NaN < 100%
-                           "b": [1.0] * 5})  # 0% NaN < 100%
+        df = pd.DataFrame(
+            {
+                "a": [np.nan, 1.0, 2.0, 3.0, 4.0],  # 20% NaN < 100%
+                "b": [1.0] * 5,
+            }
+        )  # 0% NaN < 100%
         result = nan_filter(["a", "b"], df, threshold=1.0)
         # a has 20% NaN < 1.0 → kept; b has 0% NaN → kept
         assert "a" in result
@@ -208,10 +230,12 @@ class TestNanFilter:
 
     def test_default_threshold(self):
         """Default threshold is 0.95 (from design)."""
-        df = pd.DataFrame({
-            "mostly_ok": [np.nan, 1.0, 1.0, 1.0, 1.0],  # 20% NaN
-            "mostly_bad": [np.nan] * 4 + [1.0],  # 80% NaN but < 95%
-        })
+        df = pd.DataFrame(
+            {
+                "mostly_ok": [np.nan, 1.0, 1.0, 1.0, 1.0],  # 20% NaN
+                "mostly_bad": [np.nan] * 4 + [1.0],  # 80% NaN but < 95%
+            }
+        )
         result = nan_filter(["mostly_ok", "mostly_bad"], df)
         assert "mostly_ok" in result
         assert "mostly_bad" in result  # 80% < 95% threshold
@@ -230,11 +254,13 @@ class TestDedupL2:
         np.random.seed(42)
         n = 100
         base = np.random.randn(n)
-        df = pd.DataFrame({
-            "x_brute_pct1": base,
-            "x_brute_pct5": base + np.random.randn(n) * 0.01,  # near-duplicate
-            "x_brute_ma10": base * -1,  # anti-correlated, different transform
-        })
+        df = pd.DataFrame(
+            {
+                "x_brute_pct1": base,
+                "x_brute_pct5": base + np.random.randn(n) * 0.01,  # near-duplicate
+                "x_brute_ma10": base * -1,  # anti-correlated, different transform
+            }
+        )
         feats = ["x_brute_pct1", "x_brute_pct5", "x_brute_ma10"]
         result = dedup_l2(feats, df, threshold=0.7)
         # pct1 and pct5 are highly correlated → one should be dropped
@@ -247,11 +273,13 @@ class TestDedupL2:
         """Uncorrelated features are all kept."""
         np.random.seed(42)
         n = 100
-        df = pd.DataFrame({
-            "a_brute_pct1": np.random.randn(n),
-            "a_brute_pct5": np.random.randn(n),
-            "b_brute_pct1": np.random.randn(n),
-        })
+        df = pd.DataFrame(
+            {
+                "a_brute_pct1": np.random.randn(n),
+                "a_brute_pct5": np.random.randn(n),
+                "b_brute_pct1": np.random.randn(n),
+            }
+        )
         # Force all pairwise |r| <= 0.7 by using low-correlation data
         feats = ["a_brute_pct1", "a_brute_pct5", "b_brute_pct1"]
         result = dedup_l2(feats, df, threshold=0.7)
@@ -269,11 +297,13 @@ class TestDedupL2:
         np.random.seed(42)
         n = 100
         base = np.random.randn(n)
-        df = pd.DataFrame({
-            "dim01_MACD": base,
-            "dim01_RSI": base + np.random.randn(n) * 0.01,  # correlated
-            "dim12_MA_5": np.random.randn(n),  # independent
-        })
+        df = pd.DataFrame(
+            {
+                "dim01_MACD": base,
+                "dim01_RSI": base + np.random.randn(n) * 0.01,  # correlated
+                "dim12_MA_5": np.random.randn(n),  # independent
+            }
+        )
         feats = ["dim01_MACD", "dim01_RSI", "dim12_MA_5"]
         result = dedup_l2(feats, df, threshold=0.7)
         # dim01 pair: one should survive
@@ -292,10 +322,12 @@ class TestDedupL2:
         np.random.seed(42)
         n = 200
         base = np.random.randn(n)
-        df = pd.DataFrame({
-            "x_brute_ma5": base * 0.1,        # low variance
-            "x_brute_ma10": base * 5.0,       # high variance (same signal, amplified)
-        })
+        df = pd.DataFrame(
+            {
+                "x_brute_ma5": base * 0.1,  # low variance
+                "x_brute_ma10": base * 5.0,  # high variance (same signal, amplified)
+            }
+        )
         feats = ["x_brute_ma5", "x_brute_ma10"]
         result = dedup_l2(feats, df, threshold=0.7)
         # Both are highly correlated; higher variance should survive
@@ -314,11 +346,13 @@ class TestGateD:
         """Gate D runs and selects a subset of features."""
         np.random.seed(42)
         n = 200
-        df = pd.DataFrame({
-            "symbol": ["000001"] * n,
-            "date": pd.bdate_range("2025-01-01", periods=n),
-            "label_pm_1d_net": np.random.randn(n),
-        })
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001"] * n,
+                "date": pd.bdate_range("2025-01-01", periods=n),
+                "label_pm_1d_net": np.random.randn(n),
+            }
+        )
         # Add 40 features: 5 informative + 35 noise
         signal = np.random.randn(n)
         for i in range(5):
@@ -326,12 +360,17 @@ class TestGateD:
         for i in range(35):
             df[f"noise_{i}"] = np.random.randn(n)
 
-        feats = [c for c in df.columns if c.startswith("sig_") or c.startswith("noise_")]
+        feats = [
+            c for c in df.columns if c.startswith("sig_") or c.startswith("noise_")
+        ]
         # Make label correlated with signal features
-        df["label_pm_1d_net"] = df[[f"sig_{i}" for i in range(5)]].mean(axis=1) + np.random.randn(n) * 0.5
+        df["label_pm_1d_net"] = (
+            df[[f"sig_{i}" for i in range(5)]].mean(axis=1) + np.random.randn(n) * 0.5
+        )
 
-        result = gate_d_ablation(feats, df, label_col="label_pm_1d_net",
-                                 min_feats=5, sat_pct=0.90)
+        result = gate_d_ablation(
+            feats, df, label_col="label_pm_1d_net", min_feats=5, sat_pct=0.90
+        )
         assert len(result) >= 5
         assert len(result) <= len(feats)
         # Signal features should dominate selection
@@ -342,17 +381,20 @@ class TestGateD:
         """Result is clamped to at least min_feats."""
         np.random.seed(42)
         n = 150
-        df = pd.DataFrame({
-            "symbol": ["000001"] * n,
-            "date": pd.bdate_range("2025-01-01", periods=n),
-            "label_pm_1d_net": np.random.randn(n),
-        })
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001"] * n,
+                "date": pd.bdate_range("2025-01-01", periods=n),
+                "label_pm_1d_net": np.random.randn(n),
+            }
+        )
         for i in range(10):
             df[f"f_{i}"] = np.random.randn(n)
 
         feats = [f"f_{i}" for i in range(10)]
-        result = gate_d_ablation(feats, df, label_col="label_pm_1d_net",
-                                 min_feats=10, sat_pct=0.95)
+        result = gate_d_ablation(
+            feats, df, label_col="label_pm_1d_net", min_feats=10, sat_pct=0.95
+        )
         # When feats <= min_feats, return all
         assert result == feats
 
@@ -360,19 +402,22 @@ class TestGateD:
         """Gate D respects the label_col parameter."""
         np.random.seed(42)
         n = 100
-        df = pd.DataFrame({
-            "symbol": ["000001"] * n,
-            "date": pd.bdate_range("2025-01-01", periods=n),
-            "custom_label": np.random.randn(n),
-        })
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001"] * n,
+                "date": pd.bdate_range("2025-01-01", periods=n),
+                "custom_label": np.random.randn(n),
+            }
+        )
         for i in range(20):
             df[f"f_{i}"] = np.random.randn(n)
 
         feats = [f"f_{i}" for i in range(20)]
         df["custom_label"] = df["f_0"] + np.random.randn(n) * 0.3
 
-        result = gate_d_ablation(feats, df, label_col="custom_label",
-                                 min_feats=5, sat_pct=0.90)
+        result = gate_d_ablation(
+            feats, df, label_col="custom_label", min_feats=5, sat_pct=0.90
+        )
         assert len(result) >= 5
         assert len(result) <= 20
 
@@ -380,11 +425,13 @@ class TestGateD:
         """Gate D handles NaN in feature columns via fillna(0)."""
         np.random.seed(42)
         n = 120
-        df = pd.DataFrame({
-            "symbol": ["000001"] * n,
-            "date": pd.bdate_range("2025-01-01", periods=n),
-            "label_1d_net": np.random.randn(n),
-        })
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001"] * n,
+                "date": pd.bdate_range("2025-01-01", periods=n),
+                "label_1d_net": np.random.randn(n),
+            }
+        )
         for i in range(15):
             vals = np.random.randn(n)
             if i % 3 == 0:
@@ -392,8 +439,9 @@ class TestGateD:
             df[f"f_{i}"] = vals
 
         feats = [f"f_{i}" for i in range(15)]
-        result = gate_d_ablation(feats, df, label_col="label_1d_net",
-                                  min_feats=5, sat_pct=0.95)
+        result = gate_d_ablation(
+            feats, df, label_col="label_1d_net", min_feats=5, sat_pct=0.95
+        )
         assert len(result) >= 5
 
     def test_gate_d_single_date_returns_all(self):
@@ -401,13 +449,15 @@ class TestGateD:
         # With 1-2 dates, the 80/20 split produces empty test set
         np.random.seed(42)
         n = 5  # small
-        df = pd.DataFrame({
-            "symbol": ["000001"] * n,
-            "date": pd.bdate_range("2025-01-01", periods=n),
-            "label_pm_1d_net": np.random.randn(n),
-            "f_0": np.random.randn(n),
-            "f_1": np.random.randn(n),
-        })
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001"] * n,
+                "date": pd.bdate_range("2025-01-01", periods=n),
+                "label_pm_1d_net": np.random.randn(n),
+                "f_0": np.random.randn(n),
+                "f_1": np.random.randn(n),
+            }
+        )
         feats = ["f_0", "f_1"]
         result = gate_d_ablation(feats, df, min_feats=2, sat_pct=0.95)
         assert len(result) >= 1  # Should not crash
@@ -467,23 +517,36 @@ class TestFeatureSelectorSelection:
             base = 10 + hash(sym) % 30
             for i, d in enumerate(dates):
                 close = base + np.cumsum(np.random.randn(len(dates)) * 0.2)[i]
-                rows.append({
-                    "symbol": sym, "date": d,
-                    "open": close * 0.99, "high": close * 1.02,
-                    "low": close * 0.98, "close": close,
-                    "open_hfq": close * 0.99, "high_hfq": close * 1.02,
-                    "low_hfq": close * 0.98, "close_hfq": close,
-                    "volume": 1e6, "amount": 1e7, "turnover_rate": 2.0,
-                    "pre_close": close * 0.995,
-                    "board": "GEM", "industry": "科技",
-                    "is_st": 0, "is_suspended": 0, "list_days": 500,
-                    "label_pm_1d_net": np.random.randn(),
-                    "label_1d_net": np.random.randn(),
-                })
+                rows.append(
+                    {
+                        "symbol": sym,
+                        "date": d,
+                        "open": close * 0.99,
+                        "high": close * 1.02,
+                        "low": close * 0.98,
+                        "close": close,
+                        "open_hfq": close * 0.99,
+                        "high_hfq": close * 1.02,
+                        "low_hfq": close * 0.98,
+                        "close_hfq": close,
+                        "volume": 1e6,
+                        "amount": 1e7,
+                        "turnover_rate": 2.0,
+                        "pre_close": close * 0.995,
+                        "board": "GEM",
+                        "industry": "科技",
+                        "is_st": 0,
+                        "is_suspended": 0,
+                        "list_days": 500,
+                        "label_pm_1d_net": np.random.randn(),
+                        "label_1d_net": np.random.randn(),
+                    }
+                )
         df = pd.DataFrame(rows)
 
         # Build features (FeatureEngineV35 expects built columns)
         from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+
         fe = FeatureEngineV35()
         df = fe.build(df)
 
@@ -512,8 +575,11 @@ class TestFeatureSelectorVersioning:
     def test_save_and_load_current(self):
         """Save a version and load it back as current."""
         result = {
-            "board": "main", "pipeline": "test", "created": "2026-01-01",
-            "pool_size": 100, "selected_count": 50,
+            "board": "main",
+            "pipeline": "test",
+            "created": "2026-01-01",
+            "pool_size": 100,
+            "selected_count": 50,
             "features": ["dim01_MA_5", "dim02_STD_10", "dim03_feat"],
         }
         with tempfile.TemporaryDirectory() as tmp:
@@ -529,8 +595,11 @@ class TestFeatureSelectorVersioning:
     def test_save_as_draft(self):
         """Save as draft without activating (no current pointer)."""
         result = {
-            "board": "dual", "pipeline": "gate_d", "created": "2026-01-02",
-            "pool_size": 200, "selected_count": 30,
+            "board": "dual",
+            "pipeline": "gate_d",
+            "created": "2026-01-02",
+            "pool_size": 200,
+            "selected_count": 30,
             "features": ["a", "b", "c"],
         }
         with tempfile.TemporaryDirectory() as tmp:
@@ -551,6 +620,7 @@ class TestFeatureSelectorVersioning:
     def test_list_versions(self):
         """list_versions returns all non-current versions sorted newest first."""
         import time
+
         with tempfile.TemporaryDirectory() as tmp:
             sel = FeatureSelector(registry_dir=tmp)
             sel.save_version({"features": ["a"]}, "main", activate=False)
@@ -566,8 +636,13 @@ class TestFeatureSelectorVersioning:
 
     def test_get_status_active(self):
         """get_status returns correct status for active board."""
-        result = {"board": "main", "pipeline": "test", "selected_count": 10,
-                  "pool_size": 50, "features": ["a"]}
+        result = {
+            "board": "main",
+            "pipeline": "test",
+            "selected_count": 10,
+            "pool_size": 50,
+            "features": ["a"],
+        }
         with tempfile.TemporaryDirectory() as tmp:
             sel = FeatureSelector(registry_dir=tmp)
             sel.save_version(result, "main", activate=True)
@@ -597,11 +672,12 @@ class TestFeatureSelectorVersioning:
     def test_rollback(self):
         """rollback points current to a previous version."""
         import time
+
         with tempfile.TemporaryDirectory() as tmp:
             sel = FeatureSelector(registry_dir=tmp)
             sel.save_version({"features": ["v1"]}, "main", activate=True)
             time.sleep(1.1)
-            v2 = sel.save_version({"features": ["v2"]}, "main", activate=True)
+            sel.save_version({"features": ["v2"]}, "main", activate=True)
 
             versions = sel.list_versions("main")
             assert len(versions) >= 2
@@ -678,10 +754,13 @@ class TestEndToEndMini:
         new = gen.generate(df)
         df_exp = df.join(new)
 
-        all_feats = [c for c in df_exp.columns
-                     if c not in BruteForceGenerator.EXCLUDE_COLS
-                     and not c.startswith("label_")
-                     and df_exp[c].dtype in ("float64", "int64")]
+        all_feats = [
+            c
+            for c in df_exp.columns
+            if c not in BruteForceGenerator.EXCLUDE_COLS
+            and not c.startswith("label_")
+            and df_exp[c].dtype in ("float64", "int64")
+        ]
         assert len(all_feats) > 30, f"Expected >30 brute features, got {len(all_feats)}"
 
         # Layer 2: NaN filter
@@ -707,23 +786,36 @@ class TestEndToEndMini:
             base = 10 + hash(sym) % 30
             for i, d in enumerate(dates):
                 close = base + np.cumsum(np.random.randn(len(dates)) * 0.15)[i]
-                rows.append({
-                    "symbol": sym, "date": d,
-                    "open": close * 0.99, "high": close * 1.02,
-                    "low": close * 0.98, "close": close,
-                    "open_hfq": close * 0.99, "high_hfq": close * 1.02,
-                    "low_hfq": close * 0.98, "close_hfq": close,
-                    "volume": 1e6, "amount": 1e7, "turnover_rate": 2.0,
-                    "pre_close": close * 0.995,
-                    "board": "GEM", "industry": "科技",
-                    "is_st": 0, "is_suspended": 0, "list_days": 500,
-                    "label_pm_1d_net": np.random.randn(),
-                    "label_1d_net": np.random.randn(),
-                })
+                rows.append(
+                    {
+                        "symbol": sym,
+                        "date": d,
+                        "open": close * 0.99,
+                        "high": close * 1.02,
+                        "low": close * 0.98,
+                        "close": close,
+                        "open_hfq": close * 0.99,
+                        "high_hfq": close * 1.02,
+                        "low_hfq": close * 0.98,
+                        "close_hfq": close,
+                        "volume": 1e6,
+                        "amount": 1e7,
+                        "turnover_rate": 2.0,
+                        "pre_close": close * 0.995,
+                        "board": "GEM",
+                        "industry": "科技",
+                        "is_st": 0,
+                        "is_suspended": 0,
+                        "list_days": 500,
+                        "label_pm_1d_net": np.random.randn(),
+                        "label_1d_net": np.random.randn(),
+                    }
+                )
         df = pd.DataFrame(rows)
 
         # Build features via FeatureEngineV35
         from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+
         fe = FeatureEngineV35()
         df = fe.build(df)
 
@@ -736,6 +828,7 @@ class TestEndToEndMini:
 
         # Gate D (only if enough features)
         if len(valid) > 30:
-            selected = gate_d_ablation(valid, df, label_col="label_pm_1d_net",
-                                       min_feats=5, sat_pct=0.95)
+            selected = gate_d_ablation(
+                valid, df, label_col="label_pm_1d_net", min_feats=5, sat_pct=0.95
+            )
             assert len(selected) >= 5

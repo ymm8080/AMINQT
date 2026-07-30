@@ -7,7 +7,6 @@ import warnings
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.feature_registry import FeatureRegistry
@@ -23,15 +22,25 @@ def _make_minimal_panel(n_symbols=5, n_dates=100, extra_cols=None):
         for i, d in enumerate(dates):
             base_price = 10 + hash(sym) % 50 + 0.1 * (i % 100)  # daily variation
             row = {
-                "symbol": sym, "date": d,
-                "open": base_price, "high": base_price * 1.02,
-                "low": base_price * 0.98, "close": base_price * 1.01,
-                "open_hfq": base_price, "high_hfq": base_price * 1.02,
-                "low_hfq": base_price * 0.98, "close_hfq": base_price * 1.01,
-                "volume": 1e6, "amount": 1e7, "turnover_rate": 2.0,
+                "symbol": sym,
+                "date": d,
+                "open": base_price,
+                "high": base_price * 1.02,
+                "low": base_price * 0.98,
+                "close": base_price * 1.01,
+                "open_hfq": base_price,
+                "high_hfq": base_price * 1.02,
+                "low_hfq": base_price * 0.98,
+                "close_hfq": base_price * 1.01,
+                "volume": 1e6,
+                "amount": 1e7,
+                "turnover_rate": 2.0,
                 "pre_close": base_price * 0.99,
-                "board": "main", "industry": "银行", "is_st": 0,
-                "is_suspended": 0, "list_days": 500,
+                "board": "main",
+                "industry": "银行",
+                "is_st": 0,
+                "is_suspended": 0,
+                "list_days": 500,
             }
             if extra_cols:
                 for ec_name, ec_fn in extra_cols.items():
@@ -128,7 +137,8 @@ class TestAutoAdoption:
         """A new numeric column with <70% NaN generates template features."""
         np.random.seed(42)
         panel = _make_minimal_panel(
-            n_symbols=15, n_dates=100,  # ≥10 stocks needed for IC gate daily grp
+            n_symbols=15,
+            n_dates=100,  # ≥10 stocks needed for IC gate daily grp
             extra_cols={"eps": lambda s, d: np.random.normal(1.5, 0.3)},
         )
 
@@ -152,7 +162,9 @@ class TestAutoAdoption:
 
             # Check trial features were generated (zscore_20d is the first one)
             trial_names = [f for f in df.columns if f.startswith("eps_zscore")]
-            assert len(trial_names) >= 1, f"Expected >=1 trial feature (eps_zscore_20d), got {trial_names}"
+            assert len(trial_names) >= 1, (
+                f"Expected >=1 trial feature (eps_zscore_20d), got {trial_names}"
+            )
 
             # Check registry
             for name in trial_names:
@@ -170,8 +182,11 @@ class TestAutoAdoption:
         np.random.seed(42)
         panel = _make_minimal_panel(n_symbols=5, n_dates=100)
         # 90% NaN
-        sparse_vals = np.where(np.random.random(len(panel)) > 0.9,
-                               np.random.normal(1.5, 0.3, len(panel)), np.nan)
+        sparse_vals = np.where(
+            np.random.random(len(panel)) > 0.9,
+            np.random.normal(1.5, 0.3, len(panel)),
+            np.nan,
+        )
         panel["sparse_col"] = sparse_vals
         nan_rate = panel["sparse_col"].isna().mean()
         assert nan_rate > 0.7, f"Expected >70% NaN, got {nan_rate:.1%}"
@@ -216,7 +231,8 @@ class TestAutoAdoption:
         """When adoption is disabled, new columns do NOT generate auto-adopted trial features."""
         np.random.seed(42)
         panel = _make_minimal_panel(
-            n_symbols=5, n_dates=100,
+            n_symbols=5,
+            n_dates=100,
             extra_cols={"eps": lambda s, d: np.random.normal(1.5, 0.3)},
         )
 
@@ -235,10 +251,14 @@ class TestAutoAdoption:
 
             # Auto-adopted trial features (zscore_20d, chg5d, ma5_cross, etc.)
             # should NOT exist since adoption is disabled
-            trial_specific = [f for f in df.columns if f.startswith("eps_zscore")
-                              or f.startswith("eps_ma5_cross")
-                              or f.startswith("eps_vol_adj")
-                              or f.startswith("eps_sector_rank")]
+            trial_specific = [
+                f
+                for f in df.columns
+                if f.startswith("eps_zscore")
+                or f.startswith("eps_ma5_cross")
+                or f.startswith("eps_vol_adj")
+                or f.startswith("eps_sector_rank")
+            ]
             assert len(trial_specific) == 0, (
                 f"Expected 0 auto-adopted trial features, got {trial_specific}"
             )
@@ -275,17 +295,33 @@ class TestTrialGradeGracePeriod:
         """Trial feature with borderline IC stays trial for 3 windows."""
         # This test validates the registry-level logic, not the full ICScreener
         reg = FeatureRegistry(path="/nonexistent/test.json")
-        reg.register_new("eps_zscore_20d", {
-            "dim_group": "_auto_adopted", "active": True, "grade": "trial",
-            "trial_windows": 0, "source_cols": ["eps"], "transform": "zscore_20d",
-        })
+        reg.register_new(
+            "eps_zscore_20d",
+            {
+                "dim_group": "_auto_adopted",
+                "active": True,
+                "grade": "trial",
+                "trial_windows": 0,
+                "source_cols": ["eps"],
+                "transform": "zscore_20d",
+            },
+        )
 
         # First failed screen — should stay trial
         screen = {
-            "window_id": "main_2026W31", "factors": [],
-            "detail": {"eps_zscore_20d": {"ic_1d": 0.005, "ic_3d": 0.004,
-                        "ic_5d": 0.003, "icir": 0.02, "grade": "dead",
-                        "rolling_mean": 0.004, "rolling_pos_ratio": 0.40}},
+            "window_id": "main_2026W31",
+            "factors": [],
+            "detail": {
+                "eps_zscore_20d": {
+                    "ic_1d": 0.005,
+                    "ic_3d": 0.004,
+                    "ic_5d": 0.003,
+                    "icir": 0.02,
+                    "grade": "dead",
+                    "rolling_mean": 0.004,
+                    "rolling_pos_ratio": 0.40,
+                }
+            },
         }
         # Simulate ICScreener trial grace logic
         meta = reg.get_meta("eps_zscore_20d")
@@ -305,16 +341,32 @@ class TestTrialGradeGracePeriod:
     def test_trial_feature_dies_after_3_windows(self):
         """After 3 consecutive 'dead' IC evaluations, trial → dead."""
         reg = FeatureRegistry(path="/nonexistent/test.json")
-        reg.register_new("eps_vol_adj", {
-            "dim_group": "_auto_adopted", "active": True, "grade": "trial",
-            "trial_windows": 2, "source_cols": ["eps"], "transform": "vol_adj",
-        })
+        reg.register_new(
+            "eps_vol_adj",
+            {
+                "dim_group": "_auto_adopted",
+                "active": True,
+                "grade": "trial",
+                "trial_windows": 2,
+                "source_cols": ["eps"],
+                "transform": "vol_adj",
+            },
+        )
 
         screen = {
-            "window_id": "main_2026W33", "factors": [],
-            "detail": {"eps_vol_adj": {"ic_1d": 0.003, "ic_3d": 0.002,
-                        "ic_5d": 0.001, "icir": 0.01, "grade": "dead",
-                        "rolling_mean": 0.002, "rolling_pos_ratio": 0.30}},
+            "window_id": "main_2026W33",
+            "factors": [],
+            "detail": {
+                "eps_vol_adj": {
+                    "ic_1d": 0.003,
+                    "ic_3d": 0.002,
+                    "ic_5d": 0.001,
+                    "icir": 0.01,
+                    "grade": "dead",
+                    "rolling_mean": 0.002,
+                    "rolling_pos_ratio": 0.30,
+                }
+            },
         }
 
         meta = reg.get_meta("eps_vol_adj")

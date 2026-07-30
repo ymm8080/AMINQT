@@ -69,9 +69,18 @@ class FeatureEngineV35:
 
     # ── Non-feature columns (identifier / raw prices / intermediate) ──
     _NON_FEATURE_ID_COLS = {
-        "symbol", "date", "board", "industry", "name", "tradestatus",
-        "announce_date", "report_period", "time", "market_state",
-        "schema_version", "ts_code",
+        "symbol",
+        "date",
+        "board",
+        "industry",
+        "name",
+        "tradestatus",
+        "announce_date",
+        "report_period",
+        "time",
+        "market_state",
+        "schema_version",
+        "ts_code",
     }
 
     # ── Dim gating names (must match method names in build) ──
@@ -129,8 +138,14 @@ class FeatureEngineV35:
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)  # 安全网 #13
 
         # ── Dim gating: skip dims with zero active features ──
-        _ok = lambda dim_key: registry is None or self._dim_active(registry, self._DIM_GATE_MAP[dim_key])
-        _ok_raw = lambda dim_name: registry is None or self._dim_active(registry, dim_name)
+        def _ok(dim_key):
+            return (
+                    registry is None or self._dim_active(registry, self._DIM_GATE_MAP[dim_key])
+                )
+        def _ok_raw(dim_name):
+            return (
+                    registry is None or self._dim_active(registry, dim_name)
+                )
 
         if _ok("dim01"):
             df = self.dim01_price_volume(df)
@@ -143,7 +158,9 @@ class FeatureEngineV35:
         if _ok("dim04"):
             df = self.dim04_sector_effect(df)
         if _ok("dim05"):
-            df = self.dim05_turnover_liquidity(df)  # Tushare daily_basic 换手率/量比/股息率
+            df = self.dim05_turnover_liquidity(
+                df
+            )  # Tushare daily_basic 换手率/量比/股息率
         if _ok("dim06"):
             df = self.dim06_valuation_size(df)  # Tushare daily_basic PE/PB/PS/市值
         if _ok_raw("dim_active_pit"):
@@ -155,7 +172,9 @@ class FeatureEngineV35:
         if _ok("dim10"):
             df = self.dim10_money_flow(df)
         if _ok("dim11"):
-            df = self.dim11_float_limits(df)  # Tushare stk_limit 涨跌停价 + daily_basic 流通股本
+            df = self.dim11_float_limits(
+                df
+            )  # Tushare stk_limit 涨跌停价 + daily_basic 流通股本
         if _ok("dim12"):
             df = self.dim12_ma_system(df)
         if _ok("dim13"):
@@ -175,7 +194,9 @@ class FeatureEngineV35:
         if _ok("dim19"):
             df = self.dim19_amihud(df)  # E6
         if _ok("dim21"):
-            df = self.dim21_chip_tushare(df)  # 真实筹码分布 (Tushare cyq_perf), 无CYQ时用OHLCV代理补位
+            df = self.dim21_chip_tushare(
+                df
+            )  # 真实筹码分布 (Tushare cyq_perf), 无CYQ时用OHLCV代理补位
         # dim20_chip_proxy 已合并到 dim21 — CYQ NaN 时自动回退 OHLCV 推导
         if _ok("dim22"):
             df = self.dim22_fundamental_pit(df)  # [Alt-3] 基本面PIT (fina_indicator)
@@ -218,7 +239,9 @@ class FeatureEngineV35:
         if registry is not None:
             active_set = set(registry.get_active())
             all_feat_cols = set(self.feature_columns(df))
-            drop_cols = [c for c in df.columns if c in all_feat_cols and c not in active_set]
+            drop_cols = [
+                c for c in df.columns if c in all_feat_cols and c not in active_set
+            ]
             if drop_cols:
                 # Log per-dim-group breakdown of dropped features
                 by_dim: dict[str, list[str]] = {}
@@ -230,10 +253,15 @@ class FeatureEngineV35:
                 total_after = total_before - len(drop_cols)
                 logger.info(
                     "Registry prune: %d -> %d features (dropped %d across %d dims)",
-                    total_before, total_after, len(drop_cols), len(by_dim),
+                    total_before,
+                    total_after,
+                    len(drop_cols),
+                    len(by_dim),
                 )
                 for dg, names in sorted(by_dim.items()):
-                    logger.info("  Pruned [%s]: %d features — %s", dg, len(names), names[:5])
+                    logger.info(
+                        "  Pruned [%s]: %d features — %s", dg, len(names), names[:5]
+                    )
                 df = df.drop(columns=drop_cols)
 
         return df
@@ -248,7 +276,9 @@ class FeatureEngineV35:
 
     # ---------------- IC/IR Gate (Gate A) — quick pre-screen ----------------
     @staticmethod
-    def _quick_ic_check(df: pd.DataFrame, col: str, label_col: str) -> tuple[float, float, int]:
+    def _quick_ic_check(
+        df: pd.DataFrame, col: str, label_col: str
+    ) -> tuple[float, float, int]:
         """Compute |mean IC|, ICIR, and number of valid trading days.
 
         Groups by date, computes Spearman Rank IC against label_col per day,
@@ -305,8 +335,17 @@ class FeatureEngineV35:
         # Find new panel columns
         panel_cols = set(df.columns)
         skip_set = self._NON_FEATURE_ID_COLS | {
-            "open", "high", "low", "close", "volume", "amount",
-            "pre_close", "open_hfq", "high_hfq", "low_hfq", "close_hfq",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "amount",
+            "pre_close",
+            "open_hfq",
+            "high_hfq",
+            "low_hfq",
+            "close_hfq",
             "turnover_rate",
         }
         candidates = panel_cols - registered_cols - skip_set
@@ -332,9 +371,21 @@ class FeatureEngineV35:
             if nan_rate > 0.7:
                 skipped[col] = f"too sparse (NaN={nan_rate:.1%})"
                 continue
-            if any(col.endswith(s) for s in ("_chg1", "_chg3", "_chg5", "_chg10", "_chg20",
-                                                "_pct_chg1", "_pct_chg3", "_pct_chg5",
-                                                "_xrank", "_industry_rank")):
+            if any(
+                col.endswith(s)
+                for s in (
+                    "_chg1",
+                    "_chg3",
+                    "_chg5",
+                    "_chg10",
+                    "_chg20",
+                    "_pct_chg1",
+                    "_pct_chg3",
+                    "_pct_chg5",
+                    "_xrank",
+                    "_industry_rank",
+                )
+            ):
                 skipped[col] = "derived column (skip)"
                 continue
             adoptable.append(col)
@@ -342,12 +393,17 @@ class FeatureEngineV35:
         logger.info(
             "Auto-Adopt [BEFORE]: %d registered features (%d active), "
             "%d panel columns, %d candidate new cols (%d adoptable, %d skipped)",
-            n_features_before, active_before, len(panel_cols),
-            len(candidates), len(adoptable), len(skipped),
+            n_features_before,
+            active_before,
+            len(panel_cols),
+            len(candidates),
+            len(adoptable),
+            len(skipped),
         )
         if skipped:
-            logger.info("Auto-Adopt skipped: %s",
-                        {c: r for c, r in sorted(skipped.items())})
+            logger.info(
+                "Auto-Adopt skipped: %s", {c: r for c, r in sorted(skipped.items())}
+            )
 
         # ── IC/IR Gate pre-screen (Gate A) ──
         # Compute 1-day forward return label (use close as reference)
@@ -373,7 +429,9 @@ class FeatureEngineV35:
                 continue
 
             abs_ic, icir_val, n_days = self._quick_ic_check(
-                df_sorted, col, label_col,
+                df_sorted,
+                col,
+                label_col,
             )
             if n_days < 20:
                 screened_fail[col] = f"too few trading days ({n_days})"
@@ -392,8 +450,10 @@ class FeatureEngineV35:
         # Log IC gate summary
         logger.info(
             "Auto-Adopt IC Gate: %d/%d pass (|IC|>=%.2f & ICIR>=%.2f), %d fail",
-            len(screened_pass), len(adoptable),
-            self._ADOPTION_IC_MIN, self._ADOPTION_ICIR_MIN,
+            len(screened_pass),
+            len(adoptable),
+            self._ADOPTION_IC_MIN,
+            self._ADOPTION_ICIR_MIN,
             len(screened_fail),
         )
         if screened_fail:
@@ -429,19 +489,29 @@ class FeatureEngineV35:
             logger.info(
                 "Auto-Adopt [AFTER]: %d -> %d features (+%d), "
                 "%d -> %d active (+%d), %d -> %d df columns (+%d)",
-                n_features_before, n_features_after, total_added,
-                active_before, active_after, active_after - active_before,
-                n_cols_before, n_cols_after, n_cols_after - n_cols_before,
+                n_features_before,
+                n_features_after,
+                total_added,
+                active_before,
+                active_after,
+                active_after - active_before,
+                n_cols_before,
+                n_cols_after,
+                n_cols_after - n_cols_before,
             )
             # Per-column detail
             for col, feat_list in sorted(features_added.items()):
                 logger.info(
                     "Auto-Adopt: %s → %d trial features: %s",
-                    col, len(feat_list), feat_list,
+                    col,
+                    len(feat_list),
+                    feat_list,
                 )
         else:
-            logger.info("Auto-Adopt [AFTER]: no columns adopted (all %d candidates skipped/rejected)",
-                        len(candidates))
+            logger.info(
+                "Auto-Adopt [AFTER]: no columns adopted (all %d candidates skipped/rejected)",
+                len(candidates),
+            )
 
         return df
 
@@ -456,19 +526,30 @@ class FeatureEngineV35:
 
         # 1. Rolling 20d z-score
         zscore_col = f"{col}_zscore_20d"
+
         def _per_stock_zscore(g):
             s = g[col]
             mu = s.rolling(W20, min_periods=10).mean()
             sd = s.rolling(W20, min_periods=10).std()
             g[zscore_col] = (s - mu) / sd.replace(0, np.nan)
             return g
+
         df = _apply_per_stock(df, _per_stock_zscore)
         if zscore_col in df.columns:
-            registry.register_new(zscore_col, {
-                "dim_group": "_auto_adopted", "active": True, "grade": "trial",
-                "source_cols": [col], "transform": "zscore_20d",
-                "created": today, "last_eval": "", "icir": 0.0, "ic_abs": 0.0,
-            })
+            registry.register_new(
+                zscore_col,
+                {
+                    "dim_group": "_auto_adopted",
+                    "active": True,
+                    "grade": "trial",
+                    "source_cols": [col],
+                    "transform": "zscore_20d",
+                    "created": today,
+                    "last_eval": "",
+                    "icir": 0.0,
+                    "ic_abs": 0.0,
+                },
+            )
 
         # 2. 5-day change
         chg5_col = f"{col}_chg5d"
@@ -476,52 +557,93 @@ class FeatureEngineV35:
         chg5 = grp.diff(5)
         if chg5.notna().sum() > 100:
             df[chg5_col] = chg5
-            registry.register_new(chg5_col, {
-                "dim_group": "_auto_adopted", "active": True, "grade": "trial",
-                "source_cols": [col], "transform": "chg5d",
-                "created": today, "last_eval": "", "icir": 0.0, "ic_abs": 0.0,
-            })
+            registry.register_new(
+                chg5_col,
+                {
+                    "dim_group": "_auto_adopted",
+                    "active": True,
+                    "grade": "trial",
+                    "source_cols": [col],
+                    "transform": "chg5d",
+                    "created": today,
+                    "last_eval": "",
+                    "icir": 0.0,
+                    "ic_abs": 0.0,
+                },
+            )
 
         # 3. 20-day change
         chg20_col = f"{col}_chg20d"
         chg20 = grp.diff(20)
         if chg20.notna().sum() > 100:
             df[chg20_col] = chg20
-            registry.register_new(chg20_col, {
-                "dim_group": "_auto_adopted", "active": True, "grade": "trial",
-                "source_cols": [col], "transform": "chg20d",
-                "created": today, "last_eval": "", "icir": 0.0, "ic_abs": 0.0,
-            })
+            registry.register_new(
+                chg20_col,
+                {
+                    "dim_group": "_auto_adopted",
+                    "active": True,
+                    "grade": "trial",
+                    "source_cols": [col],
+                    "transform": "chg20d",
+                    "created": today,
+                    "last_eval": "",
+                    "icir": 0.0,
+                    "ic_abs": 0.0,
+                },
+            )
 
         # 4. Cross-sectional rank within industry
         if "industry" in df.columns:
             rank_col = f"{col}_sector_rank"
-            df[rank_col] = df.groupby(["date", "industry"], observed=True)[col].rank(pct=True)
-            registry.register_new(rank_col, {
-                "dim_group": "_auto_adopted", "active": True, "grade": "trial",
-                "source_cols": [col], "transform": "sector_rank",
-                "created": today, "last_eval": "", "icir": 0.0, "ic_abs": 0.0,
-            })
+            df[rank_col] = df.groupby(["date", "industry"], observed=True)[col].rank(
+                pct=True
+            )
+            registry.register_new(
+                rank_col,
+                {
+                    "dim_group": "_auto_adopted",
+                    "active": True,
+                    "grade": "trial",
+                    "source_cols": [col],
+                    "transform": "sector_rank",
+                    "created": today,
+                    "last_eval": "",
+                    "icir": 0.0,
+                    "ic_abs": 0.0,
+                },
+            )
 
         # 5. MA5 crossover signal
         ma5_cross_col = f"{col}_ma5_cross"
+
         def _per_stock_ma5_cross(g):
             s = g[col]
             ma5 = s.rolling(5, min_periods=3).mean()
             prev_cross = np.sign(s.shift(1) - ma5.shift(1))
             g[ma5_cross_col] = np.sign(s - ma5) - prev_cross
             return g
+
         df = _apply_per_stock(df, _per_stock_ma5_cross)
         if ma5_cross_col in df.columns:
-            registry.register_new(ma5_cross_col, {
-                "dim_group": "_auto_adopted", "active": True, "grade": "trial",
-                "source_cols": [col], "transform": "ma5_cross",
-                "created": today, "last_eval": "", "icir": 0.0, "ic_abs": 0.0,
-            })
+            registry.register_new(
+                ma5_cross_col,
+                {
+                    "dim_group": "_auto_adopted",
+                    "active": True,
+                    "grade": "trial",
+                    "source_cols": [col],
+                    "transform": "ma5_cross",
+                    "created": today,
+                    "last_eval": "",
+                    "icir": 0.0,
+                    "ic_abs": 0.0,
+                },
+            )
 
         # 6. Volume-adjusted variant
         if "volume" in df.columns:
             vol_adj_col = f"{col}_vol_adj"
+
             def _per_stock_vol_adj(g):
                 s = g[col]
                 v = g["volume"]
@@ -530,13 +652,23 @@ class FeatureEngineV35:
                 v_z = (v - v_mu) / v_sd.replace(0, 1.0)
                 g[vol_adj_col] = s * v_z
                 return g
+
             df = _apply_per_stock(df, _per_stock_vol_adj)
             if vol_adj_col in df.columns:
-                registry.register_new(vol_adj_col, {
-                    "dim_group": "_auto_adopted", "active": True, "grade": "trial",
-                    "source_cols": [col, "volume"], "transform": "vol_adj",
-                    "created": today, "last_eval": "", "icir": 0.0, "ic_abs": 0.0,
-                })
+                registry.register_new(
+                    vol_adj_col,
+                    {
+                        "dim_group": "_auto_adopted",
+                        "active": True,
+                        "grade": "trial",
+                        "source_cols": [col, "volume"],
+                        "transform": "vol_adj",
+                        "created": today,
+                        "last_eval": "",
+                        "icir": 0.0,
+                        "ic_abs": 0.0,
+                    },
+                )
 
         return df
 
@@ -547,10 +679,20 @@ class FeatureEngineV35:
     # (close_chg5 ≈ bias_5), and dim-generated features should not get
     # uninformed second-order diffs.
     _TS_WHITELIST: set[str] = {
-        "cost_5pct", "cost_15pct", "cost_50pct", "cost_85pct", "cost_95pct",
-        "avg_cost", "weight_avg", "benefit_part",
-        "pct_70_low", "pct_70_high", "pct_90_low", "pct_90_high",
-        "pct_70_con", "pct_90_con",
+        "cost_5pct",
+        "cost_15pct",
+        "cost_50pct",
+        "cost_85pct",
+        "cost_95pct",
+        "avg_cost",
+        "weight_avg",
+        "benefit_part",
+        "pct_70_low",
+        "pct_70_high",
+        "pct_90_low",
+        "pct_90_high",
+        "pct_70_con",
+        "pct_90_con",
     }
 
     # ── Columns eligible for _xrank (whitelist) ──
@@ -560,16 +702,34 @@ class FeatureEngineV35:
     # invariant to monotonic transforms (Spearman IC unchanged).
     _XRANK_WHITELIST: set[str] = {
         # OHLCV raw
-        "open", "high", "low", "close",
+        "open",
+        "high",
+        "low",
+        "close",
         "pre_close",
-        "open_hfq", "high_hfq", "low_hfq", "close_hfq",
-        "volume", "amount",
-        "turnover_rate", "free_float_turnover_rate",
+        "open_hfq",
+        "high_hfq",
+        "low_hfq",
+        "close_hfq",
+        "volume",
+        "amount",
+        "turnover_rate",
+        "free_float_turnover_rate",
         # CYQ chip distribution
-        "cost_5pct", "cost_15pct", "cost_50pct", "cost_85pct", "cost_95pct",
-        "avg_cost", "weight_avg", "benefit_part",
-        "pct_70_low", "pct_70_high", "pct_90_low", "pct_90_high",
-        "pct_70_con", "pct_90_con",
+        "cost_5pct",
+        "cost_15pct",
+        "cost_50pct",
+        "cost_85pct",
+        "cost_95pct",
+        "avg_cost",
+        "weight_avg",
+        "benefit_part",
+        "pct_70_low",
+        "pct_70_high",
+        "pct_90_low",
+        "pct_90_high",
+        "pct_70_con",
+        "pct_90_con",
     }
 
     @classmethod
@@ -591,7 +751,8 @@ class FeatureEngineV35:
         # Only process columns in the whitelist that exist in the panel
         whitelist_in_panel = cls._TS_WHITELIST & set(df.columns)
         src_cols = [
-            c for c in whitelist_in_panel
+            c
+            for c in whitelist_in_panel
             if df[c].dtype in ("float64", "float32", "int64", "int32")
             and df[c].isna().mean() < 0.7
         ]
@@ -648,7 +809,8 @@ class FeatureEngineV35:
         # Only process columns in the whitelist that exist in the panel
         whitelist_in_panel = cls._XRANK_WHITELIST & set(df.columns)
         src_cols = [
-            c for c in whitelist_in_panel
+            c
+            for c in whitelist_in_panel
             if df[c].dtype in ("float64", "float32", "int64", "int32")
             and not c.endswith("_xrank")
         ]
