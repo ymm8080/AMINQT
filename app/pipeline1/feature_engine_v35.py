@@ -139,13 +139,12 @@ class FeatureEngineV35:
 
         # ── Dim gating: skip dims with zero active features ──
         def _ok(dim_key):
-            return (
-                    registry is None or self._dim_active(registry, self._DIM_GATE_MAP[dim_key])
-                )
+            return registry is None or self._dim_active(
+                registry, self._DIM_GATE_MAP[dim_key]
+            )
+
         def _ok_raw(dim_name):
-            return (
-                    registry is None or self._dim_active(registry, dim_name)
-                )
+            return registry is None or self._dim_active(registry, dim_name)
 
         if _ok("dim01"):
             df = self.dim01_price_volume(df)
