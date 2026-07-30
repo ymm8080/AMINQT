@@ -9,7 +9,12 @@ Usage:
   python scripts/build_features.py --data-window 3Y            # Data window (1Y/3Y/ALL)
   python scripts/build_features.py --board main --max-stocks 100  # Test with 100 stocks
 """
-import argparse, os, sys, time, logging
+
+import argparse
+import os
+import sys
+import time
+import logging
 from datetime import datetime
 
 import numpy as np
@@ -78,9 +83,22 @@ def step1_update_registry(panel):
 
     # Discover new numeric columns
     skip = {
-        "symbol", "date", "board", "industry", "announce_date",
-        "is_suspended", "is_st", "tradestatus", "open", "high", "low",
-        "close", "volume", "amount", "pre_close", "turnover_rate",
+        "symbol",
+        "date",
+        "board",
+        "industry",
+        "announce_date",
+        "is_suspended",
+        "is_st",
+        "tradestatus",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "amount",
+        "pre_close",
+        "turnover_rate",
     }
     panel_cols = [
         c
@@ -148,22 +166,29 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
         # Full MAIN board (60/00/002/601/603/605), not just CSI 300
         board_panel = panel[~panel["board"].isin(["GEM", "STAR"])].copy()
         if max_stocks and max_stocks > 0:
-            stocks = sorted(np.random.choice(
-                board_panel["symbol"].unique(), size=max_stocks, replace=False))
+            stocks = sorted(
+                np.random.choice(
+                    board_panel["symbol"].unique(), size=max_stocks, replace=False
+                )
+            )
             board_panel = board_panel[board_panel["symbol"].isin(stocks)]
         logger.info(f"  MAIN: {board_panel['symbol'].nunique():,} stocks")
     else:
         dual = panel[panel["board"].isin(["GEM", "STAR"])]
         board_stocks = sorted(dual["symbol"].unique())
         if len(board_stocks) > 300:
-            board_stocks = sorted(np.random.choice(board_stocks, size=300, replace=False))
+            board_stocks = sorted(
+                np.random.choice(board_stocks, size=300, replace=False)
+            )
         board_panel = panel[panel["symbol"].isin(board_stocks)].copy()
         logger.info(f"  DUAL: {board_panel['symbol'].nunique():,} stocks")
 
     # Clean + labels (shared for both boards)
     cleaner = CleaningPipeline()
     main_d, dual_d = cleaner.run_train(board_panel)
-    df = main_d if board == "main" else (dual_d if len(dual_d) > len(main_d) else main_d)
+    df = (
+        main_d if board == "main" else (dual_d if len(dual_d) > len(main_d) else main_d)
+    )
     logger.info(f"  Cleaned: {len(df):,} rows, {df['symbol'].nunique()} stocks")
 
     df = LabelEngine.build_path_labels(df)
@@ -176,11 +201,20 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
     if board == "main":
         # Family-based batching: generate one transform family at a time,
         # join to df incrementally. Peak: base + largest family ≈ 3GB.
-        FAMILIES = ["pct_change", "rolling_mean", "rolling_std",
-                     "rolling_max", "diff", "momentum", "EMA"]
+        FAMILIES = [
+            "pct_change",
+            "rolling_mean",
+            "rolling_std",
+            "rolling_max",
+            "diff",
+            "momentum",
+            "EMA",
+        ]
         gen = BruteForceGenerator()
         raw_cols = gen._eligible(df)
-        logger.info(f"  BruteForce: {len(raw_cols)} eligible raw cols x {len(FAMILIES)} families")
+        logger.info(
+            f"  BruteForce: {len(raw_cols)} eligible raw cols x {len(FAMILIES)} families"
+        )
 
         total_new_cols = 0
         for fam in FAMILIES:
@@ -198,6 +232,7 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
     else:
         fe = FeatureEngineV35()
         import tempfile
+
         reg_dir = tempfile.mkdtemp()
         registry = FeatureRegistry(path=os.path.join(reg_dir, "feature_registry.json"))
         sample = (
@@ -213,10 +248,19 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
     out_path = os.path.join(REGISTRY_DIR, f"features_{board}_{ts}.parquet")
     df.to_parquet(out_path)
 
-    n_feat = len(FeatureEngineV35.feature_columns(df)) if board == "dual" else len(
-        [c for c in df.columns if c not in BruteForceGenerator.EXCLUDE_COLS
-         and not c.startswith("label_")
-         and df[c].dtype in ("float64", "int64", "float32")])
+    n_feat = (
+        len(FeatureEngineV35.feature_columns(df))
+        if board == "dual"
+        else len(
+            [
+                c
+                for c in df.columns
+                if c not in BruteForceGenerator.EXCLUDE_COLS
+                and not c.startswith("label_")
+                and df[c].dtype in ("float64", "int64", "float32")
+            ]
+        )
+    )
 
     logger.info(
         f"  Saved: {out_path} ({n_feat} features, "
@@ -231,7 +275,9 @@ def main():
     ap.add_argument("--board", choices=["main", "dual"], help="Board to build")
     ap.add_argument("--data-window", default=None, choices=["1Y", "3Y", "ALL"])
     ap.add_argument("--adoption-only", action="store_true")
-    ap.add_argument("--max-stocks", type=int, default=0, help="Cap stocks (0=all, use for testing)")
+    ap.add_argument(
+        "--max-stocks", type=int, default=0, help="Cap stocks (0=all, use for testing)"
+    )
     args = ap.parse_args()
 
     panel = load_panel(args.data_window)
