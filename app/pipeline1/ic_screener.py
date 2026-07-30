@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # ICIR 0.10-0.25 is still normal range for single factors.
 # Model Gate (metrics.ignition_gate): 组合模型分数 — 门槛严格 (ICIR≥0.30),
 IC_STRONG = 0.02  # 有效因子 |IC| 下限 (因子级: ≥0.02 即有效; 模型级: ≥0.03)
-IC_WEAK = 0.015   # 弱因子 |IC| 下限 (≥0.015 方可通过因子门禁)
+IC_WEAK = 0.015  # 弱因子 |IC| 下限 (≥0.015 方可通过因子门禁)
 ROLLING_WINDOW = 60  # 滚动 IC 窗口 (交易日)
 ROLLING_MEAN_MIN = 0.015  # 60日滚动IC均值下限 (与 IC_WEAK 对齐)
 ROLLING_POS_RATIO_MIN = 0.50  # 滚动IC正值比例 (过半即可, 原0.60太严)
@@ -36,9 +36,7 @@ L2_NEG_PERIODS = (
     10  # [E4-L2] 连续 N 期滚动 IC 为负 → 自动剔除 (提高至10期, 允许周期性回撤)
 )
 L2_RECOVERY_PERIODS = 1  # 连续 N 期正向 IC → 解除剔除, 恢复候选资格
-ICIR_MIN = (
-    0.10  # [P19 两阶门禁] 因子级 ICIR 下限: |IC|/IC_std ≥ 0.10 (与 ADOPTION ANALYSIS WEAK 对齐)
-)
+ICIR_MIN = 0.10  # [P19 两阶门禁] 因子级 ICIR 下限: |IC|/IC_std ≥ 0.10 (与 ADOPTION ANALYSIS WEAK 对齐)
 
 
 class ICScreener:
@@ -149,7 +147,10 @@ class ICScreener:
 
     # ---------------- 主筛选 ----------------
     def screen(
-        self, train_df: pd.DataFrame, feature_cols: list[str], window_id: str,
+        self,
+        train_df: pd.DataFrame,
+        feature_cols: list[str],
+        window_id: str,
         registry=None,  # FeatureRegistry | None
     ) -> dict:
         """窗口内重算 IC 并筛因子.
@@ -209,7 +210,9 @@ class ICScreener:
             )  # 90%置信 (原1.96/95%太严)
             # [P19 Factor Gate] IC 稳定性: 取各标签最佳 ICIR
             icir = max(self.ic_stability(train_df, f, lbl) for lbl in label_of.values())
-            icir_ok = icir >= ICIR_MIN  # 因子级门槛 0.05 (模型级见 metrics.ignition_gate)
+            icir_ok = (
+                icir >= ICIR_MIN
+            )  # 因子级门槛 0.05 (模型级见 metrics.ignition_gate)
             if (
                 (best_ic > IC_STRONG or auc > 0.55)
                 and dual_ok
@@ -233,14 +236,16 @@ class ICScreener:
                     if trial_windows < 3:
                         grade = "trial"  # Keep as trial, not dead yet
                         logger.info(
-                            "P19 trial: %s IC=%.4f below threshold, "
-                            "grace window %d/3",
-                            f, best_ic, trial_windows,
+                            "P19 trial: %s IC=%.4f below threshold, grace window %d/3",
+                            f,
+                            best_ic,
+                            trial_windows,
                         )
                     else:
                         logger.info(
                             "P19 trial: %s failed after %d windows, marking dead",
-                            f, trial_windows,
+                            f,
+                            trial_windows,
                         )
 
             # [E4-L2] 连续 N 期窗口 IC 为负 → 自动剔除; 连续 M 期正向 → 恢复

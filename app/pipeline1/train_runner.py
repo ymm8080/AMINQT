@@ -39,7 +39,9 @@ def prepare_board_frame(
     cross_sectional_rank: 仅双创开启截面排名 (主板大票定价效率高, 截面因子负贡献).
     """
     df = features.build(
-        board_df, float_shares_map, cross_sectional_rank=cross_sectional_rank,
+        board_df,
+        float_shares_map,
+        cross_sectional_rank=cross_sectional_rank,
         registry=registry,
     )
     df = LabelEngine.build_path_labels(df)  # [E2] label_mdd_* + label_pain
@@ -109,7 +111,9 @@ def select_features(
         df = df.join(new_feats)
         logger.info(
             "[%s] BruteForce 特征注入: %d → %d 列",
-            board, n_before, len(df.columns),
+            board,
+            n_before,
+            len(df.columns),
         )
 
     try:
@@ -120,12 +124,17 @@ def select_features(
         if picked:
             logger.info(
                 "[%s] FeatureSelector(%s) 精选 %d/%d 因子 (pool=%d)",
-                board, pipeline, len(picked), len(candidates), len(selected),
+                board,
+                pipeline,
+                len(picked),
+                len(candidates),
+                len(selected),
             )
             return picked, df
         logger.warning(
             "[%s] FeatureSelector 全部淘汰, 回退全量 %d 因子",
-            board, len(candidates),
+            board,
+            len(candidates),
         )
     except Exception as exc:  # 精选失败不阻断训练 (降级全量)
         logger.error("[%s] FeatureSelector 失败 (%s), 回退全量因子", board, exc)
@@ -188,12 +197,16 @@ def run_training(
         if not registry.features:
             logger.info("Registry empty, seeding from panel sample...")
             try:
-                sample = panel.groupby("symbol").apply(
-                    lambda g: g.head(min(50, len(g)))
-                ).reset_index(drop=True)
+                sample = (
+                    panel.groupby("symbol")
+                    .apply(lambda g: g.head(min(50, len(g))))
+                    .reset_index(drop=True)
+                )
                 registry._seed(sample)
             except Exception as exc:
-                logger.warning("Registry seed failed (%s), continuing without registry", exc)
+                logger.warning(
+                    "Registry seed failed (%s), continuing without registry", exc
+                )
                 registry = None
 
     main_df, dual_df = cleaner.run_train(panel)
@@ -204,10 +217,15 @@ def run_training(
             continue
         use_xrank = board != "main"  # 仅双创加截面排名 (主板大票定价有效, 截面负贡献)
         df = prepare_board_frame(
-            board_df, features, float_shares_map, cross_sectional_rank=use_xrank,
+            board_df,
+            features,
+            float_shares_map,
+            cross_sectional_rank=use_xrank,
             registry=registry,
         )
-        cols, augmented_df = select_features(df, board, tag, selector, registry=registry)
+        cols, augmented_df = select_features(
+            df, board, tag, selector, registry=registry
+        )
         cols_by_board[board] = cols
         panels[board] = augmented_df
 

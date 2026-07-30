@@ -4,9 +4,13 @@ Three-Layer Feature Selection Module.
 Layer1: BruteForceGenerator + registry building
 Layer2: DedupL2 (MAIN), GateD (DUAL), versioning, save/load
 """
-import json, os, re, time, logging
+
+import json
+import os
+import re
+import time
+import logging
 from datetime import datetime
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -20,6 +24,7 @@ logger = logging.getLogger(__name__)
 # BruteForceGenerator (Layer1)
 # ──────────────────────────────────────────────────────────
 
+
 class BruteForceGenerator:
     """Generate ~3200 brute-force time-series features from raw panel columns.
 
@@ -28,19 +33,25 @@ class BruteForceGenerator:
     """
 
     BASE_TRANSFORM_DEFS = {
-        "pct_change":  {"windows": (1, 2, 3, 5, 10, 20, 40, 60), "suffix": "pct"},
-        "rolling_mean": {"windows": (5, 10, 20, 40, 60),          "suffix": "ma"},
-        "rolling_std":  {"windows": (5, 10, 20, 40),              "suffix": "std"},
-        "rolling_max":  {"windows": (10, 20, 40),                 "suffix": "max"},
-        "rolling_min":  {"windows": (10, 20, 40),                 "suffix": "min"},
-        "diff":         {"windows": (1, 5, 20),                   "suffix": "d"},
-        "momentum":     {"windows": (5, 20, 40),                  "suffix": "mom"},
-        "EMA":          {"windows": (5, 20, 40),                  "suffix": "ema"},
+        "pct_change": {"windows": (1, 2, 3, 5, 10, 20, 40, 60), "suffix": "pct"},
+        "rolling_mean": {"windows": (5, 10, 20, 40, 60), "suffix": "ma"},
+        "rolling_std": {"windows": (5, 10, 20, 40), "suffix": "std"},
+        "rolling_max": {"windows": (10, 20, 40), "suffix": "max"},
+        "rolling_min": {"windows": (10, 20, 40), "suffix": "min"},
+        "diff": {"windows": (1, 5, 20), "suffix": "d"},
+        "momentum": {"windows": (5, 20, 40), "suffix": "mom"},
+        "EMA": {"windows": (5, 20, 40), "suffix": "ema"},
     }
 
     EXCLUDE_COLS = {
-        "symbol", "date", "board", "industry", "announce_date",
-        "is_suspended", "is_st", "tradestatus",
+        "symbol",
+        "date",
+        "board",
+        "industry",
+        "announce_date",
+        "is_suspended",
+        "is_st",
+        "tradestatus",
     }
 
     def __init__(self, transforms=None, eligible_cols=None):
@@ -50,11 +61,14 @@ class BruteForceGenerator:
     def _eligible(self, df):
         cols = self.eligible_cols
         if cols is None:
-            cols = [c for c in df.columns
-                    if c not in self.EXCLUDE_COLS
-                    and not c.startswith("label_")
-                    and not c.startswith("dim")
-                    and df[c].dtype in ("float64", "int64")]
+            cols = [
+                c
+                for c in df.columns
+                if c not in self.EXCLUDE_COLS
+                and not c.startswith("label_")
+                and not c.startswith("dim")
+                and df[c].dtype in ("float64", "int64")
+            ]
         return [c for c in cols if c in df.columns]
 
     def generate(self, df, raw_cols=None):
@@ -78,11 +92,13 @@ class BruteForceGenerator:
 
                 for w in self.transforms.get("rolling_mean", {}).get("windows", ()):
                     feats[f"{col}_brute_ma{w}"] = (
-                        pd.Series(s).rolling(w, min_periods=1).mean().values)
+                        pd.Series(s).rolling(w, min_periods=1).mean().values
+                    )
 
                 for w in self.transforms.get("rolling_std", {}).get("windows", ()):
                     feats[f"{col}_brute_std{w}"] = (
-                        pd.Series(s).rolling(w, min_periods=1).std().values)
+                        pd.Series(s).rolling(w, min_periods=1).std().values
+                    )
 
                 for w in self.transforms.get("rolling_max", {}).get("windows", ()):
                     r = pd.Series(s).rolling(w, min_periods=1)
@@ -101,7 +117,8 @@ class BruteForceGenerator:
 
                 for w in self.transforms.get("EMA", {}).get("windows", ()):
                     feats[f"{col}_brute_ema{w}"] = (
-                        pd.Series(s).ewm(span=w, min_periods=1).mean().values)
+                        pd.Series(s).ewm(span=w, min_periods=1).mean().values
+                    )
 
             all_new[sym] = pd.DataFrame(feats, index=g.index)
 
@@ -109,14 +126,19 @@ class BruteForceGenerator:
         # Clean infs
         for c in new.columns:
             new[c] = new[c].replace([np.inf, -np.inf], np.nan)
-        logger.info("BruteForce: %d cols from %d raw cols (%.0fs)",
-                     len(new.columns), len(raw), time.time() - t0)
+        logger.info(
+            "BruteForce: %d cols from %d raw cols (%.0fs)",
+            len(new.columns),
+            len(raw),
+            time.time() - t0,
+        )
         return new
 
 
 # ──────────────────────────────────────────────────────────
 # Dedup L2 (Layer2, MAIN)
 # ──────────────────────────────────────────────────────────
+
 
 def dedup_l2(feats, df, threshold=0.7):
     """Correlation dedup within same base column group.
@@ -160,7 +182,7 @@ def dedup_l2(feats, df, threshold=0.7):
         for i, ci in enumerate(ordered):
             if ci in dropped:
                 continue
-            for cj in ordered[i + 1:]:
+            for cj in ordered[i + 1 :]:
                 if cj in dropped:
                     continue
                 if corr.loc[ci, cj] > threshold:
@@ -168,7 +190,9 @@ def dedup_l2(feats, df, threshold=0.7):
 
         kept.extend([c for c in avail if c not in dropped])
 
-    logger.info("DedupL2: %d -> %d features (|r|>%.2f)", len(feats), len(kept), threshold)
+    logger.info(
+        "DedupL2: %d -> %d features (|r|>%.2f)", len(feats), len(kept), threshold
+    )
     return kept
 
 
@@ -176,9 +200,16 @@ def dedup_l2(feats, df, threshold=0.7):
 # Gate D (Layer2, DUAL)
 # ──────────────────────────────────────────────────────────
 
-def gate_d_ablation(feats, df, label_col="label_1d_net",
-                    min_feats=30, sat_pct=0.95,
-                    lgb_params=None, random_state=42):
+
+def gate_d_ablation(
+    feats,
+    df,
+    label_col="label_1d_net",
+    min_feats=30,
+    sat_pct=0.95,
+    lgb_params=None,
+    random_state=42,
+):
     """Importance forward ablation with saturation gate.
 
     1. Train full model on all feats, rank by gain importance
@@ -197,25 +228,38 @@ def gate_d_ablation(feats, df, label_col="label_1d_net",
     if len(avail) <= min_feats:
         return avail
 
-    base_params = dict(n_estimators=300, max_depth=6, num_leaves=31,
-                       learning_rate=0.05, subsample=0.8, colsample_bytree=0.8,
-                       random_state=random_state, n_jobs=-1, verbose=-1)
+    base_params = dict(
+        n_estimators=300,
+        max_depth=6,
+        num_leaves=31,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=random_state,
+        n_jobs=-1,
+        verbose=-1,
+    )
     if lgb_params:
         base_params.update(lgb_params)
 
     # Full model importance
     full = lgb.LGBMRegressor(**base_params)
     full.fit(tr[avail].fillna(0), tr[label_col])
-    imp = pd.DataFrame({
-        "feature": avail,
-        "gain": full.booster_.feature_importance(importance_type="gain"),
-    }).sort_values("gain", ascending=False)
+    imp = pd.DataFrame(
+        {
+            "feature": avail,
+            "gain": full.booster_.feature_importance(importance_type="gain"),
+        }
+    ).sort_values("gain", ascending=False)
 
     def _eval_icir(preds):
         df_e = te.copy()
         df_e["pred"] = preds
-        ics = [spearmanr(g["pred"], g[label_col])[0]
-               for _, g in df_e.groupby("date") if len(g) >= 10]
+        ics = [
+            spearmanr(g["pred"], g[label_col])[0]
+            for _, g in df_e.groupby("date")
+            if len(g) >= 10
+        ]
         a = np.array([x for x in ics if not np.isnan(x)])
         return float(round(abs(a.mean()) / a.std() if a.std() > 0 else 0, 4))
 
@@ -246,8 +290,14 @@ def gate_d_ablation(feats, df, label_col="label_1d_net",
     sat_n = max(sat_n, min_feats)
 
     selected = imp.head(sat_n)["feature"].tolist()
-    logger.info("GateD: %d -> %d features (best_ir=%.4f @ n=%d, sat_n=%d)",
-                len(avail), len(selected), best_ir, best_n, sat_n)
+    logger.info(
+        "GateD: %d -> %d features (best_ir=%.4f @ n=%d, sat_n=%d)",
+        len(avail),
+        len(selected),
+        best_ir,
+        best_n,
+        sat_n,
+    )
     return selected
 
 
@@ -255,19 +305,27 @@ def gate_d_ablation(feats, df, label_col="label_1d_net",
 # Utility
 # ──────────────────────────────────────────────────────────
 
+
 def nan_filter(feats, df, threshold=0.95):
     """Drop features with NaN rate >= threshold."""
     good = []
     for c in feats:
-        if c in df.columns and df[c].dtype != object and df[c].isna().mean() < threshold:
+        if (
+            c in df.columns
+            and df[c].dtype != object
+            and df[c].isna().mean() < threshold
+        ):
             good.append(c)
-    logger.info("NaN filter: %d -> %d (threshold=%.2f)", len(feats), len(good), threshold)
+    logger.info(
+        "NaN filter: %d -> %d (threshold=%.2f)", len(feats), len(good), threshold
+    )
     return good
 
 
 # ──────────────────────────────────────────────────────────
 # FeatureSelector (Layer2 orchestrator + versioning)
 # ──────────────────────────────────────────────────────────
+
 
 class FeatureSelector:
     """Board-dispatched feature selection with versioning."""
@@ -281,8 +339,11 @@ class FeatureSelector:
         "dual": {
             "pipeline": "gate_d",
             "nan_threshold": 0.95,
-            "gate_d": {"min_features": 30, "saturation_pct": 0.95,
-                       "label": "label_pm_1d_net"},
+            "gate_d": {
+                "min_features": 30,
+                "saturation_pct": 0.95,
+                "label": "label_pm_1d_net",
+            },
         },
         "fallback": {"pipeline": "ic_screener"},
     }
@@ -305,6 +366,7 @@ class FeatureSelector:
             return self._run_gate_d(df, board, board_cfg)
         else:
             from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+
             return FeatureEngineV35.feature_columns(df)
 
     def _run_bruteforce_dedup(self, df, board, cfg, generator=None):
@@ -315,16 +377,20 @@ class FeatureSelector:
         df_exp = df.join(new)
         all_cands = df_exp.columns.tolist()
         # Also include original raw + curated columns that might exist
-        all_feats = [c for c in all_cands
-                     if c not in BruteForceGenerator.EXCLUDE_COLS
-                     and not c.startswith("label_")
-                     and df_exp[c].dtype in ("float64", "int64")]
+        all_feats = [
+            c
+            for c in all_cands
+            if c not in BruteForceGenerator.EXCLUDE_COLS
+            and not c.startswith("label_")
+            and df_exp[c].dtype in ("float64", "int64")
+        ]
         valid = nan_filter(all_feats, df_exp, cfg.get("nan_threshold", 0.95))
         selected = dedup_l2(valid, df_exp, cfg.get("dedup_threshold", 0.7))
         return selected
 
     def _run_gate_d(self, df, board, cfg):
         from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+
         all_feats = FeatureEngineV35.feature_columns(df)
         valid = nan_filter(all_feats, df, cfg.get("nan_threshold", 0.95))
         gcfg = cfg.get("gate_d", {})
@@ -332,7 +398,9 @@ class FeatureSelector:
         if label not in df.columns:
             label = "label_1d_net"
         return gate_d_ablation(
-            valid, df, label_col=label,
+            valid,
+            df,
+            label_col=label,
             min_feats=gcfg.get("min_features", 30),
             sat_pct=gcfg.get("saturation_pct", 0.95),
         )
@@ -341,7 +409,9 @@ class FeatureSelector:
 
     def _version_path(self, board, version_id=None):
         if version_id:
-            return os.path.join(self.registry_dir, f"selected_{board}_{version_id}.json")
+            return os.path.join(
+                self.registry_dir, f"selected_{board}_{version_id}.json"
+            )
         ts = datetime.now().strftime("%Y%m%dT%H%M%S")
         return os.path.join(self.registry_dir, f"selected_{board}_{ts}.json")
 
@@ -355,8 +425,11 @@ class FeatureSelector:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2, ensure_ascii=False)
         if activate:
-            current = {"active_version": f"selected_{board}_{ts}.json",
-                       "board": board, "updated_at": ts}
+            current = {
+                "active_version": f"selected_{board}_{ts}.json",
+                "board": board,
+                "updated_at": ts,
+            }
             with open(self._current_path(board), "w", encoding="utf-8") as f:
                 json.dump(current, f, indent=2, ensure_ascii=False)
         return path
@@ -365,7 +438,9 @@ class FeatureSelector:
         """Load active feature list for a board."""
         cp = self._current_path(board)
         if not os.path.exists(cp):
-            raise FileNotFoundError(f"No current version for {board}. Run select first.")
+            raise FileNotFoundError(
+                f"No current version for {board}. Run select first."
+            )
         with open(cp, encoding="utf-8") as f:
             current = json.load(f)
         vp = os.path.join(self.registry_dir, current["active_version"])
@@ -381,22 +456,32 @@ class FeatureSelector:
     def list_versions(self, board):
         """List all versions for a board, sorted newest first."""
         prefix = f"selected_{board}_"
-        files = [f for f in os.listdir(self.registry_dir)
-                 if f.startswith(prefix) and f.endswith(".json")
-                 and "current" not in f]
+        files = [
+            f
+            for f in os.listdir(self.registry_dir)
+            if f.startswith(prefix) and f.endswith(".json") and "current" not in f
+        ]
         files.sort(reverse=True)
-        return [f[len(prefix):-5] for f in files]
+        return [f[len(prefix) : -5] for f in files]
 
     def get_status(self, board):
         """Return current version status."""
         cp = self._current_path(board)
         if not os.path.exists(cp):
-            return {"board": board, "status": "no_current", "versions_available": len(self.list_versions(board))}
+            return {
+                "board": board,
+                "status": "no_current",
+                "versions_available": len(self.list_versions(board)),
+            }
         with open(cp, encoding="utf-8") as f:
             current = json.load(f)
         vp = os.path.join(self.registry_dir, current["active_version"])
         if not os.path.exists(vp):
-            return {"board": board, "status": "broken_pointer", "points_to": current["active_version"]}
+            return {
+                "board": board,
+                "status": "broken_pointer",
+                "points_to": current["active_version"],
+            }
         with open(vp, encoding="utf-8") as f:
             ver = json.load(f)
         return {
@@ -428,10 +513,12 @@ class FeatureSelector:
         path = self._version_path(board, version_id)
         if not os.path.exists(path):
             raise FileNotFoundError(f"Version {version_id} not found")
-        current = {"active_version": f"selected_{board}_{version_id}.json",
-                   "board": board,
-                   "updated_at": datetime.now().strftime("%Y%m%dT%H%M%S"),
-                   "rollback": True}
+        current = {
+            "active_version": f"selected_{board}_{version_id}.json",
+            "board": board,
+            "updated_at": datetime.now().strftime("%Y%m%dT%H%M%S"),
+            "rollback": True,
+        }
         with open(self._current_path(board), "w", encoding="utf-8") as f:
             json.dump(current, f, indent=2, ensure_ascii=False)
         return current

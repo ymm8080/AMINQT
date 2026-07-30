@@ -20,7 +20,6 @@ import shutil
 import tempfile
 from datetime import datetime
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -81,9 +80,18 @@ ADOPTION_TEMPLATES = [
 
 # ── Columns never treated as feature sources ──
 NON_FEATURE_COLS = {
-    "symbol", "date", "board", "industry", "name", "tradestatus",
-    "announce_date", "report_period", "time", "market_state",
-    "schema_version", "ts_code",
+    "symbol",
+    "date",
+    "board",
+    "industry",
+    "name",
+    "tradestatus",
+    "announce_date",
+    "report_period",
+    "time",
+    "market_state",
+    "schema_version",
+    "ts_code",
 }
 
 
@@ -92,7 +100,12 @@ class FeatureRegistry:
 
     def __init__(self, path: str = "data/factor_registry/feature_registry.json"):
         self.path = path
-        self._data: dict = {"version": SCHEMA_VERSION, "features": {}, "adoption": {}, "last_update": ""}
+        self._data: dict = {
+            "version": SCHEMA_VERSION,
+            "features": {},
+            "adoption": {},
+            "last_update": "",
+        }
         if os.path.exists(path):
             self.load()
         else:
@@ -114,10 +127,19 @@ class FeatureRegistry:
             adoption = self._data["adoption"]
             adoption.setdefault("enabled", False)
             adoption.setdefault("registered_source_cols", [])
-            logger.info("FeatureRegistry: 已加载 %s (%d 特征)", self.path, len(self._data["features"]))
+            logger.info(
+                "FeatureRegistry: 已加载 %s (%d 特征)",
+                self.path,
+                len(self._data["features"]),
+            )
         except (OSError, json.JSONDecodeError) as exc:
             logger.error("FeatureRegistry: 加载 %s 失败: %s", self.path, exc)
-            self._data = {"version": SCHEMA_VERSION, "features": {}, "adoption": {}, "last_update": ""}
+            self._data = {
+                "version": SCHEMA_VERSION,
+                "features": {},
+                "adoption": {},
+                "last_update": "",
+            }
 
     def save(self) -> None:
         """原子写入 (temp file + rename)."""
@@ -125,13 +147,18 @@ class FeatureRegistry:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         try:
             fd, tmp = tempfile.mkstemp(
-                suffix=".json", prefix="feature_registry_",
+                suffix=".json",
+                prefix="feature_registry_",
                 dir=os.path.dirname(self.path) or ".",
             )
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 json.dump(self._data, fh, ensure_ascii=False, indent=1)
             shutil.move(tmp, self.path)
-            logger.info("FeatureRegistry: 已保存 %s (%d 特征)", self.path, len(self._data["features"]))
+            logger.info(
+                "FeatureRegistry: 已保存 %s (%d 特征)",
+                self.path,
+                len(self._data["features"]),
+            )
         except OSError as exc:
             logger.error("FeatureRegistry: 保存 %s 失败: %s", self.path, exc)
 
@@ -141,7 +168,8 @@ class FeatureRegistry:
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         try:
             fd, tmp = tempfile.mkstemp(
-                suffix=".json", prefix="feature_registry_",
+                suffix=".json",
+                prefix="feature_registry_",
                 dir=os.path.dirname(path) or ".",
             )
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -166,8 +194,11 @@ class FeatureRegistry:
         feats = self._data["features"]
         if dim_group is None:
             return [n for n, m in feats.items() if m.get("active", True)]
-        return [n for n, m in feats.items()
-                if m.get("active", True) and m.get("dim_group") == dim_group]
+        return [
+            n
+            for n, m in feats.items()
+            if m.get("active", True) and m.get("dim_group") == dim_group
+        ]
 
     def get_by_grade(self, grade: str) -> list[str]:
         """返回指定 grade 的特征名列表."""
@@ -235,19 +266,24 @@ class FeatureRegistry:
         完整记录注册中心变化: 新登记 / 停用 / 重新激活 / 评级迁移 / IC 跳变.
         """
         detail = result.get("detail", {})
-        factors_list = set(result.get("factors", []))
+        set(result.get("factors", []))
 
         # ── BEFORE snapshot ──
         before_total = len(self._data["features"])
         before_active = len(self.get_active())
-        before_by_grade = {g: len(self.get_by_grade(g)) for g in ("strong", "weak", "trial", "dead", "unknown")}
+        before_by_grade = {
+            g: len(self.get_by_grade(g))
+            for g in ("strong", "weak", "trial", "dead", "unknown")
+        }
 
         # ── Track all changes ──
         new_registrations: list[str] = []
-        deactivated: list[tuple[str, str]] = []    # (name, old_grade→new_grade)
-        reactivated: list[tuple[str, str]] = []     # (name, old_grade→new_grade)
+        deactivated: list[tuple[str, str]] = []  # (name, old_grade→new_grade)
+        reactivated: list[tuple[str, str]] = []  # (name, old_grade→new_grade)
         grade_changes: list[tuple[str, str, str]] = []  # (name, old_grade, new_grade)
-        ic_jumps: list[tuple[str, float, float]] = []   # (name, old_ic, new_ic) — delta > 0.01
+        ic_jumps: list[
+            tuple[str, float, float]
+        ] = []  # (name, old_ic, new_ic) — delta > 0.01
 
         updated = 0
         for fname, d in detail.items():
@@ -292,7 +328,10 @@ class FeatureRegistry:
         # ── AFTER snapshot ──
         after_total = len(self._data["features"])
         after_active = len(self.get_active())
-        after_by_grade = {g: len(self.get_by_grade(g)) for g in ("strong", "weak", "trial", "dead", "unknown")}
+        after_by_grade = {
+            g: len(self.get_by_grade(g))
+            for g in ("strong", "weak", "trial", "dead", "unknown")
+        }
 
         # ── Log comprehensive change report ──
         logger.info(
@@ -301,17 +340,28 @@ class FeatureRegistry:
             "  Active:   %d → %d (%+d)\n"
             "  Grade:    strong %d→%d  weak %d→%d  trial %d→%d  dead %d→%d  unknown %d→%d",
             window_id,
-            before_total, after_total, after_total - before_total,
-            before_active, after_active, after_active - before_active,
-            before_by_grade["strong"], after_by_grade["strong"],
-            before_by_grade["weak"], after_by_grade["weak"],
-            before_by_grade["trial"], after_by_grade["trial"],
-            before_by_grade["dead"], after_by_grade["dead"],
-            before_by_grade["unknown"], after_by_grade["unknown"],
+            before_total,
+            after_total,
+            after_total - before_total,
+            before_active,
+            after_active,
+            after_active - before_active,
+            before_by_grade["strong"],
+            after_by_grade["strong"],
+            before_by_grade["weak"],
+            after_by_grade["weak"],
+            before_by_grade["trial"],
+            after_by_grade["trial"],
+            before_by_grade["dead"],
+            after_by_grade["dead"],
+            before_by_grade["unknown"],
+            after_by_grade["unknown"],
         )
 
         if new_registrations:
-            logger.info("  NEW [+%d]: %s", len(new_registrations), new_registrations[:15])
+            logger.info(
+                "  NEW [+%d]: %s", len(new_registrations), new_registrations[:15]
+            )
         if deactivated:
             names = [f"{n}({t})" for n, t in deactivated[:15]]
             logger.info("  DEACTIVATED [%d]: %s", len(deactivated), names)
@@ -325,7 +375,9 @@ class FeatureRegistry:
             for trans, names in sorted(by_transition.items()):
                 logger.info("  GRADE [%s]: %d — %s", trans, len(names), names[:10])
         if ic_jumps:
-            jumps_str = ", ".join(f"{n}:{old:.4f}→{new:.4f}" for n, old, new in ic_jumps[:10])
+            jumps_str = ", ".join(
+                f"{n}:{old:.4f}→{new:.4f}" for n, old, new in ic_jumps[:10]
+            )
             logger.info("  IC-JUMP [%d]: %s", len(ic_jumps), jumps_str)
 
         logger.info("═══ End Registry Update [%s] ═══", window_id)
@@ -387,13 +439,17 @@ class FeatureRegistry:
             raw_boards = df_sample["board"].unique()
             needs_fix = any(b in ("SZ", "SH", "BJ") for b in raw_boards)
             if needs_fix:
-                logger.info("_seed: normalizing board values (SZ/SH/BJ → main/GEM/STAR)")
+                logger.info(
+                    "_seed: normalizing board values (SZ/SH/BJ → main/GEM/STAR)"
+                )
                 board_map = {s: board_of(s) for s in df_sample["symbol"].unique()}
                 df_sample["board"] = df_sample["symbol"].map(board_map)
                 # Fallback: keep existing if already valid
                 valid_boards = {"main", "GEM", "STAR"}
                 existing_valid = df_sample["board"].isin(valid_boards)
-                df_sample.loc[~existing_valid, "board"] = df_sample.loc[~existing_valid, "symbol"].map(board_map)
+                df_sample.loc[~existing_valid, "board"] = df_sample.loc[
+                    ~existing_valid, "symbol"
+                ].map(board_map)
 
         fe = FeatureEngineV35()
         # Run full build to get all feature columns
@@ -404,9 +460,13 @@ class FeatureRegistry:
         # Now run each dim in isolation to attribute columns
         df_iso = df_before.copy()
         dim_methods = [
-            m for m in DIM_GROUPS
-            if m in dir(fe) and not m.startswith("_industry") and not m.startswith("_missingness")
-            and not m.startswith("_time_series") and not m.startswith("_cross_sectional")
+            m
+            for m in DIM_GROUPS
+            if m in dir(fe)
+            and not m.startswith("_industry")
+            and not m.startswith("_missingness")
+            and not m.startswith("_time_series")
+            and not m.startswith("_cross_sectional")
             and not m.startswith("_auto_adopted")
         ]
         for dim_name in dim_methods:
@@ -418,78 +478,96 @@ class FeatureRegistry:
                 new_cols = after - before
                 for col in sorted(new_cols):
                     if col in all_feature_cols or col in df_full.columns:
-                        self.register_new(col, {
-                            "dim_group": dim_name,
-                            "active": True,
-                            "grade": "unknown",
-                            "source_cols": [],
-                            "transform": dim_name,
-                            "created": datetime.now().strftime("%Y-%m-%d"),
-                            "last_eval": "",
-                        })
+                        self.register_new(
+                            col,
+                            {
+                                "dim_group": dim_name,
+                                "active": True,
+                                "grade": "unknown",
+                                "source_cols": [],
+                                "transform": dim_name,
+                                "created": datetime.now().strftime("%Y-%m-%d"),
+                                "last_eval": "",
+                            },
+                        )
             except Exception as exc:
-                logger.warning("FeatureRegistry._seed: dim %s 失败, 跳过: %s", dim_name, exc)
+                logger.warning(
+                    "FeatureRegistry._seed: dim %s 失败, 跳过: %s", dim_name, exc
+                )
 
         # Post-processing groups (industry_neutralize, missingness, time_series_changes, xrank)
         df_post = fe.industry_neutralize(df_iso)
         industry_cols = set(df_post.columns) - set(df_iso.columns)
         for col in sorted(industry_cols):
-            self.register_new(col, {
-                "dim_group": "_industry_neutralize",
-                "active": True,
-                "grade": "unknown",
-                "source_cols": [],
-                "transform": "industry_rank",
-                "created": datetime.now().strftime("%Y-%m-%d"),
-                "last_eval": "",
-            })
+            self.register_new(
+                col,
+                {
+                    "dim_group": "_industry_neutralize",
+                    "active": True,
+                    "grade": "unknown",
+                    "source_cols": [],
+                    "transform": "industry_rank",
+                    "created": datetime.now().strftime("%Y-%m-%d"),
+                    "last_eval": "",
+                },
+            )
         df_iso = df_post
 
         df_post = fe.add_missingness_flags(df_iso)
         miss_cols = set(df_post.columns) - set(df_iso.columns)
         for col in sorted(miss_cols):
-            self.register_new(col, {
-                "dim_group": "_missingness_flags",
-                "active": True,
-                "grade": "unknown",
-                "source_cols": [],
-                "transform": "isna_flag",
-                "created": datetime.now().strftime("%Y-%m-%d"),
-                "last_eval": "",
-            })
+            self.register_new(
+                col,
+                {
+                    "dim_group": "_missingness_flags",
+                    "active": True,
+                    "grade": "unknown",
+                    "source_cols": [],
+                    "transform": "isna_flag",
+                    "created": datetime.now().strftime("%Y-%m-%d"),
+                    "last_eval": "",
+                },
+            )
         df_iso = df_post
 
         df_post = fe._add_time_series_changes(df_iso)
         ts_cols = set(df_post.columns) - set(df_iso.columns)
         for col in sorted(ts_cols):
-            self.register_new(col, {
-                "dim_group": "_time_series_changes",
-                "active": True,
-                "grade": "unknown",
-                "source_cols": [],
-                "transform": "time_series_chg",
-                "created": datetime.now().strftime("%Y-%m-%d"),
-                "last_eval": "",
-            })
+            self.register_new(
+                col,
+                {
+                    "dim_group": "_time_series_changes",
+                    "active": True,
+                    "grade": "unknown",
+                    "source_cols": [],
+                    "transform": "time_series_chg",
+                    "created": datetime.now().strftime("%Y-%m-%d"),
+                    "last_eval": "",
+                },
+            )
         df_iso = df_post
 
         df_post = fe._add_cross_sectional_ranks(df_iso)
         xr_cols = set(df_post.columns) - set(df_iso.columns)
         for col in sorted(xr_cols):
-            self.register_new(col, {
-                "dim_group": "_cross_sectional_ranks",
-                "active": True,
-                "grade": "unknown",
-                "source_cols": [],
-                "transform": "board_rank",
-                "created": datetime.now().strftime("%Y-%m-%d"),
-                "last_eval": "",
-            })
+            self.register_new(
+                col,
+                {
+                    "dim_group": "_cross_sectional_ranks",
+                    "active": True,
+                    "grade": "unknown",
+                    "source_cols": [],
+                    "transform": "board_rank",
+                    "created": datetime.now().strftime("%Y-%m-%d"),
+                    "last_eval": "",
+                },
+            )
 
         n = len(self._data["features"])
         logger.info(
             "FeatureRegistry._seed: %d features discovered across %d dim groups",
-            n, len(self.get_dim_groups()),
+            n,
+            len(self.get_dim_groups()),
         )
         self.save()
         return n
