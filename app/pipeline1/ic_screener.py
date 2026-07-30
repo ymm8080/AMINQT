@@ -200,7 +200,9 @@ class ICScreener:
                 key=lambda x: abs(x[0]),  # strongest direction wins
             )
             roll_mean, roll_pos = roll_best
-            dual_ok = abs(roll_mean) > ROLLING_MEAN_MIN and roll_pos > ROLLING_POS_RATIO_MIN
+            dual_ok = (
+                abs(roll_mean) > ROLLING_MEAN_MIN and roll_pos > ROLLING_POS_RATIO_MIN
+            )
             # B6: 3d/5d IC 显著性用 Newey-West HAC 调整 (lag=5/8)
             t_3d = self.ic_t_stat_newey_west(train_df, f, label_of[3], lag=5)
             t_5d = self.ic_t_stat_newey_west(train_df, f, label_of[5], lag=8)
@@ -212,9 +214,7 @@ class ICScreener:
                 (self.ic_stability(train_df, f, lbl) for lbl in label_of.values()),
                 key=abs,
             )
-            icir_ok = (
-                abs(icir) >= ICIR_MIN
-            )  # 因子级门槛 |ICIR|≥0.10 (方向无关)
+            icir_ok = abs(icir) >= ICIR_MIN  # 因子级门槛 |ICIR|≥0.10 (方向无关)
             if (
                 (best_ic > IC_STRONG or auc > 0.55)
                 and dual_ok
