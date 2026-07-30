@@ -127,6 +127,7 @@ logger.info(
     _removed / len(df) * 100,
 )
 df_ic = df[_ic_mask].copy()
+label_1d = "label_1d_net" if "label_1d_net" in df.columns else "label_1d"
 label_3d = "label_3d_net" if "label_3d_net" in df.columns else "label_3d"
 label_5d = "label_5d_net" if "label_5d_net" in df.columns else "label_5d"
 
