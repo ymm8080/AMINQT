@@ -69,7 +69,7 @@ class ICScreener:
             return 0.0
         ic_std = float(ic_series.std())
         ic_mean = float(ic_series.mean())
-        return abs(ic_mean) / ic_std if ic_std > 0 else 0.0
+        return ic_mean / ic_std if ic_std > 0 else 0.0
 
     # ---------------- Newey-West HAC t 统计量 (B6) ----------------
     @staticmethod
@@ -121,7 +121,7 @@ class ICScreener:
             daily_ic.loc[d0:d1].mean()
             for d0, d1 in zip(dates[:-window], dates[window:])
         ]
-        rolls = pd.Series(rolls).dropna().abs()
+        rolls = pd.Series(rolls).dropna()
         if len(rolls) == 0:
             return 0.0, 0.0
         return float(rolls.mean()), float(
