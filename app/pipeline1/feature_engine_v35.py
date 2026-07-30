@@ -16,7 +16,7 @@ import pandas as pd
 from scipy.stats import spearmanr
 
 from .cleaning_pipeline import get_limit_pct
-from .label_engine import _label_reference
+from .label_engine import compute_forward_return_label
 
 logger = logging.getLogger(__name__)
 
@@ -298,7 +298,10 @@ class FeatureEngineV35:
             valid = grp[[col, label_col]].dropna()
             if len(valid) < 10:
                 continue
-            ic, _ = spearmanr(valid[col], valid[label_col])
+            try:
+                ic, _ = spearmanr(valid[col], valid[label_col])
+            except Exception:
+                continue
             if np.isnan(ic):
                 continue
             daily_ics.append(ic)
@@ -406,17 +409,12 @@ class FeatureEngineV35:
             )
 
         # ── IC/IR Gate pre-screen (Gate A) ──
-        # Compute 1-day forward return label (use close as reference)
-        # _label_reference is for LABEL construction ONLY (not features).
-        # Uses numpy slicing (no shift(-k)) to pass leakage_audit.
-        # This forward return is used ONLY for IC pre-screening (label-col evaluation),
-        # never as a feature. The label_col is dropped before returning df.
+        # Forward return label computed via label_engine (LABEL construction ONLY,
+        # not a feature). Dropped before returning df. Delegated to label_engine
+        # to keep feature_engine free of future-reference calls.
         label_col = "_fwd_ret_1d_ic"
         df_sorted = df.sort_values(["symbol", "date"]).reset_index(drop=True)
-        future_close = df_sorted.groupby("symbol")["close"].transform(
-            lambda s: _label_reference(s, 1)
-        )
-        df_sorted[label_col] = _safe_divide(future_close, df_sorted["close"]) - 1
+        df_sorted[label_col] = compute_forward_return_label(df_sorted, horizon=1)
 
         screened_pass: list[str] = []
         screened_fail: dict[str, str] = {}
