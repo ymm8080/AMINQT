@@ -7,8 +7,14 @@ Usage:
   python scripts/train_predict_dual.py
   python scripts/train_predict_dual.py --tag 2026W31
 """
-import argparse, json, os, sys, time, logging
-from datetime import datetime, timedelta
+
+import argparse
+import json
+import os
+import sys
+import time
+import logging
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -122,18 +128,21 @@ def main():
     do_all = not (args.train_only or args.predict_only)
 
     if args.train_only or do_all:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  STAGE 2-3: Train DUAL (tag={tag})")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         # Find latest Layer1 features
         import glob
+
         feat_files = sorted(
             glob.glob(os.path.join(REGISTRY_DIR, "features_dual_*.parquet")),
             reverse=True,
         )
         if not feat_files:
-            print("ERROR: No feature parquet. Run: python scripts/build_features.py --board dual")
+            print(
+                "ERROR: No feature parquet. Run: python scripts/build_features.py --board dual"
+            )
             sys.exit(1)
 
         # Find latest Layer2 selected
@@ -143,17 +152,19 @@ def main():
         )
         sel_file = sel_files[0] if sel_files else None
         if not sel_file:
-            print("ERROR: No selected features. Run: python scripts/select_features.py --board dual --update")
+            print(
+                "ERROR: No selected features. Run: python scripts/select_features.py --board dual --update"
+            )
             sys.exit(1)
 
         print(f"  Features: {feat_files[0]}")
         print(f"  Selection: {sel_file}")
-        results = train_dual(feat_files[0], sel_file, tag)
+        train_dual(feat_files[0], sel_file, tag)
 
     if args.predict_only or do_all:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  STAGE 4: Predict DUAL ({trade_date})")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         lst = predict_dual(trade_date)
         if lst is not None and len(lst):
             cols = ["symbol", "board", "pred_ret_1d", "prob_up", "score"]

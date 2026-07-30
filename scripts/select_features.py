@@ -9,18 +9,30 @@ Usage:
   python scripts/select_features.py --board main --history      # Version list
   python scripts/select_features.py --board main --rollback <id> # Rollback
 """
-import argparse, glob, json, os, sys, time, logging
 
-import numpy as np
+import argparse
+import glob
+import json
+import os
+import sys
+import time
+import logging
+
 import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.pipeline1.feature_selector import (
-    FeatureSelector, BruteForceGenerator, nan_filter, dedup_l2, gate_d_ablation,
+    FeatureSelector,
+    BruteForceGenerator,
+    nan_filter,
+    dedup_l2,
+    gate_d_ablation,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("select_features")
 
 REGISTRY_DIR = "data/factor_registry"
@@ -31,7 +43,9 @@ def find_latest_features(board):
     pattern = os.path.join(REGISTRY_DIR, f"features_{board}_*.parquet")
     files = sorted(glob.glob(pattern), reverse=True)
     if not files:
-        raise FileNotFoundError(f"No Layer1 features found for {board}. Run build_features.py first.")
+        raise FileNotFoundError(
+            f"No Layer1 features found for {board}. Run build_features.py first."
+        )
     return files[0]
 
 
@@ -56,8 +70,13 @@ def load_panel_for_board(board, features_path):
         panel = panel[panel["symbol"].isin(symbols)]
         from app.pipeline1.cleaning_pipeline import CleaningPipeline
         from app.pipeline1.label_engine import LabelEngine
+
         main_d, dual_d = CleaningPipeline().run_train(panel)
-        source = main_d if board == "main" else (dual_d if len(dual_d) > len(main_d) else main_d)
+        source = (
+            main_d
+            if board == "main"
+            else (dual_d if len(dual_d) > len(main_d) else main_d)
+        )
         source = LabelEngine.build_path_labels(source)
         source = LabelEngine.build_labels(source)
         source = LabelEngine.mask_suspension(source)
@@ -71,7 +90,7 @@ def load_panel_for_board(board, features_path):
 
 def run_selection(df, board, label, dry_run=False):
     """Run feature selection pipeline for the board."""
-    selector = FeatureSelector(registry_dir=REGISTRY_DIR)
+    FeatureSelector(registry_dir=REGISTRY_DIR)
     t0 = time.time()
 
     if board == "main":
@@ -80,8 +99,10 @@ def run_selection(df, board, label, dry_run=False):
         symbols = set(df["symbol"].unique())
         panel = panel[panel["symbol"].isin(symbols)]
         from app.pipeline1.cleaning_pipeline import CleaningPipeline
+
         main_d, _ = CleaningPipeline().run_train(panel)
         from app.pipeline1.label_engine import LabelEngine
+
         raw = LabelEngine.build_path_labels(main_d)
         raw = LabelEngine.build_labels(raw)
         raw = LabelEngine.mask_suspension(raw)
@@ -90,10 +111,13 @@ def run_selection(df, board, label, dry_run=False):
         gen = BruteForceGenerator()
         new = gen.generate(raw)
         raw_exp = raw.join(new)
-        all_feats = [c for c in raw_exp.columns
-                     if c not in BruteForceGenerator.EXCLUDE_COLS
-                     and not c.startswith("label_")
-                     and raw_exp[c].dtype in ("float64", "int64")]
+        all_feats = [
+            c
+            for c in raw_exp.columns
+            if c not in BruteForceGenerator.EXCLUDE_COLS
+            and not c.startswith("label_")
+            and raw_exp[c].dtype in ("float64", "int64")
+        ]
         valid = nan_filter(all_feats, raw_exp, 0.95)
         selected = dedup_l2(valid, raw_exp, 0.7)
         pipeline = "bruteforce_dedup"
@@ -101,9 +125,12 @@ def run_selection(df, board, label, dry_run=False):
     else:
         # DUAL: use FeatureEngineV35 curated features
         from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+
         all_feats = FeatureEngineV35.feature_columns(df)
         valid = nan_filter(all_feats, df, 0.95)
-        selected = gate_d_ablation(valid, df, label_col=label, min_feats=30, sat_pct=0.95)
+        selected = gate_d_ablation(
+            valid, df, label_col=label, min_feats=30, sat_pct=0.95
+        )
         pipeline = "gate_d"
         pool_size = len(valid)
 
@@ -114,8 +141,9 @@ def run_selection(df, board, label, dry_run=False):
         "created": pd.Timestamp.now().isoformat(),
         "pool_size": pool_size,
         "selected_count": len(selected),
-        "params": {"nan_threshold": 0.95, "dedup_threshold": 0.7} if board == "main"
-                 else {"min_features": 30, "saturation_pct": 0.95},
+        "params": {"nan_threshold": 0.95, "dedup_threshold": 0.7}
+        if board == "main"
+        else {"min_features": 30, "saturation_pct": 0.95},
         "features": selected,
     }
 
@@ -138,7 +166,11 @@ def cmd_history(board):
     current = None
     try:
         c = selector.load_current(board)
-        current = c.get("active_version", "").replace(f"selected_{board}_", "").replace(".json", "")
+        current = (
+            c.get("active_version", "")
+            .replace(f"selected_{board}_", "")
+            .replace(".json", "")
+        )
     except Exception:
         pass
 
@@ -162,8 +194,8 @@ def cmd_update(board, dry_run=False, draft_only=False):
         print(f"Pool: {result['pool_size']}")
         print(f"Selected: {result['selected_count']}")
         print(f"Time: {elapsed:.0f}s")
-        if result['selected_count'] < 30:
-            print("Sample:", result['features'][:10])
+        if result["selected_count"] < 30:
+            print("Sample:", result["features"][:10])
         return
 
     # Compare with current
@@ -173,7 +205,9 @@ def cmd_update(board, dry_run=False, draft_only=False):
         current_feats = current.get("features", [])
         diff = selector.diff_versions(current_feats, selected)
         print(f"\n  DIFF vs current ({current.get('created', '?')}):")
-        print(f"    +{diff['added_count']} added, -{diff['removed_count']} removed (net {diff['net_change']:+d})")
+        print(
+            f"    +{diff['added_count']} added, -{diff['removed_count']} removed (net {diff['net_change']:+d})"
+        )
         if diff["sample_added"]:
             print(f"    Added sample: {diff['sample_added'][:3]}")
         if diff["sample_removed"]:
@@ -181,7 +215,9 @@ def cmd_update(board, dry_run=False, draft_only=False):
     except FileNotFoundError:
         print("  (No current version - this will be the first)")
 
-    print(f"\n  Pool: {result['pool_size']} -> Selected: {result['selected_count']} ({elapsed:.0f}s)")
+    print(
+        f"\n  Pool: {result['pool_size']} -> Selected: {result['selected_count']} ({elapsed:.0f}s)"
+    )
 
     if draft_only:
         path = selector.save_version(result, board, activate=False)
