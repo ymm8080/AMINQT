@@ -340,7 +340,7 @@ def rank_ic(df, factor, label):
         if len(g) >= 10
     ]
     ics = [i for i in ics if not np.isnan(i)]
-    return float(np.mean(np.abs(ics))) if ics else 0.0
+    return float(np.mean(ics)) if ics else 0.0
 
 
 dims_features = {

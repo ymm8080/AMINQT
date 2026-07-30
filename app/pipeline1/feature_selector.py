@@ -261,7 +261,7 @@ def gate_d_ablation(
             if len(g) >= 10
         ]
         a = np.array([x for x in ics if not np.isnan(x)])
-        return float(round(abs(a.mean()) / a.std() if a.std() > 0 else 0, 4))
+        return float(round(a.mean() / a.std() if a.std() > 0 else 0, 4))
 
     # Quick ablation
     ab_params = dict(base_params)
