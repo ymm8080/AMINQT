@@ -6,7 +6,6 @@ import os
 import time
 import logging
 import json
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -65,14 +64,10 @@ if os.path.exists(hn_cache):
 # ==== Risk flags: prefer panel columns; fill gaps from DataSupplyChain ====
 if "is_st" not in df.columns:
     try:
-        names = pro.stock_basic(
-            exchange="", list_status="L", fields="ts_code,name"
-        )
+        names = pro.stock_basic(exchange="", list_status="L", fields="ts_code,name")
         names["symbol"] = names["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
         st_set = set(
-            names.loc[
-                names["name"].str.contains("ST", case=False, na=False), "symbol"
-            ]
+            names.loc[names["name"].str.contains("ST", case=False, na=False), "symbol"]
         )
         df["is_st"] = df["symbol"].isin(st_set).astype(int)
     except Exception:
@@ -96,6 +91,7 @@ df = LabelEngine.build_labels(df)
 df = LabelEngine.mask_suspension(df)
 df = LabelEngine.mask_recent_days(df, days=6)
 logger.info("Features: %d cols in %.1fs", len(df.columns), time.time() - t0)
+
 
 # ==== IC eval ====
 # ==== IC-safe filtering: 剔除不可交易/异常样本后再算 IC ====
@@ -126,9 +122,12 @@ _ic_mask = _ic_tradable_mask(df)
 _removed = (~_ic_mask).sum()
 logger.info(
     "IC-sample filter: removed %d / %d rows (%.1f%%) — ST/停牌/涨跌停/次新股",
-    _removed, len(df), _removed / len(df) * 100,
+    _removed,
+    len(df),
+    _removed / len(df) * 100,
 )
 df_ic = df[_ic_mask].copy()
+label_1d = "label_1d_net" if "label_1d_net" in df.columns else "label_1d"
 label_3d = "label_3d_net" if "label_3d_net" in df.columns else "label_3d"
 label_5d = "label_5d_net" if "label_5d_net" in df.columns else "label_5d"
 
@@ -136,12 +135,14 @@ label_5d = "label_5d_net" if "label_5d_net" in df.columns else "label_5d"
 def rank_ic(df, factor, label):
     """日度 Rank IC 均值 (带符号, Spearman 时间均值). 返回 signed IC. 使用公共模块保证口径一致."""
     from app.utils.daily_rank_ic import mean_rank_ic
+
     return mean_rank_ic(df, factor, label, abs_mean=False)
 
 
 def abs_rank_ic(df, factor, label):
     """日度 |Rank IC| 均值 (方向无关, 用于筛选强度)."""
     from app.utils.daily_rank_ic import mean_rank_ic
+
     return mean_rank_ic(df, factor, label, abs_mean=True)
 
 
@@ -257,15 +258,19 @@ for dim, feats in dims.items():
         ic5 = rank_ic(df_ic, f, label_5d)
         best_abs = max(abs(ic1), abs(ic3), abs(ic5))
         # Direction: sign of the strongest label (1d priority)
-        dominant = ic1 if abs(ic1) >= abs(ic3) and abs(ic1) >= abs(ic5) else (
-            ic3 if abs(ic3) >= abs(ic5) else ic5
+        dominant = (
+            ic1
+            if abs(ic1) >= abs(ic3) and abs(ic1) >= abs(ic5)
+            else (ic3 if abs(ic3) >= abs(ic5) else ic5)
         )
         direction = "+" if dominant > 0 else ("-" if dominant < 0 else "·")
         if best_abs > 0.005:
             sig = (
                 "STRONG"
                 if best_abs >= 0.03
-                else ("OK" if best_abs >= 0.02 else ("weak" if best_abs >= 0.01 else "-"))
+                else (
+                    "OK" if best_abs >= 0.02 else ("weak" if best_abs >= 0.01 else "-")
+                )
             )
             print(
                 f"{dim:<20s} {f:<35s} {ic1:>8.4f} {ic3:>8.4f} {ic5:>8.4f} {best_abs:>8.4f} {direction:>4s} {nan_r * 100:>6.1f} {sig}"
@@ -276,7 +281,9 @@ for dim, feats in dims.items():
             best_signed_ic1, best_signed_ic3, best_signed_ic5 = ic1, ic3, ic5
             best_f, best_nan = f, nan_r
     verdict = (
-        "INCLUDE" if best_abs_ic1 >= 0.02 else ("WATCH" if best_abs_ic1 >= 0.01 else "SKIP")
+        "INCLUDE"
+        if best_abs_ic1 >= 0.02
+        else ("WATCH" if best_abs_ic1 >= 0.01 else "SKIP")
     )
     results[dim] = {
         "best": best_f,
