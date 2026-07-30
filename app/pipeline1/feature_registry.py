@@ -132,7 +132,7 @@ class FeatureRegistry:
                 self.path,
                 len(self._data["features"]),
             )
-        except (OSError, json.JSONDecodeError) as exc:
+        except Exception as exc:
             logger.error("FeatureRegistry: 加载 %s 失败: %s", self.path, exc)
             self._data = {
                 "version": SCHEMA_VERSION,
@@ -159,7 +159,7 @@ class FeatureRegistry:
                 self.path,
                 len(self._data["features"]),
             )
-        except OSError as exc:
+        except Exception as exc:
             logger.error("FeatureRegistry: 保存 %s 失败: %s", self.path, exc)
 
     def _save_as(self, path: str) -> None:
