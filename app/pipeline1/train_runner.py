@@ -100,41 +100,39 @@ def select_features(
     board_cfg = selector.config.get(board, selector.config.get("fallback", {}))
     pipeline = board_cfg.get("pipeline", "ic_screener")
 
-    # ── bruteforce_dedup pipeline: pre-generate BruteForce features ──
-    # FeatureSelector._run_bruteforce_dedup generates them internally for
-    # correlation computation, but we also need them in the training df.
-    if pipeline == "bruteforce_dedup":
-        gen = BruteForceGenerator()
-        raw_cols = gen._eligible(df)
-        new_feats = gen.generate(df, raw_cols=raw_cols)
-        n_before = len(df.columns)
-        df = df.join(new_feats)
-        logger.info(
-            "[%s] BruteForce 特征注入: %d → %d 列",
-            board,
-            n_before,
-            len(df.columns),
-        )
-
     try:
         selected = selector.select(df, board)
-        # Intersect with available columns and valid candidates
+
+        # ── Post-selection BruteForce injection ──
+        # _run_bruteforce_dedup generates BruteForce features internally for
+        # correlation/dedup, but they land in a local df_exp copy.  Any
+        # selected feature missing from the training df must be generated
+        # here in a single pass (no pre-generation — avoids H1 double-gen
+        # where second _eligible() picks up first-pass brute-force cols).
+        missing = [f for f in selected if f not in df.columns]
+        if missing:
+            gen = BruteForceGenerator()
+            raw_cols = gen._eligible(df)
+            new_feats = gen.generate(df, raw_cols=raw_cols)
+            keep_cols = [c for c in missing if c in new_feats.columns]
+            if keep_cols:
+                df = df.join(new_feats[keep_cols])
+                logger.info(
+                    "[%s] BruteForce 后注入 %d 个选中特征 (缺失 %d)",
+                    board, len(keep_cols), len(missing),
+                )
+
         df_col_set = set(df.columns)
         picked = [f for f in selected if f in df_col_set]
         if picked:
             logger.info(
                 "[%s] FeatureSelector(%s) 精选 %d/%d 因子 (pool=%d)",
-                board,
-                pipeline,
-                len(picked),
-                len(candidates),
-                len(selected),
+                board, pipeline, len(picked), len(candidates), len(selected),
             )
             return picked, df
         logger.warning(
             "[%s] FeatureSelector 全部淘汰, 回退全量 %d 因子",
-            board,
-            len(candidates),
+            board, len(candidates),
         )
     except Exception as exc:  # 精选失败不阻断训练 (降级全量)
         logger.error("[%s] FeatureSelector 失败 (%s), 回退全量因子", board, exc)
