@@ -81,7 +81,7 @@ class _StubFeatures:
 
     @staticmethod
     def feature_columns(df):
-        return ["f1", "f2"]
+        return ["f1", "f2", "ATR_pct"]
 
 
 def test_stage1_gate_small_mode(tmp_path, monkeypatch):
