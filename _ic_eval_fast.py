@@ -31,6 +31,7 @@ df['date']=pd.to_datetime(df['date']); df=df.sort_values(['symbol','date'])
 print('Labels...',flush=True)
 from app.pipeline1.label_engine import LabelEngine
 df=LabelEngine.build_labels(df,session='PM')
+df=LabelEngine.mask_recent_days(df,days=6)  # 屏蔽近端未成熟标签, 防 IC 泄漏
 
 ohlcv=[c for c in OHLCV_COLS if c in df.columns]
 cyq=[c for c in CYQ_COLS if c in df.columns]

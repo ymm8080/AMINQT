@@ -20,6 +20,7 @@ print(f'Sampled {len(sample_dates)}/{len(dates)} dates, {len(df):,} rows ({time.
 # Labels
 from app.pipeline1.label_engine import LabelEngine
 df=LabelEngine.build_labels(df,session='PM')
+df=LabelEngine.mask_recent_days(df,days=6)  # 屏蔽近端未成熟标签, 防 IC 泄漏
 print(f'Labels done ({time.time()-t0:.1f}s)',flush=True)
 
 ohlcv=[c for c in OHLCV if c in df.columns]

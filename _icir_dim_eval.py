@@ -65,6 +65,7 @@ print(f"IC-sample filter: removed {removed:,} / {len(df):,} rows ({removed/len(d
 df = df[ic_mask].copy()
 
 df = LabelEngine.build_labels(df, session="PM")
+df = LabelEngine.mask_recent_days(df, days=6)  # 屏蔽近端未成熟标签, 防 IC 泄漏
 
 MAIN = "label_pm_1d_net"
 AUX  = "label_pm_5d_net"
