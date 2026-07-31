@@ -172,7 +172,7 @@ def cmd_history(board):
         print(f"{v:<25} {'ACTIVE' if v == current else '':<12}")
 
 
-def cmd_update(board, dry_run=False, draft_only=False):
+def cmd_update(board, dry_run=False, draft_only=False, yes=False):
     feat_path = find_latest_features(board)
     logger.info(f"Layer1 features: {feat_path}")
     df, label = load_panel_for_board(board, feat_path)
@@ -210,6 +210,11 @@ def cmd_update(board, dry_run=False, draft_only=False):
         print(f"  Saved as draft: {path}")
         return
 
+    if yes:
+        path = sel.save_version(result, board, activate=True)
+        print(f"  Activated: {path}")
+        return
+
     resp = input("\n  Save as new current? [y/N]: ").strip().lower()
     if resp == "y":
         path = sel.save_version(result, board, activate=True)
@@ -245,6 +250,7 @@ def main():
     ap.add_argument("--rollback", type=str, default=None)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--draft-only", action="store_true")
+    ap.add_argument("--yes", "-y", action="store_true", help="Auto-confirm activation")
     args = ap.parse_args()
 
     if args.status:
@@ -256,7 +262,7 @@ def main():
     elif args.keep:
         cmd_keep(args.board)
     elif args.update:
-        cmd_update(args.board, dry_run=args.dry_run, draft_only=args.draft_only)
+        cmd_update(args.board, dry_run=args.dry_run, draft_only=args.draft_only, yes=args.yes)
     else:
         print("Specify --status, --history, --update, --keep, or --rollback")
         print("Use --dry-run with --update for preview")

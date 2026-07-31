@@ -90,6 +90,7 @@ def main():
     # 2. 构建标签
     print("\n[2] 构建标签 (1d/3d/5d)...")
     df = LabelEngine.build_labels(df, session="PM")
+    df = LabelEngine.mask_recent_days(df, days=6)  # 屏蔽近端未成熟标签, 防 IC 泄漏
 
     # 3. 构建特征 (含 _chg 特征, WINDOWS = (1,3,5,10,20) 全量测试)
     print("\n[3] 构建特征 (包含全部 CHG 窗口: 1,3,5,10,20)...")

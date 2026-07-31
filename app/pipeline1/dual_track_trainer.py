@@ -20,6 +20,7 @@ LightGBM 双轨×8: (1d_reg Huber + 1d_cls binary + 3d_reg + 5d_reg) × (主板/
 
 from __future__ import annotations
 
+import gc
 import logging
 import os
 import pickle
@@ -28,6 +29,20 @@ import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+# Lazy import to avoid circular dependency
+_checkpoint_module = None
+
+
+def _get_checkpoint_cls():
+    """Lazy-import TrainingCheckpoint to avoid circular imports."""
+    global _checkpoint_module
+    if _checkpoint_module is None:
+        from .checkpoint import TrainingCheckpoint as _TC
+
+        _checkpoint_module = _TC
+    return _checkpoint_module
+
 
 WINDOW_TOTAL = 770  # [V3.8] 设计目标窗口 (3年数据≈750交易日)
 WINDOW_TRANSITION = 560  # [B11] 过渡窗口下限
@@ -168,10 +183,11 @@ class DualTrackTrainer:
             )
         return np.array([0.5 ** (age[d] / half_life) for d in df["date"]])
 
-    # ---------------- 单模型训练 ----------------
+    # ---------------- 单模型训练 (低内存路径: float32 + gc) ----------------
     def _train_one(
         self, kind: str, segs: dict[str, pd.DataFrame], feature_cols: list[str]
     ):
+        import gc
         import lightgbm as lgb
 
         label = {
@@ -194,18 +210,31 @@ class DualTrackTrainer:
         es = segs["es"].dropna(subset=[label])
         train = risk_filter(train)
         es = risk_filter(es)
-        X = np.nan_to_num(train[feature_cols].values, nan=0.0)
+
+        # ── 内存: float32 下转 (混合 dtype 的 DataFrame.values 会 upcast 到 float64) ──
+        cols_present = [c for c in feature_cols if c in train.columns]
+        if cols_present:
+            train[cols_present] = train[cols_present].astype("float32", copy=False)
+        cols_es_present = [c for c in feature_cols if c in es.columns]
+        if cols_es_present:
+            es[cols_es_present] = es[cols_es_present].astype("float32", copy=False)
+
+        X = np.nan_to_num(train[cols_present].values, nan=0.0)
         y = train[label].values
-        X_es = np.nan_to_num(es[feature_cols].values, nan=0.0)
+        X_es = np.nan_to_num(es[cols_es_present].values, nan=0.0)
         y_es = es[label].values
         w = self.time_weights(train)
+
+        # 释放 DataFrame 引用 (X/y 已提取为 numpy 数组)
+        del train, es
+        gc.collect()
 
         if kind.endswith("cls"):
             model = lgb.LGBMClassifier(**LGB_PARAMS_CLS)
         else:
             model = lgb.LGBMRegressor(**LGB_PARAMS_REG)
-        # ES 段长度由 split_window 按统计下限推导, 保证 >= MIN_ES_DATES
-        es_dates = es["date"].nunique() if "date" in es.columns else len(es)
+        # es_dates 从 segs 取 (train/es DataFrame 已释放, segs 仍持有 es 引用)
+        es_dates = segs["es"]["date"].nunique() if "date" in segs["es"].columns else len(y_es)
         use_es = es_dates >= MIN_ES_DATES
         if not use_es:
             logger.warning(
@@ -228,16 +257,27 @@ class DualTrackTrainer:
         except Exception as exc:
             logger.error("模型训练失败 [%s/%s]: %s", kind, label, exc)
             raise
+        finally:
+            # 训练完成后释放 numpy 数组 (模型已持有需要的内部状态)
+            del X, y, X_es, y_es, w
+            gc.collect()
         return model, label
 
-    # ---------------- 窗口训练 (单板块 4 模型 + E1/E2) ----------------
+    # ---------------- 窗口训练 (单板块 4 模型 + E1/E2, 支持断点续训) ----------------
     def train_window(
-        self, df: pd.DataFrame, board: str, feature_cols: list[str]
+        self,
+        df: pd.DataFrame,
+        board: str,
+        feature_cols: list[str],
+        checkpoint=None,  # TrainingCheckpoint | None
     ) -> dict:
         """训练一个板块的 4 个模型 + E1 分位数五模型 + E2 痛苦预警 (标签齐备时).
 
         固定使用 WINDOW_TOTAL 窗口 (B11 过渡逻辑已废弃).
         段长按比例动态分配 (split_window), 保证 es/calib/test 各 >= 最小值.
+
+        若提供 checkpoint 且存在, 跳过已完成的模型种类 (断点续训).
+        每完成一个模型种类即原子写入 checkpoint (crash-safe).
         """
         depth = int(df["date"].nunique()) if len(df) else 0
         window = WINDOW_TOTAL  # B11 过渡逻辑已废弃, 始终使用全窗口
@@ -248,8 +288,52 @@ class DualTrackTrainer:
                 f"(需 ≥ {ES_DAYS + CALIB_DAYS + TEST_DAYS + MIN_TRAIN_DAYS})"
             )
         segs = self.split_window(df, window)
-        out = {"board": board, "feature_cols": feature_cols, "models": {}, "segs": segs}
+
+        # ── 内存: 只保留训练/校准/OOS 需要的列, 释放 OHLCV 原始列 ──
+        keep_cols = set(feature_cols) | {
+            "symbol", "date", "board", "is_suspended", "is_st",
+        }
+        for seg_name, seg_df in segs.items():
+            label_cols_in_seg = [c for c in seg_df.columns if c.startswith("label_")]
+            keep_cols.update(label_cols_in_seg)
+            drop_cols = [c for c in seg_df.columns if c not in keep_cols]
+            if drop_cols:
+                segs[seg_name] = seg_df.drop(columns=drop_cols)
+                logger.debug(
+                    "[%s] segs[%s] 释放 %d 列 (保留 %d)",
+                    board, seg_name, len(drop_cols),
+                    len(segs[seg_name].columns),
+                )
+        gc.collect()
+        out = {
+            "board": board,
+            "feature_cols": feature_cols,
+            "models": {},
+            "segs": segs,
+            "_window_total": window,
+        }
+
+        # ── 断点续训: 从 checkpoint 恢复已训练的模型 ──
+        if checkpoint is not None and checkpoint.exists():
+            partial = checkpoint.load_partial()
+            if partial is not None and "models" in partial:
+                out["models"] = partial["models"]
+                # 恢复 extras
+                for ek in ("quantile_models", "pain_model", "rank_model"):
+                    if ek in partial:
+                        out[ek] = partial[ek]
+                logger.info(
+                    "[%s] 从 checkpoint 恢复: models=%s extras=%s",
+                    board,
+                    list(out["models"].keys()),
+                    [k for k in ("quantile_models", "pain_model", "rank_model") if k in out],
+                )
+
+        # ── 训练未完成的模型种类 ──
         for kind in MODEL_KINDS:
+            if checkpoint is not None and kind in (checkpoint.completed_kinds or []):
+                logger.info("[%s] %s — checkpoint 已完成, 跳过", board, kind)
+                continue
             model, label = self._train_one(kind, segs, feature_cols)
             out["models"][kind] = (model, label)
             logger.info(
@@ -258,16 +342,36 @@ class DualTrackTrainer:
                 kind,
                 len(segs["train"].dropna(subset=[label])),
             )
-        self._train_extras(out)
+            gc.collect()
+            # 每完成一个模型种类立即写入 checkpoint
+            if checkpoint is not None:
+                self._save_checkpoint(out, checkpoint)
+
+        # ── 训练未完成的 extras ──
+        self._train_extras(out, checkpoint=checkpoint)
         return out
 
-    # ---------------- E1/E2 + LambdaRank: 分位数 + 痛苦预警 + 排序 ----------------
-    def _train_extras(self, out: dict) -> None:
+    @staticmethod
+    def _save_checkpoint(out: dict, checkpoint) -> None:
+        """Save incremental checkpoint (called after each model kind/extra)."""
+        from .checkpoint import EXTRA_KINDS
+
+        completed_kinds = list(out.get("models", {}).keys())
+        completed_extras = [k for k in EXTRA_KINDS if k in out]
+        checkpoint.save_progress(
+            out, completed_kinds=completed_kinds, completed_extras=completed_extras
+        )
+
+    # ---------------- E1/E2 + LambdaRank: 分位数 + 痛苦预警 + 排序 (支持断点续训) ----------------
+    def _train_extras(self, out: dict, checkpoint=None) -> None:
         """[E1] 分位数五模型 (label_1d_net) + [E2] 痛苦预警 (label_pain)
         + [阶段四] LambdaRank 排序模型 (lambdarank_truncation_level=25, 分位 gain).
 
         E1 沿用回归超参, 不单独搜索 (V3.8 §2.2, 避免调参维度爆炸).
         标签缺失时跳过 (向后兼容旧面板).
+
+        若提供 checkpoint, 跳过已完成的 extra 种类.
+        每完成一个 extra 种类即写入 checkpoint.
         """
         from .quantile_models import PainModel, QuantileModelSet
 
@@ -275,8 +379,15 @@ class DualTrackTrainer:
 
         def _xy(seg_name: str, label: str):
             sub = risk_filter(segs[seg_name].dropna(subset=[label]))
-            X = np.nan_to_num(sub[cols].values, nan=0.0)
+            # float32 下转: 避免混合 dtype 导致 .values upcast 到 float64
+            cols_present = [c for c in cols if c in sub.columns]
+            if cols_present:
+                sub[cols_present] = sub[cols_present].astype("float32", copy=False)
+            X = np.nan_to_num(sub[cols_present].values, nan=0.0)
             return sub, X, sub[label].values
+
+        # 哪些 extras 已完成 (从 checkpoint)
+        done_extras = set(checkpoint.completed_extras or []) if checkpoint is not None else set()
 
         # E1: label 偏好 label_pm_1d_net → label_1d_net → label_1d (与 _train_one 同口径)
         q_label = next(
@@ -288,47 +399,69 @@ class DualTrackTrainer:
             None,
         )
         if q_label is not None:
-            try:
-                train, X, y = _xy("train", q_label)
-                _, X_es, y_es = _xy("es", q_label)
-                # E1 沿用回归超参 (objective 由 QuantileModelSet 按分位设置)
-                params = {k: v for k, v in LGB_PARAMS_REG.items() if k != "objective"}
-                qset = QuantileModelSet(params).fit(
-                    X,
-                    y,
-                    sample_weight=self.time_weights(train),
-                    eval_set=(X_es, y_es) if len(y_es) else None,
-                    es_patience=ES_PATIENCE,
-                )
-                qset.label_ = q_label
-                out["quantile_models"] = qset
-                logger.info(
-                    "[%s] E1 分位数五模型训练完成 (label=%s)", out["board"], q_label
-                )
-            except Exception as e:
-                logger.warning("[%s] E1 分位数模型训练失败: %s", out["board"], e)
-            # 阶段四: LambdaRank (标签=净收益截面分位 gain 0-4, group=date)
-            try:
-                out["rank_model"] = self._train_ranker(out, q_label)
-                logger.info("[%s] LambdaRank 排序模型训练完成", out["board"])
-            except Exception as e:
-                logger.warning("[%s] LambdaRank 训练失败: %s", out["board"], e)
+            # E1 分位数五模型
+            if "quantile_models" not in done_extras:
+                try:
+                    train, X, y = _xy("train", q_label)
+                    _, X_es, y_es = _xy("es", q_label)
+                    # E1 沿用回归超参 (objective 由 QuantileModelSet 按分位设置)
+                    params = {k: v for k, v in LGB_PARAMS_REG.items() if k != "objective"}
+                    qset = QuantileModelSet(params).fit(
+                        X,
+                        y,
+                        sample_weight=self.time_weights(train),
+                        eval_set=(X_es, y_es) if len(y_es) else None,
+                        es_patience=ES_PATIENCE,
+                    )
+                    qset.label_ = q_label
+                    out["quantile_models"] = qset
+                    logger.info(
+                        "[%s] E1 分位数五模型训练完成 (label=%s)", out["board"], q_label
+                    )
+                except Exception as e:
+                    logger.warning("[%s] E1 分位数模型训练失败: %s", out["board"], e)
+                del train, X, y, X_es, y_es
+                gc.collect()
+                if checkpoint is not None:
+                    self._save_checkpoint(out, checkpoint)
+            else:
+                logger.info("[%s] E1 分位数模型 — checkpoint 已完成, 跳过", out["board"])
 
+            # 阶段四: LambdaRank (标签=净收益截面分位 gain 0-4, group=date)
+            if "rank_model" not in done_extras:
+                try:
+                    out["rank_model"] = self._train_ranker(out, q_label)
+                    logger.info("[%s] LambdaRank 排序模型训练完成", out["board"])
+                except Exception as e:
+                    logger.warning("[%s] LambdaRank 训练失败: %s", out["board"], e)
+                if checkpoint is not None:
+                    self._save_checkpoint(out, checkpoint)
+            else:
+                logger.info("[%s] LambdaRank — checkpoint 已完成, 跳过", out["board"])
+
+        # E2 痛苦预警
         if "label_pain" in segs["train"].columns:
-            try:
-                train, X, y = _xy("train", "label_pain")
-                _, X_es, y_es = _xy("es", "label_pain")
-                params = {k: v for k, v in LGB_PARAMS_CLS.items() if k != "objective"}
-                pain = PainModel(params).fit(
-                    X,
-                    y,
-                    sample_weight=self.time_weights(train),
-                    eval_set=(X_es, y_es) if len(y_es) else None,
-                    es_patience=ES_PATIENCE,
-                )
-                out["pain_model"] = pain
-            except Exception as e:
-                logger.warning("[%s] E2 痛苦预警模型训练失败: %s", out["board"], e)
+            if "pain_model" not in done_extras:
+                try:
+                    train, X, y = _xy("train", "label_pain")
+                    _, X_es, y_es = _xy("es", "label_pain")
+                    params = {k: v for k, v in LGB_PARAMS_CLS.items() if k != "objective"}
+                    pain = PainModel(params).fit(
+                        X,
+                        y,
+                        sample_weight=self.time_weights(train),
+                        eval_set=(X_es, y_es) if len(y_es) else None,
+                        es_patience=ES_PATIENCE,
+                    )
+                    out["pain_model"] = pain
+                except Exception as e:
+                    logger.warning("[%s] E2 痛苦预警模型训练失败: %s", out["board"], e)
+                del train, X, y, X_es, y_es
+                gc.collect()
+                if checkpoint is not None:
+                    self._save_checkpoint(out, checkpoint)
+            else:
+                logger.info("[%s] E2 痛苦预警 — checkpoint 已完成, 跳过", out["board"])
 
     # ---------------- 阶段四: LambdaRank 排序模型 ----------------
     def _train_ranker(self, out: dict, label: str):
@@ -343,13 +476,17 @@ class DualTrackTrainer:
 
         def _prep(seg_name: str):
             sub = risk_filter(segs[seg_name].dropna(subset=[label])).sort_values("date")
+            # float32 下转
+            cols_present = [c for c in cols if c in sub.columns]
+            if cols_present:
+                sub[cols_present] = sub[cols_present].astype("float32", copy=False)
             gains = (
                 sub.groupby("date")[label]
                 .rank(pct=True)
                 .pipe(lambda s: (s * 5).clip(0, 4.999).astype(int))
             )
             group = sub.groupby("date").size().values
-            X = np.nan_to_num(sub[cols].values, nan=0.0)
+            X = np.nan_to_num(sub[cols_present].values, nan=0.0)
             return X, gains.values, group
 
         X, gains, group = _prep("train")
@@ -480,26 +617,45 @@ class DualTrackTrainer:
         ]
         return bool(np.nanmean(corrs) > threshold)
 
-    # ---------------- 每周全局重训 (解耦) ----------------
+    # ---------------- 每周全局重训 (解耦, 支持断点续训) ----------------
     def weekly_retrain(
         self,
         panels: dict[str, pd.DataFrame],
         feature_cols_by_board: dict[str, list[str]],
         tag: str,
+        resume: bool = False,
     ) -> dict:
         """每周一次全局重训 (用户 2026-07-22 裁决: 周频全局训练).
 
         panels: {'main': 主板750日面板, 'dual': 双创750日面板}.
         每周第一个交易日 15:30 启动, 与 16:00 清单生成并行.
 
+        resume=True: 从 checkpoint 断点续训, 跳过已完成的模型种类.
+        训练完成后自动清理 checkpoint 文件.
+
         Returns:
             {board: {'path', 'oos': {...}, 'switched': bool}}
         """
+        TC = _get_checkpoint_cls()
         results = {}
         for board, df in panels.items():
-            trained = self.train_window(df, board, feature_cols_by_board[board])
+            ck = TC(self.model_dir, board, tag) if resume else None
+
+            if ck is not None and ck.exists():
+                remaining = ck.remaining_kinds()
+                logger.info(
+                    "[%s] 断点续训: 已完成 %s, 剩余 %s",
+                    board,
+                    ck.completed_kinds,
+                    remaining,
+                )
+                if not remaining and not ck.remaining_extras():
+                    logger.info("[%s] 全部模型已完成, 仅执行 OOS 验证 + 归档", board)
+
+            trained = self.train_window(df, board, feature_cols_by_board[board], checkpoint=ck)
             oos = self.validate_oos(trained)
             path = self.save(trained, tag)
+
             # 切换决策: OOS 合格才切换, 否则保留旧模型 + 告警
             results[board] = {"path": path, "oos": oos, "switched": oos["pass"]}
             if not oos["pass"]:
@@ -510,6 +666,12 @@ class DualTrackTrainer:
                     max(oos["ics"].get(k, 0.0) for k in ("1d_reg", "3d_reg", "5d_reg")),
                     OOS_IC_MIN,
                 )
+
+            # 训练成功 → 清理 checkpoint (原子归档完成)
+            if ck is not None:
+                ck.clear()
+                logger.info("[%s] checkpoint 已清理 (归档完成)", board)
+
         return results
 
     # 兼容别名 (V3.5 原文为月度, 用户 2026-07-22 裁决改为周频)
