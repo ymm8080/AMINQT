@@ -120,7 +120,9 @@ class BruteForceGenerator:
                         pd.Series(s).ewm(span=w, min_periods=1).mean().values
                     )
 
-            all_new[sym] = pd.DataFrame(feats, index=g.index).replace([np.inf, -np.inf], np.nan)
+            all_new[sym] = pd.DataFrame(feats, index=g.index).replace(
+                [np.inf, -np.inf], np.nan
+            )
 
         new = pd.concat(all_new.values())
         logger.info(
@@ -162,17 +164,33 @@ class BruteForceGenerator:
                 elif family_name == "rolling_mean":
                     for w in windows:
                         feats[f"{col}_brute_{suffix}{w}"] = (
-                            pd.Series(s).rolling(w, min_periods=1).mean().values.astype(np.float32))
+                            pd.Series(s)
+                            .rolling(w, min_periods=1)
+                            .mean()
+                            .values.astype(np.float32)
+                        )
                 elif family_name == "rolling_std":
                     for w in windows:
                         feats[f"{col}_brute_{suffix}{w}"] = (
-                            pd.Series(s).rolling(w, min_periods=1).std().values.astype(np.float32))
+                            pd.Series(s)
+                            .rolling(w, min_periods=1)
+                            .std()
+                            .values.astype(np.float32)
+                        )
                 elif family_name in ("rolling_max", "rolling_min"):
                     for w in windows:
                         feats[f"{col}_brute_max{w}"] = (
-                            pd.Series(s).rolling(w, min_periods=1).max().values.astype(np.float32))
+                            pd.Series(s)
+                            .rolling(w, min_periods=1)
+                            .max()
+                            .values.astype(np.float32)
+                        )
                         feats[f"{col}_brute_min{w}"] = (
-                            pd.Series(s).rolling(w, min_periods=1).min().values.astype(np.float32))
+                            pd.Series(s)
+                            .rolling(w, min_periods=1)
+                            .min()
+                            .values.astype(np.float32)
+                        )
                 elif family_name == "diff":
                     for w in windows:
                         o = np.full(n, np.nan, dtype=np.float32)
@@ -186,12 +204,22 @@ class BruteForceGenerator:
                 elif family_name == "EMA":
                     for w in windows:
                         feats[f"{col}_brute_{suffix}{w}"] = (
-                            pd.Series(s).ewm(span=w, min_periods=1).mean().values.astype(np.float32))
-            all_new[sym] = pd.DataFrame(feats, index=g.index).replace([np.inf, -np.inf], np.nan)
+                            pd.Series(s)
+                            .ewm(span=w, min_periods=1)
+                            .mean()
+                            .values.astype(np.float32)
+                        )
+            all_new[sym] = pd.DataFrame(feats, index=g.index).replace(
+                [np.inf, -np.inf], np.nan
+            )
         new = pd.concat(all_new.values())
         logger.info(
             "BruteForce[%s]: %d cols from %d raw (%.0fs, float32)",
-            family_name, len(new.columns), len(raw), time.time() - t0)
+            family_name,
+            len(new.columns),
+            len(raw),
+            time.time() - t0,
+        )
         return new
 
     def generate_family(self, df, family_name, raw_cols=None, dtype="float32"):
@@ -220,17 +248,33 @@ class BruteForceGenerator:
                 elif family_name == "rolling_mean":
                     for w in windows:
                         feats[f"{col}_brute_{suffix}{w}"] = (
-                            pd.Series(s).rolling(w, min_periods=1).mean().values.astype(np.float32))
+                            pd.Series(s)
+                            .rolling(w, min_periods=1)
+                            .mean()
+                            .values.astype(np.float32)
+                        )
                 elif family_name == "rolling_std":
                     for w in windows:
                         feats[f"{col}_brute_{suffix}{w}"] = (
-                            pd.Series(s).rolling(w, min_periods=1).std().values.astype(np.float32))
+                            pd.Series(s)
+                            .rolling(w, min_periods=1)
+                            .std()
+                            .values.astype(np.float32)
+                        )
                 elif family_name in ("rolling_max", "rolling_min"):
                     for w in windows:
                         feats[f"{col}_brute_max{w}"] = (
-                            pd.Series(s).rolling(w, min_periods=1).max().values.astype(np.float32))
+                            pd.Series(s)
+                            .rolling(w, min_periods=1)
+                            .max()
+                            .values.astype(np.float32)
+                        )
                         feats[f"{col}_brute_min{w}"] = (
-                            pd.Series(s).rolling(w, min_periods=1).min().values.astype(np.float32))
+                            pd.Series(s)
+                            .rolling(w, min_periods=1)
+                            .min()
+                            .values.astype(np.float32)
+                        )
                 elif family_name == "diff":
                     for w in windows:
                         o = np.full(n, np.nan, dtype=np.float32)
@@ -244,12 +288,22 @@ class BruteForceGenerator:
                 elif family_name == "EMA":
                     for w in windows:
                         feats[f"{col}_brute_{suffix}{w}"] = (
-                            pd.Series(s).ewm(span=w, min_periods=1).mean().values.astype(np.float32))
-            all_new[sym] = pd.DataFrame(feats, index=g.index).replace([np.inf, -np.inf], np.nan)
+                            pd.Series(s)
+                            .ewm(span=w, min_periods=1)
+                            .mean()
+                            .values.astype(np.float32)
+                        )
+            all_new[sym] = pd.DataFrame(feats, index=g.index).replace(
+                [np.inf, -np.inf], np.nan
+            )
         new = pd.concat(all_new.values())
         logger.info(
             "BruteForce[%s]: %d cols from %d raw (%.0fs, float32)",
-            family_name, len(new.columns), len(raw), time.time() - t0)
+            family_name,
+            len(new.columns),
+            len(raw),
+            time.time() - t0,
+        )
         return new
 
 

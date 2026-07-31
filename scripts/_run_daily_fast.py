@@ -2,6 +2,7 @@
 
 Usage: python scripts/_run_daily_fast.py [trade_date]
 """
+
 from __future__ import annotations
 
 import logging
@@ -15,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import pandas as pd
@@ -85,7 +87,9 @@ def build_panel_fast(trade_date: str) -> pd.DataFrame:
                     .map(cyq.set_index("symbol")[col])
                     .values
                 )
-        logger.info("CYQ merge: %d cols updated for %d rows", len(cyq_cols), today_mask.sum())
+        logger.info(
+            "CYQ merge: %d cols updated for %d rows", len(cyq_cols), today_mask.sum()
+        )
     else:
         logger.warning("CYQ cache not found: %s — today's CYQ will be NaN", cyq_path)
 
@@ -103,6 +107,7 @@ def main(trade_date: str):
     # 3. Run production pipeline with pre-built panel
     logger.info("Importing DailySelectionPipeline...")
     from app.pipeline1.daily_pipeline import DailySelectionPipeline
+
     logger.info("Constructing DailySelectionPipeline...")
     pipeline = DailySelectionPipeline(
         supply=DataSupplyChain(),

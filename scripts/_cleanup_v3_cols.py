@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Remove leaked ts_code and end_date columns from v3 (from previous _fill_fina run)."""
+
 import sys
 from pathlib import Path
 
@@ -8,7 +9,9 @@ sys.path.insert(0, str(ROOT))
 import pandas as pd
 import logging
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("cleanup")
 
 V3_PATH = "data/panel_full_enriched_v3.parquet"

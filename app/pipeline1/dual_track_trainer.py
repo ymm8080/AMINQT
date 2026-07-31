@@ -234,7 +234,9 @@ class DualTrackTrainer:
         else:
             model = lgb.LGBMRegressor(**LGB_PARAMS_REG)
         # es_dates 从 segs 取 (train/es DataFrame 已释放, segs 仍持有 es 引用)
-        es_dates = segs["es"]["date"].nunique() if "date" in segs["es"].columns else len(y_es)
+        es_dates = (
+            segs["es"]["date"].nunique() if "date" in segs["es"].columns else len(y_es)
+        )
         use_es = es_dates >= MIN_ES_DATES
         if not use_es:
             logger.warning(
@@ -291,7 +293,11 @@ class DualTrackTrainer:
 
         # ── 内存: 只保留训练/校准/OOS 需要的列, 释放 OHLCV 原始列 ──
         keep_cols = set(feature_cols) | {
-            "symbol", "date", "board", "is_suspended", "is_st",
+            "symbol",
+            "date",
+            "board",
+            "is_suspended",
+            "is_st",
         }
         for seg_name, seg_df in segs.items():
             label_cols_in_seg = [c for c in seg_df.columns if c.startswith("label_")]
@@ -301,7 +307,9 @@ class DualTrackTrainer:
                 segs[seg_name] = seg_df.drop(columns=drop_cols)
                 logger.debug(
                     "[%s] segs[%s] 释放 %d 列 (保留 %d)",
-                    board, seg_name, len(drop_cols),
+                    board,
+                    seg_name,
+                    len(drop_cols),
                     len(segs[seg_name].columns),
                 )
         gc.collect()
@@ -326,7 +334,11 @@ class DualTrackTrainer:
                     "[%s] 从 checkpoint 恢复: models=%s extras=%s",
                     board,
                     list(out["models"].keys()),
-                    [k for k in ("quantile_models", "pain_model", "rank_model") if k in out],
+                    [
+                        k
+                        for k in ("quantile_models", "pain_model", "rank_model")
+                        if k in out
+                    ],
                 )
 
         # ── 训练未完成的模型种类 ──
@@ -387,7 +399,9 @@ class DualTrackTrainer:
             return sub, X, sub[label].values
 
         # 哪些 extras 已完成 (从 checkpoint)
-        done_extras = set(checkpoint.completed_extras or []) if checkpoint is not None else set()
+        done_extras = (
+            set(checkpoint.completed_extras or []) if checkpoint is not None else set()
+        )
 
         # E1: label 偏好 label_pm_1d_net → label_1d_net → label_1d (与 _train_one 同口径)
         q_label = next(
@@ -405,7 +419,9 @@ class DualTrackTrainer:
                     train, X, y = _xy("train", q_label)
                     _, X_es, y_es = _xy("es", q_label)
                     # E1 沿用回归超参 (objective 由 QuantileModelSet 按分位设置)
-                    params = {k: v for k, v in LGB_PARAMS_REG.items() if k != "objective"}
+                    params = {
+                        k: v for k, v in LGB_PARAMS_REG.items() if k != "objective"
+                    }
                     qset = QuantileModelSet(params).fit(
                         X,
                         y,
@@ -425,7 +441,9 @@ class DualTrackTrainer:
                 if checkpoint is not None:
                     self._save_checkpoint(out, checkpoint)
             else:
-                logger.info("[%s] E1 分位数模型 — checkpoint 已完成, 跳过", out["board"])
+                logger.info(
+                    "[%s] E1 分位数模型 — checkpoint 已完成, 跳过", out["board"]
+                )
 
             # 阶段四: LambdaRank (标签=净收益截面分位 gain 0-4, group=date)
             if "rank_model" not in done_extras:
@@ -445,7 +463,9 @@ class DualTrackTrainer:
                 try:
                     train, X, y = _xy("train", "label_pain")
                     _, X_es, y_es = _xy("es", "label_pain")
-                    params = {k: v for k, v in LGB_PARAMS_CLS.items() if k != "objective"}
+                    params = {
+                        k: v for k, v in LGB_PARAMS_CLS.items() if k != "objective"
+                    }
                     pain = PainModel(params).fit(
                         X,
                         y,
@@ -652,7 +672,9 @@ class DualTrackTrainer:
                 if not remaining and not ck.remaining_extras():
                     logger.info("[%s] 全部模型已完成, 仅执行 OOS 验证 + 归档", board)
 
-            trained = self.train_window(df, board, feature_cols_by_board[board], checkpoint=ck)
+            trained = self.train_window(
+                df, board, feature_cols_by_board[board], checkpoint=ck
+            )
             oos = self.validate_oos(trained)
             path = self.save(trained, tag)
 

@@ -1,9 +1,11 @@
 """Test Tushare API availability and points level for the missing data columns."""
-import os, sys, time
-import pandas as pd
+
+import os
 
 # Load token from .env
-env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+env_path = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"
+)
 with open(env_path) as f:
     for line in f:
         line = line.strip()

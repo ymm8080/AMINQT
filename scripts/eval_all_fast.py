@@ -5,11 +5,18 @@ WITHOUT the slow _chgN/_pct_chgN generation. Those are linear transforms.
 Evaluates ~500 core features in <2 min (vs ~3,500 in 10+ min).
 """
 
-import json, logging, os, sys, numpy as np, pandas as pd
+import json
+import logging
+import os
+import sys
+import numpy as np
+import pandas as pd
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 PANEL = "data/panel_full_enriched_v3.parquet"
@@ -24,7 +31,6 @@ def eval_all_fast(board_name, board_df):
     from app.utils.daily_rank_ic import daily_rank_ic_series, mean_rank_ic
 
     fe = FeatureEngineV35()
-    csr = board_name != "main"
 
     # Latest ~250d
     max_d = board_df["date"].max()
@@ -80,11 +86,15 @@ def eval_all_fast(board_name, board_df):
     df = LabelEngine.mask_recent_days(df, days=6)
 
     feature_cols = FeatureEngineV35.feature_columns(df)
-    feature_cols = [c for c in feature_cols if c in df.columns and df[c].dtype != object]
+    feature_cols = [
+        c for c in feature_cols if c in df.columns and df[c].dtype != object
+    ]
     feature_cols = [c for c in feature_cols if df[c].isna().mean() < 0.95]
 
     label_col = "label_1d_net" if "label_1d_net" in df.columns else "label_1d"
-    logger.info("[%s] Evaluating %d features vs %s...", board_name, len(feature_cols), label_col)
+    logger.info(
+        "[%s] Evaluating %d features vs %s...", board_name, len(feature_cols), label_col
+    )
 
     results = []
     for i, col in enumerate(feature_cols):
@@ -98,17 +108,31 @@ def eval_all_fast(board_name, board_df):
             ic_std = float(np.nanstd(ic_series.values)) if len(ic_series) >= 5 else 0.0
             icir = ic_mean / ic_std if ic_std > 0 else 0.0
             pos_ratio = float((ic_series > 0).mean())
-            nan_rate = float(board_df[col].isna().mean()) if col in board_df.columns else 1.0
-            results.append({
-                "factor": col, "ic_mean": round(float(ic_mean), 6),
-                "ic_abs": round(float(ic_abs), 6), "ic_std": round(float(ic_std), 6),
-                "icir": round(float(icir), 4), "pos_ratio": round(float(pos_ratio), 4),
-                "nan_rate": round(float(nan_rate), 4), "n_dates": len(ic_series),
-            })
+            nan_rate = (
+                float(board_df[col].isna().mean()) if col in board_df.columns else 1.0
+            )
+            results.append(
+                {
+                    "factor": col,
+                    "ic_mean": round(float(ic_mean), 6),
+                    "ic_abs": round(float(ic_abs), 6),
+                    "ic_std": round(float(ic_std), 6),
+                    "icir": round(float(icir), 4),
+                    "pos_ratio": round(float(pos_ratio), 4),
+                    "nan_rate": round(float(nan_rate), 4),
+                    "n_dates": len(ic_series),
+                }
+            )
         except Exception:
             pass
         if (i + 1) % 200 == 0:
-            logger.info("[%s] %d/%d (%d results)", board_name, i+1, len(feature_cols), len(results))
+            logger.info(
+                "[%s] %d/%d (%d results)",
+                board_name,
+                i + 1,
+                len(feature_cols),
+                len(results),
+            )
 
     if not results:
         logger.error("[%s] NO results", board_name)
@@ -120,22 +144,33 @@ def eval_all_fast(board_name, board_df):
 
     print(f"\n{'=' * 100}")
     print(f"  {board_name.upper()} — ALL CORE FEATURES ranked by |IC| (top {top_n})")
-    print(f"  {board_df['symbol'].nunique()} stocks, {len(board_df)} rows, {len(feature_cols)} features")
+    print(
+        f"  {board_df['symbol'].nunique()} stocks, {len(board_df)} rows, {len(feature_cols)} features"
+    )
     print(f"{'=' * 100}")
-    print(f"{'Rank':<5s} {'Factor':<50s} {'IC_mean':>8s} {'|IC|':>8s} {'ICIR':>7s} {'Pos%':>7s} {'NaN%':>7s}")
+    print(
+        f"{'Rank':<5s} {'Factor':<50s} {'IC_mean':>8s} {'|IC|':>8s} {'ICIR':>7s} {'Pos%':>7s} {'NaN%':>7s}"
+    )
     print("-" * 100)
     for idx, (_, r) in enumerate(top.iterrows(), 1):
-        print(f"{idx:<5d} {r['factor']:<50s} {r['ic_mean']:>+8.4f} {r['ic_abs']:>8.4f} {r['icir']:>7.2f} {r['pos_ratio']:>7.1%} {r['nan_rate']:>7.1%}")
+        print(
+            f"{idx:<5d} {r['factor']:<50s} {r['ic_mean']:>+8.4f} {r['ic_abs']:>8.4f} {r['icir']:>7.2f} {r['pos_ratio']:>7.1%} {r['nan_rate']:>7.1%}"
+        )
 
     strong = (rdf["ic_abs"] >= 0.05).sum()
     weak = ((rdf["ic_abs"] >= 0.02) & (rdf["ic_abs"] < 0.05)).sum()
     noise = (rdf["ic_abs"] < 0.02).sum()
-    print(f"\n  Total: {len(rdf)} | Strong(|IC|>=0.05): {strong} | Weak(0.02-0.05): {weak} | Noise(<0.02): {noise}")
+    print(
+        f"\n  Total: {len(rdf)} | Strong(|IC|>=0.05): {strong} | Weak(0.02-0.05): {weak} | Noise(<0.02): {noise}"
+    )
     print(f"  IC range: [{rdf['ic_mean'].min():+.4f}, {rdf['ic_mean'].max():+.4f}]")
 
     return {
-        "board": board_name, "n_features": len(rdf),
-        "n_strong": int(strong), "n_weak": int(weak), "n_noise": int(noise),
+        "board": board_name,
+        "n_features": len(rdf),
+        "n_strong": int(strong),
+        "n_weak": int(weak),
+        "n_noise": int(noise),
         "ic_range": [float(rdf["ic_mean"].min()), float(rdf["ic_mean"].max())],
         "top_50": rdf.head(50).to_dict(orient="records"),
     }
@@ -150,7 +185,7 @@ def main():
         panel["board"] = panel["symbol"].map(board_of)
 
     rng = np.random.RandomState(SEED)
-    main_syms = panel[panel["board"]=="main"]["symbol"].unique()
+    main_syms = panel[panel["board"] == "main"]["symbol"].unique()
     main_pick = rng.choice(main_syms, min(N_STOCKS, len(main_syms)), replace=False)
     main_df = panel[panel["symbol"].isin(main_pick)].copy()
     main_df = main_df[~main_df["is_st"].astype(bool) & (main_df["list_days"] >= 250)]
@@ -161,7 +196,11 @@ def main():
     dual_df = panel[panel["symbol"].isin(dual_pick)].copy()
     dual_df = dual_df[~dual_df["is_st"].astype(bool) & (dual_df["list_days"] >= 250)]
 
-    logger.info("Main: %d stocks | Dual: %d stocks", main_df["symbol"].nunique(), dual_df["symbol"].nunique())
+    logger.info(
+        "Main: %d stocks | Dual: %d stocks",
+        main_df["symbol"].nunique(),
+        dual_df["symbol"].nunique(),
+    )
 
     output = {"timestamp": datetime.now().isoformat(), "boards": {}}
     for name, bdf in [("main", main_df), ("dual", dual_df)]:

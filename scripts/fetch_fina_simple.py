@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Simple fetch of fina_indicator for full range 2023-01-01 ~ 2026-07-28."""
-import os, sys
+
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.pipeline1.data_supply import DataSupplyChain

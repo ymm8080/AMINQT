@@ -262,7 +262,9 @@ def main():
     elif args.keep:
         cmd_keep(args.board)
     elif args.update:
-        cmd_update(args.board, dry_run=args.dry_run, draft_only=args.draft_only, yes=args.yes)
+        cmd_update(
+            args.board, dry_run=args.dry_run, draft_only=args.draft_only, yes=args.yes
+        )
     else:
         print("Specify --status, --history, --update, --keep, or --rollback")
         print("Use --dry-run with --update for preview")

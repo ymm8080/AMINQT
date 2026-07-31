@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import glob as glob_mod  # avoids shadowing the module with loop var
-import json
 import logging
 import os
 import sys
@@ -62,7 +61,8 @@ CORR_THRESHOLD = 0.7
 def latest_panel(data_dir: str = "data") -> str | None:
     """Find the most recently modified .parquet file in ``data_dir``."""
     candidates = [
-        f for f in glob_mod.glob(os.path.join(data_dir, "*.parquet"))
+        f
+        for f in glob_mod.glob(os.path.join(data_dir, "*.parquet"))
         if os.path.isfile(f)
     ]
     if not candidates:
@@ -77,9 +77,11 @@ def load_and_sample_panel(path: str) -> pd.DataFrame:
     df = pd.read_parquet(path)
     logger.info(
         "Panel: %d rows, %d cols, %d stocks, dates %s ~ %s",
-        len(df), len(df.columns),
+        len(df),
+        len(df.columns),
         df["symbol"].nunique(),
-        df["date"].min(), df["date"].max(),
+        df["date"].min(),
+        df["date"].max(),
     )
 
     rng = np.random.RandomState(RANDOM_SEED)
@@ -106,7 +108,9 @@ def load_and_sample_panel(path: str) -> pd.DataFrame:
     return df_sample
 
 
-def compute_spearman_matrix(df: pd.DataFrame, features: list[str]) -> pd.DataFrame | None:
+def compute_spearman_matrix(
+    df: pd.DataFrame, features: list[str]
+) -> pd.DataFrame | None:
     """Compute Spearman correlation matrix (pairwise complete obs).
 
     Returns a square DataFrame indexed by feature name, or *None* if
@@ -196,7 +200,7 @@ def greedy_cluster(
 
         cluster_members: list[tuple[str, dict, float]] = []
 
-        for f2 in all_features[i + 1:]:
+        for f2 in all_features[i + 1 :]:
             if f2 in substituted:
                 continue
             r = corr.loc[f1, f2]
@@ -244,23 +248,34 @@ def main() -> None:
         description="L2 Family Dedup — Remove highly correlated features within dim groups",
     )
     parser.add_argument(
-        "--panel", type=str, default=None,
+        "--panel",
+        type=str,
+        default=None,
         help="Path to panel parquet. Default: latest in data/",
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Run without modifying the registry — just print the report",
     )
     parser.add_argument(
-        "--registry", type=str, default=DEFAULT_REGISTRY_PATH,
+        "--registry",
+        type=str,
+        default=DEFAULT_REGISTRY_PATH,
         help=f"Path to feature registry JSON (default: {DEFAULT_REGISTRY_PATH})",
     )
     args = parser.parse_args()
 
     # ── 1. Load registry ──────────────────────────────────────────
-    registry_path = os.path.abspath(args.registry) if not os.path.isabs(args.registry) else args.registry
+    registry_path = (
+        os.path.abspath(args.registry)
+        if not os.path.isabs(args.registry)
+        else args.registry
+    )
     if not os.path.exists(registry_path):
-        logger.info("Registry not found at %s — nothing to dedup. Exiting.", registry_path)
+        logger.info(
+            "Registry not found at %s — nothing to dedup. Exiting.", registry_path
+        )
         return
 
     from app.pipeline1.feature_registry import FeatureRegistry
@@ -305,6 +320,7 @@ def main() -> None:
     df_sample = load_and_sample_panel(panel_path)
 
     from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+
     panel_feature_cols = set(FeatureEngineV35.feature_columns(df_sample))
 
     # ── 4 & 5. Per dim group: correlate + cluster ───────────────
@@ -318,23 +334,26 @@ def main() -> None:
 
         # Only include features that exist in the panel
         available = [
-            n for n in feat_meta
-            if n in panel_feature_cols and n in df_sample.columns
+            n for n in feat_meta if n in panel_feature_cols and n in df_sample.columns
         ]
         if len(available) < 3:
             logger.info(
                 "  [%s] only %d features available in panel (<3), skipping",
-                dim_group, len(available),
+                dim_group,
+                len(available),
             )
             continue
 
         logger.info(
             "  [%s] computing Spearman correlation for %d features...",
-            dim_group, len(available),
+            dim_group,
+            len(available),
         )
         corr = compute_spearman_matrix(df_sample, available)
         if corr is None:
-            logger.info("  [%s] not enough valid data after filtering, skipping", dim_group)
+            logger.info(
+                "  [%s] not enough valid data after filtering, skipping", dim_group
+            )
             continue
 
         clusters = greedy_cluster(corr, feat_meta)
@@ -344,7 +363,9 @@ def main() -> None:
             total_substituted += n_sub
             logger.info(
                 "  [%s] %d cluster(s), %d feature(s) to substitute",
-                dim_group, len(clusters), n_sub,
+                dim_group,
+                len(clusters),
+                n_sub,
             )
 
             # ── 6. Update registry (skip on dry-run) ──
@@ -358,7 +379,8 @@ def main() -> None:
                             total_strong_protected += 1
                             logger.info(
                                 "  [%s] PROTECTED strong feature: %s",
-                                dim_group, sub_name,
+                                dim_group,
+                                sub_name,
                             )
                             continue
                         sub_meta["active"] = False
@@ -369,7 +391,10 @@ def main() -> None:
     if not args.dry_run:
         if total_substituted > 0:
             registry.save()
-            logger.info("Registry saved: %d features deactivated as substitutes", total_substituted)
+            logger.info(
+                "Registry saved: %d features deactivated as substitutes",
+                total_substituted,
+            )
         else:
             logger.info("No features to update — registry unchanged.")
     else:
@@ -385,7 +410,9 @@ def main() -> None:
     lines.append(f"- **Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     lines.append(f"- **Registry:** {registry_path}")
     lines.append(f"- **Panel:** {panel_path}")
-    lines.append(f"- **Mode:** {'DRY RUN (no changes applied)' if args.dry_run else 'LIVE'}")
+    lines.append(
+        f"- **Mode:** {'DRY RUN (no changes applied)' if args.dry_run else 'LIVE'}"
+    )
     lines.append(f"- **Correlation threshold:** |r| > {CORR_THRESHOLD}")
     lines.append("")
 
@@ -413,8 +440,12 @@ def main() -> None:
             lines.append("")
             continue
 
-        lines.append("| Keeper | Grade(kept) | ICIR(kept) | Substitute | Grade(sub) | ICIR(sub) | |r| |")
-        lines.append("|--------|-------------|------------|------------|------------|-----------|-----|")
+        lines.append(
+            "| Keeper | Grade(kept) | ICIR(kept) | Substitute | Grade(sub) | ICIR(sub) | |r| |"
+        )
+        lines.append(
+            "|--------|-------------|------------|------------|------------|-----------|-----|"
+        )
 
         for kept_name, substitutes in clusters.items():
             kept_meta = feat_meta.get(kept_name, {})
@@ -434,13 +465,17 @@ def main() -> None:
     lines.append("---")
     lines.append("## Summary")
     lines.append("")
-    lines.append(f"- **Dim groups processed:** {len(all_clusters)} / {len(dim_features)}")
+    lines.append(
+        f"- **Dim groups processed:** {len(all_clusters)} / {len(dim_features)}"
+    )
     lines.append(f"- **Total active features (eligible dims):** {total_before}")
     lines.append(f"- **Features kept:** {total_kept}")
     lines.append(f"- **Features substituted:** {total_substituted}")
     if total_before > 0:
         ratio = total_substituted / total_before
-        lines.append(f"- **Compression ratio:** {ratio:.1%} ({total_substituted} / {total_before})")
+        lines.append(
+            f"- **Compression ratio:** {ratio:.1%} ({total_substituted} / {total_before})"
+        )
     lines.append(f"- **Strong features protected:** {total_strong_protected}")
     lines.append("")
 
@@ -460,11 +495,15 @@ def main() -> None:
     print("=" * 72)
     print(f"  L2 Family Dedup {'DRY RUN' if args.dry_run else 'LIVE'}")
     print(f"  Dim groups: {len(all_clusters)} / {len(dim_features)} with clusters")
-    print(f"  Substituted: {total_substituted} / {total_before} features "
-          f"({total_substituted / total_before:.1%})" if total_before > 0 else "  No features to dedup.")
+    print(
+        f"  Substituted: {total_substituted} / {total_before} features "
+        f"({total_substituted / total_before:.1%})"
+        if total_before > 0
+        else "  No features to dedup."
+    )
     print(f"  Report: {report_path}")
     if args.dry_run:
-        print(f"  (registry NOT modified)")
+        print("  (registry NOT modified)")
     print("=" * 72)
     print()
 

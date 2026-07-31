@@ -165,11 +165,12 @@ def pre_screen_features(feat_cols, full_table, random_state=42):
     logger.info(f"  Pre-screen: {n_total} columns on {n_rows:,} rows (half-year)")
 
     # ── 1. NaN filter on ALL rows (> 95% NaN → drop) ──
-    drop_nan = {c for c in survived
-                if full_table.column(c).null_count / n_rows > 0.95}
+    drop_nan = {c for c in survived if full_table.column(c).null_count / n_rows > 0.95}
     survived = [c for c in survived if c not in drop_nan]
-    logger.info(f"  Pre-screen NaN: {n_total} → {len(survived)} "
-                f"({len(drop_nan)} dropped >95% NaN)")
+    logger.info(
+        f"  Pre-screen NaN: {n_total} → {len(survived)} "
+        f"({len(drop_nan)} dropped >95% NaN)"
+    )
 
     # ── 2. Dedup L2 — 5K sample for Spearman correlation ──
     n_sample = min(5000, n_rows)
@@ -187,7 +188,9 @@ def pre_screen_features(feat_cols, full_table, random_state=42):
         if len(freqs) > 0 and freqs.column(1)[0].as_py() / n_rows > 0.95:
             drop_mode.add(c)
     survived = [c for c in survived if c not in drop_mode]
-    logger.info(f"  Pre-screen Mode>95%: {len(drop_mode)} dropped → {len(survived)} remain")
+    logger.info(
+        f"  Pre-screen Mode>95%: {len(drop_mode)} dropped → {len(survived)} remain"
+    )
 
     # ── 4. MinMax normalize on ALL rows + VarThresh (threshold 0.0001) ──
     X = full_table.select(survived).to_pandas().values
@@ -196,13 +199,20 @@ def pre_screen_features(feat_cols, full_table, random_state=42):
     variances = np.nanvar(normed, axis=0, ddof=0)
     del X, normed
 
-    n_before = len(survived)
-    drop_var = {survived[i] for i in range(len(survived))
-                if np.isnan(variances[i]) or variances[i] < 0.0001}
+    len(survived)
+    drop_var = {
+        survived[i]
+        for i in range(len(survived))
+        if np.isnan(variances[i]) or variances[i] < 0.0001
+    }
     survived = [c for c in survived if c not in drop_var]
-    logger.info(f"  Pre-screen VarThresh(<0.0001): {len(drop_var)} dropped → {len(survived)} remain")
+    logger.info(
+        f"  Pre-screen VarThresh(<0.0001): {len(drop_var)} dropped → {len(survived)} remain"
+    )
 
-    logger.info(f"  Pre-screen TOTAL: {n_total} → {len(survived)} ({n_total - len(survived)} dropped)")
+    logger.info(
+        f"  Pre-screen TOTAL: {n_total} → {len(survived)} ({n_total - len(survived)} dropped)"
+    )
     return survived
 
 
@@ -262,16 +272,26 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
         # ── Two-phase build ──
         # Phase 1: 1Y data → generate 3,680 features → 4-step IC screen → ~635 selected
         # Phase 2: Full 3Y data → generate only selected features → final parquet
-        import tempfile, pyarrow.parquet as pq, pyarrow as pa, re
+        import tempfile
+        import pyarrow.parquet as pq
+        import pyarrow as pa
+        import re
         import gc as _gc
 
         FAMILIES = [
-            "pct_change", "rolling_mean", "rolling_std",
-            "rolling_max", "diff", "momentum", "EMA",
+            "pct_change",
+            "rolling_mean",
+            "rolling_std",
+            "rolling_max",
+            "diff",
+            "momentum",
+            "EMA",
         ]
         gen = BruteForceGenerator()
         raw_cols = gen._eligible(df)
-        logger.info(f"  BruteForce: {len(raw_cols)} eligible raw cols x {len(FAMILIES)} families")
+        logger.info(
+            f"  BruteForce: {len(raw_cols)} eligible raw cols x {len(FAMILIES)} families"
+        )
 
         # ══════════════════════════════════════════════════
         # Phase 1: 1Y expansion + IC screen (no in-memory merge)
@@ -290,77 +310,101 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
             family_files = {}  # fam → path
             all_bf_cols = []  # track all brute-force column names
             for fam in FAMILIES:
-                new = gen.generate_family(df_p1, fam, raw_cols=raw_cols, dtype="float32")
+                new = gen.generate_family(
+                    df_p1, fam, raw_cols=raw_cols, dtype="float32"
+                )
                 fp = os.path.join(tmp1, f"{fam}.parquet")
-                bf_only = [c for c in new.columns if "_brute_" in c and c not in base_names]
+                bf_only = [
+                    c for c in new.columns if "_brute_" in c and c not in base_names
+                ]
                 if bf_only:
                     new[bf_only].to_parquet(fp, index=False)
                     family_files[fam] = fp
                     all_bf_cols.extend(bf_only)
-                del new; _gc.collect()
+                del new
+                _gc.collect()
 
             total_cols = len(base_names) + len(all_bf_cols)
-            logger.info(f"  Phase 1: {len(base_names)} base + {len(all_bf_cols)} BF = {total_cols} cols")
+            logger.info(
+                f"  Phase 1: {len(base_names)} base + {len(all_bf_cols)} BF = {total_cols} cols"
+            )
 
             # ── Structured sample for DedupL2 ──
             # Pick ~12 trading days (one per month), Tue/Wed/Thu only,
             # 2nd/3rd week, market return [-1%, +1%], away from holidays.
-            import calendar as _cal
-            from pandas.tseries.holiday import AbstractHolidayCalendar, nearest_workday, Holiday
-            from pandas.tseries.offsets import CustomBusinessDay
+            from pandas.tseries.holiday import (
+                AbstractHolidayCalendar,
+                nearest_workday,
+                Holiday,
+            )
 
             # Simple Chinese holiday calendar (Spring Festival, National Day, etc.)
             class _CNHoliday(AbstractHolidayCalendar):
                 rules = [
-                    Holiday('New Year', month=1, day=1),
-                    Holiday('Spring Festival Eve', month=1, day=28, offset=pd.DateOffset(days=-2)),
-                    Holiday('Spring Festival', month=1, day=28),
-                    Holiday('Qingming', month=4, day=5),
-                    Holiday('Labor Day', month=5, day=1),
-                    Holiday('Dragon Boat', month=6, day=10),
-                    Holiday('Mid-Autumn', month=9, day=25),
-                    Holiday('National Day', month=10, day=1, observance=nearest_workday),
-                    Holiday('National Day 2', month=10, day=2),
-                    Holiday('National Day 3', month=10, day=3),
+                    Holiday("New Year", month=1, day=1),
+                    Holiday(
+                        "Spring Festival Eve",
+                        month=1,
+                        day=28,
+                        offset=pd.DateOffset(days=-2),
+                    ),
+                    Holiday("Spring Festival", month=1, day=28),
+                    Holiday("Qingming", month=4, day=5),
+                    Holiday("Labor Day", month=5, day=1),
+                    Holiday("Dragon Boat", month=6, day=10),
+                    Holiday("Mid-Autumn", month=9, day=25),
+                    Holiday(
+                        "National Day", month=10, day=1, observance=nearest_workday
+                    ),
+                    Holiday("National Day 2", month=10, day=2),
+                    Holiday("National Day 3", month=10, day=3),
                 ]
 
             hol_cal = _CNHoliday()
-            holidays = set(d.date() for d in hol_cal.holidays(
-                start=dates_18m[0], end=dates_18m[-1]
-            ))
+            holidays = set(
+                d.date()
+                for d in hol_cal.holidays(start=dates_18m[0], end=dates_18m[-1])
+            )
 
             # Compute market index return approximation
             # Use close_hfq if available in base columns
-            has_price = 'close_hfq' in base_names and 'open_hfq' in base_names
+            has_price = "close_hfq" in base_names and "open_hfq" in base_names
             sampled_dates = []
             for y in sorted(set(d.year for d in dates_18m)):
                 for m in range(1, 13):
-                    month_dates = [d for d in dates_18m
-                                   if d.year == y and d.month == m]
+                    month_dates = [d for d in dates_18m if d.year == y and d.month == m]
                     if len(month_dates) < 8:
                         continue
                     # 2nd or 3rd week (day 8-21)
                     month_start = month_dates[0]
                     week2_start = month_start + pd.Timedelta(days=7)
                     week3_end = month_start + pd.Timedelta(days=20)
-                    candidates = [d for d in month_dates
-                                  if d >= week2_start and d <= week3_end]
+                    candidates = [
+                        d for d in month_dates if d >= week2_start and d <= week3_end
+                    ]
                     # Tue/Wed/Thu only (weekday 1/2/3)
-                    candidates = [d for d in candidates
-                                  if d.weekday() in (1, 2, 3)]
+                    candidates = [d for d in candidates if d.weekday() in (1, 2, 3)]
                     # Away from holidays (>= 5 trading days)
-                    candidates = [d for d in candidates
-                                  if all(abs((d.date() - h).days) > 5
-                                         for h in holidays if h is not None)]
+                    candidates = [
+                        d
+                        for d in candidates
+                        if all(
+                            abs((d.date() - h).days) > 5
+                            for h in holidays
+                            if h is not None
+                        )
+                    ]
                     # Market return check (use panel data)
                     for d in candidates:
-                        day_mask = df_p1['date'] == d
+                        day_mask = df_p1["date"] == d
                         if has_price and day_mask.any():
                             day_data = df_p1[day_mask]
-                            opens = day_data['open_hfq'].values
-                            closes = day_data['close_hfq'].values
+                            opens = day_data["open_hfq"].values
+                            closes = day_data["close_hfq"].values
                             # Equal-weight market return
-                            mkt_ret = np.nanmean((closes - opens) / (np.abs(opens) + 1e-8))
+                            mkt_ret = np.nanmean(
+                                (closes - opens) / (np.abs(opens) + 1e-8)
+                            )
                             if -0.01 <= mkt_ret <= 0.01:
                                 sampled_dates.append(d)
                                 break  # one day per month
@@ -373,10 +417,10 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
                     break
             # Fallback: if not enough dates found, fill with simple Tue/Wed/Thu
             if len(sampled_dates) < 2:
-                sampled_dates = [d for d in dates_18m if d.weekday() in (1,2,3)][:3]
+                sampled_dates = [d for d in dates_18m if d.weekday() in (1, 2, 3)][:3]
 
             logger.info(f"  Dedup sample: {len(sampled_dates)} dates selected")
-            sample_mask = df_p1['date'].isin(sampled_dates)
+            sample_mask = df_p1["date"].isin(sampled_dates)
             # Use boolean mask directly on parquet read
             sample_row_mask = sample_mask.values  # numpy bool array
 
@@ -385,8 +429,11 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
             for fam, fp in family_files.items():
                 sample_parts.append(pd.read_parquet(fp)[sample_row_mask])
             sample_df = pd.concat(sample_parts, axis=1)
-            del sample_parts; _gc.collect()
-            logger.info(f"  Dedup sample: {len(sample_df):,} rows from {len(sampled_dates)} dates")
+            del sample_parts
+            _gc.collect()
+            logger.info(
+                f"  Dedup sample: {len(sample_df):,} rows from {len(sampled_dates)} dates"
+            )
 
             # Run pre-screen on the sample (NaN/Mode on ALL rows, Dedup/Var on sample)
             # For NaN: check ALL rows from each file
@@ -415,12 +462,20 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
                 if col is None:
                     continue
                 # Skip non-numeric
-                if pa.types.is_string(col.type) or pa.types.is_timestamp(col.type) or pa.types.is_boolean(col.type):
+                if (
+                    pa.types.is_string(col.type)
+                    or pa.types.is_timestamp(col.type)
+                    or pa.types.is_boolean(col.type)
+                ):
                     continue
                 # (A) Mode check
                 freqs = col.value_counts()
                 if len(freqs) > 0:
-                    top = freqs.column(1)[0].as_py() if hasattr(freqs, 'column') else freqs.field(1)[0].as_py()
+                    top = (
+                        freqs.column(1)[0].as_py()
+                        if hasattr(freqs, "column")
+                        else freqs.field(1)[0].as_py()
+                    )
                     if top / col.length() > 0.95:
                         drop_mode.add(c)
                         continue  # already dropped, skip VarThresh
@@ -442,7 +497,9 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
                 if np.isnan(v) or v < 0.0022:
                     drop_var.add(c)
             survived = [c for c in survived if c not in drop_mode and c not in drop_var]
-            logger.info(f"  Phase 1 Step2: Mode={len(drop_mode)} + VarThresh<0.0022={len(drop_var)} dropped → {len(survived)} remain")
+            logger.info(
+                f"  Phase 1 Step2: Mode={len(drop_mode)} + VarThresh<0.0022={len(drop_var)} dropped → {len(survived)} remain"
+            )
 
             bf_survived = [c for c in survived if "_brute_" in c]
             base_survived = [c for c in survived if "_brute_" not in c]
@@ -454,17 +511,31 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
             shutil.rmtree(tmp1, ignore_errors=True)
 
         # Parse brute-force specs: 'bias_10_brute_pct40' → raw='bias_10', fam='pct_change', w=40
-        FAM_ABBR_MAP = {'pct':'pct_change','d':'diff','max':'rolling_max','min':'rolling_min',
-                        'std':'rolling_std','ma':'rolling_mean','ema':'EMA','mom':'momentum'}
+        FAM_ABBR_MAP = {
+            "pct": "pct_change",
+            "d": "diff",
+            "max": "rolling_max",
+            "min": "rolling_min",
+            "std": "rolling_std",
+            "ma": "rolling_mean",
+            "ema": "EMA",
+            "mom": "momentum",
+        }
         selected_specs = []
         for c in bf_survived:
             parts = c.split("_brute_")
-            m = re.match(r'(pct|d|max|min|std|ma|ema|mom)(\d+)', parts[1])
+            m = re.match(r"(pct|d|max|min|std|ma|ema|mom)(\d+)", parts[1])
             if m:
-                selected_specs.append({
-                    'raw': parts[0], 'family': FAM_ABBR_MAP[m.group(1)], 'window': int(m.group(2))
-                })
-        logger.info(f"  Phase 1 DONE: {len(selected_specs)} brute-force + {len(base_survived)} base selected")
+                selected_specs.append(
+                    {
+                        "raw": parts[0],
+                        "family": FAM_ABBR_MAP[m.group(1)],
+                        "window": int(m.group(2)),
+                    }
+                )
+        logger.info(
+            f"  Phase 1 DONE: {len(selected_specs)} brute-force + {len(base_survived)} base selected"
+        )
 
         # ══════════════════════════════════════════════════
         # Phase 2: 1.5Y — generate ONLY selected features
@@ -472,7 +543,7 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
         # ══════════════════════════════════════════════════
         specs_by_fam = {}
         for s in selected_specs:
-            specs_by_fam.setdefault(s['family'], []).append(s)
+            specs_by_fam.setdefault(s["family"], []).append(s)
 
         tmp2 = tempfile.mkdtemp(prefix="brute_p2_", dir=REGISTRY_DIR)
         try:
@@ -486,7 +557,9 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
                 if fam not in specs_by_fam:
                     continue
                 specs = specs_by_fam[fam]
-                new = gen.generate_family(df_p1, fam, raw_cols=raw_cols, dtype="float32")
+                new = gen.generate_family(
+                    df_p1, fam, raw_cols=raw_cols, dtype="float32"
+                )
                 abbr = fam_abbr_rev.get(fam, fam[:3])
                 needed = {f"{s['raw']}_brute_{abbr}{s['window']}" for s in specs}
                 keep = [c for c in new.columns if c in needed]
@@ -495,14 +568,18 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
                     tmp_fp = os.path.join(tmp2, f"p2_{fam}.parquet")
                     new[keep].to_parquet(tmp_fp, index=False)
                     ft = pq.read_table(tmp_fp)
-                    base_table = pa.concat_tables([base_table, ft], promote_options="permissive")
+                    base_table = pa.concat_tables(
+                        [base_table, ft], promote_options="permissive"
+                    )
                     n_gen += len(keep)
                     del ft
-                del new; _gc.collect()
+                del new
+                _gc.collect()
                 # Flush to disk
                 acc = os.path.join(tmp2, "accumulated.parquet")
                 pq.write_table(base_table, acc)
-                del base_table; _gc.collect()
+                del base_table
+                _gc.collect()
                 base_table = pq.read_table(acc)
 
             logger.info(f"  Phase 2: {n_gen} features generated on 1.5Y data")
@@ -510,7 +587,8 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
             ts = datetime.now().strftime("%Y%m%dT%H%M%S")
             out_path = os.path.join(REGISTRY_DIR, f"features_{board}_{ts}.parquet")
             pq.write_table(base_table, out_path)
-            del base_table; _gc.collect()
+            del base_table
+            _gc.collect()
             logger.info(
                 f"  Saved: {out_path} ({n_gen} features, "
                 f"{os.path.getsize(out_path) / 1024 / 1024:.0f}MB, "
@@ -518,8 +596,10 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
             )
             return out_path
         finally:
-            try: del base_table
-            except: pass
+            try:
+                del base_table
+            except:
+                pass
             _gc.collect()
             shutil.rmtree(tmp2, ignore_errors=True)
     else:

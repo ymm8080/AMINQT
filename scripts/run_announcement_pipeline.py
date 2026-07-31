@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 import time
 from datetime import datetime, timedelta
@@ -59,9 +58,7 @@ SOURCE_LABELS = {
 }
 
 
-def fetch_announcement_data(
-    target_date: str, refresh: bool = False
-) -> dict:
+def fetch_announcement_data(target_date: str, refresh: bool = False) -> dict:
     """拉取公告类数据.
 
     Args:
@@ -145,7 +142,6 @@ def _fetch_anns_d(supply: DataSupplyChain, trade_date: str, refresh: bool):
         return raw if raw is not None else __import__("pandas").DataFrame()
 
     # 缓存到 parquet
-    import pandas as pd
 
     path = supply._alt_cache_path("anns_d", trade_date)
     raw.to_parquet(path, index=False)
@@ -180,9 +176,7 @@ def write_log(target_date: str, results: dict, elapsed_total: float) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Pipeline 2: 08:00 announcement data"
-    )
+    parser = argparse.ArgumentParser(description="Pipeline 2: 08:00 announcement data")
     parser.add_argument("--date", help="Target date YYYYMMDD (default: today)")
     parser.add_argument("--refresh", action="store_true", help="Force refresh cache")
     args = parser.parse_args()

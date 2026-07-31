@@ -2,6 +2,7 @@
 
 Usage: python scripts/append_today_to_panel.py [trade_date]
 """
+
 from __future__ import annotations
 
 import os
@@ -14,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import pandas as pd

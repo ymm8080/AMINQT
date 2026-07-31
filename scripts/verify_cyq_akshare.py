@@ -14,8 +14,8 @@ Verify:
   4. akshare pct_90_low vs Tushare cost_5pct
   5. akshare pct_90_high vs Tushare cost_95pct
 """
+
 import os
-import sys
 import pandas as pd
 import numpy as np
 
@@ -48,9 +48,15 @@ print(f"akshare columns ({len(ak_cols)}): {ak_cols}")
 
 # Rename to English
 ak_df.columns = [
-    "date", "benefit_part", "avg_cost",
-    "pct_90_low", "pct_90_high", "pct_90_con",
-    "pct_70_low", "pct_70_high", "pct_70_con",
+    "date",
+    "benefit_part",
+    "avg_cost",
+    "pct_90_low",
+    "pct_90_high",
+    "pct_90_con",
+    "pct_70_low",
+    "pct_70_high",
+    "pct_70_con",
 ]
 ak_df["date"] = pd.to_datetime(ak_df["date"])
 ak_df = ak_df[ak_df["date"] >= "2026-01-01"].reset_index(drop=True)
@@ -68,16 +74,18 @@ ts_raw = pro.cyq_perf(ts_code=TS_CODE, start_date=START, end_date=END)
 print(f"Tushare columns: {list(ts_raw.columns)}")
 print(f"Tushare rows: {len(ts_raw)}")
 
-ts_df = pd.DataFrame({
-    "date": pd.to_datetime(ts_raw["trade_date"], format="%Y%m%d"),
-    "cost_5pct": pd.to_numeric(ts_raw["cost_5pct"]),
-    "cost_15pct": pd.to_numeric(ts_raw["cost_15pct"]),
-    "cost_50pct": pd.to_numeric(ts_raw["cost_50pct"]),
-    "cost_85pct": pd.to_numeric(ts_raw["cost_85pct"]),
-    "cost_95pct": pd.to_numeric(ts_raw["cost_95pct"]),
-    "weight_avg": pd.to_numeric(ts_raw["weight_avg"]),
-    "winner_rate": pd.to_numeric(ts_raw["winner_rate"]),
-})
+ts_df = pd.DataFrame(
+    {
+        "date": pd.to_datetime(ts_raw["trade_date"], format="%Y%m%d"),
+        "cost_5pct": pd.to_numeric(ts_raw["cost_5pct"]),
+        "cost_15pct": pd.to_numeric(ts_raw["cost_15pct"]),
+        "cost_50pct": pd.to_numeric(ts_raw["cost_50pct"]),
+        "cost_85pct": pd.to_numeric(ts_raw["cost_85pct"]),
+        "cost_95pct": pd.to_numeric(ts_raw["cost_95pct"]),
+        "weight_avg": pd.to_numeric(ts_raw["weight_avg"]),
+        "winner_rate": pd.to_numeric(ts_raw["winner_rate"]),
+    }
+)
 print(ts_df.tail(3).to_string())
 print()
 
@@ -95,7 +103,7 @@ for label, lo, hi, con in [
     print(f"\n  {label} concentration:")
     print(f"    rows:           {len(ak_df)}")
     print(f"    max(|diff|):    {diff.max():.8f}")
-    print(f"    exact match:    {(diff < 1e-8).mean()*100:.1f}%")
+    print(f"    exact match:    {(diff < 1e-8).mean() * 100:.1f}%")
     print(f"    correlation:    {ak_df[con].corr(calc):.6f}")
 
 # ── 4. Cross-verify akshare vs Tushare ──
@@ -109,11 +117,11 @@ print(f"  Merged rows: {len(merged)}")
 print()
 
 pairs = [
-    ("akshare pct_70_low",  "pct_70_low",  "cost_15pct"),
+    ("akshare pct_70_low", "pct_70_low", "cost_15pct"),
     ("akshare pct_70_high", "pct_70_high", "cost_85pct"),
-    ("akshare pct_90_low",  "pct_90_low",  "cost_5pct"),
+    ("akshare pct_90_low", "pct_90_low", "cost_5pct"),
     ("akshare pct_90_high", "pct_90_high", "cost_95pct"),
-    ("akshare avg_cost",    "avg_cost",    "cost_50pct"),
+    ("akshare avg_cost", "avg_cost", "cost_50pct"),
     ("akshare avg_cost vs weight_avg", "avg_cost", "weight_avg"),
     ("akshare benefit_part vs winner_rate/100", "benefit_part", None),
 ]
@@ -131,14 +139,24 @@ for label, ak_col, ts_col in pairs:
     print(f"    mean(diff):     {(ak_vals - ts_vals).mean():.6f}")
     print(f"    max(|diff|):    {diff.max():.6f}")
     print(f"    correlation:    {ak_vals.corr(ts_vals):.6f}")
-    print(f"    exact match:    {(diff < 0.001).mean()*100:.1f}%")
+    print(f"    exact match:    {(diff < 0.001).mean() * 100:.1f}%")
     print()
 
 # Show sample side-by-side
 print("=" * 60)
 print("5. Sample comparison (last 5 rows)")
 print("=" * 60)
-cols = ["date", "pct_70_low", "cost_15pct", "pct_70_high", "cost_85pct",
-        "pct_90_low", "cost_5pct", "pct_90_high", "cost_95pct",
-        "benefit_part", "winner_rate"]
+cols = [
+    "date",
+    "pct_70_low",
+    "cost_15pct",
+    "pct_70_high",
+    "cost_85pct",
+    "pct_90_low",
+    "cost_5pct",
+    "pct_90_high",
+    "cost_95pct",
+    "benefit_part",
+    "winner_rate",
+]
 print(merged[cols].tail(5).to_string())
