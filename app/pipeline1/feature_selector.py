@@ -159,13 +159,7 @@ class BruteForceGenerator:
                 if family_name == "pct_change":
                     for w in windows:
                         o = np.full(n, np.nan, dtype=np.float32)
-                        denom = np.abs(s[:-w])
-                        o[w:] = np.divide(
-                            (s[w:] - s[:-w]) * 100,
-                            denom,
-                            out=np.zeros_like(denom),
-                            where=denom > 0,
-                        )
+                        o[w:] = (s[w:] - s[:-w]) / np.abs(s[:-w]) * 100
                         feats[f"{col}_brute_{suffix}{w}"] = o
                 elif family_name == "rolling_mean":
                     for w in windows:
@@ -205,13 +199,7 @@ class BruteForceGenerator:
                 elif family_name == "momentum":
                     for w in windows:
                         o = np.full(n, np.nan, dtype=np.float32)
-                        denom = np.abs(s[:-w])
-                        o[w:] = np.divide(
-                            s[w:],
-                            denom,
-                            out=np.zeros_like(denom),
-                            where=denom > 0,
-                        )
+                        o[w:] = s[w:] / np.abs(s[:-w])
                         feats[f"{col}_brute_{suffix}{w}"] = o.astype(np.float32)
                 elif family_name == "EMA":
                     for w in windows:

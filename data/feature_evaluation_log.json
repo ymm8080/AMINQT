@@ -1,0 +1,1024 @@
+{
+  "entries": [
+    {
+      "timestamp": "2026-07-27T21:16:09.610490",
+      "type": "dim21_29_eval",
+      "script_version": "1.0",
+      "panel_info": {
+        "stocks": 61,
+        "dates": 222,
+        "rows": 12289,
+        "total_cols": 477,
+        "sampled": true,
+        "date_range": {
+          "start": "2025-08-25 00:00:00",
+          "end": "2026-07-27 00:00:00"
+        }
+      },
+      "dimension_summary": {
+        "dim21_cyq": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim22_finPIT": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim23_shareholder": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim24_margin": {
+          "status": "INCLUDE",
+          "best_feature": "margin_pressure_score",
+          "best_ic": {
+            "1d": 0.10569,
+            "3d": 0.13344,
+            "5d": 0.10098
+          }
+        },
+        "dim25_northbound": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim26_lhb": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim27_indflow": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim28_sector": {
+          "status": "INCLUDE",
+          "best_feature": "sw_turnover_anomaly",
+          "best_ic": {
+            "1d": 0.21173,
+            "3d": 0.20128,
+            "5d": 0.21587
+          }
+        },
+        "dim29_reserved": {
+          "status": "NOT_IMPLEMENTED",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        }
+      },
+      "chg_win_rate": "0/58",
+      "chg_positive_count": 0
+    },
+    {
+      "timestamp": "2026-07-27T21:16:10.766768",
+      "type": "dim21_29_eval",
+      "script_version": "1.0",
+      "panel_info": {
+        "stocks": 61,
+        "dates": 222,
+        "rows": 12289,
+        "total_cols": 477,
+        "sampled": true,
+        "date_range": {
+          "start": "2025-08-25 00:00:00",
+          "end": "2026-07-27 00:00:00"
+        }
+      },
+      "dimension_summary": {
+        "dim21_cyq": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim22_finPIT": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim23_shareholder": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim24_margin": {
+          "status": "INCLUDE",
+          "best_feature": "margin_pressure_score",
+          "best_ic": {
+            "1d": 0.10569,
+            "3d": 0.13344,
+            "5d": 0.10098
+          }
+        },
+        "dim25_northbound": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim26_lhb": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim27_indflow": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim28_sector": {
+          "status": "INCLUDE",
+          "best_feature": "sw_turnover_anomaly",
+          "best_ic": {
+            "1d": 0.21173,
+            "3d": 0.20128,
+            "5d": 0.21587
+          }
+        },
+        "dim29_reserved": {
+          "status": "NOT_IMPLEMENTED",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        }
+      },
+      "chg_win_rate": "0/58",
+      "chg_positive_count": 0
+    },
+    {
+      "timestamp": "2026-07-27T21:18:34.559153",
+      "type": "dim21_29_eval",
+      "script_version": "1.0",
+      "panel_info": {
+        "stocks": 135,
+        "dates": 620,
+        "rows": 125472,
+        "total_cols": 844,
+        "sampled": true,
+        "date_range": {
+          "start": "2024-01-02 00:00:00",
+          "end": "2026-07-27 00:00:00"
+        }
+      },
+      "dimension_summary": {
+        "dim21_cyq": {
+          "status": "INCLUDE",
+          "best_feature": "cost_spread",
+          "best_ic": {
+            "1d": 0.17271,
+            "3d": 0.1738,
+            "5d": 0.18743
+          }
+        },
+        "dim22_finPIT": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim23_shareholder": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim24_margin": {
+          "status": "INCLUDE",
+          "best_feature": "short_balance_ratio",
+          "best_ic": {
+            "1d": 0.09474,
+            "3d": 0.08541,
+            "5d": 0.10361
+          }
+        },
+        "dim25_northbound": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim26_lhb": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim27_indflow": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim28_sector": {
+          "status": "INCLUDE",
+          "best_feature": "sw_ret_1d",
+          "best_ic": {
+            "1d": 0.13229,
+            "3d": 0.13943,
+            "5d": 0.14267
+          }
+        },
+        "dim29_reserved": {
+          "status": "NOT_IMPLEMENTED",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        }
+      },
+      "chg_win_rate": "5/65",
+      "chg_positive_count": 5
+    },
+    {
+      "timestamp": "2026-07-27T21:20:12.162479",
+      "type": "dim21_29_eval",
+      "script_version": "1.0",
+      "panel_info": {
+        "stocks": 349,
+        "dates": 620,
+        "rows": 325655,
+        "total_cols": 844,
+        "sampled": true,
+        "date_range": {
+          "start": "2024-01-02 00:00:00",
+          "end": "2026-07-27 00:00:00"
+        }
+      },
+      "dimension_summary": {
+        "dim21_cyq": {
+          "status": "INCLUDE",
+          "best_feature": "conc_90",
+          "best_ic": {
+            "1d": 0.14655,
+            "3d": 0.15476,
+            "5d": 0.16762
+          }
+        },
+        "dim22_finPIT": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim23_shareholder": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim24_margin": {
+          "status": "INCLUDE",
+          "best_feature": "short_balance_ratio",
+          "best_ic": {
+            "1d": 0.08202,
+            "3d": 0.07763,
+            "5d": 0.08623
+          }
+        },
+        "dim25_northbound": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim26_lhb": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim27_indflow": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim28_sector": {
+          "status": "INCLUDE",
+          "best_feature": "sw_ret_1d",
+          "best_ic": {
+            "1d": 0.12114,
+            "3d": 0.12377,
+            "5d": 0.12654
+          }
+        },
+        "dim29_reserved": {
+          "status": "NOT_IMPLEMENTED",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        }
+      },
+      "chg_win_rate": "6/65",
+      "chg_positive_count": 6
+    },
+    {
+      "timestamp": "2026-07-27T21:54:40.796359",
+      "type": "dim21_29_eval",
+      "script_version": "1.0",
+      "panel_info": {
+        "stocks": 187,
+        "dates": 246,
+        "rows": 37744,
+        "total_cols": 478,
+        "sampled": true,
+        "date_range": {
+          "start": "2025-07-22 00:00:00",
+          "end": "2026-07-27 00:00:00"
+        }
+      },
+      "dimension_summary": {
+        "dim21_cyq": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim22_finPIT": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim23_shareholder": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim24_margin": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim25_northbound": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim26_lhb": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim27_indflow": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim28_sector": {
+          "status": "INCLUDE",
+          "best_feature": "sw_turnover_anomaly",
+          "best_ic": {
+            "1d": 0.19481,
+            "3d": 0.18214,
+            "5d": 0.18977
+          }
+        },
+        "dim29_reserved": {
+          "status": "NOT_IMPLEMENTED",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        }
+      },
+      "chg_win_rate": "1/61",
+      "chg_positive_count": 1
+    },
+    {
+      "timestamp": "2026-07-27T22:01:26.975522",
+      "type": "dim21_29_eval",
+      "script_version": "1.0",
+      "panel_info": {
+        "stocks": 187,
+        "dates": 246,
+        "rows": 37744,
+        "total_cols": 625,
+        "sampled": true,
+        "date_range": {
+          "start": "2025-07-22 00:00:00",
+          "end": "2026-07-27 00:00:00"
+        }
+      },
+      "dimension_summary": {
+        "dim21_cyq": {
+          "status": "INCLUDE",
+          "best_feature": "conc_90",
+          "best_ic": {
+            "1d": 0.17322,
+            "3d": 0.16365,
+            "5d": 0.16485
+          }
+        },
+        "dim22_finPIT": {
+          "status": "INCLUDE",
+          "best_feature": "margin_chg",
+          "best_ic": {
+            "1d": 0.1112,
+            "3d": 0.11154,
+            "5d": 0.11559
+          }
+        },
+        "dim23_shareholder": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim24_margin": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim25_northbound": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim26_lhb": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim27_indflow": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim28_sector": {
+          "status": "INCLUDE",
+          "best_feature": "sw_turnover_anomaly",
+          "best_ic": {
+            "1d": 0.19481,
+            "3d": 0.18214,
+            "5d": 0.18977
+          }
+        },
+        "dim29_reserved": {
+          "status": "NOT_IMPLEMENTED",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        }
+      },
+      "chg_win_rate": "4/66",
+      "chg_positive_count": 4
+    },
+    {
+      "timestamp": "2026-07-27T22:19:12.214966",
+      "type": "dim21_29_full_eval",
+      "script_version": "2.0",
+      "panel_info": {
+        "stocks": 2019,
+        "dates": 247,
+        "rows": 317032,
+        "total_cols": 528,
+        "full_panel": true,
+        "pre_clean_cols": 77,
+        "date_range": {
+          "start": "2025-07-21 00:00:00",
+          "end": "2026-07-27 00:00:00"
+        }
+      },
+      "dimension_summary": {
+        "dim21_cyq": {
+          "status": "INCLUDE",
+          "best_feature": "conc_90",
+          "best_ic": {
+            "1d": 0.1761,
+            "3d": 0.18164,
+            "5d": 0.19134
+          }
+        },
+        "dim22_finPIT": {
+          "status": "INCLUDE",
+          "best_feature": "margin_chg",
+          "best_ic": {
+            "1d": 0.11546,
+            "3d": 0.11159,
+            "5d": 0.114
+          }
+        },
+        "dim23_shareholder": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim24_margin": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim25_northbound": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim26_lhb": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim27_indflow": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim28_sector": {
+          "status": "INCLUDE",
+          "best_feature": "sw_turnover_anomaly",
+          "best_ic": {
+            "1d": 0.15666,
+            "3d": 0.14349,
+            "5d": 0.15243
+          }
+        },
+        "dim29_reserved": {
+          "status": "NOT_IMPLEMENTED",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        }
+      },
+      "chg_win_rate": "1/66",
+      "chg_positive_count": 1
+    },
+    {
+      "timestamp": "2026-07-27T23:59:07.981940",
+      "type": "dim21_29_full_eval",
+      "script_version": "2.0",
+      "panel_info": {
+        "stocks": 2019,
+        "dates": 247,
+        "rows": 317032,
+        "total_cols": 769,
+        "full_panel": true,
+        "pre_clean_cols": 77,
+        "date_range": {
+          "start": "2025-07-21 00:00:00",
+          "end": "2026-07-27 00:00:00"
+        }
+      },
+      "dimension_summary": {
+        "dim21_cyq": {
+          "status": "INCLUDE",
+          "best_feature": "cost_spread",
+          "best_ic": {
+            "1d": 0.17273,
+            "3d": 0.17701,
+            "5d": 0.1866
+          }
+        },
+        "dim22_finPIT": {
+          "status": "INCLUDE",
+          "best_feature": "margin_chg",
+          "best_ic": {
+            "1d": 0.11546,
+            "3d": 0.11159,
+            "5d": 0.114
+          }
+        },
+        "dim23_shareholder": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim24_margin": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim25_northbound": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim26_lhb": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim27_indflow": {
+          "status": "SKIP",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        },
+        "dim28_sector": {
+          "status": "INCLUDE",
+          "best_feature": "sw_turnover_anomaly",
+          "best_ic": {
+            "1d": 0.15666,
+            "3d": 0.14349,
+            "5d": 0.15243
+          }
+        },
+        "dim29_reserved": {
+          "status": "NOT_IMPLEMENTED",
+          "best_feature": null,
+          "best_ic": {
+            "1d": 0.0,
+            "3d": 0.0,
+            "5d": 0.0
+          }
+        }
+      },
+      "chg_win_rate": "3/66",
+      "chg_wins_count": 3,
+      "ts_ic_win_rate": "7/66"
+    },
+    {
+      "timestamp": "2026-07-28T00:45:23.619452",
+      "type": "dim21_29_full_eval_v3",
+      "script_version": "3.0",
+      "panel_info": {
+        "stocks": 3227,
+        "dates": 560,
+        "rows": 507171,
+        "total_cols": 769,
+        "full_panel": true,
+        "pre_clean_cols": 77,
+        "date_range": {
+          "start": "2024-04-03 00:00:00",
+          "end": "2026-07-27 00:00:00"
+        },
+        "board_distribution": {
+          "GEM": {
+            "stocks": 863,
+            "rows": 136274
+          },
+          "STAR": {
+            "stocks": 345,
+            "rows": 53865
+          },
+          "main": {
+            "stocks": 2019,
+            "rows": 317032
+          }
+        }
+      },
+      "boards": {
+        "main": {
+          "stocks": 2019,
+          "dimensions": {
+            "dim21_cyq": {
+              "status": "INCLUDE",
+              "best_feature": "cost_spread",
+              "best_ic": {
+                "1d": 0.17273,
+                "3d": 0.17701,
+                "5d": 0.1866
+              }
+            },
+            "dim22_finPIT": {
+              "status": "INCLUDE",
+              "best_feature": "margin_chg",
+              "best_ic": {
+                "1d": 0.11546,
+                "3d": 0.11159,
+                "5d": 0.114
+              }
+            },
+            "dim23_shareholder": {
+              "status": "SKIP",
+              "best_feature": null,
+              "best_ic": {
+                "1d": 0.0,
+                "3d": 0.0,
+                "5d": 0.0
+              }
+            },
+            "dim24_margin": {
+              "status": "SKIP",
+              "best_feature": null,
+              "best_ic": {
+                "1d": 0.0,
+                "3d": 0.0,
+                "5d": 0.0
+              }
+            },
+            "dim25_northbound": {
+              "status": "SKIP",
+              "best_feature": null,
+              "best_ic": {
+                "1d": 0.0,
+                "3d": 0.0,
+                "5d": 0.0
+              }
+            },
+            "dim26_lhb": {
+              "status": "SKIP",
+              "best_feature": null,
+              "best_ic": {
+                "1d": 0.0,
+                "3d": 0.0,
+                "5d": 0.0
+              }
+            },
+            "dim27_indflow": {
+              "status": "SKIP",
+              "best_feature": null,
+              "best_ic": {
+                "1d": 0.0,
+                "3d": 0.0,
+                "5d": 0.0
+              }
+            },
+            "dim28_sector": {
+              "status": "INCLUDE",
+              "best_feature": "sw_turnover_anomaly",
+              "best_ic": {
+                "1d": 0.15666,
+                "3d": 0.14349,
+                "5d": 0.15243
+              }
+            },
+            "dim29_reserved": {
+              "status": "NOT_IMPLEMENTED",
+              "best_feature": null,
+              "best_ic": {
+                "1d": 0.0,
+                "3d": 0.0,
+                "5d": 0.0
+              }
+            }
+          },
+          "chg_win_rate": "3/66",
+          "ts_ic_win_rate": "7/66"
+        },
+        "gem_star": {
+          "stocks": 1208,
+          "dimensions": {
+            "dim21_cyq": {
+              "status": "INCLUDE",
+              "best_feature": "cost_bias",
+              "best_ic": {
+                "1d": 0.30231,
+                "3d": 0.28962,
+                "5d": 0.29456
+              }
+            },
+            "dim22_finPIT": {
+              "status": "INCLUDE",
+              "best_feature": "margin_chg",
+              "best_ic": {
+                "1d": 0.16197,
+                "3d": 0.15806,
+                "5d": 0.15112
+              }
+            },
+            "dim23_shareholder": {
+              "status": "SKIP",
+              "best_feature": null,
+              "best_ic": {
+                "1d": 0.0,
+                "3d": 0.0,
+                "5d": 0.0
+              }
+            },
+            "dim24_margin": {
+              "status": "SKIP",
+              "best_feature": null,
+              "best_ic": {
+                "1d": 0.0,
+                "3d": 0.0,
+                "5d": 0.0
+              }
+            },
+            "dim25_northbound": {
+              "status": "SKIP",
+              "best_feature": null,
+              "best_ic": {
+                "1d": 0.0,
+                "3d": 0.0,
+                "5d": 0.0
+              }
+            },
+            "dim26_lhb": {
+              "status": "SKIP",
+              "best_feature": null,
+              "best_ic": {
+                "1d": 0.0,
+                "3d": 0.0,
+                "5d": 0.0
+              }
+            },
+            "dim27_indflow": {
+              "status": "SKIP",
+              "best_feature": null,
+              "best_ic": {
+                "1d": 0.0,
+                "3d": 0.0,
+                "5d": 0.0
+              }
+            },
+            "dim28_sector": {
+              "status": "INCLUDE",
+              "best_feature": "sw_ret_1d",
+              "best_ic": {
+                "1d": 0.27386,
+                "3d": 0.27073,
+                "5d": 0.27231
+              }
+            },
+            "dim29_reserved": {
+              "status": "NOT_IMPLEMENTED",
+              "best_feature": null,
+              "best_ic": {
+                "1d": 0.0,
+                "3d": 0.0,
+                "5d": 0.0
+              }
+            }
+          },
+          "chg_win_rate": "3/66",
+          "ts_ic_win_rate": "5/66"
+        }
+      }
+    }
+  ]
+}

@@ -245,7 +245,6 @@ def step_select_features(board: str, state: PipelineState) -> str | None:
         "--board",
         board,
         "--update",
-        "--yes",
     ]
     result = subprocess.run(cmd, capture_output=False)
     if result.returncode != 0:
@@ -387,15 +386,14 @@ def step_predict(
 
     # ── 内存优化: PyArrow predicate pushdown (只读主板, 非 GEM/STAR) ──
     import pyarrow.parquet as pq
+    import pyarrow.compute as pc
 
+    pf = pq.ParquetFile(PANEL_PATH)
     if low_memory:
-        import pyarrow.compute as pc
-
         # Only load last ~180 trading days for feature lookback
-        date_col = pd.to_datetime(
-            pq.read_table(PANEL_PATH, columns=["date"]).column("date").to_pandas()
+        all_dates = sorted(
+            pd.unique(pf.read(columns=["date"]).column("date").to_pandas())
         )
-        all_dates = sorted(date_col.unique())
         if len(all_dates) > 180:
             cutoff = all_dates[-180]
             logger.info(
@@ -404,25 +402,20 @@ def step_predict(
                 180,
                 len(all_dates),
             )
+            table = pf.read()
             date_mask = pc.field("date") >= pd.Timestamp(cutoff)
+            # Combine date + board filter
+            board_arr = pc.field("board")
             board_mask = pc.invert(
-                pc.or_(
-                    pc.equal(pc.field("board"), "GEM"),
-                    pc.equal(pc.field("board"), "STAR"),
-                )
+                pc.or_(pc.equal(board_arr, "GEM"), pc.equal(board_arr, "STAR"))
             )
-            table = pq.read_table(
-                PANEL_PATH,
-                filters=pq.filters.Filter.mask(pc.and_(date_mask, board_mask)),
+            table = pf.read(
+                filters=pq.filters.Filter.mask(pc.and_(date_mask, board_mask))
             )
         else:
-            table = pq.read_table(
-                PANEL_PATH, filters=[("board", "not in", ["GEM", "STAR"])]
-            )
+            table = pf.read(filters=[("board", "not in", ["GEM", "STAR"])])
     else:
-        table = pq.read_table(
-            PANEL_PATH, filters=[("board", "not in", ["GEM", "STAR"])]
-        )
+        table = pf.read(filters=[("board", "not in", ["GEM", "STAR"])])
 
     main_panel = table.to_pandas()
     del table

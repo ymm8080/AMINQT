@@ -1,0 +1,417 @@
+{
+  "timestamp": "2026-07-29T00:44:00.582001",
+  "total_factors": 56,
+  "strong_count": 50,
+  "weak_count": 6,
+  "dead_count": 0,
+  "strong": [
+    {
+      "factor": "bias_120d",
+      "ic_5d": 0.3213,
+      "grade": "weak"
+    },
+    {
+      "factor": "MA120_dist",
+      "ic_5d": 0.3213,
+      "grade": "weak"
+    },
+    {
+      "factor": "ATR_pct",
+      "ic_5d": 0.2069,
+      "grade": "weak"
+    },
+    {
+      "factor": "MACD_signal",
+      "ic_5d": 0.2028,
+      "grade": "weak"
+    },
+    {
+      "factor": "dv_ttm",
+      "ic_5d": 0.2012,
+      "grade": "weak"
+    },
+    {
+      "factor": "pe_ttm",
+      "ic_5d": 0.1989,
+      "grade": "weak"
+    },
+    {
+      "factor": "pe_pct",
+      "ic_5d": 0.1989,
+      "grade": "weak"
+    },
+    {
+      "factor": "benefit_part",
+      "ic_5d": 0.1943,
+      "grade": "weak"
+    },
+    {
+      "factor": "value_composite",
+      "ic_5d": 0.1942,
+      "grade": "weak"
+    },
+    {
+      "factor": "margin_buy_amt",
+      "ic_5d": 0.1937,
+      "grade": "weak"
+    },
+    {
+      "factor": "dv_ratio",
+      "ic_5d": 0.1932,
+      "grade": "weak"
+    },
+    {
+      "factor": "pct_90_con",
+      "ic_5d": 0.1906,
+      "grade": "weak"
+    },
+    {
+      "factor": "conc_90",
+      "ic_5d": 0.1906,
+      "grade": "weak"
+    },
+    {
+      "factor": "cost_bias",
+      "ic_5d": 0.1906,
+      "grade": "weak"
+    },
+    {
+      "factor": "turnover_rate_f",
+      "ic_5d": 0.1876,
+      "grade": "weak"
+    },
+    {
+      "factor": "total_share",
+      "ic_5d": 0.1872,
+      "grade": "weak"
+    },
+    {
+      "factor": "cost_spread",
+      "ic_5d": 0.185,
+      "grade": "weak"
+    },
+    {
+      "factor": "pct_70_con",
+      "ic_5d": 0.184,
+      "grade": "weak"
+    },
+    {
+      "factor": "MACD",
+      "ic_5d": 0.1831,
+      "grade": "weak"
+    },
+    {
+      "factor": "顶部_density_20d",
+      "ic_5d": 0.179,
+      "grade": "weak"
+    },
+    {
+      "factor": "margin_balance_chg_5d",
+      "ic_5d": 0.1784,
+      "grade": "weak"
+    },
+    {
+      "factor": "mv_ma20_dev",
+      "ic_5d": 0.178,
+      "grade": "weak"
+    },
+    {
+      "factor": "ROC_60d",
+      "ic_5d": 0.1774,
+      "grade": "weak"
+    },
+    {
+      "factor": "intra_strength_ma5",
+      "ic_5d": 0.1763,
+      "grade": "weak"
+    },
+    {
+      "factor": "ROC_5d",
+      "ic_5d": 0.1742,
+      "grade": "weak"
+    },
+    {
+      "factor": "vol_adj_mom_5d",
+      "ic_5d": 0.1725,
+      "grade": "weak"
+    },
+    {
+      "factor": "长期线",
+      "ic_5d": 0.1724,
+      "grade": "weak"
+    },
+    {
+      "factor": "pb",
+      "ic_5d": 0.17,
+      "grade": "weak"
+    },
+    {
+      "factor": "pb_pct",
+      "ic_5d": 0.17,
+      "grade": "weak"
+    },
+    {
+      "factor": "bias_10d",
+      "ic_5d": 0.1687,
+      "grade": "weak"
+    },
+    {
+      "factor": "MA10_dist",
+      "ic_5d": 0.1687,
+      "grade": "dead"
+    },
+    {
+      "factor": "limit_dist_pct",
+      "ic_5d": 0.1684,
+      "grade": "weak"
+    },
+    {
+      "factor": "limit_down_dist_pct",
+      "ic_5d": 0.1681,
+      "grade": "weak"
+    },
+    {
+      "factor": "float_share",
+      "ic_5d": 0.1672,
+      "grade": "weak"
+    },
+    {
+      "factor": "bias_60d",
+      "ic_5d": 0.166,
+      "grade": "weak"
+    },
+    {
+      "factor": "MA60_dist",
+      "ic_5d": 0.166,
+      "grade": "weak"
+    },
+    {
+      "factor": "主力轨迹",
+      "ic_5d": 0.1652,
+      "grade": "weak"
+    },
+    {
+      "factor": "close_position_ma20",
+      "ic_5d": 0.1647,
+      "grade": "weak"
+    },
+    {
+      "factor": "gross_margin",
+      "ic_5d": 0.164,
+      "grade": "weak"
+    },
+    {
+      "factor": "alpha054_ts",
+      "ic_5d": 0.1626,
+      "grade": "weak"
+    },
+    {
+      "factor": "margin_balance",
+      "ic_5d": 0.1572,
+      "grade": "weak"
+    },
+    {
+      "factor": "获利盘",
+      "ic_5d": 0.1566,
+      "grade": "weak"
+    },
+    {
+      "factor": "short_balance_ratio",
+      "ic_5d": 0.1562,
+      "grade": "weak"
+    },
+    {
+      "factor": "limit_asymmetry",
+      "ic_5d": 0.1561,
+      "grade": "weak"
+    },
+    {
+      "factor": "MAZL",
+      "ic_5d": 0.1559,
+      "grade": "weak"
+    },
+    {
+      "factor": "gap_strength_20d",
+      "ic_5d": 0.155,
+      "grade": "weak"
+    },
+    {
+      "factor": "free_share",
+      "ic_5d": 0.1549,
+      "grade": "weak"
+    },
+    {
+      "factor": "MA5_dist",
+      "ic_5d": 0.1532,
+      "grade": "weak"
+    },
+    {
+      "factor": "close_position",
+      "ic_5d": 0.1525,
+      "grade": "weak"
+    },
+    {
+      "factor": "ar_turnover",
+      "ic_5d": 0.1508,
+      "grade": "weak"
+    }
+  ],
+  "weak": [
+    {
+      "factor": "中期线",
+      "ic_5d": 0.1497,
+      "grade": "weak"
+    },
+    {
+      "factor": "pct_70_high",
+      "ic_5d": 0.1426,
+      "grade": "weak"
+    },
+    {
+      "factor": "pct_90_high",
+      "ic_5d": 0.1424,
+      "grade": "weak"
+    },
+    {
+      "factor": "up_limit_raw",
+      "ic_5d": 0.1423,
+      "grade": "weak"
+    },
+    {
+      "factor": "down_limit_raw",
+      "ic_5d": 0.1418,
+      "grade": "weak"
+    },
+    {
+      "factor": "fisher_transform",
+      "ic_5d": 0.1365,
+      "grade": "dead"
+    }
+  ],
+  "dead": [],
+  "dimension_summary": [
+    {
+      "dims": [
+        "dim01",
+        "dim02",
+        "dim03",
+        "dim07"
+      ],
+      "best_feature": "bias_120d",
+      "best_ic_5d": 0.3213,
+      "n_strong": 0,
+      "n_weak": 82,
+      "n_dead": 10
+    },
+    {
+      "dims": [
+        "dim04",
+        "dim05",
+        "dim06",
+        "dim08"
+      ],
+      "best_feature": "dv_ttm",
+      "best_ic_5d": 0.2012,
+      "n_strong": 0,
+      "n_weak": 56,
+      "n_dead": 4
+    },
+    {
+      "dims": [
+        "dim07",
+        "dim14",
+        "dim09",
+        "dim10"
+      ],
+      "best_feature": "dv_ttm",
+      "best_ic_5d": 0.2012,
+      "n_strong": 0,
+      "n_weak": 90,
+      "n_dead": 15
+    },
+    {
+      "dims": [
+        "dim16",
+        "dim17",
+        "dim18",
+        "dim19"
+      ],
+      "best_feature": "dv_ttm",
+      "best_ic_5d": 0.2012,
+      "n_strong": 0,
+      "n_weak": 59,
+      "n_dead": 3
+    },
+    {
+      "dims": [
+        "dim11",
+        "dim12",
+        "dim13",
+        "dim15",
+        "dim16",
+        "dim17"
+      ],
+      "best_feature": "MA120_dist",
+      "best_ic_5d": 0.3213,
+      "n_strong": 0,
+      "n_weak": 76,
+      "n_dead": 8
+    },
+    {
+      "dims": [
+        "dim21",
+        "dim22",
+        "dim23",
+        "dim24",
+        "dim25",
+        "dim26",
+        "dim27",
+        "dim28",
+        "dim29",
+        "dim30"
+      ],
+      "best_feature": "dv_ttm",
+      "best_ic_5d": 0.2012,
+      "n_strong": 1,
+      "n_weak": 103,
+      "n_dead": 27
+    },
+    {
+      "dims": [
+        "dim21",
+        "dim22",
+        "dim23"
+      ],
+      "best_feature": "dv_ttm",
+      "best_ic_5d": 0.2012,
+      "n_strong": 1,
+      "n_weak": 64,
+      "n_dead": 5
+    },
+    {
+      "dims": [
+        "dim24",
+        "dim25",
+        "dim26"
+      ],
+      "best_feature": "dv_ttm",
+      "best_ic_5d": 0.2012,
+      "n_strong": 0,
+      "n_weak": 49,
+      "n_dead": 8
+    },
+    {
+      "dims": [
+        "dim27",
+        "dim28",
+        "dim29",
+        "dim30"
+      ],
+      "best_feature": "dv_ttm",
+      "best_ic_5d": 0.2012,
+      "n_strong": 0,
+      "n_weak": 80,
+      "n_dead": 14
+    }
+  ]
+}
