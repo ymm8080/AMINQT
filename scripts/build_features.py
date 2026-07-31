@@ -598,7 +598,7 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
         finally:
             try:
                 del base_table
-            except:
+            except Exception:
                 pass
             _gc.collect()
             shutil.rmtree(tmp2, ignore_errors=True)

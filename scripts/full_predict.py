@@ -26,14 +26,14 @@ print(f"Loaded: {len(feats)}feats 1d_reg+1d_cls")
 
 # Load all labels
 label_cols = ["symbol", "date", "label_1d_net"]
-for l in ["label_3d_net", "label_5d_net"]:
-    if l in pq.read_schema(FPATH).names:
-        label_cols.append(l)
+for lbl in ["label_3d_net", "label_5d_net"]:
+    if lbl in pq.read_schema(FPATH).names:
+        label_cols.append(lbl)
 df = pd.read_parquet(FPATH, columns=label_cols + feats).dropna(subset=["label_1d_net"])
 # Drop rows with NaN in 3d/5d labels (masked days)
-for l in ["label_3d_net", "label_5d_net"]:
-    if l in df.columns:
-        df = df.dropna(subset=[l])
+for lbl in ["label_3d_net", "label_5d_net"]:
+    if lbl in df.columns:
+        df = df.dropna(subset=[lbl])
 dates = sorted(df["date"].unique())
 n = len(dates)
 train = df[df["date"].isin(set(dates[: int(n * 0.85)]))]

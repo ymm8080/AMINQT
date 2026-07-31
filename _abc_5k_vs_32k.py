@@ -46,7 +46,7 @@ def gen_brute(df, raw_cols, label_prefix):
             if col not in g.columns: continue
             s = g[col].astype(float).values; n = len(s)
             for w in [1,2,3,5,10,20,40,60]:
-                o=np.full(n,np.nan); o[w:]=(s[w:]-s[:-w])/np.abs(s[:-w])*100
+                o=np.full(n,np.nan); d=np.abs(s[:-w]); o[w:]=np.divide((s[w:]-s[:-w])*100,d,out=np.zeros_like(d),where=d>0)
                 feats[f'{col}_pct{w}']=o
             for w in [5,10,20,40,60]:
                 feats[f'{col}_ma{w}']=pd.Series(s).rolling(w,min_periods=1).mean().values
@@ -58,7 +58,7 @@ def gen_brute(df, raw_cols, label_prefix):
             for w in [1,5,20]:
                 o=np.full(n,np.nan); o[w:]=s[w:]-s[:-w]; feats[f'{col}_d{w}']=o
             for w in [5,20,40]:
-                o=np.full(n,np.nan); o[w:]=s[w:]/np.abs(s[:-w]); feats[f'{col}_mom{w}']=o
+                o=np.full(n,np.nan); d=np.abs(s[:-w]); o[w:]=np.divide(s[w:],d,out=np.zeros_like(d),where=d>0); feats[f'{col}_mom{w}']=o
             for w in [5,20,40]:
                 feats[f'{col}_ema{w}']=pd.Series(s).ewm(span=w,min_periods=1).mean().values
         all_new[sym]=pd.DataFrame(feats,index=g.index)

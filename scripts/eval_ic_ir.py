@@ -99,7 +99,7 @@ for bv, bn in [("main", "main"), ("GEM", "dual")]:
                     "nan": round(nan, 3),
                 }
             )
-        except:
+        except Exception:
             pass
 
     # Sort by signed IC descending
