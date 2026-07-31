@@ -298,6 +298,7 @@ class DualTrackTrainer:
             "board",
             "is_suspended",
             "is_st",
+            "close_hfq",  # IC 衰减曲线 (ic_decay_curve) 下游需要
         }
         for seg_name, seg_df in segs.items():
             label_cols_in_seg = [c for c in seg_df.columns if c.startswith("label_")]
