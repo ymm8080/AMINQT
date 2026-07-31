@@ -69,10 +69,12 @@ signal.signal(signal.SIGTERM, _on_interrupt)
 # Helpers
 # ──────────────────────────────────────────────
 
+
 def _log_memory(tag: str = "") -> None:
     """Log current RSS memory usage."""
     try:
         import psutil
+
         rss_mb = psutil.Process().memory_info().rss / 1024 / 1024
         logger.info("  MEM [%s]: %.0f MB", tag, rss_mb)
     except ImportError:
@@ -131,7 +133,10 @@ def load_features_for_training(
 
     file_mb = os.path.getsize(features_path) / 1024 / 1024
     logger.info(
-        "  Loading %d cols from %s (%.0fMB)", len(read_cols), os.path.basename(features_path), file_mb
+        "  Loading %d cols from %s (%.0fMB)",
+        len(read_cols),
+        os.path.basename(features_path),
+        file_mb,
     )
     df = pd.read_parquet(features_path, columns=read_cols)
 
@@ -160,13 +165,16 @@ def load_features_for_training(
 # Step: Build Features (Layer 1)
 # ──────────────────────────────────────────────
 
+
 def step_build_features(board: str, state: PipelineState) -> str | None:
     """Run Layer1 feature build. Returns path to features parquet."""
     step = "build_features"
     if not state.step_should_run(step):
         output = state._state["steps"][step].get("output", "")
         if output and os.path.exists(output):
-            logger.info("[%s] 已完成 (state), 跳过. Output: %s", step, os.path.basename(output))
+            logger.info(
+                "[%s] 已完成 (state), 跳过. Output: %s", step, os.path.basename(output)
+            )
             return output
         else:
             logger.warning("[%s] state 标记 done 但 output 缺失, 重新运行", step)
@@ -182,7 +190,9 @@ def step_build_features(board: str, state: PipelineState) -> str | None:
     cmd = [sys.executable, "scripts/build_features.py", "--board", board]
     result = subprocess.run(cmd, capture_output=False)
     if result.returncode != 0:
-        state.mark_failed(step, f"build_features.py exited with code {result.returncode}")
+        state.mark_failed(
+            step, f"build_features.py exited with code {result.returncode}"
+        )
         raise RuntimeError(f"build_features.py failed (exit {result.returncode})")
 
     feat_path = find_latest_features(board)
@@ -196,13 +206,16 @@ def step_build_features(board: str, state: PipelineState) -> str | None:
 # Step: Select Features (Layer 2)
 # ──────────────────────────────────────────────
 
+
 def step_select_features(board: str, state: PipelineState) -> str | None:
     """Ensure Layer2 feature selection exists. Returns path to selected JSON."""
     step = "select_features"
     if not state.step_should_run(step):
         output = state._state["steps"][step].get("output", "")
         if output and os.path.exists(output):
-            logger.info("[%s] 已完成 (state), 跳过. Output: %s", step, os.path.basename(output))
+            logger.info(
+                "[%s] 已完成 (state), 跳过. Output: %s", step, os.path.basename(output)
+            )
             return output
 
     # Check if selection already exists (may have been run manually)
@@ -211,7 +224,9 @@ def step_select_features(board: str, state: PipelineState) -> str | None:
         # If selection is from today, consider it done
         sel_mtime = os.path.getmtime(existing)
         if time.time() - sel_mtime < 86400:  # < 24h old
-            logger.info("[%s] 发现最近的 selection (%s), 跳过", step, os.path.basename(existing))
+            logger.info(
+                "[%s] 发现最近的 selection (%s), 跳过", step, os.path.basename(existing)
+            )
             state.mark_done(step, output=existing)
             return existing
     except FileNotFoundError:
@@ -225,12 +240,17 @@ def step_select_features(board: str, state: PipelineState) -> str | None:
     import subprocess
 
     cmd = [
-        sys.executable, "scripts/select_features.py",
-        "--board", board, "--update",
+        sys.executable,
+        "scripts/select_features.py",
+        "--board",
+        board,
+        "--update",
     ]
     result = subprocess.run(cmd, capture_output=False)
     if result.returncode != 0:
-        state.mark_failed(step, f"select_features.py exited with code {result.returncode}")
+        state.mark_failed(
+            step, f"select_features.py exited with code {result.returncode}"
+        )
         raise RuntimeError(f"select_features.py failed (exit {result.returncode})")
 
     sel_path = find_latest_selection(board)
@@ -242,6 +262,7 @@ def step_select_features(board: str, state: PipelineState) -> str | None:
 # ──────────────────────────────────────────────
 # Step: Train
 # ──────────────────────────────────────────────
+
 
 def step_train(
     board: str,
@@ -268,8 +289,14 @@ def step_train(
     # Check if model already exists for this tag
     model_path = MODEL_DIR / f"main_{tag}.pkl"
     if model_path.exists() and not resume:
-        logger.info("[%s] 模型已存在: %s. 跳过训练 (用 --resume 或 --force train 覆盖)", step, model_path)
-        state.mark_done(step, output=str(model_path), meta={"features": len(feature_cols)})
+        logger.info(
+            "[%s] 模型已存在: %s. 跳过训练 (用 --resume 或 --force train 覆盖)",
+            step,
+            model_path,
+        )
+        state.mark_done(
+            step, output=str(model_path), meta={"features": len(feature_cols)}
+        )
         return {"main": {"path": str(model_path), "oos": {"ics": {}}, "switched": True}}
 
     state.mark_running(step)
@@ -303,7 +330,13 @@ def step_train(
     state.mark_done(
         step,
         output=results.get("main", {}).get("path", ""),
-        meta={"features": len(feature_cols), "oos_ic_1d": results.get("main", {}).get("oos", {}).get("ics", {}).get("1d_reg", 0)},
+        meta={
+            "features": len(feature_cols),
+            "oos_ic_1d": results.get("main", {})
+            .get("oos", {})
+            .get("ics", {})
+            .get("1d_reg", 0),
+        },
     )
     _log_memory("after train")
     gc.collect()
@@ -313,6 +346,7 @@ def step_train(
 # ──────────────────────────────────────────────
 # Step: Predict
 # ──────────────────────────────────────────────
+
 
 def step_predict(
     board: str,
@@ -357,14 +391,16 @@ def step_predict(
     pf = pq.ParquetFile(PANEL_PATH)
     if low_memory:
         # Only load last ~180 trading days for feature lookback
-        all_dates = sorted(pd.unique(
-            pf.read(columns=["date"]).column("date").to_pandas()
-        ))
+        all_dates = sorted(
+            pd.unique(pf.read(columns=["date"]).column("date").to_pandas())
+        )
         if len(all_dates) > 180:
             cutoff = all_dates[-180]
             logger.info(
                 "  low_memory: date filter >= %s (%d/%d dates)",
-                str(cutoff)[:10], 180, len(all_dates),
+                str(cutoff)[:10],
+                180,
+                len(all_dates),
             )
             table = pf.read()
             date_mask = pc.field("date") >= pd.Timestamp(cutoff)
@@ -373,9 +409,9 @@ def step_predict(
             board_mask = pc.invert(
                 pc.or_(pc.equal(board_arr, "GEM"), pc.equal(board_arr, "STAR"))
             )
-            table = pf.read(filters=pq.filters.Filter.mask(
-                pc.and_(date_mask, board_mask)
-            ))
+            table = pf.read(
+                filters=pq.filters.Filter.mask(pc.and_(date_mask, board_mask))
+            )
         else:
             table = pf.read(filters=[("board", "not in", ["GEM", "STAR"])])
     else:
@@ -424,6 +460,7 @@ def step_predict(
 # Main
 # ──────────────────────────────────────────────
 
+
 def main():
     ap = argparse.ArgumentParser(
         description="Train + Predict MAIN board (robust, resumable)"
@@ -433,18 +470,26 @@ def main():
     ap.add_argument("--predict-only", action="store_true", help="Skip training")
     ap.add_argument("--max-stocks", type=int, default=0, help="Cap stocks (0=all)")
     ap.add_argument(
-        "--resume", action="store_true",
-        help="Resume from last pipeline state + training checkpoint"
+        "--resume",
+        action="store_true",
+        help="Resume from last pipeline state + training checkpoint",
     )
     ap.add_argument(
-        "--force", nargs="*", default=None,
-        help="Force re-run specific steps even if marked done (build_features, select_features, train, predict)"
+        "--force",
+        nargs="*",
+        default=None,
+        help="Force re-run specific steps even if marked done (build_features, select_features, train, predict)",
     )
-    ap.add_argument("--status", action="store_true", help="Show pipeline state and exit")
-    ap.add_argument("--reset", action="store_true", help="Clear pipeline state and start fresh")
     ap.add_argument(
-        "--low-memory", action="store_true",
-        help="Aggressive memory saving: date-filtered panel, extra gc"
+        "--status", action="store_true", help="Show pipeline state and exit"
+    )
+    ap.add_argument(
+        "--reset", action="store_true", help="Clear pipeline state and start fresh"
+    )
+    ap.add_argument(
+        "--low-memory",
+        action="store_true",
+        help="Aggressive memory saving: date-filtered panel, extra gc",
     )
     args = ap.parse_args()
 
@@ -468,6 +513,7 @@ def main():
         print(f"\n{state.summary()}")
         # Also check training checkpoint
         from app.pipeline1.checkpoint import TrainingCheckpoint
+
         ck = TrainingCheckpoint(str(MODEL_DIR), board, tag)
         if ck.exists():
             print("\nTraining checkpoint exists:")
@@ -519,17 +565,26 @@ def main():
         # ── Train ──
         if args.train_only or do_all:
             step_train(
-                board, feat_path, sel_path, tag,
-                args.max_stocks, state, resume=args.resume,
+                board,
+                feat_path,
+                sel_path,
+                tag,
+                args.max_stocks,
+                state,
+                resume=args.resume,
             )
             if _interrupted:
                 logger.warning("中断: train 后退出 (state + checkpoint 已保存)")
-                logger.warning("下次运行: python scripts/train_predict_main.py --resume")
+                logger.warning(
+                    "下次运行: python scripts/train_predict_main.py --resume"
+                )
                 return
 
         # ── Predict ──
         if args.predict_only or do_all:
-            lst = step_predict(board, trade_date, args.max_stocks, state, low_memory=args.low_memory)
+            lst = step_predict(
+                board, trade_date, args.max_stocks, state, low_memory=args.low_memory
+            )
             if lst is not None and len(lst):
                 cols = ["symbol", "board", "pred_ret_1d", "prob_up", "score"]
                 available = [c for c in cols if c in lst.columns]
@@ -539,7 +594,9 @@ def main():
                 print("  No MAIN candidates (safety valve or empty)")
 
     except KeyboardInterrupt:
-        logger.warning("用户中断 (KeyboardInterrupt). State 已保存, 下次用 --resume 继续.")
+        logger.warning(
+            "用户中断 (KeyboardInterrupt). State 已保存, 下次用 --resume 继续."
+        )
         print(f"\n{state.summary()}")
         sys.exit(130)
     except Exception as e:

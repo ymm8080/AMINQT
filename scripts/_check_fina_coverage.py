@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Check fina_indicator coverage in v3 vs cache."""
-import os, sys
+
+import os
+import sys
 from pathlib import Path
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 import pandas as pd
@@ -35,11 +38,29 @@ if missing:
 
 # Per-column NaN rates
 fina_cols = [
-    "roe", "roe_deducted", "roa", "gross_margin", "rev_yoy", "debt_ratio",
-    "current_ratio", "asset_turnover", "ar_turnover", "inventory_turnover",
-    "ocf_to_or", "eps_yoy", "profit_yoy", "net_margin",
-    "ocfps", "revenue_ps", "bps", "eps", "dt_eps", "roe_yoy", "q_roe",
-    "q_ocf_to_sales", "announce_date",
+    "roe",
+    "roe_deducted",
+    "roa",
+    "gross_margin",
+    "rev_yoy",
+    "debt_ratio",
+    "current_ratio",
+    "asset_turnover",
+    "ar_turnover",
+    "inventory_turnover",
+    "ocf_to_or",
+    "eps_yoy",
+    "profit_yoy",
+    "net_margin",
+    "ocfps",
+    "revenue_ps",
+    "bps",
+    "eps",
+    "dt_eps",
+    "roe_yoy",
+    "q_roe",
+    "q_ocf_to_sales",
+    "announce_date",
 ]
 print(f"\nPer-column NaN rates (v3 has {len(v3)} rows):")
 for c in fina_cols:

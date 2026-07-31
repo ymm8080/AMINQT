@@ -5,14 +5,18 @@ Only divide values > 1 by 100 (Tushare values in 0-100 range).
 Values <= 1 are already correct (either baostock 0-1 or rare Tushare <1%).
 Safe write: temp + atomic rename.
 """
+
 import os
 import logging
 import pandas as pd
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("fix_bp")
 
 V3_PATH = os.path.join("data", "panel_full_enriched_v3.parquet")
+
 
 def main():
     logger.info("Loading V3: %s", V3_PATH)
@@ -44,6 +48,7 @@ def main():
     v3.to_parquet(tmp, index=False)
     os.replace(tmp, V3_PATH)
     logger.info("V3 saved: %d rows, %d cols", len(v3), len(v3.columns))
+
 
 if __name__ == "__main__":
     main()

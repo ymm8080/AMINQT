@@ -135,7 +135,10 @@ if results:
     # Check 2023 early coverage
     df["ann_dt"] = pd.to_datetime(df["ann_date"], format="%Y%m%d", errors="coerce")
     early = df[df["ann_dt"] < "2023-07-01"]
-    print(f"Pre-2023-07-01 rows: {len(early)}, stocks: {early['ts_code'].nunique()}", flush=True)
+    print(
+        f"Pre-2023-07-01 rows: {len(early)}, stocks: {early['ts_code'].nunique()}",
+        flush=True,
+    )
 else:
     print("NO DATA!", flush=True)
     sys.exit(1)

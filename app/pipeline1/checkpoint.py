@@ -36,6 +36,7 @@ EXTRA_KINDS = ("quantile_models", "pain_model", "rank_model")
 # Training Checkpoint
 # ──────────────────────────────────────────────
 
+
 class TrainingCheckpoint:
     """Per-board training checkpoint: saves after each model kind completes.
 
@@ -113,7 +114,9 @@ class TrainingCheckpoint:
         segment_dates = {}
         for seg_name, seg_df in trained.get("segs", {}).items():
             if "date" in seg_df.columns:
-                segment_dates[seg_name] = sorted(seg_df["date"].unique())[:2]  # first 2 dates
+                segment_dates[seg_name] = sorted(seg_df["date"].unique())[
+                    :2
+                ]  # first 2 dates
 
         manifest = {
             "board": self.board,
@@ -132,7 +135,8 @@ class TrainingCheckpoint:
             "board": trained.get("board", self.board),
             "feature_cols": trained.get("feature_cols", []),
             "models": {
-                k: v for k, v in trained.get("models", {}).items()
+                k: v
+                for k, v in trained.get("models", {}).items()
                 if k in completed_kinds
             },
         }
@@ -243,6 +247,7 @@ class TrainingCheckpoint:
 # Pipeline State (multi-step progress tracker)
 # ──────────────────────────────────────────────
 
+
 class PipelineState:
     """Track multi-step pipeline progress across Claude sessions.
 
@@ -319,13 +324,17 @@ class PipelineState:
         }
         self._save()
 
-    def mark_done(self, step_name: str, output: str = "", meta: dict | None = None) -> None:
+    def mark_done(
+        self, step_name: str, output: str = "", meta: dict | None = None
+    ) -> None:
         entry = self._state.setdefault("steps", {}).get(step_name, {})
-        entry.update({
-            "status": "done",
-            "completed_at": datetime.now().isoformat(),
-            "output": output,
-        })
+        entry.update(
+            {
+                "status": "done",
+                "completed_at": datetime.now().isoformat(),
+                "output": output,
+            }
+        )
         if meta:
             entry.setdefault("meta", {}).update(meta)
         self._state.setdefault("steps", {})[step_name] = entry
@@ -334,11 +343,13 @@ class PipelineState:
 
     def mark_failed(self, step_name: str, error: str) -> None:
         entry = self._state.setdefault("steps", {}).get(step_name, {})
-        entry.update({
-            "status": "failed",
-            "failed_at": datetime.now().isoformat(),
-            "error": str(error)[:500],
-        })
+        entry.update(
+            {
+                "status": "failed",
+                "failed_at": datetime.now().isoformat(),
+                "error": str(error)[:500],
+            }
+        )
         self._state.setdefault("steps", {})[step_name] = entry
         self._save()
 
@@ -346,7 +357,9 @@ class PipelineState:
         lines = [f"Pipeline: {self.run_name} | board={self.board} tag={self.tag}"]
         for step, info in self._state.get("steps", {}).items():
             status = info.get("status", "?")
-            icon = {"done": "✓", "running": "…", "failed": "✗", "pending": "○"}.get(status, "?")
+            icon = {"done": "✓", "running": "…", "failed": "✗", "pending": "○"}.get(
+                status, "?"
+            )
             lines.append(f"  {icon} {step}: {status}")
         return "\n".join(lines)
 

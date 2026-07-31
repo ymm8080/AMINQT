@@ -202,11 +202,17 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
         # Family-based batching with pyarrow merge.
         # Write each family to a temp parquet, then use pyarrow columnar
         # concat to avoid pandas block consolidation OOM (needs 5GB+ contiguous).
-        import tempfile, pyarrow.parquet as pq, pyarrow as pa
+        import tempfile
+        import pyarrow.parquet as pq
 
         FAMILIES = [
-            "pct_change", "rolling_mean", "rolling_std",
-            "rolling_max", "diff", "momentum", "EMA",
+            "pct_change",
+            "rolling_mean",
+            "rolling_std",
+            "rolling_max",
+            "diff",
+            "momentum",
+            "EMA",
         ]
         gen = BruteForceGenerator()
         raw_cols = gen._eligible(df)
@@ -220,7 +226,9 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
             base_path = os.path.join(tmp_dir, "base.parquet")
             df.to_parquet(base_path, index=False)
             base_table = pq.read_table(base_path)
-            logger.info(f"  Base saved: {base_table.num_columns} cols, {base_table.num_rows:,} rows")
+            logger.info(
+                f"  Base saved: {base_table.num_columns} cols, {base_table.num_rows:,} rows"
+            )
 
             total_new_cols = 0
             for fam in FAMILIES:
@@ -233,7 +241,8 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
                 fam_table = pq.read_table(fam_path)
                 for i in range(fam_table.num_columns):
                     base_table = base_table.append_column(
-                        fam_table.column_names[i], fam_table.column(i))
+                        fam_table.column_names[i], fam_table.column(i)
+                    )
                 del new, fam_table
                 logger.info(
                     f"  Family [{fam}]: {n_cols} cols, "

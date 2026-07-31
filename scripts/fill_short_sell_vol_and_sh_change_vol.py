@@ -9,6 +9,7 @@ Usage:
     python scripts/fill_short_sell_vol_and_sh_change_vol.py
     python scripts/fill_short_sell_vol_and_sh_change_vol.py --skip-fetch
 """
+
 from __future__ import annotations
 
 import logging
@@ -47,8 +48,17 @@ import tushare as ts  # noqa: E402
 pro = ts.pro_api(os.environ["TUSHARE_TOKEN"])
 
 V3_PATH = PROJECT_ROOT / "data" / "panel_full_enriched_v3.parquet"
-MARGIN_CACHE = PROJECT_ROOT / "data" / "supply_cache" / "alt_data" / "margin" / "all_margin_full.parquet"
-HOLDERTRADE_CACHE = PROJECT_ROOT / "data" / "supply_cache" / "alt_data" / "holdertrade_all_full.parquet"
+MARGIN_CACHE = (
+    PROJECT_ROOT
+    / "data"
+    / "supply_cache"
+    / "alt_data"
+    / "margin"
+    / "all_margin_full.parquet"
+)
+HOLDERTRADE_CACHE = (
+    PROJECT_ROOT / "data" / "supply_cache" / "alt_data" / "holdertrade_all_full.parquet"
+)
 THROTTLE = 0.2
 
 
@@ -69,7 +79,9 @@ def coverage_report(df: pd.DataFrame, columns: list[str], label: str = "") -> No
 # ====================================================================
 # STEP 0: Backup V3 (iron rule #11)
 # ====================================================================
-backup_name = f"panel_full_enriched_v3_bak_{datetime.now().strftime('%Y%m%d_%H%M%S')}.parquet"
+backup_name = (
+    f"panel_full_enriched_v3_bak_{datetime.now().strftime('%Y%m%d_%H%M%S')}.parquet"
+)
 backup_path = PROJECT_ROOT / "data" / backup_name
 logger.info("STEP 0: Backing up V3 -> %s", backup_name)
 shutil.copy2(V3_PATH, backup_path)
@@ -85,7 +97,11 @@ all_dates = sorted(df["date"].dropna().unique())
 date_strs = [d.strftime("%Y%m%d") for d in all_dates]
 logger.info(
     "  Panel: %d rows, %d symbols, %d dates (%s ~ %s)",
-    len(df), df["symbol"].nunique(), len(all_dates), date_strs[0], date_strs[-1],
+    len(df),
+    df["symbol"].nunique(),
+    len(all_dates),
+    date_strs[0],
+    date_strs[-1],
 )
 TARGET_COLS = ["short_sell_vol", "sh_change_vol"]
 coverage_report(df, TARGET_COLS, "(BEFORE)")
@@ -102,13 +118,17 @@ if MARGIN_CACHE.exists():
     mg_existing["date"] = pd.to_datetime(mg_existing["date"])
     logger.info(
         "  Existing cache: %d rows, %d dates, %d symbols",
-        len(mg_existing), mg_existing["date"].nunique(), mg_existing["symbol"].nunique(),
+        len(mg_existing),
+        mg_existing["date"].nunique(),
+        mg_existing["symbol"].nunique(),
     )
 
 if not skip_fetch:
-    existing_dates = set(
-        mg_existing["date"].dt.strftime("%Y%m%d").unique()
-    ) if len(mg_existing) else set()
+    existing_dates = (
+        set(mg_existing["date"].dt.strftime("%Y%m%d").unique())
+        if len(mg_existing)
+        else set()
+    )
     missing_dates = [d for d in date_strs if d not in existing_dates]
     logger.info("  Missing dates: %d (of %d total)", len(missing_dates), len(date_strs))
 
@@ -117,29 +137,49 @@ if not skip_fetch:
         try:
             raw = pro.margin_detail(trade_date=dt_str)
             if raw is not None and len(raw) > 0:
-                parsed = pd.DataFrame({
-                    "symbol": raw["ts_code"].str.replace(".SZ", "").str.replace(".SH", ""),
-                    "date": pd.to_datetime(raw["trade_date"], format="%Y%m%d"),
-                    "margin_balance": pd.to_numeric(raw.get("rzye", np.nan), errors="coerce"),
-                    "short_balance": pd.to_numeric(raw.get("rqye", np.nan), errors="coerce"),
-                    "margin_buy_amt": pd.to_numeric(raw.get("rzmre", np.nan), errors="coerce"),
-                    "short_sell_vol": pd.to_numeric(raw.get("rqmcl", np.nan), errors="coerce"),
-                })
+                parsed = pd.DataFrame(
+                    {
+                        "symbol": raw["ts_code"]
+                        .str.replace(".SZ", "")
+                        .str.replace(".SH", ""),
+                        "date": pd.to_datetime(raw["trade_date"], format="%Y%m%d"),
+                        "margin_balance": pd.to_numeric(
+                            raw.get("rzye", np.nan), errors="coerce"
+                        ),
+                        "short_balance": pd.to_numeric(
+                            raw.get("rqye", np.nan), errors="coerce"
+                        ),
+                        "margin_buy_amt": pd.to_numeric(
+                            raw.get("rzmre", np.nan), errors="coerce"
+                        ),
+                        "short_sell_vol": pd.to_numeric(
+                            raw.get("rqmcl", np.nan), errors="coerce"
+                        ),
+                    }
+                )
                 mg_frames.append(parsed)
         except Exception as e:
             logger.debug("  margin %s failed: %s", dt_str, e)
         if i % 50 == 0 and i > 0:
-            cum = sum(f["date"].nunique() for f in mg_frames if isinstance(f, pd.DataFrame))
-            logger.info("    ... %d/%d (cumulative: %d dates)", i, len(missing_dates), cum)
+            cum = sum(
+                f["date"].nunique() for f in mg_frames if isinstance(f, pd.DataFrame)
+            )
+            logger.info(
+                "    ... %d/%d (cumulative: %d dates)", i, len(missing_dates), cum
+            )
         time.sleep(THROTTLE)
 
     if mg_frames:
-        mg_all = pd.concat(mg_frames, ignore_index=True).drop_duplicates(subset=["symbol", "date"])
+        mg_all = pd.concat(mg_frames, ignore_index=True).drop_duplicates(
+            subset=["symbol", "date"]
+        )
         MARGIN_CACHE.parent.mkdir(parents=True, exist_ok=True)
         mg_all.to_parquet(MARGIN_CACHE, index=False)
         logger.info(
             "  Total margin cache: %d rows, %d dates, %d symbols",
-            len(mg_all), mg_all["date"].nunique(), mg_all["symbol"].nunique(),
+            len(mg_all),
+            mg_all["date"].nunique(),
+            mg_all["symbol"].nunique(),
         )
     else:
         mg_all = mg_existing
@@ -157,7 +197,9 @@ if HOLDERTRADE_CACHE.exists():
     ht_existing["date"] = pd.to_datetime(ht_existing["date"])
     logger.info(
         "  Existing cache: %d rows, %d dates, %d symbols",
-        len(ht_existing), ht_existing["date"].nunique(), ht_existing["symbol"].nunique(),
+        len(ht_existing),
+        ht_existing["date"].nunique(),
+        ht_existing["symbol"].nunique(),
     )
 
 if not skip_fetch:
@@ -175,7 +217,9 @@ if not skip_fetch:
                 & (ht_existing["date"] <= pd.to_datetime(end, format="%Y%m%d"))
             ]
             if len(covered) > 0:
-                logger.info("  %s~%s: cache has %d rows, skipping", start, end, len(covered))
+                logger.info(
+                    "  %s~%s: cache has %d rows, skipping", start, end, len(covered)
+                )
                 continue
         logger.info("  Fetching %s ~ %s...", start, end)
         offset = 0
@@ -193,35 +237,52 @@ if not skip_fetch:
                 offset += _PAGE
                 time.sleep(0.3)
             except Exception as e:
-                logger.warning("  holdertrade %s-%s offset=%d failed: %s", start, end, offset, e)
+                logger.warning(
+                    "  holdertrade %s-%s offset=%d failed: %s", start, end, offset, e
+                )
                 break
         logger.info("    %s~%s: %d pages", start, end, len(ht_frames_raw))
 
     if ht_frames_raw:
         raw_all = pd.concat(ht_frames_raw, ignore_index=True)
-        change_vol = pd.to_numeric(raw_all.get("change_vol", 0), errors="coerce").fillna(0)
-        avg_price = pd.to_numeric(raw_all.get("avg_price", 0), errors="coerce").fillna(0)
+        change_vol = pd.to_numeric(
+            raw_all.get("change_vol", 0), errors="coerce"
+        ).fillna(0)
+        avg_price = pd.to_numeric(raw_all.get("avg_price", 0), errors="coerce").fillna(
+            0
+        )
         change_amt = change_vol * avg_price
         in_de = raw_all.get("in_de", "")
-        ht_new = pd.DataFrame({
-            "symbol": raw_all["ts_code"].str.replace(".SZ", "").str.replace(".SH", ""),
-            "date": pd.to_datetime(
-                raw_all.get("ann_date", raw_all.get("trade_date", "")),
-                format="%Y%m%d", errors="coerce",
-            ),
-            "sh_change_vol": change_vol,
-            "sh_change_amt": change_amt,
-            "sh_change_type": in_de,
-        })
-        ht_new["sh_net_sign"] = in_de.apply(
-            lambda x: 1 if str(x).upper() == "IN" else (-1 if str(x).upper() == "DE" else 0)
+        ht_new = pd.DataFrame(
+            {
+                "symbol": raw_all["ts_code"]
+                .str.replace(".SZ", "")
+                .str.replace(".SH", ""),
+                "date": pd.to_datetime(
+                    raw_all.get("ann_date", raw_all.get("trade_date", "")),
+                    format="%Y%m%d",
+                    errors="coerce",
+                ),
+                "sh_change_vol": change_vol,
+                "sh_change_amt": change_amt,
+                "sh_change_type": in_de,
+            }
         )
-        ht_agg = ht_new.groupby(["symbol", "date"]).agg(
-            sh_change_vol=("sh_change_vol", "sum"),
-            sh_change_amt=("sh_change_amt", "sum"),
-            sh_net_change_sign=("sh_net_sign", "sum"),
-            sh_change_amt_total=("sh_change_amt", "sum"),
-        ).reset_index()
+        ht_new["sh_net_sign"] = in_de.apply(
+            lambda x: (
+                1 if str(x).upper() == "IN" else (-1 if str(x).upper() == "DE" else 0)
+            )
+        )
+        ht_agg = (
+            ht_new.groupby(["symbol", "date"])
+            .agg(
+                sh_change_vol=("sh_change_vol", "sum"),
+                sh_change_amt=("sh_change_amt", "sum"),
+                sh_net_change_sign=("sh_net_sign", "sum"),
+                sh_change_amt_total=("sh_change_amt", "sum"),
+            )
+            .reset_index()
+        )
         ht_agg["sh_net_sign"] = ht_agg["sh_net_change_sign"].apply(
             lambda x: 1 if x > 0 else (-1 if x < 0 else 0)
         )
@@ -235,7 +296,9 @@ if not skip_fetch:
         ht_all.to_parquet(HOLDERTRADE_CACHE, index=False)
         logger.info(
             "  Total holdertrade cache: %d rows, %d symbols, %d dates",
-            len(ht_all), ht_all["symbol"].nunique(), ht_all["date"].nunique(),
+            len(ht_all),
+            ht_all["symbol"].nunique(),
+            ht_all["date"].nunique(),
         )
     else:
         ht_all = ht_existing
@@ -249,13 +312,19 @@ else:
 # ====================================================================
 logger.info("STEP 4: Merge short_sell_vol from margin cache into V3...")
 if len(mg_all) > 0:
-    margin_cols = ["margin_balance", "short_balance", "margin_buy_amt", "short_sell_vol"]
+    margin_cols = [
+        "margin_balance",
+        "short_balance",
+        "margin_buy_amt",
+        "short_sell_vol",
+    ]
     for c in margin_cols:
         if c in df.columns:
             df = df.drop(columns=c)
     df = df.merge(
         mg_all[["symbol", "date"] + margin_cols],
-        on=["symbol", "date"], how="left",
+        on=["symbol", "date"],
+        how="left",
     )
     logger.info("  short_sell_vol merged from margin_detail cache.")
 else:
@@ -264,21 +333,27 @@ else:
 # ====================================================================
 # STEP 5: Merge holdertrade (sh_change_vol) into V3 with forward-fill
 # ====================================================================
-logger.info("STEP 5: Merge sh_change_vol from holdertrade cache into V3 (with forward-fill)...")
+logger.info(
+    "STEP 5: Merge sh_change_vol from holdertrade cache into V3 (with forward-fill)..."
+)
 if len(ht_all) > 0:
     ht_all = ht_all.dropna(subset=["date"]).drop_duplicates(
         subset=["symbol", "date"], keep="last"
     )
     ht_cols = [
-        "sh_change_vol", "sh_change_amt",
-        "sh_net_change_sign", "sh_change_amt_total", "sh_net_sign",
+        "sh_change_vol",
+        "sh_change_amt",
+        "sh_net_change_sign",
+        "sh_change_amt_total",
+        "sh_net_sign",
     ]
     for c in ht_cols:
         if c in df.columns:
             df = df.drop(columns=c)
     df = df.merge(
         ht_all[["symbol", "date"] + ht_cols],
-        on=["symbol", "date"], how="left",
+        on=["symbol", "date"],
+        how="left",
     )
     df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
     for c in ht_cols:

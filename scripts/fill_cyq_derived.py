@@ -13,23 +13,26 @@ Derivation (verified 100% exact within same source):
 Only fills NaN values; existing non-NaN data is preserved.
 Safe write: temp file + atomic rename.
 """
+
 import os
 import logging
 import numpy as np
 import pandas as pd
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("fill_cyq")
 
 V3_PATH = os.path.join("data", "panel_full_enriched_v3.parquet")
 
 DERIVE_MAP = {
-    "pct_70_low":  ("cost_15pct", None),
+    "pct_70_low": ("cost_15pct", None),
     "pct_70_high": ("cost_85pct", None),
-    "pct_70_con":  ("cost_85pct", "cost_15pct"),   # (hi, lo) → (hi-lo)/(hi+lo)
-    "pct_90_low":  ("cost_5pct",  None),
+    "pct_70_con": ("cost_85pct", "cost_15pct"),  # (hi, lo) → (hi-lo)/(hi+lo)
+    "pct_90_low": ("cost_5pct", None),
     "pct_90_high": ("cost_95pct", None),
-    "pct_90_con":  ("cost_95pct", "cost_5pct"),    # (hi, lo) → (hi-lo)/(hi+lo)
+    "pct_90_con": ("cost_95pct", "cost_5pct"),  # (hi, lo) → (hi-lo)/(hi+lo)
 }
 
 # weight_avg: same Tushare source as avg_cost (fetch_cyq_remaining mapped weight_avg→avg_cost)
@@ -47,7 +50,9 @@ def main():
     for c in all_cols:
         if c in v3.columns:
             nn = v3[c].notna().sum()
-            logger.info("  %-15s  NaN=%6.2f%%  non_null=%d", c, v3[c].isna().mean()*100, nn)
+            logger.info(
+                "  %-15s  NaN=%6.2f%%  non_null=%d", c, v3[c].isna().mean() * 100, nn
+            )
         else:
             logger.info("  %-15s  NOT IN PANEL", c)
 
@@ -75,9 +80,14 @@ def main():
 
         after_nn = v3[target].notna().sum()
         filled = after_nn - before_nn
-        logger.info("  %s: filled %d rows (%d → %d non-null, %.2f%% NaN remains)",
-                     target, filled, before_nn, after_nn,
-                     v3[target].isna().mean()*100)
+        logger.info(
+            "  %s: filled %d rows (%d → %d non-null, %.2f%% NaN remains)",
+            target,
+            filled,
+            before_nn,
+            after_nn,
+            v3[target].isna().mean() * 100,
+        )
 
     # ── weight_avg from avg_cost ──
     if WEIGHT_AVG_SRC in v3.columns and "weight_avg" in v3.columns:
@@ -85,15 +95,21 @@ def main():
         mask = v3["weight_avg"].isna() & v3[WEIGHT_AVG_SRC].notna()
         v3.loc[mask, "weight_avg"] = v3.loc[mask, WEIGHT_AVG_SRC]
         after_nn = v3["weight_avg"].notna().sum()
-        logger.info("  weight_avg: filled %d rows (%d → %d non-null, %.2f%% NaN remains)",
-                     after_nn - before_nn, before_nn, after_nn,
-                     v3["weight_avg"].isna().mean()*100)
+        logger.info(
+            "  weight_avg: filled %d rows (%d → %d non-null, %.2f%% NaN remains)",
+            after_nn - before_nn,
+            before_nn,
+            after_nn,
+            v3["weight_avg"].isna().mean() * 100,
+        )
 
     # ── After stats ──
     logger.info("After fill:")
     for c in all_cols:
         nn = v3[c].notna().sum()
-        logger.info("  %-15s  NaN=%6.2f%%  non_null=%d", c, v3[c].isna().mean()*100, nn)
+        logger.info(
+            "  %-15s  NaN=%6.2f%%  non_null=%d", c, v3[c].isna().mean() * 100, nn
+        )
 
     # ── Safe write ──
     tmp_path = V3_PATH + ".tmp"

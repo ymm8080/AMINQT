@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check fina_indicator row count distribution per stock to find sparse stocks."""
+
 import sys
 from pathlib import Path
 

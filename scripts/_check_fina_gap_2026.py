@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check fina_indicator coverage: identify missing stocks and 2023 gaps."""
+
 import os
 import sys
 from pathlib import Path
@@ -24,7 +25,9 @@ new_stocks = set(new_cache["symbol"].unique())
 print(f"New cache stocks: {len(new_stocks)}")
 
 # Check early 2023 coverage
-new_cache["ann_dt"] = pd.to_datetime(new_cache["ann_date"], format="%Y%m%d", errors="coerce")
+new_cache["ann_dt"] = pd.to_datetime(
+    new_cache["ann_date"], format="%Y%m%d", errors="coerce"
+)
 early = new_cache[new_cache["ann_dt"] < "2023-07-01"]
 print(f"Pre-2023-07-01 rows: {len(early)}, stocks: {early['ts_code'].nunique()}")
 
@@ -38,7 +41,9 @@ if missing_new:
 fina_dir = "data/supply_cache/alt_data/fina_indicator"
 all_cache_stocks = set(new_stocks)
 per_files = [
-    f for f in os.listdir(fina_dir) if f.endswith(".parquet") and not f.startswith("all_")
+    f
+    for f in os.listdir(fina_dir)
+    if f.endswith(".parquet") and not f.startswith("all_")
 ]
 print(f"\nPer-stock files: {len(per_files)}")
 for f in per_files:
