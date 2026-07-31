@@ -7,12 +7,38 @@ venv/
 env/
 
 # Data (keep dir structure, ignore large files)
+*.parquet
 data/raw/*.csv
 data/intraday/*.csv
 data/processed/*.parquet
+data/audit/*
+data/factor_registry/registry_*.json
+data/factor_registry/selected_main_*.json
 !data/raw/.gitkeep
 !data/intraday/.gitkeep
 !data/processed/.gitkeep
+!data/audit/.gitkeep
+!data/factor_registry/.gitkeep
+
+# Local test / review artifacts
+_r*.txt
+_test_*.txt
+_test_fail*.txt
+_test_out*.txt
+_test_result*.txt
+_test_round*.txt
+_test_tpr*.txt
+_commit_msg*.txt
+_lint.txt
+_new_review.txt
+_pr49_diff.txt
+_verify_output.txt
+*.patch
+data/cyq_fetch_log.txt
+data/hk_hold_fetch_log.txt
+
+# Worktree metadata
+.claude/worktrees/*
 
 # Trained models
 *.pth
