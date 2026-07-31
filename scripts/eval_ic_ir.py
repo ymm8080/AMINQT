@@ -32,6 +32,7 @@ for bv, bn in [('main','main'), ('GEM','dual')]:
     df = recent[recent['symbol'].isin(pick)].copy()
     df = LabelEngine.build_labels(df)
     df = LabelEngine.mask_suspension(df)
+    df = LabelEngine.mask_recent_days(df, days=6)  # 屏蔽近端未成熟标签, 防 IC 泄漏
     lc = 'label_1d_net' if 'label_1d_net' in df.columns else 'label_1d'
     raw_cols = [c for c in df.columns if c not in SKIP and df[c].dtype in ('float64','float32','int64','int32')]
 

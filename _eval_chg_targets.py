@@ -63,6 +63,7 @@ print("\nBuilding labels (PM session)...", flush=True)
 t1 = time.time()
 from app.pipeline1.label_engine import LabelEngine
 df = LabelEngine.build_labels(df, session="PM")
+df = LabelEngine.mask_recent_days(df, days=6)  # 屏蔽近端未成熟标签, 防 IC 泄漏
 print(f"  Done in {time.time()-t1:.1f}s", flush=True)
 
 # ── 3. Find available columns ──
