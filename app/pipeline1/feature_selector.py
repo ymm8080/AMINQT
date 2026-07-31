@@ -120,12 +120,11 @@ class BruteForceGenerator:
                         pd.Series(s).ewm(span=w, min_periods=1).mean().values
                     )
 
-            all_new[sym] = pd.DataFrame(feats, index=g.index)
+            all_new[sym] = pd.DataFrame(feats, index=g.index).replace(
+                [np.inf, -np.inf], np.nan
+            )
 
         new = pd.concat(all_new.values())
-        # Clean infs
-        for c in new.columns:
-            new[c] = new[c].replace([np.inf, -np.inf], np.nan)
         logger.info(
             "BruteForce: %d cols from %d raw cols (%.0fs)",
             len(new.columns),
@@ -134,10 +133,109 @@ class BruteForceGenerator:
         )
         return new
 
+    def generate_family(self, df, family_name, raw_cols=None, dtype="float32"):
+        """Generate brute-force features for ONE transform family.
 
-# ──────────────────────────────────────────────────────────
-# Dedup L2 (Layer2, MAIN)
-# ──────────────────────────────────────────────────────────
+        Memory-safe: one family at a time (7 loops), joined incrementally.
+        Peak ~ base + 1 family, never holds all 3200 cols at once.
+        Returns DataFrame with new feature columns in specified dtype.
+        """
+        t0 = time.time()
+        raw = raw_cols or self._eligible(df)
+        family_def = self.transforms.get(family_name)
+        if family_def is None:
+            raise ValueError(f"Unknown transform family: {family_name}")
+        windows = family_def.get("windows", ())
+        suffix = family_def.get("suffix", family_name)
+        all_new = {}
+        for sym, g in df.groupby("symbol"):
+            g = g.sort_values("date")
+            feats = {}
+            for col in raw:
+                if col not in g.columns:
+                    continue
+                s = g[col].astype(float).values
+                n = len(s)
+                if family_name == "pct_change":
+                    for w in windows:
+                        o = np.full(n, np.nan, dtype=np.float32)
+                        denom = np.abs(s[:-w])
+                        o[w:] = np.divide(
+                            (s[w:] - s[:-w]) * 100,
+                            denom,
+                            out=np.zeros_like(denom),
+                            where=denom > 0,
+                        )
+                        feats[f"{col}_brute_{suffix}{w}"] = o
+                elif family_name == "rolling_mean":
+                    for w in windows:
+                        feats[f"{col}_brute_{suffix}{w}"] = (
+                            pd.Series(s)
+                            .rolling(w, min_periods=1)
+                            .mean()
+                            .values.astype(np.float32)
+                        )
+                elif family_name == "rolling_std":
+                    for w in windows:
+                        feats[f"{col}_brute_{suffix}{w}"] = (
+                            pd.Series(s)
+                            .rolling(w, min_periods=1)
+                            .std()
+                            .values.astype(np.float32)
+                        )
+                elif family_name in ("rolling_max", "rolling_min"):
+                    for w in windows:
+                        feats[f"{col}_brute_max{w}"] = (
+                            pd.Series(s)
+                            .rolling(w, min_periods=1)
+                            .max()
+                            .values.astype(np.float32)
+                        )
+                        feats[f"{col}_brute_min{w}"] = (
+                            pd.Series(s)
+                            .rolling(w, min_periods=1)
+                            .min()
+                            .values.astype(np.float32)
+                        )
+                elif family_name == "diff":
+                    for w in windows:
+                        o = np.full(n, np.nan, dtype=np.float32)
+                        o[w:] = s[w:] - s[:-w]
+                        feats[f"{col}_brute_{suffix}{w}"] = o.astype(np.float32)
+                elif family_name == "momentum":
+                    for w in windows:
+                        o = np.full(n, np.nan, dtype=np.float32)
+                        denom = np.abs(s[:-w])
+                        o[w:] = np.divide(
+                            s[w:],
+                            denom,
+                            out=np.zeros_like(denom),
+                            where=denom > 0,
+                        )
+                        feats[f"{col}_brute_{suffix}{w}"] = o.astype(np.float32)
+                elif family_name == "EMA":
+                    for w in windows:
+                        feats[f"{col}_brute_{suffix}{w}"] = (
+                            pd.Series(s)
+                            .ewm(span=w, min_periods=1)
+                            .mean()
+                            .values.astype(np.float32)
+                        )
+            all_new[sym] = pd.DataFrame(feats, index=g.index).replace(
+                [np.inf, -np.inf], np.nan
+            )
+        new = pd.concat(all_new.values())
+        logger.info(
+            "BruteForce[%s]: %d cols from %d raw (%.0fs, float32)",
+            family_name,
+            len(new.columns),
+            len(raw),
+            time.time() - t0,
+        )
+        return new
+
+
+# ── Dedup L2 ──
 
 
 def dedup_l2(feats, df, threshold=0.7):
