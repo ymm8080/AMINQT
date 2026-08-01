@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check which stocks have no 2023 fina_indicator data in the new cache."""
+
 import sys
 from pathlib import Path
 
@@ -33,7 +34,9 @@ if missing_2023:
     # Check if these stocks have ANY fina data at all
     for s in sorted(missing_2023):
         sub = cache[cache["symbol"] == s]
-        print(f"  {s}: {len(sub)} rows, earliest ann={sub['ann_dt'].min()}, periods={sub['end_date'].tolist()[:3]}")
+        print(
+            f"  {s}: {len(sub)} rows, earliest ann={sub['ann_dt'].min()}, periods={sub['end_date'].tolist()[:3]}"
+        )
 
 # Also check: stocks where roe is ALL NaN in cache
 print("\n--- Stocks with ALL NaN roe in cache ---")
@@ -46,9 +49,11 @@ if len(zero_roe) > 0:
 # Check stocks with very few rows (<=2)
 row_counts = cache.groupby("symbol").size()
 few_rows = row_counts[row_counts <= 2]
-print(f"\n--- Stocks with <=2 fina rows ---")
+print("\n--- Stocks with <=2 fina rows ---")
 print(f"Count: {len(few_rows)}")
 if len(few_rows) > 0:
     for s in few_rows.index.tolist():
         sub = cache[cache["symbol"] == s]
-        print(f"  {s}: {len(sub)} rows, ann_dates={sub['ann_date'].tolist()}, roe={sub['roe'].tolist()}")
+        print(
+            f"  {s}: {len(sub)} rows, ann_dates={sub['ann_date'].tolist()}, roe={sub['roe'].tolist()}"
+        )

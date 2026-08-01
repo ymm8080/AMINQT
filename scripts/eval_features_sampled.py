@@ -58,9 +58,14 @@ def eval_board(board_name: str, board_df: pd.DataFrame, top_n: int = 50) -> dict
     max_date = board_df["date"].max()
     cutoff = max_date - pd.Timedelta(days=400)  # ~250 trading days
     board_df = board_df[board_df["date"] >= cutoff].copy()
-    logger.info("[%s] Last ~250d rows (%s to %s): %d, stocks: %d",
-                board_name, str(cutoff.date()), str(max_date.date()),
-                len(board_df), board_df["symbol"].nunique())
+    logger.info(
+        "[%s] Last ~250d rows (%s to %s): %d, stocks: %d",
+        board_name,
+        str(cutoff.date()),
+        str(max_date.date()),
+        len(board_df),
+        board_df["symbol"].nunique(),
+    )
 
     logger.info("[%s] Building features...", board_name)
     df = features.build(board_df, cross_sectional_rank=cross_sectional_rank)
@@ -97,28 +102,48 @@ def eval_board(board_name: str, board_df: pd.DataFrame, top_n: int = 50) -> dict
             ic_std = float(np.nanstd(ic_series.values)) if len(ic_series) else 0.0
             icir = ic_mean / ic_std if ic_std > 0 else 0.0
             pos_ratio = float((ic_series > 0).mean())
-            nan_rate = float(board_df[col].isna().mean()) if col in board_df.columns else 1.0
-            results.append({
-                "factor": col,
-                "ic_mean": round(float(ic_mean), 6),
-                "ic_abs": round(float(ic_abs), 6),
-                "ic_std": round(float(ic_std), 6),
-                "icir": round(float(icir), 4),
-                "pos_ratio": round(float(pos_ratio), 4),
-                "nan_rate": round(float(nan_rate), 4),
-                "n_dates": len(ic_series),
-            })
+            nan_rate = (
+                float(board_df[col].isna().mean()) if col in board_df.columns else 1.0
+            )
+            results.append(
+                {
+                    "factor": col,
+                    "ic_mean": round(float(ic_mean), 6),
+                    "ic_abs": round(float(ic_abs), 6),
+                    "ic_std": round(float(ic_std), 6),
+                    "icir": round(float(icir), 4),
+                    "pos_ratio": round(float(pos_ratio), 4),
+                    "nan_rate": round(float(nan_rate), 4),
+                    "n_dates": len(ic_series),
+                }
+            )
         except Exception as e:
             if first_error is None:
                 first_error = (col, str(e))
                 logger.warning("[%s] First IC error on '%s': %s", board_name, col, e)
         if (i + 1) % 200 == 0:
-            logger.info("[%s] %d/%d features (got %d results so far)",
-                        board_name, i + 1, len(feature_cols), len(results))
+            logger.info(
+                "[%s] %d/%d features (got %d results so far)",
+                board_name,
+                i + 1,
+                len(feature_cols),
+                len(results),
+            )
 
     if not results:
-        logger.error("[%s] NO features passed IC computation. First error: %s", board_name, first_error)
-        return {"board": board_name, "n_features": 0, "n_strong": 0, "n_weak": 0, "n_noise": 0, "error": str(first_error)}
+        logger.error(
+            "[%s] NO features passed IC computation. First error: %s",
+            board_name,
+            first_error,
+        )
+        return {
+            "board": board_name,
+            "n_features": 0,
+            "n_strong": 0,
+            "n_weak": 0,
+            "n_noise": 0,
+            "error": str(first_error),
+        }
 
     results_df = pd.DataFrame(results).sort_values("ic_abs", ascending=False)
     logger.info("[%s] Done: %d features with valid IC", board_name, len(results_df))
@@ -130,23 +155,33 @@ def eval_board(board_name: str, board_df: pd.DataFrame, top_n: int = 50) -> dict
     print(f"\n{'=' * 90}")
     print(f"  {board_name.upper()} — Top {top_n} features by |IC| (2024-now, sampled)")
     print(f"{'=' * 90}")
-    print(f"{'Rank':<5s} {'Factor':<45s} {'IC':>8s} {'|IC|':>8s} {'ICIR':>7s} {'Pos%':>7s} {'NaN%':>7s}")
+    print(
+        f"{'Rank':<5s} {'Factor':<45s} {'IC':>8s} {'|IC|':>8s} {'ICIR':>7s} {'Pos%':>7s} {'NaN%':>7s}"
+    )
     print("-" * 90)
     for idx, (_, r) in enumerate(top.iterrows(), 1):
-        print(f"{idx:<5d} {r['factor']:<45s} {r['ic_mean']:>+8.4f} {r['ic_abs']:>8.4f} {r['icir']:>7.2f} {r['pos_ratio']:>7.1%} {r['nan_rate']:>7.1%}")
+        print(
+            f"{idx:<5d} {r['factor']:<45s} {r['ic_mean']:>+8.4f} {r['ic_abs']:>8.4f} {r['icir']:>7.2f} {r['pos_ratio']:>7.1%} {r['nan_rate']:>7.1%}"
+        )
 
     print(f"\n{'=' * 90}")
     print(f"  {board_name.upper()} — Bottom {top_n} features by |IC| (noise/dead)")
     print(f"{'=' * 90}")
-    print(f"{'Rank':<5s} {'Factor':<45s} {'IC':>8s} {'|IC|':>8s} {'ICIR':>7s} {'Pos%':>7s} {'NaN%':>7s}")
+    print(
+        f"{'Rank':<5s} {'Factor':<45s} {'IC':>8s} {'|IC|':>8s} {'ICIR':>7s} {'Pos%':>7s} {'NaN%':>7s}"
+    )
     print("-" * 90)
     for idx, (_, r) in enumerate(bottom.iterrows(), 1):
-        print(f"{idx:<5d} {r['factor']:<45s} {r['ic_mean']:>+8.4f} {r['ic_abs']:>8.4f} {r['icir']:>7.2f} {r['pos_ratio']:>7.1%} {r['nan_rate']:>7.1%}")
+        print(
+            f"{idx:<5d} {r['factor']:<45s} {r['ic_mean']:>+8.4f} {r['ic_abs']:>8.4f} {r['icir']:>7.2f} {r['pos_ratio']:>7.1%} {r['nan_rate']:>7.1%}"
+        )
 
     strong = (results_df["ic_abs"] >= 0.03).sum()
     weak = ((results_df["ic_abs"] >= 0.01) & (results_df["ic_abs"] < 0.03)).sum()
     noise = (results_df["ic_abs"] < 0.01).sum()
-    print(f"\n  Summary: {strong} strong (|IC|>=0.03) | {weak} weak (0.01-0.03) | {noise} noise (<0.01)")
+    print(
+        f"\n  Summary: {strong} strong (|IC|>=0.03) | {weak} weak (0.01-0.03) | {noise} noise (<0.01)"
+    )
 
     return {
         "board": board_name,
@@ -162,8 +197,12 @@ def eval_board(board_name: str, board_df: pd.DataFrame, top_n: int = 50) -> dict
 def main():
     logger.info("Loading panel: %s", PANEL_PATH)
     panel = pd.read_parquet(PANEL_PATH)
-    logger.info("Panel: %d stocks, %d rows, %d cols",
-                panel["symbol"].nunique(), len(panel), len(panel.columns))
+    logger.info(
+        "Panel: %d stocks, %d rows, %d cols",
+        panel["symbol"].nunique(),
+        len(panel),
+        len(panel.columns),
+    )
 
     from app.pipeline1.cleaning_pipeline import board_of
 
@@ -175,8 +214,11 @@ def main():
     dual_sample = sample_board(panel, "GEM", N_SAMPLE_DUAL)
     star_sample = sample_board(panel, "STAR", N_SAMPLE_DUAL // 2)
     dual_combined = pd.concat([dual_sample, star_sample], ignore_index=True)
-    logger.info("Dual combined: %d stocks, %d rows",
-                dual_combined["symbol"].nunique(), len(dual_combined))
+    logger.info(
+        "Dual combined: %d stocks, %d rows",
+        dual_combined["symbol"].nunique(),
+        len(dual_combined),
+    )
 
     # Minimal cleaning: remove ST and short-history only, skip liquidity/top-N filters
     def clean_light(df: pd.DataFrame) -> pd.DataFrame:
@@ -215,8 +257,12 @@ def main():
     for board_name in ["main", "dual"]:
         if board_name not in output["boards"]:
             continue
-        csv_path = os.path.join(REGISTRY_DIR, f"feature_eval_{board_name}_top50_{tag}.csv")
-        pd.DataFrame(output["boards"][board_name].get("top_50", [])).to_csv(csv_path, index=False)
+        csv_path = os.path.join(
+            REGISTRY_DIR, f"feature_eval_{board_name}_top50_{tag}.csv"
+        )
+        pd.DataFrame(output["boards"][board_name].get("top_50", [])).to_csv(
+            csv_path, index=False
+        )
         logger.info("Top-50 CSV saved: %s", csv_path)
 
 

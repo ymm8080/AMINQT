@@ -134,10 +134,15 @@ if results:
     print(f"Rows: {len(df)}, Stocks: {df['ts_code'].nunique()}", flush=True)
     # Check date range
     df["ann_dt"] = pd.to_datetime(df["ann_date"], format="%Y%m%d", errors="coerce")
-    print(f"Announce date range: {df['ann_dt'].min()} ~ {df['ann_dt'].max()}", flush=True)
+    print(
+        f"Announce date range: {df['ann_dt'].min()} ~ {df['ann_dt'].max()}", flush=True
+    )
     # Check pre-2023-04-08 coverage (the gap we're filling)
     pre_apr = df[df["ann_dt"] < "2023-04-08"]
-    print(f"Pre-2023-04-08 rows: {len(pre_apr)}, stocks: {pre_apr['ts_code'].nunique()}", flush=True)
+    print(
+        f"Pre-2023-04-08 rows: {len(pre_apr)}, stocks: {pre_apr['ts_code'].nunique()}",
+        flush=True,
+    )
 else:
     print("NO DATA!", flush=True)
     sys.exit(1)

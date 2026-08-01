@@ -101,50 +101,24 @@ def _fetch_cyq_daily(supply: DataSupplyChain, trade_date: str, refresh: bool):
 
     out = pd.DataFrame(
         {
-            "symbol": raw["ts_code"]
-            .str.replace(".SZ", "")
-            .str.replace(".SH", ""),
-            "date": pd.to_datetime(
-                raw["trade_date"], format="%Y%m%d", errors="coerce"
-            ),
+            "symbol": raw["ts_code"].str.replace(".SZ", "").str.replace(".SH", ""),
+            "date": pd.to_datetime(raw["trade_date"], format="%Y%m%d", errors="coerce"),
             "benefit_part": pd.to_numeric(
                 raw.get("benefit_part", None), errors="coerce"
             ),
             "avg_cost": pd.to_numeric(raw.get("avg_cost", None), errors="coerce"),
-            "pct_70_low": pd.to_numeric(
-                raw.get("pct_70_low", None), errors="coerce"
-            ),
-            "pct_70_high": pd.to_numeric(
-                raw.get("pct_70_high", None), errors="coerce"
-            ),
-            "pct_70_con": pd.to_numeric(
-                raw.get("pct_70_con", None), errors="coerce"
-            ),
-            "pct_90_low": pd.to_numeric(
-                raw.get("pct_90_low", None), errors="coerce"
-            ),
-            "pct_90_high": pd.to_numeric(
-                raw.get("pct_90_high", None), errors="coerce"
-            ),
-            "pct_90_con": pd.to_numeric(
-                raw.get("pct_90_con", None), errors="coerce"
-            ),
+            "pct_70_low": pd.to_numeric(raw.get("pct_70_low", None), errors="coerce"),
+            "pct_70_high": pd.to_numeric(raw.get("pct_70_high", None), errors="coerce"),
+            "pct_70_con": pd.to_numeric(raw.get("pct_70_con", None), errors="coerce"),
+            "pct_90_low": pd.to_numeric(raw.get("pct_90_low", None), errors="coerce"),
+            "pct_90_high": pd.to_numeric(raw.get("pct_90_high", None), errors="coerce"),
+            "pct_90_con": pd.to_numeric(raw.get("pct_90_con", None), errors="coerce"),
             "cost_5pct": pd.to_numeric(raw.get("cost_5pct", None), errors="coerce"),
-            "cost_15pct": pd.to_numeric(
-                raw.get("cost_15pct", None), errors="coerce"
-            ),
-            "cost_50pct": pd.to_numeric(
-                raw.get("cost_50pct", None), errors="coerce"
-            ),
-            "cost_85pct": pd.to_numeric(
-                raw.get("cost_85pct", None), errors="coerce"
-            ),
-            "cost_95pct": pd.to_numeric(
-                raw.get("cost_95pct", None), errors="coerce"
-            ),
-            "weight_avg": pd.to_numeric(
-                raw.get("weight_avg", None), errors="coerce"
-            ),
+            "cost_15pct": pd.to_numeric(raw.get("cost_15pct", None), errors="coerce"),
+            "cost_50pct": pd.to_numeric(raw.get("cost_50pct", None), errors="coerce"),
+            "cost_85pct": pd.to_numeric(raw.get("cost_85pct", None), errors="coerce"),
+            "cost_95pct": pd.to_numeric(raw.get("cost_95pct", None), errors="coerce"),
+            "weight_avg": pd.to_numeric(raw.get("weight_avg", None), errors="coerce"),
         }
     )
     out.to_parquet(path, index=False)
@@ -178,18 +152,14 @@ def _fetch_sector_index_tushare(
         {
             "index_code": raw["ts_code"].str.replace(".SI", ""),
             "index_name": raw.get("name", ""),
-            "date": pd.to_datetime(
-                raw["trade_date"], format="%Y%m%d", errors="coerce"
-            ),
+            "date": pd.to_datetime(raw["trade_date"], format="%Y%m%d", errors="coerce"),
             "open": pd.to_numeric(raw["open"], errors="coerce"),
             "high": pd.to_numeric(raw["high"], errors="coerce"),
             "low": pd.to_numeric(raw["low"], errors="coerce"),
             "close": pd.to_numeric(raw["close"], errors="coerce"),
             "volume": pd.to_numeric(raw.get("vol", None), errors="coerce"),
             "amount": pd.to_numeric(raw.get("amount", None), errors="coerce"),
-            "ret_pct": pd.to_numeric(
-                raw.get("pct_change", None), errors="coerce"
-            )
+            "ret_pct": pd.to_numeric(raw.get("pct_change", None), errors="coerce")
             / 100.0,
         }
     )
@@ -255,8 +225,13 @@ def fetch_market_data(trade_date: str, refresh: bool = False) -> dict:
                 "status": "fail",
                 "msg": f"{exc} ({elapsed:.1f}s)",
             }
-            logger.warning("  %s (%s): FAIL %s (%.1fs)",
-                           src, SOURCE_LABELS.get(src, ""), exc, elapsed)
+            logger.warning(
+                "  %s (%s): FAIL %s (%.1fs)",
+                src,
+                SOURCE_LABELS.get(src, ""),
+                exc,
+                elapsed,
+            )
 
     return results
 
@@ -283,7 +258,7 @@ def write_log(trade_date: str, results: dict, elapsed_total: float) -> None:
     lines.append("")
 
     # WORM: 已存在则追加, 不覆盖
-    mode = "a" if log_path.exists() else "w"
+    "a" if log_path.exists() else "w"
     with open(log_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     logger.info("Log written: %s", log_path)
@@ -315,7 +290,13 @@ def main() -> int:
     fail = sum(1 for r in results.values() if r["status"] == "fail")
     empty = sum(1 for r in results.values() if r["status"] == "empty")
     logger.info("")
-    logger.info("Summary: %d ok, %d empty, %d fail (total %.1fs)", ok, empty, fail, elapsed_total)
+    logger.info(
+        "Summary: %d ok, %d empty, %d fail (total %.1fs)",
+        ok,
+        empty,
+        fail,
+        elapsed_total,
+    )
 
     write_log(trade_date, results, elapsed_total)
 

@@ -53,7 +53,8 @@ for sym, g in df.groupby('symbol'):
         # pct_change
         for w in [1,2,3,5,10,20,40,60]:
             out = np.full(n, np.nan)
-            out[w:] = (s[w:] - s[:-w]) / np.abs(s[:-w]) * 100
+            denom = np.abs(s[:-w])
+            out[w:] = np.divide((s[w:] - s[:-w]) * 100, denom, out=np.zeros_like(denom), where=denom > 0)
             feats[f'{col}_pct{w}'] = out
         # rolling mean
         for w in [5,10,20,40,60]:
@@ -75,7 +76,8 @@ for sym, g in df.groupby('symbol'):
         # momentum (current / N-days ago)
         for w in [5,20,40]:
             out = np.full(n, np.nan)
-            out[w:] = s[w:] / np.abs(s[:-w])
+            denom = np.abs(s[:-w])
+            out[w:] = np.divide(s[w:], denom, out=np.zeros_like(denom), where=denom > 0)
             feats[f'{col}_mom{w}'] = out
         # EMA
         for w in [5,20,40]:

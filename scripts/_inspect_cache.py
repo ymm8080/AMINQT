@@ -1,12 +1,16 @@
 """Quick inspection of alt data cache files."""
-import pandas as pd, os
+
+import pandas as pd
+import os
 
 os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Margin
 mg = pd.read_parquet("data/supply_cache/alt_data/margin/20240102_20260727.parquet")
 print("=== MARGIN ===")
-print(f"Rows: {len(mg)}, Symbols: {mg['symbol'].nunique()}, Dates: {mg['date'].nunique()}")
+print(
+    f"Rows: {len(mg)}, Symbols: {mg['symbol'].nunique()}, Dates: {mg['date'].nunique()}"
+)
 print(f"Date range: {mg['date'].min()} ~ {mg['date'].max()}")
 print(f"Columns: {list(mg.columns)}")
 print()
@@ -14,13 +18,17 @@ print()
 # LHB
 lhb = pd.read_parquet("data/supply_cache/alt_data/lhb/all_20240102_20260727.parquet")
 print("=== LHB ===")
-print(f"Rows: {len(lhb)}, Symbols: {lhb['symbol'].nunique()}, Dates: {lhb['date'].nunique()}")
+print(
+    f"Rows: {len(lhb)}, Symbols: {lhb['symbol'].nunique()}, Dates: {lhb['date'].nunique()}"
+)
 print(f"Date range: {lhb['date'].min()} ~ {lhb['date'].max()}")
 print(f"Columns: {list(lhb.columns)}")
 print()
 
 # Northbound
-nb = pd.read_parquet("data/supply_cache/alt_data/northbound/all_20240102_20260727.parquet")
+nb = pd.read_parquet(
+    "data/supply_cache/alt_data/northbound/all_20240102_20260727.parquet"
+)
 print("=== NORTHBOUND ===")
 print(f"Rows: {len(nb)}, Dates: {nb['date'].nunique()}")
 print(f"Date range: {nb['date'].min()} ~ {nb['date'].max()}")

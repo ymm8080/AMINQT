@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Verify fina_indicator coverage in v3 after fill, by year and by stock."""
+
 import sys
 from pathlib import Path
 
@@ -9,17 +10,32 @@ import pandas as pd
 
 v3 = pd.read_parquet(
     "data/panel_full_enriched_v3.parquet",
-    columns=["symbol", "date", "roe", "eps_yoy", "gross_margin",
-             "net_margin", "profit_yoy", "rev_yoy", "debt_ratio",
-             "roa", "current_ratio", "asset_turnover"],
+    columns=[
+        "symbol",
+        "date",
+        "roe",
+        "eps_yoy",
+        "gross_margin",
+        "net_margin",
+        "profit_yoy",
+        "rev_yoy",
+        "debt_ratio",
+        "roa",
+        "current_ratio",
+        "asset_turnover",
+    ],
 )
 v3["year"] = v3["date"].dt.year
 
 print("=" * 80)
 print("FINA_INDICATOR Coverage in V3 (post-fill)")
 print("=" * 80)
-print(f"V3: {len(v3)} rows, {v3['symbol'].nunique()} stocks, {v3['date'].min()} ~ {v3['date'].max()}")
-print(f"Columns checked: {[c for c in v3.columns if c not in ('symbol','date','year')]}")
+print(
+    f"V3: {len(v3)} rows, {v3['symbol'].nunique()} stocks, {v3['date'].min()} ~ {v3['date'].max()}"
+)
+print(
+    f"Columns checked: {[c for c in v3.columns if c not in ('symbol', 'date', 'year')]}"
+)
 
 # Per-year NaN rates
 print("\n=== NaN rate by year ===")
@@ -44,8 +60,20 @@ if len(zero_cov) > 0:
     print(f"  {sorted(zero_cov.index.tolist())}")
 
 # Check the 12 previously-zero stocks
-prev_zero = ['000620', '000692', '000796', '002021', '002157', '002482',
-             '002564', '300010', '600589', '600671', '603030', '688520']
+prev_zero = [
+    "000620",
+    "000692",
+    "000796",
+    "002021",
+    "002157",
+    "002482",
+    "002564",
+    "300010",
+    "600589",
+    "600671",
+    "603030",
+    "688520",
+]
 print("\n=== Previously zero-coverage stocks (2023 roe) ===")
 for s in prev_zero:
     sub = v3_2023[v3_2023["symbol"] == s]

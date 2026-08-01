@@ -4,6 +4,7 @@
 Step 1: Fetch 428 remaining stocks -> append to cyq_full.parquet
 Step 2: Merge cyq_full.parquet into V3 -> write to .tmp -> rename (atomic)
 """
+
 import os
 import sys
 import time
@@ -25,11 +26,15 @@ import pandas as pd  # noqa: E402
 import tushare as ts  # noqa: E402
 import logging  # noqa: E402
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("cyq_resume")
 
 V3_PATH = ROOT / "data" / "panel_full_enriched_v3.parquet"
-CYQ_CACHE = ROOT / "data" / "supply_cache" / "alt_data" / "cyq_tushare" / "cyq_full.parquet"
+CYQ_CACHE = (
+    ROOT / "data" / "supply_cache" / "alt_data" / "cyq_tushare" / "cyq_full.parquet"
+)
 START_DATE = "20230101"
 END_DATE = "20260728"
 THROTTLE = 0.35
@@ -38,19 +43,25 @@ THROTTLE = 0.35
 def fetch_one(pro, ts_code):
     for attempt in range(2):
         try:
-            raw = pro.cyq_perf(ts_code=ts_code, start_date=START_DATE, end_date=END_DATE)
+            raw = pro.cyq_perf(
+                ts_code=ts_code, start_date=START_DATE, end_date=END_DATE
+            )
             if raw is not None and len(raw):
-                return pd.DataFrame({
-                    "symbol": ts_code.split(".")[0],
-                    "date": pd.to_datetime(raw["trade_date"], format="%Y%m%d"),
-                    "benefit_part": pd.to_numeric(raw["winner_rate"], errors="coerce"),
-                    "avg_cost": pd.to_numeric(raw["weight_avg"], errors="coerce"),
-                    "cost_5pct": pd.to_numeric(raw["cost_5pct"], errors="coerce"),
-                    "cost_15pct": pd.to_numeric(raw["cost_15pct"], errors="coerce"),
-                    "cost_50pct": pd.to_numeric(raw["cost_50pct"], errors="coerce"),
-                    "cost_85pct": pd.to_numeric(raw["cost_85pct"], errors="coerce"),
-                    "cost_95pct": pd.to_numeric(raw["cost_95pct"], errors="coerce"),
-                })
+                return pd.DataFrame(
+                    {
+                        "symbol": ts_code.split(".")[0],
+                        "date": pd.to_datetime(raw["trade_date"], format="%Y%m%d"),
+                        "benefit_part": pd.to_numeric(
+                            raw["winner_rate"], errors="coerce"
+                        ),
+                        "avg_cost": pd.to_numeric(raw["weight_avg"], errors="coerce"),
+                        "cost_5pct": pd.to_numeric(raw["cost_5pct"], errors="coerce"),
+                        "cost_15pct": pd.to_numeric(raw["cost_15pct"], errors="coerce"),
+                        "cost_50pct": pd.to_numeric(raw["cost_50pct"], errors="coerce"),
+                        "cost_85pct": pd.to_numeric(raw["cost_85pct"], errors="coerce"),
+                        "cost_95pct": pd.to_numeric(raw["cost_95pct"], errors="coerce"),
+                    }
+                )
             return None
         except Exception:
             if attempt == 0:
@@ -105,8 +116,11 @@ def main():
                 eta = (len(remaining) - i - 1) / rate
                 logger.info(
                     "  Progress: %d/%d (%.0f%%) | fail %d | ETA %.0fs",
-                    i + 1, len(remaining), (i + 1) / len(remaining) * 100,
-                    fail_count, eta,
+                    i + 1,
+                    len(remaining),
+                    (i + 1) / len(remaining) * 100,
+                    fail_count,
+                    eta,
                 )
 
         cyq_all = pd.concat(frames, ignore_index=True)
@@ -115,7 +129,9 @@ def main():
         cyq_all.to_parquet(CYQ_CACHE, index=False)
         logger.info(
             "CYQ cache updated: %d rows, %d stocks, %d failed, %.1f min",
-            len(cyq_all), cyq_all["symbol"].nunique(), fail_count,
+            len(cyq_all),
+            cyq_all["symbol"].nunique(),
+            fail_count,
             (time.time() - t0) / 60,
         )
     else:
@@ -129,21 +145,33 @@ def main():
     cyq = pd.read_parquet(CYQ_CACHE)
     logger.info(
         "CYQ: %d rows, %d stocks, %s ~ %s",
-        len(cyq), cyq["symbol"].nunique(), cyq["date"].min(), cyq["date"].max(),
+        len(cyq),
+        cyq["symbol"].nunique(),
+        cyq["date"].min(),
+        cyq["date"].max(),
     )
 
     v3 = pd.read_parquet(V3_PATH)
     logger.info("V3: %d rows, %d cols", len(v3), len(v3.columns))
 
-    cyq_cols = ["benefit_part", "avg_cost", "cost_5pct", "cost_15pct",
-                "cost_50pct", "cost_85pct", "cost_95pct"]
+    cyq_cols = [
+        "benefit_part",
+        "avg_cost",
+        "cost_5pct",
+        "cost_15pct",
+        "cost_50pct",
+        "cost_85pct",
+        "cost_95pct",
+    ]
     old = [c for c in cyq_cols if c in v3.columns]
     if old:
         v3 = v3.drop(columns=old)
         logger.info("Dropped %d old CYQ columns", len(old))
 
     data_cols = [c for c in cyq.columns if c not in ("symbol", "date")]
-    v3 = v3.merge(cyq[["symbol", "date"] + data_cols], on=["symbol", "date"], how="left")
+    v3 = v3.merge(
+        cyq[["symbol", "date"] + data_cols], on=["symbol", "date"], how="left"
+    )
     logger.info("Merged %d columns", len(data_cols))
 
     for c in data_cols:
