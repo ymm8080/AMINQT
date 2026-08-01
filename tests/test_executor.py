@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Tests for services/executor — mode toggle + risk-filter gate + T+1 (M3)."""
 
+from decimal import Decimal
+
 import pytest
 
 from config import settings
@@ -40,7 +42,7 @@ def auto_executor(monkeypatch):
 
 def test_manual_mode_returns_recommendation(manual_executor):
     order = Order(
-        symbol="000001", side="buy", qty=100, price=10.0, amount=1e8, pct_change=1.0
+        symbol="000001", side="buy", qty=100, price=Decimal("10"), amount=1e8, pct_change=1.0
     )
     result = manual_executor.execute(order)
     assert result["mode"] == "manual"
@@ -51,7 +53,7 @@ def test_manual_mode_returns_recommendation(manual_executor):
 
 def test_auto_mode_accepts_passing_risk_filter(auto_executor):
     order = Order(
-        symbol="000001", side="buy", qty=100, price=10.0, amount=1e8, pct_change=1.0
+        symbol="000001", side="buy", qty=100, price=Decimal("10"), amount=1e8, pct_change=1.0
     )
     result = auto_executor.execute(order)
     assert result["mode"] == "auto"

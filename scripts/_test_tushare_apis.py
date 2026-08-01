@@ -1,21 +1,9 @@
 """Test Tushare API availability and points level for the missing data columns."""
 
-import os
-
-# Load token from .env
-env_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"
-)
-with open(env_path) as f:
-    for line in f:
-        line = line.strip()
-        if line.startswith("TUSHARE_TOKEN="):
-            os.environ["TUSHARE_TOKEN"] = line.split("=", 1)[1].strip()
-            break
-
 import tushare as ts
+from config import settings
 
-token = os.environ["TUSHARE_TOKEN"]
+token = settings.TUSHARE_TOKEN
 pro = ts.pro_api(token)
 
 # Check user points

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """BacktestEngine 测试 (P9, ARCH §7)."""
 
 import numpy as np
@@ -7,6 +8,10 @@ import pytest
 from app.core.backtest_engine import BacktestEngine, BacktestResult
 
 DATES = pd.date_range("2024-01-01", periods=6, freq="B")
+
+# Default cost-free config used for signal/IC/gap tests so their expected
+# returns remain unchanged.  Cost tests override these explicitly.
+_NO_COSTS = {"commission_rate": 0.0, "stamp_tax_rate": 0.0, "slippage_rate": 0.0}
 
 
 def _df(closes, **cols):
@@ -25,7 +30,7 @@ class TestKnownReturn:
                 signal=[True, False, False, False, False, False],
             )
         }
-        engine = BacktestEngine({"holding_days": 1})
+        engine = BacktestEngine({"holding_days": 1, **_NO_COSTS})
         result = engine.run("selection", ["AAA"], "2024-01-01", "2024-01-10", data=data)
         assert result.total_return == pytest.approx(0.10, abs=1e-9)
         assert result.max_drawdown == pytest.approx(0.0, abs=1e-9)
@@ -33,7 +38,7 @@ class TestKnownReturn:
 
     def test_no_signal_zero_return(self):
         data = {"AAA": _df([100, 110, 121, 133.1, 146.41, 161.051], signal=[False] * 6)}
-        engine = BacktestEngine()
+        engine = BacktestEngine({**_NO_COSTS})
         result = engine.run("selection", ["AAA"], "2024-01-01", "2024-01-10", data=data)
         assert result.total_return == pytest.approx(0.0)
         assert result.sharpe == pytest.approx(0.0)
@@ -46,7 +51,7 @@ class TestKnownReturn:
                 score=[0.9, 0.1, 0.1, 0.1, 0.1, 0.1],
             )
         }
-        engine = BacktestEngine({"score_threshold": 0.5, "holding_days": 1})
+        engine = BacktestEngine({"score_threshold": 0.5, "holding_days": 1, **_NO_COSTS})
         result = engine.run("selection", ["AAA"], "2024-01-01", "2024-01-10", data=data)
         assert result.total_return == pytest.approx(0.10, abs=1e-9)
 
@@ -57,7 +62,7 @@ class TestKnownReturn:
                 signal=[True, True, False, False, False, False],
             )
         }
-        engine = BacktestEngine({"holding_days": 1})
+        engine = BacktestEngine({"holding_days": 1, **_NO_COSTS})
         result = engine.run("selection", ["AAA"], "2024-01-01", "2024-01-10", data=data)
         # 两日各 -10%: equity 1.0 -> 0.9 -> 0.81
         assert result.total_return == pytest.approx(-0.19, abs=1e-9)
@@ -72,6 +77,83 @@ class TestKnownReturn:
         assert result == BacktestResult(gaps={})
 
 
+class TestTransactionCosts:
+    def test_costs_reduce_return(self):
+        # 100 -> 110: raw 10% return
+        data = {
+            "AAA": _df(
+                [100, 110, 121, 133.1, 146.41, 161.051],
+                signal=[True, False, False, False, False, False],
+            )
+        }
+        engine = BacktestEngine(
+            {
+                "holding_days": 1,
+                "commission_rate": 0.00025,
+                "stamp_tax_rate": 0.0005,
+                "slippage_rate": 0.001,
+            }
+        )
+        result = engine.run("selection", ["AAA"], "2024-01-01", "2024-01-10", data=data)
+        # round-trip cost = 2*commission + stamp_tax + 2*slippage = 0.0005+0.0005+0.002 = 0.003
+        assert result.total_return == pytest.approx(0.10 - 0.003, abs=1e-9)
+
+    def test_zero_costs_match_raw_return(self):
+        data = {
+            "AAA": _df(
+                [100, 110, 121, 133.1, 146.41, 161.051],
+                signal=[True, False, False, False, False, False],
+            )
+        }
+        engine = BacktestEngine({"holding_days": 1, **_NO_COSTS})
+        result = engine.run("selection", ["AAA"], "2024-01-01", "2024-01-10", data=data)
+        assert result.total_return == pytest.approx(0.10, abs=1e-9)
+
+    def test_ic_uses_raw_fwd_ret_not_cost_adjusted(self):
+        # IC label must be raw forward return, not cost-adjusted
+        a = _df(
+            [100, 102, 104.04, 106.1208, 108.243216, 110.40808032], score=[0.9] * 6
+        )
+        b = _df(
+            [100, 101, 102.01, 103.0301, 104.060701, 105.10140701], score=[0.1] * 6
+        )
+        engine = BacktestEngine(
+            {
+                "holding_days": 1,
+                "commission_rate": 0.001,
+                "stamp_tax_rate": 0.001,
+                "slippage_rate": 0.001,
+            }
+        )
+        result = engine.run(
+            "selection", ["AAA", "BBB"], "2024-01-01", "2024-01-10", data={"AAA": a, "BBB": b}
+        )
+        # IC still perfectly positive because label is raw fwd_ret
+        assert result.ic == pytest.approx(1.0, abs=1e-9)
+        # But portfolio return is reduced by costs (raw ~10.4% for AAA-only)
+        assert 0.0 < result.total_return < 0.104
+
+
+class TestT1Enforcement:
+    """A股 T+1: 买入当日不可卖出, holding_days < 1 强制为 1."""
+
+    def test_holding_days_zero_coerced_to_one(self):
+        engine = BacktestEngine({"holding_days": 0, **_NO_COSTS})
+        assert engine.holding_days == 1
+
+    def test_no_same_day_sell(self):
+        # signal on day 0; with holding_days coerced to 1, sell on day 1 close
+        data = {
+            "AAA": _df(
+                [100, 110, 121, 133.1, 146.41, 161.051],
+                signal=[True, False, False, False, False, False],
+            )
+        }
+        engine = BacktestEngine({"holding_days": 0, **_NO_COSTS})
+        result = engine.run("selection", ["AAA"], "2024-01-01", "2024-01-10", data=data)
+        assert result.total_return == pytest.approx(0.10, abs=1e-9)
+
+
 class TestIC:
     def _ic_data(self, score_a, score_b):
         # 每日 A 前向收益 > B 前向收益 (单调上涨且 A 涨幅恒大于 B)
@@ -84,7 +166,7 @@ class TestIC:
         return {"AAA": a, "BBB": b}
 
     def test_ic_positive(self):
-        engine = BacktestEngine({"holding_days": 1})
+        engine = BacktestEngine({"holding_days": 1, **_NO_COSTS})
         result = engine.run(
             "selection",
             ["AAA", "BBB"],
@@ -97,7 +179,7 @@ class TestIC:
         assert result.icir > 0
 
     def test_ic_negative(self):
-        engine = BacktestEngine({"holding_days": 1})
+        engine = BacktestEngine({"holding_days": 1, **_NO_COSTS})
         result = engine.run(
             "selection",
             ["AAA", "BBB"],
@@ -110,7 +192,7 @@ class TestIC:
 
     def test_ic_no_future_factor_leak(self):
         # IC 使用 holding_days 日前向收益作标签; 改标签窗口 IC 仍确定
-        engine = BacktestEngine({"holding_days": 2})
+        engine = BacktestEngine({"holding_days": 2, **_NO_COSTS})
         result = engine.run(
             "selection",
             ["AAA", "BBB"],
@@ -136,7 +218,7 @@ class TestCtrlRatio:
             ctrl_ratio=[0.2] * 6,
             ctrl_weekly_rising=[False] * 6,
         )
-        engine = BacktestEngine({"holding_days": 1})
+        engine = BacktestEngine({"holding_days": 1, **_NO_COSTS})
         result = engine.run(
             "selection",
             ["AAA", "BBB"],
@@ -159,7 +241,7 @@ class TestCtrlRatio:
                 [100, 110, 121, 133.1, 146.41, 161.051], signal=[True] + [False] * 5
             )
         }
-        engine = BacktestEngine()
+        engine = BacktestEngine({**_NO_COSTS})
         result = engine.run("selection", ["AAA"], "2024-01-01", "2024-01-10", data=data)
         assert result.ctrl_ratio_ic == 0.0
         assert result.ctrl_ratio_long_short_return == 0.0
@@ -180,6 +262,7 @@ class TestGaps:
                     "target_total_return": 0.5,
                     "target_max_drawdown": 0.05,
                 },
+                **_NO_COSTS,
             }
         )
         result = engine.run("selection", ["AAA"], "2024-01-01", "2024-01-10", data=data)

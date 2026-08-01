@@ -149,6 +149,7 @@ jobs:
             python -m pytest tests/ \
               --cov=app \
               --cov=services \
+              --cov-fail-under=80 \
               --cov-report=term-missing \
               --cov-report=xml:coverage.xml \
               -v || RET=$?

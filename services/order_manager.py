@@ -5,15 +5,45 @@
 
 幂等: client_order_id 唯一, 重复提交直接拒绝 (ValueError)。
 T+1: 卖出数量不得超过可用持仓 (available_qty)。
+审计日志: 每笔成交/拒绝追加写入日志文件, append-only, 不可变。
 """
 
+import json
 import logging
 import uuid
+from datetime import datetime, timezone
+from decimal import Decimal
 from enum import Enum
+from pathlib import Path
 
+from config import settings
 from services.executor_base import Order
 
 logger = logging.getLogger(__name__)
+
+# 交易审计日志目录 (DATA_OTHERS_DIR/logs/trades/YYYY/MM/)
+_TRADE_LOG_DIR = settings.DATA_OTHERS_DIR / "logs" / "trades"
+
+
+def _trade_log_path() -> Path:
+    """Return today's append-only trade log path (WORM: one file per day)."""
+    now = datetime.now(timezone.utc)
+    path = _TRADE_LOG_DIR / f"{now.year:04d}" / f"{now.month:02d}"
+    path.mkdir(parents=True, exist_ok=True)
+    return path / f"trades_{now.strftime('%Y%m%d')}.jsonl"
+
+
+def _append_trade_log(record: dict) -> None:
+    """Append one immutable record to today's trade log.
+
+    Args:
+        record: Must be JSON-serializable.
+    """
+    log_path = _trade_log_path()
+    line = json.dumps(record, ensure_ascii=False, default=str, sort_keys=True)
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
+    logger.debug("[AUDIT] appended trade log: %s", log_path)
 
 
 class OrderStatus(Enum):
@@ -76,6 +106,18 @@ class OrderManager:
         except Exception:
             logger.exception("[OM] 执行器下单异常: %s", rec["order_id"])
             rec["status"] = OrderStatus.REJECTED
+            _append_trade_log(
+                {
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "order_id": rec["order_id"],
+                    "symbol": rec["symbol"],
+                    "side": rec["side"],
+                    "qty": rec["qty"],
+                    "price": rec["price"],
+                    "status": "rejected",
+                    "reason": "executor_exception",
+                }
+            )
             return False
         rec["executor_result"] = result
         rec["status"] = OrderStatus.SUBMITTED
@@ -88,14 +130,33 @@ class OrderManager:
             rec["price"],
         )
         if result.get("executed"):
-            self._fills.append(
+            fill = {
+                "order_id": rec["order_id"],
+                "symbol": rec["symbol"],
+                "side": rec["side"],
+                "qty": rec["qty"],
+                "price": rec["price"],
+                "result": result,
+            }
+            self._fills.append(fill)
+            _append_trade_log(
                 {
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    **fill,
+                    "status": "filled",
+                }
+            )
+        else:
+            _append_trade_log(
+                {
+                    "ts": datetime.now(timezone.utc).isoformat(),
                     "order_id": rec["order_id"],
                     "symbol": rec["symbol"],
                     "side": rec["side"],
                     "qty": rec["qty"],
                     "price": rec["price"],
-                    "result": result,
+                    "status": "rejected",
+                    "reason": result.get("reason", "unknown"),
                 }
             )
         return True
@@ -133,7 +194,7 @@ class OrderManager:
         self,
         symbol: str,
         side: str,
-        price: float,
+        price: Decimal | float | int | None,
         qty: int,
         require_confirm: bool = True,
         client_order_id: str | None = None,
@@ -147,7 +208,7 @@ class OrderManager:
         Args:
             symbol: 股票代码。
             side: "buy" | "sell"。
-            price: 委托价格。
+            price: 委托价格 (Decimal/float/int/None for MKT)。
             qty: 数量。
             require_confirm: True → PENDING_CONFIRM 待手动确认;
                 False → 直接报单 (SUBMITTED)。
@@ -170,12 +231,13 @@ class OrderManager:
                 f"(已存在委托 {self._client_ids[client_order_id]})"
             )
         order_id = uuid.uuid4().hex
+        decimal_price = Decimal(str(price)) if price is not None else None
         rec = {
             "order_id": order_id,
             "client_order_id": client_order_id,
             "symbol": symbol,
             "side": side,
-            "price": price,
+            "price": decimal_price,
             "qty": qty,
             "amount": amount,
             "pct_change": pct_change,

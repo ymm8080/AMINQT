@@ -12,6 +12,7 @@ risk filter can run. Missing metadata in AUTO mode is rejected (fail-safe).
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
+from decimal import Decimal
 
 from app.core import risk_filter
 from config import settings
@@ -26,7 +27,7 @@ class Order:
     symbol: str
     side: str  # "buy" | "sell"
     qty: int
-    price: float | None = None  # None → market price
+    price: Decimal | None = None  # None → market price
     # Market metadata required for AUTO-mode risk-filter gate.
     amount: float | None = None
     pct_change: float | None = None
@@ -53,12 +54,13 @@ class Executor(ABC):
             dict describing what happened (executed vs recommended vs rejected).
         """
         if self.mode is settings.ExecutionMode.MANUAL:
+            price_str = str(order.price) if order.price is not None else "MKT"
             logger.info(
-                "[MANUAL] recommend: %s %s %d %s",
+                "[MANUAL] recommend: %s %s %d @ %s",
                 order.side,
                 order.symbol,
                 order.qty,
-                order.price or "MKT",
+                price_str,
             )
             return {
                 "mode": "manual",

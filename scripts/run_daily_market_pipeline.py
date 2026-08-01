@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Pipeline 1: 每日 16:00 收盘后行情数据拉取.
+"""Pipeline 1: 每日 22:00 收盘后行情数据拉取.
 
 交易日 15:00 收盘后, Tushare 数据约 15:30~16:00 完成结算并可用.
-本脚本在 16:00 定时触发, 拉取当日全市场行情数据:
+本脚本在 22:00 定时触发 (2026-08-01 起, 原 16:00), 拉取当日全市场行情数据:
 
   - OHLCV 日线 (pro.daily)
   - 每日估值 (pro.daily_basic: PE/PB/换手/市值)
@@ -14,7 +14,7 @@
   - 筹码分布 (pro.cyq_perf)
 
 公告类数据 (fina_indicator / holdertrade / holdernumber / anns_d)
-由 08:00 Pipeline 2 单独拉取, 此处不涉及.
+由 22:00 Pipeline 2 单独拉取, 此处不涉及.
 
 各源独立失败不阻断, 结果写入 data/supply_cache/ (parquet, WORM).
 日志写入 data/daily_market_log_YYYYMMDD.md.
@@ -42,7 +42,11 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
 
-from app.pipeline1.data_supply import DataSupplyChain, _with_timeout  # noqa: E402
+from app.pipeline1.data_supply import (  # noqa: E402
+    DataSupplyChain,
+    FETCH_TIMEOUT,
+    _with_timeout,
+)
 from app.core.config_loader import load_config  # noqa: E402
 from app.pipeline1.backup import backup_keepers  # noqa: E402
 from config.settings import data_others_path  # noqa: E402
@@ -202,7 +206,7 @@ def fetch_market_data(trade_date: str, refresh: bool = False) -> dict:
             elif src == "cyq_tushare":
                 df = _with_timeout(
                     lambda: _fetch_cyq_daily(supply, trade_date, refresh),
-                    timeout=120,
+                    timeout=FETCH_TIMEOUT,
                 )
             else:
                 continue
@@ -291,7 +295,7 @@ def run_backup(trade_date: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Pipeline 1: 16:00 daily market data")
+    parser = argparse.ArgumentParser(description="Pipeline 1: 22:00 daily market data")
     parser.add_argument("--date", help="Trade date YYYYMMDD (default: today)")
     parser.add_argument("--refresh", action="store_true", help="Force refresh cache")
     args = parser.parse_args()
