@@ -117,7 +117,10 @@ def fetch_announcement_data(
             dataframes[src] = df if df is not None else pd.DataFrame()
             logger.info(
                 "  %s (%s): %d rows (%.1fs)",
-                src, SOURCE_LABELS.get(src, ""), rows, elapsed,
+                src,
+                SOURCE_LABELS.get(src, ""),
+                rows,
+                elapsed,
             )
         except Exception as exc:
             elapsed = time.time() - t0
@@ -129,7 +132,10 @@ def fetch_announcement_data(
             dataframes[src] = pd.DataFrame()
             logger.warning(
                 "  %s (%s): FAIL %s (%.1fs)",
-                src, SOURCE_LABELS.get(src, ""), exc, elapsed,
+                src,
+                SOURCE_LABELS.get(src, ""),
+                exc,
+                elapsed,
             )
 
     return results, dataframes
@@ -180,9 +186,7 @@ def update_v3_panel_holdertrade(
     panel_cols = schema.names
 
     try:
-        today_rows = pq.read_table(
-            PANEL, filters=[("date", "=", today_ts)]
-        ).to_pandas()
+        today_rows = pq.read_table(PANEL, filters=[("date", "=", today_ts)]).to_pandas()
     except Exception as exc:
         msg = f"failed to read today's rows: {exc}"
         logger.error("V3 panel update: %s", msg)
@@ -372,9 +376,7 @@ def main() -> int:
 
     t0 = time.time()
 
-    results, dataframes = fetch_announcement_data(
-        target_date, refresh=args.refresh
-    )
+    results, dataframes = fetch_announcement_data(target_date, refresh=args.refresh)
 
     holdertrade_df = dataframes.get("stk_holdertrade", pd.DataFrame())
     v3_result = update_v3_panel_holdertrade(target_date, holdertrade_df)
@@ -387,7 +389,9 @@ def main() -> int:
     logger.info("")
     logger.info(
         "Summary: %d ok, %d empty, %d fail | V3: %s (%d stocks) (total %.1fs)",
-        ok, empty, fail,
+        ok,
+        empty,
+        fail,
         v3_result.get("status", "N/A"),
         v3_result.get("updated", 0),
         elapsed_total,
