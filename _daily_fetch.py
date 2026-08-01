@@ -1,4 +1,4 @@
-"""Daily fetch script — append one day's data to V3 panel from Tushare.
+﻿"""Daily fetch script — append one day's data to V3 panel from Tushare.
 NEVER loads full panel into memory. Uses pyarrow streaming read/write.
 
 Usage: python _daily_fetch.py [YYYYMMDD]  (default: today)
@@ -149,8 +149,6 @@ if len(limit):
 # Rename mappings
 rename_map = {
     "net_mf_amount": "main_money_flow",
-    "winner_rate": "_winner_rate_tmp",
-
     "rzye": "margin_balance", "rqye": "short_balance",
     "rzmre": "margin_buy_amt", "rqyl": "short_sell_vol",
 }
