@@ -59,6 +59,25 @@ class TestFrontierAPI:
             assert key in body["metrics"]
         assert len(body["nav_curve"]) > 0
 
+    def test_gate_eval(self, tmp_path, monkeypatch):
+        """gate-eval 端点: 无报告 → exists=false; 有报告 → 返回最新内容."""
+        import glob
+        import json
+
+        r = client.get("/api/frontier/backtest/gate-eval")
+        assert r.status_code == 200 and "exists" in r.json()
+
+        report = tmp_path / "gate_eval_20990101.json"
+        report.write_text(
+            json.dumps({"generated_at": "t", "window": ["a", "b"], "scenarios": []}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            glob, "glob", lambda p: [str(report)] if "gate_eval_" in p else []
+        )
+        body = client.get("/api/frontier/backtest/gate-eval").json()
+        assert body["exists"] is True and body["window"] == ["a", "b"]
+
     def test_tune_and_validation(self):
         r = client.post(
             "/api/frontier/backtest/tune",

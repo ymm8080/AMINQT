@@ -1,8 +1,19 @@
 import { useEffect, useState } from 'react'
-import { api, BacktestResult, ForecastQuality } from '../api'
+import { api, BacktestResult, ForecastQuality, GateEvalReport } from '../api'
 import { EquityChart } from '../components/EquityChart'
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 
 const fmtPct = (v: number) => `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`
+const SCENARIO_COLORS = ['#e54545', '#4c9aff', '#3fb950', '#d29922', '#bc8cff']
 const fmtNum = (v: number | null | undefined, decimals = 4) =>
   v != null ? v.toFixed(decimals) : '—'
 const qualityTrafficLight = (q: ForecastQuality | null) => {
@@ -39,6 +50,11 @@ export function BacktestPage() {
   const [tuneParams, setTuneParams] = useState('max_hold_days,prob_exit')
   const [tuneRanges, setTuneRanges] = useState('')
   const [busy, setBusy] = useState(false)
+  const [gateEval, setGateEval] = useState<GateEvalReport | null>(null)
+
+  useEffect(() => {
+    api.gateEval().then(setGateEval).catch(() => {})
+  }, [])
 
   useEffect(() => {
     api.tuningReport()
@@ -305,6 +321,71 @@ export function BacktestPage() {
         <button className="primary" style={{ marginLeft: 12 }} onClick={runTune} disabled={busy}>🔍 调优</button>
         {tune && <pre style={{ fontSize: 12, marginTop: 12 }}>{JSON.stringify(tune, null, 2)}</pre>}
       </div>
+
+      {gateEval?.exists && gateEval.scenarios && (
+        <div className="panel">
+          <h3>
+            E7 闸门方案对比 · 真实数据回放
+            <span className="dim" style={{ fontSize: 12, marginLeft: 8 }}>
+              {gateEval.window?.[0]} ~ {gateEval.window?.[1]} · Top15 等权 · 次日净收益 (label_pm_1d_net)
+            </span>
+          </h3>
+          <table>
+            <thead>
+              <tr>
+                <th>方案</th><th>空仓率</th><th>平均持股</th>
+                <th>日均净收益</th><th>累计净收益</th><th>胜率</th>
+              </tr>
+            </thead>
+            <tbody>
+              {gateEval.scenarios.map((s) => (
+                <tr key={s.name}>
+                  <td>{s.name}</td>
+                  <td>{(s.empty_rate * 100).toFixed(1)}%</td>
+                  <td>{s.avg_holdings?.toFixed(1) ?? '—'}</td>
+                  <td>{s.avg_daily_net != null ? fmtPct(s.avg_daily_net) : '—'}</td>
+                  <td>{fmtPct(s.compound)}</td>
+                  <td>{s.win_rate != null ? `${(s.win_rate * 100).toFixed(0)}%` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart
+              data={gateEval.scenarios[0].daily.map((d, i) => {
+                const row: Record<string, unknown> = { date: d.date }
+                gateEval.scenarios!.forEach((s) => {
+                  row[s.name] = s.daily[i]?.cum ?? null
+                })
+                return row
+              })}
+            >
+              <CartesianGrid stroke="#21262d" />
+              <XAxis dataKey="date" tick={{ fill: '#8b949e', fontSize: 11 }} minTickGap={40} />
+              <YAxis
+                tick={{ fill: '#8b949e', fontSize: 11 }}
+                tickFormatter={(v: number) => `${(v * 100).toFixed(1)}%`}
+              />
+              <Tooltip
+                contentStyle={{ background: '#161b22', border: '1px solid #30363d' }}
+                labelStyle={{ color: '#8b949e' }}
+                formatter={(v: number) => fmtPct(v)}
+              />
+              <Legend />
+              {gateEval.scenarios.map((s, i) => (
+                <Line
+                  key={s.name}
+                  type="monotone"
+                  dataKey={s.name}
+                  stroke={SCENARIO_COLORS[i % SCENARIO_COLORS.length]}
+                  dot={false}
+                  strokeWidth={1.5}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </>
   )
 }

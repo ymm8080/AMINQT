@@ -13,12 +13,17 @@ Sources fetched:
   7. cyq_perf — chip distribution (batch, one call)
   8. margin_detail — margin balance (per-stock)
   9. top_list — LHB (dragon-tiger board)
+ 10. sw_daily — sector index (Shenwan industry)
 
 Derived (computed from panel history, reads only needed columns):
   - bias_5..250, bias_cross, ma_vol_ratio_5_20, amplitude_5d
   - vol_surge, amt_surge, ret_pct
-  - pct_70_con, pct_90_con (cyq_calculator formula)
-  - Forward-fill: financials, margin(T+1 gap), SW indices, shareholders
+  - pct_70_con, pct_90_con (cyq formula: (hi-lo)/(hi+lo), [0,1] range)
+  - Forward-fill: financials (quarterly), margin(T+1 gap), announce_date
+
+NOT fetched here (separate pipelines):
+  - fina_indicator → run_announcement_pipeline.py (Pipeline 2, quarterly)
+  - holdertrade/holdernumber → removed from panel (no longer tracked)
 """
 import os, sys
 import pandas as pd
@@ -31,9 +36,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TRADE_DATE = sys.argv[1] if len(sys.argv) > 1 else datetime.now().strftime("%Y%m%d")
-PANEL = "data/panel_full_enriched_v3.parquet"
+PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
 
-pro = ts.pro_api(os.getenv("TUSHARE_TOKEN"))
+_token = os.getenv("TUSHARE_TOKEN") or ts.get_token()
+if not _token:
+    print("FATAL: No Tushare token found. Set TUSHARE_TOKEN or run `tushare.set_token('your_token')`")
+    sys.exit(1)
+pro = ts.pro_api(_token)
 
 # ── 0. Get valid stock universe from panel ──
 print(f"[0] Getting stock universe...")
@@ -71,6 +80,7 @@ money = safe_fetch(pro.moneyflow, "moneyflow", trade_date=TRADE_DATE)
 cyq   = safe_fetch(pro.cyq_perf, "cyq_perf", trade_date=TRADE_DATE)
 margin= safe_fetch(pro.margin_detail, "margin_detail", trade_date=TRADE_DATE)
 lhb   = safe_fetch(pro.top_list, "LHB", trade_date=TRADE_DATE)
+sw    = safe_fetch(pro.sw_daily, "sw_daily", trade_date=TRADE_DATE)
 
 if not len(ohlcv):
     print("FATAL: No OHLCV data"); sys.exit(1)
@@ -94,10 +104,11 @@ merges = {
     "daily_basic": (basic, ["turnover_rate", "turnover_rate_f", "volume_ratio",
         "pe", "pe_ttm", "pb", "ps", "ps_ttm", "total_share", "float_share",
         "free_share", "total_mv", "circ_mv", "dv_ratio", "dv_ttm"]),
-    "stk_limit": (limit, ["up_limit", "down_limit"]),
     "moneyflow": (money, ["net_mf_amount", "buy_elg_amount", "sell_elg_amount"]),
     "cyq_perf": (cyq, ["cost_5pct", "cost_15pct", "cost_50pct", "cost_85pct",
-        "cost_95pct", "weight_avg", "winner_rate"]),
+        "cost_95pct", "weight_avg", "winner_rate",
+        "benefit_part", "avg_cost", "pct_70_low", "pct_70_high", "pct_70_con",
+        "pct_90_low", "pct_90_high", "pct_90_con"]),
     "margin_detail": (margin, ["rzye", "rqye", "rzmre", "rqyl"]),
 }
 # Aggregate LHB by symbol
@@ -111,15 +122,20 @@ for src_name, (src_df, cols) in merges.items():
     if not available:
         continue
     smap = src_df.set_index("symbol")[available]
-    # Only map columns that exist in panel schema
     for c in available:
-        tgt = c  # Will be renamed below
+        tgt = c
         if tgt in panel_cols and tgt not in df.columns:
             df[tgt] = df["symbol"].map(smap[c])
 
+# stk_limit: map source cols to panel column names directly
+if len(limit):
+    lmap = limit.set_index("symbol")
+    for src_col, tgt_col in [("up_limit", "up_limit_raw"), ("down_limit", "down_limit_raw")]:
+        if src_col in lmap.columns and tgt_col in panel_cols and tgt_col not in df.columns:
+            df[tgt_col] = df["symbol"].map(lmap[src_col])
+
 # Rename mappings
 rename_map = {
-    "up_limit": "up_limit_raw", "down_limit": "down_limit_raw",
     "net_mf_amount": "main_money_flow",
     "winner_rate": "_winner_rate_tmp",
     "rzye": "margin_balance", "rqye": "short_balance",
@@ -128,6 +144,10 @@ rename_map = {
 for old, new in rename_map.items():
     if old in df.columns:
         df[new] = df[old]
+
+# free_float_turnover_rate = turnover_rate_f (free float turnover)
+if "turnover_rate_f" in df.columns and "free_float_turnover_rate" in panel_cols:
+    df["free_float_turnover_rate"] = df["turnover_rate_f"]
 
 # LHB merge
 if len(lhb):
@@ -158,6 +178,7 @@ if "cost_50pct" in df.columns and "avg_cost" in panel_cols:
 
 # --- pct_90/70 CI ---
 # Formula from cyq_calculator.py: concentration = (hi-lo)/(hi+lo)
+# Result in [0, 1]: smaller = more concentrated (bullish)
 def safe_div(a, b):
     return np.where((b.notna() & (b != 0)), a / b, np.nan)
 
@@ -195,6 +216,36 @@ try:
             df[col] = df["symbol"].map(smap)
 except Exception as e:
     print(f"    stock_basic: {e}")
+
+# --- Sector index (sw_daily) ---
+# Map each stock's industry to SW index data
+if len(sw) and "industry" in df.columns:
+    # Build index_name -> {close, vol, pct_change} mapping
+    sw_map = {}
+    for _, row in sw.iterrows():
+        idx_name = str(row.get("name", "")).strip()
+        if idx_name:
+            sw_map[idx_name] = {
+                "close": row.get("close"),
+                "vol": row.get("vol"),
+                "pct_change": row.get("pct_change"),
+            }
+    # Map to each stock by industry
+    for tgt_col, sw_key in [
+        ("sw_index_close", "close"),
+        ("sw_index_vol", "vol"),
+        ("sw_ret_1d", "pct_change"),
+    ]:
+        if tgt_col in panel_cols:
+            vals = {}
+            for _, row in df.iterrows():
+                ind = str(row.get("industry", "")).strip()
+                if ind in sw_map and pd.notna(sw_map[ind].get(sw_key)):
+                    vals[row["symbol"]] = sw_map[ind][sw_key]
+            if vals:
+                df[tgt_col] = df["symbol"].map(vals)
+    n_filled = df["sw_index_close"].notna().sum() if "sw_index_close" in df.columns else 0
+    print(f"    sw_daily: {len(sw)} indices -> {n_filled}/{len(df)} stocks mapped")
 
 # --- Simple derived features (no history needed) ---
 if all(c in df.columns for c in ["high", "low", "pre_close"]):
@@ -299,13 +350,11 @@ ffill_cols = [
     "debt_ratio", "current_ratio", "asset_turnover", "inventory_turnover",
     "ocf_to_or", "eps", "bps", "ocfps", "revenue_ps",
     "roe_deducted", "roe_yoy", "q_roe",
-    "ar_turnover", "free_float_turnover_rate",
-    "holder_count", "sh_change_amt", "sh_change_amt_total",
-    "sh_change_vol", "sh_net_change_sign", "sh_net_sign",
+    "ar_turnover",
     "sw_index_close", "sw_index_vol", "sw_ret_1d",
-    "chip_concentration", "profit_ratio",
     "margin_balance", "short_balance", "margin_buy_amt", "short_sell_vol",
     "dt_eps", "q_ocf_to_sales",
+    "announce_date",
 ]
 ffill_cols = [c for c in ffill_cols if c in panel_cols]
 needed_ffill = [c for c in ffill_cols if c not in df.columns or df[c].isna().all()]
@@ -370,7 +419,7 @@ print(f"\n{'='*55}")
 print(f"DONE: {TRADE_DATE}")
 print(f"{'='*55}")
 pf2 = pq.ParquetFile(PANEL)
-print(f"Panel: {pf2.metadata.num_rows:,} rows")
+print(f"Panel: {pf2.metadata.num_rows:,} rows, {len(pf2.schema_arrow.names)} cols")
 pf2.close()
 
 final = pq.read_table(PANEL, filters=[("date", "=", pd.Timestamp(TRADE_DATE))]).to_pandas()
@@ -381,3 +430,5 @@ print(f"Filled: {filled}/{n_cols} ({filled/n_cols:.1%})")
 empty_cols = sorted([c for c in final.columns if final[c].notna().sum() == 0])
 if empty_cols:
     print(f"Empty ({len(empty_cols)}): {', '.join(empty_cols)}")
+else:
+    print("All columns have data!")

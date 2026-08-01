@@ -264,38 +264,58 @@ def _cands(rows: list[dict]) -> pd.DataFrame:
 
 class TestDynamicEntry:
     def test_gate_filters_low_quality(self):
+        """计算闸: prob 需超当日基准率 (均值), 净预期 compound 需 > 0."""
         cands = _cands(
             [
-                {"symbol": "600001"},  # prob 0.70, ret 0.02 → 过
-                {"symbol": "600002", "prob_up": 0.55},  # prob 不足 → 剔
-                {"symbol": "600003", "pred_ret_1d": 0.001},  # ret < 2×COST → 剔
+                {"symbol": "600001"},  # prob 0.70 > 基准 0.65, compound .028 > 0 → 过
+                {"symbol": "600002", "prob_up": 0.55},  # prob < 基准 → 剔
+                {  # 净预期为负 → 剔
+                    "symbol": "600003",
+                    "pred_ret_1d": -0.02,
+                    "pred_ret_3d": -0.03,
+                    "pred_ret_5d": -0.05,
+                },
             ]
         )
         out = ListGenerator().emit(cands)
         assert list(out["list"]["symbol"]) == ["600001"]
 
-    def test_quantile_fallback_when_absolute_threshold_unreachable(self):
-        """E7: 绝对阈值不可达时, 分位数回退取 prob_up 前 20% — 不再返回空清单."""
+    def test_zero_passing_is_feature_not_bug(self):
         cands = _cands([{"symbol": "600001", "prob_up": 0.50}])
         out = ListGenerator().emit(cands)
-        assert not out["empty"] and len(out["list"]) == 1
+        assert out["empty"] and len(out["list"]) == 0
 
     def test_bear_tightening(self):
-        # 4 只 prob=0.62 (正常过0.60, bear不过0.65) + 1 只 prob=0.70 (两种都过) [E11]
+        """bear: prob 门槛按 entry_prob_bear/entry_prob 比率收紧 [E11]."""
         cands = _cands(
             [
-                {"symbol": "600001", "industry": "A", "prob_up": 0.62},
-                {"symbol": "600002", "industry": "B", "prob_up": 0.62},
-                {"symbol": "600003", "industry": "C", "prob_up": 0.62},
-                {"symbol": "600004", "industry": "D", "prob_up": 0.62},
-                {"symbol": "600005", "industry": "E", "prob_up": 0.70},
+                {"symbol": "600001", "prob_up": 0.70},  # 基准=(.70+.60)/2=.65
+                {"symbol": "600002", "prob_up": 0.60},  # 两种状态都过不了 prob 闸
             ]
         )
-        # 正常: 5 只全过绝对阈值 (0.62/0.70 > 0.60)
-        assert len(ListGenerator().emit(cands, market_state="range")["list"]) == 5
-        # bear: 仅 1 只过绝对阈值 (0.70 > 0.65, 其余 0.62 < 0.65)
-        bear_out = ListGenerator().emit(cands, market_state="bear")
-        assert not bear_out["empty"] and len(bear_out["list"]) == 1
+        # range: 0.70 > 0.65 → 过
+        assert len(ListGenerator().emit(cands, market_state="range")["list"]) == 1
+        # bear: 0.70 < 0.65×(0.65/0.60)≈0.704 → 不过
+        assert ListGenerator().emit(cands, market_state="bear")["empty"]
+
+    def test_bear_requires_positive_1d(self):
+        """bear 下 compound>0 但 pred_1d<0 也被剔 (最近端净预期必须为正)."""
+        cands = _cands(
+            [
+                {
+                    "symbol": "600001",
+                    "prob_up": 0.90,  # 远高于 bear 收紧后基准
+                    "pred_ret_1d": -0.005,
+                    "pred_ret_3d": 0.05,
+                    "pred_ret_5d": 0.08,
+                },
+                {"symbol": "600002", "prob_up": 0.50},
+            ]
+        )
+        # range: compound = -.0025+.0175+.012 = .027 > 0 → 过
+        assert len(ListGenerator().emit(cands, market_state="range")["list"]) == 1
+        # bear: pred_1d < 0 → 剔
+        assert ListGenerator().emit(cands, market_state="bear")["empty"]
 
 
 class TestScorePainPenalty:
@@ -338,7 +358,9 @@ class TestDistributionWeights:
         return _cands(rows)
 
     def test_uncertainty_damps_weight(self):
-        out = ListGenerator().emit(self._dist_cands())
+        # escape hatch: 权重测试与准入闸无关, 跳过闸门 (GATE_OFF)
+        gen = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0)
+        out = gen.emit(self._dist_cands())
         w = out["list"].set_index("symbol")["weight"]
         assert w["609999"] < w.drop("609999").min()
 
@@ -346,7 +368,8 @@ class TestDistributionWeights:
         # 5 只等原始权重: 每只 raw 权重 0.2 → clip 至 0.10, 不再归一 (余下留现金)
         cands = _cands([{"symbol": f"6000{i:02d}"} for i in range(5)])
         cands["industry"] = ["白酒", "电池", "保险", "半导体", "白酒"]
-        out = ListGenerator().emit(cands)
+        gen = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0)  # 跳过闸门
+        out = gen.emit(cands)
         assert (out["list"]["weight"] <= 0.10 + 1e-4).all()  # 单票上限
         assert out["list"]["weight"].sum() == pytest.approx(0.5, abs=0.01)
 

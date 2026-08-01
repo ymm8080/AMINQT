@@ -452,6 +452,25 @@ def run_tune(req: TuneRequest) -> dict:
 
 
 # ============================================================
+# E7 闸门方案对比 (真实数据回放, scripts/eval_gate_options.py 产出)
+# ============================================================
+@router.get("/backtest/gate-eval")
+def get_gate_eval() -> dict:
+    """最新一期闸门方案对比报告 (WORM: data/backtest_reports/gate_eval_*.json)."""
+    import glob
+    import json
+    import os
+
+    files = sorted(
+        glob.glob(os.path.join("data", "backtest_reports", "gate_eval_*.json"))
+    )
+    if not files:
+        return {"exists": False}
+    with open(files[-1], encoding="utf-8") as fh:
+        return {"exists": True, "path": files[-1], **json.load(fh)}
+
+
+# ============================================================
 # 规则参数 / 调参报告
 # ============================================================
 @router.get("/config/rules")

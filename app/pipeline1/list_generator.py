@@ -274,43 +274,65 @@ class ListGenerator:
         market_state: str = "range",
         cost: float | None = None,
     ) -> pd.DataFrame:
-        """[E7] 动态准入过滤.
+        """[E7] 计算型准入过滤 (2026-07-26 用户裁决: 门槛由数据算出, 不设绝对常数).
+
+        老常数闸 (prob>=entry_prob 且 pred_ret_1d>=mult*COST) 在净收益标签口径下
+        82/82 天全不可达 (成本双算 + Huber 收缩), 评估见 scripts/eval_gate_options.py.
+        新闸 (全部基于当日预测数据计算):
+          1. prob_up > base_rate (B4 20日滚动基准率; bear 按 entry_prob_bear/
+             entry_prob 参数比率收紧, 不引入新常数)
+          2. compound_ret (1d/3d/5d 净预测按 COMPOUND_W 加权) > 0 — 净预期为正,
+             成本已在训练标签口径内扣除
+          3. pred_q50 > 0 (E1 分布中位数也为正; 列存在时)
+          4. bear 额外要求 pred_ret_1d > 0 (最近端净预期为正) [E11]
+        符合票可能为 0 — 这是特性不是故障.
+        escape hatch (测试/研究): entry_prob<=0 跳过 prob 闸, entry_ret_mult<=0 跳过边际闸.
 
         Args:
-            df: compute_scores 输出 (含 score, prob_up, pred_ret_1d)
+            df: compute_scores 输出 (含 score, prob_up, pred_ret_1d, base_rate, compound_ret)
             market_state: 'range' / 'bear'
-            cost: 交易成本; None → 自动估计
-
-        Returns:
-            过滤后的 DataFrame (entry_prob 松绑, 关注 score 排名)
+            cost: 交易成本 (保留签名兼容; 计算闸不直接使用绝对成本阈值)
         """
         if len(df) == 0:
             return df
-        cost = cost if cost is not None else self._estimate_cost(df)
-        # 准入门槛 (E7 §1): prob_up > entry_prob 且 pred_ret_1d > mult × cost
-        # [E11] Bear 模式收紧
+        # cost 仅用于兼容旧调用方; 计算闸不再设绝对成本倍数门槛
+        if cost is None:
+            self._estimate_cost(df)
         is_bear = market_state == "bear"
-        prob_thresh = self.entry_prob_bear if is_bear else self.entry_prob
-        ret_mult = self.entry_ret_mult_bear if is_bear else self.entry_ret_mult
-        ret_thresh = ret_mult * cost
-        passed = (df["prob_up"] >= prob_thresh) & (df["pred_ret_1d"] >= ret_thresh)
-        # 如果绝对阈值过滤后不足 3 只, 回退取 prob_up + pred_ret_1d 前 80% 分位
-        if passed.sum() < 3:
-            pctile_prob = float(df["prob_up"].quantile(self._prob_pctile))
-            pctile_ret = float(df["pred_ret_1d"].quantile(self._prob_pctile))
-            passed = (df["prob_up"] >= pctile_prob) & (df["pred_ret_1d"] >= pctile_ret)
-            logger.info(
-                "E7 准入回退: prob_up 前 %.0f%% (%.4f) + pred_ret_1d 前 %.0f%% (%.4f), %d 只通过",
-                self._prob_pctile * 100,
-                pctile_prob,
-                self._prob_pctile * 100,
-                pctile_ret,
-                int(passed.sum()),
+        ok = pd.Series(True, index=df.index)
+        # 1. prob_up > base_rate (bear 按声明参数比率收紧, 无新常数)
+        if self.entry_prob > 0:
+            base = (
+                df["base_rate"] if "base_rate" in df.columns else df["prob_up"].mean()
             )
+            ratio = self.entry_prob_bear / self.entry_prob if is_bear else 1.0
+            ok &= df["prob_up"] > base * ratio
+        # 2/3/4. 净预期为正 (compound_ret > 0; pred_q50 > 0; bear 额外 pred_ret_1d > 0)
+        if self.entry_ret_mult > 0:
+            if "compound_ret" in df.columns:
+                compound = df["compound_ret"]
+            else:
+                w1, w3, w5 = COMPOUND_W
+                compound = (
+                    w1 * df["pred_ret_1d"]
+                    + w3 * df["pred_ret_3d"]
+                    + w5 * df["pred_ret_5d"]
+                )
+            ok &= compound > 0
+            if "pred_q50" in df.columns and df["pred_q50"].notna().any():
+                ok &= df["pred_q50"].fillna(compound) > 0
+            if is_bear:
+                ok &= df["pred_ret_1d"] > 0
         # [E2] 痛苦预警: pain_prob > 0.5 直接剔除 (安全网 #16)
         if "pain_prob" in df.columns:
-            passed &= df["pain_prob"].fillna(0) <= 0.5
-        return df[passed].copy()
+            ok &= df["pain_prob"].fillna(0) <= 0.5
+        passed = df[ok]
+        if len(passed) == 0:
+            logger.warning(
+                "E7 计算型准入: 0 只过闸 (prob>基准率%s, 净预期>0), 今日空清单",
+                "×bear收紧" if is_bear else "",
+            )
+        return passed.copy()
 
     # ---------------- 最终清单 ---------------
     def emit(
