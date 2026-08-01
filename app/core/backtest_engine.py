@@ -83,6 +83,10 @@ class BacktestEngine:
         self.ctrl_col = self.config.get("ctrl_col", "ctrl_ratio")
         self.ctrl_rising_col = self.config.get("ctrl_rising_col", "ctrl_weekly_rising")
         self.execution = self.config.get("execution", "close")
+        # 交易成本: 佣金(双向) + 印花税(卖出) + 滑点(双向)
+        self.commission_rate = float(self.config.get("commission_rate", 0.00025))
+        self.stamp_tax_rate = float(self.config.get("stamp_tax_rate", 0.0005))
+        self.slippage_rate = float(self.config.get("slippage_rate", 0.001))
         self.targets: dict[str, float] = self.config.get("targets", {})
         logger.info(
             "BacktestEngine 初始化: holding_days=%d, execution=%s",
@@ -157,6 +161,25 @@ class BacktestEngine:
             "sharpe": float(np.nan_to_num(sharpe, nan=0.0)),
             "max_drawdown": max_drawdown,
         }
+
+    def _cost_per_trade(self, side: str) -> float:
+        """单次交易成本 (买入/卖出).
+
+        Args:
+            side: "buy" or "sell".
+
+        Returns:
+            Total cost as a fraction of notional.
+        """
+        cost = self.commission_rate + self.slippage_rate
+        if side == "sell":
+            cost += self.stamp_tax_rate
+        return cost
+
+    def _apply_costs(self, raw_ret: pd.Series) -> pd.Series:
+        """从原始前向收益中扣除买卖双向交易成本."""
+        round_trip = self._cost_per_trade("buy") + self._cost_per_trade("sell")
+        return raw_ret - round_trip
 
     @staticmethod
     def _ic_series(panel: pd.DataFrame, factor_col: str) -> pd.Series:

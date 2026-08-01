@@ -31,6 +31,7 @@ from app.pipeline1.feature_selector import (
     dedup_l2,
     gate_d_ablation,
 )
+from config.settings import data_others_path
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -38,6 +39,7 @@ logging.basicConfig(
 logger = logging.getLogger("select_features")
 
 REGISTRY_DIR = "data/factor_registry"
+REGISTRY_JSON_DIR = str(data_others_path("data/factor_registry"))
 
 
 def find_latest_features(board):
@@ -95,7 +97,7 @@ def load_panel_for_board(board, features_path):
 
 def run_selection(df, board, label, dry_run=False):
     """Run feature selection. MAIN: uses sampled df from load_panel_for_board."""
-    FeatureSelector(registry_dir=REGISTRY_DIR)
+    FeatureSelector(registry_dir=REGISTRY_JSON_DIR)
     t0 = time.time()
 
     if board == "main":
@@ -149,12 +151,12 @@ def run_selection(df, board, label, dry_run=False):
 
 
 def cmd_status(board):
-    sel = FeatureSelector(registry_dir=REGISTRY_DIR)
+    sel = FeatureSelector(registry_dir=REGISTRY_JSON_DIR)
     print(json.dumps(sel.get_status(board), indent=2, ensure_ascii=False))
 
 
 def cmd_history(board):
-    sel = FeatureSelector(registry_dir=REGISTRY_DIR)
+    sel = FeatureSelector(registry_dir=REGISTRY_JSON_DIR)
     versions = sel.list_versions(board)
     current = None
     try:
@@ -186,7 +188,7 @@ def cmd_update(board, dry_run=False, draft_only=False, yes=False):
             print("Sample:", result["features"][:10])
         return
 
-    sel = FeatureSelector(registry_dir=REGISTRY_DIR)
+    sel = FeatureSelector(registry_dir=REGISTRY_JSON_DIR)
     try:
         current = sel.load_current(board)
         diff = sel.diff_versions(current.get("features", []), selected)
@@ -225,7 +227,7 @@ def cmd_update(board, dry_run=False, draft_only=False, yes=False):
 
 
 def cmd_keep(board):
-    sel = FeatureSelector(registry_dir=REGISTRY_DIR)
+    sel = FeatureSelector(registry_dir=REGISTRY_JSON_DIR)
     try:
         s = sel.get_status(board)
         print(
@@ -236,7 +238,7 @@ def cmd_keep(board):
 
 
 def cmd_rollback(board, version_id):
-    FeatureSelector(registry_dir=REGISTRY_DIR).rollback(board, version_id)
+    FeatureSelector(registry_dir=REGISTRY_JSON_DIR).rollback(board, version_id)
     print(f"Rolled back {board} to {version_id}")
 
 

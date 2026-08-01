@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Show latest prediction data from predictions.db"""
 import sqlite3
+import os
 
-conn = sqlite3.connect("data/predictions.db")
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+from config.settings import data_others_path  # noqa: E402
+
+conn = sqlite3.connect(str(data_others_path("data/predictions.db")))
 conn.row_factory = sqlite3.Row
 
 # Latest runs

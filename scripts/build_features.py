@@ -29,6 +29,7 @@ from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.feature_selector import BruteForceGenerator
 from app.pipeline1.feature_registry import FeatureRegistry
 from app.pipeline1.train_runner import prepare_board_frame
+from config.settings import data_others_path
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -36,8 +37,10 @@ logging.basicConfig(
 logger = logging.getLogger("build_features")
 
 REGISTRY_DIR = "data/factor_registry"
+REGISTRY_JSON_DIR = str(data_others_path("data/factor_registry"))
 PANEL_PATH = "data/panel_full_enriched_v3.parquet"
 os.makedirs(REGISTRY_DIR, exist_ok=True)
+os.makedirs(REGISTRY_JSON_DIR, exist_ok=True)
 
 
 def load_panel(window=None):
@@ -59,7 +62,7 @@ def get_default_window(board):
 
 def step1_update_registry(panel):
     """Sync registry with panel: add new columns, mark removed columns."""
-    reg_path = os.path.join(REGISTRY_DIR, "feature_registry.json")
+    reg_path = os.path.join(REGISTRY_JSON_DIR, "feature_registry.json")
     registry = FeatureRegistry(path=reg_path)
 
     # Auto-seed if empty
@@ -139,7 +142,7 @@ def step1_update_registry(panel):
 
     registry.save()
     ts = datetime.now().strftime("%Y%m%dT%H%M%S")
-    reg_out = os.path.join(REGISTRY_DIR, f"registry_{ts}.json")
+    reg_out = os.path.join(REGISTRY_JSON_DIR, f"registry_{ts}.json")
     registry._save_as(reg_out)
 
     logger.info(f"Registry updated: +{added} added, -{removed} removed -> {reg_out}")

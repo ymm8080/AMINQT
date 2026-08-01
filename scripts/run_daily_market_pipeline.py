@@ -45,6 +45,7 @@ load_dotenv()
 from app.pipeline1.data_supply import DataSupplyChain, _with_timeout  # noqa: E402
 from app.core.config_loader import load_config  # noqa: E402
 from app.pipeline1.backup import backup_keepers  # noqa: E402
+from config.settings import data_others_path  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -240,7 +241,7 @@ def fetch_market_data(trade_date: str, refresh: bool = False) -> dict:
 
 def write_log(trade_date: str, results: dict, elapsed_total: float) -> None:
     """写日志到 data/daily_market_log_YYYYMMDD.md (WORM: 不覆盖)."""
-    log_path = ROOT / "data" / f"daily_market_log_{trade_date}.md"
+    log_path = Path(data_others_path("data")) / f"daily_market_log_{trade_date}.md"
     lines = [
         f"# Daily Market Pipeline - {trade_date}",
         "",
@@ -260,8 +261,8 @@ def write_log(trade_date: str, results: dict, elapsed_total: float) -> None:
     lines.append("")
 
     # WORM: 已存在则追加, 不覆盖
-    "a" if log_path.exists() else "w"
-    with open(log_path, "w", encoding="utf-8") as f:
+    mode = "a" if log_path.exists() else "w"
+    with open(log_path, mode, encoding="utf-8") as f:
         f.write("\n".join(lines))
     logger.info("Log written: %s", log_path)
 

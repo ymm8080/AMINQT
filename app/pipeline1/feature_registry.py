@@ -22,6 +22,8 @@ from datetime import datetime
 
 import pandas as pd
 
+from config.settings import data_others_path
+
 logger = logging.getLogger(__name__)
 
 # ── Registry JSON schema version ──
@@ -98,7 +100,10 @@ NON_FEATURE_COLS = {
 class FeatureRegistry:
     """特征注册中心 — 单一真源, 驱动 FeatureEngine 门控 + 自动采纳."""
 
-    def __init__(self, path: str = "data/factor_registry/feature_registry.json"):
+    def __init__(
+        self,
+        path: str = str(data_others_path("data/factor_registry/feature_registry.json")),
+    ):
         self.path = path
         self._data: dict = {
             "version": SCHEMA_VERSION,

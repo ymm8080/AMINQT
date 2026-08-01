@@ -41,6 +41,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.pipeline1.dual_track_trainer import DualTrackTrainer
 from app.pipeline1.predict_runner import find_bundles, run_prediction
 from app.pipeline1.checkpoint import PipelineState
+from config.settings import data_others_path
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -48,6 +49,7 @@ logging.basicConfig(
 logger = logging.getLogger("train_predict_main")
 
 REGISTRY_DIR = Path("data/factor_registry")
+REGISTRY_JSON_DIR = Path(data_others_path("data/factor_registry"))
 MODEL_DIR = Path("models/pipeline1")
 PANEL_PATH = Path("data/panel_full_enriched_v3.parquet")
 
@@ -84,7 +86,7 @@ def _log_memory(tag: str = "") -> None:
 def find_latest_selection(board: str) -> str:
     """Find the latest Layer2 selected_features.json for a board."""
     sel_files = sorted(
-        glob.glob(str(REGISTRY_DIR / f"selected_{board}_20*.json")),
+        glob.glob(str(REGISTRY_JSON_DIR / f"selected_{board}_20*.json")),
         reverse=True,
     )
     if not sel_files:

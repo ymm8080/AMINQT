@@ -35,6 +35,7 @@ from dotenv import load_dotenv  # noqa: E402
 load_dotenv()
 
 from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
+from config.settings import data_others_path  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -150,7 +151,7 @@ def _fetch_anns_d(supply: DataSupplyChain, trade_date: str, refresh: bool):
 
 def write_log(target_date: str, results: dict, elapsed_total: float) -> None:
     """写日志到 data/announcement_log_YYYYMMDD.md (WORM: 不覆盖)."""
-    log_path = ROOT / "data" / f"announcement_log_{target_date}.md"
+    log_path = Path(data_others_path("data")) / f"announcement_log_{target_date}.md"
     lines = [
         f"# Announcement Pipeline - {target_date}",
         "",

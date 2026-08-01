@@ -26,6 +26,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from config.settings import data_others_path
+
 logger = logging.getLogger(__name__)
 
 MODEL_KINDS = ("1d_reg", "1d_cls", "3d_reg", "5d_reg")
@@ -264,7 +266,7 @@ class PipelineState:
         ...
     """
 
-    STATE_DIR = "data/pipeline_state"
+    STATE_DIR = str(data_others_path("data/pipeline_state"))
 
     def __init__(self, run_name: str, tag: str = "", board: str = "main"):
         self.run_name = run_name

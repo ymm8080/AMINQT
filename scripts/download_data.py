@@ -1,8 +1,8 @@
+# -*- coding: utf-8 -*-
 """Phase 1 — Download daily K-line for the stock pool to data/raw/.
 
 Uses the configured data adapter (akshare by default; iFinD if creds set).
-Saves one CSV per symbol. Raw Chinese columns are preserved; data_loader
-canonicalizes them on read (PROMPT_CONTENT §1).
+Saves one Parquet per symbol with canonical English columns.
 """
 
 import logging
@@ -43,8 +43,8 @@ def main() -> int:
     for sym in settings.STOCK_LIST:
         try:
             df = adapter.fetch_daily(sym, start, end)
-            path = os.path.join(settings.RAW_DIR, f"{sym}.csv")
-            df.to_csv(path, index=False, encoding="utf-8-sig")
+            path = os.path.join(settings.RAW_DIR, f"{sym}.parquet")
+            df.to_parquet(path, index=False)
             logger.info("Saved %s → %s (%d rows)", sym, path, len(df))
             ok += 1
         except Exception as exc:  # noqa: BLE001

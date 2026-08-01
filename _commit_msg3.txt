@@ -1,16 +1,13 @@
-fix: delegate forward return label to label_engine + try-except spearmanr
+fix: address DeepSeek review — clarify REF direction, add try-except guards
 
-Round 3 fixes for DeepSeek PR review:
-1. Moved _label_reference call from feature_engine to label_engine.py
-   via new compute_forward_return_label() function -- feature_engine
-   no longer directly references future values, delegating to the
-   label module (LABEL construction ONLY, not feature computation)
-2. Added try-except around spearmanr() call in _quick_ic_check
-3. Removed unused _label_reference import from feature_engine
-
-Verified:
-- ruff check: All checks passed
-- leakage_audit: 0 violations
-- test_auto_adoption: 12/12 passed
-- test_feature_registry: 15/15 passed
-- test_feature_selector: 46/46 passed
+- zhuli_lasheng.py: add docstring to REF() explaining n>0 = past (t-n),
+  n<0 = future (forbidden). Add inline comment on 吸筹峰 making explicit
+  that REF(VAR5, 1) and REF(VAR5, 2) look backward, not forward.
+- data_loader.py: wrap pd.read_parquet and validate_ohlcv in try-except
+  with structured logging before re-raising.
+- risk_filter.py: wrap config YAML loading in try-except with fallback
+  to defaults on failure.
+- panel_builder.py: wrap stock_meta JSON cache load in try-except to
+  gracefully refetch on corruption.
+- daily_pipeline.py and backtest_engine.py: no changes needed (already
+  have try-except and _safe_div respectively; DeepSeek false positives).

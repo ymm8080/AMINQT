@@ -56,6 +56,16 @@ class TestZhuliLasheng:
         df = zhuli_lasheng(make_ohlc())
         assert isinstance(had_accumulation_peak(df, 20), bool)
 
+    def test_accumulation_peak_is_causal(self):
+        """吸筹峰 必须仅依赖历史数据（无未来函数）."""
+        full = zhuli_lasheng(make_ohlc())
+        for i in range(20, len(full)):
+            partial = full.iloc[: i + 1][
+                ["open", "high", "low", "close", "volume"]
+            ].copy()
+            ref = zhuli_lasheng(partial)
+            assert ref["吸筹峰"].iloc[-1] == full["吸筹峰"].iloc[i]
+
 
 class TestYimengDingdi:
     def test_three_lines_and_feed(self):

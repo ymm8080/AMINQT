@@ -12,18 +12,16 @@ import os
 import numpy as np
 import yaml
 
+from config.settings import PROJECT_ROOT, data_others_path
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    PROJECT_ROOT,
     "config",
     "adaptive_config.yaml",
 )
-DEFAULT_STATE_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data",
-    "adaptive_state.json",
-)
+DEFAULT_STATE_PATH = str(data_others_path("data/adaptive_state.json"))
 
 # 单次调整步长占边界区间宽度的比例
 _STEP_FRACTION = 0.10

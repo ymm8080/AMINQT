@@ -1,14 +1,19 @@
+# -*- coding: utf-8 -*-
 """M3 — Executor interface + execution-mode toggle.
 
 Two modes (settings.ExecutionMode):
   AUTO   (granted): orders sent to broker directly.
   MANUAL (pop-up):  only emit a recommendation; user must confirm.
+
+AUTO orders must carry market metadata (amount, pct_change) so the hard-constraint
+risk filter can run. Missing metadata in AUTO mode is rejected (fail-safe).
 """
 
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 
+from app.core import risk_filter
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -22,10 +27,15 @@ class Order:
     side: str  # "buy" | "sell"
     qty: int
     price: float | None = None  # None → market price
+    # Market metadata required for AUTO-mode risk-filter gate.
+    amount: float | None = None
+    pct_change: float | None = None
+    is_st: bool = False
+    list_days: int | None = None
 
 
 class Executor(ABC):
-    """Abstract broker executor with mode toggle."""
+    """Abstract broker executor with mode toggle and risk-filter gate."""
 
     mode: settings.ExecutionMode = settings.EXECUTION_MODE
 
@@ -40,7 +50,7 @@ class Executor(ABC):
             order: The Order to act on.
 
         Returns:
-            dict describing what happened (executed vs recommended).
+            dict describing what happened (executed vs recommended vs rejected).
         """
         if self.mode is settings.ExecutionMode.MANUAL:
             logger.info(
@@ -55,6 +65,42 @@ class Executor(ABC):
                 "recommendation": asdict(order),
                 "executed": False,
             }
+
+        # AUTO mode: hard-constraint risk filter gate.
+        if order.amount is None or order.pct_change is None:
+            logger.error(
+                "[AUTO] reject %s %s: missing amount/pct_change metadata",
+                order.side,
+                order.symbol,
+            )
+            return {
+                "mode": "auto",
+                "executed": False,
+                "reason": "missing_risk_metadata",
+            }
+
+        candidate = {
+            "symbol": order.symbol,
+            "score": 1.0,
+            "amount": order.amount,
+            "pct_change": order.pct_change,
+            "is_st": order.is_st,
+            "list_days": order.list_days,
+        }
+        if not risk_filter.apply_filters([candidate], account_drawdown_pct=0.0):
+            logger.warning(
+                "[AUTO] risk_filter reject %s %s (amount=%s pct_change=%s)",
+                order.side,
+                order.symbol,
+                order.amount,
+                order.pct_change,
+            )
+            return {
+                "mode": "auto",
+                "executed": False,
+                "reason": "risk_filter_rejected",
+            }
+
         logger.info("[AUTO] submit: %s %s %d", order.side, order.symbol, order.qty)
         return {"mode": "auto", "result": self._place(order), "executed": True}
 

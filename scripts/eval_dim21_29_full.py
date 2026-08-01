@@ -28,6 +28,8 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from config.settings import data_others_path
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -38,8 +40,8 @@ logger = logging.getLogger(__name__)
 # Config
 # ──────────────────────────────────────────────
 PANEL_PATH = "data/panel_full_enriched_v3.parquet"
-OUTPUT_DIR = "data/factor_registry"
-EVAL_LOG_PATH = "data/feature_evaluation_log.json"
+OUTPUT_DIR = str(data_others_path("data/factor_registry"))
+EVAL_LOG_PATH = str(data_others_path("data/feature_evaluation_log.json"))
 
 # Rank IC 参数
 MIN_X_UNIQUE = 5

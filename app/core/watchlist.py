@@ -11,14 +11,12 @@ import logging
 import os
 from datetime import date, datetime
 
+from config.settings import data_others_path
+
 logger = logging.getLogger(__name__)
 
 # 默认存储路径
-DEFAULT_WATCHLIST_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data",
-    "watchlist.json",
-)
+DEFAULT_WATCHLIST_PATH = str(data_others_path("data/watchlist.json"))
 
 
 class WatchlistManager:
