@@ -8,6 +8,7 @@
 
 import logging
 from dataclasses import dataclass, field
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -84,9 +85,9 @@ class BacktestEngine:
         self.ctrl_rising_col = self.config.get("ctrl_rising_col", "ctrl_weekly_rising")
         self.execution = self.config.get("execution", "close")
         # 交易成本: 佣金(双向) + 印花税(卖出) + 滑点(双向)
-        self.commission_rate = float(self.config.get("commission_rate", 0.00025))
-        self.stamp_tax_rate = float(self.config.get("stamp_tax_rate", 0.0005))
-        self.slippage_rate = float(self.config.get("slippage_rate", 0.001))
+        self.commission_rate = Decimal(str(self.config.get("commission_rate", 0.00025)))
+        self.stamp_tax_rate = Decimal(str(self.config.get("stamp_tax_rate", 0.0005)))
+        self.slippage_rate = Decimal(str(self.config.get("slippage_rate", 0.001)))
         self.targets: dict[str, float] = self.config.get("targets", {})
         logger.info(
             "BacktestEngine 初始化: holding_days=%d, execution=%s",
@@ -126,6 +127,8 @@ class BacktestEngine:
             d["symbol"] = symbol
             # 标签: holding_days 日前向收益 (使用 close_hfq 含分红总回报, 缺省回退 close)
             d["fwd_ret"] = d[close_col].shift(-self.holding_days) / d[close_col] - 1.0
+            # 扣除买卖双向交易成本后的净收益 (仅用于组合收益计算)
+            d["net_fwd_ret"] = self._apply_costs(d["fwd_ret"])
             if self.signal_col in d.columns:
                 d["_signal"] = d[self.signal_col].fillna(False).astype(bool)
             elif self.score_col in d.columns:
@@ -162,7 +165,7 @@ class BacktestEngine:
             "max_drawdown": max_drawdown,
         }
 
-    def _cost_per_trade(self, side: str) -> float:
+    def _cost_per_trade(self, side: str) -> Decimal:
         """单次交易成本 (买入/卖出).
 
         Args:
@@ -179,7 +182,7 @@ class BacktestEngine:
     def _apply_costs(self, raw_ret: pd.Series) -> pd.Series:
         """从原始前向收益中扣除买卖双向交易成本."""
         round_trip = self._cost_per_trade("buy") + self._cost_per_trade("sell")
-        return raw_ret - round_trip
+        return raw_ret - float(round_trip)
 
     @staticmethod
     def _ic_series(panel: pd.DataFrame, factor_col: str) -> pd.Series:
@@ -248,8 +251,9 @@ class BacktestEngine:
             return result
 
         # 组合日收益: 信号股前向收益等权均值 (无信号日收益 0)
+        # 使用扣除交易成本后的净收益; IC/ctrl 分析仍使用原始 fwd_ret 标签
         signaled = panel[panel["_signal"]]
-        daily_ret = signaled.groupby("date")["fwd_ret"].mean()
+        daily_ret = signaled.groupby("date")["net_fwd_ret"].mean()
         all_dates = pd.Series(panel["date"].unique())
         daily_ret = daily_ret.reindex(all_dates, fill_value=0.0)
         metrics = self._portfolio_metrics(daily_ret)

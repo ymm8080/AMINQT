@@ -31,6 +31,7 @@ class QuantileModelSet:
 
     def __init__(self, base_params: dict | None = None):
         self.base_params = dict(base_params or {})
+        self.base_params.setdefault("random_state", 42)
         self.models: dict[float, object] = {}
         self._iso = IsotonicRegression(increasing=True, out_of_bounds="clip")
 
@@ -91,6 +92,7 @@ class PainModel:
 
     def __init__(self, base_params: dict | None = None):
         self.base_params = dict(base_params or {})
+        self.base_params.setdefault("random_state", 42)
         self.model = None
 
     def fit(

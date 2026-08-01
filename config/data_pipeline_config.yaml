@@ -19,3 +19,46 @@ backup:
     - data/panel_18m.parquet
     - data/panel_baostock.parquet
     - data/factor_registry/features_main_*.parquet
+
+# 数据供应链参数 (app/pipeline1/data_supply.py)
+data_supply:
+  fetch_timeout: 120                 # 单源单股拉取硬超时 (秒)
+  fetch_retry_interval: 60           # 源失败后重试间隔 (秒)
+  fetch_max_retries: 10              # 最大重试次数
+  max_consecutive_fails: 3           # 历史源连续失败 N 次后判不可用
+  backfill_min_days: 1250            # 回填最小交易日数 (约 5 年)
+  backfill_throttle: 0.5             # 回填逐股间隔 (秒)
+  cyq_throttle: 0.3                  # cyq_perf 批量逐股间隔 (秒)
+  margin_bulk_min_dates: 100         # margin 区间查询至少返回天数, 不足则补采
+  margin_date_step: 5                # margin 区间补采步长 (交易日)
+  margin_date_fallback_step: 2       # margin 异常兜底补采步长
+  margin_page_size: 3000             # stk_holdertrade 分页大小
+  margin_page_sleep: 0.3             # 分页间限流 (秒)
+  sector_index_max_workers: 4        # 申万行业指数并发数
+  sector_index_fetch_timeout: 60     # 单个行业指数拉取超时 (秒)
+  ak_call_retries: 3                 # akshare 调用重试次数
+  ak_call_backoff: 2.0               # akshare 退避基数 (秒)
+  fetch_today_sources:               # fetch_today 默认拉取源
+    - ohlcv
+    - margin
+    - lhb
+
+# 面板装配参数 (app/pipeline1/panel_builder.py)
+panel_builder:
+  default_years: 3                   # 默认回看年数
+  panel_cache_dir: "data/processed"  # 面板缓存目录
+  enrich_workers: 4                  # 替代数据并发 worker 数
+  meta_fetch_sleep: 0.3              # 行业板块成分拉取间隔 (秒)
+  meta_max_consecutive_fail: 3       # 行业元数据连续失败阈值
+  progress_every_n: 10               # 进度文件写入间隔
+  progress_file: "data/enrich_progress.txt"
+  default_alt_sources:               # enrich_alt_data 默认数据源
+    - lhb
+    - holdertrade
+    - sector_index
+    - margin
+    - fina_indicator
+    - holdernumber
+    - daily_basic
+    - stk_limit
+    - cyq_tushare

@@ -29,6 +29,7 @@ import pandas as pd
 
 from config.settings import data_others_path
 
+from app.core.config_loader import load_config
 from app.core.universe_manager import name_is_st
 
 from .cleaning_pipeline import board_of
@@ -36,8 +37,33 @@ from .data_supply import DataSupplyChain, _ak_call
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_YEARS = 3  # 用户裁决 (2026-07-26): 训练数据取最近 3 年
-PANEL_CACHE_DIR = os.path.join("data", "processed")
+_PB_CFG = load_config("data_pipeline_config").get("panel_builder", {})
+
+DEFAULT_YEARS = int(_PB_CFG.get("default_years", 3))
+PANEL_CACHE_DIR = _PB_CFG.get("panel_cache_dir", os.path.join("data", "processed"))
+_ENRICH_WORKERS = int(
+    os.environ.get("ENRICH_WORKERS", _PB_CFG.get("enrich_workers", 4))
+)
+_META_FETCH_SLEEP = float(_PB_CFG.get("meta_fetch_sleep", 0.3))
+_META_MAX_CONSECUTIVE_FAIL = int(_PB_CFG.get("meta_max_consecutive_fail", 3))
+_PROGRESS_EVERY_N = int(_PB_CFG.get("progress_every_n", 10))
+_PROGRESS_FILE = _PB_CFG.get("progress_file", "data/enrich_progress.txt")
+_DEFAULT_ALT_SOURCES = list(
+    _PB_CFG.get(
+        "default_alt_sources",
+        [
+            "lhb",
+            "holdertrade",
+            "sector_index",
+            "margin",
+            "fina_indicator",
+            "holdernumber",
+            "daily_basic",
+            "stk_limit",
+            "cyq_tushare",
+        ],
+    )
+)
 
 
 def load_or_fetch_meta(
@@ -79,11 +105,11 @@ def load_or_fetch_meta(
         except Exception as exc:  # 单板块失败跳过; 连续失败=IP 被封, 放弃本次
             consecutive_fail += 1
             logger.warning("行业板块 %s 成分拉取失败: %s", board, exc)
-            if consecutive_fail >= 3:
+            if consecutive_fail >= _META_MAX_CONSECUTIVE_FAIL:
                 raise RuntimeError(
                     f"东财连续 {consecutive_fail} 板块拉取失败 (疑似封 IP), 放弃元数据"
                 ) from exc
-        time.sleep(0.3)
+        time.sleep(_META_FETCH_SLEEP)
         if (i + 1) % 30 == 0:
             logger.info("行业元数据进度: %d/%d 板块", i + 1, len(boards))
 
@@ -179,7 +205,7 @@ def _parallel_fetch(
     *,
     workers: int = _ENRICH_WORKERS,
     desc: str = "",
-    progress_file: str | None = None,
+    progress_file: str | None = str(data_others_path(_PROGRESS_FILE)),
     unpack: bool = True,
 ) -> list:
     """Run fn(item) or fn(*item) over items with ThreadPoolExecutor.
@@ -210,7 +236,7 @@ def _parallel_fetch(
         finally:
             with lock:
                 completed += 1
-                if progress_file and completed % 10 == 0:
+                if progress_file and completed % _PROGRESS_EVERY_N == 0:
                     elapsed = time.time() - t0
                     rate = completed / elapsed if elapsed > 0 else 0
                     eta = (total - completed) / rate if rate > 0 else 0
@@ -271,18 +297,7 @@ def enrich_alt_data(
         merge 后的面板 (新增各数据源的特征列)
     """
     if sources is None:
-        sources = [
-            # northbound 已移除 — 港交所 2024-08-20 停止日度披露
-            "lhb",
-            "holdertrade",
-            "sector_index",
-            "margin",
-            "fina_indicator",
-            "holdernumber",
-            "daily_basic",
-            "stk_limit",
-            "cyq_tushare",
-        ]
+        sources = list(_DEFAULT_ALT_SOURCES)
 
     if start_date is None:
         start_date = panel["date"].min().strftime("%Y%m%d")
@@ -339,7 +354,7 @@ def enrich_alt_data(
                     _fetch_one_fina,
                     symbols,
                     desc="fina",
-                    progress_file=str(data_others_path("data/enrich_progress.txt")),
+                    progress_file=None,
                 )
                 if frames:
                     df = pd.concat(frames, ignore_index=True)
@@ -404,7 +419,7 @@ def enrich_alt_data(
                     _fetch_one_holder,
                     symbols,
                     desc="holdernumber",
-                    progress_file=str(data_others_path("data/enrich_progress.txt")),
+                    progress_file=None,
                 )
                 if frames:
                     df = pd.concat(frames, ignore_index=True)
@@ -530,7 +545,7 @@ def enrich_alt_data(
                     _fetch_one_date,
                     dates.tolist(),
                     desc="daily_basic",
-                    progress_file=str(data_others_path("data/enrich_progress.txt")),
+                    progress_file=None,
                 )
                 if frames:
                     df = pd.concat(frames, ignore_index=True)
@@ -561,7 +576,7 @@ def enrich_alt_data(
                     _fetch_one_limit_date,
                     dates.tolist(),
                     desc="stk_limit",
-                    progress_file=str(data_others_path("data/enrich_progress.txt")),
+                    progress_file=None,
                 )
                 if frames:
                     df = pd.concat(frames, ignore_index=True)
@@ -655,18 +670,7 @@ def assemble_panel(
         panel = enrich_alt_data(
             panel,
             supply,
-            sources=[
-                # northbound 已移除
-                "lhb",
-                "sector_index",
-                "margin",
-                "fina_indicator",
-                "holdernumber",
-                "holdertrade",
-                "daily_basic",
-                "stk_limit",
-                "cyq_tushare",
-            ],
+            sources=list(_DEFAULT_ALT_SOURCES),
             start_date=_start,
             end_date=end_str,
             refresh=refresh,

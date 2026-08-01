@@ -18,11 +18,35 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+from app.core.config_loader import load_config
+from config import settings
+
 logger = logging.getLogger(__name__)
 
-FETCH_TIMEOUT = 120  # 单源单股拉取硬超时 (秒) — 防接口挂起卡死整个回填
-FETCH_RETRY_INTERVAL = 60  # 源失败后重试间隔 (秒)
-FETCH_MAX_RETRIES = 10  # 最大重试次数 (10 × 60s = 10 分钟)
+_DS_CFG = load_config("data_pipeline_config").get("data_supply", {})
+
+FETCH_TIMEOUT = float(_DS_CFG.get("fetch_timeout", 120))
+FETCH_RETRY_INTERVAL = float(_DS_CFG.get("fetch_retry_interval", 60))
+FETCH_MAX_RETRIES = int(_DS_CFG.get("fetch_max_retries", 10))
+_AK_CALL_RETRIES = int(_DS_CFG.get("ak_call_retries", 3))
+_AK_CALL_BACKOFF = float(_DS_CFG.get("ak_call_backoff", 2.0))
+_MAX_CONSECUTIVE_FAILS = int(_DS_CFG.get("max_consecutive_fails", 3))
+_BACKFILL_MIN_DAYS = int(_DS_CFG.get("backfill_min_days", 1250))
+_BACKFILL_THROTTLE = float(_DS_CFG.get("backfill_throttle", 0.5))
+_CYQ_THROTTLE = float(_DS_CFG.get("cyq_throttle", 0.3))
+_MARGIN_BULK_MIN_DATES = int(_DS_CFG.get("margin_bulk_min_dates", 100))
+_MARGIN_DATE_STEP = int(_DS_CFG.get("margin_date_step", 5))
+_MARGIN_DATE_FALLBACK_STEP = int(_DS_CFG.get("margin_date_fallback_step", 2))
+_MARGIN_PAGE_SIZE = int(_DS_CFG.get("margin_page_size", 3000))
+_MARGIN_PAGE_SLEEP = float(_DS_CFG.get("margin_page_sleep", 0.3))
+_SECTOR_INDEX_MAX_WORKERS = int(_DS_CFG.get("sector_index_max_workers", 4))
+_SECTOR_INDEX_FETCH_TIMEOUT = float(_DS_CFG.get("sector_index_fetch_timeout", 60))
+_FETCH_TODAY_SOURCES = list(
+    _DS_CFG.get(
+        "fetch_today_sources",
+        ["ohlcv", "margin", "lhb"],
+    )
+)
 
 
 def _with_timeout(fn, timeout: float = FETCH_TIMEOUT):
@@ -50,7 +74,13 @@ def _with_timeout(fn, timeout: float = FETCH_TIMEOUT):
     return box.get("value")
 
 
-def _ak_call(fn, *args, retries: int = 3, backoff: float = 2.0, **kwargs):
+def _ak_call(
+    fn,
+    *args,
+    retries: int = _AK_CALL_RETRIES,
+    backoff: float = _AK_CALL_BACKOFF,
+    **kwargs,
+):
     """akshare 调用重试 (东财接口频繁断连/限流, 指数退避)."""
     last: Exception | None = None
     for attempt in range(retries):
@@ -280,7 +310,9 @@ class DataSupplyChain:
         return df
 
     # ---------------- 历史数据: akshare 主源 + baostock 回退 ----------------
-    _MAX_CONSECUTIVE_FAILS = 3  # 连续失败 N 次才判定源不可用 (防单股缺失误杀全源)
+    _MAX_CONSECUTIVE_FAILS = (
+        _MAX_CONSECUTIVE_FAILS  # 连续失败 N 次才判定源不可用 (防单股缺失误杀全源)
+    )
 
     def _default_fetch_hist(self, symbol: str, start: str, end: str) -> pd.DataFrame:
         """历史日线多源级联: akshare(东财) → sina → baostock.
@@ -662,7 +694,7 @@ class DataSupplyChain:
         try:
             import tushare as ts
 
-            pro = ts.pro_api(os.environ.get("TUSHARE_TOKEN"))
+            pro = ts.pro_api(settings.TUSHARE_TOKEN)
             daily = pro.daily_basic(fields="ts_code,trade_date,pe_ttm,pb")
             daily = daily.rename(
                 columns={
@@ -756,7 +788,7 @@ class DataSupplyChain:
         symbols: list[str],
         start_date: str,
         end_date: str,
-        throttle: float = 0.3,
+        throttle: float = _CYQ_THROTTLE,
         refresh: bool = False,
     ) -> pd.DataFrame:
         """[B13] 批量拉取筹码分布, 逐股请求, 失败跳过 (不中断批次).
@@ -851,7 +883,7 @@ class DataSupplyChain:
 
     def _tushare_pro(self):
         """懒加载 Tushare pro_api; 仅从环境变量 TUSHARE_TOKEN 读取 (禁止文件存储凭据)."""
-        token = os.environ.get("TUSHARE_TOKEN")
+        token = settings.TUSHARE_TOKEN
         if not token:
             return None
         try:
@@ -1169,7 +1201,7 @@ class DataSupplyChain:
         end_date: str,
         frames: list,
         *,
-        step: int = 5,
+        step: int = _MARGIN_DATE_STEP,
     ) -> None:
         """逐日补采融资融券 (每 step 个交易日采样一次), 结果追加到 frames."""
         dates = pd.bdate_range(start=start_date, end=end_date)[::step]
@@ -1218,7 +1250,7 @@ class DataSupplyChain:
 
         pro = self._tushare_pro()
         frames: list[pd.DataFrame] = []
-        MIN_BULK_DATES = 100
+        MIN_BULK_DATES = _MARGIN_BULK_MIN_DATES
 
         if pro is not None:
             try:
@@ -1246,7 +1278,11 @@ class DataSupplyChain:
                                 MIN_BULK_DATES,
                             )
                             self._margin_date_loop(
-                                pro, start_date, end_date, frames, step=2
+                                pro,
+                                start_date,
+                                end_date,
+                                frames,
+                                step=_MARGIN_DATE_FALLBACK_STEP,
                             )
                     else:
                         self._margin_date_loop(
@@ -1261,7 +1297,13 @@ class DataSupplyChain:
                 logger.warning("Tushare margin_detail 失败: %s", exc)
                 # 区间查询抛异常时, 用逐日补采兜底
                 if not frames and start_date and end_date:
-                    self._margin_date_loop(pro, start_date, end_date, frames, step=2)
+                    self._margin_date_loop(
+                        pro,
+                        start_date,
+                        end_date,
+                        frames,
+                        step=_MARGIN_DATE_FALLBACK_STEP,
+                    )
 
         # AKShare 降级 — 沪市融资融券
         if not frames:
@@ -1741,7 +1783,7 @@ class DataSupplyChain:
                 if end_date:
                     kwargs["end_date"] = end_date
 
-                _PAGE_SIZE = 3000
+                _PAGE_SIZE = _MARGIN_PAGE_SIZE
                 all_pages: list[pd.DataFrame] = []
                 offset = 0
                 while True:
@@ -1753,7 +1795,7 @@ class DataSupplyChain:
                     if len(raw) < _PAGE_SIZE:
                         break
                     offset += _PAGE_SIZE
-                    time.sleep(0.3)  # 分页间限流
+                    time.sleep(_MARGIN_PAGE_SLEEP)  # 分页间限流
 
                 if all_pages:
                     raw = pd.concat(all_pages, ignore_index=True)
@@ -1921,11 +1963,11 @@ class DataSupplyChain:
                 return None
 
             items = list(SW_CODES.items())
-            with ThreadPoolExecutor(max_workers=4) as pool:
+            with ThreadPoolExecutor(max_workers=_SECTOR_INDEX_MAX_WORKERS) as pool:
                 futures = {pool.submit(_fetch_one_sw, item): item for item in items}
                 for future in as_completed(futures):
                     try:
-                        result = future.result(timeout=60)
+                        result = future.result(timeout=_SECTOR_INDEX_FETCH_TIMEOUT)
                         if result is not None:
                             frames.append(result)
                     except Exception:
@@ -2104,7 +2146,9 @@ class DataSupplyChain:
         return now_dt < deadline_dt
 
     # ---------------- [B11] OHLCV 回填 ----------------
-    BACKFILL_MIN_DAYS = 1250  # ≥5 年交易日 (特征预热期 250 日独立于训练窗口)
+    BACKFILL_MIN_DAYS = (
+        _BACKFILL_MIN_DAYS  # ≥5 年交易日 (特征预热期 250 日独立于训练窗口)
+    )
 
     def backfill_ohlcv(
         self,
@@ -2112,7 +2156,7 @@ class DataSupplyChain:
         years: int = 5,
         end: str | None = None,
         refresh: bool = False,
-        throttle: float = 0.5,
+        throttle: float = _BACKFILL_THROTTLE,
     ) -> pd.DataFrame:
         """[B11] OHLCV 回填 ≥5 年 (≥1250 交易日, akshare/Tushare, 不受 iFinD 3 年限制).
 
@@ -2280,7 +2324,7 @@ class DataSupplyChain:
         if trade_date is None:
             trade_date = datetime.now().strftime("%Y%m%d")
         if sources is None:
-            sources = ["ohlcv", "margin", "lhb"]  # northbound 已移除
+            sources = list(_FETCH_TODAY_SOURCES)
 
         today_data = self.fetch_today(trade_date=trade_date, sources=sources)
 

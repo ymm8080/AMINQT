@@ -67,6 +67,9 @@ DATA_SOURCE = os.getenv("AMINQT_DATA_SOURCE", "akshare")
 IFIND_USER = os.getenv("IFIND_USER", "")
 IFIND_PASSWORD = os.getenv("IFIND_PASSWORD", "")
 
+# Tushare token (env only)
+TUSHARE_TOKEN = os.getenv("TUSHARE_TOKEN", "")
+
 # ── Stock pool (5-symbol test set; expand later) ─────────────
 STOCK_LIST = ["000001", "000002", "600519", "000858", "600036"]
 

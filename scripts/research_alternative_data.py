@@ -37,6 +37,11 @@ import os
 import sys
 from dataclasses import dataclass
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
+
+from config import settings  # noqa: E402
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -308,7 +313,7 @@ def test_akshare_availability():
 
 def test_tushare_availability():
     """测试 Tushare 各接口可用性 (需 TUSHARE_TOKEN)."""
-    token = os.environ.get("TUSHARE_TOKEN")
+    token = settings.TUSHARE_TOKEN
     if not token:
         return {"_error": "TUSHARE_TOKEN 未配置"}
     results = {}

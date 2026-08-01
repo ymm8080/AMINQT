@@ -17,17 +17,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("holdertrade")
 
-# Load token
-with open(".env") as f:
-    for line in f:
-        line = line.strip()
-        if line.startswith("TUSHARE_TOKEN="):
-            os.environ["TUSHARE_TOKEN"] = line.split("=", 1)[1].strip()
-            break
-
 import tushare as ts
+from config import settings
 
-pro = ts.pro_api(os.environ["TUSHARE_TOKEN"])
+pro = ts.pro_api(settings.TUSHARE_TOKEN)
 
 CACHE_DIR = "data/supply_cache/alt_data"
 
