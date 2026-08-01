@@ -19,7 +19,11 @@ logger = logging.getLogger(__name__)
 
 def _risk_cfg() -> dict:
     """Load risk_filter block from selection_config.yaml with settings fallback."""
-    cfg = load_config("selection_config").get("risk_filter", {})
+    try:
+        cfg = load_config("selection_config").get("risk_filter", {})
+    except Exception as exc:
+        logger.warning("Failed to load selection_config.yaml: %s — using defaults", exc)
+        cfg = {}
     return {
         "min_amount": float(cfg.get("min_amount", settings.MIN_AMOUNT)),
         "price_limit_pct": float(cfg.get("price_limit_pct", settings.PRICE_LIMIT_PCT)),

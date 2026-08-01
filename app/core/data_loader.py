@@ -96,12 +96,21 @@ def load_parquet(symbol: str) -> pd.DataFrame:
             )
         raise FileNotFoundError(path)
 
-    df = pd.read_parquet(path)
+    try:
+        df = pd.read_parquet(path)
+    except Exception as exc:
+        logger.error("Failed to read Parquet %s: %s", path, exc)
+        raise
+
     df = df.rename(columns=CANONICAL_COLUMNS)
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
         df = df.sort_values("date").reset_index(drop=True)
-    validate_ohlcv(df)
+    try:
+        validate_ohlcv(df)
+    except ValueError as exc:
+        logger.error("OHLCV validation failed for %s: %s", symbol, exc)
+        raise
     logger.info("Loaded %s: %d rows, cols=%s", symbol, len(df), list(df.columns))
     return df
 

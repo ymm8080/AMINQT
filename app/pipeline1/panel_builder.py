@@ -55,9 +55,12 @@ def load_or_fetch_meta(
         )
     )
     if not refresh and os.path.exists(path):
-        with open(path, encoding="utf-8") as fh:
-            meta = json.load(fh)
-        return meta["industry_map"], meta["name_map"]
+        try:
+            with open(path, encoding="utf-8") as fh:
+                meta = json.load(fh)
+            return meta["industry_map"], meta["name_map"]
+        except (json.JSONDecodeError, KeyError, OSError) as exc:
+            logger.warning("stock_meta cache corrupted (%s): refetching", exc)
 
     import akshare as ak
 

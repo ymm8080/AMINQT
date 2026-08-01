@@ -35,6 +35,12 @@ def HHV(s: pd.Series, n: int) -> pd.Series:
 
 
 def REF(s: pd.Series, n: int) -> pd.Series:
+    """Shift series by n periods.
+
+    n > 0 → look backward (past data, t-n).
+    n < 0 → look forward (FUTURE DATA — forbidden by iron rule #1).
+    This function is NEVER called with negative n in this module.
+    """
     return s.shift(n)
 
 
@@ -84,7 +90,9 @@ def zhuli_lasheng(df: pd.DataFrame) -> pd.DataFrame:
     df["拉高"] = (VAR51 < REF(VAR51, 1)) & (VAR51 != 0)  # 黄柱
     df["出货"] = (VAR51 > REF(VAR51, 1)) & (REF(VAR51, 1) != 0)  # 白/灰柱
 
-    # ---- 吸筹峰：VAR5 局部最高点（仅使用 t/t-1/t-2，无未来函数）----
+    # ---- 吸筹峰：VAR5 局部最高点 ----
+    # REF(VAR5, n) = VAR5.shift(n) → n>0 means t-n (past), NOT future.
+    # Only uses t / t-1 / t-2; no t+k future data is referenced.
     df["吸筹峰"] = (VAR5 > 0) & (VAR5 >= REF(VAR5, 1)) & (VAR5 >= REF(VAR5, 2))
 
     # ---- 口诀信号：0轴上方死叉 + 出货柱 → 卖 ----
