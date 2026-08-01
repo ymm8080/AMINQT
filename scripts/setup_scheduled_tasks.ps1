@@ -3,13 +3,12 @@
     Register two scheduled tasks for AMINQT data pipelines.
 
 .DESCRIPTION
-    Pipeline 1: 22:00 daily (Asia/Shanghai) - market data (OHLCV, PE/PB, margin, northbound, lhb, stk_limit)
-    Pipeline 2: 22:00 daily (Asia/Shanghai) - announcement data (fina_indicator, holdertrade, holdernumber, anns_d)
-    两个管道统一在北京时间 22:00 运行 (2026-08-01 起): 行情数据 16:00 已结算完毕,
-    当日公告 22:00 基本发布完成 (公告脚本拉取当日+前日窗口).
+    Pipeline 1: 22:00 daily (Asia/Shanghai) - _daily_fetch.py (appends today's data to V3 panel)
+    Pipeline 2: 22:40 daily (Asia/Shanghai) - announcement data + V3 panel holdertrade update
+    Pipeline 2 必须在 Pipeline 1 之后运行 (依赖今日行已写入面板).
 
     任务使用 XML 注册并显式指定 +08:00 时区, 因此无论本机系统时区如何设置,
-    触发时间均为北京时间 22:00.
+    触发时间均为北京时间 (22:00 / 22:40).
 
 .NOTES
     Run as Administrator. Tasks run Monday-Friday only (weekend skip is also
@@ -26,7 +25,8 @@ $startDate = (Get-Date -Format "yyyy-MM-dd")
 function New-AmqTaskXml {
     param(
         [string]$Description,
-        [string]$ScriptPath
+        [string]$ScriptPath,
+        [string]$TriggerTime = "22:00:00"
     )
 
     $arguments = '"{0}"' -f $ScriptPath
@@ -39,7 +39,7 @@ function New-AmqTaskXml {
   </RegistrationInfo>
   <Triggers>
     <CalendarTrigger>
-      <StartBoundary>${startDate}T22:00:00${timeZoneOffset}</StartBoundary>
+      <StartBoundary>${startDate}T${TriggerTime}${timeZoneOffset}</StartBoundary>
       <ScheduleByWeek>
         <DaysOfWeek>
           <Monday/>
@@ -76,35 +76,37 @@ function Register-AmqTask {
     param(
         [string]$Name,
         [string]$ScriptPath,
-        [string]$Description
+        [string]$Description,
+        [string]$TriggerTime = "22:00:00"
     )
 
     Unregister-ScheduledTask -TaskName $Name -Confirm:$false -ErrorAction SilentlyContinue
 
-    $xml = New-AmqTaskXml -Description $Description -ScriptPath $ScriptPath
+    $xml = New-AmqTaskXml -Description $Description -ScriptPath $ScriptPath -TriggerTime $TriggerTime
     $tempFile = [System.IO.Path]::GetTempFileName() + ".xml"
     $xml | Set-Content -Path $tempFile -Encoding Unicode
 
     try {
         Register-ScheduledTask -TaskName $Name -Xml $xml -Force | Out-Null
-        Write-Host "Created: $Name (Mon-Fri 22:00 Asia/Shanghai)" -ForegroundColor Green
+        Write-Host "Created: $Name (Mon-Fri ${TriggerTime} Asia/Shanghai)" -ForegroundColor Green
     }
     finally {
         Remove-Item -Path $tempFile -ErrorAction SilentlyContinue
     }
 }
 
-# --- Pipeline 1: 22:00 market data ---
+# --- Pipeline 1: 22:00 daily fetch (append to V3 panel) ---
 Register-AmqTask `
     -Name "AMINQT-MarketData-22h" `
-    -ScriptPath "$projectRoot\scripts\run_daily_market_pipeline.py" `
-    -Description "AMINQT market data pipeline at 22:00 Asia/Shanghai (OHLCV, PE/PB, margin, northbound, lhb, stk_limit)"
+    -ScriptPath "$projectRoot\_daily_fetch.py" `
+    -Description "AMINQT daily fetch at 22:00 Asia/Shanghai — appends one day to V3 panel (_daily_fetch.py: OHLCV, adj, daily_basic, stk_limit, moneyflow, cyq_perf, margin, lhb + derived features)"
 
-# --- Pipeline 2: 22:00 announcement data ---
+# --- Pipeline 2: 22:40 announcement data + V3 panel holdertrade update ---
 Register-AmqTask `
     -Name "AMINQT-Announcement-22h" `
     -ScriptPath "$projectRoot\scripts\run_announcement_pipeline.py" `
-    -Description "AMINQT announcement data pipeline at 22:00 Asia/Shanghai (fina_indicator, holdertrade, holdernumber, anns_d)"
+    -Description "AMINQT announcement pipeline at 22:40 Asia/Shanghai — fetches fina_indicator/holdertrade/holdernumber/anns_d + updates V3 panel holdertrade columns (runs after Pipeline 1)" `
+    -TriggerTime "22:40:00"
 
 # --- Summary ---
 Write-Host ""
