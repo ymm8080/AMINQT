@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Drop 'turn' column from V3 panel (100 -> 99 cols). Keep free_float_turnover_rate only."""
+
 import os
 import gc
 import pyarrow as pa
@@ -8,6 +9,7 @@ import pyarrow.parquet as pq
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
 TMP = PANEL + ".tmp"
 DROP = ["turn"]
+
 
 def main():
     pf = pq.ParquetFile(PANEL)
@@ -35,6 +37,7 @@ def main():
     pf2 = pq.ParquetFile(PANEL)
     print(f"Done: {pf2.metadata.num_rows:,} rows, {len(pf2.schema_arrow.names)} cols")
     pf2.close()
+
 
 if __name__ == "__main__":
     main()

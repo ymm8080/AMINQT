@@ -6,6 +6,7 @@ Strategy: coalesce(_x, _y) -> original name, then drop _x and _y.
 
 Reduces 116 cols -> 102 cols.
 """
+
 import os
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -29,6 +30,7 @@ PAIRS = [
     ("pct_90_con_x", "pct_90_con_y", "pct_90_con"),
     ("weight_avg_x", "weight_avg_y", "weight_avg"),
 ]
+
 
 def main():
     print(f"Reading panel: {PANEL}")
@@ -61,8 +63,9 @@ def main():
             new_names.append(name)
 
     print(f"  New: {len(new_names)} cols")
-    assert len(new_names) == len(old_names) - len(PAIRS), \
+    assert len(new_names) == len(old_names) - len(PAIRS), (
         f"Expected {len(old_names) - len(PAIRS)}, got {len(new_names)}"
+    )
 
     # Read all _x/_y columns + write consolidated
     print("\nCoalescing _x/_y pairs...")

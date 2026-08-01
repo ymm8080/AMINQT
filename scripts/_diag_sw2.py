@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """Diagnose sw_daily matching issue - output to file for proper encoding."""
+
 import tushare as ts
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 
 pro = ts.pro_api(ts.get_token() or os.getenv("TUSHARE_TOKEN"))
@@ -27,7 +29,7 @@ with open("scripts/_sw_diag_output.txt", "w", encoding="utf-8") as f:
     f.write(f"\nstock_basic industries ({len(industries)}):\n")
     for ind in industries:
         f.write(f"  [{ind}]\n")
-    
+
     sw_set = set(sw1_names)
     sb_set = set(industries)
     matched = sw_set & sb_set
@@ -35,7 +37,7 @@ with open("scripts/_sw_diag_output.txt", "w", encoding="utf-8") as f:
     f.write(f"Matched: {sorted(matched)}\n")
     f.write(f"In SW but not SB: {sorted(sw_set - sb_set)}\n")
     f.write(f"In SB but not SW: {sorted(sb_set - sw_set)}\n")
-    
+
     # Count stocks per industry
     stock_counts = sb["industry"].value_counts()
     f.write("\nStock counts per industry (top 10):\n")

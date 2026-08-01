@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """Check stock_basic.industry: source, coverage, history."""
+
 import tushare as ts
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 
 pro = ts.pro_api(ts.get_token() or os.getenv("TUSHARE_TOKEN"))
@@ -28,7 +30,9 @@ print("  - For historical industry: need pro.stock_company or daily_basic")
 
 # 4. Check stock_company for historical industry
 try:
-    sc = pro.stock_company(fields="ts_code,exchange,province,city,introduction,main_business")
+    sc = pro.stock_company(
+        fields="ts_code,exchange,province,city,introduction,main_business"
+    )
     print(f"\nstock_company: {len(sc)} rows, columns: {sc.columns.tolist()}")
 except Exception as e:
     print(f"\nstock_company: {e}")

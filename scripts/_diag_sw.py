@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """Diagnose sw_daily matching issue."""
+
 import tushare as ts
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 
 pro = ts.pro_api(ts.get_token() or os.getenv("TUSHARE_TOKEN"))
