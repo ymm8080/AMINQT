@@ -36,7 +36,7 @@ BS_PATH = ROOT / "data" / "panel_full.parquet"
 
 HFQ_COLS = ["open_hfq", "high_hfq", "low_hfq", "close_hfq"]
 CYQ_COLS = [
-    "benefit_part",
+    "winner_ratio",
     "avg_cost",
     "pct_70_low",
     "pct_70_high",

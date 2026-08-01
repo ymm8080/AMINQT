@@ -6,7 +6,7 @@ import pandas as pd
 df = pd.read_parquet("data/panel_full_enriched_v3.parquet")
 
 cyq_cols = [
-    "benefit_part",
+    "winner_ratio",
     "avg_cost",
     "weight_avg",
     "cost_5pct",
@@ -30,7 +30,7 @@ print(
 print("-" * 65)
 
 sources = {
-    "benefit_part": "Tushare",
+    "winner_ratio": "Tushare",
     "avg_cost": "Tushare",
     "weight_avg": "Tushare*",
     "cost_5pct": "Tushare",

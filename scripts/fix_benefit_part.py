@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fix benefit_part unit: Tushare winner_rate (0-100) stored directly as benefit_part.
+"""Fix winner_ratio unit: Tushare winner_rate (0-100) stored directly as winner_ratio.
 
 Only divide values > 1 by 100 (Tushare values in 0-100 range).
 Values <= 1 are already correct (either baostock 0-1 or rare Tushare <1%).
@@ -22,7 +22,7 @@ def main():
     logger.info("Loading V3: %s", V3_PATH)
     v3 = pd.read_parquet(V3_PATH)
 
-    bp = v3["benefit_part"]
+    bp = v3["winner_ratio"]
     nn = bp.notna().sum()
     over1 = (bp > 1).sum()
     under1 = (bp <= 1).sum() & bp.notna()
@@ -34,9 +34,9 @@ def main():
 
     # Divide only values > 1 by 100
     mask = bp > 1
-    v3.loc[mask, "benefit_part"] = v3.loc[mask, "benefit_part"] / 100.0
+    v3.loc[mask, "winner_ratio"] = v3.loc[mask, "winner_ratio"] / 100.0
 
-    bp = v3["benefit_part"]
+    bp = v3["winner_ratio"]
     logger.info("After fix:")
     logger.info("  range: %.4f ~ %.4f", bp.min(), bp.max())
     logger.info("  > 1: %d (should be 0)", (bp > 1).sum())

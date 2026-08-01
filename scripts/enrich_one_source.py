@@ -616,7 +616,7 @@ SOURCE_COL_PREFIXES: dict[str, list[str]] = {
         "cost_85pct",
         "cost_95pct",
         "weight_avg",
-        "benefit_part",
+        "winner_ratio",
         "pct_90_con",
         "pct_70_con",
     ],

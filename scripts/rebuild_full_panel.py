@@ -95,7 +95,7 @@ if "board" not in panel.columns:
 
 # ── 4. CYQ enrich (skip if already present) ──
 CYQ_COLS = [
-    "benefit_part",
+    "winner_ratio",
     "avg_cost",
     "pct_70_low",
     "pct_70_high",

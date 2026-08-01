@@ -34,7 +34,7 @@ for code in test_codes:
         ak_df = ak.stock_cyq_em(symbol=code, adjust="qfq")
         ak_df.columns = [
             "date",
-            "benefit_part_ak",
+            "winner_ratio_ak",
             "avg_cost_ak",
             "pct_90_low_ak",
             "pct_90_high_ak",
@@ -44,7 +44,7 @@ for code in test_codes:
             "pct_70_con_ak",
         ]
         ak_df["date"] = pd.to_datetime(ak_df["date"])
-        ak_df["benefit_part_ak"] = ak_df["benefit_part_ak"] * 100  # 转百分比
+        ak_df["winner_ratio_ak"] = ak_df["winner_ratio_ak"] * 100  # 转百分比
         print(
             f"akshare: {len(ak_df)} 行, {ak_df['date'].min().date()} ~ {ak_df['date'].max().date()}"
         )
@@ -95,7 +95,7 @@ for code in test_codes:
         # 累积分布
         cum = np.cumsum(chip.dist) / dist_sum
 
-        # benefit_part (获利比例) = WINNER(close)
+        # winner_ratio (获利比例) = WINNER(close)
         benefit = chip.winner(r["close"]) * 100
 
         # avg_cost (平均成本) = sum(grid * dist) / sum(dist)
@@ -118,7 +118,7 @@ for code in test_codes:
         results.append(
             {
                 "date": r["date"],
-                "benefit_part_calc": benefit,
+                "winner_ratio_calc": benefit,
                 "avg_cost_calc": avg_cost,
                 "pct_70_low_calc": pct_70_low,
                 "pct_70_high_calc": pct_70_high,
@@ -144,7 +144,7 @@ for code in test_codes:
 
     # 4. 误差分析
     metrics = [
-        ("benefit_part", "benefit_part_ak", "benefit_part_calc"),
+        ("winner_ratio", "winner_ratio_ak", "winner_ratio_calc"),
         ("avg_cost", "avg_cost_ak", "avg_cost_calc"),
         ("pct_70_low", "pct_70_low_ak", "pct_70_low_calc"),
         ("pct_70_high", "pct_70_high_ak", "pct_70_high_calc"),
@@ -174,8 +174,8 @@ for code in test_codes:
     print("\n最近 5 天对比:")
     cols = [
         "date",
-        "benefit_part_ak",
-        "benefit_part_calc",
+        "winner_ratio_ak",
+        "winner_ratio_calc",
         "avg_cost_ak",
         "avg_cost_calc",
         "pct_70_con_ak",

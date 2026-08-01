@@ -77,7 +77,7 @@ SOURCE_MARKERS = {
     "sector_index": "sw_ret_1d",
     "daily_basic": "pe_ttm",
     "stk_limit": "up_limit_raw",
-    "cyq_tushare": "benefit_part",
+    "cyq_tushare": "winner_ratio",
 }
 
 # 各数据源在 v3 中的完整列前缀 (用于清理旧数据再 merge)
@@ -122,7 +122,7 @@ SOURCE_COL_PREFIXES = {
     ],
     "stk_limit": ["up_limit_raw", "down_limit_raw"],
     "cyq_tushare": [
-        "benefit_part",
+        "winner_ratio",
         "avg_cost",
         "pct_70_low",
         "pct_70_high",

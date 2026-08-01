@@ -149,7 +149,7 @@ def main():
         "sector_index": "sw_ret_1d",
         "daily_basic": "pe_ttm",
         "stk_limit": "up_limit_raw",
-        "cyq_tushare": "benefit_part",
+        "cyq_tushare": "winner_ratio",
     }
     present = {k: v for k, v in markers.items() if v in panel.columns}
     missing = {k: v for k, v in markers.items() if v not in panel.columns}

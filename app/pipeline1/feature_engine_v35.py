@@ -1838,7 +1838,7 @@ class FeatureEngineV35:
         if has_tushare:
             # Tushare cyq_perf 主源: 从 winner_rate + cost 列推导 winner_ratio/pct_90_con
             if "winner_ratio" not in df.columns:
-                df["winner_ratio"] = df["winner_rate"]
+                df["winner_ratio"] = df["winner_rate"] / 100.0
             if "pct_90_con" not in df.columns:
                 df["pct_90_con"] = (df["cost_95pct"] - df["cost_5pct"]) / (
                     df["cost_95pct"] + df["cost_5pct"]

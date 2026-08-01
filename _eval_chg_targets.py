@@ -17,7 +17,7 @@ OHLCV_COLS = [
     'volume', 'amount', 'turnover_rate',
 ]
 CYQ_COLS = [
-    'chip_concentration', 'conc_90', 'benefit_part',
+    'chip_concentration', 'conc_90', 'winner_ratio',
     'cost_5pct', 'cost_15pct', 'cost_50pct', 'cost_85pct', 'cost_95pct',
     'weight_avg', 'winner_rate', 'his_low', 'his_high',
 ]

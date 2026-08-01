@@ -6,7 +6,7 @@ from scipy.stats import spearmanr
 t0=time.time()
 
 OHLCV_COLS=['open_hfq','high_hfq','low_hfq','close_hfq','open','high','low','close','volume','amount','turnover_rate']
-CYQ_COLS=['chip_concentration','conc_90','benefit_part','cost_5pct','cost_15pct','cost_50pct','cost_85pct','cost_95pct','weight_avg','winner_rate','his_low','his_high']
+CYQ_COLS=['chip_concentration','conc_90','winner_ratio','cost_5pct','cost_15pct','cost_50pct','cost_85pct','cost_95pct','weight_avg','winner_rate','his_low','his_high']
 W=(1,3,5,10,20)
 L=['label_1d','label_3d','label_5d']
 

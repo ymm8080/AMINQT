@@ -37,7 +37,7 @@ def main():
 
     # 删除旧 cyq 列
     cyq_cols = [
-        "benefit_part",
+        "winner_ratio",
         "avg_cost",
         "cost_5pct",
         "cost_15pct",

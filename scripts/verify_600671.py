@@ -52,7 +52,7 @@ ts_df["pct_70_con_derived"] = (ts_df["cost_85pct"] - ts_df["cost_15pct"]) / (
 ak_df = ak.stock_cyq_em(symbol=SYMBOL, adjust="")
 ak_df.columns = [
     "date",
-    "benefit_part",
+    "winner_ratio",
     "avg_cost",
     "pct_90_low",
     "pct_90_high",
@@ -120,11 +120,11 @@ for d in TARGET_DATES:
         f"  {'70% high (price)':<30s}  {tr['cost_85pct']:>12.2f}  {ar['pct_70_high']:>12.2f}  {abs(tr['cost_85pct'] - ar['pct_70_high']):>10.2f}"
     )
 
-    # benefit_part
+    # winner_ratio
     ts_bp = tr["winner_rate"] / 100
-    ak_bp = ar["benefit_part"]
+    ak_bp = ar["winner_ratio"]
     print(
-        f"  {'benefit_part (winner/100)':<30s}  {ts_bp:>12.6f}  {ak_bp:>12.6f}  {abs(ts_bp - ak_bp):>10.6f}"
+        f"  {'winner_ratio (winner/100)':<30s}  {ts_bp:>12.6f}  {ak_bp:>12.6f}  {abs(ts_bp - ak_bp):>10.6f}"
     )
 
     # weight_avg / avg_cost

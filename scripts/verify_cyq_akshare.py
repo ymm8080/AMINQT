@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-verify CYQ column relationships using akshare + Tushare data.
 
-akshare stock_cyq_em provides: date, benefit_part, avg_cost,
+akshare stock_cyq_em provides: date, winner_ratio, avg_cost,
   pct_90_low, pct_90_high, pct_90_con, pct_70_low, pct_70_high, pct_70_con
 
 Tushare cyq_perf provides: cost_5pct, cost_15pct, cost_50pct,
@@ -49,7 +49,7 @@ print(f"akshare columns ({len(ak_cols)}): {ak_cols}")
 # Rename to English
 ak_df.columns = [
     "date",
-    "benefit_part",
+    "winner_ratio",
     "avg_cost",
     "pct_90_low",
     "pct_90_high",
@@ -123,12 +123,12 @@ pairs = [
     ("akshare pct_90_high", "pct_90_high", "cost_95pct"),
     ("akshare avg_cost", "avg_cost", "cost_50pct"),
     ("akshare avg_cost vs weight_avg", "avg_cost", "weight_avg"),
-    ("akshare benefit_part vs winner_rate/100", "benefit_part", None),
+    ("akshare winner_ratio vs winner_rate/100", "winner_ratio", None),
 ]
 
 for label, ak_col, ts_col in pairs:
     if ts_col is None:
-        # special case: benefit_part vs winner_rate/100
+        # special case: winner_ratio vs winner_rate/100
         ts_vals = merged["winner_rate"] / 100.0
     else:
         ts_vals = merged[ts_col]
@@ -156,7 +156,7 @@ cols = [
     "cost_5pct",
     "pct_90_high",
     "cost_95pct",
-    "benefit_part",
+    "winner_ratio",
     "winner_rate",
 ]
 print(merged[cols].tail(5).to_string())
