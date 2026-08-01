@@ -12,7 +12,6 @@ import os
 import gc
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pandas as pd
 
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
 TMP = PANEL + ".tmp"

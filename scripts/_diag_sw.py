@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Diagnose sw_daily matching issue."""
 import tushare as ts
-import pandas as pd
 import os
 from dotenv import load_dotenv
 load_dotenv()

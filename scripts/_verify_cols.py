@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """Analyze chip_concentration, profit_ratio, free_float_turnover_rate vs their potential duplicates."""
 import pyarrow.parquet as pq
-import pandas as pd
-import numpy as np
 
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
 

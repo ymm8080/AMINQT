@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Restore holder_count column from backup into the 98-col panel."""
-import os, gc
+import os
+import gc
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pandas as pd
 
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
 BACKUP = r"data\panel_full_enriched_v3.parquet"
@@ -50,7 +50,8 @@ def main():
     print("Writing...")
     t = pa.Table.from_pandas(df, schema=new_schema, preserve_index=False)
     pq.write_table(t, TMP, compression="snappy")
-    del df, t; gc.collect()
+    del df, t
+    gc.collect()
 
     os.remove(PANEL)
     os.rename(TMP, PANEL)

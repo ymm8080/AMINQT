@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """Fix duplicate blocks in _daily_fetch.py caused by patch script."""
-import re
 
 p = "_daily_fetch.py"
 with open(p, encoding="utf-8") as f:
@@ -69,10 +68,10 @@ while lines and lines[-1].strip() == "":
     lines.pop()
 # Check for duplicate else block
 if len(lines) >= 4:
-    last4 = [l.strip() for l in lines[-4:]]
+    last4 = [line.strip() for line in lines[-4:]]
     if last4[2] == "else:" and last4[3] == 'print("All columns have data!")':
         if len(lines) >= 6:
-            last6 = [l.strip() for l in lines[-6:]]
+            last6 = [line.strip() for line in lines[-6:]]
             if last6[4] == "else:" and last6[5] == 'print("All columns have data!")':
                 # Remove last 2 lines
                 lines = lines[:-2]

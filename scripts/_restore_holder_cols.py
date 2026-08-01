@@ -4,7 +4,6 @@ import os
 import gc
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pandas as pd
 
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
 BACKUP = r"d:\AMINQT\AMINQT CODES\data\panel_full_enriched_v3.parquet"
@@ -54,7 +53,7 @@ def main():
     # Read holder data
     holder_df = pq.read_table(BACKUP, columns=["symbol", "date"] + avail).to_pandas()
     print(f"  Holder data: {len(holder_df):,} rows")
-    print(f"  Non-null counts:")
+    print("  Non-null counts:")
     for c in avail:
         print(f"    {c}: {holder_df[c].notna().sum():,}")
 

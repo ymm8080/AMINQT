@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Drop 'turn' column from V3 panel (100 -> 99 cols). Keep free_float_turnover_rate only."""
-import os, gc
+import os
+import gc
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -27,7 +28,8 @@ def main():
     print("Writing...")
     t = pa.Table.from_pandas(df, schema=new_schema, preserve_index=False)
     pq.write_table(t, TMP, compression="snappy")
-    del df, t; gc.collect()
+    del df, t
+    gc.collect()
     os.remove(PANEL)
     os.rename(TMP, PANEL)
     pf2 = pq.ParquetFile(PANEL)

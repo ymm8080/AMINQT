@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Diagnose sw_daily matching issue - output to file for proper encoding."""
 import tushare as ts
-import pandas as pd
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -39,7 +38,7 @@ with open("scripts/_sw_diag_output.txt", "w", encoding="utf-8") as f:
     
     # Count stocks per industry
     stock_counts = sb["industry"].value_counts()
-    f.write(f"\nStock counts per industry (top 10):\n")
+    f.write("\nStock counts per industry (top 10):\n")
     for ind, count in stock_counts.head(10).items():
         in_sw = "YES" if ind in sw_set else "NO"
         f.write(f"  [{ind}]: {count} stocks -> SW match: {in_sw}\n")

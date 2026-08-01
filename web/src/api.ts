@@ -155,6 +155,26 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return r.json()
 }
 
+export interface GateEvalScenario {
+  name: string
+  days: number
+  empty_days: number
+  empty_rate: number
+  avg_holdings: number | null
+  avg_daily_net: number | null
+  compound: number
+  win_rate: number | null
+  daily: { date: string; n: number; ret: number | null; cum: number }[]
+}
+
+export interface GateEvalReport {
+  exists: boolean
+  path?: string
+  generated_at?: string
+  window?: [string, string]
+  scenarios?: GateEvalScenario[]
+}
+
 export const api = {
   latestList: () => req<LatestList>('/list/latest'),
   ohlc: (symbol: string, days = 120) =>
@@ -213,4 +233,5 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     }),
+  gateEval: () => req<GateEvalReport>('/backtest/gate-eval'),
 }

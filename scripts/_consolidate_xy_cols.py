@@ -7,8 +7,6 @@ Strategy: coalesce(_x, _y) -> original name, then drop _x and _y.
 Reduces 116 cols -> 102 cols.
 """
 import os
-import sys
-import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -100,7 +98,7 @@ def main():
 
     new_schema = pa.schema(new_fields)
 
-    writer = pq.ParquetWriter(tmp_path, schema=new_schema)
+    # writer = pq.ParquetWriter(tmp_path, schema=new_schema)  # Not needed - using pq.write_table instead
 
     for rg_idx in range(pf.metadata.num_row_groups):
         rg = pf.read_row_group(rg_idx)

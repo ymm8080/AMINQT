@@ -104,6 +104,7 @@ class TestEndToEndV35:
             pytest.skip("清单首选非 600519, 跳过盘中段 (指标源仅单股)")
         for c in cands:
             c.flag_daily_buy = True
+            c.flag_intraday_buy = True  # 跳过 _check_intraday_buy_point (依赖 CapitalFeed, 测试中 capital=None)
         seq = [100.0, 99.6, 99.0, 98.4, 98.2, 98.3, 98.9, 99.4, 99.8]
         times = [
             "09:32",
