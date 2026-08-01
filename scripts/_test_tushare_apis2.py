@@ -1,21 +1,10 @@
 """Test Tushare API with proper trading day."""
 
-import os
 import pandas as pd
-
-env_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"
-)
-with open(env_path) as f:
-    for line in f:
-        line = line.strip()
-        if line.startswith("TUSHARE_TOKEN="):
-            os.environ["TUSHARE_TOKEN"] = line.split("=", 1)[1].strip()
-            break
-
 import tushare as ts
+from config import settings
 
-pro = ts.pro_api(os.environ["TUSHARE_TOKEN"])
+pro = ts.pro_api(settings.TUSHARE_TOKEN)
 
 # Use 20260724 (Friday) and 20260728 (Monday) as trading days
 TD = "20260724"

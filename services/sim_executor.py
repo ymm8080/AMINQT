@@ -15,7 +15,8 @@ class SimExecutor(Executor):
 
     def _place(self, order: Order) -> dict:
         verb = "买入" if order.side == "buy" else "卖出"
-        print(f"[SIM] {verb} {order.symbol} {order.qty}股 @ {order.price or '市价'}")
+        price_str = str(order.price) if order.price is not None else "市价"
+        print(f"[SIM] {verb} {order.symbol} {order.qty}股 @ {price_str}")
         return {
             "status": "sim_filled",
             "symbol": order.symbol,

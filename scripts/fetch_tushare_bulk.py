@@ -36,18 +36,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("fetch_bulk")
 
-# Load Tushare token from .env
-env_path = os.path.join(PROJECT_ROOT, ".env")
-with open(env_path) as f:
-    for line in f:
-        line = line.strip()
-        if line.startswith("TUSHARE_TOKEN="):
-            os.environ["TUSHARE_TOKEN"] = line.split("=", 1)[1].strip()
-            break
-
 import tushare as ts  # noqa: E402
+from config import settings  # noqa: E402
 
-pro = ts.pro_api(os.environ["TUSHARE_TOKEN"])
+pro = ts.pro_api(settings.TUSHARE_TOKEN)
 
 PANEL_V3 = "data/panel_full_enriched_v3.parquet"
 PANEL_V4 = f"data/panel_full_enriched_v4_{datetime.now().strftime('%Y%m%d')}.parquet"

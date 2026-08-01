@@ -34,18 +34,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("fill_v3")
 
-env_path = PROJECT_ROOT / ".env"
-if env_path.exists():
-    with open(env_path) as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith("TUSHARE_TOKEN="):
-                os.environ["TUSHARE_TOKEN"] = line.split("=", 1)[1].strip()
-                break
-
 import tushare as ts  # noqa: E402
+from config import settings  # noqa: E402
 
-pro = ts.pro_api(os.environ["TUSHARE_TOKEN"])
+pro = ts.pro_api(settings.TUSHARE_TOKEN)
 
 V3_PATH = PROJECT_ROOT / "data" / "panel_full_enriched_v3.parquet"
 MARGIN_CACHE = (

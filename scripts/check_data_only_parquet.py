@@ -23,6 +23,7 @@ from pathlib import Path
 # Files/dirs that are allowed even though they are not parquet.
 ALLOWED_SUFFIXES = {".parquet", ".py"}
 ALLOWED_NAMES = {".gitkeep"}
+IGNORED_DIR_NAMES = {"__pycache__"}
 
 
 def find_violations(root: Path) -> list[Path]:
@@ -34,6 +35,8 @@ def find_violations(root: Path) -> list[Path]:
         if path.suffix.lower() in ALLOWED_SUFFIXES:
             continue
         if path.name in ALLOWED_NAMES:
+            continue
+        if IGNORED_DIR_NAMES.intersection(path.parts):
             continue
         violations.append(path)
     return violations
