@@ -41,22 +41,29 @@ _PB_CFG = load_config("data_pipeline_config").get("panel_builder", {})
 
 DEFAULT_YEARS = int(_PB_CFG.get("default_years", 3))
 PANEL_CACHE_DIR = _PB_CFG.get("panel_cache_dir", os.path.join("data", "processed"))
-_ENRICH_WORKERS = int(os.environ.get("ENRICH_WORKERS", _PB_CFG.get("enrich_workers", 4)))
+_ENRICH_WORKERS = int(
+    os.environ.get("ENRICH_WORKERS", _PB_CFG.get("enrich_workers", 4))
+)
 _META_FETCH_SLEEP = float(_PB_CFG.get("meta_fetch_sleep", 0.3))
 _META_MAX_CONSECUTIVE_FAIL = int(_PB_CFG.get("meta_max_consecutive_fail", 3))
 _PROGRESS_EVERY_N = int(_PB_CFG.get("progress_every_n", 10))
 _PROGRESS_FILE = _PB_CFG.get("progress_file", "data/enrich_progress.txt")
-_DEFAULT_ALT_SOURCES = list(_PB_CFG.get("default_alt_sources", [
-    "lhb",
-    "holdertrade",
-    "sector_index",
-    "margin",
-    "fina_indicator",
-    "holdernumber",
-    "daily_basic",
-    "stk_limit",
-    "cyq_tushare",
-]))
+_DEFAULT_ALT_SOURCES = list(
+    _PB_CFG.get(
+        "default_alt_sources",
+        [
+            "lhb",
+            "holdertrade",
+            "sector_index",
+            "margin",
+            "fina_indicator",
+            "holdernumber",
+            "daily_basic",
+            "stk_limit",
+            "cyq_tushare",
+        ],
+    )
+)
 
 
 def load_or_fetch_meta(

@@ -51,7 +51,9 @@ class TestKnownReturn:
                 score=[0.9, 0.1, 0.1, 0.1, 0.1, 0.1],
             )
         }
-        engine = BacktestEngine({"score_threshold": 0.5, "holding_days": 1, **_NO_COSTS})
+        engine = BacktestEngine(
+            {"score_threshold": 0.5, "holding_days": 1, **_NO_COSTS}
+        )
         result = engine.run("selection", ["AAA"], "2024-01-01", "2024-01-10", data=data)
         assert result.total_return == pytest.approx(0.10, abs=1e-9)
 
@@ -111,12 +113,8 @@ class TestTransactionCosts:
 
     def test_ic_uses_raw_fwd_ret_not_cost_adjusted(self):
         # IC label must be raw forward return, not cost-adjusted
-        a = _df(
-            [100, 102, 104.04, 106.1208, 108.243216, 110.40808032], score=[0.9] * 6
-        )
-        b = _df(
-            [100, 101, 102.01, 103.0301, 104.060701, 105.10140701], score=[0.1] * 6
-        )
+        a = _df([100, 102, 104.04, 106.1208, 108.243216, 110.40808032], score=[0.9] * 6)
+        b = _df([100, 101, 102.01, 103.0301, 104.060701, 105.10140701], score=[0.1] * 6)
         engine = BacktestEngine(
             {
                 "holding_days": 1,
@@ -126,7 +124,11 @@ class TestTransactionCosts:
             }
         )
         result = engine.run(
-            "selection", ["AAA", "BBB"], "2024-01-01", "2024-01-10", data={"AAA": a, "BBB": b}
+            "selection",
+            ["AAA", "BBB"],
+            "2024-01-01",
+            "2024-01-10",
+            data={"AAA": a, "BBB": b},
         )
         # IC still perfectly positive because label is raw fwd_ret
         assert result.ic == pytest.approx(1.0, abs=1e-9)

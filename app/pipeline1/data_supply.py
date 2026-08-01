@@ -74,7 +74,13 @@ def _with_timeout(fn, timeout: float = FETCH_TIMEOUT):
     return box.get("value")
 
 
-def _ak_call(fn, *args, retries: int = _AK_CALL_RETRIES, backoff: float = _AK_CALL_BACKOFF, **kwargs):
+def _ak_call(
+    fn,
+    *args,
+    retries: int = _AK_CALL_RETRIES,
+    backoff: float = _AK_CALL_BACKOFF,
+    **kwargs,
+):
     """akshare 调用重试 (东财接口频繁断连/限流, 指数退避)."""
     last: Exception | None = None
     for attempt in range(retries):
@@ -304,7 +310,9 @@ class DataSupplyChain:
         return df
 
     # ---------------- 历史数据: akshare 主源 + baostock 回退 ----------------
-    _MAX_CONSECUTIVE_FAILS = _MAX_CONSECUTIVE_FAILS  # 连续失败 N 次才判定源不可用 (防单股缺失误杀全源)
+    _MAX_CONSECUTIVE_FAILS = (
+        _MAX_CONSECUTIVE_FAILS  # 连续失败 N 次才判定源不可用 (防单股缺失误杀全源)
+    )
 
     def _default_fetch_hist(self, symbol: str, start: str, end: str) -> pd.DataFrame:
         """历史日线多源级联: akshare(东财) → sina → baostock.
@@ -1270,7 +1278,11 @@ class DataSupplyChain:
                                 MIN_BULK_DATES,
                             )
                             self._margin_date_loop(
-                                pro, start_date, end_date, frames, step=_MARGIN_DATE_FALLBACK_STEP
+                                pro,
+                                start_date,
+                                end_date,
+                                frames,
+                                step=_MARGIN_DATE_FALLBACK_STEP,
                             )
                     else:
                         self._margin_date_loop(
@@ -1285,7 +1297,13 @@ class DataSupplyChain:
                 logger.warning("Tushare margin_detail 失败: %s", exc)
                 # 区间查询抛异常时, 用逐日补采兜底
                 if not frames and start_date and end_date:
-                    self._margin_date_loop(pro, start_date, end_date, frames, step=_MARGIN_DATE_FALLBACK_STEP)
+                    self._margin_date_loop(
+                        pro,
+                        start_date,
+                        end_date,
+                        frames,
+                        step=_MARGIN_DATE_FALLBACK_STEP,
+                    )
 
         # AKShare 降级 — 沪市融资融券
         if not frames:
@@ -2128,7 +2146,9 @@ class DataSupplyChain:
         return now_dt < deadline_dt
 
     # ---------------- [B11] OHLCV 回填 ----------------
-    BACKFILL_MIN_DAYS = _BACKFILL_MIN_DAYS  # ≥5 年交易日 (特征预热期 250 日独立于训练窗口)
+    BACKFILL_MIN_DAYS = (
+        _BACKFILL_MIN_DAYS  # ≥5 年交易日 (特征预热期 250 日独立于训练窗口)
+    )
 
     def backfill_ohlcv(
         self,
