@@ -23,8 +23,10 @@ MODEL_DIR = PROJECT_ROOT / "app" / "models" / "trained"
 
 # Non-parquet data outputs (logs, reports, JSON state, CSV exports, etc.)
 # are kept outside the repo data/ directory so that data/ contains only
-# parquet-format analytical datasets.
-DATA_OTHERS_DIR = Path("D:/AMINQT/DATA OTHERS")
+# parquet-format analytical datasets.  Override via AMINQT_DATA_OTHERS env.
+DATA_OTHERS_DIR = Path(
+    os.getenv("AMINQT_DATA_OTHERS", str(PROJECT_ROOT.parent / "DATA OTHERS"))
+)
 
 for _d in (RAW_DIR, INTRADAY_DIR, PROCESSED_DIR, MODEL_DIR, DATA_OTHERS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
