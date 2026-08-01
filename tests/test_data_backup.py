@@ -24,19 +24,32 @@ def _mk(path, content=b"x", mtime=None):
 
 def test_static_keeper_copied_with_date_suffix(tmp_path):
     _mk(tmp_path / "data/cyq_panel.parquet")
-    out = backup_keepers(tmp_path, tmp_path / "bk", ["data/cyq_panel.parquet"], "20260731")
+    out = backup_keepers(
+        tmp_path, tmp_path / "bk", ["data/cyq_panel.parquet"], "20260731"
+    )
     assert (tmp_path / "bk/cyq_panel__20260731.parquet").exists()
     assert out["data/cyq_panel.parquet"].startswith("ok")
 
 
 def test_wildcard_keeper_picks_newest_source(tmp_path):
-    _mk(tmp_path / "data/factor_registry/features_main_20260730T010000.parquet", mtime=1000)
-    _mk(tmp_path / "data/factor_registry/features_main_20260731T075252.parquet", mtime=2000)
+    _mk(
+        tmp_path / "data/factor_registry/features_main_20260730T010000.parquet",
+        mtime=1000,
+    )
+    _mk(
+        tmp_path / "data/factor_registry/features_main_20260731T075252.parquet",
+        mtime=2000,
+    )
     backup_keepers(
-        tmp_path, tmp_path / "bk", ["data/factor_registry/features_main_*.parquet"], "20260731"
+        tmp_path,
+        tmp_path / "bk",
+        ["data/factor_registry/features_main_*.parquet"],
+        "20260731",
     )
     assert (tmp_path / "bk/features_main_20260731T075252__20260731.parquet").exists()
-    assert not (tmp_path / "bk/features_main_20260730T010000__20260731.parquet").exists()
+    assert not (
+        tmp_path / "bk/features_main_20260730T010000__20260731.parquet"
+    ).exists()
 
 
 def test_missing_keeper_skipped_without_error(tmp_path):
@@ -48,7 +61,9 @@ def test_worm_same_day_rerun_does_not_overwrite(tmp_path):
     _mk(tmp_path / "data/cyq_panel.parquet", content=b"v1")
     backup_keepers(tmp_path, tmp_path / "bk", ["data/cyq_panel.parquet"], "20260731")
     (tmp_path / "data/cyq_panel.parquet").write_bytes(b"v2")
-    out = backup_keepers(tmp_path, tmp_path / "bk", ["data/cyq_panel.parquet"], "20260731")
+    out = backup_keepers(
+        tmp_path, tmp_path / "bk", ["data/cyq_panel.parquet"], "20260731"
+    )
     assert (tmp_path / "bk/cyq_panel__20260731.parquet").read_bytes() == b"v1"
     assert "exists" in out["data/cyq_panel.parquet"]
 
