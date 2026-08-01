@@ -1,0 +1,21 @@
+# ═══════════════════════════════════════
+# 数据 Pipeline 配置 (Pipeline 1/2 每日任务)
+# ═══════════════════════════════════════
+
+# ── 关键数据文件备份 ──
+# 背景: 主目录有 automation 执行 git checkout/reset --hard,
+#       工作区中被跟踪的 parquet 会被 git 物理删除 (2026-07-31 实录三波).
+#       每日 pipeline 结束后把关键文件复制到仓库外备份目录.
+backup:
+  enabled: true
+  dir: "D:/AMINQT/DATA_BACKUP"       # 仓库外备份目录 (勿放仓库内!)
+  retention: 2                       # 每个文件保留最新 N 份 (WORM: 不覆盖, 只清理最旧)
+  keepers:                           # 相对仓库根目录, 支持 glob (取 mtime 最新者)
+    - data/panel_full_enriched_v3.parquet
+    - data/panel_4000.parquet
+    - data/cyq_panel.parquet
+    - data/cyq_panel_full.parquet
+    - data/enrich_parts/cyq_tushare.parquet
+    - data/panel_18m.parquet
+    - data/panel_baostock.parquet
+    - data/factor_registry/features_main_*.parquet

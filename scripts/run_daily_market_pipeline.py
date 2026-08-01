@@ -43,6 +43,8 @@ from dotenv import load_dotenv  # noqa: E402
 load_dotenv()
 
 from app.pipeline1.data_supply import DataSupplyChain, _with_timeout  # noqa: E402
+from app.core.config_loader import load_config  # noqa: E402
+from app.pipeline1.backup import backup_keepers  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -264,6 +266,29 @@ def write_log(trade_date: str, results: dict, elapsed_total: float) -> None:
     logger.info("Log written: %s", log_path)
 
 
+def run_backup(trade_date: str) -> None:
+    """备份关键数据文件到仓库外目录 (best-effort, 失败不影响主流程).
+
+    防主目录 automation 的 git checkout/reset --hard 物理删除 parquet.
+    配置见 config/data_pipeline_config.yaml::backup.
+    """
+    try:
+        bcfg = load_config("data_pipeline_config").get("backup") or {}
+        if not bcfg.get("enabled", False):
+            return
+        results = backup_keepers(
+            root=ROOT,
+            backup_dir=bcfg["dir"],
+            keepers=bcfg.get("keepers", []),
+            trade_date=trade_date,
+            retention=int(bcfg.get("retention", 2)),
+        )
+        ok = sum(1 for v in results.values() if v.startswith(("ok", "exists")))
+        logger.info("Backup: %d/%d keepers in %s", ok, len(results), bcfg["dir"])
+    except Exception:
+        logger.exception("Backup step failed (ignored, pipeline result unaffected)")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Pipeline 1: 16:00 daily market data")
     parser.add_argument("--date", help="Trade date YYYYMMDD (default: today)")
@@ -299,6 +324,8 @@ def main() -> int:
     )
 
     write_log(trade_date, results, elapsed_total)
+
+    run_backup(trade_date)
 
     return 1 if fail == len(MARKET_SOURCES) else 0
 
