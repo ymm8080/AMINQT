@@ -3,57 +3,114 @@
     Register two scheduled tasks for AMINQT data pipelines.
 
 .DESCRIPTION
-    Pipeline 1: 22:00 daily - market data (OHLCV, PE/PB, margin, northbound, lhb, stk_limit)
-    Pipeline 2: 22:00 daily - announcement data (fina_indicator, holdertrade, holdernumber, anns_d)
-    两个管道统一在 22:00 运行 (2026-08-01 起): 行情数据 16:00 已结算完毕,
+    Pipeline 1: 22:00 daily (Asia/Shanghai) - market data (OHLCV, PE/PB, margin, northbound, lhb, stk_limit)
+    Pipeline 2: 22:00 daily (Asia/Shanghai) - announcement data (fina_indicator, holdertrade, holdernumber, anns_d)
+    两个管道统一在北京时间 22:00 运行 (2026-08-01 起): 行情数据 16:00 已结算完毕,
     当日公告 22:00 基本发布完成 (公告脚本拉取当日+前日窗口).
+
+    任务使用 XML 注册并显式指定 +08:00 时区, 因此无论本机系统时区如何设置,
+    触发时间均为北京时间 22:00.
 
 .NOTES
     Run as Administrator. Tasks run Monday-Friday only (weekend skip is also
     handled inside the Python scripts).
 #>
 
-$ErrorActionPreference = "Continue"   # schtasks /query 找不到任务时 stderr 在 PS5.1 Stop 模式下会变成终止错误
+$ErrorActionPreference = "Stop"
 
 $projectRoot = "D:\AMINQT\AMINQT CODES"
 $python = "python"
+$timeZoneOffset = "+08:00"  # Asia/Shanghai
+$startDate = (Get-Date -Format "yyyy-MM-dd")
+
+function New-AmqTaskXml {
+    param(
+        [string]$Description,
+        [string]$ScriptPath
+    )
+
+    $arguments = '"{0}"' -f $ScriptPath
+
+    @"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>$Description</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>${startDate}T22:00:00${timeZoneOffset}</StartBoundary>
+      <ScheduleByWeek>
+        <DaysOfWeek>
+          <Monday/>
+          <Tuesday/>
+          <Wednesday/>
+          <Thursday/>
+          <Friday/>
+        </DaysOfWeek>
+        <WeeksInterval>1</WeeksInterval>
+      </ScheduleByWeek>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+    </Principal>
+  </Principals>
+  <Settings>
+    <Enabled>true</Enabled>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>$python</Command>
+      <Arguments>$arguments</Arguments>
+      <WorkingDirectory>$projectRoot</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
+"@
+}
+
+function Register-AmqTask {
+    param(
+        [string]$Name,
+        [string]$ScriptPath,
+        [string]$Description
+    )
+
+    Unregister-ScheduledTask -TaskName $Name -Confirm:$false -ErrorAction SilentlyContinue
+
+    $xml = New-AmqTaskXml -Description $Description -ScriptPath $ScriptPath
+    $tempFile = [System.IO.Path]::GetTempFileName() + ".xml"
+    $xml | Set-Content -Path $tempFile -Encoding Unicode
+
+    try {
+        Register-ScheduledTask -TaskName $Name -Xml $xml -Force | Out-Null
+        Write-Host "Created: $Name (Mon-Fri 22:00 Asia/Shanghai)" -ForegroundColor Green
+    }
+    finally {
+        Remove-Item -Path $tempFile -ErrorAction SilentlyContinue
+    }
+}
 
 # --- Pipeline 1: 22:00 market data ---
-$task1Name = "AMINQT-MarketData-22h"
-
-# Remove existing task if present
-schtasks /query /tn $task1Name 2>$null
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "Removing existing task: $task1Name"
-    schtasks /delete /tn $task1Name /f
-}
-
-# Create task: Monday-Friday 22:00
-# 注意: 必须用 --% 停止符 + \" 转义, 否则 PS 5.1 会吞掉路径中的引号导致 /tr 解析失败
-schtasks --% /create /tn "AMINQT-MarketData-22h" /tr "python \"D:\AMINQT\AMINQT CODES\scripts\run_daily_market_pipeline.py\"" /sc weekly /d MON,TUE,WED,THU,FRI /st 22:00 /f
-
-Write-Host "Created: $task1Name (Mon-Fri 22:00)" -ForegroundColor Green
+Register-AmqTask `
+    -Name "AMINQT-MarketData-22h" `
+    -ScriptPath "$projectRoot\scripts\run_daily_market_pipeline.py" `
+    -Description "AMINQT market data pipeline at 22:00 Asia/Shanghai (OHLCV, PE/PB, margin, northbound, lhb, stk_limit)"
 
 # --- Pipeline 2: 22:00 announcement data ---
-$task2Name = "AMINQT-Announcement-22h"
-
-# Remove existing task if present
-schtasks /query /tn $task2Name 2>$null
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "Removing existing task: $task2Name"
-    schtasks /delete /tn $task2Name /f
-}
-
-# Create task: Monday-Friday 22:00
-schtasks --% /create /tn "AMINQT-Announcement-22h" /tr "python \"D:\AMINQT\AMINQT CODES\scripts\run_announcement_pipeline.py\"" /sc weekly /d MON,TUE,WED,THU,FRI /st 22:00 /f
-
-Write-Host "Created: $task2Name (Mon-Fri 22:00)" -ForegroundColor Green
+Register-AmqTask `
+    -Name "AMINQT-Announcement-22h" `
+    -ScriptPath "$projectRoot\scripts\run_announcement_pipeline.py" `
+    -Description "AMINQT announcement data pipeline at 22:00 Asia/Shanghai (fina_indicator, holdertrade, holdernumber, anns_d)"
 
 # --- Summary ---
 Write-Host ""
 Write-Host "=== Scheduled Tasks Summary ===" -ForegroundColor Cyan
-schtasks /query /tn $task1Name /fo LIST 2>$null | Select-String "TaskName|Status|Next Run"
-schtasks /query /tn $task2Name /fo LIST 2>$null | Select-String "TaskName|Status|Next Run"
+schtasks /query /tn "AMINQT-MarketData-22h" /fo LIST 2>$null | Select-String "TaskName|Status|Next Run|Start Time|Time Zone"
+schtasks /query /tn "AMINQT-Announcement-22h" /fo LIST 2>$null | Select-String "TaskName|Status|Next Run|Start Time|Time Zone"
 
 Write-Host ""
 Write-Host "Manual trigger:" -ForegroundColor Yellow
