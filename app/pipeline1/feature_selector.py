@@ -223,7 +223,9 @@ class BruteForceGenerator:
         return new
 
 
-# ── Dedup L2 ──
+# ──────────────────────────────────────────────────────────
+# Dedup L2 (Layer2, MAIN)
+# ──────────────────────────────────────────────────────────
 
 
 def dedup_l2(feats, df, threshold=0.7):
