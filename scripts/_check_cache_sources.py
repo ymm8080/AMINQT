@@ -49,7 +49,7 @@ expected = {
     "fina_indicator": ["roe", "roa", "gross_margin", "net_margin"],
     "holdernumber": ["holder_count"],
     "holdertrade": ["sh_"],
-    "cyq_tushare": ["benefit_part", "pct_", "cost_"],
+    "cyq_tushare": ["winner_ratio", "pct_", "cost_"],
     "sector_index": ["sw_"],
 }
 for src, prefixes in expected.items():

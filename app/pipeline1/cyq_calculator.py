@@ -4,7 +4,7 @@
 原算法: akshare stock_cyq_em (https://quote.eastmoney.com)
 
 只依赖 OHLCV + 换手率, 计算日频筹码分布:
-  - 获利盘比例 (benefit_part)
+  - 获利盘比例 (winner_ratio)
   - 平均成本 (avg_cost)
   - 70%/90% 筹码集中度 (concentration)
   - 成本分位线 (5%/15%/50%/85%/95%)
@@ -124,9 +124,9 @@ def _compute_cyq_one_day(
         for i in range(factor):
             if current_price >= minprice + i * accuracy:
                 below += xdata[i]
-        benefit_part = below / total_chips
+        winner_ratio = below / total_chips
     else:
-        benefit_part = 0.5
+        winner_ratio = 0.5
 
     avg_cost = cost_at_percentile(0.5)
 
@@ -143,7 +143,7 @@ def _compute_cyq_one_day(
     pc90 = compute_percent_chips(0.9)
 
     return {
-        "benefit_part": benefit_part,
+        "winner_ratio": winner_ratio,
         "avg_cost": avg_cost,
         "pct_70_low": pc70["priceRange"][0],
         "pct_70_high": pc70["priceRange"][1],
@@ -188,7 +188,7 @@ def _compute_cyq_for_stock(
         # 返回空结构
         cols = [
             "date",
-            "benefit_part",
+            "winner_ratio",
             "avg_cost",
             "pct_70_low",
             "pct_70_high",
@@ -208,7 +208,7 @@ def _compute_cyq_for_stock(
     return pd.DataFrame(rows)[
         [
             "date",
-            "benefit_part",
+            "winner_ratio",
             "avg_cost",
             "pct_70_low",
             "pct_70_high",
@@ -263,7 +263,7 @@ if __name__ == "__main__":
         d = str(row["date"])[:10]
         print(
             f"{d} | 90%集中度={row['pct_90_con'] * 100:.2f}% | "
-            f"获利盘={row['benefit_part'] * 100:.1f}% | "
+            f"获利盘={row['winner_ratio'] * 100:.1f}% | "
             f"90%区间=[{row['pct_90_low']:.2f}, {row['pct_90_high']:.2f}] | "
             f"均价={row['weight_avg']:.2f}"
         )

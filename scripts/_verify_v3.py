@@ -63,7 +63,7 @@ groups = {
     ],
     "龙虎榜": ["lhb_net_buy", "lhb_buy_amt", "lhb_sell_amt"],
     "筹码分布": [
-        "benefit_part",
+        "winner_ratio",
         "avg_cost",
         "pct_70_low",
         "pct_70_high",

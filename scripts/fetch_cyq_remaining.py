@@ -51,7 +51,7 @@ def fetch_one(pro, ts_code):
                     {
                         "symbol": ts_code.split(".")[0],
                         "date": pd.to_datetime(raw["trade_date"], format="%Y%m%d"),
-                        "benefit_part": pd.to_numeric(
+                        "winner_ratio": pd.to_numeric(
                             raw["winner_rate"], errors="coerce"
                         ),
                         "avg_cost": pd.to_numeric(raw["weight_avg"], errors="coerce"),
@@ -155,7 +155,7 @@ def main():
     logger.info("V3: %d rows, %d cols", len(v3), len(v3.columns))
 
     cyq_cols = [
-        "benefit_part",
+        "winner_ratio",
         "avg_cost",
         "cost_5pct",
         "cost_15pct",

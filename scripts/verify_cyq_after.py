@@ -8,7 +8,7 @@ print(f"V3: {len(df):,} rows, {len(df.columns)} cols")
 print()
 
 cyq = [
-    "benefit_part",
+    "winner_ratio",
     "avg_cost",
     "pct_70_low",
     "pct_70_high",

@@ -23,7 +23,7 @@ v3 = [
     "list_days",
     "industry",
     "free_float_turnover_rate",
-    "benefit_part",
+    "winner_ratio",
     "avg_cost",
     "pct_70_low",
     "pct_70_high",
@@ -197,7 +197,7 @@ dim_map = {
     },
     "dim18/dim26_lhb": {"lhb_net_buy", "lhb_buy_amt", "lhb_sell_amt"},
     "dim21_chip": {
-        "benefit_part",
+        "winner_ratio",
         "avg_cost",
         "weight_avg",
         "pct_70_low",
@@ -241,14 +241,14 @@ missingness_cols = {
     "main_money_flow",
     "chip_concentration",
     "conc_90",
-    "benefit_part",
+    "winner_ratio",
     "margin_balance",
     "north_net_buy_sh",
     "holder_count",
 }
 
 # NEUTRALIZE_COLS
-neutralize_cols = {"turnover_rate", "chip_concentration", "conc_90", "benefit_part"}
+neutralize_cols = {"turnover_rate", "chip_concentration", "conc_90", "winner_ratio"}
 
 print("=" * 70)
 print("V3 COLUMNS — FEATURE ENGINEERING COVERAGE ANALYSIS")

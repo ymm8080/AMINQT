@@ -73,7 +73,7 @@ MIN_TOTAL_SAMPLES = 500  # 因子全局最小样本数
 DIM_FEATURES: dict[str, list[str]] = {
     "dim21_cyq": [
         "conc_90",
-        "benefit_part",
+        "winner_ratio",
         "cost_bias",
         "cost_spread",
         "chip_skew",
@@ -266,7 +266,7 @@ def try_enrich_cyq(df: pd.DataFrame) -> pd.DataFrame:
             for c in df.columns
             if c.startswith("pct_")
             or c.startswith("cost_")
-            or c in ("benefit_part", "weight_avg")
+            or c in ("winner_ratio", "weight_avg")
         ]
         logger.info("CYQ enriched: +%d cols, %.1fs", len(cyq_cols), time.time() - t0)
     except Exception as exc:
@@ -618,11 +618,11 @@ def main():
     df = add_industry_board(df)
 
     # 3. Enrich CYQ (skip if already in enriched panel — avoids column collisions)
-    #    enrich_cyq() merges columns like benefit_part, pct_90_con, cost_50pct.
+    #    enrich_cyq() merges columns like winner_ratio, pct_90_con, cost_50pct.
     #    If these already exist (from panel_full_enriched.parquet), the merge
-    #    creates suffixed duplicates (e.g. benefit_part_x/y), breaking downstream
+    #    creates suffixed duplicates (e.g. winner_ratio_x/y), breaking downstream
     #    feature computation. Check by exact column name, not "conc_" prefix.
-    CYQ_REQUIRED = {"pct_90_con", "benefit_part", "cost_50pct"}
+    CYQ_REQUIRED = {"pct_90_con", "winner_ratio", "cost_50pct"}
     if not CYQ_REQUIRED.issubset(df.columns):
         df = try_enrich_cyq(df)
     else:

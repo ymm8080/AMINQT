@@ -59,7 +59,7 @@ def main():
 
     # 3. 列名映射: Tushare -> v3
     rename_map = {
-        "winner_rate": "benefit_part",  # 获利比例
+        "winner_rate": "winner_ratio",  # 获利比例
         "weight_avg": "avg_cost",  # 加权平均成本 -> 平均成本
     }
     cyq = cyq.rename(columns=rename_map)
@@ -67,7 +67,7 @@ def main():
 
     # 4. 删除 v3 中的旧 cyq 列 (避免 _x/_y 冲突)
     cyq_cols_in_v3 = [
-        "benefit_part",
+        "winner_ratio",
         "avg_cost",
         "pct_70_low",
         "pct_70_high",

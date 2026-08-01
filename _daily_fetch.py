@@ -31,9 +31,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TRADE_DATE = sys.argv[1] if len(sys.argv) > 1 else datetime.now().strftime("%Y%m%d")
-PANEL = "data/panel_full_enriched_v3.parquet"
+PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
 
-pro = ts.pro_api(os.getenv("TUSHARE_TOKEN"))
+_token = os.getenv("TUSHARE_TOKEN") or ts.get_token()
+if not _token:
+    print("FATAL: No Tushare token"); sys.exit(1)
+pro = ts.pro_api(_token)
 
 # ── 0. Get valid stock universe from panel ──
 print(f"[0] Getting stock universe...")
@@ -71,6 +74,7 @@ money = safe_fetch(pro.moneyflow, "moneyflow", trade_date=TRADE_DATE)
 cyq   = safe_fetch(pro.cyq_perf, "cyq_perf", trade_date=TRADE_DATE)
 margin= safe_fetch(pro.margin_detail, "margin_detail", trade_date=TRADE_DATE)
 lhb   = safe_fetch(pro.top_list, "LHB", trade_date=TRADE_DATE)
+sw    = safe_fetch(pro.sw_daily, "sw_daily", trade_date=TRADE_DATE)
 
 if not len(ohlcv):
     print("FATAL: No OHLCV data"); sys.exit(1)
@@ -91,10 +95,9 @@ panel_cols = schema.names
 # ── 3. Merge all sources ──
 print(f"\n[3] Merging sources...")
 merges = {
-    "daily_basic": (basic, ["turnover_rate", "turnover_rate_f", "volume_ratio",
+    "daily_basic": (basic, ["volume_ratio",
         "pe", "pe_ttm", "pb", "ps", "ps_ttm", "total_share", "float_share",
         "free_share", "total_mv", "circ_mv", "dv_ratio", "dv_ttm"]),
-    "stk_limit": (limit, ["up_limit", "down_limit"]),
     "moneyflow": (money, ["net_mf_amount", "buy_elg_amount", "sell_elg_amount"]),
     "cyq_perf": (cyq, ["cost_5pct", "cost_15pct", "cost_50pct", "cost_85pct",
         "cost_95pct", "weight_avg", "winner_rate"]),
@@ -117,11 +120,26 @@ for src_name, (src_df, cols) in merges.items():
         if tgt in panel_cols and tgt not in df.columns:
             df[tgt] = df["symbol"].map(smap[c])
 
+# Direct mapping: Tushare source cols -> panel target cols (names differ)
+if len(cyq) and "winner_rate" in cyq.columns and "winner_rate" not in df.columns:
+    wmap = cyq.set_index("symbol")["winner_rate"]
+    df["winner_rate"] = df["symbol"].map(wmap)
+
+if len(basic):
+    bmap = basic.set_index("symbol")
+    if "turnover_rate_f" in bmap.columns and "free_float_turnover_rate" in panel_cols:
+        df["free_float_turnover_rate"] = df["symbol"].map(bmap["turnover_rate_f"])
+
+# stk_limit direct mapping
+if len(limit):
+    lmap = limit.set_index("symbol")
+    for src_col, tgt_col in [("up_limit", "up_limit_raw"), ("down_limit", "down_limit_raw")]:
+        if src_col in lmap.columns and tgt_col in panel_cols:
+            df[tgt_col] = df["symbol"].map(lmap[src_col])
+
 # Rename mappings
 rename_map = {
-    "up_limit": "up_limit_raw", "down_limit": "down_limit_raw",
-    "net_mf_amount": "main_money_flow",
-    "winner_rate": "_winner_rate_tmp",
+"net_mf_amount": "main_money_flow",
     "rzye": "margin_balance", "rqye": "short_balance",
     "rzmre": "margin_buy_amt", "rqyl": "short_sell_vol",
 }
@@ -148,9 +166,9 @@ if len(adj) and "adj_factor" in adj.columns:
         if tgt in panel_cols:
             df[tgt] = df[col] * factor
 
-# --- benefit_part = winner_rate / 100 ---
-if "_winner_rate_tmp" in df.columns:
-    df["benefit_part"] = df["_winner_rate_tmp"] / 100.0
+# --- winner_ratio = winner_rate / 100 ([0,1] ratio) ---
+if "winner_rate" in df.columns and "winner_ratio" in panel_cols:
+    df["winner_ratio"] = df["winner_rate"] / 100.0
 
 # --- avg_cost = cost_50pct ---
 if "cost_50pct" in df.columns and "avg_cost" in panel_cols:
@@ -196,6 +214,33 @@ try:
 except Exception as e:
     print(f"    stock_basic: {e}")
 
+# --- Sector index (sw_daily) ---
+if len(sw) and "industry" in df.columns:
+    sw_map = {}
+    for _, row in sw.iterrows():
+        idx_name = str(row.get("name", "")).strip()
+        if idx_name:
+            sw_map[idx_name] = {"close": row.get("close"), "vol": row.get("vol"), "pct_change": row.get("pct_change")}
+    # Fuzzy match industry -> SW name
+    ind_to_sw = {}
+    for ind in df["industry"].dropna().unique():
+        ind_s = str(ind).strip()
+        for sw_n in sw_map:
+            if ind_s in sw_n or sw_n in ind_s:
+                ind_to_sw[ind_s] = sw_n
+                break
+    for tgt_col, sw_key in [("sw_index_close","close"),("sw_index_vol","vol"),("sw_ret_1d","pct_change")]:
+        if tgt_col in panel_cols:
+            vals = {}
+            for _, row in df.iterrows():
+                sw_n = ind_to_sw.get(str(row.get("industry","")).strip())
+                if sw_n and pd.notna(sw_map[sw_n].get(sw_key)):
+                    vals[row["symbol"]] = sw_map[sw_n][sw_key]
+            if vals:
+                df[tgt_col] = df["symbol"].map(vals)
+    n_filled = df["sw_index_close"].notna().sum() if "sw_index_close" in df.columns else 0
+    print(f"    sw_daily: {len(sw)} indices -> {n_filled}/{len(df)} stocks")
+
 # --- Simple derived features (no history needed) ---
 if all(c in df.columns for c in ["high", "low", "pre_close"]):
     df["intraday_range"] = (df["high"] - df["low"]) / df["pre_close"].replace(0, np.nan)
@@ -208,9 +253,6 @@ if all(c in df.columns for c in ["amount", "close"]):
     if "volume" in panel_cols and "volume" not in df.columns:
         df["volume"] = np.nan
     df.loc[valid, "volume"] = df.loc[valid, "amount"] / df.loc[valid, "close"]
-
-if "turn" in panel_cols and "turnover_rate" in df.columns:
-    df["turn"] = df["turnover_rate"]
 
 if "pct_chg" in df.columns and "ret_pct" in panel_cols:
     df["ret_pct"] = df["pct_chg"] / 100
@@ -299,13 +341,12 @@ ffill_cols = [
     "debt_ratio", "current_ratio", "asset_turnover", "inventory_turnover",
     "ocf_to_or", "eps", "bps", "ocfps", "revenue_ps",
     "roe_deducted", "roe_yoy", "q_roe",
-    "ar_turnover", "free_float_turnover_rate",
-    "holder_count", "sh_change_amt", "sh_change_amt_total",
-    "sh_change_vol", "sh_net_change_sign", "sh_net_sign",
+    "ar_turnover", "profit_ratio",
+    "holder_count", "sh_change_vol", "sh_change_amt", "sh_change_amt_total",
+    "sh_net_change_sign", "sh_net_sign",
     "sw_index_close", "sw_index_vol", "sw_ret_1d",
-    "chip_concentration", "profit_ratio",
     "margin_balance", "short_balance", "margin_buy_amt", "short_sell_vol",
-    "dt_eps", "q_ocf_to_sales",
+    "dt_eps", "q_ocf_to_sales", "announce_date",
 ]
 ffill_cols = [c for c in ffill_cols if c in panel_cols]
 needed_ffill = [c for c in ffill_cols if c not in df.columns or df[c].isna().all()]
@@ -315,6 +356,9 @@ if needed_ffill:
     ffill_hist = ffill_hist[ffill_hist["symbol"].isin(symbols)]
     ffill_hist = ffill_hist[ffill_hist["date"] < pd.Timestamp(TRADE_DATE)]
     ffill_hist = ffill_hist.sort_values(["symbol", "date"])
+    for col in needed_ffill:
+        if col in ffill_hist.columns:
+            ffill_hist[col] = ffill_hist.groupby("symbol")[col].ffill()
     last_per_stock = ffill_hist.groupby("symbol").last()
     filled_count = 0
     for col in needed_ffill:
@@ -370,7 +414,7 @@ print(f"\n{'='*55}")
 print(f"DONE: {TRADE_DATE}")
 print(f"{'='*55}")
 pf2 = pq.ParquetFile(PANEL)
-print(f"Panel: {pf2.metadata.num_rows:,} rows")
+print(f"Panel: {pf2.metadata.num_rows:,} rows, {len(pf2.schema_arrow.names)} cols")
 pf2.close()
 
 final = pq.read_table(PANEL, filters=[("date", "=", pd.Timestamp(TRADE_DATE))]).to_pandas()

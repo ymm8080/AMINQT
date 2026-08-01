@@ -150,7 +150,7 @@ def abs_rank_ic(df, factor, label):
 dims = {
     "dim21_cyq": [
         "conc_90",
-        "benefit_part",
+        "winner_ratio",
         "cost_bias",
         "cost_spread",
         "chip_skew",
@@ -226,7 +226,7 @@ chg_check = [
     "BB_width",
     "chip_concentration",
     "conc_90",
-    "benefit_part",
+    "winner_ratio",
     "amihud_illiquidity",
 ]
 dims["_time_series_chg"] = [f"{c}_chg{w}" for c in chg_check for w in [1, 3, 5]]

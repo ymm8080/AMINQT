@@ -53,7 +53,7 @@ MIN_Y_UNIQUE = 2
 DIM_FEATURES: dict[str, list[str]] = {
     "dim21_cyq": [
         "conc_90",
-        "benefit_part",
+        "winner_ratio",
         "cost_bias",
         "cost_spread",
         "chip_skew",
@@ -337,7 +337,7 @@ def maybe_drop_sparse_rows(df: pd.DataFrame) -> pd.DataFrame:
     If a row has no alt data at all, it's not useful for dim21-28 eval.
     """
     alt_markers = {
-        "benefit_part",
+        "winner_ratio",
         "pct_90_con",
         "roe",
         "gross_margin",

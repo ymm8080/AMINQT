@@ -1,0 +1,24 @@
+index_classify L1 SW: 0 rows
+  Columns: ['index_code', 'industry_name', 'level', 'industry_code', 'is_pub', 'parent_code', 'src']
+
+index_classify L2 SW: 0 rows
+  Columns: ['index_code', 'industry_name', 'level', 'industry_code', 'is_pub', 'parent_code', 'src']
+
+index_member 801010.SI (农林牧渔): 3000 rows
+  Columns: ['index_code', 'con_code', 'in_date', 'out_date', 'is_new']
+  Sample:
+  index_code   con_code   in_date  out_date is_new
+0  801862.SI  600251.SH  20130812  20130823      N
+1  801862.SI  600390.SH  20130812  20130816      N
+2  801862.SI  600419.SH  20130812  20130816      N
+
+stock_basic: 5534 stocks, 110 unique industries
+  Columns: ['ts_code', 'symbol', 'name', 'area', 'industry', 'market', 'list_date']
+
+stock_company: 6294 rows
+  Columns: ['ts_code', 'exchange', 'province', 'city', 'introduction', 'main_business']
+
+daily_basic: 5528 rows
+  Columns: ['ts_code', 'trade_date', 'close', 'turnover_rate', 'turnover_rate_f', 'volume_ratio', 'pe', 'pe_ttm', 'pb', 'ps', 'ps_ttm', 'dv_ratio', 'dv_ttm', 'total_share', 'float_share', 'free_share', 'total_mv', 'circ_mv']
+
+daily_basic sample ts_code: 000001.SZ

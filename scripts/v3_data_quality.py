@@ -16,7 +16,7 @@ print("=" * 70)
 print("1. CYQ Column Fill Rates")
 print("=" * 70)
 cyq = [
-    "benefit_part",
+    "winner_ratio",
     "avg_cost",
     "weight_avg",
     "cost_5pct",
@@ -99,20 +99,20 @@ print(
     f"  cost_5 ≤ 15 ≤ 50 ≤ 85 ≤ 95:  {'PASS' if violations == 0 else f'FAIL ({violations:,}/{n_valid:,})'}"
 )
 
-# 5b. benefit_part in [0, 1] (or [0, 100] if Tushare winner_rate stored directly)
-bp_valid = df["benefit_part"].dropna()
+# 5b. winner_ratio in [0, 1] (or [0, 100] if Tushare winner_rate stored directly)
+bp_valid = df["winner_ratio"].dropna()
 bp_oob_01 = ((bp_valid < 0) | (bp_valid > 1)).sum()
 bp_oob_100 = ((bp_valid < 0) | (bp_valid > 100)).sum()
 bp_min, bp_max = bp_valid.min(), bp_valid.max()
 if bp_oob_01 == 0:
-    print(f"  benefit_part in [0,1]:       PASS  (range: {bp_min:.4f} ~ {bp_max:.4f})")
+    print(f"  winner_ratio in [0,1]:       PASS  (range: {bp_min:.4f} ~ {bp_max:.4f})")
 elif bp_oob_100 == 0:
-    print(f"  benefit_part in [0,100]:    PASS  (range: {bp_min:.2f} ~ {bp_max:.2f})")
+    print(f"  winner_ratio in [0,100]:    PASS  (range: {bp_min:.2f} ~ {bp_max:.2f})")
     print(
-        "    ⚠ benefit_part is [0,100] not [0,1] — fetch_cyq_remaining stored winner_rate directly"
+        "    ⚠ winner_ratio is [0,100] not [0,1] — fetch_cyq_remaining stored winner_rate directly"
     )
 else:
-    print(f"  benefit_part range:          FAIL  (range: {bp_min:.2f} ~ {bp_max:.2f})")
+    print(f"  winner_ratio range:          FAIL  (range: {bp_min:.2f} ~ {bp_max:.2f})")
 
 # 5c. pct_70_con in [0, 1]
 p70 = df["pct_70_con"].dropna()
@@ -211,7 +211,7 @@ sample = df[df["symbol"] == "000001"].sort_values("date").tail(3)
 show = [
     "date",
     "close",
-    "benefit_part",
+    "winner_ratio",
     "cost_5pct",
     "cost_15pct",
     "cost_50pct",
