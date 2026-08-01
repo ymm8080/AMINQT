@@ -27,6 +27,8 @@ from datetime import datetime
 
 import pandas as pd
 
+from config.settings import data_others_path
+
 from app.core.universe_manager import name_is_st
 
 from .cleaning_pipeline import board_of
@@ -47,7 +49,7 @@ def load_or_fetch_meta(
     name_map 用于 ST 标记. 缓存 stock_meta_<YYYYMMDD>.json (WORM, 当日有效).
     """
     os.makedirs(cache_dir, exist_ok=True)
-    path = os.path.join(cache_dir, f"stock_meta_{datetime.now():%Y%m%d}.json")
+    path = str(data_others_path(os.path.join(cache_dir, f"stock_meta_{datetime.now():%Y%m%d}.json")))
     if not refresh and os.path.exists(path):
         with open(path, encoding="utf-8") as fh:
             meta = json.load(fh)
@@ -330,7 +332,7 @@ def enrich_alt_data(
                     _fetch_one_fina,
                     symbols,
                     desc="fina",
-                    progress_file="data/enrich_progress.txt",
+                    progress_file=str(data_others_path("data/enrich_progress.txt")),
                 )
                 if frames:
                     df = pd.concat(frames, ignore_index=True)
@@ -395,7 +397,7 @@ def enrich_alt_data(
                     _fetch_one_holder,
                     symbols,
                     desc="holdernumber",
-                    progress_file="data/enrich_progress.txt",
+                    progress_file=str(data_others_path("data/enrich_progress.txt")),
                 )
                 if frames:
                     df = pd.concat(frames, ignore_index=True)
@@ -521,7 +523,7 @@ def enrich_alt_data(
                     _fetch_one_date,
                     dates.tolist(),
                     desc="daily_basic",
-                    progress_file="data/enrich_progress.txt",
+                    progress_file=str(data_others_path("data/enrich_progress.txt")),
                 )
                 if frames:
                     df = pd.concat(frames, ignore_index=True)
@@ -552,7 +554,7 @@ def enrich_alt_data(
                     _fetch_one_limit_date,
                     dates.tolist(),
                     desc="stk_limit",
-                    progress_file="data/enrich_progress.txt",
+                    progress_file=str(data_others_path("data/enrich_progress.txt")),
                 )
                 if frames:
                     df = pd.concat(frames, ignore_index=True)

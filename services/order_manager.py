@@ -62,7 +62,14 @@ class OrderManager:
             True 执行器接受 (SUBMITTED), False 异常 (REJECTED)。
         """
         order = Order(
-            symbol=rec["symbol"], side=rec["side"], qty=rec["qty"], price=rec["price"]
+            symbol=rec["symbol"],
+            side=rec["side"],
+            qty=rec["qty"],
+            price=rec["price"],
+            amount=rec.get("amount"),
+            pct_change=rec.get("pct_change"),
+            is_st=rec.get("is_st", False),
+            list_days=rec.get("list_days"),
         )
         try:
             result = self.executor.execute(order)
@@ -130,6 +137,10 @@ class OrderManager:
         qty: int,
         require_confirm: bool = True,
         client_order_id: str | None = None,
+        amount: float | None = None,
+        pct_change: float | None = None,
+        is_st: bool = False,
+        list_days: int | None = None,
     ) -> str:
         """提交委托 (默认手动确认模式).
 
@@ -141,6 +152,10 @@ class OrderManager:
             require_confirm: True → PENDING_CONFIRM 待手动确认;
                 False → 直接报单 (SUBMITTED)。
             client_order_id: 客户端幂等键; 重复提交将被拒绝。
+            amount: 最新日成交额 (AUTO 风控需要).
+            pct_change: 最新日涨跌幅 %% (AUTO 风控需要).
+            is_st: 是否为 ST 股.
+            list_days: 上市天数.
 
         Returns:
             order_id。
@@ -162,6 +177,10 @@ class OrderManager:
             "side": side,
             "price": price,
             "qty": qty,
+            "amount": amount,
+            "pct_change": pct_change,
+            "is_st": is_st,
+            "list_days": list_days,
             "status": OrderStatus.PENDING_CONFIRM,
             "executor_result": None,
         }

@@ -28,6 +28,8 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from config.settings import data_others_path
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -43,8 +45,8 @@ SKIP_DIMS = {
     "_auto_adopted",
 }
 
-DEFAULT_REGISTRY_PATH = "data/factor_registry/feature_registry.json"
-REPORT_DIR = "data/factor_registry"
+DEFAULT_REGISTRY_PATH = str(data_others_path("data/factor_registry/feature_registry.json"))
+REPORT_DIR = str(data_others_path("data/factor_registry"))
 
 # Sampling params
 N_STOCKS = 200

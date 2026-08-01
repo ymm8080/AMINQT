@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.pipeline1.dual_track_trainer import DualTrackTrainer
 from app.pipeline1.predict_runner import find_bundles, run_prediction
+from config.settings import data_others_path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,6 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger("train_predict_dual")
 
 REGISTRY_DIR = "data/factor_registry"
+REGISTRY_JSON_DIR = str(data_others_path("data/factor_registry"))
 MODEL_DIR = "models/pipeline1"
 PANEL_PATH = "data/panel_full_enriched_v3.parquet"
 
@@ -147,7 +149,7 @@ def main():
 
         # Find latest Layer2 selected
         sel_files = sorted(
-            glob.glob(os.path.join(REGISTRY_DIR, "selected_dual_20*.json")),
+            glob.glob(os.path.join(REGISTRY_JSON_DIR, "selected_dual_20*.json")),
             reverse=True,
         )
         sel_file = sel_files[0] if sel_files else None

@@ -24,9 +24,11 @@ import sqlite3
 import numpy as np
 import pandas as pd
 
+from config.settings import data_others_path
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join("data", "predictions.db")
+DB_PATH = str(data_others_path("data/predictions.db"))
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS prediction_runs (

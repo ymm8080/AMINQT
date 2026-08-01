@@ -10,6 +10,8 @@ import logging
 import os
 from datetime import datetime
 
+from config.settings import data_others_path
+
 logger = logging.getLogger(__name__)
 
 TICK_FIELDS = [
@@ -23,11 +25,7 @@ TICK_FIELDS = [
 # 打标后自动固定 (is_fixed=True) 的 TICK (ARCH §5.16.2)
 _FIXING_TICKS = ("is_daily_buy", "is_daily_sell")
 
-DEFAULT_POOL_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data",
-    "stock_pool.json",
-)
+DEFAULT_POOL_PATH = str(data_others_path("data/stock_pool.json"))
 
 
 def _default_ticks() -> dict[str, bool]:

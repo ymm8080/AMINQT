@@ -15,10 +15,12 @@ import os
 import numpy as np
 import pandas as pd
 
+from config.settings import data_others_path
+
 LIST_DIR = "data/lists"
-TUNING_REPORT = "data/tuning_report.json"
-WATCHLIST_PATH = "data/watchlist.json"
-PRIORITY_PATH = "data/priority.json"
+TUNING_REPORT = str(data_others_path("data/tuning_report.json"))
+WATCHLIST_PATH = str(data_others_path("data/watchlist.json"))
+PRIORITY_PATH = str(data_others_path("data/priority.json"))
 
 DEMO_SYMBOLS = [
     "600519",

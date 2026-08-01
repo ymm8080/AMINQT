@@ -21,8 +21,42 @@ INTRADAY_DIR = DATA_DIR / "intraday"
 PROCESSED_DIR = DATA_DIR / "processed"
 MODEL_DIR = PROJECT_ROOT / "app" / "models" / "trained"
 
-for _d in (RAW_DIR, INTRADAY_DIR, PROCESSED_DIR, MODEL_DIR):
+# Non-parquet data outputs (logs, reports, JSON state, CSV exports, etc.)
+# are kept outside the repo data/ directory so that data/ contains only
+# parquet-format analytical datasets.
+DATA_OTHERS_DIR = Path("D:/AMINQT/DATA OTHERS")
+
+for _d in (RAW_DIR, INTRADAY_DIR, PROCESSED_DIR, MODEL_DIR, DATA_OTHERS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
+
+
+def data_others_path(path: str | Path) -> Path:
+    """Return the DATA_OTHERS location for a non-parquet path.
+
+    Paths that start with ``data/`` are mapped to ``DATA_OTHERS_DIR`` so that
+    ``data/`` contains only parquet-format analytical datasets. Parquet paths
+    are rejected because they must remain in ``DATA_DIR``.
+    """
+    p = Path(path)
+    if p.suffix.lower() == ".parquet":
+        raise ValueError(f"parquet files must stay in data/: {path}")
+    if p.is_absolute():
+        return p
+    parts = p.parts
+    if parts and parts[0] == "data":
+        parts = parts[1:]
+    return DATA_OTHERS_DIR.joinpath(*parts)
+
+
+def data_path(path: str | Path) -> Path:
+    """Return the location under DATA_DIR for a parquet dataset path."""
+    p = Path(path)
+    if p.is_absolute():
+        return p
+    parts = p.parts
+    if parts and parts[0] == "data":
+        parts = parts[1:]
+    return DATA_DIR.joinpath(*parts)
 
 # ── Data source: "ifind" | "akshare" (akshare = fallback/dev) ──
 DATA_SOURCE = os.getenv("AMINQT_DATA_SOURCE", "akshare")
@@ -56,6 +90,6 @@ EXECUTION_MODE = ExecutionMode(os.getenv("AMINQT_EXEC_MODE", "manual"))
 EXECUTION_BROKER = os.getenv("AMINQT_BROKER", "sim")  # "sim" | "xt"
 
 # ── Risk filter hard constraints (Phase 4) ────────────────────
-MIN_AMOUNT = 5_000_000          # 成交额 >= 5000万
+MIN_AMOUNT = 50_000_000         # 成交额 >= 5000万
 PRICE_LIMIT_PCT = 9.5           # |涨跌幅| <= 9.5%
 MAX_ACCOUNT_DRAWDOWN_PCT = 3.0  # 账户回撤 > 3% → 返回空列表

@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 from app.pipeline1.panel_builder import assemble_panel, load_or_fetch_meta  # noqa: E402
 from app.pipeline1.train_runner import run_training  # noqa: E402
+from config.settings import data_others_path  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
@@ -40,7 +41,7 @@ def load_symbols(args: argparse.Namespace) -> list[str]:
         return [s.strip() for s in lines if s.strip() and not s.startswith("#")]
     import json
 
-    watchlist = Path("data/watchlist.json")
+    watchlist = Path(data_others_path("data/watchlist.json"))
     if watchlist.exists():
         symbols = json.loads(watchlist.read_text(encoding="utf-8"))
         if symbols:

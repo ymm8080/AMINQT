@@ -19,6 +19,8 @@ from datetime import datetime
 
 import pandas as pd
 
+from config.settings import data_others_path
+
 from .cleaning_pipeline import CleaningPipeline
 from .data_supply import DataSupplyChain, DataSupplyError
 from .dual_track_trainer import DualTrackTrainer
@@ -171,7 +173,7 @@ class DailySelectionPipeline:
                 import json
                 import os
 
-                pq_path = os.path.join("data", "priority.json")
+                pq_path = str(data_others_path("data/priority.json"))
                 existing = set()
                 if os.path.exists(pq_path):
                     with open(pq_path, "r", encoding="utf-8") as f:
@@ -284,7 +286,7 @@ class DailySelectionPipeline:
 
         # WORM 入库
         try:
-            worm_dir = os.path.join("data", "quality_reports")
+            worm_dir = str(data_others_path("data/quality_reports"))
             os.makedirs(worm_dir, exist_ok=True)
             path = os.path.join(worm_dir, f"quality_{trade_date}.json")
             with open(path, "w", encoding="utf-8") as fh:

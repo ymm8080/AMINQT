@@ -19,6 +19,8 @@ import os
 import numpy as np
 import pandas as pd
 
+from config.settings import data_others_path
+
 from app.pipeline1.backtest_v35 import BacktestEngineV35, BacktestProtocol
 from app.rules.config import TUNABLE_BOUNDS
 
@@ -50,7 +52,7 @@ class ParamTuner:
         panel: pd.DataFrame,
         daily_lists: dict,
         benchmark: pd.Series | None = None,
-        report_dir: str = "data",
+        report_dir: str = str(data_others_path("data")),
     ):
         self.panel = panel
         self.daily_lists = daily_lists

@@ -16,6 +16,8 @@ import os
 
 import pandas as pd
 
+from config.settings import data_others_path
+
 from .cleaning_pipeline import CleaningPipeline
 from .dual_track_trainer import DualTrackTrainer
 from .feature_engine_v35 import FeatureEngineV35
@@ -150,7 +152,7 @@ def run_training(
     panel: pd.DataFrame,
     tag: str,
     model_dir: str = "models/pipeline1",
-    registry_path: str = "data/factor_registry",
+    registry_path: str = str(data_others_path("data/factor_registry")),
     float_shares_map: dict | None = None,
     use_ic_screen: bool = True,
     use_registry: bool = True,

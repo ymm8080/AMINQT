@@ -81,6 +81,11 @@ jobs:
             ruff format --check $DIRS
           fi
 
+      - name: Enforce parquet-only DATA directory
+        run: |
+          echo "=== checking data/ only contains parquet datasets ==="
+          python scripts/check_data_only_parquet.py --ci
+
   # ===========================================================================
   # Phase 2: ADR Validation (supports Chinese and English)
   # ===========================================================================

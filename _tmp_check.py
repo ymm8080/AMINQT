@@ -5,8 +5,10 @@ import os
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+from config.settings import data_others_path  # noqa: E402
+
 # 1. List tables in predictions.db
-conn = sqlite3.connect('data/predictions.db')
+conn = sqlite3.connect(str(data_others_path('data/predictions.db')))
 cur = conn.cursor()
 cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
 tables = [r[0] for r in cur.fetchall()]
