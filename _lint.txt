@@ -1,0 +1,938 @@
+﻿Lint	Ruff check	﻿2026-07-29T02:31:00.4738334Z ##[group]Run echo "=== ruff check ==="
+Lint	Ruff check	2026-07-29T02:31:00.4738687Z ^[[36;1mecho "=== ruff check ==="^[[0m
+Lint	Ruff check	2026-07-29T02:31:00.4738940Z ^[[36;1mDIRS=""^[[0m
+Lint	Ruff check	2026-07-29T02:31:00.4739188Z ^[[36;1mfor d in app scripts services tests; do^[[0m
+Lint	Ruff check	2026-07-29T02:31:00.4739640Z ^[[36;1m  if [ -d "$d" ] && find "$d" -name '*.py' -print -quit | grep -q .; then^[[0m
+Lint	Ruff check	2026-07-29T02:31:00.4740026Z ^[[36;1m    DIRS="$DIRS $d"^[[0m
+Lint	Ruff check	2026-07-29T02:31:00.4740271Z ^[[36;1m  fi^[[0m
+Lint	Ruff check	2026-07-29T02:31:00.4740468Z ^[[36;1mdone^[[0m
+Lint	Ruff check	2026-07-29T02:31:00.4740669Z ^[[36;1mif [ -z "$DIRS" ]; then^[[0m
+Lint	Ruff check	2026-07-29T02:31:00.4741017Z ^[[36;1m  echo "No Python files found yet - skipping ruff check"^[[0m
+Lint	Ruff check	2026-07-29T02:31:00.4741347Z ^[[36;1melse^[[0m
+Lint	Ruff check	2026-07-29T02:31:00.4741547Z ^[[36;1m  ruff check $DIRS^[[0m
+Lint	Ruff check	2026-07-29T02:31:00.4741776Z ^[[36;1mfi^[[0m
+Lint	Ruff check	2026-07-29T02:31:00.4792037Z shell: /usr/bin/bash -e {0}
+Lint	Ruff check	2026-07-29T02:31:00.4792299Z env:
+Lint	Ruff check	2026-07-29T02:31:00.4792510Z   PYTHON_VERSION: 3.11
+Lint	Ruff check	2026-07-29T02:31:00.4792810Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.15/x64
+Lint	Ruff check	2026-07-29T02:31:00.4793283Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib/pkgconfig
+Lint	Ruff check	2026-07-29T02:31:00.4793720Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+Lint	Ruff check	2026-07-29T02:31:00.4794097Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+Lint	Ruff check	2026-07-29T02:31:00.4794585Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+Lint	Ruff check	2026-07-29T02:31:00.4794957Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib
+Lint	Ruff check	2026-07-29T02:31:00.4795279Z ##[endgroup]
+Lint	Ruff check	2026-07-29T02:31:00.4867822Z === ruff check ===
+Lint	Ruff check	2026-07-29T02:31:00.5299710Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5300337Z   --> app/streamlit/page_data_feed.py:29:1
+Lint	Ruff check	2026-07-29T02:31:00.5300802Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5301156Z 27 |       sys.path.insert(0, str(_PROJECT_ROOT))
+Lint	Ruff check	2026-07-29T02:31:00.5301616Z 28 |
+Lint	Ruff check	2026-07-29T02:31:00.5301962Z 29 | / from scripts.data_fetch_pipeline import (
+Lint	Ruff check	2026-07-29T02:31:00.5302431Z 30 | |     ALL_SOURCES,
+Lint	Ruff check	2026-07-29T02:31:00.5302773Z 31 | |     SOURCE_GROUPS,
+Lint	Ruff check	2026-07-29T02:31:00.5303182Z 32 | |     SOURCE_MARKERS,
+Lint	Ruff check	2026-07-29T02:31:00.5303523Z 33 | |     V3_PATH,
+Lint	Ruff check	2026-07-29T02:31:00.5303848Z 34 | |     compute_coverage,
+Lint	Ruff check	2026-07-29T02:31:00.5304388Z 35 | |     load_v3,
+Lint	Ruff check	2026-07-29T02:31:00.5304691Z 36 | | )
+Lint	Ruff check	2026-07-29T02:31:00.5304966Z    | |_^
+Lint	Ruff check	2026-07-29T02:31:00.5305220Z 37 |
+Lint	Ruff check	2026-07-29T02:31:00.5305535Z 38 |   logger = logging.getLogger(__name__)
+Lint	Ruff check	2026-07-29T02:31:00.5305935Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5306274Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5306896Z 
+Lint	Ruff check	2026-07-29T02:31:00.5307085Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5307525Z   --> app/streamlit_app.py:18:1
+Lint	Ruff check	2026-07-29T02:31:00.5307874Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5308197Z 16 |     sys.path.insert(0, str(_PROJECT_ROOT))
+Lint	Ruff check	2026-07-29T02:31:00.5308615Z 17 |
+Lint	Ruff check	2026-07-29T02:31:00.5308886Z 18 | import os
+Lint	Ruff check	2026-07-29T02:31:00.5309177Z    | ^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5309497Z 19 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5309890Z 20 | import streamlit as st  # noqa: E402
+Lint	Ruff check	2026-07-29T02:31:00.5310282Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5310592Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5310893Z 
+Lint	Ruff check	2026-07-29T02:31:00.5311064Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5311399Z   --> app/streamlit_app.py:19:1
+Lint	Ruff check	2026-07-29T02:31:00.5311634Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5311810Z 18 | import os
+Lint	Ruff check	2026-07-29T02:31:00.5312122Z 19 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5312341Z    | ^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5312571Z 20 | import streamlit as st  # noqa: E402
+Lint	Ruff check	2026-07-29T02:31:00.5312837Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5313041Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5313229Z 
+Lint	Ruff check	2026-07-29T02:31:00.5313336Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5313618Z   --> scripts/_bench_chip.py:11:1
+Lint	Ruff check	2026-07-29T02:31:00.5313878Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5314438Z  9 | sys.path.insert(0, str(ROOT))
+Lint	Ruff check	2026-07-29T02:31:00.5314686Z 10 |
+Lint	Ruff check	2026-07-29T02:31:00.5314872Z 11 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5315338Z    | ^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5315552Z 12 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5315858Z 13 | from app.indicators.chip_distribution import ChipDistribution
+Lint	Ruff check	2026-07-29T02:31:00.5316216Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5316467Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5316693Z 
+Lint	Ruff check	2026-07-29T02:31:00.5316805Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5317097Z   --> scripts/_bench_chip.py:12:1
+Lint	Ruff check	2026-07-29T02:31:00.5317342Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5317530Z 11 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5317765Z 12 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5317978Z    | ^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5318298Z 13 | from app.indicators.chip_distribution import ChipDistribution
+Lint	Ruff check	2026-07-29T02:31:00.5318654Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5318875Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5319081Z 
+Lint	Ruff check	2026-07-29T02:31:00.5319240Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5319841Z   --> scripts/_bench_chip.py:13:1
+Lint	Ruff check	2026-07-29T02:31:00.5320248Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5320527Z 11 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5320881Z 12 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5321352Z 13 | from app.indicators.chip_distribution import ChipDistribution
+Lint	Ruff check	2026-07-29T02:31:00.5321800Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5322075Z 14 |
+Lint	Ruff check	2026-07-29T02:31:00.5322309Z 15 | V3_PATH = "data/panel_full_enriched_v3.parquet"
+Lint	Ruff check	2026-07-29T02:31:00.5322610Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5322831Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5323052Z 
+Lint	Ruff check	2026-07-29T02:31:00.5323149Z E722 Do not use bare `except`
+Lint	Ruff check	2026-07-29T02:31:00.5323405Z   --> scripts/_check_cache.py:43:9
+Lint	Ruff check	2026-07-29T02:31:00.5323643Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5323883Z 41 |             print(f"  schema: {list(df.columns)[:8]}...")
+Lint	Ruff check	2026-07-29T02:31:00.5324387Z 42 |             print(f"  rows: {len(df)}")
+Lint	Ruff check	2026-07-29T02:31:00.5324742Z 43 |         except:
+Lint	Ruff check	2026-07-29T02:31:00.5324944Z    |         ^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5325150Z 44 |             pass
+Lint	Ruff check	2026-07-29T02:31:00.5325374Z 45 |         print()
+Lint	Ruff check	2026-07-29T02:31:00.5325569Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5325670Z 
+Lint	Ruff check	2026-07-29T02:31:00.5325780Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5326090Z   --> scripts/_check_tushare_perm.py:11:1
+Lint	Ruff check	2026-07-29T02:31:00.5326352Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5326536Z 10 | load_dotenv()
+Lint	Ruff check	2026-07-29T02:31:00.5326753Z 11 | import tushare as ts
+Lint	Ruff check	2026-07-29T02:31:00.5326977Z    | ^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5327181Z 12 |
+Lint	Ruff check	2026-07-29T02:31:00.5327545Z 13 | token = os.getenv("TUSHARE_TOKEN")
+Lint	Ruff check	2026-07-29T02:31:00.5327796Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5328008Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5328211Z 
+Lint	Ruff check	2026-07-29T02:31:00.5328315Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5328598Z   --> scripts/_compare_cyq.py:10:1
+Lint	Ruff check	2026-07-29T02:31:00.5328844Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5329043Z  8 | sys.path.insert(0, str(ROOT))
+Lint	Ruff check	2026-07-29T02:31:00.5329281Z  9 |
+Lint	Ruff check	2026-07-29T02:31:00.5329480Z 10 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5329708Z    | ^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5329925Z 11 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5330145Z 12 | import akshare as ak
+Lint	Ruff check	2026-07-29T02:31:00.5330358Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5330568Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5330765Z 
+Lint	Ruff check	2026-07-29T02:31:00.5330872Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5331152Z   --> scripts/_compare_cyq.py:11:1
+Lint	Ruff check	2026-07-29T02:31:00.5331385Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5331571Z 10 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5331802Z 11 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5332006Z    | ^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5332213Z 12 | import akshare as ak
+Lint	Ruff check	2026-07-29T02:31:00.5332518Z 13 | from app.indicators.chip_distribution import ChipDistribution
+Lint	Ruff check	2026-07-29T02:31:00.5332858Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5333063Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5333262Z 
+Lint	Ruff check	2026-07-29T02:31:00.5333363Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5333787Z   --> scripts/_compare_cyq.py:12:1
+Lint	Ruff check	2026-07-29T02:31:00.5334014Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5334372Z 10 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5334599Z 11 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5334818Z 12 | import akshare as ak
+Lint	Ruff check	2026-07-29T02:31:00.5335035Z    | ^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5335318Z 13 | from app.indicators.chip_distribution import ChipDistribution
+Lint	Ruff check	2026-07-29T02:31:00.5335639Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5335845Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5336045Z 
+Lint	Ruff check	2026-07-29T02:31:00.5336148Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5336423Z   --> scripts/_compare_cyq.py:13:1
+Lint	Ruff check	2026-07-29T02:31:00.5336655Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5336839Z 11 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5337056Z 12 | import akshare as ak
+Lint	Ruff check	2026-07-29T02:31:00.5337347Z 13 | from app.indicators.chip_distribution import ChipDistribution
+Lint	Ruff check	2026-07-29T02:31:00.5337697Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5337972Z 14 |
+Lint	Ruff check	2026-07-29T02:31:00.5338193Z 15 | V3_PATH = "data/panel_full_enriched_v3.parquet"
+Lint	Ruff check	2026-07-29T02:31:00.5338480Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5338689Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5338880Z 
+Lint	Ruff check	2026-07-29T02:31:00.5338987Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5339260Z   --> scripts/_fast_fill_v3.py:11:1
+Lint	Ruff check	2026-07-29T02:31:00.5339502Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5339721Z  9 | ROOT = Path(__file__).resolve().parent.parent
+Lint	Ruff check	2026-07-29T02:31:00.5340053Z 10 | sys.path.insert(0, str(ROOT))
+Lint	Ruff check	2026-07-29T02:31:00.5340297Z 11 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5340511Z    | ^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5340719Z 12 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5340916Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5341118Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5341300Z 
+Lint	Ruff check	2026-07-29T02:31:00.5341414Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5341692Z   --> scripts/_fast_fill_v3.py:12:1
+Lint	Ruff check	2026-07-29T02:31:00.5341931Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5342114Z 10 | sys.path.insert(0, str(ROOT))
+Lint	Ruff check	2026-07-29T02:31:00.5342355Z 11 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5342569Z 12 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5342766Z    | ^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5342955Z 13 |
+Lint	Ruff check	2026-07-29T02:31:00.5343143Z 14 | logging.basicConfig(
+Lint	Ruff check	2026-07-29T02:31:00.5343356Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5343557Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5343738Z 
+Lint	Ruff check	2026-07-29T02:31:00.5343846Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5344415Z   --> scripts/_fetch_cyq.py:11:1
+Lint	Ruff check	2026-07-29T02:31:00.5344650Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5344839Z  9 | sys.path.insert(0, str(ROOT))
+Lint	Ruff check	2026-07-29T02:31:00.5345068Z 10 |
+Lint	Ruff check	2026-07-29T02:31:00.5345249Z 11 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5345458Z    | ^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5345690Z 12 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5345884Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5346087Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5346292Z 
+Lint	Ruff check	2026-07-29T02:31:00.5346412Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5346718Z   --> scripts/_fetch_cyq.py:12:1
+Lint	Ruff check	2026-07-29T02:31:00.5346963Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5347160Z 11 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5347392Z 12 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5347600Z    | ^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5347810Z 13 |
+Lint	Ruff check	2026-07-29T02:31:00.5348009Z 14 | logging.basicConfig(
+Lint	Ruff check	2026-07-29T02:31:00.5348232Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5348451Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5348664Z 
+Lint	Ruff check	2026-07-29T02:31:00.5348770Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5349061Z   --> scripts/_fetch_cyq_tushare.py:12:1
+Lint	Ruff check	2026-07-29T02:31:00.5349318Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5349513Z 10 | sys.path.insert(0, str(ROOT))
+Lint	Ruff check	2026-07-29T02:31:00.5349754Z 11 |
+Lint	Ruff check	2026-07-29T02:31:00.5349938Z 12 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5350173Z    | ^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5350385Z 13 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5350602Z 14 | from dotenv import load_dotenv
+Lint	Ruff check	2026-07-29T02:31:00.5350996Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5351206Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5351404Z 
+Lint	Ruff check	2026-07-29T02:31:00.5351509Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5351795Z   --> scripts/_fetch_cyq_tushare.py:13:1
+Lint	Ruff check	2026-07-29T02:31:00.5352046Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5352233Z 12 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5352449Z 13 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5352644Z    | ^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5352853Z 14 | from dotenv import load_dotenv
+Lint	Ruff check	2026-07-29T02:31:00.5353098Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5353307Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5353499Z 
+Lint	Ruff check	2026-07-29T02:31:00.5353600Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5353879Z   --> scripts/_fetch_cyq_tushare.py:14:1
+Lint	Ruff check	2026-07-29T02:31:00.5354127Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5354551Z 12 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5354792Z 13 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5355019Z 14 | from dotenv import load_dotenv
+Lint	Ruff check	2026-07-29T02:31:00.5355285Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5355517Z 15 |
+Lint	Ruff check	2026-07-29T02:31:00.5355706Z 16 | load_dotenv()
+Lint	Ruff check	2026-07-29T02:31:00.5355908Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5356124Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5356332Z 
+Lint	Ruff check	2026-07-29T02:31:00.5356442Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5356737Z   --> scripts/_fetch_cyq_tushare.py:17:1
+Lint	Ruff check	2026-07-29T02:31:00.5356992Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5357171Z 16 | load_dotenv()
+Lint	Ruff check	2026-07-29T02:31:00.5357385Z 17 | import tushare as ts
+Lint	Ruff check	2026-07-29T02:31:00.5357613Z    | ^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5357824Z 18 |
+Lint	Ruff check	2026-07-29T02:31:00.5358011Z 19 | logging.basicConfig(
+Lint	Ruff check	2026-07-29T02:31:00.5358226Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5358437Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5358641Z 
+Lint	Ruff check	2026-07-29T02:31:00.5358746Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5359028Z   --> scripts/_fill_fina.py:11:1
+Lint	Ruff check	2026-07-29T02:31:00.5359276Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5359495Z  9 | ROOT = Path(__file__).resolve().parent.parent
+Lint	Ruff check	2026-07-29T02:31:00.5359807Z 10 | sys.path.insert(0, str(ROOT))
+Lint	Ruff check	2026-07-29T02:31:00.5360066Z 11 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5360291Z    | ^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5360504Z 12 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5360715Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5360928Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5361125Z 
+Lint	Ruff check	2026-07-29T02:31:00.5361229Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5361666Z   --> scripts/_fill_fina.py:12:1
+Lint	Ruff check	2026-07-29T02:31:00.5361901Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5362091Z 10 | sys.path.insert(0, str(ROOT))
+Lint	Ruff check	2026-07-29T02:31:00.5362343Z 11 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5362558Z 12 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5362759Z    | ^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5362951Z 13 |
+Lint	Ruff check	2026-07-29T02:31:00.5363139Z 14 | logging.basicConfig(
+Lint	Ruff check	2026-07-29T02:31:00.5363356Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5363559Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5363762Z 
+Lint	Ruff check	2026-07-29T02:31:00.5363858Z E722 Do not use bare `except`
+Lint	Ruff check	2026-07-29T02:31:00.5364105Z   --> scripts/_fill_fina.py:41:9
+Lint	Ruff check	2026-07-29T02:31:00.5364537Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5364761Z 39 |             if len(df) and "symbol" in df.columns:
+Lint	Ruff check	2026-07-29T02:31:00.5365072Z 40 |                 frames.append(df)
+Lint	Ruff check	2026-07-29T02:31:00.5365327Z 41 |         except:
+Lint	Ruff check	2026-07-29T02:31:00.5365533Z    |         ^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5365735Z 42 |             pass
+Lint	Ruff check	2026-07-29T02:31:00.5365966Z 43 |     if not frames:
+Lint	Ruff check	2026-07-29T02:31:00.5366174Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5366285Z 
+Lint	Ruff check	2026-07-29T02:31:00.5366379Z E722 Do not use bare `except`
+Lint	Ruff check	2026-07-29T02:31:00.5366635Z   --> scripts/_test_akshare_cyq.py:54:5
+Lint	Ruff check	2026-07-29T02:31:00.5366890Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5367131Z 52 |         if df is not None and len(df) > 0:
+Lint	Ruff check	2026-07-29T02:31:00.5367404Z 53 |             ok += 1
+Lint	Ruff check	2026-07-29T02:31:00.5367616Z 54 |     except:
+Lint	Ruff check	2026-07-29T02:31:00.5367817Z    |     ^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5368166Z 55 |         pass
+Lint	Ruff check	2026-07-29T02:31:00.5368393Z 56 | elapsed = time.time() - t0
+Lint	Ruff check	2026-07-29T02:31:00.5368632Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5368735Z 
+Lint	Ruff check	2026-07-29T02:31:00.5368844Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5369132Z   --> scripts/_test_cyq_perm.py:12:1
+Lint	Ruff check	2026-07-29T02:31:00.5369382Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5369559Z 11 | load_dotenv()
+Lint	Ruff check	2026-07-29T02:31:00.5369767Z 12 | import tushare as ts
+Lint	Ruff check	2026-07-29T02:31:00.5369988Z    | ^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5370190Z 13 |
+Lint	Ruff check	2026-07-29T02:31:00.5370393Z 14 | token = os.getenv("TUSHARE_TOKEN")
+Lint	Ruff check	2026-07-29T02:31:00.5370639Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5370849Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5371044Z 
+Lint	Ruff check	2026-07-29T02:31:00.5371149Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5371436Z   --> scripts/data_fetch_pipeline.py:42:1
+Lint	Ruff check	2026-07-29T02:31:00.5371696Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5371892Z 40 | sys.path.insert(0, str(ROOT))
+Lint	Ruff check	2026-07-29T02:31:00.5372132Z 41 |
+Lint	Ruff check	2026-07-29T02:31:00.5372403Z 42 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5372747Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5373089Z 43 | from app.pipeline1.panel_builder import enrich_alt_data
+Lint	Ruff check	2026-07-29T02:31:00.5373409Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5373633Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5373839Z 
+Lint	Ruff check	2026-07-29T02:31:00.5373946Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5374501Z   --> scripts/data_fetch_pipeline.py:43:1
+Lint	Ruff check	2026-07-29T02:31:00.5374786Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5375040Z 42 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5375422Z 43 | from app.pipeline1.panel_builder import enrich_alt_data
+Lint	Ruff check	2026-07-29T02:31:00.5375758Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5376024Z 44 |
+Lint	Ruff check	2026-07-29T02:31:00.5376226Z 45 | logging.basicConfig(
+Lint	Ruff check	2026-07-29T02:31:00.5376455Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5376674Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5376883Z 
+Lint	Ruff check	2026-07-29T02:31:00.5376987Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5377280Z   --> scripts/enrich_holdertrade.py:21:1
+Lint	Ruff check	2026-07-29T02:31:00.5377547Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5377740Z 19 | sys.path.insert(0, ".")
+Lint	Ruff check	2026-07-29T02:31:00.5377963Z 20 |
+Lint	Ruff check	2026-07-29T02:31:00.5378199Z 21 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5378523Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5378848Z 22 | from app.pipeline1.panel_builder import enrich_alt_data
+Lint	Ruff check	2026-07-29T02:31:00.5379317Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5379530Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5379740Z 
+Lint	Ruff check	2026-07-29T02:31:00.5379860Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5380158Z   --> scripts/enrich_holdertrade.py:22:1
+Lint	Ruff check	2026-07-29T02:31:00.5380416Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5380659Z 21 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5381036Z 22 | from app.pipeline1.panel_builder import enrich_alt_data
+Lint	Ruff check	2026-07-29T02:31:00.5381373Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5381629Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5381837Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5382027Z 
+Lint	Ruff check	2026-07-29T02:31:00.5382139Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5382422Z   --> scripts/enrich_margin_panel.py:8:1
+Lint	Ruff check	2026-07-29T02:31:00.5382752Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5403637Z  6 | logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
+Lint	Ruff check	2026-07-29T02:31:00.5404398Z  7 |
+Lint	Ruff check	2026-07-29T02:31:00.5404621Z  8 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5404864Z    | ^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5405166Z  9 | from app.pipeline1.panel_builder import enrich_alt_data
+Lint	Ruff check	2026-07-29T02:31:00.5405571Z 10 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5405891Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5406121Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5406545Z 
+Lint	Ruff check	2026-07-29T02:31:00.5406667Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5406968Z   --> scripts/enrich_margin_panel.py:9:1
+Lint	Ruff check	2026-07-29T02:31:00.5407227Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5407417Z  8 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5407711Z  9 | from app.pipeline1.panel_builder import enrich_alt_data
+Lint	Ruff check	2026-07-29T02:31:00.5408044Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5408372Z 10 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5408668Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5408887Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5409085Z 
+Lint	Ruff check	2026-07-29T02:31:00.5409202Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5409494Z   --> scripts/enrich_margin_panel.py:10:1
+Lint	Ruff check	2026-07-29T02:31:00.5409751Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5409936Z  8 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5410228Z  9 | from app.pipeline1.panel_builder import enrich_alt_data
+Lint	Ruff check	2026-07-29T02:31:00.5410601Z 10 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5410933Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5411184Z 11 |
+Lint	Ruff check	2026-07-29T02:31:00.5411481Z 12 | PANEL_PATH = r"D:\AMINQT\AMINQT CODES\data\panel_full_enriched.parquet"
+Lint	Ruff check	2026-07-29T02:31:00.5411838Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5412043Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5412235Z 
+Lint	Ruff check	2026-07-29T02:31:00.5412341Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5412623Z   --> scripts/fast_alt_eval.py:25:1
+Lint	Ruff check	2026-07-29T02:31:00.5412871Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5413153Z 23 | logger.info("Panel: %d stocks, %d rows", df["symbol"].nunique(), len(df))
+Lint	Ruff check	2026-07-29T02:31:00.5413498Z 24 |
+Lint	Ruff check	2026-07-29T02:31:00.5413732Z 25 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5414047Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5414588Z 26 | from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
+Lint	Ruff check	2026-07-29T02:31:00.5414942Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5415163Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5415356Z 
+Lint	Ruff check	2026-07-29T02:31:00.5415460Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5415737Z   --> scripts/fast_alt_eval.py:26:1
+Lint	Ruff check	2026-07-29T02:31:00.5415970Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5416199Z 25 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5416591Z 26 | from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
+Lint	Ruff check	2026-07-29T02:31:00.5416966Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5417413Z 27 |
+Lint	Ruff check	2026-07-29T02:31:00.5417616Z 28 | supply = DataSupplyChain()
+Lint	Ruff check	2026-07-29T02:31:00.5417855Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5418070Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5418280Z 
+Lint	Ruff check	2026-07-29T02:31:00.5418373Z E722 Do not use bare `except`
+Lint	Ruff check	2026-07-29T02:31:00.5418623Z   --> scripts/fast_alt_eval.py:80:5
+Lint	Ruff check	2026-07-29T02:31:00.5418872Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5419108Z 78 |                     raw[c] = pd.to_numeric(raw[c], errors="coerce")
+Lint	Ruff check	2026-07-29T02:31:00.5419550Z 79 |             mg_frames.append(raw[["symbol", "date", "rzye", "rqye", "rzmre", "rqmcl"]])
+Lint	Ruff check	2026-07-29T02:31:00.5419932Z 80 |     except:
+Lint	Ruff check	2026-07-29T02:31:00.5420128Z    |     ^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5420322Z 81 |         pass
+Lint	Ruff check	2026-07-29T02:31:00.5420533Z 82 |     time.sleep(0.2)
+Lint	Ruff check	2026-07-29T02:31:00.5420748Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5420850Z 
+Lint	Ruff check	2026-07-29T02:31:00.5420942Z E722 Do not use bare `except`
+Lint	Ruff check	2026-07-29T02:31:00.5421190Z    --> scripts/fast_alt_eval.py:118:5
+Lint	Ruff check	2026-07-29T02:31:00.5421447Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5421624Z 116 |                 )
+Lint	Ruff check	2026-07-29T02:31:00.5421927Z 117 |             mf_frames.append(raw[["symbol", "date", "net_mf_amount"]])
+Lint	Ruff check	2026-07-29T02:31:00.5422259Z 118 |     except:
+Lint	Ruff check	2026-07-29T02:31:00.5422452Z     |     ^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5422646Z 119 |         pass
+Lint	Ruff check	2026-07-29T02:31:00.5422850Z 120 |     time.sleep(0.2)
+Lint	Ruff check	2026-07-29T02:31:00.5423065Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5423170Z 
+Lint	Ruff check	2026-07-29T02:31:00.5423483Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5423769Z    --> scripts/fast_alt_eval.py:147:1
+Lint	Ruff check	2026-07-29T02:31:00.5424011Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5424532Z 145 | df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
+Lint	Ruff check	2026-07-29T02:31:00.5424918Z 146 |
+Lint	Ruff check	2026-07-29T02:31:00.5425202Z 147 | from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+Lint	Ruff check	2026-07-29T02:31:00.5425572Z     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5425916Z 148 | from app.pipeline1.label_engine import LabelEngine
+Lint	Ruff check	2026-07-29T02:31:00.5426224Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5426439Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5426641Z 
+Lint	Ruff check	2026-07-29T02:31:00.5426745Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5427027Z    --> scripts/fast_alt_eval.py:148:1
+Lint	Ruff check	2026-07-29T02:31:00.5427268Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5427523Z 147 | from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+Lint	Ruff check	2026-07-29T02:31:00.5427906Z 148 | from app.pipeline1.label_engine import LabelEngine
+Lint	Ruff check	2026-07-29T02:31:00.5428214Z     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5428460Z 149 |
+Lint	Ruff check	2026-07-29T02:31:00.5428642Z 150 | t0 = time.time()
+Lint	Ruff check	2026-07-29T02:31:00.5428843Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5429046Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5429244Z 
+Lint	Ruff check	2026-07-29T02:31:00.5429344Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5429620Z   --> scripts/fetch_cyq_perf.py:25:1
+Lint	Ruff check	2026-07-29T02:31:00.5429865Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5430056Z 23 | load_dotenv()  # noqa: E402
+Lint	Ruff check	2026-07-29T02:31:00.5430286Z 24 |
+Lint	Ruff check	2026-07-29T02:31:00.5430576Z 25 | from app.pipeline1.data_supply import DataSupplyChain, DataSupplyError
+Lint	Ruff check	2026-07-29T02:31:00.5430987Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5431266Z 26 |
+Lint	Ruff check	2026-07-29T02:31:00.5431607Z 27 | logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+Lint	Ruff check	2026-07-29T02:31:00.5432038Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5432235Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5432431Z 
+Lint	Ruff check	2026-07-29T02:31:00.5432543Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5432816Z   --> scripts/fetch_fina_bulk.py:27:1
+Lint	Ruff check	2026-07-29T02:31:00.5433065Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5433251Z 25 |     sys.path.insert(0, PROJ)
+Lint	Ruff check	2026-07-29T02:31:00.5433484Z 26 |
+Lint	Ruff check	2026-07-29T02:31:00.5433730Z 27 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5434061Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5434674Z 28 |
+Lint	Ruff check	2026-07-29T02:31:00.5434868Z 29 | logging.basicConfig(
+Lint	Ruff check	2026-07-29T02:31:00.5435086Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5435293Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5435482Z 
+Lint	Ruff check	2026-07-29T02:31:00.5435596Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5435885Z   --> scripts/fetch_fina_indicator.py:13:1
+Lint	Ruff check	2026-07-29T02:31:00.5436142Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5436338Z 11 |     sys.path.insert(0, _project_root)
+Lint	Ruff check	2026-07-29T02:31:00.5436591Z 12 |
+Lint	Ruff check	2026-07-29T02:31:00.5436772Z 13 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5436990Z    | ^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5437248Z 14 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5437539Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5437770Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5437954Z 
+Lint	Ruff check	2026-07-29T02:31:00.5438060Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5438335Z   --> scripts/fetch_fina_indicator.py:14:1
+Lint	Ruff check	2026-07-29T02:31:00.5438588Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5438771Z 13 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5439038Z 14 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5439349Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5439601Z 15 |
+Lint	Ruff check	2026-07-29T02:31:00.5439810Z 16 | # Get stock list (do this once in main thread)
+Lint	Ruff check	2026-07-29T02:31:00.5440082Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5440282Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5440604Z 
+Lint	Ruff check	2026-07-29T02:31:00.5440714Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5440994Z   --> scripts/fetch_fina_indicator.py:43:1
+Lint	Ruff check	2026-07-29T02:31:00.5441241Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5441422Z 42 | # Thread-safe state
+Lint	Ruff check	2026-07-29T02:31:00.5441640Z 43 | import threading
+Lint	Ruff check	2026-07-29T02:31:00.5441848Z    | ^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5442039Z 44 |
+Lint	Ruff check	2026-07-29T02:31:00.5442235Z 45 | results = []
+Lint	Ruff check	2026-07-29T02:31:00.5442427Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5442620Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5442805Z 
+Lint	Ruff check	2026-07-29T02:31:00.5442911Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5443230Z   --> scripts/fetch_fina_indicator_retry.py:12:1
+Lint	Ruff check	2026-07-29T02:31:00.5443515Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5443715Z 10 |     sys.path.insert(0, _project_root)
+Lint	Ruff check	2026-07-29T02:31:00.5443965Z 11 |
+Lint	Ruff check	2026-07-29T02:31:00.5444316Z 12 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5444582Z    | ^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5444847Z 13 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5445147Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5445383Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5445561Z 
+Lint	Ruff check	2026-07-29T02:31:00.5445669Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5445964Z   --> scripts/fetch_fina_indicator_retry.py:13:1
+Lint	Ruff check	2026-07-29T02:31:00.5446225Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5446405Z 12 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5446680Z 13 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5447010Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5447268Z 14 |
+Lint	Ruff check	2026-07-29T02:31:00.5447501Z 15 | out_dir = "data/supply_cache/alt_data/fina_indicator"
+Lint	Ruff check	2026-07-29T02:31:00.5447783Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5447986Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5448172Z 
+Lint	Ruff check	2026-07-29T02:31:00.5448272Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5448538Z   --> scripts/full_alt_eval.py:25:1
+Lint	Ruff check	2026-07-29T02:31:00.5448778Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5449052Z 23 | logger.info("Panel: %d stocks, %d rows", df["symbol"].nunique(), len(df))
+Lint	Ruff check	2026-07-29T02:31:00.5449396Z 24 |
+Lint	Ruff check	2026-07-29T02:31:00.5449618Z 25 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5449927Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5450286Z 26 | from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
+Lint	Ruff check	2026-07-29T02:31:00.5450635Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5450837Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5451207Z 
+Lint	Ruff check	2026-07-29T02:31:00.5451308Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5451573Z   --> scripts/full_alt_eval.py:26:1
+Lint	Ruff check	2026-07-29T02:31:00.5451803Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5452029Z 25 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5452422Z 26 | from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
+Lint	Ruff check	2026-07-29T02:31:00.5452786Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5453060Z 27 |
+Lint	Ruff check	2026-07-29T02:31:00.5453249Z 28 | supply = DataSupplyChain()
+Lint	Ruff check	2026-07-29T02:31:00.5453475Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5453675Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5453868Z 
+Lint	Ruff check	2026-07-29T02:31:00.5453968Z E722 Do not use bare `except`
+Lint	Ruff check	2026-07-29T02:31:00.5454442Z   --> scripts/full_alt_eval.py:58:5
+Lint	Ruff check	2026-07-29T02:31:00.5454688Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5454871Z 56 |             raw["symbol"] = sym
+Lint	Ruff check	2026-07-29T02:31:00.5455137Z 57 |             fin_frames.append(raw)
+Lint	Ruff check	2026-07-29T02:31:00.5455394Z 58 |     except:
+Lint	Ruff check	2026-07-29T02:31:00.5455583Z    |     ^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5455773Z 59 |         pass
+Lint	Ruff check	2026-07-29T02:31:00.5455976Z 60 |     time.sleep(0.05)
+Lint	Ruff check	2026-07-29T02:31:00.5456191Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5456291Z 
+Lint	Ruff check	2026-07-29T02:31:00.5456381Z E722 Do not use bare `except`
+Lint	Ruff check	2026-07-29T02:31:00.5456630Z    --> scripts/full_alt_eval.py:143:5
+Lint	Ruff check	2026-07-29T02:31:00.5456872Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5457044Z 141 |             )
+Lint	Ruff check	2026-07-29T02:31:00.5457486Z 142 |             hn_all.append(raw[["symbol", "announce_date", "holder_count"]])
+Lint	Ruff check	2026-07-29T02:31:00.5457829Z 143 |     except:
+Lint	Ruff check	2026-07-29T02:31:00.5458010Z     |     ^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5458189Z 144 |         pass
+Lint	Ruff check	2026-07-29T02:31:00.5458393Z 145 |     time.sleep(0.03)
+Lint	Ruff check	2026-07-29T02:31:00.5458604Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5458704Z 
+Lint	Ruff check	2026-07-29T02:31:00.5458791Z E722 Do not use bare `except`
+Lint	Ruff check	2026-07-29T02:31:00.5459028Z    --> scripts/full_alt_eval.py:178:5
+Lint	Ruff check	2026-07-29T02:31:00.5459263Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5459498Z 176 |                     raw[c] = pd.to_numeric(raw[c], errors="coerce")
+Lint	Ruff check	2026-07-29T02:31:00.5459933Z 177 |             mg_frames.append(raw[["symbol", "date", "rzye", "rqye", "rzmre", "rqmcl"]])
+Lint	Ruff check	2026-07-29T02:31:00.5460303Z 178 |     except:
+Lint	Ruff check	2026-07-29T02:31:00.5460484Z     |     ^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5460666Z 179 |         pass
+Lint	Ruff check	2026-07-29T02:31:00.5460864Z 180 |     time.sleep(0.3)
+Lint	Ruff check	2026-07-29T02:31:00.5461074Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5461176Z 
+Lint	Ruff check	2026-07-29T02:31:00.5461270Z E722 Do not use bare `except`
+Lint	Ruff check	2026-07-29T02:31:00.5461513Z    --> scripts/full_alt_eval.py:225:5
+Lint	Ruff check	2026-07-29T02:31:00.5461750Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5461922Z 223 |                 ]
+Lint	Ruff check	2026-07-29T02:31:00.5462119Z 224 |             )
+Lint	Ruff check	2026-07-29T02:31:00.5462303Z 225 |     except:
+Lint	Ruff check	2026-07-29T02:31:00.5462481Z     |     ^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5462659Z 226 |         pass
+Lint	Ruff check	2026-07-29T02:31:00.5462848Z 227 |     time.sleep(0.3)
+Lint	Ruff check	2026-07-29T02:31:00.5463051Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5463151Z 
+Lint	Ruff check	2026-07-29T02:31:00.5463259Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5463536Z    --> scripts/full_alt_eval.py:252:1
+Lint	Ruff check	2026-07-29T02:31:00.5463768Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5464055Z 250 | df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
+Lint	Ruff check	2026-07-29T02:31:00.5464539Z 251 |
+Lint	Ruff check	2026-07-29T02:31:00.5464806Z 252 | from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+Lint	Ruff check	2026-07-29T02:31:00.5465163Z     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5465494Z 253 | from app.pipeline1.label_engine import LabelEngine
+Lint	Ruff check	2026-07-29T02:31:00.5465784Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5465999Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5466200Z 
+Lint	Ruff check	2026-07-29T02:31:00.5466311Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5466579Z    --> scripts/full_alt_eval.py:253:1
+Lint	Ruff check	2026-07-29T02:31:00.5466810Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5467060Z 252 | from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+Lint	Ruff check	2026-07-29T02:31:00.5467424Z 253 | from app.pipeline1.label_engine import LabelEngine
+Lint	Ruff check	2026-07-29T02:31:00.5467912Z     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5468161Z 254 |
+Lint	Ruff check	2026-07-29T02:31:00.5468341Z 255 | t0 = time.time()
+Lint	Ruff check	2026-07-29T02:31:00.5468541Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5468748Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5468937Z 
+Lint	Ruff check	2026-07-29T02:31:00.5469047Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5469340Z   --> scripts/full_fetch_and_eval.py:24:1
+Lint	Ruff check	2026-07-29T02:31:00.5469600Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5469797Z 22 | logger = logging.getLogger(__name__)
+Lint	Ruff check	2026-07-29T02:31:00.5470032Z 23 |
+Lint	Ruff check	2026-07-29T02:31:00.5470273Z 24 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5470608Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5470964Z 25 | from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
+Lint	Ruff check	2026-07-29T02:31:00.5471307Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5471499Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5471690Z 
+Lint	Ruff check	2026-07-29T02:31:00.5471791Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5472057Z   --> scripts/full_fetch_and_eval.py:25:1
+Lint	Ruff check	2026-07-29T02:31:00.5472299Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5472522Z 24 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5472912Z 25 | from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
+Lint	Ruff check	2026-07-29T02:31:00.5473275Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5473676Z 26 |
+Lint	Ruff check	2026-07-29T02:31:00.5473857Z 27 | supply = DataSupplyChain()
+Lint	Ruff check	2026-07-29T02:31:00.5474076Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5474484Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5474671Z 
+Lint	Ruff check	2026-07-29T02:31:00.5474768Z E722 Do not use bare `except`
+Lint	Ruff check	2026-07-29T02:31:00.5475022Z    --> scripts/full_fetch_and_eval.py:140:5
+Lint	Ruff check	2026-07-29T02:31:00.5475270Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5475440Z 138 |                 ]
+Lint	Ruff check	2026-07-29T02:31:00.5475640Z 139 |             )
+Lint	Ruff check	2026-07-29T02:31:00.5475839Z 140 |     except:
+Lint	Ruff check	2026-07-29T02:31:00.5476025Z     |     ^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5476211Z 141 |         pass
+Lint	Ruff check	2026-07-29T02:31:00.5476406Z 142 |     if (i + 1) % 20 == 0:
+Lint	Ruff check	2026-07-29T02:31:00.5476611Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5476702Z 
+Lint	Ruff check	2026-07-29T02:31:00.5476793Z E722 Do not use bare `except`
+Lint	Ruff check	2026-07-29T02:31:00.5477029Z    --> scripts/full_fetch_and_eval.py:198:9
+Lint	Ruff check	2026-07-29T02:31:00.5477279Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5477452Z 196 |                 )
+Lint	Ruff check	2026-07-29T02:31:00.5477768Z 197 |                 hn_frames.append(raw[["symbol", "announce_date", "holder_count"]])
+Lint	Ruff check	2026-07-29T02:31:00.5478129Z 198 |         except:
+Lint	Ruff check	2026-07-29T02:31:00.5478327Z     |         ^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5478520Z 199 |             pass
+Lint	Ruff check	2026-07-29T02:31:00.5478719Z 200 |         if (i + 1) % 500 == 0:
+Lint	Ruff check	2026-07-29T02:31:00.5478941Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5479033Z 
+Lint	Ruff check	2026-07-29T02:31:00.5479125Z E722 Do not use bare `except`
+Lint	Ruff check	2026-07-29T02:31:00.5479362Z    --> scripts/full_fetch_and_eval.py:249:5
+Lint	Ruff check	2026-07-29T02:31:00.5479611Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5479837Z 247 |                     raw[c] = pd.to_numeric(raw[c], errors="coerce")
+Lint	Ruff check	2026-07-29T02:31:00.5480218Z 248 |             nb_frames.append(raw[["symbol", "date", "vol", "ratio"]])
+Lint	Ruff check	2026-07-29T02:31:00.5480552Z 249 |     except:
+Lint	Ruff check	2026-07-29T02:31:00.5480741Z     |     ^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5480927Z 250 |         pass
+Lint	Ruff check	2026-07-29T02:31:00.5481114Z 251 |     if (i + 1) % 50 == 0:
+Lint	Ruff check	2026-07-29T02:31:00.5481325Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5481422Z 
+Lint	Ruff check	2026-07-29T02:31:00.5481520Z E722 Do not use bare `except`
+Lint	Ruff check	2026-07-29T02:31:00.5481760Z    --> scripts/full_fetch_and_eval.py:280:5
+Lint	Ruff check	2026-07-29T02:31:00.5482002Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5482263Z 278 |                 raw[["symbol", "date", "net_buy", "buy_amount", "sell_amount"]]
+Lint	Ruff check	2026-07-29T02:31:00.5482596Z 279 |             )
+Lint	Ruff check	2026-07-29T02:31:00.5482791Z 280 |     except:
+Lint	Ruff check	2026-07-29T02:31:00.5482980Z     |     ^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5483163Z 281 |         pass
+Lint	Ruff check	2026-07-29T02:31:00.5483360Z 282 |     time.sleep(0.2)
+Lint	Ruff check	2026-07-29T02:31:00.5483722Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5483814Z 
+Lint	Ruff check	2026-07-29T02:31:00.5483922Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5484419Z    --> scripts/full_fetch_and_eval.py:315:1
+Lint	Ruff check	2026-07-29T02:31:00.5484702Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5484984Z 313 | df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
+Lint	Ruff check	2026-07-29T02:31:00.5485332Z 314 |
+Lint	Ruff check	2026-07-29T02:31:00.5485595Z 315 | from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+Lint	Ruff check	2026-07-29T02:31:00.5485962Z     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5486287Z 316 | from app.pipeline1.label_engine import LabelEngine
+Lint	Ruff check	2026-07-29T02:31:00.5486571Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5486774Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5486968Z 
+Lint	Ruff check	2026-07-29T02:31:00.5487067Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5487338Z    --> scripts/full_fetch_and_eval.py:316:1
+Lint	Ruff check	2026-07-29T02:31:00.5487577Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5487829Z 315 | from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+Lint	Ruff check	2026-07-29T02:31:00.5488191Z 316 | from app.pipeline1.label_engine import LabelEngine
+Lint	Ruff check	2026-07-29T02:31:00.5488489Z     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5488734Z 317 |
+Lint	Ruff check	2026-07-29T02:31:00.5488902Z 318 | t0 = time.time()
+Lint	Ruff check	2026-07-29T02:31:00.5489097Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5489303Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5489491Z 
+Lint	Ruff check	2026-07-29T02:31:00.5489741Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5490014Z   --> scripts/ic_eval_direct.py:24:1
+Lint	Ruff check	2026-07-29T02:31:00.5490244Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5490416Z 23 | # Industry + board
+Lint	Ruff check	2026-07-29T02:31:00.5490683Z 24 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5490999Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5491356Z 25 | from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
+Lint	Ruff check	2026-07-29T02:31:00.5491709Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5491916Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5492110Z 
+Lint	Ruff check	2026-07-29T02:31:00.5492220Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5492496Z   --> scripts/ic_eval_direct.py:25:1
+Lint	Ruff check	2026-07-29T02:31:00.5492732Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5492911Z 23 | # Industry + board
+Lint	Ruff check	2026-07-29T02:31:00.5493177Z 24 | from app.pipeline1.data_supply import DataSupplyChain
+Lint	Ruff check	2026-07-29T02:31:00.5493569Z 25 | from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
+Lint	Ruff check	2026-07-29T02:31:00.5493949Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5494426Z 26 |
+Lint	Ruff check	2026-07-29T02:31:00.5494625Z 27 | supply = DataSupplyChain()
+Lint	Ruff check	2026-07-29T02:31:00.5494847Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5495051Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5495243Z 
+Lint	Ruff check	2026-07-29T02:31:00.5495342Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5495606Z   --> scripts/ic_eval_direct.py:71:1
+Lint	Ruff check	2026-07-29T02:31:00.5495838Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5496128Z 69 | df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
+Lint	Ruff check	2026-07-29T02:31:00.5496474Z 70 |
+Lint	Ruff check	2026-07-29T02:31:00.5496741Z 71 | from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+Lint	Ruff check	2026-07-29T02:31:00.5497092Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5497406Z 72 | from app.pipeline1.label_engine import LabelEngine
+Lint	Ruff check	2026-07-29T02:31:00.5497700Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5497918Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5498111Z 
+Lint	Ruff check	2026-07-29T02:31:00.5498218Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5498482Z   --> scripts/ic_eval_direct.py:72:1
+Lint	Ruff check	2026-07-29T02:31:00.5498713Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5498956Z 71 | from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+Lint	Ruff check	2026-07-29T02:31:00.5499306Z 72 | from app.pipeline1.label_engine import LabelEngine
+Lint	Ruff check	2026-07-29T02:31:00.5499598Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5499998Z 73 |
+Lint	Ruff check	2026-07-29T02:31:00.5500171Z 74 | t0 = time.time()
+Lint	Ruff check	2026-07-29T02:31:00.5500371Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5500572Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5500752Z 
+Lint	Ruff check	2026-07-29T02:31:00.5500857Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5501132Z   --> scripts/rebuild_full_panel.py:14:1
+Lint	Ruff check	2026-07-29T02:31:00.5501377Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5501576Z 13 | warnings.filterwarnings("ignore")
+Lint	Ruff check	2026-07-29T02:31:00.5501836Z 14 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5502057Z    | ^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5502275Z 15 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5502477Z 16 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5502660Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5502855Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5503039Z 
+Lint	Ruff check	2026-07-29T02:31:00.5503142Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5503413Z   --> scripts/rebuild_full_panel.py:15:1
+Lint	Ruff check	2026-07-29T02:31:00.5503657Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5503845Z 13 | warnings.filterwarnings("ignore")
+Lint	Ruff check	2026-07-29T02:31:00.5504108Z 14 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5504518Z 15 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5504725Z    | ^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5504923Z 16 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5505118Z 17 | import os
+Lint	Ruff check	2026-07-29T02:31:00.5505300Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5505499Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5505680Z 
+Lint	Ruff check	2026-07-29T02:31:00.5505785Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5506193Z   --> scripts/rebuild_full_panel.py:16:1
+Lint	Ruff check	2026-07-29T02:31:00.5506430Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5506602Z 14 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5506821Z 15 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5507030Z 16 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5507236Z    | ^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5507429Z 17 | import os
+Lint	Ruff check	2026-07-29T02:31:00.5507617Z 18 | import time
+Lint	Ruff check	2026-07-29T02:31:00.5507806Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5508006Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5508196Z 
+Lint	Ruff check	2026-07-29T02:31:00.5508308Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5508585Z   --> scripts/rebuild_full_panel.py:17:1
+Lint	Ruff check	2026-07-29T02:31:00.5508827Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5509010Z 15 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5509218Z 16 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5509406Z 17 | import os
+Lint	Ruff check	2026-07-29T02:31:00.5509585Z    | ^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5509765Z 18 | import time
+Lint	Ruff check	2026-07-29T02:31:00.5509955Z 19 | import sys
+Lint	Ruff check	2026-07-29T02:31:00.5510152Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5510349Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5510532Z 
+Lint	Ruff check	2026-07-29T02:31:00.5510639Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5510909Z   --> scripts/rebuild_full_panel.py:18:1
+Lint	Ruff check	2026-07-29T02:31:00.5511148Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5511320Z 16 | import logging
+Lint	Ruff check	2026-07-29T02:31:00.5511511Z 17 | import os
+Lint	Ruff check	2026-07-29T02:31:00.5511694Z 18 | import time
+Lint	Ruff check	2026-07-29T02:31:00.5511873Z    | ^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5512054Z 19 | import sys
+Lint	Ruff check	2026-07-29T02:31:00.5512239Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5512439Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5512619Z 
+Lint	Ruff check	2026-07-29T02:31:00.5512727Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5512996Z   --> scripts/rebuild_full_panel.py:19:1
+Lint	Ruff check	2026-07-29T02:31:00.5513233Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5513397Z 17 | import os
+Lint	Ruff check	2026-07-29T02:31:00.5513589Z 18 | import time
+Lint	Ruff check	2026-07-29T02:31:00.5513773Z 19 | import sys
+Lint	Ruff check	2026-07-29T02:31:00.5513953Z    | ^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5514135Z 20 |
+Lint	Ruff check	2026-07-29T02:31:00.5514437Z 21 | logging.basicConfig(
+Lint	Ruff check	2026-07-29T02:31:00.5514655Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5514853Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5515034Z 
+Lint	Ruff check	2026-07-29T02:31:00.5515140Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5515409Z   --> scripts/rebuild_full_panel.py:27:1
+Lint	Ruff check	2026-07-29T02:31:00.5515649Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5515958Z 26 | sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+Lint	Ruff check	2026-07-29T02:31:00.5516547Z 27 | from app.pipeline1.cleaning_pipeline import board_of
+Lint	Ruff check	2026-07-29T02:31:00.5516865Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5517116Z 28 |
+Lint	Ruff check	2026-07-29T02:31:00.5517570Z 29 | # ── 1. Load base panel ──
+Lint	Ruff check	2026-07-29T02:31:00.5517799Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5518002Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5518188Z 
+Lint	Ruff check	2026-07-29T02:31:00.5518291Z F821 Undefined name `enrich_cyq`
+Lint	Ruff check	2026-07-29T02:31:00.5518551Z    --> scripts/rebuild_full_panel.py:117:13
+Lint	Ruff check	2026-07-29T02:31:00.5518817Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5519128Z 115 |     logger.info("CYQ already in base (%d cols) -- skipping enrich", len(CYQ_COLS))
+Lint	Ruff check	2026-07-29T02:31:00.5519510Z 116 | else:
+Lint	Ruff check	2026-07-29T02:31:00.5519780Z 117 |     panel = enrich_cyq(panel, cyq_cache="data/cyq_panel.parquet")
+Lint	Ruff check	2026-07-29T02:31:00.5520122Z     |             ^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5520425Z 118 |     logger.info("After CYQ enrich: %d cols", len(panel.columns))
+Lint	Ruff check	2026-07-29T02:31:00.5520746Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5520849Z 
+Lint	Ruff check	2026-07-29T02:31:00.5520960Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5521236Z   --> scripts/test_dim24_26.py:9:1
+Lint	Ruff check	2026-07-29T02:31:00.5521474Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5521675Z  8 | warnings.filterwarnings("ignore")
+Lint	Ruff check	2026-07-29T02:31:00.5521937Z  9 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5522153Z    | ^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5522361Z 10 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5522571Z 11 | import time
+Lint	Ruff check	2026-07-29T02:31:00.5522901Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5523105Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5523289Z 
+Lint	Ruff check	2026-07-29T02:31:00.5523399Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5523671Z   --> scripts/test_dim24_26.py:10:1
+Lint	Ruff check	2026-07-29T02:31:00.5523906Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5524095Z  8 | warnings.filterwarnings("ignore")
+Lint	Ruff check	2026-07-29T02:31:00.5524454Z  9 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5524666Z 10 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5524874Z    | ^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5525078Z 11 | import time
+Lint	Ruff check	2026-07-29T02:31:00.5525265Z 12 | import os
+Lint	Ruff check	2026-07-29T02:31:00.5525439Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5525639Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5525821Z 
+Lint	Ruff check	2026-07-29T02:31:00.5525929Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5526193Z   --> scripts/test_dim24_26.py:11:1
+Lint	Ruff check	2026-07-29T02:31:00.5526416Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5526595Z  9 | import pandas as pd
+Lint	Ruff check	2026-07-29T02:31:00.5526811Z 10 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5527020Z 11 | import time
+Lint	Ruff check	2026-07-29T02:31:00.5527207Z    | ^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5527390Z 12 | import os
+Lint	Ruff check	2026-07-29T02:31:00.5527569Z 13 | import sys
+Lint	Ruff check	2026-07-29T02:31:00.5527749Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5527948Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5528129Z 
+Lint	Ruff check	2026-07-29T02:31:00.5528236Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5528498Z   --> scripts/test_dim24_26.py:12:1
+Lint	Ruff check	2026-07-29T02:31:00.5528727Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5528908Z 10 | import numpy as np
+Lint	Ruff check	2026-07-29T02:31:00.5529118Z 11 | import time
+Lint	Ruff check	2026-07-29T02:31:00.5529303Z 12 | import os
+Lint	Ruff check	2026-07-29T02:31:00.5529485Z    | ^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5529664Z 13 | import sys
+Lint	Ruff check	2026-07-29T02:31:00.5529844Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5530042Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5530221Z 
+Lint	Ruff check	2026-07-29T02:31:00.5530326Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5530595Z   --> scripts/test_dim24_26.py:13:1
+Lint	Ruff check	2026-07-29T02:31:00.5530829Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5531001Z 11 | import time
+Lint	Ruff check	2026-07-29T02:31:00.5531189Z 12 | import os
+Lint	Ruff check	2026-07-29T02:31:00.5531371Z 13 | import sys
+Lint	Ruff check	2026-07-29T02:31:00.5531555Z    | ^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5531734Z 14 |
+Lint	Ruff check	2026-07-29T02:31:00.5531997Z 15 | ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+Lint	Ruff check	2026-07-29T02:31:00.5532324Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5532523Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5532702Z 
+Lint	Ruff check	2026-07-29T02:31:00.5532805Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5533223Z   --> scripts/test_dim24_26.py:31:1
+Lint	Ruff check	2026-07-29T02:31:00.5533450Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5533633Z 30 | # Basic columns
+Lint	Ruff check	2026-07-29T02:31:00.5533945Z 31 | from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct
+Lint	Ruff check	2026-07-29T02:31:00.5534452Z    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5534726Z 32 |
+Lint	Ruff check	2026-07-29T02:31:00.5534940Z 33 | panel["board"] = panel["symbol"].map(board_of)
+Lint	Ruff check	2026-07-29T02:31:00.5535223Z    |
+Lint	Ruff check	2026-07-29T02:31:00.5535427Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5535617Z 
+Lint	Ruff check	2026-07-29T02:31:00.5535717Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5535986Z    --> scripts/test_dim24_26.py:123:1
+Lint	Ruff check	2026-07-29T02:31:00.5536229Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5536479Z 121 | panel["list_days"] = panel.groupby("symbol").cumcount() + 1
+Lint	Ruff check	2026-07-29T02:31:00.5536797Z 122 |
+Lint	Ruff check	2026-07-29T02:31:00.5537054Z 123 | from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+Lint	Ruff check	2026-07-29T02:31:00.5537412Z     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5537738Z 124 | from app.pipeline1.label_engine import LabelEngine
+Lint	Ruff check	2026-07-29T02:31:00.5538031Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5538233Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5538423Z 
+Lint	Ruff check	2026-07-29T02:31:00.5538520Z E402 Module level import not at top of file
+Lint	Ruff check	2026-07-29T02:31:00.5538786Z    --> scripts/test_dim24_26.py:124:1
+Lint	Ruff check	2026-07-29T02:31:00.5539026Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5539421Z 123 | from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+Lint	Ruff check	2026-07-29T02:31:00.5539798Z 124 | from app.pipeline1.label_engine import LabelEngine
+Lint	Ruff check	2026-07-29T02:31:00.5540103Z     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Lint	Ruff check	2026-07-29T02:31:00.5540353Z 125 |
+Lint	Ruff check	2026-07-29T02:31:00.5540535Z 126 | t0 = time.time()
+Lint	Ruff check	2026-07-29T02:31:00.5540738Z     |
+Lint	Ruff check	2026-07-29T02:31:00.5540941Z help: Move module level imports to top of file
+Lint	Ruff check	2026-07-29T02:31:00.5541131Z 
+Lint	Ruff check	2026-07-29T02:31:00.5541212Z Found 81 errors.
+Lint	Ruff check	2026-07-29T02:31:00.5552244Z ##[error]Process completed with exit code 1.

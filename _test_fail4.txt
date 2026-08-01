@@ -1,0 +1,1303 @@
+﻿Test	Run pytest with coverage	﻿2026-07-29T04:32:02.8562656Z ##[group]Run if [ -d tests ] && find tests -name '*.py' -print -quit | grep -q .; then
+Test	Run pytest with coverage	2026-07-29T04:32:02.8563293Z ^[[36;1mif [ -d tests ] && find tests -name '*.py' -print -quit | grep -q .; then^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8563703Z ^[[36;1m  python -m pytest tests/ \^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8563971Z ^[[36;1m    --cov=app \^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8564199Z ^[[36;1m    --cov=services \^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8564472Z ^[[36;1m    --cov-report=term-missing \^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8564764Z ^[[36;1m    --cov-report=xml:coverage.xml \^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8565039Z ^[[36;1m    -v || RET=$?^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8565285Z ^[[36;1m  if [ "${RET:-0}" = "5" ]; then^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8565643Z ^[[36;1m    echo "All tests skipped - pre-implementation phase - passing"^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8566003Z ^[[36;1m    exit 0^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8566252Z ^[[36;1m  elif [ -n "${RET:-}" ] && [ "$RET" != "0" ]; then^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8566548Z ^[[36;1m    exit $RET^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8566760Z ^[[36;1m  fi^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8566984Z ^[[36;1melse^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8567240Z ^[[36;1m  echo "No test files found yet - skipping pytest"^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8567545Z ^[[36;1mfi^[[0m
+Test	Run pytest with coverage	2026-07-29T04:32:02.8612266Z shell: /usr/bin/bash -e {0}
+Test	Run pytest with coverage	2026-07-29T04:32:02.8612522Z env:
+Test	Run pytest with coverage	2026-07-29T04:32:02.8612715Z   PYTHON_VERSION: 3.11
+Test	Run pytest with coverage	2026-07-29T04:32:02.8613011Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.15/x64
+Test	Run pytest with coverage	2026-07-29T04:32:02.8613449Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib/pkgconfig
+Test	Run pytest with coverage	2026-07-29T04:32:02.8613880Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+Test	Run pytest with coverage	2026-07-29T04:32:02.8614273Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+Test	Run pytest with coverage	2026-07-29T04:32:02.8614649Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+Test	Run pytest with coverage	2026-07-29T04:32:02.8615043Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib
+Test	Run pytest with coverage	2026-07-29T04:32:02.8615382Z ##[endgroup]
+Test	Run pytest with coverage	2026-07-29T04:32:10.0702971Z ============================= test session starts ==============================
+Test	Run pytest with coverage	2026-07-29T04:32:10.0704025Z platform linux -- Python 3.11.15, pytest-9.1.1, pluggy-1.6.0
+Test	Run pytest with coverage	2026-07-29T04:32:10.0704794Z rootdir: /home/runner/work/AMINQT/AMINQT
+Test	Run pytest with coverage	2026-07-29T04:32:10.0705390Z configfile: pytest.ini
+Test	Run pytest with coverage	2026-07-29T04:32:10.0705876Z plugins: cov-7.1.0, anyio-4.14.2
+Test	Run pytest with coverage	2026-07-29T04:32:10.0706412Z collected 784 items / 7 skipped
+Test	Run pytest with coverage	2026-07-29T04:32:10.0706751Z 
+Test	Run pytest with coverage	2026-07-29T04:32:10.2458558Z tests/test_adaptive_engine.py .............                              [  1%]
+Test	Run pytest with coverage	2026-07-29T04:32:10.3136054Z tests/test_adaptive_weighter.py ................                         [  3%]
+Test	Run pytest with coverage	2026-07-29T04:32:10.4917591Z tests/test_announcement_factors.py ........                              [  4%]
+Test	Run pytest with coverage	2026-07-29T04:32:10.7072028Z tests/test_backtest_engine.py ............                               [  6%]
+Test	Run pytest with coverage	2026-07-29T04:32:30.0496764Z tests/test_backtest_tuner.py ......                                      [  7%]
+Test	Run pytest with coverage	2026-07-29T04:32:30.1504117Z tests/test_base_liquidity_filter.py ...................                  [  9%]
+Test	Run pytest with coverage	2026-07-29T04:32:30.3007107Z tests/test_calendar_factors.py ...........                               [ 10%]
+Test	Run pytest with coverage	2026-07-29T04:32:30.3811691Z tests/test_config_loader.py ............                                 [ 12%]
+Test	Run pytest with coverage	2026-07-29T04:32:30.3977302Z tests/test_config_unlock_gate.py ......                                  [ 13%]
+Test	Run pytest with coverage	2026-07-29T04:32:31.6771932Z tests/test_daily_pipeline.py ...F.                                       [ 13%]
+Test	Run pytest with coverage	2026-07-29T04:32:31.8159328Z tests/test_daily_rank_ic.py ...............                              [ 15%]
+Test	Run pytest with coverage	2026-07-29T04:32:32.1578700Z tests/test_dashboard.py .........                                        [ 16%]
+Test	Run pytest with coverage	2026-07-29T04:32:32.2388739Z tests/test_dataset_splitter.py ..............                            [ 18%]
+Test	Run pytest with coverage	2026-07-29T04:32:32.2762828Z tests/test_deepseek_agent.py ............                                [ 20%]
+Test	Run pytest with coverage	2026-07-29T04:32:32.3599517Z tests/test_deepseek_pr_review.py ..............................          [ 23%]
+Test	Run pytest with coverage	2026-07-29T04:32:32.4457018Z tests/test_dual_layer_buy.py ..........................                  [ 27%]
+Test	Run pytest with coverage	2026-07-29T04:32:32.4992747Z tests/test_dual_layer_sell.py .................                          [ 29%]
+Test	Run pytest with coverage	2026-07-29T04:32:33.0712129Z tests/test_end_to_end_v35.py s.                                          [ 29%]
+Test	Run pytest with coverage	2026-07-29T04:32:34.7946100Z tests/test_factor_discovery.py ..............                            [ 31%]
+Test	Run pytest with coverage	2026-07-29T04:32:35.0808589Z tests/test_forecast_accuracy.py .......                                  [ 32%]
+Test	Run pytest with coverage	2026-07-29T04:33:01.3774574Z tests/test_frontier_api.py ..F.....                                      [ 33%]
+Test	Run pytest with coverage	2026-07-29T04:33:01.4846027Z tests/test_indicator_weighter.py ..................................      [ 37%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.2024132Z tests/test_indicators.py ...........F..                                  [ 39%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.2942599Z tests/test_intraday_factor_engine.py .....................               [ 42%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.3800848Z tests/test_intraday_loader.py .........                                  [ 43%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.4417537Z tests/test_intraday_v51.py .......................                       [ 46%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.4755675Z tests/test_intraday_v51_brokers.py .........                             [ 47%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.5247052Z tests/test_intraday_v51_bt.py ............                               [ 48%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.5710521Z tests/test_intraday_v51_p204.py ................                         [ 51%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.5961125Z tests/test_intraday_v51_sample_stats.py ........                         [ 52%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.7185848Z tests/test_iwencai_agent.py ......................                       [ 54%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.8034149Z tests/test_market_context.py ....                                        [ 55%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.8626965Z tests/test_order_manager.py .....................                        [ 58%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.8795240Z tests/test_pipeline1_knob_health.py ......                               [ 58%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.8902364Z tests/test_pipeline1_sensitivity.py ....                                 [ 59%]
+Test	Run pytest with coverage	2026-07-29T04:33:02.9065362Z tests/test_pipeline1_stage3_gate.py ......                               [ 60%]
+Test	Run pytest with coverage	2026-07-29T04:33:05.5431784Z tests/test_pipeline1_v35.py .................F....F.....FFFF...F........ [ 65%]
+Test	Run pytest with coverage	2026-07-29T04:33:06.1091245Z ....                                                                     [ 66%]
+Test	Run pytest with coverage	2026-07-29T04:33:17.2036300Z tests/test_pipeline1_v38.py .........................................    [ 71%]
+Test	Run pytest with coverage	2026-07-29T04:33:17.2689039Z tests/test_pipeline1_v38_appendix_de.py ................                 [ 73%]
+Test	Run pytest with coverage	2026-07-29T04:33:17.3120931Z tests/test_pipeline1_v38_d10.py .............                            [ 75%]
+Test	Run pytest with coverage	2026-07-29T04:33:18.0463766Z tests/test_pipeline1_v38_dual_list.py ...F.............                  [ 77%]
+Test	Run pytest with coverage	2026-07-29T04:33:18.0685088Z tests/test_pipeline1_v38_fusion.py ........                              [ 78%]
+Test	Run pytest with coverage	2026-07-29T04:33:18.9753122Z tests/test_pipeline1_v38_gates.py .............                          [ 79%]
+Test	Run pytest with coverage	2026-07-29T04:33:19.0319345Z tests/test_pipeline1_v38_stage2.py ..............                        [ 81%]
+Test	Run pytest with coverage	2026-07-29T04:33:19.0700282Z tests/test_price_limits.py ...............                               [ 83%]
+Test	Run pytest with coverage	2026-07-29T04:33:19.1278170Z tests/test_right_side_filter.py .............                            [ 85%]
+Test	Run pytest with coverage	2026-07-29T04:33:19.1787932Z tests/test_rule_engine_v2.py ....................                        [ 87%]
+Test	Run pytest with coverage	2026-07-29T04:33:19.2464331Z tests/test_sector_context.py .............                               [ 89%]
+Test	Run pytest with coverage	2026-07-29T04:33:19.9108823Z tests/test_stage1_gate.py F                                              [ 89%]
+Test	Run pytest with coverage	2026-07-29T04:33:20.0139435Z tests/test_stock_pool_manager.py ....................                    [ 92%]
+Test	Run pytest with coverage	2026-07-29T04:33:20.0891602Z tests/test_trading_state_machine.py ............................         [ 95%]
+Test	Run pytest with coverage	2026-07-29T04:36:39.0111071Z tests/test_train_predict_runner.py F....F....EEE.EE                      [ 97%]
+Test	Run pytest with coverage	2026-07-29T04:36:43.7917227Z tests/test_universe_manager.py .................                         [100%]
+Test	Run pytest with coverage	2026-07-29T04:36:43.7917954Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7918210Z ==================================== ERRORS ====================================
+Test	Run pytest with coverage	2026-07-29T04:36:43.7919036Z ________ ERROR at setup of TestRunTraining.test_bundles_saved_with_oos _________
+Test	Run pytest with coverage	2026-07-29T04:36:43.7919615Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7921463Z tmp_path_factory = TempPathFactory(_given_basetemp=None, _trace=<pluggy._tracing.TagTracerSub object at 0x7f565f18b150>, _basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0'), _retention_count=3, _retention_policy='all')
+Test	Run pytest with coverage	2026-07-29T04:36:43.7923052Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7923258Z     @pytest.fixture(scope="module")
+Test	Run pytest with coverage	2026-07-29T04:36:43.7923763Z     def trained(tmp_path_factory):
+Test	Run pytest with coverage	2026-07-29T04:36:43.7924628Z         """合成面板 → run_training (tiny LGB) → 模型包目录."""
+Test	Run pytest with coverage	2026-07-29T04:36:43.7925239Z         tmp = tmp_path_factory.mktemp("train_predict")
+Test	Run pytest with coverage	2026-07-29T04:36:43.7925832Z         dtt.LGB_PARAMS_REG["n_estimators"] = 10
+Test	Run pytest with coverage	2026-07-29T04:36:43.7926421Z         dtt.LGB_PARAMS_CLS["n_estimators"] = 10
+Test	Run pytest with coverage	2026-07-29T04:36:43.7926945Z         dtt.ES_PATIENCE = 3
+Test	Run pytest with coverage	2026-07-29T04:36:43.7927517Z         panel = make_panel()  # 760 日双股主板面板
+Test	Run pytest with coverage	2026-07-29T04:36:43.7928023Z >       results = run_training(
+Test	Run pytest with coverage	2026-07-29T04:36:43.7928425Z             panel,
+Test	Run pytest with coverage	2026-07-29T04:36:43.7928712Z             "w30",
+Test	Run pytest with coverage	2026-07-29T04:36:43.7929023Z             model_dir=str(tmp / "models"),
+Test	Run pytest with coverage	2026-07-29T04:36:43.7929445Z             registry_path=str(tmp / "registry"),
+Test	Run pytest with coverage	2026-07-29T04:36:43.7930089Z             use_ic_screen=False,
+Test	Run pytest with coverage	2026-07-29T04:36:43.7930454Z         )
+Test	Run pytest with coverage	2026-07-29T04:36:43.7930606Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7930758Z tests/test_train_predict_runner.py:228: 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7931238Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7931781Z app/pipeline1/train_runner.py:127: in run_training
+Test	Run pytest with coverage	2026-07-29T04:36:43.7932235Z     df = prepare_board_frame(
+Test	Run pytest with coverage	2026-07-29T04:36:43.7932672Z app/pipeline1/train_runner.py:39: in prepare_board_frame
+Test	Run pytest with coverage	2026-07-29T04:36:43.7933179Z     df = features.build(
+Test	Run pytest with coverage	2026-07-29T04:36:43.7933599Z app/pipeline1/feature_engine_v35.py:106: in build
+Test	Run pytest with coverage	2026-07-29T04:36:43.7934327Z     df = self.dim27_industry_flow(df)  # [Alt-7a] 行业级 alt 数据聚合
+Test	Run pytest with coverage	2026-07-29T04:36:43.7934865Z          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.7935424Z app/pipeline1/feature_engine_v35.py:1894: in dim27_industry_flow
+Test	Run pytest with coverage	2026-07-29T04:36:43.7936093Z     ind_hc[["date", "industry", "ind_holder_trend_20d"]],
+Test	Run pytest with coverage	2026-07-29T04:36:43.7936645Z     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.7937945Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/frame.py:4384: in __getitem__
+Test	Run pytest with coverage	2026-07-29T04:36:43.7938988Z     indexer = self.columns._get_indexer_strict(key, "columns")[1]
+Test	Run pytest with coverage	2026-07-29T04:36:43.7939612Z               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.7940859Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/indexes/base.py:6302: in _get_indexer_strict
+Test	Run pytest with coverage	2026-07-29T04:36:43.7941974Z     self._raise_if_missing(keyarr, indexer, axis_name)
+Test	Run pytest with coverage	2026-07-29T04:36:43.7942642Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7943115Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7943469Z self = Index(['date', 'holder_count_qoq', 'ind_holder_trend_20d'], dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:43.7944278Z key = Index(['date', 'industry', 'ind_holder_trend_20d'], dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:43.7944982Z indexer = array([ 0, -1,  2]), axis_name = 'columns'
+Test	Run pytest with coverage	2026-07-29T04:36:43.7945356Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7945667Z     def _raise_if_missing(self, key, indexer, axis_name: str_t) -> None:
+Test	Run pytest with coverage	2026-07-29T04:36:43.7946264Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.7946656Z         Check that indexer can be used to return a result.
+Test	Run pytest with coverage	2026-07-29T04:36:43.7947179Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.7947538Z         e.g. at least one element was found,
+Test	Run pytest with coverage	2026-07-29T04:36:43.7948100Z         unless the list of keys was actually empty.
+Test	Run pytest with coverage	2026-07-29T04:36:43.7948875Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.7949197Z         Parameters
+Test	Run pytest with coverage	2026-07-29T04:36:43.7949553Z         ----------
+Test	Run pytest with coverage	2026-07-29T04:36:43.7950137Z         key : list-like
+Test	Run pytest with coverage	2026-07-29T04:36:43.7950682Z             Targeted labels (only used to show correct error message).
+Test	Run pytest with coverage	2026-07-29T04:36:43.7951301Z         indexer: array-like of booleans
+Test	Run pytest with coverage	2026-07-29T04:36:43.7951781Z             Indices corresponding to the key,
+Test	Run pytest with coverage	2026-07-29T04:36:43.7952278Z             (with -1 indicating not found).
+Test	Run pytest with coverage	2026-07-29T04:36:43.7952731Z         axis_name : str
+Test	Run pytest with coverage	2026-07-29T04:36:43.7953078Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.7953353Z         Raises
+Test	Run pytest with coverage	2026-07-29T04:36:43.7953658Z         ------
+Test	Run pytest with coverage	2026-07-29T04:36:43.7953959Z         KeyError
+Test	Run pytest with coverage	2026-07-29T04:36:43.7954387Z             If at least one key was requested but none was found.
+Test	Run pytest with coverage	2026-07-29T04:36:43.7954947Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.7955291Z         if len(key) == 0:
+Test	Run pytest with coverage	2026-07-29T04:36:43.7955682Z             return
+Test	Run pytest with coverage	2026-07-29T04:36:43.7956019Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.7956329Z         # Count missing values
+Test	Run pytest with coverage	2026-07-29T04:36:43.7956824Z         missing_mask = indexer < 0
+Test	Run pytest with coverage	2026-07-29T04:36:43.7957309Z         nmissing = missing_mask.sum()
+Test	Run pytest with coverage	2026-07-29T04:36:43.7957727Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.7958009Z         if nmissing:
+Test	Run pytest with coverage	2026-07-29T04:36:43.7958369Z             if nmissing == len(indexer):
+Test	Run pytest with coverage	2026-07-29T04:36:43.7958943Z                 raise KeyError(f"None of [{key}] are in the [{axis_name}]")
+Test	Run pytest with coverage	2026-07-29T04:36:43.7959525Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.7960273Z             not_found = list(ensure_index(key)[missing_mask.nonzero()[0]].unique())
+Test	Run pytest with coverage	2026-07-29T04:36:43.7961056Z >           raise KeyError(f"{not_found} not in index")
+Test	Run pytest with coverage	2026-07-29T04:36:43.7961605Z E           KeyError: "['industry'] not in index"
+Test	Run pytest with coverage	2026-07-29T04:36:43.7961955Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7962543Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/indexes/base.py:6355: KeyError
+Test	Run pytest with coverage	2026-07-29T04:36:43.7963642Z ______ ERROR at setup of TestRunTraining.test_prepare_board_frame_labels _______
+Test	Run pytest with coverage	2026-07-29T04:36:43.7964263Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7965565Z tmp_path_factory = TempPathFactory(_given_basetemp=None, _trace=<pluggy._tracing.TagTracerSub object at 0x7f565f18b150>, _basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0'), _retention_count=3, _retention_policy='all')
+Test	Run pytest with coverage	2026-07-29T04:36:43.7967030Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7967195Z     @pytest.fixture(scope="module")
+Test	Run pytest with coverage	2026-07-29T04:36:43.7967651Z     def trained(tmp_path_factory):
+Test	Run pytest with coverage	2026-07-29T04:36:43.7968370Z         """合成面板 → run_training (tiny LGB) → 模型包目录."""
+Test	Run pytest with coverage	2026-07-29T04:36:43.7968956Z         tmp = tmp_path_factory.mktemp("train_predict")
+Test	Run pytest with coverage	2026-07-29T04:36:43.7970025Z         dtt.LGB_PARAMS_REG["n_estimators"] = 10
+Test	Run pytest with coverage	2026-07-29T04:36:43.7970570Z         dtt.LGB_PARAMS_CLS["n_estimators"] = 10
+Test	Run pytest with coverage	2026-07-29T04:36:43.7971054Z         dtt.ES_PATIENCE = 3
+Test	Run pytest with coverage	2026-07-29T04:36:43.7971576Z         panel = make_panel()  # 760 日双股主板面板
+Test	Run pytest with coverage	2026-07-29T04:36:43.7972030Z >       results = run_training(
+Test	Run pytest with coverage	2026-07-29T04:36:43.7972414Z             panel,
+Test	Run pytest with coverage	2026-07-29T04:36:43.7972724Z             "w30",
+Test	Run pytest with coverage	2026-07-29T04:36:43.7973087Z             model_dir=str(tmp / "models"),
+Test	Run pytest with coverage	2026-07-29T04:36:43.7973596Z             registry_path=str(tmp / "registry"),
+Test	Run pytest with coverage	2026-07-29T04:36:43.7974117Z             use_ic_screen=False,
+Test	Run pytest with coverage	2026-07-29T04:36:43.7974547Z         )
+Test	Run pytest with coverage	2026-07-29T04:36:43.7974732Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7974923Z tests/test_train_predict_runner.py:228: 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7975491Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7976133Z app/pipeline1/train_runner.py:127: in run_training
+Test	Run pytest with coverage	2026-07-29T04:36:43.7976667Z     df = prepare_board_frame(
+Test	Run pytest with coverage	2026-07-29T04:36:43.7977169Z app/pipeline1/train_runner.py:39: in prepare_board_frame
+Test	Run pytest with coverage	2026-07-29T04:36:43.7977707Z     df = features.build(
+Test	Run pytest with coverage	2026-07-29T04:36:43.7978137Z app/pipeline1/feature_engine_v35.py:106: in build
+Test	Run pytest with coverage	2026-07-29T04:36:43.7978892Z     df = self.dim27_industry_flow(df)  # [Alt-7a] 行业级 alt 数据聚合
+Test	Run pytest with coverage	2026-07-29T04:36:43.7979464Z          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.7980234Z app/pipeline1/feature_engine_v35.py:1894: in dim27_industry_flow
+Test	Run pytest with coverage	2026-07-29T04:36:43.7981116Z     ind_hc[["date", "industry", "ind_holder_trend_20d"]],
+Test	Run pytest with coverage	2026-07-29T04:36:43.7981648Z     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.7982517Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/frame.py:4384: in __getitem__
+Test	Run pytest with coverage	2026-07-29T04:36:43.7983561Z     indexer = self.columns._get_indexer_strict(key, "columns")[1]
+Test	Run pytest with coverage	2026-07-29T04:36:43.7984234Z               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.7985278Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/indexes/base.py:6302: in _get_indexer_strict
+Test	Run pytest with coverage	2026-07-29T04:36:43.7986353Z     self._raise_if_missing(keyarr, indexer, axis_name)
+Test	Run pytest with coverage	2026-07-29T04:36:43.7986951Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7987373Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7987700Z self = Index(['date', 'holder_count_qoq', 'ind_holder_trend_20d'], dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:43.7988542Z key = Index(['date', 'industry', 'ind_holder_trend_20d'], dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:43.7989258Z indexer = array([ 0, -1,  2]), axis_name = 'columns'
+Test	Run pytest with coverage	2026-07-29T04:36:43.7989654Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.7990181Z     def _raise_if_missing(self, key, indexer, axis_name: str_t) -> None:
+Test	Run pytest with coverage	2026-07-29T04:36:43.7990834Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.7991257Z         Check that indexer can be used to return a result.
+Test	Run pytest with coverage	2026-07-29T04:36:43.7991797Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.7992151Z         e.g. at least one element was found,
+Test	Run pytest with coverage	2026-07-29T04:36:43.7992694Z         unless the list of keys was actually empty.
+Test	Run pytest with coverage	2026-07-29T04:36:43.7993172Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.7993457Z         Parameters
+Test	Run pytest with coverage	2026-07-29T04:36:43.7993784Z         ----------
+Test	Run pytest with coverage	2026-07-29T04:36:43.7994110Z         key : list-like
+Test	Run pytest with coverage	2026-07-29T04:36:43.7994596Z             Targeted labels (only used to show correct error message).
+Test	Run pytest with coverage	2026-07-29T04:36:43.7995190Z         indexer: array-like of booleans
+Test	Run pytest with coverage	2026-07-29T04:36:43.7995658Z             Indices corresponding to the key,
+Test	Run pytest with coverage	2026-07-29T04:36:43.7996196Z             (with -1 indicating not found).
+Test	Run pytest with coverage	2026-07-29T04:36:43.7996687Z         axis_name : str
+Test	Run pytest with coverage	2026-07-29T04:36:43.7997057Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.7997362Z         Raises
+Test	Run pytest with coverage	2026-07-29T04:36:43.7997695Z         ------
+Test	Run pytest with coverage	2026-07-29T04:36:43.7998025Z         KeyError
+Test	Run pytest with coverage	2026-07-29T04:36:43.7998473Z             If at least one key was requested but none was found.
+Test	Run pytest with coverage	2026-07-29T04:36:43.7999003Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.7999311Z         if len(key) == 0:
+Test	Run pytest with coverage	2026-07-29T04:36:43.7999663Z             return
+Test	Run pytest with coverage	2026-07-29T04:36:43.8000417Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8000723Z         # Count missing values
+Test	Run pytest with coverage	2026-07-29T04:36:43.8001125Z         missing_mask = indexer < 0
+Test	Run pytest with coverage	2026-07-29T04:36:43.8001556Z         nmissing = missing_mask.sum()
+Test	Run pytest with coverage	2026-07-29T04:36:43.8001977Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8002289Z         if nmissing:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8002687Z             if nmissing == len(indexer):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8003324Z                 raise KeyError(f"None of [{key}] are in the [{axis_name}]")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8004017Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8004551Z             not_found = list(ensure_index(key)[missing_mask.nonzero()[0]].unique())
+Test	Run pytest with coverage	2026-07-29T04:36:43.8005277Z >           raise KeyError(f"{not_found} not in index")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8005839Z E           KeyError: "['industry'] not in index"
+Test	Run pytest with coverage	2026-07-29T04:36:43.8006209Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8006821Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/indexes/base.py:6355: KeyError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8007982Z ____________ ERROR at setup of TestFindBundles.test_latest_and_tag _____________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8008543Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8010068Z tmp_path_factory = TempPathFactory(_given_basetemp=None, _trace=<pluggy._tracing.TagTracerSub object at 0x7f565f18b150>, _basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0'), _retention_count=3, _retention_policy='all')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8011542Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8011720Z     @pytest.fixture(scope="module")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8012370Z     def trained(tmp_path_factory):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8012973Z         """合成面板 → run_training (tiny LGB) → 模型包目录."""
+Test	Run pytest with coverage	2026-07-29T04:36:43.8013527Z         tmp = tmp_path_factory.mktemp("train_predict")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8014078Z         dtt.LGB_PARAMS_REG["n_estimators"] = 10
+Test	Run pytest with coverage	2026-07-29T04:36:43.8014613Z         dtt.LGB_PARAMS_CLS["n_estimators"] = 10
+Test	Run pytest with coverage	2026-07-29T04:36:43.8015127Z         dtt.ES_PATIENCE = 3
+Test	Run pytest with coverage	2026-07-29T04:36:43.8015694Z         panel = make_panel()  # 760 日双股主板面板
+Test	Run pytest with coverage	2026-07-29T04:36:43.8016207Z >       results = run_training(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8016644Z             panel,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8016947Z             "w30",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8017277Z             model_dir=str(tmp / "models"),
+Test	Run pytest with coverage	2026-07-29T04:36:43.8017724Z             registry_path=str(tmp / "registry"),
+Test	Run pytest with coverage	2026-07-29T04:36:43.8018163Z             use_ic_screen=False,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8018527Z         )
+Test	Run pytest with coverage	2026-07-29T04:36:43.8018683Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8018859Z tests/test_train_predict_runner.py:228: 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8019391Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8020269Z app/pipeline1/train_runner.py:127: in run_training
+Test	Run pytest with coverage	2026-07-29T04:36:43.8020847Z     df = prepare_board_frame(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8021548Z app/pipeline1/train_runner.py:39: in prepare_board_frame
+Test	Run pytest with coverage	2026-07-29T04:36:43.8022105Z     df = features.build(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8022586Z app/pipeline1/feature_engine_v35.py:106: in build
+Test	Run pytest with coverage	2026-07-29T04:36:43.8023351Z     df = self.dim27_industry_flow(df)  # [Alt-7a] 行业级 alt 数据聚合
+Test	Run pytest with coverage	2026-07-29T04:36:43.8023952Z          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8024565Z app/pipeline1/feature_engine_v35.py:1894: in dim27_industry_flow
+Test	Run pytest with coverage	2026-07-29T04:36:43.8025303Z     ind_hc[["date", "industry", "ind_holder_trend_20d"]],
+Test	Run pytest with coverage	2026-07-29T04:36:43.8025897Z     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8026844Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/frame.py:4384: in __getitem__
+Test	Run pytest with coverage	2026-07-29T04:36:43.8027952Z     indexer = self.columns._get_indexer_strict(key, "columns")[1]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8028620Z               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8029688Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/indexes/base.py:6302: in _get_indexer_strict
+Test	Run pytest with coverage	2026-07-29T04:36:43.8031030Z     self._raise_if_missing(keyarr, indexer, axis_name)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8031624Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8032024Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8032569Z self = Index(['date', 'holder_count_qoq', 'ind_holder_trend_20d'], dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8033404Z key = Index(['date', 'industry', 'ind_holder_trend_20d'], dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8034077Z indexer = array([ 0, -1,  2]), axis_name = 'columns'
+Test	Run pytest with coverage	2026-07-29T04:36:43.8034475Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8034790Z     def _raise_if_missing(self, key, indexer, axis_name: str_t) -> None:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8035400Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.8035795Z         Check that indexer can be used to return a result.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8036252Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8036561Z         e.g. at least one element was found,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8037078Z         unless the list of keys was actually empty.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8037511Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8037775Z         Parameters
+Test	Run pytest with coverage	2026-07-29T04:36:43.8038079Z         ----------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8038386Z         key : list-like
+Test	Run pytest with coverage	2026-07-29T04:36:43.8038852Z             Targeted labels (only used to show correct error message).
+Test	Run pytest with coverage	2026-07-29T04:36:43.8039438Z         indexer: array-like of booleans
+Test	Run pytest with coverage	2026-07-29T04:36:43.8040128Z             Indices corresponding to the key,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8040600Z             (with -1 indicating not found).
+Test	Run pytest with coverage	2026-07-29T04:36:43.8041016Z         axis_name : str
+Test	Run pytest with coverage	2026-07-29T04:36:43.8041323Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8041575Z         Raises
+Test	Run pytest with coverage	2026-07-29T04:36:43.8041901Z         ------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8042182Z         KeyError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8042586Z             If at least one key was requested but none was found.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8043265Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.8043552Z         if len(key) == 0:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8043874Z             return
+Test	Run pytest with coverage	2026-07-29T04:36:43.8044156Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8044428Z         # Count missing values
+Test	Run pytest with coverage	2026-07-29T04:36:43.8044797Z         missing_mask = indexer < 0
+Test	Run pytest with coverage	2026-07-29T04:36:43.8045197Z         nmissing = missing_mask.sum()
+Test	Run pytest with coverage	2026-07-29T04:36:43.8045578Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8045839Z         if nmissing:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8046175Z             if nmissing == len(indexer):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8046710Z                 raise KeyError(f"None of [{key}] are in the [{axis_name}]")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8047232Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8047669Z             not_found = list(ensure_index(key)[missing_mask.nonzero()[0]].unique())
+Test	Run pytest with coverage	2026-07-29T04:36:43.8048321Z >           raise KeyError(f"{not_found} not in index")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8048801Z E           KeyError: "['industry'] not in index"
+Test	Run pytest with coverage	2026-07-29T04:36:43.8049119Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8049626Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/indexes/base.py:6355: KeyError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8050859Z __________ ERROR at setup of TestRunPrediction.test_emits_schema_list __________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8051317Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8052467Z tmp_path_factory = TempPathFactory(_given_basetemp=None, _trace=<pluggy._tracing.TagTracerSub object at 0x7f565f18b150>, _basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0'), _retention_count=3, _retention_policy='all')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8053775Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8053931Z     @pytest.fixture(scope="module")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8054339Z     def trained(tmp_path_factory):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8054918Z         """合成面板 → run_training (tiny LGB) → 模型包目录."""
+Test	Run pytest with coverage	2026-07-29T04:36:43.8055422Z         tmp = tmp_path_factory.mktemp("train_predict")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8055917Z         dtt.LGB_PARAMS_REG["n_estimators"] = 10
+Test	Run pytest with coverage	2026-07-29T04:36:43.8056380Z         dtt.LGB_PARAMS_CLS["n_estimators"] = 10
+Test	Run pytest with coverage	2026-07-29T04:36:43.8056822Z         dtt.ES_PATIENCE = 3
+Test	Run pytest with coverage	2026-07-29T04:36:43.8057280Z         panel = make_panel()  # 760 日双股主板面板
+Test	Run pytest with coverage	2026-07-29T04:36:43.8057708Z >       results = run_training(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8058058Z             panel,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8058351Z             "w30",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8058677Z             model_dir=str(tmp / "models"),
+Test	Run pytest with coverage	2026-07-29T04:36:43.8059115Z             registry_path=str(tmp / "registry"),
+Test	Run pytest with coverage	2026-07-29T04:36:43.8059555Z             use_ic_screen=False,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8060069Z         )
+Test	Run pytest with coverage	2026-07-29T04:36:43.8060220Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8060602Z tests/test_train_predict_runner.py:228: 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8061128Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8061685Z app/pipeline1/train_runner.py:127: in run_training
+Test	Run pytest with coverage	2026-07-29T04:36:43.8062152Z     df = prepare_board_frame(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8062634Z app/pipeline1/train_runner.py:39: in prepare_board_frame
+Test	Run pytest with coverage	2026-07-29T04:36:43.8063141Z     df = features.build(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8063545Z app/pipeline1/feature_engine_v35.py:106: in build
+Test	Run pytest with coverage	2026-07-29T04:36:43.8064265Z     df = self.dim27_industry_flow(df)  # [Alt-7a] 行业级 alt 数据聚合
+Test	Run pytest with coverage	2026-07-29T04:36:43.8064778Z          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8065298Z app/pipeline1/feature_engine_v35.py:1894: in dim27_industry_flow
+Test	Run pytest with coverage	2026-07-29T04:36:43.8065918Z     ind_hc[["date", "industry", "ind_holder_trend_20d"]],
+Test	Run pytest with coverage	2026-07-29T04:36:43.8066578Z     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8067568Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/frame.py:4384: in __getitem__
+Test	Run pytest with coverage	2026-07-29T04:36:43.8068601Z     indexer = self.columns._get_indexer_strict(key, "columns")[1]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8069505Z               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8070767Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/indexes/base.py:6302: in _get_indexer_strict
+Test	Run pytest with coverage	2026-07-29T04:36:43.8133786Z     self._raise_if_missing(keyarr, indexer, axis_name)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8134841Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8135265Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8135598Z self = Index(['date', 'holder_count_qoq', 'ind_holder_trend_20d'], dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8136339Z key = Index(['date', 'industry', 'ind_holder_trend_20d'], dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8136997Z indexer = array([ 0, -1,  2]), axis_name = 'columns'
+Test	Run pytest with coverage	2026-07-29T04:36:43.8137358Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8137589Z     def _raise_if_missing(self, key, indexer, axis_name: str_t) -> None:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8138027Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.8138300Z         Check that indexer can be used to return a result.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8138652Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8138876Z         e.g. at least one element was found,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8139243Z         unless the list of keys was actually empty.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8139573Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8140037Z         Parameters
+Test	Run pytest with coverage	2026-07-29T04:36:43.8140355Z         ----------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8140587Z         key : list-like
+Test	Run pytest with coverage	2026-07-29T04:36:43.8140937Z             Targeted labels (only used to show correct error message).
+Test	Run pytest with coverage	2026-07-29T04:36:43.8141361Z         indexer: array-like of booleans
+Test	Run pytest with coverage	2026-07-29T04:36:43.8141695Z             Indices corresponding to the key,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8142035Z             (with -1 indicating not found).
+Test	Run pytest with coverage	2026-07-29T04:36:43.8142345Z         axis_name : str
+Test	Run pytest with coverage	2026-07-29T04:36:43.8142581Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8142774Z         Raises
+Test	Run pytest with coverage	2026-07-29T04:36:43.8142984Z         ------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8143196Z         KeyError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8143495Z             If at least one key was requested but none was found.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8143857Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.8144045Z         if len(key) == 0:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8144253Z             return
+Test	Run pytest with coverage	2026-07-29T04:36:43.8144439Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8144619Z         # Count missing values
+Test	Run pytest with coverage	2026-07-29T04:36:43.8144855Z         missing_mask = indexer < 0
+Test	Run pytest with coverage	2026-07-29T04:36:43.8145113Z         nmissing = missing_mask.sum()
+Test	Run pytest with coverage	2026-07-29T04:36:43.8145350Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8145521Z         if nmissing:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8145731Z             if nmissing == len(indexer):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8146073Z                 raise KeyError(f"None of [{key}] are in the [{axis_name}]")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8146401Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8146681Z             not_found = list(ensure_index(key)[missing_mask.nonzero()[0]].unique())
+Test	Run pytest with coverage	2026-07-29T04:36:43.8147087Z >           raise KeyError(f"{not_found} not in index")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8147616Z E           KeyError: "['industry'] not in index"
+Test	Run pytest with coverage	2026-07-29T04:36:43.8147815Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8148163Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/indexes/base.py:6355: KeyError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8148803Z __________ ERROR at setup of TestRunPrediction.test_no_bundles_raises __________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8149103Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8150054Z tmp_path_factory = TempPathFactory(_given_basetemp=None, _trace=<pluggy._tracing.TagTracerSub object at 0x7f565f18b150>, _basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0'), _retention_count=3, _retention_policy='all')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8150899Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8150996Z     @pytest.fixture(scope="module")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8151256Z     def trained(tmp_path_factory):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8151693Z         """合成面板 → run_training (tiny LGB) → 模型包目录."""
+Test	Run pytest with coverage	2026-07-29T04:36:43.8152016Z         tmp = tmp_path_factory.mktemp("train_predict")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8152332Z         dtt.LGB_PARAMS_REG["n_estimators"] = 10
+Test	Run pytest with coverage	2026-07-29T04:36:43.8152633Z         dtt.LGB_PARAMS_CLS["n_estimators"] = 10
+Test	Run pytest with coverage	2026-07-29T04:36:43.8152898Z         dtt.ES_PATIENCE = 3
+Test	Run pytest with coverage	2026-07-29T04:36:43.8153188Z         panel = make_panel()  # 760 日双股主板面板
+Test	Run pytest with coverage	2026-07-29T04:36:43.8153454Z >       results = run_training(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8153677Z             panel,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8153867Z             "w30",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8154071Z             model_dir=str(tmp / "models"),
+Test	Run pytest with coverage	2026-07-29T04:36:43.8154497Z             registry_path=str(tmp / "registry"),
+Test	Run pytest with coverage	2026-07-29T04:36:43.8154777Z             use_ic_screen=False,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8155001Z         )
+Test	Run pytest with coverage	2026-07-29T04:36:43.8155104Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8155207Z tests/test_train_predict_runner.py:228: 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8155523Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8155896Z app/pipeline1/train_runner.py:127: in run_training
+Test	Run pytest with coverage	2026-07-29T04:36:43.8156201Z     df = prepare_board_frame(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8156498Z app/pipeline1/train_runner.py:39: in prepare_board_frame
+Test	Run pytest with coverage	2026-07-29T04:36:43.8156821Z     df = features.build(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8157069Z app/pipeline1/feature_engine_v35.py:106: in build
+Test	Run pytest with coverage	2026-07-29T04:36:43.8157486Z     df = self.dim27_industry_flow(df)  # [Alt-7a] 行业级 alt 数据聚合
+Test	Run pytest with coverage	2026-07-29T04:36:43.8157794Z          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8158110Z app/pipeline1/feature_engine_v35.py:1894: in dim27_industry_flow
+Test	Run pytest with coverage	2026-07-29T04:36:43.8158489Z     ind_hc[["date", "industry", "ind_holder_trend_20d"]],
+Test	Run pytest with coverage	2026-07-29T04:36:43.8158805Z     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8159317Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/frame.py:4384: in __getitem__
+Test	Run pytest with coverage	2026-07-29T04:36:43.8160197Z     indexer = self.columns._get_indexer_strict(key, "columns")[1]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8160555Z               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8161135Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/indexes/base.py:6302: in _get_indexer_strict
+Test	Run pytest with coverage	2026-07-29T04:36:43.8161763Z     self._raise_if_missing(keyarr, indexer, axis_name)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8162108Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8162344Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8162538Z self = Index(['date', 'holder_count_qoq', 'ind_holder_trend_20d'], dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8162987Z key = Index(['date', 'industry', 'ind_holder_trend_20d'], dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8163375Z indexer = array([ 0, -1,  2]), axis_name = 'columns'
+Test	Run pytest with coverage	2026-07-29T04:36:43.8163596Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8163778Z     def _raise_if_missing(self, key, indexer, axis_name: str_t) -> None:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8164126Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.8164359Z         Check that indexer can be used to return a result.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8164645Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8164836Z         e.g. at least one element was found,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8165134Z         unless the list of keys was actually empty.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8165554Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8165726Z         Parameters
+Test	Run pytest with coverage	2026-07-29T04:36:43.8165924Z         ----------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8166120Z         key : list-like
+Test	Run pytest with coverage	2026-07-29T04:36:43.8166408Z             Targeted labels (only used to show correct error message).
+Test	Run pytest with coverage	2026-07-29T04:36:43.8166757Z         indexer: array-like of booleans
+Test	Run pytest with coverage	2026-07-29T04:36:43.8167041Z             Indices corresponding to the key,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8167325Z             (with -1 indicating not found).
+Test	Run pytest with coverage	2026-07-29T04:36:43.8167590Z         axis_name : str
+Test	Run pytest with coverage	2026-07-29T04:36:43.8167784Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8167945Z         Raises
+Test	Run pytest with coverage	2026-07-29T04:36:43.8168123Z         ------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8168304Z         KeyError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8168556Z             If at least one key was requested but none was found.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8168854Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.8169032Z         if len(key) == 0:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8169241Z             return
+Test	Run pytest with coverage	2026-07-29T04:36:43.8169418Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8169592Z         # Count missing values
+Test	Run pytest with coverage	2026-07-29T04:36:43.8170106Z         missing_mask = indexer < 0
+Test	Run pytest with coverage	2026-07-29T04:36:43.8170383Z         nmissing = missing_mask.sum()
+Test	Run pytest with coverage	2026-07-29T04:36:43.8170619Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8170786Z         if nmissing:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8170996Z             if nmissing == len(indexer):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8171329Z                 raise KeyError(f"None of [{key}] are in the [{axis_name}]")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8171658Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8172087Z             not_found = list(ensure_index(key)[missing_mask.nonzero()[0]].unique())
+Test	Run pytest with coverage	2026-07-29T04:36:43.8172490Z >           raise KeyError(f"{not_found} not in index")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8172801Z E           KeyError: "['industry'] not in index"
+Test	Run pytest with coverage	2026-07-29T04:36:43.8172993Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8173324Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/indexes/base.py:6355: KeyError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8173882Z =================================== FAILURES ===================================
+Test	Run pytest with coverage	2026-07-29T04:36:43.8174318Z ____________ TestDailyPipeline.test_empty_trigger_forces_empty_list ____________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8174621Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8174829Z self = <tests.test_daily_pipeline.TestDailyPipeline object at 0x7f563288d4d0>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8175611Z pipeline = (<app.pipeline1.daily_pipeline.DailySelectionPipeline object at 0x7f562d948050>,       symbol       date board  ...  l...  1000 -1.920088  1.855401
+Test	Run pytest with coverage	2026-07-29T04:36:43.8176358Z 1519  601318 2025-11-28  main  ...       1000 -1.099179 -0.151295
+Test	Run pytest with coverage	2026-07-29T04:36:43.8176617Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8176706Z [1520 rows x 22 columns])
+Test	Run pytest with coverage	2026-07-29T04:36:43.8176854Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8177006Z     def test_empty_trigger_forces_empty_list(self, pipeline):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8177386Z         from app.pipeline1.list_generator import MarketEnv
+Test	Run pytest with coverage	2026-07-29T04:36:43.8177683Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8177869Z         pipe, panel = pipeline
+Test	Run pytest with coverage	2026-07-29T04:36:43.8178217Z         r = pipe.run("20260720", panel=panel, env=MarketEnv(hs300_drop_today=0.031))
+Test	Run pytest with coverage	2026-07-29T04:36:43.8178628Z >       assert r["empty"] and len(r["list"]) == 0
+Test	Run pytest with coverage	2026-07-29T04:36:43.8178908Z E       assert (False)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8179043Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8179167Z tests/test_daily_pipeline.py:141: AssertionError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8179559Z ____________________ TestFrontierAPI.test_ohlc_and_intraday ____________________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8180110Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8180316Z self = <tests.test_frontier_api.TestFrontierAPI object at 0x7f562decfe90>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8180619Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8180722Z     def test_ohlc_and_intraday(self):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8181024Z         r = client.get("/api/frontier/ohlc/600519?days=60")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8181392Z         assert r.status_code == 200 and len(r.json()["items"]) == 60
+Test	Run pytest with coverage	2026-07-29T04:36:43.8181751Z         r = client.get("/api/frontier/intraday/600519")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8182106Z >       assert r.status_code == 200 and len(r.json()["items"]) == 120
+Test	Run pytest with coverage	2026-07-29T04:36:43.8182473Z E       AssertionError: assert (200 == 200 and 24 == 120)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8182928Z E        +  where 200 = <Response [200 OK]>.status_code
+Test	Run pytest with coverage	2026-07-29T04:36:43.8183760Z E        +  and   24 = len([{'time': '09:35', 'price': 1316.2, 'volume': 4477}, {'time': '09:40', 'price': 1317.99, 'volume': 1600}, {'time': '09...': 3635}, {'time': '09:55', 'price': 1326.0, 'volume': 2192}, {'time': '10:00', 'price': 1330.05, 'volume': 1607}, ...])
+Test	Run pytest with coverage	2026-07-29T04:36:43.8184494Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8184607Z tests/test_frontier_api.py:37: AssertionError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8185045Z ____________ TestDualTrackTrainer.test_split_window_transition_b11 _____________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8185355Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8185560Z self = <tests.test_indicators.TestDualTrackTrainer object at 0x7f562dd77ed0>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8185869Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8185980Z     def test_split_window_transition_b11(self):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8186444Z         """B11: 回填达标前 540 日过渡窗口, es/calib/test 保持统计下限, train 吸收余量."""
+Test	Run pytest with coverage	2026-07-29T04:36:43.8186858Z         from app.pipeline1.dual_track_trainer import DualTrackTrainer
+Test	Run pytest with coverage	2026-07-29T04:36:43.8187199Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8187425Z         dates = pd.bdate_range("2023-01-02", periods=540)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8187763Z         df = pd.DataFrame({"date": dates, "x": range(540)})
+Test	Run pytest with coverage	2026-07-29T04:36:43.8188136Z         segs = DualTrackTrainer.split_window(df, window_total=540)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8188503Z >       assert {k: len(v) for k, v in segs.items()} == {
+Test	Run pytest with coverage	2026-07-29T04:36:43.8188791Z             "train": 460,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8189132Z             "es": 20,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8189332Z             "calib": 20,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8189539Z             "test": 60,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8189737Z         }
+Test	Run pytest with coverage	2026-07-29T04:36:43.8190287Z E       AssertionError: assert {'train': 440...0, 'test': 60} == {'train': 460...0, 'test': 60}
+Test	Run pytest with coverage	2026-07-29T04:36:43.8190714Z E         
+Test	Run pytest with coverage	2026-07-29T04:36:43.8190934Z E         Omitting 3 identical items, use -vv to show
+Test	Run pytest with coverage	2026-07-29T04:36:43.8191223Z E         Differing items:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8191452Z E         {'train': 440} != {'train': 460}
+Test	Run pytest with coverage	2026-07-29T04:36:43.8191706Z E         
+Test	Run pytest with coverage	2026-07-29T04:36:43.8191880Z E         Full diff:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8192073Z E           {
+Test	Run pytest with coverage	2026-07-29T04:36:43.8192264Z E         -     'train': 460,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8192486Z E         ?               ^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8192698Z E         +     'train': 440,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8192910Z E         ?               ^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8193117Z E               'es': 20,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8193334Z E               'calib': 20,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8193550Z E               'test': 60,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8193753Z E           }
+Test	Run pytest with coverage	2026-07-29T04:36:43.8193884Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8194014Z tests/test_indicators.py:199: AssertionError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8194391Z ______________________ TestFeatures.test_dims_and_groupby ______________________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8194682Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8194872Z self = <tests.test_pipeline1_v35.TestFeatures object at 0x7f562d709e90>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8195153Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8195253Z     def test_dims_and_groupby(self):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8195602Z         """14 维特征产出 + groupby(symbol) 无跨股泄漏."""
+Test	Run pytest with coverage	2026-07-29T04:36:43.8195914Z         df = make_panel(symbols=("600519", "300750"), days=300)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8196225Z         eng = FeatureEngineV35()
+Test	Run pytest with coverage	2026-07-29T04:36:43.8196461Z >       out = eng.build(df)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8196672Z               ^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8196801Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8196904Z tests/test_pipeline1_v35.py:261: 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8197207Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8197558Z app/pipeline1/feature_engine_v35.py:106: in build
+Test	Run pytest with coverage	2026-07-29T04:36:43.8197966Z     df = self.dim27_industry_flow(df)  # [Alt-7a] 行业级 alt 数据聚合
+Test	Run pytest with coverage	2026-07-29T04:36:43.8198276Z          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8198596Z app/pipeline1/feature_engine_v35.py:1894: in dim27_industry_flow
+Test	Run pytest with coverage	2026-07-29T04:36:43.8198981Z     ind_hc[["date", "industry", "ind_holder_trend_20d"]],
+Test	Run pytest with coverage	2026-07-29T04:36:43.8199289Z     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8200225Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/frame.py:4384: in __getitem__
+Test	Run pytest with coverage	2026-07-29T04:36:43.8200828Z     indexer = self.columns._get_indexer_strict(key, "columns")[1]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8201180Z               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8201748Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/indexes/base.py:6302: in _get_indexer_strict
+Test	Run pytest with coverage	2026-07-29T04:36:43.8202413Z     self._raise_if_missing(keyarr, indexer, axis_name)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8202759Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8203001Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8203194Z self = Index(['date', 'holder_count_qoq', 'ind_holder_trend_20d'], dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8203650Z key = Index(['date', 'industry', 'ind_holder_trend_20d'], dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8204031Z indexer = array([ 0, -1,  2]), axis_name = 'columns'
+Test	Run pytest with coverage	2026-07-29T04:36:43.8204251Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8204424Z     def _raise_if_missing(self, key, indexer, axis_name: str_t) -> None:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8204768Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.8204996Z         Check that indexer can be used to return a result.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8205281Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8205473Z         e.g. at least one element was found,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8205768Z         unless the list of keys was actually empty.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8206173Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8206341Z         Parameters
+Test	Run pytest with coverage	2026-07-29T04:36:43.8206534Z         ----------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8206727Z         key : list-like
+Test	Run pytest with coverage	2026-07-29T04:36:43.8207017Z             Targeted labels (only used to show correct error message).
+Test	Run pytest with coverage	2026-07-29T04:36:43.8207362Z         indexer: array-like of booleans
+Test	Run pytest with coverage	2026-07-29T04:36:43.8207640Z             Indices corresponding to the key,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8207928Z             (with -1 indicating not found).
+Test	Run pytest with coverage	2026-07-29T04:36:43.8208187Z         axis_name : str
+Test	Run pytest with coverage	2026-07-29T04:36:43.8208390Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8208554Z         Raises
+Test	Run pytest with coverage	2026-07-29T04:36:43.8208731Z         ------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8208910Z         KeyError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8209159Z             If at least one key was requested but none was found.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8209456Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.8209632Z         if len(key) == 0:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8210105Z             return
+Test	Run pytest with coverage	2026-07-29T04:36:43.8210351Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8210533Z         # Count missing values
+Test	Run pytest with coverage	2026-07-29T04:36:43.8210778Z         missing_mask = indexer < 0
+Test	Run pytest with coverage	2026-07-29T04:36:43.8211035Z         nmissing = missing_mask.sum()
+Test	Run pytest with coverage	2026-07-29T04:36:43.8211271Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8211436Z         if nmissing:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8211646Z             if nmissing == len(indexer):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8211980Z                 raise KeyError(f"None of [{key}] are in the [{axis_name}]")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8212310Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8212588Z             not_found = list(ensure_index(key)[missing_mask.nonzero()[0]].unique())
+Test	Run pytest with coverage	2026-07-29T04:36:43.8213009Z >           raise KeyError(f"{not_found} not in index")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8213317Z E           KeyError: "['industry'] not in index"
+Test	Run pytest with coverage	2026-07-29T04:36:43.8213514Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8213849Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/indexes/base.py:6355: KeyError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8214472Z _____________________ TestFeatures.test_candlestick_dim16 ______________________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8214764Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8214948Z self = <tests.test_pipeline1_v35.TestFeatures object at 0x7f562d8eb410>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8215229Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8215331Z     def test_candlestick_dim16(self):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8215662Z         """dim16: 6 个 K 线形态二值特征."""
+Test	Run pytest with coverage	2026-07-29T04:36:43.8215930Z         df = make_panel(symbols=("600519",), days=30)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8216220Z         eng = FeatureEngineV35()
+Test	Run pytest with coverage	2026-07-29T04:36:43.8216468Z         out = eng.dim16_candlestick(df)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8216714Z         for col in (
+Test	Run pytest with coverage	2026-07-29T04:36:43.8217065Z             "bullish_engulfing",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8217296Z             "bearish_engulfing",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8217517Z             "hammer",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8217719Z             "shooting_star",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8217941Z             "morning_star",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8218156Z             "evening_star",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8218360Z         ):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8218557Z >           assert col in out.columns, col
+Test	Run pytest with coverage	2026-07-29T04:36:43.8218850Z E           AssertionError: bullish_engulfing
+Test	Run pytest with coverage	2026-07-29T04:36:43.8220045Z E           assert 'bullish_engulfing' in Index(['symbol', 'date', 'board', 'open', 'high', 'low', 'close', 'close_hfq',\n       'high_hfq', 'low_hfq', 'open_hfq...t_intensity_60d', 'reversal_intensity_20d',\n       'body_shadow_ratio_5d', 'body_shadow_ratio_20d'],\n      dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8222285Z E            +  where Index(['symbol', 'date', 'board', 'open', 'high', 'low', 'close', 'close_hfq',\n       'high_hfq', 'low_hfq', 'open_hfq...t_intensity_60d', 'reversal_intensity_20d',\n       'body_shadow_ratio_5d', 'body_shadow_ratio_20d'],\n      dtype='str') =     symbol       date  ... body_shadow_ratio_5d  body_shadow_ratio_20d\n0   600519 2025-01-01  ...             0.475085...9               0.316267\n29  600519 2025-02-11  ...             0.504885               0.326887\n\n[30 rows x 32 columns].columns
+Test	Run pytest with coverage	2026-07-29T04:36:43.8223707Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8223832Z tests/test_pipeline1_v35.py:346: AssertionError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8224367Z ___________________ TestListGenerator.test_schema_and_top15 ____________________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8224660Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8224863Z self = <tests.test_pipeline1_v35.TestListGenerator object at 0x7f562d8eb4d0>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8225161Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8225261Z     def test_schema_and_top15(self):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8225572Z         out = ListGenerator(**GATE_OFF).emit(make_candidates())
+Test	Run pytest with coverage	2026-07-29T04:36:43.8225892Z         lst = out["list"]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8226110Z         assert len(lst) <= 15
+Test	Run pytest with coverage	2026-07-29T04:36:43.8226371Z         assert list(lst.columns) == SCHEMA_FIELDS
+Test	Run pytest with coverage	2026-07-29T04:36:43.8226664Z         assert out["schema_version"] == "1.2"
+Test	Run pytest with coverage	2026-07-29T04:36:43.8227013Z >       assert lst["prob_up"].iloc[0] == round(lst["prob_up"].iloc[0], 3)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8227423Z E       assert np.float64(0.47681507208363116) == np.float64(0.477)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8227837Z E        +  where np.float64(0.477) = round(np.float64(0.47681507208363116), 3)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8228110Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8228235Z tests/test_pipeline1_v35.py:452: AssertionError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8228623Z ____________________ TestListGenerator.test_industry_limit _____________________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8228912Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8229106Z self = <tests.test_pipeline1_v35.TestListGenerator object at 0x7f562d8eab10>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8229407Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8229502Z     def test_industry_limit(self):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8229767Z         cands = make_candidates(n=20)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8230246Z         cands["industry"] = "白酒"  # 全部同行业 → 最多 4 只
+Test	Run pytest with coverage	2026-07-29T04:36:43.8230564Z         out = ListGenerator(**GATE_OFF).emit(cands)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8230850Z >       assert len(out["list"]) == 4
+Test	Run pytest with coverage	2026-07-29T04:36:43.8231094Z E       assert 8 == 4
+Test	Run pytest with coverage	2026-07-29T04:36:43.8231875Z E        +  where 8 = len(   symbol board  pred_ret_1d  ...  announce_score  weight  schema_version\n0  600013   GEM     0.028843  ...           ...   0.1             1.2\n7  600008  STAR     0.004959  ...             NaN     0.1             1.2\n\n[8 rows x 21 columns])
+Test	Run pytest with coverage	2026-07-29T04:36:43.8232631Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8232748Z tests/test_pipeline1_v35.py:458: AssertionError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8233134Z ___________________ TestListGenerator.test_momentum_firewall ___________________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8233427Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8233626Z self = <tests.test_pipeline1_v35.TestListGenerator object at 0x7f562d8e9090>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8233919Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8234018Z     def test_momentum_firewall(self):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8234440Z         """V3.4 陷阱修复: pred_1d=-8%, pred_3d=-2% → 旧规则误判 high, 新规则 low."""
+Test	Run pytest with coverage	2026-07-29T04:36:43.8235009Z >       assert ListGenerator.compute_momentum(-0.08, -0.02, -0.01) == "low"
+Test	Run pytest with coverage	2026-07-29T04:36:43.8235373Z                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8235768Z E       AttributeError: type object 'ListGenerator' has no attribute 'compute_momentum'
+Test	Run pytest with coverage	2026-07-29T04:36:43.8236094Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8236216Z tests/test_pipeline1_v35.py:462: AttributeError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8236610Z _____________________ TestListGenerator.test_holding_bonus _____________________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8236894Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8237103Z self = <tests.test_pipeline1_v35.TestListGenerator object at 0x7f562d8e8590>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8237396Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8237495Z     def test_holding_bonus(self):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8237911Z         """向后兼容: 无 holding_day 列时, is_in_yesterday_list=1 视为 day1 (weight=1.0)."""
+Test	Run pytest with coverage	2026-07-29T04:36:43.8238282Z         cands = make_candidates(n=2, seed=3)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8238619Z         cands.loc[:, ["pred_ret_1d", "pred_ret_3d", "pred_ret_5d"]] = 0.02
+Test	Run pytest with coverage	2026-07-29T04:36:43.8238983Z         cands.loc[:, "prob_up"] = 0.5
+Test	Run pytest with coverage	2026-07-29T04:36:43.8239251Z         cands["is_in_yesterday_list"] = [1, 0]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8239548Z         out = ListGenerator(**GATE_OFF).emit(cands)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8240122Z         # 昨日在清单内的票 +0.2 加成 → 排第一, 分差 ≈ 0.2
+Test	Run pytest with coverage	2026-07-29T04:36:43.8240425Z         assert out["list"].iloc[0]["symbol"] == "600000"
+Test	Run pytest with coverage	2026-07-29T04:36:43.8240930Z >       assert out["list"].iloc[0]["score"] - out["list"].iloc[1][
+Test	Run pytest with coverage	2026-07-29T04:36:43.8241241Z             "score"
+Test	Run pytest with coverage	2026-07-29T04:36:43.8241445Z         ] == pytest.approx(0.2)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8241754Z E       assert np.float64(0.0) == 0.2 ± 2.0e-07
+Test	Run pytest with coverage	2026-07-29T04:36:43.8242012Z E         
+Test	Run pytest with coverage	2026-07-29T04:36:43.8242204Z E         comparison failed
+Test	Run pytest with coverage	2026-07-29T04:36:43.8242425Z E         Obtained: 0.0
+Test	Run pytest with coverage	2026-07-29T04:36:43.8242674Z E         Expected: 0.2 ± 2.0e-07
+Test	Run pytest with coverage	2026-07-29T04:36:43.8242836Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8242954Z tests/test_pipeline1_v35.py:478: AssertionError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8243354Z ____________________ TestListGenerator.test_empty_triggers _____________________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8243650Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8243845Z self = <tests.test_pipeline1_v35.TestListGenerator object at 0x7f562d8e9890>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8244152Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8244246Z     def test_empty_triggers(self):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8244577Z         """D18: 暴跌/跌停>50 → 空清单; 连跌3日 → 仅 Top 5."""
+Test	Run pytest with coverage	2026-07-29T04:36:43.8244877Z         gen = ListGenerator(**GATE_OFF)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8245222Z         out = gen.emit(make_candidates(), MarketEnv(hs300_drop_today=0.031))
+Test	Run pytest with coverage	2026-07-29T04:36:43.8245607Z >       assert out["empty"] and len(out["list"]) == 0
+Test	Run pytest with coverage	2026-07-29T04:36:43.8245893Z E       assert (False)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8246025Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8246139Z tests/test_pipeline1_v35.py:533: AssertionError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8246541Z _____________ TestV37ScoreFormula.test_fallback_without_rank_score _____________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8246848Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8247087Z self = <tests.test_pipeline1_v38_dual_list.TestV37ScoreFormula object at 0x7f562d8a2890>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8247435Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8247549Z     def test_fallback_without_rank_score(self):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8247831Z         gen = ListGenerator()
+Test	Run pytest with coverage	2026-07-29T04:36:43.8248062Z         df = pd.DataFrame(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8248275Z             {
+Test	Run pytest with coverage	2026-07-29T04:36:43.8248463Z                 "symbol": ["A"],
+Test	Run pytest with coverage	2026-07-29T04:36:43.8248697Z                 "board": ["main"],
+Test	Run pytest with coverage	2026-07-29T04:36:43.8248943Z                 "pred_ret_1d": [0.02],
+Test	Run pytest with coverage	2026-07-29T04:36:43.8249196Z                 "pred_ret_3d": [0.02],
+Test	Run pytest with coverage	2026-07-29T04:36:43.8249441Z                 "pred_ret_5d": [0.02],
+Test	Run pytest with coverage	2026-07-29T04:36:43.8249689Z                 "prob_up": [0.6],
+Test	Run pytest with coverage	2026-07-29T04:36:43.8250044Z             }
+Test	Run pytest with coverage	2026-07-29T04:36:43.8250223Z         )
+Test	Run pytest with coverage	2026-07-29T04:36:43.8250411Z         out = gen.compute_scores(df)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8250827Z         # 无 rank_score → 回退 pred_ret_1d 横截面 rank(pct=True)=1.0, prob/base=1
+Test	Run pytest with coverage	2026-07-29T04:36:43.8251375Z >       assert out["score"].iloc[0] == pytest.approx(1.0 * 1.0)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8251766Z E       assert np.float64(0.022) == 1.0 ± 1.0e-06
+Test	Run pytest with coverage	2026-07-29T04:36:43.8252036Z E         
+Test	Run pytest with coverage	2026-07-29T04:36:43.8252222Z E         comparison failed
+Test	Run pytest with coverage	2026-07-29T04:36:43.8252446Z E         Obtained: 0.022
+Test	Run pytest with coverage	2026-07-29T04:36:43.8252704Z E         Expected: 1.0 ± 1.0e-06
+Test	Run pytest with coverage	2026-07-29T04:36:43.8252858Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8253003Z tests/test_pipeline1_v38_dual_list.py:126: AssertionError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8253417Z _________________________ test_stage1_gate_small_mode __________________________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8253681Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8253912Z tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_stage1_gate_small_mode0')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8254453Z monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f55cc99c310>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8254752Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8254890Z     def test_stage1_gate_small_mode(tmp_path, monkeypatch):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8255317Z         """--small 跑通主函数: 返回码 0/1 + JSON 报告含四项门禁 checks."""
+Test	Run pytest with coverage	2026-07-29T04:36:43.8255644Z         panel_path = tmp_path / "panel.parquet"
+Test	Run pytest with coverage	2026-07-29T04:36:43.8255943Z         make_panel().to_parquet(panel_path)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8256195Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8256377Z         gate = _load_gate_module()
+Test	Run pytest with coverage	2026-07-29T04:36:43.8256703Z         monkeypatch.setattr(gate, "FeatureEngineV35", _StubFeatures)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8257040Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8257212Z >       rc = gate.main(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8257545Z             [
+Test	Run pytest with coverage	2026-07-29T04:36:43.8257734Z                 "--panel",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8257956Z                 str(panel_path),
+Test	Run pytest with coverage	2026-07-29T04:36:43.8258185Z                 "--tag",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8258394Z                 "pytest",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8258601Z                 "--small",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8258810Z                 "--out-dir",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8259036Z                 str(tmp_path),
+Test	Run pytest with coverage	2026-07-29T04:36:43.8259264Z                 "--journal-dir",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8259508Z                 str(tmp_path / "journal"),
+Test	Run pytest with coverage	2026-07-29T04:36:43.8259949Z                 "--model-dir",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8260232Z                 str(tmp_path / "models"),
+Test	Run pytest with coverage	2026-07-29T04:36:43.8260485Z             ]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8260660Z         )
+Test	Run pytest with coverage	2026-07-29T04:36:43.8260763Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8260855Z tests/test_stage1_gate.py:95: 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8261139Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8261484Z scripts/run_stage1_gate.py:200: in main
+Test	Run pytest with coverage	2026-07-29T04:36:43.8261841Z     boards[board] = _evaluate_board(board, _build_labels(bdf), trainer)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8262210Z                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8262529Z scripts/run_stage1_gate.py:85: in _evaluate_board
+Test	Run pytest with coverage	2026-07-29T04:36:43.8262850Z     trained = trainer.train_window(df, board, cols)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8263158Z               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8263477Z app/pipeline1/dual_track_trainer.py:253: in train_window
+Test	Run pytest with coverage	2026-07-29T04:36:43.8263852Z     model, label = self._train_one(kind, segs, feature_cols)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8264183Z                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8264502Z app/pipeline1/dual_track_trainer.py:219: in _train_one
+Test	Run pytest with coverage	2026-07-29T04:36:43.8264800Z     model.fit(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8265202Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/lightgbm/sklearn.py:1657: in fit
+Test	Run pytest with coverage	2026-07-29T04:36:43.8265696Z     _LGBMCheckClassificationTargets(y)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8266012Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8266247Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8266366Z y = array([0., 0., 1., ..., 0., 1., 0.], shape=(4020,))
+Test	Run pytest with coverage	2026-07-29T04:36:43.8266566Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8266670Z     def check_classification_targets(y):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8266980Z         """Ensure that target y is of a non-regression type.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8267266Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8267567Z         Only the following target types (as defined in type_of_target) are allowed:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8268137Z             'binary', 'multiclass', 'multiclass-multioutput',
+Test	Run pytest with coverage	2026-07-29T04:36:43.8268493Z             'multilabel-indicator', 'multilabel-sequences'
+Test	Run pytest with coverage	2026-07-29T04:36:43.8268782Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8268952Z         Parameters
+Test	Run pytest with coverage	2026-07-29T04:36:43.8269147Z         ----------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8269342Z         y : array-like
+Test	Run pytest with coverage	2026-07-29T04:36:43.8269550Z             Target values.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8269764Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.8270100Z         y_type = type_of_target(y, input_name="y")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8270386Z         if y_type not in [
+Test	Run pytest with coverage	2026-07-29T04:36:43.8270595Z             "binary",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8270797Z             "multiclass",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8271027Z             "multiclass-multioutput",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8271294Z             "multilabel-indicator",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8271549Z             "multilabel-sequences",
+Test	Run pytest with coverage	2026-07-29T04:36:43.8271781Z         ]:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8271967Z >           raise ValueError(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8272293Z                 f"Unknown label type: {y_type}. Maybe you are trying to fit a "
+Test	Run pytest with coverage	2026-07-29T04:36:43.8272703Z                 "classifier, which expects discrete classes on a "
+Test	Run pytest with coverage	2026-07-29T04:36:43.8273049Z                 "regression target with continuous values."
+Test	Run pytest with coverage	2026-07-29T04:36:43.8273329Z             )
+Test	Run pytest with coverage	2026-07-29T04:36:43.8273966Z E           ValueError: Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8274717Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8275046Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/sklearn/utils/multiclass.py:230: ValueError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8275653Z ------------------------------ Captured log call -------------------------------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8276317Z WARNING  run_stage1_gate:run_stage1_gate.py:63 small 模式: n_estimators=20, ES_PATIENCE=5 (仅 smoke, 不作验收依据)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8277660Z ERROR    app.pipeline1.dual_track_trainer:dual_track_trainer.py:229 模型训练失败 [1d_cls/label_pm_cls_net]: Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8278744Z ______________ TestFetchCascade.test_fallback_order_and_down_flag ______________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8279047Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8279270Z self = <tests.test_train_predict_runner.TestFetchCascade object at 0x7f562dac10d0>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8280032Z tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_fallback_order_and_down_f0')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8280391Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8280538Z     def test_fallback_order_and_down_flag(self, tmp_path):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8280932Z         """akshare 失败 → sina; 失败后本次运行内跳过该源."""
+Test	Run pytest with coverage	2026-07-29T04:36:43.8281266Z         from app.pipeline1.data_supply import DataSupplyChain
+Test	Run pytest with coverage	2026-07-29T04:36:43.8281575Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8281797Z         supply = DataSupplyChain(cache_dir=str(tmp_path))
+Test	Run pytest with coverage	2026-07-29T04:36:43.8282103Z         calls = []
+Test	Run pytest with coverage	2026-07-29T04:36:43.8282307Z         good = pd.DataFrame(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8282598Z             {"symbol": ["600519"], "date": [pd.Timestamp("2026-07-24")]}
+Test	Run pytest with coverage	2026-07-29T04:36:43.8282914Z         )
+Test	Run pytest with coverage	2026-07-29T04:36:43.8283082Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8283268Z         def fail(symbol, start, end):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8283525Z             calls.append("fail")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8283783Z             raise ConnectionError("boom")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8284041Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8284226Z         supply._akshare_fetch_hist = fail
+Test	Run pytest with coverage	2026-07-29T04:36:43.8284600Z         supply._sina_fetch_hist = lambda s, a, b: (calls.append("sina"), good)[1]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8285099Z         df = supply._default_fetch_hist("600519", "2023-01-01", "2026-07-24")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8285484Z         assert len(df) == 1 and calls == ["fail", "sina"]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8285860Z         # 第二次: akshare 已被标记 down, 直走 sina
+Test	Run pytest with coverage	2026-07-29T04:36:43.8286199Z         supply._default_fetch_hist("600519", "2023-01-01", "2026-07-24")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8286705Z >       assert calls == ["fail", "sina", "sina"]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8287108Z E       AssertionError: assert ['fail', 'sin...fail', 'sina'] == ['fail', 'sina', 'sina']
+Test	Run pytest with coverage	2026-07-29T04:36:43.8287497Z E         
+Test	Run pytest with coverage	2026-07-29T04:36:43.8287701Z E         At index 2 diff: 'fail' != 'sina'
+Test	Run pytest with coverage	2026-07-29T04:36:43.8287996Z E         Left contains one more item: 'sina'
+Test	Run pytest with coverage	2026-07-29T04:36:43.8288252Z E         
+Test	Run pytest with coverage	2026-07-29T04:36:43.8288436Z E         Full diff:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8288631Z E           [
+Test	Run pytest with coverage	2026-07-29T04:36:43.8288813Z E               'fail',
+Test	Run pytest with coverage	2026-07-29T04:36:43.8289014Z E               'sina',
+Test	Run pytest with coverage	2026-07-29T04:36:43.8289210Z E         +     'fail',
+Test	Run pytest with coverage	2026-07-29T04:36:43.8289404Z E               'sina',
+Test	Run pytest with coverage	2026-07-29T04:36:43.8289596Z E           ]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8289698Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8289963Z tests/test_train_predict_runner.py:41: AssertionError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8290364Z ------------------------------ Captured log call -------------------------------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8291056Z WARNING  app.pipeline1.data_supply:data_supply.py:216 tushare 历史拉取失败 600519 (Tushare 不可用) → 尝试下一源 (连续失败 1/3)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8291823Z WARNING  app.pipeline1.data_supply:data_supply.py:216 akshare 历史拉取失败 600519 (boom) → 尝试下一源 (连续失败 1/3)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8292566Z WARNING  app.pipeline1.data_supply:data_supply.py:216 tushare 历史拉取失败 600519 (Tushare 不可用) → 尝试下一源 (连续失败 2/3)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8293310Z WARNING  app.pipeline1.data_supply:data_supply.py:216 akshare 历史拉取失败 600519 (boom) → 尝试下一源 (连续失败 2/3)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8294032Z __________________ TestAdaptiveWindow.test_too_shallow_raises __________________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8294327Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8294554Z self = <tests.test_train_predict_runner.TestAdaptiveWindow object at 0x7f562dc036d0>
+Test	Run pytest with coverage	2026-07-29T04:36:43.8295100Z tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_too_shallow_raises0')
+Test	Run pytest with coverage	2026-07-29T04:36:43.8295419Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8295533Z     def test_too_shallow_raises(self, tmp_path):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8295997Z         panel = make_panel(days=140)  # < 100+50 下限 (es+calib+test=100, train>=50)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8296366Z         df = panel.copy()
+Test	Run pytest with coverage	2026-07-29T04:36:43.8296586Z         df["label_1d"] = 0.01
+Test	Run pytest with coverage	2026-07-29T04:36:43.8296880Z         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
+Test	Run pytest with coverage	2026-07-29T04:36:43.8297305Z         with pytest.raises(RuntimeError, match="深度不足"):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8297645Z >           trainer.train_window(df, "main", ["f1", "f2"])
+Test	Run pytest with coverage	2026-07-29T04:36:43.8297874Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8297989Z tests/test_train_predict_runner.py:102: 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8298306Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8298688Z app/pipeline1/dual_track_trainer.py:253: in train_window
+Test	Run pytest with coverage	2026-07-29T04:36:43.8299057Z     model, label = self._train_one(kind, segs, feature_cols)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8299386Z                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8299707Z app/pipeline1/dual_track_trainer.py:193: in _train_one
+Test	Run pytest with coverage	2026-07-29T04:36:43.8300630Z     train = segs["train"].dropna(subset=[label])  # per-model dropna (安全网 #7)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8301023Z             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Test	Run pytest with coverage	2026-07-29T04:36:43.8301338Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8301570Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8301729Z self =      symbol       date board  ...        f1        f2  label_1d
+Test	Run pytest with coverage	2026-07-29T04:36:43.8302169Z 0    600519 2023-01-02  main  ... -0.801931 -1.119600 ...  0.036582  0.655362      0.01
+Test	Run pytest with coverage	2026-07-29T04:36:43.8302606Z 189  601318 2023-03-10  main  ...  0.483246  0.516712      0.01
+Test	Run pytest with coverage	2026-07-29T04:36:43.8302829Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8302916Z [100 rows x 23 columns]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8303202Z axis = 0, how = 'any', thresh = <no_default>, subset = ['label_cls']
+Test	Run pytest with coverage	2026-07-29T04:36:43.8303545Z inplace = False, ignore_index = False
+Test	Run pytest with coverage	2026-07-29T04:36:43.8303730Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8303808Z     def dropna(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8303995Z         self,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8304180Z         *,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8304362Z         axis: Axis = 0,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8304613Z         how: AnyAll | lib.NoDefault = lib.no_default,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8304935Z         thresh: int | lib.NoDefault = lib.no_default,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8305261Z         subset: IndexLabel | AnyArrayLike | None = None,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8305559Z         inplace: bool = False,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8305801Z         ignore_index: bool = False,
+Test	Run pytest with coverage	2026-07-29T04:36:43.8306057Z     ) -> DataFrame | None:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8306267Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.8306453Z         Remove missing values.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8306668Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8306933Z         See the :ref:`User Guide <missing_data>` for more on which values are
+Test	Run pytest with coverage	2026-07-29T04:36:43.8307339Z         considered missing, and how to work with missing data.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8307639Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8307807Z         Parameters
+Test	Run pytest with coverage	2026-07-29T04:36:43.8308005Z         ----------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8308241Z         axis : {0 or 'index', 1 or 'columns'}, default 0
+Test	Run pytest with coverage	2026-07-29T04:36:43.8308619Z             Determine if rows or columns which contain missing values are
+Test	Run pytest with coverage	2026-07-29T04:36:43.8308957Z             removed.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8309146Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8309377Z             * 0, or 'index' : Drop rows which contain missing values.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8309769Z             * 1, or 'columns' : Drop columns which contain missing value.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8310227Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8310540Z             Only a single axis is allowed.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8310789Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8310970Z         how : {'any', 'all'}, default 'any'
+Test	Run pytest with coverage	2026-07-29T04:36:43.8311342Z             Determine if row or column is removed from DataFrame, when we have
+Test	Run pytest with coverage	2026-07-29T04:36:43.8312014Z             at least one NA or all NA.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8312281Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8312545Z             * 'any' : If any NA values are present, drop that row or column.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8312935Z             * 'all' : If all values are NA, drop that row or column.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8313244Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8313424Z         thresh : int, optional
+Test	Run pytest with coverage	2026-07-29T04:36:43.8313744Z             Require that many non-NA values. Cannot be combined with how.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8314154Z         subset : column label or iterable of labels, optional
+Test	Run pytest with coverage	2026-07-29T04:36:43.8314563Z             Labels along other axis to consider, e.g. if you are dropping rows
+Test	Run pytest with coverage	2026-07-29T04:36:43.8314963Z             these would be a list of columns to include.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8315275Z         inplace : bool, default False
+Test	Run pytest with coverage	2026-07-29T04:36:43.8315614Z             Whether to modify the DataFrame rather than creating a new one.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8315989Z         ignore_index : bool, default ``False``
+Test	Run pytest with coverage	2026-07-29T04:36:43.8316418Z             If ``True``, the resulting axis will be labeled 0, 1, …, n - 1.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8316736Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8317050Z             .. versionadded:: 2.0.0
+Test	Run pytest with coverage	2026-07-29T04:36:43.8317285Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8317449Z         Returns
+Test	Run pytest with coverage	2026-07-29T04:36:43.8317784Z         -------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8317980Z         DataFrame or None
+Test	Run pytest with coverage	2026-07-29T04:36:43.8318315Z             DataFrame with NA entries dropped from it or None if ``inplace=True``.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8318679Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8318845Z         See Also
+Test	Run pytest with coverage	2026-07-29T04:36:43.8319034Z         --------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8319250Z         DataFrame.isna: Indicate missing values.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8319604Z         DataFrame.notna : Indicate existing (non-missing) values.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8320223Z         DataFrame.fillna : Replace missing values.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8320541Z         Series.dropna : Drop missing values.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8320831Z         Index.dropna : Drop missing indices.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8321081Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8321250Z         Examples
+Test	Run pytest with coverage	2026-07-29T04:36:43.8321435Z         --------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8321634Z         >>> df = pd.DataFrame(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8321857Z         ...     {
+Test	Run pytest with coverage	2026-07-29T04:36:43.8322086Z         ...         "name": ["Alfred", "Batman", "Catwoman"],
+Test	Run pytest with coverage	2026-07-29T04:36:43.8322435Z         ...         "toy": [np.nan, "Batmobile", "Bullwhip"],
+Test	Run pytest with coverage	2026-07-29T04:36:43.8322790Z         ...         "born": [pd.NaT, pd.Timestamp("1940-04-25"), pd.NaT],
+Test	Run pytest with coverage	2026-07-29T04:36:43.8323108Z         ...     }
+Test	Run pytest with coverage	2026-07-29T04:36:43.8323292Z         ... )
+Test	Run pytest with coverage	2026-07-29T04:36:43.8323472Z         >>> df
+Test	Run pytest with coverage	2026-07-29T04:36:43.8323671Z                name        toy       born
+Test	Run pytest with coverage	2026-07-29T04:36:43.8323941Z         0    Alfred        NaN        NaT
+Test	Run pytest with coverage	2026-07-29T04:36:43.8324207Z         1    Batman  Batmobile 1940-04-25
+Test	Run pytest with coverage	2026-07-29T04:36:43.8324471Z         2  Catwoman   Bullwhip        NaT
+Test	Run pytest with coverage	2026-07-29T04:36:43.8324711Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8324940Z         Drop the rows where at least one element is missing.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8325239Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8325405Z         >>> df.dropna()
+Test	Run pytest with coverage	2026-07-29T04:36:43.8325623Z              name        toy       born
+Test	Run pytest with coverage	2026-07-29T04:36:43.8325886Z         1  Batman  Batmobile 1940-04-25
+Test	Run pytest with coverage	2026-07-29T04:36:43.8326131Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8326362Z         Drop the columns where at least one element is missing.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8326673Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8326850Z         >>> df.dropna(axis="columns")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8327091Z                name
+Test	Run pytest with coverage	2026-07-29T04:36:43.8327284Z         0    Alfred
+Test	Run pytest with coverage	2026-07-29T04:36:43.8327470Z         1    Batman
+Test	Run pytest with coverage	2026-07-29T04:36:43.8327656Z         2  Catwoman
+Test	Run pytest with coverage	2026-07-29T04:36:43.8327838Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8328230Z         Drop the rows where all elements are missing.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8328506Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8328686Z         >>> df.dropna(how="all")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8328928Z                name        toy       born
+Test	Run pytest with coverage	2026-07-29T04:36:43.8329183Z         0    Alfred        NaN        NaT
+Test	Run pytest with coverage	2026-07-29T04:36:43.8329441Z         1    Batman  Batmobile 1940-04-25
+Test	Run pytest with coverage	2026-07-29T04:36:43.8329700Z         2  Catwoman   Bullwhip        NaT
+Test	Run pytest with coverage	2026-07-29T04:36:43.8330067Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8330289Z         Keep only the rows with at least 2 non-NA values.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8330581Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8330757Z         >>> df.dropna(thresh=2)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8330998Z                name        toy       born
+Test	Run pytest with coverage	2026-07-29T04:36:43.8331258Z         1    Batman  Batmobile 1940-04-25
+Test	Run pytest with coverage	2026-07-29T04:36:43.8331518Z         2  Catwoman   Bullwhip        NaT
+Test	Run pytest with coverage	2026-07-29T04:36:43.8331756Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8331978Z         Define in which columns to look for missing values.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8332284Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8332469Z         >>> df.dropna(subset=["name", "toy"])
+Test	Run pytest with coverage	2026-07-29T04:36:43.8332737Z                name        toy       born
+Test	Run pytest with coverage	2026-07-29T04:36:43.8332994Z         1    Batman  Batmobile 1940-04-25
+Test	Run pytest with coverage	2026-07-29T04:36:43.8333252Z         2  Catwoman   Bullwhip        NaT
+Test	Run pytest with coverage	2026-07-29T04:36:43.8333492Z         """
+Test	Run pytest with coverage	2026-07-29T04:36:43.8333756Z         if (how is not lib.no_default) and (thresh is not lib.no_default):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8334110Z             raise TypeError(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8334440Z                 "You cannot set both the how and thresh arguments at the same time."
+Test	Run pytest with coverage	2026-07-29T04:36:43.8334929Z             )
+Test	Run pytest with coverage	2026-07-29T04:36:43.8335106Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8335287Z         if how is lib.no_default:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8335523Z             how = "any"
+Test	Run pytest with coverage	2026-07-29T04:36:43.8335723Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8335940Z         inplace = validate_bool_kwarg(inplace, "inplace")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8336253Z         if isinstance(axis, (tuple, list)):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8336518Z             # GH20987
+Test	Run pytest with coverage	2026-07-29T04:36:43.8336859Z             raise TypeError("supplying multiple axes to axis is no longer supported.")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8337245Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8337434Z         axis = self._get_axis_number(axis)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8337698Z         agg_axis = 1 - axis
+Test	Run pytest with coverage	2026-07-29T04:36:43.8337912Z     
+Test	Run pytest with coverage	2026-07-29T04:36:43.8338083Z         agg_obj = self
+Test	Run pytest with coverage	2026-07-29T04:36:43.8338380Z         if subset is not None:
+Test	Run pytest with coverage	2026-07-29T04:36:43.8338622Z             # subset needs to be list
+Test	Run pytest with coverage	2026-07-29T04:36:43.8338885Z             if not is_list_like(subset):
+Test	Run pytest with coverage	2026-07-29T04:36:43.8339169Z                 subset = [cast(Hashable, subset)]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8339450Z             ax = self._get_axis(agg_axis)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8339724Z             indices = ax.get_indexer_for(subset)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8340266Z             check = indices == -1
+Test	Run pytest with coverage	2026-07-29T04:36:43.8340513Z             if check.any():
+Test	Run pytest with coverage	2026-07-29T04:36:43.8340786Z >               raise KeyError(np.array(subset)[check].tolist())
+Test	Run pytest with coverage	2026-07-29T04:36:43.8341120Z E               KeyError: ['label_cls']
+Test	Run pytest with coverage	2026-07-29T04:36:43.8341299Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8341612Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/pandas/core/frame.py:7803: KeyError
+Test	Run pytest with coverage	2026-07-29T04:36:43.8342204Z ------------------------------ Captured log call -------------------------------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8342914Z WARNING  app.pipeline1.dual_track_trainer:dual_track_trainer.py:211 [1d_reg/label_1d] ES 集仅 18 交易日 (< 20), 跳过早停
+Test	Run pytest with coverage	2026-07-29T04:36:43.8343460Z =============================== warnings summary ===============================
+Test	Run pytest with coverage	2026-07-29T04:36:43.8343781Z app/main.py:33
+Test	Run pytest with coverage	2026-07-29T04:36:43.8344081Z   /home/runner/work/AMINQT/AMINQT/app/main.py:33: DeprecationWarning: 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8344520Z           on_event is deprecated, use lifespan event handlers instead.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8344854Z   
+Test	Run pytest with coverage	2026-07-29T04:36:43.8345034Z           Read more about it in the
+Test	Run pytest with coverage	2026-07-29T04:36:43.8345452Z           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+Test	Run pytest with coverage	2026-07-29T04:36:43.8346012Z           
+Test	Run pytest with coverage	2026-07-29T04:36:43.8346204Z     @app.on_event("startup")
+Test	Run pytest with coverage	2026-07-29T04:36:43.8346353Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8346665Z ../../../../../opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/fastapi/applications.py:4675
+Test	Run pytest with coverage	2026-07-29T04:36:43.8347443Z   /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/fastapi/applications.py:4675: DeprecationWarning: 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8348072Z           on_event is deprecated, use lifespan event handlers instead.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8348396Z   
+Test	Run pytest with coverage	2026-07-29T04:36:43.8348576Z           Read more about it in the
+Test	Run pytest with coverage	2026-07-29T04:36:43.8348974Z           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+Test	Run pytest with coverage	2026-07-29T04:36:43.8349391Z           
+Test	Run pytest with coverage	2026-07-29T04:36:43.8349672Z     return self.router.on_event(event_type)  # ty: ignore[deprecated]
+Test	Run pytest with coverage	2026-07-29T04:36:43.8350073Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8350182Z tests/test_daily_pipeline.py: 30 warnings
+Test	Run pytest with coverage	2026-07-29T04:36:43.8350474Z tests/test_end_to_end_v35.py: 10 warnings
+Test	Run pytest with coverage	2026-07-29T04:36:43.8350750Z tests/test_indicators.py: 10 warnings
+Test	Run pytest with coverage	2026-07-29T04:36:43.8351043Z tests/test_pipeline1_v38_dual_list.py: 20 warnings
+Test	Run pytest with coverage	2026-07-29T04:36:43.8351345Z tests/test_stage1_gate.py: 1 warning
+Test	Run pytest with coverage	2026-07-29T04:36:43.8351629Z tests/test_train_predict_runner.py: 20 warnings
+Test	Run pytest with coverage	2026-07-29T04:36:43.8352468Z   /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/lightgbm/sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+Test	Run pytest with coverage	2026-07-29T04:36:43.8353535Z     eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8353859Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8354019Z tests/test_forecast_accuracy.py::TestMetrics::test_wmape
+Test	Run pytest with coverage	2026-07-29T04:36:43.8354759Z   /home/runner/work/AMINQT/AMINQT/tests/test_forecast_accuracy.py:26: DeprecationWarning: wmape is deprecated since v3.2, use compute_quality_metrics instead
+Test	Run pytest with coverage	2026-07-29T04:36:43.8355508Z     assert wmape(actual, pred) == pytest.approx(0.04 / 0.06)
+Test	Run pytest with coverage	2026-07-29T04:36:43.8355747Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8355950Z tests/test_forecast_accuracy.py::TestMetrics::test_wmape_zero_denominator
+Test	Run pytest with coverage	2026-07-29T04:36:43.8356743Z   /home/runner/work/AMINQT/AMINQT/tests/test_forecast_accuracy.py:29: DeprecationWarning: wmape is deprecated since v3.2, use compute_quality_metrics instead
+Test	Run pytest with coverage	2026-07-29T04:36:43.8357529Z     assert np.isnan(wmape(pd.Series([0.0, 0.0]), pd.Series([0.01, 0.02])))
+Test	Run pytest with coverage	2026-07-29T04:36:43.8357810Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8357988Z tests/test_frontier_api.py::TestFrontierAPI::test_ohlc_and_intraday
+Test	Run pytest with coverage	2026-07-29T04:36:43.8358976Z   /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/py_mini_racer/py_mini_racer.py:15: DeprecationWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html
+Test	Run pytest with coverage	2026-07-29T04:36:43.8360118Z     import pkg_resources
+Test	Run pytest with coverage	2026-07-29T04:36:43.8360264Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8360389Z tests/test_train_predict_runner.py: 32 warnings
+Test	Run pytest with coverage	2026-07-29T04:36:43.8361726Z   /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/urllib3/connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'www.swsresearch.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+Test	Run pytest with coverage	2026-07-29T04:36:43.8363020Z     warnings.warn(
+Test	Run pytest with coverage	2026-07-29T04:36:43.8363141Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8363342Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+Test	Run pytest with coverage	2026-07-29T04:36:43.8363776Z ================================ tests coverage ================================
+Test	Run pytest with coverage	2026-07-29T04:36:43.8364198Z _______________ coverage: platform linux, python 3.11.15-final-0 _______________
+Test	Run pytest with coverage	2026-07-29T04:36:43.8364489Z 
+Test	Run pytest with coverage	2026-07-29T04:36:43.8364624Z Name                                        Stmts   Miss  Cover   Missing
+Test	Run pytest with coverage	2026-07-29T04:36:43.8364999Z -------------------------------------------------------------------------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8365515Z app/__init__.py                                 0      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8365874Z app/api/__init__.py                             0      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8366562Z app/api/frontier_routes.py                    243    111    54%   35, 46, 54, 63-70, 79-245, 253, 258, 272-274, 277, 287-289, 292, 306, 342-345, 430, 435-437, 472, 485-517, 537-542, 548-556, 562-567
+Test	Run pytest with coverage	2026-07-29T04:36:43.8367282Z app/api/routes.py                              14      3    79%   16, 30, 39
+Test	Run pytest with coverage	2026-07-29T04:36:43.8367674Z app/config/__init__.py                          0      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8368109Z app/config/profiles.py                         36      8    78%   135, 143-145, 156-159, 178-179
+Test	Run pytest with coverage	2026-07-29T04:36:43.8368547Z app/core/__init__.py                            0      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8368971Z app/core/adaptive_engine.py                    99      8    92%   65, 69, 91-92, 123-124, 126-127
+Test	Run pytest with coverage	2026-07-29T04:36:43.8369457Z app/core/adaptive_weighter.py                  71      1    99%   158
+Test	Run pytest with coverage	2026-07-29T04:36:43.8370026Z app/core/announcement_factors.py               62      2    97%   110, 129
+Test	Run pytest with coverage	2026-07-29T04:36:43.8370520Z app/core/backtest_engine.py                   145      8    94%   107-108, 111-112, 117, 121, 130, 146
+Test	Run pytest with coverage	2026-07-29T04:36:43.8371115Z app/core/base_liquidity_filter.py             134     16    88%   109-110, 160, 195, 206-209, 215-218, 223, 233, 264, 267
+Test	Run pytest with coverage	2026-07-29T04:36:43.8371676Z app/core/calendar_factors.py                   78      3    96%   45-46, 113
+Test	Run pytest with coverage	2026-07-29T04:36:43.8372094Z app/core/config_loader.py                      30      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8372621Z app/core/data_loader.py                        28     28     0%   9-62
+Test	Run pytest with coverage	2026-07-29T04:36:43.8373029Z app/core/dataset_splitter.py                   42      1    98%   118
+Test	Run pytest with coverage	2026-07-29T04:36:43.8373453Z app/core/deepseek_agent.py                    110      9    92%   50, 64-78
+Test	Run pytest with coverage	2026-07-29T04:36:43.8374008Z app/core/dual_layer_buy_detector.py           172     13    92%   45, 51, 53, 293, 309-310, 313-314, 326, 368-370, 375-376
+Test	Run pytest with coverage	2026-07-29T04:36:43.8385834Z app/core/dual_layer_sell_detector.py           77      4    95%   35, 121, 157, 160
+Test	Run pytest with coverage	2026-07-29T04:36:43.8386379Z app/core/extended_buy_detector.py              35     35     0%   9-110
+Test	Run pytest with coverage	2026-07-29T04:36:43.8386851Z app/core/extended_sell_detector.py            115    115     0%   20-290
+Test	Run pytest with coverage	2026-07-29T04:36:43.8387388Z app/core/factor_discovery.py                  120     20    83%   38, 96-99, 102, 106, 132-135, 149-154, 165-169
+Test	Run pytest with coverage	2026-07-29T04:36:43.8387910Z app/core/factor_engine.py                      13      1    92%   41
+Test	Run pytest with coverage	2026-07-29T04:36:43.8388471Z app/core/indicator_weighter.py                173     19    89%   182-187, 192-193, 204-207, 428-430, 540, 546-548, 559
+Test	Run pytest with coverage	2026-07-29T04:36:43.8389091Z app/core/intraday_factor_engine.py            182      8    96%   65, 74, 112, 135, 206-208, 235, 366
+Test	Run pytest with coverage	2026-07-29T04:36:43.8389603Z app/core/intraday_loader.py                    64      1    98%   107
+Test	Run pytest with coverage	2026-07-29T04:36:43.8390253Z app/core/market_context.py                     89     30    66%   66-102, 106-111, 134, 162, 168, 207, 236
+Test	Run pytest with coverage	2026-07-29T04:36:43.8390763Z app/core/price_limits.py                       29      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8391188Z app/core/progressive_signal.py                135    135     0%   8-327
+Test	Run pytest with coverage	2026-07-29T04:36:43.8391685Z app/core/right_side_filter.py                  65      9    86%   72, 83, 101, 109, 114, 137-139, 160
+Test	Run pytest with coverage	2026-07-29T04:36:43.8392171Z app/core/risk_filter.py                         8      8     0%   3-32
+Test	Run pytest with coverage	2026-07-29T04:36:43.8392582Z app/core/sector_context.py                     74      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8393026Z app/core/stock_pool_manager.py                112      4    96%   67-68, 213, 284
+Test	Run pytest with coverage	2026-07-29T04:36:43.8393785Z app/core/ths_indicators.py                    253    218    14%   104-107, 112, 117, 122, 127, 132, 137, 166-180, 187-189, 205-275, 288-305, 321-349, 367-448, 465-497, 517-565, 583-601, 620-650, 667-689
+Test	Run pytest with coverage	2026-07-29T04:36:43.8394529Z app/core/universe_manager.py                   43      1    98%   126
+Test	Run pytest with coverage	2026-07-29T04:36:43.8395171Z app/core/watchlist.py                          45     45     0%   9-114
+Test	Run pytest with coverage	2026-07-29T04:36:43.8395600Z app/core/watchlist_marker.py                   98     98     0%   13-202
+Test	Run pytest with coverage	2026-07-29T04:36:43.8396014Z app/indicators/__init__.py                      0      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8396743Z app/indicators/capital_feed.py                122     91    25%   37-39, 43-45, 49, 53-62, 65-69, 72-73, 77-83, 89-96, 101-102, 121-122, 125-156, 159-163, 167, 170, 180-182, 186, 191-200, 209-218, 230-260
+Test	Run pytest with coverage	2026-07-29T04:36:43.8397524Z app/indicators/chip_distribution.py            71     20    72%   34-36, 99, 103-134
+Test	Run pytest with coverage	2026-07-29T04:36:43.8398008Z app/indicators/faxian_niugu.py                 28     11    61%   51-67
+Test	Run pytest with coverage	2026-07-29T04:36:43.8398546Z app/indicators/indicator_feed.py               80     15    81%   65, 68-70, 76-77, 83, 94, 103-105, 111, 114, 121, 132
+Test	Run pytest with coverage	2026-07-29T04:36:43.8399124Z app/indicators/yimeng_dingdi.py                73     15    79%   143-144, 150, 155-166
+Test	Run pytest with coverage	2026-07-29T04:36:43.8399619Z app/indicators/zhuli_lasheng.py                71     14    80%   107, 112-134
+Test	Run pytest with coverage	2026-07-29T04:36:43.8400311Z app/intraday/__init__.py                        0      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8400692Z app/intraday/v51/__init__.py                    0      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8401110Z app/intraday/v51/backtest_engine.py           119      2    98%   108, 114
+Test	Run pytest with coverage	2026-07-29T04:36:43.8401656Z app/intraday/v51/broker_adapter.py             70      4    94%   154-161, 166
+Test	Run pytest with coverage	2026-07-29T04:36:43.8402131Z app/intraday/v51/buy_engine.py                 90      4    96%   88, 122, 126, 141
+Test	Run pytest with coverage	2026-07-29T04:36:43.8402722Z app/intraday/v51/config.py                     45      2    96%   48, 52
+Test	Run pytest with coverage	2026-07-29T04:36:43.8403145Z app/intraday/v51/cost_model.py                 16      1    94%   37
+Test	Run pytest with coverage	2026-07-29T04:36:43.8403568Z app/intraday/v51/data_5min.py                  48      2    96%   95-97
+Test	Run pytest with coverage	2026-07-29T04:36:43.8403991Z app/intraday/v51/event_study.py                18      1    94%   36
+Test	Run pytest with coverage	2026-07-29T04:36:43.8404443Z app/intraday/v51/fund_manager.py               76      9    88%   75, 81, 84-91
+Test	Run pytest with coverage	2026-07-29T04:36:43.8404889Z app/intraday/v51/mvp_gate.py                   68     68     0%   19-139
+Test	Run pytest with coverage	2026-07-29T04:36:43.8405333Z app/intraday/v51/param_optimizer.py            50      3    94%   42, 126, 141
+Test	Run pytest with coverage	2026-07-29T04:36:43.8405780Z app/intraday/v51/position.py                   32      4    88%   38-41
+Test	Run pytest with coverage	2026-07-29T04:36:43.8406197Z app/intraday/v51/reconcile.py                  30      1    97%   34
+Test	Run pytest with coverage	2026-07-29T04:36:43.8406611Z app/intraday/v51/safe_div.py                    5      1    80%   13
+Test	Run pytest with coverage	2026-07-29T04:36:43.8407020Z app/intraday/v51/sample_stats.py                3      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8407425Z app/intraday/v51/sell_engine.py                91     17    81%   62-84
+Test	Run pytest with coverage	2026-07-29T04:36:43.8407832Z app/intraday/v51/semi_auto.py                  37      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8408217Z app/intraday/v51/sessions.py                   28      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8408637Z app/intraday/v51/state_machine.py              43      4    91%   67-68, 78-79
+Test	Run pytest with coverage	2026-07-29T04:36:43.8409099Z app/intraday/v51/traffic_light.py              44      2    95%   39, 71
+Test	Run pytest with coverage	2026-07-29T04:36:43.8409523Z app/intraday/v51/worm_logger.py                24      1    96%   45
+Test	Run pytest with coverage	2026-07-29T04:36:43.8410037Z app/main.py                                    21      8    62%   36-51
+Test	Run pytest with coverage	2026-07-29T04:36:43.8410403Z app/models/__init__.py                          0      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8410799Z app/models/daily_trainer.py                    61     61     0%   11-221
+Test	Run pytest with coverage	2026-07-29T04:36:43.8411222Z app/models/ensemble.py                         57     57     0%   7-138
+Test	Run pytest with coverage	2026-07-29T04:36:43.8411801Z app/models/iwencai_agent.py                   224     91    59%   86-90, 98-99, 115-213, 220-227, 242-282, 296-307, 321, 337, 367, 393, 414, 460
+Test	Run pytest with coverage	2026-07-29T04:36:43.8412404Z app/models/lightgbm_predictor.py               10     10     0%   6-25
+Test	Run pytest with coverage	2026-07-29T04:36:43.8412830Z app/models/lstm_model.py                       12     12     0%   6-47
+Test	Run pytest with coverage	2026-07-29T04:36:43.8413370Z app/models/model_registry.py                   86     86     0%   7-226
+Test	Run pytest with coverage	2026-07-29T04:36:43.8413824Z app/models/model_selector.py                  103    103     0%   7-288
+Test	Run pytest with coverage	2026-07-29T04:36:43.8414260Z app/models/model_zoo.py                       197    197     0%   12-566
+Test	Run pytest with coverage	2026-07-29T04:36:43.8414714Z app/models/pipeline2_warm_starter.py           72     72     0%   12-219
+Test	Run pytest with coverage	2026-07-29T04:36:43.8415131Z app/pattern/__init__.py                         0      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8415537Z app/pattern/intraday_learner.py                 5      5     0%   12-30
+Test	Run pytest with coverage	2026-07-29T04:36:43.8415955Z app/pipeline1/__init__.py                       0      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8416383Z app/pipeline1/announcement.py                 125      2    98%   205, 286
+Test	Run pytest with coverage	2026-07-29T04:36:43.8416839Z app/pipeline1/backtest_adjudication.py         81      3    96%   73-75
+Test	Run pytest with coverage	2026-07-29T04:36:43.8417359Z app/pipeline1/backtest_v35.py                 212     11    95%   37, 98, 111, 123, 128, 184, 195, 197, 232, 236, 255
+Test	Run pytest with coverage	2026-07-29T04:36:43.8417868Z app/pipeline1/bear_protocol.py                 83      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8418331Z app/pipeline1/cleaning_pipeline.py            142      7    95%   86-87, 169, 191-192, 208, 227
+Test	Run pytest with coverage	2026-07-29T04:36:43.8418845Z app/pipeline1/cyq_calculator.py               112    112     0%   16-264
+Test	Run pytest with coverage	2026-07-29T04:36:43.8419448Z app/pipeline1/daily_pipeline.py               137     44    68%   96-97, 125, 128, 149-150, 171-174, 193-200, 205-223, 242-288, 299, 313-314
+Test	Run pytest with coverage	2026-07-29T04:36:43.8421815Z app/pipeline1/data_supply.py                  911    560    39%   120-146, 154-172, 199, 208-209, 234-264, 288-298, 302-307, 314-360, 386-422, 448-490, 511, 519-531, 554-573, 579-591, 618-644, 671-672, 679-680, 686, 689-699, 703-723, 749-755, 777, 782, 787-838, 861, 869, 877, 898-899, 907-908, 919-920, 926-934, 941, 970-986, 1007, 1012, 1019-1059, 1072, 1075-1082, 1085-1086, 1090-1095, 1124-1192, 1228-1231, 1248, 1253, 1260-1323, 1343, 1346-1348, 1354-1407, 1411-1413, 1436-1469, 1498-1501, 1520, 1524-1590, 1594-1616, 1638, 1710, 1720-1721, 1723, 1733-1735, 1758, 1764-1822, 1840, 1846-1882, 1890-1893, 1925, 1927, 1961-1991, 2014-2113
+Test	Run pytest with coverage	2026-07-29T04:36:43.8423823Z app/pipeline1/dq_report.py                     32      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8424270Z app/pipeline1/dual_list_runner.py              99      7    93%   74, 76, 82-85, 89, 147
+Test	Run pytest with coverage	2026-07-29T04:36:43.8424945Z app/pipeline1/dual_track_trainer.py           230     38    83%   246, 308-309, 314-315, 318-331, 392-398, 405, 425-426, 456-458, 470-481, 498-513
+Test	Run pytest with coverage	2026-07-29T04:36:43.8425589Z app/pipeline1/dynamic_engine.py                68      2    97%   141, 158
+Test	Run pytest with coverage	2026-07-29T04:36:43.8426794Z app/pipeline1/feature_engine_v35.py           991    481    51%   107-118, 135-209, 219-286, 473-477, 503-508, 523, 563-606, 639-680, 744-746, 748, 750, 817, 851-884, 932-940, 1277-1316, 1348-1354, 1357, 1364-1368, 1376-1389, 1449-1505, 1542-1582, 1615-1636, 1673-1718, 1750-1798, 1825-1827, 1832-1867, 1899-1979, 2003-2087, 2108-2156, 2170-2256, 2263, 2286-2325
+Test	Run pytest with coverage	2026-07-29T04:36:43.8428042Z app/pipeline1/forecast_accuracy.py             97      8    92%   70, 103, 128, 174, 179, 197-199
+Test	Run pytest with coverage	2026-07-29T04:36:43.8428538Z app/pipeline1/gt_score.py                      28      1    96%   38
+Test	Run pytest with coverage	2026-07-29T04:36:43.8428937Z app/pipeline1/ic_decay.py                      24      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8429588Z app/pipeline1/ic_screener.py                  183     38    79%   64, 67, 85, 89, 116, 124, 139, 142, 168, 170, 172, 186, 211-216, 226, 233-248, 257, 271, 289, 300-301, 308-309, 329-332
+Test	Run pytest with coverage	2026-07-29T04:36:43.8430501Z app/pipeline1/label_engine.py                 158      1    99%   304
+Test	Run pytest with coverage	2026-07-29T04:36:43.8430944Z app/pipeline1/leakage_audit.py                 40      1    98%   93
+Test	Run pytest with coverage	2026-07-29T04:36:43.8431470Z app/pipeline1/list_generator.py               165     13    92%   73-75, 104, 160, 182-184, 205, 253, 264-265, 341
+Test	Run pytest with coverage	2026-07-29T04:36:43.8431994Z app/pipeline1/metrics.py                       24      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8432524Z app/pipeline1/model_fusion.py                  45      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8432988Z app/pipeline1/oos_monitor.py                  130     34    74%   52-75, 80, 95-103, 133-139, 214, 235
+Test	Run pytest with coverage	2026-07-29T04:36:43.8433857Z app/pipeline1/panel_builder.py                270    119    56%   49-88, 137-161, 198-200, 214-215, 226-227, 265, 279, 281, 301-322, 335-341, 373, 376-385, 401-407, 438-446, 468-484, 501-538, 561-568, 592-599, 615-622, 700-701
+Test	Run pytest with coverage	2026-07-29T04:36:43.8434663Z app/pipeline1/paper_trading.py                 86      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8435158Z app/pipeline1/param_tuner.py                   99     11    89%   42, 82, 84, 148, 167-170, 176-177, 183
+Test	Run pytest with coverage	2026-07-29T04:36:43.8435692Z app/pipeline1/predict_runner.py                41     27    34%   37-54, 79-106
+Test	Run pytest with coverage	2026-07-29T04:36:43.8436285Z app/pipeline1/prediction_db.py                 83     55    34%   101-130, 138-174, 179-205, 213-220, 224-236, 245-259, 272-278
+Test	Run pytest with coverage	2026-07-29T04:36:43.8436910Z app/pipeline1/predictor.py                     83     23    72%   30-33, 49, 63, 101-102, 109-119, 149-159
+Test	Run pytest with coverage	2026-07-29T04:36:43.8437452Z app/pipeline1/prob_calibrator.py               50      5    90%   43-44, 54-55, 74
+Test	Run pytest with coverage	2026-07-29T04:36:43.8437907Z app/pipeline1/quantile_models.py               51      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8438283Z app/pipeline1/risk_overlays.py                141     76    46%   67-78, 109, 146-149, 160-185, 222-226, 237-243, 252-279, 287-291, 296-298, 310-325, 330-334
+Test	Run pytest with coverage	2026-07-29T04:36:43.8438435Z app/pipeline1/sensitivity.py                   11      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8438748Z app/pipeline1/serenity_overlay.py              33      2    94%   71-72
+Test	Run pytest with coverage	2026-07-29T04:36:43.8439040Z app/pipeline1/trade_discipline.py             209     47    78%   45-67, 75-84, 99-105, 134-136, 147, 153, 173-174, 198, 271
+Test	Run pytest with coverage	2026-07-29T04:36:43.8439256Z app/pipeline1/train_runner.py                  67     44    34%   42-46, 56-95, 124-125, 130-147
+Test	Run pytest with coverage	2026-07-29T04:36:43.8439401Z app/pipelines/__init__.py                       0      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8439592Z app/pipelines/trading_pipeline.py              11     11     0%   9-41
+Test	Run pytest with coverage	2026-07-29T04:36:43.8439965Z app/pipelines/training_pipeline.py             13     13     0%   10-44
+Test	Run pytest with coverage	2026-07-29T04:36:43.8440154Z app/rules/__init__.py                           0      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8440305Z app/rules/config.py                            51      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8440458Z app/rules/config_io.py                         54     54     0%   9-81
+Test	Run pytest with coverage	2026-07-29T04:36:43.8440608Z app/rules/peak_tracker.py                      33      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8441008Z app/rules/rule_engine.py                      262     25    90%   150, 152, 154, 156-157, 164, 192, 194-195, 237, 239, 278, 402, 418, 433, 444, 471, 482, 552-554, 557-560
+Test	Run pytest with coverage	2026-07-29T04:36:43.8441161Z app/streamlit/__init__.py                       6      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8441312Z app/streamlit/components/__init__.py            5      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8441467Z app/streamlit/components/charts.py             48      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8441731Z app/streamlit/components/indicators.py         85     76    11%   22, 27, 35-68, 78-139, 147-206, 214-267
+Test	Run pytest with coverage	2026-07-29T04:36:43.8442017Z app/streamlit/components/trading_panel.py     115    104    10%   22-88, 92, 107-157, 162-182, 187-206, 216-222
+Test	Run pytest with coverage	2026-07-29T04:36:43.8442406Z app/streamlit/data_service.py                 188     51    73%   76, 80, 83, 88-90, 95-103, 114-121, 131, 162, 258-284, 289-295, 308, 359, 372, 390-392, 406, 430-434
+Test	Run pytest with coverage	2026-07-29T04:36:43.8442620Z app/streamlit/page_backtest.py                 99     86    13%   35-58, 62-63, 81-87, 94-223
+Test	Run pytest with coverage	2026-07-29T04:36:43.8442839Z app/streamlit/page_config.py                   67     57    15%   46-105, 112-114, 119-153, 157
+Test	Run pytest with coverage	2026-07-29T04:36:43.8443147Z app/streamlit/page_data_feed.py               161    136    16%   27, 60, 65-79, 84-92, 100-134, 139-161, 172-205, 214-316, 320-364, 368
+Test	Run pytest with coverage	2026-07-29T04:36:43.8443547Z app/streamlit/page_selection.py               184    164    11%   34-37, 45-63, 71-83, 90-136, 144-205, 213-264, 272-307, 312-333, 338-366, 371-383, 405-410, 417
+Test	Run pytest with coverage	2026-07-29T04:36:43.8443913Z app/streamlit/page_trading.py                  71     55    23%   39-41, 45-47, 55, 88, 108, 115-226, 230
+Test	Run pytest with coverage	2026-07-29T04:36:43.8444090Z app/streamlit_app.py                           27     14    48%   16, 42-58, 62
+Test	Run pytest with coverage	2026-07-29T04:36:43.8444225Z app/utils/__init__.py                           3      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8444392Z app/utils/daily_rank_ic.py                     30      2    93%   42-43
+Test	Run pytest with coverage	2026-07-29T04:36:43.8444529Z services/__init__.py                            0      0   100%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8444715Z services/deepseek_sub_agent.py                 90     90     0%   21-363
+Test	Run pytest with coverage	2026-07-29T04:36:43.8444905Z services/executor_base.py                      31     10    68%   45-59, 72-78
+Test	Run pytest with coverage	2026-07-29T04:36:43.8445067Z services/order_manager.py                      87      2    98%   44-46
+Test	Run pytest with coverage	2026-07-29T04:36:43.8445233Z services/sim_executor.py                       13     13     0%   6-31
+Test	Run pytest with coverage	2026-07-29T04:36:43.8445418Z services/trading_state_machine.py              76      2    97%   116-117
+Test	Run pytest with coverage	2026-07-29T04:36:43.8445582Z services/xt_executor.py                        38     38     0%   8-73
+Test	Run pytest with coverage	2026-07-29T04:36:43.8445725Z -------------------------------------------------------------------------
+Test	Run pytest with coverage	2026-07-29T04:36:43.8445845Z TOTAL                                       12413   4731    62%
+Test	Run pytest with coverage	2026-07-29T04:36:43.8445958Z Coverage XML written to file coverage.xml
+Test	Run pytest with coverage	2026-07-29T04:36:44.0854738Z =========================== short test summary info ============================
+Test	Run pytest with coverage	2026-07-29T04:36:44.0856050Z FAILED tests/test_daily_pipeline.py::TestDailyPipeline::test_empty_trigger_forces_empty_list - assert (False)
+Test	Run pytest with coverage	2026-07-29T04:36:44.0856746Z FAILED tests/test_frontier_api.py::TestFrontierAPI::test_ohlc_and_intraday - AssertionError: assert (200 == 200 and 24 == 120)
+Test	Run pytest with coverage	2026-07-29T04:36:44.0856945Z  +  where 200 = <Response [200 OK]>.status_code
+Test	Run pytest with coverage	2026-07-29T04:36:44.0857929Z  +  and   24 = len([{'time': '09:35', 'price': 1316.2, 'volume': 4477}, {'time': '09:40', 'price': 1317.99, 'volume': 1600}, {'time': '09...': 3635}, {'time': '09:55', 'price': 1326.0, 'volume': 2192}, {'time': '10:00', 'price': 1330.05, 'volume': 1607}, ...])
+Test	Run pytest with coverage	2026-07-29T04:36:44.0858896Z FAILED tests/test_indicators.py::TestDualTrackTrainer::test_split_window_transition_b11 - AssertionError: assert {'train': 440...0, 'test': 60} == {'train': 460...0, 'test': 60}
+Test	Run pytest with coverage	2026-07-29T04:36:44.0859028Z   
+Test	Run pytest with coverage	2026-07-29T04:36:44.0859217Z   Omitting 3 identical items, use -vv to show
+Test	Run pytest with coverage	2026-07-29T04:36:44.0859363Z   Differing items:
+Test	Run pytest with coverage	2026-07-29T04:36:44.0859517Z   {'train': 440} != {'train': 460}
+Test	Run pytest with coverage	2026-07-29T04:36:44.0859640Z   
+Test	Run pytest with coverage	2026-07-29T04:36:44.0859771Z   Full diff:
+Test	Run pytest with coverage	2026-07-29T04:36:44.0860189Z     {
+Test	Run pytest with coverage	2026-07-29T04:36:44.0860331Z   -     'train': 460,
+Test	Run pytest with coverage	2026-07-29T04:36:44.0860452Z   ?               ^
+Test	Run pytest with coverage	2026-07-29T04:36:44.0860580Z   +     'train': 440,
+Test	Run pytest with coverage	2026-07-29T04:36:44.0860701Z   ?               ^
+Test	Run pytest with coverage	2026-07-29T04:36:44.0860814Z         'es': 20,
+Test	Run pytest with coverage	2026-07-29T04:36:44.0860957Z         'calib': 20,
+Test	Run pytest with coverage	2026-07-29T04:36:44.0861073Z         'test': 60,
+Test	Run pytest with coverage	2026-07-29T04:36:44.0861197Z     }
+Test	Run pytest with coverage	2026-07-29T04:36:44.0861747Z FAILED tests/test_pipeline1_v35.py::TestFeatures::test_dims_and_groupby - KeyError: "['industry'] not in index"
+Test	Run pytest with coverage	2026-07-29T04:36:44.0862288Z FAILED tests/test_pipeline1_v35.py::TestFeatures::test_candlestick_dim16 - AssertionError: bullish_engulfing
+Test	Run pytest with coverage	2026-07-29T04:36:44.0863551Z assert 'bullish_engulfing' in Index(['symbol', 'date', 'board', 'open', 'high', 'low', 'close', 'close_hfq',\n       'high_hfq', 'low_hfq', 'open_hfq...t_intensity_60d', 'reversal_intensity_20d',\n       'body_shadow_ratio_5d', 'body_shadow_ratio_20d'],\n      dtype='str')
+Test	Run pytest with coverage	2026-07-29T04:36:44.0865804Z  +  where Index(['symbol', 'date', 'board', 'open', 'high', 'low', 'close', 'close_hfq',\n       'high_hfq', 'low_hfq', 'open_hfq...t_intensity_60d', 'reversal_intensity_20d',\n       'body_shadow_ratio_5d', 'body_shadow_ratio_20d'],\n      dtype='str') =     symbol       date  ... body_shadow_ratio_5d  body_shadow_ratio_20d\n0   600519 2025-01-01  ...             0.475085...9               0.316267\n29  600519 2025-02-11  ...             0.504885               0.326887\n\n[30 rows x 32 columns].columns
+Test	Run pytest with coverage	2026-07-29T04:36:44.0866748Z FAILED tests/test_pipeline1_v35.py::TestListGenerator::test_schema_and_top15 - assert np.float64(0.47681507208363116) == np.float64(0.477)
+Test	Run pytest with coverage	2026-07-29T04:36:44.0867010Z  +  where np.float64(0.477) = round(np.float64(0.47681507208363116), 3)
+Test	Run pytest with coverage	2026-07-29T04:36:44.0867432Z FAILED tests/test_pipeline1_v35.py::TestListGenerator::test_industry_limit - assert 8 == 4
+Test	Run pytest with coverage	2026-07-29T04:36:44.0868490Z  +  where 8 = len(   symbol board  pred_ret_1d  ...  announce_score  weight  schema_version\n0  600013   GEM     0.028843  ...           ...   0.1             1.2\n7  600008  STAR     0.004959  ...             NaN     0.1             1.2\n\n[8 rows x 21 columns])
+Test	Run pytest with coverage	2026-07-29T04:36:44.0869347Z FAILED tests/test_pipeline1_v35.py::TestListGenerator::test_momentum_firewall - AttributeError: type object 'ListGenerator' has no attribute 'compute_momentum'
+Test	Run pytest with coverage	2026-07-29T04:36:44.0870460Z FAILED tests/test_pipeline1_v35.py::TestListGenerator::test_holding_bonus - assert np.float64(0.0) == 0.2 ± 2.0e-07
+Test	Run pytest with coverage	2026-07-29T04:36:44.0870596Z   
+Test	Run pytest with coverage	2026-07-29T04:36:44.0870732Z   comparison failed
+Test	Run pytest with coverage	2026-07-29T04:36:44.0870853Z   Obtained: 0.0
+Test	Run pytest with coverage	2026-07-29T04:36:44.0871055Z   Expected: 0.2 ± 2.0e-07
+Test	Run pytest with coverage	2026-07-29T04:36:44.0871462Z FAILED tests/test_pipeline1_v35.py::TestListGenerator::test_empty_triggers - assert (False)
+Test	Run pytest with coverage	2026-07-29T04:36:44.0872376Z FAILED tests/test_pipeline1_v38_dual_list.py::TestV37ScoreFormula::test_fallback_without_rank_score - assert np.float64(0.022) == 1.0 ± 1.0e-06
+Test	Run pytest with coverage	2026-07-29T04:36:44.0872722Z   
+Test	Run pytest with coverage	2026-07-29T04:36:44.0872900Z   comparison failed
+Test	Run pytest with coverage	2026-07-29T04:36:44.0873021Z   Obtained: 0.022
+Test	Run pytest with coverage	2026-07-29T04:36:44.0873222Z   Expected: 1.0 ± 1.0e-06
+Test	Run pytest with coverage	2026-07-29T04:36:44.0874395Z FAILED tests/test_stage1_gate.py::test_stage1_gate_small_mode - ValueError: Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.
+Test	Run pytest with coverage	2026-07-29T04:36:44.0875324Z FAILED tests/test_train_predict_runner.py::TestFetchCascade::test_fallback_order_and_down_flag - AssertionError: assert ['fail', 'sin...fail', 'sina'] == ['fail', 'sina', 'sina']
+Test	Run pytest with coverage	2026-07-29T04:36:44.0875437Z   
+Test	Run pytest with coverage	2026-07-29T04:36:44.0875585Z   At index 2 diff: 'fail' != 'sina'
+Test	Run pytest with coverage	2026-07-29T04:36:44.0875743Z   Left contains one more item: 'sina'
+Test	Run pytest with coverage	2026-07-29T04:36:44.0875861Z   
+Test	Run pytest with coverage	2026-07-29T04:36:44.0875984Z   Full diff:
+Test	Run pytest with coverage	2026-07-29T04:36:44.0876114Z     [
+Test	Run pytest with coverage	2026-07-29T04:36:44.0876227Z         'fail',
+Test	Run pytest with coverage	2026-07-29T04:36:44.0876345Z         'sina',
+Test	Run pytest with coverage	2026-07-29T04:36:44.0876464Z   +     'fail',
+Test	Run pytest with coverage	2026-07-29T04:36:44.0876576Z         'sina',
+Test	Run pytest with coverage	2026-07-29T04:36:44.0876689Z     ]
+Test	Run pytest with coverage	2026-07-29T04:36:44.0877255Z FAILED tests/test_train_predict_runner.py::TestAdaptiveWindow::test_too_shallow_raises - KeyError: ['label_cls']
+Test	Run pytest with coverage	2026-07-29T04:36:44.0877894Z ERROR tests/test_train_predict_runner.py::TestRunTraining::test_bundles_saved_with_oos - KeyError: "['industry'] not in index"
+Test	Run pytest with coverage	2026-07-29T04:36:44.0878564Z ERROR tests/test_train_predict_runner.py::TestRunTraining::test_prepare_board_frame_labels - KeyError: "['industry'] not in index"
+Test	Run pytest with coverage	2026-07-29T04:36:44.0879129Z ERROR tests/test_train_predict_runner.py::TestFindBundles::test_latest_and_tag - KeyError: "['industry'] not in index"
+Test	Run pytest with coverage	2026-07-29T04:36:44.0879740Z ERROR tests/test_train_predict_runner.py::TestRunPrediction::test_emits_schema_list - KeyError: "['industry'] not in index"
+Test	Run pytest with coverage	2026-07-29T04:36:44.0880514Z ERROR tests/test_train_predict_runner.py::TestRunPrediction::test_no_bundles_raises - KeyError: "['industry'] not in index"
+Test	Run pytest with coverage	2026-07-29T04:36:44.0880853Z = 14 failed, 764 passed, 8 skipped, 128 warnings, 5 errors in 280.14s (0:04:40) =
+Test	Run pytest with coverage	2026-07-29T04:36:44.5584263Z ##[error]Process completed with exit code 1.

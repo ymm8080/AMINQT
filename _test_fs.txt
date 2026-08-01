@@ -1,0 +1,15 @@
+﻿..............................................                           [100%]
+============================== warnings summary ===============================
+tests/test_feature_selector.py: 29 warnings
+  C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\numpy\_core\_methods.py:219: RuntimeWarning: Degrees of freedom <= 0 for slice
+    ret = _var(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
+
+tests/test_feature_selector.py: 29 warnings
+  C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\numpy\_core\_methods.py:178: RuntimeWarning: invalid value encountered in divide
+    arrmean = um.true_divide(arrmean, div, out=arrmean,
+
+tests/test_feature_selector.py: 29 warnings
+  C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\numpy\_core\_methods.py:211: RuntimeWarning: invalid value encountered in scalar divide
+    ret = ret.dtype.type(ret / rcount)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html

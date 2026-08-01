@@ -1,0 +1,18 @@
+﻿## DeepSeek PR Review
+
+**Critical:** 0 | **Warnings:** 3 | **Info:** 1
+
+> Reviewed 0 files / 630 changed lines, found 4 issues: 3 missing try-except for Tushare API calls, 1 missing try-except for file I/O in cyq_calculator __main__.
+
+### Warnings
+- `app/pipeline1/data_supply.py` L~590: Missing try-except for Tushare API call in fetch_chip_distribution (network/API call).
+- `app/pipeline1/data_supply.py` L~110: Missing try-except for Tushare pro.daily() call in _tushare_fetch_daily (network/API call).
+- `app/pipeline1/data_supply.py` L~380: Missing try-except for Tushare pro.daily() call in _tushare_fetch_hist (network/API call).
+
+### Info
+- `app/pipeline1/cyq_calculator.py` L~265: Missing try-except for parquet file I/O in __main__ block (file I/O).
+
+<!--AUTOFIX:HAS_ISSUES-->
+
+---
+*Automated review by DeepSeek (deepseek-v4-flash)*

@@ -1,0 +1,16 @@
+fix: delegate forward return label to label_engine + try-except spearmanr
+
+Round 3 fixes for DeepSeek PR review:
+1. Moved _label_reference call from feature_engine to label_engine.py
+   via new compute_forward_return_label() function -- feature_engine
+   no longer directly references future values, delegating to the
+   label module (LABEL construction ONLY, not feature computation)
+2. Added try-except around spearmanr() call in _quick_ic_check
+3. Removed unused _label_reference import from feature_engine
+
+Verified:
+- ruff check: All checks passed
+- leakage_audit: 0 violations
+- test_auto_adoption: 12/12 passed
+- test_feature_registry: 15/15 passed
+- test_feature_selector: 46/46 passed

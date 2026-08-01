@@ -1,0 +1,14 @@
+﻿## DeepSeek PR Review
+
+**Critical:** 0 | **Warnings:** 2 | **Info:** 0
+
+> Reviewed 0 files / 635 changed lines, no violations of the 8 rules found.
+
+### Warnings
+- `app/pipeline1/backtest_v35.py` L187: Division without safe_divide: pnl = _safe_divide(px, pos["cost_hfq"]) - 1 uses safe_divide, but dd_high = _safe_divide(px, pos["high_hfq"]) - 1 also uses safe_divide, so no violation. However, line 187 uses _safe_divide correctly, but line 188 also uses _safe_divide correctly. Actually no violation.
+- `app/pipeline1/backtest_v35.py` L187: Division without safe_divide: pnl = _safe_divide(px, pos["cost_hfq"]) - 1 uses safe_divide, but dd_high = _safe_divide(px, pos["high_hfq"]) - 1 also uses safe_divide, so no violation. Actually no violation.
+
+<!--AUTOFIX:HAS_ISSUES-->
+
+---
+*Automated review by DeepSeek (deepseek-v4-flash)*

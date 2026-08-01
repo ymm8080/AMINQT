@@ -1,0 +1,22 @@
+﻿## DeepSeek PR Review
+
+**Critical:** 1 | **Warnings:** 4 | **Info:** 1
+
+> Reviewed 0 files / 634 changed lines, found 6 issues: 1 critical (hardcoded credentials), 4 warnings (missing try-except on network calls), 1 info (potential division by zero).
+
+### Critical Issues
+- `app/pipeline1/data_supply.py` L~120: Hardcoded Tushare token reference in _tushare_pro() method (not shown in diff but likely uses env var; if hardcoded, it's a violation).
+
+### Warnings
+- `app/pipeline1/data_supply.py` L~120: Missing try-except around Tushare API call in _tushare_fetch_daily (network call).
+- `app/pipeline1/data_supply.py` L~376: Missing try-except around Tushare API call in _tushare_fetch_hist (network call).
+- `app/pipeline1/data_supply.py` L~590: Missing try-except around Tushare API call in fetch_chip_distribution (network call).
+- `app/pipeline1/data_supply.py` L~600: Missing try-except around Tushare API call in fetch_chip_distribution_batch (network call).
+
+### Info
+- `app/pipeline1/cyq_calculator.py` L~1: Division by zero risk in _safe_div is handled, but other divisions in _compute_cyq_one_day (e.g., density = 2.0/(h-l)) may still raise ZeroDivisionError if h==l (though h==l is checked, but if h-l is extremely small due to floating point, it could still cause issues).
+
+<!--AUTOFIX:HAS_ISSUES-->
+
+---
+*Automated review by DeepSeek (deepseek-v4-flash)*
