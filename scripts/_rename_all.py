@@ -2,6 +2,7 @@
 """Replace benefit_part -> winner_ratio in all Python files.
 Also change winner_rate/100 -> winner_rate (no division) where applicable.
 """
+
 import pathlib
 
 ROOT = pathlib.Path(".")
@@ -56,29 +57,35 @@ for fpath in all_files:
     text = p.read_text(encoding="utf-8")
     if "benefit_part" not in text:
         continue
-    
+
     # Global replace benefit_part -> winner_ratio
     text = text.replace("benefit_part", "winner_ratio")
-    
+
     # Fix the /100 division: winner_ratio = winner_rate / 100.0 -> winner_ratio = winner_rate
     # This pattern appears in feature_engine_v35.py and _daily_fetch.py
-    text = text.replace("df[\"winner_ratio\"] = df[\"winner_rate\"] / 100.0",
-                        'df["winner_ratio"] = df["winner_rate"]')
-    text = text.replace("df[\"winner_ratio\"] = df[\"_winner_rate_tmp\"] / 100.0",
-                        'df["winner_ratio"] = df["winner_rate"]')
-    
+    text = text.replace(
+        'df["winner_ratio"] = df["winner_rate"] / 100.0',
+        'df["winner_ratio"] = df["winner_rate"]',
+    )
+    text = text.replace(
+        'df["winner_ratio"] = df["_winner_rate_tmp"] / 100.0',
+        'df["winner_ratio"] = df["winner_rate"]',
+    )
+
     # Fix rename_map: remove winner_rate -> _winner_rate_tmp (no longer needed)
-    text = text.replace('"winner_rate": "_winner_rate_tmp",\n    ', '')
-    text = text.replace('"winner_rate": "_winner_rate_tmp",', '')
-    
+    text = text.replace('"winner_rate": "_winner_rate_tmp",\n    ', "")
+    text = text.replace('"winner_rate": "_winner_rate_tmp",', "")
+
     # Remove _winner_rate_tmp computation block
     text = text.replace(
         '# --- winner_ratio = winner_rate / 100 ---\nif "_winner_rate_tmp" in df.columns:\n    df["winner_ratio"] = df["winner_rate"]\n',
-        '# --- winner_ratio = winner_rate (0-100, percentage) ---\nif "winner_rate" in df.columns and "winner_ratio" in panel_cols:\n    df["winner_ratio"] = df["winner_rate"]\n')
+        '# --- winner_ratio = winner_rate (0-100, percentage) ---\nif "winner_rate" in df.columns and "winner_ratio" in panel_cols:\n    df["winner_ratio"] = df["winner_rate"]\n',
+    )
     text = text.replace(
         '# --- winner_ratio = winner_rate / 100 ---\nif "_winner_rate_tmp" in df.columns:\n    df["winner_ratio"] = df[\'winner_rate\']\n',
-        '# --- winner_ratio = winner_rate (0-100, percentage) ---\nif "winner_rate" in df.columns and "winner_ratio" in panel_cols:\n    df["winner_ratio"] = df["winner_rate"]\n')
-    
+        '# --- winner_ratio = winner_rate (0-100, percentage) ---\nif "winner_rate" in df.columns and "winner_ratio" in panel_cols:\n    df["winner_ratio"] = df["winner_rate"]\n',
+    )
+
     p.write_text(text, encoding="utf-8")
     count = text.count("winner_ratio")
     print(f"  {fpath}: {count} occurrences of winner_ratio")

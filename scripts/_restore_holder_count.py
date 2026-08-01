@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Restore holder_count column from backup into the 98-col panel."""
+
 import os
 import gc
 import pyarrow as pa
@@ -8,6 +9,7 @@ import pyarrow.parquet as pq
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
 BACKUP = r"data\panel_full_enriched_v3.parquet"
 TMP = PANEL + ".tmp"
+
 
 def main():
     pf = pq.ParquetFile(PANEL)
@@ -59,6 +61,7 @@ def main():
     pf2 = pq.ParquetFile(PANEL)
     print(f"Done: {pf2.metadata.num_rows:,} rows, {len(pf2.schema_arrow.names)} cols")
     pf2.close()
+
 
 if __name__ == "__main__":
     main()

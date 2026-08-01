@@ -1,5 +1,6 @@
 import pyarrow.parquet as pq
 import pandas as pd
+
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
 cols = ["symbol", "date", "holder_count", "sh_change_vol", "sh_change_amt"]
 df = pq.read_table(PANEL, columns=cols).to_pandas()

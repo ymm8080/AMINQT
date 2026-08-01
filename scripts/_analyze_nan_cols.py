@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Analyze the 31 NaN columns in v3 panel."""
+
 import pyarrow.parquet as pq
 
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
@@ -32,8 +33,8 @@ df = t.to_pandas()
 print(f"{'Col':<20s} {'NaN%':>7s} {'non_null':>12s}")
 print("-" * 42)
 for x, y in pairs:
-    print(f"{x:<20s} {df[x].isna().mean()*100:>6.2f}% {df[x].notna().sum():>12,}")
-    print(f"{y:<20s} {df[y].isna().mean()*100:>6.2f}% {df[y].notna().sum():>12,}")
+    print(f"{x:<20s} {df[x].isna().mean() * 100:>6.2f}% {df[x].notna().sum():>12,}")
+    print(f"{y:<20s} {df[y].isna().mean() * 100:>6.2f}% {df[y].notna().sum():>12,}")
     both = (df[x].notna() & df[y].notna()).sum()
     only_x = (df[x].notna() & df[y].isna()).sum()
     only_y = (df[x].isna() & df[y].notna()).sum()
@@ -45,4 +46,4 @@ for x, y in pairs:
     print()
 
 for c in ["up_limit_raw", "down_limit_raw", "announce_date"]:
-    print(f"{c:<20s} {df[c].isna().mean()*100:>6.2f}% {df[c].notna().sum():>12,}")
+    print(f"{c:<20s} {df[c].isna().mean() * 100:>6.2f}% {df[c].notna().sum():>12,}")

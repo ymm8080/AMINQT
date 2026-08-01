@@ -3,6 +3,7 @@
 
 free_float_turnover_rate (= turnover_rate_f) and turn (= turnover_rate) are kept.
 """
+
 import os
 import gc
 import pyarrow as pa

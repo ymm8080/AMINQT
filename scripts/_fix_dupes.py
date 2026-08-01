@@ -11,11 +11,11 @@ text = text.replace(
     'sw    = safe_fetch(pro.sw_daily, "sw_daily", trade_date=TRADE_DATE)\n'
     'sw    = safe_fetch(pro.sw_daily, "sw_daily", trade_date=TRADE_DATE)',
     'lhb   = safe_fetch(pro.top_list, "LHB", trade_date=TRADE_DATE)\n'
-    'sw    = safe_fetch(pro.sw_daily, "sw_daily", trade_date=TRADE_DATE)'
+    'sw    = safe_fetch(pro.sw_daily, "sw_daily", trade_date=TRADE_DATE)',
 )
 
 # Remove duplicate stk_limit block (keep first)
-old_stk = '''# stk_limit: map source cols to panel column names directly
+old_stk = """# stk_limit: map source cols to panel column names directly
 if len(limit):
     lmap = limit.set_index("symbol")
     for src_col, tgt_col in [("up_limit", "up_limit_raw"), ("down_limit", "down_limit_raw")]:
@@ -27,26 +27,26 @@ if len(limit):
     lmap = limit.set_index("symbol")
     for src_col, tgt_col in [("up_limit", "up_limit_raw"), ("down_limit", "down_limit_raw")]:
         if src_col in lmap.columns and tgt_col in panel_cols and tgt_col not in df.columns:
-            df[tgt_col] = df["symbol"].map(lmap[src_col])'''
-new_stk = '''# stk_limit: map source cols to panel column names directly
+            df[tgt_col] = df["symbol"].map(lmap[src_col])"""
+new_stk = """# stk_limit: map source cols to panel column names directly
 if len(limit):
     lmap = limit.set_index("symbol")
     for src_col, tgt_col in [("up_limit", "up_limit_raw"), ("down_limit", "down_limit_raw")]:
         if src_col in lmap.columns and tgt_col in panel_cols and tgt_col not in df.columns:
-            df[tgt_col] = df["symbol"].map(lmap[src_col])'''
+            df[tgt_col] = df["symbol"].map(lmap[src_col])"""
 text = text.replace(old_stk, new_stk)
 
 # Remove duplicate free_float_turnover_rate block
-old_fft = '''# free_float_turnover_rate = turnover_rate_f (free float turnover)
+old_fft = """# free_float_turnover_rate = turnover_rate_f (free float turnover)
 if "turnover_rate_f" in df.columns and "free_float_turnover_rate" in panel_cols:
     df["free_float_turnover_rate"] = df["turnover_rate_f"]
 
 # free_float_turnover_rate = turnover_rate_f
 if "turnover_rate_f" in df.columns and "free_float_turnover_rate" in panel_cols:
-    df["free_float_turnover_rate"] = df["turnover_rate_f"]'''
-new_fft = '''# free_float_turnover_rate = turnover_rate_f
+    df["free_float_turnover_rate"] = df["turnover_rate_f"]"""
+new_fft = """# free_float_turnover_rate = turnover_rate_f
 if "turnover_rate_f" in df.columns and "free_float_turnover_rate" in panel_cols:
-    df["free_float_turnover_rate"] = df["turnover_rate_f"]'''
+    df["free_float_turnover_rate"] = df["turnover_rate_f"]"""
 text = text.replace(old_fft, new_fft)
 
 # Remove duplicate sw_daily sector index block

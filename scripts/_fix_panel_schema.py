@@ -8,6 +8,7 @@ Operations:
 
 Result: 116 cols -> 96 cols.
 """
+
 import os
 import gc
 import pyarrow as pa
@@ -85,8 +86,9 @@ def main():
             new_names.append(name)
 
     print(f"New: {len(new_names)} cols")
-    assert len(new_names) == len(old_names) - len(PAIRS) - len(HOLDER_COLS), \
+    assert len(new_names) == len(old_names) - len(PAIRS) - len(HOLDER_COLS), (
         f"Expected {len(old_names) - len(PAIRS) - len(HOLDER_COLS)}, got {len(new_names)}"
+    )
 
     # Read _x/_y columns for coalescing
     print("\nCoalescing _x/_y pairs...")
