@@ -28,13 +28,13 @@ BIAS_PERIODS = (
     250,
 )  # 乖离率周期 (与 MA_WINDOWS 一致, 独立常量防耦合)
 # 行业中性化目标列 (申万一级行业内 rank)
-NEUTRALIZE_COLS = ["turnover_rate", "chip_concentration", "conc_90", "benefit_part"]
+NEUTRALIZE_COLS = ["turnover_rate", "chip_concentration", "conc_90", "winner_ratio"]
 # 关键因子 missingness 指示
 MISSINGNESS_COLS = [
     "main_money_flow",
     "chip_concentration",
     "conc_90",
-    "benefit_part",
+    "winner_ratio",
     "margin_balance",
     "holder_count",
 ]
@@ -624,7 +624,7 @@ class FeatureEngineV35:
         "cost_95pct",
         "avg_cost",
         "weight_avg",
-        "benefit_part",
+        "winner_ratio",
         "pct_70_low",
         "pct_70_high",
         "pct_90_low",
@@ -661,7 +661,7 @@ class FeatureEngineV35:
         "cost_95pct",
         "avg_cost",
         "weight_avg",
-        "benefit_part",
+        "winner_ratio",
         "pct_70_low",
         "pct_70_high",
         "pct_90_low",
@@ -1753,15 +1753,15 @@ class FeatureEngineV35:
         """CYQ 筹码特征 (7→15 个) — Tushare cyq_perf 主源, OHLCV 代理补位.
 
         Tushare cyq_perf 提供: cost_5pct/15pct/50pct/85pct/95pct, weight_avg,
-        his_low, his_high, winner_rate (获利盘比例 %, 等价 benefit_part×100).
-        benefit_part 和 pct_90_con 从 Tushare 列直接推导:
-          benefit_part = winner_rate / 100
-          pct_90_con   = (cost_95pct - cost_5pct) / cost_50pct
+        his_low, his_high, winner_rate (获利盘比例 %, 等价 winner_ratio×100).
+        winner_ratio 和 pct_90_con 从 Tushare 列直接推导:
+          winner_ratio = winner_rate / 100
+          pct_90_con   = (cost_95pct - cost_5pct) / (cost_95pct + cost_5pct)
 
         Tushare 无数据时降级为旧 calculator 列, 再缺则降级为 OHLCV 代理.
         """
         TUSHARE_REQUIRED = ["cost_50pct", "winner_rate"]
-        CALC_REQUIRED = ["pct_90_con", "benefit_part", "cost_50pct"]
+        CALC_REQUIRED = ["pct_90_con", "winner_ratio", "cost_50pct"]
         has_tushare = all(c in df.columns for c in TUSHARE_REQUIRED)
         has_calc = all(c in df.columns for c in CALC_REQUIRED)
 
@@ -1769,7 +1769,7 @@ class FeatureEngineV35:
             g = g.sort_values("date")
             c = g.get("close_hfq", g["close"])
             c50 = g["cost_50pct"]
-            bp = g["benefit_part"]
+            bp = g["winner_ratio"]
             conc90 = g["pct_90_con"]
 
             c5 = g.get("cost_5pct", pd.Series(np.nan, index=g.index))
@@ -1778,7 +1778,7 @@ class FeatureEngineV35:
             c85 = g.get("cost_85pct", pd.Series(np.nan, index=g.index))
 
             g["conc_90"] = conc90
-            g["benefit_part"] = bp
+            g["winner_ratio"] = bp
             g["cost_bias"] = (c - c50) / c50.replace(0, np.nan)
             g["cost_spread"] = (c95 - c5) / c50.replace(0, np.nan)
             if c15.notna().any() and c85.notna().any():
@@ -1815,7 +1815,7 @@ class FeatureEngineV35:
             g["conc_90"] = 1 - to.rolling(20).std() / to.rolling(20).mean().replace(
                 0, 1
             )
-            g["benefit_part"] = np.nan  # OHLCV 无法推导获利盘
+            g["winner_ratio"] = np.nan  # OHLCV 无法推导获利盘
             g["cost_bias"] = c / c.rolling(60).mean() - 1  # 价格偏离60日均线替代
             g["cost_spread"] = np.nan
             g["chip_skew"] = np.nan
@@ -1836,13 +1836,17 @@ class FeatureEngineV35:
             return g
 
         if has_tushare:
-            # Tushare cyq_perf 主源: 从 winner_rate + cost 列推导 benefit_part/pct_90_con
-            if "benefit_part" not in df.columns:
-                df["benefit_part"] = df["winner_rate"] / 100.0
+            # Tushare cyq_perf 主源: 从 winner_rate + cost 列推导 winner_ratio/pct_90_con
+            if "winner_ratio" not in df.columns:
+                df["winner_ratio"] = df["winner_rate"]
             if "pct_90_con" not in df.columns:
-                df["pct_90_con"] = (df["cost_95pct"] - df["cost_5pct"]) / df[
-                    "cost_50pct"
-                ].replace(0, np.nan)
+                df["pct_90_con"] = (df["cost_95pct"] - df["cost_5pct"]) / (
+                    df["cost_95pct"] + df["cost_5pct"]
+                ).replace(0, np.nan)
+            if "pct_70_con" not in df.columns:
+                df["pct_70_con"] = (df["cost_85pct"] - df["cost_15pct"]) / (
+                    df["cost_85pct"] + df["cost_15pct"]
+                ).replace(0, np.nan)
             df = _apply_per_stock(df, per_stock_cyq)
         elif has_calc:
             # 旧 calculator 列 (无 Tushare 时的降级)
