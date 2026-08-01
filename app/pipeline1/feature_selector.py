@@ -440,7 +440,9 @@ class FeatureSelector:
         "fallback": {"pipeline": "ic_screener"},
     }
 
-    def __init__(self, config=None, registry_dir=str(data_others_path("data/factor_registry"))):
+    def __init__(
+        self, config=None, registry_dir=str(data_others_path("data/factor_registry"))
+    ):
         self.config = config or self.DEFAULT_CONFIG
         self.registry_dir = registry_dir
         os.makedirs(registry_dir, exist_ok=True)

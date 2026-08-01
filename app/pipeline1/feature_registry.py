@@ -100,7 +100,10 @@ NON_FEATURE_COLS = {
 class FeatureRegistry:
     """特征注册中心 — 单一真源, 驱动 FeatureEngine 门控 + 自动采纳."""
 
-    def __init__(self, path: str = str(data_others_path("data/factor_registry/feature_registry.json"))):
+    def __init__(
+        self,
+        path: str = str(data_others_path("data/factor_registry/feature_registry.json")),
+    ):
         self.path = path
         self._data: dict = {
             "version": SCHEMA_VERSION,

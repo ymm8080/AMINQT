@@ -49,7 +49,11 @@ def load_or_fetch_meta(
     name_map 用于 ST 标记. 缓存 stock_meta_<YYYYMMDD>.json (WORM, 当日有效).
     """
     os.makedirs(cache_dir, exist_ok=True)
-    path = str(data_others_path(os.path.join(cache_dir, f"stock_meta_{datetime.now():%Y%m%d}.json")))
+    path = str(
+        data_others_path(
+            os.path.join(cache_dir, f"stock_meta_{datetime.now():%Y%m%d}.json")
+        )
+    )
     if not refresh and os.path.exists(path):
         with open(path, encoding="utf-8") as fh:
             meta = json.load(fh)

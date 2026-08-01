@@ -55,9 +55,30 @@ def test_drawdown_circuit_breaker_returns_empty(cfg):
 
 def test_st_and_new_listing_filters(cfg):
     candidates = [
-        _c("A", score=0.9, amount=60_000_000.0, pct_change=2.0, is_st=False, list_days=100),
-        _c("B", score=0.85, amount=60_000_000.0, pct_change=2.0, is_st=True, list_days=100),
-        _c("C", score=0.8, amount=60_000_000.0, pct_change=2.0, is_st=False, list_days=2),
+        _c(
+            "A",
+            score=0.9,
+            amount=60_000_000.0,
+            pct_change=2.0,
+            is_st=False,
+            list_days=100,
+        ),
+        _c(
+            "B",
+            score=0.85,
+            amount=60_000_000.0,
+            pct_change=2.0,
+            is_st=True,
+            list_days=100,
+        ),
+        _c(
+            "C",
+            score=0.8,
+            amount=60_000_000.0,
+            pct_change=2.0,
+            is_st=False,
+            list_days=2,
+        ),
     ]
     out = risk_filter.apply_filters(candidates, cfg=cfg)
     assert [c["symbol"] for c in out] == ["A"]

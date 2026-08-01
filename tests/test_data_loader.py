@@ -29,7 +29,15 @@ def sample_parquet(tmp_path, monkeypatch):
 
 def test_load_parquet_canonicalizes_and_validates(sample_parquet):
     df = data_loader.load_parquet("000001")
-    assert list(df.columns) == ["date", "open", "high", "low", "close", "volume", "amount"]
+    assert list(df.columns) == [
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "amount",
+    ]
     assert len(df) == 2
     assert df["date"].iloc[0] == pd.Timestamp("2024-01-01")
 

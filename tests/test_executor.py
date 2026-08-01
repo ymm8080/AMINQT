@@ -28,22 +28,20 @@ class _StubExecutor(Executor):
 
 @pytest.fixture
 def manual_executor(monkeypatch):
-    monkeypatch.setattr(
-        executor_base.Executor, "mode", settings.ExecutionMode.MANUAL
-    )
+    monkeypatch.setattr(executor_base.Executor, "mode", settings.ExecutionMode.MANUAL)
     return _StubExecutor()
 
 
 @pytest.fixture
 def auto_executor(monkeypatch):
-    monkeypatch.setattr(
-        executor_base.Executor, "mode", settings.ExecutionMode.AUTO
-    )
+    monkeypatch.setattr(executor_base.Executor, "mode", settings.ExecutionMode.AUTO)
     return _StubExecutor()
 
 
 def test_manual_mode_returns_recommendation(manual_executor):
-    order = Order(symbol="000001", side="buy", qty=100, price=10.0, amount=1e8, pct_change=1.0)
+    order = Order(
+        symbol="000001", side="buy", qty=100, price=10.0, amount=1e8, pct_change=1.0
+    )
     result = manual_executor.execute(order)
     assert result["mode"] == "manual"
     assert result["executed"] is False
@@ -52,7 +50,9 @@ def test_manual_mode_returns_recommendation(manual_executor):
 
 
 def test_auto_mode_accepts_passing_risk_filter(auto_executor):
-    order = Order(symbol="000001", side="buy", qty=100, price=10.0, amount=1e8, pct_change=1.0)
+    order = Order(
+        symbol="000001", side="buy", qty=100, price=10.0, amount=1e8, pct_change=1.0
+    )
     result = auto_executor.execute(order)
     assert result["mode"] == "auto"
     assert result["executed"] is True
@@ -68,7 +68,9 @@ def test_auto_mode_rejects_missing_metadata(auto_executor):
 
 
 def test_auto_mode_rejects_amount_too_low(auto_executor):
-    order = Order(symbol="000001", side="buy", qty=100, price=10.0, amount=1e6, pct_change=1.0)
+    order = Order(
+        symbol="000001", side="buy", qty=100, price=10.0, amount=1e6, pct_change=1.0
+    )
     result = auto_executor.execute(order)
     assert result["executed"] is False
     assert result["reason"] == "risk_filter_rejected"
@@ -76,7 +78,9 @@ def test_auto_mode_rejects_amount_too_low(auto_executor):
 
 
 def test_auto_mode_rejects_price_limit(auto_executor):
-    order = Order(symbol="000001", side="buy", qty=100, price=10.0, amount=1e8, pct_change=10.0)
+    order = Order(
+        symbol="000001", side="buy", qty=100, price=10.0, amount=1e8, pct_change=10.0
+    )
     result = auto_executor.execute(order)
     assert result["executed"] is False
     assert result["reason"] == "risk_filter_rejected"

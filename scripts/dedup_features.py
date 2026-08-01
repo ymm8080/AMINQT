@@ -45,7 +45,9 @@ SKIP_DIMS = {
     "_auto_adopted",
 }
 
-DEFAULT_REGISTRY_PATH = str(data_others_path("data/factor_registry/feature_registry.json"))
+DEFAULT_REGISTRY_PATH = str(
+    data_others_path("data/factor_registry/feature_registry.json")
+)
 REPORT_DIR = str(data_others_path("data/factor_registry"))
 
 # Sampling params

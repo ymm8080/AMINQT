@@ -43,7 +43,9 @@ ICIR_MIN = 0.10  # [P19 两阶门禁] 因子级 ICIR 下限: |IC|/IC_std ≥ 0.1
 class ICScreener:
     """IC 筛选 — 每期滚动重算."""
 
-    def __init__(self, registry_path: str = str(data_others_path("data/factor_registry"))):
+    def __init__(
+        self, registry_path: str = str(data_others_path("data/factor_registry"))
+    ):
         self.registry_path = registry_path
         os.makedirs(registry_path, exist_ok=True)
 

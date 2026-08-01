@@ -22,9 +22,7 @@ def _risk_cfg() -> dict:
     cfg = load_config("selection_config").get("risk_filter", {})
     return {
         "min_amount": float(cfg.get("min_amount", settings.MIN_AMOUNT)),
-        "price_limit_pct": float(
-            cfg.get("price_limit_pct", settings.PRICE_LIMIT_PCT)
-        ),
+        "price_limit_pct": float(cfg.get("price_limit_pct", settings.PRICE_LIMIT_PCT)),
         "max_account_drawdown_pct": float(
             cfg.get("max_account_drawdown_pct", settings.MAX_ACCOUNT_DRAWDOWN_PCT)
         ),
@@ -67,7 +65,12 @@ def apply_filters(
         pct_change = float(c.get("pct_change", 0.0) or 0.0)
 
         if amount < cfg["min_amount"]:
-            logger.debug("Risk filter drop %s: amount %.0f < %.0f", symbol, amount, cfg["min_amount"])
+            logger.debug(
+                "Risk filter drop %s: amount %.0f < %.0f",
+                symbol,
+                amount,
+                cfg["min_amount"],
+            )
             continue
 
         if abs(pct_change) > cfg["price_limit_pct"]:

@@ -85,11 +85,7 @@ def zhuli_lasheng(df: pd.DataFrame) -> pd.DataFrame:
     df["出货"] = (VAR51 > REF(VAR51, 1)) & (REF(VAR51, 1) != 0)  # 白/灰柱
 
     # ---- 吸筹峰：VAR5 局部最高点（仅使用 t/t-1/t-2，无未来函数）----
-    df["吸筹峰"] = (
-        (VAR5 > 0)
-        & (VAR5 >= REF(VAR5, 1))
-        & (VAR5 >= REF(VAR5, 2))
-    )
+    df["吸筹峰"] = (VAR5 > 0) & (VAR5 >= REF(VAR5, 1)) & (VAR5 >= REF(VAR5, 2))
 
     # ---- 口诀信号：0轴上方死叉 + 出货柱 → 卖 ----
     df["轨迹死叉"] = (df["主力轨迹"] < df["MAZL"]) & (
