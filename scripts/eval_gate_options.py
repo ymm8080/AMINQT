@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """E7 准入闸门方案对比评估 (数据先行, 供用户裁决)
 =====================================================
 在最后 N 个 OOS 交易日 (测试段, 模型未参与拟合) 逐日回放:
@@ -51,9 +51,9 @@ def main() -> pd.DataFrame:
     parser.add_argument("--panel", default=None, help="面板 parquet (默认取最新)")
     args = parser.parse_args()
 
-    panel_path = args.panel or sorted(
-        Path("data/processed").glob("panel_*_3y_*.parquet")
-    )[-1]
+    panel_path = (
+        args.panel or sorted(Path("data/processed").glob("panel_*_3y_*.parquet"))[-1]
+    )
     logger.info("面板: %s", panel_path)
     panel = pd.read_parquet(panel_path)
 
@@ -75,8 +75,14 @@ def main() -> pd.DataFrame:
         # 逐日回放需全历史推理 (predict() 只取最新截面) → 直接对全特征矩阵推理
         bundle = predictor.bundles[board]
         cols = bundle["feature_cols"]
-        X = np.nan_to_num(feat[cols].to_numpy(dtype=float), nan=0.0, posinf=0.0, neginf=0.0)
-        out = feat[["symbol", "date", "adv20"]].copy() if "adv20" in feat else feat[["symbol", "date"]].copy()
+        X = np.nan_to_num(
+            feat[cols].to_numpy(dtype=float), nan=0.0, posinf=0.0, neginf=0.0
+        )
+        out = (
+            feat[["symbol", "date", "adv20"]].copy()
+            if "adv20" in feat
+            else feat[["symbol", "date"]].copy()
+        )
         out["pred_ret_1d"] = bundle["models"]["1d_reg"][0].predict(X)
         raw_prob = bundle["models"]["1d_cls"][0].predict_proba(X)[:, 1]
         out["prob_up"] = bundle["calibrator"].predict_proba(raw_prob)
@@ -94,14 +100,19 @@ def main() -> pd.DataFrame:
     )
 
     dates = sorted(df["date"].unique())[-args.days : -2]  # 末端 label_pm_1d 需 T+2
-    logger.info("回放 %d 个交易日 (%s ~ %s)", len(dates), dates[0].date(), dates[-1].date())
+    logger.info(
+        "回放 %d 个交易日 (%s ~ %s)", len(dates), dates[0].date(), dates[-1].date()
+    )
 
     scenarios = {
         "A_现状_net>=2xCOST": lambda g: g["pred_ret_1d"] >= 2 * COST,
-        "B_毛口径_net+cost>=2xCOST": lambda g: (g["pred_ret_1d"] + g["cost_total"]) >= 2 * COST,
+        "B_毛口径_net+cost>=2xCOST": lambda g: (
+            (g["pred_ret_1d"] + g["cost_total"]) >= 2 * COST
+        ),
         "C_降倍_net>=1xCOST": lambda g: g["pred_ret_1d"] >= 1 * COST,
-        "D_计算闸_net>0&prob>日均": lambda g: (g["pred_ret_1d"] > 0)
-        & (g["prob_up"] > g["prob_up"].mean()),
+        "D_计算闸_net>0&prob>日均": lambda g: (
+            (g["pred_ret_1d"] > 0) & (g["prob_up"] > g["prob_up"].mean())
+        ),
     }
     rows = []
     for name, gate in scenarios.items():
@@ -129,10 +140,16 @@ def main() -> pd.DataFrame:
             "days": len(daily),
             "empty_days": sum(1 for x in daily if x["n"] == 0),
             "empty_rate": sum(1 for x in daily if x["n"] == 0) / len(daily),
-            "avg_holdings": float(np.mean([x["n"] for x in invested])) if invested else None,
-            "avg_daily_net": float(np.mean([x["ret"] for x in invested])) if invested else None,
+            "avg_holdings": float(np.mean([x["n"] for x in invested]))
+            if invested
+            else None,
+            "avg_daily_net": float(np.mean([x["ret"] for x in invested]))
+            if invested
+            else None,
             "compound": cum - 1,
-            "win_rate": float(np.mean([x["ret"] > 0 for x in invested])) if invested else None,
+            "win_rate": float(np.mean([x["ret"] > 0 for x in invested]))
+            if invested
+            else None,
             "daily": daily,
         }
         rows.append(stats)
@@ -146,9 +163,13 @@ def main() -> pd.DataFrame:
                 "空仓天数": r["empty_days"],
                 "空仓率": f"{r['empty_rate']:.1%}",
                 "平均持股数": f"{r['avg_holdings']:.1f}" if r["avg_holdings"] else "—",
-                "日均净收益(持仓日)": f"{r['avg_daily_net']:.4%}" if r["avg_daily_net"] is not None else "—",
+                "日均净收益(持仓日)": f"{r['avg_daily_net']:.4%}"
+                if r["avg_daily_net"] is not None
+                else "—",
                 "累计净收益": f"{r['compound']:.2%}",
-                "胜率(持仓日)": f"{r['win_rate']:.1%}" if r["win_rate"] is not None else "—",
+                "胜率(持仓日)": f"{r['win_rate']:.1%}"
+                if r["win_rate"] is not None
+                else "—",
             }
             for r in rows
         ]
@@ -169,7 +190,9 @@ def main() -> pd.DataFrame:
         "scenarios": rows,
     }
     out_path = out_dir / f"gate_eval_{datetime.now():%Y%m%d}.json"
-    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     logger.info("报告落盘: %s", out_path)
     return table
 

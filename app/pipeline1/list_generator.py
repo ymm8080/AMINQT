@@ -302,7 +302,9 @@ class ListGenerator:
         ok = pd.Series(True, index=df.index)
         # 1. prob_up > base_rate (bear 按声明参数比率收紧, 无新常数)
         if self.entry_prob > 0:
-            base = df["base_rate"] if "base_rate" in df.columns else df["prob_up"].mean()
+            base = (
+                df["base_rate"] if "base_rate" in df.columns else df["prob_up"].mean()
+            )
             ratio = self.entry_prob_bear / self.entry_prob if is_bear else 1.0
             ok &= df["prob_up"] > base * ratio
         # 2/3/4. 净预期为正 (compound_ret > 0; pred_q50 > 0; bear 额外 pred_ret_1d > 0)
@@ -311,7 +313,11 @@ class ListGenerator:
                 compound = df["compound_ret"]
             else:
                 w1, w3, w5 = COMPOUND_W
-                compound = w1 * df["pred_ret_1d"] + w3 * df["pred_ret_3d"] + w5 * df["pred_ret_5d"]
+                compound = (
+                    w1 * df["pred_ret_1d"]
+                    + w3 * df["pred_ret_3d"]
+                    + w5 * df["pred_ret_5d"]
+                )
             ok &= compound > 0
             if "pred_q50" in df.columns and df["pred_q50"].notna().any():
                 ok &= df["pred_q50"].fillna(compound) > 0
