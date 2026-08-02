@@ -2002,7 +2002,7 @@ class DataSupplyChain:
         """[dim05/dim06] Tushare daily_basic — 每日估值/换手/市值指标.
 
         单日全市场拉取 (~5500 股/次), 或按 ts_code + 日期范围拉取.
-        产出列: turnover_rate_f, volume_ratio, pe_ttm, pb, ps_ttm, dv_ratio, dv_ttm,
+        产出列: turnover_rate, turnover_rate_f, volume_ratio, pe_ttm, pb, ps_ttm, dv_ratio, dv_ttm,
                 total_mv, circ_mv, total_share, float_share, free_share
         """
         key = f"{trade_date or 'range'}_{ts_code or 'all'}_{start_date or ''}_{end_date or ''}"
@@ -2036,6 +2036,9 @@ class DataSupplyChain:
                     .str.replace(".SH", ""),
                     "date": pd.to_datetime(
                         raw["trade_date"], format="%Y%m%d", errors="coerce"
+                    ),
+                    "turnover_rate": pd.to_numeric(
+                        raw.get("turnover_rate", np.nan), errors="coerce"
                     ),
                     "turnover_rate_f": pd.to_numeric(
                         raw.get("turnover_rate_f", np.nan), errors="coerce"

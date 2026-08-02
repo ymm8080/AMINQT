@@ -239,6 +239,7 @@ class TestDualTrackTrainer:
                 "f1": f,
                 "f2": rng.normal(size=750),
                 "label_1d": f * 0.01 + rng.normal(0, 0.01, 750),
+                "label_2d": rng.normal(0, 0.015, 750),
                 "label_3d": rng.normal(0, 0.02, 750),
                 "label_5d": rng.normal(0, 0.03, 750),
             }
@@ -246,7 +247,7 @@ class TestDualTrackTrainer:
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer()
         trained = trainer.train_window(df, "main", ["f1", "f2"])
-        assert set(trained["models"]) == {"1d_reg", "1d_cls", "3d_reg", "5d_reg"}
+        assert set(trained["models"]) == {"1d_reg", "1d_cls", "2d_reg", "3d_reg", "5d_reg"}
         pred = trained["models"]["1d_reg"][0].predict(df[["f1", "f2"]].tail(5))
         assert len(pred) == 5
         oos = trainer.validate_oos(trained)

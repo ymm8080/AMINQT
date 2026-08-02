@@ -39,7 +39,7 @@ from app.streamlit.data_service import (  # noqa: E402
 
 
 def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
-    """生成与 PIPELINE1 ListGenerator.emit 输出同构的 V1.2 清单."""
+    """生成与 PIPELINE1 ListGenerator.emit 输出同构的 V1.3 清单."""
     rng = np.random.default_rng(42)
     n = len(symbols)
     return pd.DataFrame(
@@ -47,6 +47,7 @@ def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
             "symbol": list(symbols),
             "board": ["main"] * n,
             "pred_ret_1d": rng.uniform(-0.02, 0.05, n),
+            "pred_ret_2d": rng.uniform(-0.03, 0.08, n),
             "pred_ret_3d": rng.uniform(-0.03, 0.09, n),
             "pred_ret_5d": rng.uniform(-0.04, 0.12, n),
             "prob_up": np.round(rng.uniform(0.42, 0.62, n), 3),

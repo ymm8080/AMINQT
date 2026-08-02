@@ -68,13 +68,14 @@ class TestScoreForecast:
             {
                 "symbol": row["symbol"],
                 "pred_ret_1d": row["label_pm_1d_net"],
+                "pred_ret_2d": row["label_pm_2d_net"],
                 "pred_ret_3d": row["label_pm_3d_net"],
                 "pred_ret_5d": row["label_pm_5d_net"],
             }
         )
         out = score_forecast(forecast, labeled, fdate)
         assert out["mature"]
-        for k in (1, 3, 5):
+        for k in (1, 2, 3, 5):
             assert out["horizons"][k]["mae_1d"] == pytest.approx(0.0, abs=1e-4)
             assert out["horizons"][k]["bias_1d"] == pytest.approx(0.0, abs=1e-4)
             assert out["horizons"][k]["n_samples"] == 2
@@ -87,6 +88,7 @@ class TestScoreForecast:
             {
                 "symbol": row["symbol"],
                 "pred_ret_1d": row["label_pm_1d_net"] + 0.01,  # 系统性高估 1%
+                "pred_ret_2d": row["label_pm_2d_net"] + 0.01,
                 "pred_ret_3d": row["label_pm_3d_net"] + 0.01,
                 "pred_ret_5d": row["label_pm_5d_net"] + 0.01,
             }
@@ -101,6 +103,7 @@ class TestScoreForecast:
             {
                 "symbol": ["AAA", "BBB"],
                 "pred_ret_1d": [0.01, 0.02],
+                "pred_ret_2d": [0.01, 0.02],
                 "pred_ret_3d": [0.01, 0.02],
                 "pred_ret_5d": [0.01, 0.02],
             }
@@ -124,6 +127,7 @@ class TestScoreMatured:
             {
                 "symbol": row["symbol"],
                 "pred_ret_1d": row["label_pm_1d_net"] + 0.005,
+                "pred_ret_2d": row["label_pm_2d_net"] + 0.005,
                 "pred_ret_3d": row["label_pm_3d_net"] + 0.005,
                 "pred_ret_5d": row["label_pm_5d_net"] + 0.005,
             }
@@ -134,6 +138,7 @@ class TestScoreMatured:
             {
                 "symbol": ["AAA", "BBB"],
                 "pred_ret_1d": [0.01, 0.02],
+                "pred_ret_2d": [0.01, 0.02],
                 "pred_ret_3d": [0.01, 0.02],
                 "pred_ret_5d": [0.01, 0.02],
             }

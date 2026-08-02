@@ -293,7 +293,7 @@ class FeatureRegistry:
         updated = 0
         for fname, d in detail.items():
             grade = d.get("grade", "dead")
-            new_ic = max(abs(d.get(f"ic_{k}d", 0.0)) for k in (1, 3, 5))
+            new_ic = max(abs(d.get(f"ic_{k}d", 0.0)) for k in (1, 2, 3, 5))
             old_entry = self._data["features"].get(fname, {})
             old_grade = old_entry.get("grade", "unknown")
             old_active = old_entry.get("active", True)
