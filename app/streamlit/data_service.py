@@ -76,8 +76,11 @@ def load_priority_symbols(path: str = PRIORITY_PATH) -> set[str]:
     """读取已保存的重点股代码集合."""
     if not os.path.exists(path):
         return set()
-    with open(path, encoding="utf-8") as fh:
-        data = json.load(fh)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (json.JSONDecodeError, OSError):
+        return set()
     if isinstance(data, list):
         return set(str(s).strip() for s in data if s)
     if isinstance(data, dict):
@@ -123,16 +126,22 @@ def pipeline_buy_candidates(df: pd.DataFrame) -> set[str]:
     return set(df["symbol"].head(5))
 
 
-def apply_priority_tags(df: pd.DataFrame) -> pd.DataFrame:
+def apply_priority_tags(
+    df: pd.DataFrame, priority_path: str = PRIORITY_PATH
+) -> pd.DataFrame:
     """为清单打日内交易标签: 只读 priority.json.
 
     Pipeline1 程序离线运行时写入 priority.json; 用户手工 toggle 也写 priority.json.
     页面不做自动计算, 手工更改不会被覆盖.
+
+    Args:
+        df: 清单 DataFrame.
+        priority_path: priority.json 路径 (测试可注入临时路径).
     """
     if df is None or df.empty or "symbol" not in df.columns:
         return df
     df = df.copy()
-    saved = load_priority_symbols()
+    saved = load_priority_symbols(priority_path)
     df["priority"] = df["symbol"].isin(saved)
     return df
 
@@ -157,14 +166,20 @@ def load_list(trade_date: str, list_dir: str = LIST_DIR) -> pd.DataFrame | None:
 
 def load_latest_list(
     list_dir: str = LIST_DIR,
+    priority_path: str = PRIORITY_PATH,
 ) -> tuple[pd.DataFrame | None, str | None]:
-    """加载最新清单 → (df, date); 无清单返回 (None, None)."""
+    """加载最新清单 → (df, date); 无清单返回 (None, None).
+
+    Args:
+        list_dir: 清单目录.
+        priority_path: priority.json 路径 (测试可注入临时路径).
+    """
     dates = list_available_dates(list_dir)
     if not dates:
         return None, None
     df = load_list(dates[0], list_dir)
     if df is not None:
-        df = apply_priority_tags(df)
+        df = apply_priority_tags(df, priority_path)
     return df, dates[0]
 
 
@@ -466,7 +481,7 @@ def save_yaml(data: dict, path: str) -> None:
 # ============================================================
 # 回测真实数据适配器 (V5.2 BacktestEngine 格式)
 # ============================================================
-V3_PANEL_PATH = "data/panel_full_enriched_v3.parquet"
+V3_PANEL_PATH = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
 
 
 def load_backtest_panel(days: int = 750) -> pd.DataFrame | None:

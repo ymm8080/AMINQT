@@ -46,7 +46,6 @@ def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
         {
             "symbol": list(symbols),
             "board": ["main"] * n,
-            "day_change": rng.uniform(-0.03, 0.06, n),
             "pred_ret_1d": rng.uniform(-0.02, 0.05, n),
             "pred_ret_3d": rng.uniform(-0.03, 0.09, n),
             "pred_ret_5d": rng.uniform(-0.04, 0.12, n),
@@ -186,7 +185,7 @@ class TestPrioritySync:
         """apply_priority_tags: priority 标记股的 priority=True."""
         save_priority_symbols({"600519", "300750"}, path=tmp_priority_path)
         lst = _make_schema_list(("600519", "300750", "601318"))
-        tagged = apply_priority_tags(lst)
+        tagged = apply_priority_tags(lst, priority_path=tmp_priority_path)
         assert "priority" in tagged.columns
         assert tagged.loc[tagged["symbol"] == "600519", "priority"].iloc[0]
         assert tagged.loc[tagged["symbol"] == "300750", "priority"].iloc[0]
@@ -242,7 +241,9 @@ class TestEndToEndListToPanel:
         save_priority_symbols(new_symbols, path=tmp_priority_path)
 
         # 3. 看板加载最新清单
-        df, date = load_latest_list(list_dir=tmp_list_dir)
+        df, date = load_latest_list(
+            list_dir=tmp_list_dir, priority_path=tmp_priority_path
+        )
         assert date == trade_date
         assert df is not None
         assert set(df["symbol"]) == new_symbols
