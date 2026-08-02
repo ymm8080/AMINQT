@@ -31,6 +31,14 @@ DATA_OTHERS_DIR = Path(
 for _d in (RAW_DIR, INTRADAY_DIR, PROCESSED_DIR, MODEL_DIR, DATA_OTHERS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
+# ── V3 Panel (single source of truth) ────────────────────────
+# Override via PANEL_PATH env var; defaults to project data/ directory.
+# _daily_fetch.py writes here → all read paths must resolve to the same file.
+PANEL_V3_PATH = Path(
+    os.getenv("PANEL_PATH", str(DATA_DIR / "panel_full_enriched_v3.parquet"))
+)
+PANEL_V3_FALLBACK = DATA_DIR / "panel_full_enriched_v2.parquet"
+
 
 def data_others_path(path: str | Path) -> Path:
     """Return the DATA_OTHERS location for a non-parquet path.

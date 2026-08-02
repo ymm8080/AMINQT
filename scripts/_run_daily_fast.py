@@ -24,13 +24,14 @@ import pyarrow.parquet as pq
 
 from app.pipeline1.data_supply import DataSupplyChain
 from app.pipeline1.predict_runner import find_bundles
+from config.settings import PANEL_V3_PATH
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
 logger = logging.getLogger("run_daily_fast")
 
-PANEL_PATH = "data/panel_full_enriched_v3.parquet"
+PANEL_PATH = str(PANEL_V3_PATH)
 
 
 def build_panel_fast(trade_date: str) -> pd.DataFrame:

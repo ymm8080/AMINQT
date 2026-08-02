@@ -80,6 +80,13 @@ class FeatureEngineV35:
         "market_state",
         "schema_version",
         "ts_code",
+        "sw_l1_name",
+        "sw_l2_name",
+        "sw_l3_name",
+        # Eval-driven noise drops (|ICIR| < 0.05 across T+1/T+3/T+5)
+        "sw_l2_pe",
+        "sw_l3_pe",
+        "sw_l3_ret_1d",
     }
 
     # ── Dim gating names (must match method names in build) ──
@@ -2454,110 +2461,162 @@ class FeatureEngineV35:
     # ---------------- ㉘ 申万行业指数动量/轮动 (Alt-7b) ----------------
     @staticmethod
     def dim28_sector_index(df: pd.DataFrame) -> pd.DataFrame:
-        """从申万一级行业指数日线提取行业动量/轮动特征.
+        """从申万 L1/L2/L3 行业指数日线提取行业动量/轮动特征.
 
-        上游: 需 sector_index 面板 merge 到个股 (由 panel_builder.enrich_alt_data 扩展).
-        行业指数列: sw_ret_1d, sw_ret_5d, sw_ret_20d, sw_vol_20d,
-                    sw_relative_strength, sw_rotation_position
+        上游: panel 含 sw_l1_name, sw_l2_name, sw_l3_name (V3 panel).
+        数据源: data/processed/sw_daily_history.parquet.
 
-        产出 (行业级特征, 同行业个股共享):
-          1. sw_ret_1d              — 行业指数日收益率
-          2. sw_ret_5d              — 行业指数 5 日动量
-          3. sw_ret_20d             — 行业指数 20 日动量
-          4. sw_vol_20d             — 行业指数 20 日波动率
-          5. sw_relative_strength   — 行业/沪深300 相对强弱 (20日)
-          6. sw_rotation_position   — 行业轮动位置 (5日动量截面排名)
-          7. sw_momentum_accel      — 行业动量加速度 (5日-20日)
-          8. sw_turnover_anomaly    — 行业成交额异常 (vs 自身20日均值)
+        每个级别 (N=1,2,3) 产出 13 列:
+          Raw: sw_lN_close, sw_lN_vol, sw_lN_amount, sw_lN_pe, sw_lN_pb, sw_lN_ret_1d
+          Derived: sw_lN_ret_5d, sw_lN_ret_20d, sw_lN_vol_20d, sw_lN_momentum_accel,
+                   sw_lN_turnover_anomaly, sw_lN_rotation_position, sw_lN_relative_strength
         """
-        # 这些列需由 panel_builder 将行业指数 merge 到个股 (按 date+industry 对齐)
-        # 如果面板中存在行业指数列 (index_code match → industry match), 直接使用
-        # 否则尝试从 OHLCV 计算行业平均回报作为代理
-        out_cols = [
-            "sw_ret_1d",
-            "sw_ret_5d",
-            "sw_ret_20d",
-            "sw_vol_20d",
-            "sw_relative_strength",
-            "sw_rotation_position",
-            "sw_momentum_accel",
-            "sw_turnover_anomaly",
+        import os as _os
+
+        SW_DAILY_PATH = _os.path.join(
+            _os.getenv("PROCESSED_DIR", "data/processed"),
+            "sw_daily_history.parquet",
+        )
+
+        LEVELS = ["l1", "l2", "l3"]
+        RAW_MAP = {
+            "close": "close", "vol": "vol", "amount": "amount",
+            "pe": "pe", "pb": "pb", "pct_change": "ret_1d",
+        }
+        DERIVED = [
+            "ret_5d", "ret_20d", "vol_20d", "momentum_accel",
+            "turnover_anomaly", "rotation_position", "relative_strength",
         ]
+        # ── Eval-driven noise drops (sw_feature_eval_multihorizon.csv) ──
+        # sw_l2_pe / sw_l3_pe: |ICIR| < 0.05 across T+1/T+3/T+5
+        # sw_l3_ret_1d: |ICIR| < 0.05 across T+1/T+3/T+5
+        SKIP_RAW = {"l2": {"pe"}, "l3": {"pe", "pct_change"}}
 
-        # 方案 A: 面板已有行业指数 merge 列 (上游已处理, sw_ret_1d 来自 sector_index)
-        # 方案 B: 从 OHLCV 面板计算行业平均收益作为代理
-        # 统一路径: sw_ret_1d 优先 (真实行业指数), 否则用 OHLCV 代理
-        if "industry" not in df.columns:
-            for c in out_cols:
-                df[c] = np.nan
-            return df
-
-        if "sw_ret_1d" not in df.columns:
-            # 方案 B: OHLCV 代理 — 行业内个股等权平均收益率
-            df = df.sort_values(["symbol", "date"])
-            close_col = "close_hfq" if "close_hfq" in df.columns else "close"
-            df["_ret_1d"] = df.groupby("symbol")[close_col].pct_change()
-            grp = df.groupby(["date", "industry"], observed=True)
-            ind_ret = grp["_ret_1d"].mean().reset_index()
-            ind_ret = ind_ret.rename(columns={"_ret_1d": "sw_ret_1d"})
-            # 行业成交额代理
-            ind_amount = grp["amount"].sum().reset_index()
-            ind_amount = ind_amount.rename(columns={"amount": "_ind_amount"})
-            ind = ind_ret.merge(ind_amount, on=["date", "industry"], how="left")
-            ind = ind.sort_values(["industry", "date"])
-            df = df.drop(columns=["_ret_1d"], errors="ignore")
-        else:
-            # 方案 A: 用已有的 sw_ret_1d 按行业聚合 (取每行业每日第一条, 行业指数同行业个股共享)
-            sw_cols = ["date", "industry", "sw_ret_1d"]
-            extra = [c for c in ["sw_index_close", "sw_index_vol"] if c in df.columns]
-            ind = df[sw_cols + extra].drop_duplicates(subset=["date", "industry"])
-            ind = ind.sort_values(["industry", "date"])
-            # 成交额代理: 行业内个股 amount 之和
-            if "amount" in df.columns:
-                ind_amt = (
-                    df.groupby(["date", "industry"], observed=True)["amount"]
-                    .sum()
-                    .reset_index()
+        # Load SW daily history
+        sw_hist = None
+        try:
+            if _os.path.exists(SW_DAILY_PATH):
+                sw_hist = pd.read_parquet(SW_DAILY_PATH)
+                sw_hist["date"] = pd.to_datetime(
+                    sw_hist["trade_date"], format="%Y%m%d", errors="coerce"
                 )
-                ind_amt = ind_amt.rename(columns={"amount": "_ind_amount"})
-                ind = ind.merge(ind_amt, on=["date", "industry"], how="left")
-
-        # per-industry rolling (统一路径)
-        def per_ind(g):
-            g = g.sort_values("date")
-            g["sw_ret_5d"] = g["sw_ret_1d"].rolling(5, min_periods=3).sum()
-            g["sw_ret_20d"] = g["sw_ret_1d"].rolling(20, min_periods=5).sum()
-            g["sw_vol_20d"] = g["sw_ret_1d"].rolling(20, min_periods=10).std()
-            # 成交额异常
-            if "_ind_amount" in g.columns:
-                amt_ma = g["_ind_amount"].rolling(20, min_periods=10).mean()
-                g["sw_turnover_anomaly"] = (
-                    g["_ind_amount"] / amt_ma.replace(0, np.nan) - 1
+                logger.info(
+                    "dim28: SW daily history loaded: %d rows, %d indices",
+                    len(sw_hist), sw_hist["ts_code"].nunique(),
                 )
             else:
-                g["sw_turnover_anomaly"] = np.nan
-            # 动量加速度
-            g["sw_momentum_accel"] = g["sw_ret_5d"] - g["sw_ret_20d"]
-            return g
+                logger.warning("dim28: SW daily history not found at %s", SW_DAILY_PATH)
+        except Exception as exc:
+            logger.warning("dim28: Failed to load SW daily history: %s", exc)
 
-        ind = per_ind(ind)
-        ind = ind.drop(columns=["_ind_amount"], errors="ignore")
+        for lvl in LEVELS:
+            name_col = f"sw_{lvl}_name"
+            prefix = f"sw_{lvl}_"
 
-        # 相对强弱 (vs 全行业均值)
-        ind["sw_relative_strength"] = ind.groupby("date")["sw_ret_20d"].transform(
-            lambda s: s - s.mean()
-        )
-        # 轮动位置 + 截面排名
-        ind["sw_rotation_position"] = ind.groupby("date")["sw_ret_5d"].rank(pct=True)
-        for col in ["sw_ret_5d", "sw_ret_20d"]:
-            ind[f"{col}_rank"] = ind.groupby("date")[col].rank(pct=True)
+            # Ensure all output columns exist (skip noise-dropped cols)
+            skip = SKIP_RAW.get(lvl, set())
+            for src, out_suf in RAW_MAP.items():
+                if src in skip:
+                    continue
+                col = f"{prefix}{out_suf}"
+                if col not in df.columns:
+                    df[col] = np.nan
+            for dc in DERIVED:
+                col = f"{prefix}{dc}"
+                if col not in df.columns:
+                    df[col] = np.nan
 
-        # merge 回个股面板
-        merge_cols = ["date", "industry"] + out_cols
-        avail = [c for c in merge_cols if c in ind.columns]
-        df = df.merge(ind[avail], on=["date", "industry"], how="left")
+            if name_col not in df.columns:
+                continue
+            if sw_hist is None or len(sw_hist) == 0:
+                continue
+
+            # Filter SW daily for this level
+            lvl_upper = lvl.upper()
+            sw_lvl = sw_hist[sw_hist["level"] == lvl_upper].copy()
+            if len(sw_lvl) == 0:
+                logger.warning("dim28: No SW daily data for level %s", lvl_upper)
+                continue
+
+            # Compute derived features on index level
+            sw_lvl = sw_lvl.sort_values(["ts_code", "date"])
+            grp = sw_lvl.groupby("ts_code")
+            sw_lvl["_ret_5d"] = grp["pct_change"].rolling(
+                5, min_periods=3
+            ).sum().reset_index(level=0, drop=True)
+            sw_lvl["_ret_20d"] = grp["pct_change"].rolling(
+                20, min_periods=5
+            ).sum().reset_index(level=0, drop=True)
+            sw_lvl["_vol_20d"] = grp["pct_change"].rolling(
+                20, min_periods=10
+            ).std().reset_index(level=0, drop=True)
+            sw_lvl["_momentum_accel"] = sw_lvl["_ret_5d"] - sw_lvl["_ret_20d"]
+
+            if "amount" in sw_lvl.columns:
+                amt_ma = grp["amount"].rolling(
+                    20, min_periods=10
+                ).mean().reset_index(level=0, drop=True)
+                sw_lvl["_turnover_anomaly"] = (
+                    sw_lvl["amount"] / amt_ma.replace(0, np.nan) - 1
+                )
+            else:
+                sw_lvl["_turnover_anomaly"] = np.nan
+
+            sw_lvl["_rotation_position"] = sw_lvl.groupby("date")[
+                "_ret_5d"
+            ].rank(pct=True)
+            sw_lvl["_relative_strength"] = sw_lvl.groupby("date")[
+                "_ret_20d"
+            ].transform(lambda s: s - s.mean())
+
+            # Build merge frame (skip noise-dropped cols)
+            merge_cols = {
+                "close": f"{prefix}close", "vol": f"{prefix}vol",
+                "amount": f"{prefix}amount", "pe": f"{prefix}pe",
+                "pb": f"{prefix}pb", "pct_change": f"{prefix}ret_1d",
+                "_ret_5d": f"{prefix}ret_5d", "_ret_20d": f"{prefix}ret_20d",
+                "_vol_20d": f"{prefix}vol_20d",
+                "_momentum_accel": f"{prefix}momentum_accel",
+                "_turnover_anomaly": f"{prefix}turnover_anomaly",
+                "_rotation_position": f"{prefix}rotation_position",
+                "_relative_strength": f"{prefix}relative_strength",
+            }
+            # Remove skipped raw cols from merge
+            for src in skip:
+                merge_cols.pop(src, None)
+            rename_dict = {k: v for k, v in merge_cols.items() if k in sw_lvl.columns}
+            sw_merge = sw_lvl.rename(columns=rename_dict)
+
+            keep_cols = ["date", "name"] + list(rename_dict.values())
+            keep_cols = [c for c in keep_cols if c in sw_merge.columns]
+            sw_merge = sw_merge[keep_cols].drop_duplicates(subset=["date", "name"])
+
+            # Drop old level cols from df before merge
+            for c in rename_dict.values():
+                if c in df.columns:
+                    df = df.drop(columns=[c])
+
+            # Merge by (date, name)
+            df = df.merge(
+                sw_merge,
+                left_on=["date", name_col],
+                right_on=["date", "name"],
+                how="left",
+            )
+            df = df.drop(columns=["name"], errors="ignore")
+
+            log_col = f"{prefix}close"
+            if log_col not in df.columns:
+                log_col = next(iter(rename_dict.values()), None)
+            n_filled = df[log_col].notna().sum() if log_col else 0
+            logger.info(
+                "dim28: %s — %d/%d rows filled (%.1f%%)",
+                lvl_upper, n_filled, len(df),
+                n_filled / len(df) * 100 if len(df) else 0,
+            )
 
         return df
+
 
     # ---------------- ㉙ 股东增减持 (Alt-6) ----------------
     @staticmethod
@@ -2746,30 +2805,116 @@ class FeatureEngineV35:
     def dim31_announcement(df: pd.DataFrame) -> pd.DataFrame:
         """从 announce_date 派生公告事件特征 (PIT 安全).
 
+        上游 announce_date 经 merge_asof(backward) 后为 forward-filled 阶梯值:
+        两个公告之间所有交易日共享同一个 announce_date.
+        因此必须用 **跳变检测** (announce_date != prev_day's announce_date)
+        来识别真正的公告日, 不能用 .notna() (那会把阶梯内所有行都标为 1).
+
         产出:
-          1. days_since_last_ann — 距上次公告天数 (正=越久未公告, NaT → NaN)
-          2. ann_count_60d       — 近 60 日公告次数
-          3. is_ann_day          — 当日是否有公告 (二元)
+          1. days_since_last_ann   — 距上次公告天数 (PIT: 仅用 ≤ date 的公告)
+          2. is_ann_day            — 当日是否为新公告日 (跳变检测, 二元)
+          3. ann_count_60d         — 近 60 日公告次数 (跳变检测后 rolling sum)
+          4. exp_days_to_next_ann  — 基于个股历史公告节奏预估距下次公告天数 (PIT)
+
+        exp_days_to_next_ann 逻辑:
+          - 收集 ≤ 当前日期 的历史公告月份
+          - 找到下一个该股票历史上曾公告过的月份
+          - 预估日 = 该月份历史公告日的中位数
+          - 返回 (预估公告日 - 当前日期).days
+          - IC=-0.022, ICIR=-0.11 (公告前买入预期效应)
 
         上游列: announce_date (datetime64[ns])
-        NaN 率高时 (当前 ~99%) 特征填 NaN, LightGBM 自行处理.
+        NaN 率高时 (fina_indicator 覆盖不全) 特征填 NaN, LightGBM 自行处理.
         """
+        import calendar
+
+        out_cols = (
+            "days_since_last_ann",
+            "is_ann_day",
+            "ann_count_60d",
+            "exp_days_to_next_ann",
+        )
+
         if "announce_date" not in df.columns:
-            for c in ("days_since_last_ann", "ann_count_60d", "is_ann_day"):
+            for c in out_cols:
                 df[c] = np.nan
             return df
 
         def _per_stock(g: pd.DataFrame) -> pd.DataFrame:
             g = g.sort_values("date")
             ann_dt = pd.to_datetime(g["announce_date"])
-            # PIT: 仅用 <=当前日期 的公告
+
+            # ── 跳变检测: announce_date 变化的那一天才是真正的公告日 ──
+            prev_ann = ann_dt.shift(1)
+            is_new = ann_dt.notna() & (ann_dt != prev_ann)
+
+            # PIT: 仅用 <=当前日期 的公告 (merge_asof 已保证, 但二次防护)
             last_ann = ann_dt.where(ann_dt <= g["date"]).ffill()
             g["days_since_last_ann"] = (g["date"] - last_ann).dt.days
-            # 公告频率: 近 60 日有公告的交易日数
+
+            # is_ann_day: 仅跳变当天为 1 (修复: 原 .notna() 导致阶梯内全为 1)
+            g["is_ann_day"] = is_new.astype(int)
+
+            # ann_count_60d: 近 60 日真实公告次数 (跳变检测后 rolling sum)
             g["ann_count_60d"] = (
-                ann_dt.notna().astype(int).rolling(60, min_periods=1).sum()
+                is_new.astype(int).rolling(60, min_periods=1).sum()
             )
-            g["is_ann_day"] = ann_dt.notna().astype(int)
+
+            # ── exp_days_to_next_ann: 基于历史公告节奏预估 (PIT 安全) ──
+            # 收集历史公告月份/日, 预估下次公告日
+            ann_months_days: dict[int, list[int]] = {}
+            exp_days_arr = np.full(len(g), np.nan)
+
+            dates = g["date"].values
+            is_new_vals = is_new.values
+            ann_dt_vals = ann_dt.values
+
+            for i in range(len(g)):
+                # 更新历史公告模式 (只用 ≤ 当前日期 的公告)
+                if is_new_vals[i] and not pd.isna(ann_dt_vals[i]):
+                    ann_ts = pd.Timestamp(ann_dt_vals[i])
+                    m = ann_ts.month
+                    d = ann_ts.day
+                    if m not in ann_months_days:
+                        ann_months_days[m] = []
+                    ann_months_days[m].append(d)
+
+                # 预估下次公告日
+                if ann_months_days:
+                    cur_date = pd.Timestamp(dates[i])
+                    cm = cur_date.month
+                    cy = cur_date.year
+
+                    for offset in range(13):
+                        target_m = ((cm - 1 + offset) % 12) + 1
+                        if target_m not in ann_months_days:
+                            continue
+
+                        est_day = int(
+                            np.median(ann_months_days[target_m])
+                        )
+                        if target_m >= cm:
+                            target_y = cy
+                        else:
+                            target_y = cy + 1
+
+                        max_day = calendar.monthrange(target_y, target_m)[1]
+                        est_day = min(est_day, max_day)
+                        est_date = pd.Timestamp(target_y, target_m, est_day)
+
+                        if est_date > cur_date:
+                            exp_days_arr[i] = (est_date - cur_date).days
+                            break
+                        elif offset == 0:
+                            # 同月但已过, 尝试明年
+                            target_y = cy + 1
+                            est_date = pd.Timestamp(
+                                target_y, target_m, est_day
+                            )
+                            exp_days_arr[i] = (est_date - cur_date).days
+                            break
+
+            g["exp_days_to_next_ann"] = exp_days_arr
             return g
 
         return _apply_per_stock(df, _per_stock)

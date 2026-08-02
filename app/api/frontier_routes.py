@@ -19,6 +19,7 @@ from app.pipeline1.backtest_v35 import BacktestEngineV35, BacktestProtocol
 from app.pipeline1.param_tuner import ParamTuner
 from app.rules.config import TUNABLE_BOUNDS, Config
 from app.streamlit import data_service as ds
+from config.settings import PANEL_V3_FALLBACK, PANEL_V3_PATH
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/frontier", tags=["frontier"])
@@ -590,11 +591,71 @@ def get_prediction_quality(limit: int = 60) -> dict:
 # ============================================================
 # Pipeline 触发 (每日数据追加 + 预测)
 # ============================================================
-PANEL_PATHS = [
-    "data/panel_full_enriched_v3.parquet",
-    "data/panel_full_enriched_v2.parquet",
-]
+PANEL_PATHS = [str(PANEL_V3_PATH), str(PANEL_V3_FALLBACK)]
 MODEL_DIR = "models/pipeline1"
+
+# ── Pipeline subprocess runner ────────────────────────────────
+# Tracks background execution of _daily_fetch.py / run_announcement_pipeline.py.
+# Both scheduled tasks and manual triggers update the same V3 parquet;
+# the frontend polls /pipeline/status (panel_mtime) to detect changes.
+import subprocess as _subprocess  # noqa: E402
+import threading as _threading  # noqa: E402
+from config.settings import PROJECT_ROOT as _PROJECT_ROOT  # noqa: E402
+
+_PIPELINE_SCRIPTS = {
+    "daily_fetch": str(_PROJECT_ROOT / "_daily_fetch.py"),
+    "announcement": str(_PROJECT_ROOT / "scripts" / "run_announcement_pipeline.py"),
+}
+
+# task_id -> {status, started_at, finished_at, returncode, stdout, stderr}
+_pipeline_tasks: dict[str, dict] = {}
+_pipeline_lock = _threading.Lock()
+
+
+class TriggerRequest(BaseModel):
+    script: str  # "daily_fetch" | "announcement"
+    trade_date: str | None = None  # YYYYMMDD, None=今天
+
+
+def _run_pipeline_subprocess(task_id: str, script_path: str, args: list[str]) -> None:
+    """Run a pipeline script in a background thread, store result in _pipeline_tasks."""
+    try:
+        proc = _subprocess.run(
+            ["python", script_path] + args,
+            capture_output=True,
+            text=True,
+            timeout=7200,  # 2h
+            cwd=str(_PROJECT_ROOT),
+        )
+        with _pipeline_lock:
+            _pipeline_tasks[task_id] = {
+                **_pipeline_tasks.get(task_id, {}),
+                "status": "done" if proc.returncode == 0 else "failed",
+                "finished_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "returncode": proc.returncode,
+                "stdout": proc.stdout[-5000:] if proc.stdout else "",
+                "stderr": proc.stderr[-3000:] if proc.stderr else "",
+            }
+    except _subprocess.TimeoutExpired:
+        with _pipeline_lock:
+            _pipeline_tasks[task_id] = {
+                **_pipeline_tasks.get(task_id, {}),
+                "status": "failed",
+                "finished_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "returncode": -1,
+                "stdout": "",
+                "stderr": "Pipeline timed out (2h)",
+            }
+    except Exception as exc:
+        with _pipeline_lock:
+            _pipeline_tasks[task_id] = {
+                **_pipeline_tasks.get(task_id, {}),
+                "status": "failed",
+                "finished_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "returncode": -1,
+                "stdout": "",
+                "stderr": str(exc),
+            }
 
 
 class AppendDailyRequest(BaseModel):
@@ -605,7 +666,7 @@ class AppendDailyRequest(BaseModel):
 
 @router.get("/pipeline/status")
 def get_pipeline_status() -> dict:
-    """面板 + 模型 + 清单状态快照."""
+    """面板 + 模型 + 清单状态快照 (含 panel_mtime 用于变更检测)."""
     import os
 
     # 面板状态
@@ -614,6 +675,7 @@ def get_pipeline_status() -> dict:
         if os.path.exists(path):
             try:
                 df = pd.read_parquet(path, columns=["symbol", "date"])
+                mtime_ts = os.path.getmtime(path)
                 panel_info = {
                     "exists": True,
                     "path": path,
@@ -622,6 +684,10 @@ def get_pipeline_status() -> dict:
                     "last_date": str(df["date"].max().strftime("%Y-%m-%d")),
                     "first_date": str(df["date"].min().strftime("%Y-%m-%d")),
                     "size_mb": round(os.path.getsize(path) / 1e6, 1),
+                    "panel_mtime": datetime.fromtimestamp(mtime_ts).strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                    "panel_mtime_epoch": mtime_ts,
                 }
                 break
             except Exception as exc:
@@ -656,6 +722,76 @@ def get_pipeline_status() -> dict:
         "latest_list_date": list_dates[0] if list_dates else None,
         "list_count": len(list_dates),
     }
+
+
+@router.post("/pipeline/trigger")
+def trigger_pipeline_script(req: TriggerRequest) -> dict:
+    """Trigger _daily_fetch.py or run_announcement_pipeline.py as background subprocess.
+
+    Args:
+        req.script: "daily_fetch" or "announcement"
+        req.trade_date: YYYYMMDD (optional, default=today)
+
+    Returns:
+        {"task_id": str, "status": "running"}
+    """
+    import os
+
+    script_key = req.script
+    if script_key not in _PIPELINE_SCRIPTS:
+        raise HTTPException(400, f"Unknown script: {script_key}")
+
+    script_path = _PIPELINE_SCRIPTS[script_key]
+    if not os.path.exists(script_path):
+        raise HTTPException(500, f"Script not found: {script_path}")
+
+    # Prevent duplicate concurrent runs of the same script
+    task_id = script_key  # one task per script type
+    with _pipeline_lock:
+        existing = _pipeline_tasks.get(task_id, {})
+        if existing.get("status") == "running":
+            raise HTTPException(
+                409,
+                f"{script_key} is already running (started {existing.get('started_at')})",
+            )
+
+    args: list[str] = []
+    if req.trade_date:
+        if script_key == "announcement":
+            args = ["--date", req.trade_date]
+        else:
+            args = [req.trade_date]
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with _pipeline_lock:
+        _pipeline_tasks[task_id] = {
+            "status": "running",
+            "started_at": now_str,
+            "finished_at": None,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "",
+            "script": script_key,
+            "script_path": script_path,
+        }
+
+    thread = _threading.Thread(
+        target=_run_pipeline_subprocess,
+        args=(task_id, script_path, args),
+        daemon=True,
+    )
+    thread.start()
+
+    logger.info("[pipeline/trigger] %s started (task_id=%s)", script_key, task_id)
+    return {"task_id": task_id, "status": "running", "started_at": now_str}
+
+
+@router.get("/pipeline/task-status")
+def get_task_status() -> dict:
+    """Return status of all pipeline subprocess tasks (running/done/failed)."""
+    with _pipeline_lock:
+        tasks = dict(_pipeline_tasks)
+    return {"tasks": tasks}
 
 
 @router.post("/pipeline/append-daily")
