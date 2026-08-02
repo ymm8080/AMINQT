@@ -44,6 +44,7 @@ CAP_POSITION_REDUCED = 0.3
 SCHEMA_FIELDS = [
     "symbol",
     "board",
+    "day_change",
     "pred_ret_1d",
     "pred_ret_3d",
     "pred_ret_5d",
@@ -424,6 +425,7 @@ class ListGenerator:
             if col not in final.columns:
                 final[col] = 0
         for col in (
+            "day_change",
             "pred_q10",
             "pred_q50",
             "pred_q90",
