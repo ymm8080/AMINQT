@@ -508,6 +508,49 @@ def load_backtest_panel(days: int = 750) -> pd.DataFrame | None:
         return None
 
 
+def load_predictions_from_db(
+    dates: list[pd.Timestamp],
+) -> pd.DataFrame | None:
+    """从 PredictionDB (SQLite) 加载 pipeline 预测.
+
+    预测来自 predict_runner.run_prediction() → PredictionDB.insert_run().
+    包含: symbol, date, score, prob_up, pred_ret_3d 等.
+
+    Args:
+        dates: 面板中的日期列表.
+
+    Returns:
+        DataFrame (date, symbol, score, prob_up, pred_ret_3d) 或 None.
+    """
+    try:
+        from app.pipeline1.prediction_db import PredictionDB
+
+        db = PredictionDB()
+        date_strs = [d.strftime("%Y%m%d") for d in dates]
+        import sqlite3
+
+        with sqlite3.connect(db.path) as conn:
+            placeholders = ",".join("?" * len(date_strs))
+            df = pd.read_sql(
+                f"""SELECT date, symbol, score, prob_up,
+                       pred_ret_1d, pred_ret_3d, pred_ret_5d
+                    FROM prediction_stocks
+                    WHERE date IN ({placeholders})""",
+                conn,
+                params=date_strs,
+            )
+        if df.empty:
+            return None
+        df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
+        _data_logger.info(
+            "从 PredictionDB 加载 %d 条预测 (%d 日期)", len(df), df["date"].nunique()
+        )
+        return df
+    except Exception as exc:
+        _data_logger.warning("加载预测失败, 回退 pctChg proxy: %s", exc)
+        return None
+
+
 def panel_to_v52_format(
     panel: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame, list, str] | None:
@@ -561,24 +604,71 @@ def panel_to_v52_format(
             price_df["circ_mv"] = df["circ_mv"]
         else:
             price_df["circ_mv"] = price_df["avg_amount_20d"] * 20
-        # 涨跌停 (用 pre_close + 10% 近似, 20cm 板块简化)
-        price_df["up_limit"] = (price_df["pre_close"] * 1.1).round(2)
-        price_df["down_limit"] = (price_df["pre_close"] * 0.9).round(2)
-        # 状态标记
-        price_df["is_halt"] = 0
-        price_df["is_st"] = 0
+        # 涨跌停: 优先使用面板的 up_limit_raw/down_limit_raw, 回退到 pre_close*1.1
+        if "up_limit_raw" in df.columns:
+            price_df["up_limit"] = df["up_limit_raw"]
+        else:
+            price_df["up_limit"] = (price_df["pre_close"] * 1.1).round(2)
+        if "down_limit_raw" in df.columns:
+            price_df["down_limit"] = df["down_limit_raw"]
+        else:
+            price_df["down_limit"] = (price_df["pre_close"] * 0.9).round(2)
+        # 状态标记: 优先使用面板的 is_suspended/is_st, 回退到 0
+        price_df["is_halt"] = (
+            df["is_suspended"].astype(int) if "is_suspended" in df.columns else 0
+        )
+        price_df["is_st"] = df["is_st"].astype(int) if "is_st" in df.columns else 0
+        # circ_mv NaN 填 0, 防止 NaN < 2e9 返回 False 绕过 BacktestEngine 流动性过滤
+        price_df["circ_mv"] = price_df["circ_mv"].fillna(0)
 
         # ---- 构建 pred_df ----
-        # 使用面板中可用的预测列
+        # 优先从 PredictionDB 加载 pipeline 预测; 缺失时用 pctChg 近似
         pred_cols_map = {
             "score": "score_h2",
             "prob_up": "prob_up_h2",
             "pred_ret_3d": "pred_ret_h2",
         }
         pred_df = df[["date", "stock"]].copy()
+        has_prediction = any(src in df.columns for src in pred_cols_map)
+        # 尝试从 PredictionDB 加载 (pipeline 真实预测)
+        if not has_prediction:
+            pred_db = load_predictions_from_db(sorted(df["date"].unique()))
+            if pred_db is not None and not pred_db.empty:
+                pred_db = pred_db.rename(columns={"symbol": "stock"})
+                df = df.merge(
+                    pred_db[["date", "stock", "score", "prob_up", "pred_ret_3d"]],
+                    on=["date", "stock"],
+                    how="left",
+                    suffixes=("", "_pred"),
+                )
+                for src in pred_cols_map:
+                    if src not in df.columns and f"{src}_pred" in df.columns:
+                        df[src] = df[f"{src}_pred"]
+                has_prediction = any(src in df.columns for src in pred_cols_map)
+                _data_logger.info("已 merge pipeline 预测: %d 条", len(pred_db))
+        # DB 预测只覆盖部分日期/股票, 对 NaN 补 pctChg 近似
+        if has_prediction and "pctChg" in df.columns:
+            pctchg = df["pctChg"].astype(float)
+            if "score" in df.columns:
+                df["score"] = df["score"].fillna(pctchg / 100.0)
+            if "prob_up" in df.columns:
+                df["prob_up"] = df["prob_up"].fillna(
+                    (pctchg > 0).astype(float) * 0.6 + 0.4
+                )
+            if "pred_ret_3d" in df.columns:
+                df["pred_ret_3d"] = df["pred_ret_3d"].fillna(pctchg / 100.0)
         for src, dst in pred_cols_map.items():
             if src in df.columns:
                 pred_df[dst] = df[src].astype(float)
+            elif not has_prediction and "pctChg" in df.columns:
+                if dst == "pred_ret_h2":
+                    pred_df[dst] = df["pctChg"].astype(float) / 100.0
+                elif dst == "prob_up_h2":
+                    pred_df[dst] = (df["pctChg"].astype(float) > 0).astype(
+                        float
+                    ) * 0.6 + 0.4
+                elif dst == "score_h2":
+                    pred_df[dst] = df["pctChg"].astype(float) / 100.0
             else:
                 pred_df[dst] = 0.5 if "prob" in dst else 0.0
         # 如果没有 score 列, 用 prob_up 近似
@@ -619,6 +709,37 @@ def panel_to_v35_lists(
         # 构建每日清单: 每个交易日取 score 前 30 只
         daily_lists = {}
         score_col = "score" if "score" in df.columns else "prob_up"
+        has_score = score_col in df.columns
+        # 无预测列时, 优先从 PredictionDB 加载 pipeline 预测
+        if not has_score:
+            pred_db = load_predictions_from_db(sorted(df["date"].unique()))
+            if pred_db is not None and not pred_db.empty:
+                df = df.merge(
+                    pred_db[["date", "symbol", "score", "prob_up", "pred_ret_3d"]],
+                    on=["date", "symbol"],
+                    how="left",
+                    suffixes=("", "_pred"),
+                )
+                if "score_pred" in df.columns:
+                    df["score"] = df["score"].fillna(df["score_pred"])
+                if "prob_up_pred" in df.columns:
+                    df["prob_up"] = df["prob_up"].fillna(df["prob_up_pred"])
+                score_col = "score" if "score" in df.columns else "prob_up"
+                has_score = score_col in df.columns
+                _data_logger.info("V35: 已 merge pipeline 预测: %d 条", len(pred_db))
+        # DB 预测覆盖部分股票, 对 NaN 补 pctChg
+        if has_score and "pctChg" in df.columns:
+            if "score" in df.columns:
+                df["score"] = df["score"].fillna(df["pctChg"].astype(float))
+            if "prob_up" in df.columns:
+                df["prob_up"] = df["prob_up"].fillna(
+                    (df["pctChg"].astype(float) > 0).astype(float) * 0.6 + 0.4
+                )
+        # 仍无预测列时, 用 pctChg 作为 score 近似
+        if not has_score and "pctChg" in df.columns:
+            df["_proxy_score"] = df["pctChg"].astype(float)
+            score_col = "_proxy_score"
+            has_score = True
         for d, g in df.groupby("date"):
             top = g.nlargest(30, score_col) if score_col in g.columns else g.head(30)
             lst = top[["symbol"]].copy()

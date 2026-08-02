@@ -111,6 +111,8 @@ export interface PipelinePanelStatus {
   last_date?: string
   first_date?: string
   size_mb?: number
+  panel_mtime?: string
+  panel_mtime_epoch?: number
   error?: string
 }
 
@@ -125,6 +127,21 @@ export interface PipelineStatus {
   models: Record<string, PipelineModelStatus>
   latest_list_date: string | null
   list_count: number
+}
+
+export interface PipelineTaskStatus {
+  status: string  // "running" | "done" | "failed"
+  started_at: string | null
+  finished_at: string | null
+  returncode: number | null
+  stdout: string
+  stderr: string
+  script: string
+  script_path: string
+}
+
+export interface PipelineTaskStatusResponse {
+  tasks: Record<string, PipelineTaskStatus>
 }
 
 export interface AppendDailyResult {
@@ -227,6 +244,13 @@ export const api = {
   predictionQuality: () => req<{ items: { date: string; n: number; direction_accuracy: number; bias_1d: number; mae_1d: number }[] }>('/prediction/quality'),
   // pipeline trigger
   pipelineStatus: () => req<PipelineStatus>('/pipeline/status'),
+  triggerPipeline: (script: string, trade_date?: string) =>
+    req<{ task_id: string; status: string; started_at: string }>('/pipeline/trigger', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ script, trade_date: trade_date || null }),
+    }),
+  taskStatus: () => req<PipelineTaskStatusResponse>('/pipeline/task-status'),
   appendDaily: (params: { trade_date?: string; market_state?: string; save_panel?: boolean }) =>
     req<AppendDailyResult>('/pipeline/append-daily', {
       method: 'POST',
