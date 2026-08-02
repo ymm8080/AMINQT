@@ -94,6 +94,13 @@ NON_FEATURE_COLS = {
     "market_state",
     "schema_version",
     "ts_code",
+    "sw_l1_name",
+    "sw_l2_name",
+    "sw_l3_name",
+    # Eval-driven noise drops (|ICIR| < 0.05 across T+1/T+3/T+5)
+    "sw_l2_pe",
+    "sw_l3_pe",
+    "sw_l3_ret_1d",
 }
 
 

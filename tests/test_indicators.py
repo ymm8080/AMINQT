@@ -247,7 +247,13 @@ class TestDualTrackTrainer:
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer()
         trained = trainer.train_window(df, "main", ["f1", "f2"])
-        assert set(trained["models"]) == {"1d_reg", "1d_cls", "2d_reg", "3d_reg", "5d_reg"}
+        assert set(trained["models"]) == {
+            "1d_reg",
+            "1d_cls",
+            "2d_reg",
+            "3d_reg",
+            "5d_reg",
+        }
         pred = trained["models"]["1d_reg"][0].predict(df[["f1", "f2"]].tail(5))
         assert len(pred) == 5
         oos = trainer.validate_oos(trained)

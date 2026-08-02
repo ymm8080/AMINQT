@@ -336,7 +336,6 @@ class TestHorizonWeights:
         oos = trainer.validate_oos(trained)
         assert "weighted_ic" in oos
         expected = sum(
-            LABEL_WEIGHTS[k] * oos["ics"].get(f"{k}d_reg", 0.0)
-            for k in LABEL_WEIGHTS
+            LABEL_WEIGHTS[k] * oos["ics"].get(f"{k}d_reg", 0.0) for k in LABEL_WEIGHTS
         ) / sum(LABEL_WEIGHTS.values())
         assert oos["weighted_ic"] == pytest.approx(expected, abs=1e-6)
