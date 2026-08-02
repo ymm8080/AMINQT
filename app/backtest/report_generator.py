@@ -87,22 +87,40 @@ class ReportGenerator:
         # JSON 报告 (结构化数据, 便于程序读取)
         json_path = basepath + ".json"
         self._write_json(
-            json_path, mode_name, result_df, trades_df, metrics,
-            signal_report, comparison, data_version_hash,
+            json_path,
+            mode_name,
+            result_df,
+            trades_df,
+            metrics,
+            signal_report,
+            comparison,
+            data_version_hash,
         )
 
         # 文本报告 (人类可读)
         txt_path = basepath + ".txt"
         self._write_text(
-            txt_path, mode_name, result_df, trades_df, metrics,
-            signal_report, comparison, data_version_hash,
+            txt_path,
+            mode_name,
+            result_df,
+            trades_df,
+            metrics,
+            signal_report,
+            comparison,
+            data_version_hash,
         )
 
         # HTML 报告 (可视化)
         html_path = basepath + ".html"
         self._write_html(
-            html_path, mode_name, result_df, trades_df, metrics,
-            signal_report, comparison, data_version_hash,
+            html_path,
+            mode_name,
+            result_df,
+            trades_df,
+            metrics,
+            signal_report,
+            comparison,
+            data_version_hash,
         )
 
         logger.info("报告生成完成: %s.{json,txt,html}", basepath)
@@ -130,8 +148,12 @@ class ReportGenerator:
                     "disclaimer": _APPROX_MODE_DISCLAIMER,
                 },
                 "metrics": self._sanitize_for_json(metrics),
-                "signal_report": self._sanitize_for_json(signal_report) if signal_report else None,
-                "comparison": self._sanitize_for_json(comparison) if comparison else None,
+                "signal_report": self._sanitize_for_json(signal_report)
+                if signal_report
+                else None,
+                "comparison": self._sanitize_for_json(comparison)
+                if comparison
+                else None,
                 "trades_summary": self._trades_summary(trades_df),
                 "nav_summary": self._nav_summary(result_df),
             }
@@ -197,7 +219,9 @@ class ReportGenerator:
         if ts["total_trades"] > 0 and not trades_df.empty:
             lines.append("")
             lines.append("  最近 10 笔交易:")
-            lines.append(f"  {'日期':<12} {'股票':<8} {'买价':>8} {'卖价':>8} {'盈亏%':>8} {'原因':<12}")
+            lines.append(
+                f"  {'日期':<12} {'股票':<8} {'买价':>8} {'卖价':>8} {'盈亏%':>8} {'原因':<12}"
+            )
             recent = trades_df.tail(10)
             for _, t in recent.iterrows():
                 lines.append(
@@ -233,7 +257,9 @@ class ReportGenerator:
                 lines.append(f"    Rank IC 标准差: {sr.get('rank_ic_std', 0):.4f}")
                 lines.append(f"    Rank IR:        {sr.get('rank_ir', 0):.4f}")
                 lines.append(f"    命中率:         {sr.get('hit_rate', 0):.4%}")
-                lines.append(f"    成交量确认率:   {sr.get('volume_confirmation_rate', 0):.4%}")
+                lines.append(
+                    f"    成交量确认率:   {sr.get('volume_confirmation_rate', 0):.4%}"
+                )
                 ts_data = sr.get("trigger_stats", {})
                 if ts_data:
                     lines.append(f"    触发统计:       {ts_data}")
@@ -244,14 +270,26 @@ class ReportGenerator:
             lines.append("─" * 50)
             lines.append("  5. 对比分析 (Squad vs Sniper)")
             lines.append("─" * 50)
-            lines.append(f"  集中度风险系数:   {comparison.get('concentration_risk_ratio', 0):.4f}")
+            lines.append(
+                f"  集中度风险系数:   {comparison.get('concentration_risk_ratio', 0):.4f}"
+            )
             lines.append(f"  Squad 夏普:       {comparison.get('squad_sharpe', 0):.4f}")
-            lines.append(f"  Sniper 夏普:      {comparison.get('sniper_sharpe', 0):.4f}")
+            lines.append(
+                f"  Sniper 夏普:      {comparison.get('sniper_sharpe', 0):.4f}"
+            )
             lines.append(f"  Squad 最大回撤:   {comparison.get('squad_max_dd', 0):.4%}")
-            lines.append(f"  Sniper 最大回撤:  {comparison.get('sniper_max_dd', 0):.4%}")
-            lines.append(f"  Squad 总收益:     {comparison.get('squad_total_return', 0):.4%}")
-            lines.append(f"  Sniper 总收益:    {comparison.get('sniper_total_return', 0):.4%}")
-            lines.append(f"  建议:             {comparison.get('recommendation', 'N/A')}")
+            lines.append(
+                f"  Sniper 最大回撤:  {comparison.get('sniper_max_dd', 0):.4%}"
+            )
+            lines.append(
+                f"  Squad 总收益:     {comparison.get('squad_total_return', 0):.4%}"
+            )
+            lines.append(
+                f"  Sniper 总收益:    {comparison.get('sniper_total_return', 0):.4%}"
+            )
+            lines.append(
+                f"  建议:             {comparison.get('recommendation', 'N/A')}"
+            )
             lines.append("")
 
         # 6. 审计信息
@@ -300,7 +338,9 @@ class ReportGenerator:
                     nav_data["date"] = nav_data["date"].astype(str).str[:10]
                 for _, row in nav_data.iterrows():
                     d = row.get("date", "") if "date" in nav_data.columns else ""
-                    nav_rows += f"      <tr><td>{d}</td><td>{row['nav']:.2f}</td></tr>\n"
+                    nav_rows += (
+                        f"      <tr><td>{d}</td><td>{row['nav']:.2f}</td></tr>\n"
+                    )
 
             trade_rows = ""
             if not trades_df.empty:
@@ -378,14 +418,14 @@ class ReportGenerator:
 
 <h2>1. 绩效概览</h2>
 <div>
-  <div class="metric-card"><div class="metric-value">{metrics.get('total_return', 0):.2%}</div><div class="metric-label">总收益率</div></div>
-  <div class="metric-card"><div class="metric-value">{metrics.get('annual_return', 0):.2%}</div><div class="metric-label">年化收益率</div></div>
-  <div class="metric-card"><div class="metric-value">{metrics.get('sharpe_ratio', 0):.2f}</div><div class="metric-label">夏普比率</div></div>
-  <div class="metric-card"><div class="metric-value {('negative' if metrics.get('max_drawdown', 0) < 0 else '')}">{metrics.get('max_drawdown', 0):.2%}</div><div class="metric-label">最大回撤</div></div>
-  <div class="metric-card"><div class="metric-value">{metrics.get('win_rate', 0):.2%}</div><div class="metric-label">胜率</div></div>
-  <div class="metric-card"><div class="metric-value">{metrics.get('calmar_ratio', 0):.2f}</div><div class="metric-label">Calmar</div></div>
-  <div class="metric-card"><div class="metric-value">{metrics.get('num_trades', 0)}</div><div class="metric-label">总交易数</div></div>
-  <div class="metric-card"><div class="metric-value">{metrics.get('daily_tradeable_rate', 0):.2%}</div><div class="metric-label">日可交易率</div></div>
+  <div class="metric-card"><div class="metric-value">{metrics.get("total_return", 0):.2%}</div><div class="metric-label">总收益率</div></div>
+  <div class="metric-card"><div class="metric-value">{metrics.get("annual_return", 0):.2%}</div><div class="metric-label">年化收益率</div></div>
+  <div class="metric-card"><div class="metric-value">{metrics.get("sharpe_ratio", 0):.2f}</div><div class="metric-label">夏普比率</div></div>
+  <div class="metric-card"><div class="metric-value {("negative" if metrics.get("max_drawdown", 0) < 0 else "")}">{metrics.get("max_drawdown", 0):.2%}</div><div class="metric-label">最大回撤</div></div>
+  <div class="metric-card"><div class="metric-value">{metrics.get("win_rate", 0):.2%}</div><div class="metric-label">胜率</div></div>
+  <div class="metric-card"><div class="metric-value">{metrics.get("calmar_ratio", 0):.2f}</div><div class="metric-label">Calmar</div></div>
+  <div class="metric-card"><div class="metric-value">{metrics.get("num_trades", 0)}</div><div class="metric-label">总交易数</div></div>
+  <div class="metric-card"><div class="metric-value">{metrics.get("daily_tradeable_rate", 0):.2%}</div><div class="metric-label">日可交易率</div></div>
 </div>
 
 <h2>2. 交易明细 (最近20笔)</h2>
@@ -435,7 +475,11 @@ class ReportGenerator:
                 "swap_trades": 0,
             }
         total = len(trades_df)
-        swap = int(trades_df.get("is_swap", pd.Series(dtype=int)).sum()) if "is_swap" in trades_df.columns else 0
+        swap = (
+            int(trades_df.get("is_swap", pd.Series(dtype=int)).sum())
+            if "is_swap" in trades_df.columns
+            else 0
+        )
         return {
             "total_trades": total,
             "buy_trades": total,  # 每条记录是一笔完整交易 (买+卖)

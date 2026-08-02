@@ -50,9 +50,7 @@ def render() -> None:
     # ---------- Tab 1: 规则引擎 Config (可编辑) ----------
     with tab_rules:
         st.subheader("规则引擎参数 ([TUNABLE] 可回测调优)")
-        st.caption(
-            "可直接编辑后保存, 或通过 回测中心 → 参数调优 自动写回"
-        )
+        st.caption("可直接编辑后保存, 或通过 回测中心 → 参数调优 自动写回")
         cfg = Config()
         cols = st.columns(3)
         edited_values = {}

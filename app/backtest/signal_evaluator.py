@@ -123,23 +123,36 @@ class SignalEvaluator:
             if simulate_trigger:
                 if triggered:
                     entry_price = trigger_price * slippage_buy
-                    actual_ret = close_price / entry_price - 1.0 if entry_price > 0 else np.nan
+                    actual_ret = (
+                        close_price / entry_price - 1.0 if entry_price > 0 else np.nan
+                    )
                 else:
                     actual_ret = np.nan
             else:
-                actual_ret = close_price / open_price - 1.0 if open_price > 0 else np.nan
+                actual_ret = (
+                    close_price / open_price - 1.0 if open_price > 0 else np.nan
+                )
 
-            records.append({
-                "date": signal_date, "stock": stock, "score": score,
-                "prob_up": prob_up, "pred_ret": pred_ret,
-                "actual_ret": actual_ret, "triggered": triggered,
-                "open_triggered": open_triggered, "gap_return": gap_return,
-            })
+            records.append(
+                {
+                    "date": signal_date,
+                    "stock": stock,
+                    "score": score,
+                    "prob_up": prob_up,
+                    "pred_ret": pred_ret,
+                    "actual_ret": actual_ret,
+                    "triggered": triggered,
+                    "open_triggered": open_triggered,
+                    "gap_return": gap_return,
+                }
+            )
 
         return pd.DataFrame(records)
 
     def calc_rank_ic(
-        self, score_col: str = "score_h2", horizon: int = 2,
+        self,
+        score_col: str = "score_h2",
+        horizon: int = 2,
         simulate_trigger: bool = True,
     ) -> pd.DataFrame:
         """计算每日 Top5 内部 Rank IC.
@@ -167,8 +180,11 @@ class SignalEvaluator:
         return pd.DataFrame(records)
 
     def calc_topk_hit_rate(
-        self, score_col: str = "score_h2", prob_col: str = "prob_up_h2",
-        horizon: int = 2, k: int = 5,
+        self,
+        score_col: str = "score_h2",
+        prob_col: str = "prob_up_h2",
+        horizon: int = 2,
+        k: int = 5,
     ) -> Dict:
         """TopK 命中率统计."""
         df = self._calc_actual_returns(
@@ -202,10 +218,18 @@ class SignalEvaluator:
                 top1_returns.append(float(top1_valid.iloc[0]))
 
         return {
-            "top1_hit_rate": float(np.mean(hit_rates["top1_hit_rate"])) if "top1_hit_rate" in hit_rates else 0.0,
-            "top2_hit_rate": float(np.mean(hit_rates["top2_hit_rate"])) if "top2_hit_rate" in hit_rates else 0.0,
-            "top3_hit_rate": float(np.mean(hit_rates["top3_hit_rate"])) if "top3_hit_rate" in hit_rates else 0.0,
-            "top5_hit_rate": float(np.mean(hit_rates["top5_hit_rate"])) if "top5_hit_rate" in hit_rates else 0.0,
+            "top1_hit_rate": float(np.mean(hit_rates["top1_hit_rate"]))
+            if "top1_hit_rate" in hit_rates
+            else 0.0,
+            "top2_hit_rate": float(np.mean(hit_rates["top2_hit_rate"]))
+            if "top2_hit_rate" in hit_rates
+            else 0.0,
+            "top3_hit_rate": float(np.mean(hit_rates["top3_hit_rate"]))
+            if "top3_hit_rate" in hit_rates
+            else 0.0,
+            "top5_hit_rate": float(np.mean(hit_rates["top5_hit_rate"]))
+            if "top5_hit_rate" in hit_rates
+            else 0.0,
             "top5_avg_return": float(np.mean(top5_returns)) if top5_returns else 0.0,
             "top1_avg_return": float(np.mean(top1_returns)) if top1_returns else 0.0,
         }
@@ -214,14 +238,20 @@ class SignalEvaluator:
     def _empty_hit_rate() -> Dict:
         """空命中率结果."""
         return {
-            "top1_hit_rate": 0.0, "top2_hit_rate": 0.0,
-            "top3_hit_rate": 0.0, "top5_hit_rate": 0.0,
-            "top5_avg_return": 0.0, "top1_avg_return": 0.0,
+            "top1_hit_rate": 0.0,
+            "top2_hit_rate": 0.0,
+            "top3_hit_rate": 0.0,
+            "top5_hit_rate": 0.0,
+            "top5_avg_return": 0.0,
+            "top1_avg_return": 0.0,
         }
 
     def calc_trigger_stats(
-        self, score_col: str = "score_h2", prob_col: str = "prob_up_h2",
-        horizon: int = 2, k: int = 5,
+        self,
+        score_col: str = "score_h2",
+        prob_col: str = "prob_up_h2",
+        horizon: int = 2,
+        k: int = 5,
     ) -> Dict:
         """触发率统计."""
         df = self._calc_actual_returns(score_col, horizon, simulate_trigger=False)
@@ -255,17 +285,23 @@ class SignalEvaluator:
             "intraday_trigger_rate": _safe_div(
                 triggered_count - open_triggered_count, total
             ),
-            "triggered_avg_return": float(np.mean(triggered_returns)) if triggered_returns else 0.0,
-            "missed_avg_return": float(np.mean(missed_returns)) if missed_returns else 0.0,
+            "triggered_avg_return": float(np.mean(triggered_returns))
+            if triggered_returns
+            else 0.0,
+            "missed_avg_return": float(np.mean(missed_returns))
+            if missed_returns
+            else 0.0,
         }
 
     @staticmethod
     def _empty_trigger_stats() -> Dict:
         """空触发统计结果."""
         return {
-            "trigger_rate": 0.0, "open_trigger_rate": 0.0,
+            "trigger_rate": 0.0,
+            "open_trigger_rate": 0.0,
             "intraday_trigger_rate": 0.0,
-            "triggered_avg_return": 0.0, "missed_avg_return": 0.0,
+            "triggered_avg_return": 0.0,
+            "missed_avg_return": 0.0,
         }
 
     def calc_prediction_bias(
@@ -277,22 +313,44 @@ class SignalEvaluator:
             score_col, horizon, self.config.signal_simulate_trigger
         )
         if df.empty:
-            return {"mae": 0.0, "rmse": 0.0, "wmape": 0.0, "bias": 0.0, "correlation": 0.0}
+            return {
+                "mae": 0.0,
+                "rmse": 0.0,
+                "wmape": 0.0,
+                "bias": 0.0,
+                "correlation": 0.0,
+            }
 
         valid = df[["pred_ret", "actual_ret"]].dropna()
         if len(valid) < 2:
-            return {"mae": 0.0, "rmse": 0.0, "wmape": 0.0, "bias": 0.0, "correlation": 0.0}
+            return {
+                "mae": 0.0,
+                "rmse": 0.0,
+                "wmape": 0.0,
+                "bias": 0.0,
+                "correlation": 0.0,
+            }
 
         pred = valid["pred_ret"].values
         actual = valid["actual_ret"].values
         errors = pred - actual
         mae = float(np.mean(np.abs(errors)))
-        rmse = float(np.sqrt(np.mean(errors ** 2)))
+        rmse = float(np.sqrt(np.mean(errors**2)))
         wmape = _safe_div(float(np.sum(np.abs(errors))), float(np.sum(np.abs(actual))))
         bias = float(np.mean(errors))
-        correlation = float(np.corrcoef(pred, actual)[0, 1]) if np.std(pred) > 0 and np.std(actual) > 0 else 0.0
+        correlation = (
+            float(np.corrcoef(pred, actual)[0, 1])
+            if np.std(pred) > 0 and np.std(actual) > 0
+            else 0.0
+        )
 
-        return {"mae": mae, "rmse": rmse, "wmape": wmape, "bias": bias, "correlation": correlation}
+        return {
+            "mae": mae,
+            "rmse": rmse,
+            "wmape": wmape,
+            "bias": bias,
+            "correlation": correlation,
+        }
 
     def calc_prob_calibration(
         self, prob_col: str = "prob_up_h2", horizon: int = 2
@@ -307,28 +365,44 @@ class SignalEvaluator:
             score_col, horizon, self.config.signal_simulate_trigger
         )
         if df.empty:
-            return pd.DataFrame(columns=["prob_bin", "count", "actual_up_rate", "avg_return"])
+            return pd.DataFrame(
+                columns=["prob_bin", "count", "actual_up_rate", "avg_return"]
+            )
 
         valid = df[["prob_up", "actual_ret"]].dropna()
         if valid.empty:
-            return pd.DataFrame(columns=["prob_bin", "count", "actual_up_rate", "avg_return"])
+            return pd.DataFrame(
+                columns=["prob_bin", "count", "actual_up_rate", "avg_return"]
+            )
 
         bins = [0.0, 0.50, 0.55, 0.60, 0.70, 1.01]
         labels = ["<0.50", "0.50-0.55", "0.55-0.60", "0.60-0.70", "0.70+"]
         valid = valid.copy()
-        valid["prob_bin"] = pd.cut(valid["prob_up"], bins=bins, labels=labels, right=False)
+        valid["prob_bin"] = pd.cut(
+            valid["prob_up"], bins=bins, labels=labels, right=False
+        )
 
         records = []
         for label in labels:
             subset = valid[valid["prob_bin"] == label]
             if len(subset) == 0:
-                records.append({"prob_bin": label, "count": 0, "actual_up_rate": 0.0, "avg_return": 0.0})
+                records.append(
+                    {
+                        "prob_bin": label,
+                        "count": 0,
+                        "actual_up_rate": 0.0,
+                        "avg_return": 0.0,
+                    }
+                )
             else:
-                records.append({
-                    "prob_bin": label, "count": len(subset),
-                    "actual_up_rate": float((subset["actual_ret"] > 0).mean()),
-                    "avg_return": float(subset["actual_ret"].mean()),
-                })
+                records.append(
+                    {
+                        "prob_bin": label,
+                        "count": len(subset),
+                        "actual_up_rate": float((subset["actual_ret"] > 0).mean()),
+                        "avg_return": float(subset["actual_ret"].mean()),
+                    }
+                )
         return pd.DataFrame(records)
 
     def calc_gap_risk(self, score_col: str = "score_h2", k: int = 5) -> float:
@@ -407,15 +481,21 @@ class SignalEvaluator:
 
             logger.info("评估信号质量: H%d", horizon)
 
-            rank_ic_df = self.calc_rank_ic(score_col, horizon, self.config.signal_simulate_trigger)
+            rank_ic_df = self.calc_rank_ic(
+                score_col, horizon, self.config.signal_simulate_trigger
+            )
             hit_rate = self.calc_topk_hit_rate(score_col, prob_col, horizon)
             trigger_stats = self.calc_trigger_stats(score_col, prob_col, horizon)
             pred_bias = self.calc_prediction_bias(pred_col, horizon)
             calibration = self.calc_prob_calibration(prob_col, horizon)
             gap_risk = self.calc_gap_risk(score_col)
 
-            rank_ic_mean = float(rank_ic_df["rank_ic"].mean()) if not rank_ic_df.empty else 0.0
-            rank_ic_std = float(rank_ic_df["rank_ic"].std()) if not rank_ic_df.empty else 0.0
+            rank_ic_mean = (
+                float(rank_ic_df["rank_ic"].mean()) if not rank_ic_df.empty else 0.0
+            )
+            rank_ic_std = (
+                float(rank_ic_df["rank_ic"].std()) if not rank_ic_df.empty else 0.0
+            )
             rank_ir = _safe_div(rank_ic_mean, rank_ic_std)
 
             report[f"h{horizon}"] = {
@@ -427,7 +507,9 @@ class SignalEvaluator:
                 "prediction_bias": pred_bias,
                 "calibration": calibration.to_dict("records"),
                 "avg_gap_return": gap_risk,
-                "volume_confirmation_rate": self.calc_volume_confirmation_rate(score_col),
+                "volume_confirmation_rate": self.calc_volume_confirmation_rate(
+                    score_col
+                ),
             }
 
         logger.info("信号评估完成")

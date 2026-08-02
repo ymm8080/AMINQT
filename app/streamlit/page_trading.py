@@ -190,7 +190,9 @@ def render() -> None:
         signals = ds.load_real_signals()
         if not signals:
             signals = _demo_signals()
-            st.caption("⚠ 使用演示信号 — 真实信号需先运行 Pipeline-1 选股并标记 priority")
+            st.caption(
+                "⚠ 使用演示信号 — 真实信号需先运行 Pipeline-1 选股并标记 priority"
+            )
         render_signal_list(sm, om, signals)
 
     # ---------- 右栏: 持仓/委托/成交 ----------
@@ -223,16 +225,18 @@ def render() -> None:
         st.dataframe(log_df, use_container_width=True, hide_index=True)
     else:
         # 记录页面加载
-        ds.append_audit_log({
-            "时间": _dt.datetime.now().strftime("%H:%M:%S"),
-            "操作": "页面加载",
-            "代码": "-",
-            "方向": "-",
-            "价格": "-",
-            "数量": "-",
-            "结果": "OK",
-            "备注": "交易看板已接入状态机/委托管理器/真实信号",
-        })
+        ds.append_audit_log(
+            {
+                "时间": _dt.datetime.now().strftime("%H:%M:%S"),
+                "操作": "页面加载",
+                "代码": "-",
+                "方向": "-",
+                "价格": "-",
+                "数量": "-",
+                "结果": "OK",
+                "备注": "交易看板已接入状态机/委托管理器/真实信号",
+            }
+        )
         st.info("审计日志已初始化 — 后续操作将自动记录")
 
 

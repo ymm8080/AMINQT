@@ -97,7 +97,8 @@ class BacktestPipeline:
 
         logger.info(
             "BacktestPipeline 初始化: modes=%s, horizon=%d",
-            self.modes, self.horizon,
+            self.modes,
+            self.horizon,
         )
 
     def run(self) -> PipelineResult:
@@ -201,13 +202,19 @@ class BacktestPipeline:
 
         if not mode_results:
             return PipelineResult(
-                success=False, config=self.config, errors=errors,
+                success=False,
+                config=self.config,
+                errors=errors,
                 signal_report=signal_report,
             )
 
         # ── Step 6: 对比分析 (如果有两个以上模式) ──
         comparison: Optional[Dict[str, Any]] = None
-        if len(mode_results) >= 2 and "squad" in mode_results and "sniper" in mode_results:
+        if (
+            len(mode_results) >= 2
+            and "squad" in mode_results
+            and "sniper" in mode_results
+        ):
             try:
                 s_res, s_trades, s_metrics = mode_results["squad"]
                 n_res, n_trades, n_metrics = mode_results["sniper"]
@@ -286,6 +293,7 @@ class BacktestPipeline:
 
         # 为每个模式创建独立的配置副本
         from dataclasses import replace
+
         mode_config = replace(self.config, position_mode=mode)
 
         engine = BacktestEngine(

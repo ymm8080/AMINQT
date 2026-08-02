@@ -57,6 +57,7 @@ def main() -> int:
     logger.info("=" * 60)
 
     import yaml
+
     config_data = {}
     if os.path.exists(args.config):
         with open(args.config, encoding="utf-8") as f:
@@ -97,7 +98,9 @@ def main() -> int:
         if result.success:
             logger.info("回测完成!")
             for mode in modes:
-                metrics = result.squad_metrics if mode == "squad" else result.sniper_metrics
+                metrics = (
+                    result.squad_metrics if mode == "squad" else result.sniper_metrics
+                )
                 if metrics:
                     logger.info(
                         "  [%s] 收益=%.2f%% 夏普=%.2f 回撤=%.2f%% 胜率=%.2f%%",

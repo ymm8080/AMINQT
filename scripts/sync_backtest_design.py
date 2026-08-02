@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 # 两份副本的绝对路径
 FILE_A = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "docs", "backtest_design.md",
+    "docs",
+    "backtest_design.md",
 )
 FILE_B = r"d:\AMINQT\REFERENCE\Design All\Function Spec\BACKTESTING\backtest_design.md"
 
@@ -90,8 +91,9 @@ def sync(check_only: bool = False) -> int:
     mtime_b = os.path.getmtime(FILE_B)
 
     if check_only:
-        logger.warning("文件不一致! A=%s(%s) B=%s(%s)",
-                       hash_a, mtime_a, hash_b, mtime_b)
+        logger.warning(
+            "文件不一致! A=%s(%s) B=%s(%s)", hash_a, mtime_a, hash_b, mtime_b
+        )
         return 1
 
     if mtime_a > mtime_b:
@@ -112,7 +114,8 @@ def main() -> int:
         description="双向同步 backtest_design.md",
     )
     parser.add_argument(
-        "--check", action="store_true",
+        "--check",
+        action="store_true",
         help="仅检查一致性, 不执行复制",
     )
     args = parser.parse_args()

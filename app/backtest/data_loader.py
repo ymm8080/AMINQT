@@ -124,12 +124,8 @@ class DataLoader:
         else:
             self.market_df = pd.DataFrame()
 
-        self._validate(
-            self.pred_df, self.REQUIRED_PRED_COLS, "预测表"
-        )
-        self._validate(
-            self.price_df, self.REQUIRED_PRICE_COLS, "行情表"
-        )
+        self._validate(self.pred_df, self.REQUIRED_PRED_COLS, "预测表")
+        self._validate(self.price_df, self.REQUIRED_PRICE_COLS, "行情表")
 
         self._align()
         self._calc_rolling_metrics()
@@ -163,9 +159,7 @@ class DataLoader:
         logger.info("%s加载完成: %s, shape=%s", name, path, df.shape)
         return df
 
-    def _validate(
-        self, df: pd.DataFrame, required_cols: list, name: str
-    ) -> None:
+    def _validate(self, df: pd.DataFrame, required_cols: list, name: str) -> None:
         """校验必要列是否存在.
 
         Args:
@@ -195,23 +189,17 @@ class DataLoader:
         self.pred_df["date"] = pd.to_datetime(self.pred_df["date"])
         self.price_df["date"] = pd.to_datetime(self.price_df["date"])
         if self.benchmark_df is not None and not self.benchmark_df.empty:
-            self.benchmark_df["date"] = pd.to_datetime(
-                self.benchmark_df["date"]
-            )
+            self.benchmark_df["date"] = pd.to_datetime(self.benchmark_df["date"])
 
         # 股票代码统一为字符串
         self.pred_df["stock"] = self.pred_df["stock"].astype(str)
         self.price_df["stock"] = self.price_df["stock"].astype(str)
 
         # 创建行情表的 (date, stock) 索引集合
-        price_keys = set(
-            zip(self.price_df["date"], self.price_df["stock"])
-        )
+        price_keys = set(zip(self.price_df["date"], self.price_df["stock"]))
 
         # 删除预测表中行情缺失的行
-        pred_keys = list(
-            zip(self.pred_df["date"], self.pred_df["stock"])
-        )
+        pred_keys = list(zip(self.pred_df["date"], self.pred_df["stock"]))
         mask = [k in price_keys for k in pred_keys]
         before = len(self.pred_df)
         self.pred_df = self.pred_df[mask].copy()
@@ -225,12 +213,12 @@ class DataLoader:
             )
 
         # 强制排序 (可重复性要求)
-        self.pred_df = self.pred_df.sort_values(
-            ["date", "stock"]
-        ).reset_index(drop=True)
-        self.price_df = self.price_df.sort_values(
-            ["date", "stock"]
-        ).reset_index(drop=True)
+        self.pred_df = self.pred_df.sort_values(["date", "stock"]).reset_index(
+            drop=True
+        )
+        self.price_df = self.price_df.sort_values(["date", "stock"]).reset_index(
+            drop=True
+        )
 
         logger.info(
             "数据对齐完成: pred=%d, price=%d, dates=%d",

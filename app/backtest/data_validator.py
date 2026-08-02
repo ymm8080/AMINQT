@@ -76,16 +76,12 @@ class DataValidator:
         # E003: close <= 0
         bad_close = self.price_df[self.price_df["close"] <= 0]
         if not bad_close.empty:
-            errors.append(
-                ("E003", f"{len(bad_close)} rows with close <= 0, dropped")
-            )
+            errors.append(("E003", f"{len(bad_close)} rows with close <= 0, dropped"))
 
         # E004: high < low
         bad_hl = self.price_df[self.price_df["high"] < self.price_df["low"]]
         if not bad_hl.empty:
-            errors.append(
-                ("E004", f"{len(bad_hl)} rows with high < low, dropped")
-            )
+            errors.append(("E004", f"{len(bad_hl)} rows with high < low, dropped"))
 
         # E004 补充: open > high 或 open < low
         bad_oh = self.price_df[
@@ -93,9 +89,7 @@ class DataValidator:
             | (self.price_df["open"] < self.price_df["low"])
         ]
         if not bad_oh.empty:
-            errors.append(
-                ("E004", f"{len(bad_oh)} rows with open out of [low, high]")
-            )
+            errors.append(("E004", f"{len(bad_oh)} rows with open out of [low, high]"))
 
         # E005: 成交量为0但有收盘价 → 推断停牌
         vol_zero = self.price_df[
@@ -208,9 +202,7 @@ class DataValidator:
 
         return df
 
-    def filter_ipo_stocks(
-        self, min_listing_days: int = 60
-    ) -> pd.DataFrame:
+    def filter_ipo_stocks(self, min_listing_days: int = 60) -> pd.DataFrame:
         """过滤次新股 (上市 < 60 交易日).
 
         Args:

@@ -224,7 +224,9 @@ class ParamTuner:
                 values = np.unique(values.astype(int))
             grids.append([(name, v) for v in values])
         combos = [dict(c) for c in itertools.product(*grids)]
-        logger.info("网格搜索: %d 维 %d 组合 (引擎=%s)", len(param_names), len(combos), engine)
+        logger.info(
+            "网格搜索: %d 维 %d 组合 (引擎=%s)", len(param_names), len(combos), engine
+        )
 
         # 训练/OOS 切分 (按时间)
         dates = sorted(self.panel["date"].unique())

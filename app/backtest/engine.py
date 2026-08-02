@@ -51,6 +51,7 @@ def _softmax(x: np.ndarray) -> np.ndarray:
 
 class PositionMode(Enum):
     """仓位分配模式."""
+
     SQUAD = "squad"
     SNIPER = "sniper"
     SNIPER_MAX = "sniper_max"
@@ -59,6 +60,7 @@ class PositionMode(Enum):
 @dataclass
 class Trade:
     """单笔交易记录. 价格为整数分."""
+
     entry_date: pd.Timestamp
     exit_date: pd.Timestamp
     stock: str
@@ -77,7 +79,7 @@ class Trade:
     commission_entry_fen: int = 0
     commission_exit_fen: int = 0
     stamp_tax_fen: int = 0
-    is_swap: bool = False              # V5.0: 是否为换仓交易
+    is_swap: bool = False  # V5.0: 是否为换仓交易
 
 
 @dataclass
@@ -86,6 +88,7 @@ class Holding:
 
     V5.2融合: 增加ATR自适应止损价、板块标识、20日中位数基准.
     """
+
     stock: str
     entry_date: pd.Timestamp
     entry_price_fen: int
@@ -100,11 +103,11 @@ class Holding:
     stop_loss_triggered: bool = False
     stop_profit_triggered: bool = False
     # V5.2 新增
-    stop_price_fen: int = 0           # S1 动态止损价 (max(固定, -1.5*ATR))
-    atr_pct: float = 0.0              # 入场时ATR百分比
-    board: str = "main"               # main(主板) / dual(双创)
-    median_2d_return: float = 0.0     # S5a: 该股20日2日收益中位数
-    down_limit_days: int = 0           # V5.0 F2.19 连续跌停天数
+    stop_price_fen: int = 0  # S1 动态止损价 (max(固定, -1.5*ATR))
+    atr_pct: float = 0.0  # 入场时ATR百分比
+    board: str = "main"  # main(主板) / dual(双创)
+    median_2d_return: float = 0.0  # S5a: 该股20日2日收益中位数
+    down_limit_days: int = 0  # V5.0 F2.19 连续跌停天数
 
 
 class BacktestEngine:
@@ -152,9 +155,7 @@ class BacktestEngine:
 
     def _reset_state(self) -> None:
         """重置回测状态."""
-        self.available_cash_fen: int = self._price_to_fen(
-            self.config.initial_capital
-        )
+        self.available_cash_fen: int = self._price_to_fen(self.config.initial_capital)
         self.frozen_cash_fen: int = 0
         self.holdings: List[Holding] = []
         self.trades: List[Trade] = []
@@ -168,12 +169,10 @@ class BacktestEngine:
         self._daily_total: int = 0
         self._daily_loss_days: int = 0
         # V5.2 新增
-        self._atr_cache: Dict[str, float] = {}       # {stock: atr_pct}
-        self._median_2d_cache: Dict[str, float] = {} # {stock: median_2d_return}
-        self._peak_nav_fen: int = self._price_to_fen(
-            self.config.initial_capital
-        )
-        self._daily_pnl_history: List[float] = []    # 用于2σ计算
+        self._atr_cache: Dict[str, float] = {}  # {stock: atr_pct}
+        self._median_2d_cache: Dict[str, float] = {}  # {stock: median_2d_return}
+        self._peak_nav_fen: int = self._price_to_fen(self.config.initial_capital)
+        self._daily_pnl_history: List[float] = []  # 用于2σ计算
         self._system_halted: bool = False
 
     # ── 价格工具 (fen 精度) ─────────────────────────────────
@@ -202,7 +201,9 @@ class BacktestEngine:
     def _calc_commission(self, amount_fen: int) -> int:
         """佣金 = max(amount_yuan * rate, min_commission) 转分."""
         amount_yuan = amount_fen / 100.0
-        comm_yuan = max(amount_yuan * self.config.commission_rate, self.config.min_commission)
+        comm_yuan = max(
+            amount_yuan * self.config.commission_rate, self.config.min_commission
+        )
         return int(comm_yuan * 100 + 0.5)
 
     # ── 行情查询 ────────────────────────────────────────────
@@ -211,7 +212,9 @@ class BacktestEngine:
         """获取行情数据行."""
         return self._price_index.get((date, stock))
 
-    def _get_trade_date_after(self, date: pd.Timestamp, n: int = 1) -> pd.Timestamp | None:
+    def _get_trade_date_after(
+        self, date: pd.Timestamp, n: int = 1
+    ) -> pd.Timestamp | None:
         """获取 date 后第 n 个交易日 (使用交易日历)."""
         idx = np.searchsorted(self.trade_dates, date)
         target = idx + n
@@ -239,9 +242,7 @@ class BacktestEngine:
             return True
         return today_vol >= yesterday_vol * self.config.volume_confirm_ratio
 
-    def _check_market_drop(
-        self, today: pd.Timestamp, yesterday: pd.Timestamp
-    ) -> bool:
+    def _check_market_drop(self, today: pd.Timestamp, yesterday: pd.Timestamp) -> bool:
         """V5.0 F2.18 大盘跌幅过滤: 大盘跌幅 >= 2% → 停止买入.
 
         Returns:
@@ -254,7 +255,9 @@ class BacktestEngine:
         if y_market.empty:
             return True
         y_close = y_market["index_close"].iloc[0]
-        y_idx_list = self._market_df.index[self._market_df["date"] == yesterday].tolist()
+        y_idx_list = self._market_df.index[
+            self._market_df["date"] == yesterday
+        ].tolist()
         if not y_idx_list:
             return True
         y_pos = self._market_df.index.get_loc(y_idx_list[0])
@@ -285,7 +288,8 @@ class BacktestEngine:
             if holding.down_limit_days >= self.config.down_limit_max_days:
                 logger.warning(
                     "%s 连续跌停 %d 日, 强制平仓",
-                    holding.stock, holding.down_limit_days,
+                    holding.stock,
+                    holding.down_limit_days,
                 )
                 return True
         else:
@@ -335,7 +339,7 @@ class BacktestEngine:
                 np.abs(low[1:] - close[:-1]),
             ),
         )
-        atr = float(np.mean(tr[-self.config.atr_period:]))
+        atr = float(np.mean(tr[-self.config.atr_period :]))
         last_close = close[-1]
         atr_pct = _safe_div(atr, last_close) if last_close > 0 else 0.0
         self._atr_cache[stock] = atr_pct
@@ -378,7 +382,11 @@ class BacktestEngine:
         Returns:
             止损价(分).
         """
-        fixed = self.config.stop_loss_main if board == "main" else self.config.stop_loss_dual
+        fixed = (
+            self.config.stop_loss_main
+            if board == "main"
+            else self.config.stop_loss_dual
+        )
         atr_stop = -self.config.stop_loss_atr_mult * atr_pct
         stop_pct = max(fixed, atr_stop)
         # 噪音带断言: 止损不能太近
@@ -518,7 +526,9 @@ class BacktestEngine:
                 # 保留旧持仓, 跳过新信号
                 logger.debug(
                     "保留持仓 %s (holding=%.4f vs new=%.4f)",
-                    stock, holding_expected, new_expected,
+                    stock,
+                    holding_expected,
+                    new_expected,
                 )
 
         return filtered_candidates, sells_to_execute
@@ -570,9 +580,7 @@ class BacktestEngine:
 
         # Step 3: 一次重分配 (仅一次)
         if capped_excess > 0:
-            uncapped_idx = [
-                i for i, a in enumerate(final_allocs) if a < max_per_fen
-            ]
+            uncapped_idx = [i for i, a in enumerate(final_allocs) if a < max_per_fen]
             if uncapped_idx:
                 remaining_weights = sum(weights[i] for i in uncapped_idx)
                 if remaining_weights > 0:
@@ -630,10 +638,14 @@ class BacktestEngine:
         total_cost_fen = cost_fen + commission_fen
 
         if total_cost_fen > self.available_cash_fen:
-            shares = int(
-                (self.available_cash_fen - self.config.min_commission * 100)
-                / (price_fen * (1 + self.config.commission_rate)) / 100
-            ) * 100
+            shares = (
+                int(
+                    (self.available_cash_fen - self.config.min_commission * 100)
+                    / (price_fen * (1 + self.config.commission_rate))
+                    / 100
+                )
+                * 100
+            )
             if shares <= 0:
                 return False, {}
             cost_fen = shares * price_fen
@@ -662,9 +674,13 @@ class BacktestEngine:
         self.holdings.append(holding)
 
         return True, {
-            "date": date, "stock": stock, "side": "buy",
-            "price_fen": price_fen, "quantity": shares,
-            "commission_fen": commission_fen, "cost_fen": total_cost_fen,
+            "date": date,
+            "stock": stock,
+            "side": "buy",
+            "price_fen": price_fen,
+            "quantity": shares,
+            "commission_fen": commission_fen,
+            "cost_fen": total_cost_fen,
         }
 
     def _execute_sell(
@@ -682,7 +698,14 @@ class BacktestEngine:
         """
         slippage_bp = (
             self.config.slippage_sell_stop_bp
-            if reason in ("stop_loss", "stop_profit", "trailing_stop", "replace_signal", "replace_loss")
+            if reason
+            in (
+                "stop_loss",
+                "stop_profit",
+                "trailing_stop",
+                "replace_signal",
+                "replace_loss",
+            )
             else self.config.slippage_sell_moo_bp
         )
         sell_price_fen = int(price_fen * (1000 - slippage_bp) / 1000 + 0.5)
@@ -804,9 +827,7 @@ class BacktestEngine:
 
     # ── 对账与检查点 ────────────────────────────────────────
 
-    def _calc_market_value(
-        self, price_row_map: Dict[str, pd.Series]
-    ) -> int:
+    def _calc_market_value(self, price_row_map: Dict[str, pd.Series]) -> int:
         """计算持仓市值 (分)."""
         mv = 0
         for h in self.holdings:
@@ -816,12 +837,20 @@ class BacktestEngine:
                 mv += h.quantity * close_fen
         return mv
 
-    def _reconcile(self, date: pd.Timestamp, price_row_map: Dict[str, pd.Series]) -> bool:
+    def _reconcile(
+        self, date: pd.Timestamp, price_row_map: Dict[str, pd.Series]
+    ) -> bool:
         """每日对账: assert 总资产 = 现金 + 市值, 偏差 < 1分."""
         mv = self._calc_market_value(price_row_map)
         # 对账只检查非负
         if self.available_cash_fen < 0 or self.frozen_cash_fen < 0:
-            logger.error("对账失败 %s: cash=%d, frozen=%d, mv=%d", date, self.available_cash_fen, self.frozen_cash_fen, mv)
+            logger.error(
+                "对账失败 %s: cash=%d, frozen=%d, mv=%d",
+                date,
+                self.available_cash_fen,
+                self.frozen_cash_fen,
+                mv,
+            )
             return False
         return True
 
@@ -860,7 +889,9 @@ class BacktestEngine:
 
         logger.info(
             "回测开始: horizon=%d, mode=%s, %d 交易日",
-            horizon, self.position_mode.value, len(self.trade_dates),
+            horizon,
+            self.position_mode.value,
+            len(self.trade_dates),
         )
 
         for i in range(1, len(self.trade_dates)):
@@ -871,7 +902,9 @@ class BacktestEngine:
             price_row_map = {r["stock"]: r for _, r in today_prices.iterrows()}
 
             yesterday_prices = self.price_df[self.price_df["date"] == yesterday]
-            yesterday_price_map = {r["stock"]: r for _, r in yesterday_prices.iterrows()}
+            yesterday_price_map = {
+                r["stock"]: r for _, r in yesterday_prices.iterrows()
+            }
 
             trades_today = 0
             stocks_to_remove: set[str] = set()
@@ -879,7 +912,9 @@ class BacktestEngine:
             # ── 1. 开盘前: 风控检查 (基于昨日收盘) ──
             pending_sells: List[Tuple[str, str, int]] = []
             if self.holdings:
-                pending_sells = self._check_risk(today, self.holdings, yesterday_price_map)
+                pending_sells = self._check_risk(
+                    today, self.holdings, yesterday_price_map
+                )
 
             # ── 2. 开盘: 执行风控卖出 (MOO) ──
             for stock, reason, _ in pending_sells:
@@ -889,27 +924,37 @@ class BacktestEngine:
                 row = price_row_map.get(stock)
                 if row is None:
                     continue
-                can_sell, sell_open_fen, _ = self._check_sell_eligible(today, stock, row, h)
+                can_sell, sell_open_fen, _ = self._check_sell_eligible(
+                    today, stock, row, h
+                )
                 if can_sell:
                     self._execute_sell(today, stock, sell_open_fen, h, reason)
                     stocks_to_remove.add(stock)
                     trades_today += 1
 
             # 移除已卖出的持仓
-            self.holdings = [h for h in self.holdings if h.stock not in stocks_to_remove]
+            self.holdings = [
+                h for h in self.holdings if h.stock not in stocks_to_remove
+            ]
 
             # ── 3. 到期卖出 S5b (收盘执行, 在步骤5处理) ──
 
             # ── 4. 买入 ──
             signal_rows = pred_by_date.get(yesterday, [])
-            if signal_rows and not self.stop_new_positions and self.cooldown_days == 0 and not self._system_halted:
+            if (
+                signal_rows
+                and not self.stop_new_positions
+                and self.cooldown_days == 0
+                and not self._system_halted
+            ):
                 signal_sorted = sorted(
                     signal_rows,
                     key=lambda r: r.get(score_col, -np.inf),
                     reverse=True,
                 )
                 signal_filtered = [
-                    r for r in signal_sorted
+                    r
+                    for r in signal_sorted
                     if r.get(prob_col, 0) >= self.config.prob_threshold
                 ]
 
@@ -937,7 +982,9 @@ class BacktestEngine:
                     if high_fen < trigger_fen:
                         continue
 
-                    entry_fen = self._calc_entry_price(trigger_fen, self.config.slippage_buy_bp)
+                    entry_fen = self._calc_entry_price(
+                        trigger_fen, self.config.slippage_buy_bp
+                    )
                     if entry_fen > high_fen:
                         entry_fen = high_fen
                     if up_limit_fen > 0 and entry_fen >= up_limit_fen:
@@ -952,24 +999,38 @@ class BacktestEngine:
                     atr_pct = self._precompute_atr(stock, self.price_df)
                     board = self._get_board(stock)
                     median_2d = self._precompute_median_2d_return(stock, self.price_df)
-                    stop_price_fen = self._calc_stop_price_fen(entry_fen, atr_pct, board)
+                    stop_price_fen = self._calc_stop_price_fen(
+                        entry_fen, atr_pct, board
+                    )
 
                     # B7 止损距离否决 (V5.2): 距stop_price < 1.2*ATR → 放弃
-                    stop_distance = _safe_div(
-                        entry_fen - stop_price_fen, entry_fen
-                    )
-                    if atr_pct > 0 and stop_distance < self.config.stop_distance_atr_mult * atr_pct:
-                        logger.debug("B7否决 %s: 止损距离=%.4f < %.4f", stock, stop_distance, self.config.stop_distance_atr_mult * atr_pct)
+                    stop_distance = _safe_div(entry_fen - stop_price_fen, entry_fen)
+                    if (
+                        atr_pct > 0
+                        and stop_distance < self.config.stop_distance_atr_mult * atr_pct
+                    ):
+                        logger.debug(
+                            "B7否决 %s: 止损距离=%.4f < %.4f",
+                            stock,
+                            stop_distance,
+                            self.config.stop_distance_atr_mult * atr_pct,
+                        )
                         continue
 
-                    candidates.append({
-                        "stock": stock, "prob": prob, "score": score,
-                        "pred_ret": pred_ret, "entry_price_fen": entry_fen,
-                        "amount_fen": amount_fen,
-                        "atr_pct": atr_pct, "board": board,
-                        "stop_price_fen": stop_price_fen,
-                        "median_2d_return": median_2d,
-                    })
+                    candidates.append(
+                        {
+                            "stock": stock,
+                            "prob": prob,
+                            "score": score,
+                            "pred_ret": pred_ret,
+                            "entry_price_fen": entry_fen,
+                            "amount_fen": amount_fen,
+                            "atr_pct": atr_pct,
+                            "board": board,
+                            "stop_price_fen": stop_price_fen,
+                            "median_2d_return": median_2d,
+                        }
+                    )
 
                 self._daily_total += 1
 
@@ -984,13 +1045,17 @@ class BacktestEngine:
                     row = price_row_map.get(stock)
                     if row is None:
                         continue
-                    can_sell, sell_open_fen, _ = self._check_sell_eligible(today, stock, row, h)
+                    can_sell, sell_open_fen, _ = self._check_sell_eligible(
+                        today, stock, row, h
+                    )
                     if can_sell:
                         self._execute_sell(today, stock, sell_open_fen, h, reason)
                         stocks_to_remove.add(stock)
                         trades_today += 1
 
-                self.holdings = [h for h in self.holdings if h.stock not in stocks_to_remove]
+                self.holdings = [
+                    h for h in self.holdings if h.stock not in stocks_to_remove
+                ]
 
                 # 候选不足检查
                 mode_min = self.config.min_tradeable
@@ -1001,8 +1066,13 @@ class BacktestEngine:
 
                 if len(candidates) >= mode_min:
                     self._daily_tradeable += 1
-                    alloc_input = [(c["stock"], c["prob"], c["score"], c["pred_ret"]) for c in candidates]
-                    allocations = self._allocate_capital(alloc_input, self.available_cash_fen)
+                    alloc_input = [
+                        (c["stock"], c["prob"], c["score"], c["pred_ret"])
+                        for c in candidates
+                    ]
+                    allocations = self._allocate_capital(
+                        alloc_input, self.available_cash_fen
+                    )
 
                     alloc_map = {a[0]: a[1] for a in allocations}
                     for cand in candidates:
@@ -1011,9 +1081,15 @@ class BacktestEngine:
                             continue
                         cash_for_stock = alloc_map[stock]
                         self._execute_buy(
-                            today, stock, cand["entry_price_fen"], cash_for_stock,
-                            cand["prob"], cand["pred_ret"], cand["score"],
-                            horizon, cand["amount_fen"],
+                            today,
+                            stock,
+                            cand["entry_price_fen"],
+                            cash_for_stock,
+                            cand["prob"],
+                            cand["pred_ret"],
+                            cand["score"],
+                            horizon,
+                            cand["amount_fen"],
                             cand.get("atr_pct", 0.0),
                             cand.get("board", "main"),
                             cand.get("stop_price_fen", 0),
@@ -1033,11 +1109,17 @@ class BacktestEngine:
                         self._execute_sell(today, h.stock, close_fen, h, "system_halt")
                         stocks_to_remove.add(h.stock)
                         trades_today += 1
-                self.holdings = [h for h in self.holdings if h.stock not in stocks_to_remove]
+                self.holdings = [
+                    h for h in self.holdings if h.stock not in stocks_to_remove
+                ]
 
             # ── 5. 收盘: 到期卖出 ──
             maturity_sells: List[Holding] = []
-            effective_period = self.config.holding_period if self.config.holding_period > 0 else horizon
+            effective_period = (
+                self.config.holding_period
+                if self.config.holding_period > 0
+                else horizon
+            )
             for h in self.holdings:
                 if h.days_held >= effective_period:
                     maturity_sells.append(h)
@@ -1046,7 +1128,9 @@ class BacktestEngine:
                 row = price_row_map.get(h.stock)
                 if row is None:
                     continue
-                can_sell, _, sell_reason = self._check_sell_eligible(today, h.stock, row, h)
+                can_sell, _, sell_reason = self._check_sell_eligible(
+                    today, h.stock, row, h
+                )
                 if can_sell:
                     close_fen = self._price_to_fen(row["close"])
                     self._execute_sell(today, h.stock, close_fen, h, "maturity")
@@ -1054,7 +1138,9 @@ class BacktestEngine:
                     trades_today += 1
                 # 跌停/停牌 → 顺延 (不删除, 下个交易日再尝试)
 
-            self.holdings = [h for h in self.holdings if h.stock not in stocks_to_remove]
+            self.holdings = [
+                h for h in self.holdings if h.stock not in stocks_to_remove
+            ]
 
             # ── 6. 更新持仓 (收盘价) ──
             self._update_holdings(today, price_row_map)
@@ -1066,7 +1152,11 @@ class BacktestEngine:
             nav = self._fen_to_yuan(nav_fen)
 
             # ── 8. 当日盈亏检查 ──
-            prev_nav_fen = int(self.config.initial_capital * 100) if not self.daily_records else int(self.daily_records[-1]["nav"] * 100)
+            prev_nav_fen = (
+                int(self.config.initial_capital * 100)
+                if not self.daily_records
+                else int(self.daily_records[-1]["nav"] * 100)
+            )
             daily_pnl_fen = nav_fen - prev_nav_fen
             daily_pnl_pct = _safe_div(daily_pnl_fen, prev_nav_fen)
 
@@ -1077,7 +1167,11 @@ class BacktestEngine:
                 if self.consecutive_loss_days >= self.config.consecutive_loss_limit:
                     self.cooldown_days = self.config.consecutive_loss_cooldown
                     self.consecutive_loss_days = 0
-                    logger.warning("连续亏损 %d 日, 进入 %d 天冷却", self.config.consecutive_loss_limit, self.cooldown_days)
+                    logger.warning(
+                        "连续亏损 %d 日, 进入 %d 天冷却",
+                        self.config.consecutive_loss_limit,
+                        self.cooldown_days,
+                    )
             else:
                 self.consecutive_loss_days = 0
 
@@ -1089,7 +1183,7 @@ class BacktestEngine:
                 fuse_triggered = True
             # 2σ自适应
             if self.config.daily_fuse_use_sigma and len(self._daily_pnl_history) >= 5:
-                window = self._daily_pnl_history[-self.config.daily_fuse_window:]
+                window = self._daily_pnl_history[-self.config.daily_fuse_window :]
                 mu = float(np.mean(window))
                 sigma = float(np.std(window))
                 lower_bound = mu - self.config.daily_fuse_sigma * sigma
@@ -1127,36 +1221,44 @@ class BacktestEngine:
             self._reconcile(today, price_row_map)
 
             # ── 13. 记录 ──
-            self.daily_records.append({
-                "date": today,
-                "nav": nav,
-                "cash": self._fen_to_yuan(self.available_cash_fen),
-                "market_value": self._fen_to_yuan(market_value),
-                "daily_pnl": self._fen_to_yuan(daily_pnl_fen),
-                "daily_pnl_pct": daily_pnl_pct,
-                "num_holdings": len(self.holdings),
-                "num_trades_today": trades_today,
-                "stop_flag": self.stop_new_positions,
-                "cooldown_days": self.cooldown_days,
-            })
+            self.daily_records.append(
+                {
+                    "date": today,
+                    "nav": nav,
+                    "cash": self._fen_to_yuan(self.available_cash_fen),
+                    "market_value": self._fen_to_yuan(market_value),
+                    "daily_pnl": self._fen_to_yuan(daily_pnl_fen),
+                    "daily_pnl_pct": daily_pnl_pct,
+                    "num_holdings": len(self.holdings),
+                    "num_trades_today": trades_today,
+                    "stop_flag": self.stop_new_positions,
+                    "cooldown_days": self.cooldown_days,
+                }
+            )
 
             # 持仓快照
             for h in self.holdings:
                 row = price_row_map.get(h.stock)
                 close_fen = self._price_to_fen(row["close"]) if row is not None else 0
-                self.holdings_history.append({
-                    "date": today,
-                    "stock": h.stock,
-                    "quantity": h.quantity,
-                    "entry_price": self._fen_to_yuan(h.entry_price_fen),
-                    "close_price": self._fen_to_yuan(close_fen),
-                    "days_held": h.days_held,
-                    "pnl_pct": _safe_div(close_fen - h.entry_price_fen, h.entry_price_fen),
-                })
+                self.holdings_history.append(
+                    {
+                        "date": today,
+                        "stock": h.stock,
+                        "quantity": h.quantity,
+                        "entry_price": self._fen_to_yuan(h.entry_price_fen),
+                        "close_price": self._fen_to_yuan(close_fen),
+                        "days_held": h.days_held,
+                        "pnl_pct": _safe_div(
+                            close_fen - h.entry_price_fen, h.entry_price_fen
+                        ),
+                    }
+                )
 
         logger.info(
             "回测完成: %d 交易日, %d 笔交易, 最终NAV=%.2f",
-            len(self.daily_records), len(self.trades), nav,
+            len(self.daily_records),
+            len(self.trades),
+            nav,
         )
         return pd.DataFrame(self.daily_records)
 
@@ -1168,24 +1270,26 @@ class BacktestEngine:
             return pd.DataFrame()
         records = []
         for t in self.trades:
-            records.append({
-                "entry_date": t.entry_date,
-                "exit_date": t.exit_date,
-                "stock": t.stock,
-                "entry_price": self._fen_to_yuan(t.entry_price_fen),
-                "exit_price": self._fen_to_yuan(t.exit_price_fen),
-                "quantity": t.quantity,
-                "pnl": self._fen_to_yuan(t.pnl_fen),
-                "pnl_pct": t.pnl_pct,
-                "exit_reason": t.exit_reason,
-                "horizon": t.horizon,
-                "mode": t.mode,
-                "prob_up": t.prob_up,
-                "pred_ret": t.pred_ret,
-                "score": t.score,
-                "max_profit_pct": t.max_profit_pct,
-                "is_swap": t.is_swap,
-            })
+            records.append(
+                {
+                    "entry_date": t.entry_date,
+                    "exit_date": t.exit_date,
+                    "stock": t.stock,
+                    "entry_price": self._fen_to_yuan(t.entry_price_fen),
+                    "exit_price": self._fen_to_yuan(t.exit_price_fen),
+                    "quantity": t.quantity,
+                    "pnl": self._fen_to_yuan(t.pnl_fen),
+                    "pnl_pct": t.pnl_pct,
+                    "exit_reason": t.exit_reason,
+                    "horizon": t.horizon,
+                    "mode": t.mode,
+                    "prob_up": t.prob_up,
+                    "pred_ret": t.pred_ret,
+                    "score": t.score,
+                    "max_profit_pct": t.max_profit_pct,
+                    "is_swap": t.is_swap,
+                }
+            )
         return pd.DataFrame(records)
 
     def get_holdings_history(self) -> pd.DataFrame:
@@ -1207,10 +1311,20 @@ class BacktestEngine:
         nav = df["nav"].values
         daily_returns = df["daily_pnl_pct"].values
 
-        total_return = _safe_div(nav[-1] - self.config.initial_capital, self.config.initial_capital)
-        annual_return = (1 + total_return) ** (_safe_div(_TRADING_DAYS_PER_YEAR, len(nav))) - 1
-        annual_vol = float(np.std(daily_returns) * np.sqrt(_TRADING_DAYS_PER_YEAR)) if len(daily_returns) > 1 else 0.0
-        sharpe = _safe_div(float(np.mean(daily_returns)), float(np.std(daily_returns))) * np.sqrt(_TRADING_DAYS_PER_YEAR)
+        total_return = _safe_div(
+            nav[-1] - self.config.initial_capital, self.config.initial_capital
+        )
+        annual_return = (1 + total_return) ** (
+            _safe_div(_TRADING_DAYS_PER_YEAR, len(nav))
+        ) - 1
+        annual_vol = (
+            float(np.std(daily_returns) * np.sqrt(_TRADING_DAYS_PER_YEAR))
+            if len(daily_returns) > 1
+            else 0.0
+        )
+        sharpe = _safe_div(
+            float(np.mean(daily_returns)), float(np.std(daily_returns))
+        ) * np.sqrt(_TRADING_DAYS_PER_YEAR)
 
         equity = pd.Series(nav)
         running_max = equity.cummax()
@@ -1247,7 +1361,9 @@ class BacktestEngine:
             max_win = 0.0
             max_loss = 0.0
 
-        daily_tradeable_rate = _safe_div(self._daily_tradeable, max(self._daily_total, 1))
+        daily_tradeable_rate = _safe_div(
+            self._daily_tradeable, max(self._daily_total, 1)
+        )
 
         return {
             "total_return": total_return,
@@ -1276,14 +1392,24 @@ class BacktestEngine:
     def _empty_metrics() -> Dict:
         """空绩效指标."""
         return {
-            "total_return": 0.0, "annual_return": 0.0,
-            "annual_volatility": 0.0, "sharpe_ratio": 0.0,
-            "max_drawdown": 0.0, "max_drawdown_duration": 0,
-            "calmar_ratio": 0.0, "win_rate": 0.0,
-            "profit_loss_ratio": 0.0, "avg_win": 0.0,
-            "avg_loss": 0.0, "max_win": 0.0, "max_loss": 0.0,
-            "num_trades": 0, "num_winning_trades": 0,
-            "num_losing_trades": 0, "concentration_risk_ratio": 0.0,
+            "total_return": 0.0,
+            "annual_return": 0.0,
+            "annual_volatility": 0.0,
+            "sharpe_ratio": 0.0,
+            "max_drawdown": 0.0,
+            "max_drawdown_duration": 0,
+            "calmar_ratio": 0.0,
+            "win_rate": 0.0,
+            "profit_loss_ratio": 0.0,
+            "avg_win": 0.0,
+            "avg_loss": 0.0,
+            "max_win": 0.0,
+            "max_loss": 0.0,
+            "num_trades": 0,
+            "num_winning_trades": 0,
+            "num_losing_trades": 0,
+            "concentration_risk_ratio": 0.0,
             "daily_tradeable_rate": 0.0,
-            "config_hash": "", "data_version_hash": "",
+            "config_hash": "",
+            "data_version_hash": "",
         }

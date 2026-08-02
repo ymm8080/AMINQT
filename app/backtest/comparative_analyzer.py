@@ -67,7 +67,9 @@ class ComparativeAnalyzer:
             return 0.0 if sniper_dd == 0 else float("inf")
         return _safe_div(sniper_dd, squad_dd)
 
-    def calc_jensen_alpha(self, result: pd.DataFrame, benchmark_col: str = "csi1000") -> float:
+    def calc_jensen_alpha(
+        self, result: pd.DataFrame, benchmark_col: str = "csi1000"
+    ) -> float:
         """计算 Jensen Alpha (相对基准).
 
         Alpha = 策略年化收益 - (无风险利率 + Beta × (基准年化收益 - 无风险利率))
@@ -110,7 +112,11 @@ class ComparativeAnalyzer:
 
         # Beta
         cov_matrix = np.cov(strategy_returns, bench_returns)
-        beta = _safe_div(cov_matrix[0, 1], cov_matrix[1, 1]) if cov_matrix[1, 1] != 0 else 0.0
+        beta = (
+            _safe_div(cov_matrix[0, 1], cov_matrix[1, 1])
+            if cov_matrix[1, 1] != 0
+            else 0.0
+        )
 
         # 年化收益
         strategy_annual = (1 + np.mean(strategy_returns)) ** _TRADING_DAYS_PER_YEAR - 1
@@ -126,8 +132,16 @@ class ComparativeAnalyzer:
         Returns:
             "squad_final_nav=X, sniper_final_nav=Y, benchmark=Z"
         """
-        squad_final = float(self.squad_result["nav"].iloc[-1]) if not self.squad_result.empty else 0.0
-        sniper_final = float(self.sniper_result["nav"].iloc[-1]) if not self.sniper_result.empty else 0.0
+        squad_final = (
+            float(self.squad_result["nav"].iloc[-1])
+            if not self.squad_result.empty
+            else 0.0
+        )
+        sniper_final = (
+            float(self.sniper_result["nav"].iloc[-1])
+            if not self.sniper_result.empty
+            else 0.0
+        )
         bench_final = 0.0
         if self.benchmark_df is not None and not self.benchmark_df.empty:
             if "csi1000_close" in self.benchmark_df.columns:
