@@ -17,7 +17,11 @@ import numpy as np
 import pandas as pd
 from numpy.lib.stride_tricks import sliding_window_view
 
-LABEL_HORIZONS = (1, 3, 5)
+LABEL_HORIZONS = (1, 2, 3, 5)
+# 评估/排序跨视界权重 (用户 2026-08-02 裁决: 预测 1/2/3/5d 并按权重评估).
+# 1d 权重最低 — T+1 制度下买入后当日不可卖, 最不可执行; 3d 历史预测力最强.
+# 修改此字典即全局生效 (validate_oos 加权 IC + predictor/list_generator 综合分).
+LABEL_WEIGHTS = {1: 0.15, 2: 0.25, 3: 0.35, 5: 0.25}
 CLS_THRESHOLD = 0.005  # +0.5% 覆盖双边成本 (佣金万2.5x2 + 印花税0.05% + 滑点0.05% ≈ 0.13%, 留安全垫)
 COST = 0.0013  # round-trip 费用: 佣金万2.5双边 + 印花税0.05%卖出 (E5 净标签口径)
 # E5 滑点分层 (按 ADV20): >5亿→0.05% / 1~5亿→0.10% / <1亿→0.15% (双边计入)
@@ -298,6 +302,7 @@ class LabelEngine:
         cls_label = "label_pm_cls" if "label_pm_cls" in df.columns else "label_cls"
         out = {
             "1d": df.dropna(subset=["label_1d"]),
+            "2d": df.dropna(subset=["label_2d"]),
             "3d": df.dropna(subset=["label_3d"]),
             "5d": df.dropna(subset=["label_5d"]),
             "cls": df.dropna(subset=[cls_label]),

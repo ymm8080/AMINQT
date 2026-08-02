@@ -258,6 +258,7 @@ def _cands(rows: list[dict]) -> pd.DataFrame:
         "pred_ret_5d": 0.05,
         "prob_up": 0.70,
         "pred_ret_1d": 0.02,
+        "pred_ret_2d": 0.03,
     }
     return pd.DataFrame([{**base, **r} for r in rows])
 
@@ -571,6 +572,7 @@ class TestScreenerL2:
                         "date": d,
                         "factor": f[i],
                         "label_1d": -f[i] + rng.normal(0, 0.01),
+                        "label_2d": -f[i] + rng.normal(0, 0.01),
                         "label_3d": -f[i] + rng.normal(0, 0.01),
                         "label_5d": -f[i] + rng.normal(0, 0.01),
                     }

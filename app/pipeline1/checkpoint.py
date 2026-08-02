@@ -30,7 +30,7 @@ from config.settings import data_others_path
 
 logger = logging.getLogger(__name__)
 
-MODEL_KINDS = ("1d_reg", "1d_cls", "3d_reg", "5d_reg")
+MODEL_KINDS = ("1d_reg", "1d_cls", "2d_reg", "3d_reg", "5d_reg")
 EXTRA_KINDS = ("quantile_models", "pain_model", "rank_model")
 
 

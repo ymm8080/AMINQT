@@ -171,7 +171,7 @@ class ICScreener:
         """
         # [B9] PM 执行口径验收标签优先; [E5] 净收益标签优先 (分层滑点口径)
         label_of = {}
-        for k in (1, 3, 5):
+        for k in (1, 2, 3, 5):
             pm_net = f"label_pm_{k}d_net"
             reg_net = f"label_{k}d_net"
             pm_raw = f"label_pm_{k}d"

@@ -28,7 +28,7 @@ from .label_engine import LabelEngine
 
 logger = logging.getLogger(__name__)
 
-HORIZONS = (1, 3, 5)
+HORIZONS = (1, 2, 3, 5)
 ACCURACY_DIR = os.path.join("data", "forecast_accuracy")
 
 
