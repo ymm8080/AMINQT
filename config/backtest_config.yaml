@@ -1,0 +1,103 @@
+# -*- coding: utf-8 -*-
+# =========================================================================
+# A股日线回测系统配置文件 (V5.0 + V5.2)
+# 所有参数集中管理, 禁止魔法数字 (铁律: 无硬编码)
+# =========================================================================
+
+# ── 回测核心参数 ──
+backtest:
+  # 资金
+  initial_capital: 100000.0
+
+  # 触发
+  trigger_pct: 0.03              # 3% 突破触发
+
+  # 滑点 (basis points, 1bp = 0.01%)
+  slippage_buy_bp: 10            # 买入 0.1%
+  slippage_sell_moo_bp: 10       # 正常卖出 0.1%
+  slippage_sell_stop_bp: 30      # 止损/止盈卖出 0.3%
+
+  # 佣金
+  commission_rate: 0.00025       # 万2.5
+  min_commission: 5.0            # 最低5元
+  stamp_tax_rate: 0.001          # 千1, 仅卖出
+
+  # ── 风控 (V5.2 ATR自适应) ──
+  # S1 止损: max(固定值, -1.5×ATR_pct), 分主板/双创
+  stop_loss_main: -0.04          # 主板固定止损 -4%
+  stop_loss_dual: -0.06          # 双创固定止损 -6%
+  stop_loss_atr_mult: 1.5        # ATR倍数
+  stop_loss_atr_floor: 1.2       # 噪音带断言: abs(stop) >= 1.2×ATR_pct
+
+  # S2 移动止盈: 浮盈≥3%激活, 回撤max(3%, 1.0×ATR_pct)
+  trailing_stop: true
+  trailing_stop_activate: 0.03   # 浮盈3%激活
+  trailing_stop_min_pct: 0.03    # 回撤下限3%
+  trailing_stop_atr_mult: 1.0    # 回撤ATR倍数
+
+  # S5a 时间止损: 满2日且2日收益<20日中位数
+  time_stop_days: 2
+  time_stop_use_median: true
+  time_stop_fixed_threshold: 0.01
+
+  # S5b 持仓到期
+  holding_period: 2              # 持有期(交易日)
+
+  # 日保险丝: μ-2σ双轨 + 固定兜底
+  daily_fuse_fixed: -0.04        # 固定日亏损兜底 -4%
+  daily_fuse_use_sigma: true
+  daily_fuse_sigma: 2.0
+  daily_fuse_window: 20
+
+  # 系统停机线
+  system_halt_drawdown: -0.15    # 总资金回撤≥15%停机
+
+  # 连续亏损
+  consecutive_loss_limit: 3
+  consecutive_loss_cooldown: 5
+
+  # ATR参数
+  atr_period: 14
+
+  # ── 买入过滤 ──
+  max_gain_pct: 0.07             # B3 追高过滤: 涨幅≤7%
+  min_net_edge: 0.005            # B5 净收益闸门: 0.5%
+  stop_distance_atr_mult: 1.2    # B7 止损距离否决
+
+  # ── V5.0 新增 ──
+  volume_confirm_ratio: 1.5      # F2.17 成交量确认
+  market_drop_limit: -0.02       # F2.18 大盘暴跌停买 -2%
+  down_limit_max_days: 3         # F2.19 连续跌停强制平仓
+  max_swap_per_day: 2            # 每日换仓上限
+  swap_threshold: 0.01           # 换仓收益阈值 1%
+
+  # ── 选股 ──
+  prob_threshold: 0.55
+  position_mode: squad           # squad / sniper / sniper_max
+  filter_st: true
+  filter_trend: false            # 默认关闭
+
+  # ── 资金管理 ──
+  cash_interest_rate: 0.003      # 年化0.3%现金利息
+  min_tradeable: 2               # 最小可交易候选数
+  volume_limit_pct: 0.10         # 单笔买入≤当日成交额10%
+  min_position_value: 20000     # 最小交易金额
+
+# ── 信号评估参数 ──
+signal_eval:
+  horizons: [1, 2, 4]            # 评估周期
+  simulate_trigger: true         # 模拟触发
+  k: 5                           # Top-K
+
+# ── 数据路径 (按需修改) ──
+data:
+  pred_path: "data/processed/predictions.csv"
+  price_path: "data/processed/prices.csv"
+  benchmark_path: "data/processed/benchmark.csv"
+  market_path: "data/processed/market_index.csv"
+
+# ── 输出 ──
+output:
+  report_dir: "reports"
+  modes: ["squad", "sniper"]     # 回测模式
+  horizon: 2                     # 持有期
