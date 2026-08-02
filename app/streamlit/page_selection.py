@@ -18,6 +18,7 @@ import streamlit as st
 from . import data_service as ds
 from .components import (
     chip_control_chart,
+    factor_radar,
     find_bull_chart,
     intraday_chart,
     kline_chart,
@@ -305,6 +306,102 @@ def _render_charts(symbol: str) -> None:
     st.divider()
     st.subheader("筹码分布")
     st.plotly_chart(_chip_distribution_chart(ohlc), use_container_width=True)
+
+    # 因子雷达 (B2)
+    st.divider()
+    st.subheader("因子雷达")
+    st.caption("从 OHLC 数据近似计算的 V3.5 关键因子值")
+    factors = _compute_factor_values(ohlc)
+    if factors:
+        col_radar, col_table = st.columns([2, 1])
+        with col_radar:
+            st.plotly_chart(factor_radar(factors, top_n=10, title=f"{symbol} 因子雷达"), use_container_width=True)
+        with col_table:
+            st.dataframe(
+                pd.DataFrame(
+                    list(factors.items()), columns=["因子", "值"]
+                ).style.format({"值": "{:.4f}"}),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+
+def _compute_factor_values(df: pd.DataFrame) -> dict:
+    """从 OHLC 数据近似计算 V3.5 关键因子值 (用于雷达图).
+
+    Returns:
+        {因子名: 标准化值 (0~1)} — 10 个关键因子.
+    """
+    try:
+        close = df["close"].astype(float)
+        high = df["high"].astype(float)
+        low = df["low"].astype(float)
+        volume = df["volume"].astype(float)
+        result = {}
+
+        # 1. MACD 信号强度 (DIF 归一化)
+        ema12 = close.ewm(span=12, adjust=False).mean()
+        ema26 = close.ewm(span=26, adjust=False).mean()
+        dif = ema12 - ema26
+        result["MACD"] = float(dif.iloc[-1] / close.iloc[-1]) if close.iloc[-1] > 0 else 0
+
+        # 2. RSI (14)
+        delta = close.diff()
+        gain = delta.clip(lower=0).rolling(14).mean()
+        loss = (-delta.clip(upper=0)).rolling(14).mean()
+        rs = gain / loss.replace(0, 1e-8)
+        rsi = 100 - 100 / (1 + rs)
+        result["RSI"] = float(rsi.iloc[-1] / 100) if not np.isnan(rsi.iloc[-1]) else 0.5
+
+        # 3. KDJ K 值
+        low14 = low.rolling(14).min()
+        high14 = high.rolling(14).max()
+        rsv = (close - low14) / (high14 - low14).replace(0, 1e-8) * 100
+        k = rsv.rolling(3).mean()
+        result["KDJ"] = float(k.iloc[-1] / 100) if not np.isnan(k.iloc[-1]) else 0.5
+
+        # 4. 布林带宽
+        ma20 = close.rolling(20).mean()
+        std20 = close.rolling(20).std()
+        boll_width = (ma20 + 2 * std20 - (ma20 - 2 * std20)) / ma20
+        result["BOLL宽"] = float(boll_width.iloc[-1]) if not np.isnan(boll_width.iloc[-1]) else 0
+
+        # 5. ATR 百分比
+        tr = np.maximum(
+            high - low,
+            np.maximum(
+                np.abs(high - close.shift(1)),
+                np.abs(low - close.shift(1)),
+            ),
+        )
+        atr = tr.rolling(14).mean()
+        atr_pct = atr / close
+        result["ATR%"] = float(atr_pct.iloc[-1]) if not np.isnan(atr_pct.iloc[-1]) else 0
+
+        # 6. 量比
+        vol_ma5 = volume.rolling(5).mean()
+        vol_ratio = volume / vol_ma5.replace(0, 1e-8)
+        result["量比"] = float(vol_ratio.iloc[-1]) if not np.isnan(vol_ratio.iloc[-1]) else 1
+
+        # 7. 乖离率 (close vs MA20)
+        bias = (close - ma20) / ma20
+        result["乖离MA20"] = float(bias.iloc[-1]) if not np.isnan(bias.iloc[-1]) else 0
+
+        # 8. 量价背离 (相关性)
+        vol_price_corr = close.pct_change().rolling(20).corr(volume.pct_change())
+        result["量价相关"] = float(vol_price_corr.iloc[-1]) if not np.isnan(vol_price_corr.iloc[-1]) else 0
+
+        # 9. 动量 (20日收益)
+        mom_20d = close / close.shift(20) - 1
+        result["动量20d"] = float(mom_20d.iloc[-1]) if not np.isnan(mom_20d.iloc[-1]) else 0
+
+        # 10. 波动率 (20日)
+        vol_20d = close.pct_change().rolling(20).std()
+        result["波动率20d"] = float(vol_20d.iloc[-1]) if not np.isnan(vol_20d.iloc[-1]) else 0
+
+        return result
+    except Exception:
+        return {}
 
 
 def _macd_chart(df: pd.DataFrame) -> go.Figure:

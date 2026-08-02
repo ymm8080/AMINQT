@@ -1,14 +1,12 @@
+# -*- coding: utf-8 -*-
 """
 页面 4: 配置中心 (P10)
 ============================
-- 规则引擎 Config 在线编辑 ([TUNABLE] 参数 + 边界提示)
-- selection/trading YAML 配置编辑/保存/校验
+- 规则引擎 Config 在线编辑 ([TUNABLE] 参数可编辑 + 边界提示) [E1]
+- selection/trading/backtest YAML 配置编辑/保存/校验 [E2]
 - 调参报告查看 (tuning_report.json)
 - 因子参考表 (V3.5 14 维 + 个股公告因子)
-
-变更点 (看板.docx):
-- 因子参考表补充个股公告因子
-- 调参报告用用户能理解的语言解释
+- 一键应用调参结果到规则引擎/V5.2配置 [F3]
 """
 
 from __future__ import annotations
@@ -22,6 +20,7 @@ from . import data_service as ds
 CONFIG_PATHS = {
     "selection": "config/selection_config.yaml",
     "trading": "config/trading_config.yaml",
+    "backtest": "config/backtest_config.yaml",
 }
 
 FACTOR_DIMS = [
@@ -44,31 +43,41 @@ FACTOR_DIMS = [
 
 def render() -> None:
     st.header("配置中心")
-    tab_rules, tab_yaml, tab_report, tab_factors = st.tabs(
-        ["规则参数", "YAML 配置", "调参报告", "因子参考"]
+    tab_rules, tab_yaml, tab_report, tab_factors, tab_apply = st.tabs(
+        ["规则参数", "YAML 配置", "调参报告", "因子参考", "应用调参"]
     )
 
-    # ---------- Tab 1: 规则引擎 Config ----------
+    # ---------- Tab 1: 规则引擎 Config (可编辑) ----------
     with tab_rules:
         st.subheader("规则引擎参数 ([TUNABLE] 可回测调优)")
         st.caption(
-            "初始值 = 用户规则预设; 边界 = TUNABLE_BOUNDS; "
-            "调优流程见 回测中心 → 参数调优"
+            "可直接编辑后保存, 或通过 回测中心 → 参数调优 自动写回"
         )
         cfg = Config()
         cols = st.columns(3)
+        edited_values = {}
         for i, (name, (lo, hi, step)) in enumerate(sorted(TUNABLE_BOUNDS.items())):
             with cols[i % 3]:
-                st.number_input(
+                edited_values[name] = st.number_input(
                     f"{name} [{lo}~{hi}]",
                     value=float(getattr(cfg, name)),
                     key=f"cfg_{name}",
-                    disabled=True,
-                    help="P2 定稿后开放在线编辑; 当前经 回测中心→调参 写回",
+                    disabled=False,
+                    help=f"可编辑; 范围 [{lo}, {hi}] 步长 {step}",
                 )
-        st.info(
-            "在线写回将在 Pipeline-2 定稿后开放; 当前流程: 回测中心调参 → tuning_report.json → apply_to_config"
-        )
+        col_save, col_reset = st.columns(2)
+        if col_save.button("💾 保存参数到 Config", type="primary", key="save_rules"):
+            try:
+                cfg2 = Config()
+                for name, val in edited_values.items():
+                    if name in TUNABLE_BOUNDS and hasattr(cfg2, name):
+                        setattr(cfg2, name, type(getattr(cfg2, name))(val))
+                st.success("规则参数已写入 Config (内存级)")
+                st.caption("持久化需在 YAML 配置 Tab 手动保存 selection/trading 配置")
+            except Exception as exc:
+                st.error(f"保存失败: {exc}")
+        if col_reset.button("🔄 重置为默认值", key="reset_rules"):
+            st.rerun()
 
     # ---------- Tab 2: YAML 配置 ----------
     with tab_yaml:
@@ -106,6 +115,10 @@ def render() -> None:
             "因子集不固定: 每滚动重训窗口由 ICScreener 重算 (三标签并集 + 分类AUC), "
             "当期清单见 data/factor_registry/"
         )
+
+    # ---------- Tab 5: 应用调参结果 (F3) ----------
+    with tab_apply:
+        _render_apply_tab()
 
 
 def _to_yaml(data: dict) -> str:
@@ -151,6 +164,64 @@ def _render_tuning_report(report: dict) -> None:
                 st.json(params)
 
     st.json(report)
+
+
+def _render_apply_tab() -> None:
+    """一键应用调参结果到规则引擎 Config 和 V5.2 BacktestConfig."""
+    st.subheader("一键应用调参结果")
+    st.caption("从 tuning_report.json 读取最佳参数, 写回规则引擎 Config")
+
+    report = ds.load_tuning_report()
+    if report is None:
+        st.info("暂无调参报告 — 请先在 回测中心 → 参数调优 执行")
+        return
+
+    if report.get("fallback_to_default"):
+        st.warning(
+            "⚠ 上次调参结果在 OOS 验证未通过, 已回退默认值。"
+            "建议检查数据质量或特征是否有泄漏, 不要硬调参数。"
+        )
+    else:
+        st.success("✅ 上次调参结果在 OOS 验证通过, 推荐参数如下:")
+
+    best = report.get("best_params", {})
+    if best:
+        st.markdown("**推荐参数:**")
+        for k, v in best.items():
+            st.markdown(f"- `{k}`: {v}")
+    else:
+        st.markdown("**推荐参数: 使用默认值**")
+    st.caption(
+        f"训练段评分: {report.get('train_score', 0):+.4f} | "
+        f"OOS 评分: {report.get('oos_score', 0):+.4f} | "
+        f"引擎: {report.get('engine', 'v35')}"
+    )
+
+    st.divider()
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("✅ 写回规则引擎 Config", type="primary", key="apply_rules"):
+            try:
+                from app.pipeline1.param_tuner import ParamTuner
+
+                cfg = Config()
+                ParamTuner.apply_to_config(best, cfg)
+                st.success("已写入规则引擎 Config (内存级)")
+                st.caption("持久化需在 YAML 配置 Tab 手动保存")
+            except Exception as exc:
+                st.error(f"写回失败: {exc}")
+    with col2:
+        if st.button("✅ 写回 V5.2 BacktestConfig", key="apply_v52"):
+            try:
+                from app.backtest.config_manager import ConfigManager
+                from app.pipeline1.param_tuner import ParamTuner
+
+                v52_config = ConfigManager.load("config/backtest_config.yaml")
+                ParamTuner.apply_to_v52_config(best, v52_config)
+                st.success("已写入 V5.2 BacktestConfig (内存级)")
+                st.caption("持久化需在 YAML 配置 Tab 保存 backtest 配置")
+            except Exception as exc:
+                st.error(f"写回失败: {exc}")
 
 
 if __name__ == "__main__":

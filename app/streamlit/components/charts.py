@@ -150,8 +150,20 @@ def intraday_chart(
     return fig
 
 
-def equity_curve(nav_df: pd.DataFrame, title: str = "净值曲线") -> go.Figure:
-    """回测净值曲线."""
+def equity_curve(
+    nav_df: pd.DataFrame,
+    title: str = "净值曲线",
+    benchmark_df: pd.DataFrame | None = None,
+    benchmark_name: str = "基准",
+) -> go.Figure:
+    """回测净值曲线 (可选叠加基准对比线).
+
+    Args:
+        nav_df: 含 date/nav 列的 DataFrame.
+        title: 图表标题.
+        benchmark_df: 含 date/nav 列的基准 DataFrame (归一化为同一起点).
+        benchmark_name: 基准曲线名称.
+    """
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
@@ -161,11 +173,27 @@ def equity_curve(nav_df: pd.DataFrame, title: str = "净值曲线") -> go.Figure
             line={"color": "#e54545", "width": 1.5},
         )
     )
+    if benchmark_df is not None and not benchmark_df.empty:
+        bench = benchmark_df.copy()
+        # 归一化基准到与策略同一起点
+        start_nav = nav_df["nav"].iloc[0]
+        bench_start = bench["nav"].iloc[0]
+        if bench_start > 0:
+            bench["nav"] = bench["nav"] / bench_start * start_nav
+        fig.add_trace(
+            go.Scatter(
+                x=bench["date"],
+                y=bench["nav"],
+                name=benchmark_name,
+                line={"color": "#1f77b4", "width": 1, "dash": "dot"},
+            )
+        )
     fig.update_layout(
         title=title,
         height=320,
         margin={"l": 10, "r": 10, "t": 40, "b": 10},
         yaxis_tickformat=".2f",
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02},
     )
     return fig
 
@@ -208,5 +236,44 @@ def factor_radar(factors: dict, top_n: int = 10, title: str = "因子雷达") ->
     )
     fig.update_layout(
         title=title, height=360, margin={"l": 40, "r": 40, "t": 40, "b": 10}
+    )
+    return fig
+
+
+def comparison_nav_chart(
+    navs: dict[str, pd.DataFrame],
+    title: str = "多模式净值对比",
+) -> go.Figure:
+    """多模式净值对比图 (Squad vs Sniper vs 基准).
+
+    Args:
+        navs: {label: DataFrame(date, nav)} — 每条曲线归一化到 1.0.
+        title: 图表标题.
+    """
+    fig = go.Figure()
+    palette = ["#e54545", "#1f77b4", "#2ca02c", "#ff7f0e", "#9467bd"]
+    for i, (label, df) in enumerate(navs.items()):
+        if df is None or df.empty:
+            continue
+        norm = df.copy()
+        start = norm["nav"].iloc[0]
+        if start > 0:
+            norm["nav"] = norm["nav"] / start
+        color = palette[i % len(palette)]
+        fig.add_trace(
+            go.Scatter(
+                x=norm["date"],
+                y=norm["nav"],
+                name=label,
+                line={"color": color, "width": 1.5 if i == 0 else 1},
+            )
+        )
+    fig.add_hline(y=1.0, line_dash="dash", line_color="gray", opacity=0.4)
+    fig.update_layout(
+        title=title,
+        height=400,
+        margin={"l": 10, "r": 10, "t": 40, "b": 10},
+        yaxis_tickformat=".2f",
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02},
     )
     return fig

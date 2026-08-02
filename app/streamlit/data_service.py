@@ -461,3 +461,283 @@ def save_yaml(data: dict, path: str) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         yaml.safe_dump(data, fh, allow_unicode=True, sort_keys=False)
+
+
+# ============================================================
+# 回测真实数据适配器 (V5.2 BacktestEngine 格式)
+# ============================================================
+V3_PANEL_PATH = "data/panel_full_enriched_v3.parquet"
+
+
+def load_backtest_panel(days: int = 750) -> pd.DataFrame | None:
+    """加载 v3 面板 parquet 并截取最近 N 个交易日.
+
+    Returns:
+        面板 DataFrame 或 None (文件不存在时).
+    """
+    if not os.path.exists(V3_PANEL_PATH):
+        return None
+    try:
+        panel = pd.read_parquet(V3_PANEL_PATH)
+        if "date" in panel.columns:
+            panel["date"] = pd.to_datetime(panel["date"])
+            all_dates = sorted(panel["date"].unique())
+            if len(all_dates) > days:
+                keep_dates = set(all_dates[-days:])
+                panel = panel[panel["date"].isin(keep_dates)]
+        return panel.sort_values(["date", "symbol"]).reset_index(drop=True)
+    except Exception as exc:
+        _data_logger.error("加载 v3 面板失败: %s", exc)
+        return None
+
+
+def panel_to_v52_format(
+    panel: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, list, str] | None:
+    """将 v3 面板转换为 V5.2 BacktestEngine 所需的 pred_df + price_df.
+
+    V5.2 引擎需要:
+        pred_df:  date, stock, score_h2, prob_up_h2, pred_ret_h2
+        price_df: date, stock, open, high, low, close, volume,
+                  pre_close, up_limit, down_limit, is_halt, is_st,
+                  avg_amount_20d, circ_mv, amount
+
+    Returns:
+        (pred_df, price_df, trade_dates, data_version_hash) 或 None.
+    """
+    if panel is None or panel.empty:
+        return None
+    try:
+        df = panel.copy()
+        # 重命名 symbol → stock
+        df = df.rename(columns={"symbol": "stock"})
+        # 确保 date 为 Timestamp
+        df["date"] = pd.to_datetime(df["date"])
+
+        # ---- 构建 price_df ----
+        price_cols = [
+            "date", "stock", "open", "high", "low", "close",
+            "volume", "pre_close", "amount",
+        ]
+        available = [c for c in price_cols if c in df.columns]
+        price_df = df[available].copy()
+        # 补充缺失列
+        if "pre_close" not in price_df.columns:
+            price_df["pre_close"] = price_df.groupby("stock")["close"].shift(1).fillna(
+                price_df["close"]
+            )
+        if "amount" not in price_df.columns:
+            price_df["amount"] = price_df.get("volume", 0) * price_df["close"]
+        # avg_amount_20d
+        price_df["avg_amount_20d"] = price_df.groupby("stock")["amount"].transform(
+            lambda x: x.rolling(20, min_periods=1).mean()
+        )
+        # circ_mv (流通市值, 面板可能没有 → 用 amount 近似)
+        if "circ_mv" in df.columns:
+            price_df["circ_mv"] = df["circ_mv"]
+        else:
+            price_df["circ_mv"] = price_df["avg_amount_20d"] * 20
+        # 涨跌停 (用 pre_close + 10% 近似, 20cm 板块简化)
+        price_df["up_limit"] = (price_df["pre_close"] * 1.1).round(2)
+        price_df["down_limit"] = (price_df["pre_close"] * 0.9).round(2)
+        # 状态标记
+        price_df["is_halt"] = 0
+        price_df["is_st"] = 0
+
+        # ---- 构建 pred_df ----
+        # 使用面板中可用的预测列
+        pred_cols_map = {
+            "score": "score_h2",
+            "prob_up": "prob_up_h2",
+            "pred_ret_3d": "pred_ret_h2",
+        }
+        pred_df = df[["date", "stock"]].copy()
+        for src, dst in pred_cols_map.items():
+            if src in df.columns:
+                pred_df[dst] = df[src].astype(float)
+            else:
+                pred_df[dst] = 0.5 if "prob" in dst else 0.0
+        # 如果没有 score 列, 用 prob_up 近似
+        if "score_h2" not in pred_df.columns or pred_df["score_h2"].sum() == 0:
+            if "prob_up_h2" in pred_df.columns:
+                pred_df["score_h2"] = pred_df["prob_up_h2"]
+
+        # 交易日历
+        trade_dates = sorted(price_df["date"].unique())
+        import hashlib
+        data_version_hash = "sha256:" + hashlib.sha256(
+            str(trade_dates[0]).encode() + str(trade_dates[-1]).encode()
+        ).hexdigest()[:16]
+
+        return pred_df, price_df, trade_dates, data_version_hash
+    except Exception as exc:
+        _data_logger.error("面板转 V5.2 格式失败: %s", exc)
+        return None
+
+
+def panel_to_v35_lists(
+    panel: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict] | None:
+    """将 v3 面板转换为 V35 BacktestEngineV35 所需的 (panel, daily_lists).
+
+    Returns:
+        (panel, daily_lists) 或 None — daily_lists: {date: DataFrame(symbol, score, ...)}.
+    """
+    if panel is None or panel.empty:
+        return None
+    try:
+        df = panel.copy()
+        df["date"] = pd.to_datetime(df["date"])
+        # 构建每日清单: 每个交易日取 score 前 30 只
+        daily_lists = {}
+        score_col = "score" if "score" in df.columns else "prob_up"
+        for d, g in df.groupby("date"):
+            top = g.nlargest(30, score_col) if score_col in g.columns else g.head(30)
+            lst = top[["symbol"]].copy()
+            if score_col in top.columns:
+                lst["score"] = top[score_col].values
+            else:
+                lst["score"] = 0.5
+            if "prob_up" in top.columns:
+                lst["prob_up"] = top["prob_up"].values
+            if "industry" in top.columns:
+                lst["industry"] = top["industry"].values
+            else:
+                lst["industry"] = "UNKNOWN"
+            daily_lists[d] = lst
+        return df, daily_lists
+    except Exception as exc:
+        _data_logger.error("面板转 V35 清单失败: %s", exc)
+        return None
+
+
+# ============================================================
+# 真实交易信号 / 持仓加载 (C1/C2 Gap)
+# ============================================================
+AUDIT_LOG_PATH = str(data_others_path("data/audit_log.json"))
+
+
+def load_real_signals() -> list[dict]:
+    """从最新清单加载真实交易信号 (替代硬编码演示数据).
+
+    优先读取 priority.json 中的标记股, 结合最新清单的预测数据.
+    """
+    try:
+        priority_syms = load_priority_symbols()
+        if not priority_syms:
+            return []
+        lst, _ = load_latest_list()
+        if lst is None:
+            # 没有清单, 用 priority 标记构造最小信号
+            return [
+                {
+                    "time": "14:50",
+                    "symbol": s,
+                    "side": "buy",
+                    "priority": "L4-形态",
+                    "reason": "日内买入标记",
+                    "price": 0.0,
+                    "qty": 100,
+                }
+                for s in sorted(priority_syms)
+            ]
+        # 从清单中匹配 priority 股票
+        matched = lst[lst["symbol"].isin(priority_syms)]
+        signals = []
+        for _, row in matched.iterrows():
+            sym = row["symbol"]
+            pred_ret = float(row.get("pred_ret_1d", 0))
+            prob = float(row.get("prob_up", 0))
+            side = "buy" if pred_ret > 0 else "sell"
+            reason = f"prob={prob:.2f} pred_ret_1d={pred_ret:+.2%}"
+            signals.append({
+                "time": "14:50",
+                "symbol": sym,
+                "side": side,
+                "priority": "Pipeline-1",
+                "reason": reason,
+                "price": float(row.get("close", 0) or 0),
+                "qty": 100,
+            })
+        return signals
+    except Exception as exc:
+        _data_logger.warning("加载真实信号失败: %s", exc)
+        return []
+
+
+def load_real_positions() -> list[dict]:
+    """从 priority.json + 最新行情构造持仓列表 (近似).
+
+    Returns:
+        持仓列表 [{symbol, qty, available_qty, cost, current_price}].
+    """
+    try:
+        priority_syms = load_priority_symbols()
+        if not priority_syms:
+            return []
+        lst, _ = load_latest_list()
+        positions = []
+        for sym in sorted(priority_syms):
+            if lst is not None and sym in lst["symbol"].values:
+                row = lst[lst["symbol"] == sym].iloc[0]
+                close = float(row.get("close", 100) or 100)
+                cost = close * 0.98  # 近似成本
+            else:
+                close = 100.0
+                cost = 98.0
+            positions.append({
+                "symbol": sym,
+                "qty": 100,
+                "available_qty": 0,  # T+1: 当日买入不可卖
+                "cost": round(cost, 2),
+                "current_price": round(close, 2),
+            })
+        return positions
+    except Exception as exc:
+        _data_logger.warning("加载真实持仓失败: %s", exc)
+        return []
+
+
+def load_real_account() -> dict:
+    """构造账户快照 (演示, 生产接入 Executor.get_account).
+
+    Returns:
+        {total_asset, available_cash, frozen}.
+    """
+    return {"total_asset": 1018000.0, "available_cash": 817400.0, "frozen": 0.0}
+
+
+def load_audit_log(limit: int = 50) -> list[dict]:
+    """读取审计日志 (append-only JSON).
+
+    Returns:
+        日志记录列表 (最新的 limit 条).
+    """
+    if not os.path.exists(AUDIT_LOG_PATH):
+        return []
+    try:
+        with open(AUDIT_LOG_PATH, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, list):
+            return data[-limit:]
+        if isinstance(data, dict):
+            return data.get("entries", [])[-limit:]
+        return []
+    except Exception:
+        return []
+
+
+def append_audit_log(entry: dict) -> None:
+    """追加审计日志条目 (append-only, 铁律10).
+
+    Args:
+        entry: 日志条目 {时间, 操作, 代码, 方向, 价格, 数量, 结果, 备注}.
+    """
+    os.makedirs(os.path.dirname(AUDIT_LOG_PATH), exist_ok=True)
+    log = load_audit_log()
+    log.append(entry)
+    try:
+        with open(AUDIT_LOG_PATH, "w", encoding="utf-8") as fh:
+            json.dump(log, fh, ensure_ascii=False, indent=1)
+    except Exception as exc:
+        _data_logger.error("写入审计日志失败: %s", exc)

@@ -8,6 +8,7 @@ app/streamlit/components 包 (P10)
 from __future__ import annotations
 
 from .charts import (
+    comparison_nav_chart,
     drawdown_chart,
     equity_curve,
     factor_radar,
@@ -34,6 +35,7 @@ __all__ = [
     "equity_curve",
     "drawdown_chart",
     "factor_radar",
+    "comparison_nav_chart",
     "main_force_chips_chart",
     "chip_control_chart",
     "find_bull_chart",

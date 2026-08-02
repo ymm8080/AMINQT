@@ -187,18 +187,26 @@ def render() -> None:
     # ---------- 中栏: 信号 ----------
     with mid:
         st.subheader("信号列表")
-        render_signal_list(sm, om, _demo_signals())
+        signals = ds.load_real_signals()
+        if not signals:
+            signals = _demo_signals()
+            st.caption("⚠ 使用演示信号 — 真实信号需先运行 Pipeline-1 选股并标记 priority")
+        render_signal_list(sm, om, signals)
 
     # ---------- 右栏: 持仓/委托/成交 ----------
     with right:
         st.subheader("账户")
-        acct = _account_snapshot()
+        acct = ds.load_real_account()
         c1, c2 = st.columns(2)
         c1.metric("总资产", f"{acct['total_asset']:,.0f}")
         c2.metric("可用资金", f"{acct['available_cash']:,.0f}")
 
         st.subheader("持仓")
-        render_position_list(_demo_positions())
+        positions = ds.load_real_positions()
+        if not positions:
+            positions = _demo_positions()
+            st.caption("⚠ 使用演示持仓 — 真实持仓需先标记 priority 股票")
+        render_position_list(positions)
 
         st.subheader("委托队列")
         render_order_queue(om)
@@ -209,21 +217,23 @@ def render() -> None:
     # ---------- 底栏: 审计日志 ----------
     st.divider()
     st.subheader("交易审计日志")
-    log_df = pd.DataFrame(
-        [
-            {
-                "时间": _dt.datetime.now().strftime("%H:%M:%S"),
-                "操作": "页面加载",
-                "代码": "-",
-                "方向": "-",
-                "价格": "-",
-                "数量": "-",
-                "结果": "OK",
-                "备注": "交易看板已接入状态机/委托管理器",
-            }
-        ]
-    )
-    st.dataframe(log_df, use_container_width=True, hide_index=True)
+    audit_entries = ds.load_audit_log()
+    if audit_entries:
+        log_df = pd.DataFrame(audit_entries)
+        st.dataframe(log_df, use_container_width=True, hide_index=True)
+    else:
+        # 记录页面加载
+        ds.append_audit_log({
+            "时间": _dt.datetime.now().strftime("%H:%M:%S"),
+            "操作": "页面加载",
+            "代码": "-",
+            "方向": "-",
+            "价格": "-",
+            "数量": "-",
+            "结果": "OK",
+            "备注": "交易看板已接入状态机/委托管理器/真实信号",
+        })
+        st.info("审计日志已初始化 — 后续操作将自动记录")
 
 
 if __name__ == "__main__":
