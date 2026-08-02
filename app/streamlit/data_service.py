@@ -481,7 +481,9 @@ def save_yaml(data: dict, path: str) -> None:
 # ============================================================
 # 回测真实数据适配器 (V5.2 BacktestEngine 格式)
 # ============================================================
-V3_PANEL_PATH = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
+V3_PANEL_PATH = os.getenv(
+    "PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
+)
 
 
 def load_backtest_panel(days: int = 750) -> pd.DataFrame | None:
