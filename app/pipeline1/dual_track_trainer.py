@@ -579,9 +579,7 @@ class DualTrackTrainer:
                 )
                 calibrators[k] = None
                 continue
-            raw = model.predict_proba(
-                np.nan_to_num(calib[cols].values, nan=0.0)
-            )[:, 1]
+            raw = model.predict_proba(np.nan_to_num(calib[cols].values, nan=0.0))[:, 1]
             n_calib_dates = (
                 calib["date"].nunique() if "date" in calib.columns else len(calib)
             )
@@ -593,9 +591,7 @@ class DualTrackTrainer:
                     n_calib_dates,
                     kind,
                 )
-            calibrators[k] = ProbCalibrator(method=method).fit(
-                raw, calib[label].values
-            )
+            calibrators[k] = ProbCalibrator(method=method).fit(raw, calib[label].values)
         trained["calibrators"] = calibrators
         trained["calibrator"] = calibrators.get(1)  # 1d 别名 (向后兼容)
         return trained["calibrator"]

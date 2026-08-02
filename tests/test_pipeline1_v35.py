@@ -566,9 +566,7 @@ class TestListGenerator:
             [0.4, 0.6, 0.7, 0.8],
             [0.3, 0.2, 0.9, 1.0],
         ]
-        scored = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0).compute_scores(
-            cands
-        )
+        scored = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0).compute_scores(cands)
         cp = scored["compound_prob"]
         w2, w3, w5 = 0.45, 0.35, 0.2
         assert cp.iloc[0] == pytest.approx(0.5)
@@ -580,9 +578,7 @@ class TestListGenerator:
         cands = make_candidates(n=3, seed=7).drop(
             columns=["prob_up_2d", "prob_up_3d", "prob_up_5d"]
         )
-        scored = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0).compute_scores(
-            cands
-        )
+        scored = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0).compute_scores(cands)
         assert (scored["compound_prob"] == scored["prob_up"]).all()
 
     def test_empty_triggers(self):
