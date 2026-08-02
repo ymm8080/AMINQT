@@ -252,6 +252,69 @@ class DailySelectionPipeline:
         prev = [d for d in dates if d < trade_date]
         return self.load_list(prev[-1]) if prev else None
 
+    # ---------------- 持仓卖出信号 (预测驱动 + 价格硬止损) ----------------
+    def predict_held(
+        self,
+        trade_date: str,
+        held_symbols: list[str],
+        entry_cost_map: dict | None = None,
+        panel: pd.DataFrame | None = None,
+    ) -> pd.DataFrame:
+        """对持仓股重跑预测并输出卖出信号 (16:00 主链之后运行).
+
+        买入链路只预测当日候选; 持仓股需要每天用当日特征重算预测,
+        才能拿到新鲜 pred_ret_1d / prob_up / pain_prob 做卖出裁决.
+
+        Args:
+            trade_date: 'YYYYMMDD'
+            held_symbols: 当前持仓 symbol 列表
+            entry_cost_map: {symbol: 买入成本价}; 提供时合并当日 close 计算
+                            pnl (现价/成本-1), 触发价格硬止损 (-6%)
+            panel: 完整面板 (含当日); None → _assemble_panel (生产路径)
+
+        Returns:
+            DataFrame(symbol, board, close, pred_ret_1d/3d/5d, prob_up,
+                      pain_prob, pred_q10, [pnl], sell_signal, sell_reason);
+            无持仓可预测时返回空 DataFrame.
+        """
+        if panel is None:
+            panel = self._assemble_panel(trade_date)
+        main_df, dual_df, _valve = self.cleaner.run_inference(panel)
+        held = set(held_symbols)
+        frames = []
+        for board, df in (("main", main_df), ("dual", dual_df)):
+            if len(df) == 0 or board not in self.predictor.bundles:
+                continue
+            cols = self.predictor.bundles[board]["feature_cols"]
+            # dual 板需要全截面算 cross-sectional rank, 特征在全 df 上构建
+            feat = self.features.build(
+                df,
+                self.float_shares_map,
+                inference_cols=cols,
+                cross_sectional_rank=(board == "dual"),
+            )
+            held_feat = feat[feat["symbol"].isin(held)]
+            if len(held_feat) == 0:
+                continue
+            pred = self.predictor.predict(held_feat, board)
+            latest_close = (
+                df[df["symbol"].isin(held)]
+                .sort_values("date")
+                .groupby("symbol")["close"]
+                .last()
+            )
+            pred["close"] = pred["symbol"].map(latest_close)
+            if entry_cost_map:
+                pred["pnl"] = pred["close"] / pred["symbol"].map(entry_cost_map) - 1
+            frames.append(pred)
+        if not frames:
+            logger.warning("持仓股均不在可预测范围: %s", held_symbols)
+            return pd.DataFrame()
+        out = pd.concat(frames, ignore_index=True)
+        from .sell_signal import evaluate_sell_signal
+
+        return evaluate_sell_signal(out, pnl_col="pnl" if entry_cost_map else None)
+
     # ---------------- P25.4 每日质量报告 (D-26) ----------------
     def generate_quality_report(self, forecast_df, actual_returns, trade_date):
         """D-26: 推理后自动计算预测质量报告.
