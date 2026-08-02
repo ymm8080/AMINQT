@@ -1,4 +1,4 @@
-﻿﻿"""Daily fetch script — append one day's data to V3 panel from Tushare.
+﻿"""Daily fetch script — append one day's data to V3 panel from Tushare.
 NEVER loads full panel into memory. Uses pyarrow streaming read/write.
 
 Usage: python _daily_fetch.py [YYYYMMDD]  (default: today)
