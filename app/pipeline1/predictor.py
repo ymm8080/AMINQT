@@ -92,7 +92,10 @@ class V35Predictor:
         # 综合排序分: LABEL_WEIGHTS 加权 (1d/2d/3d/5d, 修改字典即全局生效)
         total_w = sum(LABEL_WEIGHTS.values())
         latest["composite_score"] = (
-            sum(LABEL_WEIGHTS[k] * latest[f"pred_ret_{k}d"].values for k in LABEL_WEIGHTS)
+            sum(
+                LABEL_WEIGHTS[k] * latest[f"pred_ret_{k}d"].values
+                for k in LABEL_WEIGHTS
+            )
             / total_w
         )
         keep = [

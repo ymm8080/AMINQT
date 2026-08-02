@@ -470,7 +470,9 @@ class TestListGenerator:
     def test_holding_bonus(self):
         """向后兼容: 无 holding_day 列时, is_in_yesterday_list=1 视为 day1 (weight=1.0)."""
         cands = make_candidates(n=2, seed=3)
-        cands.loc[:, ["pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d"]] = 0.02
+        cands.loc[:, ["pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d"]] = (
+            0.02
+        )
         cands.loc[:, "prob_up"] = 0.5
         cands["is_in_yesterday_list"] = [1, 0]
         out = ListGenerator(**GATE_OFF).emit(cands)
@@ -483,7 +485,9 @@ class TestListGenerator:
     def test_holding_bonus_decay_b3(self):
         """B3: Holding Bonus 按持仓天数衰减 day1=1.0/day2=0.5/day3=0.0."""
         cands = make_candidates(n=3, seed=3)
-        cands.loc[:, ["pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d"]] = 0.02
+        cands.loc[:, ["pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d"]] = (
+            0.02
+        )
         cands.loc[:, "prob_up"] = 0.5
         cands["is_in_yesterday_list"] = [1, 1, 1]
         cands["holding_day"] = [1, 2, 3]  # day1/day2/day3
