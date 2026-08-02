@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """PIPELINE1 → 选股看板 连通性单元测试.
 
 验证从 PIPELINE1 生成的清单 (list_YYYYMMDD.parquet) 到选股看板
