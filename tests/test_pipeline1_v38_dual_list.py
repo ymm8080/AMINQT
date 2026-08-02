@@ -42,6 +42,8 @@ class TestLambdaRank:
             )
         df = pd.concat(frames, ignore_index=True)
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        for k in (2, 3, 5):
+            df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         trained = trainer.train_window(df, "main", ["f1"])
         assert "rank_model" in trained
@@ -81,6 +83,8 @@ class TestLambdaRank:
             )
         df = pd.concat(frames, ignore_index=True)
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        for k in (2, 3, 5):
+            df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         path = trainer.save(trainer.train_window(df, "main", ["f1"]), "t")
         feats = df.copy()
@@ -89,6 +93,10 @@ class TestLambdaRank:
         out = V35Predictor({"main": path}).predict(feats, "main")
         assert "rank_score" in out.columns
         assert out["rank_score"].notna().all()
+        # [多视界] 每个视界概率列存在且落在 [0,1]
+        for col in ("prob_up_2d", "prob_up_3d", "prob_up_5d"):
+            assert col in out.columns
+            assert out[col].between(0, 1).all()
 
 
 # ============================================================

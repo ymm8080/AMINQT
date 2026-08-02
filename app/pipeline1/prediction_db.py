@@ -34,7 +34,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS prediction_runs (
     date         TEXT PRIMARY KEY,
     n_stocks     INTEGER NOT NULL DEFAULT 0,
-    schema_version TEXT NOT NULL DEFAULT '1.3',
+    schema_version TEXT NOT NULL DEFAULT '1.4',
     created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
@@ -49,6 +49,9 @@ CREATE TABLE IF NOT EXISTS prediction_stocks (
     pred_ret_3d  REAL,
     pred_ret_5d  REAL,
     prob_up      REAL,
+    prob_up_2d   REAL,
+    prob_up_3d   REAL,
+    prob_up_5d   REAL,
     score        REAL,
     momentum     TEXT,
     weight       REAL,
@@ -103,6 +106,21 @@ class PredictionDB:
                     "actual_ret_2d",
                     "ALTER TABLE prediction_outcomes ADD COLUMN actual_ret_2d REAL",
                 ),
+                (
+                    "prediction_stocks",
+                    "prob_up_2d",
+                    "ALTER TABLE prediction_stocks ADD COLUMN prob_up_2d REAL",
+                ),
+                (
+                    "prediction_stocks",
+                    "prob_up_3d",
+                    "ALTER TABLE prediction_stocks ADD COLUMN prob_up_3d REAL",
+                ),
+                (
+                    "prediction_stocks",
+                    "prob_up_5d",
+                    "ALTER TABLE prediction_stocks ADD COLUMN prob_up_5d REAL",
+                ),
             ):
                 cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
                 if col not in cols:
@@ -111,7 +129,7 @@ class PredictionDB:
 
     # ── 写入 ──
     def insert_run(
-        self, date_str: str, stocks: pd.DataFrame, schema_version: str = "1.3"
+        self, date_str: str, stocks: pd.DataFrame, schema_version: str = "1.4"
     ) -> int:
         """插入当日清单 (幂等: 已存在则跳过)."""
         with sqlite3.connect(self.path) as conn:
@@ -131,8 +149,9 @@ class PredictionDB:
                 conn.execute(
                     """INSERT OR IGNORE INTO prediction_stocks
                        (date, symbol, board, rank, pred_ret_1d, pred_ret_2d, pred_ret_3d, pred_ret_5d,
-                        prob_up, score, momentum, weight, pain_prob, consensus_score, signal_conflict)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        prob_up, prob_up_2d, prob_up_3d, prob_up_5d,
+                        score, momentum, weight, pain_prob, consensus_score, signal_conflict)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         date_str,
                         str(row.get("symbol", "")),
@@ -143,6 +162,9 @@ class PredictionDB:
                         _safe_float(row, "pred_ret_3d"),
                         _safe_float(row, "pred_ret_5d"),
                         _safe_float(row, "prob_up"),
+                        _safe_float(row, "prob_up_2d"),
+                        _safe_float(row, "prob_up_3d"),
+                        _safe_float(row, "prob_up_5d"),
                         _safe_float(row, "score"),
                         str(row.get("momentum", "")),
                         _safe_float(row, "weight"),

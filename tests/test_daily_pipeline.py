@@ -71,6 +71,8 @@ def _train_bundle(tmp_path, panel):
     df["label_3d"] = df.groupby("symbol")["close_hfq"].shift(-3) / df["close_hfq"] - 1
     df["label_5d"] = df.groupby("symbol")["close_hfq"].shift(-5) / df["close_hfq"] - 1
     df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+    for k in (2, 3, 5):
+        df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
     trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
     trained = trainer.train_window(df, "main", ["f1", "f2"])
     return trainer.save(trained, "test")
@@ -103,7 +105,7 @@ class TestDailyPipeline:
         lst = result["list"]
         assert list(lst.columns) == SCHEMA_FIELDS
         assert 0 < len(lst) <= 2
-        assert (lst["schema_version"] == "1.3").all()
+        assert (lst["schema_version"] == "1.4").all()
 
     def test_list_persisted_and_yesterday_carryover(self, pipeline):
         """清单持久化 + 次日 is_in_yesterday_list 回填 (Holding Bonus)."""

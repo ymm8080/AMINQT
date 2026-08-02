@@ -14,7 +14,7 @@ class TestDataService:
         df = ds.demo_list()
         for col in SCHEMA_FIELDS:
             assert col in df.columns, col
-        assert (df["schema_version"] == "1.3").all()
+        assert (df["schema_version"] == "1.4").all()
         assert df["prob_up"].between(0, 1).all()
 
     def test_demo_ohlc_and_intraday(self):
