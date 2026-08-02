@@ -46,6 +46,7 @@ def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
         {
             "symbol": list(symbols),
             "board": ["main"] * n,
+            "day_change": rng.uniform(-0.03, 0.06, n),
             "pred_ret_1d": rng.uniform(-0.02, 0.05, n),
             "pred_ret_3d": rng.uniform(-0.03, 0.09, n),
             "pred_ret_5d": rng.uniform(-0.04, 0.12, n),
