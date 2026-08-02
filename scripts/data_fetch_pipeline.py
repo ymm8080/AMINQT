@@ -41,6 +41,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 from app.pipeline1.panel_builder import enrich_alt_data  # noqa: E402
+from config.settings import PANEL_V3_PATH  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,7 +49,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("data_fetch_pipeline")
 
-V3_PATH = ROOT / "data" / "panel_full_enriched_v3.parquet"
+V3_PATH = PANEL_V3_PATH
 
 # 数据源分组 (用于 UI 显示)
 SOURCE_GROUPS = {

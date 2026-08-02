@@ -48,6 +48,7 @@ omit =
     # ── Integration-level modules (require file I/O / DB / external state) ──
     app/pipeline1/checkpoint.py
     app/pipeline1/prediction_db.py
+    app/intraday/v51/mvp_gate.py
 
 [report]
 # Show missing lines in terminal output

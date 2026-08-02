@@ -10,6 +10,7 @@ env/
 *.parquet
 data/raw/*.csv
 data/intraday/*.csv
+data/processed/*.csv
 data/processed/*.parquet
 data/audit/*
 data/factor_registry/registry_*.json
