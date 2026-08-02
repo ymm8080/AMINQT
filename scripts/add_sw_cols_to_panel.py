@@ -6,6 +6,7 @@ Add:    sw_l1_name, sw_l2_name, sw_l3_name (string)
 
 Usage: python scripts/add_sw_cols_to_panel.py
 """
+
 import os
 import sys
 import logging
@@ -13,7 +14,9 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
@@ -22,8 +25,14 @@ SW_CSV = os.path.join(
 )
 
 NEW_COLS = ["sw_l1_name", "sw_l2_name", "sw_l3_name"]
-OLD_COLS_TO_REMOVE = ["sw_l1_code", "sw_l2_code", "sw_l3_code",
-                      "sw_index_close", "sw_index_vol", "sw_ret_1d"]
+OLD_COLS_TO_REMOVE = [
+    "sw_l1_code",
+    "sw_l2_code",
+    "sw_l3_code",
+    "sw_index_close",
+    "sw_index_vol",
+    "sw_ret_1d",
+]
 
 
 def main():
@@ -95,9 +104,13 @@ def main():
         if "ts_code" in rg_df.columns:
             ts_codes = rg_df["ts_code"].astype(str).tolist()
         elif "symbol" in rg_df.columns:
-            ts_codes = rg_df["symbol"].apply(
-                lambda x: f"{x}.SZ" if str(x).startswith(("0", "3")) else f"{x}.SH"
-            ).tolist()
+            ts_codes = (
+                rg_df["symbol"]
+                .apply(
+                    lambda x: f"{x}.SZ" if str(x).startswith(("0", "3")) else f"{x}.SH"
+                )
+                .tolist()
+            )
         else:
             logger.error(f"Row group {rg_idx}: no ts_code/symbol!")
             continue
@@ -123,7 +136,9 @@ def main():
         total_rows += len(rg_df)
 
         if (rg_idx + 1) % 5 == 0 or rg_idx == pf.metadata.num_row_groups - 1:
-            logger.info(f"  Row group {rg_idx+1}/{pf.metadata.num_row_groups}, {total_rows:,} rows")
+            logger.info(
+                f"  Row group {rg_idx + 1}/{pf.metadata.num_row_groups}, {total_rows:,} rows"
+            )
 
     writer.close()
     pf.close()
@@ -138,7 +153,9 @@ def main():
     logger.info("DONE")
     logger.info("=" * 55)
     pf2 = pq.ParquetFile(PANEL)
-    logger.info(f"Panel: {pf2.metadata.num_rows:,} rows, {len(pf2.schema_arrow.names)} cols")
+    logger.info(
+        f"Panel: {pf2.metadata.num_rows:,} rows, {len(pf2.schema_arrow.names)} cols"
+    )
     pf2.close()
 
     t = pq.read_table(PANEL, columns=["date"] + NEW_COLS).to_pandas()
@@ -147,7 +164,7 @@ def main():
     logger.info(f"\nFill rates on {max_date.date()}:")
     for col in NEW_COLS:
         n = latest[col].notna().sum()
-        logger.info(f"  {col}: {n}/{len(latest)} ({n/len(latest)*100:.1f}%)")
+        logger.info(f"  {col}: {n}/{len(latest)} ({n / len(latest) * 100:.1f}%)")
 
 
 if __name__ == "__main__":

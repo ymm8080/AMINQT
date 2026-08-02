@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
 """Backfill missing L3 SW daily indices."""
-import os, time, logging
+
+import os
+import time
+import logging
 import pandas as pd
 import tushare as ts
 from dotenv import load_dotenv
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -50,10 +55,17 @@ if frames:
     new = pd.concat(frames, ignore_index=True)
     combined = pd.concat([existing, new], ignore_index=True)
     combined = combined.drop_duplicates(subset=["ts_code", "trade_date"])
-    combined = combined.sort_values(["level", "ts_code", "trade_date"]).reset_index(drop=True)
+    combined = combined.sort_values(["level", "ts_code", "trade_date"]).reset_index(
+        drop=True
+    )
     combined.to_parquet(OUT, index=False)
     l3_new = combined[combined["level"] == "L3"]["ts_code"].nunique()
-    logger.info("Saved: %d rows, %d total indices, L3=%d", len(combined), combined["ts_code"].nunique(), l3_new)
+    logger.info(
+        "Saved: %d rows, %d total indices, L3=%d",
+        len(combined),
+        combined["ts_code"].nunique(),
+        l3_new,
+    )
 else:
     logger.info("No new data fetched")
 

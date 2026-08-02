@@ -2480,12 +2480,21 @@ class FeatureEngineV35:
 
         LEVELS = ["l1", "l2", "l3"]
         RAW_MAP = {
-            "close": "close", "vol": "vol", "amount": "amount",
-            "pe": "pe", "pb": "pb", "pct_change": "ret_1d",
+            "close": "close",
+            "vol": "vol",
+            "amount": "amount",
+            "pe": "pe",
+            "pb": "pb",
+            "pct_change": "ret_1d",
         }
         DERIVED = [
-            "ret_5d", "ret_20d", "vol_20d", "momentum_accel",
-            "turnover_anomaly", "rotation_position", "relative_strength",
+            "ret_5d",
+            "ret_20d",
+            "vol_20d",
+            "momentum_accel",
+            "turnover_anomaly",
+            "rotation_position",
+            "relative_strength",
         ]
         # ── Eval-driven noise drops (sw_feature_eval_multihorizon.csv) ──
         # sw_l2_pe / sw_l3_pe: |ICIR| < 0.05 across T+1/T+3/T+5
@@ -2502,7 +2511,8 @@ class FeatureEngineV35:
                 )
                 logger.info(
                     "dim28: SW daily history loaded: %d rows, %d indices",
-                    len(sw_hist), sw_hist["ts_code"].nunique(),
+                    len(sw_hist),
+                    sw_hist["ts_code"].nunique(),
                 )
             else:
                 logger.warning("dim28: SW daily history not found at %s", SW_DAILY_PATH)
@@ -2541,40 +2551,56 @@ class FeatureEngineV35:
             # Compute derived features on index level
             sw_lvl = sw_lvl.sort_values(["ts_code", "date"])
             grp = sw_lvl.groupby("ts_code")
-            sw_lvl["_ret_5d"] = grp["pct_change"].rolling(
-                5, min_periods=3
-            ).sum().reset_index(level=0, drop=True)
-            sw_lvl["_ret_20d"] = grp["pct_change"].rolling(
-                20, min_periods=5
-            ).sum().reset_index(level=0, drop=True)
-            sw_lvl["_vol_20d"] = grp["pct_change"].rolling(
-                20, min_periods=10
-            ).std().reset_index(level=0, drop=True)
+            sw_lvl["_ret_5d"] = (
+                grp["pct_change"]
+                .rolling(5, min_periods=3)
+                .sum()
+                .reset_index(level=0, drop=True)
+            )
+            sw_lvl["_ret_20d"] = (
+                grp["pct_change"]
+                .rolling(20, min_periods=5)
+                .sum()
+                .reset_index(level=0, drop=True)
+            )
+            sw_lvl["_vol_20d"] = (
+                grp["pct_change"]
+                .rolling(20, min_periods=10)
+                .std()
+                .reset_index(level=0, drop=True)
+            )
             sw_lvl["_momentum_accel"] = sw_lvl["_ret_5d"] - sw_lvl["_ret_20d"]
 
             if "amount" in sw_lvl.columns:
-                amt_ma = grp["amount"].rolling(
-                    20, min_periods=10
-                ).mean().reset_index(level=0, drop=True)
+                amt_ma = (
+                    grp["amount"]
+                    .rolling(20, min_periods=10)
+                    .mean()
+                    .reset_index(level=0, drop=True)
+                )
                 sw_lvl["_turnover_anomaly"] = (
                     sw_lvl["amount"] / amt_ma.replace(0, np.nan) - 1
                 )
             else:
                 sw_lvl["_turnover_anomaly"] = np.nan
 
-            sw_lvl["_rotation_position"] = sw_lvl.groupby("date")[
-                "_ret_5d"
-            ].rank(pct=True)
-            sw_lvl["_relative_strength"] = sw_lvl.groupby("date")[
-                "_ret_20d"
-            ].transform(lambda s: s - s.mean())
+            sw_lvl["_rotation_position"] = sw_lvl.groupby("date")["_ret_5d"].rank(
+                pct=True
+            )
+            sw_lvl["_relative_strength"] = sw_lvl.groupby("date")["_ret_20d"].transform(
+                lambda s: s - s.mean()
+            )
 
             # Build merge frame (skip noise-dropped cols)
             merge_cols = {
-                "close": f"{prefix}close", "vol": f"{prefix}vol",
-                "amount": f"{prefix}amount", "pe": f"{prefix}pe",
-                "pb": f"{prefix}pb", "pct_change": f"{prefix}ret_1d",
-                "_ret_5d": f"{prefix}ret_5d", "_ret_20d": f"{prefix}ret_20d",
+                "close": f"{prefix}close",
+                "vol": f"{prefix}vol",
+                "amount": f"{prefix}amount",
+                "pe": f"{prefix}pe",
+                "pb": f"{prefix}pb",
+                "pct_change": f"{prefix}ret_1d",
+                "_ret_5d": f"{prefix}ret_5d",
+                "_ret_20d": f"{prefix}ret_20d",
                 "_vol_20d": f"{prefix}vol_20d",
                 "_momentum_accel": f"{prefix}momentum_accel",
                 "_turnover_anomaly": f"{prefix}turnover_anomaly",
@@ -2611,12 +2637,13 @@ class FeatureEngineV35:
             n_filled = df[log_col].notna().sum() if log_col else 0
             logger.info(
                 "dim28: %s — %d/%d rows filled (%.1f%%)",
-                lvl_upper, n_filled, len(df),
+                lvl_upper,
+                n_filled,
+                len(df),
                 n_filled / len(df) * 100 if len(df) else 0,
             )
 
         return df
-
 
     # ---------------- ㉙ 股东增减持 (Alt-6) ----------------
     @staticmethod
@@ -2856,9 +2883,7 @@ class FeatureEngineV35:
             g["is_ann_day"] = is_new.astype(int)
 
             # ann_count_60d: 近 60 日真实公告次数 (跳变检测后 rolling sum)
-            g["ann_count_60d"] = (
-                is_new.astype(int).rolling(60, min_periods=1).sum()
-            )
+            g["ann_count_60d"] = is_new.astype(int).rolling(60, min_periods=1).sum()
 
             # ── exp_days_to_next_ann: 基于历史公告节奏预估 (PIT 安全) ──
             # 收集历史公告月份/日, 预估下次公告日
@@ -2890,9 +2915,7 @@ class FeatureEngineV35:
                         if target_m not in ann_months_days:
                             continue
 
-                        est_day = int(
-                            np.median(ann_months_days[target_m])
-                        )
+                        est_day = int(np.median(ann_months_days[target_m]))
                         if target_m >= cm:
                             target_y = cy
                         else:
@@ -2908,9 +2931,7 @@ class FeatureEngineV35:
                         elif offset == 0:
                             # 同月但已过, 尝试明年
                             target_y = cy + 1
-                            est_date = pd.Timestamp(
-                                target_y, target_m, est_day
-                            )
+                            est_date = pd.Timestamp(target_y, target_m, est_day)
                             exp_days_arr[i] = (est_date - cur_date).days
                             break
 

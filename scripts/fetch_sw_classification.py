@@ -15,6 +15,7 @@ Output: data/processed/sw_stock_classification.csv
   Columns: ts_code, symbol, name, sw_l1_code, sw_l1_name,
            sw_l2_code, sw_l2_name, sw_l3_code, sw_l3_name, in_date
 """
+
 import os
 import sys
 import time
@@ -24,7 +25,9 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 OUTPUT_DIR = Path(os.getenv("PROCESSED_DIR", "data/processed"))
@@ -32,9 +35,18 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_PATH = OUTPUT_DIR / "sw_stock_classification.csv"
 
 FINAL_COLS = [
-    "ts_code", "symbol", "name",
-    "sw_l1_code", "sw_l1_name", "sw_l2_code", "sw_l2_name",
-    "sw_l3_code", "sw_l3_name", "in_date", "fetch_date", "data_source",
+    "ts_code",
+    "symbol",
+    "name",
+    "sw_l1_code",
+    "sw_l1_name",
+    "sw_l2_code",
+    "sw_l2_name",
+    "sw_l3_code",
+    "sw_l3_name",
+    "in_date",
+    "fetch_date",
+    "data_source",
 ]
 
 
@@ -49,6 +61,7 @@ def fetch_tushare_classification():
     try:
         import tushare as ts
         from dotenv import load_dotenv
+
         load_dotenv()
 
         token = os.getenv("TUSHARE_TOKEN") or ts.get_token()
@@ -64,7 +77,9 @@ def fetch_tushare_classification():
                 try:
                     df = pro.index_classify(level=level, src=src)
                     if len(df) > 0:
-                        logger.info(f"index_classify(level={level}, src={src}): {len(df)} rows")
+                        logger.info(
+                            f"index_classify(level={level}, src={src}): {len(df)} rows"
+                        )
                         classify[level] = df
                         break
                 except Exception as e:
@@ -86,7 +101,10 @@ def fetch_tushare_classification():
             for _, row in l3_df.iterrows():
                 l3_code = row["index_code"]
                 parent = row.get("parent_code", "")
-                l3_to_parent[l3_code] = {"l2_code": parent, "l3_name": row.get("industry_name", "")}
+                l3_to_parent[l3_code] = {
+                    "l2_code": parent,
+                    "l3_name": row.get("industry_name", ""),
+                }
 
             if len(l2_df) > 0 and "parent_code" in l2_df.columns:
                 for _, row in l2_df.iterrows():
@@ -114,7 +132,9 @@ def fetch_tushare_classification():
                 if len(members) > 0:
                     all_members.append(members)
                     if (i + 1) % 50 == 0:
-                        logger.info(f"  Progress: {i+1}/{len(l3_codes)}, total {sum(len(x) for x in all_members)} rows")
+                        logger.info(
+                            f"  Progress: {i + 1}/{len(l3_codes)}, total {sum(len(x) for x in all_members)} rows"
+                        )
                     time.sleep(0.25)
                     continue
             except Exception:
@@ -127,7 +147,9 @@ def fetch_tushare_classification():
                     members["l3_code"] = l3_code
                     all_members.append(members)
                     if (i + 1) % 50 == 0:
-                        logger.info(f"  Progress: {i+1}/{len(l3_codes)}, total {sum(len(x) for x in all_members)} rows")
+                        logger.info(
+                            f"  Progress: {i + 1}/{len(l3_codes)}, total {sum(len(x) for x in all_members)} rows"
+                        )
             except Exception as e:
                 logger.warning(f"  {l3_code}: {e}")
             time.sleep(0.25)
@@ -137,7 +159,9 @@ def fetch_tushare_classification():
             return None
 
         combined = pd.concat(all_members, ignore_index=True)
-        logger.info(f"Total raw members: {len(combined)} rows, cols: {combined.columns.tolist()}")
+        logger.info(
+            f"Total raw members: {len(combined)} rows, cols: {combined.columns.tolist()}"
+        )
 
         # ── Step 3: Normalize ──
         if "l1_name" in combined.columns:
@@ -149,11 +173,16 @@ def fetch_tushare_classification():
             logger.info(f"After dedup by ts_code: {len(combined)} rows")
 
             rename = {
-                "l1_code": "sw_l1_code", "l1_name": "sw_l1_name",
-                "l2_code": "sw_l2_code", "l2_name": "sw_l2_name",
-                "l3_code": "sw_l3_code", "l3_name": "sw_l3_name",
+                "l1_code": "sw_l1_code",
+                "l1_name": "sw_l1_name",
+                "l2_code": "sw_l2_code",
+                "l2_name": "sw_l2_name",
+                "l3_code": "sw_l3_code",
+                "l3_name": "sw_l3_name",
             }
-            combined = combined.rename(columns={k: v for k, v in rename.items() if k in combined.columns})
+            combined = combined.rename(
+                columns={k: v for k, v in rename.items() if k in combined.columns}
+            )
         else:
             logger.info("Using sparse schema, joining with index_classify hierarchy")
             if "con_code" in combined.columns:
@@ -165,18 +194,25 @@ def fetch_tushare_classification():
             if l3_to_parent:
                 combined["sw_l3_code"] = combined["index_code"]
                 combined["sw_l3_name"] = combined["sw_l3_code"].map(
-                    lambda x: l3_to_parent.get(x, {}).get("l3_name", ""))
+                    lambda x: l3_to_parent.get(x, {}).get("l3_name", "")
+                )
                 combined["sw_l2_code"] = combined["sw_l3_code"].map(
-                    lambda x: l3_to_parent.get(x, {}).get("l2_code", ""))
+                    lambda x: l3_to_parent.get(x, {}).get("l2_code", "")
+                )
                 combined["sw_l2_name"] = combined["sw_l3_code"].map(
-                    lambda x: l3_to_parent.get(x, {}).get("l2_name", ""))
+                    lambda x: l3_to_parent.get(x, {}).get("l2_name", "")
+                )
                 combined["sw_l1_code"] = combined["sw_l3_code"].map(
-                    lambda x: l3_to_parent.get(x, {}).get("l1_code", ""))
+                    lambda x: l3_to_parent.get(x, {}).get("l1_code", "")
+                )
                 combined["sw_l1_name"] = combined["sw_l3_code"].map(
-                    lambda x: l3_to_parent.get(x, {}).get("l1_name", ""))
+                    lambda x: l3_to_parent.get(x, {}).get("l1_name", "")
+                )
 
         if "ts_code" in combined.columns:
-            combined["symbol"] = combined["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
+            combined["symbol"] = (
+                combined["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
+            )
 
         for c in FINAL_COLS:
             if c not in combined.columns:
@@ -194,6 +230,7 @@ def fetch_akshare_classification():
     """Fallback: akshare stock_industry_clf_hist_sw() from swsresearch.com."""
     try:
         import akshare as ak
+
         logger.info("akshare: calling stock_industry_clf_hist_sw()...")
         df = ak.stock_industry_clf_hist_sw()
         logger.info(f"akshare: {len(df)} rows, cols: {df.columns.tolist()}")
@@ -201,12 +238,19 @@ def fetch_akshare_classification():
             return None
 
         col_map = {
-            "股票代码": "symbol", "股票名称": "name",
-            "行业代码": "sw_l3_code", "行业名称": "sw_l3_name",
-            "申万一级": "sw_l1_name", "申万二级": "sw_l2_name",
-            "开始日期": "in_date", "结束日期": "out_date", "是否最新": "is_new",
+            "股票代码": "symbol",
+            "股票名称": "name",
+            "行业代码": "sw_l3_code",
+            "行业名称": "sw_l3_name",
+            "申万一级": "sw_l1_name",
+            "申万二级": "sw_l2_name",
+            "开始日期": "in_date",
+            "结束日期": "out_date",
+            "是否最新": "is_new",
         }
-        renamed = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+        renamed = df.rename(
+            columns={k: v for k, v in col_map.items() if k in df.columns}
+        )
 
         if "symbol" in renamed.columns:
             renamed["ts_code"] = renamed["symbol"].apply(
@@ -252,6 +296,7 @@ def incremental_update(new_ts_codes):
     try:
         import tushare as ts
         from dotenv import load_dotenv
+
         load_dotenv()
         token = os.getenv("TUSHARE_TOKEN") or ts.get_token()
         if not token:
@@ -288,7 +333,9 @@ def incremental_update(new_ts_codes):
                     row = df.head(1)
                 new_rows.append(row)
             if (i + 1) % 20 == 0:
-                logger.info(f"  Progress: {i+1}/{len(truly_new)}, fetched {len(new_rows)} rows")
+                logger.info(
+                    f"  Progress: {i + 1}/{len(truly_new)}, fetched {len(new_rows)} rows"
+                )
             time.sleep(0.15)
         except Exception as e:
             logger.warning(f"  {ts_code}: {e}")
@@ -298,18 +345,27 @@ def incremental_update(new_ts_codes):
         return 0
 
     combined = pd.concat(new_rows, ignore_index=True)
-    logger.info(f"  Fetched {len(combined)} rows for {combined['ts_code'].nunique()} stocks")
+    logger.info(
+        f"  Fetched {len(combined)} rows for {combined['ts_code'].nunique()} stocks"
+    )
 
     # Normalize (same as fetch_tushare_classification Step 3)
     rename = {
-        "l1_code": "sw_l1_code", "l1_name": "sw_l1_name",
-        "l2_code": "sw_l2_code", "l2_name": "sw_l2_name",
-        "l3_code": "sw_l3_code", "l3_name": "sw_l3_name",
+        "l1_code": "sw_l1_code",
+        "l1_name": "sw_l1_name",
+        "l2_code": "sw_l2_code",
+        "l2_name": "sw_l2_name",
+        "l3_code": "sw_l3_code",
+        "l3_name": "sw_l3_name",
     }
-    combined = combined.rename(columns={k: v for k, v in rename.items() if k in combined.columns})
+    combined = combined.rename(
+        columns={k: v for k, v in rename.items() if k in combined.columns}
+    )
 
     if "ts_code" in combined.columns:
-        combined["symbol"] = combined["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
+        combined["symbol"] = (
+            combined["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
+        )
 
     combined["fetch_date"] = datetime.now().strftime("%Y-%m-%d")
     combined["data_source"] = "tushare_incremental"
@@ -333,7 +389,9 @@ def incremental_update(new_ts_codes):
         updated = combined
 
     updated.to_csv(OUTPUT_PATH, index=False, encoding="utf-8-sig")
-    logger.info(f"  Appended {len(combined)} rows. CSV now has {len(updated)} total stocks")
+    logger.info(
+        f"  Appended {len(combined)} rows. CSV now has {len(updated)} total stocks"
+    )
     return len(combined)
 
 
@@ -354,11 +412,21 @@ def detect_and_update(new_ts_codes):
 
 def main():
     """CLI entry point. Supports full rebuild (default) or incremental update."""
-    parser = argparse.ArgumentParser(description="Fetch Shenwan SW stock classification")
-    parser.add_argument("--incremental", type=str, default=None,
-                        help="Comma-separated ts_codes to add incrementally")
-    parser.add_argument("--incremental-file", type=str, default=None,
-                        help="Path to text file with one ts_code per line")
+    parser = argparse.ArgumentParser(
+        description="Fetch Shenwan SW stock classification"
+    )
+    parser.add_argument(
+        "--incremental",
+        type=str,
+        default=None,
+        help="Comma-separated ts_codes to add incrementally",
+    )
+    parser.add_argument(
+        "--incremental-file",
+        type=str,
+        default=None,
+        help="Path to text file with one ts_code per line",
+    )
     args = parser.parse_args()
 
     # ── Incremental mode ──
@@ -411,19 +479,23 @@ def main():
             logger.info(f"  {col}: {n} filled, {u} unique values")
 
     if "sw_l1_name" in final_df.columns:
-        logger.info(f"\nL1 distribution (top 10):")
+        logger.info("\nL1 distribution (top 10):")
         for name, count in final_df["sw_l1_name"].value_counts().head(10).items():
             logger.info(f"  {name}: {count} stocks")
 
-    display_cols = [c for c in ["ts_code", "symbol", "name",
-                                "sw_l1_name", "sw_l2_name", "sw_l3_name"] if c in final_df.columns]
-    logger.info(f"\nSample (first 10):")
+    display_cols = [
+        c
+        for c in ["ts_code", "symbol", "name", "sw_l1_name", "sw_l2_name", "sw_l3_name"]
+        if c in final_df.columns
+    ]
+    logger.info("\nSample (first 10):")
     print(final_df[display_cols].head(10).to_string())
 
     # Coverage check
     try:
         import tushare as ts
         from dotenv import load_dotenv
+
         load_dotenv()
         pro = ts.pro_api(os.getenv("TUSHARE_TOKEN") or ts.get_token())
         sb = pro.stock_basic(list_status="L", fields="ts_code,symbol,name")
@@ -431,7 +503,9 @@ def main():
         mapped_stocks = set(final_df["ts_code"].tolist())
         overlap = panel_stocks & mapped_stocks
         pct = len(overlap) / len(panel_stocks) * 100 if panel_stocks else 0
-        logger.info(f"\nCoverage: {len(overlap)}/{len(panel_stocks)} stocks ({pct:.1f}%)")
+        logger.info(
+            f"\nCoverage: {len(overlap)}/{len(panel_stocks)} stocks ({pct:.1f}%)"
+        )
         missing = panel_stocks - mapped_stocks
         if missing and len(missing) <= 30:
             logger.info(f"Missing: {sorted(missing)[:30]}")
