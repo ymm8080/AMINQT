@@ -9,17 +9,16 @@ Sources fetched:
   3. daily_basic — turnover, PE, PB, float, MV
   4. stk_limit — up/down limit prices
   5. suspend_d — suspension markers
-  6. moneyflow — main/super-large order flow
-  7. cyq_perf — chip distribution (batch, one call)
-  8. margin_detail — margin balance (per-stock)
-  9. top_list — LHB (dragon-tiger board)
- 10. sw_daily — sector index (Shenwan industry)
+  6. cyq_perf — chip distribution (batch, one call)
+  7. margin_detail — margin balance (per-stock)
+  8. top_list — LHB (dragon-tiger board)
 
 Derived (computed from panel history, reads only needed columns):
   - bias_5..250, bias_cross, ma_vol_ratio_5_20, amplitude_5d
-  - vol_surge, amt_surge, ret_pct
+  - vol_surge, amt_surge
   - pct_70_con, pct_90_con (cyq formula: (hi-lo)/(hi+lo), [0,1] range)
-  - Forward-fill: financials (quarterly), margin(T+1 gap), announce_date
+  - Forward-fill: financials (quarterly), margin(T+1 gap), announce_date,
+    sw_l1_name/sw_l2_name/sw_l3_name (Shenwan classification, static per symbol)
 
 NOT fetched here (separate pipelines):
   - fina_indicator → run_announcement_pipeline.py (Pipeline 2, quarterly)
@@ -77,11 +76,9 @@ adj   = safe_fetch(pro.adj_factor, "adj_factor", trade_date=TRADE_DATE)
 basic = safe_fetch(pro.daily_basic, "daily_basic", trade_date=TRADE_DATE)
 limit = safe_fetch(pro.stk_limit, "stk_limit", trade_date=TRADE_DATE)
 susp  = safe_fetch(pro.suspend_d, "suspend", trade_date=TRADE_DATE)
-money = safe_fetch(pro.moneyflow, "moneyflow", trade_date=TRADE_DATE)
 cyq   = safe_fetch(pro.cyq_perf, "cyq_perf", trade_date=TRADE_DATE)
 margin= safe_fetch(pro.margin_detail, "margin_detail", trade_date=TRADE_DATE)
 lhb   = safe_fetch(pro.top_list, "LHB", trade_date=TRADE_DATE)
-sw    = safe_fetch(pro.sw_daily, "sw_daily", trade_date=TRADE_DATE)
 
 if not len(ohlcv):
     print("FATAL: No OHLCV data")
@@ -104,13 +101,12 @@ panel_cols = schema.names
 print("\n[3] Merging sources...")
 merges = {
     "daily_basic": (basic, ["volume_ratio",
-        "pe", "pe_ttm", "pb", "ps", "ps_ttm", "total_share", "float_share",
+        "pe_ttm", "pb", "ps_ttm", "total_share", "float_share",
         "free_share", "total_mv", "circ_mv", "dv_ratio", "dv_ttm",
         "turnover_rate"]),
-    "moneyflow": (money, ["net_mf_amount", "buy_elg_amount", "sell_elg_amount"]),
     "cyq_perf": (cyq, ["cost_5pct", "cost_15pct", "cost_50pct", "cost_85pct",
         "cost_95pct", "weight_avg", "winner_rate",
-        "benefit_part", "avg_cost", "pct_70_low", "pct_70_high", "pct_70_con",
+        "avg_cost", "pct_70_low", "pct_70_high", "pct_70_con",
         "pct_90_low", "pct_90_high", "pct_90_con"]),
     "margin_detail": (margin, ["rzye", "rqye", "rzmre", "rqyl"]),
 }
@@ -149,7 +145,6 @@ if len(limit):
 
 # Rename mappings
 rename_map = {
-    "net_mf_amount": "main_money_flow",
     "rzye": "margin_balance", "rqye": "short_balance",
     "rzmre": "margin_buy_amt", "rqyl": "short_sell_vol",
 }
@@ -200,10 +195,6 @@ for lo, hi, llo, lhi, lcon in [
             df[lhi] = df[hi]
             df[lcon] = safe_div(df[hi] - df[lo], df[hi] + df[lo])
 
-# --- super_large_order_net ---
-if "buy_elg_amount" in df.columns and "sell_elg_amount" in df.columns:
-    df["super_large_order_net"] = df["buy_elg_amount"] - df["sell_elg_amount"]
-
 # --- is_suspended ---
 if len(susp):
     suspended_set = set(susp["symbol"].unique())
@@ -225,35 +216,6 @@ try:
 except Exception as e:
     print(f"    stock_basic: {e}")
 
-# --- Sector index (sw_daily) ---
-# Map each stock's industry to SW index data
-if len(sw) and "industry" in df.columns:
-    # Build index_name -> {close, vol, pct_change} mapping
-    sw_map = {}
-    for _, row in sw.iterrows():
-        idx_name = str(row.get("name", "")).strip()
-        if idx_name:
-            sw_map[idx_name] = {"close": row.get("close"), "vol": row.get("vol"), "pct_change": row.get("pct_change")}
-    # Fuzzy match industry -> SW name
-    ind_to_sw = {}
-    for ind in df["industry"].dropna().unique():
-        ind_s = str(ind).strip()
-        for sw_n in sw_map:
-            if ind_s in sw_n or sw_n in ind_s:
-                ind_to_sw[ind_s] = sw_n
-                break
-    for tgt_col, sw_key in [("sw_index_close","close"),("sw_index_vol","vol"),("sw_ret_1d","pct_change")]:
-        if tgt_col in panel_cols:
-            vals = {}
-            for _, row in df.iterrows():
-                sw_n = ind_to_sw.get(str(row.get("industry","")).strip())
-                if sw_n and pd.notna(sw_map[sw_n].get(sw_key)):
-                    vals[row["symbol"]] = sw_map[sw_n][sw_key]
-            if vals:
-                df[tgt_col] = df["symbol"].map(vals)
-    n_filled = df["sw_index_close"].notna().sum() if "sw_index_close" in df.columns else 0
-    print(f"    sw_daily: {len(sw)} indices -> {n_filled}/{len(df)} stocks")
-
 # --- Simple derived features (no history needed) ---
 if all(c in df.columns for c in ["high", "low", "pre_close"]):
     df["intraday_range"] = (df["high"] - df["low"]) / df["pre_close"].replace(0, np.nan)
@@ -266,9 +228,6 @@ if all(c in df.columns for c in ["amount", "close"]):
     if "volume" in panel_cols and "volume" not in df.columns:
         df["volume"] = np.nan
     df.loc[valid, "volume"] = df.loc[valid, "amount"] / df.loc[valid, "close"]
-
-if "pct_chg" in df.columns and "ret_pct" in panel_cols:
-    df["ret_pct"] = df["pct_chg"] / 100
 
 # ── 5. Read history for rolling features ──
 print("\n[5] Computing rolling features from history...")
@@ -354,10 +313,10 @@ ffill_cols = [
     "debt_ratio", "current_ratio", "asset_turnover", "inventory_turnover",
     "ocf_to_or", "eps", "bps", "ocfps", "revenue_ps",
     "roe_deducted", "roe_yoy", "q_roe",
-    "ar_turnover", "profit_ratio",
-    "holder_count", "sh_change_vol", "sh_change_amt", "sh_change_amt_total",
+    "ar_turnover",
+    "sh_change_vol", "sh_change_amt", "sh_change_amt_total",
     "sh_net_change_sign", "sh_net_sign",
-    "sw_index_close", "sw_index_vol", "sw_ret_1d",
+    "sw_l1_name", "sw_l2_name", "sw_l3_name",
     "margin_balance", "short_balance", "margin_buy_amt", "short_sell_vol",
     "dt_eps", "q_ocf_to_sales",
     "announce_date",
