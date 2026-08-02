@@ -34,7 +34,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS prediction_runs (
     date         TEXT PRIMARY KEY,
     n_stocks     INTEGER NOT NULL DEFAULT 0,
-    schema_version TEXT NOT NULL DEFAULT '1.2',
+    schema_version TEXT NOT NULL DEFAULT '1.3',
     created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
@@ -111,7 +111,7 @@ class PredictionDB:
 
     # ── 写入 ──
     def insert_run(
-        self, date_str: str, stocks: pd.DataFrame, schema_version: str = "1.2"
+        self, date_str: str, stocks: pd.DataFrame, schema_version: str = "1.3"
     ) -> int:
         """插入当日清单 (幂等: 已存在则跳过)."""
         with sqlite3.connect(self.path) as conn:
