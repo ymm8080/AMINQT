@@ -102,7 +102,7 @@ def ic_eval(df, cols, lc):
                 r, _ = spearmanr(v[c], v[lc])
                 if not np.isnan(r):
                     ics.append(r)
-            except:
+            except Exception:
                 pass
         nn = len(ics)
         if nn < 20:
