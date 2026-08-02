@@ -10,6 +10,7 @@ from app.backtest.config_manager import BacktestConfig
 
 # ── Shared fixtures ──
 
+
 @pytest.fixture
 def cfg():
     return BacktestConfig(
@@ -86,6 +87,7 @@ def trade_dates(price_df):
 # ════════════════════════════════════════════════════
 # SignalEvaluator
 # ════════════════════════════════════════════════════
+
 
 class TestSignalEvaluator:
     """SignalEvaluator 信号质量评估."""
@@ -230,6 +232,7 @@ class TestSignalEvaluator:
 # ════════════════════════════════════════════════════
 # DataValidator
 # ════════════════════════════════════════════════════
+
 
 class TestDataValidator:
     """DataValidator 数据完整性校验."""
@@ -409,7 +412,10 @@ class TestDataValidator:
         from app.backtest.data_validator import DataValidator
 
         market = pd.DataFrame(
-            {"date": pd.date_range("2024-01-01", periods=3), "index_close": [3000, 3010, 3005]}
+            {
+                "date": pd.date_range("2024-01-01", periods=3),
+                "index_close": [3000, 3010, 3005],
+            }
         )
         dv = DataValidator(price_df, pred_df, market_df=market)
         issues = dv.run_all_checks()
@@ -419,6 +425,7 @@ class TestDataValidator:
 # ════════════════════════════════════════════════════
 # ComparativeAnalyzer
 # ════════════════════════════════════════════════════
+
 
 class TestComparativeAnalyzer:
     """ComparativeAnalyzer Squad vs Sniper 对比."""
@@ -441,8 +448,13 @@ class TestComparativeAnalyzer:
             "total_return": 0.05,
         }
         return ComparativeAnalyzer(
-            squad_result, sniper_result, squad_trades, sniper_trades,
-            squad_metrics, sniper_metrics, benchmark,
+            squad_result,
+            sniper_result,
+            squad_trades,
+            sniper_trades,
+            squad_metrics,
+            sniper_metrics,
+            benchmark,
         )
 
     def test_calc_concentration_risk_ratio(self):
@@ -457,8 +469,10 @@ class TestComparativeAnalyzer:
         ca = ComparativeAnalyzer(
             pd.DataFrame({"nav": [100000]}),
             pd.DataFrame({"nav": [100000]}),
-            pd.DataFrame(), pd.DataFrame(),
-            {"max_drawdown": 0.0}, {"max_drawdown": 0.0},
+            pd.DataFrame(),
+            pd.DataFrame(),
+            {"max_drawdown": 0.0},
+            {"max_drawdown": 0.0},
         )
         assert ca.calc_concentration_risk_ratio() == 0.0
 
@@ -490,8 +504,12 @@ class TestComparativeAnalyzer:
         from app.backtest.comparative_analyzer import ComparativeAnalyzer
 
         ca = ComparativeAnalyzer(
-            pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
-            {}, {},
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            {},
+            {},
         )
         desc = ca.compare_nav_curves()
         assert "squad_final_nav=0.00" in desc
@@ -504,13 +522,16 @@ class TestComparativeAnalyzer:
         assert "sniper_sharpe" in report
         assert "recommendation" in report
         assert report["recommendation"] in (
-            "concentrated", "diversified", "tighten_stop",
+            "concentrated",
+            "diversified",
+            "tighten_stop",
         )
 
 
 # ════════════════════════════════════════════════════
 # DataLoader
 # ════════════════════════════════════════════════════
+
 
 class TestDataLoader:
     """DataLoader 数据加载与对齐."""
@@ -523,10 +544,17 @@ class TestDataLoader:
             for s in stocks:
                 rows.append(
                     {
-                        "date": d, "stock": s,
-                        "score_h1": 0.6, "prob_up_h1": 0.55, "pred_ret_h1": 0.01,
-                        "score_h2": 0.6, "prob_up_h2": 0.55, "pred_ret_h2": 0.01,
-                        "score_h4": 0.6, "prob_up_h4": 0.55, "pred_ret_h4": 0.01,
+                        "date": d,
+                        "stock": s,
+                        "score_h1": 0.6,
+                        "prob_up_h1": 0.55,
+                        "pred_ret_h1": 0.01,
+                        "score_h2": 0.6,
+                        "prob_up_h2": 0.55,
+                        "pred_ret_h2": 0.01,
+                        "score_h4": 0.6,
+                        "prob_up_h4": 0.55,
+                        "pred_ret_h4": 0.01,
                         "board": "main",
                     }
                 )
@@ -540,12 +568,20 @@ class TestDataLoader:
             for s in stocks:
                 rows.append(
                     {
-                        "date": d, "stock": s,
-                        "open": 10.0, "high": 10.5, "low": 9.8, "close": 10.2,
-                        "volume": 2000000, "amount": 20000000.0,
-                        "up_limit": 11.0, "down_limit": 9.0,
-                        "is_st": False, "is_halt": False,
-                        "pre_close": 9.9, "circ_mv": 2000000000.0,
+                        "date": d,
+                        "stock": s,
+                        "open": 10.0,
+                        "high": 10.5,
+                        "low": 9.8,
+                        "close": 10.2,
+                        "volume": 2000000,
+                        "amount": 20000000.0,
+                        "up_limit": 11.0,
+                        "down_limit": 9.0,
+                        "is_st": False,
+                        "is_halt": False,
+                        "pre_close": 9.9,
+                        "circ_mv": 2000000000.0,
                     }
                 )
         pd.DataFrame(rows).to_csv(path, index=False)
@@ -640,7 +676,10 @@ class TestDataLoader:
         self._make_pred_csv(pred_path)
         self._make_price_csv(price_path)
         pd.DataFrame(
-            {"date": pd.date_range("2024-01-01", periods=5), "index_close": range(3000, 3005)}
+            {
+                "date": pd.date_range("2024-01-01", periods=5),
+                "index_close": range(3000, 3005),
+            }
         ).to_csv(market_path, index=False)
         loader = DataLoader(pred_path, price_path, market_path=market_path)
         pred_df, price_df, _, market_df = loader.load()
@@ -652,9 +691,7 @@ class TestDataLoader:
         pred_path = str(tmp_path / "pred.csv")
         price_path = str(tmp_path / "price.csv")
         # pred with missing columns
-        pd.DataFrame(
-            {"date": [1], "stock": ["x"]}
-        ).to_csv(pred_path, index=False)
+        pd.DataFrame({"date": [1], "stock": ["x"]}).to_csv(pred_path, index=False)
         self._make_price_csv(price_path)
         loader = DataLoader(pred_path, price_path)
         with pytest.raises(ValueError, match="缺失必要列"):
