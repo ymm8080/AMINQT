@@ -89,6 +89,17 @@ class V35Predictor:
         # 校准 (校准器缺失时回退原始 predict_proba)
         cal = bundle.get("calibrator")
         latest["prob_up"] = cal.predict_proba(raw_prob) if cal is not None else raw_prob
+        # [多视界] 2/3/5d 分类概率 (各视界校准器; 缺失时回退 raw / 缺 kind 跳过)
+        calibrators = bundle.get("calibrators", {})
+        for k in (2, 3, 5):
+            kind = f"{k}d_cls"
+            if kind not in models:
+                continue
+            raw = models[kind][0].predict_proba(X)[:, 1]
+            cal_k = calibrators.get(k) if calibrators else None
+            latest[f"prob_up_{k}d"] = (
+                cal_k.predict_proba(raw) if cal_k is not None else raw
+            )
         # 综合排序分: LABEL_WEIGHTS 加权 (1d/2d/3d/5d, 修改字典即全局生效)
         total_w = sum(LABEL_WEIGHTS.values())
         latest["composite_score"] = (
@@ -108,6 +119,9 @@ class V35Predictor:
             "pred_ret_3d",
             "pred_ret_5d",
             "prob_up",
+            "prob_up_2d",
+            "prob_up_3d",
+            "prob_up_5d",
         ]
         # [E1] 分位数分布预测 (bundle 含 quantile_models 时)
         if "quantile_models" in bundle:

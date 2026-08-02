@@ -100,6 +100,8 @@ class TestAdaptiveWindow:
             df.groupby("symbol")["close_hfq"].shift(-5) / df["close_hfq"] - 1
         )
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        for k in (2, 3, 5):
+            df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         trained = trainer.train_window(df, "main", ["f1", "f2"])
         assert len(trained["segs"]["es"]) > 0
@@ -128,6 +130,8 @@ class TestAdaptiveWindow:
                 df.groupby("symbol")["close_hfq"].shift(-k) / df["close_hfq"] - 1
             )
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        for k in (2, 3, 5):
+            df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         trained = trainer.train_window(df, "main", ["f1", "f2"])  # 不应 raise
         assert len(trained["segs"]["es"]) > 0
@@ -331,6 +335,8 @@ class TestHorizonWeights:
                 df.groupby("symbol")["close_hfq"].shift(-k) / df["close_hfq"] - 1
             )
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        for k in (2, 3, 5):
+            df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         trained = trainer.train_window(df, "main", ["f1", "f2"])
         oos = trainer.validate_oos(trained)

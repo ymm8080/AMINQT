@@ -38,7 +38,7 @@ def get_latest_list() -> dict:
     return {
         "date": date,
         "demo": demo,
-        "schema_version": "1.3",
+        "schema_version": "1.4",
         "items": lst.to_dict("records"),
     }
 

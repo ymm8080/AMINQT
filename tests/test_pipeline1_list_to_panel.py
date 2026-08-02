@@ -3,7 +3,7 @@
 
 验证从 PIPELINE1 生成的清单 (list_YYYYMMDD.parquet) 到选股看板
 (data_service.load_latest_list / load_priority_symbols) 的完整数据链路,
-确保 schema V1.3 字段对齐、priority 同步、清单可被面板正确加载.
+确保 schema V1.4 字段对齐、priority 同步、清单可被面板正确加载.
 """
 
 from __future__ import annotations
@@ -35,11 +35,11 @@ from app.streamlit.data_service import (  # noqa: E402
 )
 
 
-# ── 合成 V1.3 schema 清单 ──
+# ── 合成 V1.4 schema 清单 ──
 
 
 def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
-    """生成与 PIPELINE1 ListGenerator.emit 输出同构的 V1.3 清单."""
+    """生成与 PIPELINE1 ListGenerator.emit 输出同构的 V1.4 清单."""
     rng = np.random.default_rng(42)
     n = len(symbols)
     return pd.DataFrame(
@@ -52,6 +52,9 @@ def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
             "pred_ret_3d": rng.uniform(-0.03, 0.09, n),
             "pred_ret_5d": rng.uniform(-0.04, 0.12, n),
             "prob_up": np.round(rng.uniform(0.42, 0.62, n), 3),
+            "prob_up_2d": np.round(rng.uniform(0.40, 0.66, n), 3),
+            "prob_up_3d": np.round(rng.uniform(0.38, 0.68, n), 3),
+            "prob_up_5d": np.round(rng.uniform(0.36, 0.70, n), 3),
             "momentum": rng.choice(["high", "medium", "low"], n, p=[0.3, 0.5, 0.2]),
             "consensus_score": rng.uniform(1, n, n),
             "signal_conflict": rng.choice([0, 1], n, p=[0.8, 0.2]),
@@ -59,6 +62,8 @@ def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
             "is_one_word_limit": 0,
             "market_state": "range",
             "score": rng.uniform(0, 0.05, n),
+            "compound_ret": rng.uniform(0.0, 0.06, n),
+            "compound_prob": np.round(rng.uniform(0.42, 0.62, n), 6),
             "pred_q10": rng.uniform(-0.04, 0.01, n),
             "pred_q50": rng.uniform(-0.01, 0.04, n),
             "pred_q90": rng.uniform(0.01, 0.10, n),
@@ -66,7 +71,7 @@ def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
             "pain_prob": np.round(rng.uniform(0.0, 0.5, n), 3),
             "announce_score": rng.uniform(-1.0, 1.0, n),
             "weight": np.round(rng.uniform(0.02, 0.10, n), 4),
-            "schema_version": "1.3",
+            "schema_version": "1.4",
         }
     )
 
@@ -94,7 +99,7 @@ class TestSchemaAlignment:
     """验证清单字段与 data_service 期望的列一致."""
 
     def test_schema_fields_match(self):
-        """SCHEMA_FIELDS 常量与合成的 V1.3 清单列一致."""
+        """SCHEMA_FIELDS 常量与合成的 V1.4 清单列一致."""
         lst = _make_schema_list()
         assert list(lst.columns) == SCHEMA_FIELDS, (
             "清单 schema 与 SCHEMA_FIELDS 不匹配:\n"
@@ -103,9 +108,9 @@ class TestSchemaAlignment:
         )
 
     def test_schema_version_constant(self):
-        """所有行的 schema_version = '1.3'."""
+        """所有行的 schema_version = '1.4'."""
         lst = _make_schema_list()
-        assert (lst["schema_version"] == "1.3").all()
+        assert (lst["schema_version"] == "1.4").all()
 
 
 # ══════════════════════════════════════════════════════════
@@ -278,13 +283,13 @@ class TestEndToEndListToPanel:
         assert "600519" not in set(df["symbol"])
 
     def test_demo_list_fallback_schema(self):
-        """无清单时 demo_list 返回与 V1.3 schema 同构的 DataFrame."""
+        """无清单时 demo_list 返回与 V1.4 schema 同构的 DataFrame."""
         demo = demo_list()
         assert "symbol" in demo.columns
         assert "score" in demo.columns
         assert "pred_ret_1d" in demo.columns
         assert "schema_version" in demo.columns
-        assert (demo["schema_version"] == "1.3").all()
+        assert (demo["schema_version"] == "1.4").all()
 
 
 # ══════════════════════════════════════════════════════════

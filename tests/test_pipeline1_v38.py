@@ -260,7 +260,12 @@ def _cands(rows: list[dict]) -> pd.DataFrame:
         "pred_ret_1d": 0.02,
         "pred_ret_2d": 0.03,
     }
-    return pd.DataFrame([{**base, **r} for r in rows])
+    df = pd.DataFrame([{**base, **r} for r in rows])
+    # 多视界概率列缺省 = prob_up (compound_prob 精确回退 == prob_up, 现有断言不变)
+    for k in (2, 3, 5):
+        if f"prob_up_{k}d" not in df.columns:
+            df[f"prob_up_{k}d"] = df["prob_up"]
+    return df
 
 
 class TestDynamicEntry:
