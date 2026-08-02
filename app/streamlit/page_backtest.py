@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import datetime as _dt
-import hashlib
 import logging
 import os
 
@@ -24,7 +23,6 @@ import streamlit as st
 
 from app.pipeline1.backtest_v35 import BacktestEngineV35, BacktestProtocol
 from app.pipeline1.param_tuner import (
-    CONFIG_TO_V52,
     ParamTuner,
     TUNABLE_ENGINE,
 )
@@ -148,6 +146,7 @@ def _load_v52_data(data_source: str, window: str) -> dict | None:
             if result is not None:
                 pred_df, price_df, trade_dates, dv_hash = result
                 from app.backtest.config_manager import BacktestConfig, ConfigManager
+
                 config = ConfigManager.load("config/backtest_config.yaml")
                 return {
                     "pred_df": pred_df,
@@ -167,6 +166,7 @@ def _load_v52_data(data_source: str, window: str) -> dict | None:
         return None
     pred_df, price_df, trade_dates, dv_hash = result
     from app.backtest.config_manager import BacktestConfig
+
     return {
         "pred_df": pred_df,
         "price_df": price_df,
@@ -246,7 +246,8 @@ def render() -> None:
             st.divider()
             st.subheader("V5.2 专属参数")
             position_mode = st.selectbox(
-                "仓位模式", ["squad", "sniper", "sniper_max"],
+                "仓位模式",
+                ["squad", "sniper", "sniper_max"],
                 help="squad: 分散5只; sniper: 集中2只; sniper_max: 全仓1只",
             )
             horizon = st.selectbox("持有期 (交易日)", [1, 2, 4], index=1)
@@ -262,8 +263,16 @@ def render() -> None:
     # ---------- Tab 1: 回测 ----------
     with tab_bt:
         _render_backtest_tab(
-            engine_choice, data_choice, window, use_v52,
-            top_n, max_hold, hard_stop, trailing, prob_exit, capital,
+            engine_choice,
+            data_choice,
+            window,
+            use_v52,
+            top_n,
+            max_hold,
+            hard_stop,
+            trailing,
+            prob_exit,
+            capital,
             position_mode if use_v52 else "squad",
             horizon if use_v52 else 2,
             benchmark_sel,
@@ -286,9 +295,19 @@ def render() -> None:
 
 
 def _render_backtest_tab(
-    engine_choice, data_choice, window, use_v52,
-    top_n, max_hold, hard_stop, trailing, prob_exit, capital,
-    position_mode, horizon, benchmark_sel,
+    engine_choice,
+    data_choice,
+    window,
+    use_v52,
+    top_n,
+    max_hold,
+    hard_stop,
+    trailing,
+    prob_exit,
+    capital,
+    position_mode,
+    horizon,
+    benchmark_sel,
 ) -> None:
     panel, lists, is_real = _load_panel(data_choice, window)
     data_tag = "真实数据" if is_real else "演示数据"
@@ -299,13 +318,27 @@ def _render_backtest_tab(
         with st.spinner(f"回测运行中 ({engine_tag})..."):
             if use_v52:
                 result = _run_v52_backtest(
-                    data_choice, window, position_mode, horizon,
-                    top_n, max_hold, hard_stop, trailing, prob_exit, capital,
+                    data_choice,
+                    window,
+                    position_mode,
+                    horizon,
+                    top_n,
+                    max_hold,
+                    hard_stop,
+                    trailing,
+                    prob_exit,
+                    capital,
                 )
             else:
                 result = _run_v35_backtest(
-                    panel, lists, top_n, max_hold, hard_stop,
-                    trailing, prob_exit, capital,
+                    panel,
+                    lists,
+                    top_n,
+                    max_hold,
+                    hard_stop,
+                    trailing,
+                    prob_exit,
+                    capital,
                 )
 
         if result is None:
@@ -344,7 +377,9 @@ def _render_backtest_tab(
                 st.dataframe(result["holdings_history"], use_container_width=True)
 
 
-def _run_v35_backtest(panel, lists, top_n, max_hold, hard_stop, trailing, prob_exit, capital):
+def _run_v35_backtest(
+    panel, lists, top_n, max_hold, hard_stop, trailing, prob_exit, capital
+):
     """运行 V35 回测, 返回 {nav_curve, trades, metrics}."""
     try:
         proto = BacktestProtocol(
@@ -362,7 +397,18 @@ def _run_v35_backtest(panel, lists, top_n, max_hold, hard_stop, trailing, prob_e
         return None
 
 
-def _run_v52_backtest(data_choice, window, position_mode, horizon, top_n, max_hold, hard_stop, trailing, prob_exit, capital):
+def _run_v52_backtest(
+    data_choice,
+    window,
+    position_mode,
+    horizon,
+    top_n,
+    max_hold,
+    hard_stop,
+    trailing,
+    prob_exit,
+    capital,
+):
     """运行 V5.2 回测, 返回 {nav_curve, trades, metrics, holdings_history}."""
     try:
         v52_data = _load_v52_data(data_choice, window)
@@ -370,7 +416,6 @@ def _run_v52_backtest(data_choice, window, position_mode, horizon, top_n, max_ho
             st.error("V5.2 数据加载失败")
             return None
 
-        from app.backtest.config_manager import BacktestConfig
         from app.backtest.engine import BacktestEngine
 
         base_config = v52_data["config"]
@@ -412,7 +457,9 @@ def _run_v52_backtest(data_choice, window, position_mode, horizon, top_n, max_ho
         return None
 
 
-def _get_benchmark_df(benchmark_sel: str, nav_curve: pd.DataFrame) -> pd.DataFrame | None:
+def _get_benchmark_df(
+    benchmark_sel: str, nav_curve: pd.DataFrame
+) -> pd.DataFrame | None:
     """获取基准净值 DataFrame (归一化)."""
     if benchmark_sel == "无":
         return None
@@ -448,9 +495,9 @@ def _render_comparison_tab(data_choice, window, capital, benchmark_sel) -> None:
         navs = {}
         for mode in ["squad", "sniper"]:
             with st.spinner(f"运行 {mode} 模式..."):
-                config = BacktestConfig(**{
-                    k: v for k, v in vars(v52_data["config"]).items()
-                })
+                config = BacktestConfig(
+                    **{k: v for k, v in vars(v52_data["config"]).items()}
+                )
                 config.position_mode = mode
                 config.initial_capital = capital
                 eng = BacktestEngine(
@@ -489,8 +536,11 @@ def _render_comparison_tab(data_choice, window, capital, benchmark_sel) -> None:
         comparison = comp.generate_comparison_report()
 
         col1, col2, col3 = st.columns(3)
-        col1.metric("集中度风险系数", f"{comparison['concentration_risk_ratio']:.2f}",
-                     help="Sniper最大回撤/Squad最大回撤, >1表示Sniper风险更高")
+        col1.metric(
+            "集中度风险系数",
+            f"{comparison['concentration_risk_ratio']:.2f}",
+            help="Sniper最大回撤/Squad最大回撤, >1表示Sniper风险更高",
+        )
         col2.metric("Squad 夏普", f"{comparison['squad_sharpe']:.2f}")
         col3.metric("Sniper 夏普", f"{comparison['sniper_sharpe']:.2f}")
 
@@ -502,8 +552,10 @@ def _render_comparison_tab(data_choice, window, capital, benchmark_sel) -> None:
             "diversified": "分散策略更优",
             "tighten_stop": "建议收紧止损",
         }
-        col6.metric("建议", rec_map.get(
-            comparison["recommendation"], comparison["recommendation"]))
+        col6.metric(
+            "建议",
+            rec_map.get(comparison["recommendation"], comparison["recommendation"]),
+        )
 
         with st.expander("Jensen Alpha"):
             st.metric("Squad Alpha", f"{comparison['jensen_alpha_squad']:+.2%}")
@@ -541,23 +593,21 @@ def _render_tuning_tab(data_choice, window) -> None:
     # 参数选择: 根据引擎过滤
     if use_v52_tune:
         available_params = [
-            name for name, engine in TUNABLE_ENGINE.items()
-            if engine in ("both", "v52")
+            name for name, engine in TUNABLE_ENGINE.items() if engine in ("both", "v52")
         ]
     else:
         available_params = [
-            name for name, engine in TUNABLE_ENGINE.items()
-            if engine == "both"
+            name for name, engine in TUNABLE_ENGINE.items() if engine == "both"
         ]
     rule_only_params = [
-        name for name, engine in TUNABLE_ENGINE.items()
-        if engine == "rule_only"
+        name for name, engine in TUNABLE_ENGINE.items() if engine == "rule_only"
     ]
 
     tunable = st.multiselect(
         f"调参目标 (可用 {len(available_params)} 个, 引擎={tune_engine})",
         sorted(available_params),
-        default=["max_hold_days", "prob_exit"] if not use_v52_tune
+        default=["max_hold_days", "prob_exit"]
+        if not use_v52_tune
         else ["max_hold_days", "prob_exit", "surge_pct"],
     )
 
@@ -579,9 +629,15 @@ def _render_tuning_tab(data_choice, window) -> None:
             lo_default, hi_default, step_default = TUNABLE_BOUNDS[name]
             with cols[i % len(cols)]:
                 st.markdown(f"**{name}**")
-                lo = st.number_input("min", value=float(lo_default), key=f"range_lo_{name}")
-                hi = st.number_input("max", value=float(hi_default), key=f"range_hi_{name}")
-                step = st.number_input("step", value=float(step_default), key=f"range_step_{name}")
+                lo = st.number_input(
+                    "min", value=float(lo_default), key=f"range_lo_{name}"
+                )
+                hi = st.number_input(
+                    "max", value=float(hi_default), key=f"range_hi_{name}"
+                )
+                step = st.number_input(
+                    "step", value=float(step_default), key=f"range_step_{name}"
+                )
                 ranges[name] = (lo, hi, step)
 
     if st.button("🔍 网格搜索 + OOS 复验", key="btn_tune"):
@@ -626,18 +682,19 @@ def _render_tuning_tab(data_choice, window) -> None:
                     TUNABLE_BOUNDS.clear()
                     TUNABLE_BOUNDS.update(original_bounds)
 
-            st.json({
-                "best_params": report["best_params"],
-                "train_score": report["train_score"],
-                "oos_score": report["oos_score"],
-                "engine": report.get("engine", "v35"),
-                "fallback_to_default": report["fallback_to_default"],
-            })
+            st.json(
+                {
+                    "best_params": report["best_params"],
+                    "train_score": report["train_score"],
+                    "oos_score": report["oos_score"],
+                    "engine": report.get("engine", "v35"),
+                    "fallback_to_default": report["fallback_to_default"],
+                }
+            )
             st.dataframe(
-                pd.DataFrame([
-                    {"params": p, "train_score": s}
-                    for p, s in report["leaderboard"]
-                ]),
+                pd.DataFrame(
+                    [{"params": p, "train_score": s} for p, s in report["leaderboard"]]
+                ),
                 use_container_width=True,
             )
             st.caption(f"报告: {report['report_path']} | OOS 不达标自动回退默认值")
@@ -646,6 +703,7 @@ def _render_tuning_tab(data_choice, window) -> None:
             if not report["fallback_to_default"] and report["best_params"]:
                 if st.button("✅ 应用调参结果到规则引擎 Config", type="primary"):
                     from app.rules.config import Config
+
                     cfg = Config()
                     ParamTuner.apply_to_config(report["best_params"], cfg)
                     st.success("已写入规则引擎 Config (内存级)")
@@ -680,7 +738,7 @@ def _render_report_tab() -> None:
     if st.button("📄 生成报告", type="primary", key="btn_report"):
         try:
             from app.backtest.report_generator import ReportGenerator
-            from app.backtest.config_manager import BacktestConfig, ConfigManager
+            from app.backtest.config_manager import ConfigManager
 
             config = ConfigManager.load("config/backtest_config.yaml")
             gen = ReportGenerator(config=config, output_dir=output_dir)
@@ -735,6 +793,7 @@ def _render_report_tab() -> None:
                 fpath = os.path.join(report_dir_path, fname)
                 if col2.button("查看", key=f"view_{fname}"):
                     import json as _json
+
                     try:
                         with open(fpath, encoding="utf-8") as fh:
                             data = _json.load(fh)

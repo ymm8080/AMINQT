@@ -23,7 +23,6 @@ if _PROJECT_ROOT not in sys.path:
 
 from app.pipeline1.list_generator import SCHEMA_FIELDS  # noqa: E402
 from app.streamlit.data_service import (  # noqa: E402
-    LIST_DIR,
     apply_priority_tags,
     demo_list,
     list_available_dates,
@@ -37,6 +36,7 @@ from app.streamlit.data_service import (  # noqa: E402
 
 
 # ── 合成 V1.2 schema 清单 ──
+
 
 def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
     """生成与 PIPELINE1 ListGenerator.emit 输出同构的 V1.2 清单."""
@@ -88,6 +88,7 @@ def tmp_priority_path(tmp_path):
 # 1. Schema 对齐: PIPELINE1 输出 → data_service 加载
 # ══════════════════════════════════════════════════════════
 
+
 class TestSchemaAlignment:
     """验证清单字段与 data_service 期望的列一致."""
 
@@ -109,6 +110,7 @@ class TestSchemaAlignment:
 # ══════════════════════════════════════════════════════════
 # 2. 清单持久化 → data_service 加载链路
 # ══════════════════════════════════════════════════════════
+
 
 class TestListPersistence:
     """模拟 PIPELINE1 to_parquet → data_service 加载."""
@@ -142,9 +144,7 @@ class TestListPersistence:
         """load_latest_list 返回最新日期的清单 + 日期字符串."""
         for d in ("20260729", "20260731"):
             lst = _make_schema_list(symbols=("600519",))
-            lst.to_parquet(
-                os.path.join(tmp_list_dir, f"list_{d}.parquet"), index=False
-            )
+            lst.to_parquet(os.path.join(tmp_list_dir, f"list_{d}.parquet"), index=False)
         df, date = load_latest_list(list_dir=tmp_list_dir)
         assert date == "20260731"
         assert df is not None
@@ -159,6 +159,7 @@ class TestListPersistence:
 # ══════════════════════════════════════════════════════════
 # 3. Priority 同步: PIPELINE1 → priority.json → data_service
 # ══════════════════════════════════════════════════════════
+
 
 class TestPrioritySync:
     """验证 priority.json 的读写与清单标记联动."""
@@ -224,6 +225,7 @@ class TestPrioritySync:
 # 4. 端到端: PIPELINE1 写清单 → 看板加载 → priority 标记
 # ══════════════════════════════════════════════════════════
 
+
 class TestEndToEndListToPanel:
     """模拟 DailySelectionPipeline.run 的持久化 → 看板消费."""
 
@@ -286,6 +288,7 @@ class TestEndToEndListToPanel:
 # 5. priority.json 格式兼容 (list / dict)
 # ══════════════════════════════════════════════════════════
 
+
 class TestPriorityFormat:
     """priority.json 支持两种格式: list 或 {symbols: [...]}."""
 
@@ -297,9 +300,7 @@ class TestPriorityFormat:
 
     def test_dict_format(self, tmp_path):
         p = tmp_path / "priority.json"
-        p.write_text(
-            json.dumps({"symbols": ["601318", "000001"]}), encoding="utf-8"
-        )
+        p.write_text(json.dumps({"symbols": ["601318", "000001"]}), encoding="utf-8")
         syms = load_priority_symbols(path=str(p))
         assert syms == {"601318", "000001"}
 

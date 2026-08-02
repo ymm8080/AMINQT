@@ -516,15 +516,22 @@ def panel_to_v52_format(
 
         # ---- 构建 price_df ----
         price_cols = [
-            "date", "stock", "open", "high", "low", "close",
-            "volume", "pre_close", "amount",
+            "date",
+            "stock",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "pre_close",
+            "amount",
         ]
         available = [c for c in price_cols if c in df.columns]
         price_df = df[available].copy()
         # 补充缺失列
         if "pre_close" not in price_df.columns:
-            price_df["pre_close"] = price_df.groupby("stock")["close"].shift(1).fillna(
-                price_df["close"]
+            price_df["pre_close"] = (
+                price_df.groupby("stock")["close"].shift(1).fillna(price_df["close"])
             )
         if "amount" not in price_df.columns:
             price_df["amount"] = price_df.get("volume", 0) * price_df["close"]
@@ -565,9 +572,13 @@ def panel_to_v52_format(
         # 交易日历
         trade_dates = sorted(price_df["date"].unique())
         import hashlib
-        data_version_hash = "sha256:" + hashlib.sha256(
-            str(trade_dates[0]).encode() + str(trade_dates[-1]).encode()
-        ).hexdigest()[:16]
+
+        data_version_hash = (
+            "sha256:"
+            + hashlib.sha256(
+                str(trade_dates[0]).encode() + str(trade_dates[-1]).encode()
+            ).hexdigest()[:16]
+        )
 
         return pred_df, price_df, trade_dates, data_version_hash
     except Exception as exc:
@@ -650,15 +661,17 @@ def load_real_signals() -> list[dict]:
             prob = float(row.get("prob_up", 0))
             side = "buy" if pred_ret > 0 else "sell"
             reason = f"prob={prob:.2f} pred_ret_1d={pred_ret:+.2%}"
-            signals.append({
-                "time": "14:50",
-                "symbol": sym,
-                "side": side,
-                "priority": "Pipeline-1",
-                "reason": reason,
-                "price": float(row.get("close", 0) or 0),
-                "qty": 100,
-            })
+            signals.append(
+                {
+                    "time": "14:50",
+                    "symbol": sym,
+                    "side": side,
+                    "priority": "Pipeline-1",
+                    "reason": reason,
+                    "price": float(row.get("close", 0) or 0),
+                    "qty": 100,
+                }
+            )
         return signals
     except Exception as exc:
         _data_logger.warning("加载真实信号失败: %s", exc)
@@ -685,13 +698,15 @@ def load_real_positions() -> list[dict]:
             else:
                 close = 100.0
                 cost = 98.0
-            positions.append({
-                "symbol": sym,
-                "qty": 100,
-                "available_qty": 0,  # T+1: 当日买入不可卖
-                "cost": round(cost, 2),
-                "current_price": round(close, 2),
-            })
+            positions.append(
+                {
+                    "symbol": sym,
+                    "qty": 100,
+                    "available_qty": 0,  # T+1: 当日买入不可卖
+                    "cost": round(cost, 2),
+                    "current_price": round(close, 2),
+                }
+            )
         return positions
     except Exception as exc:
         _data_logger.warning("加载真实持仓失败: %s", exc)

@@ -315,7 +315,10 @@ def _render_charts(symbol: str) -> None:
     if factors:
         col_radar, col_table = st.columns([2, 1])
         with col_radar:
-            st.plotly_chart(factor_radar(factors, top_n=10, title=f"{symbol} 因子雷达"), use_container_width=True)
+            st.plotly_chart(
+                factor_radar(factors, top_n=10, title=f"{symbol} 因子雷达"),
+                use_container_width=True,
+            )
         with col_table:
             st.dataframe(
                 pd.DataFrame(
@@ -343,7 +346,9 @@ def _compute_factor_values(df: pd.DataFrame) -> dict:
         ema12 = close.ewm(span=12, adjust=False).mean()
         ema26 = close.ewm(span=26, adjust=False).mean()
         dif = ema12 - ema26
-        result["MACD"] = float(dif.iloc[-1] / close.iloc[-1]) if close.iloc[-1] > 0 else 0
+        result["MACD"] = (
+            float(dif.iloc[-1] / close.iloc[-1]) if close.iloc[-1] > 0 else 0
+        )
 
         # 2. RSI (14)
         delta = close.diff()
@@ -364,7 +369,9 @@ def _compute_factor_values(df: pd.DataFrame) -> dict:
         ma20 = close.rolling(20).mean()
         std20 = close.rolling(20).std()
         boll_width = (ma20 + 2 * std20 - (ma20 - 2 * std20)) / ma20
-        result["BOLL宽"] = float(boll_width.iloc[-1]) if not np.isnan(boll_width.iloc[-1]) else 0
+        result["BOLL宽"] = (
+            float(boll_width.iloc[-1]) if not np.isnan(boll_width.iloc[-1]) else 0
+        )
 
         # 5. ATR 百分比
         tr = np.maximum(
@@ -376,12 +383,16 @@ def _compute_factor_values(df: pd.DataFrame) -> dict:
         )
         atr = tr.rolling(14).mean()
         atr_pct = atr / close
-        result["ATR%"] = float(atr_pct.iloc[-1]) if not np.isnan(atr_pct.iloc[-1]) else 0
+        result["ATR%"] = (
+            float(atr_pct.iloc[-1]) if not np.isnan(atr_pct.iloc[-1]) else 0
+        )
 
         # 6. 量比
         vol_ma5 = volume.rolling(5).mean()
         vol_ratio = volume / vol_ma5.replace(0, 1e-8)
-        result["量比"] = float(vol_ratio.iloc[-1]) if not np.isnan(vol_ratio.iloc[-1]) else 1
+        result["量比"] = (
+            float(vol_ratio.iloc[-1]) if not np.isnan(vol_ratio.iloc[-1]) else 1
+        )
 
         # 7. 乖离率 (close vs MA20)
         bias = (close - ma20) / ma20
@@ -389,15 +400,23 @@ def _compute_factor_values(df: pd.DataFrame) -> dict:
 
         # 8. 量价背离 (相关性)
         vol_price_corr = close.pct_change().rolling(20).corr(volume.pct_change())
-        result["量价相关"] = float(vol_price_corr.iloc[-1]) if not np.isnan(vol_price_corr.iloc[-1]) else 0
+        result["量价相关"] = (
+            float(vol_price_corr.iloc[-1])
+            if not np.isnan(vol_price_corr.iloc[-1])
+            else 0
+        )
 
         # 9. 动量 (20日收益)
         mom_20d = close / close.shift(20) - 1
-        result["动量20d"] = float(mom_20d.iloc[-1]) if not np.isnan(mom_20d.iloc[-1]) else 0
+        result["动量20d"] = (
+            float(mom_20d.iloc[-1]) if not np.isnan(mom_20d.iloc[-1]) else 0
+        )
 
         # 10. 波动率 (20日)
         vol_20d = close.pct_change().rolling(20).std()
-        result["波动率20d"] = float(vol_20d.iloc[-1]) if not np.isnan(vol_20d.iloc[-1]) else 0
+        result["波动率20d"] = (
+            float(vol_20d.iloc[-1]) if not np.isnan(vol_20d.iloc[-1]) else 0
+        )
 
         return result
     except Exception:

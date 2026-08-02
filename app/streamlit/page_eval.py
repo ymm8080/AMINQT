@@ -96,6 +96,7 @@ def _run_prediction(symbols: list[str] | None = None) -> dict | None:
 
         # Signed IC
         import predict_only
+
         bundle = predictor.bundles[board]
         ic = predict_only._compute_signed_ic(feats, bundle, board)
         ic_by_board[board] = ic
@@ -140,6 +141,7 @@ def _run_prediction(symbols: list[str] | None = None) -> dict | None:
     # 写报告
     from datetime import datetime
     import predict_only
+
     trade_date = datetime.now().strftime("%Y%m%d")
     report_path = predict_only._write_report(
         trade_date, ic_by_board, filtered, preds, bundles
@@ -170,12 +172,17 @@ def _demo_panel(days: int = 180, seed: int = 9) -> pd.DataFrame:
         frames.append(
             pd.DataFrame(
                 {
-                    "symbol": sym, "date": dates,
-                    "open": open_, "high": np.maximum(open_, close) * 1.01,
-                    "low": np.minimum(open_, close) * 0.99, "close": close,
+                    "symbol": sym,
+                    "date": dates,
+                    "open": open_,
+                    "high": np.maximum(open_, close) * 1.01,
+                    "low": np.minimum(open_, close) * 0.99,
+                    "close": close,
                     "pre_close": pd.Series(close).shift(1).fillna(close[0]),
-                    "board": "main", "industry": ind,
-                    "amount": 1e9, "volume": 1e7,
+                    "board": "main",
+                    "industry": ind,
+                    "amount": 1e9,
+                    "volume": 1e7,
                     "score": rng.uniform(0, 1, days),
                     "prob_up": rng.uniform(0.4, 0.7, days),
                     "pred_ret_1d": rng.uniform(-0.02, 0.05, days),
@@ -235,7 +242,9 @@ def _filter_panel_by_date(panel: pd.DataFrame, start: date, end: date) -> pd.Dat
     return filtered if len(filtered) else panel
 
 
-def _load_bt_panel_from_pred(pred_result: dict | None, start: date, end: date) -> tuple[pd.DataFrame, dict, bool]:
+def _load_bt_panel_from_pred(
+    pred_result: dict | None, start: date, end: date
+) -> tuple[pd.DataFrame, dict, bool]:
     """从预测结果中提取回测面板和清单 (保证数据一致性), 按日期段过滤."""
     if pred_result is not None and "panel" in pred_result:
         panel = _filter_panel_by_date(pred_result["panel"], start, end)
@@ -248,7 +257,9 @@ def _load_bt_panel_from_pred(pred_result: dict | None, start: date, end: date) -
     return panel, _demo_lists(panel), False
 
 
-def _load_v52_from_pred(pred_result: dict | None, start: date, end: date) -> dict | None:
+def _load_v52_from_pred(
+    pred_result: dict | None, start: date, end: date
+) -> dict | None:
     """从预测结果中提取 V5.2 数据包, 按日期段过滤."""
     if pred_result is not None and "panel" in pred_result:
         panel = _filter_panel_by_date(pred_result["panel"], start, end)
@@ -256,10 +267,13 @@ def _load_v52_from_pred(pred_result: dict | None, start: date, end: date) -> dic
         if result is not None:
             pred_df, price_df, trade_dates, dv_hash = result
             from app.backtest.config_manager import ConfigManager
+
             config = ConfigManager.load("config/backtest_config.yaml")
             return {
-                "pred_df": pred_df, "price_df": price_df,
-                "trade_dates": trade_dates, "data_version_hash": dv_hash,
+                "pred_df": pred_df,
+                "price_df": price_df,
+                "trade_dates": trade_dates,
+                "data_version_hash": dv_hash,
                 "config": config,
             }
     # fallback: 演示数据
@@ -270,14 +284,19 @@ def _load_v52_from_pred(pred_result: dict | None, start: date, end: date) -> dic
         return None
     pred_df, price_df, trade_dates, dv_hash = result
     from app.backtest.config_manager import BacktestConfig
+
     return {
-        "pred_df": pred_df, "price_df": price_df,
-        "trade_dates": trade_dates, "data_version_hash": dv_hash,
+        "pred_df": pred_df,
+        "price_df": price_df,
+        "trade_dates": trade_dates,
+        "data_version_hash": dv_hash,
         "config": BacktestConfig(),
     }
 
 
-def _get_benchmark_df(benchmark_sel: str, nav_curve: pd.DataFrame) -> pd.DataFrame | None:
+def _get_benchmark_df(
+    benchmark_sel: str, nav_curve: pd.DataFrame
+) -> pd.DataFrame | None:
     if benchmark_sel == "无":
         return None
     try:
@@ -332,8 +351,10 @@ def render() -> None:
     with st.sidebar:
         st.subheader("预测设置")
         mode = st.radio(
-            "预测模式", ["全量预测", "指定股票"],
-            horizontal=True, key="pred_mode",
+            "预测模式",
+            ["全量预测", "指定股票"],
+            horizontal=True,
+            key="pred_mode",
         )
         symbols = None
         if mode == "指定股票":
@@ -348,7 +369,8 @@ def render() -> None:
         st.divider()
         st.subheader("回测设置")
         engine_choice = st.selectbox(
-            "回测引擎", ["V3.5 (轻量)", "V5.2 (完整风控)"],
+            "回测引擎",
+            ["V3.5 (轻量)", "V5.2 (完整风控)"],
             help="V3.5: 基础退出规则; V5.2: ATR止损/仓位模式/日保险丝",
         )
         # 回测日期段: 默认最近6个完整月
@@ -373,7 +395,8 @@ def render() -> None:
             st.divider()
             st.subheader("V5.2 专属")
             position_mode = st.selectbox(
-                "仓位模式", ["squad", "sniper", "sniper_max"],
+                "仓位模式",
+                ["squad", "sniper", "sniper_max"],
                 help="squad: 分散5只; sniper: 集中2只; sniper_max: 全仓1只",
             )
             horizon = st.selectbox("持有期", [1, 2, 4], index=1)
@@ -405,21 +428,32 @@ def render() -> None:
             st.caption("⚠ 尚未运行预测 — 回测 Tab 将使用演示数据")
 
     # ---------- Tabs: 不同角度的 review ----------
-    tab_pred, tab_bt, tab_compare, tab_tune, tab_report = st.tabs([
-        "预测质量 (IC)",
-        "回测绩效 (P&L)",
-        "多模式对比",
-        "参数调优",
-        "报告管理",
-    ])
+    tab_pred, tab_bt, tab_compare, tab_tune, tab_report = st.tabs(
+        [
+            "预测质量 (IC)",
+            "回测绩效 (P&L)",
+            "多模式对比",
+            "参数调优",
+            "报告管理",
+        ]
+    )
 
     with tab_pred:
         _render_prediction_tab(pred_result)
 
     with tab_bt:
         _render_backtest_tab(
-            engine_choice, bt_start, bt_end, use_v52, pred_result,
-            top_n, max_hold, hard_stop, trailing, prob_exit, capital,
+            engine_choice,
+            bt_start,
+            bt_end,
+            use_v52,
+            pred_result,
+            top_n,
+            max_hold,
+            hard_stop,
+            trailing,
+            prob_exit,
+            capital,
             position_mode if use_v52 else "squad",
             horizon if use_v52 else 2,
             benchmark_sel,
@@ -456,13 +490,15 @@ def _render_prediction_tab(pred_result: dict | None) -> None:
     ic_rows = []
     for board, ics in ic_by_board.items():
         best_key = max(ics, key=lambda k: ics[k])
-        ic_rows.append({
-            "Board": board,
-            "IC_1d": f"{ics['1d_reg']:+.4f}",
-            "IC_3d": f"{ics['3d_reg']:+.4f}",
-            "IC_5d": f"{ics['5d_reg']:+.4f}",
-            "Best": f"{best_key}={ics[best_key]:+.4f}",
-        })
+        ic_rows.append(
+            {
+                "Board": board,
+                "IC_1d": f"{ics['1d_reg']:+.4f}",
+                "IC_3d": f"{ics['3d_reg']:+.4f}",
+                "IC_5d": f"{ics['5d_reg']:+.4f}",
+                "Best": f"{best_key}={ics[best_key]:+.4f}",
+            }
+        )
     st.dataframe(pd.DataFrame(ic_rows), use_container_width=True, hide_index=True)
 
     # 候选清单
@@ -473,18 +509,33 @@ def _render_prediction_tab(pred_result: dict | None) -> None:
     )
     if len(filtered):
         display_cols = [
-            c for c in [
-                "symbol", "board", "industry",
-                "pred_ret_1d", "pred_ret_3d", "pred_ret_5d",
-                "prob_up", "pain_prob", "pred_q10", "pred_q50",
-                "pred_q90", "uncertainty_width", "score", "ATR_pct",
-            ] if c in filtered.columns
+            c
+            for c in [
+                "symbol",
+                "board",
+                "industry",
+                "pred_ret_1d",
+                "pred_ret_3d",
+                "pred_ret_5d",
+                "prob_up",
+                "pain_prob",
+                "pred_q10",
+                "pred_q50",
+                "pred_q90",
+                "uncertainty_width",
+                "score",
+                "ATR_pct",
+            ]
+            if c in filtered.columns
         ]
         st.dataframe(
-            filtered[display_cols].style.format({
-                c: "{:.4f}" for c in display_cols
-                if c not in ("symbol", "board", "industry")
-            }),
+            filtered[display_cols].style.format(
+                {
+                    c: "{:.4f}"
+                    for c in display_cols
+                    if c not in ("symbol", "board", "industry")
+                }
+            ),
             use_container_width=True,
             height=min(400, 35 * len(filtered) + 40),
         )
@@ -492,30 +543,46 @@ def _render_prediction_tab(pred_result: dict | None) -> None:
         # 入选原因
         st.subheader("入选原因分析")
         import predict_only
+
         for _, row in filtered.iterrows():
             with st.expander(
                 f"{row['symbol']} ({row.get('board', '')} / "
                 f"{row.get('industry', '')}) — score={row.get('score', 0):.4f}"
             ):
                 param_cols = [
-                    "pred_ret_1d", "pred_ret_3d", "pred_ret_5d",
-                    "prob_up", "pain_prob", "pred_q10", "pred_q50",
-                    "pred_q90", "uncertainty_width", "score",
-                    "ATR_pct", "adv20", "turnover_rate", "close",
-                    "amount", "composite_score", "rank_score",
+                    "pred_ret_1d",
+                    "pred_ret_3d",
+                    "pred_ret_5d",
+                    "prob_up",
+                    "pain_prob",
+                    "pred_q10",
+                    "pred_q50",
+                    "pred_q90",
+                    "uncertainty_width",
+                    "score",
+                    "ATR_pct",
+                    "adv20",
+                    "turnover_rate",
+                    "close",
+                    "amount",
+                    "composite_score",
+                    "rank_score",
                 ]
                 param_data = []
                 for c in param_cols:
                     if c in row.index and not pd.isna(row[c]):
                         v = row[c]
-                        param_data.append({
-                            "参数": c,
-                            "值": f"{v:.6f}" if isinstance(v, float) else v,
-                        })
+                        param_data.append(
+                            {
+                                "参数": c,
+                                "值": f"{v:.6f}" if isinstance(v, float) else v,
+                            }
+                        )
                 if param_data:
                     st.dataframe(
                         pd.DataFrame(param_data),
-                        use_container_width=True, hide_index=True,
+                        use_container_width=True,
+                        hide_index=True,
                     )
                 st.markdown(f"**Reason**: {predict_only._build_reasons(row)}")
     else:
@@ -530,9 +597,20 @@ def _render_prediction_tab(pred_result: dict | None) -> None:
 
 
 def _render_backtest_tab(
-    engine_choice, bt_start, bt_end, use_v52, pred_result,
-    top_n, max_hold, hard_stop, trailing, prob_exit, capital,
-    position_mode, horizon, benchmark_sel,
+    engine_choice,
+    bt_start,
+    bt_end,
+    use_v52,
+    pred_result,
+    top_n,
+    max_hold,
+    hard_stop,
+    trailing,
+    prob_exit,
+    capital,
+    position_mode,
+    horizon,
+    benchmark_sel,
 ) -> None:
     engine_tag = "V5.2" if use_v52 else "V3.5"
     data_tag = "预测数据" if pred_result else "演示数据"
@@ -542,14 +620,31 @@ def _render_backtest_tab(
         with st.spinner(f"回测运行中 ({engine_tag})..."):
             if use_v52:
                 result = _run_v52_backtest(
-                    pred_result, bt_start, bt_end, position_mode, horizon,
-                    top_n, max_hold, hard_stop, trailing, prob_exit, capital,
+                    pred_result,
+                    bt_start,
+                    bt_end,
+                    position_mode,
+                    horizon,
+                    top_n,
+                    max_hold,
+                    hard_stop,
+                    trailing,
+                    prob_exit,
+                    capital,
                 )
             else:
-                panel, lists, _ = _load_bt_panel_from_pred(pred_result, bt_start, bt_end)
+                panel, lists, _ = _load_bt_panel_from_pred(
+                    pred_result, bt_start, bt_end
+                )
                 result = _run_v35_backtest(
-                    panel, lists, top_n, max_hold, hard_stop,
-                    trailing, prob_exit, capital,
+                    panel,
+                    lists,
+                    top_n,
+                    max_hold,
+                    hard_stop,
+                    trailing,
+                    prob_exit,
+                    capital,
                 )
 
         if result is None:
@@ -584,11 +679,15 @@ def _render_backtest_tab(
                 st.dataframe(result["holdings_history"], use_container_width=True)
 
 
-def _run_v35_backtest(panel, lists, top_n, max_hold, hard_stop, trailing, prob_exit, capital):
+def _run_v35_backtest(
+    panel, lists, top_n, max_hold, hard_stop, trailing, prob_exit, capital
+):
     try:
         proto = BacktestProtocol(
-            top_n=top_n, max_hold_days=max_hold,
-            hard_stop=hard_stop, trailing_drawdown=trailing,
+            top_n=top_n,
+            max_hold_days=max_hold,
+            hard_stop=hard_stop,
+            trailing_drawdown=trailing,
             prob_exit=prob_exit,
         )
         return BacktestEngineV35(panel, proto).run(lists, initial_capital=capital)
@@ -598,14 +697,25 @@ def _run_v35_backtest(panel, lists, top_n, max_hold, hard_stop, trailing, prob_e
         return None
 
 
-def _run_v52_backtest(pred_result, bt_start, bt_end, position_mode, horizon, top_n, max_hold, hard_stop, trailing, prob_exit, capital):
+def _run_v52_backtest(
+    pred_result,
+    bt_start,
+    bt_end,
+    position_mode,
+    horizon,
+    top_n,
+    max_hold,
+    hard_stop,
+    trailing,
+    prob_exit,
+    capital,
+):
     try:
         v52_data = _load_v52_from_pred(pred_result, bt_start, bt_end)
         if v52_data is None:
             st.error("V5.2 数据加载失败")
             return None
 
-        from app.backtest.config_manager import BacktestConfig
         from app.backtest.engine import BacktestEngine
 
         base_config = v52_data["config"]
@@ -634,8 +744,10 @@ def _run_v52_backtest(pred_result, bt_start, bt_end, position_mode, horizon, top
             nav_curve["n_positions"] = result_df.get("num_holdings", 0)
 
         return {
-            "nav_curve": nav_curve, "trades": trades_df,
-            "metrics": metrics, "holdings_history": holdings_df,
+            "nav_curve": nav_curve,
+            "trades": trades_df,
+            "metrics": metrics,
+            "holdings_history": holdings_df,
         }
     except Exception as exc:
         logger.error("V5.2 回测失败: %s", exc, exc_info=True)
@@ -648,7 +760,9 @@ def _run_v52_backtest(pred_result, bt_start, bt_end, position_mode, horizon, top
 # ══════════════════════════════════════════════════════════
 
 
-def _render_comparison_tab(pred_result, bt_start, bt_end, capital, benchmark_sel) -> None:
+def _render_comparison_tab(
+    pred_result, bt_start, bt_end, capital, benchmark_sel
+) -> None:
     st.subheader("Squad vs Sniper 多模式对比")
     st.caption("运行两种仓位模式回测, 对比绩效差异 (集中度风险/Jensen Alpha)")
 
@@ -666,9 +780,9 @@ def _render_comparison_tab(pred_result, bt_start, bt_end, capital, benchmark_sel
         navs = {}
         for mode in ["squad", "sniper"]:
             with st.spinner(f"运行 {mode} 模式..."):
-                config = BacktestConfig(**{
-                    k: v for k, v in vars(v52_data["config"]).items()
-                })
+                config = BacktestConfig(
+                    **{k: v for k, v in vars(v52_data["config"]).items()}
+                )
                 config.position_mode = mode
                 config.initial_capital = capital
                 eng = BacktestEngine(
@@ -716,8 +830,10 @@ def _render_comparison_tab(pred_result, bt_start, bt_end, capital, benchmark_sel
             "diversified": "分散策略更优",
             "tighten_stop": "建议收紧止损",
         }
-        col6.metric("建议", rec_map.get(
-            comparison["recommendation"], comparison["recommendation"]))
+        col6.metric(
+            "建议",
+            rec_map.get(comparison["recommendation"], comparison["recommendation"]),
+        )
 
         with st.expander("Jensen Alpha"):
             st.metric("Squad Alpha", f"{comparison['jensen_alpha_squad']:+.2%}")
@@ -734,7 +850,8 @@ def _render_tuning_tab(pred_result, bt_start, bt_end) -> None:
     st.caption("全部 16 个 TUNABLE_BOUNDS 参数, 支持 V35/V5.2 双引擎评估")
 
     tune_engine = st.selectbox(
-        "调参引擎", ["V3.5", "V5.2"],
+        "调参引擎",
+        ["V3.5", "V5.2"],
         help="V3.5 只支持 4 个参数; V5.2 支持 8 个参数",
     )
     use_v52_tune = tune_engine == "V5.2"
@@ -751,23 +868,21 @@ def _render_tuning_tab(pred_result, bt_start, bt_end) -> None:
 
     if use_v52_tune:
         available_params = [
-            name for name, engine in TUNABLE_ENGINE.items()
-            if engine in ("both", "v52")
+            name for name, engine in TUNABLE_ENGINE.items() if engine in ("both", "v52")
         ]
     else:
         available_params = [
-            name for name, engine in TUNABLE_ENGINE.items()
-            if engine == "both"
+            name for name, engine in TUNABLE_ENGINE.items() if engine == "both"
         ]
     rule_only_params = [
-        name for name, engine in TUNABLE_ENGINE.items()
-        if engine == "rule_only"
+        name for name, engine in TUNABLE_ENGINE.items() if engine == "rule_only"
     ]
 
     tunable = st.multiselect(
         f"调参目标 (可用 {len(available_params)} 个, 引擎={tune_engine})",
         sorted(available_params),
-        default=["max_hold_days", "prob_exit"] if not use_v52_tune
+        default=["max_hold_days", "prob_exit"]
+        if not use_v52_tune
         else ["max_hold_days", "prob_exit", "surge_pct"],
     )
 
@@ -776,7 +891,8 @@ def _render_tuning_tab(pred_result, bt_start, bt_end) -> None:
             st.caption("以下参数属于日内规则引擎, 无法通过回测调优:")
             st.dataframe(
                 pd.DataFrame({"参数名": rule_only_params}),
-                use_container_width=True, hide_index=True,
+                use_container_width=True,
+                hide_index=True,
             )
 
     ranges = {}
@@ -787,9 +903,15 @@ def _render_tuning_tab(pred_result, bt_start, bt_end) -> None:
             lo_default, hi_default, step_default = TUNABLE_BOUNDS[name]
             with cols[i % len(cols)]:
                 st.markdown(f"**{name}**")
-                lo = st.number_input("min", value=float(lo_default), key=f"range_lo_{name}")
-                hi = st.number_input("max", value=float(hi_default), key=f"range_hi_{name}")
-                step = st.number_input("step", value=float(step_default), key=f"range_step_{name}")
+                lo = st.number_input(
+                    "min", value=float(lo_default), key=f"range_lo_{name}"
+                )
+                hi = st.number_input(
+                    "max", value=float(hi_default), key=f"range_hi_{name}"
+                )
+                step = st.number_input(
+                    "step", value=float(step_default), key=f"range_step_{name}"
+                )
                 ranges[name] = (lo, hi, step)
 
     if st.button("🔍 网格搜索 + OOS 复验", key="btn_tune"):
@@ -816,10 +938,13 @@ def _render_tuning_tab(pred_result, bt_start, bt_end) -> None:
                         "Calmar": "calmar",
                     }
                     tuner = ParamTuner(
-                        panel=panel, daily_lists=lists, v52_data=v52_data,
+                        panel=panel,
+                        daily_lists=lists,
+                        v52_data=v52_data,
                     )
                     report = tuner.grid_search(
-                        tunable, top_k=3,
+                        tunable,
+                        top_k=3,
                         objective=obj_map[objective],
                         max_dd_limit=max_dd_limit,
                         engine="v52" if use_v52_tune else "v35",
@@ -828,18 +953,19 @@ def _render_tuning_tab(pred_result, bt_start, bt_end) -> None:
                     TUNABLE_BOUNDS.clear()
                     TUNABLE_BOUNDS.update(original_bounds)
 
-            st.json({
-                "best_params": report["best_params"],
-                "train_score": report["train_score"],
-                "oos_score": report["oos_score"],
-                "engine": report.get("engine", "v35"),
-                "fallback_to_default": report["fallback_to_default"],
-            })
+            st.json(
+                {
+                    "best_params": report["best_params"],
+                    "train_score": report["train_score"],
+                    "oos_score": report["oos_score"],
+                    "engine": report.get("engine", "v35"),
+                    "fallback_to_default": report["fallback_to_default"],
+                }
+            )
             st.dataframe(
-                pd.DataFrame([
-                    {"params": p, "train_score": s}
-                    for p, s in report["leaderboard"]
-                ]),
+                pd.DataFrame(
+                    [{"params": p, "train_score": s} for p, s in report["leaderboard"]]
+                ),
                 use_container_width=True,
             )
             st.caption(f"报告: {report['report_path']} | OOS 不达标自动回退默认值")
@@ -847,6 +973,7 @@ def _render_tuning_tab(pred_result, bt_start, bt_end) -> None:
             if not report["fallback_to_default"] and report["best_params"]:
                 if st.button("✅ 应用调参结果到规则引擎 Config", type="primary"):
                     from app.rules.config import Config
+
                     cfg = Config()
                     ParamTuner.apply_to_config(report["best_params"], cfg)
                     st.success("已写入规则引擎 Config (内存级)")
@@ -896,9 +1023,11 @@ def _render_report_tab() -> None:
                 result_df["daily_pnl_pct"] = result_df["nav"].pct_change().fillna(0)
 
             basepath = gen.generate(
-                mode_name=mode_name, result_df=result_df,
+                mode_name=mode_name,
+                result_df=result_df,
                 trades_df=trades_df if trades_df is not None else pd.DataFrame(),
-                metrics=metrics, data_version_hash="panel_v3",
+                metrics=metrics,
+                data_version_hash="panel_v3",
             )
             st.success(f"报告已生成: {basepath}.{{json,txt,html}}")
 
@@ -930,6 +1059,7 @@ def _render_report_tab() -> None:
                 fpath = os.path.join(report_dir_path, fname)
                 if col2.button("查看", key=f"view_{fname}"):
                     import json as _json
+
                     try:
                         with open(fpath, encoding="utf-8") as fh:
                             data = _json.load(fh)
