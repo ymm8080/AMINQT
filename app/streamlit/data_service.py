@@ -524,23 +524,27 @@ def load_predictions_from_db(
     """
     try:
         from app.pipeline1.prediction_db import PredictionDB
+
         db = PredictionDB()
         date_strs = [d.strftime("%Y%m%d") for d in dates]
         import sqlite3
+
         with sqlite3.connect(db.path) as conn:
             placeholders = ",".join("?" * len(date_strs))
             df = pd.read_sql(
                 f"""SELECT date, symbol, score, prob_up,
                        pred_ret_1d, pred_ret_3d, pred_ret_5d
                     FROM prediction_stocks
-                    WHERE date IN ({placeholders})""", 
-                conn, params=date_strs
+                    WHERE date IN ({placeholders})""",
+                conn,
+                params=date_strs,
             )
         if df.empty:
             return None
         df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
-        _data_logger.info("从 PredictionDB 加载 %d 条预测 (%d 日期)",
-                          len(df), df["date"].nunique())
+        _data_logger.info(
+            "从 PredictionDB 加载 %d 条预测 (%d 日期)", len(df), df["date"].nunique()
+        )
         return df
     except Exception as exc:
         _data_logger.warning("加载预测失败, 回退 pctChg proxy: %s", exc)
@@ -610,7 +614,9 @@ def panel_to_v52_format(
         else:
             price_df["down_limit"] = (price_df["pre_close"] * 0.9).round(2)
         # 状态标记: 优先使用面板的 is_suspended/is_st, 回退到 0
-        price_df["is_halt"] = df["is_suspended"].astype(int) if "is_suspended" in df.columns else 0
+        price_df["is_halt"] = (
+            df["is_suspended"].astype(int) if "is_suspended" in df.columns else 0
+        )
         price_df["is_st"] = df["is_st"].astype(int) if "is_st" in df.columns else 0
         # circ_mv NaN 填 0, 防止 NaN < 2e9 返回 False 绕过 BacktestEngine 流动性过滤
         price_df["circ_mv"] = price_df["circ_mv"].fillna(0)
@@ -628,13 +634,13 @@ def panel_to_v52_format(
         if not has_prediction:
             pred_db = load_predictions_from_db(sorted(df["date"].unique()))
             if pred_db is not None and not pred_db.empty:
-                # merge predictions into df
                 pred_db = pred_db.rename(columns={"symbol": "stock"})
                 df = df.merge(
                     pred_db[["date", "stock", "score", "prob_up", "pred_ret_3d"]],
-                    on=["date", "stock"], how="left", suffixes=("", "_pred")
+                    on=["date", "stock"],
+                    how="left",
+                    suffixes=("", "_pred"),
                 )
-                # Fill from pred columns where original is missing
                 for src in pred_cols_map:
                     if src not in df.columns and f"{src}_pred" in df.columns:
                         df[src] = df[f"{src}_pred"]
@@ -646,18 +652,21 @@ def panel_to_v52_format(
             if "score" in df.columns:
                 df["score"] = df["score"].fillna(pctchg / 100.0)
             if "prob_up" in df.columns:
-                df["prob_up"] = df["prob_up"].fillna((pctchg > 0).astype(float) * 0.6 + 0.4)
+                df["prob_up"] = df["prob_up"].fillna(
+                    (pctchg > 0).astype(float) * 0.6 + 0.4
+                )
             if "pred_ret_3d" in df.columns:
                 df["pred_ret_3d"] = df["pred_ret_3d"].fillna(pctchg / 100.0)
         for src, dst in pred_cols_map.items():
             if src in df.columns:
                 pred_df[dst] = df[src].astype(float)
             elif not has_prediction and "pctChg" in df.columns:
-                # 无预测列时, 用 pctChg (当日涨幅) 作为 pred_ret 近似
                 if dst == "pred_ret_h2":
                     pred_df[dst] = df["pctChg"].astype(float) / 100.0
                 elif dst == "prob_up_h2":
-                    pred_df[dst] = (df["pctChg"].astype(float) > 0).astype(float) * 0.6 + 0.4
+                    pred_df[dst] = (df["pctChg"].astype(float) > 0).astype(
+                        float
+                    ) * 0.6 + 0.4
                 elif dst == "score_h2":
                     pred_df[dst] = df["pctChg"].astype(float) / 100.0
             else:
@@ -707,7 +716,9 @@ def panel_to_v35_lists(
             if pred_db is not None and not pred_db.empty:
                 df = df.merge(
                     pred_db[["date", "symbol", "score", "prob_up", "pred_ret_3d"]],
-                    on=["date", "symbol"], how="left", suffixes=("", "_pred")
+                    on=["date", "symbol"],
+                    how="left",
+                    suffixes=("", "_pred"),
                 )
                 if "score_pred" in df.columns:
                     df["score"] = df["score"].fillna(df["score_pred"])
@@ -721,8 +732,10 @@ def panel_to_v35_lists(
             if "score" in df.columns:
                 df["score"] = df["score"].fillna(df["pctChg"].astype(float))
             if "prob_up" in df.columns:
-                df["prob_up"] = df["prob_up"].fillna((df["pctChg"].astype(float) > 0).astype(float) * 0.6 + 0.4)
-        # 仍无预测列时, 用 pctChg (当日涨幅) 作为 score 近似
+                df["prob_up"] = df["prob_up"].fillna(
+                    (df["pctChg"].astype(float) > 0).astype(float) * 0.6 + 0.4
+                )
+        # 仍无预测列时, 用 pctChg 作为 score 近似
         if not has_score and "pctChg" in df.columns:
             df["_proxy_score"] = df["pctChg"].astype(float)
             score_col = "_proxy_score"
