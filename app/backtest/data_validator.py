@@ -191,6 +191,11 @@ class DataValidator:
             修正后的 price_df.
         """
         df = self.price_df.copy()
+        # Ensure is_halt is int (input may be bool — newer pandas rejects int→bool assignment)
+        if "is_halt" in df.columns:
+            df["is_halt"] = df["is_halt"].astype(int)
+        else:
+            df["is_halt"] = 0
 
         # volume <= 0 且 close > 0 → halt
         mask = (df["volume"] <= 0) & (df["close"] > 0)
