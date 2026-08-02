@@ -22,15 +22,18 @@ import time
 import logging
 import argparse
 import pandas as pd
-from pathlib import Path
 from datetime import datetime
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config.settings import data_others_path  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-OUTPUT_DIR = Path(os.getenv("PROCESSED_DIR", "data/processed"))
+OUTPUT_DIR = data_others_path("data/processed")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_PATH = OUTPUT_DIR / "sw_stock_classification.csv"
 

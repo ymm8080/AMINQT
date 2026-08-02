@@ -24,6 +24,10 @@ import pandas as pd
 import tushare as ts
 from dotenv import load_dotenv
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config.settings import data_others_path  # noqa: E402
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
 )
@@ -32,7 +36,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 PROCESSED_DIR = os.getenv("PROCESSED_DIR", "data/processed")
-SW_CSV = os.path.join(PROCESSED_DIR, "sw_stock_classification.csv")
+SW_CSV = str(data_others_path("data/processed/sw_stock_classification.csv"))
 OUTPUT = os.path.join(PROCESSED_DIR, "sw_daily_history.parquet")
 
 DEFAULT_START = "20180101"

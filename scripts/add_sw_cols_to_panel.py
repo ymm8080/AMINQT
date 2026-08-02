@@ -14,15 +14,17 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config.settings import data_others_path  # noqa: E402
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
-SW_CSV = os.path.join(
-    os.getenv("PROCESSED_DIR", "data/processed"), "sw_stock_classification.csv"
-)
+SW_CSV = str(data_others_path("data/processed/sw_stock_classification.csv"))
 
 NEW_COLS = ["sw_l1_name", "sw_l2_name", "sw_l3_name"]
 OLD_COLS_TO_REMOVE = [

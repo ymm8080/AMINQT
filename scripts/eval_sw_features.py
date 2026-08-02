@@ -10,6 +10,9 @@ from scipy.stats import spearmanr
 import lightgbm as lgb
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from config.settings import data_others_path  # noqa: E402
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
 )
@@ -288,7 +291,9 @@ def main():
         )
     print()
 
-    out = os.path.join("data/processed", "sw_feature_eval_multihorizon.csv")
+    out_dir = data_others_path("data/processed")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = str(out_dir / "sw_feature_eval_multihorizon.csv")
     b.to_csv(out, index=False)
     print(f"  Saved: {out}")
 
