@@ -204,6 +204,7 @@ def demo_list(seed: int = 42) -> pd.DataFrame:
             ],
             "day_change": rng.uniform(-0.03, 0.06, n),
             "pred_ret_1d": rng.uniform(-0.02, 0.05, n),
+            "pred_ret_2d": rng.uniform(-0.03, 0.08, n),
             "pred_ret_3d": rng.uniform(-0.03, 0.09, n),
             "pred_ret_5d": rng.uniform(-0.04, 0.12, n),
             "prob_up": np.round(rng.uniform(0.42, 0.62, n), 3),
@@ -222,7 +223,7 @@ def demo_list(seed: int = 42) -> pd.DataFrame:
             "pain_prob": np.round(rng.uniform(0.0, 0.5, n), 3),
             "announce_score": rng.uniform(-1.0, 1.0, n),
             "weight": np.round(rng.uniform(0.02, 0.10, n), 4),
-            "schema_version": "1.2",
+            "schema_version": "1.3",
         }
     )
     df["name"] = df["symbol"].map(DEMO_NAMES)

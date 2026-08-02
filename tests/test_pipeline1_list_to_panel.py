@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """PIPELINE1 → 选股看板 连通性单元测试.
 
 验证从 PIPELINE1 生成的清单 (list_YYYYMMDD.parquet) 到选股看板
 (data_service.load_latest_list / load_priority_symbols) 的完整数据链路,
-确保 schema V1.2 字段对齐、priority 同步、清单可被面板正确加载.
+确保 schema V1.3 字段对齐、priority 同步、清单可被面板正确加载.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from app.streamlit.data_service import (  # noqa: E402
 )
 
 
-# ── 合成 V1.2 schema 清单 ──
+# ── 合成 V1.3 schema 清单 ──
 
 
 def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
@@ -46,6 +46,7 @@ def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
         {
             "symbol": list(symbols),
             "board": ["main"] * n,
+            "day_change": rng.uniform(-0.03, 0.06, n),
             "pred_ret_1d": rng.uniform(-0.02, 0.05, n),
             "pred_ret_2d": rng.uniform(-0.03, 0.08, n),
             "pred_ret_3d": rng.uniform(-0.03, 0.09, n),
@@ -65,7 +66,7 @@ def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
             "pain_prob": np.round(rng.uniform(0.0, 0.5, n), 3),
             "announce_score": rng.uniform(-1.0, 1.0, n),
             "weight": np.round(rng.uniform(0.02, 0.10, n), 4),
-            "schema_version": "1.2",
+            "schema_version": "1.3",
         }
     )
 
@@ -93,7 +94,7 @@ class TestSchemaAlignment:
     """验证清单字段与 data_service 期望的列一致."""
 
     def test_schema_fields_match(self):
-        """SCHEMA_FIELDS 常量与合成的 V1.2 清单列一致."""
+        """SCHEMA_FIELDS 常量与合成的 V1.3 清单列一致."""
         lst = _make_schema_list()
         assert list(lst.columns) == SCHEMA_FIELDS, (
             "清单 schema 与 SCHEMA_FIELDS 不匹配:\n"
@@ -102,9 +103,9 @@ class TestSchemaAlignment:
         )
 
     def test_schema_version_constant(self):
-        """所有行的 schema_version = '1.2'."""
+        """所有行的 schema_version = '1.3'."""
         lst = _make_schema_list()
-        assert (lst["schema_version"] == "1.2").all()
+        assert (lst["schema_version"] == "1.3").all()
 
 
 # ══════════════════════════════════════════════════════════
@@ -277,13 +278,13 @@ class TestEndToEndListToPanel:
         assert "600519" not in set(df["symbol"])
 
     def test_demo_list_fallback_schema(self):
-        """无清单时 demo_list 返回与 V1.2 schema 同构的 DataFrame."""
+        """无清单时 demo_list 返回与 V1.3 schema 同构的 DataFrame."""
         demo = demo_list()
         assert "symbol" in demo.columns
         assert "score" in demo.columns
         assert "pred_ret_1d" in demo.columns
         assert "schema_version" in demo.columns
-        assert (demo["schema_version"] == "1.2").all()
+        assert (demo["schema_version"] == "1.3").all()
 
 
 # ══════════════════════════════════════════════════════════
