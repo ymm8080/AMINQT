@@ -105,7 +105,8 @@ print("\n[3] Merging sources...")
 merges = {
     "daily_basic": (basic, ["volume_ratio",
         "pe", "pe_ttm", "pb", "ps", "ps_ttm", "total_share", "float_share",
-        "free_share", "total_mv", "circ_mv", "dv_ratio", "dv_ttm"]),
+        "free_share", "total_mv", "circ_mv", "dv_ratio", "dv_ttm",
+        "turnover_rate"]),
     "moneyflow": (money, ["net_mf_amount", "buy_elg_amount", "sell_elg_amount"]),
     "cyq_perf": (cyq, ["cost_5pct", "cost_15pct", "cost_50pct", "cost_85pct",
         "cost_95pct", "weight_avg", "winner_rate",
@@ -155,10 +156,6 @@ rename_map = {
 for old, new in rename_map.items():
     if old in df.columns:
         df[new] = df[old]
-
-# free_float_turnover_rate = turnover_rate_f (free float turnover)
-if "turnover_rate_f" in df.columns and "free_float_turnover_rate" in panel_cols:
-    df["free_float_turnover_rate"] = df["turnover_rate_f"]
 
 # LHB merge
 if len(lhb):
