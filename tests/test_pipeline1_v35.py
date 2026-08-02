@@ -434,6 +434,7 @@ def make_candidates(n=20, seed=1) -> pd.DataFrame:
             "board": [boards[i % 3] for i in range(n)],
             "industry": [inds[i % 4] for i in range(n)],
             "pred_ret_1d": rng.uniform(-0.05, 0.05, n),
+            "pred_ret_2d": rng.uniform(-0.07, 0.12, n),
             "pred_ret_3d": rng.uniform(-0.08, 0.10, n),
             "pred_ret_5d": rng.uniform(-0.10, 0.15, n),
             "prob_up": rng.uniform(0.35, 0.65, n),
@@ -448,7 +449,7 @@ class TestListGenerator:
         lst = out["list"]
         assert len(lst) <= 15
         assert list(lst.columns) == SCHEMA_FIELDS
-        assert out["schema_version"] == "1.2"
+        assert out["schema_version"] == "1.3"
         assert lst["prob_up"].iloc[0] == round(lst["prob_up"].iloc[0], 3)
 
     def test_industry_limit(self):
@@ -469,7 +470,9 @@ class TestListGenerator:
     def test_holding_bonus(self):
         """向后兼容: 无 holding_day 列时, is_in_yesterday_list=1 视为 day1 (weight=1.0)."""
         cands = make_candidates(n=2, seed=3)
-        cands.loc[:, ["pred_ret_1d", "pred_ret_3d", "pred_ret_5d"]] = 0.02
+        cands.loc[:, ["pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d"]] = (
+            0.02
+        )
         cands.loc[:, "prob_up"] = 0.5
         cands["is_in_yesterday_list"] = [1, 0]
         out = ListGenerator(**GATE_OFF).emit(cands)
@@ -482,7 +485,9 @@ class TestListGenerator:
     def test_holding_bonus_decay_b3(self):
         """B3: Holding Bonus 按持仓天数衰减 day1=1.0/day2=0.5/day3=0.0."""
         cands = make_candidates(n=3, seed=3)
-        cands.loc[:, ["pred_ret_1d", "pred_ret_3d", "pred_ret_5d"]] = 0.02
+        cands.loc[:, ["pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d"]] = (
+            0.02
+        )
         cands.loc[:, "prob_up"] = 0.5
         cands["is_in_yesterday_list"] = [1, 1, 1]
         cands["holding_day"] = [1, 2, 3]  # day1/day2/day3
@@ -517,7 +522,7 @@ class TestListGenerator:
         # 主板 score 天然偏大
         cands.loc[cands["board"] == "main", "pred_ret_1d"] = 0.10
         cands.loc[cands["board"] == "GEM", "pred_ret_1d"] = 0.01
-        cands.loc[:, ["pred_ret_3d", "pred_ret_5d"]] = 0.01
+        cands.loc[:, ["pred_ret_2d", "pred_ret_3d", "pred_ret_5d"]] = 0.01
         cands.loc[:, "prob_up"] = 0.5
         cands["industry"] = ["白酒", "电池", "半导体", "保险", "白酒", "电池"]
         out = ListGenerator(**GATE_OFF).emit(cands)

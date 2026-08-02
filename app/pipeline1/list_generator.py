@@ -17,12 +17,14 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from .label_engine import LABEL_WEIGHTS
+
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = "1.2"
+SCHEMA_VERSION = "1.3"
 TOP_N = 15
 MAX_PER_INDUSTRY = 4
-COMPOUND_W = (0.45, 0.35, 0.30)  # 1d/3d/5d
+COMPOUND_W = tuple(LABEL_WEIGHTS[k] for k in (1, 2, 3, 5))  # 1d/2d/3d/5d
 HOLDING_BONUS = 0.2
 # B3: Holding Bonus 按持仓天数衰减 day1=1.0/day2=0.5/day3=0.0
 HOLDING_DAY_WEIGHTS = {0: 0.0, 1: 1.0, 2: 0.5, 3: 0.0}
@@ -46,6 +48,7 @@ SCHEMA_FIELDS = [
     "board",
     "day_change",
     "pred_ret_1d",
+    "pred_ret_2d",
     "pred_ret_3d",
     "pred_ret_5d",
     "prob_up",
@@ -130,10 +133,13 @@ class ListGenerator:
         [E2] 痛苦惩罚: score × (1 - 0.5×pain_prob)  (pain_prob=0.3 → ×0.85)
         [公告] score × (1 + 0.3×announce_score)  (安全网 #17)
         adjusted = score + 0.2 * holding_day_weight * is_in_yesterday_list  (B3 衰减)"""
-        w1, w3, w5 = COMPOUND_W
+        w1, w2, w3, w5 = COMPOUND_W
         df = df.copy()
         df["compound_ret"] = (
-            w1 * df["pred_ret_1d"] + w3 * df["pred_ret_3d"] + w5 * df["pred_ret_5d"]
+            w1 * df["pred_ret_1d"]
+            + w2 * df["pred_ret_2d"]
+            + w3 * df["pred_ret_3d"]
+            + w5 * df["pred_ret_5d"]
         )
         # B4: base_rate = 20 日滚动均值 (原单日均值日间波动大致 score 尺度不稳)
         daily_mean = float(df["prob_up"].mean())
@@ -313,9 +319,10 @@ class ListGenerator:
             if "compound_ret" in df.columns:
                 compound = df["compound_ret"]
             else:
-                w1, w3, w5 = COMPOUND_W
+                w1, w2, w3, w5 = COMPOUND_W
                 compound = (
                     w1 * df["pred_ret_1d"]
+                    + w2 * df["pred_ret_2d"]
                     + w3 * df["pred_ret_3d"]
                     + w5 * df["pred_ret_5d"]
                 )

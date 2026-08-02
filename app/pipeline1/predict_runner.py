@@ -17,9 +17,25 @@ import pandas as pd
 
 from .daily_pipeline import DailySelectionPipeline
 from .data_supply import DataSupplyChain
+from .dual_track_trainer import DualTrackTrainer
 from .list_generator import MarketEnv
 
 logger = logging.getLogger(__name__)
+
+
+def _is_inferable(path: str) -> bool:
+    """模型包能否被推理端复现: feature_cols 不含训练注入的 _brute_ 特征.
+
+    选择脚本 (_abc_brute5k.py 等) 训练时注入 _brute_ 特征, FeatureEngineV35
+    推理端无法复现 → predict() 全列缺失 → KeyError + 全零垃圾预测.
+    """
+    try:
+        bundle = DualTrackTrainer.load(path)
+    except Exception:
+        logger.warning("模型包加载失败, 跳过: %s", path)
+        return False
+    cols = bundle.get("feature_cols") or []
+    return not any("_brute_" in c for c in cols)
 
 
 def find_bundles(
@@ -27,7 +43,8 @@ def find_bundles(
 ) -> dict[str, str]:
     """定位双板块模型包: {'main': path, 'dual': path}.
 
-    tag 给定 → {board}_{tag}.pkl; 否则取该 board 最新 (字典序最大) 的包.
+    tag 给定 → {board}_{tag}.pkl; 否则取该 board 最新 (字典序最大) 且
+    可推理 (不含 _brute_ 训练注入特征) 的包.
     缺失的板块不出现在返回值中 (调用方决定降级或报错).
     """
     bundles: dict[str, str] = {}
@@ -47,10 +64,13 @@ def find_bundles(
             for f in os.listdir(model_dir)
             if f.startswith(f"{board}_") and f.endswith(".pkl")
         )
-        if candidates:
-            bundles[board] = os.path.join(model_dir, candidates[-1])
+        for fname in reversed(candidates):
+            path = os.path.join(model_dir, fname)
+            if _is_inferable(path):
+                bundles[board] = path
+                break
         else:
-            logger.warning("[%s] 无可用模型包 (%s)", board, model_dir)
+            logger.warning("[%s] 无可用可推理模型包 (%s)", board, model_dir)
     return bundles
 
 

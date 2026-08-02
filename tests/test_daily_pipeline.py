@@ -67,6 +67,7 @@ def _train_bundle(tmp_path, panel):
     dtt.ES_PATIENCE = 3
     df = panel.copy()
     df["label_1d"] = df.groupby("symbol")["close_hfq"].shift(-1) / df["close_hfq"] - 1
+    df["label_2d"] = df.groupby("symbol")["close_hfq"].shift(-2) / df["close_hfq"] - 1
     df["label_3d"] = df.groupby("symbol")["close_hfq"].shift(-3) / df["close_hfq"] - 1
     df["label_5d"] = df.groupby("symbol")["close_hfq"].shift(-5) / df["close_hfq"] - 1
     df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
@@ -102,7 +103,7 @@ class TestDailyPipeline:
         lst = result["list"]
         assert list(lst.columns) == SCHEMA_FIELDS
         assert 0 < len(lst) <= 2
-        assert (lst["schema_version"] == "1.2").all()
+        assert (lst["schema_version"] == "1.3").all()
 
     def test_list_persisted_and_yesterday_carryover(self, pipeline):
         """清单持久化 + 次日 is_in_yesterday_list 回填 (Holding Bonus)."""
@@ -119,7 +120,7 @@ class TestDailyPipeline:
         """数据供应链失败 → 三档降级 (第1档: 沿用昨日/告警)."""
 
         class FailSupply(DataSupplyChain):
-            def _assemble_check(self):
+            def append_today_to_panel(self, panel, trade_date=None, sources=None):
                 raise DataSupplyError("network down")
 
         pipe = DailySelectionPipeline(
@@ -127,7 +128,8 @@ class TestDailyPipeline:
             bundle_paths={},
             list_dir=str(tmp_path / "l"),
         )
-        result = pipe.run("20260720", panel=None)  # _assemble_panel 抛 DataSupplyError
+        # panel=None → _assemble_panel → append_today_to_panel 抛 DataSupplyError
+        result = pipe.run("20260720", panel=None)
         assert result["mode"] == "reuse_yesterday"
         # 连续失败升级
         assert pipe.guard.on_failure()["mode"] == "sell_only"

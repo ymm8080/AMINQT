@@ -107,7 +107,7 @@ LGB_PARAMS_CLS = {
     "random_state": 42,
     "verbosity": -1,
 }
-MODEL_KINDS = ("1d_reg", "1d_cls", "3d_reg", "5d_reg")
+MODEL_KINDS = ("1d_reg", "1d_cls", "2d_reg", "3d_reg", "5d_reg")
 
 
 def risk_filter(df: pd.DataFrame) -> pd.DataFrame:
@@ -193,6 +193,7 @@ class DualTrackTrainer:
         label = {
             "1d_reg": "label_1d",
             "1d_cls": "label_cls",
+            "2d_reg": "label_2d",
             "3d_reg": "label_3d",
             "5d_reg": "label_5d",
         }[kind]
@@ -571,8 +572,13 @@ class DualTrackTrainer:
 
     # ---------------- OOS 验证 + 切换 ----------------
     def validate_oos(self, trained: dict, ic_min: float = OOS_IC_MIN) -> dict:
-        """测试段 Rank IC (仅月度归因段). IC >= 0.03 才允许切换新模型."""
+        """测试段 Rank IC (仅月度归因段). IC >= 0.03 才允许切换新模型.
+
+        切换判据 = 跨视界加权 IC (LABEL_WEIGHTS): 各回归模型 IC 按权重求和,
+        1d 最不可执行 (T+1 买入当日不可卖) 权重最低, 3d 历史预测力最强.
+        """
         from .ic_screener import ICScreener
+        from .label_engine import LABEL_WEIGHTS
 
         test = trained["segs"]["test"]
         cols = trained["feature_cols"]
@@ -586,11 +592,16 @@ class DualTrackTrainer:
             ics[kind] = ICScreener.rank_ic(
                 sub.rename(columns={"_pred": "score"}), "score", label
             )
-        # 开关门阈值: max(1d, 3d, 5d) IC — 任意标签达标即可切换
-        best_ic = max(ics.get(k, 0.0) for k in ("1d_reg", "3d_reg", "5d_reg"))
+        # 跨视界加权 IC (回归模型, 1d_cls 不参与 — 分类分不直接贡献收益率)
+        total_w = sum(LABEL_WEIGHTS.values())
+        weighted_ic = (
+            sum(LABEL_WEIGHTS[k] * ics.get(f"{k}d_reg", 0.0) for k in LABEL_WEIGHTS)
+            / total_w
+        )
         return {
             "ics": ics,
-            "pass": best_ic >= ic_min,
+            "weighted_ic": weighted_ic,
+            "pass": weighted_ic >= ic_min,
             "best_ic_key": max(ics, key=lambda k: ics.get(k, 0.0)),
         }
 
@@ -628,13 +639,13 @@ class DualTrackTrainer:
         from scipy.stats import spearmanr
 
         imps = []
-        for kind in ("1d_reg", "3d_reg", "5d_reg"):
+        for kind in ("1d_reg", "2d_reg", "3d_reg", "5d_reg"):
             model, _ = trained["models"][kind]
             imps.append(pd.Series(model.feature_importances_).rank())
         corrs = [
             spearmanr(imps[i], imps[j]).statistic
-            for i in range(3)
-            for j in range(i + 1, 3)
+            for i in range(4)
+            for j in range(i + 1, 4)
         ]
         return bool(np.nanmean(corrs) > threshold)
 
@@ -683,10 +694,9 @@ class DualTrackTrainer:
             results[board] = {"path": path, "oos": oos, "switched": oos["pass"]}
             if not oos["pass"]:
                 logger.warning(
-                    "[%s] 新模型 OOS maxIC(%s)=%.4f < %.2f, 保留旧模型",
+                    "[%s] 新模型 OOS weighted_IC=%.4f < %.2f, 保留旧模型",
                     board,
-                    oos.get("best_ic_key", "1d_reg"),
-                    max(oos["ics"].get(k, 0.0) for k in ("1d_reg", "3d_reg", "5d_reg")),
+                    oos.get("weighted_ic", 0.0),
                     OOS_IC_MIN,
                 )
 
