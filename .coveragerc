@@ -34,6 +34,7 @@ omit =
     app/models/pipeline2_warm_starter.py
     # ── Orchestration entry points (integration-level code) ──
     app/pipelines/*
+    app/backtest/pipeline.py
     # ── Unimplemented stubs (0% coverage, not yet active code) ──
     app/core/extended_buy_detector.py
     app/core/extended_sell_detector.py
@@ -47,6 +48,7 @@ omit =
     # ── Integration-level modules (require file I/O / DB / external state) ──
     app/pipeline1/checkpoint.py
     app/pipeline1/prediction_db.py
+    app/intraday/v51/mvp_gate.py
 
 [report]
 # Show missing lines in terminal output
