@@ -249,6 +249,28 @@ class TestLabels:
         assert len(sets["5d"]) == 25
         assert len(sets["cls"]) == 25
 
+    def test_multihorizon_cls_labels(self):
+        """多视界分类标签: label_{2,3,5}d_cls + PM 变体; AM 会话不报 KeyError."""
+        df = make_panel(symbols=("600519",), days=30)
+        out = LabelEngine.build_labels(df)  # 默认 PM
+        for k in (2, 3, 5):
+            assert f"label_{k}d_cls" in out.columns
+            assert f"label_pm_{k}d_cls" in out.columns
+            assert set(out[f"label_{k}d_cls"].dropna().unique()) <= {0.0, 1.0}
+            assert set(out[f"label_pm_{k}d_cls"].dropna().unique()) <= {0.0, 1.0}
+        out_am = LabelEngine.build_labels(df, session="AM")  # 无 label_pm_* → 不报错
+        for k in (2, 3, 5):
+            assert f"label_{k}d_cls" in out_am.columns
+
+    def test_net_cls_labels(self):
+        """E5: label_{2,3,5}d_cls_net / label_pm_{2,3,5}d_cls_net 基于净收益>0."""
+        df = make_panel(symbols=("600519",), days=30)
+        out = LabelEngine.add_net_labels(LabelEngine.build_labels(df))
+        for k in (2, 3, 5):
+            assert f"label_{k}d_cls_net" in out.columns
+            assert f"label_pm_{k}d_cls_net" in out.columns
+            assert set(out[f"label_{k}d_cls_net"].dropna().unique()) <= {0.0, 1.0}
+
 
 # ============================================================
 # 特征引擎
@@ -428,7 +450,7 @@ def make_candidates(n=20, seed=1) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     boards = ["main", "GEM", "STAR"]
     inds = ["白酒", "电池", "保险", "半导体"]
-    return pd.DataFrame(
+    df = pd.DataFrame(
         {
             "symbol": [f"60{i:04d}" for i in range(n)],
             "board": [boards[i % 3] for i in range(n)],
@@ -441,6 +463,10 @@ def make_candidates(n=20, seed=1) -> pd.DataFrame:
             "is_in_yesterday_list": [i % 2 for i in range(n)],
         }
     )
+    # 多视界概率列缺省 = prob_up (compound_prob 精确回退 == prob_up, 现有断言不变)
+    for k in (2, 3, 5):
+        df[f"prob_up_{k}d"] = df["prob_up"]
+    return df
 
 
 class TestListGenerator:
@@ -449,7 +475,7 @@ class TestListGenerator:
         lst = out["list"]
         assert len(lst) <= 15
         assert list(lst.columns) == SCHEMA_FIELDS
-        assert out["schema_version"] == "1.3"
+        assert out["schema_version"] == "1.4"
         assert lst["prob_up"].iloc[0] == round(lst["prob_up"].iloc[0], 3)
 
     def test_industry_limit(self):
@@ -473,7 +499,7 @@ class TestListGenerator:
         cands.loc[:, ["pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d"]] = (
             0.02
         )
-        cands.loc[:, "prob_up"] = 0.5
+        cands.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d"]] = 0.5
         cands["is_in_yesterday_list"] = [1, 0]
         out = ListGenerator(**GATE_OFF).emit(cands)
         # 昨日在清单内的票 +0.2 加成 → 排第一, 分差 ≈ 0.2
@@ -488,7 +514,7 @@ class TestListGenerator:
         cands.loc[:, ["pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d"]] = (
             0.02
         )
-        cands.loc[:, "prob_up"] = 0.5
+        cands.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d"]] = 0.5
         cands["is_in_yesterday_list"] = [1, 1, 1]
         cands["holding_day"] = [1, 2, 3]  # day1/day2/day3
         gen = ListGenerator(**GATE_OFF)
@@ -507,11 +533,11 @@ class TestListGenerator:
         gen = ListGenerator()
         # 第一次 emit: 单日均值 = 滚动均值 (仅1天)
         c1 = make_candidates(n=5, seed=1)
-        c1.loc[:, "prob_up"] = 0.50
+        c1.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d"]] = 0.50
         gen.emit(c1)
         # 第二次 emit: 不同均值, base_rate 应为前2天平均
         c2 = make_candidates(n=5, seed=2)
-        c2.loc[:, "prob_up"] = 0.60
+        c2.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d"]] = 0.60
         df2 = gen.compute_scores(c2)
         # 20日滚动 = (0.50 + 0.60) / 2 = 0.55
         assert df2["base_rate"].iloc[0] == pytest.approx(0.55, abs=0.01)
@@ -523,13 +549,37 @@ class TestListGenerator:
         cands.loc[cands["board"] == "main", "pred_ret_1d"] = 0.10
         cands.loc[cands["board"] == "GEM", "pred_ret_1d"] = 0.01
         cands.loc[:, ["pred_ret_2d", "pred_ret_3d", "pred_ret_5d"]] = 0.01
-        cands.loc[:, "prob_up"] = 0.5
+        cands.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d"]] = 0.5
         cands["industry"] = ["白酒", "电池", "半导体", "保险", "白酒", "电池"]
         out = ListGenerator(**GATE_OFF).emit(cands)
         lst = out["list"]
         # 跨组归一化后, 双创板 (低 score) 也有机会进 Top 15
         boards_in_list = set(lst["board"])
         assert "GEM" in boards_in_list
+
+    def test_compound_prob_weighting(self):
+        """多视界加权概率: compound_prob = w2*p2 + w3*p3 + w5*p5 (t+1 权重=0)."""
+        n = 3
+        cands = make_candidates(n=n, seed=7)
+        cands.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d"]] = [
+            [0.5, 0.5, 0.5, 0.5],
+            [0.4, 0.6, 0.7, 0.8],
+            [0.3, 0.2, 0.9, 1.0],
+        ]
+        scored = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0).compute_scores(cands)
+        cp = scored["compound_prob"]
+        w2, w3, w5 = 0.45, 0.35, 0.2
+        assert cp.iloc[0] == pytest.approx(0.5)
+        assert cp.iloc[1] == pytest.approx(w2 * 0.6 + w3 * 0.7 + w5 * 0.8)
+        assert cp.iloc[2] == pytest.approx(w2 * 0.2 + w3 * 0.9 + w5 * 1.0)
+
+    def test_compound_prob_fallback_when_columns_missing(self):
+        """旧 bundle 缺 2/3/5d 概率列 → compound_prob 精确回退 prob_up."""
+        cands = make_candidates(n=3, seed=7).drop(
+            columns=["prob_up_2d", "prob_up_3d", "prob_up_5d"]
+        )
+        scored = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0).compute_scores(cands)
+        assert (scored["compound_prob"] == scored["prob_up"]).all()
 
     def test_empty_triggers(self):
         """D18: 暴跌/跌停>50 → 空清单; 连跌3日 → 仅 Top 5."""

@@ -107,7 +107,16 @@ LGB_PARAMS_CLS = {
     "random_state": 42,
     "verbosity": -1,
 }
-MODEL_KINDS = ("1d_reg", "1d_cls", "2d_reg", "3d_reg", "5d_reg")
+MODEL_KINDS = (
+    "1d_reg",
+    "1d_cls",
+    "2d_reg",
+    "2d_cls",
+    "3d_reg",
+    "3d_cls",
+    "5d_reg",
+    "5d_cls",
+)
 
 
 def risk_filter(df: pd.DataFrame) -> pd.DataFrame:
@@ -194,12 +203,17 @@ class DualTrackTrainer:
             "1d_reg": "label_1d",
             "1d_cls": "label_cls",
             "2d_reg": "label_2d",
+            "2d_cls": "label_2d_cls",
             "3d_reg": "label_3d",
+            "3d_cls": "label_3d_cls",
             "5d_reg": "label_5d",
+            "5d_cls": "label_5d_cls",
         }[kind]
         # [B9] PM 执行口径验收标签优先 (label_pm_kd / label_pm_cls), 缺失时回退研究口径
-        if kind == "1d_cls":
-            pm_label = "label_pm_cls"
+        if kind.endswith("cls"):
+            pm_label = (
+                "label_pm_cls" if kind == "1d_cls" else f"label_pm_{kind[0]}d_cls"
+            )
         else:
             pm_label = f"label_pm_{kind[0]}d"
         if pm_label in segs["train"].columns:
@@ -539,36 +553,48 @@ class DualTrackTrainer:
         """用校准集 (与早停物理隔离) 拟合校准器 (安全网: 严禁原始 predict_proba).
 
         [E1/V3.8] Isotonic → Platt Scaling (小样本更稳定), 月度滚动重校.
+        [多视界] 每个 cls 视界 (1/2/3/5d) 一个 ProbCalibrator, 存
+        trained["calibrators"] = {k: cal}; 向后兼容: trained["calibrator"] = 1d 别名.
         校准集 < 30 交易日时强制 Platt (Isotonic 小样本退化为阶跃函数).
         """
+        from .label_engine import LABEL_HORIZONS
         from .prob_calibrator import ProbCalibrator
 
-        model, label = trained["models"]["1d_cls"]
-        calib = trained["segs"]["calib"].dropna(subset=[label])
-        cols = trained["feature_cols"]
-        # 校准集可能为空 (小窗口 + 多特征列 NaN), 此时跳过校准用原始 prob
-        if len(calib) == 0:
-            logger.warning(
-                "[%s] 校准集为空 (label=%s), 跳过校准, 使用原始 predict_proba",
-                trained.get("board", "?"),
-                label,
+        calibrators = {}
+        for k in LABEL_HORIZONS:
+            kind = f"{k}d_cls"
+            if kind not in trained["models"]:
+                calibrators[k] = None
+                continue
+            model, label = trained["models"][kind]
+            calib = trained["segs"]["calib"].dropna(subset=[label])
+            cols = trained["feature_cols"]
+            # 校准集可能为空 (小窗口 + 多特征列 NaN), 此时跳过校准用原始 prob
+            if len(calib) == 0:
+                logger.warning(
+                    "[%s] 校准集为空 (label=%s, %s), 跳过校准, 使用原始 predict_proba",
+                    trained.get("board", "?"),
+                    label,
+                    kind,
+                )
+                calibrators[k] = None
+                continue
+            raw = model.predict_proba(np.nan_to_num(calib[cols].values, nan=0.0))[:, 1]
+            n_calib_dates = (
+                calib["date"].nunique() if "date" in calib.columns else len(calib)
             )
-            trained["calibrator"] = None
-            return None
-        raw = model.predict_proba(np.nan_to_num(calib[cols].values, nan=0.0))[:, 1]
-        n_calib_dates = (
-            calib["date"].nunique() if "date" in calib.columns else len(calib)
-        )
-        method = "platt" if n_calib_dates < MIN_ES_DATES else "isotonic"
-        if n_calib_dates < MIN_ES_DATES:
-            logger.warning(
-                "[%s] 校准集仅 %d 交易日, 使用 Platt (Isotonic 小样本退化为阶跃函数)",
-                trained["board"],
-                n_calib_dates,
-            )
-        calibrator = ProbCalibrator(method=method).fit(raw, calib[label].values)
-        trained["calibrator"] = calibrator
-        return calibrator
+            method = "platt" if n_calib_dates < MIN_ES_DATES else "isotonic"
+            if n_calib_dates < MIN_ES_DATES:
+                logger.warning(
+                    "[%s] 校准集仅 %d 交易日 (kind=%s), 使用 Platt",
+                    trained["board"],
+                    n_calib_dates,
+                    kind,
+                )
+            calibrators[k] = ProbCalibrator(method=method).fit(raw, calib[label].values)
+        trained["calibrators"] = calibrators
+        trained["calibrator"] = calibrators.get(1)  # 1d 别名 (向后兼容)
+        return trained["calibrator"]
 
     # ---------------- OOS 验证 + 切换 ----------------
     def validate_oos(self, trained: dict, ic_min: float = OOS_IC_MIN) -> dict:
@@ -607,7 +633,7 @@ class DualTrackTrainer:
 
     def save(self, trained: dict, tag: str) -> str:
         """保存模型包 (含校准器; 若无则先拟合)."""
-        if "calibrator" not in trained:
+        if "calibrators" not in trained:
             self.fit_calibrator(trained)
         path = os.path.join(self.model_dir, f"{trained['board']}_{tag}.pkl")
         bundle = {
@@ -616,7 +642,12 @@ class DualTrackTrainer:
             "models": trained["models"],
             "calibrator": trained["calibrator"],
         }
-        for extra in ("quantile_models", "pain_model", "rank_model"):  # E1/E2/排序
+        for extra in (  # 多视界校准器 + E1/E2/排序
+            "calibrators",
+            "quantile_models",
+            "pain_model",
+            "rank_model",
+        ):
             if extra in trained:
                 bundle[extra] = trained[extra]
         try:
