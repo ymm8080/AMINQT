@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 参数调优器 (用户 2026-07-22 需求: 预定义买卖/持仓规则参数由回测结果调整)
 ============================================================================
@@ -7,6 +8,7 @@
 - 防过拟合: 训练段选参 → OOS 段复验, OOS 不达标则回退默认值 + 告警
   (与 V3.5 超参纪律一致: 严禁在验证集上反复搜索 = 多重检验)
 - 产出: 推荐 Config 参数 + 报告 (data/tuning_report_{tag}.json)
+- V5.2 扩展: 支持 V5.2 BacktestEngine 评估 (CONFIG_TO_V52 映射 8 个参数)
 """
 
 from __future__ import annotations
@@ -28,12 +30,46 @@ logger = logging.getLogger(__name__)
 
 # 回测协议参数 ←→ Config 字段映射 (调参时同步两处)
 PROTOCOL_FIELDS = {"max_hold_days", "hard_stop", "trailing_drawdown", "prob_exit"}
-# Config 参数 → 回测协议参数映射 (名称不同的)
+# Config 参数 → V35 回测协议参数映射 (名称不同的)
 CONFIG_TO_PROTOCOL = {
     "hard_stop_intraday": "hard_stop",
     "max_hold_days": "max_hold_days",
     "trailing_drawdown": "trailing_drawdown",
     "prob_exit": "prob_exit",
+}
+
+# V5.2 BacktestConfig 字段映射 (TUNABLE_BOUNDS → BacktestConfig 属性名)
+CONFIG_TO_V52 = {
+    "max_hold_days": "holding_period",
+    "hard_stop_intraday": "stop_loss_main",
+    "trailing_drawdown": "trailing_stop_min_pct",
+    "prob_exit": "prob_threshold",
+    "surge_pct": "max_gain_pct",
+    "daily_loss_breaker": "daily_fuse_fixed",
+    "dd_derisk_level1": "system_halt_drawdown",
+    "cooldown_days": "consecutive_loss_cooldown",
+}
+
+# 每个参数可用的引擎: "both" / "v52" / "rule_only"
+TUNABLE_ENGINE = {
+    "max_hold_days": "both",
+    "hard_stop_intraday": "both",
+    "trailing_drawdown": "both",
+    "prob_exit": "both",
+    "surge_pct": "v52",
+    "daily_loss_breaker": "v52",
+    "dd_derisk_level1": "v52",
+    "cooldown_days": "v52",
+    "control_min": "rule_only",
+    "turnover_max_entry": "rule_only",
+    "gap_open_pct": "rule_only",
+    "breadth_min": "rule_only",
+    "peak_confirm_drop": "rule_only",
+    "auction_gap_sell": "rule_only",
+    "climax_move": "rule_only",
+    "climax_turnover": "rule_only",
+    "warn_gain": "rule_only",
+    "daily_close_lookback": "rule_only",
 }
 
 
@@ -53,18 +89,30 @@ class ParamTuner:
         daily_lists: dict,
         benchmark: pd.Series | None = None,
         report_dir: str = str(data_others_path("data")),
+        v52_data: dict | None = None,
     ):
+        """初始化参数调优器.
+
+        Args:
+            panel: V35 引擎用的全市场日线面板.
+            daily_lists: V35 引擎用的每日候选清单.
+            benchmark: 基准日收益序列.
+            report_dir: 报告输出目录.
+            v52_data: V5.2 引擎数据包 {pred_df, price_df, trade_dates,
+                     data_version_hash, config} — 为 None 时只支持 V35.
+        """
         self.panel = panel
         self.daily_lists = daily_lists
         self.benchmark = benchmark
         self.report_dir = report_dir
+        self.v52_data = v52_data
         os.makedirs(report_dir, exist_ok=True)
 
-    # ---------------- 单次评估 ----------------
+    # ---------------- 单次评估 (V35) ----------------
     def _evaluate(
         self, params: dict, panel: pd.DataFrame, lists: dict, benchmark
     ) -> dict:
-        """跑一轮回测, 返回完整 metrics 字典."""
+        """跑一轮回测 (V35 引擎), 返回完整 metrics 字典."""
         proto_kwargs = {}
         for cfg_name, value in params.items():
             if value is None:
@@ -77,13 +125,65 @@ class ParamTuner:
         result = eng.run(lists, benchmark)
         return result["metrics"]
 
+    # ---------------- 单次评估 (V5.2) ----------------
+    def _evaluate_v52(self, params: dict) -> dict:
+        """跑一轮回测 (V5.2 引擎), 返回完整 metrics 字典.
+
+        将 TUNABLE_BOUNDS 参数映射到 BacktestConfig 字段后运行 V5.2 引擎.
+        需要 v52_data 在构造时传入.
+        """
+        if self.v52_data is None:
+            raise ValueError("V5.2 数据未提供, 无法使用 V5.2 引擎评估")
+        from app.backtest.config_manager import BacktestConfig
+        from app.backtest.engine import BacktestEngine
+
+        base_config = self.v52_data.get("config") or BacktestConfig()
+        # 复制基础配置字段
+        base_fields = {}
+        for f in dir(base_config):
+            if f.startswith("_") or callable(getattr(base_config, f)):
+                continue
+            base_fields[f] = getattr(base_config, f)
+        # 覆盖调参字段
+        for name, val in params.items():
+            if val is None or name not in CONFIG_TO_V52:
+                continue
+            field = CONFIG_TO_V52[name]
+            current = getattr(base_config, field)
+            if isinstance(current, bool):
+                base_fields[field] = bool(val)
+            elif isinstance(current, int):
+                base_fields[field] = int(val)
+            else:
+                base_fields[field] = float(val)
+        config = BacktestConfig(**base_fields)
+        eng = BacktestEngine(
+            config=config,
+            pred_df=self.v52_data["pred_df"],
+            price_df=self.v52_data["price_df"],
+            trade_dates=self.v52_data["trade_dates"],
+            data_version_hash=self.v52_data.get("data_version_hash", ""),
+        )
+        eng.run()
+        metrics = eng.get_metrics()
+        # 规范化 key 名称以与 V35 一致
+        metrics.setdefault("net_excess_annual", metrics.get("total_return", 0))
+        metrics.setdefault("sharpe", metrics.get("sharpe_ratio", 0))
+        metrics.setdefault("sortino", 0.0)
+        metrics.setdefault("max_drawdown", metrics.get("max_drawdown", 0))
+        return metrics
+
     @staticmethod
     def _score(metrics: dict, objective: str) -> float:
-        """从 metrics 中提取目标函数值."""
+        """从 metrics 中提取目标函数值 (兼容 V35/V5.2 两种 key 命名)."""
         if objective == "sharpe":
-            return metrics.get("sharpe", -np.inf)
+            return metrics.get("sharpe", metrics.get("sharpe_ratio", -np.inf))
         if objective == "total_return":
             return metrics.get("total_return", -np.inf)
+        if objective == "sortino":
+            return metrics.get("sortino", -np.inf)
+        if objective == "calmar":
+            return metrics.get("calmar_ratio", -np.inf)
         # 默认: 扣费后净年化超额
         return metrics.get("net_excess_annual", -np.inf)
 
@@ -95,6 +195,7 @@ class ParamTuner:
         top_k: int = 5,
         objective: str = "net_excess_annual",
         max_dd_limit: float | None = None,
+        engine: str = "v35",
     ) -> dict:
         """对指定参数做网格搜索.
 
@@ -102,11 +203,14 @@ class ParamTuner:
             param_names: TUNABLE_BOUNDS 的子集 (建议 <= 4 维, 控制组合数)
             oos_ratio: OOS 段占比 (尾部样本, 严禁反向调参)
             top_k: 训练段前 K 名进入 OOS 复验
-            objective: 目标函数字段 (net_excess_annual / sharpe / total_return)
+            objective: 目标函数字段 (net_excess_annual / sharpe / total_return
+                       / sortino / calmar)
             max_dd_limit: 最大回撤约束 (如 -0.10); OOS 复验时过滤
+            engine: 使用的引擎 "v35" 或 "v52"
 
         Returns:
-            {best_params, train_score, oos_score, fallback, leaderboard, report_path}
+            {best_params, train_score, oos_score, fallback, leaderboard,
+             report_path}
         """
         grids = []
         for name in param_names:
@@ -120,7 +224,9 @@ class ParamTuner:
                 values = np.unique(values.astype(int))
             grids.append([(name, v) for v in values])
         combos = [dict(c) for c in itertools.product(*grids)]
-        logger.info("网格搜索: %d 维 %d 组合", len(param_names), len(combos))
+        logger.info(
+            "网格搜索: %d 维 %d 组合 (引擎=%s)", len(param_names), len(combos), engine
+        )
 
         # 训练/OOS 切分 (按时间)
         dates = sorted(self.panel["date"].unique())
@@ -144,7 +250,10 @@ class ParamTuner:
         # 训练段评分
         scores = []
         for params in combos:
-            metrics = self._evaluate(params, train_panel, train_lists, bench_train)
+            if engine == "v52":
+                metrics = self._evaluate_v52(params)
+            else:
+                metrics = self._evaluate(params, train_panel, train_lists, bench_train)
             score = self._score(metrics, objective)
             if np.isnan(score):
                 continue
@@ -154,13 +263,17 @@ class ParamTuner:
 
         # OOS 复验 (只验 top_k, 不做二次搜索)
         best_params, best_train = leaderboard[0]
-        oos_metrics = self._evaluate(best_params, oos_panel, oos_lists, bench_oos)
+        if engine == "v52":
+            oos_metrics = self._evaluate_v52(best_params)
+            default_params = {n: None for n in param_names}
+            oos_default_metrics = self._evaluate_v52(default_params)
+        else:
+            oos_metrics = self._evaluate(best_params, oos_panel, oos_lists, bench_oos)
+            default_params = {n: None for n in param_names}  # 协议默认值
+            oos_default_metrics = self._evaluate(
+                default_params, oos_panel, oos_lists, bench_oos
+            )
         oos_best = self._score(oos_metrics, objective)
-
-        default_params = {n: None for n in param_names}  # 协议默认值
-        oos_default_metrics = self._evaluate(
-            default_params, oos_panel, oos_lists, bench_oos
-        )
         oos_default = self._score(oos_default_metrics, objective)
 
         # 约束检查
@@ -188,6 +301,7 @@ class ParamTuner:
             "param_names": param_names,
             "objective": objective,
             "max_dd_limit": max_dd_limit,
+            "engine": engine,
             "n_combos": len(combos),
             "best_params": {k: _native(v) for k, v in best_params.items()},
             "train_score": round(best_train, 4),
@@ -213,3 +327,20 @@ class ParamTuner:
             if name in TUNABLE_BOUNDS and value is not None and hasattr(cfg, name):
                 setattr(cfg, name, type(getattr(cfg, name))(value))
         return cfg
+
+    @staticmethod
+    def apply_to_v52_config(params: dict, v52_config):
+        """把调优结果写回 V5.2 BacktestConfig (只写 CONFIG_TO_V52 字段)."""
+        for name, value in params.items():
+            if name not in CONFIG_TO_V52 or value is None:
+                continue
+            field = CONFIG_TO_V52[name]
+            if hasattr(v52_config, field):
+                current = getattr(v52_config, field)
+                if isinstance(current, bool):
+                    setattr(v52_config, field, bool(value))
+                elif isinstance(current, int):
+                    setattr(v52_config, field, int(value))
+                else:
+                    setattr(v52_config, field, float(value))
+        return v52_config

@@ -1,7 +1,8 @@
+# -*- coding: utf-8 -*-
 """
-A股量化交易系统 — Streamlit 四页看板 (P10)
+A股量化交易系统 — Streamlit 看板 (P10)
 =====================================================
-页面: 选股 (Pipeline-1 V3.5 清单) / 交易 (P2 框架演示) / 回测 (V3.5 协议+调参) / 配置.
+页面: 选股 / 预测评估 (预测+回测一体) / 交易 / 数据管理 / 配置.
 启动: streamlit run app/streamlit_app.py
 """
 
@@ -20,10 +21,9 @@ import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from app.streamlit import (  # noqa: E402
-    page_backtest,
     page_config,
     page_data_feed,
-    page_prediction,
+    page_eval,
     page_selection,
     page_trading,
 )
@@ -32,9 +32,8 @@ st.set_page_config(page_title="A股量化交易系统", page_icon="📈", layout
 
 PAGES = {
     "选股看板": page_selection.render,
-    "预测中心": page_prediction.render,
     "交易看板": page_trading.render,
-    "回测中心": page_backtest.render,
+    "预测评估中心": page_eval.render,
     "数据管理": page_data_feed.render,
     "配置中心": page_config.render,
 }
