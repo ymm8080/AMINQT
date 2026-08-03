@@ -12,6 +12,7 @@ Sources fetched:
   6. cyq_perf — chip distribution (batch, one call)
   7. margin_detail — margin balance (per-stock)
   8. top_list — LHB (dragon-tiger board)
+  9. stock_basic — name/list_date (ingest gate: ST/*ST 或 上市 <150 交易日不入库)
 
 Derived (computed from panel history, reads only needed columns):
   - bias_5..250, bias_cross, ma_vol_ratio_5_20, amplitude_5d
@@ -35,6 +36,8 @@ from datetime import datetime
 import time
 import tushare as ts
 from dotenv import load_dotenv
+from config.settings import INGEST_MIN_LIST_DAYS
+from app.pipeline1.ingest_scan import apply_ingest_scan
 load_dotenv()
 
 from app.pipeline1 import cyq_ext
@@ -87,6 +90,20 @@ def safe_fetch(fn, name, max_retries=3, **kwargs):
         time.sleep(2 * attempt)
     print(f"    {name}: giving up after {max_retries} attempts")
     return pd.DataFrame()
+
+_stock_basic_cache: pd.DataFrame | None = None
+
+def fetch_stock_basic_cached() -> pd.DataFrame:
+    """Tushare stock_basic (name/list_date), 模块级缓存 — 静态数据每日不变."""
+    global _stock_basic_cache
+    if _stock_basic_cache is None:
+        _stock_basic_cache = safe_fetch(
+            pro.stock_basic, "stock_basic", exchange="", list_status="L",
+            fields="ts_code,name,list_date",
+        )
+        if len(_stock_basic_cache):
+            _stock_basic_cache = _stock_basic_cache.set_index("symbol")
+    return _stock_basic_cache
 
 ohlcv = safe_fetch(pro.daily, "OHLCV", trade_date=TRADE_DATE)
 adj   = safe_fetch(pro.adj_factor, "adj_factor", trade_date=TRADE_DATE)
@@ -176,6 +193,28 @@ if len(lhb):
             smap = lhb.set_index("symbol")[src]
             df[tgt] = df["symbol"].map(smap)
 
+# GLM 龙虎榜 spec: 席位明细 (散户大本营"拉萨"/机构专用) per 股-日.
+# 列由回填脚本首次加入面板 schema, 此处仅填充已存在的列 (panel_cols 守卫).
+if len(lhb):
+    try:
+        from app.pipeline1.data_supply import DataSupplyChain
+        _seat_supply = DataSupplyChain()
+    except Exception:
+        _seat_supply = None
+    if _seat_supply is not None:
+        seat_cols = ["lhb_retail_buy", "lhb_retail_sell", "lhb_inst_buy", "lhb_inst_sell"]
+        for col in seat_cols:
+            if col in panel_cols and col not in df.columns:
+                df[col] = np.nan
+        for sym in lhb["symbol"].unique().tolist():
+            agg = _seat_supply.fetch_lhb_seat_aggregate(sym, TRADE_DATE)
+            if not agg:
+                continue
+            m = df["symbol"] == sym
+            for k, v in agg.items():
+                if k in panel_cols and k in df.columns:
+                    df.loc[m, k] = v
+
 # ── 4. Compute derived columns ──
 print("\n[4] Computing derived columns...")
 
@@ -239,6 +278,16 @@ if "list_days" in panel_cols and "list_days" in last_meta.columns:
 print(f"    meta carry: board={df['board'].nunique() if 'board' in df.columns else '-'} | "
       f"industry nunique={df['industry'].nunique() if 'industry' in df.columns else '-'} | "
       f"list_days sample={df['list_days'].dropna().head(3).tolist() if 'list_days' in df.columns else '-'}")
+
+# --- 入库扫描: ST/*ST 股 或 上市 < INGEST_MIN_LIST_DAYS 交易日 不进入 V3 ---
+_stock_info = fetch_stock_basic_cached()
+# 交易日历 = 面板唯一 date 列 (与面板历史一致的交易日口径).
+_trade_cal = pd.DatetimeIndex(sorted(yesterday["date"].unique()))
+df, _dropped = apply_ingest_scan(df, _stock_info, TRADE_DATE, INGEST_MIN_LIST_DAYS, _trade_cal)
+if len(_stock_info):
+    print(f"    Ingest scan: dropped {_dropped} rows (ST or trading_days < {INGEST_MIN_LIST_DAYS})")
+else:
+    print("    WARN: Ingest scan SKIPPED — stock_basic 不可用, ST/次新股未被过滤!")
 
 # --- Simple derived features (no history needed) ---
 if all(c in df.columns for c in ["high", "low", "pre_close"]):
