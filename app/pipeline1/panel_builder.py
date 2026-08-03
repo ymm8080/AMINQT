@@ -151,6 +151,18 @@ def enrich_panel(
     return df
 
 
+def _keep_cyq_base_cols(cyq: pd.DataFrame) -> pd.DataFrame:
+    """CYQ 只保留 KEEP 基础列 (2026-08-02 删列决策).
+
+    cyq_cache 中间件保持全列, 只有 merge 进面板时过滤; 不透传已删列
+    (pct_70_*/pct_90_low/cost_5pct/15pct/85pct) 与原始 Tushare 字段
+    (winner_rate/his_low/his_high).
+    """
+    from config.settings import CYQ_BASE_KEEP
+
+    return cyq[["symbol", "date"] + [c for c in CYQ_BASE_KEEP if c in cyq.columns]]
+
+
 def enrich_cyq(
     panel: pd.DataFrame,
     cyq_cache: str = "data/cyq_panel.parquet",
@@ -167,7 +179,7 @@ def enrich_cyq(
         refresh: True 强制重新计算
 
     Returns:
-        merge 后的面板 (新增 15 列筹码特征)
+        merge 后的面板 (保留 CYQ_BASE_KEEP 列)
     """
     import os
 
@@ -181,19 +193,23 @@ def enrich_cyq(
         if cyq_symbols >= panel_symbols:
             missing = panel_symbols - cyq_symbols
             if not missing:
-                return panel.merge(cyq, on=["symbol", "date"], how="left")
+                return panel.merge(
+                    _keep_cyq_base_cols(cyq), on=["symbol", "date"], how="left"
+                )
             # 部分缺失: 只计算缺失的股票
             need = [s for s in panel["symbol"].unique() if s in missing]
             new_cyq = compute_cyq_panel(panel[panel["symbol"].isin(need)])
             cyq = pd.concat([cyq, new_cyq], ignore_index=True)
             cyq.to_parquet(cyq_cache, index=False)
-            return panel.merge(cyq, on=["symbol", "date"], how="left")
+            return panel.merge(
+                _keep_cyq_base_cols(cyq), on=["symbol", "date"], how="left"
+            )
 
     # 全量计算 + 缓存
     cyq = compute_cyq_panel(panel)
     os.makedirs(os.path.dirname(cyq_cache) or ".", exist_ok=True)
     cyq.to_parquet(cyq_cache, index=False)
-    return panel.merge(cyq, on=["symbol", "date"], how="left")
+    return panel.merge(_keep_cyq_base_cols(cyq), on=["symbol", "date"], how="left")
 
 
 _ENRICH_WORKERS = int(os.environ.get("ENRICH_WORKERS", "4"))
@@ -603,6 +619,12 @@ def enrich_alt_data(
                     refresh=refresh,
                 )
                 if len(df):
+                    # V3 删列 (2026-08-02): 只合并 KEEP 基础列, 不透传已删列
+                    # (pct_70_*/pct_90_low/cost_5pct/15pct/85pct) 与原始 Tushare 字段
+                    # (winner_rate/his_low/his_high). 派生 KEEP 列 (winner_ratio/
+                    # pct_90_high/pct_90_con/avg_cost) 由 dim21 或面板既有值负责.
+                    # cyq_perf 原始列中仅 cost_50pct/cost_95pct/weight_avg 属于 KEEP.
+                    df = _keep_cyq_base_cols(df)
                     merge_cols = ["symbol", "date"]
                     avail = [
                         c

@@ -28,13 +28,13 @@ BIAS_PERIODS = (
     250,
 )  # 乖离率周期 (与 MA_WINDOWS 一致, 独立常量防耦合)
 # 行业中性化目标列 (申万一级行业内 rank)
-NEUTRALIZE_COLS = ["turnover_rate", "chip_concentration", "conc_90", "winner_ratio"]
-# 关键因子 missingness 指示
+# 2026-08-02 删列: conc_90 改由 dim21 直接产 conc_90_industry_rank;
+# winner_ratio_industry_rank 已删 (V3 CYQ 决策).
+NEUTRALIZE_COLS = ["turnover_rate", "chip_concentration"]
+# 关键因子 missingness 指示 (conc_90/winner_ratio 的 is_missing_* 已按 V3 CYQ 决策删除)
 MISSINGNESS_COLS = [
     "main_money_flow",
     "chip_concentration",
-    "conc_90",
-    "winner_ratio",
     "margin_balance",
     "holder_count",
 ]
@@ -1757,14 +1757,12 @@ class FeatureEngineV35:
     # ---------------- ㉑ CYQ 筹码分布 (OHLCV 代理补位) ----------------
     @staticmethod
     def dim21_chip_tushare(df: pd.DataFrame) -> pd.DataFrame:
-        """CYQ 筹码特征 (7→15 个) — Tushare cyq_perf 主源, OHLCV 代理补位.
+        """CYQ 筹码特征 (派生 KEEP) — Tushare cyq_perf 主源, OHLCV 代理补位.
 
-        Tushare cyq_perf 提供: cost_5pct/15pct/50pct/85pct/95pct, weight_avg,
-        his_low, his_high, winner_rate (获利盘比例 %, 等价 winner_ratio×100).
-        winner_ratio 和 pct_90_con 从 Tushare 列直接推导:
-          winner_ratio = winner_rate / 100
-          pct_90_con   = (cost_95pct - cost_5pct) / (cost_95pct + cost_5pct)
-
+        V3 删列 (2026-08-02): 只产出 3 个派生幸存列 + 透传 winner_ratio.
+          cost_bias             — 收盘价偏离成本 50 分位
+          conc_trend_20d        — pct_90_con 20 日趋势
+          conc_90_industry_rank — pct_90_con 按 date+industry 截面排名
         Tushare 无数据时降级为旧 calculator 列, 再缺则降级为 OHLCV 代理.
         """
         TUSHARE_REQUIRED = ["cost_50pct", "winner_rate"]
@@ -1779,39 +1777,9 @@ class FeatureEngineV35:
             bp = g["winner_ratio"]
             conc90 = g["pct_90_con"]
 
-            c5 = g.get("cost_5pct", pd.Series(np.nan, index=g.index))
-            c95 = g.get("cost_95pct", pd.Series(np.nan, index=g.index))
-            c15 = g.get("cost_15pct", pd.Series(np.nan, index=g.index))
-            c85 = g.get("cost_85pct", pd.Series(np.nan, index=g.index))
-
-            g["conc_90"] = conc90
             g["winner_ratio"] = bp
             g["cost_bias"] = (c - c50) / c50.replace(0, np.nan)
-            g["cost_spread"] = (c95 - c5) / c50.replace(0, np.nan)
-            if c15.notna().any() and c85.notna().any():
-                g["chip_skew"] = (c50 - c15) / (c85 - c50).replace(0, np.nan)
-            else:
-                g["chip_skew"] = np.nan
             g["conc_trend_20d"] = conc90 / conc90.shift(20).replace(0, np.nan)
-            g["benefit_trend_5d"] = bp - bp.shift(5)
-
-            is_shrinking = (conc90 < conc90.shift(1)).astype(int)
-            g["conc_streak"] = is_shrinking.groupby(
-                (is_shrinking == 0).cumsum()
-            ).cumsum()
-            g["conc_streak_3d"] = (g["conc_streak"] >= 3).astype(int)
-            pct70 = g.get("pct_70_con", conc90)
-            is_shrinking_70 = (pct70 < pct70.shift(1)).astype(int)
-            g["conc70_streak"] = is_shrinking_70.groupby(
-                (is_shrinking_70 == 0).cumsum()
-            ).cumsum()
-            g["conc70_streak_3d"] = (g["conc70_streak"] >= 3).astype(int)
-            was_streak3 = (g["conc_streak"].shift(1) >= 3).astype(int)
-            g["conc_reversal"] = was_streak3 * (1 - is_shrinking)
-            g["cost50_rank"] = 0.0
-            bp_ma60 = bp.rolling(60, min_periods=20).mean()
-            g["benefit_vs_ma60"] = (bp - bp_ma60) / bp_ma60.replace(0, np.nan)
-            g["benefit_dir_5d"] = np.sign(bp - bp.shift(5))
             return g
 
         def per_stock_proxy(g: pd.DataFrame) -> pd.DataFrame:
@@ -1819,40 +1787,21 @@ class FeatureEngineV35:
             g = g.sort_values("date")
             c, v = g["close"], g["volume"]
             to = g.get("turnover_rate", v / v.rolling(20).mean())
-            g["conc_90"] = 1 - to.rolling(20).std() / to.rolling(20).mean().replace(
-                0, 1
-            )
+            conc90 = 1 - to.rolling(20).std() / to.rolling(20).mean().replace(0, 1)
             g["winner_ratio"] = np.nan  # OHLCV 无法推导获利盘
             g["cost_bias"] = c / c.rolling(60).mean() - 1  # 价格偏离60日均线替代
-            g["cost_spread"] = np.nan
-            g["chip_skew"] = np.nan
-            g["conc_trend_20d"] = g["conc_90"] / g["conc_90"].shift(20).replace(0, 1)
-            g["benefit_trend_5d"] = np.nan
-            # streak/拐点 对 OHLCV 代理无意义, 填 NaN
-            for col in [
-                "conc_streak",
-                "conc_streak_3d",
-                "conc70_streak",
-                "conc70_streak_3d",
-                "conc_reversal",
-                "benefit_vs_ma60",
-                "benefit_dir_5d",
-            ]:
-                g[col] = np.nan
-            g["cost50_rank"] = 0.0
+            g["conc_trend_20d"] = conc90 / conc90.shift(20).replace(0, 1)
             return g
 
         if has_tushare:
             # Tushare cyq_perf 主源: 从 winner_rate + cost 列推导 winner_ratio/pct_90_con
             if "winner_ratio" not in df.columns:
                 df["winner_ratio"] = df["winner_rate"] / 100.0
-            if "pct_90_con" not in df.columns:
+            if "pct_90_con" not in df.columns and {"cost_5pct", "cost_95pct"} <= set(
+                df.columns
+            ):
                 df["pct_90_con"] = (df["cost_95pct"] - df["cost_5pct"]) / (
                     df["cost_95pct"] + df["cost_5pct"]
-                ).replace(0, np.nan)
-            if "pct_70_con" not in df.columns:
-                df["pct_70_con"] = (df["cost_85pct"] - df["cost_15pct"]) / (
-                    df["cost_85pct"] + df["cost_15pct"]
                 ).replace(0, np.nan)
             df = _apply_per_stock(df, per_stock_cyq)
         elif has_calc:
@@ -1862,18 +1811,15 @@ class FeatureEngineV35:
             # 无任何 CYQ 数据 → 全量 OHLCV 代理
             df = _apply_per_stock(df, per_stock_proxy)
 
-        # cost50_rank (截面)
-        if "cost_50pct" in df.columns:
-            if "board" in df.columns:
-                grp = df.groupby(["date", "board"], observed=True)
-                df["cost50_rank"] = grp["cost_50pct"].rank(pct=True).fillna(0.5)
-            else:
-                df["cost50_rank"] = (
-                    df.groupby("date")["cost_50pct"].rank(pct=True).fillna(0.5)
-                )
+        # conc_90_industry_rank (截面): pct_90_con 按 date+industry 排名 (KEEP)
+        if "pct_90_con" in df.columns:
+            grp = ["date", "industry"] if "industry" in df.columns else ["date"]
+            df["conc_90_industry_rank"] = (
+                df.groupby(grp, observed=True)["pct_90_con"].rank(pct=True).fillna(0.5)
+            )
 
-        # NaN 列的 OHLCV 回退: 对每个 stock, conc_90/cost_bias 等为 NaN 时用 proxy 值
-        nan_mask = df["conc_90"].isna()
+        # NaN 列的 OHLCV 回退: 对每个 stock, cost_bias/conc_trend_20d 为 NaN 时用 proxy 值
+        nan_mask = df["cost_bias"].isna()
         if nan_mask.any() and (has_tushare or has_calc):
             # 只对含 NaN 的 stock 计算 proxy
             nan_symbols = df.loc[nan_mask, "symbol"].unique()
@@ -1885,7 +1831,7 @@ class FeatureEngineV35:
             if proxy_dfs:
                 proxy = pd.concat(proxy_dfs)
                 # 只填充 NaN 位置 (按 index 对齐, 安全网 #5)
-                for col in ["conc_90", "cost_bias", "conc_trend_20d"]:
+                for col in ["cost_bias", "conc_trend_20d"]:
                     if col in proxy.columns and col in df.columns:
                         fill_mask = df[col].isna()
                         common = fill_mask & fill_mask.index.isin(proxy.index)
