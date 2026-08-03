@@ -3,6 +3,7 @@
 规则 (2026-08-03): 当日追加前剔 ST/*ST 股 和 上市 < 150 个交易日的新股.
 上市天数 = 面板交易日历 (trade_cal) 中 [list_date, trade_date] 的交易日计数.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -25,7 +26,9 @@ def _stock_info(specs: dict) -> pd.DataFrame:
 
 
 def _frame(symbols) -> pd.DataFrame:
-    return pd.DataFrame({"symbol": list(symbols), "close": np.arange(len(symbols)) + 1.0})
+    return pd.DataFrame(
+        {"symbol": list(symbols), "close": np.arange(len(symbols)) + 1.0}
+    )
 
 
 def test_keeps_old_non_st():
@@ -39,7 +42,9 @@ def test_drops_st_by_name():
     info = _stock_info(
         {"600001": ("ST测试", "20010101"), "600519": ("贵州茅台", "20010827")}
     )
-    out, dropped = apply_ingest_scan(_frame(["600001", "600519"]), info, TRADE_DATE, 150, _CAL)
+    out, dropped = apply_ingest_scan(
+        _frame(["600001", "600519"]), info, TRADE_DATE, 150, _CAL
+    )
     assert dropped == 1
     assert list(out["symbol"]) == ["600519"]
 
@@ -64,7 +69,9 @@ def test_boundary_150_kept_149_dropped():
     ld_150 = _CAL[-150].strftime("%Y%m%d")  # age 150 → 保留
     ld_149 = _CAL[-149].strftime("%Y%m%d")  # age 149 → 剔除
     info = _stock_info({"A150": ("正好150天", ld_150), "B149": ("差1天", ld_149)})
-    out, dropped = apply_ingest_scan(_frame(["A150", "B149"]), info, TRADE_DATE, 150, _CAL)
+    out, dropped = apply_ingest_scan(
+        _frame(["A150", "B149"]), info, TRADE_DATE, 150, _CAL
+    )
     assert dropped == 1
     assert list(out["symbol"]) == ["A150"]
 
