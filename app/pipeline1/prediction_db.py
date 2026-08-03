@@ -34,7 +34,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS prediction_runs (
     date         TEXT PRIMARY KEY,
     n_stocks     INTEGER NOT NULL DEFAULT 0,
-    schema_version TEXT NOT NULL DEFAULT '1.2',
+    schema_version TEXT NOT NULL DEFAULT '1.4',
     created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
@@ -45,9 +45,13 @@ CREATE TABLE IF NOT EXISTS prediction_stocks (
     board        TEXT NOT NULL DEFAULT 'main',
     rank         INTEGER NOT NULL DEFAULT 0,
     pred_ret_1d  REAL,
+    pred_ret_2d  REAL,
     pred_ret_3d  REAL,
     pred_ret_5d  REAL,
     prob_up      REAL,
+    prob_up_2d   REAL,
+    prob_up_3d   REAL,
+    prob_up_5d   REAL,
     score        REAL,
     momentum     TEXT,
     weight       REAL,
@@ -61,6 +65,7 @@ CREATE TABLE IF NOT EXISTS prediction_outcomes (
     date         TEXT NOT NULL,
     symbol       TEXT NOT NULL,
     actual_ret_1d REAL,
+    actual_ret_2d REAL,
     actual_ret_3d REAL,
     actual_ret_5d REAL,
     direction_correct_1d INTEGER,  -- 1=true, 0=false, NULL=未计算
@@ -85,10 +90,46 @@ class PredictionDB:
         with sqlite3.connect(path) as conn:
             conn.executescript(SCHEMA)
             conn.commit()
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """为历史 DB 补 T+2 列 (CREATE IF NOT EXISTS 不修改既有表)."""
+        with sqlite3.connect(self.path) as conn:
+            for table, col, ddl in (
+                (
+                    "prediction_stocks",
+                    "pred_ret_2d",
+                    "ALTER TABLE prediction_stocks ADD COLUMN pred_ret_2d REAL",
+                ),
+                (
+                    "prediction_outcomes",
+                    "actual_ret_2d",
+                    "ALTER TABLE prediction_outcomes ADD COLUMN actual_ret_2d REAL",
+                ),
+                (
+                    "prediction_stocks",
+                    "prob_up_2d",
+                    "ALTER TABLE prediction_stocks ADD COLUMN prob_up_2d REAL",
+                ),
+                (
+                    "prediction_stocks",
+                    "prob_up_3d",
+                    "ALTER TABLE prediction_stocks ADD COLUMN prob_up_3d REAL",
+                ),
+                (
+                    "prediction_stocks",
+                    "prob_up_5d",
+                    "ALTER TABLE prediction_stocks ADD COLUMN prob_up_5d REAL",
+                ),
+            ):
+                cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+                if col not in cols:
+                    conn.execute(ddl)
+            conn.commit()
 
     # ── 写入 ──
     def insert_run(
-        self, date_str: str, stocks: pd.DataFrame, schema_version: str = "1.2"
+        self, date_str: str, stocks: pd.DataFrame, schema_version: str = "1.4"
     ) -> int:
         """插入当日清单 (幂等: 已存在则跳过)."""
         with sqlite3.connect(self.path) as conn:
@@ -107,18 +148,23 @@ class PredictionDB:
             for rank, (_, row) in enumerate(stocks.iterrows(), 1):
                 conn.execute(
                     """INSERT OR IGNORE INTO prediction_stocks
-                       (date, symbol, board, rank, pred_ret_1d, pred_ret_3d, pred_ret_5d,
-                        prob_up, score, momentum, weight, pain_prob, consensus_score, signal_conflict)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       (date, symbol, board, rank, pred_ret_1d, pred_ret_2d, pred_ret_3d, pred_ret_5d,
+                        prob_up, prob_up_2d, prob_up_3d, prob_up_5d,
+                        score, momentum, weight, pain_prob, consensus_score, signal_conflict)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         date_str,
                         str(row.get("symbol", "")),
                         str(row.get("board", "main")),
                         rank,
                         _safe_float(row, "pred_ret_1d"),
+                        _safe_float(row, "pred_ret_2d"),
                         _safe_float(row, "pred_ret_3d"),
                         _safe_float(row, "pred_ret_5d"),
                         _safe_float(row, "prob_up"),
+                        _safe_float(row, "prob_up_2d"),
+                        _safe_float(row, "prob_up_3d"),
+                        _safe_float(row, "prob_up_5d"),
                         _safe_float(row, "score"),
                         str(row.get("momentum", "")),
                         _safe_float(row, "weight"),
@@ -157,13 +203,14 @@ class PredictionDB:
 
                 conn.execute(
                     """INSERT OR REPLACE INTO prediction_outcomes
-                       (date, symbol, actual_ret_1d, actual_ret_3d, actual_ret_5d,
+                       (date, symbol, actual_ret_1d, actual_ret_2d, actual_ret_3d, actual_ret_5d,
                         direction_correct_1d, pred_error_1d)
-                       VALUES (?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?)""",
                     (
                         date_str,
                         sym,
                         _safe_float(row, "actual_ret_1d"),
+                        _safe_float(row, "actual_ret_2d"),
                         _safe_float(row, "actual_ret_3d"),
                         _safe_float(row, "actual_ret_5d"),
                         dir_correct,

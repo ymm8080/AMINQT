@@ -34,6 +34,7 @@ class TestLambdaRank:
                         "date": dates,
                         "f1": f,
                         "label_1d": f * 0.01 + rng.normal(0, 0.01, 750),
+                        "label_2d": rng.normal(0, 0.015, 750),
                         "label_3d": rng.normal(0, 0.02, 750),
                         "label_5d": rng.normal(0, 0.03, 750),
                     }
@@ -41,6 +42,8 @@ class TestLambdaRank:
             )
         df = pd.concat(frames, ignore_index=True)
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        for k in (2, 3, 5):
+            df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         trained = trainer.train_window(df, "main", ["f1"])
         assert "rank_model" in trained
@@ -72,6 +75,7 @@ class TestLambdaRank:
                         "date": dates,
                         "f1": f,
                         "label_1d": f * 0.01 + rng.normal(0, 0.01, 750),
+                        "label_2d": rng.normal(0, 0.015, 750),
                         "label_3d": rng.normal(0, 0.02, 750),
                         "label_5d": rng.normal(0, 0.03, 750),
                     }
@@ -79,6 +83,8 @@ class TestLambdaRank:
             )
         df = pd.concat(frames, ignore_index=True)
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        for k in (2, 3, 5):
+            df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         path = trainer.save(trainer.train_window(df, "main", ["f1"]), "t")
         feats = df.copy()
@@ -87,6 +93,10 @@ class TestLambdaRank:
         out = V35Predictor({"main": path}).predict(feats, "main")
         assert "rank_score" in out.columns
         assert out["rank_score"].notna().all()
+        # [多视界] 每个视界概率列存在且落在 [0,1]
+        for col in ("prob_up_2d", "prob_up_3d", "prob_up_5d"):
+            assert col in out.columns
+            assert out[col].between(0, 1).all()
 
 
 # ============================================================
@@ -99,6 +109,7 @@ class TestV37ScoreFormula:
             {
                 "symbol": ["A", "B"],
                 "pred_ret_1d": [0.02, 0.02],
+                "pred_ret_2d": [0.02, 0.02],
                 "pred_ret_3d": [0.02, 0.02],
                 "pred_ret_5d": [0.02, 0.02],
                 "prob_up": [0.6, 0.6],
@@ -116,6 +127,7 @@ class TestV37ScoreFormula:
                 "symbol": ["A"],
                 "board": ["main"],
                 "pred_ret_1d": [0.02],
+                "pred_ret_2d": [0.02],
                 "pred_ret_3d": [0.02],
                 "pred_ret_5d": [0.02],
                 "prob_up": [0.6],
@@ -136,6 +148,7 @@ def _dual_cands() -> pd.DataFrame:
             "board": ["main", "main", "main", "GEM"],
             "industry": ["白酒", "电池", "保险", "医药"],
             "pred_ret_1d": [0.03, 0.025, 0.02, 0.04],
+            "pred_ret_2d": [0.04, 0.03, 0.025, 0.05],
             "pred_ret_3d": [0.05, 0.04, 0.03, 0.06],
             "pred_ret_5d": [0.07, 0.06, 0.05, 0.08],
             "prob_up": [0.72, 0.69, 0.60, 0.75],  # 600003 prob<0.68 出局

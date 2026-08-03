@@ -13,8 +13,10 @@ from pathlib import Path
 
 # 确保仓库根目录在 sys.path, 支持 `streamlit run app/streamlit_app.py` 直接启动
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+# 必须把仓库根目录放到 sys.path 最前: 若 root 已在 path 靠后位置(如 PYTHONPATH),
+# 且 app/ 目录(streamlit 会把它加到 path[0])内含同名 config 包, import config 会解析到
+# app/config 而非根 config, 导致 ModuleNotFoundError. 无条件插到 [0] 保证根 config 优先.
+sys.path.insert(0, str(_PROJECT_ROOT))
 
 import os  # noqa: E402
 import pandas as pd  # noqa: E402

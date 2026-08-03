@@ -21,6 +21,7 @@ import pandas as pd
 
 from app.core.factor_engine import safe_divide
 from .dual_track_trainer import DualTrackTrainer
+from .label_engine import LABEL_WEIGHTS
 
 logger = logging.getLogger(__name__)
 
@@ -63,32 +64,64 @@ class V35Predictor:
             raise RuntimeError(f"板块 {board} 模型包未加载")
         cols = bundle["feature_cols"]
         latest = features.sort_values("date").groupby("symbol").tail(1).copy()
+        # 推理端无法复现的特征 (训练注入 _brute_ / 面板缺列) 补 0 + 告警, 防 KeyError
+        missing = [c for c in cols if c not in latest.columns]
+        if missing:
+            for c in missing:
+                latest[c] = 0.0
+            logger.warning(
+                "[%s] 特征缺失 %d/%d 补 0: %s",
+                board,
+                len(missing),
+                len(cols),
+                missing[:5],
+            )
         # np.nan_to_num: 特征面板可能含 NaN, 模型输入前必须清洗 (防 LightGBM 异常)
         X = np.nan_to_num(
             latest[cols].to_numpy(dtype=float), nan=0.0, posinf=0.0, neginf=0.0
         )
         models = bundle["models"]
         latest["pred_ret_1d"] = models["1d_reg"][0].predict(X)
+        latest["pred_ret_2d"] = models["2d_reg"][0].predict(X)
         latest["pred_ret_3d"] = models["3d_reg"][0].predict(X)
         latest["pred_ret_5d"] = models["5d_reg"][0].predict(X)
         raw_prob = models["1d_cls"][0].predict_proba(X)[:, 1]
         # 校准 (校准器缺失时回退原始 predict_proba)
         cal = bundle.get("calibrator")
         latest["prob_up"] = cal.predict_proba(raw_prob) if cal is not None else raw_prob
-        # 综合排序分: 1d:0.25 / 3d:0.45 / 5d:0.35 (3d 预测力最强, 权重最高)
-        pred_1d = latest["pred_ret_1d"].values
-        pred_3d = latest["pred_ret_3d"].values
-        pred_5d = latest["pred_ret_5d"].values
-        latest["composite_score"] = 0.25 * pred_1d + 0.45 * pred_3d + 0.35 * pred_5d
+        # [多视界] 2/3/5d 分类概率 (各视界校准器; 缺失时回退 raw / 缺 kind 跳过)
+        calibrators = bundle.get("calibrators", {})
+        for k in (2, 3, 5):
+            kind = f"{k}d_cls"
+            if kind not in models:
+                continue
+            raw = models[kind][0].predict_proba(X)[:, 1]
+            cal_k = calibrators.get(k) if calibrators else None
+            latest[f"prob_up_{k}d"] = (
+                cal_k.predict_proba(raw) if cal_k is not None else raw
+            )
+        # 综合排序分: LABEL_WEIGHTS 加权 (1d/2d/3d/5d, 修改字典即全局生效)
+        total_w = sum(LABEL_WEIGHTS.values())
+        latest["composite_score"] = (
+            sum(
+                LABEL_WEIGHTS[k] * latest[f"pred_ret_{k}d"].values
+                for k in LABEL_WEIGHTS
+            )
+            / total_w
+        )
         keep = [
             "symbol",
             "board",
             "industry",
             "composite_score",
             "pred_ret_1d",
+            "pred_ret_2d",
             "pred_ret_3d",
             "pred_ret_5d",
             "prob_up",
+            "prob_up_2d",
+            "prob_up_3d",
+            "prob_up_5d",
         ]
         # [E1] 分位数分布预测 (bundle 含 quantile_models 时)
         if "quantile_models" in bundle:

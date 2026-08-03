@@ -17,12 +17,14 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from .label_engine import LABEL_WEIGHTS
+
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = "1.2"
+SCHEMA_VERSION = "1.4"
 TOP_N = 15
 MAX_PER_INDUSTRY = 4
-COMPOUND_W = (0.45, 0.35, 0.30)  # 1d/3d/5d
+COMPOUND_W = tuple(LABEL_WEIGHTS[k] for k in (1, 2, 3, 5))  # 1d/2d/3d/5d
 HOLDING_BONUS = 0.2
 # B3: Holding Bonus 按持仓天数衰减 day1=1.0/day2=0.5/day3=0.0
 HOLDING_DAY_WEIGHTS = {0: 0.0, 1: 1.0, 2: 0.5, 3: 0.0}
@@ -46,9 +48,13 @@ SCHEMA_FIELDS = [
     "board",
     "day_change",
     "pred_ret_1d",
+    "pred_ret_2d",
     "pred_ret_3d",
     "pred_ret_5d",
     "prob_up",
+    "prob_up_2d",
+    "prob_up_3d",
+    "prob_up_5d",
     "momentum",
     "consensus_score",
     "signal_conflict",
@@ -56,6 +62,8 @@ SCHEMA_FIELDS = [
     "is_one_word_limit",
     "market_state",
     "score",
+    "compound_ret",
+    "compound_prob",
     # V1.2 新增 (E1/E2/公告/分布权重)
     "pred_q10",
     "pred_q50",
@@ -130,19 +138,33 @@ class ListGenerator:
         [E2] 痛苦惩罚: score × (1 - 0.5×pain_prob)  (pain_prob=0.3 → ×0.85)
         [公告] score × (1 + 0.3×announce_score)  (安全网 #17)
         adjusted = score + 0.2 * holding_day_weight * is_in_yesterday_list  (B3 衰减)"""
-        w1, w3, w5 = COMPOUND_W
+        w1, w2, w3, w5 = COMPOUND_W
         df = df.copy()
         df["compound_ret"] = (
-            w1 * df["pred_ret_1d"] + w3 * df["pred_ret_3d"] + w5 * df["pred_ret_5d"]
+            w1 * df["pred_ret_1d"]
+            + w2 * df["pred_ret_2d"]
+            + w3 * df["pred_ret_3d"]
+            + w5 * df["pred_ret_5d"]
         )
-        # B4: base_rate = 20 日滚动均值 (原单日均值日间波动大致 score 尺度不稳)
-        daily_mean = float(df["prob_up"].mean())
+        # [多视界] 加权概率 (t+1 权重=0; 旧 bundle 缺 2/3/5d 概率列时精确回退 prob_up)
+        prob_cols = [f"prob_up_{k}d" for k in (2, 3, 5)]
+        if all(c in df.columns for c in prob_cols):
+            df["compound_prob"] = (
+                w1 * df["prob_up"]
+                + w2 * df["prob_up_2d"]
+                + w3 * df["prob_up_3d"]
+                + w5 * df["prob_up_5d"]
+            )
+        else:
+            df["compound_prob"] = df["prob_up"]
+        # B4: base_rate = 20 日滚动均值 (compound_prob 加权概率)
+        daily_mean = float(df["compound_prob"].mean())
         self._base_rate_history.append(daily_mean)
         recent = self._base_rate_history[-BASE_RATE_WINDOW:]
         base_rate = float(pd.Series(recent).mean())
         base_rate = base_rate if base_rate > 1e-6 else 1.0
         df["base_rate"] = base_rate
-        prob_adjust = df["prob_up"] / base_rate
+        prob_adjust = df["compound_prob"] / base_rate
         use_rank = False
         if "rank_score" in df.columns:
             rank_std = float(df["rank_score"].std())
@@ -155,8 +177,8 @@ class ListGenerator:
                 )
                 use_rank = True
         if not use_rank:
-            # V3.5 回退: pred_ret_1d 横截面 rank(pct=True) × prob_adjust
-            df["score"] = df["pred_ret_1d"].rank(pct=True) * prob_adjust
+            # V3.5 回退: compound_ret 横截面 rank(pct=True) × prob_adjust (t+1 权重已 0)
+            df["score"] = df["compound_ret"].rank(pct=True) * prob_adjust
         # [E2] 痛苦惩罚
         if "pain_prob" in df.columns:
             pain_penalty = 1 - 0.5 * df["pain_prob"].fillna(0).clip(0, 1)
@@ -301,21 +323,23 @@ class ListGenerator:
             self._estimate_cost(df)
         is_bear = market_state == "bear"
         ok = pd.Series(True, index=df.index)
-        # 1. prob_up > base_rate (bear 按声明参数比率收紧, 无新常数)
+        # 1. 加权概率 > base_rate (bear 按声明参数比率收紧, 无新常数)
         if self.entry_prob > 0:
             base = (
                 df["base_rate"] if "base_rate" in df.columns else df["prob_up"].mean()
             )
             ratio = self.entry_prob_bear / self.entry_prob if is_bear else 1.0
-            ok &= df["prob_up"] > base * ratio
+            cp = df["compound_prob"] if "compound_prob" in df.columns else df["prob_up"]
+            ok &= cp > base * ratio
         # 2/3/4. 净预期为正 (compound_ret > 0; pred_q50 > 0; bear 额外 pred_ret_1d > 0)
         if self.entry_ret_mult > 0:
             if "compound_ret" in df.columns:
                 compound = df["compound_ret"]
             else:
-                w1, w3, w5 = COMPOUND_W
+                w1, w2, w3, w5 = COMPOUND_W
                 compound = (
                     w1 * df["pred_ret_1d"]
+                    + w2 * df["pred_ret_2d"]
                     + w3 * df["pred_ret_3d"]
                     + w5 * df["pred_ret_5d"]
                 )
@@ -421,11 +445,17 @@ class ListGenerator:
         final["weight"] = self._compute_weights(final)
         if "prob_up" in final.columns:
             final["prob_up"] = final["prob_up"].round(3)
+        for col in ("prob_up_2d", "prob_up_3d", "prob_up_5d"):
+            if col in final.columns:
+                final[col] = final[col].round(3)
         for col in ("is_limit_up_close", "is_one_word_limit"):
             if col not in final.columns:
                 final[col] = 0
         for col in (
             "day_change",
+            "prob_up_2d",
+            "prob_up_3d",
+            "prob_up_5d",
             "pred_q10",
             "pred_q50",
             "pred_q90",

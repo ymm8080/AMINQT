@@ -48,7 +48,13 @@ class TestFetchCascade:
         from app.pipeline1.data_supply import DataSupplyChain, DataSupplyError
 
         supply = DataSupplyChain(cache_dir=str(tmp_path))
-        for name in ("_akshare_fetch_hist", "_sina_fetch_hist", "_baostock_fetch_hist"):
+        # 源链以 tushare 打头: 4 个源全部 mock 失败
+        for name in (
+            "_tushare_fetch_hist",
+            "_akshare_fetch_hist",
+            "_sina_fetch_hist",
+            "_baostock_fetch_hist",
+        ):
             setattr(
                 supply,
                 name,
@@ -84,6 +90,9 @@ class TestAdaptiveWindow:
         df["label_1d"] = (
             df.groupby("symbol")["close_hfq"].shift(-1) / df["close_hfq"] - 1
         )
+        df["label_2d"] = (
+            df.groupby("symbol")["close_hfq"].shift(-2) / df["close_hfq"] - 1
+        )
         df["label_3d"] = (
             df.groupby("symbol")["close_hfq"].shift(-3) / df["close_hfq"] - 1
         )
@@ -91,6 +100,8 @@ class TestAdaptiveWindow:
             df.groupby("symbol")["close_hfq"].shift(-5) / df["close_hfq"] - 1
         )
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        for k in (2, 3, 5):
+            df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         trained = trainer.train_window(df, "main", ["f1", "f2"])
         assert len(trained["segs"]["es"]) > 0
@@ -114,11 +125,13 @@ class TestAdaptiveWindow:
         sparse = panel[panel["symbol"] == "600519"].tail(2).copy()
         sparse["symbol"] = "000999"  # 只有 2 天数据的"新股"
         df = pd.concat([panel, sparse], ignore_index=True)
-        for k in (1, 3, 5):
+        for k in (1, 2, 3, 5):
             df[f"label_{k}d"] = (
                 df.groupby("symbol")["close_hfq"].shift(-k) / df["close_hfq"] - 1
             )
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        for k in (2, 3, 5):
+            df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         trained = trainer.train_window(df, "main", ["f1", "f2"])  # 不应 raise
         assert len(trained["segs"]["es"]) > 0
@@ -293,3 +306,42 @@ class TestRunPrediction:
     def test_no_bundles_raises(self, trained):
         with pytest.raises(RuntimeError, match="模型包"):
             run_prediction(trained["panel"], "20260720", {})
+
+
+# ---------------- 跨视界权重 (1d/2d/3d/5d) + 加权 OOS ----------------
+class TestHorizonWeights:
+    def test_horizons_and_weights_cover_1_2_3_5(self):
+        from app.pipeline1.label_engine import LABEL_HORIZONS, LABEL_WEIGHTS
+
+        assert LABEL_HORIZONS == (1, 2, 3, 5)
+        assert set(LABEL_WEIGHTS) == {1, 2, 3, 5}
+        assert sum(LABEL_WEIGHTS.values()) == pytest.approx(1.0)
+
+    def test_component_weights_single_source(self):
+        from app.pipeline1.label_engine import LABEL_WEIGHTS
+        from app.pipeline1.list_generator import COMPOUND_W
+
+        assert COMPOUND_W == tuple(LABEL_WEIGHTS[k] for k in (1, 2, 3, 5))
+
+    def test_validate_oos_weighted_ic_formula(self, tmp_path):
+        from app.pipeline1.label_engine import LABEL_WEIGHTS
+
+        dtt.LGB_PARAMS_REG["n_estimators"] = 5
+        dtt.LGB_PARAMS_CLS["n_estimators"] = 5
+        dtt.ES_PATIENCE = 2
+        df = make_panel(days=760).copy()
+        for k in (1, 2, 3, 5):
+            df[f"label_{k}d"] = (
+                df.groupby("symbol")["close_hfq"].shift(-k) / df["close_hfq"] - 1
+            )
+        df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        for k in (2, 3, 5):
+            df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
+        trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
+        trained = trainer.train_window(df, "main", ["f1", "f2"])
+        oos = trainer.validate_oos(trained)
+        assert "weighted_ic" in oos
+        expected = sum(
+            LABEL_WEIGHTS[k] * oos["ics"].get(f"{k}d_reg", 0.0) for k in LABEL_WEIGHTS
+        ) / sum(LABEL_WEIGHTS.values())
+        assert oos["weighted_ic"] == pytest.approx(expected, abs=1e-6)

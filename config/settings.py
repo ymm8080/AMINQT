@@ -39,6 +39,27 @@ PANEL_V3_PATH = Path(
 )
 PANEL_V3_FALLBACK = DATA_DIR / "panel_full_enriched_v2.parquet"
 
+# ── V3 CYQ 基础列删减 (2026-08-02 A/B/C 决策) ────────────────
+# benefit_part 已并入 winner_ratio (别名); cost_50pct 因 cost_bias 依赖而保留.
+CYQ_BASE_KEEP = [
+    "winner_ratio",
+    "avg_cost",
+    "pct_90_high",
+    "pct_90_con",
+    "cost_50pct",
+    "cost_95pct",
+    "weight_avg",
+]
+CYQ_BASE_DELETE = [
+    "pct_70_low",
+    "pct_70_high",
+    "pct_70_con",
+    "pct_90_low",
+    "cost_5pct",
+    "cost_15pct",
+    "cost_85pct",
+]
+
 
 def data_others_path(path: str | Path) -> Path:
     """Return the DATA_OTHERS location for a non-parquet path.

@@ -239,15 +239,58 @@ class TestDualTrackTrainer:
                 "f1": f,
                 "f2": rng.normal(size=750),
                 "label_1d": f * 0.01 + rng.normal(0, 0.01, 750),
+                "label_2d": rng.normal(0, 0.015, 750),
                 "label_3d": rng.normal(0, 0.02, 750),
                 "label_5d": rng.normal(0, 0.03, 750),
             }
         )
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        for k in (2, 3, 5):
+            df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer()
         trained = trainer.train_window(df, "main", ["f1", "f2"])
-        assert set(trained["models"]) == {"1d_reg", "1d_cls", "3d_reg", "5d_reg"}
+        assert set(trained["models"]) == {
+            "1d_reg",
+            "1d_cls",
+            "2d_reg",
+            "2d_cls",
+            "3d_reg",
+            "3d_cls",
+            "5d_reg",
+            "5d_cls",
+        }
         pred = trained["models"]["1d_reg"][0].predict(df[["f1", "f2"]].tail(5))
         assert len(pred) == 5
         oos = trainer.validate_oos(trained)
         assert "1d_reg" in oos["ics"]
+
+    def test_calibrators_multihorizon(self):
+        """fit_calibrator 产出 {1,2,3,5} 校准器字典 + 1d 兼容别名."""
+        import app.pipeline1.dual_track_trainer as dtt
+
+        dtt.LGB_PARAMS_REG["n_estimators"] = 10
+        dtt.LGB_PARAMS_CLS["n_estimators"] = 10
+        dtt.ES_PATIENCE = 3
+        rng = np.random.default_rng(3)
+        dates = pd.bdate_range("2023-01-02", periods=500)
+        f = rng.normal(size=500)
+        df = pd.DataFrame(
+            {
+                "date": dates,
+                "symbol": "600519",
+                "f1": f,
+                "label_1d": f * 0.01 + rng.normal(0, 0.01, 500),
+                "label_2d": rng.normal(0, 0.015, 500),
+                "label_3d": rng.normal(0, 0.02, 500),
+                "label_5d": rng.normal(0, 0.03, 500),
+            }
+        )
+        df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
+        for k in (2, 3, 5):
+            df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
+        trainer = dtt.DualTrackTrainer()
+        trained = trainer.train_window(df, "main", ["f1"])
+        cal = trainer.fit_calibrator(trained)
+        assert set(trained["calibrators"]) == {1, 2, 3, 5}
+        assert trained["calibrator"] is trained["calibrators"][1]
+        assert cal is trained["calibrator"]

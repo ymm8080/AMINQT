@@ -244,10 +244,10 @@ def run_training(
     for board, res in results.items():
         res["n_features"] = len(cols_by_board[board])
         logger.info(
-            "[%s] 模型包 %s | OOS IC(1d)=%.4f | switched=%s",
+            "[%s] 模型包 %s | OOS weighted_IC=%.4f | switched=%s",
             board,
             res["path"],
-            res["oos"]["ics"].get("1d_reg", 0.0),
+            res["oos"].get("weighted_ic", 0.0),
             res["switched"],
         )
     return results
