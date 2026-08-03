@@ -5,6 +5,7 @@ _daily_fetch.py 在追加当日行前调用 apply_ingest_scan, 使 ST 股与次�
 不进入 V3 面板 — universe 在入口处收敛, 而非靠面板列 (is_st/list_days)
 在训练/回测阶段反复过滤.
 """
+
 import pandas as pd
 
 from app.core.universe_manager import name_is_st
@@ -29,7 +30,9 @@ def apply_ingest_scan(df, stock_info, trade_date, min_list_days, trade_cal):
     if stock_info is None or len(stock_info) == 0:
         return df, 0
     if trade_cal is None or len(trade_cal) == 0:
-        raise ValueError("trade_cal required when stock_info is non-empty (trading-day age)")
+        raise ValueError(
+            "trade_cal required when stock_info is non-empty (trading-day age)"
+        )
     names = df["symbol"].map(stock_info["name"]).fillna("")
     is_st = names.map(name_is_st)
     ld = pd.to_datetime(

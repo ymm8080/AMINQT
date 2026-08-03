@@ -15,6 +15,13 @@ data/processed/*.parquet
 data/audit/*
 data/factor_registry/registry_*.json
 data/factor_registry/selected_main_*.json
+# Enforce parquet-only data/ (CI: check_data_only_parquet.py)
+data/**/*.log
+data/**/*.err
+data/**/*.pid
+data/**/*.md
+data/**/*.txt
+data/**/*.csv
 !data/raw/.gitkeep
 !data/intraday/.gitkeep
 !data/processed/.gitkeep

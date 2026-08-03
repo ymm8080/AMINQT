@@ -92,9 +92,7 @@ def _ak_call(
     last: Exception | None = None
     for attempt in range(retries):
         try:
-            return _with_timeout(
-                lambda: fn(*args, **kwargs), timeout=_AK_CALL_TIMEOUT
-            )
+            return _with_timeout(lambda: fn(*args, **kwargs), timeout=_AK_CALL_TIMEOUT)
         except Exception as exc:  # noqa: BLE001 — 网络层异常类型多样, 统一重试
             last = exc
             wait = backoff * (attempt + 1)
@@ -229,11 +227,9 @@ class DataSupplyChain:
             info = stock_info.set_index("ts_code")
             df["board"] = df["ts_code"].map(info["market"])
             df["industry"] = df["ts_code"].map(info["industry"])
-            scan_info = (
-                stock_info.rename(columns={"ts_code": "symbol"})[
-                    ["symbol", "name", "list_date"]
-                ].set_index("symbol")
-            )
+            scan_info = stock_info.rename(columns={"ts_code": "symbol"})[
+                ["symbol", "name", "list_date"]
+            ].set_index("symbol")
             try:
                 cal = self._get_trade_cal_cached(pro)
                 df, _ = apply_ingest_scan(
@@ -1723,18 +1719,24 @@ class DataSupplyChain:
                 flag=flag,
             )
         except Exception as exc:  # noqa: BLE001 — 网络层异常统一处理
-            logger.warning("stock_lhb_stock_detail_em 失败 %s %s %s: %s",
-                           symbol, trade_date, flag, exc)
+            logger.warning(
+                "stock_lhb_stock_detail_em 失败 %s %s %s: %s",
+                symbol,
+                trade_date,
+                flag,
+                exc,
+            )
             return None
         if raw is None or len(raw) == 0:
             return pd.DataFrame()
-        keep = [c for c in ("交易营业部名称", "买入金额", "卖出金额", "净额", "类型")
-                if c in raw.columns]
+        keep = [
+            c
+            for c in ("交易营业部名称", "买入金额", "卖出金额", "净额", "类型")
+            if c in raw.columns
+        ]
         return raw[keep].copy()
 
-    def fetch_lhb_seat_aggregate(
-        self, symbol: str, trade_date: str
-    ) -> dict | None:
+    def fetch_lhb_seat_aggregate(self, symbol: str, trade_date: str) -> dict | None:
         """聚合单股单日机构/散户席位买卖金额 (GLM 龙虎榜 spec).
 
         取"买入"+"卖出"两个 flag 的 top-5 席位, 按营业部去重 (同席位因多个
@@ -1751,17 +1753,20 @@ class DataSupplyChain:
                 return None  # 取数失败 → 留待重试 (与"上榜但无席位"区分)
             if len(f):
                 frames.append(f)
-        zeros = {"lhb_retail_buy": 0.0, "lhb_retail_sell": 0.0,
-                 "lhb_inst_buy": 0.0, "lhb_inst_sell": 0.0}
+        zeros = {
+            "lhb_retail_buy": 0.0,
+            "lhb_retail_sell": 0.0,
+            "lhb_inst_buy": 0.0,
+            "lhb_inst_sell": 0.0,
+        }
         if not frames:
             return zeros  # 成功取到但无席位明细 → 上榜但无该类席位=0
         detail = pd.concat(frames, ignore_index=True)
         if "交易营业部名称" not in detail.columns:
             return zeros
         # 同席位多上榜原因 → 金额相同, 按席位取 max 去重
-        detail = (
-            detail.groupby("交易营业部名称", as_index=False)
-            .agg(买入金额=("买入金额", "max"), 卖出金额=("卖出金额", "max"))
+        detail = detail.groupby("交易营业部名称", as_index=False).agg(
+            买入金额=("买入金额", "max"), 卖出金额=("卖出金额", "max")
         )
         buy = pd.to_numeric(detail["买入金额"], errors="coerce").fillna(0)
         sell = pd.to_numeric(detail["卖出金额"], errors="coerce").fillna(0)

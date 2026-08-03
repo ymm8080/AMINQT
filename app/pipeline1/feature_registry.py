@@ -63,6 +63,7 @@ DIM_GROUPS = [
     "dim30_kline_geometry",
     "dim31_announcement",
     "dim32_lhb_glm",
+    "dim33_block_trade",
     "dim34_lhb_v2",
     # Post-processing (not real dims but produce features)
     "_industry_neutralize",
@@ -111,6 +112,11 @@ NON_FEATURE_COLS = {
     "lhb_top_sell",
     "lhb_quant_buy",
     "lhb_quant_sell",
+    # 大宗交易上游原始列 (dim33 EWMA 输入, 非特征)
+    "bt_count",
+    "bt_disc_raw",
+    "bt_inst_absorb",
+    "bt_amt_ratio_float_mv",
     # Eval-driven noise drops (|ICIR| < 0.05 across T+1/T+3/T+5)
     "sw_l2_pe",
     "sw_l3_pe",

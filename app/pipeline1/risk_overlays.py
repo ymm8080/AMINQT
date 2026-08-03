@@ -54,7 +54,8 @@ except Exception:
     _FS_CFG = {}
 
 BLOCK_TRADE_CACHE = _FS_CFG.get(
-    "block_trade_cache", "data/supply_cache/alt_data/block_trade/block_trade_full.parquet"
+    "block_trade_cache",
+    "data/supply_cache/alt_data/block_trade/block_trade_full.parquet",
 )
 BLOCK_TRADE_LOOKBACK_DAYS = int(_FS_CFG.get("lookback_days", 5))
 BLOCK_TRADE_STALE_MAX_DAYS = int(_FS_CFG.get("stale_max_days", 7))
@@ -383,7 +384,9 @@ def block_trade_recent_scan(
     if (ref - bt["date"].max()).days > stale_max_days:
         logger.warning(
             "FINAL STOCK SCAN: 缓存过期 (最新 %s vs 名单日 %s, 差 >%d 天), 跳过扫描",
-            bt["date"].max().date(), ref.date(), stale_max_days,
+            bt["date"].max().date(),
+            ref.date(),
+            stale_max_days,
         )
         return set()
     days = np.sort(bt["date"].unique())
@@ -393,6 +396,8 @@ def block_trade_recent_scan(
     if excluded:
         logger.warning(
             "FINAL STOCK SCAN: 剔除 %d 只近 %d 交易日有大宗: %s",
-            len(excluded), lookback_days, ",".join(sorted(excluded)),
+            len(excluded),
+            lookback_days,
+            ",".join(sorted(excluded)),
         )
     return excluded

@@ -13,6 +13,7 @@ WORM: 先备份 原面板 → *_gate_base_<ts>.parquet, 再写回同名路径.
 内存注意: 2.7M×132 行面板的 pandas 布尔掩码拷贝会分配 ~2.4GB 连续内存,
 本机 16GB RAM 下易 OOM. 故过滤/删列/写回全部走 pyarrow Table 层 (不落 pandas).
 """
+
 import os
 import shutil
 import sys
@@ -68,12 +69,16 @@ def main():
     sd = pq.read_table(PANEL, columns=["symbol", "date"]).to_pandas()
     n0 = len(sd)
     trade_cal = pd.DatetimeIndex(sorted(sd["date"].unique()))
-    print(f"  rows={n0}  trade calendar: {len(trade_cal)} days  "
-          f"{trade_cal[0].date()} .. {trade_cal[-1].date()}")
+    print(
+        f"  rows={n0}  trade calendar: {len(trade_cal)} days  "
+        f"{trade_cal[0].date()} .. {trade_cal[-1].date()}"
+    )
 
     stock_info = fetch_stock_basic()
     if stock_info is None or len(stock_info) == 0:
-        sys.exit("FATAL: stock_basic unavailable — aborting (refusing to gate on stale cache)")
+        sys.exit(
+            "FATAL: stock_basic unavailable — aborting (refusing to gate on stale cache)"
+        )
 
     # ── 3. 每行上市交易日数 (掩码在 symbol/date 上算, 不放大) ──
     names = sd["symbol"].map(stock_info["name"]).fillna("")
@@ -93,9 +98,11 @@ def main():
     drop_st = is_st.to_numpy()
     drop_young = np.asarray(list_days < INGEST_MIN_LIST_DAYS)
     keep_mask = ~drop_st & ~drop_young
-    print(f"  ST rows: {int(drop_st.sum())}  ({drop_st.sum()/n0:.1%})")
-    print(f"  young rows (<{INGEST_MIN_LIST_DAYS}td): {int(drop_young.sum())}  "
-          f"({drop_young.sum()/n0:.1%})")
+    print(f"  ST rows: {int(drop_st.sum())}  ({drop_st.sum() / n0:.1%})")
+    print(
+        f"  young rows (<{INGEST_MIN_LIST_DAYS}td): {int(drop_young.sum())}  "
+        f"({drop_young.sum() / n0:.1%})"
+    )
     print(f"  kept: {int(keep_mask.sum())} / {n0}")
 
     # ── 4. 逐 row-group 过滤 + 删列 (内存有界, 避免 2.7M×132 整表拷贝) ──

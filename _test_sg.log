@@ -1,0 +1,17 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-8.4.2, pluggy-1.6.0
+rootdir: D:\AMINQT\AMINQT CODES
+configfile: pytest.ini
+plugins: anyio-4.14.0, asyncio-0.26.0, cov-5.0.0
+asyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1 item
+
+tests\test_stage1_gate.py .                                              [100%]
+
+============================== warnings summary ===============================
+tests/test_stage1_gate.py: 30 warnings
+  C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+    eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 1 passed, 30 warnings in 13.80s =======================

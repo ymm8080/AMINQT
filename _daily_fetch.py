@@ -492,6 +492,63 @@ if needed_ffill:
                 filled_count += 1
     print(f"    Forward-filled: {filled_count} columns")
 
+# ── 6.5 大宗交易当日聚合 → 4 个 bt_ 原始列 (dim33 EWMA 上游, 非特征) ──
+# 算法忠实还原自 block_trade_agg v2.0 (pyc): L1 噪音清洗 (不删除, 仅排除出聚合) +
+# 有效单聚合. 单位: vol=万股, amount=万元, daily_amt=万元 (面板 amount=千元 → /10),
+# circ_mv=万元, close=元.
+if len(bt):
+    try:
+        _bt = bt.copy()
+        _bt["date"] = pd.Timestamp(TRADE_DATE)
+        snap = df[["symbol", "close", "amount", "circ_mv"]].drop_duplicates("symbol")
+        snap["daily_amt"] = snap["amount"] / 10.0  # 千元 → 万元
+        _bt = _bt.merge(
+            snap[["symbol", "close", "daily_amt", "circ_mv"]],
+            on=["symbol"], how="left",
+        )
+        _bt = _bt[_bt["close"].notna()].copy()
+        if len(_bt):
+            # L1 噪音标记 (规则与历史聚合一致)
+            def _broker(seat):
+                s = str(seat)
+                idx = s.find("证券")
+                return s[idx:idx + 2] if idx >= 0 else ""
+
+            same_broker = (_bt["buyer"].map(_broker) == _bt["seller"].map(_broker)) & (
+                _bt["buyer"] != _bt["seller"]
+            )
+            # 折价 = (price − close) / close; 噪音判定依赖折价, 须先算
+            _bt["discount"] = (_bt["price"] - _bt["close"]) / _bt["close"].replace(0, np.nan)
+            _bt["is_noise"] = (
+                (_bt["buyer"] == _bt["seller"])
+                | (same_broker & (_bt["discount"] < -0.1))
+                | ((_bt["vol"] < 10) & (_bt["discount"].abs() < 0.01))
+            )
+            _inst_kw = ("机构专用", "QFII", "合格境外", "社保", "养老", "资产管理", "资管", "保险", "信托")
+            _bt["is_inst_buyer"] = _bt["buyer"].map(lambda s: any(k in str(s) for k in _inst_kw))
+            v = _bt[~_bt["is_noise"]].copy()
+            if len(v):
+                grp = v.groupby("symbol")
+                total_amt = grp["amount"].sum()
+                wavg = (v["price"] * v["vol"]).groupby(v["symbol"]).sum() / grp["vol"].sum().replace(0, np.nan)
+                close = grp["close"].first()
+                daily_amt = grp["daily_amt"].first()
+                circ_mv = grp["circ_mv"].first()
+                disc = (wavg - close) / close.replace(0, np.nan)
+                any_inst = v.groupby("symbol")["is_inst_buyer"].max()
+                bt_today = pd.DataFrame({
+                    "bt_count": grp.size(),
+                    "bt_disc_raw": (-disc).clip(lower=0),
+                    "bt_inst_absorb": any_inst * total_amt / daily_amt.replace(0, np.nan),
+                    "bt_amt_ratio_float_mv": total_amt / circ_mv.replace(0, np.nan),
+                })
+                for c in bt_today.columns:
+                    df[c] = df["symbol"].map(bt_today[c])
+                print(f"    block_trade agg: {len(bt_today)} symbols -> "
+                      f"{[c for c in bt_today.columns if c in df.columns]}")
+    except Exception as e:
+        print(f"    block_trade agg: FAILED ({e})")
+
 # ── 7. Align to panel schema ──
 print("\n[7] Aligning to panel schema...")
 for c in panel_cols:
