@@ -1,66 +1,36 @@
-"""Append today's OHLCV + CYQ into panel_full_enriched_v3.parquet.
+"""【已退役 RETIRED】极简日更追加脚本 — 不再使用.
 
-Usage: python scripts/append_today_to_panel.py [trade_date]
+原功能 (2026-08-03 前): 仅追加当日 OHLCV + LHB + CYQ, 其余面板列全部置 pd.NA
+(不 ffill 慢列、不计算 rolling/派生特征), 是 07-27/28 缺 300 股与 07-30 荒行
+数据残缺的根源之一. 已退役, 文件保留仅供审计参考 (完整历史见 git).
+
+正式日更增广改用仓库根目录的全量脚本:
+    python _daily_fetch.py [YYYYMMDD]
+
+_daily_fetch.py 会拉取全部源 + 计算 rolling/派生特征 + 恒 ffill 慢列,
+并原子替换当日行 (WORM 备份先行).
 """
 
-from __future__ import annotations
-
-import os
 import sys
-from datetime import datetime
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-os.chdir(ROOT)
+MSG = """
+============================================================
+ append_today_to_panel.py 已退役 (RETIRED)
+============================================================
+此脚本只追加 OHLCV/LHB/CYQ, 其余面板列留空, 会造成日更数据残缺.
 
-from dotenv import load_dotenv
+请改用全量日更脚本 (根目录):
+    python _daily_fetch.py [YYYYMMDD]
 
-load_dotenv()
-
-import pandas as pd
-from app.pipeline1.data_supply import DataSupplyChain
-
-PANEL_PATH = "data/panel_full_enriched_v3.parquet"
-
-
-def main(trade_date: str):
-    print(f"Loading panel: {PANEL_PATH}")
-    panel = pd.read_parquet(PANEL_PATH)
-    print(f"  {len(panel)} rows, {panel['date'].min()} ~ {panel['date'].max()}")
-
-    # Remove today if already present (avoid duplicates)
-    panel = panel[panel["date"] < pd.to_datetime(trade_date)]
-
-    # Append today's OHLCV + LHB
-    supply = DataSupplyChain()
-    print(f"Appending today's data for {trade_date} ...")
-    panel = supply.append_today_to_panel(
-        panel, trade_date=trade_date, sources=["ohlcv", "lhb"]
-    )
-
-    # Merge today's CYQ from Tushare cache
-    cyq_path = f"data/supply_cache/alt_data/cyq_tushare/{trade_date}.parquet"
-    if os.path.exists(cyq_path):
-        cyq = pd.read_parquet(cyq_path)
-        cyq_cols = [c for c in cyq.columns if c not in ("symbol", "date")]
-        today_mask = panel["date"] == pd.to_datetime(trade_date)
-        for col in cyq_cols:
-            if col in panel.columns:
-                panel.loc[today_mask, col] = (
-                    panel.loc[today_mask, "symbol"]
-                    .map(cyq.set_index("symbol")[col])
-                    .values
-                )
-        print(f"CYQ merged: {len(cyq_cols)} cols for {today_mask.sum()} rows")
-
-    # Save back (WORM: write new file, don't overwrite)
-    out_path = PANEL_PATH  # overwrite v3 — it's the working panel
-    panel.to_parquet(out_path, index=False)
-    print(f"Saved: {out_path}")
-    print(f"  {len(panel)} rows, {panel['date'].min()} ~ {panel['date'].max()}")
-
+_daily_fetch.py 行为:
+  - 拉取 OHLCV / adj / daily_basic / stk_limit / suspend / cyq_perf /
+    margin_detail / top_list / stock_basic 全部源 (带重试)
+  - 计算 rolling 特征 (bias/ma/vol_surge/...) 与 CYQ 派生列
+  - 恒前向填充 ffill 标记的慢列 (announce_date/财务/增减持/申万 等)
+  - 原子替换当日行, 不产生重复
+============================================================
+"""
 
 if __name__ == "__main__":
-    td = sys.argv[1] if len(sys.argv) > 1 else datetime.now().strftime("%Y%m%d")
-    main(td)
+    print(MSG)
+    sys.exit(1)

@@ -1,0 +1,15 @@
+2026-08-02 20:31:15,288 [INFO] STEP 1: fetch real LHB 20230101~20231231
+2026-08-02 20:31:18,168 [INFO] 交易日: 242 天 (20230103 ~ 20231229)
+2026-08-02 20:34:09,122 [WARNING]   20230420 重试 1/5: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')) (10s 后重试)
+2026-08-02 20:35:15,454 [INFO]   100/242 天 (20230602)
+2026-08-02 20:38:37,607 [INFO]   200/242 天 (20231101)
+2026-08-02 20:40:06,449 [INFO] 真实 LHB 2023 已缓存: data/supply_cache/alt_data/lhb/all_20230103_20231229.parquet (12899 行)
+2026-08-02 20:40:06,458 [INFO] STEP 2: 加载 v3: D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet
+2026-08-02 20:40:08,057 [INFO] v3: 2720808 行 100 列
+2026-08-02 20:40:08,343 [INFO] 备份: D:\AMINQT\PARQUET\panel_full_enriched_v3_prelhb2023_20260802_204008.parquet
+2026-08-02 20:40:08,555 [INFO] 待修复 2023 行 (全 NaN 或全 0): 714869
+2026-08-02 20:40:08,826 [INFO] 匹配到真实 LHB: 6074/714869
+2026-08-02 20:40:08,855 [INFO]   lhb_net_buy: 6074 行为真实值
+2026-08-02 20:40:08,884 [INFO]   lhb_buy_amt: 6071 行为真实值
+2026-08-02 20:40:08,910 [INFO]   lhb_sell_amt: 6064 行为真实值
+2026-08-02 20:40:21,439 [INFO] 完成: 2720808 行 100 列, 546.2 秒

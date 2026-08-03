@@ -471,12 +471,17 @@ def enrich_alt_data(
                     and "sh_net_sign" in df.columns
                 ):
                     # 按公告日期聚合: 日频面板上当日净增减持
+                    agg_map = {
+                        "sh_net_change_sign": ("sh_net_sign", "sum"),
+                        "sh_change_amt_total": ("sh_change_amt", "sum"),
+                    }
+                    if "evt_start_date" in df.columns:
+                        agg_map["sh_evt_start_date"] = ("evt_start_date", "min")
+                    if "evt_end_date" in df.columns:
+                        agg_map["sh_evt_end_date"] = ("evt_end_date", "max")
                     daily_net = (
                         df.groupby(["symbol", "announce_date"])
-                        .agg(
-                            sh_net_change_sign=("sh_net_sign", "sum"),
-                            sh_change_amt_total=("sh_change_amt", "sum"),
-                        )
+                        .agg(**agg_map)
                         .reset_index()
                     )
                     daily_net = daily_net.rename(columns={"announce_date": "date"})

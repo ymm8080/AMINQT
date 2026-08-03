@@ -130,12 +130,11 @@ def evaluate_sell_signal(
 
         def _stop(idx):
             return [
-                f"硬止损{pnl[i] * 100:+.1f}%≤{price_hard_stop * 100:.0f}%"
-                for i in idx
+                f"硬止损{pnl[i] * 100:+.1f}%≤{price_hard_stop * 100:.0f}%" for i in idx
             ]
 
         hit(pnl <= price_hard_stop, 3, _stop)
 
-    out["sell_signal"] = [SIGNAL_LEVELS[l] for l in level]
+    out["sell_signal"] = [SIGNAL_LEVELS[level_idx] for level_idx in level]
     out["sell_reason"] = [r if r else "持有" for r in reason]
     return out

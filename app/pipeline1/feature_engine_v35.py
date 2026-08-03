@@ -2609,6 +2609,8 @@ class FeatureEngineV35:
           5. sh_insider_signal    — 内部人信号: 20 日内净增持=+1, 净减持=-1, 无=0
           6. sh_change_frequency  — 近 60 日公告次数 (活跃度指标)
           7. sh_amt_vs_amount     — 增减持金额/日成交额 (影响规模)
+          8. sh_days_since_evt_start — 距最近一次增减持事件开始的天数 (ffill 连续时序)
+          9. sh_days_since_evt_end   — 距最近一次增减持事件结束的天数 (ffill 连续时序)
         """
         has_ht = any(
             c in df.columns for c in ["sh_net_change_sign", "sh_change_amt_total"]
@@ -2621,6 +2623,8 @@ class FeatureEngineV35:
             "sh_insider_signal",
             "sh_change_frequency",
             "sh_amt_vs_amount",
+            "sh_days_since_evt_start",
+            "sh_days_since_evt_end",
         ]
         if not has_ht:
             for c in out_cols:
@@ -2655,6 +2659,16 @@ class FeatureEngineV35:
                 ).replace([np.inf, -np.inf], np.nan)
             else:
                 g["sh_amt_vs_amount"] = np.nan
+
+            # 距最近事件天数: ffill 事件窗口后, 今天(行日期) − 事件起止日期
+            if "sh_evt_start_date" in g.columns:
+                es = g["sh_evt_start_date"].ffill()
+                ee = g["sh_evt_end_date"].ffill()
+                g["sh_days_since_evt_start"] = (g["date"] - es).dt.days
+                g["sh_days_since_evt_end"] = (g["date"] - ee).dt.days
+            else:
+                g["sh_days_since_evt_start"] = np.nan
+                g["sh_days_since_evt_end"] = np.nan
 
             return g
 
@@ -2925,6 +2939,8 @@ class FeatureEngineV35:
             "close_hfq",
             "limit_pct",
             "announce_date",
+            "sh_evt_start_date",
+            "sh_evt_end_date",
             "PE_TTM",
             "touched_limit_up",
             "score_rank",

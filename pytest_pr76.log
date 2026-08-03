@@ -1,0 +1,52 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-8.4.2, pluggy-1.6.0
+rootdir: D:\AMINQT\AMINQT CODES
+configfile: pytest.ini
+plugins: anyio-4.14.0, asyncio-0.26.0, cov-5.0.0
+asyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 193 items
+
+tests\test_prediction_db.py ....                                         [  2%]
+tests\test_pipeline1_v35.py ............................................ [ 24%]
+........                                                                 [ 29%]
+tests\test_pipeline1_v38.py ..........................................   [ 50%]
+tests\test_pipeline1_v38_dual_list.py .................                  [ 59%]
+tests\test_daily_pipeline.py .....                                       [ 62%]
+tests\test_indicators.py ................                                [ 70%]
+tests\test_pipeline1_list_to_panel.py ....................               [ 80%]
+tests\test_train_predict_runner.py ...................                   [ 90%]
+tests\test_dashboard.py .........                                        [ 95%]
+tests\test_frontier_api.py .........                                     [100%]
+
+============================== warnings summary ===============================
+app\main.py:33
+  D:\AMINQT\AMINQT CODES\app\main.py:33: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\fastapi\applications.py:4601
+  C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\fastapi\applications.py:4601: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_pipeline1_v38_dual_list.py: 28 warnings
+tests/test_daily_pipeline.py: 42 warnings
+tests/test_indicators.py: 28 warnings
+tests/test_train_predict_runner.py: 57 warnings
+  C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+    eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+
+tests/test_train_predict_runner.py::TestRunTraining::test_bundles_saved_with_oos
+  D:\AMINQT\AMINQT CODES\app\pipeline1\train_runner.py:209: FutureWarning: DataFrameGroupBy.apply operated on the grouping columns. This behavior is deprecated, and in a future version of pandas the grouping columns will be excluded from the operation. Either pass `include_groups=False` to exclude the groupings or explicitly select the grouping columns after groupby to silence this warning.
+    .apply(lambda g: g.head(min(50, len(g))))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============== 193 passed, 158 warnings in 1140.67s (0:19:00) ================

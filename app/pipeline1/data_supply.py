@@ -1828,6 +1828,16 @@ class DataSupplyChain:
                                 format="%Y%m%d",
                                 errors="coerce",
                             ),
+                            "evt_start_date": pd.to_datetime(
+                                raw.get("evt_start_date", ""),
+                                format="%Y%m%d",
+                                errors="coerce",
+                            ),
+                            "evt_end_date": pd.to_datetime(
+                                raw.get("evt_end_date", ""),
+                                format="%Y%m%d",
+                                errors="coerce",
+                            ),
                         }
                     )
                     out["sh_net_sign"] = in_de.apply(
@@ -2311,6 +2321,10 @@ class DataSupplyChain:
     ) -> pd.DataFrame:
         """拉取当日数据并追加到历史面板.
 
+        ⚠ DEPRECATED (2026-08-03): 此方法只写 OHLCV + meta 列, 其余面板列置 pd.NA,
+        不 ffill 慢列/不算特征. 正式日更改用仓库根目录 `python _daily_fetch.py [YYYYMMDD]`
+        (全量增广 + 恒 ffill). 此处仅保留给 in-app 快速路径 (frontier_routes/_run_daily_fast).
+
         1. 拉取当日 OHLCV + alt data
         2. append OHLCV 行到面板 (concat)
         3. merge alt data 到当日行 (left join on symbol+date)
@@ -2324,6 +2338,10 @@ class DataSupplyChain:
         Returns:
             扩展后的面板 (含当日新行)
         """
+        logger.warning(
+            "DEPRECATED: append_today_to_panel 已退役 (只写 OHLCV/meta, 其余列留空). "
+            "正式日更请用根目录 `python _daily_fetch.py [YYYYMMDD]`."
+        )
         if trade_date is None:
             trade_date = datetime.now().strftime("%Y%m%d")
         if sources is None:

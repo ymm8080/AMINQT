@@ -316,6 +316,50 @@ class TestFeatures:
         assert "PE_log_industry_rank" in out.columns
         assert out["PE_log_industry_rank"].between(0, 1).all()
 
+    def test_dim29_holder_evt_days(self):
+        """dim29 增减持事件窗口: days_since_evt_start/end 在事件行=公告日挂载, ffill 后随日期递增."""
+        dates = pd.bdate_range("2025-01-06", periods=6)  # 06/07/08/09/10/13
+        df = pd.DataFrame(
+            {
+                "symbol": ["600519"] * 6,
+                "date": dates,
+                "sh_net_change_sign": [np.nan, np.nan, 1.0, np.nan, np.nan, np.nan],
+                "sh_change_amt_total": [np.nan, np.nan, 1000.0, np.nan, np.nan, np.nan],
+                "sh_evt_start_date": pd.to_datetime(
+                    [None, None, "2025-01-06", None, None, None]
+                ),
+                "sh_evt_end_date": pd.to_datetime(
+                    [None, None, "2025-01-07", None, None, None]
+                ),
+            }
+        )
+        out = FeatureEngineV35.dim29_holdertrade(df)
+        sub = out[out["symbol"] == "600519"].sort_values("date").reset_index(drop=True)
+        # 事件行 (idx2, 公告日 2025-01-08): 距事件起/止 = 2 / 1 天
+        assert sub["sh_days_since_evt_start"].iloc[2] == 2
+        assert sub["sh_days_since_evt_end"].iloc[2] == 1
+        # 事件前 NaN
+        assert sub["sh_days_since_evt_start"].iloc[:2].isna().all()
+        # ffill: 事件后行距上次事件天数递增 (含跨周末 13 号)
+        assert sub["sh_days_since_evt_start"].iloc[3] == 3
+        assert sub["sh_days_since_evt_end"].iloc[3] == 2
+        assert sub["sh_days_since_evt_start"].iloc[5] == 7
+
+    def test_dim29_holder_evt_days_missing_cols(self):
+        """无 evt 列 (AKShare 降级/旧数据): 两 day 特征全 NaN, 不崩."""
+        dates = pd.bdate_range("2025-01-06", periods=4)
+        df = pd.DataFrame(
+            {
+                "symbol": ["600519"] * 4,
+                "date": dates,
+                "sh_net_change_sign": [np.nan, 1.0, np.nan, np.nan],
+                "sh_change_amt_total": [np.nan, 1000.0, np.nan, np.nan],
+            }
+        )
+        out = FeatureEngineV35.dim29_holdertrade(df)
+        assert out["sh_days_since_evt_start"].isna().all()
+        assert out["sh_days_since_evt_end"].isna().all()
+
     def test_pit_active_v17(self):
         """§14.2.2 安全网 #15: is_active PIT 标签, shift(1) 确保不含 T."""
         df = make_panel(symbols=("600519",), days=300)

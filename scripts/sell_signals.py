@@ -64,9 +64,12 @@ def main() -> int:
     ap.add_argument("--date", default=datetime.now().strftime("%Y%m%d"))
     ap.add_argument("--symbols", help="逗号分隔持仓股 (缺省取昨日清单)")
     ap.add_argument("--entry", help="持仓成本 csv (symbol,cost)")
-    ap.add_argument("--tag", default="2026W31_fix",
-                    help="模型包 tag (find_bundles 默认取最新, 可能挑中训练期 brute 包"
-                         "无法推理; 默认钉在可复现的 2026W31_fix)")
+    ap.add_argument(
+        "--tag",
+        default="2026W31_fix",
+        help="模型包 tag (find_bundles 默认取最新, 可能挑中训练期 brute 包"
+        "无法推理; 默认钉在可复现的 2026W31_fix)",
+    )
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -88,12 +91,12 @@ def main() -> int:
     pipe = DailySelectionPipeline(supply=DataSupplyChain(), bundle_paths=bundles)
     entry_cost_map = _read_entry(args.entry) if args.entry else None
 
-    print(f"日期 {args.date} | 持仓 {len(symbols)} 只 | "
-          f"{'价格硬止损 -6% 已启用' if entry_cost_map else '仅预测信号 (无价格硬止损)'}")
+    print(
+        f"日期 {args.date} | 持仓 {len(symbols)} 只 | "
+        f"{'价格硬止损 -6% 已启用' if entry_cost_map else '仅预测信号 (无价格硬止损)'}"
+    )
     try:
-        out = pipe.predict_held(
-            args.date, symbols, entry_cost_map=entry_cost_map
-        )
+        out = pipe.predict_held(args.date, symbols, entry_cost_map=entry_cost_map)
     except Exception as exc:  # 数据供应链失败等
         print(f"预测失败: {exc!r}")
         return 1

@@ -1,0 +1,13 @@
+[1] 读取规范面板: D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet
+[1b] 无 DELETE 基础列需删除
+[2] 计算扩展列 (缺 ['chip_gini', 'resistance_dist', 'support_dist']) ...
+Traceback (most recent call last):
+  File "D:\AMINQT\AMINQT CODES\scripts\_backfill_cyq_ext.py", line 122, in <module>
+    main()
+  File "D:\AMINQT\AMINQT CODES\scripts\_backfill_cyq_ext.py", line 90, in main
+    cyq = _compute_panel_parallel(panel_slim, parallel)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AMINQT\AMINQT CODES\scripts\_backfill_cyq_ext.py", line 52, in _compute_panel_parallel
+    parts = list(ex.map(cyq_ext.compute_cyq_panel, chunk_frames))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\concurrent\futures\process.py", line 636, in _chain_from_iterable_of_lists
