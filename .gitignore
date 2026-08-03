@@ -29,6 +29,7 @@ data/**/*.csv
 !data/factor_registry/.gitkeep
 
 # Local test / review artifacts
+*.log
 _r*.txt
 _test_*.txt
 _test_fail*.txt
@@ -68,3 +69,6 @@ xtquant/
 
 # Graphify tool cache
 graphify-out/
+
+# Node.js (web frontend)
+web/node_modules/
