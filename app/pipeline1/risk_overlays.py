@@ -60,6 +60,15 @@ BLOCK_TRADE_CACHE = _FS_CFG.get(
 BLOCK_TRADE_LOOKBACK_DAYS = int(_FS_CFG.get("lookback_days", 5))
 BLOCK_TRADE_STALE_MAX_DAYS = int(_FS_CFG.get("stale_max_days", 7))
 
+# share_float (限售股解禁) — 未来 N 天内解禁比例累计超阈值 → 剔除 (2026-08-03 用户定案)
+SHARE_FLOAT_CACHE = _FS_CFG.get(
+    "share_float_cache",
+    "data/supply_cache/alt_data/share_float/share_float_full.parquet",
+)
+UNLOCK_WINDOW_DAYS = int(_FS_CFG.get("unlock_window_days", 30))
+UNLOCK_RATIO_THRESHOLD = float(_FS_CFG.get("unlock_ratio_threshold", 5.0))
+UNLOCK_STALE_MAX_DAYS = int(_FS_CFG.get("unlock_stale_max_days", 7))
+
 
 # ============================================================
 # E6 流动性承载
@@ -398,6 +407,76 @@ def block_trade_recent_scan(
             "FINAL STOCK SCAN: 剔除 %d 只近 %d 交易日有大宗: %s",
             len(excluded),
             lookback_days,
+            ",".join(sorted(excluded)),
+        )
+    return excluded
+
+
+# ============================================================
+# FINAL STOCK SCAN — 限售股解禁风控过滤 (用户定案 2026-08-03)
+# 出名单时读 share_float 缓存, 剔除未来 N 天解禁比例累计超阈值的候选 (风控, 非 alpha)
+# ============================================================
+def share_float_upcoming_scan(
+    symbols: list[str],
+    ref_date,
+    cache_path: str = SHARE_FLOAT_CACHE,
+    window_days: int = UNLOCK_WINDOW_DAYS,
+    ratio_threshold: float = UNLOCK_RATIO_THRESHOLD,
+    stale_max_days: int = UNLOCK_STALE_MAX_DAYS,
+) -> set[str]:
+    """FINAL STOCK SCAN: 返回 symbols 中未来 window_days 天内解禁比例累计 > ratio_threshold 的子集.
+
+    读 raw 缓存 (share_float_full.parquet, 限售股解禁日历), 剔除临近大额解禁的候选 —
+    解禁是抛压前兆, 用户定案纳入 SCAN (2026-08-03). PIT-safe: 只认名单日前已公告
+    (ann_date <= ref) 的解禁, 不 look-ahead. 缓存缺失/过期 → 返回空集 (fail-open):
+    安全网不应因数据源抖动而清空当日名单.
+    float_ratio 单位 = % (解禁股份占总股本比例, 已对 daily_basic total_share 验证).
+    """
+    if not symbols:
+        return set()
+    ref = pd.Timestamp(ref_date)
+    try:
+        sf = pd.read_parquet(
+            cache_path, columns=["symbol", "ann_date", "float_date", "float_ratio"]
+        )
+    except Exception as exc:
+        logger.warning("FINAL STOCK SCAN: 读解禁缓存失败, 跳过扫描: %s", exc)
+        return set()
+    if len(sf) == 0:
+        return set()
+    sf = sf.dropna(subset=["ann_date", "float_date"])
+    if sf["ann_date"].dtype == object:
+        sf["ann_date"] = pd.to_datetime(
+            sf["ann_date"], format="%Y%m%d", errors="coerce"
+        )
+    if sf["float_date"].dtype == object:
+        sf["float_date"] = pd.to_datetime(
+            sf["float_date"], format="%Y%m%d", errors="coerce"
+        )
+    sf = sf.dropna(subset=["ann_date", "float_date"])
+    sf = sf[sf["ann_date"] <= ref]  # PIT-safe: 只认名单日前已公告的解禁
+    if len(sf) == 0:
+        return set()
+    if (ref - sf["ann_date"].max()).days > stale_max_days:
+        logger.warning(
+            "FINAL STOCK SCAN: 解禁缓存过期 (最新公告 %s vs 名单日 %s, 差 >%d 天), 跳过扫描",
+            sf["ann_date"].max().date(),
+            ref.date(),
+            stale_max_days,
+        )
+        return set()
+    cutoff = ref + pd.Timedelta(days=window_days)
+    win = sf[(sf["float_date"] > ref) & (sf["float_date"] <= cutoff)]
+    if len(win) == 0:
+        return set()
+    accum = win.groupby("symbol")["float_ratio"].sum()
+    excluded = {s for s in symbols if accum.get(s, 0.0) > ratio_threshold}
+    if excluded:
+        logger.warning(
+            "FINAL STOCK SCAN: 剔除 %d 只未来 %d 天解禁比例累计 >%.1f%%: %s",
+            len(excluded),
+            window_days,
+            ratio_threshold,
             ",".join(sorted(excluded)),
         )
     return excluded
