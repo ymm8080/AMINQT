@@ -75,9 +75,7 @@ def test_strong_sell_when_q10_very_negative():
 
 def test_price_hard_stop_overrides_positive_prediction():
     # 预测全绿, 但已跌 7% > 6% → 硬止损红/强卖
-    out = evaluate_sell_signal(
-        pd.DataFrame([_row(pnl=-0.07)]), pnl_col="pnl"
-    )
+    out = evaluate_sell_signal(pd.DataFrame([_row(pnl=-0.07)]), pnl_col="pnl")
     assert out.loc[0, "sell_signal"] == "strong_sell"
     assert "硬止损" in out.loc[0, "sell_reason"]
 
@@ -102,9 +100,7 @@ def test_missing_columns_safe():
 def test_red_wins_over_orange_and_yellow():
     # 同票同时命中 红(pain 0.65) / 橙(pred_ret_1d -0.5%) / 黄(prob 0.48) → 红
     out = evaluate_sell_signal(
-        pd.DataFrame(
-            [_row(pred_ret_1d=-0.005, prob_up=0.48, pain_prob=0.65)]
-        )
+        pd.DataFrame([_row(pred_ret_1d=-0.005, prob_up=0.48, pain_prob=0.65)])
     )
     assert out.loc[0, "sell_signal"] == "strong_sell"
 

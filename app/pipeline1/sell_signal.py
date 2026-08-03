@@ -130,8 +130,7 @@ def evaluate_sell_signal(
 
         def _stop(idx):
             return [
-                f"硬止损{pnl[i] * 100:+.1f}%≤{price_hard_stop * 100:.0f}%"
-                for i in idx
+                f"硬止损{pnl[i] * 100:+.1f}%≤{price_hard_stop * 100:.0f}%" for i in idx
             ]
 
         hit(pnl <= price_hard_stop, 3, _stop)

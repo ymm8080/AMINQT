@@ -37,7 +37,9 @@ def main():
     if not len(bdf):
         print("ERROR: row not found in backup!")
         return
-    print(f"Backup row found: {SYMBOL} @ {TARGET_DATE.date()} (close={bdf.iloc[0]['close']})")
+    print(
+        f"Backup row found: {SYMBOL} @ {TARGET_DATE.date()} (close={bdf.iloc[0]['close']})"
+    )
 
     # 2. Confirm it is NOT already in the panel
     cur_df = pq.read_table(PANEL, columns=["symbol", "date"]).to_pandas()
@@ -82,12 +84,16 @@ def main():
 
     # 5. Verify
     pf = pq.ParquetFile(PANEL)
-    print(f"Panel now: {pf.metadata.num_rows:,} rows, {len(pf.schema_arrow.names)} cols")
+    print(
+        f"Panel now: {pf.metadata.num_rows:,} rows, {len(pf.schema_arrow.names)} cols"
+    )
     check = pq.read_table(
         PANEL,
         filters=[("symbol", "=", SYMBOL), ("date", "=", TARGET_DATE)],
     ).to_pandas()
-    print(f"Restored row present: {len(check)} | close={check.iloc[0]['close'] if len(check) else 'N/A'}")
+    print(
+        f"Restored row present: {len(check)} | close={check.iloc[0]['close'] if len(check) else 'N/A'}"
+    )
 
 
 if __name__ == "__main__":
