@@ -1,0 +1,75 @@
+2026-08-02 21:19:40,803 [INFO] 加载面板: D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet
+2026-08-02 21:19:42,615 [INFO] 面板: 2720808 行 100 列 3244 股, 2023-01-03 00:00:00 ~ 2026-07-31 00:00:00
+2026-08-02 21:19:42,753 [INFO] 需回填 2070072 行, 涉及 864 个交易日
+2026-08-02 21:19:42,753 [INFO] 拉取 stk_limit (per-date, 864 日)...
+2026-08-02 21:19:45,467 [INFO] stk_limit: 6364 stocks
+2026-08-02 21:19:45,590 [INFO] stk_limit: 6327 stocks
+2026-08-02 21:19:46,493 [INFO] stk_limit: 6486 stocks
+2026-08-02 21:19:47,597 [INFO] stk_limit: 6548 stocks
+2026-08-02 21:19:47,598 [INFO] stk_limit: 6501 stocks
+2026-08-02 21:19:48,496 [INFO] stk_limit: 6560 stocks
+2026-08-02 21:19:49,528 [INFO] stk_limit: 6568 stocks
+2026-08-02 21:19:49,560 [INFO] stk_limit: 6581 stocks
+2026-08-02 21:19:50,518 [INFO] stk_limit: 6593 stocks
+2026-08-02 21:19:51,474 [INFO] stk_limit: 6603 stocks
+2026-08-02 21:19:52,147 [INFO] stk_limit: 6617 stocks
+2026-08-02 21:19:52,422 [INFO] stk_limit: 6620 stocks
+2026-08-02 21:19:54,458 [INFO] stk_limit: 6653 stocks
+2026-08-02 21:19:54,559 [INFO] stk_limit: 6648 stocks
+2026-08-02 21:19:54,599 [INFO] stk_limit: 6641 stocks
+2026-08-02 21:19:56,501 [INFO] stk_limit: 6673 stocks
+2026-08-02 21:19:57,516 [INFO] stk_limit: 6656 stocks
+2026-08-02 21:19:59,431 [INFO] stk_limit: 6672 stocks
+2026-08-02 21:20:15,141 [WARNING] Tushare stk_limit 失败: HTTPConnectionPool(host='api.waditu.com', port=80): Read timed out.
+2026-08-02 21:20:22,067 [INFO] stk_limit: 6461 stocks
+2026-08-02 21:20:24,248 [INFO] stk_limit: 6706 stocks
+2026-08-02 21:20:26,172 [WARNING] Tushare stk_limit 失败: HTTPConnectionPool(host='api.waditu.com', port=80): Read timed out.
+2026-08-02 21:20:27,256 [INFO] stk_limit: 6718 stocks
+2026-08-02 21:20:29,244 [INFO] stk_limit: 6724 stocks
+2026-08-02 21:20:30,083 [WARNING] Tushare stk_limit 失败: HTTPConnectionPool(host='api.waditu.com', port=80): Read timed out.
+2026-08-02 21:20:31,105 [WARNING] Tushare stk_limit 失败: HTTPConnectionPool(host='api.waditu.com', port=80): Read timed out.
+2026-08-02 21:20:31,191 [INFO] stk_limit: 6729 stocks
+2026-08-02 21:20:33,109 [INFO] stk_limit: 6735 stocks
+2026-08-02 21:20:33,140 [INFO] stk_limit: 6673 stocks
+2026-08-02 21:20:35,183 [INFO] stk_limit: 6745 stocks
+2026-08-02 21:20:35,184 [INFO] stk_limit: 6751 stocks
+2026-08-02 21:20:36,999 [INFO] stk_limit: 6758 stocks
+2026-08-02 21:20:37,001 [INFO] stk_limit: 6775 stocks
+2026-08-02 21:20:37,002 [INFO] stk_limit: 6674 stocks
+2026-08-02 21:20:38,008 [INFO] stk_limit: 6680 stocks
+2026-08-02 21:20:39,042 [INFO] stk_limit: 6782 stocks
+2026-08-02 21:20:39,042 [INFO] stk_limit: 6776 stocks
+2026-08-02 21:20:39,043 [INFO] stk_limit: 6779 stocks
+2026-08-02 21:20:41,025 [INFO] stk_limit: 6791 stocks
+2026-08-02 21:20:41,112 [INFO] stk_limit: 6867 stocks
+2026-08-02 21:20:41,632 [INFO] stk_limit: 6868 stocks
+2026-08-02 21:20:42,124 [INFO] stk_limit: 6868 stocks
+2026-08-02 21:20:43,222 [INFO] stk_limit: 6892 stocks
+2026-08-02 21:20:44,237 [INFO] stk_limit: 6898 stocks
+2026-08-02 21:20:44,454 [INFO] stk_limit: 6894 stocks
+2026-08-02 21:20:45,138 [INFO] stk_limit: 6903 stocks
+2026-08-02 21:20:45,306 [INFO] stk_limit: 6920 stocks
+2026-08-02 21:20:46,455 [INFO] stk_limit: 6985 stocks
+2026-08-02 21:20:47,124 [INFO] stk_limit: 6988 stocks
+2026-08-02 21:20:47,530 [INFO] stk_limit: 6952 stocks
+2026-08-02 21:20:48,767 [INFO] stk_limit: 6986 stocks
+2026-08-02 21:20:49,629 [INFO] stk_limit: 7024 stocks
+2026-08-02 21:20:50,226 [INFO] stk_limit: 7047 stocks
+2026-08-02 21:20:50,811 [INFO] stk_limit: 7221 stocks
+2026-08-02 21:20:51,885 [INFO] stk_limit: 7343 stocks
+2026-08-02 21:20:51,892 [INFO] stk_limit: 7327 stocks
+2026-08-02 21:20:52,247 [INFO] stk_limit: 7361 stocks
+2026-08-02 21:20:52,247 [INFO] stk_limit: 7352 stocks
+2026-08-02 21:20:54,059 [INFO] stk_limit: 7405 stocks
+2026-08-02 21:20:54,060 [INFO] stk_limit: 7536 stocks
+2026-08-02 21:20:55,295 [INFO] stk_limit: 7496 stocks
+2026-08-02 21:20:56,070 [INFO] stk_limit: 7568 stocks
+2026-08-02 21:20:56,071 [INFO] stk_limit: 7562 stocks
+2026-08-02 21:20:57,457 [INFO] stk_limit: 7628 stocks
+2026-08-02 21:21:24,466 [WARNING] Tushare stk_limit 失败: HTTPConnectionPool(host='api.waditu.com', port=80): Read timed out.
+2026-08-02 21:21:31,550 [INFO] stk_limit: 7542 stocks
+2026-08-02 21:21:32,584 [INFO] 拉取完成: 6014875 行, 864 个交易日, 7958 股
+2026-08-02 21:21:35,020 [INFO] NaN 单元格匹配率: 100.0%
+2026-08-02 21:21:35,142 [INFO] 回填后 up_limit_raw 剩余 NaN: 0 (覆盖率 100.00%)
+2026-08-02 21:21:35,424 [INFO] 备份: D:\AMINQT\PARQUET\panel_full_enriched_v3_prestklimit_20260802_212135.parquet
+2026-08-02 21:21:46,789 [INFO] 完成: 面板已写回, 耗时 126.0 秒

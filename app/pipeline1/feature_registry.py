@@ -89,6 +89,8 @@ NON_FEATURE_COLS = {
     "name",
     "tradestatus",
     "announce_date",
+    "sh_evt_start_date",
+    "sh_evt_end_date",
     "report_period",
     "time",
     "market_state",

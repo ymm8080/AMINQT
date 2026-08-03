@@ -1,0 +1,27 @@
+20:54:09 [INFO] Loading panel: data/panel_full_enriched_v3.parquet
+20:54:11 [INFO] Trimmed to 63 days (2026-04-30 → 2026-07-31), 300 stocks, 18832 rows
+20:54:11 [INFO] Patched WINDOW_TOTAL=63 WINDOW_TRANSITION=63 (orig: 770/560)
+20:54:11 [INFO] Cleaning: dual=4856 rows (0.1s)
+20:54:27 [INFO] dim28: SW daily history loaded: 871577 rows, 428 indices
+20:54:28 [INFO] dim28: L1 — 4845/4856 rows filled (99.8%)
+20:54:29 [INFO] dim28: L2 — 4790/4856 rows filled (98.6%)
+20:54:30 [INFO] dim28: L3 — 4697/4856 rows filled (96.7%)
+20:54:33 [INFO] Features: 497 cols (22.4s)
+20:54:34 [INFO] Labels: 4856 rows after masking (0.2s)
+20:54:36 [INFO] FeatureSelector: gate_d
+20:54:36 [INFO] NaN filter: 469 -> 423 (threshold=0.95)
+20:54:47 [INFO] GateD: 423 -> 423 features (best_ir=0.7725 @ n=423, sat_n=423)
+20:54:47 [INFO] FeatureSelection: 423/423 selected (12s)
+20:54:47 [INFO] Training dual board: tag=2026W31_3m features=423 rows=4856
+Traceback (most recent call last):
+  File "D:\AMINQT\AMINQT CODES\_smoke_train_predict.py", line 34, in <module>
+    exec(compile(_src, "_train_predict_dual_1y.py", "exec"), {"__file__": _src_path, "__name__": "__main__"})
+  File "_train_predict_dual_1y.py", line 119, in <module>
+    oos_1d = res.get("oos", {}).get("ics", {}).get("1d_reg", 0.0)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AMINQT\AMINQT CODES\app\pipeline1\dual_track_trainer.py", line 718, in weekly_retrain
+    trained = self.train_window(
+              ^^^^^^^^^^^^^^^^^^
+  File "D:\AMINQT\AMINQT CODES\app\pipeline1\dual_track_trainer.py", line 303, in train_window
+    raise RuntimeError(
+RuntimeError: [dual] 训练样本深度不足: 62 交易日 (需 ≥ 150)

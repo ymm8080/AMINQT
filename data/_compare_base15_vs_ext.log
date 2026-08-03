@@ -1,0 +1,124 @@
+2026-08-02 09:26:13,830 INFO 构建 OOS 帧 [dual] ...
+2026-08-02 09:28:17,030 INFO dim28: SW daily history loaded: 871577 rows, 428 indices
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:728: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\app\pipeline1\feature_engine_v35.py:732: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+===========================================================================
+B 基础15列 vs 扩展候选 — C bundle, July OOS (drop=全模型IC-打乱后IC)
+col                   stand_m  drop_m gain_m  stand_d  drop_d gain_d  redun
+---------------------------------------------------------------------------
+A_variant(整包)         -0.2039                 -0.1185                      
+B_variant(整包)         -0.2033                 -0.1240                      
+C_variant(整包)         -0.2265                 -0.1236                      
+---------------------------------------------------------------------------
+cost_95pct            -0.1727 +0.0000      0  +0.0171 +0.0000      0  1.000
+winner_ratio          -0.1098 +0.0000      0  -0.1969 +0.0000      0  1.000
+pct_90_high           -0.1727 -0.0017     16  +0.0171 +0.0014     20  1.000
+pct_90_low            -0.1591 -0.0006     25  +0.0758 +0.0011     28  1.000
+pct_90_con            -0.1512 +0.0002     56  -0.1523 +0.0018     68  0.955
+cost_50pct            -0.1697 +0.0000      0  +0.0501 +0.0000      0  1.000
+cost_85pct            -0.1693 +0.0000      0  +0.0251 +0.0000      0  1.000
+pct_70_con            -0.1130 +0.0003     66  -0.1441 -0.0001     71  0.955
+avg_cost              -0.1697 +0.0009     10  +0.0501 +0.0002     31  1.000
+cost_5pct             -0.1591 +0.0000      0  +0.0758 +0.0000      0  1.000
+weight_avg            -0.1690 -0.0003      8  +0.0443 +0.0006     14  1.000
+pct_70_low            -0.1655 -0.0014     11  +0.0703 +0.0005     16  1.000
+pct_70_high           -0.1693 +0.0038     16  +0.0251 +0.0008     19  1.000
+benefit_part          -0.1098 -0.0003     32  -0.1969 -0.0004     28  1.000
+cost_15pct            -0.1655 +0.0000      0  +0.0703 +0.0000      0  1.000
+chip_entropy          +0.1138 +0.0017    114  +0.0582 +0.0063    150  0.177
+chip_skew_dist        +0.0137 +0.0026    190  -0.0903 +0.0014    111  0.150
+peak_roc_5d           -0.0413 +0.0036    185  -0.0301 +0.0003    122  0.181
+peak_roc_20d          -0.1196 +0.0032    155  -0.0374 +0.0015    174  0.276
+peak_mass             -0.0424 -0.0018    136  -0.0788 -0.0005    150  0.224
+===========================================================================
+注: stand=独立rank IC; drop>0模型使用该列; gain=真实importance(位置对齐); redun=vs base-15最大|spearman|

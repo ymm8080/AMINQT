@@ -136,6 +136,6 @@ def evaluate_sell_signal(
 
         hit(pnl <= price_hard_stop, 3, _stop)
 
-    out["sell_signal"] = [SIGNAL_LEVELS[l] for l in level]
+    out["sell_signal"] = [SIGNAL_LEVELS[level_idx] for level_idx in level]
     out["sell_reason"] = [r if r else "持有" for r in reason]
     return out

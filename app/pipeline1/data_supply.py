@@ -1828,6 +1828,16 @@ class DataSupplyChain:
                                 format="%Y%m%d",
                                 errors="coerce",
                             ),
+                            "evt_start_date": pd.to_datetime(
+                                raw.get("evt_start_date", ""),
+                                format="%Y%m%d",
+                                errors="coerce",
+                            ),
+                            "evt_end_date": pd.to_datetime(
+                                raw.get("evt_end_date", ""),
+                                format="%Y%m%d",
+                                errors="coerce",
+                            ),
                         }
                     )
                     out["sh_net_sign"] = in_de.apply(
