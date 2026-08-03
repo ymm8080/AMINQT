@@ -21,12 +21,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 import pandas as pd  # noqa: E402
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("fill_fina_gaps")
 
-V3_PATH = os.getenv(
-    "FILL_V3_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
-)
+V3_PATH = os.getenv("FILL_V3_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
 CACHE_DIR = "data/supply_cache/alt_data/fina_indicator/backfill_20260802_full"
 
 # cache raw field -> v3 column (only the 4 gapped in 2023)
@@ -46,7 +46,13 @@ def main() -> None:
 
     logger.info("加载 v3...")
     v3 = pd.read_parquet(V3_PATH)
-    logger.info("v3: %d 行 %d 列, %s ~ %s", len(v3), len(v3.columns), v3["date"].min(), v3["date"].max())
+    logger.info(
+        "v3: %d 行 %d 列, %s ~ %s",
+        len(v3),
+        len(v3.columns),
+        v3["date"].min(),
+        v3["date"].max(),
+    )
 
     logger.info("加载缓存...")
     frames = []
@@ -60,7 +66,9 @@ def main() -> None:
     logger.info("缓存: %d 行, %d 股", len(fina), fina["symbol"].nunique())
 
     fina = fina.rename(columns=FILL_MAP)
-    fina["announce_date"] = pd.to_datetime(fina["ann_date"], format="%Y%m%d", errors="coerce")
+    fina["announce_date"] = pd.to_datetime(
+        fina["ann_date"], format="%Y%m%d", errors="coerce"
+    )
     fina = fina.dropna(subset=["announce_date"])
     keep = ["symbol", "announce_date"] + list(FILL_MAP.values())
     fina = fina[keep].drop_duplicates(subset=["symbol", "announce_date"], keep="last")
@@ -71,8 +79,10 @@ def main() -> None:
     fina = fina.sort_values("_date").reset_index(drop=True)
 
     # before overwrite: WORM dated backup
-    backup = V3_PATH.replace(".parquet", "_prefina2023_{}.parquet".format(
-        pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")))
+    backup = V3_PATH.replace(
+        ".parquet",
+        "_prefina2023_{}.parquet".format(pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")),
+    )
     shutil.copy2(V3_PATH, backup)
     logger.info("备份: %s", backup)
 
@@ -103,7 +113,10 @@ def main() -> None:
         after = float(v3[col].notna().mean() * 100)
         logger.info(
             "  %s: fill %d 行, 覆盖率 %.2f%% -> %.2f%%",
-            col, n_fill, before, after,
+            col,
+            n_fill,
+            before,
+            after,
         )
 
     v3 = v3.drop(columns=["_date"])
@@ -111,7 +124,9 @@ def main() -> None:
 
     logger.info("保存 v3...")
     v3.to_parquet(V3_PATH, index=False)
-    logger.info("完成: %d 行 %d 列, %.1f 秒", len(v3), len(v3.columns), time.time() - t0)
+    logger.info(
+        "完成: %d 行 %d 列, %.1f 秒", len(v3), len(v3.columns), time.time() - t0
+    )
 
 
 if __name__ == "__main__":

@@ -23,14 +23,11 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import numpy as np
 import pandas as pd
 
 import _verify_cyq_drop as V  # noqa: E402
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("analyze_v3_cyq_cols")
 
 MODEL_DIR = V.MODEL_DIR
@@ -38,10 +35,19 @@ PANEL_PATH = V.PANEL_PATH
 
 # V3 面板实际的 CYQ 原始列 (_x/_y 双源)
 RAW_FIELDS = [
-    "benefit_part", "avg_cost",
-    "pct_70_low", "pct_70_high", "pct_70_con",
-    "pct_90_low", "pct_90_high", "pct_90_con",
-    "cost_5pct", "cost_15pct", "cost_50pct", "cost_85pct", "cost_95pct",
+    "benefit_part",
+    "avg_cost",
+    "pct_70_low",
+    "pct_70_high",
+    "pct_70_con",
+    "pct_90_low",
+    "pct_90_high",
+    "pct_90_con",
+    "cost_5pct",
+    "cost_15pct",
+    "cost_50pct",
+    "cost_85pct",
+    "cost_95pct",
     "weight_avg",
 ]
 X_COLS = [f"{f}_x" for f in RAW_FIELDS]
@@ -84,7 +90,9 @@ def redundancy_in_cluster(df: pd.DataFrame, col: str, cluster: list[str]) -> flo
     others = [c for c in cluster if c != col and c in df.columns]
     if col not in df.columns or not others:
         return 0.0
-    return float(df[[col] + others].corr(method="spearman").abs().loc[col, others].max())
+    return float(
+        df[[col] + others].corr(method="spearman").abs().loc[col, others].max()
+    )
 
 
 def main() -> None:
@@ -110,7 +118,9 @@ def main() -> None:
     # ── 2. 逐列统计 ──
     cluster = cluster_cols(oos["main"])
     cluster_d = cluster_cols(oos["dual"])
-    print(f"\n======== 2. V3 实际 CYQ 簇 (main={len(cluster)}, dual={len(cluster_d)}) ========")
+    print(
+        f"\n======== 2. V3 实际 CYQ 簇 (main={len(cluster)}, dual={len(cluster_d)}) ========"
+    )
     print(f"  簇: {', '.join(cluster)}")
 
     hdr = f"{'col':<26}{'stand_m':>9}{'drop_m':>9}{'gain_m':>8}{'stand_d':>9}{'drop_d':>9}{'gain_d':>8}{'redun':>7}"
@@ -131,11 +141,15 @@ def main() -> None:
                 f"{gains[b].get(col, 0.0):.0f}".rjust(8),
             ]
             if redun_v is None:
-                redun_v = redundancy_in_cluster(df, col, cluster if b == "main" else cluster_d)
+                redun_v = redundancy_in_cluster(
+                    df, col, cluster if b == "main" else cluster_d
+                )
         cells.append(f"{redun_v:.3f}".rjust(7) if redun_v is not None else "     -")
         print("".join(cells))
     print("-" * len(hdr))
-    print("stand=独立rankIC; drop=全模型IC-打乱该列IC; gain=真实importance; redun=簇内最大|spearman|")
+    print(
+        "stand=独立rankIC; drop=全模型IC-打乱该列IC; gain=真实importance; redun=簇内最大|spearman|"
+    )
 
     # ── 3. dedup_l2 在 V3 簇上 ──
     print("\n======== 3. dedup_l2 (0.7) 在 V3 实际 CYQ 簇 ========")
@@ -144,6 +158,7 @@ def main() -> None:
         cl = cluster if b == "main" else cluster_d
         try:
             from app.pipeline1.feature_selector import dedup_l2
+
             kept = dedup_l2(cl, df, threshold=0.7)
         except Exception as e:  # noqa: BLE001
             logger.warning("dedup_l2 失败 [%s]: %s", b, e)

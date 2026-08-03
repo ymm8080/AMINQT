@@ -107,9 +107,7 @@ def _compute_cyq_one_day(
 
         H = math.floor((h - minprice) / accuracy)
         L_idx = math.ceil((l - minprice) / accuracy)
-        density = (
-            factor - 1 if h == l else _safe_div(2.0, h - l, factor - 1)
-        )
+        density = factor - 1 if h == l else _safe_div(2.0, h - l, factor - 1)
         avg_bucket = math.floor((avg - minprice) / accuracy)
 
         for n in range(factor):
@@ -194,9 +192,13 @@ def _compute_cyq_one_day(
 
     sorted_p = sorted(p)
     n_p = factor
-    chip_gini = (2 * sum(i * x for i, x in enumerate(sorted_p, start=1))) / (
-        n_p * sum(sorted_p)
-    ) - (n_p + 1) / n_p if sum(sorted_p) > 0 else 0.0
+    chip_gini = (
+        (2 * sum(i * x for i, x in enumerate(sorted_p, start=1)))
+        / (n_p * sum(sorted_p))
+        - (n_p + 1) / n_p
+        if sum(sorted_p) > 0
+        else 0.0
+    )
 
     dist_mean = sum(pi * prices[i] for i, pi in enumerate(p))
     dist_var = sum(pi * (prices[i] - dist_mean) ** 2 for i, pi in enumerate(p))
@@ -210,7 +212,9 @@ def _compute_cyq_one_day(
     def _mass_above(price_th: float) -> float:
         if total_chips <= 0:
             return 0.0
-        return sum(xdata[i] for i in range(factor) if prices[i] > price_th) / total_chips
+        return (
+            sum(xdata[i] for i in range(factor) if prices[i] > price_th) / total_chips
+        )
 
     mass_above_close = _mass_above(current_price)
     mass_above_1_1x = _mass_above(current_price * 1.1)
@@ -225,7 +229,11 @@ def _compute_cyq_one_day(
             is_above = prices[i] > current_price
             if is_above != above:
                 continue
-            dist = abs(prices[i] - current_price) / current_price if current_price > 0 else 0.0
+            dist = (
+                abs(prices[i] - current_price) / current_price
+                if current_price > 0
+                else 0.0
+            )
             if best is None or dist < best:
                 best = dist
         return best if best is not None else 0.0

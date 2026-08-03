@@ -193,13 +193,17 @@ def enrich_cyq(
         if cyq_symbols >= panel_symbols:
             missing = panel_symbols - cyq_symbols
             if not missing:
-                return panel.merge(_keep_cyq_base_cols(cyq), on=["symbol", "date"], how="left")
+                return panel.merge(
+                    _keep_cyq_base_cols(cyq), on=["symbol", "date"], how="left"
+                )
             # 部分缺失: 只计算缺失的股票
             need = [s for s in panel["symbol"].unique() if s in missing]
             new_cyq = compute_cyq_panel(panel[panel["symbol"].isin(need)])
             cyq = pd.concat([cyq, new_cyq], ignore_index=True)
             cyq.to_parquet(cyq_cache, index=False)
-            return panel.merge(_keep_cyq_base_cols(cyq), on=["symbol", "date"], how="left")
+            return panel.merge(
+                _keep_cyq_base_cols(cyq), on=["symbol", "date"], how="left"
+            )
 
     # 全量计算 + 缓存
     cyq = compute_cyq_panel(panel)

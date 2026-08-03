@@ -18,14 +18,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import numpy as np
 import pandas as pd
 
 import _verify_cyq_drop as V  # noqa: E402
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("data_chip_cols")
 
 CANDIDATES = [
@@ -101,7 +98,7 @@ def decile_table(df: pd.DataFrame, col: str) -> pd.DataFrame:
 def main() -> None:
     frames = {b: load_oos(b) for b in ("main", "dual")}
     for col in CANDIDATES:
-        print(f"\n{'='*72}\n### {col}\n{'='*72}")
+        print(f"\n{'=' * 72}\n### {col}\n{'=' * 72}")
         for b, df in frames.items():
             if col not in df.columns:
                 print(f"[{b}] 列不存在")
@@ -119,10 +116,12 @@ def main() -> None:
                 f"pos_frac={ic['pos_frac']:.2f} min={ic['min_day']:+.4f} max={ic['max_day']:+.4f}"
             )
             dec = decile_table(df, col)
-            row = "  ".join(f"D{d:.0f}={r['mean_label']*100:+.2f}%" for d, r in dec.iterrows())
+            row = "  ".join(
+                f"D{d:.0f}={r['mean_label'] * 100:+.2f}%" for d, r in dec.iterrows()
+            )
             print(f"十分位 → 3d净收益: {row}")
             spread = dec["mean_label"].iloc[-1] - dec["mean_label"].iloc[0]
-            print(f"  D10-D1 spread = {spread*100:+.2f}pp")
+            print(f"  D10-D1 spread = {spread * 100:+.2f}pp")
 
 
 if __name__ == "__main__":

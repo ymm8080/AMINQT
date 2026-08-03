@@ -20,9 +20,7 @@ import pandas as pd
 
 import _verify_cyq_drop as V  # noqa: E402  (导入即应用其 monkeypatch, 无害)
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("recover_cyq_percol")
 
 MODEL_DIR = V.MODEL_DIR
@@ -51,7 +49,9 @@ def main() -> None:
         model_cols[b] = [
             c for c in bundle_c[b]["feature_cols"] if c in oos_df[b].columns
         ]
-        logger.info("[%s] OOS 帧 %d rows / %d cols", b, len(oos_df[b]), len(model_cols[b]))
+        logger.info(
+            "[%s] OOS 帧 %d rows / %d cols", b, len(oos_df[b]), len(model_cols[b])
+        )
 
     # 逐列统计 (与主脚本 per-col 循环同逻辑)
     per_col: dict[str, dict] = {}
@@ -71,16 +71,23 @@ def main() -> None:
         per_col[col] = info
 
     # ── 输出 ──
-    print("\n======== DedupL2 幸存扩展列 (%d/%d) ========" % (len(kept_ext), len(EXTRA_FEATURES)))
+    print(
+        "\n======== DedupL2 幸存扩展列 (%d/%d) ========"
+        % (len(kept_ext), len(EXTRA_FEATURES))
+    )
     print(", ".join(kept_ext) if kept_ext else "(全部被去重)")
 
     print("\n======== PER-COLUMN (C 模型单次训练; drop=全模型IC-打乱该列后IC) ========")
-    print(f"{'col':<22}{'keep':>5}{'stand_m':>8}{'drop_m':>8}{'gain_m':>7}{'stand_d':>8}{'drop_d':>8}{'gain_d':>7}{'redun':>7}")
+    print(
+        f"{'col':<22}{'keep':>5}{'stand_m':>8}{'drop_m':>8}{'gain_m':>7}{'stand_d':>8}{'drop_d':>8}{'gain_d':>7}{'redun':>7}"
+    )
     for col, info in sorted(
         per_col.items(),
-        key=lambda kv: -max(
-            kv[1].get("main", {}).get("drop", 0.0),
-            kv[1].get("dual", {}).get("drop", 0.0),
+        key=lambda kv: (
+            -max(
+                kv[1].get("main", {}).get("drop", 0.0),
+                kv[1].get("dual", {}).get("drop", 0.0),
+            )
         ),
     ):
         m, d = info.get("main"), info.get("dual")

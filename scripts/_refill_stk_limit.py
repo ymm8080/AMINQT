@@ -8,6 +8,7 @@
 
 WORM: 改写前日期后缀备份, os.replace 原子写. 严禁与其他面板写脚本并发.
 """
+
 from __future__ import annotations
 
 import logging
@@ -22,7 +23,9 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("refill_stk_limit")
 
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
@@ -40,8 +43,11 @@ def main():
     panel = pd.read_parquet(PANEL)
     logger.info(
         "面板: %d 行 %d 列 %d 股, %s ~ %s",
-        len(panel), len(panel.columns), panel["symbol"].nunique(),
-        panel["date"].min(), panel["date"].max(),
+        len(panel),
+        len(panel.columns),
+        panel["symbol"].nunique(),
+        panel["date"].min(),
+        panel["date"].max(),
     )
 
     if "up_limit_raw" not in panel.columns:
@@ -77,13 +83,16 @@ def main():
     fetch_df = fetch_df.drop_duplicates(subset=["symbol", "date"])
     logger.info(
         "拉取完成: %d 行, %d 个交易日, %d 股",
-        len(fetch_df), fetch_df["date"].nunique(), fetch_df["symbol"].nunique(),
+        len(fetch_df),
+        fetch_df["date"].nunique(),
+        fetch_df["symbol"].nunique(),
     )
 
     # 只回填 NaN 单元格: 先记录命中率, 匹配率过低于中止
     merged = panel[["symbol", "date"]].merge(
         fetch_df[["symbol", "date", "up_limit_raw", "down_limit_raw"]],
-        on=["symbol", "date"], how="left",
+        on=["symbol", "date"],
+        how="left",
     )
     hit = merged.loc[missing_mask, "up_limit_raw"].notna()
     hit_rate = hit.mean() if len(hit) else 0.0
@@ -93,14 +102,21 @@ def main():
         return
 
     panel.loc[missing_mask, "up_limit_raw"] = merged.loc[missing_mask, "up_limit_raw"]
-    panel.loc[missing_mask, "down_limit_raw"] = merged.loc[missing_mask, "down_limit_raw"]
+    panel.loc[missing_mask, "down_limit_raw"] = merged.loc[
+        missing_mask, "down_limit_raw"
+    ]
 
     after_missing = int(panel["up_limit_raw"].isna().sum())
-    logger.info("回填后 up_limit_raw 剩余 NaN: %d (覆盖率 %.2f%%)",
-                after_missing, (len(panel) - after_missing) / len(panel) * 100)
+    logger.info(
+        "回填后 up_limit_raw 剩余 NaN: %d (覆盖率 %.2f%%)",
+        after_missing,
+        (len(panel) - after_missing) / len(panel) * 100,
+    )
 
-    backup = PANEL.replace(".parquet", "_prestklimit_{}.parquet".format(
-        pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")))
+    backup = PANEL.replace(
+        ".parquet",
+        "_prestklimit_{}.parquet".format(pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")),
+    )
     shutil.copy2(PANEL, backup)
     logger.info("备份: %s", backup)
     tmp = PANEL + ".tmp"

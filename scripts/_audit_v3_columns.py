@@ -25,9 +25,7 @@ import pandas as pd
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("audit_v3_columns")
 
-PANEL_PATH = os.getenv(
-    "PANEL_PATH", "data/panel_full_enriched_v3.parquet"
-)
+PANEL_PATH = os.getenv("PANEL_PATH", "data/panel_full_enriched_v3.parquet")
 OUT_REPORT = os.getenv(
     "AUDIT_OUT", "data/v3_column_audit_{}.md".format(date.today().strftime("%Y%m%d"))
 )
@@ -42,8 +40,12 @@ def _cov_stats(df: pd.DataFrame, col: str) -> dict:
     n = len(df)
     if not nn.any():
         return {
-            "n_nn": 0, "cov": 0.0, "n_sym": 0, "n_date": 0,
-            "first": None, "last": None,
+            "n_nn": 0,
+            "cov": 0.0,
+            "n_sym": 0,
+            "n_date": 0,
+            "first": None,
+            "last": None,
         }
     d = df.loc[nn, "date"]
     return {
@@ -78,6 +80,7 @@ def main() -> None:
     num_cols = [c for c in cols if pd.api.types.is_numeric_dtype(df[c])]
 
     lines: list[str] = []
+
     def out(s: str = "") -> None:
         print(s)
         lines.append(s)
@@ -86,15 +89,19 @@ def main() -> None:
     out("=" * 100)
     out("V3 PANEL COLUMN COVERAGE & DATA QUALITY AUDIT")
     out(f"  面板: {PANEL_PATH}")
-    out(f"  窗口: {YEAR_START}-01-01 ~ {TODAY.date()} (数据 {dmin.date()} ~ {dmax.date()})")
+    out(
+        f"  窗口: {YEAR_START}-01-01 ~ {TODAY.date()} (数据 {dmin.date()} ~ {dmax.date()})"
+    )
     out(f"  行数: {rows:,} | symbol: {n_sym:,} | 交易日: {n_day:,}")
     out(f"  列数: {len(cols)} (数值 {len(num_cols)})")
     out("=" * 100)
 
     # ── 1. 逐列覆盖率 ──
     out(f"\n## 1. 逐列覆盖率 ({len(cols)} 列, 按覆盖率升序)")
-    hdr = (f"{'col':<30}{'cov%':>7}{'n_nn':>10}{'n_sym':>7}{'n_date':>7}"
-           f"{'first':>11}{'last':>11}")
+    hdr = (
+        f"{'col':<30}{'cov%':>7}{'n_nn':>10}{'n_sym':>7}{'n_date':>7}"
+        f"{'first':>11}{'last':>11}"
+    )
     out(hdr)
     out("-" * len(hdr))
     year_cov = _year_cov(df)
@@ -113,8 +120,10 @@ def main() -> None:
             f"{year_cov.loc[y, c]:6.1f}" if c in year_cov.columns else "     -"
             for y in years_present
         )
-        out(f"{c:<30}{cov:>7}{s['n_nn']:>10}{s['n_sym']:>7}{s['n_date']:>7}"
-            f"{first:>11}{last:>11}  {yc}")
+        out(
+            f"{c:<30}{cov:>7}{s['n_nn']:>10}{s['n_sym']:>7}{s['n_date']:>7}"
+            f"{first:>11}{last:>11}  {yc}"
+        )
 
     # ── 2. 时间断更检测: 首年无数据或末年无数据 ──
     out("\n## 2. 时间覆盖异常列")
@@ -127,8 +136,10 @@ def main() -> None:
         has_last = c not in year_cov.columns or yc.get(last_y, 0) > 0.5
         mid = [y for y in years_present if yc.get(y, 0) > 50]
         if (not has_first or not has_last) and mid:
-            out(f"  {c:<30} 首年cov={yc.get(first_y, 0):.1f}% "
-                f"末年cov={yc.get(last_y, 0):.1f}% 但中间覆盖良好 → 断更/新列")
+            out(
+                f"  {c:<30} 首年cov={yc.get(first_y, 0):.1f}% "
+                f"末年cov={yc.get(last_y, 0):.1f}% 但中间覆盖良好 → 断更/新列"
+            )
             flag = True
     if not flag:
         out("  (无)")
@@ -185,21 +196,26 @@ def main() -> None:
         if c not in df.columns:
             continue
         if pd.api.types.is_bool_dtype(df[c]):
-            out(f"  {c:<14} True={int(df[c].sum()):>8,} False={int((~df[c]).sum()):>8,}")
+            out(
+                f"  {c:<14} True={int(df[c].sum()):>8,} False={int((~df[c]).sum()):>8,}"
+            )
         else:
             n_nn = int(df[c].notna().sum())
-            out(f"  {c:<14} 非空={n_nn:>9,} ({n_nn/rows*100:6.2f}%)")
+            out(f"  {c:<14} 非空={n_nn:>9,} ({n_nn / rows * 100:6.2f}%)")
     if "board" in df.columns:
         out("\n  board 分布:")
         for b, n in df["board"].value_counts().items():
-            out(f"    {str(b):<10} {n:>9,} ({n/rows*100:5.2f}%)")
+            out(f"    {str(b):<10} {n:>9,} ({n / rows * 100:5.2f}%)")
 
     # ── 4. 关键缺口汇总 (覆盖率 < 50% 且非设计性稀疏) ──
     out("\n## 4. 覆盖率 < 50% 的列 (前 25)")
     low = [c for c in cols if stats[c]["cov"] < 50]
     low.sort(key=lambda c: stats[c]["cov"])
     for c in low[:25]:
-        yc = " ".join(f"{year_cov.loc[y, c]:.0f}%" if c in year_cov.columns else "  -" for y in years_present)
+        yc = " ".join(
+            f"{year_cov.loc[y, c]:.0f}%" if c in year_cov.columns else "  -"
+            for y in years_present
+        )
         out(f"  {c:<30} cov={stats[c]['cov']:6.2f}%  per-year: {yc}")
 
     # ── 写报告 ──

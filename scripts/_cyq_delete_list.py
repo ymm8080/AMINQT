@@ -26,9 +26,7 @@ REDUN_REFUSE = 0.70  # 冗余度超过此值判高冗余
 def main() -> None:
     oos = {b: C.load_oos(b) for b in ("main", "dual")}
     bundle_c = {
-        b: V.DualTrackTrainer.load(
-            os.path.join(V.MODEL_DIR, f"{b}_ab_c_bundle.pkl")
-        )
+        b: V.DualTrackTrainer.load(os.path.join(V.MODEL_DIR, f"{b}_ab_c_bundle.pkl"))
         for b in ("main", "dual")
     }
     model_cols = {
@@ -72,13 +70,19 @@ def main() -> None:
 
     # 扩展列先, 基础列后
     ext = [r for r in rows if r["col"] in V.EXTRA_FEATURES]
-    base = [r for r in rows if r["col"] in V.BASE_15 and r["col"] not in V.EXTRA_FEATURES]
+    base = [
+        r for r in rows if r["col"] in V.BASE_15 and r["col"] not in V.EXTRA_FEATURES
+    ]
     ext.sort(key=lambda r: (r["verdict"], -r["drop_max"]))
     base.sort(key=lambda r: (r["verdict"], -r["drop_max"]))
 
     print("=" * 110)
-    print("CYQ 删列/保留清单 — C bundle, July OOS (drop=全模型IC-打乱后IC; redun=vs base-15 最大|spearman|)")
-    print(f"{'col':<22}{'verdict':>8}{'dedup':>6}{'drop_m':>8}{'drop_d':>8}{'stand_m':>9}{'stand_d':>9}{'gain_m':>7}{'gain_d':>7}{'redun':>7}")
+    print(
+        "CYQ 删列/保留清单 — C bundle, July OOS (drop=全模型IC-打乱后IC; redun=vs base-15 最大|spearman|)"
+    )
+    print(
+        f"{'col':<22}{'verdict':>8}{'dedup':>6}{'drop_m':>8}{'drop_d':>8}{'stand_m':>9}{'stand_d':>9}{'gain_m':>7}{'gain_d':>7}{'redun':>7}"
+    )
     print("-" * 110)
     for r in ext + base:
         m, d = r["main"], r["dual"]
@@ -96,7 +100,9 @@ def main() -> None:
     keep_ext = [c for c in keep if c in V.EXTRA_FEATURES]
     print(f"\nKEEP   ({len(keep)}): {', '.join(keep)}")
     print(f"DELETE ({len(dele)}): {', '.join(dele)}")
-    print(f"\n[扩展列] KEEP {len(keep_ext)}/{len(V.EXTRA_FEATURES)}: {', '.join(keep_ext)}")
+    print(
+        f"\n[扩展列] KEEP {len(keep_ext)}/{len(V.EXTRA_FEATURES)}: {', '.join(keep_ext)}"
+    )
 
 
 if __name__ == "__main__":

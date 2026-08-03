@@ -46,9 +46,7 @@ def _compute_panel_parallel(panel_slim: pd.DataFrame, n_workers: int) -> pd.Data
         panel_slim[panel_slim["symbol"].isin(s)].copy() for s in chunks if len(s)
     ]
     t0 = time.time()
-    with concurrent.futures.ProcessPoolExecutor(
-        max_workers=len(chunk_frames)
-    ) as ex:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=len(chunk_frames)) as ex:
         parts = list(ex.map(cyq_ext.compute_cyq_panel, chunk_frames))
     out = pd.concat(parts, ignore_index=True)
     print(f"    并行计算完成 ({time.time() - t0:.0f}s, {len(chunk_frames)} workers)")

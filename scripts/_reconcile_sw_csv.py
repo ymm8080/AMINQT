@@ -26,6 +26,8 @@ merged = pd.concat([full, inc], ignore_index=True).drop_duplicates(
     subset=["ts_code"], keep="first"
 )
 print(f"merged={len(merged)} (expect {len(full) + len(inc)})")
-assert len(merged) == len(full) + len(inc), "overlap between literal and incremental rows?"
+assert len(merged) == len(full) + len(inc), (
+    "overlap between literal and incremental rows?"
+)
 merged.to_csv(MAPPED, index=False)
 print(f"wrote {len(merged)} rows to {MAPPED}")

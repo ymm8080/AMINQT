@@ -147,8 +147,10 @@ def main():
     pf.close()
 
     # ── 4. WORM backup + atomic replace ──
-    backup = PANEL.replace(".parquet", "_presw_{}.parquet".format(
-        pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")))
+    backup = PANEL.replace(
+        ".parquet",
+        "_presw_{}.parquet".format(pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")),
+    )
     shutil.copy2(PANEL, backup)
     logger.info(f"备份: {backup}")
     os.replace(tmp_path, PANEL)

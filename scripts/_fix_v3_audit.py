@@ -10,6 +10,7 @@
 
 WORM: 改写前备份, os.replace 原子写. 严禁与其他面板写脚本并发.
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,11 +25,20 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("fix_v3_audit")
 
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
-FINA_DIR = ROOT / "data" / "supply_cache" / "alt_data" / "fina_indicator" / "backfill_20260802_full"
+FINA_DIR = (
+    ROOT
+    / "data"
+    / "supply_cache"
+    / "alt_data"
+    / "fina_indicator"
+    / "backfill_20260802_full"
+)
 
 from app.pipeline1.cleaning_pipeline import board_of  # noqa: E402
 
@@ -132,8 +142,11 @@ def main():
     panel = pd.read_parquet(PANEL)
     logger.info(
         "面板: %d 行 %d 列 %d 股, %s ~ %s",
-        len(panel), len(panel.columns), panel["symbol"].nunique(),
-        panel["date"].min(), panel["date"].max(),
+        len(panel),
+        len(panel.columns),
+        panel["symbol"].nunique(),
+        panel["date"].min(),
+        panel["date"].max(),
     )
 
     before = {
@@ -161,8 +174,10 @@ def main():
     logger.info("修复后: %s", after)
 
     # ── 4. WORM 备份 + 原子写 ──
-    backup = PANEL.replace(".parquet", "_preauditfix_{}.parquet".format(
-        pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")))
+    backup = PANEL.replace(
+        ".parquet",
+        "_preauditfix_{}.parquet".format(pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")),
+    )
     shutil.copy2(PANEL, backup)
     logger.info("备份: %s", backup)
     tmp = PANEL + ".tmp"

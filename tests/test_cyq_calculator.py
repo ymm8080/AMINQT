@@ -6,7 +6,6 @@
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from app.pipeline1.cyq_ext import (
     TARGET_COLS,
@@ -91,10 +90,18 @@ def test_cost_percentiles_monotonic():
 def test_mass_fractions_bounded():
     out = _compute_cyq_for_stock(_synthetic_kdata())
     last = out.iloc[-1]
-    for c in ("mass_above_close", "mass_above_1_1x", "mass_above_1_2x", "mass_below_0_9x", "peak_mass"):
+    for c in (
+        "mass_above_close",
+        "mass_above_1_1x",
+        "mass_above_1_2x",
+        "mass_below_0_9x",
+        "peak_mass",
+    ):
         assert 0.0 <= last[c] <= 1.0, f"{c}={last[c]:.3f}"
     # 越高的阈值上方筹码越少
-    assert last["mass_above_close"] >= last["mass_above_1_1x"] >= last["mass_above_1_2x"]
+    assert (
+        last["mass_above_close"] >= last["mass_above_1_1x"] >= last["mass_above_1_2x"]
+    )
 
 
 def test_entropy_gini_nonnegative():
@@ -108,7 +115,9 @@ def test_entropy_gini_nonnegative():
 def test_compute_cyq_panel_includes_extended():
     k = _synthetic_kdata()
     k["symbol"] = "000001"
-    panel = compute_cyq_panel(k[["symbol", "date", "open", "close", "high", "low", "turnover_rate"]])
+    panel = compute_cyq_panel(
+        k[["symbol", "date", "open", "close", "high", "low", "turnover_rate"]]
+    )
     assert "peak_price" in panel.columns
     assert len(panel) == len(k) - 60  # 预热期跳过 120/2 天
 

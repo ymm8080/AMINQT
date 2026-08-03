@@ -30,9 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import pandas as pd
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("verify_cyq_drop")
 
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
@@ -73,8 +71,8 @@ OOS_HI = pd.Timestamp("2026-07-28")  # 3d 标签需前瞻, 面板截至 2026-07-
 LOOKBACK = pd.Timestamp("2025-07-01")  # OOS 特征回看起点 (bias_250 ≈ 1年)
 
 SEED = 42
-N_MAIN = 300   # 沪深300 成分 (主板仅此)
-N_DUAL = 300   # 双创成交额活跃 top-300
+N_MAIN = 300  # 沪深300 成分 (主板仅此)
+N_DUAL = 300  # 双创成交额活跃 top-300
 
 LABEL = "label_pm_3d_net"
 
@@ -97,13 +95,31 @@ CYQ_COLS = [
 
 # 扩展候选列: Calculator 150桶分布导出的新列 + Tier-0 组合 + 众数迁移
 EXTRA_FEATURES = [
-    "cost_10pct", "cost_20pct", "cost_30pct", "cost_40pct",
-    "cost_60pct", "cost_70pct", "cost_80pct",
-    "peak_price", "peak_mass", "chip_entropy", "chip_gini", "chip_skew_dist",
-    "mass_above_close", "mass_above_1_1x", "mass_above_1_2x", "mass_below_0_9x",
-    "resistance_dist", "support_dist", "pct_60_con", "pct_80_con",
-    "benefit_x_con", "price_position", "chip_range_width",
-    "peak_roc_5d", "peak_roc_20d",
+    "cost_10pct",
+    "cost_20pct",
+    "cost_30pct",
+    "cost_40pct",
+    "cost_60pct",
+    "cost_70pct",
+    "cost_80pct",
+    "peak_price",
+    "peak_mass",
+    "chip_entropy",
+    "chip_gini",
+    "chip_skew_dist",
+    "mass_above_close",
+    "mass_above_1_1x",
+    "mass_above_1_2x",
+    "mass_below_0_9x",
+    "resistance_dist",
+    "support_dist",
+    "pct_60_con",
+    "pct_80_con",
+    "benefit_x_con",
+    "price_position",
+    "chip_range_width",
+    "peak_roc_5d",
+    "peak_roc_20d",
 ]
 # cyq_panel 缓存已有的基础列 (含 Calculator 的 winner_ratio 别名)
 BASE_15 = set(CYQ_COLS) | {"winner_ratio"}
@@ -122,9 +138,7 @@ def load_csi300() -> set[str]:
     return set(codes)
 
 
-def select_universe(
-    panel: pd.DataFrame, n_dual: int = N_DUAL
-) -> pd.DataFrame:
+def select_universe(panel: pd.DataFrame, n_dual: int = N_DUAL) -> pd.DataFrame:
     """主板=沪深300成分; 双创=近90日成交额活跃 top-n_dual.
 
     主板与双创按证券代码前缀划分 (board_of), 沪深300 含少数双创成分,
@@ -332,14 +346,10 @@ def main() -> None:
     }
     results: dict[tuple[str, str], float] = {}
     for name, (vpanel, tag) in variants.items():
-        train = vpanel[
-            (vpanel["date"] >= TRAIN_LO) & (vpanel["date"] <= TRAIN_END)
-        ]
+        train = vpanel[(vpanel["date"] >= TRAIN_LO) & (vpanel["date"] <= TRAIN_END)]
         n_days = int(train["date"].nunique())
         assert n_days >= 150, f"训练窗口过短: {n_days} < 150"
-        paths = {
-            b: os.path.join(MODEL_DIR, f"{b}_{tag}.pkl") for b in ("main", "dual")
-        }
+        paths = {b: os.path.join(MODEL_DIR, f"{b}_{tag}.pkl") for b in ("main", "dual")}
         if not all(os.path.exists(p) for p in paths.values()):
             logger.info(
                 "=== TRAIN %s: %d rows / %d syms / %d days ===",
@@ -397,24 +407,32 @@ def main() -> None:
 
     # ── 汇总输出 ──
     print("\n======== A/B/C 汇总 (外部 OOS 2026-07, t+3 rank IC) ========")
-    print("注: A=原面板(_x/_y→dim21 OHLCV代理CYQ); B=真实Calculator基础15; C=B+25扩展列(单次bundled).")
+    print(
+        "注: A=原面板(_x/_y→dim21 OHLCV代理CYQ); B=真实Calculator基础15; C=B+25扩展列(单次bundled)."
+    )
     for b in ("main", "dual"):
         a = results[("A_current", b)]
         print(
-            f"[{b}] A(proxy)={a:.4f}  B(calc)={b_base[b]:.4f}  Δ(B-A)={b_base[b]-a:+.4f}  "
-            f"C(bundle)={c_ic[b]:.4f}  Δ(C-B)={c_ic[b]-b_base[b]:+.4f}"
+            f"[{b}] A(proxy)={a:.4f}  B(calc)={b_base[b]:.4f}  Δ(B-A)={b_base[b] - a:+.4f}  "
+            f"C(bundle)={c_ic[b]:.4f}  Δ(C-B)={c_ic[b] - b_base[b]:+.4f}"
         )
 
-    print(f"\n======== DedupL2 幸存扩展列 ({len(kept_ext)}/{len(EXTRA_FEATURES)}) ========")
+    print(
+        f"\n======== DedupL2 幸存扩展列 ({len(kept_ext)}/{len(EXTRA_FEATURES)}) ========"
+    )
     print(", ".join(kept_ext) if kept_ext else "(全部被去重)")
 
     print("\n======== PER-COLUMN (C 模型单次训练; drop=全模型IC-打乱该列后IC) ========")
-    print(f"{'col':<22}{'keep':>5}{'stand_m':>8}{'drop_m':>8}{'gain_m':>7}{'stand_d':>8}{'drop_d':>8}{'gain_d':>7}{'redun':>7}")
+    print(
+        f"{'col':<22}{'keep':>5}{'stand_m':>8}{'drop_m':>8}{'gain_m':>7}{'stand_d':>8}{'drop_d':>8}{'gain_d':>7}{'redun':>7}"
+    )
     for col, info in sorted(
         per_col.items(),
-        key=lambda kv: -max(
-            kv[1].get("main", {}).get("drop", 0.0),
-            kv[1].get("dual", {}).get("drop", 0.0),
+        key=lambda kv: (
+            -max(
+                kv[1].get("main", {}).get("drop", 0.0),
+                kv[1].get("dual", {}).get("drop", 0.0),
+            )
         ),
     ):
         m, d = info.get("main"), info.get("dual")

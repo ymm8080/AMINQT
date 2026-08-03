@@ -27,7 +27,9 @@ sys.path.insert(0, str(ROOT))
 import pandas as pd  # noqa: E402
 import tushare as ts  # noqa: E402
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("refill_lhb_2023")
 
 V3_PATH = os.getenv("FILL_V3_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
@@ -46,7 +48,9 @@ def _fetch_day(pro, ymd: str) -> pd.DataFrame:
         except Exception as exc:
             last = exc
             wait = 10 * attempt
-            logger.warning("  %s 重试 %d/5: %s (%ds 后重试)", ymd, attempt, str(exc)[:120], wait)
+            logger.warning(
+                "  %s 重试 %d/5: %s (%ds 后重试)", ymd, attempt, str(exc)[:120], wait
+            )
             time.sleep(wait)
     else:
         raise last
@@ -108,15 +112,23 @@ def main() -> None:
     v3["date"] = pd.to_datetime(v3["date"])
     logger.info("v3: %d 行 %d 列", len(v3), len(v3.columns))
 
-    backup = V3_PATH.replace(".parquet", "_prelhb2023_{}.parquet".format(
-        pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")))
+    backup = V3_PATH.replace(
+        ".parquet",
+        "_prelhb2023_{}.parquet".format(pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")),
+    )
     shutil.copy2(V3_PATH, backup)
     logger.info("备份: %s", backup)
 
-    n_art = int(((lhb[["lhb_buy_amt", "lhb_sell_amt"]].fillna(0).abs() > 1e11).any(axis=1)).sum())
+    n_art = int(
+        (
+            (lhb[["lhb_buy_amt", "lhb_sell_amt"]].fillna(0).abs() > 1e11).any(axis=1)
+        ).sum()
+    )
     if n_art:
         logger.info("剔除不合理超大额 LHB (%d 行): buy/sell > 1e11", n_art)
-        lhb = lhb[~((lhb[["lhb_buy_amt", "lhb_sell_amt"]].fillna(0).abs() > 1e11).any(axis=1))]
+        lhb = lhb[
+            ~((lhb[["lhb_buy_amt", "lhb_sell_amt"]].fillna(0).abs() > 1e11).any(axis=1))
+        ]
 
     y2023 = v3["date"].dt.year == 2023
     mask = y2023 & (v3[LHB_COLS].isna().all(axis=1) | v3[LHB_COLS].eq(0).all(axis=1))
@@ -143,7 +155,9 @@ def main() -> None:
         logger.info("  %s: %d 行为真实值", c, n_real)
 
     v3.to_parquet(V3_PATH, index=False)
-    logger.info("完成: %d 行 %d 列, %.1f 秒", len(v3), len(v3.columns), time.time() - t0)
+    logger.info(
+        "完成: %d 行 %d 列, %.1f 秒", len(v3), len(v3.columns), time.time() - t0
+    )
 
 
 if __name__ == "__main__":

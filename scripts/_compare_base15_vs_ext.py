@@ -21,9 +21,7 @@ import pandas as pd
 
 import _verify_cyq_drop as V  # noqa: E402
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("compare_base15_vs_ext")
 
 CANDIDATES = [
@@ -57,9 +55,7 @@ def load_oos(board: str) -> pd.DataFrame:
 def main() -> None:
     oos_df = {b: load_oos(b) for b in ("main", "dual")}
     bundle_c = {
-        b: V.DualTrackTrainer.load(
-            os.path.join(V.MODEL_DIR, f"{b}_ab_c_bundle.pkl")
-        )
+        b: V.DualTrackTrainer.load(os.path.join(V.MODEL_DIR, f"{b}_ab_c_bundle.pkl"))
         for b in ("main", "dual")
     }
     model_cols = {
@@ -115,12 +111,14 @@ def main() -> None:
                     f"{v['drop']:+.4f}".rjust(8),
                     f"{v['gain']:.0f}".rjust(7),
                 ]
-        redun = (r["main"] or r["dual"])
+        redun = r["main"] or r["dual"]
         redun_v = redun["redun"] if redun else None
         cells.append(f"{redun_v:.3f}".rjust(7) if redun_v is not None else "     -")
         print("".join(cells))
     print("=" * len(hdr))
-    print("注: stand=独立rank IC; drop>0模型使用该列; gain=真实importance(位置对齐); redun=vs base-15最大|spearman|")
+    print(
+        "注: stand=独立rank IC; drop>0模型使用该列; gain=真实importance(位置对齐); redun=vs base-15最大|spearman|"
+    )
 
 
 if __name__ == "__main__":

@@ -43,9 +43,24 @@ KEEP_DERIVED = {"cost_bias", "conc_trend_20d", "conc_90_industry_rank"}
 KEEP = KEEP_BASE | KEEP_EXT | KEEP_DERIVED
 DELETE_BASE = set(CYQ_BASE_DELETE)
 
-CYQ_MARKERS = ("chip", "peak", "entropy", "skew", "support", "resist", "winner",
-               "benefit", "conc_90", "conc_trend", "cost50", "avg_cost", "cost_",
-               "weight_avg", "pct_70", "pct_90")
+CYQ_MARKERS = (
+    "chip",
+    "peak",
+    "entropy",
+    "skew",
+    "support",
+    "resist",
+    "winner",
+    "benefit",
+    "conc_90",
+    "conc_trend",
+    "cost50",
+    "avg_cost",
+    "cost_",
+    "weight_avg",
+    "pct_70",
+    "pct_90",
+)
 _NON_CYQ = {"body_pct_ma20", "body_pct_ma5"}
 
 
@@ -91,7 +106,9 @@ def main() -> None:
     print(f"\n[registry] {REG}  active CYQ = {len(active_cyq)}")
     print(f"  {active_cyq}")
     if set(active_cyq) != KEEP:
-        print(f"[FAIL] active CYQ != KEEP 15\n  缺: {sorted(KEEP - set(active_cyq))}\n  多: {sorted(set(active_cyq) - KEEP)}")
+        print(
+            f"[FAIL] active CYQ != KEEP 15\n  缺: {sorted(KEEP - set(active_cyq))}\n  多: {sorted(set(active_cyq) - KEEP)}"
+        )
         fail += 1
     else:
         print("[ok] active CYQ == KEEP 15")
@@ -109,7 +126,9 @@ def main() -> None:
         out_cyq = sorted(c for c in out.columns if is_cyq(c))
         print(f"  build 输出 CYQ 列 ({len(out_cyq)}): {out_cyq}")
         if set(out_cyq) != KEEP:
-            print(f"[FAIL] build 输出 CYQ != KEEP 15\n  缺: {sorted(KEEP - set(out_cyq))}\n  多: {sorted(set(out_cyq) - KEEP)}")
+            print(
+                f"[FAIL] build 输出 CYQ != KEEP 15\n  缺: {sorted(KEEP - set(out_cyq))}\n  多: {sorted(set(out_cyq) - KEEP)}"
+            )
             fail += 1
         else:
             print("[ok] build 输出 CYQ == KEEP 15")
