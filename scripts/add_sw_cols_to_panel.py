@@ -8,6 +8,7 @@ Usage: python scripts/add_sw_cols_to_panel.py
 """
 
 import os
+import shutil
 import sys
 import logging
 import pandas as pd
@@ -145,10 +146,12 @@ def main():
     writer.close()
     pf.close()
 
-    # ── 4. Atomic replace ──
-    if os.path.exists(PANEL):
-        os.remove(PANEL)
-    os.rename(tmp_path, PANEL)
+    # ── 4. WORM backup + atomic replace ──
+    backup = PANEL.replace(".parquet", "_presw_{}.parquet".format(
+        pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")))
+    shutil.copy2(PANEL, backup)
+    logger.info(f"备份: {backup}")
+    os.replace(tmp_path, PANEL)
 
     # ── 5. Audit ──
     logger.info("\n" + "=" * 55)

@@ -16,7 +16,8 @@ Sources fetched:
 Derived (computed from panel history, reads only needed columns):
   - bias_5..250, bias_cross, ma_vol_ratio_5_20, amplitude_5d
   - vol_surge, amt_surge
-  - pct_70_con, pct_90_con (cyq formula: (hi-lo)/(hi+lo), [0,1] range)
+  - pct_90_con (cyq formula: (hi-lo)/(hi+lo), [0,1] range)
+  - cost_bias, conc_trend_20d, conc_90_industry_rank (CYQ 派生列, dim21 公式)
   - Forward-fill: financials (quarterly), margin(T+1 gap), announce_date,
     sw_l1_name/sw_l2_name/sw_l3_name (Shenwan classification, static per symbol)
 
@@ -34,6 +35,8 @@ from datetime import datetime
 import tushare as ts
 from dotenv import load_dotenv
 load_dotenv()
+
+from app.pipeline1 import cyq_ext
 
 TRADE_DATE = sys.argv[1] if len(sys.argv) > 1 else datetime.now().strftime("%Y%m%d")
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
@@ -104,10 +107,10 @@ merges = {
         "pe_ttm", "pb", "ps_ttm", "total_share", "float_share",
         "free_share", "total_mv", "circ_mv", "dv_ratio", "dv_ttm",
         "turnover_rate"]),
-    "cyq_perf": (cyq, ["cost_5pct", "cost_15pct", "cost_50pct", "cost_85pct",
-        "cost_95pct", "weight_avg", "winner_rate",
-        "avg_cost", "pct_70_low", "pct_70_high", "pct_70_con",
-        "pct_90_low", "pct_90_high", "pct_90_con"]),
+    # V3 (2026-08-02): 只直连 KEEP 基础列 (同名字段).
+    # winner_rate→winner_ratio / avg_cost=cost_50pct 由显式块处理;
+    # pct_90_high/pct_90_con 由下方从 cost_5pct/cost_95pct 推导; 删除列不落盘.
+    "cyq_perf": (cyq, ["cost_50pct", "cost_95pct", "weight_avg"]),
     "margin_detail": (margin, ["rzye", "rqye", "rzmre", "rqyl"]),
 }
 # Aggregate LHB by symbol
@@ -185,15 +188,16 @@ if "cost_50pct" in df.columns and "avg_cost" in panel_cols:
 def safe_div(a, b):
     return np.where((b.notna() & (b != 0)), a / b, np.nan)
 
-for lo, hi, llo, lhi, lcon in [
-    ("cost_5pct", "cost_95pct", "pct_90_low", "pct_90_high", "pct_90_con"),
-    ("cost_15pct", "cost_85pct", "pct_70_low", "pct_70_high", "pct_70_con"),
-]:
-    if all(c in df.columns or c in panel_cols for c in [llo, lhi, lcon]):
-        if lo in df.columns and hi in df.columns:
-            df[llo] = df[lo]
-            df[lhi] = df[hi]
-            df[lcon] = safe_div(df[hi] - df[lo], df[hi] + df[lo])
+# V3 删列 (2026-08-02): pct_90_low / pct_70_* / cost_5pct/15pct/85pct 不再落盘.
+# pct_90_high / pct_90_con 仍 KEEP → 直接从原始 cyq (Tushare cyq_perf) 推导.
+if len(cyq) and {"cost_5pct", "cost_95pct"} <= set(cyq.columns):
+    cmap = cyq.set_index("symbol")[["cost_5pct", "cost_95pct"]]
+    c5 = df["symbol"].map(cmap["cost_5pct"])
+    c95 = df["symbol"].map(cmap["cost_95pct"])
+    if "pct_90_high" in panel_cols and "pct_90_high" not in df.columns:
+        df["pct_90_high"] = c95
+    if "pct_90_con" in panel_cols and "pct_90_con" not in df.columns:
+        df["pct_90_con"] = safe_div(c95 - c5, c95 + c5)
 
 # --- is_suspended ---
 if len(susp):
@@ -234,7 +238,7 @@ print("\n[5] Computing rolling features from history...")
 symbols = sorted(df["symbol"].unique())
 
 # Read only needed columns from panel
-hist_cols = ["symbol", "date", "close_hfq", "volume", "high", "low", "pre_close", "open", "amount"]
+hist_cols = ["symbol", "date", "close_hfq", "volume", "high", "low", "pre_close", "open", "amount", "pct_90_con"]
 hist_cols = [c for c in hist_cols if c in panel_cols]
 hist = pq.read_table(PANEL, columns=hist_cols).to_pandas()
 hist = hist[hist["symbol"].isin(symbols)]
@@ -305,6 +309,47 @@ for col, surge_col in [("volume", "vol_surge"), ("amount", "amt_surge")]:
                 and pd.notna(last_s[sym]) and last_s[sym] > 0):
                 vals[sym] = (today_vals[sym] - last_m[sym]) / last_s[sym]
         df[surge_col] = df["symbol"].map(vals)
+
+# --- CYQ 筹码形态扩展列 (chip_morphology): compute_cyq_today 补今日 8 列 ---
+cyq_ext_cols = [c for c in cyq_ext.TARGET_COLS if c in panel_cols]
+cyq_need = ["open", "high", "low", "close", "turnover_rate"]
+if cyq_ext_cols and all(c in df.columns for c in cyq_need):
+    cyq_hist_cols = ["symbol", "date"] + cyq_need
+    if "peak_price" in panel_cols:
+        cyq_hist_cols.append("peak_price")
+    cyq_hist = pq.read_table(PANEL, columns=cyq_hist_cols).to_pandas()
+    cyq_hist = cyq_hist[cyq_hist["symbol"].isin(symbols)]
+    cyq_hist = cyq_hist[cyq_hist["date"] < pd.Timestamp(TRADE_DATE)]
+    # NaN turnover_rate → 0, 否则 min(1.0, nan/100) 污染整个筹码分布
+    cyq_hist["turnover_rate"] = cyq_hist["turnover_rate"].fillna(0.0)
+    today_slim = df[["symbol", "date"] + cyq_need].copy()
+    today_slim["turnover_rate"] = today_slim["turnover_rate"].fillna(0.0)
+    try:
+        cyq_today = cyq_ext.compute_cyq_today(cyq_hist, today_slim)
+        for c in cyq_ext_cols:
+            if c in cyq_today.columns:
+                df[c] = df["symbol"].map(cyq_today.set_index("symbol")[c])
+        print(f"    cyq_ext today: {len(cyq_ext_cols)} 列已计算 "
+              f"({', '.join(cyq_ext_cols)})")
+    except Exception as e:
+        print(f"    cyq_ext today: FAILED ({e})")
+
+# --- CYQ 派生列 (cost_bias / conc_trend_20d / conc_90_industry_rank) ---
+# 公式与 dim21_chip_tushare (feature_engine_v35.py) / scripts/_add_cyq_derived_cols.py 一致.
+# cost_bias 与 conc_90_industry_rank 仅用今日行; conc_trend_20d 用 hist 的 t-20 pct_90_con.
+derived_cyq = ["cost_bias", "conc_trend_20d", "conc_90_industry_rank"]
+if any(c in panel_cols for c in derived_cyq):
+    if "cost_bias" in panel_cols and {"close_hfq", "cost_50pct"} <= set(df.columns):
+        df["cost_bias"] = (df["close_hfq"] - df["cost_50pct"]) / df["cost_50pct"].replace(0, np.nan)
+    if "conc_trend_20d" in panel_cols and "pct_90_con" in df.columns and "pct_90_con" in hist.columns:
+        h90 = hist[hist["date"] < pd.Timestamp(TRADE_DATE)]
+        prev20 = h90.groupby("symbol")["pct_90_con"].shift(19).groupby(h90["symbol"]).last()
+        df["conc_trend_20d"] = df["pct_90_con"] / df["symbol"].map(prev20).replace(0, np.nan)
+    if "conc_90_industry_rank" in panel_cols and "pct_90_con" in df.columns and "industry" in df.columns:
+        df["conc_90_industry_rank"] = (
+            df.groupby("industry", observed=True)["pct_90_con"].rank(pct=True).fillna(0.5)
+        )
+    print(f"    cyq derived today: {[c for c in derived_cyq if c in panel_cols]}")
 
 # ── 6. Forward-fill quarterly & slow data ──
 print("\n[6] Forward-filling quarterly/slow data...")
