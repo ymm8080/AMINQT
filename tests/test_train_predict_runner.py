@@ -154,10 +154,7 @@ class TestEnrichPanel:
         out = enrich_panel(self._mini())
         board = dict(zip(out["symbol"], out["board"]))
         assert board == {"600519": "main", "300750": "GEM", "688981": "STAR"}
-        assert out["is_st"].eq(False).all()
         assert out["is_suspended"].eq(False).all()
-        days = out.sort_values(["symbol", "date"]).groupby("symbol")["list_days"]
-        assert all(list(g) == [1, 2] for _, g in days if len(g) == 2)
         assert out["industry"].eq("UNKNOWN").all()
         assert (out["free_float_turnover_rate"] == out["turnover_rate"]).all()
 
@@ -168,8 +165,6 @@ class TestEnrichPanel:
             name_map={"300750": "ST宁德"},
         )
         assert out.loc[out["symbol"] == "600519", "industry"].iloc[0] == "白酒"
-        assert out.loc[out["symbol"] == "300750", "is_st"].iloc[0]
-        assert not out.loc[out["symbol"] == "600519", "is_st"].iloc[0]
 
 
 # ---------------- assemble_panel ----------------
@@ -210,7 +205,7 @@ class TestAssemblePanel:
             cache_dir=str(tmp_path / "panels"),
         )
         assert set(panel["symbol"]) == {"600519", "300750"}
-        assert {"board", "is_st", "list_days", "industry"} <= set(panel.columns)
+        assert {"board", "is_suspended", "industry"} <= set(panel.columns)
         # 缓存落盘 (WORM 日期后缀 + universe 哈希) + 二次调用读缓存
         cached = list((tmp_path / "panels").glob("panel_20260724_3y_*.parquet"))
         assert len(cached) == 1

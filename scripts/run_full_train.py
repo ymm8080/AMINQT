@@ -15,6 +15,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
+from config.settings import PANEL_V3_PATH
 from app.pipeline1.train_runner import run_training
 from app.pipeline1.cleaning_pipeline import CleaningPipeline, CleaningConfig
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
@@ -24,8 +25,8 @@ from app.pipeline1.predictor import V35Predictor
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-TAG = "2026W31_full"
-PANEL_PATH = "data/panel_full_enriched.parquet"
+TAG = "2026W32_full"
+PANEL_PATH = str(PANEL_V3_PATH)
 
 
 def main():

@@ -45,9 +45,7 @@ def _make_panel(n_symbols=10, n_dates=60, seed=42):
                     "pre_close": close * 0.995,
                     "board": "main",
                     "industry": "银行",
-                    "is_st": 0,
                     "is_suspended": 0,
-                    "list_days": 500,
                     "eps": np.random.normal(1.5, 0.3),
                     "bps": np.random.normal(8.0, 1.0),
                     "ocfps": np.random.normal(0.5, 0.2),
@@ -79,9 +77,7 @@ def _make_small_df(n_symbols=3, n_dates=30, n_extra_feats=0, seed=123):
                 "pre_close": close * 0.995,
                 "board": "main",
                 "industry": "银行",
-                "is_st": 0,
                 "is_suspended": 0,
-                "list_days": 500,
             }
             for j in range(n_extra_feats):
                 row[f"extra_{j}"] = np.random.normal(0, 1)
@@ -535,9 +531,7 @@ class TestFeatureSelectorSelection:
                         "pre_close": close * 0.995,
                         "board": "GEM",
                         "industry": "科技",
-                        "is_st": 0,
                         "is_suspended": 0,
-                        "list_days": 500,
                         "label_pm_1d_net": np.random.randn(),
                         "label_1d_net": np.random.randn(),
                     }
@@ -804,9 +798,7 @@ class TestEndToEndMini:
                         "pre_close": close * 0.995,
                         "board": "GEM",
                         "industry": "科技",
-                        "is_st": 0,
                         "is_suspended": 0,
-                        "list_days": 500,
                         "label_pm_1d_net": np.random.randn(),
                         "label_1d_net": np.random.randn(),
                     }

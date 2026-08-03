@@ -1,14 +1,0 @@
-INFO - 加载面板: data/panel_full_enriched_v3.parquet (3227 stocks, 654618 rows, 77 cols)
-INFO - cyq_tushare 将在 alt enrich 中拉取, 跳过 enrich_cyq (OHLCV 计算器)
-INFO - 检测到缺失 alt 数据源: ['sector_index']
-INFO - 检测到陈旧 alt 数据源 (NaN率过高): ['northbound', 'margin', 'fina_indicator', 'holdernumber', 'cyq_tushare']
-INFO - 替代数据源 enrich: ['sector_index'], 日期范围: 20240102 - 20260727
-INFO -   sector_index: 16740 行, 8 新列 -> panel
-INFO - 替代数据源 enrich: ['northbound', 'margin', 'fina_indicator', 'holdernumber', 'cyq_tushare'], 日期范围: 20240102 - 20260727
-INFO - Tushare moneyflow_hsgt: 300 行北向净买入数据 (最近日期 20260727)
-  0%|          | 0/3 [00:00<?, ?it/s] 33%|███▎      | 1/3 [00:02<00:05,  2.96s/it] 67%|██████▋   | 2/3 [00:06<00:03,  3.10s/it]100%|██████████| 3/3 [00:08<00:00,  2.95s/it]                                             INFO - AKShare 北向资金(沪股通): 过滤 454 行无明细数据 (最后有效日期≈2024-08-16)
-  0%|          | 0/3 [00:00<?, ?it/s] 33%|███▎      | 1/3 [00:03<00:06,  3.01s/it] 67%|██████▋   | 2/3 [00:06<00:03,  3.10s/it]100%|██████████| 3/3 [00:08<00:00,  2.64s/it]                                             INFO - AKShare 北向资金(深股通): 过滤 454 行无明细数据 (最后有效日期≈2024-08-16)
-INFO -   northbound: 448 行, 5 新列 -> panel
-INFO - Tushare margin_detail 批量仅 2 天 (<100), 启动逐日补采
-INFO -   融资融券逐日补采: 335 个交易日 (步长 2)
-INFO -     ... 11/335 完成

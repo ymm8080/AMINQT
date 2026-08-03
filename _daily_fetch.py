@@ -12,6 +12,7 @@ Sources fetched:
   6. cyq_perf — chip distribution (batch, one call)
   7. margin_detail — margin balance (per-stock)
   8. top_list — LHB (dragon-tiger board)
+  9. stock_basic — name/list_date (ingest gate: ST/*ST 或 上市 <150 交易日不入库)
 
 Derived (computed from panel history, reads only needed columns):
   - bias_5..250, bias_cross, ma_vol_ratio_5_20, amplitude_5d
@@ -35,6 +36,8 @@ from datetime import datetime
 import time
 import tushare as ts
 from dotenv import load_dotenv
+from config.settings import INGEST_MIN_LIST_DAYS
+from app.pipeline1.ingest_scan import apply_ingest_scan
 load_dotenv()
 
 from app.pipeline1 import cyq_ext
@@ -88,6 +91,20 @@ def safe_fetch(fn, name, max_retries=3, **kwargs):
     print(f"    {name}: giving up after {max_retries} attempts")
     return pd.DataFrame()
 
+_stock_basic_cache: pd.DataFrame | None = None
+
+def fetch_stock_basic_cached() -> pd.DataFrame:
+    """Tushare stock_basic (name/list_date), 模块级缓存 — 静态数据每日不变."""
+    global _stock_basic_cache
+    if _stock_basic_cache is None:
+        _stock_basic_cache = safe_fetch(
+            pro.stock_basic, "stock_basic", exchange="", list_status="L",
+            fields="ts_code,name,list_date",
+        )
+        if len(_stock_basic_cache):
+            _stock_basic_cache = _stock_basic_cache.set_index("symbol")
+    return _stock_basic_cache
+
 ohlcv = safe_fetch(pro.daily, "OHLCV", trade_date=TRADE_DATE)
 adj   = safe_fetch(pro.adj_factor, "adj_factor", trade_date=TRADE_DATE)
 basic = safe_fetch(pro.daily_basic, "daily_basic", trade_date=TRADE_DATE)
@@ -96,10 +113,42 @@ susp  = safe_fetch(pro.suspend_d, "suspend", trade_date=TRADE_DATE)
 cyq   = safe_fetch(pro.cyq_perf, "cyq_perf", trade_date=TRADE_DATE)
 margin= safe_fetch(pro.margin_detail, "margin_detail", trade_date=TRADE_DATE)
 lhb   = safe_fetch(pro.top_list, "LHB", trade_date=TRADE_DATE)
+bt    = safe_fetch(pro.block_trade, "block_trade", trade_date=TRADE_DATE)
 
 if not len(ohlcv):
     print("FATAL: No OHLCV data")
     sys.exit(1)
+
+# ── block_trade: 当日大宗明细 → raw 缓存 (FINAL STOCK SCAN 读它, 需每日刷新) ──
+# 只刷新 raw 缓存, 不落面板 bt_* 列 (特征工程已 REVERT; SCAN 出名单时直接读缓存剔除).
+if len(bt):
+    try:
+        from app.core.config_loader import load_config
+        _bt_cache = (
+            load_config("data_pipeline_config")
+            .get("final_stock_scan", {})
+            .get("block_trade_cache", "data/supply_cache/alt_data/block_trade/block_trade_full.parquet")
+        )
+        _bt_path = (
+            _bt_cache if os.path.isabs(_bt_cache)
+            else os.path.join(os.path.dirname(os.path.abspath(__file__)), _bt_cache)
+        )
+        old = pd.read_parquet(_bt_path) if os.path.exists(_bt_path) else pd.DataFrame()
+        bt_raw = bt.copy()
+        bt_raw["date"] = pd.Timestamp(TRADE_DATE)
+        _keep = ["symbol", "date", "ts_code", "trade_date", "price", "vol", "amount", "buyer", "seller"]
+        bt_raw = bt_raw[[c for c in _keep if c in bt_raw.columns]]
+        # 去重: 同 symbol+trade_date 保留最新 (历史日重跑安全)
+        merged = pd.concat([old, bt_raw], ignore_index=True)
+        merged = merged.drop_duplicates(subset=["symbol", "trade_date"], keep="last")
+        merged = merged.sort_values(["symbol", "date"]).reset_index(drop=True)
+        os.makedirs(os.path.dirname(_bt_path), exist_ok=True)
+        _tmp = _bt_path + ".tmp"
+        merged.to_parquet(_tmp, index=False)
+        os.replace(_tmp, _bt_path)  # 原子替换, 避免崩溃写坏缓存导致 SCAN fail-open
+        print(f"    block_trade raw cache: +{len(bt)} rows -> {len(merged)} total")
+    except Exception as e:
+        print(f"    block_trade raw cache: FAILED ({e})")
 
 # ── 2. Build today's DataFrame ──
 print("\n[2] Building today's frame...")
@@ -176,6 +225,28 @@ if len(lhb):
             smap = lhb.set_index("symbol")[src]
             df[tgt] = df["symbol"].map(smap)
 
+# GLM 龙虎榜 spec: 席位明细 (散户大本营"拉萨"/机构专用) per 股-日.
+# 列由回填脚本首次加入面板 schema, 此处仅填充已存在的列 (panel_cols 守卫).
+if len(lhb):
+    try:
+        from app.pipeline1.data_supply import DataSupplyChain
+        _seat_supply = DataSupplyChain()
+    except Exception:
+        _seat_supply = None
+    if _seat_supply is not None:
+        seat_cols = ["lhb_retail_buy", "lhb_retail_sell", "lhb_inst_buy", "lhb_inst_sell"]
+        for col in seat_cols:
+            if col in panel_cols and col not in df.columns:
+                df[col] = np.nan
+        for sym in lhb["symbol"].unique().tolist():
+            agg = _seat_supply.fetch_lhb_seat_aggregate(sym, TRADE_DATE)
+            if not agg:
+                continue
+            m = df["symbol"] == sym
+            for k, v in agg.items():
+                if k in panel_cols and k in df.columns:
+                    df.loc[m, k] = v
+
 # ── 4. Compute derived columns ──
 print("\n[4] Computing derived columns...")
 
@@ -218,27 +289,31 @@ if len(susp):
     suspended_set = set(susp["symbol"].unique())
     df["is_suspended"] = df["symbol"].isin(suspended_set).astype(int)
 
-# --- 元数据列: 与基建面板同语义 (board/is_st/industry/list_days) ---
-# 基建 (panel_builder): board=board_of (main/GEM/STAR); industry=东财行业板块, 缺省 UNKNOWN;
-# is_st=名称判断; list_days=每股累计交易日数 (cumcount). 日更必须延续这些语义 —
-# 不能再引入 stock_basic 的交易所代码 / 109 行业 / 上市日历天数, 否则尾部特征跳变.
+# --- 元数据列: 与基建面板同语义 (board/industry) ---
+# 基建 (panel_builder): board=board_of (main/GEM/STAR); industry=东财行业板块, 缺省 UNKNOWN.
+# 日更必须延续这些语义 — 不能再引入 stock_basic 的交易所代码 / 109 行业, 否则尾部特征跳变.
+# is_st/list_days 已从 V3 移除: ST/次新由下方 ingest scan 按 stock_basic name/list_date 过滤.
 if "board" in panel_cols:
     df["board"] = df["symbol"].map(board_of)
-meta_carry_cols = ["is_st", "industry", "list_days"]
+meta_carry_cols = ["industry"]
 meta_hist = pq.read_table(PANEL, columns=["symbol", "date"] + meta_carry_cols).to_pandas()
 meta_hist = meta_hist[meta_hist["date"] < pd.Timestamp(TRADE_DATE)]
 last_meta = meta_hist.sort_values("date").groupby("symbol").last()
-for col in ["is_st", "industry"]:
-    if col in panel_cols:
-        smap = last_meta[col].dropna()
-        df[col] = df["symbol"].map(smap)
-        df[col] = df[col].fillna(False if col == "is_st" else "UNKNOWN")
-if "list_days" in panel_cols and "list_days" in last_meta.columns:
-    ld = last_meta["list_days"].dropna()
-    df["list_days"] = df["symbol"].map(ld) + 1
+if "industry" in panel_cols and "industry" in last_meta.columns:
+    smap = last_meta["industry"].dropna()
+    df["industry"] = df["symbol"].map(smap).fillna("UNKNOWN")
 print(f"    meta carry: board={df['board'].nunique() if 'board' in df.columns else '-'} | "
-      f"industry nunique={df['industry'].nunique() if 'industry' in df.columns else '-'} | "
-      f"list_days sample={df['list_days'].dropna().head(3).tolist() if 'list_days' in df.columns else '-'}")
+      f"industry nunique={df['industry'].nunique() if 'industry' in df.columns else '-'}")
+
+# --- 入库扫描: ST/*ST 股 或 上市 < INGEST_MIN_LIST_DAYS 交易日 不进入 V3 ---
+_stock_info = fetch_stock_basic_cached()
+# 交易日历 = 面板唯一 date 列 (与面板历史一致的交易日口径).
+_trade_cal = pd.DatetimeIndex(sorted(yesterday["date"].unique()))
+df, _dropped = apply_ingest_scan(df, _stock_info, TRADE_DATE, INGEST_MIN_LIST_DAYS, _trade_cal)
+if len(_stock_info):
+    print(f"    Ingest scan: dropped {_dropped} rows (ST or trading_days < {INGEST_MIN_LIST_DAYS})")
+else:
+    print("    WARN: Ingest scan SKIPPED — stock_basic 不可用, ST/次新股未被过滤!")
 
 # --- Simple derived features (no history needed) ---
 if all(c in df.columns for c in ["high", "low", "pre_close"]):
@@ -416,6 +491,63 @@ if needed_ffill:
             if df[col].notna().sum() > 0:
                 filled_count += 1
     print(f"    Forward-filled: {filled_count} columns")
+
+# ── 6.5 大宗交易当日聚合 → 4 个 bt_ 原始列 (dim33 EWMA 上游, 非特征) ──
+# 算法忠实还原自 block_trade_agg v2.0 (pyc): L1 噪音清洗 (不删除, 仅排除出聚合) +
+# 有效单聚合. 单位: vol=万股, amount=万元, daily_amt=万元 (面板 amount=千元 → /10),
+# circ_mv=万元, close=元.
+if len(bt):
+    try:
+        _bt = bt.copy()
+        _bt["date"] = pd.Timestamp(TRADE_DATE)
+        snap = df[["symbol", "close", "amount", "circ_mv"]].drop_duplicates("symbol")
+        snap["daily_amt"] = snap["amount"] / 10.0  # 千元 → 万元
+        _bt = _bt.merge(
+            snap[["symbol", "close", "daily_amt", "circ_mv"]],
+            on=["symbol"], how="left",
+        )
+        _bt = _bt[_bt["close"].notna()].copy()
+        if len(_bt):
+            # L1 噪音标记 (规则与历史聚合一致)
+            def _broker(seat):
+                s = str(seat)
+                idx = s.find("证券")
+                return s[idx:idx + 2] if idx >= 0 else ""
+
+            same_broker = (_bt["buyer"].map(_broker) == _bt["seller"].map(_broker)) & (
+                _bt["buyer"] != _bt["seller"]
+            )
+            # 折价 = (price − close) / close; 噪音判定依赖折价, 须先算
+            _bt["discount"] = (_bt["price"] - _bt["close"]) / _bt["close"].replace(0, np.nan)
+            _bt["is_noise"] = (
+                (_bt["buyer"] == _bt["seller"])
+                | (same_broker & (_bt["discount"] < -0.1))
+                | ((_bt["vol"] < 10) & (_bt["discount"].abs() < 0.01))
+            )
+            _inst_kw = ("机构专用", "QFII", "合格境外", "社保", "养老", "资产管理", "资管", "保险", "信托")
+            _bt["is_inst_buyer"] = _bt["buyer"].map(lambda s: any(k in str(s) for k in _inst_kw))
+            v = _bt[~_bt["is_noise"]].copy()
+            if len(v):
+                grp = v.groupby("symbol")
+                total_amt = grp["amount"].sum()
+                wavg = (v["price"] * v["vol"]).groupby(v["symbol"]).sum() / grp["vol"].sum().replace(0, np.nan)
+                close = grp["close"].first()
+                daily_amt = grp["daily_amt"].first()
+                circ_mv = grp["circ_mv"].first()
+                disc = (wavg - close) / close.replace(0, np.nan)
+                any_inst = v.groupby("symbol")["is_inst_buyer"].max()
+                bt_today = pd.DataFrame({
+                    "bt_count": grp.size(),
+                    "bt_disc_raw": (-disc).clip(lower=0),
+                    "bt_inst_absorb": any_inst * total_amt / daily_amt.replace(0, np.nan),
+                    "bt_amt_ratio_float_mv": total_amt / circ_mv.replace(0, np.nan),
+                })
+                for c in bt_today.columns:
+                    df[c] = df["symbol"].map(bt_today[c])
+                print(f"    block_trade agg: {len(bt_today)} symbols -> "
+                      f"{[c for c in bt_today.columns if c in df.columns]}")
+    except Exception as e:
+        print(f"    block_trade agg: FAILED ({e})")
 
 # ── 7. Align to panel schema ──
 print("\n[7] Aligning to panel schema...")

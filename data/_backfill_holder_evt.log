@@ -1,3 +1,0 @@
-2026-08-03 00:48:53,346 [INFO] backfill_holder_evt: 加载面板: D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet
-2026-08-03 00:48:55,298 [INFO] backfill_holder_evt: 面板: 2720808 行, 3244 symbols, 日期 20230103 ~ 20260731, 列数 101
-2026-08-03 00:48:55,308 [INFO] backfill_holder_evt: 拉取 holdertrade (20230103 ~ 20260731) ...

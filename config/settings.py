@@ -127,3 +127,62 @@ EXECUTION_BROKER = os.getenv("AMINQT_BROKER", "sim")  # "sim" | "xt"
 MIN_AMOUNT = 50_000_000         # 成交额 >= 5000万
 PRICE_LIMIT_PCT = 9.5           # |涨跌幅| <= 9.5%
 MAX_ACCOUNT_DRAWDOWN_PCT = 3.0  # 账户回撤 > 3% → 返回空列表
+
+# ── V3 入库扫描 (ingest gate, 2026-08-03) ─────────────────────
+# _daily_fetch.py 追加当日行前扫描: ST/*ST 股 或 上市 < INGEST_MIN_LIST_DAYS 个交易日
+# 不进入 V3 面板 (universe 在入口收敛). 交易日数按面板唯一 date 列 (交易日历)
+# 计算 stock_basic.list_date → trade_date 的交易日计数 (searchsorted 向量化).
+INGEST_MIN_LIST_DAYS = 150
+
+# ── KIMI LHB v2.0 spec 参数 (龙虎榜稀疏特征: 半衰期/情境权重/记忆下限) ──
+# 见 REFERENCE/.../FEATURE/kimi LHB_v2.0_设计文档.md §3.1/§3.3/§4
+LHB_V2_SPEC = {
+    "h_inst": 8,          # 机构半衰期 (spec 建议 7-10)
+    "h_top": 6,           # 顶级游资半衰期 (5-7)
+    "h_quant": 4,         # 量化席位半衰期 (3-5)
+    "h_retail": 4,        # 散户/混合半衰期 (3-5)
+    "h_sell": 5,          # 抛压记忆半衰期
+    "h_sellbuy": 5,       # 买卖比半衰期
+    "h_conboard": 3,      # 连板衰减记忆半衰期 (§4.3)
+    "w_limit_up": 1.5,    # 涨停日卖出情境权重 (§2.5)
+    "w_limit_down": 1.2,  # 跌停日卖出情境权重
+    "w_up5": 1.3,         # 大涨日(>5%)卖出权重
+    "w_down5": 1.1,       # 大跌日(<-5%)卖出权重
+    "w_flat": 1.0,        # 平盘日卖出权重
+    "f_min_ratio": 0.1,   # 最小记忆值 = max(0, 历史均值×比例) (§3.3)
+    "lock_thresh": 0.3,   # 机构锁仓信号阈值 F_inst > 0.3 (§4.5)
+    "overheat_penalty": 0.7,  # 过热惩罚因子 (C5d≥阈值时正向资金流×0.7) (§5.2)
+    "limit_up_tol": 0.001,   # 判定涨停: close >= up_limit_raw×(1−tol)
+    "limit_down_tol": 0.001, # 判定跌停: close <= down_limit_raw×(1+tol)
+    "eps": 1e-6,          # 除零保护
+    "circ_mv_unit": 1e4,  # 面板 circ_mv 单位 万元 → 元
+}
+
+# ── LHB v2.0 训练/评估配置 (spec §5.3 选择性偏差: 仅上榜股票池) ──
+# 见 REFERENCE/.../FEATURE/kimi LHB_v2.0_设计文档.md §5.3/§6.1
+LHB_V2_EVAL = {
+    "horizons": [1, 3, 5],   # 标签: t+1 开盘买入 → t+1/t+3/t+5 收盘 (T+1 模拟)
+    "split_ratio": 0.8,      # 时间切分: 前 80% 上榜日训练, 后 20% 评估
+    "quantile": 0.2,         # 多空分位 (预测 top/bottom 20%)
+    "min_ic_obs": 20,        # 单特征 IC 至少需要的日期数
+    "min_ic_n": 10,          # 单日 spearman 至少需要的股票数
+    "lgb": {
+        "n_estimators": 300,
+        "max_depth": 6,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "random_state": 42,
+        "n_jobs": -1,
+    },
+}
+
+# ── LHB v2.0 TOP10 周频选股评估 (用户目标: 每周输出 10 只买入标的) ──
+LHB_V2_TOP10 = {
+    "top_n": 10,                  # 每期入选股票数
+    "cost_commission": 0.00025,   # 佣金 万2.5 (单边)
+    "cost_stamp": 0.0005,         # 印花税 0.05% (仅卖出)
+    "cost_slippage": 0.0010,      # 滑点 0.10% (单边)
+    "exclude_st": True,           # 剔除 ST (基座 is_st 待修, 当前可能不触发)
+}

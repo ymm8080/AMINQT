@@ -1,4 +1,0 @@
-20:49:56 [INFO] Loading panel: data/panel_full_enriched_v3.parquet
-20:49:59 [INFO] Trimmed to 250 days (2025-07-22 ¡ú 2026-07-31), 3244 stocks, 810288 rows
-20:49:59 [INFO] Patched WINDOW_TOTAL=250 WINDOW_TRANSITION=250 (orig: 770/560)
-20:50:03 [INFO] Cleaning: dual=217940 rows (3.9s)

@@ -31,7 +31,6 @@ logger = logging.getLogger("ic_dim")
 PANEL_PATH = "data/panel_full_enriched_v3.parquet"
 REGISTRY_DIR = "data/factor_registry"
 MIN_AMOUNT = 200_000
-MIN_LIST_DAYS = 60
 CACHE_DIR = "data/supply_cache/alt_data"
 
 
@@ -180,9 +179,7 @@ def main():
     panel = merge_from_caches(panel)
     logger.info("Panel after cache merge: %d cols", len(panel.columns))
 
-    clean = panel[~panel["is_st"].astype(bool)]
-    clean = clean[clean["list_days"] >= MIN_LIST_DAYS]
-    clean = clean[~clean["is_suspended"].astype(bool)]
+    clean = panel[~panel["is_suspended"].astype(bool)]
     clean = clean.dropna(
         subset=["open", "high", "low", "close", "close_hfq", "volume", "amount"]
     )

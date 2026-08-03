@@ -127,7 +127,7 @@ def risk_filter(df: pd.DataFrame) -> pd.DataFrame:
     Models must learn limit-up/down patterns.
     """
     mask = pd.Series(True, index=df.index)
-    for col in ("is_suspended", "is_st"):
+    for col in ("is_suspended",):
         if col in df.columns:
             mask &= ~df[col].astype(bool)
     return df[mask]
@@ -312,7 +312,6 @@ class DualTrackTrainer:
             "date",
             "board",
             "is_suspended",
-            "is_st",
             "close_hfq",  # IC 衰减曲线 (ic_decay_curve) 下游需要
         }
         for seg_name, seg_df in segs.items():

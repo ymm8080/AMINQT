@@ -282,9 +282,7 @@ class TestFeatureRegistrySeed:
                         "pre_close": base_price * 0.99,
                         "board": "main",
                         "industry": "银行",
-                        "is_st": 0,
                         "is_suspended": 0,
-                        "list_days": 500,
                     }
                 )
         panel = pd.DataFrame(rows)
@@ -331,9 +329,7 @@ class TestFeatureRegistrySeed:
                         "pre_close": base_price * 0.99,
                         "board": "main",
                         "industry": "银行",
-                        "is_st": 0,
                         "is_suspended": 0,
-                        "list_days": 500,
                     }
                 )
         panel = pd.DataFrame(rows)

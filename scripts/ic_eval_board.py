@@ -50,17 +50,14 @@ def main():
     panel = pd.read_parquet(PANEL_PATH)
     logger.info("面板: %d rows, %d cols", len(panel), len(panel.columns))
 
-    # ---- 基础清洗 (历史成交额+上市天数+ST+停牌过滤) ----
+    # ---- 基础清洗 (成交额+停牌过滤) ----
     MIN_AMOUNT = 200_000  # 日成交额 >= 20万 (元), 剔除僵尸股/仙股
-    MIN_LIST_DAYS = 60  # 至少60个交易日 (滚动IC窗口需要)
 
     if "board" not in panel.columns:
         panel = panel.copy()
         panel["board"] = panel["symbol"].map(board_of)
 
-    clean = panel[~panel["is_st"].astype(bool)]
-    clean = clean[clean["list_days"] >= MIN_LIST_DAYS]
-    clean = clean[~clean["is_suspended"].astype(bool)]
+    clean = panel[~panel["is_suspended"].astype(bool)]
     key_cols = ["open", "high", "low", "close", "close_hfq", "volume", "amount"]
     clean = clean.dropna(subset=key_cols)
 

@@ -34,6 +34,24 @@ from app.rules.rule_engine import (
     Tick,
 )
 from tests.test_daily_pipeline import _StubFeatures, _train_bundle, make_panel
+from app.pipeline1 import risk_overlays
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_block_trade_cache(tmp_path, monkeypatch):
+    """隔离 FINAL STOCK SCAN 大宗缓存: 测试永远读到空缓存, 不依赖外部文件状态.
+
+    list_generator.emit 在调用时 lazy import 该函数, 故 monkeypatch 模块属性即可生效.
+    """
+    empty = tmp_path / "empty_block_trade.parquet"
+    pd.DataFrame(columns=["symbol", "date"]).to_parquet(empty, index=False)
+    real = risk_overlays.block_trade_recent_scan
+
+    def _scan(symbols, ref_date, **kwargs):
+        kwargs["cache_path"] = str(empty)
+        return real(symbols, ref_date, **kwargs)
+
+    monkeypatch.setattr(risk_overlays, "block_trade_recent_scan", _scan)
 
 
 @pytest.fixture(scope="module")

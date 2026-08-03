@@ -63,8 +63,12 @@ def main():
         end_date=end_date,
         refresh=False,
     )
-    # 旧缓存可能缺 evt 列 → 强制重拉
-    if "evt_start_date" not in df.columns or "evt_end_date" not in df.columns:
+    # 旧缓存可能缺 evt 列或全为 NaT (改字段名前的缓存) → 强制重拉
+    if (
+        "evt_start_date" not in df.columns
+        or "evt_end_date" not in df.columns
+        or df["evt_start_date"].isna().all()
+    ):
         logger.warning("缓存缺 evt 列, 强制刷新拉取 ...")
         df = supply.fetch_holdertrade(
             start_date=start_date,

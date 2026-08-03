@@ -69,8 +69,6 @@ class Candidate:
     pred_return: float  # Pipeline1 模型预测涨幅 (schema V1.0 pred_ret_1d)
     pred_prob: float  # 模型预测概率 (schema V1.0 prob_up)
     avg_amount_20d: float = 1e8
-    list_days: int = 1000
-    is_st: bool = False
     is_suspended: bool = False
     daily_closes: list = field(default_factory=list)
     max_daily_gain_10d: float = 0.0
@@ -146,12 +144,8 @@ class RuleEngine:
     # ---------------- L0 合规 ----------------
     def can_buy(self, c: Candidate, tick: Tick | None, prev_close: float) -> str | None:
         """返回 None 表示可买, 否则返回否决原因."""
-        if c.is_st:
-            return "ST禁买"
         if c.is_suspended:
             return "停牌"
-        if c.list_days < 60:
-            return "次新股"
         if tick and prev_close > 0:
             if tick.price >= prev_close * (1 + price_limit(c.code) / 100) * 0.999:
                 return "涨停无法买入"

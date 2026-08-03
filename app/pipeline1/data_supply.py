@@ -19,6 +19,8 @@ import numpy as np
 import pandas as pd
 
 from app.core.config_loader import load_config
+from app.core.universe_manager import name_is_st
+from app.pipeline1.ingest_scan import apply_ingest_scan
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,7 @@ FETCH_RETRY_INTERVAL = float(_DS_CFG.get("fetch_retry_interval", 60))
 FETCH_MAX_RETRIES = int(_DS_CFG.get("fetch_max_retries", 10))
 _AK_CALL_RETRIES = int(_DS_CFG.get("ak_call_retries", 3))
 _AK_CALL_BACKOFF = float(_DS_CFG.get("ak_call_backoff", 2.0))
+_AK_CALL_TIMEOUT = float(_DS_CFG.get("ak_call_timeout", 30))
 _MAX_CONSECUTIVE_FAILS = int(_DS_CFG.get("max_consecutive_fails", 3))
 _BACKFILL_MIN_DAYS = int(_DS_CFG.get("backfill_min_days", 1250))
 _BACKFILL_THROTTLE = float(_DS_CFG.get("backfill_throttle", 0.5))
@@ -81,11 +84,15 @@ def _ak_call(
     backoff: float = _AK_CALL_BACKOFF,
     **kwargs,
 ):
-    """akshare 调用重试 (东财接口频繁断连/限流, 指数退避)."""
+    """akshare 调用重试 (东财接口频繁断连/限流, 指数退避).
+
+    单次调用套 _with_timeout 硬超时: 某些接口 (如 stock_lhb_stock_detail_em) 的
+    HTTP 请求无 timeout, 连接挂起时不抛异常, 重试永远不触发, 会整进程死等.
+    """
     last: Exception | None = None
     for attempt in range(retries):
         try:
-            return fn(*args, **kwargs)
+            return _with_timeout(lambda: fn(*args, **kwargs), timeout=_AK_CALL_TIMEOUT)
         except Exception as exc:  # noqa: BLE001 — 网络层异常类型多样, 统一重试
             last = exc
             wait = backoff * (attempt + 1)
@@ -101,8 +108,8 @@ def _ak_call(
 
 
 # 标准列: symbol, date, board, open/high/low/close (raw), open_hfq..close_hfq,
-#         volume, amount, turnover_rate, pre_close, is_suspended, is_st,
-#         industry, list_days, free_float_turnover_rate
+#         volume, amount, turnover_rate, pre_close, is_suspended,
+#         industry, free_float_turnover_rate
 REQUIRED_COLUMNS = [
     "symbol",
     "date",
@@ -117,7 +124,6 @@ REQUIRED_COLUMNS = [
     "turnover_rate",
     "pre_close",
     "is_suspended",
-    "is_st",
 ]
 
 
@@ -148,8 +154,11 @@ class DataSupplyChain:
 
         产出 v3 面板完整 OHLCV schema:
         symbol, date, board, open/high/low/close (raw), open_hfq..close_hfq,
-        volume, amount, turnover_rate, pre_close, is_suspended, is_st,
-        industry, list_days
+        volume, amount, turnover_rate, pre_close, is_suspended, industry
+
+        入库前应用 ingest gate (与 _daily_fetch 一致): 剔 ST/*ST 和 上市 <
+        INGEST_MIN_LIST_DAYS 交易日的新股. 交易日历来自 pro.trade_cal (缓存),
+        不可用则退化为仅剔 ST.
         """
         pro = self._tushare_pro()
         if pro is None:
@@ -213,25 +222,26 @@ class DataSupplyChain:
         else:
             df["turnover_rate"] = np.nan
 
-        # stock_basic: board / industry / list_days / is_st
+        # stock_basic: board / industry + ingest gate (ST/次新 < INGEST_MIN_LIST_DAYS 交易日 不入 V3)
         if stock_info is not None and len(stock_info) > 0:
             info = stock_info.set_index("ts_code")
             df["board"] = df["ts_code"].map(info["market"])
             df["industry"] = df["ts_code"].map(info["industry"])
-            list_dates = pd.to_datetime(
-                df["ts_code"].map(info["list_date"]), format="%Y%m%d", errors="coerce"
-            )
-            df["list_days"] = (
-                pd.to_datetime(trade_date, format="%Y%m%d") - list_dates
-            ).dt.days
-            # ST 标记: name 含 ST/*ST
-            names = df["ts_code"].map(info["name"]).fillna("")
-            df["is_st"] = names.str.contains("ST", case=False, na=False).astype(int)
+            scan_info = stock_info.rename(columns={"ts_code": "symbol"})[
+                ["symbol", "name", "list_date"]
+            ].set_index("symbol")
+            try:
+                cal = self._get_trade_cal_cached(pro)
+                df, _ = apply_ingest_scan(
+                    df, scan_info, trade_date, settings.INGEST_MIN_LIST_DAYS, cal
+                )
+            except Exception as exc:
+                # 交易日历不可用 → 至少剔 ST (名称判断, 不依赖日历)
+                logger.warning("次新股 ingest 过滤失败, 仅剔 ST: %s", exc)
+                df = df[~df["symbol"].map(scan_info["name"]).fillna("").map(name_is_st)]
         else:
             df["board"] = np.nan
             df["industry"] = np.nan
-            df["list_days"] = np.nan
-            df["is_st"] = 0
 
         # 停牌: vol == 0 或 open 为空 → 停牌
         df["is_suspended"] = (
@@ -258,14 +268,13 @@ class DataSupplyChain:
                 "turnover_rate": pd.to_numeric(df["turnover_rate"], errors="coerce"),
                 "pre_close": pd.to_numeric(df["pre_close"], errors="coerce"),
                 "is_suspended": df["is_suspended"],
-                "is_st": df["is_st"],
                 "industry": df["industry"],
-                "list_days": df["list_days"],
             }
         )
         return out
 
     _stock_basic_cache: pd.DataFrame | None = None
+    _trade_cal_cache: pd.DatetimeIndex | None = None
 
     def _get_stock_basic_cached(self, pro) -> pd.DataFrame | None:
         """缓存 stock_basic (静态数据, 每日不变)."""
@@ -281,6 +290,27 @@ class DataSupplyChain:
             return df
         except Exception as exc:
             logger.warning("Tushare stock_basic 失败: %s", exc)
+            return None
+
+    def _get_trade_cal_cached(self, pro) -> pd.DatetimeIndex | None:
+        """缓存 A 股交易日历 (仅开市日, 静态). ingest gate 计算上市交易日数用."""
+        if self._trade_cal_cache is not None:
+            return self._trade_cal_cache
+        try:
+            df = _with_timeout(
+                lambda: pro.trade_cal(
+                    exchange="SSE",
+                    is_open="1",
+                    start_date="20150101",
+                    end_date=datetime.now().strftime("%Y%m%d"),
+                )
+            )
+            self._trade_cal_cache = pd.DatetimeIndex(
+                pd.to_datetime(df["cal_date"], format="%Y%m%d")
+            ).sort_values()
+            return self._trade_cal_cache
+        except Exception as exc:
+            logger.warning("Tushare trade_cal 失败: %s", exc)
             return None
 
     def _akshare_fetch_daily(self, trade_date: str) -> pd.DataFrame:
@@ -1665,6 +1695,91 @@ class DataSupplyChain:
         df.to_parquet(path, index=False)
         return df
 
+    def fetch_lhb_seat_detail(
+        self, symbol: str, trade_date: str, flag: str
+    ) -> pd.DataFrame:
+        """[Alt-4b] 龙虎榜个股席位明细 — AKShare stock_lhb_stock_detail_em.
+
+        GLM 龙虎榜 spec 需要 per 股-日的机构/散户席位买卖金额; Tushare 无此
+        粒度 (top_inst 仅"机构专用"且按日). 按 (symbol, trade_date, flag) 单次调用,
+        东财接口逐股-日, 回填由脚本分块落盘 + 断点续跑.
+
+        flag: "买入" 或 "卖出" (该股该日 top-5 买入/卖出席位).
+
+        Returns:
+            DataFrame [交易营业部名称, 买入金额, 卖出金额, 净额, 类型]
+        """
+        import akshare as ak
+
+        try:
+            raw = _ak_call(
+                ak.stock_lhb_stock_detail_em,
+                symbol=symbol,
+                date=trade_date,
+                flag=flag,
+            )
+        except Exception as exc:  # noqa: BLE001 — 网络层异常统一处理
+            logger.warning(
+                "stock_lhb_stock_detail_em 失败 %s %s %s: %s",
+                symbol,
+                trade_date,
+                flag,
+                exc,
+            )
+            return None
+        if raw is None or len(raw) == 0:
+            return pd.DataFrame()
+        keep = [
+            c
+            for c in ("交易营业部名称", "买入金额", "卖出金额", "净额", "类型")
+            if c in raw.columns
+        ]
+        return raw[keep].copy()
+
+    def fetch_lhb_seat_aggregate(self, symbol: str, trade_date: str) -> dict | None:
+        """聚合单股单日机构/散户席位买卖金额 (GLM 龙虎榜 spec).
+
+        取"买入"+"卖出"两个 flag 的 top-5 席位, 按营业部去重 (同席位因多个
+        上榜原因重复出现且金额相同), 过滤:
+          - 散户大本营 = 营业部名含 "拉萨"
+          - 机构专用   = 营业部名 == "机构专用"
+        返回 {lhb_retail_buy, lhb_retail_sell, lhb_inst_buy, lhb_inst_sell};
+        无席位/取数失败返回 None (与"上榜但无该类席位"的 0 值区分).
+        """
+        frames = []
+        for flag in ("买入", "卖出"):
+            f = self.fetch_lhb_seat_detail(symbol, trade_date, flag)
+            if f is None:
+                return None  # 取数失败 → 留待重试 (与"上榜但无席位"区分)
+            if len(f):
+                frames.append(f)
+        zeros = {
+            "lhb_retail_buy": 0.0,
+            "lhb_retail_sell": 0.0,
+            "lhb_inst_buy": 0.0,
+            "lhb_inst_sell": 0.0,
+        }
+        if not frames:
+            return zeros  # 成功取到但无席位明细 → 上榜但无该类席位=0
+        detail = pd.concat(frames, ignore_index=True)
+        if "交易营业部名称" not in detail.columns:
+            return zeros
+        # 同席位多上榜原因 → 金额相同, 按席位取 max 去重
+        detail = detail.groupby("交易营业部名称", as_index=False).agg(
+            买入金额=("买入金额", "max"), 卖出金额=("卖出金额", "max")
+        )
+        buy = pd.to_numeric(detail["买入金额"], errors="coerce").fillna(0)
+        sell = pd.to_numeric(detail["卖出金额"], errors="coerce").fillna(0)
+        names = detail["交易营业部名称"].astype(str)
+        is_retail = names.str.contains("拉萨")
+        is_inst = names.eq("机构专用")
+        return {
+            "lhb_retail_buy": float(buy[is_retail].sum()),
+            "lhb_retail_sell": float(sell[is_retail].sum()),
+            "lhb_inst_buy": float(buy[is_inst].sum()),
+            "lhb_inst_sell": float(sell[is_inst].sum()),
+        }
+
     # ── 5. 股东户数 ──
     def fetch_holdernumber(
         self,
@@ -1784,10 +1899,21 @@ class DataSupplyChain:
                     kwargs["end_date"] = end_date
 
                 _PAGE_SIZE = _MARGIN_PAGE_SIZE
+                # begin_date/close_date (增减持起止) 为非默认字段, 必须显式 fields 请求
+                _FIELDS = (
+                    "ts_code,ann_date,holder_name,holder_type,in_de,change_vol,"
+                    "change_ratio,after_share,after_ratio,avg_price,total_share,"
+                    "begin_date,close_date"
+                )
                 all_pages: list[pd.DataFrame] = []
                 offset = 0
                 while True:
-                    page_kwargs = {**kwargs, "limit": _PAGE_SIZE, "offset": offset}
+                    page_kwargs = {
+                        **kwargs,
+                        "limit": _PAGE_SIZE,
+                        "offset": offset,
+                        "fields": _FIELDS,
+                    }
                     raw = _with_timeout(lambda: pro.stk_holdertrade(**page_kwargs))
                     if raw is None or len(raw) == 0:
                         break
@@ -1829,12 +1955,12 @@ class DataSupplyChain:
                                 errors="coerce",
                             ),
                             "evt_start_date": pd.to_datetime(
-                                raw.get("evt_start_date", ""),
+                                raw.get("begin_date", ""),
                                 format="%Y%m%d",
                                 errors="coerce",
                             ),
                             "evt_end_date": pd.to_datetime(
-                                raw.get("evt_end_date", ""),
+                                raw.get("close_date", ""),
                                 format="%Y%m%d",
                                 errors="coerce",
                             ),
@@ -2359,13 +2485,11 @@ class DataSupplyChain:
         ohlcv = ohlcv[ohlcv["symbol"].isin(existing_symbols)].copy()
         ohlcv["date"] = pd.to_datetime(trade_date)
 
-        # 补齐面板元数据列 (board/industry/list_days 等)
+        # 补齐面板元数据列 (is_st/list_days 已从 V3 移除, ingest gate 在入口过滤)
         meta_cols = [
             "board",
             "industry",
-            "is_st",
             "is_suspended",
-            "list_days",
             "free_float_turnover_rate",
             "limit_pct",
             "pre_close",
