@@ -320,7 +320,14 @@ class TestFeatures:
         事件: 公告日 A=2025-01-01, 变动窗口 S=2025-01-15 ~ E=2025-04-15.
         """
         dates = pd.to_datetime(
-            ["2024-12-20", "2025-01-01", "2025-01-10", "2025-02-01", "2025-04-15", "2025-05-01"]
+            [
+                "2024-12-20",
+                "2025-01-01",
+                "2025-01-10",
+                "2025-02-01",
+                "2025-04-15",
+                "2025-05-01",
+            ]
         )
         df = pd.DataFrame(
             {
@@ -457,7 +464,12 @@ class TestFeatures:
             }
         )
         out2 = FeatureEngineV35.dim32_lhb_glm(df2)
-        for c in ("lhb_inst_flow", "lhb_retail_flow", "lhb_sell_pressure", "lhb_list_count_5d"):
+        for c in (
+            "lhb_inst_flow",
+            "lhb_retail_flow",
+            "lhb_sell_pressure",
+            "lhb_list_count_5d",
+        ):
             assert out2[c].isna().all()
 
     # ============================================================
@@ -515,7 +527,9 @@ class TestFeatures:
         assert out["lhb2_inst_flow"].iloc[1] == pytest.approx(a8 * 0.6, rel=1e-3)
         assert out["lhb2_inst_shock"].iloc[1] == pytest.approx(a8 * 0.015, rel=1e-3)
         assert out["lhb2_top_flow"].iloc[1] == pytest.approx(a6 * 1.0, rel=1e-3)
-        assert out["lhb2_quant_flow"].iloc[1] == pytest.approx(-a4, rel=1e-3)  # 负值保留
+        assert out["lhb2_quant_flow"].iloc[1] == pytest.approx(
+            -a4, rel=1e-3
+        )  # 负值保留
         assert out["lhb2_retail_flow"].iloc[1] == pytest.approx(a4 * 1.0, rel=1e-3)
         # 抛压 = 卖出占比 × 涨停情境权重 1.5
         assert out["lhb2_sell_pressure"].iloc[1] == pytest.approx(
@@ -752,9 +766,17 @@ class TestFeatures:
             }
         )
         out = FeatureEngineV35.dim34_lhb_v2(df)
-        for c in ("lhb2_inst_flow", "lhb2_inst_shock", "lhb2_top_flow",
-                  "lhb2_quant_flow", "lhb2_retail_flow", "lhb2_inst_strength",
-                  "lhb2_inst_resolve", "lhb2_inst_conboard", "lhb2_inst_premium"):
+        for c in (
+            "lhb2_inst_flow",
+            "lhb2_inst_shock",
+            "lhb2_top_flow",
+            "lhb2_quant_flow",
+            "lhb2_retail_flow",
+            "lhb2_inst_strength",
+            "lhb2_inst_resolve",
+            "lhb2_inst_conboard",
+            "lhb2_inst_premium",
+        ):
             assert out[c].isna().all(), c
         assert out["lhb2_inst_lock"].sum() == 0  # 无机构数据 → 无锁仓信号 (0)
         assert out["lhb2_sell_pressure"].iloc[1] == pytest.approx(
@@ -776,10 +798,19 @@ class TestFeatures:
         )
         out2 = FeatureEngineV35.dim34_lhb_v2(df2)
         all14 = [
-            "lhb2_inst_flow", "lhb2_inst_shock", "lhb2_top_flow", "lhb2_quant_flow",
-            "lhb2_retail_flow", "lhb2_sell_pressure", "lhb2_sell_buy_ratio",
-            "lhb2_list_count_5d", "lhb2_conboard_mem", "lhb2_inst_strength",
-            "lhb2_inst_resolve", "lhb2_inst_conboard", "lhb2_inst_premium",
+            "lhb2_inst_flow",
+            "lhb2_inst_shock",
+            "lhb2_top_flow",
+            "lhb2_quant_flow",
+            "lhb2_retail_flow",
+            "lhb2_sell_pressure",
+            "lhb2_sell_buy_ratio",
+            "lhb2_list_count_5d",
+            "lhb2_conboard_mem",
+            "lhb2_inst_strength",
+            "lhb2_inst_resolve",
+            "lhb2_inst_conboard",
+            "lhb2_inst_premium",
             "lhb2_inst_lock",
         ]
         for c in all14:

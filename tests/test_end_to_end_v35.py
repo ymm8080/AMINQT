@@ -37,7 +37,6 @@ from tests.test_daily_pipeline import _StubFeatures, _train_bundle, make_panel
 from app.pipeline1 import risk_overlays
 
 
-
 @pytest.fixture(autouse=True)
 def _hermetic_block_trade_cache(tmp_path, monkeypatch):
     """隔离 FINAL STOCK SCAN 大宗缓存: 测试永远读到空缓存, 不依赖外部文件状态.
