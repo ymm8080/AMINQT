@@ -62,6 +62,8 @@ DIM_GROUPS = [
     "dim29_holdertrade",
     "dim30_kline_geometry",
     "dim31_announcement",
+    "dim32_lhb_glm",
+    "dim34_lhb_v2",
     # Post-processing (not real dims but produce features)
     "_industry_neutralize",
     "_missingness_flags",
@@ -99,6 +101,16 @@ NON_FEATURE_COLS = {
     "sw_l1_name",
     "sw_l2_name",
     "sw_l3_name",
+    # GLM 龙虎榜 spec: 席位原始金额 (dim32 输入的中间量, 非特征)
+    "lhb_inst_buy",
+    "lhb_inst_sell",
+    "lhb_retail_buy",
+    "lhb_retail_sell",
+    # KIMI LHB v2.0 spec: 顶级游资/量化席位原始金额 (dim34 输入的中间量, 非特征)
+    "lhb_top_buy",
+    "lhb_top_sell",
+    "lhb_quant_buy",
+    "lhb_quant_sell",
     # Eval-driven noise drops (|ICIR| < 0.05 across T+1/T+3/T+5)
     "sw_l2_pe",
     "sw_l3_pe",
