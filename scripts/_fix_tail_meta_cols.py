@@ -29,7 +29,9 @@ import pandas as pd
 from app.pipeline1.cleaning_pipeline import board_of
 
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
-TAIL_DATES = pd.to_datetime(["2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31"])
+TAIL_DATES = pd.to_datetime(
+    ["2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31"]
+)
 META_COLS = ["board", "is_st", "industry", "list_days"]
 
 stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -41,7 +43,9 @@ t = pq.read_table(PANEL)
 df = t.to_pandas()
 df["date"] = pd.to_datetime(df["date"])
 mask_tail = df["date"].dt.date.isin({d.date() for d in TAIL_DATES})
-print(f"尾部行: {mask_tail.sum()} (日期: {sorted(set(df.loc[mask_tail, 'date'].dt.date.astype(str)))})")
+print(
+    f"尾部行: {mask_tail.sum()} (日期: {sorted(set(df.loc[mask_tail, 'date'].dt.date.astype(str)))})"
+)
 
 # board: board_of 重算 (与基建一致), 替代 sh/sz
 df.loc[mask_tail, "board"] = df.loc[mask_tail, "symbol"].map(board_of)
@@ -64,9 +68,16 @@ tail = df[mask_tail]
 assert not (tail["board"].isin(["sh", "sz"])).any(), "board 仍有 sh/sz"
 assert tail["list_days"].isna().sum() == 0, "list_days 出现 NaN"
 print("board 分布:", tail.groupby("board").size().to_dict())
-print("industry nunique:", tail["industry"].nunique(), "| UNKNOWN:", (tail["industry"] == "UNKNOWN").sum())
-print("600519 tail list_days:",
-      tail[tail["symbol"] == "600519"].sort_values("date")["list_days"].tolist())
+print(
+    "industry nunique:",
+    tail["industry"].nunique(),
+    "| UNKNOWN:",
+    (tail["industry"] == "UNKNOWN").sum(),
+)
+print(
+    "600519 tail list_days:",
+    tail[tail["symbol"] == "600519"].sort_values("date")["list_days"].tolist(),
+)
 
 # 全 schema 保留写回: 只替换 4 列, 其余列复用原 arrow array
 cols = t.column_names
