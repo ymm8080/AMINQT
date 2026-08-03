@@ -32,11 +32,13 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 from datetime import datetime
+import time
 import tushare as ts
 from dotenv import load_dotenv
 load_dotenv()
 
 from app.pipeline1 import cyq_ext
+from app.pipeline1.cleaning_pipeline import board_of
 
 TRADE_DATE = sys.argv[1] if len(sys.argv) > 1 else datetime.now().strftime("%Y%m%d")
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
@@ -55,7 +57,13 @@ valid_universe = set(yesterday[yesterday["date"] == max_date]["symbol"].unique()
 print(f"    Universe: {len(valid_universe)} stocks, max date: {max_date.date()}")
 
 if pd.Timestamp(TRADE_DATE) <= max_date:
-    print(f"    {TRADE_DATE} already in panel (max={max_date.date()}), will replace today's rows.")
+    # 替换历史日: 合并当日已存在的 symbol, 防止刚停牌股票 (不在最新日 universe,
+    # 如 07-30 停牌的 300333) 在替换该日行时被整行丢弃.
+    existing_today = set(yesterday[yesterday["date"] == pd.Timestamp(TRADE_DATE)]["symbol"].unique())
+    kept = existing_today - valid_universe
+    valid_universe = valid_universe | existing_today
+    print(f"    {TRADE_DATE} already in panel (max={max_date.date()}), will replace today's rows. "
+          f"Kept {len(kept)} symbols present on {TRADE_DATE} but not on max date.")
 
 # ── 1. Fetch all Tushare sources ──
 print(f"\n[1] Fetching Tushare data for {TRADE_DATE}...")
@@ -65,14 +73,20 @@ def to_symbol(df):
         df["symbol"] = df["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
     return df
 
-def safe_fetch(fn, name, **kwargs):
-    try:
-        df = fn(**kwargs)
-        print(f"    {name}: {len(df)} rows")
-        return to_symbol(df)
-    except Exception as e:
-        print(f"    {name}: FAILED ({e})")
-        return pd.DataFrame()
+def safe_fetch(fn, name, max_retries=3, **kwargs):
+    """Fetch with retry. Tushare 限流/超时是瞬时的, 重试避免当日行整列留空."""
+    for attempt in range(1, max_retries + 1):
+        try:
+            df = fn(**kwargs)
+            if len(df):
+                print(f"    {name}: {len(df)} rows")
+                return to_symbol(df)
+            print(f"    {name}: {len(df)} rows (empty, attempt {attempt}/{max_retries})")
+        except Exception as e:
+            print(f"    {name}: attempt {attempt}/{max_retries} FAILED ({e})")
+        time.sleep(2 * attempt)
+    print(f"    {name}: giving up after {max_retries} attempts")
+    return pd.DataFrame()
 
 ohlcv = safe_fetch(pro.daily, "OHLCV", trade_date=TRADE_DATE)
 adj   = safe_fetch(pro.adj_factor, "adj_factor", trade_date=TRADE_DATE)
@@ -204,21 +218,27 @@ if len(susp):
     suspended_set = set(susp["symbol"].unique())
     df["is_suspended"] = df["symbol"].isin(suspended_set).astype(int)
 
-# --- stock_basic: board, is_st, industry, list_days ---
-try:
-    basic_info = pro.stock_basic(list_status="L", fields="ts_code,symbol,name,industry,list_date")
-    basic_info["board"] = basic_info["ts_code"].apply(
-        lambda x: "sh" if x.endswith(".SH") else ("sz" if x.endswith(".SZ") else "bj")
-    )
-    basic_info["is_st"] = basic_info["name"].str.contains(r"\*?ST", na=False).astype(int)
-    list_date_ts = pd.to_datetime(basic_info["list_date"], format="%Y%m%d", errors="coerce")
-    basic_info["list_days"] = (pd.Timestamp(TRADE_DATE) - list_date_ts).dt.days
-    for col in ["board", "is_st", "industry", "list_days"]:
-        if col in panel_cols:
-            smap = basic_info.set_index("symbol")[col]
-            df[col] = df["symbol"].map(smap)
-except Exception as e:
-    print(f"    stock_basic: {e}")
+# --- 元数据列: 与基建面板同语义 (board/is_st/industry/list_days) ---
+# 基建 (panel_builder): board=board_of (main/GEM/STAR); industry=东财行业板块, 缺省 UNKNOWN;
+# is_st=名称判断; list_days=每股累计交易日数 (cumcount). 日更必须延续这些语义 —
+# 不能再引入 stock_basic 的交易所代码 / 109 行业 / 上市日历天数, 否则尾部特征跳变.
+if "board" in panel_cols:
+    df["board"] = df["symbol"].map(board_of)
+meta_carry_cols = ["is_st", "industry", "list_days"]
+meta_hist = pq.read_table(PANEL, columns=["symbol", "date"] + meta_carry_cols).to_pandas()
+meta_hist = meta_hist[meta_hist["date"] < pd.Timestamp(TRADE_DATE)]
+last_meta = meta_hist.sort_values("date").groupby("symbol").last()
+for col in ["is_st", "industry"]:
+    if col in panel_cols:
+        smap = last_meta[col].dropna()
+        df[col] = df["symbol"].map(smap)
+        df[col] = df[col].fillna(False if col == "is_st" else "UNKNOWN")
+if "list_days" in panel_cols and "list_days" in last_meta.columns:
+    ld = last_meta["list_days"].dropna()
+    df["list_days"] = df["symbol"].map(ld) + 1
+print(f"    meta carry: board={df['board'].nunique() if 'board' in df.columns else '-'} | "
+      f"industry nunique={df['industry'].nunique() if 'industry' in df.columns else '-'} | "
+      f"list_days sample={df['list_days'].dropna().head(3).tolist() if 'list_days' in df.columns else '-'}")
 
 # --- Simple derived features (no history needed) ---
 if all(c in df.columns for c in ["high", "low", "pre_close"]):
@@ -367,7 +387,9 @@ ffill_cols = [
     "announce_date",
 ]
 ffill_cols = [c for c in ffill_cols if c in panel_cols]
-needed_ffill = [c for c in ffill_cols if c not in df.columns or df[c].isna().all()]
+# 慢列始终 ffill: 旧逻辑 `df[c].isna().all()` 在今日行部分拉取成功时会跳过整列,
+# 导致其余股票该列 NaN (2026-07-29/30/31 尾行缺失的根因之一)。
+needed_ffill = ffill_cols
 
 if needed_ffill:
     ffill_hist = pq.read_table(PANEL, columns=["symbol", "date"] + needed_ffill).to_pandas()
@@ -382,7 +404,14 @@ if needed_ffill:
     for col in needed_ffill:
         if col in last_per_stock.columns:
             smap = last_per_stock[col].dropna()
-            df[col] = df["symbol"].map(smap)
+            if not len(smap):
+                continue
+            mapped = df["symbol"].map(smap)
+            # fillna 而非覆盖: 保留今日直接拉取的实时值, 只补缺失行
+            if col in df.columns:
+                df[col] = df[col].fillna(mapped)
+            else:
+                df[col] = mapped
             if df[col].notna().sum() > 0:
                 filled_count += 1
     print(f"    Forward-filled: {filled_count} columns")
