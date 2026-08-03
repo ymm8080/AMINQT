@@ -113,7 +113,9 @@ def main():
     panel.to_parquet(backup, index=False)
 
     # 6. 只并 evt 2 列
-    panel = panel.merge(daily[["symbol", "date"] + EVT_COLS], on=["symbol", "date"], how="left")
+    panel = panel.merge(
+        daily[["symbol", "date"] + EVT_COLS], on=["symbol", "date"], how="left"
+    )
 
     # 7. 写回
     logger.info("写回: %s (列数 %d)", PANEL_PATH, len(panel.columns))
