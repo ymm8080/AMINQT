@@ -38,9 +38,7 @@ def _make_minimal_panel(n_symbols=5, n_dates=100, extra_cols=None):
                 "pre_close": base_price * 0.99,
                 "board": "main",
                 "industry": "银行",
-                "is_st": 0,
                 "is_suspended": 0,
-                "list_days": 500,
             }
             if extra_cols:
                 for ec_name, ec_fn in extra_cols.items():

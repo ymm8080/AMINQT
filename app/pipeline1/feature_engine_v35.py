@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 from .cleaning_pipeline import get_limit_pct
+from config.settings import LHB_V2_SPEC
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,26 @@ MISSINGNESS_COLS = [
 
 def _ema(s: pd.Series, n: int) -> pd.Series:
     return s.ewm(span=n, adjust=False).mean()
+
+
+# GLM 龙虎榜 spec: EWMA 半衰期 h=5 → α = 1 − 2^(−1/5) ≈ 0.1294
+_LHB_ALPHA = 1 - 2 ** (-1 / 5)
+
+
+def _half_life_alpha(h: float) -> float:
+    """EWMA 半衰期 h → 平滑系数 α = 1 − 2^(−1/h) (KIMI LHB v2.0 §3.2)."""
+    return 1 - 2 ** (-1 / h)
+
+
+def _mem_floor(s: pd.Series, ratio: float) -> pd.Series:
+    """F_min 最小记忆值下限 (KIMI LHB v2.0 §3.3, PIT 安全).
+
+    下限 = max(0, 历史均值×比例), 用 expanding().mean().shift(1) 仅用 T-1 及更早.
+    spec 字面 max(F, F_min) 会把负信号 (机构/量化净卖出) 抬到 0, 破坏方向性;
+    故按符号保留: 幅值不低于下限, 符号不变 → 长期未上榜不遗忘过度, 又不抹掉负信号.
+    """
+    floor = np.maximum(0.0, s.expanding().mean().shift(1).fillna(0.0) * ratio)
+    return pd.Series(np.sign(s) * np.maximum(s.abs(), floor), index=s.index)
 
 
 def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
@@ -122,6 +143,8 @@ class FeatureEngineV35:
         "dim29": "dim29_holdertrade",
         "dim30": "dim30_kline_geometry",
         "dim31": "dim31_announcement",
+        "dim32": "dim32_lhb_glm",
+        "dim34": "dim34_lhb_v2",
     }
 
     # ---------------- 总装 ----------------
@@ -222,6 +245,10 @@ class FeatureEngineV35:
             df = self.dim30_kline_geometry(df)  # K线几何特征 (缺口/实体/影线/连续)
         if _ok("dim31"):
             df = self.dim31_announcement(df)  # 公告事件特征 (距上次公告天数/公告频率)
+        if _ok("dim32"):
+            df = self.dim32_lhb_glm(df)  # GLM 龙虎榜 spec (机构动能/散户热度/抛压记忆/上榜频次)
+        if _ok("dim34"):
+            df = self.dim34_lhb_v2(df)  # KIMI LHB v2.0 (修正分母净占比+情境权重+价格交互)
 
         # ── Phase 2: Auto-adopt new panel columns ──
         # IRON RULE #1: Auto-adoption with IC pre-screen uses forward return
@@ -2594,9 +2621,10 @@ class FeatureEngineV35:
     # ---------------- ㉙ 股东增减持 (Alt-6) ----------------
     @staticmethod
     def dim29_holdertrade(df: pd.DataFrame) -> pd.DataFrame:
-        """从股东增减持数据提取 7 个内部人交易行为因子.
+        """从股东增减持数据提取 10 个内部人交易行为因子.
 
-        上游列: sh_net_change_sign, sh_change_amt_total (由 panel_builder enrich_alt_data
+        上游列: sh_net_change_sign, sh_change_amt_total, sh_evt_start_date,
+                sh_evt_end_date (由 panel_builder enrich_alt_data
                 从 Tushare stk_holdertrade / AKShare 股东增减持 聚合而来)
 
         数据特点: 不定期公告, 非日频 — 用 ffill + rolling 处理稀疏性.
@@ -2609,8 +2637,9 @@ class FeatureEngineV35:
           5. sh_insider_signal    — 内部人信号: 20 日内净增持=+1, 净减持=-1, 无=0
           6. sh_change_frequency  — 近 60 日公告次数 (活跃度指标)
           7. sh_amt_vs_amount     — 增减持金额/日成交额 (影响规模)
-          8. sh_days_since_evt_start — 距最近一次增减持事件开始的天数 (ffill 连续时序)
-          9. sh_days_since_evt_end   — 距最近一次增减持事件结束的天数 (ffill 连续时序)
+          8. sh_ann_decay         — 公告恐慌衰减 1/(1+max(0,T−A)), 公告日=1 随距公告天数递减
+          9. sh_end_decay         — 结束日反弹效应 0(T<E) else 1/(1+T−E), 结束日=1 随后递减
+          10. sh_is_executing     — 是否处于增减持执行期 (S≤T<E 为 1, 结束日视为已结束为 0)
         """
         has_ht = any(
             c in df.columns for c in ["sh_net_change_sign", "sh_change_amt_total"]
@@ -2623,8 +2652,9 @@ class FeatureEngineV35:
             "sh_insider_signal",
             "sh_change_frequency",
             "sh_amt_vs_amount",
-            "sh_days_since_evt_start",
-            "sh_days_since_evt_end",
+            "sh_ann_decay",
+            "sh_end_decay",
+            "sh_is_executing",
         ]
         if not has_ht:
             for c in out_cols:
@@ -2660,15 +2690,300 @@ class FeatureEngineV35:
             else:
                 g["sh_amt_vs_amount"] = np.nan
 
-            # 距最近事件天数: ffill 事件窗口后, 今天(行日期) − 事件起止日期
-            if "sh_evt_start_date" in g.columns:
-                es = g["sh_evt_start_date"].ffill()
-                ee = g["sh_evt_end_date"].ffill()
-                g["sh_days_since_evt_start"] = (g["date"] - es).dt.days
-                g["sh_days_since_evt_end"] = (g["date"] - ee).dt.days
+            # 事件窗口三特征 (GLM 大股东增减持 spec):
+            #   T=行日期, A=最近公告日, S=变动开始, E=变动结束
+            if "sh_evt_start_date" in g.columns and "sh_evt_end_date" in g.columns:
+                has_evt = g["sh_evt_start_date"].notna()
+                ann = g["date"].where(has_evt).ffill()   # A: 最近一次公告日
+                s = g["sh_evt_start_date"].ffill()       # S
+                e = g["sh_evt_end_date"].ffill()         # E
+                d1 = (g["date"] - ann).dt.days           # T − A
+                d2 = (g["date"] - e).dt.days             # T − E
+                # 特征1: 公告恐慌衰减 1/(1+max(0,T−A)); 无事件上下文 NaN
+                g["sh_ann_decay"] = (1.0 / (1.0 + d1.clip(lower=0))).where(
+                    ann.notna()
+                )
+                # 特征2: 结束日反弹 0(T<E) else 1/(1+T−E); 无结束日 NaN
+                g["sh_end_decay"] = pd.Series(
+                    np.where(d2.ge(0), 1.0 / (1.0 + d2), 0.0),
+                    index=g.index,
+                ).where(e.notna())
+                # 特征3: 是否处于执行期 (S≤T<E, 排他 — 结束日 T=E 视为已结束, 由特征2表达)
+                g["sh_is_executing"] = (
+                    (g["date"] >= s) & (g["date"] < e)
+                ).astype(float).where(s.notna() & e.notna())
             else:
-                g["sh_days_since_evt_start"] = np.nan
-                g["sh_days_since_evt_end"] = np.nan
+                for c in ("sh_ann_decay", "sh_end_decay", "sh_is_executing"):
+                    g[c] = np.nan
+
+            return g
+
+        return _apply_per_stock(df, per_stock)
+
+    # ---------------- ㉜ GLM 龙虎榜 spec 特征 (机构动能/散户热度/抛压记忆/上榜频次) ----------------
+    @staticmethod
+    def dim32_lhb_glm(df: pd.DataFrame) -> pd.DataFrame:
+        """龙虎榜稀疏数据特征 (GLM spec).
+
+        上游列 (由 backfill / daily fetch merge): lhb_retail_buy, lhb_retail_sell,
+                lhb_inst_buy, lhb_inst_sell (席位明细聚合), 以及既有
+                lhb_buy_amt / lhb_sell_amt / lhb_net_buy / amount.
+
+        稀疏处理 = EWMA 衰减记忆 (h=5, α=1−2^(−1/5)≈0.129): 上榜日 R 瞬间跃升,
+        非上榜日 R=0 乘 (1−α) 缓慢衰减, 保留"资金余温". 未上榜日买入/卖出=0.
+
+        产出 (4):
+          1. lhb_inst_flow     — 机构动能  EWMA((InstBuy−InstSell)/amount)    正向
+          2. lhb_retail_flow   — 散户热度  EWMA((RetBuy−RetSell)/amount)      反向
+          3. lhb_sell_pressure — 抛压记忆  EWMA(Sell/amount)                  反向
+          4. lhb_list_count_5d — 上榜频次  Σ_{i=0..4} I(上榜_{t−i})            风控
+        """
+        has_lhb = any(
+            c in df.columns
+            for c in ["lhb_net_buy", "lhb_buy_amt", "lhb_sell_amt",
+                      "lhb_inst_buy", "lhb_retail_buy"]
+        )
+        out_cols = [
+            "lhb_inst_flow",
+            "lhb_retail_flow",
+            "lhb_sell_pressure",
+            "lhb_list_count_5d",
+        ]
+        if not has_lhb:
+            for c in out_cols:
+                df[c] = np.nan
+            return df
+
+        def per_stock(g: pd.DataFrame) -> pd.DataFrame:
+            g = g.sort_values("date")
+            v = g["amount"].replace(0, np.nan)
+
+            # 机构动能: (机构买入 − 机构卖出)/成交额, 未上榜日=0
+            if "lhb_inst_buy" in g.columns and "lhb_inst_sell" in g.columns:
+                num_inst = g["lhb_inst_buy"].fillna(0) - g["lhb_inst_sell"].fillna(0)
+                g["lhb_inst_flow"] = (num_inst / v).fillna(0).ewm(
+                    alpha=_LHB_ALPHA, adjust=False
+                ).mean()
+            else:
+                g["lhb_inst_flow"] = np.nan
+
+            # 散户热度: (散户买入 − 散户卖出)/成交额, 未上榜日=0
+            if "lhb_retail_buy" in g.columns and "lhb_retail_sell" in g.columns:
+                num_ret = g["lhb_retail_buy"].fillna(0) - g["lhb_retail_sell"].fillna(0)
+                g["lhb_retail_flow"] = (num_ret / v).fillna(0).ewm(
+                    alpha=_LHB_ALPHA, adjust=False
+                ).mean()
+            else:
+                g["lhb_retail_flow"] = np.nan
+
+            # 抛压记忆: 龙虎榜总卖出/成交额, 未上榜日=0
+            if "lhb_sell_amt" in g.columns:
+                num_sell = g["lhb_sell_amt"].fillna(0)
+                g["lhb_sell_pressure"] = (num_sell / v).fillna(0).ewm(
+                    alpha=_LHB_ALPHA, adjust=False
+                ).mean()
+            else:
+                g["lhb_sell_pressure"] = np.nan
+
+            # 上榜频次: 近 5 交易日上榜天数 (含当日)
+            listed = (
+                g["lhb_buy_amt"].notna()
+                | g["lhb_sell_amt"].notna()
+                | g["lhb_net_buy"].notna()
+            ).astype(int)
+            g["lhb_list_count_5d"] = listed.rolling(5, min_periods=1).sum()
+
+            return g
+
+        return _apply_per_stock(df, per_stock)
+
+    # ---------------- ㉞ KIMI LHB v2.0 特征 (修正分母净占比 + 情境权重 + 价格交互) ----------------
+    @staticmethod
+    def dim34_lhb_v2(df: pd.DataFrame) -> pd.DataFrame:
+        """KIMI LHB v2.0 修正版龙虎榜特征 (spec §2-§5).
+
+        与 dim32 (GLM v1.0) 的差异: ① 分母修正为席位内部净占比
+        (InstBuy−InstSell)/(InstBuy+InstSell+ε) 消除市值偏差; ② 顶级游资/量化/
+        散户三席位动能 (静态分类上游 lhb_*_buy/sell); ③ 卖出压力 × 价格情境权重
+        W_price (涨停1.5/跌停1.2/大涨1.3/大跌1.1); ④ 价格行为交互 (强度/决心/连板/
+        溢价/锁仓); ⑤ F_min 最小记忆值; ⑥ 过热惩罚 (C5d≥3 正向资金流 ×0.7).
+
+        半衰期: 机构 8 / 游资 6 / 量化+散户 4 / 抛压+买卖比 5 / 连板 3.
+        PIT: EWMA 仅用当日及更早; F_min 下限用 expanding().mean().shift(1).
+        产出 (14):
+          lhb2_inst_flow       — 机构动能A   EWMA((InstBuy−InstSell)/(InstBuy+InstSell+ε))
+          lhb2_inst_shock      — 机构动能B   EWMA((InstBuy−InstSell)/流通市值)
+          lhb2_top_flow        — 顶级游资    EWMA((TopBuy−TopSell)/(TopBuy+TopSell+ε))
+          lhb2_quant_flow      — 量化席位    EWMA((QuantBuy−QuantSell)/(QuantBuy+QuantSell+ε)) 反向
+          lhb2_retail_flow     — 散户/混合   EWMA((RetailBuy−RetailSell)/(RetailBuy+RetailSell+ε)) 反向
+          lhb2_sell_pressure   — 抛压记忆    EWMA(Sell/(Buy+Sell+ε) × W_price)                   反向
+          lhb2_sell_buy_ratio  — 买卖比      EWMA(Sell/(Buy+ε))                                  反向
+          lhb2_list_count_5d   — 过热计数    Σ I(List) 近5日
+          lhb2_conboard_mem    — 连板记忆    EWMA(C_board × I(List), h=3)
+          lhb2_inst_strength   — 强度        F_inst × Ret
+          lhb2_inst_resolve    — 决心        F_inst / (Amp+ε)
+          lhb2_inst_conboard   — 连板基因    F_inst × C_board
+          lhb2_inst_premium    — 次日溢价    F_inst × F_top × (1−F_retail) × (1+Ret)
+          lhb2_inst_lock       — 机构锁仓    I(F_inst>0.3 & F_inst_{-1}>0.3 & close创新高)
+        """
+        spec = LHB_V2_SPEC
+        eps = spec["eps"]
+        fmin = spec["f_min_ratio"]
+        a_inst = _half_life_alpha(spec["h_inst"])
+        a_top = _half_life_alpha(spec["h_top"])
+        a_quant = _half_life_alpha(spec["h_quant"])
+        a_sell = _half_life_alpha(spec["h_sell"])
+        a_cb = _half_life_alpha(spec["h_conboard"])
+
+        seat_cols = [
+            "lhb_inst_buy", "lhb_inst_sell", "lhb_top_buy", "lhb_top_sell",
+            "lhb_quant_buy", "lhb_quant_sell", "lhb_retail_buy", "lhb_retail_sell",
+        ]
+        out_cols = [
+            "lhb2_inst_flow", "lhb2_inst_shock", "lhb2_top_flow", "lhb2_quant_flow",
+            "lhb2_retail_flow", "lhb2_sell_pressure", "lhb2_sell_buy_ratio",
+            "lhb2_list_count_5d", "lhb2_conboard_mem", "lhb2_inst_strength",
+            "lhb2_inst_resolve", "lhb2_inst_conboard", "lhb2_inst_premium",
+            "lhb2_inst_lock",
+        ]
+        has_seats = any(c in df.columns for c in seat_cols)
+        has_base = any(
+            c in df.columns for c in ["lhb_buy_amt", "lhb_sell_amt", "lhb_net_buy"]
+        )
+        if not (has_seats or has_base):
+            for c in out_cols:
+                df[c] = np.nan
+            return df
+
+        def per_stock(g: pd.DataFrame) -> pd.DataFrame:
+            g = g.sort_values("date")
+            close = g["close"]
+            ret = close.pct_change()
+            amp = (g["high"] - g["low"]) / g["low"].replace(0, np.nan)
+
+            # ── 价格情境权重 W_price (§2.5) — 涨停 > 跌停 > 大涨 > 大跌 > 平盘 ──
+            w = pd.Series(spec["w_flat"], index=g.index, dtype=float)
+            w[ret > 0.05] = spec["w_up5"]
+            w[ret < -0.05] = spec["w_down5"]
+            if "up_limit_raw" in g.columns and "down_limit_raw" in g.columns:
+                is_lu = g["up_limit_raw"].notna() & (
+                    close >= g["up_limit_raw"] * (1 - spec["limit_up_tol"])
+                )
+                is_ld = g["down_limit_raw"].notna() & (
+                    close <= g["down_limit_raw"] * (1 + spec["limit_down_tol"])
+                )
+                w[is_ld] = spec["w_limit_down"]
+                w[is_lu] = spec["w_limit_up"]
+                c_board = is_lu.astype(int).groupby((~is_lu).cumsum()).cumsum()
+            else:
+                c_board = pd.Series(0, index=g.index)
+
+            # ── 上榜示性 I(List) (§5.2 C5d / §4.3 F_conboard) ──
+            if has_base:
+                listed = pd.Series(False, index=g.index)
+                for c in ("lhb_buy_amt", "lhb_sell_amt", "lhb_net_buy"):
+                    if c in g.columns:
+                        listed |= g[c].notna()
+            else:
+                listed = g[seat_cols].notna().any(axis=1)
+            listed_i = listed.astype(int)
+
+            def _pair(buy_col: str, sell_col: str):
+                if buy_col in g.columns and sell_col in g.columns:
+                    return g[buy_col].fillna(0.0), g[sell_col].fillna(0.0)
+                return None
+
+            # ── 机构动能 A/B (§2.1) ──
+            p_inst = _pair("lhb_inst_buy", "lhb_inst_sell")
+            if p_inst is not None:
+                ib, iss = p_inst
+                f_inst = _mem_floor(
+                    ((ib - iss) / (ib + iss + eps)).fillna(0)
+                    .ewm(alpha=a_inst, adjust=False).mean(),
+                    fmin,
+                )
+                g["lhb2_inst_flow"] = f_inst
+                if "circ_mv" in g.columns:
+                    mv = g["circ_mv"] * spec["circ_mv_unit"]
+                    g["lhb2_inst_shock"] = _mem_floor(
+                        ((ib - iss) / (mv + eps)).fillna(0)
+                        .ewm(alpha=a_inst, adjust=False).mean(),
+                        fmin,
+                    )
+                else:
+                    g["lhb2_inst_shock"] = np.nan
+            else:
+                f_inst = pd.Series(np.nan, index=g.index)
+                g["lhb2_inst_flow"] = np.nan
+                g["lhb2_inst_shock"] = np.nan
+
+            # ── 顶级游资 / 量化 / 散户 (§2.2/§2.3/§2.4) ──
+            for out, bc, sc, a in (
+                ("lhb2_top_flow", "lhb_top_buy", "lhb_top_sell", a_top),
+                ("lhb2_quant_flow", "lhb_quant_buy", "lhb_quant_sell", a_quant),
+                ("lhb2_retail_flow", "lhb_retail_buy", "lhb_retail_sell", a_quant),
+            ):
+                p = _pair(bc, sc)
+                if p is not None:
+                    b, s = p
+                    g[out] = _mem_floor(
+                        ((b - s) / (b + s + eps)).fillna(0)
+                        .ewm(alpha=a, adjust=False).mean(),
+                        fmin,
+                    )
+                else:
+                    g[out] = np.nan
+            f_top = g["lhb2_top_flow"]
+            f_retail = g["lhb2_retail_flow"]
+
+            # ── 抛压 / 买卖比 (§2.5) ──
+            if "lhb_buy_amt" in g.columns and "lhb_sell_amt" in g.columns:
+                buy = g["lhb_buy_amt"].fillna(0.0)
+                sell = g["lhb_sell_amt"].fillna(0.0)
+                g["lhb2_sell_pressure"] = _mem_floor(
+                    (sell / (buy + sell + eps)).fillna(0).mul(w)
+                    .ewm(alpha=a_sell, adjust=False).mean(),
+                    fmin,
+                )
+                g["lhb2_sell_buy_ratio"] = _mem_floor(
+                    (sell / (buy + eps)).fillna(0)
+                    .ewm(alpha=a_sell, adjust=False).mean(),
+                    fmin,
+                )
+            else:
+                g["lhb2_sell_pressure"] = np.nan
+                g["lhb2_sell_buy_ratio"] = np.nan
+
+            # ── 上榜频次 C5d (§5.2) ──
+            g["lhb2_list_count_5d"] = listed_i.rolling(5, min_periods=1).sum()
+
+            # ── 连板衰减记忆 F_conboard (§4.3) ──
+            g["lhb2_conboard_mem"] = _mem_floor(
+                (c_board * listed_i).fillna(0)
+                .ewm(alpha=a_cb, adjust=False).mean(),
+                fmin,
+            )
+
+            # ── 价格行为交互 (§4) ──
+            g["lhb2_inst_strength"] = f_inst * ret
+            g["lhb2_inst_resolve"] = f_inst / (amp + eps)
+            g["lhb2_inst_conboard"] = f_inst * c_board
+            g["lhb2_inst_premium"] = f_inst * f_top * (1 - f_retail) * (1 + ret)
+            g["lhb2_inst_lock"] = (
+                (f_inst > spec["lock_thresh"])
+                & (f_inst.shift(1) > spec["lock_thresh"])
+                & (close > close.shift(1).rolling(5, min_periods=1).max())
+            ).astype(int)
+
+            # ── 过热惩罚 (§5.2): C5d≥3 (主板/双创) → 正向资金流 ×0.7 ──
+            # is_st 已从 V3 移除 (ingest gate 已剔 ST), ST 档位不再区分.
+            over = g["lhb2_list_count_5d"] >= 3
+            for c in (
+                "lhb2_inst_flow", "lhb2_inst_shock", "lhb2_top_flow",
+                "lhb2_inst_strength", "lhb2_inst_resolve", "lhb2_inst_conboard",
+                "lhb2_inst_premium",
+            ):
+                g[c] = np.where(over, g[c] * spec["overheat_penalty"], g[c])
 
             return g
 
@@ -2889,8 +3204,11 @@ class FeatureEngineV35:
                             exp_days_arr[i] = (est_date - cur_date).days
                             break
                         elif offset == 0:
-                            # 同月但已过, 尝试明年
+                            # 同月但已过, 尝试明年 (重新 clamp: 闰年 2/29 在次年可能不存在)
                             target_y = cy + 1
+                            est_day = min(
+                                est_day, calendar.monthrange(target_y, target_m)[1]
+                            )
                             est_date = pd.Timestamp(target_y, target_m, est_day)
                             exp_days_arr[i] = (est_date - cur_date).days
                             break
@@ -2931,8 +3249,6 @@ class FeatureEngineV35:
             "turnover_rate",
             "free_float_turnover_rate",
             "is_suspended",
-            "is_st",
-            "list_days",
             "open_hfq",
             "high_hfq",
             "low_hfq",
@@ -2941,6 +3257,14 @@ class FeatureEngineV35:
             "announce_date",
             "sh_evt_start_date",
             "sh_evt_end_date",
+            "lhb_inst_buy",
+            "lhb_inst_sell",
+            "lhb_retail_buy",
+            "lhb_retail_sell",
+            "lhb_top_buy",
+            "lhb_top_sell",
+            "lhb_quant_buy",
+            "lhb_quant_sell",
             "PE_TTM",
             "touched_limit_up",
             "score_rank",

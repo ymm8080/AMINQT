@@ -80,8 +80,6 @@ iwencai:
 # ── 风控参数 ──
 risk_filter:
   min_amount: 50000000         # 最低成交额 (5000万)
-  exclude_st: true             # 排除 ST 股
-  exclude_new_days: 5          # 排除上市不足 N 天的次新股
   max_account_drawdown_pct: 3.0  # 账户回撤超此值 → 返回空列表
 
 # ── 因子筛选 (用户自定义因子阈值) ──

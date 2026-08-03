@@ -4,8 +4,6 @@
 Rules (selection_config.yaml::risk_filter):
   - Drop amount < min_amount.
   - Drop |pct_change| > price_limit_pct.
-  - Drop ST names when exclude_st is true.
-  - Drop names listed fewer than exclude_new_days days.
   - If account drawdown > max_account_drawdown_pct → return [] (circuit breaker).
 """
 
@@ -30,8 +28,6 @@ def _risk_cfg() -> dict:
         "max_account_drawdown_pct": float(
             cfg.get("max_account_drawdown_pct", settings.MAX_ACCOUNT_DRAWDOWN_PCT)
         ),
-        "exclude_st": bool(cfg.get("exclude_st", True)),
-        "exclude_new_days": int(cfg.get("exclude_new_days", 5)),
     }
 
 
@@ -44,8 +40,7 @@ def apply_filters(
 
     Args:
         candidates: List of candidate dicts. Expected keys:
-            symbol (str), score (float), amount (float), pct_change (float),
-            is_st (bool, optional), list_days (int, optional).
+            symbol (str), score (float), amount (float), pct_change (float).
         account_drawdown_pct: Current account drawdown percentage.
         cfg: Optional risk_filter config override.
 
@@ -83,20 +78,6 @@ def apply_filters(
                 symbol,
                 pct_change,
                 cfg["price_limit_pct"],
-            )
-            continue
-
-        if cfg["exclude_st"] and c.get("is_st"):
-            logger.debug("Risk filter drop %s: ST excluded", symbol)
-            continue
-
-        list_days = c.get("list_days")
-        if list_days is not None and int(list_days) < cfg["exclude_new_days"]:
-            logger.debug(
-                "Risk filter drop %s: list_days %d < %d",
-                symbol,
-                int(list_days),
-                cfg["exclude_new_days"],
             )
             continue
 

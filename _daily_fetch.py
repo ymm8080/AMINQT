@@ -113,10 +113,42 @@ susp  = safe_fetch(pro.suspend_d, "suspend", trade_date=TRADE_DATE)
 cyq   = safe_fetch(pro.cyq_perf, "cyq_perf", trade_date=TRADE_DATE)
 margin= safe_fetch(pro.margin_detail, "margin_detail", trade_date=TRADE_DATE)
 lhb   = safe_fetch(pro.top_list, "LHB", trade_date=TRADE_DATE)
+bt    = safe_fetch(pro.block_trade, "block_trade", trade_date=TRADE_DATE)
 
 if not len(ohlcv):
     print("FATAL: No OHLCV data")
     sys.exit(1)
+
+# ── block_trade: 当日大宗明细 → raw 缓存 (FINAL STOCK SCAN 读它, 需每日刷新) ──
+# 只刷新 raw 缓存, 不落面板 bt_* 列 (特征工程已 REVERT; SCAN 出名单时直接读缓存剔除).
+if len(bt):
+    try:
+        from app.core.config_loader import load_config
+        _bt_cache = (
+            load_config("data_pipeline_config")
+            .get("final_stock_scan", {})
+            .get("block_trade_cache", "data/supply_cache/alt_data/block_trade/block_trade_full.parquet")
+        )
+        _bt_path = (
+            _bt_cache if os.path.isabs(_bt_cache)
+            else os.path.join(os.path.dirname(os.path.abspath(__file__)), _bt_cache)
+        )
+        old = pd.read_parquet(_bt_path) if os.path.exists(_bt_path) else pd.DataFrame()
+        bt_raw = bt.copy()
+        bt_raw["date"] = pd.Timestamp(TRADE_DATE)
+        _keep = ["symbol", "date", "ts_code", "trade_date", "price", "vol", "amount", "buyer", "seller"]
+        bt_raw = bt_raw[[c for c in _keep if c in bt_raw.columns]]
+        # 去重: 同 symbol+trade_date 保留最新 (历史日重跑安全)
+        merged = pd.concat([old, bt_raw], ignore_index=True)
+        merged = merged.drop_duplicates(subset=["symbol", "trade_date"], keep="last")
+        merged = merged.sort_values(["symbol", "date"]).reset_index(drop=True)
+        os.makedirs(os.path.dirname(_bt_path), exist_ok=True)
+        _tmp = _bt_path + ".tmp"
+        merged.to_parquet(_tmp, index=False)
+        os.replace(_tmp, _bt_path)  # 原子替换, 避免崩溃写坏缓存导致 SCAN fail-open
+        print(f"    block_trade raw cache: +{len(bt)} rows -> {len(merged)} total")
+    except Exception as e:
+        print(f"    block_trade raw cache: FAILED ({e})")
 
 # ── 2. Build today's DataFrame ──
 print("\n[2] Building today's frame...")
@@ -257,27 +289,21 @@ if len(susp):
     suspended_set = set(susp["symbol"].unique())
     df["is_suspended"] = df["symbol"].isin(suspended_set).astype(int)
 
-# --- 元数据列: 与基建面板同语义 (board/is_st/industry/list_days) ---
-# 基建 (panel_builder): board=board_of (main/GEM/STAR); industry=东财行业板块, 缺省 UNKNOWN;
-# is_st=名称判断; list_days=每股累计交易日数 (cumcount). 日更必须延续这些语义 —
-# 不能再引入 stock_basic 的交易所代码 / 109 行业 / 上市日历天数, 否则尾部特征跳变.
+# --- 元数据列: 与基建面板同语义 (board/industry) ---
+# 基建 (panel_builder): board=board_of (main/GEM/STAR); industry=东财行业板块, 缺省 UNKNOWN.
+# 日更必须延续这些语义 — 不能再引入 stock_basic 的交易所代码 / 109 行业, 否则尾部特征跳变.
+# is_st/list_days 已从 V3 移除: ST/次新由下方 ingest scan 按 stock_basic name/list_date 过滤.
 if "board" in panel_cols:
     df["board"] = df["symbol"].map(board_of)
-meta_carry_cols = ["is_st", "industry", "list_days"]
+meta_carry_cols = ["industry"]
 meta_hist = pq.read_table(PANEL, columns=["symbol", "date"] + meta_carry_cols).to_pandas()
 meta_hist = meta_hist[meta_hist["date"] < pd.Timestamp(TRADE_DATE)]
 last_meta = meta_hist.sort_values("date").groupby("symbol").last()
-for col in ["is_st", "industry"]:
-    if col in panel_cols:
-        smap = last_meta[col].dropna()
-        df[col] = df["symbol"].map(smap)
-        df[col] = df[col].fillna(False if col == "is_st" else "UNKNOWN")
-if "list_days" in panel_cols and "list_days" in last_meta.columns:
-    ld = last_meta["list_days"].dropna()
-    df["list_days"] = df["symbol"].map(ld) + 1
+if "industry" in panel_cols and "industry" in last_meta.columns:
+    smap = last_meta["industry"].dropna()
+    df["industry"] = df["symbol"].map(smap).fillna("UNKNOWN")
 print(f"    meta carry: board={df['board'].nunique() if 'board' in df.columns else '-'} | "
-      f"industry nunique={df['industry'].nunique() if 'industry' in df.columns else '-'} | "
-      f"list_days sample={df['list_days'].dropna().head(3).tolist() if 'list_days' in df.columns else '-'}")
+      f"industry nunique={df['industry'].nunique() if 'industry' in df.columns else '-'}")
 
 # --- 入库扫描: ST/*ST 股 或 上市 < INGEST_MIN_LIST_DAYS 交易日 不进入 V3 ---
 _stock_info = fetch_stock_basic_cached()

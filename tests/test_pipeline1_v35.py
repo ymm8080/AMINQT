@@ -14,7 +14,7 @@ from app.pipeline1.cleaning_pipeline import (
     is_limit_up,
     limit_up_price,
 )
-from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+from app.pipeline1.feature_engine_v35 import FeatureEngineV35, _LHB_ALPHA
 from app.pipeline1.ic_screener import ICScreener
 from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.list_generator import (
@@ -66,11 +66,9 @@ def make_panel(
                     "free_float_turnover_rate": rng.uniform(1, 10, days),
                     "pre_close": pre_close,
                     "is_suspended": False,
-                    "is_st": False,
                     "industry": "白酒"
                     if sym == "600519"
                     else ("电池" if sym == "300750" else "保险"),
-                    "list_days": 1000,
                 }
             )
         )
@@ -107,12 +105,12 @@ class TestCleaning:
         assert is_limit_up(109.95, 100.0, 0.10)  # 差0.05 < 0.11 → 涨停
         assert not is_limit_up(109.80, 100.0, 0.10)  # 差0.20 > 0.11 → 非涨停
 
-    def test_step1_st_and_list_days(self):
+    def test_step1_pass_through(self):
+        """ST/*ST 与次新股已在 V3 入库入口 (ingest gate) 过滤, step1 为 pass-through."""
         df = make_panel()
-        df.loc[df["symbol"] == "600519", "is_st"] = True
-        df.loc[df["symbol"] == "300750", "list_days"] = 100
         out = CleaningPipeline().step1_base_state(df)
-        assert set(out["symbol"]) == {"601318"}
+        assert out.equals(df)
+        assert len(out) == len(df)
 
     def test_step2_liquidity_and_stability(self):
         """成交额下限 + Score 前N + D24 换手稳定性."""
@@ -316,37 +314,55 @@ class TestFeatures:
         assert "PE_log_industry_rank" in out.columns
         assert out["PE_log_industry_rank"].between(0, 1).all()
 
-    def test_dim29_holder_evt_days(self):
-        """dim29 增减持事件窗口: days_since_evt_start/end 在事件行=公告日挂载, ffill 后随日期递增."""
-        dates = pd.bdate_range("2025-01-06", periods=6)  # 06/07/08/09/10/13
+    def test_dim29_spec_event_features(self):
+        """GLM 大股东增减持 spec 三特征: 公告恐慌衰减/结束反弹/是否执行中.
+
+        事件: 公告日 A=2025-01-01, 变动窗口 S=2025-01-15 ~ E=2025-04-15.
+        """
+        dates = pd.to_datetime(
+            ["2024-12-20", "2025-01-01", "2025-01-10", "2025-02-01", "2025-04-15", "2025-05-01"]
+        )
         df = pd.DataFrame(
             {
                 "symbol": ["600519"] * 6,
                 "date": dates,
-                "sh_net_change_sign": [np.nan, np.nan, 1.0, np.nan, np.nan, np.nan],
-                "sh_change_amt_total": [np.nan, np.nan, 1000.0, np.nan, np.nan, np.nan],
+                "sh_net_change_sign": [np.nan, 1.0, np.nan, np.nan, np.nan, np.nan],
+                "sh_change_amt_total": [np.nan, 1000.0, np.nan, np.nan, np.nan, np.nan],
                 "sh_evt_start_date": pd.to_datetime(
-                    [None, None, "2025-01-06", None, None, None]
+                    [None, "2025-01-15", None, None, None, None]
                 ),
                 "sh_evt_end_date": pd.to_datetime(
-                    [None, None, "2025-01-07", None, None, None]
+                    [None, "2025-04-15", None, None, None, None]
                 ),
             }
         )
         out = FeatureEngineV35.dim29_holdertrade(df)
-        sub = out[out["symbol"] == "600519"].sort_values("date").reset_index(drop=True)
-        # 事件行 (idx2, 公告日 2025-01-08): 距事件起/止 = 2 / 1 天
-        assert sub["sh_days_since_evt_start"].iloc[2] == 2
-        assert sub["sh_days_since_evt_end"].iloc[2] == 1
-        # 事件前 NaN
-        assert sub["sh_days_since_evt_start"].iloc[:2].isna().all()
-        # ffill: 事件后行距上次事件天数递增 (含跨周末 13 号)
-        assert sub["sh_days_since_evt_start"].iloc[3] == 3
-        assert sub["sh_days_since_evt_end"].iloc[3] == 2
-        assert sub["sh_days_since_evt_start"].iloc[5] == 7
+        sub = out[out["symbol"] == "600519"].sort_values("date")
+        ann = sub["sh_ann_decay"].tolist()
+        end = sub["sh_end_decay"].tolist()
+        exe = sub["sh_is_executing"].tolist()
+        # 事件前: 无上下文 → NaN
+        assert np.isnan(ann[0]) and np.isnan(end[0]) and np.isnan(exe[0])
+        # 公告日 01-01: 恐慌最大 1.0; 未结束未开始
+        assert ann[1] == pytest.approx(1.0)
+        assert end[1] == 0.0 and exe[1] == 0.0
+        # 01-10: 距公告 9 天 → 1/(1+9)=0.1; 未到开始日
+        assert ann[2] == pytest.approx(0.1)
+        assert end[2] == 0.0 and exe[2] == 0.0
+        # 02-01: 执行期中 → exec=1; 未结束 → end=0
+        assert ann[3] == pytest.approx(1 / 32)
+        assert end[3] == 0.0 and exe[3] == 1.0
+        # 结束日 04-15 (排他): 结束反弹=1.0 达峰值; 视为已结束 → exec=0 (spec 示例表)
+        assert ann[4] == pytest.approx(1 / 105)
+        assert end[4] == pytest.approx(1.0)
+        assert exe[4] == 0.0
+        # 05-01: 结束 16 天后 → end=1/17; 已出执行期
+        assert ann[5] == pytest.approx(1 / 121)
+        assert end[5] == pytest.approx(1 / 17)
+        assert exe[5] == 0.0
 
-    def test_dim29_holder_evt_days_missing_cols(self):
-        """无 evt 列 (AKShare 降级/旧数据): 两 day 特征全 NaN, 不崩."""
+    def test_dim29_spec_event_features_missing_cols(self):
+        """无 evt 列 (AKShare 降级/旧数据): 三特征全 NaN, 不崩."""
         dates = pd.bdate_range("2025-01-06", periods=4)
         df = pd.DataFrame(
             {
@@ -357,8 +373,417 @@ class TestFeatures:
             }
         )
         out = FeatureEngineV35.dim29_holdertrade(df)
-        assert out["sh_days_since_evt_start"].isna().all()
-        assert out["sh_days_since_evt_end"].isna().all()
+        for c in ("sh_ann_decay", "sh_end_decay", "sh_is_executing"):
+            assert out[c].isna().all()
+
+    def test_dim32_glm_spec_features(self):
+        """GLM 龙虎榜 spec: EWMA 衰减记忆 (h=5, α≈0.129) + 上榜频次.
+
+        7 交易日, amount=1e9 恒定; 第 2 天与第 5 天上榜.
+        上榜日 R 瞬间跃升 (F=α·R), 非上榜日乘 (1−α) 衰减.
+        """
+        dates = pd.bdate_range("2026-01-05", periods=7)
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001"] * 7,
+                "date": dates,
+                "amount": [1e9] * 7,
+                "lhb_buy_amt": [np.nan, 1e8, np.nan, np.nan, 5e7, np.nan, np.nan],
+                "lhb_sell_amt": [np.nan, 3e7, np.nan, np.nan, 1e7, np.nan, np.nan],
+                "lhb_net_buy": [np.nan, 7e7, np.nan, np.nan, 4e7, np.nan, np.nan],
+                "lhb_inst_buy": [np.nan, 2e7, np.nan, np.nan, 0.0, np.nan, np.nan],
+                "lhb_inst_sell": [np.nan, 5e6, np.nan, np.nan, 0.0, np.nan, np.nan],
+                "lhb_retail_buy": [np.nan, 4e7, np.nan, np.nan, 3e7, np.nan, np.nan],
+                "lhb_retail_sell": [np.nan, 0.0, np.nan, np.nan, 0.0, np.nan, np.nan],
+            }
+        )
+        out = FeatureEngineV35.dim32_lhb_glm(df).sort_values("date")
+        inst = out["lhb_inst_flow"].tolist()
+        retail = out["lhb_retail_flow"].tolist()
+        sellp = out["lhb_sell_pressure"].tolist()
+        cnt = out["lhb_list_count_5d"].tolist()
+
+        # 未上榜日 (index 0): R=0 → EWMA 停在 0
+        assert inst[0] == pytest.approx(0.0)
+        assert cnt[0] == 0.0
+        # 上榜日 (index 1): F = α·R — 机构 0.015, 散户 0.04, 抛压 0.03
+        assert inst[1] == pytest.approx(_LHB_ALPHA * 0.015, rel=1e-3)
+        assert retail[1] == pytest.approx(_LHB_ALPHA * 0.04, rel=1e-3)
+        assert sellp[1] == pytest.approx(_LHB_ALPHA * 0.03, rel=1e-3)
+        assert cnt[1] == 1.0
+        # 非上榜日 (index 2): 纯衰减 ×(1−α)
+        assert inst[2] == pytest.approx(inst[1] * (1 - _LHB_ALPHA), rel=1e-6)
+        assert sellp[2] == pytest.approx(sellp[1] * (1 - _LHB_ALPHA), rel=1e-6)
+        # 第二上榜日 (index 4): 机构买入=0 → R=0 仅衰减; 散户/抛压再跃升
+        assert inst[4] == pytest.approx(inst[3] * (1 - _LHB_ALPHA), rel=1e-6)
+        assert retail[4] == pytest.approx(
+            _LHB_ALPHA * 0.03 + (1 - _LHB_ALPHA) * retail[3], rel=1e-3
+        )
+        assert sellp[4] == pytest.approx(
+            _LHB_ALPHA * 0.01 + (1 - _LHB_ALPHA) * sellp[3], rel=1e-3
+        )
+        # 上榜频次: 近 5 交易日含当日 — index4 窗口含两次上榜
+        assert cnt[4] == 2.0
+        # index5 窗口 [1..5] 仍含两次上榜 → 2; index6 窗口 [2..6] 首日跌出 → 1
+        assert cnt[5] == 2.0
+        assert cnt[6] == 1.0
+
+    def test_dim32_glm_missing_cols(self):
+        """无席位列 (回填前): 机构/散户动能 NaN; 抛压/频次仍用基础 LHB 计算.
+        完全无 LHB: 四特征全 NaN."""
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001"] * 3,
+                "date": pd.bdate_range("2026-01-05", periods=3),
+                "amount": [1e9] * 3,
+                "lhb_buy_amt": [np.nan, 1e8, np.nan],
+                "lhb_sell_amt": [np.nan, 3e7, np.nan],
+                "lhb_net_buy": [np.nan, 7e7, np.nan],
+            }
+        )
+        out = FeatureEngineV35.dim32_lhb_glm(df)
+        assert out["lhb_inst_flow"].isna().all()
+        assert out["lhb_retail_flow"].isna().all()
+        assert out["lhb_sell_pressure"].iloc[1] == pytest.approx(
+            _LHB_ALPHA * 0.03, rel=1e-3
+        )
+        assert out["lhb_list_count_5d"].iloc[1] == 1.0
+
+        df2 = pd.DataFrame(
+            {
+                "symbol": ["000001"] * 2,
+                "date": pd.bdate_range("2026-01-05", periods=2),
+                "amount": [1e9] * 2,
+            }
+        )
+        out2 = FeatureEngineV35.dim32_lhb_glm(df2)
+        for c in ("lhb_inst_flow", "lhb_retail_flow", "lhb_sell_pressure", "lhb_list_count_5d"):
+            assert out2[c].isna().all()
+
+    # ============================================================
+    # dim34 KIMI LHB v2.0 spec 特征
+    # ============================================================
+    @staticmethod
+    def _ha(h: float) -> float:
+        return 1 - 2 ** (-1 / h)
+
+    def test_dim34_lhb_v2_ewma_and_weights(self):
+        """KIMI LHB v2.0: 修正分母净占比 + 情境权重 W_price + EWMA 衰减 + F_min 下限.
+
+        7 交易日, 第 2/第 5 天上榜 (均涨停 → W=1.5). 机构净占比 0.6, 顶级游资 1.0,
+        量化 −1.0, 散户 1.0; 抛压 3e7/1.3e8×1.5; 买卖比 0.3.
+        """
+        from config.settings import LHB_V2_SPEC
+
+        a8 = self._ha(LHB_V2_SPEC["h_inst"])
+        a6 = self._ha(LHB_V2_SPEC["h_top"])
+        a4 = self._ha(LHB_V2_SPEC["h_quant"])
+        a5 = self._ha(LHB_V2_SPEC["h_sell"])
+        a3 = self._ha(LHB_V2_SPEC["h_conboard"])
+
+        dates = pd.bdate_range("2026-01-05", periods=7)
+        close = [10.0, 11.0, 11.0, 11.0, 12.1, 12.1, 12.1]
+        pre = [10.0, 10.0, 11.0, 11.0, 11.0, 12.1, 12.1]
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001"] * 7,
+                "date": dates,
+                "amount": [1e9] * 7,
+                "circ_mv": [1e5] * 7,  # 万元 → 1e9 元
+                "close": close,
+                "pre_close": pre,
+                "high": [c * 1.03 for c in close],
+                "low": [c * 0.97 for c in close],
+                "up_limit_raw": [np.nan, 11.0, np.nan, np.nan, 12.1, np.nan, np.nan],
+                "down_limit_raw": [np.nan] * 7,
+                "lhb_buy_amt": [np.nan, 1e8, np.nan, np.nan, 5e7, np.nan, np.nan],
+                "lhb_sell_amt": [np.nan, 3e7, np.nan, np.nan, 1e7, np.nan, np.nan],
+                "lhb_net_buy": [np.nan, 7e7, np.nan, np.nan, 4e7, np.nan, np.nan],
+                "lhb_inst_buy": [np.nan, 2e7, np.nan, np.nan, 0.0, np.nan, np.nan],
+                "lhb_inst_sell": [np.nan, 5e6, np.nan, np.nan, 0.0, np.nan, np.nan],
+                "lhb_top_buy": [np.nan, 1.5e7, np.nan, np.nan, 5e6, np.nan, np.nan],
+                "lhb_top_sell": [np.nan, 0.0, np.nan, np.nan, 0.0, np.nan, np.nan],
+                "lhb_quant_buy": [np.nan, 0.0, np.nan, np.nan, 0.0, np.nan, np.nan],
+                "lhb_quant_sell": [np.nan, 1e7, np.nan, np.nan, 0.0, np.nan, np.nan],
+                "lhb_retail_buy": [np.nan, 4e7, np.nan, np.nan, 3e7, np.nan, np.nan],
+                "lhb_retail_sell": [np.nan, 0.0, np.nan, np.nan, 0.0, np.nan, np.nan],
+            }
+        )
+        out = FeatureEngineV35.dim34_lhb_v2(df).sort_values("date")
+
+        # ── 上榜日 (index 1): F = α·R ──
+        assert out["lhb2_inst_flow"].iloc[1] == pytest.approx(a8 * 0.6, rel=1e-3)
+        assert out["lhb2_inst_shock"].iloc[1] == pytest.approx(a8 * 0.015, rel=1e-3)
+        assert out["lhb2_top_flow"].iloc[1] == pytest.approx(a6 * 1.0, rel=1e-3)
+        assert out["lhb2_quant_flow"].iloc[1] == pytest.approx(-a4, rel=1e-3)  # 负值保留
+        assert out["lhb2_retail_flow"].iloc[1] == pytest.approx(a4 * 1.0, rel=1e-3)
+        # 抛压 = 卖出占比 × 涨停情境权重 1.5
+        assert out["lhb2_sell_pressure"].iloc[1] == pytest.approx(
+            a5 * (3e7 / 1.3e8) * 1.5, rel=1e-3
+        )
+        assert out["lhb2_sell_buy_ratio"].iloc[1] == pytest.approx(a5 * 0.3, rel=1e-3)
+        assert out["lhb2_conboard_mem"].iloc[1] == pytest.approx(a3 * 1.0, rel=1e-3)
+
+        # ── 未上榜日 (index 2): 纯衰减 ×(1−α), 不归零 ──
+        assert out["lhb2_inst_flow"].iloc[2] == pytest.approx(
+            out["lhb2_inst_flow"].iloc[1] * (1 - a8), rel=1e-6
+        )
+        assert out["lhb2_sell_pressure"].iloc[2] == pytest.approx(
+            out["lhb2_sell_pressure"].iloc[1] * (1 - a5), rel=1e-6
+        )
+        # 未上榜日 F 保持前值衰减 (F_min 下限远低于此, 不绑定)
+        assert out["lhb2_inst_flow"].iloc[2] > 0
+
+        # ── 第二上榜日 (index 4): 机构买入=0 → R_inst=0 仅衰减; 抛压再跃升(×W=1.5) ──
+        assert out["lhb2_inst_flow"].iloc[4] == pytest.approx(
+            out["lhb2_inst_flow"].iloc[3] * (1 - a8), rel=1e-6
+        )
+        assert out["lhb2_top_flow"].iloc[4] == pytest.approx(
+            a6 * 1.0 + (1 - a6) * out["lhb2_top_flow"].iloc[3], rel=1e-3
+        )
+        assert out["lhb2_retail_flow"].iloc[4] == pytest.approx(
+            a4 * 1.0 + (1 - a4) * out["lhb2_retail_flow"].iloc[3], rel=1e-3
+        )
+        assert out["lhb2_sell_pressure"].iloc[4] == pytest.approx(
+            a5 * (1e7 / 6e7) * 1.5 + (1 - a5) * out["lhb2_sell_pressure"].iloc[3],
+            rel=1e-3,
+        )
+
+        # ── 上榜频次 (近 5 交易日含当日) ──
+        cnt = out["lhb2_list_count_5d"].tolist()
+        assert cnt == [0.0, 1.0, 1.0, 1.0, 2.0, 2.0, 1.0]
+
+    def test_dim34_lhb_v2_interactions(self):
+        """价格行为交互 (§4.1/4.2/4.3/4.4): strength/resolve/conboard/premium."""
+        from config.settings import LHB_V2_SPEC
+
+        dates = pd.bdate_range("2026-01-05", periods=7)
+        close = [10.0, 11.0, 11.0, 11.0, 12.1, 12.1, 12.1]
+        pre = [10.0, 10.0, 11.0, 11.0, 11.0, 12.1, 12.1]
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001"] * 7,
+                "date": dates,
+                "amount": [1e9] * 7,
+                "circ_mv": [1e5] * 7,
+                "close": close,
+                "pre_close": pre,
+                "high": [c * 1.03 for c in close],
+                "low": [c * 0.97 for c in close],
+                "up_limit_raw": [np.nan, 11.0, np.nan, np.nan, 12.1, np.nan, np.nan],
+                "down_limit_raw": [np.nan] * 7,
+                "lhb_buy_amt": [np.nan, 1e8, np.nan, np.nan, 5e7, np.nan, np.nan],
+                "lhb_sell_amt": [np.nan, 3e7, np.nan, np.nan, 1e7, np.nan, np.nan],
+                "lhb_net_buy": [np.nan, 7e7, np.nan, np.nan, 4e7, np.nan, np.nan],
+                "lhb_inst_buy": [np.nan, 2e7, np.nan, np.nan, 0.0, np.nan, np.nan],
+                "lhb_inst_sell": [np.nan, 5e6, np.nan, np.nan, 0.0, np.nan, np.nan],
+                "lhb_top_buy": [np.nan, 1.5e7, np.nan, np.nan, 5e6, np.nan, np.nan],
+                "lhb_top_sell": [np.nan, 0.0, np.nan, np.nan, 0.0, np.nan, np.nan],
+                "lhb_quant_buy": [np.nan, 0.0, np.nan, np.nan, 0.0, np.nan, np.nan],
+                "lhb_quant_sell": [np.nan, 1e7, np.nan, np.nan, 0.0, np.nan, np.nan],
+                "lhb_retail_buy": [np.nan, 4e7, np.nan, np.nan, 3e7, np.nan, np.nan],
+                "lhb_retail_sell": [np.nan, 0.0, np.nan, np.nan, 0.0, np.nan, np.nan],
+            }
+        )
+        out = FeatureEngineV35.dim34_lhb_v2(df).sort_values("date")
+        f_inst = out["lhb2_inst_flow"]
+
+        # I_strength = F_inst × Ret (index1/4 涨停日 ret=0.10)
+        assert out["lhb2_inst_strength"].iloc[1] == pytest.approx(
+            f_inst.iloc[1] * 0.10, rel=1e-6
+        )
+        assert out["lhb2_inst_strength"].iloc[4] == pytest.approx(
+            f_inst.iloc[4] * 0.10, rel=1e-6
+        )
+        # 非涨停日 ret=0 → I_strength=0
+        assert out["lhb2_inst_strength"].iloc[3] == pytest.approx(0.0, abs=1e-12)
+
+        # I_resolve = F_inst / (Amp + ε); Amp = (high−low)/low
+        amp1 = (11.0 * 1.03 - 11.0 * 0.97) / (11.0 * 0.97)
+        assert out["lhb2_inst_resolve"].iloc[1] == pytest.approx(
+            f_inst.iloc[1] / (amp1 + LHB_V2_SPEC["eps"]), rel=1e-3
+        )
+
+        # I_conboard = F_inst × C_board (index1/4 连板1天)
+        assert out["lhb2_inst_conboard"].iloc[1] == pytest.approx(
+            f_inst.iloc[1], rel=1e-6
+        )
+        assert out["lhb2_inst_conboard"].iloc[4] == pytest.approx(
+            f_inst.iloc[4], rel=1e-6
+        )
+
+        # I_premium = F_inst × F_top × (1−F_retail) × (1+Ret)
+        ret1 = (11.0 - 10.0) / 10.0
+        exp_prem1 = (
+            f_inst.iloc[1]
+            * out["lhb2_top_flow"].iloc[1]
+            * (1 - out["lhb2_retail_flow"].iloc[1])
+            * (1 + ret1)
+        )
+        assert out["lhb2_inst_premium"].iloc[1] == pytest.approx(exp_prem1, rel=1e-6)
+
+        # 机构锁仓: F_inst 远低于 0.3 → 恒 0
+        assert out["lhb2_inst_lock"].sum() == 0
+
+        # 连板衰减记忆 F_conboard = EWMA(C_board×I(list), h=3)
+        a3 = self._ha(LHB_V2_SPEC["h_conboard"])
+        assert out["lhb2_conboard_mem"].iloc[4] == pytest.approx(
+            a3 * 1.0 + (1 - a3) * out["lhb2_conboard_mem"].iloc[3], rel=1e-3
+        )
+
+    def test_dim34_lhb_v2_lock(self):
+        """机构锁仓 (§4.5): F_inst>0.3 连续两日且收盘创新高 → I_lock=1.
+
+        row0 为未上榜零行 (EWMA 冷启动 F_0=0); rows 1-8 每日机构净买入 (R_inst=1)
+        抬高 F_inst; 上榜日仅 1,2,7,8 → 任何 5 日窗口最多 2 次上榜, 不触发过热惩罚.
+        """
+        from config.settings import LHB_V2_SPEC
+
+        a8 = self._ha(LHB_V2_SPEC["h_inst"])
+        dates = pd.bdate_range("2026-01-05", periods=9)
+        close = [10.0, 10.5, 11.0, 11.5, 12.0, 12.5, 13.0, 13.5, 14.0]
+        pre = [10.0, 10.0, 10.5, 11.0, 11.5, 12.0, 12.5, 13.0, 13.5]
+        buy_amt = [np.nan, 1e8, 1e8, np.nan, np.nan, np.nan, np.nan, 1e8, 1e8]
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001"] * 9,
+                "date": dates,
+                "amount": [1e9] * 9,
+                "circ_mv": [1e5] * 9,
+                "close": close,
+                "pre_close": pre,
+                "high": [c * 1.02 for c in close],
+                "low": [c * 0.98 for c in close],
+                "up_limit_raw": [np.nan] * 9,
+                "down_limit_raw": [np.nan] * 9,
+                "lhb_buy_amt": buy_amt,
+                "lhb_inst_buy": [0.0] + [1e7] * 8,  # R_inst = 1 → F_inst 逼近 1
+                "lhb_inst_sell": [0.0] * 9,
+            }
+        )
+        out = FeatureEngineV35.dim34_lhb_v2(df).sort_values("date")
+        f_inst = out["lhb2_inst_flow"]
+        d8 = 1 - a8
+        # R_inst=1 恒定: F_t = α·1 + (1−α)·F_{t−1}; row0 冷启动为 0
+        assert f_inst.iloc[0] == pytest.approx(0.0, abs=1e-12)
+        assert f_inst.iloc[1] == pytest.approx(a8, rel=1e-6)
+        assert f_inst.iloc[5] == pytest.approx(a8 + d8 * f_inst.iloc[4], rel=1e-6)
+        # 锁仓: F_inst>0.3 连续两日 & close 创新高(>前5日收盘) — row6 起
+        lock = out["lhb2_inst_lock"].tolist()
+        assert lock == [0, 0, 0, 0, 0, 0, 1, 1, 1]
+        # 连板基因 = F_inst × 连板天数 (本测试无涨停 → C_board=0)
+        assert out["lhb2_inst_conboard"].abs().max() == 0
+
+    def test_dim34_lhb_v2_overheat_penalty(self):
+        """过热惩罚 (§5.2): C5d≥3 (主板) → 正向资金流特征 ×0.7; 反向特征不动."""
+        from config.settings import LHB_V2_SPEC
+
+        a5 = self._ha(LHB_V2_SPEC["h_sell"])
+        dates = pd.bdate_range("2026-01-05", periods=7)
+        # row0 为未上榜零行 (EWMA 冷启动 F_0=0); rows 1-6 每日上榜 R_inst=1/3
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001"] * 7,
+                "date": dates,
+                "amount": [1e9] * 7,
+                "circ_mv": [1e5] * 7,
+                "close": [10.0] * 7,
+                "pre_close": [10.0] * 7,
+                "high": [10.3] * 7,
+                "low": [9.7] * 7,
+                "up_limit_raw": [np.nan] * 7,
+                "down_limit_raw": [np.nan] * 7,
+                "lhb_buy_amt": [np.nan] + [1e8] * 6,  # C5d = [0,1,2,3,4,5,5]
+                "lhb_sell_amt": [np.nan] + [2e7] * 6,
+                "lhb_net_buy": [np.nan] + [8e7] * 6,
+                "lhb_inst_buy": [0.0] + [2e7] * 6,  # R_inst = 1/3 恒定
+                "lhb_inst_sell": [0.0] + [1e7] * 6,
+                "lhb_quant_buy": [0.0] * 7,  # 反向特征: 量化净卖出
+                "lhb_quant_sell": [0.0] + [1e7] * 6,
+            }
+        )
+        out = FeatureEngineV35.dim34_lhb_v2(df).sort_values("date")
+
+        a8 = self._ha(LHB_V2_SPEC["h_inst"])
+        d8 = 1 - a8
+        r = 1 / 3
+        fs = [a8 * r]
+        for _ in range(5):
+            fs.append(a8 * r + d8 * fs[-1])
+        # 未过热行 (row1/2, C5d<3): 不惩罚
+        assert out["lhb2_inst_flow"].iloc[0] == pytest.approx(0.0, abs=1e-12)
+        assert out["lhb2_inst_flow"].iloc[1] == pytest.approx(fs[0], rel=1e-6)
+        assert out["lhb2_inst_flow"].iloc[2] == pytest.approx(fs[1], rel=1e-6)
+        # 过热行 (row3+, C5d≥3): ×0.7
+        assert out["lhb2_inst_flow"].iloc[3] == pytest.approx(0.7 * fs[2], rel=1e-6)
+        assert out["lhb2_inst_flow"].iloc[6] == pytest.approx(0.7 * fs[5], rel=1e-6)
+        # 反向特征 (量化/抛压) 不受惩罚
+        a4 = self._ha(LHB_V2_SPEC["h_quant"])
+        d4 = 1 - a4
+        assert out["lhb2_quant_flow"].iloc[3] == pytest.approx(
+            -a4 + d4 * out["lhb2_quant_flow"].iloc[2], rel=1e-6
+        )
+        r_sell = 2e7 / 1.2e8  # W=1.0 (无涨跌停)
+        fsell = [a5 * r_sell]
+        for _ in range(5):
+            fsell.append(a5 * r_sell + (1 - a5) * fsell[-1])
+        assert out["lhb2_sell_pressure"].iloc[6] == pytest.approx(fsell[5], rel=1e-6)
+
+    def test_dim34_lhb_v2_missing_cols(self):
+        """无席位列 (回填前): 机构/游资/量化/散户及交互 NaN; 抛压/买卖比/频次仍算.
+        完全无 LHB: 14 特征全 NaN."""
+        from config.settings import LHB_V2_SPEC
+
+        a5 = self._ha(LHB_V2_SPEC["h_sell"])
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001"] * 3,
+                "date": pd.bdate_range("2026-01-05", periods=3),
+                "amount": [1e9] * 3,
+                "close": [10.0, 11.0, 11.0],
+                "pre_close": [10.0, 10.0, 11.0],
+                "high": [10.3, 11.33, 11.33],
+                "low": [9.7, 10.67, 10.67],
+                "up_limit_raw": [np.nan, 11.0, np.nan],
+                "down_limit_raw": [np.nan] * 3,
+                "lhb_buy_amt": [np.nan, 1e8, np.nan],
+                "lhb_sell_amt": [np.nan, 3e7, np.nan],
+                "lhb_net_buy": [np.nan, 7e7, np.nan],
+            }
+        )
+        out = FeatureEngineV35.dim34_lhb_v2(df)
+        for c in ("lhb2_inst_flow", "lhb2_inst_shock", "lhb2_top_flow",
+                  "lhb2_quant_flow", "lhb2_retail_flow", "lhb2_inst_strength",
+                  "lhb2_inst_resolve", "lhb2_inst_conboard", "lhb2_inst_premium"):
+            assert out[c].isna().all(), c
+        assert out["lhb2_inst_lock"].sum() == 0  # 无机构数据 → 无锁仓信号 (0)
+        assert out["lhb2_sell_pressure"].iloc[1] == pytest.approx(
+            a5 * (3e7 / 1.3e8) * 1.5, rel=1e-3
+        )
+        assert out["lhb2_sell_buy_ratio"].iloc[1] == pytest.approx(a5 * 0.3, rel=1e-3)
+        assert out["lhb2_list_count_5d"].iloc[1] == 1.0
+
+        df2 = pd.DataFrame(
+            {
+                "symbol": ["000001"] * 2,
+                "date": pd.bdate_range("2026-01-05", periods=2),
+                "amount": [1e9] * 2,
+                "close": [10.0, 10.0],
+                "pre_close": [10.0, 10.0],
+                "high": [10.3, 10.3],
+                "low": [9.7, 9.7],
+            }
+        )
+        out2 = FeatureEngineV35.dim34_lhb_v2(df2)
+        all14 = [
+            "lhb2_inst_flow", "lhb2_inst_shock", "lhb2_top_flow", "lhb2_quant_flow",
+            "lhb2_retail_flow", "lhb2_sell_pressure", "lhb2_sell_buy_ratio",
+            "lhb2_list_count_5d", "lhb2_conboard_mem", "lhb2_inst_strength",
+            "lhb2_inst_resolve", "lhb2_inst_conboard", "lhb2_inst_premium",
+            "lhb2_inst_lock",
+        ]
+        for c in all14:
+            assert out2[c].isna().all(), c
 
     def test_pit_active_v17(self):
         """§14.2.2 安全网 #15: is_active PIT 标签, shift(1) 确保不含 T."""

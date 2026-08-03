@@ -17,7 +17,6 @@ if "board" not in panel.columns:
 max_d = panel["date"].max()
 cutoff = max_d - pd.Timedelta(days=400)
 recent = panel[panel["date"] >= cutoff]
-recent = recent[~recent["is_st"].astype(bool) & (recent["list_days"] >= 250)]
 
 SKIP = {
     "symbol",
@@ -39,8 +38,6 @@ SKIP = {
     "low_hfq",
     "close_hfq",
     "is_suspended",
-    "is_st",
-    "list_days",
     "announce_date",
     "limit_pct",
     "PE_TTM",

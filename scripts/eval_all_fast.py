@@ -188,13 +188,11 @@ def main():
     main_syms = panel[panel["board"] == "main"]["symbol"].unique()
     main_pick = rng.choice(main_syms, min(N_STOCKS, len(main_syms)), replace=False)
     main_df = panel[panel["symbol"].isin(main_pick)].copy()
-    main_df = main_df[~main_df["is_st"].astype(bool) & (main_df["list_days"] >= 250)]
 
     dual_mask = panel["board"].isin(["GEM", "STAR"])
     dual_syms = panel[dual_mask]["symbol"].unique()
     dual_pick = rng.choice(dual_syms, min(N_STOCKS, len(dual_syms)), replace=False)
     dual_df = panel[panel["symbol"].isin(dual_pick)].copy()
-    dual_df = dual_df[~dual_df["is_st"].astype(bool) & (dual_df["list_days"] >= 250)]
 
     logger.info(
         "Main: %d stocks | Dual: %d stocks",

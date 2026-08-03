@@ -5,9 +5,7 @@
 cleaning/feature/label 全链路可用的标准面板:
 
 - ``board``        : 缺失时按代码前缀推导 (复用 cleaning_pipeline.board_of)
-- ``is_st``        : 由 name_map 判断 (universe_manager.name_is_st), 无名称表默认 False
 - ``is_suspended`` : 默认 False (停牌日天然无 bar, 不影响训练)
-- ``list_days``    : 面板内每 symbol 的累计交易日数 (近似上市天数)
 - ``industry``     : industry_map 提供, 缺失默认 "UNKNOWN"
 - ``free_float_turnover_rate`` : 缺失时回退 turnover_rate
 
@@ -30,7 +28,6 @@ import pandas as pd
 from config.settings import data_others_path
 
 from app.core.config_loader import load_config
-from app.core.universe_manager import name_is_st
 
 from .cleaning_pipeline import board_of
 from .data_supply import DataSupplyChain, _ak_call
@@ -132,15 +129,8 @@ def enrich_panel(
     df = df.sort_values(["symbol", "date"]).reset_index(drop=True)  # 安全网 #13
     if "board" not in df.columns:
         df["board"] = df["symbol"].map(board_of)
-    if "is_st" not in df.columns:
-        if name_map:
-            df["is_st"] = df["symbol"].map(lambda s: name_is_st(name_map.get(s, "")))
-        else:
-            df["is_st"] = False
     if "is_suspended" not in df.columns:
         df["is_suspended"] = False
-    if "list_days" not in df.columns:
-        df["list_days"] = df.groupby("symbol").cumcount() + 1
     if "industry" not in df.columns:
         if industry_map:
             df["industry"] = df["symbol"].map(industry_map).fillna("UNKNOWN")

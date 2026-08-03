@@ -96,10 +96,12 @@ class CleaningPipeline:
 
     # ---------------- 步骤 1: 基础状态 ----------------
     def step1_base_state(self, df: pd.DataFrame) -> pd.DataFrame:
-        """剔 ST/*ST; 剔上市 < 250 交易日 (>= 最长特征窗口 250 日均线)."""
-        out = df[~df["is_st"].astype(bool)]
-        out = out[out["list_days"] >= self.cfg.min_list_days]
-        return out
+        """基础状态清洗.
+
+        ST/*ST 和次新股已在 V3 入库入口过滤 (ingest gate), 此处不再重复剔除,
+        保留为 pass-through 以维持链路结构.
+        """
+        return df
 
     # ---------------- 步骤 2: 流动性底线 ----------------
     def step2_liquidity(
@@ -158,7 +160,6 @@ class CleaningPipeline:
         out = df[(~df["is_suspended"].astype(bool)) & (~resume_first_day)]
         key_cols = ["open", "high", "low", "close", "close_hfq", "volume", "amount"]
         out = out.dropna(subset=key_cols)
-        out = out[out["list_days"] >= self.cfg.new_stock_days]
         return out
 
     # ---------------- 步骤 4: 可成交性 (仅推理端) ----------------

@@ -177,3 +177,12 @@ LHB_V2_EVAL = {
         "n_jobs": -1,
     },
 }
+
+# ── LHB v2.0 TOP10 周频选股评估 (用户目标: 每周输出 10 只买入标的) ──
+LHB_V2_TOP10 = {
+    "top_n": 10,                  # 每期入选股票数
+    "cost_commission": 0.00025,   # 佣金 万2.5 (单边)
+    "cost_stamp": 0.0005,         # 印花税 0.05% (仅卖出)
+    "cost_slippage": 0.0010,      # 滑点 0.10% (单边)
+    "exclude_st": True,           # 剔除 ST (基座 is_st 待修, 当前可能不触发)
+}

@@ -220,11 +220,8 @@ def main():
         len(dual_combined),
     )
 
-    # Minimal cleaning: remove ST and short-history only, skip liquidity/top-N filters
     def clean_light(df: pd.DataFrame) -> pd.DataFrame:
-        df = df[~df["is_st"].astype(bool)].copy()
-        df = df[df["list_days"] >= 250].copy()
-        return df
+        return df.copy()
 
     main_clean = clean_light(main_sample)
     dual_clean = clean_light(dual_combined)

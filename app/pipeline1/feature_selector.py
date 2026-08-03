@@ -52,7 +52,6 @@ class BruteForceGenerator:
         "industry",
         "announce_date",
         "is_suspended",
-        "is_st",
         "tradestatus",
         # ── Forward-filled quarterly (fina_indicator): step function,
         #    brute-force variants are constant within quarter → IC≈0, pure waste ──

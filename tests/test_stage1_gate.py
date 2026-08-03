@@ -53,9 +53,7 @@ def make_panel(days: int = 780, seed: int = 21) -> pd.DataFrame:
                     "free_float_turnover_rate": 5.0,
                     "pre_close": pd.Series(close).shift(1).fillna(close[0]),
                     "is_suspended": False,
-                    "is_st": False,
                     "industry": industry,
-                    "list_days": 1000,
                 }
             )
         )

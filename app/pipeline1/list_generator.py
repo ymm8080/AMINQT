@@ -11,6 +11,7 @@ Pipeline-1 每日选股清单生成器 (DESIGN §14.5, §14.6, [E7] 动态准入
 
 from __future__ import annotations
 
+import datetime
 import logging
 from dataclasses import dataclass, field
 
@@ -360,11 +361,19 @@ class ListGenerator:
         return passed.copy()
 
     # ---------------- 最终清单 ---------------
+    @staticmethod
+    def _scan_ref_date(candidates: pd.DataFrame) -> pd.Timestamp:
+        """FINAL STOCK SCAN 锚点日期: candidates 的 date 列最大值, 缺失则用今日."""
+        if "date" in candidates.columns and candidates["date"].notna().any():
+            return pd.Timestamp(candidates["date"].max())
+        return pd.Timestamp(datetime.date.today())
+
     def emit(
         self,
         candidates: pd.DataFrame,
         env=None,
         market_state: str = "range",
+        ref_date: str | None = None,
     ) -> dict:
         """输出最终清单.
 
@@ -372,6 +381,8 @@ class ListGenerator:
             candidates: predict() 输出 (含 symbol, pred_ret_*, prob_up, score)
             env: MarketEnv 大盘环境 (含 bear_mode, sse_break_pct)
             market_state: 'range' / 'bear'
+            ref_date: 名单生成日 (T 日), 用于 FINAL STOCK SCAN 窗口锚定;
+                缺省从 candidates['date'] 推导, 再无则用今日.
 
         Returns:
             {'mode': 'normal'|'bear'|'value'|'empty',
@@ -417,6 +428,23 @@ class ListGenerator:
         # D18 降仓 → 仅 Top 5; 正常 → Top 15
         top_n = TOP_N if cap >= 1.0 else 5
         final = final.head(top_n)
+        # [FINAL STOCK SCAN] 风控过滤: 近一周有大宗交易的股票不买 (用户定案 2026-08-03)
+        try:
+            from .risk_overlays import block_trade_recent_scan
+
+            scan_ref = (
+                pd.Timestamp(ref_date) if ref_date else self._scan_ref_date(candidates)
+            )
+            excluded = block_trade_recent_scan(final["symbol"].tolist(), scan_ref)
+            if excluded:
+                final = final[~final["symbol"].isin(excluded)].reset_index(drop=True)
+                logger.warning(
+                    "FINAL STOCK SCAN: 名单剔除 %d 只 (剩 %d 只)",
+                    len(excluded),
+                    len(final),
+                )
+        except Exception as exc:
+            logger.warning("FINAL STOCK SCAN: 失败, 放行名单: %s", exc)
         # 动量持续性 (盈亏防火墙)
         if len(final) and {"pred_ret_1d", "pred_ret_3d", "pred_ret_5d"} <= set(
             final.columns

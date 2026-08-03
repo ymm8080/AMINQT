@@ -28,9 +28,7 @@ RANDOM_SEED = 42
 
 
 def clean_light(df: pd.DataFrame) -> pd.DataFrame:
-    df = df[~df["is_st"].astype(bool)].copy()
-    df = df[df["list_days"] >= 250].copy()
-    return df
+    return df.copy()
 
 
 def eval_all(board_name: str, board_df: pd.DataFrame) -> dict:

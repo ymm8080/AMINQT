@@ -99,9 +99,7 @@ def main():
         panel["board"] = panel["symbol"].map(board_of)
 
     # 基础过滤 (最小化, 保留全量数据做 IC 评估)
-    clean = panel[~panel["is_st"].astype(bool)]
-    clean = clean[clean["list_days"] >= 60]  # 至少60日数据做滚动IC
-    clean = clean[~clean["is_suspended"].astype(bool)]
+    clean = panel[~panel["is_suspended"].astype(bool)]
 
     # 关键字段非空
     key_cols = ["open", "high", "low", "close", "close_hfq", "volume", "amount"]

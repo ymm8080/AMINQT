@@ -13,6 +13,25 @@ from app.pipeline1.data_supply import DataSupplyChain, DataSupplyError
 from app.pipeline1.list_generator import SCHEMA_FIELDS
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_block_trade_cache(tmp_path, monkeypatch):
+    """隔离 FINAL STOCK SCAN 大宗缓存: 测试永远读到空缓存, 不依赖外部文件状态.
+
+    list_generator.emit 在调用时 lazy import 该函数, 故 monkeypatch 模块属性即可生效.
+    """
+    from app.pipeline1 import risk_overlays
+
+    empty = tmp_path / "empty_block_trade.parquet"
+    pd.DataFrame(columns=["symbol", "date"]).to_parquet(empty, index=False)
+    real = risk_overlays.block_trade_recent_scan
+
+    def _scan(symbols, ref_date, **kwargs):
+        kwargs["cache_path"] = str(empty)
+        return real(symbols, ref_date, **kwargs)
+
+    monkeypatch.setattr(risk_overlays, "block_trade_recent_scan", _scan)
+
+
 def make_panel(symbols=("600519", "601318"), days=760, seed=21) -> pd.DataFrame:
     """760 交易日 (>720 窗口) 双股面板, 含 f1/f2 伪特征."""
     rng = np.random.default_rng(seed)
@@ -40,9 +59,7 @@ def make_panel(symbols=("600519", "601318"), days=760, seed=21) -> pd.DataFrame:
                     "free_float_turnover_rate": 5.0,
                     "pre_close": pd.Series(close).shift(1).fillna(close[0]),
                     "is_suspended": False,
-                    "is_st": False,
                     "industry": "白酒" if sym == "600519" else "保险",
-                    "list_days": 1000,
                 }
             )
         )

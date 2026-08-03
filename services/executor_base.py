@@ -31,8 +31,6 @@ class Order:
     # Market metadata required for AUTO-mode risk-filter gate.
     amount: float | None = None
     pct_change: float | None = None
-    is_st: bool = False
-    list_days: int | None = None
 
 
 class Executor(ABC):
@@ -86,8 +84,6 @@ class Executor(ABC):
             "score": 1.0,
             "amount": order.amount,
             "pct_change": order.pct_change,
-            "is_st": order.is_st,
-            "list_days": order.list_days,
         }
         if not risk_filter.apply_filters([candidate], account_drawdown_pct=0.0):
             logger.warning(
