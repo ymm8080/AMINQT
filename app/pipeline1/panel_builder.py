@@ -470,7 +470,9 @@ def enrich_alt_data(
                     if "evt_end_date" in df.columns:
                         agg_map["sh_evt_end_date"] = ("evt_end_date", "max")
                     daily_net = (
-                        df.groupby(["symbol", "announce_date"]).agg(**agg_map).reset_index()
+                        df.groupby(["symbol", "announce_date"])
+                        .agg(**agg_map)
+                        .reset_index()
                     )
                     daily_net = daily_net.rename(columns={"announce_date": "date"})
                     daily_net["date"] = pd.to_datetime(daily_net["date"])
