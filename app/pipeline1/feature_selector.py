@@ -91,6 +91,25 @@ class BruteForceGenerator:
         "margin_trend_4q",
         "rev_yoy_trend",
         "quality_momentum",
+        # ── HS300×1y 与全市场×3y 双口径 |wIC|<0.02 低信息列
+        #    (2026-08-04 _diag_hs300_exclude_cross 结论, A 层 brute 展开纯浪费) ──
+        "circ_mv",
+        "resistance_dist",
+        "short_sell_vol",
+        "chip_entropy",
+        "peak_roc_20d",
+        "chip_gini",
+        "total_mv",
+        "bias_5_20_cross",
+        "short_balance",
+        "volume_ratio",
+        "conc_90_industry_rank",
+        "margin_balance",
+        "peak_roc_5d",
+        "pct_90_con",
+        "chip_skew_dist",
+        "cost_bias",
+        "pctChg",
     }
 
     def __init__(self, transforms=None, eligible_cols=None):
