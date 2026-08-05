@@ -40,8 +40,6 @@ from .components import (
 
 logger = logging.getLogger(__name__)
 
-TAG = "2026W31_3y"
-
 
 # ══════════════════════════════════════════════════════════
 # 预测管道 (原 page_prediction._run_prediction)
@@ -63,7 +61,7 @@ def _run_prediction(symbols: list[str] | None = None) -> dict | None:
     """运行预测管道, 返回结果 dict."""
     from app.pipeline1.cleaning_pipeline import CleaningPipeline
     from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-    from app.pipeline1.predict_runner import find_bundles
+    from app.pipeline1.predict_runner import resolve_current_bundles
     from app.pipeline1.predictor import V35Predictor
 
     panel = _load_panel(symbols)
@@ -81,7 +79,7 @@ def _run_prediction(symbols: list[str] | None = None) -> dict | None:
         return None
 
     features = FeatureEngineV35()
-    bundles = find_bundles(model_dir="models/pipeline1", tag=TAG)
+    bundles = resolve_current_bundles(model_dir="models/pipeline1")
     if not bundles:
         st.error("无可用模型包, 请先训练")
         return None
