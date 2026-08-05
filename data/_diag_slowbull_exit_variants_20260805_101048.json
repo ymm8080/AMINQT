@@ -1,0 +1,54 @@
+{
+  "oos_6m": {
+    "start": "2026-01-26",
+    "end": "2026-08-04",
+    "max_hold": 40,
+    "note": "cur=现行; g0=破位退出仅当profit<0; g0_ratchet=g0+棘轮12%锁8%"
+  },
+  "main": {
+    "cur": {
+      "n": 871,
+      "p_win": 0.3088,
+      "avg": -0.0009,
+      "median_hold": 3.0,
+      "avg_mfe": 0.2585
+    },
+    "g0": {
+      "n": 870,
+      "p_win": 0.308,
+      "avg": -0.0019,
+      "median_hold": 3.0,
+      "avg_mfe": 0.2585
+    },
+    "g0_ratchet": {
+      "n": 870,
+      "p_win": 0.3092,
+      "avg": -0.0032,
+      "median_hold": 3.0,
+      "avg_mfe": 0.2585
+    }
+  },
+  "dual": {
+    "cur": {
+      "n": 535,
+      "p_win": 0.314,
+      "avg": 0.0017,
+      "median_hold": 3.0,
+      "avg_mfe": 0.3463
+    },
+    "g0": {
+      "n": 535,
+      "p_win": 0.3121,
+      "avg": 0.0013,
+      "median_hold": 3.0,
+      "avg_mfe": 0.3463
+    },
+    "g0_ratchet": {
+      "n": 535,
+      "p_win": 0.3196,
+      "avg": 0.0001,
+      "median_hold": 3.0,
+      "avg_mfe": 0.3463
+    }
+  }
+}

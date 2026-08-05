@@ -1,0 +1,114 @@
+{
+  "oos_6m": {
+    "start": "2026-01-26",
+    "end": "2026-08-04"
+  },
+  "main": {
+    "n_picks": 874,
+    "max_hold": 40,
+    "cause_below_ma20": {
+      "n": 165,
+      "avg": -0.062,
+      "p_win": 0.0
+    },
+    "cause_adx_broken": {
+      "n": 55,
+      "avg": -0.0329,
+      "p_win": 0.1273
+    },
+    "cause_big_drop": {
+      "n": 7,
+      "avg": -0.0148,
+      "p_win": 0.0
+    },
+    "cause_below_ma5_3d": {
+      "n": 146,
+      "avg": -0.0333,
+      "p_win": 0.1438
+    },
+    "cause_turnover_spike": {
+      "n": 313,
+      "avg": 0.0303,
+      "p_win": 0.4377
+    },
+    "cause_tp_80_div": {
+      "n": 97,
+      "avg": 0.031,
+      "p_win": 0.7216
+    },
+    "cause_trail_stop": {
+      "n": 88,
+      "avg": 0.0457,
+      "p_win": 0.4432
+    },
+    "cause_cap": {
+      "n": 0,
+      "avg": null,
+      "p_win": null
+    },
+    "stop_only": {
+      "n": 329,
+      "avg": -0.0172,
+      "p_win": 0.2006
+    },
+    "sig_only": {
+      "n": 783,
+      "avg": -0.0058,
+      "p_win": 0.3001
+    }
+  },
+  "dual": {
+    "n_picks": 535,
+    "max_hold": 40,
+    "cause_below_ma20": {
+      "n": 105,
+      "avg": -0.0624,
+      "p_win": 0.0
+    },
+    "cause_adx_broken": {
+      "n": 38,
+      "avg": -0.043,
+      "p_win": 0.0789
+    },
+    "cause_big_drop": {
+      "n": 1,
+      "avg": -0.0033,
+      "p_win": 0.0
+    },
+    "cause_below_ma5_3d": {
+      "n": 98,
+      "avg": -0.0305,
+      "p_win": 0.1633
+    },
+    "cause_turnover_spike": {
+      "n": 185,
+      "avg": 0.0457,
+      "p_win": 0.5027
+    },
+    "cause_tp_80_div": {
+      "n": 62,
+      "avg": 0.0395,
+      "p_win": 0.7097
+    },
+    "cause_trail_stop": {
+      "n": 46,
+      "avg": 0.0265,
+      "p_win": 0.3913
+    },
+    "cause_cap": {
+      "n": 0,
+      "avg": null,
+      "p_win": null
+    },
+    "stop_only": {
+      "n": 206,
+      "avg": -0.0214,
+      "p_win": 0.1796
+    },
+    "sig_only": {
+      "n": 489,
+      "avg": -0.0006,
+      "p_win": 0.319
+    }
+  }
+}
