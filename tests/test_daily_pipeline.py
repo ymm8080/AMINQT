@@ -135,7 +135,7 @@ class TestDailyPipeline:
         lst = result["list"]
         # SCHEMA_FIELDS 打头; run() 额外追加 model_version 戳 (回归分组键)
         assert list(lst.columns)[: len(SCHEMA_FIELDS)] == SCHEMA_FIELDS
-        assert list(lst.columns)[len(SCHEMA_FIELDS):] == ["model_version"]
+        assert list(lst.columns)[len(SCHEMA_FIELDS) :] == ["model_version"]
         assert 0 < len(lst) <= 2
         assert (lst["schema_version"] == "1.4").all()
 

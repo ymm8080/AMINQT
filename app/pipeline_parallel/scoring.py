@@ -11,6 +11,7 @@
 双头验收: 对选中 TOP-N 逐视界量 平均净收益(幅度) + 胜率(概率).
 纯向量化, 禁 for 循环遍历股票.
 """
+
 from __future__ import annotations
 
 import pandas as pd
@@ -21,8 +22,9 @@ def cross_rank(df: pd.DataFrame, col: str) -> pd.Series:
     return df.groupby("date")[col].rank(pct=True)
 
 
-def pool_score(df: pd.DataFrame, pool: tuple[str, ...],
-               weights: dict[str, float] | None = None) -> pd.Series:
+def pool_score(
+    df: pd.DataFrame, pool: tuple[str, ...], weights: dict[str, float] | None = None
+) -> pd.Series:
     """特征池等权(或加权) 截面分位合成分, 索引对齐 df.
 
     缺列特征自动跳过; 全部缺列 → 抛错 (配置错误, 须大声失败).
@@ -44,8 +46,7 @@ def pool_score(df: pd.DataFrame, pool: tuple[str, ...],
     return score
 
 
-def select_topn(df: pd.DataFrame, score: pd.Series,
-                top_n: int) -> pd.DataFrame:
+def select_topn(df: pd.DataFrame, score: pd.Series, top_n: int) -> pd.DataFrame:
     """每日期截面按合成池分降序取 TOP-N (返回含 score 的切片)."""
     if top_n <= 0:
         return pd.DataFrame()
@@ -54,8 +55,11 @@ def select_topn(df: pd.DataFrame, score: pd.Series,
     sub = sub.dropna(subset=["score"])
     if sub.empty:
         return sub
-    top = (sub.sort_values(["date", "score"], ascending=[True, False])
-              .groupby("date", group_keys=False).head(top_n))
+    top = (
+        sub.sort_values(["date", "score"], ascending=[True, False])
+        .groupby("date", group_keys=False)
+        .head(top_n)
+    )
     return top
 
 

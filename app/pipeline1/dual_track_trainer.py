@@ -465,7 +465,10 @@ class DualTrackTrainer:
                     )
                 except Exception as e:
                     logger.warning(
-                        "[%s] E1 分位数模型 (%dd) 训练失败: %s", out["board"], horizon, e
+                        "[%s] E1 分位数模型 (%dd) 训练失败: %s",
+                        out["board"],
+                        horizon,
+                        e,
                     )
                 del train, X, y, X_es, y_es
                 gc.collect()

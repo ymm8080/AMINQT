@@ -461,7 +461,9 @@ def nan_filter(feats, df, threshold=0.95, min_support=0):
         if c not in df.columns or not is_numeric_dtype(df[c]):
             continue
         s = df[c]
-        if s.isna().mean() < threshold or (min_support and s.notna().sum() >= min_support):
+        if s.isna().mean() < threshold or (
+            min_support and s.notna().sum() >= min_support
+        ):
             good.append(c)
     logger.info(
         "NaN filter: %d -> %d (threshold=%.2f, min_support=%d)",
@@ -538,7 +540,9 @@ def scope_ic_union(
         return selected
     labels = [c for c in label_cols if c in df.columns]
     if not labels:
-        logger.warning("scope_ic_union[%s]: 无可用 label (%s), 跳过", event_col, label_cols)
+        logger.warning(
+            "scope_ic_union[%s]: 无可用 label (%s), 跳过", event_col, label_cols
+        )
         return selected
     mask = event_scope_mask(df, event_col, window=window)
     if not mask.any():
@@ -589,7 +593,12 @@ EVENT_SCOPE_SCREENS = [
         "name": "dim33_blocktrade",
         "event_col": "bt_count",
         "window": 30,
-        "feats": ["bt_act_ewma", "bt_disc_ewma", "bt_inst_abs_ewma", "bt_mv_ratio_ewma"],
+        "feats": [
+            "bt_act_ewma",
+            "bt_disc_ewma",
+            "bt_inst_abs_ewma",
+            "bt_mv_ratio_ewma",
+        ],
         "label_cols": ["label_pm_1d_net", "label_pm_3d_net", "label_pm_5d_net"],
         "ic_bar": 0.01,
         "min_support": 1000,
@@ -679,43 +688,82 @@ FREQ_ORDER = ("月", "周", "日")
 
 FREQ_ASSIGNMENT = {
     # ── chip 筹码 ──
-    "pct_90_con": ("月", "TS"), "pct_90_high": ("月", "TS"),
-    "weight_avg": ("月", "TS"), "conc_trend_20d": ("月", "TS"),
+    "pct_90_con": ("月", "TS"),
+    "pct_90_high": ("月", "TS"),
+    "weight_avg": ("月", "TS"),
+    "conc_trend_20d": ("月", "TS"),
     "resistance_dist": ("月", "TS"),
-    "chip_entropy": ("日", "TS"), "chip_gini": ("日", "TS"), "peak_roc_5d": ("日", "TS"),
-    "chip_skew_dist": ("月", "XS"), "conc_90_industry_rank": ("月", "XS"),
-    "peak_price": ("月", "XS"), "peak_roc_20d": ("周", "TS"),
-    "cost_bias": ("周", "XS"), "support_dist": ("周", "TS"),
+    "chip_entropy": ("日", "TS"),
+    "chip_gini": ("日", "TS"),
+    "peak_roc_5d": ("日", "TS"),
+    "chip_skew_dist": ("月", "XS"),
+    "conc_90_industry_rank": ("月", "XS"),
+    "peak_price": ("月", "XS"),
+    "peak_roc_20d": ("周", "TS"),
+    "cost_bias": ("周", "XS"),
+    "support_dist": ("周", "TS"),
     # ── cost 成本线 ──
-    "cost_50pct": ("月", "TS"), "cost_95pct": ("月", "TS"),
+    "cost_50pct": ("月", "TS"),
+    "cost_95pct": ("月", "TS"),
     # ── price 价格 ──
     "close_hfq": ("周", "TS"),
     # ── vol 量 ──
-    "volume": ("月", "XS"), "amount": ("月", "XS"), "turnover_rate": ("月", "XS"),
-    "free_float_turnover_rate": ("月", "XS"), "volume_ratio": ("月", "TS"),
-    "ma_vol_ratio_5_20": ("月", "XS"), "vol_surge": ("月", "XS"), "amt_surge": ("月", "XS"),
+    "volume": ("月", "XS"),
+    "amount": ("月", "XS"),
+    "turnover_rate": ("月", "XS"),
+    "free_float_turnover_rate": ("月", "XS"),
+    "volume_ratio": ("月", "TS"),
+    "ma_vol_ratio_5_20": ("月", "XS"),
+    "vol_surge": ("月", "XS"),
+    "amt_surge": ("月", "XS"),
     # ── ma 均线乖离 ──
-    "bias_5": ("周", "TS"), "bias_10": ("周", "TS"), "bias_20": ("月", "TS"),
-    "bias_60": ("日", "TS"), "bias_120": ("月", "TS"), "bias_250": ("月", "TS"),
-    "bias_5_20_cross": ("日", "XS"), "bias_20_60_cross": ("日", "TS"),
+    "bias_5": ("周", "TS"),
+    "bias_10": ("周", "TS"),
+    "bias_20": ("月", "TS"),
+    "bias_60": ("日", "TS"),
+    "bias_120": ("月", "TS"),
+    "bias_250": ("月", "TS"),
+    "bias_5_20_cross": ("日", "XS"),
+    "bias_20_60_cross": ("日", "TS"),
     # ── volatility 波动 ──
-    "amplitude_5d": ("月", "XS"), "intraday_range": ("月", "XS"),
-    "winner_ratio": ("周", "TS"), "pctChg": ("周", "TS"),
+    "amplitude_5d": ("月", "XS"),
+    "intraday_range": ("月", "XS"),
+    "winner_ratio": ("周", "TS"),
+    "pctChg": ("周", "TS"),
     # ── valuation 估值市值 ──
-    "pe_ttm": ("周", "TS"), "pb": ("周", "TS"), "ps_ttm": ("周", "TS"),
-    "dv_ratio": ("月", "TS"), "total_mv": ("周", "TS"), "circ_mv": ("周", "TS"),
+    "pe_ttm": ("周", "TS"),
+    "pb": ("周", "TS"),
+    "ps_ttm": ("周", "TS"),
+    "dv_ratio": ("月", "TS"),
+    "total_mv": ("周", "TS"),
+    "circ_mv": ("周", "TS"),
     # ── margin 两融 ──
-    "margin_balance": ("月", "TS"), "short_balance": ("周", "TS"),
-    "margin_buy_amt": ("月", "XS"), "short_sell_vol": ("周", "TS"),
+    "margin_balance": ("月", "TS"),
+    "short_balance": ("周", "TS"),
+    "margin_buy_amt": ("月", "XS"),
+    "short_sell_vol": ("周", "TS"),
     # ── fundamental 基本面 (盈利质量→月; 成长/每股→周) ──
-    "roe": ("月", "TS"), "roe_deducted": ("月", "TS"), "roa": ("月", "TS"),
-    "gross_margin": ("月", "TS"), "debt_ratio": ("月", "TS"), "current_ratio": ("月", "TS"),
-    "asset_turnover": ("月", "TS"), "ar_turnover": ("月", "TS"),
+    "roe": ("月", "TS"),
+    "roe_deducted": ("月", "TS"),
+    "roa": ("月", "TS"),
+    "gross_margin": ("月", "TS"),
+    "debt_ratio": ("月", "TS"),
+    "current_ratio": ("月", "TS"),
+    "asset_turnover": ("月", "TS"),
+    "ar_turnover": ("月", "TS"),
     "inventory_turnover": ("月", "TS"),
-    "rev_yoy": ("周", "TS"), "net_margin": ("周", "TS"), "eps_yoy": ("周", "TS"),
-    "profit_yoy": ("周", "TS"), "ocfps": ("周", "TS"), "revenue_ps": ("周", "TS"),
-    "bps": ("周", "TS"), "eps": ("周", "TS"), "dt_eps": ("周", "TS"),
-    "roe_yoy": ("周", "TS"), "q_roe": ("周", "TS"), "q_ocf_to_sales": ("周", "TS"),
+    "rev_yoy": ("周", "TS"),
+    "net_margin": ("周", "TS"),
+    "eps_yoy": ("周", "TS"),
+    "profit_yoy": ("周", "TS"),
+    "ocfps": ("周", "TS"),
+    "revenue_ps": ("周", "TS"),
+    "bps": ("周", "TS"),
+    "eps": ("周", "TS"),
+    "dt_eps": ("周", "TS"),
+    "roe_yoy": ("周", "TS"),
+    "q_roe": ("周", "TS"),
+    "q_ocf_to_sales": ("周", "TS"),
     "ocf_to_or": ("日", "TS"),
 }
 
@@ -731,62 +779,100 @@ FREQ_ASSIGNMENT = {
 # 真新族 (benefit_part/churn_suspect 等) 不猜, 仍归 '未分类' 由覆盖率报告暴露.
 FAMILY_ANALOG = {
     # 价格族 (close_hfq: TS·周)
-    "open": ("周", "TS"), "high": ("周", "TS"), "low": ("周", "TS"),
-    "close": ("周", "TS"), "pre_close": ("周", "TS"),
-    "open_hfq": ("周", "TS"), "high_hfq": ("周", "TS"), "low_hfq": ("周", "TS"),
+    "open": ("周", "TS"),
+    "high": ("周", "TS"),
+    "low": ("周", "TS"),
+    "close": ("周", "TS"),
+    "pre_close": ("周", "TS"),
+    "open_hfq": ("周", "TS"),
+    "high_hfq": ("周", "TS"),
+    "low_hfq": ("周", "TS"),
     # 换手/量/流动性 (turnover_rate: XS·月)
-    "turn": ("月", "XS"), "turnover_rate_f": ("月", "XS"),
-    "rank_ff_turnover": ("月", "XS"), "rank_amount": ("月", "XS"),
-    "liquidity_score": ("月", "XS"), "adv20": ("月", "XS"),
+    "turn": ("月", "XS"),
+    "turnover_rate_f": ("月", "XS"),
+    "rank_ff_turnover": ("月", "XS"),
+    "rank_amount": ("月", "XS"),
+    "liquidity_score": ("月", "XS"),
+    "adv20": ("月", "XS"),
     "turnover_stability_5": ("月", "XS"),
     # 股本/市值 (total_mv/circ_mv: TS·周)
-    "total_share": ("周", "TS"), "float_share": ("周", "TS"), "free_share": ("周", "TS"),
+    "total_share": ("周", "TS"),
+    "float_share": ("周", "TS"),
+    "free_share": ("周", "TS"),
     # 筹码/成本 _x/_y 变体 (pct_90_con/cost_50pct: TS·月)
-    "pct_70_con_x": ("月", "TS"), "pct_70_con_y": ("月", "TS"),
-    "pct_70_high_x": ("月", "TS"), "pct_70_high_y": ("月", "TS"),
-    "pct_70_low_x": ("月", "TS"), "pct_70_low_y": ("月", "TS"),
-    "pct_90_con_x": ("月", "TS"), "pct_90_con_y": ("月", "TS"),
-    "pct_90_high_x": ("月", "TS"), "pct_90_high_y": ("月", "TS"),
-    "pct_90_low_x": ("月", "TS"), "pct_90_low_y": ("月", "TS"),
-    "cost_5pct_x": ("月", "TS"), "cost_5pct_y": ("月", "TS"),
-    "cost_15pct_x": ("月", "TS"), "cost_15pct_y": ("月", "TS"),
-    "cost_50pct_x": ("月", "TS"), "cost_50pct_y": ("月", "TS"),
-    "cost_85pct_x": ("月", "TS"), "cost_85pct_y": ("月", "TS"),
-    "cost_95pct_x": ("月", "TS"), "cost_95pct_y": ("月", "TS"),
-    "avg_cost_x": ("月", "TS"), "avg_cost_y": ("月", "TS"),
-    "weight_avg_x": ("月", "TS"), "weight_avg_y": ("月", "TS"),
+    "pct_70_con_x": ("月", "TS"),
+    "pct_70_con_y": ("月", "TS"),
+    "pct_70_high_x": ("月", "TS"),
+    "pct_70_high_y": ("月", "TS"),
+    "pct_70_low_x": ("月", "TS"),
+    "pct_70_low_y": ("月", "TS"),
+    "pct_90_con_x": ("月", "TS"),
+    "pct_90_con_y": ("月", "TS"),
+    "pct_90_high_x": ("月", "TS"),
+    "pct_90_high_y": ("月", "TS"),
+    "pct_90_low_x": ("月", "TS"),
+    "pct_90_low_y": ("月", "TS"),
+    "cost_5pct_x": ("月", "TS"),
+    "cost_5pct_y": ("月", "TS"),
+    "cost_15pct_x": ("月", "TS"),
+    "cost_15pct_y": ("月", "TS"),
+    "cost_50pct_x": ("月", "TS"),
+    "cost_50pct_y": ("月", "TS"),
+    "cost_85pct_x": ("月", "TS"),
+    "cost_85pct_y": ("月", "TS"),
+    "cost_95pct_x": ("月", "TS"),
+    "cost_95pct_y": ("月", "TS"),
+    "avg_cost_x": ("月", "TS"),
+    "avg_cost_y": ("月", "TS"),
+    "weight_avg_x": ("月", "TS"),
+    "weight_avg_y": ("月", "TS"),
     # 股息 (dv_ratio: TS·月)
     "dv_ttm": ("月", "TS"),
     # 涨跌停 (快信号 → 日)
-    "up_limit_raw": ("日", "TS"), "down_limit_raw": ("日", "TS"),
+    "up_limit_raw": ("日", "TS"),
+    "down_limit_raw": ("日", "TS"),
     # 行业/板块相对收益 (窗口后缀定频: _1d→日 _5d→周 _20d→月; 未6格判定)
-    "sw_ret_1d": ("日", "TS"), "sw_ret_1d_x": ("日", "TS"),
-    "sw_ret_5d": ("周", "TS"), "sector_return": ("周", "TS"),
-    "sector_return_5d": ("周", "TS"), "sw_relative_strength": ("周", "TS"),
+    "sw_ret_1d": ("日", "TS"),
+    "sw_ret_1d_x": ("日", "TS"),
+    "sw_ret_5d": ("周", "TS"),
+    "sector_return": ("周", "TS"),
+    "sector_return_5d": ("周", "TS"),
+    "sw_relative_strength": ("周", "TS"),
     "sw_rotation_position": ("周", "TS"),
-    "sw_ret_20d": ("月", "TS"), "sw_vol_20d": ("月", "TS"),
-    "ind_holder_trend_20d": ("月", "TS"), "sw_momentum_accel": ("月", "TS"),
-    "ind_margin_accel": ("月", "TS"), "ind_margin_chg_5d": ("周", "TS"),
-    "sw_index_close": ("周", "TS"), "sw_index_vol": ("周", "TS"),
+    "sw_ret_20d": ("月", "TS"),
+    "sw_vol_20d": ("月", "TS"),
+    "ind_holder_trend_20d": ("月", "TS"),
+    "sw_momentum_accel": ("月", "TS"),
+    "ind_margin_accel": ("月", "TS"),
+    "ind_margin_chg_5d": ("周", "TS"),
+    "sw_index_close": ("周", "TS"),
+    "sw_index_vol": ("周", "TS"),
     "market_turnover": ("周", "TS"),
     "market_turnover_ratio_5d": ("周", "TS"),
     "market_turnover_ratio_20d": ("月", "TS"),
     "market_limit_up": ("日", "TS"),
     # 波动/流动性 (同 amplitude_5d/turnover_rate: XS·月)
-    "ATR_pct": ("月", "XS"), "amihud_illiq": ("月", "XS"),
-    "amihud_illiquidity": ("月", "XS"), "sw_turnover_anomaly": ("月", "XS"),
-    "free_float_turnover_rate_xrank": ("月", "XS"), "amount_xrank": ("月", "XS"),
+    "ATR_pct": ("月", "XS"),
+    "amihud_illiq": ("月", "XS"),
+    "amihud_illiquidity": ("月", "XS"),
+    "sw_turnover_anomaly": ("月", "XS"),
+    "free_float_turnover_rate_xrank": ("月", "XS"),
+    "amount_xrank": ("月", "XS"),
     "turnover_f_chg_5d": ("月", "XS"),
     # 快价格信号 (日动量)
-    "close_vs_low": ("日", "TS"), "overnight_ret": ("日", "TS"), "ROC_3d": ("日", "TS"),
-    "gap_strength_5d": ("周", "TS"), "gap_strength_20d": ("月", "TS"),
+    "close_vs_low": ("日", "TS"),
+    "overnight_ret": ("日", "TS"),
+    "ROC_3d": ("日", "TS"),
+    "gap_strength_5d": ("周", "TS"),
+    "gap_strength_20d": ("月", "TS"),
     "gap_vs_ma5": ("周", "TS"),
     # 日历月 (季节效应)
     "month": ("月", "TS"),
     # 上市天数 (静态慢变 → 月)
     "list_days": ("月", "TS"),
     # benefit_part = winner_ratio 旧名 (settings.py:44 别名; winner_ratio 判 TS·周)
-    "benefit_part_x": ("周", "TS"), "benefit_part_y": ("周", "TS"),
+    "benefit_part_x": ("周", "TS"),
+    "benefit_part_y": ("周", "TS"),
     # churn_suspect = 换手稳定性派生洗盘标志 (cleaning_pipeline:140, 同 turnover_stability_5)
     "churn_suspect": ("月", "XS"),
 }
@@ -897,9 +983,7 @@ class FeatureSelector:
 
         ts = datetime.now().strftime("%Y%m%dT%H%M%S")
         for freq in FREQ_ORDER:
-            path = os.path.join(
-                self.registry_dir, f"selected_{board}_{freq}_{ts}.json"
-            )
+            path = os.path.join(self.registry_dir, f"selected_{board}_{freq}_{ts}.json")
             with open(path, "w", encoding="utf-8") as fh:
                 json.dump(
                     {
@@ -926,7 +1010,11 @@ class FeatureSelector:
                 indent=2,
                 ensure_ascii=False,
             )
-        logger.info("[%s] select_freq 覆盖率: %s", board, {k: len(v) for k, v in buckets.items()})
+        logger.info(
+            "[%s] select_freq 覆盖率: %s",
+            board,
+            {k: len(v) for k, v in buckets.items()},
+        )
         return buckets
 
     def _run_bruteforce_dedup(self, df, board, cfg, generator=None):
@@ -958,10 +1046,7 @@ class FeatureSelector:
         for fam in BRUTE_FAMILIES:
             new = generator.generate_family(df, fam, raw_cols=raw_cols, dtype="float32")
             for c in new.columns:
-                if (
-                    c in BruteForceGenerator.EXCLUDE_COLS
-                    or c.startswith("label_")
-                ):
+                if c in BruteForceGenerator.EXCLUDE_COLS or c.startswith("label_"):
                     continue
                 cand_nan[c] = float(new[c].isna().mean())
                 sample_cols[c] = new.loc[sample_pos, c].to_numpy()

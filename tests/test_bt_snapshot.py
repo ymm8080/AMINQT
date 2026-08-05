@@ -25,13 +25,14 @@ def _event(symbol, date, count):
 def test_first_run_seeds_history_then_appends_today(tmp_path):
     path = tmp_path / "bt_v3_snapshot_rolling.parquet"
     seed = pd.DataFrame(
-        [_event("600519", "2026-08-01", 1),
-         _event("300750", "2026-08-01", 3),
-         _event("000001", "2026-08-02", 5)]
+        [
+            _event("600519", "2026-08-01", 1),
+            _event("300750", "2026-08-01", 3),
+            _event("000001", "2026-08-02", 5),
+        ]
     )
     today = pd.DataFrame(
-        [_event("600519", "2026-08-03", 2),
-         _event("300750", "2026-08-03", 1)]
+        [_event("600519", "2026-08-03", 2), _event("300750", "2026-08-03", 1)]
     )
     res = refresh_rolling_snapshot(today, path, seed=seed)
     out = pd.read_parquet(path)
@@ -39,13 +40,20 @@ def test_first_run_seeds_history_then_appends_today(tmp_path):
     assert res == {"appended": 2, "total": 5}
     assert len(out) == 5
     assert list(out.columns) == ["symbol", "date"] + BT_COLS
-    assert out[(out.symbol == "600519") & (out.date == pd.Timestamp("2026-08-03"))]["bt_count"].iloc[0] == 2
+    assert (
+        out[(out.symbol == "600519") & (out.date == pd.Timestamp("2026-08-03"))][
+            "bt_count"
+        ].iloc[0]
+        == 2
+    )
 
 
 def test_rerun_is_idempotent_and_overlap_keeps_last(tmp_path):
     path = tmp_path / "bt_v3_snapshot_rolling.parquet"
     seed = pd.DataFrame([_event("600519", "2026-08-01", 1)])
-    today = pd.DataFrame([_event("600519", "2026-08-01", 9)])  # same (symbol, date), new value
+    today = pd.DataFrame(
+        [_event("600519", "2026-08-01", 9)]
+    )  # same (symbol, date), new value
 
     refresh_rolling_snapshot(today, path, seed=seed)
     out1 = pd.read_parquet(path)
@@ -62,10 +70,17 @@ def test_rerun_is_idempotent_and_overlap_keeps_last(tmp_path):
 def test_non_event_rows_are_ignored(tmp_path):
     path = tmp_path / "bt_v3_snapshot_rolling.parquet"
     today = pd.DataFrame(
-        [_event("600519", "2026-08-03", 2),
-         {"symbol": "300750", "date": pd.Timestamp("2026-08-03"),
-          "bt_count": float("nan"), "bt_disc_raw": float("nan"),
-          "bt_inst_absorb": float("nan"), "bt_amt_ratio_float_mv": float("nan")}]
+        [
+            _event("600519", "2026-08-03", 2),
+            {
+                "symbol": "300750",
+                "date": pd.Timestamp("2026-08-03"),
+                "bt_count": float("nan"),
+                "bt_disc_raw": float("nan"),
+                "bt_inst_absorb": float("nan"),
+                "bt_amt_ratio_float_mv": float("nan"),
+            },
+        ]
     )
     res = refresh_rolling_snapshot(today, path)
     out = pd.read_parquet(path)
@@ -77,9 +92,16 @@ def test_non_event_rows_are_ignored(tmp_path):
 def test_first_run_with_no_events_creates_nothing(tmp_path):
     path = tmp_path / "bt_v3_snapshot_rolling.parquet"
     no_event = pd.DataFrame(
-        [{"symbol": "600519", "date": pd.Timestamp("2026-08-03"),
-          "bt_count": float("nan"), "bt_disc_raw": float("nan"),
-          "bt_inst_absorb": float("nan"), "bt_amt_ratio_float_mv": float("nan")}]
+        [
+            {
+                "symbol": "600519",
+                "date": pd.Timestamp("2026-08-03"),
+                "bt_count": float("nan"),
+                "bt_disc_raw": float("nan"),
+                "bt_inst_absorb": float("nan"),
+                "bt_amt_ratio_float_mv": float("nan"),
+            }
+        ]
     )
     res = refresh_rolling_snapshot(no_event, path)
     assert res == {"appended": 0, "total": 0}
@@ -89,19 +111,27 @@ def test_first_run_with_no_events_creates_nothing(tmp_path):
 def test_restore_after_panel_rebuild(tmp_path):
     path = tmp_path / "bt_v3_snapshot_rolling.parquet"
     history = pd.DataFrame(
-        [_event("600519", "2026-08-01", 1),
-         _event("600519", "2026-08-02", 4),
-         _event("600519", "2026-08-03", 2)]
+        [
+            _event("600519", "2026-08-01", 1),
+            _event("600519", "2026-08-02", 4),
+            _event("600519", "2026-08-03", 2),
+        ]
     )
     refresh_rolling_snapshot(history, path)
     snap = pd.read_parquet(path)
 
     # rebuilt panel: same rows, bt_* columns dropped
     rebuilt = pd.DataFrame(
-        {"symbol": ["600519"] * 4,
-         "date": [pd.Timestamp("2026-08-01"), pd.Timestamp("2026-08-02"),
-                  pd.Timestamp("2026-08-03"), pd.Timestamp("2026-08-04")],
-         "close": [10.0] * 4}
+        {
+            "symbol": ["600519"] * 4,
+            "date": [
+                pd.Timestamp("2026-08-01"),
+                pd.Timestamp("2026-08-02"),
+                pd.Timestamp("2026-08-03"),
+                pd.Timestamp("2026-08-04"),
+            ],
+            "close": [10.0] * 4,
+        }
     )
     restored = rebuilt.merge(snap, on=["symbol", "date"], how="left")
     assert restored["bt_count"].tolist()[:3] == [1, 4, 2]

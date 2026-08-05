@@ -10,6 +10,7 @@
 回测默认全量跑 (狙击+融合+慢牛), 同时报告全窗 + 末段 OOS.
 输出 WORM 到 <DATA OTHERS>/BACKTESTING RESULT/_parallel_backtest_<ts>.json.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -20,11 +21,17 @@ import sys
 import pandas as pd
 
 from app.pipeline_parallel import signals
-from app.pipeline_parallel.backtest import (export_stock_lists, load_panel,
-                                            run_all, write_daily_shortlist,
-                                            write_last_days_csv, write_worm)
+from app.pipeline_parallel.backtest import (
+    export_stock_lists,
+    load_panel,
+    run_all,
+    write_daily_shortlist,
+    write_last_days_csv,
+    write_worm,
+)
 from app.pipeline_parallel.config import SLOW_BULL, SLOW_BULL_VERSION
 from config.settings import STOCK_LIST_DIR
+
 
 def write_slowbull_pool(work: pd.DataFrame, board: str, date=None) -> str:
     """慢牛系统每日 Top-20 观察池 → STOCK_LIST_DIR (含买卖信号列).
@@ -37,28 +44,39 @@ def write_slowbull_pool(work: pd.DataFrame, board: str, date=None) -> str:
         latest = work.loc[work["board"] == board, "date"].max()
     else:
         latest = pd.Timestamp(date)
-    pool = signals.daily_slowbull_pool(work, latest, board,
-                                       SLOW_BULL, SLOW_BULL.top_n)
+    pool = signals.daily_slowbull_pool(work, latest, board, SLOW_BULL, SLOW_BULL.top_n)
     if pool.empty:
         return ""
     stamp = str(pd.Timestamp(latest).date()).replace("-", "")
     os.makedirs(str(STOCK_LIST_DIR), exist_ok=True)
     fp = STOCK_LIST_DIR / (
-        f"slowbull_pool_{board}_{stamp}__slow_bull_{SLOW_BULL_VERSION}.csv")
+        f"slowbull_pool_{board}_{stamp}__slow_bull_{SLOW_BULL_VERSION}.csv"
+    )
     pool.to_csv(fp, index=False)
     return fp.name
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="PIPELINE 并行多系统回测")
-    ap.add_argument("--system", default=None,
-                    help="只跑指定系统 (sniper/fusion/slow_bull), 默认全量")
-    ap.add_argument("--skip-backtest", action="store_true",
-                    help="只加载面板 dump 元数据, 不跑回测")
-    ap.add_argument("--oos-days", type=int, default=None,
-                    help="样本外窗口交易日数 (覆盖默认 6m/3m/10d 三窗, 只跑单窗)")
-    ap.add_argument("--shortlist-date", default=None,
-                    help="短名单选股日 YYYY-MM-DD (默认每板块最新交易日)")
+    ap.add_argument(
+        "--system",
+        default=None,
+        help="只跑指定系统 (sniper/fusion/slow_bull), 默认全量",
+    )
+    ap.add_argument(
+        "--skip-backtest", action="store_true", help="只加载面板 dump 元数据, 不跑回测"
+    )
+    ap.add_argument(
+        "--oos-days",
+        type=int,
+        default=None,
+        help="样本外窗口交易日数 (覆盖默认 6m/3m/10d 三窗, 只跑单窗)",
+    )
+    ap.add_argument(
+        "--shortlist-date",
+        default=None,
+        help="短名单选股日 YYYY-MM-DD (默认每板块最新交易日)",
+    )
     args = ap.parse_args()
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -67,8 +85,11 @@ def main() -> int:
 
     print("加载行集 (快速路径: 复用 3y 检查点 + MFE 标签)...", flush=True)
     work = load_panel()
-    print(f"行集 rows={len(work):,} stocks={work['symbol'].nunique():,} "
-          f"latest={work['date'].max():%Y-%m-%d}", flush=True)
+    print(
+        f"行集 rows={len(work):,} stocks={work['symbol'].nunique():,} "
+        f"latest={work['date'].max():%Y-%m-%d}",
+        flush=True,
+    )
 
     if args.skip_backtest:
         return 0
@@ -82,8 +103,9 @@ def main() -> int:
     for b, bd in out["boards"].items():
         files.append(write_last_days_csv(bd["last_days"], run_dir, board=b))
     for b in out["boards"]:
-        fn = write_daily_shortlist(work, out, run_dir, board=b,
-                                   date=args.shortlist_date)
+        fn = write_daily_shortlist(
+            work, out, run_dir, board=b, date=args.shortlist_date
+        )
         if fn:
             files.append(fn)
         fn = write_slowbull_pool(work, board=b, date=args.shortlist_date)
@@ -103,25 +125,32 @@ def main() -> int:
         print(f"  {fn}")
     w = out["window"]
     for lab, ow in w["oos"].items():
-        print(f"OOS[{lab}]: {ow['start']} → {ow['end']} "
-              f"({ow['trading_days']} 交易日)")
+        print(f"OOS[{lab}]: {ow['start']} → {ow['end']} ({ow['trading_days']} 交易日)")
     for b, bd in out["boards"].items():
-        print(f"[板块 {b}] {bd['label']} | 行 {bd['rows']:,} "
-              f"股票 {bd['stocks']:,} | 阈值: 胜率>={bd['criteria']['min_winrate']} "
-              f"幅度>{bd['criteria']['min_mag']}")
+        print(
+            f"[板块 {b}] {bd['label']} | 行 {bd['rows']:,} "
+            f"股票 {bd['stocks']:,} | 阈值: 胜率>={bd['criteria']['min_winrate']} "
+            f"幅度>{bd['criteria']['min_mag']}"
+        )
         for name, s in bd["systems"].items():
             if not s.get("enabled"):
                 print(f"  [{name}] 未启用 (占位)")
                 continue
             for lab, oos in s["oos"].items():
                 pr = oos["primary"]
-                print(f"  [{name}|OOS {lab}] TOP-{s['top_n']['primary']}: "
-                      f"通过 {pr['passed'] or '无'} | 保留={oos['kept']}")
+                print(
+                    f"  [{name}|OOS {lab}] TOP-{s['top_n']['primary']}: "
+                    f"通过 {pr['passed'] or '无'} | 保留={oos['kept']}"
+                )
         lt = bd["last_days"].get("last_testable") or {}
         if lt:
-            print("  各视界可测日期 (末 15 交易日, 同一选股日): "
-                  + " ".join(f"{h}=至{lt[h]['last_date']}({lt[h]['n']}日)"
-                             for h in ("2d", "3d", "5d", "10d")))
+            print(
+                "  各视界可测日期 (末 15 交易日, 同一选股日): "
+                + " ".join(
+                    f"{h}=至{lt[h]['last_date']}({lt[h]['n']}日)"
+                    for h in ("2d", "3d", "5d", "10d")
+                )
+            )
     return 0
 
 

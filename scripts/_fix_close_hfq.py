@@ -168,7 +168,9 @@ def main() -> None:
     misalign = int((ratio != fac).sum())
     if misalign > 0:
         raise SystemExit(f"ABORT: {misalign} rows 复权因子与行序不一致, 不落盘")
-    logger.info("完整性校验: %d 行 close_hfq/close == adj_factor", int((ratio == fac).sum()))
+    logger.info(
+        "完整性校验: %d 行 close_hfq/close == adj_factor", int((ratio == fac).sum())
+    )
 
     # ── 5. 验证: 07-27 系统性跳变应消失 (对比修复前备份) ──
     def mult_at(df: pd.DataFrame, dstr: str) -> pd.Series:
@@ -179,14 +181,24 @@ def main() -> None:
 
     def n_diff(a: pd.Series, b: pd.Series) -> int:
         common = a.dropna().index.intersection(b.dropna().index)
-        return (a.loc[common].round(4) != b.loc[common].round(4)).sum() if len(common) else -1
+        return (
+            (a.loc[common].round(4) != b.loc[common].round(4)).sum()
+            if len(common)
+            else -1
+        )
 
-    m24, m27, m28 = mult_at(panel, "2026-07-24"), mult_at(panel, "2026-07-27"), mult_at(panel, "2026-07-28")
+    m24, m27, m28 = (
+        mult_at(panel, "2026-07-24"),
+        mult_at(panel, "2026-07-27"),
+        mult_at(panel, "2026-07-28"),
+    )
     bsub = pd.read_parquet(backup, columns=["symbol", "date", "close_hfq", "close"])
     b24, b27 = mult_at(bsub, "2026-07-24"), mult_at(bsub, "2026-07-27")
     logger.info(
         "07-24 vs 07-27 因子跳变 symbols: 修复前=%d, 修复后=%d (真实除权日应残留); 07-24 vs 07-28 修复后=%d",
-        n_diff(b24, b27), n_diff(m24, m27), n_diff(m24, m28),
+        n_diff(b24, b27),
+        n_diff(m24, m27),
+        n_diff(m24, m28),
     )
     for sym in ["300065", "000001", "600519", "603977", "002317"]:
         row = panel[
@@ -196,7 +208,10 @@ def main() -> None:
             r = row.iloc[0]
             logger.info(
                 "  %s 07-28: close=%.2f close_hfq=%.2f mult=%.4f (Tushare 口径)",
-                sym, r["close"], r["close_hfq"], r["close_hfq"] / r["close"],
+                sym,
+                r["close"],
+                r["close_hfq"],
+                r["close_hfq"] / r["close"],
             )
 
     # ── 6. 落盘 (原地, 备份已留) ──

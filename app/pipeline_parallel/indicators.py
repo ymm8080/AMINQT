@@ -8,6 +8,7 @@
   - PIT: 只用 t 及更早数据 (shift/rolling 不引用未来);
   - 连续价格用后复权 (close_hfq/high_hfq/low_hfq), 避免除权跳变误判趋势破位.
 """
+
 from __future__ import annotations
 
 import gc
@@ -63,8 +64,9 @@ def _merge_pct_70(work: pd.DataFrame) -> pd.DataFrame:
     cyq = pd.read_parquet(_CYQ_PANEL, columns=["symbol", "date", "pct_70_con"])
     cyq = cyq.drop_duplicates(["symbol", "date"], keep="last")
     lut = cyq.set_index(["symbol", "date"])["pct_70_con"]
-    work["pct_70_con"] = pd.MultiIndex.from_arrays(
-        [work["symbol"], work["date"]]).map(lut)
+    work["pct_70_con"] = pd.MultiIndex.from_arrays([work["symbol"], work["date"]]).map(
+        lut
+    )
     del cyq, lut
     gc.collect()
     return work
@@ -81,10 +83,14 @@ def prepare_adx(work: pd.DataFrame, spec: dict | None = None) -> pd.DataFrame:
     # 排序保证: load_panel 已按 [symbol,date] 排; 合成/其他调用未排时才重排 (省一次全表拷贝)
     need_sort = not work["symbol"].is_monotonic_increasing
     if not need_sort:
-        need_sort = not work.groupby("symbol", sort=False)["date"] \
-            .is_monotonic_increasing.all()
-    work = (work.sort_values(["symbol", "date"]).reset_index(drop=True)
-            if need_sort else work.reset_index(drop=True))
+        need_sort = not work.groupby("symbol", sort=False)[
+            "date"
+        ].is_monotonic_increasing.all()
+    work = (
+        work.sort_values(["symbol", "date"]).reset_index(drop=True)
+        if need_sort
+        else work.reset_index(drop=True)
+    )
     key = work["symbol"]
 
     c = "close_hfq" if "close_hfq" in work.columns else "close"
@@ -98,7 +104,7 @@ def prepare_adx(work: pd.DataFrame, spec: dict | None = None) -> pd.DataFrame:
     # 连续价 (后复权) 供门槛/信号对比连续 MA, 避免除权跳变误判破位
     work["close_cont"] = work["_c"]
     close, high, low_ = work["_c"], work["_h"], work["_l"]
-    work["_ret"] = _gpct(close, key)          # 单日收益 (组内)
+    work["_ret"] = _gpct(close, key)  # 单日收益 (组内)
     ret = work["_ret"]
 
     # MA 系 + 斜率 (斜率 = 近 slope_lookback 日变化率)
@@ -125,7 +131,9 @@ def prepare_adx(work: pd.DataFrame, spec: dict | None = None) -> pd.DataFrame:
     work["pdi"] = pdi
     work["mdi"] = mdi
     work["adx"] = _gema(dx, key, n)
-    work["adx_rise5"] = work["adx"] - _gshift(work["adx"], key, spec["adx_rise_lookback"])
+    work["adx_rise5"] = work["adx"] - _gshift(
+        work["adx"], key, spec["adx_rise_lookback"]
+    )
     # 打分因子: ADX 25-40 最佳, >40 过热不再加分 (clip 封顶)
     work["adx_score"] = work["adx"].clip(lower=0.0, upper=spec["adx_optimal_max"])
 
@@ -171,7 +179,9 @@ def prepare_adx(work: pd.DataFrame, spec: dict | None = None) -> pd.DataFrame:
         if col in work.columns:
             work[col] = work[col].fillna(0.0)
 
-    work = work.drop(columns=["_c", "_h", "_l", "_vol", "_limit_pct", "_ret",
-                              "_vol_pct", "ret60"], errors="ignore")
+    work = work.drop(
+        columns=["_c", "_h", "_l", "_vol", "_limit_pct", "_ret", "_vol_pct", "ret60"],
+        errors="ignore",
+    )
     gc.collect()
     return work

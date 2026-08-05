@@ -11,6 +11,7 @@
 均线/ADX/波动/量能滚动列已由 indicators.prepare_adx 计算且只用 t 及更早。
 价格一律用连续价 close_cont (后复权), 与连续 MA 自洽, 避免除权跳变误判破位。
 """
+
 from __future__ import annotations
 
 from typing import Callable
@@ -50,11 +51,28 @@ def slow_bull_gate(df: pd.DataFrame, spec: dict | None = None) -> pd.Series:
     """慢牛四门槛 AND. 输入 df 必须含 indicators.prepare_adx 输出的指标列."""
     if spec is None:
         spec = ADX_SPEC
-    req = ("close_cont", "ma5", "ma10", "ma20", "ma60",
-           "ma_slope5", "ma_slope10", "ma_slope20",
-           "adx", "pdi", "mdi", "adx_rise5",
-           "amplitude_20", "max_drop_20", "limit_down_20",
-           "ma_vol_5", "ma_vol_10", "ma_vol_20", "vol_ratio", "turnover_rate")
+    req = (
+        "close_cont",
+        "ma5",
+        "ma10",
+        "ma20",
+        "ma60",
+        "ma_slope5",
+        "ma_slope10",
+        "ma_slope20",
+        "adx",
+        "pdi",
+        "mdi",
+        "adx_rise5",
+        "amplitude_20",
+        "max_drop_20",
+        "limit_down_20",
+        "ma_vol_5",
+        "ma_vol_10",
+        "ma_vol_20",
+        "vol_ratio",
+        "turnover_rate",
+    )
     missing = [c for c in req if c not in df.columns]
     if missing:
         raise KeyError(f"慢牛硬门槛缺指标列: {missing} (先调 indicators.prepare_adx)")
@@ -69,11 +87,7 @@ def slow_bull_gate(df: pd.DataFrame, spec: dict | None = None) -> pd.Series:
         & (df["ma_slope20"] > 0)
         & ((df["ma5"] - df["ma10"]).abs() / df["ma10"] < spec["ma_bias_max"])
     )
-    g2 = (
-        (df["adx"] > spec["adx_min"])
-        & (df["pdi"] > df["mdi"])
-        & (df["adx_rise5"] > 0)
-    )
+    g2 = (df["adx"] > spec["adx_min"]) & (df["pdi"] > df["mdi"]) & (df["adx_rise5"] > 0)
     g3 = (
         (df["amplitude_20"] < spec["amplitude_20_max"])
         & (df["max_drop_20"] > -spec["max_drop_20_max"])  # 最大单日跌幅 < 5%

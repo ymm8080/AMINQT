@@ -3,6 +3,7 @@
 
 用法: python scripts/_gen_legacy_list.py [YYYYMMDD]
 """
+
 import os
 import sys
 import time
@@ -40,9 +41,7 @@ def main():
         f"({time.time() - t0:.0f}s)",
         flush=True,
     )
-    pipe = DailySelectionPipeline(
-        supply=DataSupplyChain(), bundle_paths=BUNDLES
-    )
+    pipe = DailySelectionPipeline(supply=DataSupplyChain(), bundle_paths=BUNDLES)
     res = pipe.run(trade_date, panel=panel)
     lst = res.get("list")
     print(

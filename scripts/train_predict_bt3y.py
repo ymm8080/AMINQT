@@ -131,7 +131,9 @@ def main() -> None:
             "file": os.path.basename(res["path"]),
             "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
         }
-        logger.info("[%s] 当前模型 → %s (tag=%s)", b, os.path.basename(res["path"]), tag)
+        logger.info(
+            "[%s] 当前模型 → %s (tag=%s)", b, os.path.basename(res["path"]), tag
+        )
     if mods:
         save_modules(mods)
         logger.info("current_meta.json 更新: %s", mods)

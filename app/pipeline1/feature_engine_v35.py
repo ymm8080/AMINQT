@@ -2741,7 +2741,11 @@ class FeatureEngineV35:
             #   rolling(30).sum().shift(1) 用 T-1 及更早 → 当日公告不预测当日 (PIT)
             if "sh_net_ratio" in g.columns:
                 g["sh_ratio_30d"] = (
-                    g["sh_net_ratio"].fillna(0).rolling(30, min_periods=1).sum().shift(1)
+                    g["sh_net_ratio"]
+                    .fillna(0)
+                    .rolling(30, min_periods=1)
+                    .sum()
+                    .shift(1)
                 )
             else:
                 g["sh_ratio_30d"] = np.nan

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Unit tests for lhb_seats — 席位静态分类 + top_inst → 8 列席位聚合 (LHB v2 上游)."""
+
 import numpy as np
 import pandas as pd
 
@@ -10,13 +11,19 @@ def _raw() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "ts_code": [
-                "000001.SZ", "000001.SZ", "000001.SZ", "000001.SZ",
-                "000002.SZ", "000002.SZ",
-                "600000.SH", "600000.SH",
+                "000001.SZ",
+                "000001.SZ",
+                "000001.SZ",
+                "000001.SZ",
+                "000002.SZ",
+                "000002.SZ",
+                "600000.SH",
+                "600000.SH",
             ],
             "exalter": [
                 "机构专用",  # inst
-                "拉萨团结路", "拉萨团结路",  # retail (同席位重复, 取 max)
+                "拉萨团结路",
+                "拉萨团结路",  # retail (同席位重复, 取 max)
                 "国泰君安证券股份有限公司上海江苏路营业部",  # top (江苏路)
                 "机构专用",  # inst
                 "华鑫证券上海分公司",  # quant

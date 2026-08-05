@@ -4,16 +4,29 @@
 覆盖: MFE 净标签 / 池合成打分 / TOP-N 选股 / 双头量测 / 配置完整性 /
 run_system 全流程 / OOS 窗口 (合成数据, 不触检查点). 不改动 app/pipeline1.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from app.pipeline_parallel.config import (FUSION, PANEL, SNIPER, SYSTEMS,
-                                          SLOW_BULL, MIN_MAG, MIN_WINRATE,
-                                          HORIZONS, MFE_LABELS)
-from app.pipeline_parallel.scoring import (cross_rank, dual_head_ok,
-                                           measure_dual_head, pool_score,
-                                           select_topn)
+from app.pipeline_parallel.config import (
+    FUSION,
+    PANEL,
+    SNIPER,
+    SYSTEMS,
+    SLOW_BULL,
+    MIN_MAG,
+    MIN_WINRATE,
+    HORIZONS,
+    MFE_LABELS,
+)
+from app.pipeline_parallel.scoring import (
+    cross_rank,
+    dual_head_ok,
+    measure_dual_head,
+    pool_score,
+    select_topn,
+)
 
 
 def _panel(n_dates=14, n_stocks=20, extra_cols=()):
@@ -24,14 +37,17 @@ def _panel(n_dates=14, n_stocks=20, extra_cols=()):
     """
     rng = np.random.default_rng(42)
     dates = pd.bdate_range("2025-01-06", periods=n_dates)
-    sym_base = rng.normal(0, 1, n_stocks)          # 持久因子
+    sym_base = rng.normal(0, 1, n_stocks)  # 持久因子
     rows = []
     for d in dates:
         for i in range(n_stocks):
             prefix = "00" if i % 2 == 0 else "30"
-            r = {"date": d, "symbol": f"{prefix}{i:04d}",
-                 "f1": sym_base[i] + rng.normal(0, 0.1),
-                 "f2": rng.normal(0, 1)}
+            r = {
+                "date": d,
+                "symbol": f"{prefix}{i:04d}",
+                "f1": sym_base[i] + rng.normal(0, 0.1),
+                "f2": rng.normal(0, 1),
+            }
             for c in extra_cols:
                 r[c] = rng.normal(0, 1) + sym_base[i] * 0.5
             rows.append(r)
@@ -46,13 +62,14 @@ def _with_labels(df):
     df = df.copy()
     rng = np.random.default_rng(7)
     # 每 symbol 价格路径: 基准 10, 随 f1 抬升 (0.12 放大 → 高分股 MFE 显著正)
-    df["close_hfq"] = 10.0 * (1 + 0.12 * df["f1"]) * np.exp(
-        rng.normal(0, 0.05, len(df)))
+    df["close_hfq"] = (
+        10.0 * (1 + 0.12 * df["f1"]) * np.exp(rng.normal(0, 0.05, len(df)))
+    )
     # 日内高点 >= 收盘 (OHLCV 不变量), 放大倍数随 f1 → 高 f1 的 MFE 更大
     df["high_hfq"] = np.maximum(
-        df["close_hfq"] * (1 + 0.12 * df["f1"]
-                           + rng.normal(0, 0.02, len(df))),
-        df["close_hfq"] * 1.0001)
+        df["close_hfq"] * (1 + 0.12 * df["f1"] + rng.normal(0, 0.02, len(df))),
+        df["close_hfq"] * 1.0001,
+    )
     df["adv20"] = rng.uniform(1e7, 1e9, len(df))
     df = add_mfe_labels(df, horizons=(2, 3, 5, 10))
     df["board"] = df["symbol"].map(board_of)
@@ -93,26 +110,33 @@ def test_both_systems_full_horizon_matrix():
 
 def test_config_panel_checkpoints_exist():
     import os
+
     assert os.path.exists(PANEL.main_checkpoint)
     assert os.path.exists(PANEL.dual_checkpoint)
 
 
 def test_board_of_prefix_mapping():
     from app.pipeline_parallel.config import board_of
-    assert board_of("600000") == "main"      # 沪主板
-    assert board_of("000001") == "main"      # 深主板
-    assert board_of("300001") == "dual"      # 创业板
-    assert board_of("688001") == "dual"      # 科创板
-    assert board_of("900901") == "main"      # 未知前缀归 main
+
+    assert board_of("600000") == "main"  # 沪主板
+    assert board_of("000001") == "main"  # 深主板
+    assert board_of("300001") == "dual"  # 创业板
+    assert board_of("688001") == "dual"  # 科创板
+    assert board_of("900901") == "main"  # 未知前缀归 main
 
 
 def test_board_thresholds_differ():
     # 2026-08-04 用户: MAIN/DUAL 上涨幅度阈值必须不同 (dual 20% 上限 > main 10%)
     from app.pipeline_parallel.config import BOARD_THRESHOLDS
-    assert (BOARD_THRESHOLDS["main"]["min_winrate"]
-            == BOARD_THRESHOLDS["dual"]["min_winrate"] == 0.55)
-    assert (BOARD_THRESHOLDS["dual"]["min_mag"]
-            > BOARD_THRESHOLDS["main"]["min_mag"] > 0.0)
+
+    assert (
+        BOARD_THRESHOLDS["main"]["min_winrate"]
+        == BOARD_THRESHOLDS["dual"]["min_winrate"]
+        == 0.55
+    )
+    assert (
+        BOARD_THRESHOLDS["dual"]["min_mag"] > BOARD_THRESHOLDS["main"]["min_mag"] > 0.0
+    )
 
 
 # ── MFE 净标签 ──
@@ -123,9 +147,15 @@ def test_add_mfe_labels_manual():
     dates = pd.bdate_range("2025-01-06", periods=6)
     close = [10.0, 10.1, 10.5, 11.0, 10.8, 10.9]
     high = [10.2, 10.3, 10.8, 11.2, 11.0, 11.1]
-    df = pd.DataFrame({"date": dates, "symbol": ["000001"] * 6,
-                       "close_hfq": close, "high_hfq": high,
-                       "adv20": [1e8] * 6})
+    df = pd.DataFrame(
+        {
+            "date": dates,
+            "symbol": ["000001"] * 6,
+            "close_hfq": close,
+            "high_hfq": high,
+            "adv20": [1e8] * 6,
+        }
+    )
     df = add_mfe_labels(df, horizons=(2,))
     # T 行 (index 0): exec=close[1]=10.1; MFE-2d=max(high[2],high[3])=max(10.8,11.2)=11.2
     cost = COST + 2 * slippage_tier(1e8)
@@ -158,14 +188,14 @@ def test_tradability_gate_removes_sparse_stock():
     from app.pipeline_parallel.backtest import tradability_gate
 
     df = _panel(n_dates=10, n_stocks=4)
-    sym = "300003"                       # i=3 → 双创前缀
+    sym = "300003"  # i=3 → 双创前缀
     dates = np.sort(df["date"].unique())
-    keep_days = dates[-2:]               # 该股只在末 2 天有行 → 前期可交易性差
+    keep_days = dates[-2:]  # 该股只在末 2 天有行 → 前期可交易性差
     df2 = df[(df["symbol"] != sym) | (df["date"].isin(keep_days))]
     kept, stats = tradability_gate(df2, lookback=5, min_presence=0.8)
     assert sym not in set(kept["symbol"])
     assert stats["removed_stocks"] == 1
-    assert stats["removed_rows"] == 2    # 该股仅剩的 2 行也被剔 (前 5 日有行比例不足)
+    assert stats["removed_rows"] == 2  # 该股仅剩的 2 行也被剔 (前 5 日有行比例不足)
     # 正常股不受影响 (整窗在交易)
     assert stats["kept_stocks"] == 3
 
@@ -220,8 +250,9 @@ def test_select_topn_per_date():
 def test_measure_dual_head_ok():
     df = _with_labels(_panel(extra_cols=("f1",)))
     top = select_topn(df, pool_score(df, ("f1",)), 5)
-    sel = top.merge(df[["symbol", "date", "label_mfe_3d_net"]],
-                    on=["symbol", "date"], how="left")
+    sel = top.merge(
+        df[["symbol", "date", "label_mfe_3d_net"]], on=["symbol", "date"], how="left"
+    )
     m = measure_dual_head(sel, "label_mfe_3d_net")
     assert m["n"] > 0
     assert m["mag"] > 0
@@ -287,9 +318,9 @@ def test_run_all_reports_per_board_oos():
             s = systems[name]
             # 2026-08-04 用户: 验收只看 OOS, full 不参与保留判定
             assert s["full"]["kept"] is None
-            assert set(s["oos"]) == {"oos"}            # oos_days=4 → 单窗
+            assert set(s["oos"]) == {"oos"}  # oos_days=4 → 单窗
             for w, ow in s["oos"].items():
-                assert ow["kept"] is True               # 合成持久因子下 OOS 双头必过
+                assert ow["kept"] is True  # 合成持久因子下 OOS 双头必过
                 assert ow["primary"]["passed"]
             assert set(s["full"]["primary"]["per_horizon"]) == set(HORIZONS)
     # OOS 窗口边界正确 (末 4 个交易日)
@@ -328,14 +359,14 @@ def test_rank_bands_splits_top10_by_rank():
     from app.pipeline_parallel.config import FUSION
 
     df = _with_labels(_panel(extra_cols=FUSION.pool))
-    res = rank_bands(df, FUSION, 10,
-                     (("all10", 1, 10), ("first5", 1, 5), ("last5", 6, 10)))
+    res = rank_bands(
+        df, FUSION, 10, (("all10", 1, 10), ("first5", 1, 5), ("last5", 6, 10))
+    )
     nd = df["date"].nunique()
     # 尾段无未来价 → 标签 NaN, 故用结构性等式而非固定计数
     assert 0 < res["all10"]["3d"]["n"] <= nd * 10
     assert res["first5"]["3d"]["n"] == res["last5"]["3d"]["n"]
-    assert (res["first5"]["3d"]["n"] + res["last5"]["3d"]["n"]
-            == res["all10"]["3d"]["n"])
+    assert res["first5"]["3d"]["n"] + res["last5"]["3d"]["n"] == res["all10"]["3d"]["n"]
     # first5 是高分档, 应 >= last5 的幅度
     assert res["first5"]["3d"]["mag"] >= res["last5"]["3d"]["mag"]
 
@@ -350,7 +381,7 @@ def test_run_all_compare_per_board_oos():
     for b in BOARD_PREFIXES:
         c = out["boards"][b]["compare"]
         assert "full" in c and "oos" in c
-        assert set(c["oos"]) == {"oos"}          # oos_days=4 → 单窗
+        assert set(c["oos"]) == {"oos"}  # oos_days=4 → 单窗
         for comp in [c["full"]] + [c["oos"][w] for w in c["oos"]]:
             assert set(comp["fusion"]) == {"all10", "first5", "last5"}
             assert comp["sniper_top5"]["2d"]["n"] > 0
@@ -375,8 +406,7 @@ def test_write_worm_creates_date_subfolder(monkeypatch, tmp_path):
 
 def test_export_stock_lists_csvs(monkeypatch, tmp_path):
     import app.pipeline_parallel.backtest as bt
-    from app.pipeline_parallel.backtest import (export_stock_lists, run_all,
-                                                write_worm)
+    from app.pipeline_parallel.backtest import export_stock_lists, run_all, write_worm
     from app.pipeline_parallel.config import FUSION, SNIPER
 
     pool = tuple(dict.fromkeys(SNIPER.pool + FUSION.pool))
@@ -388,14 +418,19 @@ def test_export_stock_lists_csvs(monkeypatch, tmp_path):
     # 传字符串 oos_start (runner 传 out["window"]["oos"]["start"], 真实数据回归点 2026-08-04)
     files = export_stock_lists(df, str(pd.Timestamp(dates[-4])), run_dir)
     for b in ("main", "dual"):
-        for fname in (f"stocks_{b}_sniper_full.csv", f"stocks_{b}_sniper_oos.csv",
-                      f"stocks_{b}_fusion_full.csv", f"stocks_{b}_fusion_oos.csv",
-                      f"stocks_merged_oos_{b}.csv"):
+        for fname in (
+            f"stocks_{b}_sniper_full.csv",
+            f"stocks_{b}_sniper_oos.csv",
+            f"stocks_{b}_fusion_full.csv",
+            f"stocks_{b}_fusion_oos.csv",
+            f"stocks_merged_oos_{b}.csv",
+        ):
             assert fname in files, fname
             assert (run_dir / fname).exists(), fname
     stocks = pd.read_csv(run_dir / "stocks_main_sniper_oos.csv")
     assert {"date", "symbol", "score", "rk", "label_mfe_2d_net"}.issubset(
-        set(stocks.columns))
+        set(stocks.columns)
+    )
     assert len(stocks) > 0
     merged = pd.read_csv(run_dir / "stocks_merged_oos_main.csv")
     assert {"date", "symbol", "systems"}.issubset(set(merged.columns))
@@ -418,11 +453,18 @@ def test_last_days_report_per_day_picks_and_figures():
         f = day["fusion_top10"]
         assert len(s["picks"]) == SNIPER.top_n == 5
         assert len(f["picks"]) == FUSION.top_n == 10
-        assert s["picks"][0]["rk"] == 1          # 按分数降序
+        assert s["picks"][0]["rk"] == 1  # 按分数降序
         assert f["picks"][-1]["rk"] == 10
         for p in s["picks"]:
-            assert set(p) == {"symbol", "rk", "score", "mfe_2d",
-                              "mfe_3d", "mfe_5d", "mfe_10d"}
+            assert set(p) == {
+                "symbol",
+                "rk",
+                "score",
+                "mfe_2d",
+                "mfe_3d",
+                "mfe_5d",
+                "mfe_10d",
+            }
         assert set(s["figure"]) == {"2d", "3d", "5d", "10d"}
         assert set(f["figure"]) == {"2d", "3d", "5d", "10d"}
 
@@ -437,8 +479,7 @@ def test_last_days_report_tail_horizons_nan():
     ld = last_days_report(df, n_days=10)
     # 末日: T+1 买价无未来价 → 所有视界 n=0 如实标注
     last_day = ld["days"][-1]["sniper_top5"]
-    assert all(last_day["figure"][h]["n"] == 0
-               for h in ("2d", "3d", "5d", "10d"))
+    assert all(last_day["figure"][h]["n"] == 0 for h in ("2d", "3d", "5d", "10d"))
     assert all(p["mfe_2d"] is None for p in last_day["picks"])
     # 倒数第 4 日: T+2 可测 (窗口 T+2..T+3 有价), T+10 无未来价 → n=0
     d4 = ld["days"][-4]["sniper_top5"]
@@ -458,12 +499,11 @@ def test_last_days_report_last_testable_dates():
 
     pool = tuple(dict.fromkeys(SNIPER.pool + FUSION.pool))
     df = _with_labels(_panel(n_dates=20, extra_cols=pool))
-    ld = last_days_report(df)          # 默认 n_days=15
+    ld = last_days_report(df)  # 默认 n_days=15
     assert ld["n_days"] == 15
     lt = ld["last_testable"]
     assert set(lt) == {"2d", "3d", "5d", "10d"}
-    assert all(lt[h]["n"] > 0 and lt[h]["last_date"] is not None
-               for h in lt)
+    assert all(lt[h]["n"] > 0 and lt[h]["last_date"] is not None for h in lt)
     # T+2 需未来 2 日价, T+10 需未来 10 日价 → 后者的可测末日期更早或相等
     lt_ts = {h: pd.Timestamp(lt[h]["last_date"]) for h in lt}
     assert lt_ts["10d"] <= lt_ts["5d"] <= lt_ts["3d"] <= lt_ts["2d"]
@@ -483,15 +523,25 @@ def test_write_last_days_csv(tmp_path):
     fname = write_last_days_csv(ld, tmp_path)
     assert fname == "last_5_days_picks.csv"
     csv = pd.read_csv(tmp_path / fname)
-    assert {"date", "system", "rk", "symbol", "score",
-            "mfe_2d", "mfe_3d", "mfe_5d", "mfe_10d"}.issubset(set(csv.columns))
-    assert len(csv) == 5 * 5 + 5 * 10      # 5 天 × (狙击 5 + 融合 10)
+    assert {
+        "date",
+        "system",
+        "rk",
+        "symbol",
+        "score",
+        "mfe_2d",
+        "mfe_3d",
+        "mfe_5d",
+        "mfe_10d",
+    }.issubset(set(csv.columns))
+    assert len(csv) == 5 * 5 + 5 * 10  # 5 天 × (狙击 5 + 融合 10)
     assert set(csv["system"]) == {"sniper", "fusion"}
 
 
 # ── 合并模块: 最终短名单 (2026-08-04 用户: 一般管道设计, 验收/买入都基于最终短名单) ──
 def _pool():
     from app.pipeline_parallel.config import FUSION, SNIPER
+
     return tuple(dict.fromkeys(SNIPER.pool + FUSION.pool))
 
 
@@ -501,7 +551,8 @@ def test_build_merged_shortlist_ranked():
     df = _with_labels(_panel(extra_cols=_pool()))
     sl = build_merged_shortlist(df, top_n=10)
     assert {"date", "symbol", "systems", "co_occur", "score", "rk"}.issubset(
-        set(sl.columns))
+        set(sl.columns)
+    )
     # 去重: 每 (date, symbol) 至多一行
     assert sl.duplicated(["date", "symbol"]).sum() == 0
     # rk 按日期截断到 top_n
@@ -516,7 +567,8 @@ def test_build_merged_shortlist_ranked():
         # 组内分数降序 (共现块内与单系统块内各自降序; 块边界允许回跳)
         assert g["score"].is_monotonic_decreasing or (
             g.loc[co.index, "score"].is_monotonic_decreasing
-            and g.loc[no.index, "score"].is_monotonic_decreasing)
+            and g.loc[no.index, "score"].is_monotonic_decreasing
+        )
         # 共现行 systems 必含双系统
         if len(co):
             assert (co["systems"].str.contains("+", regex=False)).all()
@@ -601,7 +653,9 @@ def test_build_conclusion_has_verdicts():
             if c["best_horizon"]:
                 assert c["winrate"] is not None and c["n"] > 0
         assert isinstance(concl["boards"][b]["improvements"], list)
-        assert len(concl["boards"][b]["improvements"]) >= 1   # 合成面板尾部 T+5/10 NaN → 有改进点
+        assert (
+            len(concl["boards"][b]["improvements"]) >= 1
+        )  # 合成面板尾部 T+5/10 NaN → 有改进点
         assert "text" in concl["recommendation"]
         assert "sizing" in concl["recommendation"]
 
@@ -617,5 +671,5 @@ def test_write_worm_writes_conclusion(monkeypatch, tmp_path):
     assert "conclusion" in out
     assert (run_dir / "conclusion.txt").exists()
     log_text = log.read_text(encoding="utf-8")
-    assert "结论" in log_text                 # 结论置顶
+    assert "结论" in log_text  # 结论置顶
     assert log_text.index("结论") < log_text.index("PIPELINE")

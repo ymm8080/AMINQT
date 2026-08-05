@@ -852,7 +852,9 @@ def _make_event_panel(n_symbols=12, n_dates=80, seed=7):
     for sym in symbols:
         for i in range(30, 51):
             m = (df["symbol"] == sym) & (df["date"] == dates[i])
-            df.loc[m, "feat_sig"] = df.loc[m, "label"] * 0.5 + np.random.randn(m.sum()) * 0.1
+            df.loc[m, "feat_sig"] = (
+                df.loc[m, "label"] * 0.5 + np.random.randn(m.sum()) * 0.1
+            )
             df.loc[m, "feat_weak"] = np.random.randn(m.sum()) * 0.01  # ~0 IC
     return df
 
@@ -924,9 +926,7 @@ def test_scope_ic_union_merges_blocktrade_style_feature():
     np.random.seed(7)
     symbols = [f"{i:06d}" for i in range(1, 13)]
     dates = pd.bdate_range("2024-01-01", periods=60)
-    df = pd.DataFrame(
-        [{"symbol": s, "date": d} for s in symbols for d in dates]
-    )
+    df = pd.DataFrame([{"symbol": s, "date": d} for s in symbols for d in dates])
     df["label"] = np.random.randn(len(df))
     df["bt_count"] = np.nan
     df["bt_act_ewma"] = np.nan
@@ -1017,6 +1017,5 @@ def test_run_bruteforce_dedup_ram_safe_parity():
         new = sel._run_bruteforce_dedup(df, "main", cfg)
 
     assert new == old, (
-        f"RAM 优化改变选择: old={len(old)} new={len(new)}; "
-        f"diff={set(old) ^ set(new)}"
+        f"RAM 优化改变选择: old={len(old)} new={len(new)}; diff={set(old) ^ set(new)}"
     )

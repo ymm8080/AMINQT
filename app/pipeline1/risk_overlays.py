@@ -454,6 +454,7 @@ def share_float_upcoming_scan(
     if len(sf) == 0:
         return set()
     sf = sf.dropna(subset=["ann_date", "float_date"])
+
     def _parse_dates(col: pd.Series) -> pd.Series:
         if col.dtype != object:
             return col

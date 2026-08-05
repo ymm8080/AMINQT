@@ -11,6 +11,7 @@ module 来源: models/pipeline1/current_meta.json (双板同 tag → 单一 tag)
 
 用法: python scripts/_deliver_legacy_list.py [YYYYMMDD]
 """
+
 import os
 import sys
 
@@ -49,9 +50,21 @@ def resolve_module(df: pd.DataFrame, trade_date: str) -> str:
 
 def write_md(df: pd.DataFrame, path: str, module: str) -> None:
     cols = [
-        "symbol", "board", "score", "weight", "compound_ret",
-        "prob_up", "prob_up_3d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d",
-        "pred_q50_2d", "pred_q50_3d", "pred_q50_5d", "pain_prob", "model_version",
+        "symbol",
+        "board",
+        "score",
+        "weight",
+        "compound_ret",
+        "prob_up",
+        "prob_up_3d",
+        "pred_ret_2d",
+        "pred_ret_3d",
+        "pred_ret_5d",
+        "pred_q50_2d",
+        "pred_q50_3d",
+        "pred_q50_5d",
+        "pain_prob",
+        "model_version",
     ]
     cols = [c for c in cols if c in df.columns]
     sub = df[cols].copy()
@@ -103,9 +116,21 @@ def main():
             f"E7 闸3 = 2d/3d/5d 中位数均正 · 排序 = d3 目标 (50% d3涨幅 + 50% d3概率) · {len(df)} 只"
         )
         cols = [
-            "symbol", "board", "score", "weight", "compound_ret",
-            "prob_up", "prob_up_3d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d",
-            "pred_q50_2d", "pred_q50_3d", "pred_q50_5d", "pain_prob", "model_version",
+            "symbol",
+            "board",
+            "score",
+            "weight",
+            "compound_ret",
+            "prob_up",
+            "prob_up_3d",
+            "pred_ret_2d",
+            "pred_ret_3d",
+            "pred_ret_5d",
+            "pred_q50_2d",
+            "pred_q50_3d",
+            "pred_q50_5d",
+            "pain_prob",
+            "model_version",
         ]
         cols = [c for c in cols if c in df.columns]
         tbl = doc.add_table(rows=1, cols=len(cols))
@@ -128,7 +153,9 @@ def main():
             str(STOCK_LIST_DIR), f"legacy_list_{trade_date}__{module}.txt"
         )
         with open(notice, "w", encoding="utf-8") as fh:
-            fh.write(f"LEGACY 清单 {trade_date} (module {module}): 空 (E7 无合格标的)\n")
+            fh.write(
+                f"LEGACY 清单 {trade_date} (module {module}): 空 (E7 无合格标的)\n"
+            )
         print(f"[warn] 空清单 → {notice}")
 
 

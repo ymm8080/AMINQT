@@ -70,7 +70,11 @@ def main() -> None:
             MTIME_GRACE_S,
         )
         raise SystemExit(1)
-    logger.info("面板 mtime %s (%.0fs 前), 无并发写入迹象", datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S"), age)
+    logger.info(
+        "面板 mtime %s (%.0fs 前), 无并发写入迹象",
+        datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S"),
+        age,
+    )
 
     # ── 1. 加载面板 + Guard: 4 列不得已存在 ──
     logger.info("加载面板: %s", PANEL_PATH)
@@ -92,7 +96,9 @@ def main() -> None:
     free = shutil.disk_usage(os.path.dirname(PANEL_PATH)).free
     panel_bytes = os.path.getsize(PANEL_PATH)
     if free < panel_bytes * 2 + 1e9:
-        logger.error("D: 剩余 %.1fGB < 面板 %d 字节 * 2 + 1GB, 中止", free / 1e9, panel_bytes)
+        logger.error(
+            "D: 剩余 %.1fGB < 面板 %d 字节 * 2 + 1GB, 中止", free / 1e9, panel_bytes
+        )
         raise SystemExit(1)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup = f"{os.path.splitext(PANEL_PATH)[0]}_preholder_ratio_{ts}.parquet"
@@ -104,18 +110,17 @@ def main() -> None:
     raw["date"] = pd.to_datetime(raw["date"])
     raw["change_ratio"] = pd.to_numeric(raw["change_ratio"], errors="coerce")
     raw["holder_type"] = raw["holder_type"].fillna("").astype(str).str.upper()
-    raw["signed_ratio"] = pd.to_numeric(raw["signed_ratio"], errors="coerce").fillna(0.0)
+    raw["signed_ratio"] = pd.to_numeric(raw["signed_ratio"], errors="coerce").fillna(
+        0.0
+    )
     raw["sr_g"] = np.where(raw["holder_type"] == "G", raw["signed_ratio"], 0.0)
     raw["sr_p"] = np.where(raw["holder_type"] == "P", raw["signed_ratio"], 0.0)
     raw["sr_c"] = np.where(raw["holder_type"] == "C", raw["signed_ratio"], 0.0)
-    agg = (
-        raw.groupby(["symbol", "date"], as_index=False)
-        .agg(
-            sh_net_ratio=("signed_ratio", "sum"),
-            sh_g_ratio=("sr_g", "sum"),
-            sh_p_ratio=("sr_p", "sum"),
-            sh_c_ratio=("sr_c", "sum"),
-        )
+    agg = raw.groupby(["symbol", "date"], as_index=False).agg(
+        sh_net_ratio=("signed_ratio", "sum"),
+        sh_g_ratio=("sr_g", "sum"),
+        sh_p_ratio=("sr_p", "sum"),
+        sh_c_ratio=("sr_c", "sum"),
     )
     logger.info("事件聚合行数: %d", len(agg))
 
@@ -131,7 +136,9 @@ def main() -> None:
 
     # ── 6. 写后验证 ──
     verify = pd.read_parquet(PANEL_PATH)
-    assert verify.shape[0] == before_rows, f"行数变化 {before_rows} -> {verify.shape[0]}"
+    assert verify.shape[0] == before_rows, (
+        f"行数变化 {before_rows} -> {verify.shape[0]}"
+    )
     twins = [c for c in verify.columns if c.endswith("_x") or c.endswith("_y")]
     assert not twins, f"出现 _x/_y 孪生列: {twins}"
     missing = [c for c in RATIO_COLS if c not in verify.columns]
@@ -144,15 +151,20 @@ def main() -> None:
     logger.info("OHLCV 违例数不变: %d (写后)", after_viol)
 
     # spot-check 600519 公告日
-    spot = verify[
-        verify["symbol"] == "600519"
-    ][["symbol", "date", "sh_net_ratio", "sh_g_ratio", "sh_p_ratio", "sh_c_ratio"]]
+    spot = verify[verify["symbol"] == "600519"][
+        ["symbol", "date", "sh_net_ratio", "sh_g_ratio", "sh_p_ratio", "sh_c_ratio"]
+    ]
     spot = spot[spot["sh_net_ratio"].notna()]
     logger.info("600519 公告日非空行 %d:", len(spot))
     if len(spot):
         logger.info("\n%s", spot.head(10).to_string(index=False))
 
-    logger.info("完成: 列数 %d -> %d, 行数 %d 不变", before_cols, len(verify.columns), before_rows)
+    logger.info(
+        "完成: 列数 %d -> %d, 行数 %d 不变",
+        before_cols,
+        len(verify.columns),
+        before_rows,
+    )
     logger.info("备份: %s", backup)
 
 

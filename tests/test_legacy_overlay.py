@@ -19,12 +19,42 @@ def _shortlist() -> pd.DataFrame:
     return pd.DataFrame(
         [
             # 共现优先
-            {"date": pd.Timestamp("2026-08-04"), "symbol": "000001", "systems": "fusion+sniper", "score": 0.90, "co_occur": True},
-            {"date": pd.Timestamp("2026-08-04"), "symbol": "000002", "systems": "fusion+sniper", "score": 0.80, "co_occur": True},
+            {
+                "date": pd.Timestamp("2026-08-04"),
+                "symbol": "000001",
+                "systems": "fusion+sniper",
+                "score": 0.90,
+                "co_occur": True,
+            },
+            {
+                "date": pd.Timestamp("2026-08-04"),
+                "symbol": "000002",
+                "systems": "fusion+sniper",
+                "score": 0.80,
+                "co_occur": True,
+            },
             # 单系统, score 高者在前
-            {"date": pd.Timestamp("2026-08-04"), "symbol": "000003", "systems": "sniper", "score": 0.95, "co_occur": False},
-            {"date": pd.Timestamp("2026-08-04"), "symbol": "000004", "systems": "fusion", "score": 0.85, "co_occur": False},
-            {"date": pd.Timestamp("2026-08-04"), "symbol": "000005", "systems": "fusion", "score": 0.70, "co_occur": False},
+            {
+                "date": pd.Timestamp("2026-08-04"),
+                "symbol": "000003",
+                "systems": "sniper",
+                "score": 0.95,
+                "co_occur": False,
+            },
+            {
+                "date": pd.Timestamp("2026-08-04"),
+                "symbol": "000004",
+                "systems": "fusion",
+                "score": 0.85,
+                "co_occur": False,
+            },
+            {
+                "date": pd.Timestamp("2026-08-04"),
+                "symbol": "000005",
+                "systems": "fusion",
+                "score": 0.70,
+                "co_occur": False,
+            },
         ],
     ).assign(rk=[1, 2, 3, 4, 5])
 
@@ -52,7 +82,9 @@ class TestRerank:
         res = ov.rerank(_shortlist(), _legacy())
         got = res.set_index("symbol").loc["000003", "prob_up_3d"]
         assert got == pytest.approx(0.9)
-        assert res.set_index("symbol").loc["000004", "composite_score"] == pytest.approx(0.013)
+        assert res.set_index("symbol").loc[
+            "000004", "composite_score"
+        ] == pytest.approx(0.013)
 
     def test_co_occur_first_then_final_score_desc(self):
         res = ov.rerank(_shortlist(), _legacy(), w_pool=0.5, w_prob=0.5)
@@ -83,15 +115,21 @@ class TestRerank:
         """prob_up_3d 缺失 → 回退 prob_up_5d → 2d → prob_up."""
         # 手动构造: 只含 prob_up_5d
         leg5 = pd.DataFrame(
-            {"symbol": ["000001", "000002", "000003", "000004", "000005"],
-             "prob_up_5d": [0.6, 0.5, 0.9, 0.3, 0.4]}
+            {
+                "symbol": ["000001", "000002", "000003", "000004", "000005"],
+                "prob_up_5d": [0.6, 0.5, 0.9, 0.3, 0.4],
+            }
         )
         res = ov.rerank(_shortlist(), leg5)
         assert res.attrs.get("prob_col") == "prob_up_5d"
         assert res["prob_up_5d"].notna().all()
         # 只含 prob_up (基础 1d 概率)
-        leg1 = pd.DataFrame({"symbol": ["000001", "000002", "000003", "000004", "000005"],
-                             "prob_up": [0.6, 0.5, 0.9, 0.3, 0.4]})
+        leg1 = pd.DataFrame(
+            {
+                "symbol": ["000001", "000002", "000003", "000004", "000005"],
+                "prob_up": [0.6, 0.5, 0.9, 0.3, 0.4],
+            }
+        )
         res1 = ov.rerank(_shortlist(), leg1)
         assert res1.attrs.get("prob_col") == "prob_up"
 
@@ -143,8 +181,9 @@ class TestOverlaySnapshot:
     prob/score/final_score 组成与实际叠加权重, 供日后 join 已实现 MFE 验证.
     """
 
-    def _snap(self, board="main", w_pool=0.2, w_prob=0.8, legacy=None,
-              date="2026-08-04"):
+    def _snap(
+        self, board="main", w_pool=0.2, w_prob=0.8, legacy=None, date="2026-08-04"
+    ):
         res = ov.rerank(_shortlist(), _legacy() if legacy is None else legacy)
         return ov.overlay_snapshot_frame(res, board, date, w_pool, w_prob)
 
@@ -186,8 +225,12 @@ class TestOverlaySnapshot:
 
     def test_prob_fallback_col_normalized(self):
         """legacy 只含 prob_up_5d → 快照 prob_up 取该列, prob_col 标注来源."""
-        leg5 = pd.DataFrame({"symbol": ["000001", "000002", "000003", "000004", "000005"],
-                             "prob_up_5d": [0.6, 0.5, 0.9, 0.3, 0.4]})
+        leg5 = pd.DataFrame(
+            {
+                "symbol": ["000001", "000002", "000003", "000004", "000005"],
+                "prob_up_5d": [0.6, 0.5, 0.9, 0.3, 0.4],
+            }
+        )
         res = ov.rerank(_shortlist(), leg5)
         assert res.attrs.get("prob_col") == "prob_up_5d"
         snap = ov.overlay_snapshot_frame(res, "main", "2026-08-04", 0.5, 0.5)
@@ -200,7 +243,8 @@ class TestWriteSnapshot:
 
     def _snap(self):
         return ov.overlay_snapshot_frame(
-            ov.rerank(_shortlist(), _legacy()), "main", "2026-08-04", 0.2, 0.8)
+            ov.rerank(_shortlist(), _legacy()), "main", "2026-08-04", 0.2, 0.8
+        )
 
     def test_writes_dated_file_with_module_suffix(self, tmp_path):
         ov._write_snapshot(self._snap(), tmp_path, module="20260805_q2345")
@@ -217,9 +261,13 @@ class TestWriteSnapshot:
     def test_worm_skip_on_existing(self, tmp_path, capsys):
         """同名文件已存在 → 不覆盖不追加, 内容保持不变."""
         ov._write_snapshot(self._snap(), tmp_path, module="v1")
-        before = (tmp_path / "overlay_track_20260804__v1.csv").read_text(encoding="utf-8")
+        before = (tmp_path / "overlay_track_20260804__v1.csv").read_text(
+            encoding="utf-8"
+        )
         ov._write_snapshot(self._snap(), tmp_path, module="v1")
-        after = (tmp_path / "overlay_track_20260804__v1.csv").read_text(encoding="utf-8")
+        after = (tmp_path / "overlay_track_20260804__v1.csv").read_text(
+            encoding="utf-8"
+        )
         assert before == after
         assert len(list(tmp_path.glob("overlay_track_*.csv"))) == 1
         assert "跳过覆盖" in capsys.readouterr().out
@@ -233,11 +281,17 @@ class TestLegacyPredict:
 
     def test_filters_to_symbols(self):
         """只对给定 symbols 推理 (predictor 用 fake 验证 isin 过滤)."""
+
         class Fake:
             def predict(self, df, board):
                 return df[["symbol"]].copy()
-        df = pd.DataFrame({"symbol": ["000001", "000002", "000003"],
-                           "date": [pd.Timestamp("2026-08-04")] * 3})
+
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001", "000002", "000003"],
+                "date": [pd.Timestamp("2026-08-04")] * 3,
+            }
+        )
         out = ov.legacy_predict(df, "main", Fake(), symbols={"000001", "000003"})
         assert set(out["symbol"]) == {"000001", "000003"}
 
@@ -263,8 +317,9 @@ class TestCrossSection:
         df = pd.DataFrame(
             {
                 "symbol": ["000001", "000002"] * 2,
-                "date": ([pd.Timestamp("2026-08-01")] * 2
-                         + [pd.Timestamp("2026-08-04")] * 2),
+                "date": (
+                    [pd.Timestamp("2026-08-01")] * 2 + [pd.Timestamp("2026-08-04")] * 2
+                ),
                 "industry": ["A", "B"] * 2,
                 "amihud_illiq": [0.1, 0.2, 0.3, 0.4],
                 "small_mv_premium": [0.5, 0.6, 0.7, 0.8],

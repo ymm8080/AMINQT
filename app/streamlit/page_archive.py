@@ -9,6 +9,7 @@
 
 本页全部为只读查询, 无任何重算/写入.
 """
+
 from __future__ import annotations
 
 import logging
@@ -53,7 +54,9 @@ def _render_models() -> None:
         ]
         st.dataframe(pd.DataFrame(rows), use_container_width=True)
     else:
-        st.info("current_meta.json 缺失或为空 — 尚无模型被提升为当前 (运行 train_predict_bt3y 后自动提升)")
+        st.info(
+            "current_meta.json 缺失或为空 — 尚无模型被提升为当前 (运行 train_predict_bt3y 后自动提升)"
+        )
 
     st.subheader("模型包文件")
     if not os.path.isdir(MODEL_DIR):
@@ -102,8 +105,9 @@ def _render_predictions() -> None:
 
     st.subheader("单日详情")
     dates = list(runs[0]["date"]) if isinstance(runs[0], dict) else runs
-    date_sel = st.selectbox("选择运行日期", sorted(dates, reverse=True),
-                            key="archive_pred_date")
+    date_sel = st.selectbox(
+        "选择运行日期", sorted(dates, reverse=True), key="archive_pred_date"
+    )
     if date_sel:
         run = _safe(db.get_run, date_sel)
         if run and run.get("stocks"):
@@ -126,15 +130,31 @@ def _render_backtests() -> None:
                     "run": child,
                     "type": "目录",
                     "json": len(jsons),
-                    "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
+                    "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime(
+                        "%Y-%m-%d %H:%M"
+                    ),
                 }
             )
             for j in jsons:
-                rows.append({"run": f"  {os.path.basename(j)}", "type": "json",
-                             "json": 1, "mtime": ""})
+                rows.append(
+                    {
+                        "run": f"  {os.path.basename(j)}",
+                        "type": "json",
+                        "json": 1,
+                        "mtime": "",
+                    }
+                )
         elif child.endswith(".json"):
-            rows.append({"run": child, "type": "json", "json": 1,
-                         "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M")})
+            rows.append(
+                {
+                    "run": child,
+                    "type": "json",
+                    "json": 1,
+                    "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime(
+                        "%Y-%m-%d %H:%M"
+                    ),
+                }
+            )
     if rows:
         st.dataframe(pd.DataFrame(rows), use_container_width=True)
     else:

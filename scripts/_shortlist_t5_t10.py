@@ -34,6 +34,7 @@
 输出: STOCK_LIST_DIR/parallel_shortlist_<date>__<module>.csv + STOCK LIST <date>__<module>.docx/.xlsx
       (module = current_meta.json 模型版本 tag, 供回归按模块分组评估)
 """
+
 import os
 import sys
 from pathlib import Path
@@ -44,8 +45,13 @@ import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 
-from config.settings import (STOCK_LIST_DIR, DATA_OTHERS_DIR, DATA_DIR,
-                             SHORTLIST_SCORE, REGIME_GATE)
+from config.settings import (
+    STOCK_LIST_DIR,
+    DATA_OTHERS_DIR,
+    DATA_DIR,
+    SHORTLIST_SCORE,
+    REGIME_GATE,
+)
 from app.pipeline_parallel.config import HORIZONS
 
 try:
@@ -119,15 +125,21 @@ def load_oos_records() -> dict[tuple[str, str], pd.DataFrame]:
     records = {}
     for board in ("main", "dual"):
         pm = _load_panel_pm(board)
-        sn = _norm_oos(pd.read_csv(FULLRUN_DIR / f"stocks_{board}_sniper_oos.csv",
-                                   dtype={"symbol": str}))
-        fu = _norm_oos(pd.read_csv(FULLRUN_DIR / f"stocks_{board}_fusion_oos.csv",
-                                   dtype={"symbol": str}))
+        sn = _norm_oos(
+            pd.read_csv(
+                FULLRUN_DIR / f"stocks_{board}_sniper_oos.csv", dtype={"symbol": str}
+            )
+        )
+        fu = _norm_oos(
+            pd.read_csv(
+                FULLRUN_DIR / f"stocks_{board}_fusion_oos.csv", dtype={"symbol": str}
+            )
+        )
         records[(board, "sniper")] = sn.merge(pm, on=["symbol", "date"], how="left")
         records[(board, "fusion")] = fu.merge(pm, on=["symbol", "date"], how="left")
-        records[(board, "both")] = pd.concat([records[(board, "sniper")],
-                                              records[(board, "fusion")]],
-                                             ignore_index=True)
+        records[(board, "both")] = pd.concat(
+            [records[(board, "sniper")], records[(board, "fusion")]], ignore_index=True
+        )
     return records
 
 
@@ -150,7 +162,7 @@ def regime_gate(records: dict) -> dict:
             if rec is None or len(rec) == 0:
                 continue
             s = rec["score"]
-            thr = s.quantile(1.0 - q)   # top q-quantile (高分选股)
+            thr = s.quantile(1.0 - q)  # top q-quantile (高分选股)
             top_mask = s >= thr
             per = {}
             for h in cfg["horizons"]:
@@ -164,9 +176,13 @@ def regime_gate(records: dict) -> dict:
                 if len(tv) < CAL_MIN_N:
                     continue
                 base_ev, top_ev = float(v.mean()), float(tv.mean())
-                per[h] = {"base_ev": base_ev, "top_ev": top_ev,
-                          "top_wr": float((tv > 0).mean()), "alpha": top_ev - base_ev}
-            active = (primary in per and per[primary]["alpha"] > margin)
+                per[h] = {
+                    "base_ev": base_ev,
+                    "top_ev": top_ev,
+                    "top_wr": float((tv > 0).mean()),
+                    "alpha": top_ev - base_ev,
+                }
+            active = primary in per and per[primary]["alpha"] > margin
             out[(board, sname)] = {"active": active, "per": per}
     return out
 
@@ -197,24 +213,39 @@ def gate_fallback(gate: dict) -> tuple | None:
 def fmt_regime(gate: dict) -> list[str]:
     """制度门判定摘要 (SUMMARY 顶部): 每组合 top vs 池基线 alpha + 保留/剔除."""
     cfg = REGIME_GATE
-    lines = ["", f"[制度自适应门] 板块×系统保留判定 — 基于最新 OOS 市场数据 "
-                 f"(固定视界净收益 label_pm, top{int(cfg['top_quantile'] * 100)}% vs 池基线, "
-                 f"门槛 +{cfg['margin'] * 100:.0f}pp, 判定只看主视界 "
-                 f"T+{cfg['primary_horizon'][:-1]}):"]
+    lines = [
+        "",
+        f"[制度自适应门] 板块×系统保留判定 — 基于最新 OOS 市场数据 "
+        f"(固定视界净收益 label_pm, top{int(cfg['top_quantile'] * 100)}% vs 池基线, "
+        f"门槛 +{cfg['margin'] * 100:.0f}pp, 判定只看主视界 "
+        f"T+{cfg['primary_horizon'][:-1]}):",
+    ]
     active = []
-    for b, s in (("main", "sniper"), ("main", "fusion"), ("dual", "sniper"), ("dual", "fusion")):
+    for b, s in (
+        ("main", "sniper"),
+        ("main", "fusion"),
+        ("dual", "sniper"),
+        ("dual", "fusion"),
+    ):
         g = gate.get((b, s))
         if not g or not g["per"]:
             continue
-        seg = [f"T+{h[:-1]} top {p['top_ev']:+.2%}(wr {p['top_wr']:.0%}) "
-               f"vs 基 {p['base_ev']:+.2%} α{p['alpha']:+.2%}"
-               for h, p in g["per"].items()]
+        seg = [
+            f"T+{h[:-1]} top {p['top_ev']:+.2%}(wr {p['top_wr']:.0%}) "
+            f"vs 基 {p['base_ev']:+.2%} α{p['alpha']:+.2%}"
+            for h, p in g["per"].items()
+        ]
         if g["active"]:
             active.append(f"{b}/{s}")
-        lines.append(f"  {b}/{s:<9}: {'; '.join(seg)}  → {'保留' if g['active'] else '剔除'}")
+        lines.append(
+            f"  {b}/{s:<9}: {'; '.join(seg)}  → {'保留' if g['active'] else '剔除'}"
+        )
     if not active:
-        note = ("无 (主视界无优势组合, 空仓观望)" if REGIME_GATE.get("fallback") != "best"
-                else "无 (弱市兜底 best-alpha)")
+        note = (
+            "无 (主视界无优势组合, 空仓观望)"
+            if REGIME_GATE.get("fallback") != "best"
+            else "无 (弱市兜底 best-alpha)"
+        )
     else:
         note = ", ".join(active)
     lines.append(f"  今日输出组合: {note}")
@@ -240,7 +271,7 @@ def calibrate(records: dict, board: str, key: str, score: float) -> dict[str, tu
     lo, hi = edges[idx], edges[idx + 1]
     mask = (s >= lo) & (s < hi)
     if idx == CAL_BINS - 1:
-        mask |= (s == hi)
+        mask |= s == hi
     sub = rec[mask]
     for h in HORIZONS:
         v = sub[f"mfe_{h}"].dropna()
@@ -255,8 +286,11 @@ def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
     """每只短名单股: 用最新 score 经 OOS 校准给 逐视界 前瞻 预期涨幅(MFE)+达到概率."""
     out = res.copy()
     for h in HORIZONS:
-        out[f"pred_mag_{h}"], out[f"pred_prob_{h}"], out[f"pred_n_{h}"] = \
-            float("nan"), float("nan"), 0
+        out[f"pred_mag_{h}"], out[f"pred_prob_{h}"], out[f"pred_n_{h}"] = (
+            float("nan"),
+            float("nan"),
+            0,
+        )
     for idx, r in out.iterrows():
         key = r["systems"] if r["systems"] in ("sniper", "fusion") else "both"
         cal = calibrate(records, r["board"], key, float(r["score"]))
@@ -286,11 +320,15 @@ def select_confident(res: pd.DataFrame, prob_min: float = 0.0) -> pd.DataFrame:
     keep = (res["pred_mag_3d"] > 0.0) & (res["pred_prob_3d"] > prob_min)
     dropped = res[~keep]
     if len(dropped):
-        print("[select] 剔除 %d 只 (T+3 预期涨幅≤0%s): %s"
-              % (len(dropped),
-                 "" if prob_min <= 0 else f" 或 达到概率≤{prob_min:.0%}",
-                 ", ".join(dropped.apply(_sel_reason, axis=1))),
-              flush=True)
+        print(
+            "[select] 剔除 %d 只 (T+3 预期涨幅≤0%s): %s"
+            % (
+                len(dropped),
+                "" if prob_min <= 0 else f" 或 达到概率≤{prob_min:.0%}",
+                ", ".join(dropped.apply(_sel_reason, axis=1)),
+            ),
+            flush=True,
+        )
     return res[keep].copy().reset_index(drop=True)
 
 
@@ -310,11 +348,14 @@ def add_score(df: pd.DataFrame) -> pd.DataFrame:
         p = out[f"pred_prob_{h}"].fillna(0.0)
         plo, phi = p.min(), p.max()
         out[f"norm_p_{h}"] = ((p - plo) / (phi - plo)) if phi > plo else 0.0
-    hw, gw, pw = (SHORTLIST_SCORE["horizon_w"], SHORTLIST_SCORE["gain_w"],
-                  SHORTLIST_SCORE["prob_w"])
+    hw, gw, pw = (
+        SHORTLIST_SCORE["horizon_w"],
+        SHORTLIST_SCORE["gain_w"],
+        SHORTLIST_SCORE["prob_w"],
+    )
     out["score_w"] = sum(
-        hw[h] * (gw * out[f"norm_g_{h}"] + pw * out[f"norm_p_{h}"])
-        for h in HORIZONS)
+        hw[h] * (gw * out[f"norm_g_{h}"] + pw * out[f"norm_p_{h}"]) for h in HORIZONS
+    )
     return out
 
 
@@ -330,19 +371,27 @@ def build_merged(res: pd.DataFrame) -> pd.DataFrame:
     df["in_t5"] = df["symbol"].isin(t5)
     df = add_score(df)
     keys = ["score_w", "pred_mag_3d", "pred_prob_3d"]
-    df = df.sort_values(keys, ascending=False, na_position="last").reset_index(drop=True)
+    df = df.sort_values(keys, ascending=False, na_position="last").reset_index(
+        drop=True
+    )
     df.insert(0, "rank", range(1, len(df) + 1))
     return df
 
 
 def fmt_merged(m: pd.DataFrame) -> list[str]:
     """合并排名表的终端文本 (单张决策清单, 涨幅→概率降序, 前瞻逐视界)."""
-    hdr = (f"{'#':>3} {'代码':<8} {'板块':<5} {'模块':<16} {'score':>7} "
-           + "  ".join(f"{'T+' + h[:-1] + ' 预期涨幅(达到概率)':>20}" for h in HORIZON_ORDER)
-           + f" {'T5':>3}")
+    hdr = (
+        f"{'#':>3} {'代码':<8} {'板块':<5} {'模块':<16} {'score':>7} "
+        + "  ".join(
+            f"{'T+' + h[:-1] + ' 预期涨幅(达到概率)':>20}" for h in HORIZON_ORDER
+        )
+        + f" {'T5':>3}"
+    )
     if len(m) == 0:
-        return ["── 合并短名单 (主板+双创合一, 共 0 只) ──",
-                "  今日主视界无优势组合, 空仓观望 (见下方制度门判定)"]
+        return [
+            "── 合并短名单 (主板+双创合一, 共 0 只) ──",
+            "  今日主视界无优势组合, 空仓观望 (见下方制度门判定)",
+        ]
     lines = [
         f"── 合并短名单 (主板+双创合一, 共 {len(m)} 只; 仅正预期涨幅; "
         f"预期=该股最新score经OOS校准的今后涨幅(MFE); 达到概率=P(实现≥该预期), 真实口径) ──",
@@ -352,20 +401,26 @@ def fmt_merged(m: pd.DataFrame) -> list[str]:
         mod = "★共现(双系统)" if bool(r["co_occur"]) else str(r["systems"])
         cols = []
         for h in HORIZON_ORDER:
-            ex = ("n/a" if pd.isna(r[f"pred_mag_{h}"])
-                  else f"{r[f'pred_mag_{h}']:+.1%}({r[f'pred_prob_{h}']:.0%})")
+            ex = (
+                "n/a"
+                if pd.isna(r[f"pred_mag_{h}"])
+                else f"{r[f'pred_mag_{h}']:+.1%}({r[f'pred_prob_{h}']:.0%})"
+            )
             cols.append(f"{ex:>18}")
         t5 = "Y" if bool(r["in_t5"]) else ""
         lines.append(
             f"{r['rank']:>3} {r['symbol']:<8} {BOARD_LABEL.get(r['board'], r['board']):<5} "
-            f"{mod:<16} {r['score']:.4f} " + "  ".join(cols) + f" {t5:>3}")
+            f"{mod:<16} {r['score']:.4f} " + "  ".join(cols) + f" {t5:>3}"
+        )
     return lines
 
 
 def build_summary(res: pd.DataFrame, stats: dict, sel_date: pd.Timestamp) -> list[str]:
     """SUMMARY: 系统级逐视界胜率/期望 → 两系统共识 → 建议顺序."""
-    lines = [f"── SUMMARY ── 选股日(数据) {sel_date:%Y-%m-%d}",
-             "系统级 OOS 逐视界 期望涨幅(MFE)/达到概率 (同系统个股共享, 非个股值; 真实口径):"]
+    lines = [
+        f"── SUMMARY ── 选股日(数据) {sel_date:%Y-%m-%d}",
+        "系统级 OOS 逐视界 期望涨幅(MFE)/达到概率 (同系统个股共享, 非个股值; 真实口径):",
+    ]
     for board in ("main", "dual"):
         label = BOARD_LABEL.get(board, board)
         lines.append(f"  [{label}]")
@@ -373,7 +428,9 @@ def build_summary(res: pd.DataFrame, stats: dict, sel_date: pd.Timestamp) -> lis
             per = stats.get((board, name), {})
             seg = "  ".join(
                 f"T+{h[:-1]} {per[h]['mag']:+.1%}({per[h]['hit']:.0%})"
-                for h in HORIZONS if h in per)
+                for h in HORIZONS
+                if h in per
+            )
             lines.append(f"    {name}: {seg or 'n/a'}")
     for board in ("main", "dual"):
         b = res[res["board"] == board]
@@ -381,8 +438,10 @@ def build_summary(res: pd.DataFrame, stats: dict, sel_date: pd.Timestamp) -> lis
             continue
         label = BOARD_LABEL.get(board, board)
         co = b[b["co_occur"]].sort_values(["cut", "score_w"], ascending=[True, False])
-        lines.append(f"\n[{label}] 两系统共识(共现)股: "
-                     f"{', '.join(str(s) for s in co['symbol'].unique()) if not co.empty else '无'}")
+        lines.append(
+            f"\n[{label}] 两系统共识(共现)股: "
+            f"{', '.join(str(s) for s in co['symbol'].unique()) if not co.empty else '无'}"
+        )
         lines.append("  建议顺序 (score_w 降序: 预期涨幅×达到概率加权):")
         for cut in ("T-5", "T-10"):
             g = b[b["cut"] == cut].sort_values("score_w", ascending=False)
@@ -390,17 +449,29 @@ def build_summary(res: pd.DataFrame, stats: dict, sel_date: pd.Timestamp) -> lis
                 continue
             picks = " > ".join(
                 f"{r['symbol']}#{i + 1}[{r['systems']}]{'★' if bool(r['co_occur']) else ''}"
-                for i, (_, r) in enumerate(g.iterrows()))
+                for i, (_, r) in enumerate(g.iterrows())
+            )
             lines.append(f"    {cut}: {picks}")
-    lines.append("\n每只个股逐视界预期 = 该股最新 score 经 OOS 同分位校准的 今后涨幅(MFE) (前瞻, 非历史回看).")
-    lines.append("达到概率 = P(已实现 MFE ≥ 该预期) — 真实口径 (旧 P(MFE>0) 85-99% 已废, 2026-08-05 用户定案).")
-    lines.append("建议: 优先 score_w 高者 (预期涨幅×概率加权); est_wr 为系统级 OOS 参考.")
+    lines.append(
+        "\n每只个股逐视界预期 = 该股最新 score 经 OOS 同分位校准的 今后涨幅(MFE) (前瞻, 非历史回看)."
+    )
+    lines.append(
+        "达到概率 = P(已实现 MFE ≥ 该预期) — 真实口径 (旧 P(MFE>0) 85-99% 已废, 2026-08-05 用户定案)."
+    )
+    lines.append(
+        "建议: 优先 score_w 高者 (预期涨幅×概率加权); est_wr 为系统级 OOS 参考."
+    )
     return lines
 
 
-def write_docx(res: pd.DataFrame, summary: list[str], sel_date: pd.Timestamp,
-               path: Path, merged: pd.DataFrame | None = None,
-               module: str = "") -> None:
+def write_docx(
+    res: pd.DataFrame,
+    summary: list[str],
+    sel_date: pd.Timestamp,
+    path: Path,
+    merged: pd.DataFrame | None = None,
+    module: str = "",
+) -> None:
     if Document is None:
         return
     doc = Document()
@@ -413,9 +484,11 @@ def write_docx(res: pd.DataFrame, summary: list[str], sel_date: pd.Timestamp,
         doc.add_paragraph(
             "rank=score_w 降序 (预期涨幅×达到概率加权, T+3 主视界短持) · "
             "systems=命中模块(共现=双系统) · T5=该股是否入选所在板块T-5 · 仅保留 T+3 预期涨幅>0 的股 · "
-            "每视界(T+2/3/5/10) 预期涨幅(MFE)=最新score经OOS校准的今后表现; 达到概率=P(实现≥该预期) (真实口径)")
-        mcols = (["rank", "symbol", "board", "module", "score", "score_w", "in_t5"]
-                 + [f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")])
+            "每视界(T+2/3/5/10) 预期涨幅(MFE)=最新score经OOS校准的今后表现; 达到概率=P(实现≥该预期) (真实口径)"
+        )
+        mcols = ["rank", "symbol", "board", "module", "score", "score_w", "in_t5"] + [
+            f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")
+        ]
         t = doc.add_table(rows=1, cols=len(mcols))
         for j, c in enumerate(mcols):
             t.rows[0].cells[j].text = c
@@ -430,17 +503,24 @@ def write_docx(res: pd.DataFrame, summary: list[str], sel_date: pd.Timestamp,
             cells[6].text = "Y" if bool(r["in_t5"]) else ""
             j = 7
             for h in HORIZON_ORDER:
-                cells[j].text = ("n/a" if pd.isna(r[f"pred_mag_{h}"])
-                                 else f"{float(r[f'pred_mag_{h}']):+.1%}")
-                cells[j + 1].text = ("n/a" if pd.isna(r[f"pred_prob_{h}"])
-                                     else f"{float(r[f'pred_prob_{h}']):.0%}")
+                cells[j].text = (
+                    "n/a"
+                    if pd.isna(r[f"pred_mag_{h}"])
+                    else f"{float(r[f'pred_mag_{h}']):+.1%}"
+                )
+                cells[j + 1].text = (
+                    "n/a"
+                    if pd.isna(r[f"pred_prob_{h}"])
+                    else f"{float(r[f'pred_prob_{h}']):.0%}"
+                )
                 j += 2
     for line in summary:
         p = doc.add_paragraph()
         run = p.add_run(line)
         run.font.size = Pt(9)
     cols = ["rank", "symbol", "module", "co_occur", "score", "score_w"] + [
-        f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
+        f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")
+    ]
     for board in ("main", "dual"):
         b = res[res["board"] == board]
         if b.empty:
@@ -452,7 +532,8 @@ def write_docx(res: pd.DataFrame, summary: list[str], sel_date: pd.Timestamp,
                 continue
             doc.add_paragraph(
                 f"{cut} · score_w 降序(预期涨幅×达到概率加权) · 仅正预期涨幅股 · "
-                f"预期涨幅(MFE)=最新score经OOS校准的今后表现; 达到概率=P(实现≥该预期)")
+                f"预期涨幅(MFE)=最新score经OOS校准的今后表现; 达到概率=P(实现≥该预期)"
+            )
             t = doc.add_table(rows=1, cols=len(cols))
             for j, c in enumerate(cols):
                 t.rows[0].cells[j].text = c
@@ -465,16 +546,27 @@ def write_docx(res: pd.DataFrame, summary: list[str], sel_date: pd.Timestamp,
                 cells[4].text = f"{float(r['score']):.4f}"
                 cells[5].text = f"{float(r['score_w']):.4f}"
                 for j, h in enumerate(HORIZONS):
-                    cells[6 + 2 * j].text = ("n/a" if pd.isna(r[f"pred_mag_{h}"])
-                                             else f"{float(r[f'pred_mag_{h}']):+.1%}")
-                    cells[7 + 2 * j].text = ("n/a" if pd.isna(r[f"pred_prob_{h}"])
-                                             else f"{float(r[f'pred_prob_{h}']):.0%}")
+                    cells[6 + 2 * j].text = (
+                        "n/a"
+                        if pd.isna(r[f"pred_mag_{h}"])
+                        else f"{float(r[f'pred_mag_{h}']):+.1%}"
+                    )
+                    cells[7 + 2 * j].text = (
+                        "n/a"
+                        if pd.isna(r[f"pred_prob_{h}"])
+                        else f"{float(r[f'pred_prob_{h}']):.0%}"
+                    )
     doc.save(str(path))
 
 
-def write_xlsx(res: pd.DataFrame, summary: list[str], sel_date: pd.Timestamp,
-               path: Path, merged: pd.DataFrame | None = None,
-               module: str = "") -> None:
+def write_xlsx(
+    res: pd.DataFrame,
+    summary: list[str],
+    sel_date: pd.Timestamp,
+    path: Path,
+    merged: pd.DataFrame | None = None,
+    module: str = "",
+) -> None:
     if Workbook is None:
         return
     wb = Workbook()
@@ -495,7 +587,8 @@ def write_xlsx(res: pd.DataFrame, summary: list[str], sel_date: pd.Timestamp,
                     if isinstance(v, (int, float)):
                         cell[0].number_format = pct
             ws.column_dimensions[get_column_letter(j)].width = max(
-                10, min(28, max(len(str(c)), 6)))
+                10, min(28, max(len(str(c)), 6))
+            )
         ws.freeze_panes = "A2"
 
     ws = wb.active
@@ -509,16 +602,30 @@ def write_xlsx(res: pd.DataFrame, summary: list[str], sel_date: pd.Timestamp,
         ws.append([line])
     ws.column_dimensions["A"].width = 110
 
-    data_cols = ["date", "board", "cut", "rk", "symbol", "module", "co_occur",
-                 "score"] + \
-        [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob", "pred_n")]
+    data_cols = [
+        "date",
+        "board",
+        "cut",
+        "rk",
+        "symbol",
+        "module",
+        "co_occur",
+        "score",
+    ] + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob", "pred_n")]
     pct_cols = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
     if merged is not None and not merged.empty:
-        mcols = (["rank", "symbol", "board", "module", "score", "score_w", "in_t5"]
-                 + [f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")])
+        mcols = ["rank", "symbol", "board", "module", "score", "score_w", "in_t5"] + [
+            f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")
+        ]
         m = merged.copy().rename(columns={"systems": "module"})
-        _sheet(wb.create_sheet("合并排名"), m[mcols], mcols,
-               pct_cols=[f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")])
+        _sheet(
+            wb.create_sheet("合并排名"),
+            m[mcols],
+            mcols,
+            pct_cols=[
+                f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")
+            ],
+        )
     for cut, title in (("T-5", "短名单 T-5"), ("T-10", "短名单 T-10")):
         r2 = res[res["cut"] == cut].copy().rename(columns={"systems": "module"})
         _sheet(wb.create_sheet(title), r2, data_cols, pct_cols)
@@ -547,36 +654,50 @@ def main() -> int:
         print("[error] FULL RUN 短名单为空", flush=True)
         return 1
     full = pd.concat(frames, ignore_index=True)
-    sel_date = pd.Timestamp(trade_date) if trade_date else pd.Timestamp(
-        full["date"].max())
+    sel_date = (
+        pd.Timestamp(trade_date) if trade_date else pd.Timestamp(full["date"].max())
+    )
 
     t0 = pd.Timestamp.now()
     records = load_oos_records()
     gate = regime_gate(records)
     active = [f"{b}/{s}" for (b, s), g in gate.items() if g["active"]]
-    print(f"[regime] 今日保留组合: {', '.join(active) if active else '无 (主视界无优势, 空仓)'}", flush=True)
+    print(
+        f"[regime] 今日保留组合: {', '.join(active) if active else '无 (主视界无优势, 空仓)'}",
+        flush=True,
+    )
     res = select_confident(add_oos_pred(full, records), prob_min=0.0)
     if REGIME_GATE.get("enable", True):
         active_mask = res.apply(lambda r: _row_active(r, gate), axis=1)
         if not active_mask.any():
             fb = gate_fallback(gate)
             if fb:
-                print(f"[regime] 全组合未过线 → 弱市兜底: 仅保留 best-alpha {fb[0]}/{fb[1]}",
-                      flush=True)
+                print(
+                    f"[regime] 全组合未过线 → 弱市兜底: 仅保留 best-alpha {fb[0]}/{fb[1]}",
+                    flush=True,
+                )
                 active_mask = res.apply(
-                    lambda r: (r["board"] == fb[0]
-                               and (r["systems"] == fb[1] or r["systems"] == "both")),
-                    axis=1)
+                    lambda r: (
+                        r["board"] == fb[0]
+                        and (r["systems"] == fb[1] or r["systems"] == "both")
+                    ),
+                    axis=1,
+                )
         n_drop = int((~active_mask).sum())
         if n_drop:
-            print(f"[regime] 制度门剔除 {n_drop} 行 (所属板块×系统今日未过线)", flush=True)
+            print(
+                f"[regime] 制度门剔除 {n_drop} 行 (所属板块×系统今日未过线)", flush=True
+            )
             res = res[active_mask].copy().reset_index(drop=True)
     res = add_score(res)
     stats = load_system_stats(records)
     merged = build_merged(res)
     summary = build_summary(res, stats, sel_date)
     summary = summary[:1] + fmt_regime(gate) + summary[1:]
-    print(f"[enrich] {len(res)} 行 ({(pd.Timestamp.now() - t0).total_seconds():.0f}s)", flush=True)
+    print(
+        f"[enrich] {len(res)} 行 ({(pd.Timestamp.now() - t0).total_seconds():.0f}s)",
+        flush=True,
+    )
 
     from app.pipeline1.model_meta import load_modules, module_id
 
@@ -618,10 +739,14 @@ def main() -> int:
             print(f"── {cut} ──")
             for i, (_, r) in enumerate(g.iterrows()):
                 tag = "★共现" if r["co_occur"] else "    "
-                ex = "  ".join(f"{h}:{r[f'pred_mag_{h}']:+.1%}/{r[f'pred_prob_{h}']:.0%}"
-                               for h in HORIZONS)
-                print(f"  #{i + 1} {tag} {r['symbol']:<8} "
-                      f"score={r['score']:.4f} [{ex}] ({r['systems']})")
+                ex = "  ".join(
+                    f"{h}:{r[f'pred_mag_{h}']:+.1%}/{r[f'pred_prob_{h}']:.0%}"
+                    for h in HORIZONS
+                )
+                print(
+                    f"  #{i + 1} {tag} {r['symbol']:<8} "
+                    f"score={r['score']:.4f} [{ex}] ({r['systems']})"
+                )
 
     if watch:
         print("\n══ 指定个股 ══", flush=True)
@@ -631,11 +756,15 @@ def main() -> int:
                 row = res[(res["symbol"] == s) & (res["cut"] == "T-10")].iloc[0]
                 seg = "  ".join(
                     f"T+{h[:-1]} {row[f'pred_mag_{h}']:+.1%}({row[f'pred_prob_{h}']:.0%})"
-                    for h in HORIZONS)
+                    for h in HORIZONS
+                )
                 print(f"{s}: 入选短名单 | 预期涨幅(MFE)/概率: {seg}", flush=True)
             else:
-                print(f"{s}: 未入选 — 模型今日未对其打分, 无前瞻预测 "
-                      f"(模型只对 top-N 产生预测)", flush=True)
+                print(
+                    f"{s}: 未入选 — 模型今日未对其打分, 无前瞻预测 "
+                    f"(模型只对 top-N 产生预测)",
+                    flush=True,
+                )
     return 0
 
 

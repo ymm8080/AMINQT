@@ -214,7 +214,11 @@ class DailySelectionPipeline:
 
         # 加载历史面板: 优先 canonical PANEL_V3_PATH (D:\AMINQT\PARQUET),
         # 再回退仓库内相对路径 (历史位置)
-        candidates = [str(PANEL_V3_PATH), "data/panel_full_enriched_v3.parquet", "data/panel_full_enriched_v2.parquet"]
+        candidates = [
+            str(PANEL_V3_PATH),
+            "data/panel_full_enriched_v3.parquet",
+            "data/panel_full_enriched_v2.parquet",
+        ]
         panel = None
         for path in candidates:
             if os.path.exists(path):

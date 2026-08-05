@@ -15,6 +15,7 @@
     python -m app.pipeline_parallel.legacy_overlay --board main --w-pool 0.6 --w-prob 0.4
     python -m app.pipeline_parallel.legacy_overlay --out data/_legacy_overlay_<ts>.csv
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,9 +36,16 @@ CHECKPOINTS = {
 # rerank 输出的 prob/pred 列优先级 (prob_up_3d 匹配狙击主视界 T+3)
 _PROB_COL_PRIORITY = ("prob_up_3d", "prob_up_5d", "prob_up_2d", "prob_up")
 _LEGACY_COLS = (
-    "prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d",
-    "pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d",
-    "composite_score", "rank_score",
+    "prob_up",
+    "prob_up_2d",
+    "prob_up_3d",
+    "prob_up_5d",
+    "pred_ret_1d",
+    "pred_ret_2d",
+    "pred_ret_3d",
+    "pred_ret_5d",
+    "composite_score",
+    "rank_score",
 )
 
 
@@ -54,8 +62,9 @@ def cross_section(board: str, date=None) -> tuple[pd.DataFrame, pd.Timestamp]:
 
 def _pick_prob_col(res: pd.DataFrame) -> str:
     """按优先级取有真实数据 (非全 NaN 占位) 的概率列; 无 → ''."""
-    return next((c for c in _PROB_COL_PRIORITY
-                 if c in res.columns and res[c].notna().any()), "")
+    return next(
+        (c for c in _PROB_COL_PRIORITY if c in res.columns and res[c].notna().any()), ""
+    )
 
 
 def overlay_weights(board: str) -> tuple[float, float]:
@@ -67,13 +76,28 @@ def overlay_weights(board: str) -> tuple[float, float]:
 # 前向跟踪快照: 每交付日截取叠加再排结果, 供数日后 join 已实现 MFE 验证改动正误.
 # 归一化: 实际命中的 prob 列 → 稳定列名 prob_up (与具体 prob_col 无关);
 # 附加该次实际应用的 w_pool/w_prob (config 板块默认或 CLI 覆盖) + 来源 prob_col.
-SNAPSHOT_COLS = ("board", "date", "symbol", "systems", "co_occur", "rk_pool",
-                 "rk_final", "score", "prob_up", "final_score",
-                 "pred_ret_3d", "composite_score", "w_pool", "w_prob", "prob_col")
+SNAPSHOT_COLS = (
+    "board",
+    "date",
+    "symbol",
+    "systems",
+    "co_occur",
+    "rk_pool",
+    "rk_final",
+    "score",
+    "prob_up",
+    "final_score",
+    "pred_ret_3d",
+    "composite_score",
+    "w_pool",
+    "w_prob",
+    "prob_col",
+)
 
 
-def overlay_snapshot_frame(res: pd.DataFrame, board: str, date,
-                           w_pool: float, w_prob: float) -> pd.DataFrame:
+def overlay_snapshot_frame(
+    res: pd.DataFrame, board: str, date, w_pool: float, w_prob: float
+) -> pd.DataFrame:
     """把 rerank 输出截成前向跟踪快照帧 (纯函数).
 
     列 = SNAPSHOT_COLS 固定顺序; prob 值取 res.attrs["prob_col"] 命中的列 → prob_up;
@@ -86,7 +110,7 @@ def overlay_snapshot_frame(res: pd.DataFrame, board: str, date,
         out = res.copy().drop(columns="prob_up", errors="ignore")
         out = out.rename(columns={prob_col: "prob_up"})
     elif "prob_up" in res.columns:
-        out = res.copy()          # prob_up 已存在 (全 NaN 占位或本来就是命中列)
+        out = res.copy()  # prob_up 已存在 (全 NaN 占位或本来就是命中列)
     else:
         out = res.assign(prob_up=np.nan)
     out = out.reindex(columns=SNAPSHOT_COLS)
@@ -98,9 +122,13 @@ def overlay_snapshot_frame(res: pd.DataFrame, board: str, date,
     return out
 
 
-def rerank(shortlist: pd.DataFrame, legacy: pd.DataFrame,
-           w_pool: float = 0.5, w_prob: float = 0.5,
-           prob_col: str = "prob_up_3d") -> pd.DataFrame:
+def rerank(
+    shortlist: pd.DataFrame,
+    legacy: pd.DataFrame,
+    w_pool: float = 0.5,
+    w_prob: float = 0.5,
+    prob_col: str = "prob_up_3d",
+) -> pd.DataFrame:
     """池分与 LEGACY 概率合成最终分再排 (纯函数).
 
     final_score = w_pool * score + w_prob * prob (prob 缺失 → 只用池分项).
@@ -129,8 +157,9 @@ def rerank(shortlist: pd.DataFrame, legacy: pd.DataFrame,
     return res
 
 
-def legacy_predict(df: pd.DataFrame, board: str, predictor,
-                   symbols: set[str]) -> pd.DataFrame:
+def legacy_predict(
+    df: pd.DataFrame, board: str, predictor, symbols: set[str]
+) -> pd.DataFrame:
     """对当日截面中 symbols 推理 (predictor 取每 symbol 最新行).
 
     df: 该日全截面 (含 feature_cols + industry). symbols 为空 → 空表.
@@ -141,20 +170,34 @@ def legacy_predict(df: pd.DataFrame, board: str, predictor,
     return predictor.predict(day, board)
 
 
-def _print_overlay(res: pd.DataFrame, board: str, date, w_pool: float,
-                   w_prob: float, prob_col: str) -> None:
-    print(f"\n=== 板块 [{board}] | {pd.Timestamp(date).date()} "
-          f"| w_pool={w_pool:.2f} w_prob={w_prob:.2f} ({prob_col or '无 prob'}) ===")
-    cols = ["rk_pool", "rk_final", "symbol", "systems", "co_occur", "score",
-            prob_col if prob_col else "", "pred_ret_3d", "composite_score",
-            "final_score"]
+def _print_overlay(
+    res: pd.DataFrame, board: str, date, w_pool: float, w_prob: float, prob_col: str
+) -> None:
+    print(
+        f"\n=== 板块 [{board}] | {pd.Timestamp(date).date()} "
+        f"| w_pool={w_pool:.2f} w_prob={w_prob:.2f} ({prob_col or '无 prob'}) ==="
+    )
+    cols = [
+        "rk_pool",
+        "rk_final",
+        "symbol",
+        "systems",
+        "co_occur",
+        "score",
+        prob_col if prob_col else "",
+        "pred_ret_3d",
+        "composite_score",
+        "final_score",
+    ]
     cols = [c for c in cols if c]
     show = res[cols].copy()
     show[prob_col] = show[prob_col].map(lambda v: f"{v:.3f}" if pd.notna(v) else "-")
     show["pred_ret_3d"] = show["pred_ret_3d"].map(
-        lambda v: f"{v:+.1%}" if pd.notna(v) else "-")
+        lambda v: f"{v:+.1%}" if pd.notna(v) else "-"
+    )
     show["composite_score"] = show["composite_score"].map(
-        lambda v: f"{v:+.1%}" if pd.notna(v) else "-")
+        lambda v: f"{v:+.1%}" if pd.notna(v) else "-"
+    )
     show["score"] = show["score"].map(lambda v: f"{v:.3f}")
     show["final_score"] = show["final_score"].map(lambda v: f"{v:.3f}")
     show["co_occur"] = show["co_occur"].map(lambda v: "*" if v else "")
@@ -184,13 +227,23 @@ def _write_snapshot(snap: pd.DataFrame, out_dir, module: str | None = None) -> N
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="LEGACY 推理叠加: 今日合并短名单 → prob → 再排")
+    ap = argparse.ArgumentParser(
+        description="LEGACY 推理叠加: 今日合并短名单 → prob → 再排"
+    )
     ap.add_argument("--board", default=None, help="main/dual, 默认两者")
     ap.add_argument("--date", default=None, help="YYYY-MM-DD, 默认每板块最新交易日")
-    ap.add_argument("--w-pool", type=float, default=None,
-                    help="池分权重覆盖 (默认按板块 config.OVERLAY_WEIGHTS: main 0.2 / dual 0.5)")
-    ap.add_argument("--w-prob", type=float, default=None,
-                    help="LEGACY prob 权重覆盖 (默认按板块 config.OVERLAY_WEIGHTS: main 0.8 / dual 0.5)")
+    ap.add_argument(
+        "--w-pool",
+        type=float,
+        default=None,
+        help="池分权重覆盖 (默认按板块 config.OVERLAY_WEIGHTS: main 0.2 / dual 0.5)",
+    )
+    ap.add_argument(
+        "--w-prob",
+        type=float,
+        default=None,
+        help="LEGACY prob 权重覆盖 (默认按板块 config.OVERLAY_WEIGHTS: main 0.8 / dual 0.5)",
+    )
     ap.add_argument("--out", default=None, help="WORM CSV 落盘路径")
     args = ap.parse_args()
     try:

@@ -12,6 +12,7 @@
 
 输出 (WORM): <BACKTEST_RESULT_DIR>_parallel_backtest_<ts>.json + .log
 """
+
 from __future__ import annotations
 
 import gc
@@ -24,13 +25,27 @@ import pandas as pd
 
 from app.pipeline1.label_engine import COST, slippage_tier
 from app.pipeline_parallel import indicators, screener, signals
-from app.pipeline_parallel.config import (ALL_HORIZON_INTS, BOARD_PREFIXES,
-                                          BOARD_THRESHOLDS, FUSION, HORIZONS,
-                                          MIN_MAG, MIN_WINRATE, OOS_WINDOWS,
-                                          PANEL, SLOW_BULL, SNIPER, SYSTEMS,
-                                          board_of)
-from app.pipeline_parallel.scoring import (dual_head_ok, measure_dual_head,
-                                           pool_score, select_topn)
+from app.pipeline_parallel.config import (
+    ALL_HORIZON_INTS,
+    BOARD_PREFIXES,
+    BOARD_THRESHOLDS,
+    FUSION,
+    HORIZONS,
+    MIN_MAG,
+    MIN_WINRATE,
+    OOS_WINDOWS,
+    PANEL,
+    SLOW_BULL,
+    SNIPER,
+    SYSTEMS,
+    board_of,
+)
+from app.pipeline_parallel.scoring import (
+    dual_head_ok,
+    measure_dual_head,
+    pool_score,
+    select_topn,
+)
 from config.settings import BACKTEST_RESULT_DIR
 from scripts._reclassify_all_features import _finalize_slice
 
@@ -48,11 +63,12 @@ def add_mfe_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
     """
     df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
     g = df.groupby("symbol")
-    exec_px = g["close_hfq"].shift(-1)          # T+1 收盘买价
+    exec_px = g["close_hfq"].shift(-1)  # T+1 收盘买价
     max_off = max(horizons) + 1
     shifts = pd.concat(
         [g["high_hfq"].shift(-off) for off in range(2, max_off + 1)],
-        axis=1, keys=range(2, max_off + 1),
+        axis=1,
+        keys=range(2, max_off + 1),
     )
     slip = df["adv20"].map(slippage_tier) if "adv20" in df.columns else 0.0015
     cost_total = COST + 2 * slip
@@ -65,8 +81,9 @@ def add_mfe_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
     return df
 
 
-def tradability_gate(work: pd.DataFrame, lookback: int = 20,
-                     min_presence: float = 0.8) -> tuple[pd.DataFrame, dict]:
+def tradability_gate(
+    work: pd.DataFrame, lookback: int = 20, min_presence: float = 0.8
+) -> tuple[pd.DataFrame, dict]:
     """PIT 可交易性门 (2026-08-04 用户: 剔除慢性停牌/数据中断股).
 
     对每 (symbol,date): 前 lookback 个交易日该股有行(在交易)的比例 < min_presence
@@ -81,7 +98,7 @@ def tradability_gate(work: pd.DataFrame, lookback: int = 20,
     si = np.array([sym_pos[s] for s in work["symbol"]])
     mat = np.zeros((len(syms), len(dates)), dtype=np.int64)
     np.add.at(mat, (si, di), 1)
-    np.minimum(mat, 1, out=mat)                  # 重复行只算在交易
+    np.minimum(mat, 1, out=mat)  # 重复行只算在交易
     csum = np.cumsum(mat, axis=1)
     col_cur = csum[si, di]
     prev = di - lookback
@@ -120,7 +137,8 @@ def load_panel() -> pd.DataFrame:
         del df
         gc.collect()
     work = pd.concat(slices, ignore_index=True).sort_values(
-        ["symbol", "date"], ignore_index=True)
+        ["symbol", "date"], ignore_index=True
+    )
     del slices
     gc.collect()
     work, gate = tradability_gate(work)
@@ -129,13 +147,19 @@ def load_panel() -> pd.DataFrame:
     work = indicators.prepare_adx(work)
     signals.add_signal_columns(work)
     work["gate_slow_bull"] = screener.compute_gate(work, "slow_bull")
-    print(f"可交易性门: 剔除 {gate['removed_rows']:,} 行 / "
-          f"{gate['removed_stocks']} 只 (近{gate['lookback']}交易日"
-          f"有行比例<{gate['min_presence']}), 保留 {gate['kept_rows']:,} 行 / "
-          f"{gate['kept_stocks']} 只", flush=True)
-    print(f"慢牛门槛: 通过 {int(work['gate_slow_bull'].sum()):,} 行 / "
-          f"{work.loc[work['gate_slow_bull'], 'symbol'].nunique():,} 只 "
-          f"(每日 Top-20 池候选)", flush=True)
+    print(
+        f"可交易性门: 剔除 {gate['removed_rows']:,} 行 / "
+        f"{gate['removed_stocks']} 只 (近{gate['lookback']}交易日"
+        f"有行比例<{gate['min_presence']}), 保留 {gate['kept_rows']:,} 行 / "
+        f"{gate['kept_stocks']} 只",
+        flush=True,
+    )
+    print(
+        f"慢牛门槛: 通过 {int(work['gate_slow_bull'].sum()):,} 行 / "
+        f"{work.loc[work['gate_slow_bull'], 'symbol'].nunique():,} 只 "
+        f"(每日 Top-20 池候选)",
+        flush=True,
+    )
     return work
 
 
@@ -148,9 +172,13 @@ def _baseline(work: pd.DataFrame, label_col: str) -> dict:
     }
 
 
-def run_system(work: pd.DataFrame, spec, top_n: int,
-               mask: np.ndarray | None = None,
-               crit: tuple[float, float] | None = None) -> dict:
+def run_system(
+    work: pd.DataFrame,
+    spec,
+    top_n: int,
+    mask: np.ndarray | None = None,
+    crit: tuple[float, float] | None = None,
+) -> dict:
     """单系统单档位回测: 返回 {per_horizon, passed, baseline_delta}.
 
     mask: 可选的布尔数组 (对齐 work) → 只在子窗口内选股+量测 (OOS 测试).
@@ -165,17 +193,18 @@ def run_system(work: pd.DataFrame, spec, top_n: int,
     else:
         sub = work[mask]
     if len(sub) == 0:
-        return {"top_n": top_n, "per_horizon": {}, "passed": [],
-                "n_picks": 0}
+        return {"top_n": top_n, "per_horizon": {}, "passed": [], "n_picks": 0}
     # 硬门槛先行 (慢牛系统): 只对通过门槛的池打分. 优先读预计算掩码列 (全窗 PIT),
     # 缺列 (未 prepare 的通用面板) 时用 apply_gate → 无候选即空帧.
     if spec.gate:
         gc_col = f"gate_{spec.gate}"
-        sub = (sub[sub[gc_col]] if gc_col in sub.columns
-               else screener.apply_gate(sub, spec.gate))
-    if len(sub) == 0:                 # 门槛后无候选 (未 prepare 面板) → 无选股, 不崩
-        return {"top_n": top_n, "per_horizon": {}, "passed": [],
-                "n_picks": 0}
+        sub = (
+            sub[sub[gc_col]]
+            if gc_col in sub.columns
+            else screener.apply_gate(sub, spec.gate)
+        )
+    if len(sub) == 0:  # 门槛后无候选 (未 prepare 面板) → 无选股, 不崩
+        return {"top_n": top_n, "per_horizon": {}, "passed": [], "n_picks": 0}
     score = pool_score(sub, spec.pool, weights=spec.pool_weights)
     top = select_topn(sub, score, top_n)
     del score
@@ -184,41 +213,46 @@ def run_system(work: pd.DataFrame, spec, top_n: int,
     per = {}
     for h, lab in zip(spec.horizons, spec.labels):
         if lab not in sub.columns:
-            per[h] = {"mag": float("nan"), "winrate": float("nan"),
-                      "n": 0, "ok": False}
+            per[h] = {"mag": float("nan"), "winrate": float("nan"), "n": 0, "ok": False}
             continue
         base = _baseline(sub, lab)
-        sel = top.merge(sub[["symbol", "date", lab]], on=["symbol", "date"],
-                        how="left")
+        sel = top.merge(sub[["symbol", "date", lab]], on=["symbol", "date"], how="left")
         m = measure_dual_head(sel, lab)
         per[h] = {
-            "mag": m["mag"], "winrate": m["winrate"], "n": m["n"],
+            "mag": m["mag"],
+            "winrate": m["winrate"],
+            "n": m["n"],
             "ok": dual_head_ok(m, min_wr, min_mag),
             "baseline": base,
             "delta_wr": (m["winrate"] - base["winrate"]) if m["n"] else None,
             "delta_mag": (m["mag"] - base["mag"]) if m["n"] else None,
         }
     passed = [h for h, r in per.items() if r.get("ok")]
-    return {"top_n": top_n, "per_horizon": per, "passed": passed,
-            "n_picks": int(len(top))}
+    return {
+        "top_n": top_n,
+        "per_horizon": per,
+        "passed": passed,
+        "n_picks": int(len(top)),
+    }
 
 
-def _dual_per_horizon(sub: pd.DataFrame, sel: pd.DataFrame, spec,
-                      crit: tuple[float, float] | None = None) -> dict:
+def _dual_per_horizon(
+    sub: pd.DataFrame, sel: pd.DataFrame, spec, crit: tuple[float, float] | None = None
+) -> dict:
     """对选中切片 sel (含 symbol/date) 逐视界量双头, 基准取 sub 窗口."""
     min_wr, min_mag = crit if crit is not None else (MIN_WINRATE, MIN_MAG)
     per = {}
     for h, lab in zip(spec.horizons, spec.labels):
         if lab not in sub.columns:
-            per[h] = {"mag": float("nan"), "winrate": float("nan"),
-                      "n": 0, "ok": False}
+            per[h] = {"mag": float("nan"), "winrate": float("nan"), "n": 0, "ok": False}
             continue
         base = _baseline(sub, lab)
-        s = sel.merge(sub[["symbol", "date", lab]], on=["symbol", "date"],
-                      how="left")
+        s = sel.merge(sub[["symbol", "date", lab]], on=["symbol", "date"], how="left")
         m = measure_dual_head(s, lab)
         per[h] = {
-            "mag": m["mag"], "winrate": m["winrate"], "n": m["n"],
+            "mag": m["mag"],
+            "winrate": m["winrate"],
+            "n": m["n"],
             "ok": dual_head_ok(m, min_wr, min_mag),
             "baseline": base,
             "delta_wr": (m["winrate"] - base["winrate"]) if m["n"] else None,
@@ -226,10 +260,14 @@ def _dual_per_horizon(sub: pd.DataFrame, sel: pd.DataFrame, spec,
     return per
 
 
-def rank_bands(work: pd.DataFrame, spec, top_n: int,
-               bands: tuple[tuple[str, int, int], ...],
-               mask: np.ndarray | None = None,
-               crit: tuple[float, float] | None = None) -> dict:
+def rank_bands(
+    work: pd.DataFrame,
+    spec,
+    top_n: int,
+    bands: tuple[tuple[str, int, int], ...],
+    mask: np.ndarray | None = None,
+    crit: tuple[float, float] | None = None,
+) -> dict:
     """选 TOP-N 后按每日期 score 排名分档 (如 TOP-10 拆 [1-5]/[6-10]), 逐档量双头.
 
     回答 (2026-08-04 用户): T+10 是否整组 TOP-10 赢 TOP-5, 还是仅 TOP-10 前 5 只赢?
@@ -242,15 +280,21 @@ def rank_bands(work: pd.DataFrame, spec, top_n: int,
     top = select_topn(sub, score, top_n)
     if top.empty:
         return {bname: {} for bname, _, _ in bands}
-    top["rk"] = top.groupby("date")["score"].rank(ascending=False,
-                                                  method="first").astype(int)
-    return {bname: _dual_per_horizon(sub, top[top["rk"].between(lo, hi)], spec,
-                                     crit)
-            for bname, lo, hi in bands}
+    top["rk"] = (
+        top.groupby("date")["score"].rank(ascending=False, method="first").astype(int)
+    )
+    return {
+        bname: _dual_per_horizon(sub, top[top["rk"].between(lo, hi)], spec, crit)
+        for bname, lo, hi in bands
+    }
 
 
-def run_all(work: pd.DataFrame, ts: str, oos_days: int | None = None,
-            oos_windows: dict[str, int] | None = None) -> dict:
+def run_all(
+    work: pd.DataFrame,
+    ts: str,
+    oos_days: int | None = None,
+    oos_windows: dict[str, int] | None = None,
+) -> dict:
     """跑全部启用系统 → WORM JSON 结构.
 
     报告窗口:
@@ -262,8 +306,7 @@ def run_all(work: pd.DataFrame, ts: str, oos_days: int | None = None,
     2026-08-04 用户: 验收只看 OOS 结果, full 永不用于保留判定.
     """
     if oos_windows is None:
-        oos_windows = ({"oos": oos_days} if oos_days is not None
-                       else dict(OOS_WINDOWS))
+        oos_windows = {"oos": oos_days} if oos_days is not None else dict(OOS_WINDOWS)
     dates = np.sort(work["date"].unique())
     if any(d >= len(dates) for d in oos_windows.values()):
         raise ValueError(f"OOS 窗口天数 {dict(oos_windows)} >= 总交易日 {len(dates)}")
@@ -272,15 +315,26 @@ def run_all(work: pd.DataFrame, ts: str, oos_days: int | None = None,
         "ts": ts,
         "objective": "MFE: 持有期内最大涨幅 (label_mfe_{h}d_net), 非目标日收盘",
         "window": {
-            "full": {"start": str(work["date"].min()),
-                     "end": str(work["date"].max()), "trading_days": int(len(dates))},
-            "oos": {lab: {"start": str(dates[-d]),
-                          "end": str(work["date"].max()), "trading_days": d}
-                    for lab, d in oos_windows.items()},
+            "full": {
+                "start": str(work["date"].min()),
+                "end": str(work["date"].max()),
+                "trading_days": int(len(dates)),
+            },
+            "oos": {
+                lab: {
+                    "start": str(dates[-d]),
+                    "end": str(work["date"].max()),
+                    "trading_days": d,
+                }
+                for lab, d in oos_windows.items()
+            },
         },
-        "criteria": {"dual_head": "幅度>阈值 且 胜率>=阈值 (每板块不同, 见 boards[*].criteria)",
-                     "boards": {b: {k: v for k, v in t.items()}
-                                for b, t in BOARD_THRESHOLDS.items()}},
+        "criteria": {
+            "dual_head": "幅度>阈值 且 胜率>=阈值 (每板块不同, 见 boards[*].criteria)",
+            "boards": {
+                b: {k: v for k, v in t.items()} for b, t in BOARD_THRESHOLDS.items()
+            },
+        },
         "gate": work.attrs.get("gate"),
         "rows": int(len(work)),
         "stocks": int(work["symbol"].nunique()),
@@ -309,7 +363,8 @@ def run_all(work: pd.DataFrame, ts: str, oos_days: int | None = None,
                     "alt": run_system(sub, spec, spec.top_n_alt, bm, crit=bcrit),
                 }
                 oos[lab]["kept"] = bool(
-                    oos[lab]["primary"]["passed"] or oos[lab]["alt"]["passed"])
+                    oos[lab]["primary"]["passed"] or oos[lab]["alt"]["passed"]
+                )
             systems[name] = {
                 "enabled": True,
                 "desc": spec.desc,
@@ -322,8 +377,7 @@ def run_all(work: pd.DataFrame, ts: str, oos_days: int | None = None,
             gc.collect()
         out["boards"][b] = {
             "label": th["label"],
-            "criteria": {"min_winrate": th["min_winrate"],
-                         "min_mag": th["min_mag"]},
+            "criteria": {"min_winrate": th["min_winrate"], "min_mag": th["min_mag"]},
             "rows": int(len(sub)),
             "stocks": int(sub["symbol"].nunique()),
             "latest": str(sub["date"].max()),
@@ -331,11 +385,12 @@ def run_all(work: pd.DataFrame, ts: str, oos_days: int | None = None,
             "systems": systems,
             "compare": {
                 "objective": "TOP-5(狙击池) vs TOP-10(融合池) 逐视界 + "
-                             "TOP-10 分档 [1-5]/[6-10]",
+                "TOP-10 分档 [1-5]/[6-10]",
                 "full": _build_compare(sub, None, bcrit),
-                "oos": {lab: _build_compare(sub,
-                                            sub["date"].values >= dates[-d], bcrit)
-                        for lab, d in oos_windows.items()},
+                "oos": {
+                    lab: _build_compare(sub, sub["date"].values >= dates[-d], bcrit)
+                    for lab, d in oos_windows.items()
+                },
             },
             "last_days": last_days_report(sub),
         }
@@ -344,13 +399,21 @@ def run_all(work: pd.DataFrame, ts: str, oos_days: int | None = None,
     return out
 
 
-def _build_compare(work: pd.DataFrame, mask: np.ndarray | None = None,
-                   crit: tuple[float, float] | None = None) -> dict:
+def _build_compare(
+    work: pd.DataFrame,
+    mask: np.ndarray | None = None,
+    crit: tuple[float, float] | None = None,
+) -> dict:
     """TOP-5 vs TOP-10 对比: 狙击 TOP-5, 融合 TOP-10 整组 + 前 5 + 后 5."""
     snip = rank_bands(work, SNIPER, SNIPER.top_n, (("top5", 1, 5),), mask, crit)
-    fus = rank_bands(work, FUSION, FUSION.top_n,
-                     (("all10", 1, 10), ("first5", 1, 5), ("last5", 6, 10)),
-                     mask, crit)
+    fus = rank_bands(
+        work,
+        FUSION,
+        FUSION.top_n,
+        (("all10", 1, 10), ("first5", 1, 5), ("last5", 6, 10)),
+        mask,
+        crit,
+    )
     return {"sniper_top5": snip["top5"], "fusion": fus}
 
 
@@ -372,44 +435,58 @@ def write_worm(out: dict, ts: str) -> tuple[Path, Path, Path]:
         fh.write("\n".join(format_conclusion(concl)) + "\n")
     w = out["window"]
     gate = out.get("gate") or {}
-    lines = [f"[{ts}] PIPELINE 并行多系统回测 (3y) | 目标=MFE",
-             f"行集 rows={out['rows']:,} stocks={out['stocks']:,} "
-             f"latest={w['full']['end']}",
-             f"全窗 {w['full']['start']} → {w['full']['end']} "
-             f"({w['full']['trading_days']}d)"]
+    lines = [
+        f"[{ts}] PIPELINE 并行多系统回测 (3y) | 目标=MFE",
+        f"行集 rows={out['rows']:,} stocks={out['stocks']:,} latest={w['full']['end']}",
+        f"全窗 {w['full']['start']} → {w['full']['end']} "
+        f"({w['full']['trading_days']}d)",
+    ]
     for lab, ow in w["oos"].items():
-        lines.append(f"OOS[{lab}] {ow['start']} → {ow['end']} "
-                     f"({ow['trading_days']} 交易日)")
+        lines.append(
+            f"OOS[{lab}] {ow['start']} → {ow['end']} ({ow['trading_days']} 交易日)"
+        )
     if gate:
-        lines.append(f"可交易性门: 剔除 {gate.get('removed_rows', 0):,} 行 / "
-                     f"{gate.get('removed_stocks', 0)} 只 "
-                     f"(近{gate.get('lookback', 20)}交易日有行比例"
-                     f"<{gate.get('min_presence', 0.8)}), "
-                     f"保留 {gate.get('kept_rows', 0):,} 行")
+        lines.append(
+            f"可交易性门: 剔除 {gate.get('removed_rows', 0):,} 行 / "
+            f"{gate.get('removed_stocks', 0)} 只 "
+            f"(近{gate.get('lookback', 20)}交易日有行比例"
+            f"<{gate.get('min_presence', 0.8)}), "
+            f"保留 {gate.get('kept_rows', 0):,} 行"
+        )
     for b, bd in out["boards"].items():
-        lines.append(f"\n=== 板块 [{b}] {bd['label']} | 行 {bd['rows']:,} "
-                     f"股票 {bd['stocks']:,} | 双头: 胜率>={bd['criteria']['min_winrate']} "
-                     f"幅度>{bd['criteria']['min_mag']} ===")
+        lines.append(
+            f"\n=== 板块 [{b}] {bd['label']} | 行 {bd['rows']:,} "
+            f"股票 {bd['stocks']:,} | 双头: 胜率>={bd['criteria']['min_winrate']} "
+            f"幅度>{bd['criteria']['min_mag']} ==="
+        )
         for name, s in bd["systems"].items():
             if not s.get("enabled"):
                 lines.append(f"[{name}] 未启用 (占位)")
                 continue
             fpr = s["full"]["primary"]
-            lines.append(f"[{name}] 全窗参考 TOP-{s['top_n']['primary']}: "
-                         f"通过 {fpr['passed'] or '无'} | 选股 {fpr['n_picks']:,}")
+            lines.append(
+                f"[{name}] 全窗参考 TOP-{s['top_n']['primary']}: "
+                f"通过 {fpr['passed'] or '无'} | 选股 {fpr['n_picks']:,}"
+            )
             for lab, oos in s["oos"].items():
                 opr = oos["primary"]
-                lines.append(f"[{name}|OOS {lab}] TOP-{s['top_n']['primary']}: "
-                             f"通过 {opr['passed'] or '无'} | "
-                             f"选股 {opr['n_picks']:,} | 保留={oos['kept']}")
+                lines.append(
+                    f"[{name}|OOS {lab}] TOP-{s['top_n']['primary']}: "
+                    f"通过 {opr['passed'] or '无'} | "
+                    f"选股 {opr['n_picks']:,} | 保留={oos['kept']}"
+                )
                 for h, r in opr["per_horizon"].items():
                     if r["n"]:
-                        lines.append(f"    T+{h}: 幅度={r['mag']:+.2%} "
-                                     f"胜率={r['winrate']:.1%} "
-                                     f"(Δ胜率{r['delta_wr']:+.1%}) n={r['n']}")
+                        lines.append(
+                            f"    T+{h}: 幅度={r['mag']:+.2%} "
+                            f"胜率={r['winrate']:.1%} "
+                            f"(Δ胜率{r['delta_wr']:+.1%}) n={r['n']}"
+                        )
         c = bd["compare"]
         for lab in c["oos"]:
-            lines.append(f"  ── 对比 (OOS {lab}): TOP-5(狙击池) vs TOP-10(融合池), 逐视界双头 ──")
+            lines.append(
+                f"  ── 对比 (OOS {lab}): TOP-5(狙击池) vs TOP-10(融合池), 逐视界双头 ──"
+            )
             for h in bd["systems"]["fusion"]["oos"][lab]["primary"]["per_horizon"]:
                 r5 = (c["oos"][lab].get("sniper_top5") or {}).get(h) or {}
                 fus = c["oos"][lab].get("fusion") or {}
@@ -427,16 +504,22 @@ def write_worm(out: dict, ts: str) -> tuple[Path, Path, Path]:
                     f"| 融前5 wr={f5.get('winrate'):.1%}"
                     f"/mag={f5.get('mag'):+.2%} "
                     f"| 融后5 wr={l5.get('winrate'):.1%}"
-                    f"/mag={l5.get('mag'):+.2%}")
+                    f"/mag={l5.get('mag'):+.2%}"
+                )
         lt = bd.get("last_days", {}).get("last_testable") or {}
         if lt:
-            lines.append("  各视界可测日期 (末 15 交易日, 同一选股日): "
-                         + " ".join(f"{h}=至{lt[h]['last_date']}"
-                                    f"({lt[h]['n']}日)"
-                                    for h in ("2d", "3d", "5d", "10d")))
+            lines.append(
+                "  各视界可测日期 (末 15 交易日, 同一选股日): "
+                + " ".join(
+                    f"{h}=至{lt[h]['last_date']}({lt[h]['n']}日)"
+                    for h in ("2d", "3d", "5d", "10d")
+                )
+            )
         n_days = bd.get("last_days", {}).get("n_days", 15)
-        lines.append(f"  ── 末 {n_days} 个交易日逐日: 当天 TOP-5(狙击)/TOP-10(融合) "
-                     f"各视界 MFE 双头图 ──")
+        lines.append(
+            f"  ── 末 {n_days} 个交易日逐日: 当天 TOP-5(狙击)/TOP-10(融合) "
+            f"各视界 MFE 双头图 ──"
+        )
         for day in bd.get("last_days", {}).get("days", []):
             cells = []
             for name, tag in (("sniper_top5", "狙5"), ("fusion_top10", "融10")):
@@ -456,8 +539,7 @@ def write_worm(out: dict, ts: str) -> tuple[Path, Path, Path]:
     return p, log, run_dir
 
 
-def export_stock_lists(work: pd.DataFrame, oos_start,
-                       run_dir: Path) -> list[str]:
+def export_stock_lists(work: pd.DataFrame, oos_start, run_dir: Path) -> list[str]:
     """按板块落盘每系统选股清单 (full + oos, 含各视界 MFE 净标签) + 合并 OOS 名单.
 
     每板块每系统 stocks_<board>_<system>_<window>.csv
@@ -486,10 +568,16 @@ def export_stock_lists(work: pd.DataFrame, oos_start,
                 top = select_topn(sub, score, spec.top_n)
                 if top.empty:
                     continue
-                top["rk"] = (top.groupby("date")["score"]
-                                 .rank(ascending=False, method="first").astype(int))
-                out = top.merge(sub[["symbol", "date"] + lab_cols],
-                                on=["symbol", "date"], how="left")
+                top["rk"] = (
+                    top.groupby("date")["score"]
+                    .rank(ascending=False, method="first")
+                    .astype(int)
+                )
+                out = top.merge(
+                    sub[["symbol", "date"] + lab_cols],
+                    on=["symbol", "date"],
+                    how="left",
+                )
                 out = out.sort_values(["date", "rk"])
                 out.insert(0, "window", tag)
                 out.insert(1, "system", spec.name)
@@ -502,7 +590,8 @@ def export_stock_lists(work: pd.DataFrame, oos_start,
         if oos_frames:
             merged = pd.concat(oos_frames, ignore_index=True)
             g = merged.groupby(["date", "symbol"], as_index=False).agg(
-                systems=("system", lambda x: "+".join(sorted(set(x)))))
+                systems=("system", lambda x: "+".join(sorted(set(x))))
+            )
             g.insert(0, "board", b)
             fp = run_dir / f"stocks_merged_oos_{b}.csv"
             g.to_csv(fp, index=False)
@@ -529,10 +618,14 @@ def export_stock_lists(work: pd.DataFrame, oos_start,
             top = select_topn(sub, score, SLOW_BULL.top_n)
             if top.empty:
                 continue
-            top["rk"] = (top.groupby("date")["score"]
-                             .rank(ascending=False, method="first").astype(int))
-            out = top.merge(sub[["symbol", "date"] + sb_lab_cols],
-                            on=["symbol", "date"], how="left")
+            top["rk"] = (
+                top.groupby("date")["score"]
+                .rank(ascending=False, method="first")
+                .astype(int)
+            )
+            out = top.merge(
+                sub[["symbol", "date"] + sb_lab_cols], on=["symbol", "date"], how="left"
+            )
             out = out.sort_values(["date", "rk"])
             out.insert(0, "window", tag)
             out.insert(1, "system", SLOW_BULL.name)
@@ -556,8 +649,10 @@ def last_days_report(work: pd.DataFrame, n_days: int = 15) -> dict:
     sub = work[work["date"].isin(set(last))]
     lab_cols = [f"label_mfe_{h}d_net" for h in (2, 3, 5, 10)]
     horizons = (2, 3, 5, 10)
-    systems = (("sniper_top5", SNIPER, SNIPER.top_n),
-               ("fusion_top10", FUSION, FUSION.top_n))
+    systems = (
+        ("sniper_top5", SNIPER, SNIPER.top_n),
+        ("fusion_top10", FUSION, FUSION.top_n),
+    )
     days = []
     for d in last:
         day_df = sub[sub["date"] == d]
@@ -571,8 +666,7 @@ def last_days_report(work: pd.DataFrame, n_days: int = 15) -> dict:
             if top.empty:
                 entry[name] = {"picks": [], "figure": {}}
                 continue
-            top["rk"] = (top["score"].rank(ascending=False, method="first")
-                             .astype(int))
+            top["rk"] = top["score"].rank(ascending=False, method="first").astype(int)
             top = top.sort_values("rk")
             figure = {}
             for h, lab in zip(horizons, lab_cols):
@@ -584,12 +678,14 @@ def last_days_report(work: pd.DataFrame, n_days: int = 15) -> dict:
                 }
             picks = []
             for row_name, row in top.iterrows():
-                pick = {"symbol": row["symbol"], "rk": int(row["rk"]),
-                        "score": round(float(row["score"]), 4)}
+                pick = {
+                    "symbol": row["symbol"],
+                    "rk": int(row["rk"]),
+                    "score": round(float(row["score"]), 4),
+                }
                 for h, lab in zip(horizons, lab_cols):
                     val = work.loc[row_name, lab]
-                    pick[f"mfe_{h}d"] = (None if pd.isna(val)
-                                         else round(float(val), 4))
+                    pick[f"mfe_{h}d"] = None if pd.isna(val) else round(float(val), 4)
                 picks.append(pick)
             entry[name] = {"picks": picks, "figure": figure}
         days.append(entry)
@@ -607,7 +703,7 @@ def last_days_report(work: pd.DataFrame, n_days: int = 15) -> dict:
         }
     return {
         "objective": "末 15 个交易日逐日: 当天 TOP-5(狙击池)/TOP-10(融合池) "
-                     "实际选股清单 + 各视界 MFE 双头图 (回测用当天名单)",
+        "实际选股清单 + 各视界 MFE 双头图 (回测用当天名单)",
         "n_days": len(days),
         "days": days,
         "last_testable": last_testable,
@@ -621,12 +717,19 @@ def write_last_days_csv(ld: dict, run_dir: Path, board: str = "") -> str:
         for name in ("sniper_top5", "fusion_top10"):
             system = "sniper" if name == "sniper_top5" else "fusion"
             for p in day[name]["picks"]:
-                rows.append({
-                    "date": day["date"], "system": system, "rk": p["rk"],
-                    "symbol": p["symbol"], "score": p["score"],
-                    "mfe_2d": p["mfe_2d"], "mfe_3d": p["mfe_3d"],
-                    "mfe_5d": p["mfe_5d"], "mfe_10d": p["mfe_10d"],
-                })
+                rows.append(
+                    {
+                        "date": day["date"],
+                        "system": system,
+                        "rk": p["rk"],
+                        "symbol": p["symbol"],
+                        "score": p["score"],
+                        "mfe_2d": p["mfe_2d"],
+                        "mfe_3d": p["mfe_3d"],
+                        "mfe_5d": p["mfe_5d"],
+                        "mfe_10d": p["mfe_10d"],
+                    }
+                )
     suffix = f"_{board}" if board else ""
     fp = run_dir / f"last_{ld['n_days']}_days_picks{suffix}.csv"
     pd.DataFrame(rows).to_csv(fp, index=False)
@@ -635,8 +738,10 @@ def write_last_days_csv(ld: dict, run_dir: Path, board: str = "") -> str:
 
 # ── 最终短名单: 合并模块 (2026-08-04 用户: 一般管道设计, 验收/买入都基于最终短名单) ──
 
-def build_merged_shortlist(work: pd.DataFrame, top_n: int,
-                           mask: np.ndarray | None = None) -> pd.DataFrame:
+
+def build_merged_shortlist(
+    work: pd.DataFrame, top_n: int, mask: np.ndarray | None = None
+) -> pd.DataFrame:
     """合并模块 (核心阶段): 每日期 狙击TOP-5 ∪ 融合TOP-10, 去重, 共现优先+分数降序, 截 top_n.
 
     最终短名单 = 实际买入名单 (用户: "WHAT WE EVALUATING IS ON FINAL SHORT LIST").
@@ -664,15 +769,17 @@ def build_merged_shortlist(work: pd.DataFrame, top_n: int,
         score=("score", "max"),
     )
     g["co_occur"] = g["systems"].str.contains("+", regex=False)
-    g = g.sort_values(["date", "co_occur", "score"],
-                      ascending=[True, False, False])
+    g = g.sort_values(["date", "co_occur", "score"], ascending=[True, False, False])
     g["rk"] = g.groupby("date").cumcount() + 1
     return g[g["rk"] <= top_n].reset_index(drop=True)
 
 
-def evaluate_merged(work: pd.DataFrame, top_n: int,
-                    mask: np.ndarray | None = None,
-                    crit: tuple[float, float] | None = None) -> dict:
+def evaluate_merged(
+    work: pd.DataFrame,
+    top_n: int,
+    mask: np.ndarray | None = None,
+    crit: tuple[float, float] | None = None,
+) -> dict:
     """对合并最终短名单 (TOP-n) 逐视界量双头 (幅度+胜率), 基准取窗口无条件.
 
     用户 (2026-08-04): 验收/评估基于最终短名单 (T-5 / T-10).
@@ -680,15 +787,26 @@ def evaluate_merged(work: pd.DataFrame, top_n: int,
     sub = work if mask is None else work[mask]
     sl = build_merged_shortlist(sub, top_n)
     if sl.empty:
-        return {h: {"mag": float("nan"), "winrate": float("nan"), "n": 0,
-                    "ok": False, "baseline": None, "delta_wr": None}
-                for h in FUSION.horizons}
+        return {
+            h: {
+                "mag": float("nan"),
+                "winrate": float("nan"),
+                "n": 0,
+                "ok": False,
+                "baseline": None,
+                "delta_wr": None,
+            }
+            for h in FUSION.horizons
+        }
     return _dual_per_horizon(sub, sl[["date", "symbol"]], FUSION, crit)
 
 
-def _build_merged_eval(sub: pd.DataFrame, bcrit: tuple[float, float],
-                       dates: np.ndarray,
-                       oos_windows: dict[str, int]) -> dict:
+def _build_merged_eval(
+    sub: pd.DataFrame,
+    bcrit: tuple[float, float],
+    dates: np.ndarray,
+    oos_windows: dict[str, int],
+) -> dict:
     """run_all 每板块 merged 段: T-5 / T-10 两档, full 仅参考 + 各 OOS 窗验收 (只看 OOS)."""
     merged: dict = {
         "objective": "最终短名单 (狙击TOP-5 ∪ 融合TOP-10 去重, 共现优先, 分数降序) — 验收只看 OOS",
@@ -699,16 +817,19 @@ def _build_merged_eval(sub: pd.DataFrame, bcrit: tuple[float, float],
         oos = {}
         for lab, d in oos_windows.items():
             mh = evaluate_merged(sub, n, sub["date"].values >= dates[-d], bcrit)
-            oos[lab] = {"per_horizon": mh,
-                        "kept": bool(any(r.get("ok") for r in mh.values()))}
+            oos[lab] = {
+                "per_horizon": mh,
+                "kept": bool(any(r.get("ok") for r in mh.values())),
+            }
         merged[cut] = {"full": {"per_horizon": full_ph, "kept": None}, "oos": oos}
     return merged
 
 
 def _primary_oos_label(out: dict) -> str:
     """验收用主 OOS 窗 = 交易日数最多的窗 (6m 默认; 单窗 --oos-days 时退化为该窗)."""
-    return max(out["window"]["oos"],
-               key=lambda lab: out["window"]["oos"][lab]["trading_days"])
+    return max(
+        out["window"]["oos"], key=lambda lab: out["window"]["oos"][lab]["trading_days"]
+    )
 
 
 def _best_horizon(per: dict) -> tuple[str | None, dict | None]:
@@ -736,41 +857,62 @@ def build_conclusion(out: dict) -> dict:
         merged = bd.get("merged", {})
         cuts = {}
         for cut in ("top5", "top10"):
-            ph = (merged.get(cut, {})
-                  .get("oos", {}).get(oos_label, {})
-                  .get("per_horizon", {}))
-            kept = bool((merged.get(cut, {})
-                         .get("oos", {}).get(oos_label, {})
-                         .get("kept", False)))
+            ph = (
+                merged.get(cut, {})
+                .get("oos", {})
+                .get(oos_label, {})
+                .get("per_horizon", {})
+            )
+            kept = bool(
+                (
+                    merged.get(cut, {})
+                    .get("oos", {})
+                    .get(oos_label, {})
+                    .get("kept", False)
+                )
+            )
             best_h, best = _best_horizon(ph)
             if best is None:
-                cuts[cut] = {"kept": kept, "best_horizon": None,
-                             "winrate": None, "mag": None, "delta_wr": None,
-                             "baseline_wr": None, "n": 0}
+                cuts[cut] = {
+                    "kept": kept,
+                    "best_horizon": None,
+                    "winrate": None,
+                    "mag": None,
+                    "delta_wr": None,
+                    "baseline_wr": None,
+                    "n": 0,
+                }
                 continue
             cuts[cut] = {
                 "kept": kept,
                 "best_horizon": best_h,
                 "winrate": round(float(best["winrate"]), 4),
                 "mag": round(float(best["mag"]), 4),
-                "delta_wr": (round(float(best["delta_wr"]), 4)
-                             if best.get("delta_wr") is not None else None),
-                "baseline_wr": (round(float(best["baseline"]["winrate"]), 4)
-                                if best.get("baseline") else None),
+                "delta_wr": (
+                    round(float(best["delta_wr"]), 4)
+                    if best.get("delta_wr") is not None
+                    else None
+                ),
+                "baseline_wr": (
+                    round(float(best["baseline"]["winrate"]), 4)
+                    if best.get("baseline")
+                    else None
+                ),
                 "n": int(best["n"]),
             }
         systems = {
             name: bool(s.get("oos", {}).get(oos_label, {}).get("kept"))
-            for name, s in bd["systems"].items() if s.get("enabled")
+            for name, s in bd["systems"].items()
+            if s.get("enabled")
         }
         boards[b] = {
             "label": bd["label"],
             "latest": bd.get("latest"),
-            "stale": bd.get("latest") is not None and str(bd["latest"]) < str(global_latest),
+            "stale": bd.get("latest") is not None
+            and str(bd["latest"]) < str(global_latest),
             "cuts": cuts,
             "systems": systems,
-            "improvements": _conclusion_improvements(b, bd, oos_label,
-                                                     global_latest),
+            "improvements": _conclusion_improvements(b, bd, oos_label, global_latest),
         }
     return {
         "oos_label": oos_label,
@@ -798,39 +940,50 @@ def _conclusion_recommendation(boards: dict) -> dict:
     }
 
 
-def _conclusion_improvements(b: str, bd: dict, oos_label: str,
-                             global_latest: str) -> list[str]:
+def _conclusion_improvements(
+    b: str, bd: dict, oos_label: str, global_latest: str
+) -> list[str]:
     """自动改进点: 数据落后 / 尾段长视界 MFE NaN / TOP-10 后5名弱 → 只买前5."""
     pts: list[str] = []
     if bd.get("latest") is not None and str(bd["latest"]) < str(global_latest):
-        pts.append(f"数据落后: 板块 {b} 最新 {bd['latest']} < 全局最新 "
-                   f"{global_latest} — 短名单缺最新交易日")
+        pts.append(
+            f"数据落后: 板块 {b} 最新 {bd['latest']} < 全局最新 "
+            f"{global_latest} — 短名单缺最新交易日"
+        )
     lt = (bd.get("last_days", {}) or {}).get("last_testable") or {}
     nd = (bd.get("last_days", {}) or {}).get("n_days", 15)
     for h in ("5d", "10d"):
         info = lt.get(h)
         if info and int(info.get("n", 0)) < nd:
-            pts.append(f"末段 T+{h}: 仅 {info.get('n')}/{nd} 个选股日可测 "
-                       f"(缺未来价 → NaN), 长视界信号可信度下降")
-    fus = ((bd.get("compare", {}) or {})
-           .get("oos", {}).get(oos_label, {}) or {}).get("fusion") or {}
+            pts.append(
+                f"末段 T+{h}: 仅 {info.get('n')}/{nd} 个选股日可测 "
+                f"(缺未来价 → NaN), 长视界信号可信度下降"
+            )
+    fus = ((bd.get("compare", {}) or {}).get("oos", {}).get(oos_label, {}) or {}).get(
+        "fusion"
+    ) or {}
     for h, r in (fus.get("all10") or {}).items():
         first5 = (fus.get("first5") or {}).get(h)
         last5 = (fus.get("last5") or {}).get(h)
-        if (r.get("n", 0) >= 5 and first5 and last5
-                and first5.get("n", 0) >= 5 and last5.get("n", 0) >= 5):
+        if (
+            r.get("n", 0) >= 5
+            and first5
+            and last5
+            and first5.get("n", 0) >= 5
+            and last5.get("n", 0) >= 5
+        ):
             if last5["mag"] < first5["mag"]:
-                pts.append(f"T+{h}: TOP-10 后5名幅度 {last5['mag']:+.2%} < "
-                           f"前5名 {first5['mag']:+.2%} → 可考虑仅买 TOP-5")
+                pts.append(
+                    f"T+{h}: TOP-10 后5名幅度 {last5['mag']:+.2%} < "
+                    f"前5名 {first5['mag']:+.2%} → 可考虑仅买 TOP-5"
+                )
                 break
     return pts
 
 
 def format_conclusion(concl: dict) -> list[str]:
     """结论 dict → 人类可读行 (置于报告顶部 / conclusion.txt)."""
-    lines = ["=" * 78,
-             "结论 (最终短名单 双头验收 — 只看 OOS)",
-             "=" * 78]
+    lines = ["=" * 78, "结论 (最终短名单 双头验收 — 只看 OOS)", "=" * 78]
     lines.append(f"OOS 窗: {concl['oos_label']} | 目标: {concl['objective']}")
     for b, bd in concl["boards"].items():
         stale = " ⚠数据落后" if bd["stale"] else ""
@@ -839,11 +992,16 @@ def format_conclusion(concl: dict) -> list[str]:
             c = bd["cuts"][cut]
             tag = "✓保留" if c["kept"] else "✗未过"
             if c["best_horizon"]:
-                delta = (f" (Δ胜率{c['delta_wr']:+.1%} vs 基准{c['baseline_wr']:.1%})"
-                         if c["delta_wr"] is not None and c["baseline_wr"] is not None else "")
-                lines.append(f"  {cut.upper()}: {tag} | 最佳 T+{c['best_horizon']} "
-                             f"胜率={c['winrate']:.1%} 幅度={c['mag']:+.2%}{delta} "
-                             f"n={c['n']}")
+                delta = (
+                    f" (Δ胜率{c['delta_wr']:+.1%} vs 基准{c['baseline_wr']:.1%})"
+                    if c["delta_wr"] is not None and c["baseline_wr"] is not None
+                    else ""
+                )
+                lines.append(
+                    f"  {cut.upper()}: {tag} | 最佳 T+{c['best_horizon']} "
+                    f"胜率={c['winrate']:.1%} 幅度={c['mag']:+.2%}{delta} "
+                    f"n={c['n']}"
+                )
             else:
                 lines.append(f"  {cut.upper()}: {tag} | 无足量数据 (n<5)")
         sysl = " ".join(f"{k}={'✓' if v else '✗'}" for k, v in bd["systems"].items())
@@ -857,8 +1015,9 @@ def format_conclusion(concl: dict) -> list[str]:
     return lines
 
 
-def build_daily_shortlists(work: pd.DataFrame, out: dict, board: str, date,
-                           top_ns: tuple[int, ...] = (5, 10)) -> pd.DataFrame:
+def build_daily_shortlists(
+    work: pd.DataFrame, out: dict, board: str, date, top_ns: tuple[int, ...] = (5, 10)
+) -> pd.DataFrame:
     """今日最终短名单 (T-5 / T-10): 合并模块 + 补逐视界期望/概率与 realized MFE.
 
     day 按 board 过滤 — 交叉截面排名不能混板 (2026-08-05 bug: 未过滤 → main 名单混入双创股).
@@ -884,21 +1043,28 @@ def build_daily_shortlists(work: pd.DataFrame, out: dict, board: str, date,
     best_wr: dict[str, float] = {}
     sys_ph: dict[str, dict[str, dict[str, float]]] = {}
     for name in ("sniper", "fusion"):
-        per = out["boards"][board]["systems"][name]["oos"][oos_label]["primary"]["per_horizon"]
-        cand = [(h, r["winrate"]) for h, r in per.items()
-                if r.get("n", 0) >= 5 and not pd.isna(r.get("winrate"))]
+        per = out["boards"][board]["systems"][name]["oos"][oos_label]["primary"][
+            "per_horizon"
+        ]
+        cand = [
+            (h, r["winrate"])
+            for h, r in per.items()
+            if r.get("n", 0) >= 5 and not pd.isna(r.get("winrate"))
+        ]
         best_wr[name] = max(cand, key=lambda x: x[1])[1] if cand else float("nan")
         sys_ph[name] = {
             h: {"mag": r["mag"], "winrate": r["winrate"]}
             for h, r in per.items()
             if r.get("n", 0) >= 5
-            and not pd.isna(r.get("winrate")) and not pd.isna(r.get("mag"))
+            and not pd.isna(r.get("winrate"))
+            and not pd.isna(r.get("mag"))
         }
 
     def _est_wr(systems: str) -> float:
         if systems == "fusion+sniper":
-            return max(best_wr.get("sniper", float("nan")),
-                       best_wr.get("fusion", float("nan")))
+            return max(
+                best_wr.get("sniper", float("nan")), best_wr.get("fusion", float("nan"))
+            )
         return best_wr.get(systems, float("nan"))
 
     res["est_wr"] = res["systems"].map(_est_wr)
@@ -910,9 +1076,14 @@ def build_daily_shortlists(work: pd.DataFrame, out: dict, board: str, date,
         pick: dict[str, tuple[float, float]] = {}
         for systems in ("fusion+sniper", "fusion", "sniper"):
             names = ("sniper", "fusion") if systems == "fusion+sniper" else (systems,)
-            cand = [(sys_ph[n][h]["winrate"], sys_ph[n][h]["mag"])
-                    for n in names if h in sys_ph[n]]
-            pick[systems] = max(cand, key=lambda x: x[0]) if cand else (float("nan"), float("nan"))
+            cand = [
+                (sys_ph[n][h]["winrate"], sys_ph[n][h]["mag"])
+                for n in names
+                if h in sys_ph[n]
+            ]
+            pick[systems] = (
+                max(cand, key=lambda x: x[0]) if cand else (float("nan"), float("nan"))
+            )
         res[f"prob_{h}"] = res["systems"].map(lambda s, p=pick: p[s][0])
         res[f"exp_{h}"] = res["systems"].map(lambda s, p=pick: p[s][1])
     lab_map = {f"label_mfe_{h}d_net": f"mfe_{h}d" for h in (2, 3, 5, 10)}
@@ -926,8 +1097,9 @@ def build_daily_shortlists(work: pd.DataFrame, out: dict, board: str, date,
     return res
 
 
-def write_daily_shortlist(work: pd.DataFrame, out: dict, run_dir: Path,
-                          board: str, date=None) -> str:
+def write_daily_shortlist(
+    work: pd.DataFrame, out: dict, run_dir: Path, board: str, date=None
+) -> str:
     """今日最终短名单 → shortlist_<board>.csv (T-5 与 T-10 同文件, 以 cut 列区分).
 
     date: 显式指定选股日 (如用户口径 08-03); None → 该板块最新交易日.

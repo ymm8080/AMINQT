@@ -12,6 +12,7 @@ current_meta.json 结构 (models/pipeline1/):
 写入时机: 每次 bundle 指针 (xxx_current.pkl) 更新后 (retrain / extras splice).
 读取时机: 预测/清单交付时, 把 module 打进文件名 + 每行 model_version 列.
 """
+
 import json
 
 META_PATH = "models/pipeline1/current_meta.json"

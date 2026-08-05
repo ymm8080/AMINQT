@@ -50,7 +50,10 @@ def refresh_rolling_snapshot(
     have = [c for c in ["symbol", "date"] + cols if c in today.columns]
     bt_have = [c for c in cols if c in today.columns]
     if not bt_have:
-        return {"appended": 0, "total": len(pd.read_parquet(path)) if path.exists() else 0}
+        return {
+            "appended": 0,
+            "total": len(pd.read_parquet(path)) if path.exists() else 0,
+        }
 
     today = today[have].copy()
     today = today[today[bt_have].notna().any(axis=1)]

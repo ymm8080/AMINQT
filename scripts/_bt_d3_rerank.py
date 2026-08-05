@@ -21,6 +21,7 @@
 
 用法: python scripts/_bt_d3_rerank.py [--force]   (--force 重算特征缓存)
 """
+
 from __future__ import annotations
 
 import gc
@@ -51,7 +52,9 @@ CACHE_TS = datetime.now().strftime("%Y%m%d_%H%M%S")
 # 特征缓存用稳定名 (面板/模型不变即可复用, 避免重复 20 分钟构建)
 FEAT_MAIN_CACHE = os.path.join(ROOT, "data", "_bt_d3_rerank_feat_main.parquet")
 FEAT_DUAL_CACHE = os.path.join(ROOT, "data", "_bt_d3_rerank_feat_dual.parquet")
-ADMITTED_CACHE = os.path.join(ROOT, "data", f"_bt_d3_rerank_admitted_{CACHE_TS}.parquet")
+ADMITTED_CACHE = os.path.join(
+    ROOT, "data", f"_bt_d3_rerank_admitted_{CACHE_TS}.parquet"
+)
 OUT_JSON = os.path.join(ROOT, "data", f"_bt_d3_rerank_{CACHE_TS}.json")
 
 T0 = time.time()
@@ -112,7 +115,9 @@ def prepare() -> tuple[pd.DataFrame, pd.DataFrame, pd.Timestamp, pd.DataFrame]:
     for board in ("main", "dual"):
         b = DualTrackTrainer.load(os.path.join(MODEL_DIR, f"{board}_current.pkl"))
         bundle_cols[board] = list(b["feature_cols"])
-    log(f"bundle feature_cols: main={len(bundle_cols['main'])} dual={len(bundle_cols['dual'])}")
+    log(
+        f"bundle feature_cols: main={len(bundle_cols['main'])} dual={len(bundle_cols['dual'])}"
+    )
 
     panel = pd.read_parquet(PANEL)
     panel["date"] = pd.to_datetime(panel["date"])
@@ -180,7 +185,9 @@ def prepare() -> tuple[pd.DataFrame, pd.DataFrame, pd.Timestamp, pd.DataFrame]:
         _downcast(feat)
         feat = feat[feat["date"] >= test_start].reset_index(drop=True)
         feat.to_parquet(cache, index=False)
-        log(f"[{board}] 特征落盘({len(feat)} rows, {len(feat.columns)} cols) -> {os.path.basename(cache)}")
+        log(
+            f"[{board}] 特征落盘({len(feat)} rows, {len(feat.columns)} cols) -> {os.path.basename(cache)}"
+        )
         _mem(board)
         features[board] = feat
     del main_df, dual_df
@@ -201,7 +208,9 @@ def run_days(feat_main, feat_dual, test_start, realized) -> pd.DataFrame:
     lister = ListGenerator()
     dates = np.array(sorted(realized["date"].unique()))
     scored = dates[dates >= test_start][:-3]  # t+3 需未来 3 个 bar
-    log(f"逐日打分: {len(scored)} 日 = {pd.Timestamp(scored[0]).date()}..{pd.Timestamp(scored[-1]).date()}")
+    log(
+        f"逐日打分: {len(scored)} 日 = {pd.Timestamp(scored[0]).date()}..{pd.Timestamp(scored[-1]).date()}"
+    )
 
     rows = []
     days_with_list = 0
@@ -237,11 +246,18 @@ def run_days(feat_main, feat_dual, test_start, realized) -> pd.DataFrame:
         passed["rank_score"] = passed["score"].rank(ascending=False, method="first")
         passed["rank_d3"] = blend.rank(ascending=False, method="first")
         cols = [
-            "symbol", "board", "score", "d3_blend",
-            "pred_ret_2d", "prob_up_2d",
-            "pred_ret_3d", "prob_up_3d",
-            "pred_ret_5d", "prob_up_5d",
-            "rank_score", "rank_d3",
+            "symbol",
+            "board",
+            "score",
+            "d3_blend",
+            "pred_ret_2d",
+            "prob_up_2d",
+            "pred_ret_3d",
+            "prob_up_3d",
+            "pred_ret_5d",
+            "prob_up_5d",
+            "rank_score",
+            "rank_d3",
         ]
         keep = [c for c in cols if c in passed.columns]
         rec = passed[keep].assign(date=date).copy()
@@ -343,7 +359,9 @@ def _pp(v) -> str:
 
 def print_table(res: dict, tag: str) -> None:
     print("\n" + "=" * 100)
-    print(f"{tag.upper()} — d3 目标排序 vs 旧 score 排序 (模型 test 段 OOS, {res['n_days']} 日 {res['n_picks']} 入选)")
+    print(
+        f"{tag.upper()} — d3 目标排序 vs 旧 score 排序 (模型 test 段 OOS, {res['n_days']} 日 {res['n_picks']} 入选)"
+    )
     print("=" * 100)
     print(
         f"{'':>10s} {'n':>5s} {'mean d3':>9s} {'d3 hit':>8s} {'mean d5':>9s} {'d5 hit':>8s} "
@@ -353,10 +371,10 @@ def print_table(res: dict, tag: str) -> None:
         for ranking in ("score", "d3"):
             m = res[ranking][f"top{N}"]
             if not m.get("n"):
-                print(f"{'top'+str(N):>7s} {ranking:>3s}    (无数据)")
+                print(f"{'top' + str(N):>7s} {ranking:>3s}    (无数据)")
                 continue
             print(
-                f"{'top'+str(N):>7s} {ranking:>3s} {m['n']:>5d} "
+                f"{'top' + str(N):>7s} {ranking:>3s} {m['n']:>5d} "
                 f"{_pp(m['mean_c2c3'])} {_pp(m['hit3'])} {_pp(m['mean_c2c5'])} {_pp(m['hit5'])} "
                 f"{_pp(m['mean_exec3'])} {_pp(m['mean_mfe3'])}"
             )
@@ -372,7 +390,9 @@ def print_table(res: dict, tag: str) -> None:
             )
         print(f"  {ranking:>5s}: " + "  ".join(parts))
     if "corr" in res:
-        print(f"\n预测序 vs 实测 d3 收益 (Spearman, n={res['corr'].get('rank_score', {}).get('n', 0)}):")
+        print(
+            f"\n预测序 vs 实测 d3 收益 (Spearman, n={res['corr'].get('rank_score', {}).get('n', 0)}):"
+        )
         for pc, v in res["corr"].items():
             print(f"  {pc:>14s}: rho={v['spearman_rho']:+.4f} (p={v['p']:.4f})")
 

@@ -352,13 +352,13 @@ class ListGenerator:
                 )
             ok &= compound > 0
             # 闸3 (2026-08-05): 2d/3d/5d 可执行视界中位数均须为正; 回退 1d pred_q50 (旧 bundle)
-            if all(c in df.columns for c in ("pred_q50_2d", "pred_q50_3d", "pred_q50_5d")):
+            if all(
+                c in df.columns for c in ("pred_q50_2d", "pred_q50_3d", "pred_q50_5d")
+            ):
                 ok &= (
-                    df["pred_q50_2d"].fillna(compound) > 0
-                ) & (
-                    df["pred_q50_3d"].fillna(compound) > 0
-                ) & (
-                    df["pred_q50_5d"].fillna(compound) > 0
+                    (df["pred_q50_2d"].fillna(compound) > 0)
+                    & (df["pred_q50_3d"].fillna(compound) > 0)
+                    & (df["pred_q50_5d"].fillna(compound) > 0)
                 )
             elif "pred_q50" in df.columns and df["pred_q50"].notna().any():
                 ok &= df["pred_q50"].fillna(compound) > 0
@@ -463,7 +463,10 @@ class ListGenerator:
         final = final.head(top_n)
         # [FINAL STOCK SCAN] 风控过滤: 近一周有大宗交易的股票不买 (用户定案 2026-08-03)
         try:
-            from .risk_overlays import block_trade_recent_scan, share_float_upcoming_scan
+            from .risk_overlays import (
+                block_trade_recent_scan,
+                share_float_upcoming_scan,
+            )
 
             scan_ref = (
                 pd.Timestamp(ref_date) if ref_date else self._scan_ref_date(candidates)

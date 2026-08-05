@@ -103,12 +103,16 @@ class TestHolderKimiFeatures:
             [build("600519", 5, 0.02), build("000001", 30, 0.10)], ignore_index=True
         )
         out = FeatureEngineV35.dim29_holdertrade(df)
-        a = out[out["symbol"] == "600519"].sort_values("date").reset_index(drop=True)[
-            "sh_ratio_30d"
-        ]
-        b = out[out["symbol"] == "000001"].sort_values("date").reset_index(drop=True)[
-            "sh_ratio_30d"
-        ]
+        a = (
+            out[out["symbol"] == "600519"]
+            .sort_values("date")
+            .reset_index(drop=True)["sh_ratio_30d"]
+        )
+        b = (
+            out[out["symbol"] == "000001"]
+            .sort_values("date")
+            .reset_index(drop=True)["sh_ratio_30d"]
+        )
         assert a[6] == pytest.approx(0.02)  # A 的 idx5 事件次日计入
         assert a[30] == pytest.approx(0.02)  # B 的 idx30 事件不影响 A
         assert b[30] == pytest.approx(0.0)  # B 事件日 T 不含当日 +0.10

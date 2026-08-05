@@ -10,6 +10,7 @@ parallel pipeline (app/pipeline_parallel) 的 load_panel 读取两个 3y 检查�
 用法: python scripts/_refresh_parallel_checkpoints.py
 输出: 两个新检查点 + 控制台日志 (最新日期 / 行数 / 列数).
 """
+
 import gc
 import os
 import sys
@@ -21,8 +22,11 @@ import pandas as pd
 from config.settings import PANEL_V3_PATH
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from scripts._reclassify_all_features import (DUAL_CHECKPOINT, MAIN_CHECKPOINT,
-                                              build_board_slice)
+from scripts._reclassify_all_features import (
+    DUAL_CHECKPOINT,
+    MAIN_CHECKPOINT,
+    build_board_slice,
+)
 
 
 def main() -> int:
@@ -48,17 +52,24 @@ def main() -> int:
     main_df, dual_df = cleaner.run_train(panel)
     del panel
     gc.collect()
-    print(f"run_train: main rows={len(main_df):,} / dual rows={len(dual_df):,}",
-          flush=True)
+    print(
+        f"run_train: main rows={len(main_df):,} / dual rows={len(dual_df):,}",
+        flush=True,
+    )
 
-    for board, ckpt, bdf in (("main", MAIN_CHECKPOINT, main_df),
-                             ("dual", DUAL_CHECKPOINT, dual_df)):
+    for board, ckpt, bdf in (
+        ("main", MAIN_CHECKPOINT, main_df),
+        ("dual", DUAL_CHECKPOINT, dual_df),
+    ):
         if bdf is None or len(bdf) == 0:
             print(f"[{board}] 空, 跳过", flush=True)
             continue
         d3 = build_board_slice(cleaner, fe, bdf, board, ckpt)
-        print(f"[{board}] 检查点已写 {ckpt} | latest={d3['date'].max():%Y-%m-%d} "
-              f"rows={len(d3):,} cols={d3.shape[1]:,}", flush=True)
+        print(
+            f"[{board}] 检查点已写 {ckpt} | latest={d3['date'].max():%Y-%m-%d} "
+            f"rows={len(d3):,} cols={d3.shape[1]:,}",
+            flush=True,
+        )
         del bdf, d3
         gc.collect()
     del main_df, dual_df, fe, cleaner
