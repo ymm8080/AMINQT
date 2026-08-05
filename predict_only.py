@@ -18,8 +18,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-TAG = "2026W31_3y"
 REPORT_DIR = "data/prediction_reports"
+
+
+def _current_module_tag() -> str:
+    """当前生效模块 tag (current_meta.json); 缺失返回 'na'."""
+    from app.pipeline1.model_meta import load_modules, module_id
+
+    return module_id(load_modules())
 
 
 def _label_reference(s: pd.Series, k: int) -> pd.Series:
@@ -201,7 +207,7 @@ def _write_report(trade_date, ic_by_board, filtered, all_preds, bundles):
     L = []
     L.append(f"# Pipeline-1 Prediction Report — {trade_date}")
     L.append(f"\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    L.append(f"Model tag: {TAG}")
+    L.append(f"Model tag: {_current_module_tag()}")
     bundle_info = ", ".join(
         f"{b}={os.path.basename(p)}" for b, p in bundles.items()
     )
@@ -299,7 +305,7 @@ def _write_report(trade_date, ic_by_board, filtered, all_preds, bundles):
 def main():
     from app.pipeline1.cleaning_pipeline import CleaningPipeline
     from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-    from app.pipeline1.predict_runner import find_bundles
+    from app.pipeline1.predict_runner import resolve_current_bundles
     from app.pipeline1.predictor import V35Predictor
 
     trade_date = datetime.now().strftime("%Y%m%d")
@@ -316,7 +322,7 @@ def main():
     logger.info(f"清洗: main={len(main_df)} dual={len(dual_df)} valve={valve}")
 
     features = FeatureEngineV35()
-    bundles = find_bundles(model_dir="models/pipeline1", tag=TAG)
+    bundles = resolve_current_bundles(model_dir="models/pipeline1")
 
     all_preds = []
     ic_by_board = {}

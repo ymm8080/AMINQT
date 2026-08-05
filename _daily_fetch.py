@@ -40,8 +40,8 @@ from config.settings import INGEST_MIN_LIST_DAYS
 from app.pipeline1.ingest_scan import apply_ingest_scan
 load_dotenv()
 
-from app.pipeline1 import cyq_ext
-from app.pipeline1.cleaning_pipeline import board_of
+from app.pipeline1 import cyq_ext  # noqa: E402
+from app.pipeline1.cleaning_pipeline import board_of  # noqa: E402
 
 TRADE_DATE = sys.argv[1] if len(sys.argv) > 1 else datetime.now().strftime("%Y%m%d")
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
@@ -150,6 +150,69 @@ if len(bt):
     except Exception as e:
         print(f"    block_trade raw cache: FAILED ({e})")
 
+# ── share_float: 限售股解禁 → raw 缓存 (FINAL STOCK SCAN 读它; 前瞻日历, 每日捕获新公告) ──
+# 回填脚本已预载 float_date 至 today+120d; 此处仅抓最近 N 天新公告的解锁, 防 SCAN 漏掉.
+try:
+    from app.core.config_loader import load_config
+    _sf_cfg = load_config("data_pipeline_config").get("final_stock_scan", {})
+    _sf_cache = _sf_cfg.get(
+        "share_float_cache",
+        "data/supply_cache/alt_data/share_float/share_float_full.parquet",
+    )
+    _sweep_days = int(_sf_cfg.get("unlock_ann_sweep_days", 7))
+    _sf_path = (
+        _sf_cache if os.path.isabs(_sf_cache)
+        else os.path.join(os.path.dirname(os.path.abspath(__file__)), _sf_cache)
+    )
+    _keep = ["symbol", "ts_code", "ann_date", "float_date", "float_share",
+             "float_ratio", "holder_name", "share_type"]
+    sf_new = pd.DataFrame()
+    for _k in range(_sweep_days, -1, -1):
+        _ad = (pd.Timestamp(TRADE_DATE) - pd.Timedelta(days=_k)).strftime("%Y%m%d")
+        _offset = 0
+        while True:
+            # 直接调用不重试: 空页是分页终止/无公告日, 属正常, 重试只烧时间
+            try:
+                _page = pro.share_float(ann_date=_ad, limit=6000, offset=_offset)
+            except Exception as _e:
+                print(f"    share_float raw cache: fetch {_ad}@{_offset} FAILED ({_e})")
+                _page = pd.DataFrame()
+            if not len(_page):
+                break
+            # 派生 symbol: to_symbol 只剥 .SZ/.SH, BJ 需本地再剥 (920101.BJ → 920101)
+            if "ts_code" in _page.columns:
+                _page["symbol"] = (
+                    _page["ts_code"].str.replace(".SZ", "", regex=False)
+                    .str.replace(".SH", "", regex=False)
+                    .str.replace(".BJ", "", regex=False)
+                )
+            _page = _page[[c for c in _keep if c in _page.columns]]
+            sf_new = pd.concat([sf_new, _page], ignore_index=True)
+            _offset += 6000
+            if _offset > 300000:  # 保险丝: 防分页异常无限循环
+                print(f"    share_float raw cache: fuse hit on {_ad}, page truncated")
+                break
+    if len(sf_new):
+        old = pd.read_parquet(_sf_path) if os.path.exists(_sf_path) else pd.DataFrame()
+        merged = pd.concat([old, sf_new], ignore_index=True)
+        # 每行是唯一 holder+share_type 解锁, 全列去重保留最新 (历史日重跑安全)
+        merged = merged.drop_duplicates(keep="last").reset_index(drop=True)
+        # 投影到保留列: 老缓存或新页可能带多余列, 防 schema 漂移
+        merged = merged[[c for c in _keep if c in merged.columns]]
+        merged = merged.sort_values("float_date").reset_index(drop=True)
+        os.makedirs(os.path.dirname(_sf_path), exist_ok=True)
+        _tmp = _sf_path + ".tmp"
+        merged.to_parquet(_tmp, index=False)
+        os.replace(_tmp, _sf_path)  # 原子替换, 避免崩溃写坏缓存导致 SCAN fail-open
+        print(f"    share_float raw cache: +{len(sf_new)} rows -> {len(merged)} total")
+    elif not os.path.exists(_sf_path):
+        print("    share_float raw cache: 无新公告且缓存不存在, 跳过写入")
+    else:
+        print(f"    share_float raw cache: no new unlocks in {_sweep_days}d sweep window")
+
+except Exception as e:
+    print(f"    share_float raw cache: FAILED ({e})")
+
 # ── 2. Build today's DataFrame ──
 print("\n[2] Building today's frame...")
 # Start from OHLCV
@@ -158,6 +221,12 @@ df["date"] = pd.Timestamp(TRADE_DATE)
 # Filter to valid universe
 df = df[df["symbol"].isin(valid_universe)].copy()
 print(f"    After universe filter: {len(df)} rows")
+
+# Tushare daily.amount 单位=千元 → 面板口径 元 (×1000); vol 单位=手 (供 volume 派生).
+# 历史面板 amount 一律为 元 (gu/手 两惯例仅 volume 单位不同), 缺此转换会导致尾部
+# 成交额缩 1000×, 触发 step2 流动性过滤整日清空 (2026-08-04 修复).
+if "amount" in df.columns:
+    df["amount"] = pd.to_numeric(df["amount"], errors="coerce") * 1000.0
 
 # Read panel schema
 schema = pq.read_schema(PANEL)
@@ -225,27 +294,27 @@ if len(lhb):
             smap = lhb.set_index("symbol")[src]
             df[tgt] = df["symbol"].map(smap)
 
-# GLM 龙虎榜 spec: 席位明细 (散户大本营"拉萨"/机构专用) per 股-日.
-# 列由回填脚本首次加入面板 schema, 此处仅填充已存在的列 (panel_cols 守卫).
+# LHB 席位 8 列 (KIMI LHB v2.0 上游): 单一源 Tushare top_inst + classify_seat.
+# 与 866 日回填 (_backfill_lhb_seats_v2.py) 完全同语义: 每股聚合, 未上榜保持 NaN,
+# retail = 拉萨 + 其他非 inst/top/quant 席位 (spec §2.4). 替代旧逐股 akshare 席位路径
+# (只填 inst/retail 且 retail 漏"其他", 与回填不一致; 且 BJ 股每次失败烧 3 次重试).
 if len(lhb):
-    try:
-        from app.pipeline1.data_supply import DataSupplyChain
-        _seat_supply = DataSupplyChain()
-    except Exception:
-        _seat_supply = None
-    if _seat_supply is not None:
-        seat_cols = ["lhb_retail_buy", "lhb_retail_sell", "lhb_inst_buy", "lhb_inst_sell"]
-        for col in seat_cols:
-            if col in panel_cols and col not in df.columns:
-                df[col] = np.nan
-        for sym in lhb["symbol"].unique().tolist():
-            agg = _seat_supply.fetch_lhb_seat_aggregate(sym, TRADE_DATE)
-            if not agg:
-                continue
-            m = df["symbol"] == sym
-            for k, v in agg.items():
-                if k in panel_cols and k in df.columns:
-                    df.loc[m, k] = v
+    _topinst = safe_fetch(pro.top_inst, "top_inst", trade_date=TRADE_DATE)
+    if len(_topinst):
+        try:
+            from app.pipeline1.lhb_seats import seat_wide_from_top_inst
+
+            _seat_wide = seat_wide_from_top_inst(_topinst)
+            for c in _seat_wide.columns:
+                if c == "symbol":
+                    continue
+                if c in panel_cols:
+                    df[c] = df["symbol"].map(_seat_wide.set_index("symbol")[c])
+            print(f"    top_inst seat agg: {len(_seat_wide)} symbols -> 8 seat cols")
+        except Exception as e:
+            print(f"    top_inst seat agg: FAILED ({e})")
+    else:
+        print("    top_inst seat agg: 无数据, 席位列留空 (上榜股为 NaN)")
 
 # ── 4. Compute derived columns ──
 print("\n[4] Computing derived columns...")
@@ -322,24 +391,39 @@ if all(c in df.columns for c in ["high", "low", "pre_close"]):
 if all(c in df.columns for c in ["close", "pre_close"]):
     df["pctChg"] = (df["close"] / df["pre_close"] - 1) * 100
 
-if all(c in df.columns for c in ["amount", "close"]):
-    valid = df["amount"].notna() & df["close"].notna() & (df["close"] > 0)
-    if "volume" in panel_cols and "volume" not in df.columns:
-        df["volume"] = np.nan
-    df.loc[valid, "volume"] = df.loc[valid, "amount"] / df.loc[valid, "close"]
+if "volume" in panel_cols and "volume" not in df.columns:
+    df["volume"] = np.nan  # 占位, 值在 [5] 历史读取后按 symbol 惯例派生
 
 # ── 5. Read history for rolling features ──
 print("\n[5] Computing rolling features from history...")
 symbols = sorted(df["symbol"].unique())
 
 # Read only needed columns from panel
-hist_cols = ["symbol", "date", "close_hfq", "volume", "high", "low", "pre_close", "open", "amount", "pct_90_con"]
+hist_cols = ["symbol", "date", "close_hfq", "volume", "high", "low", "pre_close", "open", "amount", "close", "pct_90_con"]
 hist_cols = [c for c in hist_cols if c in panel_cols]
 hist = pq.read_table(PANEL, columns=hist_cols).to_pandas()
 hist = hist[hist["symbol"].isin(symbols)]
 hist = hist[hist["date"] <= pd.Timestamp(TRADE_DATE)]
 hist = hist.sort_values(["symbol", "date"])
 print(f"    History: {len(hist):,} rows for {hist.symbol.nunique()} symbols")
+
+# volume 派生 (2026-08-04 修复): amount 已 ×1000 为元, amount/close = 股 (gu 惯例);
+# 手惯例 symbol (历史 amount/(vol×close) 中位>2) 需 ÷100 → 手, 与自身历史一致.
+# 惯例取 TRADE_DATE 之前最近 60 交易日判定: 个别 symbol 历史惯例会漂移
+# (例 001298: 3.1→2.1→1.45→1.0), 全史中位会误判, 近期窗口才能对齐当下惯例.
+if "volume" in df.columns and all(c in df.columns for c in ["amount", "close"]):
+    valid = df["amount"].notna() & df["close"].notna() & (df["close"] > 0)
+    df.loc[~valid, "volume"] = np.nan
+    df.loc[valid, "volume"] = df.loc[valid, "amount"] / df.loc[valid, "close"]
+    if "close" in hist.columns and "volume" in hist.columns and len(hist):
+        prev = hist[hist["date"] < pd.Timestamp(TRADE_DATE)]
+        recent_days = sorted(prev["date"].unique())[-60:]
+        recent = prev[prev["date"].isin(recent_days)]
+        r = recent.assign(_r=recent["amount"] / (recent["volume"] * recent["close"]))
+        r = r.dropna(subset=["_r"])
+        hand = set(r.groupby("symbol")["_r"].median()[lambda s: s > 2].index)
+        is_hand = df["symbol"].isin(hand) & valid
+        df.loc[is_hand, "volume"] = df.loc[is_hand, "volume"] / 100
 
 close_today = df.set_index("symbol")["close_hfq"]
 
@@ -457,6 +541,7 @@ ffill_cols = [
     "sh_change_vol", "sh_change_amt_total",
     "sh_net_change_sign", "sh_net_sign",
     "sh_evt_start_date", "sh_evt_end_date",
+    "sh_net_ratio", "sh_g_ratio", "sh_p_ratio", "sh_c_ratio",
     "sw_l1_name", "sw_l2_name", "sw_l3_name",
     "margin_balance", "short_balance", "margin_buy_amt", "short_sell_vol",
     "dt_eps", "q_ocf_to_sales",
@@ -548,6 +633,34 @@ if len(bt):
                       f"{[c for c in bt_today.columns if c in df.columns]}")
     except Exception as e:
         print(f"    block_trade agg: FAILED ({e})")
+
+# ── 6.6 大宗 4 列滚动快照 → V3 面板重建恢复源 (dim33 EWMA 上游) ──
+# 用当日 df 已聚合的 bt_ 列增量刷新 bt_v3_snapshot_rolling.parquet.
+# 与 block_trade_full.parquet (去重 keep=last, 逐笔失真) 不同, 快照保留聚合后 4 列
+# 全历史, 且不依赖面板本身 → 面板重建丢失 bt_ 列后直接 merge 回即可, 无需重拉 Tushare.
+try:
+    from app.core.config_loader import load_config
+    from app.pipeline1.bt_snapshot import refresh_rolling_snapshot, SNAPSHOT_COLS
+    _snap = (
+        load_config("data_pipeline_config")
+        .get("final_stock_scan", {})
+        .get(
+            "bt_v3_snapshot_cache",
+            "data/supply_cache/alt_data/block_trade/bt_v3_snapshot_rolling.parquet",
+        )
+    )
+    _snap_path = (
+        _snap if os.path.isabs(_snap)
+        else os.path.join(os.path.dirname(os.path.abspath(__file__)), _snap)
+    )
+    _seed = None
+    if not os.path.exists(_snap_path):
+        # 首次运行: 从当前面板继承全量 bt_ 历史 (此刻面板仍含 4 列)
+        _seed = pq.read_table(PANEL, columns=SNAPSHOT_COLS).to_pandas()
+    _res = refresh_rolling_snapshot(df, _snap_path, seed=_seed)
+    print(f"    bt_v3 rolling snapshot: appended {_res['appended']} -> {_res['total']} total")
+except Exception as e:
+    print(f"    bt_v3 rolling snapshot: FAILED ({e})")
 
 # ── 7. Align to panel schema ──
 print("\n[7] Aligning to panel schema...")

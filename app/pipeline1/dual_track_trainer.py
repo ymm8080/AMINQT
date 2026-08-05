@@ -117,6 +117,14 @@ MODEL_KINDS = (
     "5d_reg",
     "5d_cls",
 )
+EXTRA_KINDS = (
+    "quantile_models",
+    "quantile_models_2d",
+    "quantile_models_3d",
+    "quantile_models_5d",
+    "pain_model",
+    "rank_model",
+)
 
 
 def risk_filter(df: pd.DataFrame) -> pd.DataFrame:
@@ -342,18 +350,14 @@ class DualTrackTrainer:
             if partial is not None and "models" in partial:
                 out["models"] = partial["models"]
                 # 恢复 extras
-                for ek in ("quantile_models", "pain_model", "rank_model"):
+                for ek in EXTRA_KINDS:
                     if ek in partial:
                         out[ek] = partial[ek]
                 logger.info(
                     "[%s] 从 checkpoint 恢复: models=%s extras=%s",
                     board,
                     list(out["models"].keys()),
-                    [
-                        k
-                        for k in ("quantile_models", "pain_model", "rank_model")
-                        if k in out
-                    ],
+                    [k for k in EXTRA_KINDS if k in out],
                 )
 
         # ── 训练未完成的模型种类 ──
@@ -391,7 +395,7 @@ class DualTrackTrainer:
 
     # ---------------- E1/E2 + LambdaRank: 分位数 + 痛苦预警 + 排序 (支持断点续训) ----------------
     def _train_extras(self, out: dict, checkpoint=None) -> None:
-        """[E1] 分位数五模型 (label_1d_net) + [E2] 痛苦预警 (label_pain)
+        """[E1] 分位数五模型 (1d/2d/3d 净标签) + [E2] 痛苦预警 (label_pain)
         + [阶段四] LambdaRank 排序模型 (lambdarank_truncation_level=25, 分位 gain).
 
         E1 沿用回归超参, 不单独搜索 (V3.8 §2.2, 避免调参维度爆炸).
@@ -418,18 +422,25 @@ class DualTrackTrainer:
             set(checkpoint.completed_extras or []) if checkpoint is not None else set()
         )
 
-        # E1: label 偏好 label_pm_1d_net → label_1d_net → label_1d (与 _train_one 同口径)
-        q_label = next(
-            (
-                c
-                for c in ("label_pm_1d_net", "label_1d_net", "label_1d")
-                if c in segs["train"].columns
-            ),
-            None,
-        )
-        if q_label is not None:
-            # E1 分位数五模型
-            if "quantile_models" not in done_extras:
+        # E1: 多视界分位数五模型 (1d/2d/3d/5d; E7 闸3 自 2026-08-05 起用 2d/3d/5d 中位数)
+        # label 偏好 label_pm_{k}d_net → label_{k}d_net → label_{k}d (与 _train_one 同口径)
+        for horizon in (1, 2, 3, 5):
+            q_label = next(
+                (
+                    c
+                    for c in (
+                        f"label_pm_{horizon}d_net",
+                        f"label_{horizon}d_net",
+                        f"label_{horizon}d",
+                    )
+                    if c in segs["train"].columns
+                ),
+                None,
+            )
+            if q_label is None:
+                continue
+            qkey = "quantile_models" if horizon == 1 else f"quantile_models_{horizon}d"
+            if qkey not in done_extras:
                 try:
                     train, X, y = _xy("train", q_label)
                     _, X_es, y_es = _xy("es", q_label)
@@ -445,19 +456,26 @@ class DualTrackTrainer:
                         es_patience=ES_PATIENCE,
                     )
                     qset.label_ = q_label
-                    out["quantile_models"] = qset
+                    out[qkey] = qset
                     logger.info(
-                        "[%s] E1 分位数五模型训练完成 (label=%s)", out["board"], q_label
+                        "[%s] E1 分位数五模型训练完成 (label=%s, %dd)",
+                        out["board"],
+                        q_label,
+                        horizon,
                     )
                 except Exception as e:
-                    logger.warning("[%s] E1 分位数模型训练失败: %s", out["board"], e)
+                    logger.warning(
+                        "[%s] E1 分位数模型 (%dd) 训练失败: %s", out["board"], horizon, e
+                    )
                 del train, X, y, X_es, y_es
                 gc.collect()
                 if checkpoint is not None:
                     self._save_checkpoint(out, checkpoint)
             else:
                 logger.info(
-                    "[%s] E1 分位数模型 — checkpoint 已完成, 跳过", out["board"]
+                    "[%s] E1 分位数模型 (%dd) — checkpoint 已完成, 跳过",
+                    out["board"],
+                    horizon,
                 )
 
             # 阶段四: LambdaRank (标签=净收益截面分位 gain 0-4, group=date)

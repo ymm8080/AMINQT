@@ -133,11 +133,12 @@ def main() -> None:
 
     # ── 2. 对齐 factor, 每股按日期 ff(日)fill (停牌日缺行) ──
     m = panel[["symbol", "date"]].merge(adj, on=["symbol", "date"], how="left")
-    m = m.sort_values(["symbol", "date"])
+    m = m.sort_values(["symbol", "date"])  # sort 仅用于组内 ffill
     m["adj_factor"] = m.groupby("symbol")["adj_factor"].ffill()
+    m = m.sort_index()  # 恢复面板原始行序, 否则 .values 会错位
+    nan_rows = m["adj_factor"].isna().sum()
     old_mult = (panel["close_hfq"] / panel["close"]).replace([np.inf, -np.inf], np.nan)
     factor = m["adj_factor"].fillna(old_mult)  # 残留缺失行沿用旧口径, 避免引入 NaN
-    nan_rows = m["adj_factor"].isna().sum()
     if nan_rows:
         logger.warning("%d rows 无 adj_factor (沿用旧口径)", nan_rows)
 
@@ -161,35 +162,41 @@ def main() -> None:
             )
     panel = srt.sort_index()
 
-    # ── 5. 验证: 07-27 系统性跳变应消失 ──
-    def mult_at(dstr: str) -> pd.Series:
-        sub = panel[panel["date"] == pd.Timestamp(dstr)][
-            ["symbol", "close_hfq", "close"]
-        ]
+    # ── 4.5 完整性校验: close_hfq/close 必须 == 对齐后 factor (拦截行序错位) ──
+    ratio = (panel["close_hfq"] / panel["close"].replace(0, np.nan)).round(4)
+    fac = factor.round(4)
+    misalign = int((ratio != fac).sum())
+    if misalign > 0:
+        raise SystemExit(f"ABORT: {misalign} rows 复权因子与行序不一致, 不落盘")
+    logger.info("完整性校验: %d 行 close_hfq/close == adj_factor", int((ratio == fac).sum()))
+
+    # ── 5. 验证: 07-27 系统性跳变应消失 (对比修复前备份) ──
+    def mult_at(df: pd.DataFrame, dstr: str) -> pd.Series:
+        sub = df[df["date"] == pd.Timestamp(dstr)][["symbol", "close_hfq", "close"]]
         return sub.set_index("symbol")["close_hfq"] / sub.set_index("symbol")[
             "close"
         ].replace(0, np.nan)
 
-    m24, m27, m28 = mult_at("2026-07-24"), mult_at("2026-07-27"), mult_at("2026-07-28")
-    seam_before = (m24.dropna() != m27.dropna()).sum() if len(m24) else -1
-    seam_after = (m24.dropna() != m28.dropna()).sum() if len(m24) else -1
+    def n_diff(a: pd.Series, b: pd.Series) -> int:
+        common = a.dropna().index.intersection(b.dropna().index)
+        return (a.loc[common].round(4) != b.loc[common].round(4)).sum() if len(common) else -1
+
+    m24, m27, m28 = mult_at(panel, "2026-07-24"), mult_at(panel, "2026-07-27"), mult_at(panel, "2026-07-28")
+    bsub = pd.read_parquet(backup, columns=["symbol", "date", "close_hfq", "close"])
+    b24, b27 = mult_at(bsub, "2026-07-24"), mult_at(bsub, "2026-07-27")
     logger.info(
-        "mult(07-24)!=mult(07-27): %d symbols 修复前跳变; mult(07-24)!=mult(07-28): %d 修复后",
-        seam_before,
-        seam_after,
+        "07-24 vs 07-27 因子跳变 symbols: 修复前=%d, 修复后=%d (真实除权日应残留); 07-24 vs 07-28 修复后=%d",
+        n_diff(b24, b27), n_diff(m24, m27), n_diff(m24, m28),
     )
-    for sym in ["300065", "000001", "600519"]:
+    for sym in ["300065", "000001", "600519", "603977", "002317"]:
         row = panel[
             (panel["symbol"] == sym) & (panel["date"] == pd.Timestamp("2026-07-28"))
         ]
         if len(row):
             r = row.iloc[0]
             logger.info(
-                "  %s 07-28: close=%.2f close_hfq=%.2f mult=%.4f",
-                sym,
-                r["close"],
-                r["close_hfq"],
-                r["close_hfq"] / r["close"],
+                "  %s 07-28: close=%.2f close_hfq=%.2f mult=%.4f (Tushare 口径)",
+                sym, r["close"], r["close_hfq"], r["close_hfq"] / r["close"],
             )
 
     # ── 6. 落盘 (原地, 备份已留) ──

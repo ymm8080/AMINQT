@@ -323,6 +323,87 @@ class TestDynamicEntry:
         # bear: pred_1d < 0 → 剔
         assert ListGenerator().emit(cands, market_state="bear")["empty"]
 
+    def test_gate_q50_uses_2d3d5d_medians_not_1d(self):
+        """闸3 (2026-08-05): 有 2d/3d/5d 中位数列时用它们 (均须为正), 不再用 1d pred_q50.
+
+        1d 中位数可为负 (T+1 不可执行, 旧闸误杀), 2d/3d/5d 均为正即过闸.
+        """
+        gen = ListGenerator(entry_prob=0.0)  # 跳过 prob 闸, 单独验闸3
+        cands = _cands(
+            [
+                {
+                    "symbol": "600001",
+                    "pred_q50": -0.003,   # 1d 中位数负 (旧闸会误杀)
+                    "pred_q50_2d": 0.004,  # 2d 中位数正
+                    "pred_q50_3d": 0.012,  # 3d 中位数正
+                    "pred_q50_5d": 0.020,  # 5d 中位数正
+                },
+                {  # 2d 中位数为负 → 剔
+                    "symbol": "600002",
+                    "pred_q50_2d": -0.001,
+                    "pred_q50_3d": 0.012,
+                    "pred_q50_5d": 0.020,
+                },
+                {  # 3d 中位数为负 → 剔
+                    "symbol": "600003",
+                    "pred_q50_2d": 0.004,
+                    "pred_q50_3d": -0.005,
+                    "pred_q50_5d": 0.020,
+                },
+                {  # 5d 中位数为负 → 剔
+                    "symbol": "600004",
+                    "pred_q50_2d": 0.004,
+                    "pred_q50_3d": 0.012,
+                    "pred_q50_5d": -0.001,
+                },
+            ]
+        )
+        out = gen.emit(cands)
+        assert list(out["list"]["symbol"]) == ["600001"]
+
+    def test_gate_q50_falls_back_to_1d_when_no_2d3d(self):
+        """旧 bundle (无 2d/3d 中位数列) 回退 1d pred_q50 闸."""
+        gen = ListGenerator(entry_prob=0.0)
+        cands = _cands(
+            [
+                {"symbol": "600001", "pred_q50": -0.003},  # 1d 中位数负 → 剔
+                {"symbol": "600002"},  # 无 pred_q50 → fillna(compound) 正 → 过
+            ]
+        )
+        out = gen.emit(cands)
+        assert list(out["list"]["symbol"]) == ["600002"]
+
+    def test_emit_ranks_by_d3_target(self):
+        """排序 (2026-08-05): d3 目标 = 50% norm(pred_ret_3d) + 50% norm(prob_up_3d).
+
+        score 最高但 d3 涨幅/概率最低 → 落最后; d3 涨幅+概率双高 → 排第一.
+        """
+        gen = ListGenerator(entry_prob=0.0)
+        cands = _cands(
+            [
+                {  # d3 涨幅高 + d3 概率高 → 第 1
+                    "symbol": "600001",
+                    "pred_ret_3d": 0.05,
+                    "prob_up_3d": 0.70,
+                    "score": 0.10,
+                },
+                {  # score 最高但 d3 涨幅/概率最低 → 应落最后
+                    "symbol": "600002",
+                    "pred_ret_3d": 0.005,
+                    "prob_up_3d": 0.60,
+                    "score": 0.95,
+                },
+                {  # 中间
+                    "symbol": "600003",
+                    "pred_ret_3d": 0.02,
+                    "prob_up_3d": 0.65,
+                    "score": 0.50,
+                },
+            ]
+        )
+        out = gen.emit(cands)
+        assert list(out["list"]["symbol"]) == ["600001", "600003", "600002"]
+
 
 class TestScorePainPenalty:
     def test_pain_penalty_lowers_score(self):

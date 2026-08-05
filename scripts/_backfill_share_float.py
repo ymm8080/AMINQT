@@ -74,7 +74,7 @@ def _symbol_of(ts_code: str) -> str:
 
 def _fetch_date(pro, dd: str) -> pd.DataFrame:
     """Page float_date=dd until empty (Tushare 6000-row cap). Returns df or empty."""
-    chunks, offset = [], 0
+    chunks, offset, pages = [], 0, 0
     while True:
         for attempt in range(RETRY_N):
             try:
@@ -88,6 +88,10 @@ def _fetch_date(pro, dd: str) -> pd.DataFrame:
             break
         chunks.append(pg)
         offset += len(pg)
+        pages += 1
+        if pages >= 30:
+            print(f"    share_float {dd}: page fuse hit at {pages} pages, stopping")
+            break
         time.sleep(SLEEP_S)
     if not chunks:
         return pd.DataFrame(columns=KEEP)
@@ -150,6 +154,7 @@ def main():
         .sort_values(["symbol", "float_date"])
         .reset_index(drop=True)
     )
+    full = full.dropna(subset=["float_date"]).reset_index(drop=True)
     full = full[KEEP]
     print(f"\nFetched: {len(full):,} rows, {full['symbol'].nunique():,} symbols")
     print(

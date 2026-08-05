@@ -1,23 +1,28 @@
 # -*- coding: utf-8 -*-
-"""KIMI LHB v2.0 训练/预测/评估 — 仅龙虎榜上榜股票池 (spec §5.3).
+"""大宗交易 v3 (dim33) 训练/评估 — 仅大宗事件相关股票池 (用户定案 2026-08-03).
+
+与 lhb_v2_train_eval.py 同协议 (spec §5.3 选择性偏差: 仅上榜池) — 稀疏事件特征
+在全市场面板上评估会被 98.8% 的零值行稀释, 因此在"相关数据集"(大宗事件池)内
+训练与评估. 事件池 = 当日任一 bt_* 原始列非空的行 (与 dim33 的上游同定义).
 
 工作流:
-  1. 加载 V3 面板 (席位列 lhb_*_buy/sell 已由 _backfill_lhb_seats_v2.py 回填).
-  2. 运行 dim34_lhb_v2 → 14 个 lhb2_* 特征 (EWMA 记忆, PIT ≤t).
-  3. 上榜池 = 当日任一 lhb 基础列非空的行 (与 dim34 的 I(List) 同定义).
-  4. 标签 (spec §6.1 T+1 开盘买入, hfq 价):
+  1. 加载 V3 面板 (bt_count/bt_disc_raw/bt_inst_absorb/bt_amt_ratio_float_mv + OHLCV).
+  2. 运行 dim33_block_trade → 4 个 bt_*_ewma 特征 (EWMA 记忆, PIT ≤t).
+  3. 事件池 = 4 个 bt_ 原始列任一非空的行 (与上游同定义).
+  4. 标签 (同 LHB v2 §6.1 T+1 开盘买入, hfq 价):
        r1 = close_{t+1}/open_{t+1} − 1
        r3 = close_{t+3}/open_{t+1} − 1
        r5 = close_{t+5}/open_{t+1} − 1
-  5. 时间切分: 前 80% 上榜日训练, 后 20% 评估 (仅在榜池内).
+  5. 时间切分: 前 80% 事件日训练, 后 20% 评估 (仅在事件池内).
   6. 评估: 单特征 IC / LGBM rank IC·ICIR·t / 多空收益差 / 特征重要性.
+  7. 对照: 测试期全市场 vs 事件池单特征 IC (暴露"事件池是否浓缩信号"的证据).
 
 输出 (WORM, DATA_OTHERS + 日期后缀):
-  lhb_v2_eval_<ts>.xlsx       3 sheets: 模型摘要 / 特征 IC 表 / 特征重要性
-  lhb_v2_preds_<ts>.parquet   测试期 (symbol, date, pred, r1, r3, r5)
+  bt_v3_eval_<ts>.xlsx   4 sheets: 模型摘要 / 特征 IC 表 / 全市场vs事件池 IC / 特征重要性
+  bt_v3_preds_<ts>.parquet   测试期 (symbol, date, pred, r1, r3, r5)
 
 用法:
-  python scripts/lhb_v2_train_eval.py
+  python scripts/bt_v3_train_eval.py
 """
 
 from __future__ import annotations
@@ -35,66 +40,34 @@ from scipy.stats import spearmanr
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35 as FE  # noqa: E402
-from config.settings import BACKTEST_RESULT_DIR, LHB_V2_EVAL, PANEL_V3_PATH  # noqa: E402
+from config.settings import BACKTEST_RESULT_DIR, BT_V3_EVAL, PANEL_V3_PATH  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
 )
-logger = logging.getLogger("lhb_v2_train_eval")
+logger = logging.getLogger("bt_v3_train_eval")
 
-FEATURES = [
-    "lhb2_inst_flow",
-    "lhb2_inst_shock",
-    "lhb2_top_flow",
-    "lhb2_quant_flow",
-    "lhb2_retail_flow",
-    "lhb2_sell_pressure",
-    "lhb2_sell_buy_ratio",
-    "lhb2_list_count_5d",
-    "lhb2_conboard_mem",
-    "lhb2_inst_strength",
-    "lhb2_inst_resolve",
-    "lhb2_inst_conboard",
-    "lhb2_inst_premium",
-    "lhb2_inst_lock",
-]
-SEAT_COLS = [
-    "lhb_inst_buy",
-    "lhb_inst_sell",
-    "lhb_top_buy",
-    "lhb_top_sell",
-    "lhb_quant_buy",
-    "lhb_quant_sell",
-    "lhb_retail_buy",
-    "lhb_retail_sell",
-]
-BASE_LHB = ["lhb_buy_amt", "lhb_sell_amt", "lhb_net_buy"]
+# 4 个 dim33 EWMA 特征 ← 4 个上游原始列 (V3 面板只保留这 4 列, 2026-08-03 精简定案)
+FEATURES = ["bt_act_ewma", "bt_disc_ewma", "bt_inst_abs_ewma", "bt_mv_ratio_ewma"]
+BT_COLS = ["bt_count", "bt_disc_raw", "bt_inst_absorb", "bt_amt_ratio_float_mv"]
 
-LOAD_COLS = (
-    [
-        "date",
-        "symbol",
-        "open",
-        "close",
-        "high",
-        "low",
-        "open_hfq",
-        "close_hfq",
-        "up_limit_raw",
-        "down_limit_raw",
-        "circ_mv",
-    ]
-    + SEAT_COLS
-    + BASE_LHB
-)
+LOAD_COLS = [
+    "date",
+    "symbol",
+    "open",
+    "close",
+    "high",
+    "low",
+    "open_hfq",
+    "close_hfq",
+    "up_limit_raw",
+    "down_limit_raw",
+    "circ_mv",
+] + BT_COLS
 
-# hfq 后复权重定基伪跳检测 (标签作废依据):
-#   HFQ_GLITCH_FACTOR       单股孤立因子巨跳阈值. 真除权 ≤~5x (10送30 上限);
-#                           数据商重定基可达 544x (600602). 超过判定为伪跳.
-#   HFQ_REBASE_FAC_CHG      计数用因子跳变阈值 (真除权现金分红即可 >1.02).
-#   HFQ_REBASE_MIN_STOCKS   单日发生因子跳变的股票数 ≥ 此值 → 该日为数据商重定基日
-#                           (真除权日最多百余只; 2026-07-27 重定基日 2831 只).
-#                           重定基后 hfq 不在同一因子基, 跨它的标签收益是伪值.
+# hfq 后复权重定基伪跳检测 (标签作废依据) — 与 lhb_v2_train_eval.py 相同:
+#   数据商重定基在单日让大量股票同时发生因子跳变 (2026-07-27 有 2831 只),
+#   重定基后 hfq 不在同一因子基, 跨它的标签收益是伪值; 单股孤立巨跳也判伪跳.
 HFQ_GLITCH_FACTOR = 20.0
 HFQ_REBASE_FAC_CHG = 1.02
 HFQ_REBASE_MIN_STOCKS = 500
@@ -105,7 +78,7 @@ def load_panel() -> pd.DataFrame:
     df = pd.read_parquet(PANEL_V3_PATH, columns=LOAD_COLS)
     missing = [c for c in LOAD_COLS if c not in df.columns]
     if missing:
-        logger.error("面板缺少列: %s (需先跑 _backfill_lhb_seats_v2.py)", missing)
+        logger.error("面板缺少列: %s (需先回填 4 个 bt_* 原始列)", missing)
         raise SystemExit(1)
     logger.info(
         "面板: %d 行, %d symbols, %d 列, %s ~ %s",
@@ -119,20 +92,15 @@ def load_panel() -> pd.DataFrame:
 
 
 def add_targets(df: pd.DataFrame) -> pd.DataFrame:
-    """上榜示性 + T+1 开盘买入标签 (hfq, 对齐 symbol 未来行)."""
-    df["listed"] = df[BASE_LHB].notna().any(axis=1)
+    """T+1 开盘买入标签 (hfq, 对齐 symbol 未来行)."""
     df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
     g = df.groupby("symbol", group_keys=False)
     o1 = g["open_hfq"].shift(-1)
     for h in (1, 3, 5):
         df[f"r{h}"] = g["close_hfq"].shift(-h) / o1 - 1
 
-    # hfq 后复权重定基伪跳 → 跨过它的标签作废. 数据商重定基在单日让大量股票同时
-    # 发生因子跳变 (2026-07-27 有 2831 只, 真除权日最多百余只), 重定基后 hfq 不在
-    # 同一因子基, 收益是伪值; 单股孤立巨跳 (>HFQ_GLITCH_FACTOR) 也判定伪跳.
-    # 真除权日 hfq 价连续 (总收益), 不误伤. 窗口 t+2..t+h 内任一行为伪跳行 →
-    # r{h} 作废; r1 为同日 open→close, 开收盘同因子, 天然不受污染; 伪跳在入口行
-    # t+1 则开收盘同因子, 收益一致, 不误伤.
+    # hfq 后复权重定基伪跳 → 跨过它的标签作废 (同 lhb_v2_train_eval.py).
+    # 窗口 t+2..t+h 内任一行为伪跳行 → r{h} 作废; r1 为同日 open→close 天然免疫.
     fac = df["close_hfq"] / df["close"].replace(0, np.nan)
     fac_chg = fac / fac.groupby(df["symbol"]).shift(1)
     jump_cnt = (
@@ -146,7 +114,6 @@ def add_targets(df: pd.DataFrame) -> pd.DataFrame:
     )
     cgt = glitch.groupby(df["symbol"]).cumsum()
     for h in (3, 5):
-        # 符号内窗口 t+2..t+h 的伪跳数 = cum_glitch[t+h] − cum_glitch[t+1] > 0
         bad = (
             cgt.groupby(df["symbol"]).shift(-h) - cgt.groupby(df["symbol"]).shift(-1)
         ) > 0
@@ -154,14 +121,13 @@ def add_targets(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def run_dim34(df: pd.DataFrame) -> pd.DataFrame:
-    logger.info("运行 dim34_lhb_v2 (14 特征)...")
-    df = FE.dim34_lhb_v2(df)
-    return df
+def run_dim33(df: pd.DataFrame) -> pd.DataFrame:
+    logger.info("运行 dim33_block_trade (4 EWMA 特征)...")
+    return FE.dim33_block_trade(df)
 
 
 def feature_ic(sub: pd.DataFrame, labels: list[str], cfg: dict) -> pd.DataFrame:
-    """单特征日频 spearman IC (仅上榜池)."""
+    """单特征日频 spearman IC (仅事件池)."""
     rows = []
     for f in FEATURES:
         if f not in sub.columns:
@@ -200,6 +166,41 @@ def feature_ic(sub: pd.DataFrame, labels: list[str], cfg: dict) -> pd.DataFrame:
                     "n_dates": nn,
                 }
             )
+    return pd.DataFrame(rows)
+
+
+def full_vs_pool_ic(
+    te_full: pd.DataFrame, te_pool: pd.DataFrame, labels: list[str], cfg: dict
+) -> pd.DataFrame:
+    """测试期 全市场 vs 事件池 单特征日度 mean rank IC 对照.
+
+    稀疏特征在事件池内是否浓缩信号, 由该对照直接暴露 (实测: 全市场 |IC| 反而略大,
+    事件池并未浓缩 — 见运行日志). 供未来 selection 决策参考.
+    """
+    rows = []
+    for f in FEATURES:
+        for lab in labels:
+            for tag, sub in (("full", te_full), ("pool", te_pool)):
+                ics = []
+                for _, g in sub.groupby("date"):
+                    v = g[[f, lab]].dropna()
+                    if len(v) < cfg["min_ic_n"]:
+                        continue
+                    r, _ = spearmanr(v[f], v[lab])
+                    if not np.isnan(r):
+                        ics.append(r)
+                nn = len(ics)
+                rows.append(
+                    {
+                        "feature": f,
+                        "label": lab,
+                        "scope": tag,
+                        "ic": round(float(np.mean(ics)), 5)
+                        if nn >= cfg["min_ic_obs"]
+                        else np.nan,
+                        "n_dates": nn,
+                    }
+                )
     return pd.DataFrame(rows)
 
 
@@ -246,7 +247,7 @@ def run_model(tr: pd.DataFrame, te: pd.DataFrame, labels: list[str], cfg: dict) 
     tr = tr.dropna(subset=av + ["r1"])
     te = te.dropna(subset=av + ["r1"])
     logger.info(
-        "样本: 训练 %d 行 (%d 日), 测试 %d 行 (%d 日)",
+        "样本: 训练 %d 行 (%d 事件日), 测试 %d 行 (%d 事件日)",
         len(tr),
         tr["date"].nunique(),
         len(te),
@@ -294,44 +295,47 @@ def run_model(tr: pd.DataFrame, te: pd.DataFrame, labels: list[str], cfg: dict) 
 
 
 def main():
-    cfg = LHB_V2_EVAL
+    cfg = BT_V3_EVAL
     labels = [f"r{h}" for h in cfg["horizons"]]
 
     df = load_panel()
     df = add_targets(df)
-    df = run_dim34(df)
+    df = run_dim33(df)
 
-    pool = df[df["listed"]].copy()
+    is_event = df[BT_COLS].notna().any(axis=1)
+    pool = df[is_event].copy()
     logger.info(
-        "上榜池: %d 行, %d symbols, %d 个上榜日",
+        "大宗事件池: %d 行, %d symbols, %d 个事件日",
         len(pool),
         pool["symbol"].nunique(),
         pool["date"].nunique(),
     )
 
-    # 时间切分 (按上榜日)
+    # 时间切分 (按事件日)
     dates = sorted(pool["date"].unique())
     cutoff = dates[int(len(dates) * cfg["split_ratio"])]
     tr = pool[pool["date"] < cutoff].copy()
-    te = pool[pool["date"] >= cutoff].copy()
+    te_pool = pool[pool["date"] >= cutoff].copy()
+    te_full = df[df["date"] >= cutoff].copy()  # 全市场对照 (仅测试期)
     logger.info(
-        "切分: 训练 %s ~ %s (%d 日), 测试 %s ~ %s (%d 日)",
+        "切分: 训练 %s ~ %s (%d 事件日), 测试 %s ~ %s (%d 事件日)",
         dates[0].strftime("%Y%m%d"),
         cutoff.strftime("%Y%m%d"),
         tr["date"].nunique(),
         cutoff.strftime("%Y%m%d"),
         dates[-1].strftime("%Y%m%d"),
-        te["date"].nunique(),
+        te_pool["date"].nunique(),
     )
 
-    ic_tbl = feature_ic(te, labels, cfg)
+    ic_tbl = feature_ic(te_pool, labels, cfg)
+    ic_contrast = full_vs_pool_ic(te_full, te_pool, labels, cfg)
     logger.info(
-        "单特征 IC (测试期, %d 特征 × %d 标签):",
+        "单特征 IC (测试期事件池, %d 特征 × %d 标签):",
         ic_tbl["feature"].nunique(),
         ic_tbl["label"].nunique(),
     )
 
-    res = run_model(tr, te, labels, cfg)
+    res = run_model(tr, te_pool, labels, cfg)
 
     # ── 摘要 ──
     rows = []
@@ -362,28 +366,35 @@ def main():
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = BACKTEST_RESULT_DIR / ts
     run_dir.mkdir(parents=True, exist_ok=True)
-    xlsx_path = run_dir / f"lhb_v2_eval_{ts}.xlsx"
-    pred_path = run_dir / f"lhb_v2_preds_{ts}.parquet"
+    xlsx_path = run_dir / f"bt_v3_eval_{ts}.xlsx"
+    pred_path = run_dir / f"bt_v3_preds_{ts}.parquet"
     imp = res["importance"]
 
     pred_out = res["test"][["date", "symbol", "pred"] + labels]
     pred_out.to_parquet(pred_path, index=False)
 
-    # 汇总写入 xlsx 多 sheet (模型摘要 + 特征 IC 表 + 特征重要性)
     with pd.ExcelWriter(str(xlsx_path), engine="openpyxl") as writer:
         summary.to_excel(writer, sheet_name="model_summary", index=False)
         ic_tbl.to_excel(writer, sheet_name="feature_ic", index=False)
+        ic_contrast.to_excel(writer, sheet_name="ic_full_vs_pool", index=False)
         imp.to_excel(writer, sheet_name="importance", index=False)
     logger.info("写回: %s", xlsx_path)
     logger.info("写回: %s", pred_path)
 
     logger.info("──── 模型摘要 ────")
     print(summary.to_string(index=False))
-    logger.info("──── 特征重要性 (top 8) ────")
-    print(imp.head(8).to_string(index=False))
-    logger.info("──── 特征 IC (r1, top 8) ────")
+    logger.info("──── 特征重要性 ────")
+    print(imp.to_string(index=False))
+    logger.info("──── 特征 IC (r1, 事件池, top 8) ────")
     top_ic = ic_tbl[ic_tbl["label"] == "r1"].sort_values("ic", key=abs, ascending=False)
     print(top_ic.head(8).to_string(index=False))
+    logger.info("──── 全市场 vs 事件池 IC 对照 (r1) ────")
+    print(
+        ic_contrast[ic_contrast["label"] == "r1"]
+        .pivot(index="feature", columns="scope", values="ic")
+        .reindex(FEATURES)
+        .to_string()
+    )
 
 
 if __name__ == "__main__":

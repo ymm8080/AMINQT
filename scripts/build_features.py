@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from app.pipeline1.feature_selector import BruteForceGenerator
+from app.pipeline1.feature_selector import BRUTE_FAMILIES, BruteForceGenerator
 from app.pipeline1.feature_registry import FeatureRegistry
 from app.pipeline1.train_runner import prepare_board_frame
 from config.settings import data_others_path
@@ -208,19 +208,10 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
         import tempfile
         import pyarrow.parquet as pq
 
-        FAMILIES = [
-            "pct_change",
-            "rolling_mean",
-            "rolling_std",
-            "rolling_max",
-            "diff",
-            "momentum",
-            "EMA",
-        ]
         gen = BruteForceGenerator()
         raw_cols = gen._eligible(df)
         logger.info(
-            f"  BruteForce: {len(raw_cols)} eligible raw cols x {len(FAMILIES)} families"
+            f"  BruteForce: {len(raw_cols)} eligible raw cols x {len(BRUTE_FAMILIES)} families"
         )
 
         tmp_dir = tempfile.mkdtemp(prefix="brute_main_")
@@ -234,7 +225,7 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
             )
 
             total_new_cols = 0
-            for fam in FAMILIES:
+            for fam in BRUTE_FAMILIES:
                 new = gen.generate_family(df, fam, raw_cols=raw_cols, dtype="float32")
                 fam_path = os.path.join(tmp_dir, f"{fam}.parquet")
                 new.to_parquet(fam_path, index=False)

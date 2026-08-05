@@ -69,6 +69,10 @@ SCHEMA_FIELDS = [
     "pred_q10",
     "pred_q50",
     "pred_q90",
+    # E7 闸3 用 2d/3d/5d 中位数 (2026-08-05 用户定案, 替代 1d pred_q50)
+    "pred_q50_2d",
+    "pred_q50_3d",
+    "pred_q50_5d",
     "uncertainty_width",
     "pain_prob",
     "announce_score",
@@ -307,7 +311,9 @@ class ListGenerator:
              entry_prob 参数比率收紧, 不引入新常数)
           2. compound_ret (1d/3d/5d 净预测按 COMPOUND_W 加权) > 0 — 净预期为正,
              成本已在训练标签口径内扣除
-          3. pred_q50 > 0 (E1 分布中位数也为正; 列存在时)
+          3. pred_q50_2d/3d/5d > 0 (E1 2d/3d/5d 可执行视界中位数均为正;
+             2026-08-05 用户定案: 用 2d/3d/5d 中位数替代 1d, 1d 不可执行易误杀;
+             旧 bundle 无 2d/3d/5d 列时回退 1d pred_q50)
           4. bear 额外要求 pred_ret_1d > 0 (最近端净预期为正) [E11]
         符合票可能为 0 — 这是特性不是故障.
         escape hatch (测试/研究): entry_prob<=0 跳过 prob 闸, entry_ret_mult<=0 跳过边际闸.
@@ -345,7 +351,16 @@ class ListGenerator:
                     + w5 * df["pred_ret_5d"]
                 )
             ok &= compound > 0
-            if "pred_q50" in df.columns and df["pred_q50"].notna().any():
+            # 闸3 (2026-08-05): 2d/3d/5d 可执行视界中位数均须为正; 回退 1d pred_q50 (旧 bundle)
+            if all(c in df.columns for c in ("pred_q50_2d", "pred_q50_3d", "pred_q50_5d")):
+                ok &= (
+                    df["pred_q50_2d"].fillna(compound) > 0
+                ) & (
+                    df["pred_q50_3d"].fillna(compound) > 0
+                ) & (
+                    df["pred_q50_5d"].fillna(compound) > 0
+                )
+            elif "pred_q50" in df.columns and df["pred_q50"].notna().any():
                 ok &= df["pred_q50"].fillna(compound) > 0
             if is_bear:
                 ok &= df["pred_ret_1d"] > 0
@@ -367,6 +382,24 @@ class ListGenerator:
         if "date" in candidates.columns and candidates["date"].notna().any():
             return pd.Timestamp(candidates["date"].max())
         return pd.Timestamp(datetime.date.today())
+
+    @staticmethod
+    def _rank_by_d3_target(df: pd.DataFrame) -> pd.DataFrame:
+        """E7 准入后按 d3 目标排序: 0.5×norm(pred_ret_3d) + 0.5×norm(prob_up_3d).
+
+        用户 2026-08-05 定案: legacy 清单目标 = 最高 d3 涨幅 + d3 概率
+        (镜像并行 pipeline score_w 口径, 涨幅/概率按当批入选股 min-max 归一化).
+        缺列或 d3 涨幅/概率为常数 (归一化除零) → 回退 score 降序.
+        """
+        need = {"pred_ret_3d", "prob_up_3d"}
+        if need <= set(df.columns):
+            g, p = df["pred_ret_3d"], df["prob_up_3d"]
+            if g.max() > g.min() and p.max() > p.min():
+                blend = 0.5 * (g - g.min()) / (g.max() - g.min()) + 0.5 * (
+                    p - p.min()
+                ) / (p.max() - p.min())
+                return df.assign(d3_rank=blend).sort_values("d3_rank", ascending=False)
+        return df.sort_values("score", ascending=False)
 
     def emit(
         self,
@@ -421,8 +454,8 @@ class ListGenerator:
                 "empty": True,
                 "schema_version": SCHEMA_VERSION,
             }
-        # 按 score 降序取 TOP_N (行业分散在 list_generator 层面处理)
-        passed = passed.sort_values("score", ascending=False)
+        # 按 d3 目标排序取 TOP_N (用户 2026-08-05: 最高 d3 涨幅+d3 概率; 行业分散在清单层面)
+        passed = self._rank_by_d3_target(passed)
         # 行业集中度限制: 同一行业 <= MAX_PER_INDUSTRY 只
         final = self.apply_industry_limit(passed).reset_index(drop=True)
         # D18 降仓 → 仅 Top 5; 正常 → Top 15
@@ -430,7 +463,7 @@ class ListGenerator:
         final = final.head(top_n)
         # [FINAL STOCK SCAN] 风控过滤: 近一周有大宗交易的股票不买 (用户定案 2026-08-03)
         try:
-            from .risk_overlays import block_trade_recent_scan
+            from .risk_overlays import block_trade_recent_scan, share_float_upcoming_scan
 
             scan_ref = (
                 pd.Timestamp(ref_date) if ref_date else self._scan_ref_date(candidates)
@@ -440,6 +473,15 @@ class ListGenerator:
                 final = final[~final["symbol"].isin(excluded)].reset_index(drop=True)
                 logger.warning(
                     "FINAL STOCK SCAN: 名单剔除 %d 只 (剩 %d 只)",
+                    len(excluded),
+                    len(final),
+                )
+            # 二次扫描: 近月有大规模解禁(解锁)的股票不买
+            excluded = share_float_upcoming_scan(final["symbol"].tolist(), scan_ref)
+            if excluded:
+                final = final[~final["symbol"].isin(excluded)].reset_index(drop=True)
+                logger.warning(
+                    "FINAL STOCK SCAN: 解禁剔除 %d 只 (剩 %d 只)",
                     len(excluded),
                     len(final),
                 )
@@ -487,6 +529,9 @@ class ListGenerator:
             "pred_q10",
             "pred_q50",
             "pred_q90",
+            "pred_q50_2d",
+            "pred_q50_3d",
+            "pred_q50_5d",
             "uncertainty_width",
             "pain_prob",
             "announce_score",

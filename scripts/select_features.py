@@ -30,6 +30,7 @@ from app.pipeline1.feature_selector import (
     nan_filter,
     dedup_l2,
     gate_d_ablation,
+    apply_event_scope_screens,
 )
 from config.settings import data_others_path
 
@@ -127,6 +128,12 @@ def run_selection(df, board, label, dry_run=False):
         )
         pipeline = "gate_d"
         pool_size = len(valid)
+
+    # 子数据集 scope-IC 筛入 (事件类稀疏特征: 增减持/大宗/LHB), 与训练主链路
+    # (train_runner.select_features) 口径一致 — 在事件 scope 内评 IC 后并入精选集.
+    # MAIN 采样仅含 brute-force 列, event_col 缺失时自动跳过 (no-op); DUAL 全量
+    # 加载, 事件特征在此并入.
+    selected = apply_event_scope_screens(selected, df)
 
     elapsed = time.time() - t0
     result = {

@@ -124,11 +124,19 @@ class V35Predictor:
             "prob_up_5d",
         ]
         # [E1] 分位数分布预测 (bundle 含 quantile_models 时)
+        # 1d (向后兼容) + 2d/3d/5d (E7 闸3 自 2026-08-05 用 2d/3d/5d 中位数)
         if "quantile_models" in bundle:
             dist = bundle["quantile_models"].predict(X)
             for col in dist.columns:
                 latest[col] = dist[col].values
             keep += list(dist.columns)
+        for horizon in (2, 3, 5):
+            qkey = f"quantile_models_{horizon}d"
+            if qkey in bundle:
+                dist = bundle[qkey].predict(X)
+                for col in dist.columns:
+                    latest[f"{col}_{horizon}d"] = dist[col].values
+                keep += [f"{c}_{horizon}d" for c in dist.columns]
         # [E2] 痛苦预警 (bundle 含 pain_model 时)
         if "pain_model" in bundle:
             latest["pain_prob"] = bundle["pain_model"].predict_proba(X)

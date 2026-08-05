@@ -10,11 +10,15 @@ import pandas as pd
 import pytest
 
 from app.pipeline1.feature_selector import (
+    BRUTE_FAMILIES,
     BruteForceGenerator,
     FeatureSelector,
     dedup_l2,
     gate_d_ablation,
     nan_filter,
+    event_scope_mask,
+    daily_rank_ic,
+    scope_ic_union,
 )
 
 
@@ -824,3 +828,195 @@ class TestEndToEndMini:
                 valid, df, label_col="label_pm_1d_net", min_feats=5, sat_pct=0.95
             )
             assert len(selected) >= 5
+
+
+# ──────────────────────────────────────────────────────────
+# 子数据集 scope-IC 筛入 (事件类稀疏特征)
+# ──────────────────────────────────────────────────────────
+
+
+def _make_event_panel(n_symbols=12, n_dates=80, seed=7):
+    """Synthetic: 所有 symbol 都有事件 (day 30..50), 事件期 feat_sig 与 label 强相关."""
+    np.random.seed(seed)
+    symbols = [f"{i:06d}" for i in range(1, n_symbols + 1)]
+    dates = pd.bdate_range("2024-01-01", periods=n_dates)
+    rows = []
+    for sym in symbols:
+        for i, d in enumerate(dates):
+            rows.append({"symbol": sym, "date": d})
+    df = pd.DataFrame(rows)
+    df["label"] = np.random.randn(len(df))
+    df["feat_sig"] = np.nan
+    df["feat_weak"] = np.nan
+    df["feat_dense"] = np.random.randn(len(df))
+    for sym in symbols:
+        for i in range(30, 51):
+            m = (df["symbol"] == sym) & (df["date"] == dates[i])
+            df.loc[m, "feat_sig"] = df.loc[m, "label"] * 0.5 + np.random.randn(m.sum()) * 0.1
+            df.loc[m, "feat_weak"] = np.random.randn(m.sum()) * 0.01  # ~0 IC
+    return df
+
+
+def test_scope_ic_union_selects_signal_drops_noise():
+    df = _make_event_panel()
+    mask = event_scope_mask(df, "feat_sig", window=10)
+    assert int(mask.sum()) >= 20
+    # 事件期内强信号 → scope-IC 高
+    assert abs(daily_rank_ic(df, "feat_sig", "label", mask, min_cross=5)) > 0.3
+    # 弱噪声 → scope-IC ≈ 0
+    assert abs(daily_rank_ic(df, "feat_weak", "label", mask, min_cross=5)) < 0.1
+    sel = scope_ic_union(
+        ["feat_dense"],
+        df,
+        "feat_sig",
+        ["feat_sig", "feat_weak"],
+        ["label"],
+        window=10,
+        ic_bar=0.1,
+        min_support=5,
+        min_cross=5,
+    )
+    assert "feat_sig" in sel
+    assert "feat_weak" not in sel
+    assert "feat_dense" in sel  # 已精选的不重复并入
+
+
+def test_scope_ic_union_skips_when_no_event_support():
+    df = _make_event_panel()
+    df["no_event"] = np.nan  # 无事件列支撑 → 跳过
+    sel = scope_ic_union(["a"], df, "no_event", ["b"], ["label"], min_support=5)
+    assert sel == ["a"]
+
+
+def test_nan_filter_min_support_keeps_sparse_event_feature():
+    df = _make_event_panel()  # 12 symbols × 80 days = 960 rows
+    # 全局 NaN 率 > 0.95 但支撑充足 → min_support 豁免保留
+    df["sparse"] = np.nan
+    df.loc[df.index[:40], "sparse"] = np.random.randn(40)  # 40/960 → 95.8% NaN
+    assert df["sparse"].isna().mean() >= 0.95
+    # 默认(无 min_support) → 丢弃
+    assert nan_filter(["sparse"], df, 0.95) == []
+    # min_support=40 → 豁免保留 (支撑 40 >= 40)
+    assert nan_filter(["sparse"], df, 0.95, min_support=40) == ["sparse"]
+    # 支撑不足仍被拒
+    df["junk"] = np.nan
+    df.loc[df.index[:5], "junk"] = 1.0
+    assert nan_filter(["junk"], df, 0.95, min_support=40) == []
+
+
+def test_event_scope_screens_include_dim33_blocktrade():
+    from app.pipeline1.feature_selector import EVENT_SCOPE_SCREENS
+
+    screens = {s["name"]: s for s in EVENT_SCOPE_SCREENS}
+    assert "dim33_blocktrade" in screens
+    screen = screens["dim33_blocktrade"]
+    assert screen["event_col"] == "bt_count"
+    assert screen["feats"] == [
+        "bt_act_ewma",
+        "bt_disc_ewma",
+        "bt_inst_abs_ewma",
+        "bt_mv_ratio_ewma",
+    ]
+    assert screen["ic_bar"] == 0.01
+
+
+def test_scope_ic_union_merges_blocktrade_style_feature():
+    np.random.seed(7)
+    symbols = [f"{i:06d}" for i in range(1, 13)]
+    dates = pd.bdate_range("2024-01-01", periods=60)
+    df = pd.DataFrame(
+        [{"symbol": s, "date": d} for s in symbols for d in dates]
+    )
+    df["label"] = np.random.randn(len(df))
+    df["bt_count"] = np.nan
+    df["bt_act_ewma"] = np.nan
+    df["bt_weak"] = np.nan
+    for sym in symbols:
+        for d in dates[25:41]:  # 事件窗口: 仅事件期内特征与 label 强相关
+            m = (df["symbol"] == sym) & (df["date"] == d)
+            df.loc[m, "bt_count"] = 1
+            df.loc[m, "bt_act_ewma"] = (
+                df.loc[m, "label"].values * 0.5 + np.random.randn(m.sum()) * 0.1
+            )
+            df.loc[m, "bt_weak"] = np.random.randn(m.sum()) * 0.01  # ~0 IC
+    sel = scope_ic_union(
+        ["dense_base"],
+        df,
+        "bt_count",
+        ["bt_act_ewma", "bt_weak"],
+        ["label"],
+        window=10,
+        ic_bar=0.1,
+        min_support=5,
+        min_cross=5,
+        min_dates=5,
+    )
+    assert "bt_act_ewma" in sel
+    assert "bt_weak" not in sel
+    assert "dense_base" in sel  # 已精选的不重复并入
+
+
+# ═══════════════════════════════════════════════════════════════════
+# RAM 安全优化 — 族批 generate_family 与 generate() 的 parity
+# ═══════════════════════════════════════════════════════════════════
+
+
+def _old_bruteforce_dedup(df, cfg):
+    """旧 _run_bruteforce_dedup 参考实现 (全量 generate + join)."""
+    generator = BruteForceGenerator()
+    raw_cols = generator._eligible(df)
+    new = generator.generate(df, raw_cols=raw_cols)
+    df_exp = df.join(new)
+    all_feats = [
+        c
+        for c in df_exp.columns
+        if c not in BruteForceGenerator.EXCLUDE_COLS
+        and not c.startswith("label_")
+        and df_exp[c].dtype in ("float64", "int64")
+    ]
+    valid = nan_filter(all_feats, df_exp, cfg.get("nan_threshold", 0.95))
+    return dedup_l2(valid, df_exp, cfg.get("dedup_threshold", 0.7))
+
+
+def test_generate_family_parity_with_generate():
+    """族批 generate_family 拼接 == generate(): 列名集合相同 + 值 allclose.
+
+    保证 RAM 优化 (generate → generate_family 族批) 不改变候选特征, 预测能力不变.
+    """
+    df = _make_small_df(n_symbols=5, n_dates=60)
+    gen = BruteForceGenerator()
+    raw = gen._eligible(df)
+    assert len(raw) >= 3, f"Expected >=3 eligible raw cols, got {len(raw)}"
+
+    old = gen.generate(df, raw_cols=raw)
+    fams = [
+        gen.generate_family(df, fam, raw_cols=raw, dtype="float32")
+        for fam in BRUTE_FAMILIES
+    ]
+    new_all = pd.concat(fams, axis=1)
+
+    assert set(old.columns) == set(new_all.columns), (
+        f"列名集合不一致: old={len(old.columns)} new={len(new_all.columns)}"
+    )
+    assert len(new_all.columns) > 50
+    for c in old.columns:
+        assert np.allclose(
+            old[c].values, new_all[c].values, equal_nan=True, rtol=1e-4, atol=1e-5
+        ), f"列 {c} 值不一致"
+
+
+def test_run_bruteforce_dedup_ram_safe_parity():
+    """新族批 _run_bruteforce_dedup 与旧全量实现 selected 列表逐元素相同."""
+    df = _make_small_df(n_symbols=6, n_dates=50)
+    cfg = {"nan_threshold": 0.95, "dedup_threshold": 0.7}
+    old = _old_bruteforce_dedup(df, cfg)
+    assert len(old) > 10, "参考实现应选出 >10 特征"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        sel = FeatureSelector(registry_dir=tmp)
+        new = sel._run_bruteforce_dedup(df, "main", cfg)
+
+    assert new == old, (
+        f"RAM 优化改变选择: old={len(old)} new={len(new)}; "
+        f"diff={set(old) ^ set(new)}"
+    )

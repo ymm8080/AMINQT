@@ -17,6 +17,9 @@ E6/E8/E9 组合构建风控覆盖层 + P23.1-P23.4 分位数驱动扩展 (IMPLEM
 from __future__ import annotations
 
 import logging
+import os
+
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -64,6 +67,12 @@ BLOCK_TRADE_STALE_MAX_DAYS = int(_FS_CFG.get("stale_max_days", 7))
 SHARE_FLOAT_CACHE = _FS_CFG.get(
     "share_float_cache",
     "data/supply_cache/alt_data/share_float/share_float_full.parquet",
+)
+# 相对路径按 repo 根解析 (与 _daily_fetch.py 一致), 避免 CWD != repo root 时读不到缓存
+SHARE_FLOAT_CACHE = (
+    SHARE_FLOAT_CACHE
+    if os.path.isabs(SHARE_FLOAT_CACHE)
+    else str(Path(__file__).resolve().parent.parent / SHARE_FLOAT_CACHE)
 )
 UNLOCK_WINDOW_DAYS = int(_FS_CFG.get("unlock_window_days", 30))
 UNLOCK_RATIO_THRESHOLD = float(_FS_CFG.get("unlock_ratio_threshold", 5.0))
@@ -445,15 +454,21 @@ def share_float_upcoming_scan(
     if len(sf) == 0:
         return set()
     sf = sf.dropna(subset=["ann_date", "float_date"])
-    if sf["ann_date"].dtype == object:
-        sf["ann_date"] = pd.to_datetime(
-            sf["ann_date"], format="%Y%m%d", errors="coerce"
-        )
-    if sf["float_date"].dtype == object:
-        sf["float_date"] = pd.to_datetime(
-            sf["float_date"], format="%Y%m%d", errors="coerce"
-        )
+    def _parse_dates(col: pd.Series) -> pd.Series:
+        if col.dtype != object:
+            return col
+        parsed = pd.to_datetime(col, format="%Y%m%d", errors="coerce")
+        bad = parsed.isna() & col.notna()
+        if bad.any():
+            parsed.loc[bad] = pd.to_datetime(col.loc[bad], errors="coerce")
+        return parsed
+
+    sf["ann_date"] = _parse_dates(sf["ann_date"])
+    sf["float_date"] = _parse_dates(sf["float_date"])
     sf = sf.dropna(subset=["ann_date", "float_date"])
+    if sf["ann_date"].isna().all() or sf["float_date"].isna().all():
+        logger.warning("FINAL STOCK SCAN: 解禁缓存日期无法解析, 跳过扫描")
+        return set()
     sf = sf[sf["ann_date"] <= ref]  # PIT-safe: 只认名单日前已公告的解禁
     if len(sf) == 0:
         return set()
@@ -465,6 +480,7 @@ def share_float_upcoming_scan(
             stale_max_days,
         )
         return set()
+    sf["float_ratio"] = pd.to_numeric(sf["float_ratio"], errors="coerce")
     cutoff = ref + pd.Timedelta(days=window_days)
     win = sf[(sf["float_date"] > ref) & (sf["float_date"] <= cutoff)]
     if len(win) == 0:

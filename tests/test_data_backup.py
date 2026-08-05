@@ -52,6 +52,17 @@ def test_wildcard_keeper_picks_newest_source(tmp_path):
     ).exists()
 
 
+def test_absolute_keeper_outside_root(tmp_path):
+    # 仓库外主数据 (如 D:/AMINQT/PARQUET/) 用绝对路径 keeper 备份
+    ext = tmp_path / "external" / "panel_full_enriched_v3.parquet"
+    _mk(ext)
+    out = backup_keepers(
+        tmp_path, tmp_path / "bk", [str(ext)], "20260803"
+    )
+    assert (tmp_path / "bk/panel_full_enriched_v3__20260803.parquet").exists()
+    assert out[str(ext)].startswith("ok")
+
+
 def test_missing_keeper_skipped_without_error(tmp_path):
     out = backup_keepers(tmp_path, tmp_path / "bk", ["data/nope.parquet"], "20260731")
     assert "skip" in out["data/nope.parquet"]

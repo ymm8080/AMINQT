@@ -74,6 +74,34 @@ def find_bundles(
     return bundles
 
 
+def resolve_current_bundles(model_dir: str = "models/pipeline1") -> dict[str, str]:
+    """按 current_meta.json 解析当前生效模型包: {'main': path, 'dual': path}.
+
+    与 find_bundles 不同, 本函数以 current_meta.json 的 file 字段为准
+    (训练/量化拼接后会提升当前指针并写入元数据), 而非文件名字典序.
+    元数据缺失/损坏或文件不存在 → 回退 find_bundles(model_dir) 取最新可推理包.
+    """
+    try:
+        from .model_meta import load_modules
+
+        mods = load_modules()
+        bundles: dict[str, str] = {}
+        for board, info in mods.items():
+            fname = (info or {}).get("file")
+            if not fname:
+                continue
+            path = os.path.join(model_dir, fname)
+            if os.path.exists(path):
+                bundles[board] = path
+            else:
+                logger.warning("[%s] current_meta 指向文件缺失: %s", board, path)
+        if bundles:
+            return bundles
+    except Exception:
+        logger.warning("current_meta 解析失败, 回退 find_bundles", exc_info=True)
+    return find_bundles(model_dir)
+
+
 def run_prediction(
     panel: pd.DataFrame,
     trade_date: str,

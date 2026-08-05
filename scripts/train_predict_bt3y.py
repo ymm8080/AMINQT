@@ -11,7 +11,9 @@
 
 import logging
 import os
+import shutil
 import sys
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
@@ -19,7 +21,7 @@ import pandas as pd
 
 from app.pipeline1.train_runner import run_training
 from app.pipeline1.predict_runner import run_prediction
-from config.settings import PANEL_V3_PATH
+from config.settings import PANEL_V3_PATH, PROJECT_ROOT
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -28,6 +30,29 @@ logger = logging.getLogger("train_predict_bt3y")
 
 YEARS = 3
 LIST_DIR = "data/lists"
+MODEL_DIR = "models/pipeline1"
+
+
+def _backup_keepers(trade_date: str) -> None:
+    """WORM 备份关键文件到仓库外 (防 automation git 误删). 失败仅告警."""
+    try:
+        from app.core.config_loader import load_config
+        from app.pipeline1.backup import backup_keepers
+
+        bk = (load_config("data_pipeline_config") or {}).get("backup") or {}
+        if not bk.get("enabled"):
+            return
+        res = backup_keepers(
+            root=PROJECT_ROOT,
+            backup_dir=bk.get("dir"),
+            keepers=bk.get("keepers") or [],
+            trade_date=trade_date,
+            retention=int(bk.get("retention") or 2),
+        )
+        for pat, msg in res.items():
+            logger.info("backup %s: %s", pat, msg)
+    except Exception as exc:
+        logger.warning("backup_keepers 失败 (非阻塞): %s", exc)
 
 
 def main() -> None:
@@ -53,6 +78,10 @@ def main() -> None:
     # ── 1. 3 年训练窗口 ──
     cutoff = latest - pd.DateOffset(years=YEARS)
     train_panel = panel[panel["date"] >= cutoff].copy()
+    del panel  # 训练期释放全量面板, 降低峰值内存 (本机 commit 上限紧张)
+    import gc
+
+    gc.collect()
     logger.info(
         "训练窗口: %s .. %s (%d rows, %d stocks)",
         train_panel["date"].min().date(),
@@ -78,7 +107,39 @@ def main() -> None:
             res.get("switched"),
         )
 
+    # ── 2.5 提升当前指针 + 更新元数据 (OOS 合格才切换, 保留旧模型) ──
+    # 使后续独立预测 (predict_only / 看板) 用刚训练好的模型, 而非旧 tag.
+    from app.pipeline1.model_meta import load_modules, save_modules
+
+    mods = load_modules()
+    for b, res in results.items():
+        if not res.get("switched"):
+            logger.warning(
+                "[%s] OOS 未过 (weighted_IC=%.4f), 保留旧当前模型",
+                b,
+                res["oos"].get("weighted_ic", 0.0),
+            )
+            continue
+        cur = os.path.join(MODEL_DIR, f"{b}_current.pkl")
+        backup_cur = os.path.join(MODEL_DIR, f"{b}_current_{trade_date}_backup.pkl")
+        if os.path.exists(cur) and not os.path.exists(backup_cur):
+            shutil.copy(cur, backup_cur)
+            logger.info("[%s] 旧当前模型备份 → %s", b, os.path.basename(backup_cur))
+        shutil.copy(res["path"], cur)
+        mods[b] = {
+            "tag": tag,
+            "file": os.path.basename(res["path"]),
+            "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }
+        logger.info("[%s] 当前模型 → %s (tag=%s)", b, os.path.basename(res["path"]), tag)
+    if mods:
+        save_modules(mods)
+        logger.info("current_meta.json 更新: %s", mods)
+
     # ── 3. 预测 + 名单 (全量面板, 含当日 bt_ EWMA 记忆) ──
+    del train_panel  # 训练结束释放切片, 再重读全量面板做预测 (峰值内存解耦)
+    gc.collect()
+    panel = pd.read_parquet(PANEL_V3_PATH)
     os.makedirs(LIST_DIR, exist_ok=True)
     result = run_prediction(
         panel=panel,
@@ -93,6 +154,7 @@ def main() -> None:
             result.get("mode"),
             result.get("valve_state"),
         )
+        _backup_keepers(trade_date)  # 模型/元数据已更新, 仍备份
         return
 
     # ── 4. 按板块拆 MAIN/DUAL (board 值: main / GEM / STAR) ──
@@ -111,6 +173,8 @@ def main() -> None:
             print(f"\n=== {name.upper()}: 0 只 ===")
     if "board" in lst.columns:
         print(f"\n合计: {lst['board'].value_counts().to_dict()}")
+
+    _backup_keepers(trade_date)
 
 
 if __name__ == "__main__":

@@ -10,8 +10,8 @@ backup:
   enabled: true
   dir: "D:/AMINQT/DATA_BACKUP"       # 仓库外备份目录 (勿放仓库内!)
   retention: 2                       # 每个文件保留最新 N 份 (WORM: 不覆盖, 只清理最旧)
-  keepers:                           # 相对仓库根目录, 支持 glob (取 mtime 最新者)
-    - data/panel_full_enriched_v3.parquet
+  keepers:                           # 相对仓库根目录或绝对路径, 支持 glob (取 mtime 最新者)
+    - D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet   # V3 主面板 (仓库外)
     - data/panel_4000.parquet
     - data/cyq_panel.parquet
     - data/cyq_panel_full.parquet
@@ -19,6 +19,11 @@ backup:
     - data/panel_18m.parquet
     - data/panel_baostock.parquet
     - data/factor_registry/features_main_*.parquet
+    # 训练/预测产物 (当前指针 + 元数据 + 每日清单), 防 automation git 误删
+    - models/pipeline1/main_*.pkl
+    - models/pipeline1/dual_*.pkl
+    - models/pipeline1/current_meta.json
+    - data/lists/list_*.parquet
 
 # 数据供应链参数 (app/pipeline1/data_supply.py)
 data_supply:
@@ -67,5 +72,11 @@ panel_builder:
 # FINAL STOCK SCAN (出名单时的风控过滤, 用户定案 2026-08-03)
 final_stock_scan:
   block_trade_cache: "data/supply_cache/alt_data/block_trade/block_trade_full.parquet"
+  bt_v3_snapshot_cache: "data/supply_cache/alt_data/block_trade/bt_v3_snapshot_rolling.parquet"
   lookback_days: 5                  # 近 N 个交易日有大宗 → 剔除
   stale_max_days: 7                 # 缓存距名单日超过 N 天 → 判过期, 跳过扫描(告警)
+  share_float_cache: "data/supply_cache/alt_data/share_float/share_float_full.parquet"
+  unlock_window_days: 30            # 未来 N 天内解禁 (前瞻窗口)
+  unlock_ratio_threshold: 5.0       # 解禁占总股本比例累计 > 5% → 剔除 (float_ratio 单位 %)
+  unlock_stale_max_days: 7          # 缓存最新公告距名单日超过 N 天 → 判过期, 跳过扫描(告警)
+  unlock_ann_sweep_days: 7          # _daily_fetch 每日回扫近 N 天新公告 (ann_date), 捕获新解禁
