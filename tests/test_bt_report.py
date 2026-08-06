@@ -4,6 +4,7 @@
 用内联合成 fixture 覆盖: 新 schema 全字段 / 旧 schema (无 conclusion) 防御 /
 磁盘 IO (list_runs, load_run_json). 真实 BACKTEST_RESULT_DIR 存在时追加冒烟.
 """
+
 from __future__ import annotations
 
 import json
@@ -43,10 +44,14 @@ def _make_fixture() -> dict:
         },
         "systems": {
             "sniper": {
-                "oos": {"6m": {"primary": {"per_horizon": per_h, "top_n": 5, "kept": True}}},
+                "oos": {
+                    "6m": {"primary": {"per_horizon": per_h, "top_n": 5, "kept": True}}
+                },
             },
             "fusion": {
-                "oos": {"6m": {"primary": {"per_horizon": per_h, "top_n": 10, "kept": True}}},
+                "oos": {
+                    "6m": {"primary": {"per_horizon": per_h, "top_n": 10, "kept": True}}
+                },
             },
         },
         "last_days": {
@@ -55,14 +60,28 @@ def _make_fixture() -> dict:
                     "date": "2026-07-30",
                     "sniper_top5": {
                         "picks": [
-                            {"symbol": "600519", "rk": 1, "score": 0.9,
-                             "mfe_2d": 0.01, "mfe_3d": 0.02, "mfe_5d": 0.03, "mfe_10d": None}
+                            {
+                                "symbol": "600519",
+                                "rk": 1,
+                                "score": 0.9,
+                                "mfe_2d": 0.01,
+                                "mfe_3d": 0.02,
+                                "mfe_5d": 0.03,
+                                "mfe_10d": None,
+                            }
                         ]
                     },
                     "fusion_top10": {
                         "picks": [
-                            {"symbol": "000001", "rk": 1, "score": 0.85,
-                             "mfe_2d": 0.005, "mfe_3d": 0.01, "mfe_5d": 0.02, "mfe_10d": 0.04}
+                            {
+                                "symbol": "000001",
+                                "rk": 1,
+                                "score": 0.85,
+                                "mfe_2d": 0.005,
+                                "mfe_3d": 0.01,
+                                "mfe_5d": 0.02,
+                                "mfe_10d": 0.04,
+                            }
                         ]
                     },
                 }
@@ -90,10 +109,24 @@ def _make_fixture() -> dict:
                     "latest": "2026-08-05 00:00:00",
                     "stale": False,
                     "cuts": {
-                        "top5": {"kept": True, "best_horizon": "10d", "winrate": 0.91,
-                                 "mag": 0.09, "delta_wr": -0.01, "baseline_wr": 0.92, "n": 500},
-                        "top10": {"kept": False, "best_horizon": "5d", "winrate": 0.88,
-                                  "mag": 0.07, "delta_wr": -0.02, "baseline_wr": 0.90, "n": 900},
+                        "top5": {
+                            "kept": True,
+                            "best_horizon": "10d",
+                            "winrate": 0.91,
+                            "mag": 0.09,
+                            "delta_wr": -0.01,
+                            "baseline_wr": 0.92,
+                            "n": 500,
+                        },
+                        "top10": {
+                            "kept": False,
+                            "best_horizon": "5d",
+                            "winrate": 0.88,
+                            "mag": 0.07,
+                            "delta_wr": -0.02,
+                            "baseline_wr": 0.90,
+                            "n": 900,
+                        },
                     },
                     "systems": {"sniper": True, "fusion": True, "slow_bull": False},
                     "improvements": ["末尾 T+10d 多数入选不可测", "建议收紧 TOP-5"],
@@ -103,10 +136,24 @@ def _make_fixture() -> dict:
                     "latest": "2026-08-05 00:00:00",
                     "stale": False,
                     "cuts": {
-                        "top5": {"kept": True, "best_horizon": "10d", "winrate": 0.94,
-                                 "mag": 0.12, "delta_wr": 0.004, "baseline_wr": 0.93, "n": 510},
-                        "top10": {"kept": True, "best_horizon": "10d", "winrate": 0.95,
-                                  "mag": 0.11, "delta_wr": 0.007, "baseline_wr": 0.94, "n": 1000},
+                        "top5": {
+                            "kept": True,
+                            "best_horizon": "10d",
+                            "winrate": 0.94,
+                            "mag": 0.12,
+                            "delta_wr": 0.004,
+                            "baseline_wr": 0.93,
+                            "n": 510,
+                        },
+                        "top10": {
+                            "kept": True,
+                            "best_horizon": "10d",
+                            "winrate": 0.95,
+                            "mag": 0.11,
+                            "delta_wr": 0.007,
+                            "baseline_wr": 0.94,
+                            "n": 1000,
+                        },
                     },
                     "systems": {"sniper": True, "fusion": True, "slow_bull": False},
                     "improvements": [],
@@ -165,8 +212,15 @@ class TestParseNewSchema:
         df = btr.parse_picks(_make_fixture(), "main")
         assert len(df) == 2
         assert set(df.columns) == {
-            "date", "system", "rk", "symbol", "score",
-            "mfe_2d", "mfe_3d", "mfe_5d", "mfe_10d",
+            "date",
+            "system",
+            "rk",
+            "symbol",
+            "score",
+            "mfe_2d",
+            "mfe_3d",
+            "mfe_5d",
+            "mfe_10d",
         }
         assert df["date"].iloc[0] == "2026-07-30"
         assert pd.isna(df.loc[df["system"] == "sniper_top5", "mfe_10d"].iloc[0])
@@ -243,7 +297,9 @@ def _make_single_window() -> dict:
         "merged": {"top5": {"oos": {"oos": {"per_horizon": per_h, "kept": True}}}},
         "systems": {
             "sniper": {
-                "oos": {"oos": {"primary": {"per_horizon": per_h, "top_n": 5, "kept": True}}}
+                "oos": {
+                    "oos": {"primary": {"per_horizon": per_h, "top_n": 5, "kept": True}}
+                }
             }
         },
         "last_days": {"days": []},

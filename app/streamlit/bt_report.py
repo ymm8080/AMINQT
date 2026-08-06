@@ -4,6 +4,7 @@
 纯函数: dict in → DataFrame/dict out, 供 page_archive 回测历史 tab 渲染.
 所有字段缺失防御性返回空, 旧 schema (无 conclusion) 不崩页.
 """
+
 from __future__ import annotations
 
 import json

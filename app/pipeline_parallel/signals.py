@@ -137,7 +137,10 @@ def add_trail8_columns(df: pd.DataFrame, spec: dict | None = None) -> pd.DataFra
     win = int(spec["max_hold"])
     trail = float(spec["trail_pct"])
     peak = (
-        df["close_cont"].groupby(df["symbol"]).rolling(win, min_periods=1).max()
+        df["close_cont"]
+        .groupby(df["symbol"])
+        .rolling(win, min_periods=1)
+        .max()
         .reset_index(level=0, drop=True)
     )
     dd = df["close_cont"] / peak - 1.0

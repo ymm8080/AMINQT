@@ -429,10 +429,14 @@ def simulate_slowbull_realized(
     入场 T+1 收盘, 退出收盘判定, 净成本. 每窗: n_picks / cur / trail8_all / op_rule.
     """
     # 慢牛信号机制缺失 (非 load_panel 生产路径的合成面板) → 无可模拟, 跳过
-    need = (
-        ["gate_slow_bull", "slow_bull_regime", "adv20", "close_hfq", "low_hfq", "ma20"]
-        + list(_SELL_COLS)
-    )
+    need = [
+        "gate_slow_bull",
+        "slow_bull_regime",
+        "adv20",
+        "close_hfq",
+        "low_hfq",
+        "ma20",
+    ] + list(_SELL_COLS)
     if not all(c in work.columns for c in need):
         return {}
     A = _slowbull_sim_arrays(work)

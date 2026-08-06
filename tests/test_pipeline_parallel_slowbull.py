@@ -627,8 +627,16 @@ def test_add_trail8_columns_pit_and_trigger():
     close = [10.0, 10.2, 10.5, 10.8, 11.0, 11.0, 10.7, 10.3, 10.0, 10.0, 10.1, 10.2]
     df = pd.DataFrame(
         [
-            {"symbol": "0000000", "date": d, "close_cont": c, "close_hfq": c,
-             "close": c, "high": c * 1.01, "low": c * 0.99, "open": c}
+            {
+                "symbol": "0000000",
+                "date": d,
+                "close_cont": c,
+                "close_hfq": c,
+                "close": c,
+                "high": c * 1.01,
+                "low": c * 0.99,
+                "open": c,
+            }
             for d, c in zip(dates, close)
         ]
     )
@@ -656,10 +664,18 @@ def test_slowbull_exit_rets_trail8():
     dates = pd.bdate_range("2024-11-01", periods=len(close))
     rows = [
         {
-            "symbol": "0000000", "date": d, "close_hfq": c, "low_hfq": c * 0.995,
-            "ma20": 10.0, "adv20": 1e9,
-            "below_ma20": False, "adx_broken": False, "big_drop": False,
-            "below_ma5_3d": False, "turnover_spike": False, "tp_80_div": False,
+            "symbol": "0000000",
+            "date": d,
+            "close_hfq": c,
+            "low_hfq": c * 0.995,
+            "ma20": 10.0,
+            "adv20": 1e9,
+            "below_ma20": False,
+            "adx_broken": False,
+            "big_drop": False,
+            "below_ma5_3d": False,
+            "turnover_spike": False,
+            "tp_80_div": False,
         }
         for d, c in zip(dates, close)
     ]

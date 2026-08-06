@@ -179,7 +179,9 @@ def _render_bt_run(d: dict, btr) -> None:
         ph = btr.parse_per_horizon(d, board, "top5")
         if not ph.empty:
             st.markdown("**TOP-5 逐视界胜率 vs 基线**")
-            st.bar_chart(ph.set_index("horizon")[["winrate", "base_winrate"]], height=280)
+            st.bar_chart(
+                ph.set_index("horizon")[["winrate", "base_winrate"]], height=280
+            )
         sysdf = btr.parse_systems(d, board)
         if not sysdf.empty:
             st.markdown("**系统对比 (OOS.6m)**")
