@@ -9,6 +9,7 @@ score / prob / pred_ret / 各闸通过与否, 供用户判断.
 用法: python scripts/_diag_legacy_candidates.py [YYYYMMDD]
 输出: DATA_OTHERS/diag/legacy_candidates_{date}.csv (含闸标记) + stdout 摘要
 """
+
 import os
 import sys
 import time
@@ -22,7 +23,6 @@ import pandas as pd
 
 from config.settings import PANEL_V3_PATH, data_others_path
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
-from app.pipeline1.data_supply import DataSupplyChain
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.list_generator import ListGenerator
 from app.pipeline1.predictor import V35Predictor
@@ -42,16 +42,24 @@ def main():
     lister = ListGenerator()
 
     panel = pd.read_parquet(str(PANEL_V3_PATH))
-    print(f"[panel] {len(panel):,}r max={panel['date'].max():%Y-%m-%d} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[panel] {len(panel):,}r max={panel['date'].max():%Y-%m-%d} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     dates = sorted(panel["date"].unique())
     cut = dates[-300]
     panel = panel[panel["date"] >= cut]
-    print(f"[slice] {cut.date()}.. {len(panel):,}r ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[slice] {cut.date()}.. {len(panel):,}r ({time.time() - t0:.0f}s)", flush=True
+    )
 
     main_df, dual_df, valve_state = cleaner.run_inference(panel)
     del panel
     gc.collect()
-    print(f"[clean] valve={valve_state} main={len(main_df):,} dual={len(dual_df):,} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[clean] valve={valve_state} main={len(main_df):,} dual={len(dual_df):,} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     latest_date = None
     frames = []
@@ -71,7 +79,10 @@ def main():
         latest_date = df["date"].max()
         pred = predictor.predict(today_feat, board)
         frames.append(pred)
-        print(f"[{board}] feat={len(today_feat)} pred={len(pred)} ({time.time()-t0:.0f}s)", flush=True)
+        print(
+            f"[{board}] feat={len(today_feat)} pred={len(pred)} ({time.time() - t0:.0f}s)",
+            flush=True,
+        )
         del feat, df
         gc.collect()
     if not frames:
@@ -100,22 +111,48 @@ def main():
     out["passed_all"] = passed_all
 
     show_cols = [
-        "symbol", "board", "score", "prob_up", "compound_prob", "base_rate",
-        "pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d",
-        "compound_ret", "pred_q50", "pain_prob",
-        "gate_prob", "gate_ret", "gate_q50", "gate_pain", "passed_all",
+        "symbol",
+        "board",
+        "score",
+        "prob_up",
+        "compound_prob",
+        "base_rate",
+        "pred_ret_1d",
+        "pred_ret_2d",
+        "pred_ret_3d",
+        "pred_ret_5d",
+        "compound_ret",
+        "pred_q50",
+        "pain_prob",
+        "gate_prob",
+        "gate_ret",
+        "gate_q50",
+        "gate_pain",
+        "passed_all",
     ]
     show_cols = [c for c in show_cols if c in out.columns]
 
-    print(f"\n=== 候选统计 (trade_date={trade_date}, data_date={latest_date:%Y-%m-%d}) ===", flush=True)
+    print(
+        f"\n=== 候选统计 (trade_date={trade_date}, data_date={latest_date:%Y-%m-%d}) ===",
+        flush=True,
+    )
     print(f"候选总数: {len(out)} | 全闸通过: {int(passed_all.sum())}", flush=True)
     print(f"闸1 prob>base_rate: {int(ok_prob.sum())}/{len(out)}", flush=True)
     print(f"闸2 compound_ret>0: {int(ok_ret.sum())}/{len(out)}", flush=True)
     print(f"闸3 pred_q50>0: {int(ok_q50.sum())}/{len(out)}", flush=True)
     print(f"闸4 pain<=0.5: {int(ok_pain.sum())}/{len(out)}", flush=True)
-    print(f"\nprob_up 分布: {np.percentile(out['prob_up'], [10,25,50,75,90]).round(3)}", flush=True)
-    print(f"compound_ret 分布: {np.percentile(out['compound_ret'], [10,25,50,75,90]).round(4)}", flush=True)
-    print(f"pred_ret_1d 分布: {np.percentile(out['pred_ret_1d'], [10,25,50,75,90]).round(4)}", flush=True)
+    print(
+        f"\nprob_up 分布: {np.percentile(out['prob_up'], [10, 25, 50, 75, 90]).round(3)}",
+        flush=True,
+    )
+    print(
+        f"compound_ret 分布: {np.percentile(out['compound_ret'], [10, 25, 50, 75, 90]).round(4)}",
+        flush=True,
+    )
+    print(
+        f"pred_ret_1d 分布: {np.percentile(out['pred_ret_1d'], [10, 25, 50, 75, 90]).round(4)}",
+        flush=True,
+    )
     print(f"base_rate={float(scored['base_rate'].iloc[0]):.4f}", flush=True)
 
     print("\n=== 按 score 前 20 (near-miss, 各闸标记) ===", flush=True)
@@ -128,7 +165,10 @@ def main():
         os.path.join(str(diag_dir), f"legacy_candidates_{trade_date}.csv"),
         index=False,
     )
-    print(f"\n[saved] legacy_candidates_{trade_date}.csv ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"\n[saved] legacy_candidates_{trade_date}.csv ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

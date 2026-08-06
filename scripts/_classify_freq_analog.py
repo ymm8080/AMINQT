@@ -14,6 +14,7 @@
 输出: data/_classify_freq_analog_<ts>.log (WORM) + data/_classify_freq_analog_summary_<ts>.json
 用法: python scripts/_classify_freq_analog.py
 """
+
 import gc
 import json
 import logging
@@ -30,12 +31,11 @@ from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.feature_selector import FAMILY_ANALOG
 from app.pipeline1.train_runner import prepare_board_frame
-from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS, WEIGHTS
+from scripts._diag_column_feed import LABELS
 from scripts._classify_freq_full import (
     MIN_CROSS,
     MIN_OBS,
     WINDOWS,
-    _f,
     _wtsic,
     group_spearman,
 )
@@ -56,16 +56,39 @@ def family_of(col: str) -> str:
         return "日历"
     if col.startswith(("benefit_part", "churn_suspect")):
         return "赢家占比/洗盘"
-    if col in ("dv_ttm", "up_limit_raw", "down_limit_raw", "total_share",
-               "float_share", "free_share"):
+    if col in (
+        "dv_ttm",
+        "up_limit_raw",
+        "down_limit_raw",
+        "total_share",
+        "float_share",
+        "free_share",
+    ):
         return "股息/股本/涨跌停"
-    if col in ("turn", "turnover_rate_f", "rank_ff_turnover", "rank_amount",
-               "liquidity_score", "adv20", "turnover_stability_5",
-               "amihud_illiq", "amihud_illiquidity", "turnover_f_chg_5d",
-               "free_float_turnover_rate_xrank", "amount_xrank", "ATR_pct"):
+    if col in (
+        "turn",
+        "turnover_rate_f",
+        "rank_ff_turnover",
+        "rank_amount",
+        "liquidity_score",
+        "adv20",
+        "turnover_stability_5",
+        "amihud_illiq",
+        "amihud_illiquidity",
+        "turnover_f_chg_5d",
+        "free_float_turnover_rate_xrank",
+        "amount_xrank",
+        "ATR_pct",
+    ):
         return "换手/流动性/波动"
-    if col in ("close_vs_low", "overnight_ret", "ROC_3d", "gap_strength_5d",
-               "gap_strength_20d", "gap_vs_ma5"):
+    if col in (
+        "close_vs_low",
+        "overnight_ret",
+        "ROC_3d",
+        "gap_strength_5d",
+        "gap_strength_20d",
+        "gap_vs_ma5",
+    ):
         return "快价格信号"
     return "其他"
 
@@ -86,9 +109,7 @@ def _load_train() -> pd.DataFrame:
         if bdf is None or len(bdf) == 0:
             continue
         print(f"[{board}] build ... (rows={len(bdf):,})", flush=True)
-        d = prepare_board_frame(
-            bdf, fe, None, cross_sectional_rank=(board != "main")
-        )
+        d = prepare_board_frame(bdf, fe, None, cross_sectional_rank=(board != "main"))
         keep = [c for c in need if c in d.columns]
         parts.append(d[keep].assign(board=board))
         ncols = d.shape[1]
@@ -112,15 +133,22 @@ def classify_col(work, g_sym, g_date, lab_sym, lab_date, col):
     for f, wc in wins.items():
         wr_sym = wc.groupby(g_sym.values).rank()
         wr_date = wc.groupby(g_date.values).rank()
-        tsic[f] = {lab: group_spearman(wr_sym, lab_sym[lab], g_sym, MIN_OBS)
-                   for lab in LABELS}
-        xic[f] = {lab: group_spearman(wr_date, lab_date[lab], g_date, MIN_CROSS)
-                  for lab in LABELS}
+        tsic[f] = {
+            lab: group_spearman(wr_sym, lab_sym[lab], g_sym, MIN_OBS) for lab in LABELS
+        }
+        xic[f] = {
+            lab: group_spearman(wr_date, lab_date[lab], g_date, MIN_CROSS)
+            for lab in LABELS
+        }
     ts = {w: _wtsic(tsic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     xs = {w: _wtsic(xic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     cells = {
-        "TS日": ts[1], "TS周": ts[5], "TS月": ts[20],
-        "XS日": xs[1], "XS周": xs[5], "XS月": xs[20],
+        "TS日": ts[1],
+        "TS周": ts[5],
+        "TS月": ts[20],
+        "XS日": xs[1],
+        "XS周": xs[5],
+        "XS月": xs[20],
     }
     best = max(cells, key=lambda k: abs(cells[k]))
     return cells, best, abs(cells[best])
@@ -136,13 +164,17 @@ def main() -> None:
         print(msg, flush=True)
 
     df = _load_train()
-    prog(f"合并训练 df rows={len(df):,} stocks={df['symbol'].nunique()} "
-         f"cols={df.shape[1]}")
+    prog(
+        f"合并训练 df rows={len(df):,} stocks={df['symbol'].nunique()} "
+        f"cols={df.shape[1]}"
+    )
     latest = df["date"].max()
     cutoff = latest - pd.DateOffset(years=3)
     work = df[df["date"] >= cutoff].reset_index(drop=True)
-    prog(f"全市场×3年 rows={len(work):,} stocks={work['symbol'].nunique()} "
-         f"| {latest:%Y-%m-%d} 往前3年")
+    prog(
+        f"全市场×3年 rows={len(work):,} stocks={work['symbol'].nunique()} "
+        f"| {latest:%Y-%m-%d} 往前3年"
+    )
     del df
     gc.collect()
 
@@ -156,8 +188,7 @@ def main() -> None:
     out.append("  FAMILY_ANALOG 类比列 6格实测 — 与同族猜测对比")
     out.append("  实测: TS/XS × 日/周/月 (1/5/20窗口), 取 |IC| 最强格")
     out.append("=" * 86)
-    out.append(f"{'feature':<24}{'族':<10}{'实测':>8}{'|IC|':>8}"
-               f"{'猜测':>8}{'结果':>4}")
+    out.append(f"{'feature':<24}{'族':<10}{'实测':>8}{'|IC|':>8}{'猜测':>8}{'结果':>4}")
     out.append("-" * 86)
 
     summary = []
@@ -166,8 +197,15 @@ def main() -> None:
         fam = family_of(col)
         if col not in work.columns:
             out.append(f"{col:<24}{fam:<10}{'缺失':>8}{'':>8}{gfreq:>8}{'??':>4}")
-            summary.append({"feat": col, "family": fam, "status": "missing",
-                            "guess_freq": gfreq, "guess_type": gtype})
+            summary.append(
+                {
+                    "feat": col,
+                    "family": fam,
+                    "status": "missing",
+                    "guess_freq": gfreq,
+                    "guess_type": gtype,
+                }
+            )
             n_missing += 1
             continue
         cells, best, ic = classify_col(work, g_sym, g_date, lab_sym, lab_date, col)
@@ -179,22 +217,30 @@ def main() -> None:
         else:
             n_mismatch += 1
         out.append(
-            f"{col:<24}{fam:<10}{best:>8}{ic:>8.4f}{gfreq+':'+gtype:>8}{tag:>4}"
+            f"{col:<24}{fam:<10}{best:>8}{ic:>8.4f}{gfreq + ':' + gtype:>8}{tag:>4}"
         )
-        summary.append({
-            "feat": col, "family": fam, "status": "ok",
-            "cells": {k: round(v, 4) if v == v else None for k, v in cells.items()},
-            "verdict": best, "ic": round(ic, 4),
-            "guess_freq": gfreq, "guess_type": gtype,
-            "match": match,
-        })
+        summary.append(
+            {
+                "feat": col,
+                "family": fam,
+                "status": "ok",
+                "cells": {k: round(v, 4) if v == v else None for k, v in cells.items()},
+                "verdict": best,
+                "ic": round(ic, 4),
+                "guess_freq": gfreq,
+                "guess_type": gtype,
+                "match": match,
+            }
+        )
         del cells
         gc.collect()
         prog(f"    done {col} ({fam})")
 
     out.append("-" * 86)
-    out.append(f"一致 {n_match} / 不一致 {n_mismatch} / 缺失 {n_missing} / "
-               f"合计 {len(FAMILY_ANALOG)}")
+    out.append(
+        f"一致 {n_match} / 不一致 {n_mismatch} / 缺失 {n_missing} / "
+        f"合计 {len(FAMILY_ANALOG)}"
+    )
 
     if n_mismatch:
         out.append("\n── 不一致明细 (升级 FAMILY_ANALOG 依据) ──")
@@ -215,12 +261,24 @@ def main() -> None:
     print(text, flush=True)
 
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-    with open(os.path.join("data", f"_classify_freq_analog_summary_{ts}.json"),
-              "w", encoding="utf-8") as fh:
-        json.dump({"ts": ts, "rows": len(work),
-                   "n_match": n_match, "n_mismatch": n_mismatch,
-                   "n_missing": n_missing, "features": summary},
-                  fh, indent=2, ensure_ascii=False)
+    with open(
+        os.path.join("data", f"_classify_freq_analog_summary_{ts}.json"),
+        "w",
+        encoding="utf-8",
+    ) as fh:
+        json.dump(
+            {
+                "ts": ts,
+                "rows": len(work),
+                "n_match": n_match,
+                "n_mismatch": n_mismatch,
+                "n_missing": n_missing,
+                "features": summary,
+            },
+            fh,
+            indent=2,
+            ensure_ascii=False,
+        )
     p = os.path.join("data", f"_classify_freq_analog_{ts}.log")
     with open(p, "w", encoding="utf-8") as fh:
         fh.write(text + "\n")

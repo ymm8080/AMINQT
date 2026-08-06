@@ -17,6 +17,7 @@
 用法: python scripts/_repair_panel_amount_units.py
 输出: 面板原位更新 + <path>.pre_amountfix_<ts> 备份 + 控制台验证摘要.
 """
+
 import os
 import shutil
 import sys
@@ -30,7 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
 RECENT_DAYS = 60  # 惯例判定用断裂前最近 N 交易日 (部分 symbol 历史惯例会漂移,
-                  # 全史中位会误判, 如 001298: 3.1→2.1→1.45→1.0, 近期实为 gu)
+# 全史中位会误判, 如 001298: 3.1→2.1→1.45→1.0, 近期实为 gu)
 
 
 def detect_break_date(df: pd.DataFrame) -> pd.Timestamp | None:
@@ -67,7 +68,7 @@ def main() -> int:
     bak = f"{PANEL}.pre_amountfix_{ts}"
     print(f"备份 -> {bak} ...", flush=True)
     shutil.copy2(PANEL, bak)
-    print(f"备份完成 ({os.path.getsize(bak)/1e9:.2f} GB)", flush=True)
+    print(f"备份完成 ({os.path.getsize(bak) / 1e9:.2f} GB)", flush=True)
 
     print("读取面板 ...", flush=True)
     df = pd.read_parquet(PANEL)
@@ -84,12 +85,17 @@ def main() -> int:
     pre = df[df["date"] < brk]
     recent_days = sorted(pre["date"].unique())[-RECENT_DAYS:]
     recent_pre = pre[pre["date"].isin(recent_days)]
-    rr = recent_pre.assign(_r=recent_pre["amount"] / (recent_pre["volume"] * recent_pre["close"])).dropna(subset=["_r"])
+    rr = recent_pre.assign(
+        _r=recent_pre["amount"] / (recent_pre["volume"] * recent_pre["close"])
+    ).dropna(subset=["_r"])
     med = rr.groupby("symbol")["_r"].median()
     hand = set(med[med > 2].index)
     n_hand, n_gu = len(hand), len(med) - len(hand)
-    print(f"惯例: hand(手)={n_hand} / gu(股)={n_gu} "
-          f"(断裂前最近 {RECENT_DAYS} 交易日判定)", flush=True)
+    print(
+        f"惯例: hand(手)={n_hand} / gu(股)={n_gu} "
+        f"(断裂前最近 {RECENT_DAYS} 交易日判定)",
+        flush=True,
+    )
 
     # 3) 修复
     sub = df[mask].copy()
@@ -99,16 +105,21 @@ def main() -> int:
     good = a.notna() & v.notna() & (v > 0) & c.notna() & (c > 0)
     is_hand = sub["symbol"].isin(hand) & good
     df.loc[mask, "amount"] = np.where(good, a * 1000.0, a)
-    df.loc[mask, "volume"] = np.where(good & ~is_hand, v * 1000.0,
-                               np.where(good & is_hand, v * 10.0, v))
-    print(f"修复: {mask.sum():,} 行 (amount×1000; volume gu×1000 / hand×10)", flush=True)
+    df.loc[mask, "volume"] = np.where(
+        good & ~is_hand, v * 1000.0, np.where(good & is_hand, v * 10.0, v)
+    )
+    print(
+        f"修复: {mask.sum():,} 行 (amount×1000; volume gu×1000 / hand×10)", flush=True
+    )
 
     # 4) 验证. 注: 断裂行 volume 由 _daily_fetch 按 amount/close 重构, 故修复后
     #    ratio=amount/(volume×close) 必然是 1.0 (gu) / 100 (hand), 不能据此判一致.
     #    真实正确性判据:
     #    (a) 惯例无错换: gu→ratio<10, hand→ratio>10 (换错因子会跨到对侧量级).
     #    (b) 量级回位: 修复后断裂段 amount / volume 中位与自身断裂前中位同量级.
-    after = df[mask].assign(_r=df.loc[mask, "amount"] / (df.loc[mask, "volume"] * df.loc[mask, "close"]))
+    after = df[mask].assign(
+        _r=df.loc[mask, "amount"] / (df.loc[mask, "volume"] * df.loc[mask, "close"])
+    )
     after = after.dropna(subset=["_r"])
     post_ratio = after.groupby("symbol")["_r"].median()
     pre_amt = recent_pre.groupby("symbol")["amount"].median()
@@ -119,39 +130,67 @@ def main() -> int:
     rows = pd.DataFrame({"sym": med.index, "pre_ratio": med.values})
     rows["hand"] = rows["pre_ratio"] > 2
     rows["post_ratio"] = [post_ratio.get(s, np.nan) for s in rows["sym"]]
-    rows["amt_ratio"] = [post_amt.get(s, np.nan) / pa if (pa := pre_amt.get(s)) else np.nan
-                         for s in rows["sym"]]
-    rows["vol_ratio"] = [post_vol.get(s, np.nan) / pv if (pv := pre_vol.get(s)) else np.nan
-                         for s in rows["sym"]]
+    rows["amt_ratio"] = [
+        post_amt.get(s, np.nan) / pa if (pa := pre_amt.get(s)) else np.nan
+        for s in rows["sym"]
+    ]
+    rows["vol_ratio"] = [
+        post_vol.get(s, np.nan) / pv if (pv := pre_vol.get(s)) else np.nan
+        for s in rows["sym"]
+    ]
 
     # (a) 惯例错换 = gu 被 ×10 (post_ratio≈100) 或 hand 被 ×1000 (post_ratio≈1)
-    swap = rows[rows["post_ratio"].notna() & (
-        (rows["hand"] & (rows["post_ratio"] < 10)) |
-        (~rows["hand"] & (rows["post_ratio"] > 10)))]
+    swap = rows[
+        rows["post_ratio"].notna()
+        & (
+            (rows["hand"] & (rows["post_ratio"] < 10))
+            | (~rows["hand"] & (rows["post_ratio"] > 10))
+        )
+    ]
     print(f"验证(a) 惯例错换: {len(swap)} (应为 0)")
     if len(swap):
         print(f"  WARN: {swap.head(10).to_dict('records')}")
 
     # (b) 量级回位: amt 应回到历史量级 (±50%), vol 同理. 允许个别因停牌/涨跌停.
-    amt_bad = rows[(rows["amt_ratio"].notna()) & (rows["amt_ratio"] < 0.5) & (rows["amt_ratio"] > 0)]
-    vol_bad = rows[(rows["vol_ratio"].notna()) & (rows["vol_ratio"] < 0.5) & (rows["vol_ratio"] > 0)]
-    amt_ok = rows[rows["amt_ratio"].notna()].assign(_ok=(rows["amt_ratio"] >= 0.5))._ok.mean()
-    vol_ok = rows[rows["vol_ratio"].notna()].assign(_ok=(rows["vol_ratio"] >= 0.5))._ok.mean()
-    print(f"验证(b) 量级回位: amount {amt_ok:.1%} / volume {vol_ok:.1%} "
-          f"symbol 修复后中位 ≥ 断裂前中位 50%")
+    amt_bad = rows[
+        (rows["amt_ratio"].notna())
+        & (rows["amt_ratio"] < 0.5)
+        & (rows["amt_ratio"] > 0)
+    ]
+    vol_bad = rows[
+        (rows["vol_ratio"].notna())
+        & (rows["vol_ratio"] < 0.5)
+        & (rows["vol_ratio"] > 0)
+    ]
+    amt_ok = (
+        rows[rows["amt_ratio"].notna()]
+        .assign(_ok=(rows["amt_ratio"] >= 0.5))
+        ._ok.mean()
+    )
+    vol_ok = (
+        rows[rows["vol_ratio"].notna()]
+        .assign(_ok=(rows["vol_ratio"] >= 0.5))
+        ._ok.mean()
+    )
+    print(
+        f"验证(b) 量级回位: amount {amt_ok:.1%} / volume {vol_ok:.1%} "
+        f"symbol 修复后中位 ≥ 断裂前中位 50%"
+    )
     if len(amt_bad):
         print(f"  amount 异常偏低 {len(amt_bad)}: {amt_bad.head(8).to_dict('records')}")
     if len(vol_bad):
         print(f"  volume 异常偏低 {len(vol_bad)}: {vol_bad.head(8).to_dict('records')}")
-    print(f"  修复后 ratio 分布: gu 中位={post_ratio[~rows.set_index('sym')['hand']].median():.3f} "
-          f"hand 中位={post_ratio[rows.set_index('sym')['hand']].median():.1f}")
+    print(
+        f"  修复后 ratio 分布: gu 中位={post_ratio[~rows.set_index('sym')['hand']].median():.3f} "
+        f"hand 中位={post_ratio[rows.set_index('sym')['hand']].median():.1f}"
+    )
 
     # 5) 写回 (原子)
     tmp = PANEL + ".tmp"
     df.to_parquet(tmp, index=False, compression=comp)
     os.replace(tmp, PANEL)
     del df
-    print(f"写回完成 {PANEL} ({os.path.getsize(PANEL)/1e9:.2f} GB)", flush=True)
+    print(f"写回完成 {PANEL} ({os.path.getsize(PANEL) / 1e9:.2f} GB)", flush=True)
     print("完成", flush=True)
     return 0
 

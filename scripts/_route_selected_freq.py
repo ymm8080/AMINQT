@@ -12,6 +12,7 @@
   board: main | dual | all (默认 all)
   version_id: 指定 selected_{board}_{version_id}.json (默认最新)
 """
+
 import json
 import os
 import sys
@@ -41,7 +42,9 @@ def _latest(board: str) -> str:
 
 
 def route_board(board: str, version_id: str | None) -> list[str]:
-    fname = _latest(board) if version_id is None else f"selected_{board}_{version_id}.json"
+    fname = (
+        _latest(board) if version_id is None else f"selected_{board}_{version_id}.json"
+    )
     with open(os.path.join(REGISTRY, fname), encoding="utf-8") as fh:
         obj = json.load(fh)
     feats = obj.get("features", [])
@@ -51,8 +54,9 @@ def route_board(board: str, version_id: str | None) -> list[str]:
     for f in feats:
         buckets[freq_of(f)].append(f)
 
-    ts = obj.get("created", "").replace(":", "").replace("T", "_") or \
-        __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = obj.get("created", "").replace(":", "").replace("T", "_") or __import__(
+        "datetime"
+    ).datetime.now().strftime("%Y%m%d_%H%M%S")
     lines = [f"=== 三频路由 [{board}] source={fname} n={len(feats)} ts={ts} ==="]
     lines.append("覆盖率: " + "  ".join(f"{k}={len(v):,}" for k, v in buckets.items()))
     lines.append("")
@@ -68,17 +72,40 @@ def route_board(board: str, version_id: str | None) -> list[str]:
         lines.append("  ? " + f)
 
     for freq in FREQ_ORDER:
-        with open(os.path.join(REGISTRY, f"selected_{board}_{freq}_{ts}.json"),
-                  "w", encoding="utf-8") as fh:
-            json.dump({"board": board, "freq": freq, "source": fname,
-                       "selected_count": len(buckets[freq]), "features": buckets[freq]},
-                      fh, indent=2, ensure_ascii=False)
-    with open(os.path.join(REGISTRY, f"selected_{board}_freq_{ts}.json"),
-              "w", encoding="utf-8") as fh:
-        json.dump({"board": board, "ts": ts, "source": fname,
-                   "coverage": {k: len(v) for k, v in buckets.items()},
-                   "unknown": buckets["未分类"]},
-                  fh, indent=2, ensure_ascii=False)
+        with open(
+            os.path.join(REGISTRY, f"selected_{board}_{freq}_{ts}.json"),
+            "w",
+            encoding="utf-8",
+        ) as fh:
+            json.dump(
+                {
+                    "board": board,
+                    "freq": freq,
+                    "source": fname,
+                    "selected_count": len(buckets[freq]),
+                    "features": buckets[freq],
+                },
+                fh,
+                indent=2,
+                ensure_ascii=False,
+            )
+    with open(
+        os.path.join(REGISTRY, f"selected_{board}_freq_{ts}.json"),
+        "w",
+        encoding="utf-8",
+    ) as fh:
+        json.dump(
+            {
+                "board": board,
+                "ts": ts,
+                "source": fname,
+                "coverage": {k: len(v) for k, v in buckets.items()},
+                "unknown": buckets["未分类"],
+            },
+            fh,
+            indent=2,
+            ensure_ascii=False,
+        )
 
     text = "\n".join(lines)
     print(text, flush=True)

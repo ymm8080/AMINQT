@@ -17,6 +17,7 @@ WORM → data/_diag_moneyflow_hold_<ts>.json + .log
 
 用法: python scripts/_diag_moneyflow_hold.py [--days 250] [--refresh]
 """
+
 import argparse
 import gc
 import json
@@ -43,8 +44,14 @@ logging.disable(logging.CRITICAL)
 HS300_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "config", "universe_csi300.txt"
 )
-CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data",
-                         "supply_cache", "alt_data", "moneyflow")
+CACHE_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..",
+    "data",
+    "supply_cache",
+    "alt_data",
+    "moneyflow",
+)
 THROTTLE = 0.35  # moneyflow 免费 token 限流保护
 
 MIN_OBS = 20
@@ -69,8 +76,13 @@ def load_hs300() -> list[str]:
 def load_panel_window(days: int, hs300: set[str] | None) -> pd.DataFrame:
     """面板最近 days 交易日; hs300=None → 全市场. 返回 (df, trade_dates)."""
     read_cols = [
-        "date", "symbol", "is_suspended", "close_hfq", "circ_mv",
-        "volume", "amount",
+        "date",
+        "symbol",
+        "is_suspended",
+        "close_hfq",
+        "circ_mv",
+        "volume",
+        "amount",
     ]
     df = pd.read_parquet(PANEL_V3_PATH, columns=read_cols, engine="pyarrow")
     df["symbol"] = df["symbol"].astype(str).str.zfill(6)
@@ -93,6 +105,7 @@ def backfill_moneyflow(trade_dates: list, refresh: bool = False) -> pd.DataFrame
         return pd.read_parquet(cache_path)
 
     from dotenv import load_dotenv
+
     load_dotenv()
     import tushare as ts
 
@@ -133,12 +146,16 @@ def build_features(work: pd.DataFrame, mf: pd.DataFrame) -> pd.DataFrame:
     mf["symbol"] = mf["ts_code"].str.split(".").str[0].str.zfill(6)
     mf["date"] = pd.to_datetime(mf["trade_date"].astype(str), format="%Y%m%d")
     mf["main_net_kqy"] = (
-        mf["buy_lg_amount"] + mf["buy_elg_amount"]
-        - mf["sell_lg_amount"] - mf["sell_elg_amount"]
+        mf["buy_lg_amount"]
+        + mf["buy_elg_amount"]
+        - mf["sell_lg_amount"]
+        - mf["sell_elg_amount"]
     )
-    mf = mf[["symbol", "date", "main_net_kqy"]].sort_values(
-        ["symbol", "date"]
-    ).reset_index(drop=True)
+    mf = (
+        mf[["symbol", "date", "main_net_kqy"]]
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
 
     work = work.sort_values(["symbol", "date"]).reset_index(drop=True)
     work = work.merge(mf, on=["symbol", "date"], how="left")
@@ -147,17 +164,18 @@ def build_features(work: pd.DataFrame, mf: pd.DataFrame) -> pd.DataFrame:
     # 全窗累计 (千元) / (流通市值万元×10) → 无量纲比例 (对齐同花顺持仓比例量纲)
     work["main_hold_ratio"] = g.cumsum() / (work["circ_mv"] * 10.0)
     # 60 日滚动累计 (规避远古资金流锚定漂移)
-    work["main_hold_ratio_60d"] = (
-        g.transform(lambda x: x.rolling(60, min_periods=20).sum())
-        / (work["circ_mv"] * 10.0)
-    )
+    work["main_hold_ratio_60d"] = g.transform(
+        lambda x: x.rolling(60, min_periods=20).sum()
+    ) / (work["circ_mv"] * 10.0)
     # ── 周/月频组合变体 (用户方法论: 同频率特征×均线组合, 5=周 20=月) ──
-    work["bias5"] = work["close_hfq"] / gc.transform(
-        lambda x: x.rolling(5, min_periods=5).mean()
-    ) - 1.0
-    work["bias20"] = work["close_hfq"] / gc.transform(
-        lambda x: x.rolling(20, min_periods=20).mean()
-    ) - 1.0
+    work["bias5"] = (
+        work["close_hfq"] / gc.transform(lambda x: x.rolling(5, min_periods=5).mean())
+        - 1.0
+    )
+    work["bias20"] = (
+        work["close_hfq"] / gc.transform(lambda x: x.rolling(20, min_periods=20).mean())
+        - 1.0
+    )
     work["hold_chg_5d"] = work["main_hold_ratio_60d"] - work.groupby("symbol")[
         "main_hold_ratio_60d"
     ].shift(5)  # 周频: 主力持仓代理 5 日变化 (加仓速度)
@@ -191,21 +209,31 @@ def main() -> None:
     args = ap.parse_args()
 
     ts = _ts()
-    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data",
-                            f"_diag_moneyflow_hold_{ts}.log")
+    log_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "data",
+        f"_diag_moneyflow_hold_{ts}.log",
+    )
     json_path = log_path.replace(".log", ".json")
     out = []
     print(f"[start] universe={args.universe} × 最近 {args.days} 交易日, ts={ts}")
 
     hs300 = set(load_hs300()) if args.universe == "hs300" else None
     print(f"[universe] {'HS300 ' + str(len(hs300)) + ' 只' if hs300 else '全市场'}")
-    out.append(f"[universe] {'HS300 ' + str(len(hs300)) + ' 只' if hs300 else '全市场'}")
+    out.append(
+        f"[universe] {'HS300 ' + str(len(hs300)) + ' 只' if hs300 else '全市场'}"
+    )
 
     work, trade_dates = load_panel_window(args.days, hs300)
-    print(f"[panel] {len(work)} 行 / {work['symbol'].nunique()} 只 / "
-          f"{trade_dates[0].date()} ~ {trade_dates[-1].date()}")
-    out.append(f"[panel] {len(work)} 行 / {work['symbol'].nunique()} 只 / "
-               f"{trade_dates[0].date()} ~ {trade_dates[-1].date()}")
+    print(
+        f"[panel] {len(work)} 行 / {work['symbol'].nunique()} 只 / "
+        f"{trade_dates[0].date()} ~ {trade_dates[-1].date()}"
+    )
+    out.append(
+        f"[panel] {len(work)} 行 / {work['symbol'].nunique()} 只 / "
+        f"{trade_dates[0].date()} ~ {trade_dates[-1].date()}"
+    )
 
     mf = backfill_moneyflow(trade_dates, refresh=args.refresh)
     work = build_features(work, mf)
@@ -230,8 +258,13 @@ def main() -> None:
         "hold_chg_20d_x_sgnbias20": "持仓月变化×sgn(bias20)",
         "hold_60d_x_sgnbias20": "持仓60d×sgn(bias20)",
     }
-    res = {"ts": ts, "universe": args.universe, "days": args.days,
-           "n_rows": int(len(work)), "n_symbols": int(work["symbol"].nunique())}
+    res = {
+        "ts": ts,
+        "universe": args.universe,
+        "days": args.days,
+        "n_rows": int(len(work)),
+        "n_symbols": int(work["symbol"].nunique()),
+    }
 
     # 1) per-stock TSIC
     out.append("")
@@ -242,8 +275,9 @@ def main() -> None:
     for name, label in feats.items():
         per = per_stock_ts_ic(work, {name: work[name]}, LABELS, min_obs=MIN_OBS)
         row = {lab: per[lab][name] for lab in LABELS}
-        tsic_res[name] = {lab: (round(float(v), 4) if v == v else None)
-                          for lab, v in row.items()}
+        tsic_res[name] = {
+            lab: (round(float(v), 4) if v == v else None) for lab, v in row.items()
+        }
         out.append(
             f"{name:<28}{_f(weighted_ic(row)):>9}"
             + "".join(_f(row[lab]) for lab in LABELS)
@@ -254,14 +288,24 @@ def main() -> None:
     out.append("")
     out.append("=== 单端 TOP-10 (特征降序, 每日截面) vs 无条件基准 ===")
     base = _baseline(work)
-    out.append("基准: " + " | ".join(
-        f"T+{k}d mag={base[k]['mag']:+.4f} win={base[k]['winrate']:.3f} n={base[k]['n']}"
-        for k in HORIZONS))
+    out.append(
+        "基准: "
+        + " | ".join(
+            f"T+{k}d mag={base[k]['mag']:+.4f} win={base[k]['winrate']:.3f} n={base[k]['n']}"
+            for k in HORIZONS
+        )
+    )
     res["baseline"] = base
 
     for name, label in feats.items():
-        m = measure_topn(work, name, top_n=10, per="date", ascending=False,
-                         winrate_threshold=MIN_WINRATE)
+        m = measure_topn(
+            work,
+            name,
+            top_n=10,
+            per="date",
+            ascending=False,
+            winrate_threshold=MIN_WINRATE,
+        )
         out.append(f"\n[{name}] ({label})")
         res[name] = {"label": label}
         for k in HORIZONS:

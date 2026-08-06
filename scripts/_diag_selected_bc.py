@@ -7,6 +7,7 @@ B/C 分层与 _diag_column_feed 完全一致 (A=brute展开候选 / B=事件+flo
 
 用法: python scripts/_diag_selected_bc.py
 """
+
 import gc
 import json
 import logging
@@ -14,7 +15,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # import _diag_column_feed
+sys.path.insert(
+    0, os.path.dirname(os.path.abspath(__file__))
+)  # import _diag_column_feed
 
 import pandas as pd
 
@@ -70,7 +73,7 @@ def main() -> None:
 
     schema_names = {f.name for f in pq.read_schema(PANEL_V3_PATH)}
     present = [b for b in all_bases if b in schema_names]
-    stale = sorted(set(all_bases) - set(present))
+    sorted(set(all_bases) - set(present))
 
     read_cols = list(dict.fromkeys(list(BASE_KEYS) + present))
     df = pd.read_parquet(PANEL_V3_PATH, columns=read_cols)
@@ -93,7 +96,7 @@ def main() -> None:
     for board in ("main", "dual"):
         doc = sel[board]
         feats = doc["features"]
-        print(f"\n===== {board} | {doc.get('pipeline','?')} | 选中 {len(feats)} =====")
+        print(f"\n===== {board} | {doc.get('pipeline', '?')} | 选中 {len(feats)} =====")
         nB = nC = nA = nS = 0
         b_list, c_list, s_list = [], [], []
         for c in feats:
@@ -129,7 +132,7 @@ def main() -> None:
             for c in s_list[:60]:
                 print(f"    {c}")
             if len(s_list) > 60:
-                print(f"    ... 其余 {len(s_list)-60} 个省略")
+                print(f"    ... 其余 {len(s_list) - 60} 个省略")
 
     print("\n[基列分层明细] base -> tier (chg); 不在当前面板=stale")
     for b in sorted(all_bases, key=lambda x: -abs(tv.get(x, 0) or 0)):

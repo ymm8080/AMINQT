@@ -12,6 +12,7 @@ HS300×1年 + 全市场×3年 两窗口. 输出落盘 data/_diag_lhb_ts_vs_cross
 
 用法: python scripts/_diag_lhb_ts_vs_cross.py
 """
+
 import gc
 import logging
 import os
@@ -19,7 +20,6 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
-import numpy as np
 import pandas as pd
 
 from config.settings import PANEL_V3_PATH
@@ -87,8 +87,11 @@ def _event_study(tr, out):
     ev = tr[tr[EVENT_COL].fillna(0) != 0]
     # 当日市场横截面中位(超额基准)
     med = tr.groupby("date")[list(LABELS)].transform("median")
-    for tag, sub in (("  全部事件", ev), ("  净买>0", ev[ev[EVENT_COL] > 0]),
-                     ("  净卖<0", ev[ev[EVENT_COL] < 0])):
+    for tag, sub in (
+        ("  全部事件", ev),
+        ("  净买>0", ev[ev[EVENT_COL] > 0]),
+        ("  净卖<0", ev[ev[EVENT_COL] < 0]),
+    ):
         if len(sub) < 10:
             out.append(f"    {tag}: n={len(sub)} 样本过少")
             continue
@@ -108,8 +111,10 @@ def _event_study(tr, out):
 
 
 def _report(tr, label, out):
-    out.append(f"--- {label} | rows={len(tr):,} stocks={tr['symbol'].nunique()} "
-               f"事件日={int((tr[EVENT_COL].fillna(0) != 0).sum()):,} ---")
+    out.append(
+        f"--- {label} | rows={len(tr):,} stocks={tr['symbol'].nunique()} "
+        f"事件日={int((tr[EVENT_COL].fillna(0) != 0).sum()):,} ---"
+    )
     # 1. 横截面 IC
     xic = daily_rank_ic_multi(tr, LHB_COLS, LABELS)
     out.append("  [截面IC]  col            wIC      IC2d     IC3d     IC5d")

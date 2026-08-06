@@ -11,6 +11,7 @@ WORM → data/_diag_moneyflow_cs_<ts>.json + .log
 
 用法: python scripts/_diag_moneyflow_cs.py [--days 750] [--universe all]
 """
+
 import argparse
 import gc
 import json
@@ -99,18 +100,26 @@ def main() -> None:
     args = ap.parse_args()
 
     ts = _ts()
-    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data",
-                            f"_diag_moneyflow_cs_{ts}.log")
+    log_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "data",
+        f"_diag_moneyflow_cs_{ts}.log",
+    )
     json_path = log_path.replace(".log", ".json")
     out = []
     print(f"[start] universe={args.universe} × 最近 {args.days} 交易日, ts={ts}")
 
     hs300 = set(load_hs300()) if args.universe == "hs300" else None
     work, trade_dates = load_panel_window(args.days, hs300)
-    print(f"[panel] {len(work)} 行 / {work['symbol'].nunique()} 只 / "
-          f"{trade_dates[0].date()} ~ {trade_dates[-1].date()}")
-    out.append(f"[panel] {len(work)} 行 / {work['symbol'].nunique()} 只 / "
-               f"{trade_dates[0].date()} ~ {trade_dates[-1].date()}")
+    print(
+        f"[panel] {len(work)} 行 / {work['symbol'].nunique()} 只 / "
+        f"{trade_dates[0].date()} ~ {trade_dates[-1].date()}"
+    )
+    out.append(
+        f"[panel] {len(work)} 行 / {work['symbol'].nunique()} 只 / "
+        f"{trade_dates[0].date()} ~ {trade_dates[-1].date()}"
+    )
 
     mf = backfill_moneyflow(trade_dates, refresh=args.refresh)
     work = build_features(work, mf)
@@ -133,15 +142,22 @@ def main() -> None:
         "hold_chg_20d_x_sgnbias20": "持仓月变化×sgn(bias20)",
         "hold_60d_x_sgnbias20": "持仓60d×sgn(bias20)",
     }
-    res = {"ts": ts, "universe": args.universe, "days": args.days,
-           "n_rows": int(len(work)), "n_symbols": int(work["symbol"].nunique()),
-           "horizons": [int(k) for k in HORIZONS]}
+    res = {
+        "ts": ts,
+        "universe": args.universe,
+        "days": args.days,
+        "n_rows": int(len(work)),
+        "n_symbols": int(work["symbol"].nunique()),
+        "horizons": [int(k) for k in HORIZONS],
+    }
 
     # 1) 逐日横截面 Rank IC
     out.append("")
     out.append("=== 逐日横截面 Rank IC (Spearman, 加权均值 / IR / 同号占比) ===")
-    out.append(f"{'feature':<28}{'T+5d wIC':>12}{'IR':>8}{'consist':>9}"
-               f"{'T+10d wIC':>12}{'IR':>8}{'consist':>9}")
+    out.append(
+        f"{'feature':<28}{'T+5d wIC':>12}{'IR':>8}{'consist':>9}"
+        f"{'T+10d wIC':>12}{'IR':>8}{'consist':>9}"
+    )
     out.append("-" * 80)
     for name, label in feats.items():
         row = {}

@@ -13,6 +13,7 @@
 输出 (WORM): data/_diag_pool_corr_marginal_<ts>.json
 用法: python scripts/_diag_pool_corr_marginal.py [--window 6m] [--board main]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,23 +29,46 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dataclasses import replace
 
-from app.pipeline_parallel.backtest import (add_mfe_labels, run_system,
-                                            tradability_gate)
-from app.pipeline_parallel.config import (ALL_HORIZON_INTS, BOARD_THRESHOLDS,
-                                          FUSION, OOS_WINDOWS, PANEL, SNIPER)
+from app.pipeline_parallel.backtest import add_mfe_labels, run_system, tradability_gate
+from app.pipeline_parallel.config import (
+    ALL_HORIZON_INTS,
+    BOARD_THRESHOLDS,
+    FUSION,
+    OOS_WINDOWS,
+    PANEL,
+    SNIPER,
+)
 
 POOL_SYSTEMS = {"sniper": SNIPER, "fusion": FUSION}
 # 相关因子候选 (量价相关族, PIT)
-CORR_FACTORS = ("pv_corr_5", "pv_sync_direct_5d", "pv_sync_direct_20d",
-                "pv_sync_5d", "pv_sync_20d")
+CORR_FACTORS = (
+    "pv_corr_5",
+    "pv_sync_direct_5d",
+    "pv_sync_direct_20d",
+    "pv_sync_5d",
+    "pv_sync_20d",
+)
 HIGH_CORR = 0.5  # |r| 高于此视为强共线 (冗余)
 
 # 本测试只需的列 (池特征 ∪ 相关因子 ∪ MFE 标签输入); 全 548 列载入会 OOM
 _NEEDED = (
-    "symbol", "date", "close_hfq", "high_hfq", "adv20", "volume",
-    "amihud_illiq", "small_mv_premium", "amihud_illiquidity",
-    "down_gap_pct", "VAR51", "ret_reversal_5d", "limit_dist_pct",
-    "pv_sync_direct_5d", "pv_sync_direct_20d", "pv_sync_5d", "pv_sync_20d",
+    "symbol",
+    "date",
+    "close_hfq",
+    "high_hfq",
+    "adv20",
+    "volume",
+    "amihud_illiq",
+    "small_mv_premium",
+    "amihud_illiquidity",
+    "down_gap_pct",
+    "VAR51",
+    "ret_reversal_5d",
+    "limit_dist_pct",
+    "pv_sync_direct_5d",
+    "pv_sync_direct_20d",
+    "pv_sync_5d",
+    "pv_sync_20d",
 )
 
 
@@ -70,10 +94,9 @@ def _add_pv_corr_5(df: pd.DataFrame) -> pd.DataFrame:
     vol = df["volume"].groupby(df["symbol"], sort=False).pct_change()
     d = pd.concat([ret.rename("ret"), vol.rename("vol")], axis=1)
     # 逐股滚动 5 日相关; .corr() 返回 (symbol, date, col, col) 多级索引矩阵
-    cc = d.groupby(df["symbol"], sort=False).rolling(
-        5, min_periods=5).corr()
+    cc = d.groupby(df["symbol"], sort=False).rolling(5, min_periods=5).corr()
     # 每个窗口取 (ret, vol) 对的相关系数: 行索引奇数行(col 对全矩阵) 取第 1 列
-    pv = cc.iloc[0::2, 1]                      # ret-vol 对
+    pv = cc.iloc[0::2, 1]  # ret-vol 对
     pv = pv.reset_index(level=[0, 2], drop=True)
     df["pv_corr_5"] = pv
     del cc, pv
@@ -90,34 +113,61 @@ def pool_corr_matrix(sub: pd.DataFrame, pool: tuple[str, ...]) -> dict:
     pairs = pairs[np.isfinite(pairs)]
     return {
         "pool": list(pool),
-        "corr": {f"{i}|{j}": round(float(corr.loc[i, j]), 4)
-                 for i in cols for j in cols if i != j},
+        "corr": {
+            f"{i}|{j}": round(float(corr.loc[i, j]), 4)
+            for i in cols
+            for j in cols
+            if i != j
+        },
         "avg_abs_pair": round(float(pairs.abs().mean()), 4) if len(pairs) else None,
         "max_abs_pair": round(float(pairs.abs().max()), 4) if len(pairs) else None,
         "high_corr_pairs": sorted(
-            [f"{i}~{j}={corr.loc[i, j]:.2f}"
-             for i in cols for j in cols if i != j
-             and abs(corr.loc[i, j]) >= HIGH_CORR]),
-        "n_eff": round(float(1 / (1 + 2 * sum(
-            corr.loc[i, j] ** 2 for i in cols for j in cols if i != j))), 3)
-        if len(cols) else None,
+            [
+                f"{i}~{j}={corr.loc[i, j]:.2f}"
+                for i in cols
+                for j in cols
+                if i != j and abs(corr.loc[i, j]) >= HIGH_CORR
+            ]
+        ),
+        "n_eff": round(
+            float(
+                1
+                / (
+                    1
+                    + 2 * sum(corr.loc[i, j] ** 2 for i in cols for j in cols if i != j)
+                )
+            ),
+            3,
+        )
+        if len(cols)
+        else None,
     }
 
 
-def marginal(sub: pd.DataFrame, spec, factor: str, oos_mask,
-             bcrit: tuple[float, float]) -> dict:
+def marginal(
+    sub: pd.DataFrame, spec, factor: str, oos_mask, bcrit: tuple[float, float]
+) -> dict:
     """基池 vs 基池+factor 逐视界双头对比 (OOS)."""
     base = run_system(sub, spec, spec.top_n, oos_mask, bcrit)
-    aug = run_system(sub, replace(spec, pool=spec.pool + (factor,)),
-                     spec.top_n, oos_mask, bcrit)
+    aug = run_system(
+        sub, replace(spec, pool=spec.pool + (factor,)), spec.top_n, oos_mask, bcrit
+    )
     rows = {}
     for h in spec.horizons:
         b, a = base["per_horizon"].get(h, {}), aug["per_horizon"].get(h, {})
         rows[h] = {
-            "base": {"mag": b.get("mag"), "winrate": b.get("winrate"),
-                     "n": b.get("n"), "ok": b.get("ok")},
-            "aug": {"mag": a.get("mag"), "winrate": a.get("winrate"),
-                    "n": a.get("n"), "ok": a.get("ok")},
+            "base": {
+                "mag": b.get("mag"),
+                "winrate": b.get("winrate"),
+                "n": b.get("n"),
+                "ok": b.get("ok"),
+            },
+            "aug": {
+                "mag": a.get("mag"),
+                "winrate": a.get("winrate"),
+                "n": a.get("n"),
+                "ok": a.get("ok"),
+            },
         }
         if b.get("n") and a.get("n"):
             rows[h]["delta_wr"] = round(float(a["winrate"] - b["winrate"]), 4)
@@ -143,17 +193,23 @@ def _fmt(v: float, pct: bool = False) -> str:
 
 
 def _print_marginal(m: dict) -> None:
-    print(f"\n  +因子 {m['factor']}: 基池通过 {m['base_passed'] or '无'} "
-          f"→ 加后通过 {m['aug_passed'] or '无'} "
-          f"(新增 {m['new_pass'] or '无'}, 丢失 {m['lost_pass'] or '无'})")
-    print(f"    {'视界':<5}{'基mag':>9}{'加mag':>9}{'Δmag':>9}"
-          f"{'基wr':>8}{'加wr':>8}{'Δwr':>8}{'n基':>6}{'n加':>6}")
+    print(
+        f"\n  +因子 {m['factor']}: 基池通过 {m['base_passed'] or '无'} "
+        f"→ 加后通过 {m['aug_passed'] or '无'} "
+        f"(新增 {m['new_pass'] or '无'}, 丢失 {m['lost_pass'] or '无'})"
+    )
+    print(
+        f"    {'视界':<5}{'基mag':>9}{'加mag':>9}{'Δmag':>9}"
+        f"{'基wr':>8}{'加wr':>8}{'Δwr':>8}{'n基':>6}{'n加':>6}"
+    )
     for h, r in m["per_horizon"].items():
         b, a = r["base"], r["aug"]
-        print(f"    {h:<5}{_fmt(b['mag'],True):>9}{_fmt(a['mag'],True):>9}"
-              f"{_fmt(r.get('delta_mag'),True):>9}{_fmt(b['winrate'],True):>8}"
-              f"{_fmt(a['winrate'],True):>8}{_fmt(r.get('delta_wr'),True):>8}"
-              f"{b['n'] if b['n'] else '-':>6}{a['n'] if a['n'] else '-':>6}")
+        print(
+            f"    {h:<5}{_fmt(b['mag'], True):>9}{_fmt(a['mag'], True):>9}"
+            f"{_fmt(r.get('delta_mag'), True):>9}{_fmt(b['winrate'], True):>8}"
+            f"{_fmt(a['winrate'], True):>8}{_fmt(r.get('delta_wr'), True):>8}"
+            f"{b['n'] if b['n'] else '-':>6}{a['n'] if a['n'] else '-':>6}"
+        )
 
 
 def main() -> int:
@@ -168,21 +224,30 @@ def main() -> int:
         pass
 
     d = OOS_WINDOWS[args.window]
-    out: dict = {"ts": "2026-08-05", "type": "pool_corr_marginal",
-                 "window": args.window, "trading_days": d,
-                 "criteria": {b: t for b, t in BOARD_THRESHOLDS.items()},
-                 "boards": {}}
-    for board in (["main", "dual"] if not args.board else [args.board]):
+    out: dict = {
+        "ts": "2026-08-05",
+        "type": "pool_corr_marginal",
+        "window": args.window,
+        "trading_days": d,
+        "criteria": {b: t for b, t in BOARD_THRESHOLDS.items()},
+        "boards": {},
+    }
+    for board in ["main", "dual"] if not args.board else [args.board]:
         print(f"\n========== 板块 [{board}] ==========", flush=True)
         sub = load_board(board)
         dates = np.sort(sub["date"].unique())
         oos_mask = sub["date"].values >= dates[-d]
-        bcrit = (BOARD_THRESHOLDS[board]["min_winrate"],
-                 BOARD_THRESHOLDS[board]["min_mag"])
-        print(f"行 {len(sub):,} | OOS{args.window} "
-              f"{pd.Timestamp(dates[-d]).date()} → "
-              f"{pd.Timestamp(sub['date'].max()).date()} "
-              f"({d} 交易日) | 阈值 wr>={bcrit[0]} mag>{bcrit[1]}", flush=True)
+        bcrit = (
+            BOARD_THRESHOLDS[board]["min_winrate"],
+            BOARD_THRESHOLDS[board]["min_mag"],
+        )
+        print(
+            f"行 {len(sub):,} | OOS{args.window} "
+            f"{pd.Timestamp(dates[-d]).date()} → "
+            f"{pd.Timestamp(sub['date'].max()).date()} "
+            f"({d} 交易日) | 阈值 wr>={bcrit[0]} mag>{bcrit[1]}",
+            flush=True,
+        )
 
         corr_out: dict = {}
         marginal_out: dict = {}
@@ -191,17 +256,18 @@ def main() -> int:
             cm = pool_corr_matrix(sub[oos_mask], spec.pool)
             corr_out[name] = cm
             cols = list(cm["corr"])
-            print(f"  avg|r|={cm['avg_abs_pair']} max|r|={cm['max_abs_pair']} "
-                  f"n_eff≈{cm['n_eff']} | 强共线: "
-                  f"{cm['high_corr_pairs'] or '无'}")
+            print(
+                f"  avg|r|={cm['avg_abs_pair']} max|r|={cm['max_abs_pair']} "
+                f"n_eff≈{cm['n_eff']} | 强共线: "
+                f"{cm['high_corr_pairs'] or '无'}"
+            )
             # 打印矩阵 (唯一列名)
-            uniq = list(dict.fromkeys([c.split('|')[0] for c in cols]))
+            uniq = list(dict.fromkeys([c.split("|")[0] for c in cols]))
             mat = sub[oos_mask][uniq].corr()
             print("  " + "  ".join(f"{c:>14}" for c in uniq))
             for c in uniq:
                 row = mat[c]
-                print(f"  {c:>14}" + "".join(
-                    f"{row[o]:>14.3f}" for o in uniq))
+                print(f"  {c:>14}" + "".join(f"{row[o]:>14.3f}" for o in uniq))
 
             print(f"\n── 系统 [{name}] 相关因子 OOS 边际 (TOP-{spec.top_n}) ──")
             marg_out = []
@@ -215,8 +281,11 @@ def main() -> int:
             marginal_out[name] = marg_out
 
         out["boards"][board] = {
-            "rows": int(len(sub)), "latest": str(sub["date"].max()),
-            "pool_corr": corr_out, "marginal": marginal_out}
+            "rows": int(len(sub)),
+            "latest": str(sub["date"].max()),
+            "pool_corr": corr_out,
+            "marginal": marginal_out,
+        }
         del sub
         gc.collect()
 

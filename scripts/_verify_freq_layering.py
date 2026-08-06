@@ -12,6 +12,7 @@ per-stock TSIC 看信号在哪一档最强 → 输出频率归属判定表。
 
 用法: python scripts/_verify_freq_layering.py
 """
+
 import gc
 import logging
 import os
@@ -46,7 +47,8 @@ def _load() -> pd.DataFrame:
     read_cols = list(
         dict.fromkeys(
             ["date", "symbol", "is_suspended", "close_hfq", "volume", "amount"]
-            + CHIP_COLS + COST_COLS
+            + CHIP_COLS
+            + COST_COLS
         )
     )
     df = pd.read_parquet(PANEL_V3_PATH, columns=read_cols)
@@ -64,7 +66,9 @@ def _build(work):
     g = work.groupby("symbol")
     for c in CHIP_COLS + COST_COLS:
         for w in WINDOWS.values():
-            work[f"{c}_p{w}"] = g[c].transform(lambda x, ww=w: _apply("pct_change", ww, x))
+            work[f"{c}_p{w}"] = g[c].transform(
+                lambda x, ww=w: _apply("pct_change", ww, x)
+            )
     for w in WINDOWS.values():
         work[f"close_hfq_p{w}"] = g["close_hfq"].transform(
             lambda x, ww=w: _apply("pct_change", ww, x)
@@ -73,12 +77,14 @@ def _build(work):
             lambda x, ww=w: _apply("pct_change", ww, x)
         )
         work[f"pv{w}"] = work[f"close_hfq_p{w}"] * np.sign(work[f"vol_p{w}"])
-    work["bias20"] = work["close_hfq"] / g["close_hfq"].transform(
-        lambda x: x.rolling(20).mean()
-    ) - 1.0
-    work["bias5"] = work["close_hfq"] / g["close_hfq"].transform(
-        lambda x: x.rolling(5).mean()
-    ) - 1.0
+    work["bias20"] = (
+        work["close_hfq"] / g["close_hfq"].transform(lambda x: x.rolling(20).mean())
+        - 1.0
+    )
+    work["bias5"] = (
+        work["close_hfq"] / g["close_hfq"].transform(lambda x: x.rolling(5).mean())
+        - 1.0
+    )
 
 
 def _wtsic(tsic, k):
@@ -110,8 +116,12 @@ def _report(tr, out):
                 for w in (1, 5, 20)
             }
             cells = {
-                "TS日": ts[1], "TS周": ts[5], "TS月": ts[20],
-                "XS日": xs[1], "XS周": xs[5], "XS月": xs[20],
+                "TS日": ts[1],
+                "TS周": ts[5],
+                "TS月": ts[20],
+                "XS日": xs[1],
+                "XS周": xs[5],
+                "XS月": xs[20],
             }
             best = max(cells, key=lambda k: abs(cells[k]))
             out.append(

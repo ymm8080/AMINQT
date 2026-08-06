@@ -9,6 +9,7 @@ pred_q50_{1,2,3,5}d, 不经过任何排序/门槛, 定位 prob_up_3d 塌缩是�
 用法: python scripts/_diag_dual_board_raw.py
 输出 (WORM): data/_diag_dual_board_raw_{ts}.json
 """
+
 from __future__ import annotations
 
 import gc
@@ -19,7 +20,6 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-import numpy as np
 import pandas as pd
 
 from config.settings import PANEL_V3_PATH
@@ -39,8 +39,11 @@ def _latest_table(df: pd.DataFrame) -> pd.DataFrame:
 def main() -> int:
     t0 = time.time()
     panel = pd.read_parquet(str(PANEL_V3_PATH))
-    print(f"[panel] {len(panel):,}r max={panel['date'].max():%Y-%m-%d} "
-          f"({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[panel] {len(panel):,}r max={panel['date'].max():%Y-%m-%d} "
+        f"({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     dates = sorted(panel["date"].unique())
     panel = panel[panel["date"] >= dates[-SLICE_DAYS]]
     print(f"[slice] {SLICE_DAYS}d -> {len(panel):,}r", flush=True)
@@ -50,11 +53,15 @@ def main() -> int:
     main_df, dual_df = cleaner.run_train(panel)
     del panel
     gc.collect()
-    print(f"[clean] main={len(main_df):,} dual={len(dual_df):,} "
-          f"({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[clean] main={len(main_df):,} dual={len(dual_df):,} "
+        f"({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
-    predictor = V35Predictor({b: os.path.join(MODEL_DIR, f"{b}_current.pkl")
-                              for b in BOARDS})
+    predictor = V35Predictor(
+        {b: os.path.join(MODEL_DIR, f"{b}_current.pkl") for b in BOARDS}
+    )
     out = {}
     for board, df in (("main", main_df), ("dual", dual_df)):
         if len(df) == 0:
@@ -62,23 +69,42 @@ def main() -> int:
             out[board] = None
             continue
         cols = predictor.bundles[board]["feature_cols"]
-        df = features.build(df, None, inference_cols=cols,
-                            cross_sectional_rank=(board == "dual"))
-        print(f"[{board}] features build cols={len(cols)} "
-              f"({time.time()-t0:.0f}s)", flush=True)
+        df = features.build(
+            df, None, inference_cols=cols, cross_sectional_rank=(board == "dual")
+        )
+        print(
+            f"[{board}] features build cols={len(cols)} ({time.time() - t0:.0f}s)",
+            flush=True,
+        )
         lat = predictor.predict(df, board)
-        print(f"[{board}] predict {len(lat)} 只 ({time.time()-t0:.0f}s)", flush=True)
+        print(f"[{board}] predict {len(lat)} 只 ({time.time() - t0:.0f}s)", flush=True)
         del df
         gc.collect()
         # 排序展示用列
         show = lat.sort_values("pred_ret_3d", ascending=False)
-        cols_show = [c for c in (
-            "symbol", "board", "industry", "composite_score",
-            "pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d",
-            "prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d",
-            "pred_q50_1d", "pred_q50_2d", "pred_q50_3d", "pred_q50_5d",
-            "day_change",
-        ) if c in show.columns]
+        cols_show = [
+            c
+            for c in (
+                "symbol",
+                "board",
+                "industry",
+                "composite_score",
+                "pred_ret_1d",
+                "pred_ret_2d",
+                "pred_ret_3d",
+                "pred_ret_5d",
+                "prob_up",
+                "prob_up_2d",
+                "prob_up_3d",
+                "prob_up_5d",
+                "pred_q50_1d",
+                "pred_q50_2d",
+                "pred_q50_3d",
+                "pred_q50_5d",
+                "day_change",
+            )
+            if c in show.columns
+        ]
         tab = show[cols_show].round(4).reset_index(drop=True)
         print(f"\n===== {board} ({len(tab)} 只, 按 pred_ret_3d 降序) =====", flush=True)
         print(tab.to_string(index=False), flush=True)
@@ -87,9 +113,12 @@ def main() -> int:
             col = f"prob_up_{k}d" if k != 1 else "prob_up"
             if col in tab.columns:
                 vals = tab[col].dropna()
-                print(f"[{board}] {col}: nunique={vals.nunique()} "
-                      f"min={vals.min():.4f} max={vals.max():.4f} "
-                      f"std={vals.std():.4f}", flush=True)
+                print(
+                    f"[{board}] {col}: nunique={vals.nunique()} "
+                    f"min={vals.min():.4f} max={vals.max():.4f} "
+                    f"std={vals.std():.4f}",
+                    flush=True,
+                )
         out[board] = tab.to_dict(orient="records")
         del lat, tab
         gc.collect()

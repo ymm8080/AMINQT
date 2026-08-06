@@ -8,6 +8,7 @@
 成功标准: 峰值 commit 远低于本机 commit 上限, 且 15.8GB 物理内存下不重抖;
 选中特征数与当前 selected_main_current.json (1066) 同量级.
 """
+
 import logging
 import os
 import sys
@@ -25,7 +26,11 @@ from config.settings import PANEL_V3_PATH, data_others_path
 from app.pipeline1.feature_selector import FeatureSelector
 from app.pipeline1.feature_registry import FeatureRegistry
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from app.pipeline1.train_runner import CleaningPipeline, prepare_board_frame, select_features
+from app.pipeline1.train_runner import (
+    CleaningPipeline,
+    prepare_board_frame,
+    select_features,
+)
 
 
 def _fmt(gb):
@@ -67,11 +72,15 @@ def main():
     report(f"main_df {len(main_df):,}r/{main_df['symbol'].nunique():,}s")
 
     registry = None
-    reg_file = os.path.join(str(data_others_path("data/factor_registry")), "feature_registry.json")
+    reg_file = os.path.join(
+        str(data_others_path("data/factor_registry")), "feature_registry.json"
+    )
     if os.path.exists(reg_file):
         registry = FeatureRegistry(path=reg_file)
     features = FeatureEngineV35()
-    df = prepare_board_frame(main_df, features, cross_sectional_rank=False, registry=registry)
+    df = prepare_board_frame(
+        main_df, features, cross_sectional_rank=False, registry=registry
+    )
     del main_df
     report(f"prepared {len(df):,}r/{df.shape[1]}c")
 

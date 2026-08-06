@@ -15,6 +15,7 @@ current + 更新 current_meta.json.
            模型信号弱由制度门/下次全量重训处理, 见 2026-08-06 main 案例)
 输出: {board}_{tag}.pkl (新 bundle, 校准器为 Platt)
 """
+
 from __future__ import annotations
 
 import gc
@@ -69,7 +70,7 @@ def main() -> int:
     panel = panel[panel["date"] >= cut]
     print(
         f"[panel] {len(panel):,}r max={panel['date'].max():%Y-%m-%d} "
-        f"({time.time()-t0:.0f}s)",
+        f"({time.time() - t0:.0f}s)",
         flush=True,
     )
 
@@ -81,8 +82,11 @@ def main() -> int:
     main_df, dual_df = cleaner.run_train(panel)
     del panel
     gc.collect()
-    print(f"[clean] main={len(main_df):,} dual={len(dual_df):,} "
-          f"({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[clean] main={len(main_df):,} dual={len(dual_df):,} "
+        f"({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     trainer = DualTrackTrainer(model_dir=MODEL_DIR)
     results = {}
@@ -180,7 +184,7 @@ def main() -> int:
     if changed:
         save_modules(mods)
         print(f"[meta] current_meta.json = {mods}", flush=True)
-    print(f"[done] ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[done] ({time.time() - t0:.0f}s)", flush=True)
     return 0
 
 

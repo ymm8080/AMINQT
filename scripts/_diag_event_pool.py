@@ -16,6 +16,7 @@
 
 用法: python scripts/_diag_event_pool.py
 """
+
 import gc
 import logging
 import os
@@ -42,8 +43,7 @@ HOLDER_COLS = ["sh_net_ratio", "sh_g_ratio", "sh_c_ratio"]
 def _load() -> pd.DataFrame:
     read_cols = list(
         dict.fromkeys(
-            ["date", "symbol", "is_suspended", "close_hfq"]
-            + BT_COLS + HOLDER_COLS
+            ["date", "symbol", "is_suspended", "close_hfq"] + BT_COLS + HOLDER_COLS
         )
     )
     df = pd.read_parquet(PANEL_V3_PATH, columns=read_cols)
@@ -93,12 +93,23 @@ def report_event(out, title, df, ev_mask, feat_cols, f0_col):
 
     # 1. 事件窗口轨迹
     out.append("\n  1) 事件窗口平均相对收益 (相对事件日收盘, 全事件平均):")
-    segs = [(-20, -16), (-15, -11), (-10, -6), (-5, -1), (0, 0),
-            (1, 5), (6, 10), (11, 15), (16, 20)]
+    segs = [
+        (-20, -16),
+        (-15, -11),
+        (-10, -6),
+        (-5, -1),
+        (0, 0),
+        (1, 5),
+        (6, 10),
+        (11, 15),
+        (16, 20),
+    ]
     out.append(f"{'交易日段':<14}{'平均rel':>10}{'n':>9}")
     for a, b in segs:
         m = win["off"].between(a, b) & win["rel"].notna()
-        out.append(f"[{a:+d},{b:+d}]{'':<8}{_f(win.loc[m, 'rel'].mean()):>10}{int(m.sum()):>9,}")
+        out.append(
+            f"[{a:+d},{b:+d}]{'':<8}{_f(win.loc[m, 'rel'].mean()):>10}{int(m.sum()):>9,}"
+        )
 
     # 2. 事件特征分层
     out.append("\n  2) 事件后分点位平均收益 (相对事件日收盘):")
@@ -120,7 +131,11 @@ def report_event(out, title, df, ev_mask, feat_cols, f0_col):
     # 规模分位 (f0 绝对值, 排除 0)
     am = np.abs(f0)
     nz = f0 != 0
-    q = np.nanquantile(am[nz], [1 / 3, 2 / 3]) if nz.sum() else np.array([np.nan, np.nan])
+    q = (
+        np.nanquantile(am[nz], [1 / 3, 2 / 3])
+        if nz.sum()
+        else np.array([np.nan, np.nan])
+    )
     _row("|f0| 小1/3", piv.index[am <= q[0]])
     _row("|f0| 中1/3", piv.index[(am > q[0]) & (am <= q[1])])
     _row("|f0| 大1/3", piv.index[am > q[1]])
@@ -159,15 +174,15 @@ def main() -> None:
     cutoff = latest - pd.DateOffset(years=3)
     df = df[df["date"] >= cutoff].reset_index(drop=True)
     df = df[~df["is_suspended"].astype(bool)].reset_index(drop=True)
-    out.append(
-        f"--- 全市场×3年 | rows={len(df):,} stocks={df['symbol'].nunique()} ---"
-    )
+    out.append(f"--- 全市场×3年 | rows={len(df):,} stocks={df['symbol'].nunique()} ---")
 
     bt_mask = df[BT_COLS].notna().any(axis=1)
     report_event(out, "BT 大宗交易 事件池", df, bt_mask, BT_COLS, "bt_disc_raw")
 
     ho_mask = df[HOLDER_COLS].notna().any(axis=1)
-    report_event(out, "HOLDER 大股东增减持 事件池", df, ho_mask, HOLDER_COLS, "sh_net_ratio")
+    report_event(
+        out, "HOLDER 大股东增减持 事件池", df, ho_mask, HOLDER_COLS, "sh_net_ratio"
+    )
 
     text = "\n".join(out)
     print(text)

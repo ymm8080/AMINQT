@@ -8,6 +8,7 @@
 用法: python scripts/_diag_main_retrain_ic.py [--features <parquet>] [--oos 250]
 输出: data/_diag_main_retrain_ic_{ts}.json (WORM)
 """
+
 import argparse
 import json
 import os
@@ -55,7 +56,7 @@ def main():
     t0 = time.time()
     d = pd.read_parquet(feats_path, columns=["date"])
     dates = sorted(d["date"].unique())
-    oos = set(dates[-args.oos:])
+    oos = set(dates[-args.oos :])
     print(
         f"[info] features={os.path.basename(feats_path)} rows={pf.metadata.num_rows:,} "
         f"dates={dates[0].date()}..{dates[-1].date()} oos_days={len(oos)}",
@@ -124,7 +125,7 @@ def main():
             lz = (lr - lmean) / lstd
             daily = (rz.multiply(lz, axis=0)).groupby(cdf["date"]).mean()
             s = daily.sum()
-            sq = (daily ** 2).sum()
+            sq = (daily**2).sum()
             c = daily.count()
             p = (daily > 0).sum()
             st = stats[lab]
@@ -132,7 +133,10 @@ def main():
                 upd(st, f, s.iloc[i], sq.iloc[i], c.iloc[i], p.iloc[i])
 
         del cdf, ranks, rz
-        print(f"  chunk {start + len(chunk)}/{n_feats} ({time.time() - t0:.0f}s)", flush=True)
+        print(
+            f"  chunk {start + len(chunk)}/{n_feats} ({time.time() - t0:.0f}s)",
+            flush=True,
+        )
 
     # ---- 汇总 ----
     def dist(st):
@@ -148,16 +152,16 @@ def main():
             "p75": float(np.quantile(arr, 0.75)),
             "pct_pos": float((arr > 0).mean()),
             "pct_strong_pos": float((arr > 0.02).mean()),
-            "best": {k: float(v) for k, v in sorted(vals.items(), key=lambda x: -x[1])[:5]},
+            "best": {
+                k: float(v) for k, v in sorted(vals.items(), key=lambda x: -x[1])[:5]
+            },
         }
 
     per_feature = {}
     for lab in labels:
         per_feature[lab] = {
             "all": dist(stats[lab]),
-            "brute_only": dist(
-                {f: v for f, v in stats[lab].items() if f in brute_set}
-            ),
+            "brute_only": dist({f: v for f, v in stats[lab].items() if f in brute_set}),
         }
 
     # ---- 复合分逐日 IC ----
@@ -225,7 +229,9 @@ def main():
     os.makedirs("data", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2, default=str)
-    print(f"\n[verdict] {json.dumps(verdicts, ensure_ascii=False, indent=2)}", flush=True)
+    print(
+        f"\n[verdict] {json.dumps(verdicts, ensure_ascii=False, indent=2)}", flush=True
+    )
     print(f"[saved] {out_path}  ({time.time() - t0:.0f}s)", flush=True)
 
 

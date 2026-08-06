@@ -20,6 +20,7 @@ HS300×1年 + 全市场×3年. 输出落盘 data/_verify_combined_factors_<ts>.l
 
 用法: python scripts/_verify_combined_factors.py
 """
+
 import gc
 import logging
 import os
@@ -91,9 +92,10 @@ def _build(work):
     # --- A. 筹码月频变化 + 月均线组合 ---
     for c in CHIP_COLS:
         work[f"{c}_p20"] = g[c].transform(lambda x: _apply("pct_change", 20, x))
-    work["bias20"] = work["close_hfq"] / g["close_hfq"].transform(
-        lambda x: x.rolling(20).mean()
-    ) - 1.0
+    work["bias20"] = (
+        work["close_hfq"] / g["close_hfq"].transform(lambda x: x.rolling(20).mean())
+        - 1.0
+    )
     for c in CHIP_COLS:
         work[f"{c}_p20_x_sgn"] = work[f"{c}_p20"] * np.sign(work["bias20"])
         work[f"{c}_p20_x_bias"] = work[f"{c}_p20"] * work["bias20"]
@@ -166,10 +168,15 @@ def _report(tr, label, out):
     _feat_table(work, c_, "C. 价格×量 1/2/3阶组合", out)
     _feat_table(work, d_, "D. 筹码×COST月度成本线组合", out)
     # A 的条件子窗口
-    out.append("  [A 条件子窗口] chip_p20 在 站上(bias20>0) vs 跌破(bias20<=0) 的 TSIC:")
+    out.append(
+        "  [A 条件子窗口] chip_p20 在 站上(bias20>0) vs 跌破(bias20<=0) 的 TSIC:"
+    )
     out.append(f"{'feature':<20}{'bias20>0':>10}{'bias20<=0':>10}")
     for c in CHIP_COLS:
-        for tag, sub in (("up", work[work["bias20"] > 0]), ("dn", work[work["bias20"] <= 0])):
+        for tag, sub in (
+            ("up", work[work["bias20"] > 0]),
+            ("dn", work[work["bias20"] <= 0]),
+        ):
             fe = {f"{c}_p20": sub[f"{c}_p20"]}
             t = per_stock_ts_ic(sub, fe, LABELS, min_obs=MIN_OBS)
             w = weighted_ic({lab: t[lab][f"{c}_p20"] for lab in LABELS})

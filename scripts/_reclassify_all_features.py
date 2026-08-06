@@ -15,6 +15,7 @@
 
 输出 (WORM): data/_reclassify_all_<ts>.json + <ts>.log
 """
+
 import argparse
 import gc
 import json
@@ -33,7 +34,13 @@ from app.pipeline1.label_engine import COST, LabelEngine, slippage_tier
 from scripts._diag_column_feed import MASK_RECENT_DAYS
 from scripts._measure_topn import HORIZONS, measure_topn
 from scripts._classify_freq_analog import family_of
-from scripts._classify_freq_full import MIN_CROSS, MIN_OBS, WINDOWS, _f, _wtsic, group_spearman
+from scripts._classify_freq_full import (
+    MIN_CROSS,
+    MIN_OBS,
+    WINDOWS,
+    _wtsic,
+    group_spearman,
+)
 
 MAIN_CHECKPOINT = os.path.join("data", "_diag_stage_main_3y.parquet")
 DUAL_CHECKPOINT = os.path.join("data", "_diag_stage_dual_3y.parquet")
@@ -60,7 +67,10 @@ def add_label_pm_10d_net(df: pd.DataFrame) -> pd.DataFrame:
     df["label_pm_10d_net"] = df["label_pm_10d"] - (COST + 2 * slip)
     n = 10
     rolling_sum = (
-        df.groupby("symbol")["is_suspended"].rolling(n + 1).sum().reset_index(level=0, drop=True)
+        df.groupby("symbol")["is_suspended"]
+        .rolling(n + 1)
+        .sum()
+        .reset_index(level=0, drop=True)
     )
     vals = rolling_sum.values
     suspended_vals = np.zeros(len(vals), dtype=bool)
@@ -97,13 +107,18 @@ def build_board_slice(cleaner, fe, board_df, board, checkpoint) -> pd.DataFrame:
     d3 = d[d["date"] >= cutoff].reset_index(drop=True)
     del d
     gc.collect()
-    print(f"[{board}] 构建 rows={len(d3):,} stocks={d3['symbol'].nunique():,} "
-          f"cols={d3.shape[1]:,} | latest={latest:%Y-%m-%d}", flush=True)
+    print(
+        f"[{board}] 构建 rows={len(d3):,} stocks={d3['symbol'].nunique():,} "
+        f"cols={d3.shape[1]:,} | latest={latest:%Y-%m-%d}",
+        flush=True,
+    )
     d3 = _finalize_slice(d3)
     if checkpoint:
         d3.to_parquet(checkpoint, index=False)
-        print(f"[{board}] 检查点已落盘 {checkpoint} ({os.path.getsize(checkpoint)/1e9:.2f} GB)",
-              flush=True)
+        print(
+            f"[{board}] 检查点已落盘 {checkpoint} ({os.path.getsize(checkpoint) / 1e9:.2f} GB)",
+            flush=True,
+        )
     return d3
 
 
@@ -150,13 +165,21 @@ def route_one(work, g_sym, g_date, lab_sym, lab_date, col):
     for f, wc in wins.items():
         wr_sym = wc.groupby(g_sym.values).rank()
         wr_date = wc.groupby(g_date.values).rank()
-        tsic[f] = {l: group_spearman(wr_sym, lab_sym[l], g_sym, MIN_OBS) for l in lab_sym}
-        xic[f] = {l: group_spearman(wr_date, lab_date[l], g_date, MIN_CROSS) for l in lab_date}
+        tsic[f] = {
+            l: group_spearman(wr_sym, lab_sym[l], g_sym, MIN_OBS) for l in lab_sym
+        }
+        xic[f] = {
+            l: group_spearman(wr_date, lab_date[l], g_date, MIN_CROSS) for l in lab_date
+        }
     ts = {w: _wtsic(tsic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     xs = {w: _wtsic(xic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     cells = {
-        "TS日": ts[1], "TS周": ts[5], "TS月": ts[20],
-        "XS日": xs[1], "XS周": xs[5], "XS月": xs[20],
+        "TS日": ts[1],
+        "TS周": ts[5],
+        "TS月": ts[20],
+        "XS日": xs[1],
+        "XS周": xs[5],
+        "XS月": xs[20],
     }
     best = max(cells, key=lambda k: abs(cells[k]))
     return cells, best, abs(cells[best])
@@ -206,19 +229,24 @@ def main():
 
     # ignore_index 排序 → 不额外深拷贝 (降峰值内存, 上次 OOM 在 reset_index 5.92GiB)
     work = pd.concat(slices, ignore_index=True).sort_values(
-        ["symbol", "date"], ignore_index=True)
+        ["symbol", "date"], ignore_index=True
+    )
     del slices
     gc.collect()
     cols = feature_cols(work)
     latest = work["date"].max()
-    prog(f"生产行集 rows={len(work):,} stocks={work['symbol'].nunique():,} "
-         f"cols={len(cols):,} 特征 | latest={latest:%Y-%m-%d}")
+    prog(
+        f"生产行集 rows={len(work):,} stocks={work['symbol'].nunique():,} "
+        f"cols={len(cols):,} 特征 | latest={latest:%Y-%m-%d}"
+    )
 
     # ── 2. 验收 (单端: 高值端 TOP-10 绝对幅度+胜率) ──
-    header = ("=" * 100 +
-              "\n  TOP-10 绝对验收 (高值端 | 每日期截面 | 净收益标签 label_pm_*d_net | "
-              f"胜率>=55% 且 平均>0 通过 | 视界 {list(HORIZONS)})" +
-              "\n=" * 100)
+    header = (
+        "="
+        * 100
+        + "\n  TOP-10 绝对验收 (高值端 | 每日期截面 | 净收益标签 label_pm_*d_net | "
+        f"胜率>=55% 且 平均>0 通过 | 视界 {list(HORIZONS)})" + "\n=" * 100
+    )
     prog(header)
     summary = []
     n_pass = n_skip = 0
@@ -227,20 +255,34 @@ def main():
         res, best_h = a["res"], a["horizon"]
         if best_h is None:
             n_skip += 1
-            prog(f"[{i+1}/{len(cols)}] ✗ {col:<28} 不达标(高值端TOP10无胜率>=55%且幅度>0) | {family_of(col)}")
-            summary.append({"col": col, "family": family_of(col),
-                            "accepted": False, "horizon": None})
+            prog(
+                f"[{i + 1}/{len(cols)}] ✗ {col:<28} 不达标(高值端TOP10无胜率>=55%且幅度>0) | {family_of(col)}"
+            )
+            summary.append(
+                {
+                    "col": col,
+                    "family": family_of(col),
+                    "accepted": False,
+                    "horizon": None,
+                }
+            )
             continue
         n_pass += 1
         d_ = res.get(best_h, {})
-        prog(f"[{i+1}/{len(cols)}] ✓ {col:<28} T+{best_h} "
-             f"幅度={d_.get('mag', float('nan')):+.2%} 胜率={d_.get('winrate', float('nan')):>6.1%} "
-             f"n={d_.get('n', 0):,} | {family_of(col)}")
-        summary.append({
-            "col": col, "family": family_of(col), "accepted": True,
-            "horizon": best_h,
-            "top10_high": {str(k): res.get(k) for k in HORIZONS},
-        })
+        prog(
+            f"[{i + 1}/{len(cols)}] ✓ {col:<28} T+{best_h} "
+            f"幅度={d_.get('mag', float('nan')):+.2%} 胜率={d_.get('winrate', float('nan')):>6.1%} "
+            f"n={d_.get('n', 0):,} | {family_of(col)}"
+        )
+        summary.append(
+            {
+                "col": col,
+                "family": family_of(col),
+                "accepted": True,
+                "horizon": best_h,
+                "top10_high": {str(k): res.get(k) for k in HORIZONS},
+            }
+        )
 
     prog("-" * 100)
     prog(f"通过 {n_pass} / 未达标 {n_skip} / 合计 {len(cols)}")
@@ -251,16 +293,23 @@ def main():
         prog(f"\n路由: 对 {len(passed)} 个通过特征做 6格 rankIC ...")
         g_sym = work["symbol"]
         g_date = work["date"]
-        lab_sym = {l: work.groupby("symbol")[l].rank()
-                   for l in (f"label_pm_{k}d_net" for k in (2, 3, 5))}
-        lab_date = {l: work.groupby("date")[l].rank()
-                    for l in (f"label_pm_{k}d_net" for k in (2, 3, 5))}
+        lab_sym = {
+            l: work.groupby("symbol")[l].rank()
+            for l in (f"label_pm_{k}d_net" for k in (2, 3, 5))
+        }
+        lab_date = {
+            l: work.groupby("date")[l].rank()
+            for l in (f"label_pm_{k}d_net" for k in (2, 3, 5))
+        }
         for i, s in enumerate(passed):
             col = s["col"]
             cells, best, ic = route_one(work, g_sym, g_date, lab_sym, lab_date, col)
-            s["routing"] = {"cells": {k: round(v, 4) for k, v in cells.items()},
-                            "verdict": best, "ic": round(ic, 4)}
-            prog(f"  [{i+1}/{len(passed)}] {col:<28} {best} (|IC| {ic:.4f})")
+            s["routing"] = {
+                "cells": {k: round(v, 4) for k, v in cells.items()},
+                "verdict": best,
+                "ic": round(ic, 4),
+            }
+            prog(f"  [{i + 1}/{len(passed)}] {col:<28} {best} (|IC| {ic:.4f})")
         del g_sym, g_date, lab_sym, lab_date
         gc.collect()
 
@@ -268,21 +317,34 @@ def main():
     out = {
         "ts": ts,
         "window": {"end": str(latest), "years": 3},
-        "rows": len(work), "stocks": int(work["symbol"].nunique()),
+        "rows": len(work),
+        "stocks": int(work["symbol"].nunique()),
         "n_features": len(cols),
-        "meta": {"top_n": 10, "per": "date", "end": "high_only",   # 单端: 只测高值端
-                 "min_winrate": 0.55, "min_mag": 0.0,
-                 "horizons": list(HORIZONS), "labels": "label_pm_*d_net"},
-        "n_pass": n_pass, "n_skip": n_skip,
+        "meta": {
+            "top_n": 10,
+            "per": "date",
+            "end": "high_only",  # 单端: 只测高值端
+            "min_winrate": 0.55,
+            "min_mag": 0.0,
+            "horizons": list(HORIZONS),
+            "labels": "label_pm_*d_net",
+        },
+        "n_pass": n_pass,
+        "n_skip": n_skip,
         "features": summary,
     }
     p = os.path.join("data", f"_reclassify_all_{ts}.json")
     with open(p, "w", encoding="utf-8") as fh:
         json.dump(out, fh, indent=2, ensure_ascii=False)
-    text = "\n".join([header] + [f"[{s.get('accepted') and 'PASS' or '---'}] "
-                                 f"{s['col']:<28} "
-                                 f"T+{s.get('horizon') or '-'} {s.get('family')}"
-                                 for s in summary])
+    text = "\n".join(
+        [header]
+        + [
+            f"[{s.get('accepted') and 'PASS' or '---'}] "
+            f"{s['col']:<28} "
+            f"T+{s.get('horizon') or '-'} {s.get('family')}"
+            for s in summary
+        ]
+    )
     with open(log_path, "w", encoding="utf-8") as fh:
         fh.write(text + "\n")
     prog(f"\n落盘: {p}\n落盘: {log_path}")

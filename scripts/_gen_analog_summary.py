@@ -6,12 +6,12 @@
 输出: D:/AMINQT/REFERENCE/Design All/Function Spec/FEATURE/类比列6格分类实测总结_<ts>.docx
 用法: python scripts/_gen_analog_summary.py
 """
+
 import os
 from datetime import datetime
 
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt
@@ -67,28 +67,65 @@ TESTED = [
 
 # ── 42 列缺失 (V3 已删列, 训练 df 中不存在) ──
 MISSING = [
-    "turn", "turnover_rate_f",
-    "pct_70_con_x", "pct_70_con_y", "pct_70_high_x", "pct_70_high_y",
-    "pct_70_low_x", "pct_70_low_y", "pct_90_con_x", "pct_90_con_y",
-    "pct_90_high_x", "pct_90_high_y", "pct_90_low_x", "pct_90_low_y",
-    "cost_5pct_x", "cost_5pct_y", "cost_15pct_x", "cost_15pct_y",
-    "cost_50pct_x", "cost_50pct_y", "cost_85pct_x", "cost_85pct_y",
-    "cost_95pct_x", "cost_95pct_y", "avg_cost_x", "avg_cost_y",
-    "weight_avg_x", "weight_avg_y",
-    "sw_ret_1d", "sw_ret_1d_x", "sw_ret_5d", "sw_relative_strength",
-    "sw_rotation_position", "sw_ret_20d", "sw_vol_20d", "sw_momentum_accel",
-    "sw_index_close", "sw_index_vol", "sw_turnover_anomaly",
-    "list_days", "benefit_part_x", "benefit_part_y",
+    "turn",
+    "turnover_rate_f",
+    "pct_70_con_x",
+    "pct_70_con_y",
+    "pct_70_high_x",
+    "pct_70_high_y",
+    "pct_70_low_x",
+    "pct_70_low_y",
+    "pct_90_con_x",
+    "pct_90_con_y",
+    "pct_90_high_x",
+    "pct_90_high_y",
+    "pct_90_low_x",
+    "pct_90_low_y",
+    "cost_5pct_x",
+    "cost_5pct_y",
+    "cost_15pct_x",
+    "cost_15pct_y",
+    "cost_50pct_x",
+    "cost_50pct_y",
+    "cost_85pct_x",
+    "cost_85pct_y",
+    "cost_95pct_x",
+    "cost_95pct_y",
+    "avg_cost_x",
+    "avg_cost_y",
+    "weight_avg_x",
+    "weight_avg_y",
+    "sw_ret_1d",
+    "sw_ret_1d_x",
+    "sw_ret_5d",
+    "sw_relative_strength",
+    "sw_rotation_position",
+    "sw_ret_20d",
+    "sw_vol_20d",
+    "sw_momentum_accel",
+    "sw_index_close",
+    "sw_index_vol",
+    "sw_turnover_anomaly",
+    "list_days",
+    "benefit_part_x",
+    "benefit_part_y",
 ]
 
 # ── 34 处不一致里的关键修正 (族级) ──
 KEY_FIXES = [
-    ("价格族 8 列 (open/high/low/close/pre_close + hfq 变体)",
-     "周:TS", "TS·月", "|IC| 0.062~0.069, 全表最强档, 与 close_hfq 同为价格但频率判定不同"),
-    ("涨跌停 up_limit_raw / down_limit_raw",
-     "日:TS", "TS·月", "|IC| 0.0621 / 0.0620"),
-    ("amihud_illiq / amihud_illiquidity",
-     "月:XS", "TS·月", "|IC| 0.0382 / 0.0389 — 非横截面, 是个股时序"),
+    (
+        "价格族 8 列 (open/high/low/close/pre_close + hfq 变体)",
+        "周:TS",
+        "TS·月",
+        "|IC| 0.062~0.069, 全表最强档, 与 close_hfq 同为价格但频率判定不同",
+    ),
+    ("涨跌停 up_limit_raw / down_limit_raw", "日:TS", "TS·月", "|IC| 0.0621 / 0.0620"),
+    (
+        "amihud_illiq / amihud_illiquidity",
+        "月:XS",
+        "TS·月",
+        "|IC| 0.0382 / 0.0389 — 非横截面, 是个股时序",
+    ),
     ("ATR_pct", "月:XS", "TS·月", "|IC| 0.0226"),
     ("market_turnover", "周:TS", "TS·月", "|IC| 0.0308"),
     ("churn_suspect", "月:XS", "TS·月", "|IC| 0.0297 — 非 XS"),
@@ -108,10 +145,14 @@ WEAK = [
 
 # ── 8 个与猜测一致列 ──
 MATCHED = [
-    ("rank_amount", "XS·月"), ("liquidity_score", "XS·月"),
-    ("dv_ttm", "TS·月"), ("sector_return", "TS·周"),
-    ("market_turnover_ratio_20d", "TS·月"), ("market_limit_up", "TS·日"),
-    ("free_float_turnover_rate_xrank", "XS·月"), ("amount_xrank", "XS·月"),
+    ("rank_amount", "XS·月"),
+    ("liquidity_score", "XS·月"),
+    ("dv_ttm", "TS·月"),
+    ("sector_return", "TS·周"),
+    ("market_turnover_ratio_20d", "TS·月"),
+    ("market_limit_up", "TS·日"),
+    ("free_float_turnover_rate_xrank", "XS·月"),
+    ("amount_xrank", "XS·月"),
 ]
 
 
@@ -175,36 +216,54 @@ def main():
 
     doc = Document()
     doc.add_heading(TITLE, level=0)
-    p = _para(doc, f"生成时间: {datetime.now():%Y-%m-%d %H:%M:%S}  ·  方法: TS/XS × 日/周/月 "
-                    f"(1/5/20 变化窗口) 取 |IC| 最强格  ·  数据: 全市场×3年训练序列", italic=True)
+    _para(
+        doc,
+        f"生成时间: {datetime.now():%Y-%m-%d %H:%M:%S}  ·  方法: TS/XS × 日/周/月 "
+        f"(1/5/20 变化窗口) 取 |IC| 最强格  ·  数据: 全市场×3年训练序列",
+        italic=True,
+    )
 
     # 1. 任务与背景
     _heading(doc, "1. 任务与背景", 1)
-    _para(doc, "feature_selector.FAMILY_ANALOG 共 84 个类比列, 此前频率/类型归属是按同族猜测"
-               " (例如价格族跟 close_hfq 判周)。本次对全部 84 列跑真实 6格分类, 替换猜测, "
-               "并与猜测对比得出 一致/不一致 清单。不一致列是升级 FAMILY_ANALOG → "
-               "FREQ_ASSIGNMENT 的依据。", size=10)
+    _para(
+        doc,
+        "feature_selector.FAMILY_ANALOG 共 84 个类比列, 此前频率/类型归属是按同族猜测"
+        " (例如价格族跟 close_hfq 判周)。本次对全部 84 列跑真实 6格分类, 替换猜测, "
+        "并与猜测对比得出 一致/不一致 清单。不一致列是升级 FAMILY_ANALOG → "
+        "FREQ_ASSIGNMENT 的依据。",
+        size=10,
+    )
 
     # 2. 方法
     _heading(doc, "2. 方法口径", 1)
-    _para(doc, "用真实训练序列 (CleaningPipeline.run_train → FeatureEngineV35.build → "
-               "prepare_board_frame, main/dual 逐板块) 构建含标签的训练 df, 取最近 3 年。"
-               "每列计算 1/5/20 日变化窗口, 分别做个股时序 rank IC (TS) 与日截面 rank IC (XS),"
-               "加权 wIC = 0.45×IC2d + 0.35×IC3d + 0.2×IC5d, 取 |IC| 最强格为判定。"
-               "构建按列裁剪、逐板块释放, 不做 brute-force generate, 无 OOM。", size=10)
+    _para(
+        doc,
+        "用真实训练序列 (CleaningPipeline.run_train → FeatureEngineV35.build → "
+        "prepare_board_frame, main/dual 逐板块) 构建含标签的训练 df, 取最近 3 年。"
+        "每列计算 1/5/20 日变化窗口, 分别做个股时序 rank IC (TS) 与日截面 rank IC (XS),"
+        "加权 wIC = 0.45×IC2d + 0.35×IC3d + 0.2×IC5d, 取 |IC| 最强格为判定。"
+        "构建按列裁剪、逐板块释放, 不做 brute-force generate, 无 OOM。",
+        size=10,
+    )
 
     # 3. 结果总览
     _heading(doc, "3. 结果总览", 1)
-    _table(doc, ["项", "数量", "说明"], [
-        ["实测列", 42, "训练 df 中存在, 拿到真实 6格判定"],
-        ["其中 与猜测一致", 8, "判定与同族猜测吻合"],
-        ["其中 不一致", 34, "判定与同族猜测不符, 需升级"],
-        ["缺失列", 42, "训练 df 中不存在 — V3 已删列 (见 §6)"],
-        ["合计", 84, "FAMILY_ANALOG 全量"],
-    ], widths=[4, 2, 9])
+    _table(
+        doc,
+        ["项", "数量", "说明"],
+        [
+            ["实测列", 42, "训练 df 中存在, 拿到真实 6格判定"],
+            ["其中 与猜测一致", 8, "判定与同族猜测吻合"],
+            ["其中 不一致", 34, "判定与同族猜测不符, 需升级"],
+            ["缺失列", 42, "训练 df 中不存在 — V3 已删列 (见 §6)"],
+            ["合计", 84, "FAMILY_ANALOG 全量"],
+        ],
+        widths=[4, 2, 9],
+    )
 
     # 4. 实测判定明细
     _heading(doc, "4. 实测判定明细 (42 列)", 1)
+
     def fmt_run(i, j, run, v):
         if j == 5:
             run.font.color.rgb = None
@@ -212,67 +271,119 @@ def main():
             run.font.bold = True
         if j == 4 and TESTED[i][5]:
             run.font.bold = True
-    _table(doc,
-           ["特征", "族", "实测判定", "|IC|", "同族猜测", "一致"],
-           [(f, fam, verdict, f"{ic:.4f}" if ic else "NaN", guess, "✅" if ok else "❌")
-            for f, fam, verdict, ic, guess, ok in TESTED],
-           widths=[5.5, 2.6, 2.2, 2.0, 2.4, 1.4],
-           cell_fmt=fmt_run)
+
+    _table(
+        doc,
+        ["特征", "族", "实测判定", "|IC|", "同族猜测", "一致"],
+        [
+            (f, fam, verdict, f"{ic:.4f}" if ic else "NaN", guess, "✅" if ok else "❌")
+            for f, fam, verdict, ic, guess, ok in TESTED
+        ],
+        widths=[5.5, 2.6, 2.2, 2.0, 2.4, 1.4],
+        cell_fmt=fmt_run,
+    )
 
     # 5. 关键修正
     _heading(doc, "5. 34 处不一致中的关键修正", 1)
-    _table(doc, ["特征族", "原猜测", "实测", "说明"], [
-        (f, old, new, note) for f, old, new, note in KEY_FIXES
-    ], widths=[6, 2.4, 2.4, 5.2])
-    _para(doc, "一致列 (8): " + "、".join(f"{c} ({v})" for c, v in MATCHED) + "。",
-          size=10, italic=True)
+    _table(
+        doc,
+        ["特征族", "原猜测", "实测", "说明"],
+        [(f, old, new, note) for f, old, new, note in KEY_FIXES],
+        widths=[6, 2.4, 2.4, 5.2],
+    )
+    _para(
+        doc,
+        "一致列 (8): " + "、".join(f"{c} ({v})" for c, v in MATCHED) + "。",
+        size=10,
+        italic=True,
+    )
 
     # 6. V3 已删列发现
     _heading(doc, "6. 42 个缺失列 = V3 已删列 (关键发现)", 1)
     _para(doc, "42 个缺失列在当前 V3 面板与构建中都不再生成, 不是构建 bug:", size=10)
-    _para(doc, "· chip/cost/avg_cost/weight_avg 的 _x/_y 后缀列 = 旧 cyq(Tushare 筹码) merge 产物,"
-               " dim21_chip_tushare 于 2026-08-02 V3 删列后不再产出;", size=10)
-    _para(doc, "· sw_ret_*/sw_index_*/sw_relative_strength/sw_rotation_position/"
-               "sw_momentum_accel/sw_turnover_anomaly = 已删除的行业/市场列;", size=10)
-    _para(doc, "· list_days = V3 入库门移除 (近 150 天次新不进 V3);  turn/turnover_rate_f/"
-               "benefit_part_* = 无生成位置或旧名。", size=10)
-    _para(doc, "根因: 生产精选文件 (factor_registry, 2026-07-31) 是 V3 删列 (2026-08-02) "
-               "之前的过时快照, 仍引用这 42 个死列。", bold=True, size=10)
-    _para(doc, "结论: 新频率宽表构建必须剔除这 42 列; 下次重训会自动丢弃。同时 "
-               "tests/test_freq_assignment.py 的 PRODUCTION_BASES 含 turn/benefit_part_x/"
-               "sw_ret_1d 等死列, 清理 FAMILY_ANALOG 时需同步修改。", size=10)
+    _para(
+        doc,
+        "· chip/cost/avg_cost/weight_avg 的 _x/_y 后缀列 = 旧 cyq(Tushare 筹码) merge 产物,"
+        " dim21_chip_tushare 于 2026-08-02 V3 删列后不再产出;",
+        size=10,
+    )
+    _para(
+        doc,
+        "· sw_ret_*/sw_index_*/sw_relative_strength/sw_rotation_position/"
+        "sw_momentum_accel/sw_turnover_anomaly = 已删除的行业/市场列;",
+        size=10,
+    )
+    _para(
+        doc,
+        "· list_days = V3 入库门移除 (近 150 天次新不进 V3);  turn/turnover_rate_f/"
+        "benefit_part_* = 无生成位置或旧名。",
+        size=10,
+    )
+    _para(
+        doc,
+        "根因: 生产精选文件 (factor_registry, 2026-07-31) 是 V3 删列 (2026-08-02) "
+        "之前的过时快照, 仍引用这 42 个死列。",
+        bold=True,
+        size=10,
+    )
+    _para(
+        doc,
+        "结论: 新频率宽表构建必须剔除这 42 列; 下次重训会自动丢弃。同时 "
+        "tests/test_freq_assignment.py 的 PRODUCTION_BASES 含 turn/benefit_part_x/"
+        "sw_ret_1d 等死列, 清理 FAMILY_ANALOG 时需同步修改。",
+        size=10,
+    )
     _para(doc, "缺失列清单:", bold=True, size=10)
     _para(doc, "、".join(MISSING), size=9.5)
 
     # 7. 弱信号警告
     _heading(doc, "7. 弱信号 / 不可靠判定 (不能当频率依据)", 1)
-    _table(doc, ["特征", "最强格", "|IC|", "原因"], [
-        (f, v, f"{ic:.4f}" if ic else "NaN", note) for f, v, ic, note in WEAK
-    ], widths=[5.5, 2.4, 2.0, 6.1])
+    _table(
+        doc,
+        ["特征", "最强格", "|IC|", "原因"],
+        [(f, v, f"{ic:.4f}" if ic else "NaN", note) for f, v, ic, note in WEAK],
+        widths=[5.5, 2.4, 2.0, 6.1],
+    )
 
     # 8. 架构转向
     _heading(doc, "8. 架构转向 (2026-08-04)", 1)
-    _para(doc, "用户决定不做月度/周度独立模型。推荐方案: 日频模型吃全部频率特征 "
-               "(长窗口特征作输入) + 事件模型独立 (LHB/HOLDER 事件池 alpha, BT 折价率负向风控),"
-               "两路融合; 用最终输出 STOCK TOP10 的上涨幅度+概率准确度裁决融合方案。"
-               "现有日频模型 (UNI-FREQ, models/pipeline1/) 保存不动, 新系统另存 (QUAD-FREQ)。",
-          size=10)
+    _para(
+        doc,
+        "用户决定不做月度/周度独立模型。推荐方案: 日频模型吃全部频率特征 "
+        "(长窗口特征作输入) + 事件模型独立 (LHB/HOLDER 事件池 alpha, BT 折价率负向风控),"
+        "两路融合; 用最终输出 STOCK TOP10 的上涨幅度+概率准确度裁决融合方案。"
+        "现有日频模型 (UNI-FREQ, models/pipeline1/) 保存不动, 新系统另存 (QUAD-FREQ)。",
+        size=10,
+    )
 
     # 9. 下一步
     _heading(doc, "9. 下一步", 1)
-    _para(doc, "1) 把 34 个实测判定升级进 FREQ_ASSIGNMENT (替换 FAMILY_ANALOG 猜测);", size=10)
-    _para(doc, "2) 42 个 V3 死列从宽表/路由剔除, 同步清理 FAMILY_ANALOG 与测试死列;", size=10)
+    _para(
+        doc,
+        "1) 把 34 个实测判定升级进 FREQ_ASSIGNMENT (替换 FAMILY_ANALOG 猜测);",
+        size=10,
+    )
+    _para(
+        doc,
+        "2) 42 个 V3 死列从宽表/路由剔除, 同步清理 FAMILY_ANALOG 与测试死列;",
+        size=10,
+    )
     _para(doc, "3) 建频率宽表, 训日频(吃全频) + 事件两模型, TOP10 裁决融合。", size=10)
 
     # 10. 落盘索引
     _heading(doc, "10. 关联文件", 1)
-    _table(doc, ["文件", "说明"], [
-        ["scripts/_classify_freq_analog.py", "6格实测脚本 (可复跑)"],
-        ["data/_classify_freq_analog_20260804_080206.log", "实测结果日志 (WORM)"],
-        ["data/_classify_freq_analog_summary_<ts>.json", "结构化摘要 (WORM)"],
-        ["scripts/_gen_feature_report.py", "特征全貌调研报告生成器"],
-        ["特征全貌调研报告_20260804_070521.docx", "全貌调研报告 (同目录)"],
-    ], widths=[8, 7])
+    _table(
+        doc,
+        ["文件", "说明"],
+        [
+            ["scripts/_classify_freq_analog.py", "6格实测脚本 (可复跑)"],
+            ["data/_classify_freq_analog_20260804_080206.log", "实测结果日志 (WORM)"],
+            ["data/_classify_freq_analog_summary_<ts>.json", "结构化摘要 (WORM)"],
+            ["scripts/_gen_feature_report.py", "特征全貌调研报告生成器"],
+            ["特征全貌调研报告_20260804_070521.docx", "全貌调研报告 (同目录)"],
+        ],
+        widths=[8, 7],
+    )
 
     out = os.path.join(OUT_DIR, f"{TITLE}_{ts}.docx")
     doc.save(out)

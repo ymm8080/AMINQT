@@ -7,6 +7,7 @@ current_meta.json 同步更新.
 
 用法: python scripts/_retrain_legacy_full.py [tag]
 """
+
 from __future__ import annotations
 
 import gc
@@ -29,13 +30,19 @@ def main() -> int:
     tag = sys.argv[1] if len(sys.argv) > 1 else time.strftime("%Y%m%d")
     t0 = time.time()
     panel = pd.read_parquet(str(PANEL_V3_PATH))
-    print(f"[panel] {len(panel):,}r max={panel['date'].max():%Y-%m-%d} "
-          f"({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[panel] {len(panel):,}r max={panel['date'].max():%Y-%m-%d} "
+        f"({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     # 对齐周频 3y 训练窗口 (assemble_panel years=3 语义: 截止日前 3 个日历年)
     cut = panel["date"].max() - pd.DateOffset(years=3)
     panel = panel[panel["date"] >= cut]
-    print(f"[slice] {cut.date()}.. {panel['date'].max():%Y-%m-%d} "
-          f"-> {len(panel):,}r ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[slice] {cut.date()}.. {panel['date'].max():%Y-%m-%d} "
+        f"-> {len(panel):,}r ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     results = run_training(panel, tag, model_dir=MODEL_DIR)
     del panel
@@ -59,11 +66,14 @@ def main() -> int:
             }
             print(f"[{board}] switched -> current = {res['path']}", flush=True)
         else:
-            print(f"[{board}] OOS weighted_IC={res['oos'].get('weighted_ic'):.4f} "
-                  f"< {res['oos'].get('threshold', '?')}, 保留旧模型", flush=True)
+            print(
+                f"[{board}] OOS weighted_IC={res['oos'].get('weighted_ic'):.4f} "
+                f"< {res['oos'].get('threshold', '?')}, 保留旧模型",
+                flush=True,
+            )
     save_modules(mods)
     print(f"[meta] current_meta.json = {mods}", flush=True)
-    print(f"[done] 全部完成 ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[done] 全部完成 ({time.time() - t0:.0f}s)", flush=True)
     return 0
 
 

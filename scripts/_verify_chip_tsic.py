@@ -13,6 +13,7 @@
 
 用法: python scripts/_verify_chip_tsic.py
 """
+
 import gc
 import logging
 import os
@@ -100,14 +101,16 @@ def _report(df, label, out):
     out.append("-" * 84)
     for name in feats:
         w = _wtsic(tsic, name)
-        f = lambda v: f"{v:+.4f}" if v == v else "   nan"
+        def f(v):
+            return f"{v:+.4f}" if v == v else "   nan"
         out.append(f"{name:<22}{f(w):>14}{'':>18}{'':>13}{'':>13}")
     for c in CHIP_COLS:
         w = _wtsic(tsic, f"{c}_resid")
         per = {lab: tsic[lab][f"{c}_resid"] for lab in LABELS}
-        f = lambda v: f"{v:+.4f}" if v == v else "   nan"
+        def f(v):
+            return f"{v:+.4f}" if v == v else "   nan"
         out.append(
-            f"{c+'_resid':<22}{'':>14}{f(w):>18}"
+            f"{c + '_resid':<22}{'':>14}{f(w):>18}"
             f"{f(per['label_pm_2d_net']):>13}{f(per['label_pm_5d_net']):>13}"
         )
     out.append("")
@@ -128,12 +131,8 @@ def main() -> None:
     tr = hs[hs["date"] >= cutoff].reset_index(drop=True)
     mid = tr["date"].median()
     _report(tr, "HS300×1年 全窗", out)
-    _report(
-        tr[tr["date"] <= mid].reset_index(drop=True), "HS300×1年 上半年", out
-    )
-    _report(
-        tr[tr["date"] > mid].reset_index(drop=True), "HS300×1年 下半年", out
-    )
+    _report(tr[tr["date"] <= mid].reset_index(drop=True), "HS300×1年 上半年", out)
+    _report(tr[tr["date"] > mid].reset_index(drop=True), "HS300×1年 下半年", out)
     del hs, tr
     gc.collect()
 

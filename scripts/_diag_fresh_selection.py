@@ -12,6 +12,7 @@ brute 展开用 generate_family(float32, 逐家族) 内存安全, 规避全量 f
 
 用法: python scripts/_diag_fresh_selection.py
 """
+
 import gc
 import json
 import logging
@@ -22,7 +23,6 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import numpy as np
 import pandas as pd
 
 from config.settings import PANEL_V3_PATH
@@ -76,23 +76,33 @@ def main() -> None:
     t0 = time.time()
 
     panel = pd.read_parquet(PANEL_V3_PATH)
-    print(f"[1/5] 面板 {len(panel):,} 行 x {panel.shape[1]} 列 "
-          f"({(time.time()-t0):.0f}s)", flush=True)
+    print(
+        f"[1/5] 面板 {len(panel):,} 行 x {panel.shape[1]} 列 "
+        f"({(time.time() - t0):.0f}s)",
+        flush=True,
+    )
 
     cleaner = CleaningPipeline()
     features = FeatureEngineV35()
     main_df, dual_df = cleaner.run_train(panel)
     del panel, dual_df
     gc.collect()
-    print(f"[2/5] 清洗后 main {len(main_df):,} 行, {main_df['symbol'].nunique()} 股 "
-          f"({(time.time()-t0):.0f}s)", flush=True)
+    print(
+        f"[2/5] 清洗后 main {len(main_df):,} 行, {main_df['symbol'].nunique()} 股 "
+        f"({(time.time() - t0):.0f}s)",
+        flush=True,
+    )
 
-    df = prepare_board_frame(main_df, features, float_shares_map=None,
-                             cross_sectional_rank=False)
+    df = prepare_board_frame(
+        main_df, features, float_shares_map=None, cross_sectional_rank=False
+    )
     del main_df
     gc.collect()
-    print(f"[3/5] 特征+标签面板 {len(df):,} 行 x {df.shape[1]} 列 "
-          f"({(time.time()-t0):.0f}s)", flush=True)
+    print(
+        f"[3/5] 特征+标签面板 {len(df):,} 行 x {df.shape[1]} 列 "
+        f"({(time.time() - t0):.0f}s)",
+        flush=True,
+    )
 
     gen0 = BruteForceGenerator()
     elig = gen0._eligible(df)
@@ -102,14 +112,17 @@ def main() -> None:
     nB = sum(1 for t in tiers.values() if t == "B")
     nC = sum(1 for t in tiers.values() if t == "C")
     a_cols = [c for c in elig if tiers[c] == "A"]
-    print(f"[4/5] eligible={len(elig)} | A={nA} (brute->{nA*32:,}) "
-          f"| B={nB} (仅level) | C={nC} (仅level)  ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[4/5] eligible={len(elig)} | A={nA} (brute->{nA * 32:,}) "
+        f"| B={nB} (仅level) | C={nC} (仅level)  ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     sel = FeatureSelector()
     selected = sel.select(df, "main", generator=TieredGen(a_cols))
     selected = apply_event_scope_screens(selected, df)
     selected = [c for c in selected if c in df.columns]
-    print(f"[5/5] 选中 {len(selected)} 个 ({(time.time()-t0):.0f}s)", flush=True)
+    print(f"[5/5] 选中 {len(selected)} 个 ({(time.time() - t0):.0f}s)", flush=True)
 
     # ── 归属分类 ──
     comp = {"A_brute": [], "A_level": [], "B_level": [], "C_level": [], "other": []}
@@ -145,15 +158,22 @@ def main() -> None:
 
     # 全展开会额外出现的 B/C brute 变体数 (目标设计不生成)
     excluded_brute = sum(32 for c in elig if tiers[c] in ("B", "C"))
-    print(f"\n[对比] 全展开会比目标设计多 {excluded_brute:,} 个 B/C brute 变体进池 "
-          f"(目标设计全部不生成)")
+    print(
+        f"\n[对比] 全展开会比目标设计多 {excluded_brute:,} 个 B/C brute 变体进池 "
+        f"(目标设计全部不生成)"
+    )
 
     out = {
         "board": "main",
         "design": "tiered A-brute + B/C-level",
         "created": time.strftime("%Y%m%dT%H%M%S"),
-        "pool": {"eligible": len(elig), "A": nA, "B": nB, "C": nC,
-                 "A_brute_feats": nA * 32},
+        "pool": {
+            "eligible": len(elig),
+            "A": nA,
+            "B": nB,
+            "C": nC,
+            "A_brute_feats": nA * 32,
+        },
         "selected_count": len(selected),
         "features": selected,
     }

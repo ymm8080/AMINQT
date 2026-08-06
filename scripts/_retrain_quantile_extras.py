@@ -18,6 +18,7 @@
 
 用法: python scripts/_retrain_quantile_extras.py [YYMMDDtag]
 """
+
 import gc
 import os
 import pickle
@@ -45,7 +46,9 @@ MODEL_DIR = "models/pipeline1"
 SLICE_DAYS = 300  # 与 diag 同切片, 已验证内存安全
 MASK_RECENT_DAYS = 6
 HORIZONS = (2, 3, 5)  # E7 闸3 全视界分位数 (2d/3d/5d) 每日 splice 刷新
-BOARDS = ("dual",)  # 2026-08-05 全量重训后仅 dual 需恢复 2d/3d/5d (main OOS 被拒, 旧 bundle 已完整)
+BOARDS = (
+    "dual",
+)  # 2026-08-05 全量重训后仅 dual 需恢复 2d/3d/5d (main OOS 被拒, 旧 bundle 已完整)
 
 
 def _xy(seg: pd.DataFrame, cols: list[str], label: str):
@@ -89,7 +92,10 @@ def train_quantile(trainer, segs, cols, horizon, board):
     qset.label_ = q_label
     del X, y, X_es, y_es
     gc.collect()
-    print(f"[{board}] {horizon}d 分位数五模型训练完成 (label={q_label}, 样本 {len(segs['train']):,})", flush=True)
+    print(
+        f"[{board}] {horizon}d 分位数五模型训练完成 (label={q_label}, 样本 {len(segs['train']):,})",
+        flush=True,
+    )
     return qset
 
 
@@ -101,15 +107,24 @@ def main():
     features = FeatureEngineV35()
 
     panel = pd.read_parquet(str(PANEL_V3_PATH))
-    print(f"[panel] {len(panel):,}r max={panel['date'].max():%Y-%m-%d} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[panel] {len(panel):,}r max={panel['date'].max():%Y-%m-%d} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     dates = sorted(panel["date"].unique())
     panel = panel[panel["date"] >= dates[-SLICE_DAYS]]
-    print(f"[slice] {SLICE_DAYS}d {panel['date'].min():%Y-%m-%d}.. {len(panel):,}r", flush=True)
+    print(
+        f"[slice] {SLICE_DAYS}d {panel['date'].min():%Y-%m-%d}.. {len(panel):,}r",
+        flush=True,
+    )
 
     main_df, dual_df = cleaner.run_train(panel)
     del panel
     gc.collect()
-    print(f"[clean] main={len(main_df):,} dual={len(dual_df):,} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[clean] main={len(main_df):,} dual={len(dual_df):,} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     module_tag = f"{tag}_q2345"
     modules = {}
@@ -121,13 +136,16 @@ def main():
         with open(cur, "rb") as fh:
             bundle = pickle.load(fh)
         cols = bundle["feature_cols"]
-        print(f"[{board}] bundle feature_cols={len(cols)} ({time.time()-t0:.0f}s)", flush=True)
+        print(
+            f"[{board}] bundle feature_cols={len(cols)} ({time.time() - t0:.0f}s)",
+            flush=True,
+        )
 
         # 特征 → 路径标签 → 主标签 → 停牌/近端掩码 (与 prepare_board_frame 同序列)
         df = features.build(
             df, None, inference_cols=cols, cross_sectional_rank=(board == "dual")
         )
-        print(f"[{board}] features build ({time.time()-t0:.0f}s)", flush=True)
+        print(f"[{board}] features build ({time.time() - t0:.0f}s)", flush=True)
         df = LabelEngine.build_path_labels(df)
         df = LabelEngine.build_labels(df)
         df = LabelEngine.mask_suspension(df)
@@ -152,6 +170,7 @@ def main():
         backup = os.path.join(MODEL_DIR, f"{board}_current_prequantile_backup.pkl")
         if not os.path.exists(backup):
             import shutil
+
             shutil.copy(cur, backup)
         with open(cur, "wb") as fh:
             pickle.dump(bundle, fh)
@@ -162,13 +181,15 @@ def main():
         }
         del bundle
         gc.collect()
-        print(f"[{board}] spliced → {snap} + {cur} ({time.time()-t0:.0f}s)", flush=True)
+        print(
+            f"[{board}] spliced → {snap} + {cur} ({time.time() - t0:.0f}s)", flush=True
+        )
 
     from app.pipeline1.model_meta import save_modules
 
     save_modules(modules)
     print(f"[meta] models/pipeline1/current_meta.json = {modules}", flush=True)
-    print(f"[done] 全部完成 ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[done] 全部完成 ({time.time() - t0:.0f}s)", flush=True)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@
 
 用法: python scripts/_diag_column_feed.py
 """
+
 import gc
 import logging
 import os
@@ -123,10 +124,14 @@ def main() -> None:
     schema_names = _schema_cols(PANEL_V3_PATH)
     gen = BruteForceGenerator(eligible_cols=schema_names)
     elig = gen._eligible(pd.DataFrame(columns=schema_names))
-    read_cols = (
-        ["date", "symbol", "close_hfq", "amount", "volume", "is_suspended"]
-        + list(elig)
-    )
+    read_cols = [
+        "date",
+        "symbol",
+        "close_hfq",
+        "amount",
+        "volume",
+        "is_suspended",
+    ] + list(elig)
     read_cols = list(dict.fromkeys(read_cols))
 
     df = pd.read_parquet(PANEL_V3_PATH, columns=read_cols)
@@ -138,16 +143,20 @@ def main() -> None:
     tr = df[df["date"] >= cutoff].reset_index(drop=True)
     del df
     gc.collect()
-    print(f"训练窗口 {cutoff.date()} .. {latest.date()} | rows={len(tr):,} "
-          f"stocks={tr['symbol'].nunique()} | "
-          f"目标 label_pm_2d/3d/5d_net 非空率: "
-          f"{tr['label_pm_2d_net'].notna().mean():.1%}/{tr['label_pm_3d_net'].notna().mean():.1%}"
-          f"/{tr['label_pm_5d_net'].notna().mean():.1%}")
+    print(
+        f"训练窗口 {cutoff.date()} .. {latest.date()} | rows={len(tr):,} "
+        f"stocks={tr['symbol'].nunique()} | "
+        f"目标 label_pm_2d/3d/5d_net 非空率: "
+        f"{tr['label_pm_2d_net'].notna().mean():.1%}/{tr['label_pm_3d_net'].notna().mean():.1%}"
+        f"/{tr['label_pm_5d_net'].notna().mean():.1%}"
+    )
 
     vol0 = int((tr["volume"] == 0).sum())
     amt0 = int((tr["amount"] == 0).sum())
-    print(f"[行卫生] volume==0: {vol0:,} ({vol0/len(tr):.2%}) | "
-          f"amount==0: {amt0:,} ({amt0/len(tr):.2%})")
+    print(
+        f"[行卫生] volume==0: {vol0:,} ({vol0 / len(tr):.2%}) | "
+        f"amount==0: {amt0:,} ({amt0 / len(tr):.2%})"
+    )
 
     ics = daily_rank_ic_multi(tr, elig, LABELS)
     tv = temporal_variation(tr, elig)
@@ -155,9 +164,16 @@ def main() -> None:
     for c in elig:
         per_horizon = {lab: ics[lab][c] for lab in LABELS}
         wic = weighted_ic(per_horizon)
-        rows.append((c, wic, per_horizon["label_pm_2d_net"],
-                     per_horizon["label_pm_3d_net"], per_horizon["label_pm_5d_net"],
-                     tv[c]))
+        rows.append(
+            (
+                c,
+                wic,
+                per_horizon["label_pm_2d_net"],
+                per_horizon["label_pm_3d_net"],
+                per_horizon["label_pm_5d_net"],
+                tv[c],
+            )
+        )
     rows.sort(key=lambda t: -(abs(t[1]) if t[1] == t[1] else float("inf")))
 
     print(f"\n{'col':<26}{'wIC':>8}{'IC2d':>8}{'IC3d':>8}{'IC5d':>8}{'chg':>7}  tier")
@@ -165,16 +181,21 @@ def main() -> None:
     print("wIC = 0.45*IC2d + 0.35*IC3d + 0.2*IC5d | tier: A=brute展开 B/C=仅level")
     for c, wic, i2, i3, i5, chg in rows:
         cat = tier_of(chg, c)
-        fmt = lambda v: f"{v:+.4f}" if v == v else "   nan"
+        def fmt(v):
+            return f"{v:+.4f}" if v == v else "   nan"
         chg_s = f"{chg:.3f}" if chg == chg else "  nan"
-        print(f"{c:<26}{fmt(wic):>8}{fmt(i2):>8}{fmt(i3):>8}{fmt(i5):>8}{chg_s:>7}  {cat}")
+        print(
+            f"{c:<26}{fmt(wic):>8}{fmt(i2):>8}{fmt(i3):>8}{fmt(i5):>8}{chg_s:>7}  {cat}"
+        )
 
     counts = {"A": 0, "B": 0, "C": 0}
     for c, _, _, _, _, chg in rows:
         counts[tier_of(chg, c)] += 1
     nA = counts["A"]
-    print(f"\n汇总: A={nA} (brute展开 -> {nA*32:,} 特征) | B={counts['B']} (仅level) | "
-          f"C={counts['C']} (静态仅level)")
+    print(
+        f"\n汇总: A={nA} (brute展开 -> {nA * 32:,} 特征) | B={counts['B']} (仅level) | "
+        f"C={counts['C']} (静态仅level)"
+    )
 
 
 if __name__ == "__main__":

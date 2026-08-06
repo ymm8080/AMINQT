@@ -12,6 +12,7 @@ EVENT 是事件性的: 不是把单只股票的 LHB 与非 LHB 时段混在一�
 
 输出落盘 data/_diag_lhb_event_pool_<ts>.log (WORM).
 """
+
 import gc
 import logging
 import os
@@ -23,7 +24,6 @@ import numpy as np
 import pandas as pd
 
 from config.settings import PANEL_V3_PATH
-from app.pipeline1.label_engine import LabelEngine
 
 logging.disable(logging.CRITICAL)
 np.seterr(all="ignore")
@@ -34,8 +34,15 @@ HORIZONS = (2, 3, 5, 10, 20)
 
 def _load() -> pd.DataFrame:
     read_cols = [
-        "date", "symbol", "is_suspended", "close_hfq",
-        "lhb_net_buy", "lhb_buy_amt", "lhb_sell_amt", "lhb_inst_buy", "lhb_inst_sell",
+        "date",
+        "symbol",
+        "is_suspended",
+        "close_hfq",
+        "lhb_net_buy",
+        "lhb_buy_amt",
+        "lhb_sell_amt",
+        "lhb_inst_buy",
+        "lhb_inst_sell",
     ]
     df = pd.read_parquet(PANEL_V3_PATH, columns=read_cols)
     df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
@@ -59,9 +66,7 @@ def main() -> None:
     cutoff = latest - pd.DateOffset(years=3)
     df = df[df["date"] >= cutoff].reset_index(drop=True)
     df = df[~df["is_suspended"].astype(bool)].reset_index(drop=True)
-    out.append(
-        f"--- 全市场×3年 | rows={len(df):,} stocks={df['symbol'].nunique()} ---"
-    )
+    out.append(f"--- 全市场×3年 | rows={len(df):,} stocks={df['symbol'].nunique()} ---")
 
     ev_mask = df["lhb_net_buy"].fillna(0) != 0
     out.append(f"LHB 事件数 = {int(ev_mask.sum()):,}")
@@ -88,7 +93,17 @@ def main() -> None:
 
     # 1. 事件窗口平均收益轨迹 (分段累计)
     out.append("\n  1) 事件窗口平均相对收益 (相对事件日收盘, 全事件平均):")
-    segs = [(-20, -16), (-15, -11), (-10, -6), (-5, -1), (0, 0), (1, 5), (6, 10), (11, 15), (16, 20)]
+    segs = [
+        (-20, -16),
+        (-15, -11),
+        (-10, -6),
+        (-5, -1),
+        (0, 0),
+        (1, 5),
+        (6, 10),
+        (11, 15),
+        (16, 20),
+    ]
     out.append(f"{'交易日段':<14}{'平均rel':>10}{'n':>8}")
     for a, b in segs:
         m = win["off"].between(a, b) & win["rel"].notna()
@@ -99,13 +114,9 @@ def main() -> None:
 
     # 事件日 rel(=0) 及事件后单日点
     out.append("\n  2) 事件后分点位平均收益 & 胜率 (相对事件日收盘):")
-    out.append(
-        f"{'分组':<16}{'T+2':>10}{'T+3':>10}{'T+5':>10}{'T+10':>10}{'T+20':>10}"
-    )
+    out.append(f"{'分组':<16}{'T+2':>10}{'T+3':>10}{'T+5':>10}{'T+10':>10}{'T+20':>10}")
     # 每个事件在 horizon 点的 rel
-    piv = win.pivot_table(
-        index="evt_id", columns="off", values="rel"
-    )
+    piv = win.pivot_table(index="evt_id", columns="off", values="rel")
 
     def _row(tag, idx):
         parts = [f"{tag:<16}"]
@@ -126,9 +137,11 @@ def main() -> None:
     # 金额三分位 (lhb_net_buy abs)
     amt = np.abs(sign)
     q = np.quantile(amt, [1 / 3, 2 / 3])
-    for tag, m in (("净买额小1/3", amt <= q[0]),
-                   ("净买额中1/3", (amt > q[0]) & (amt <= q[1])),
-                   ("净买额大1/3", amt > q[1])):
+    for tag, m in (
+        ("净买额小1/3", amt <= q[0]),
+        ("净买额中1/3", (amt > q[0]) & (amt <= q[1])),
+        ("净买额大1/3", amt > q[1]),
+    ):
         _row(tag, piv.index[m])
 
     # 3. 事件池内 feature 对事件后收益的 rank IC (跨事件样本)

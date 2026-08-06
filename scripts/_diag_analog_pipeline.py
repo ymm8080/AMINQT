@@ -8,19 +8,18 @@ FeatureEngineV35.build) 下 close = TS·月 正 +0.069. 本脚本分解:
   3) 只用 run_train 输出 (不跑特征引擎) 重算 close 的 6格 → 看清洗是否单独翻转判定.
 输出: data/_diag_analog_pipeline_<ts>.log (WORM).
 """
-import gc
+
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
-import numpy as np
 import pandas as pd
 
 from config.settings import PANEL_V3_PATH
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.label_engine import LabelEngine
-from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS, WEIGHTS
+from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS
 from scripts._classify_freq_full import (
     MIN_CROSS,
     MIN_OBS,
@@ -43,13 +42,21 @@ def classify(work, col):
     for f, wc in wins.items():
         wr_sym = wc.groupby(g_sym.values).rank()
         wr_date = wc.groupby(g_date.values).rank()
-        tsic[f] = {l: group_spearman(wr_sym, lab_sym[l], g_sym, MIN_OBS) for l in LABELS}
-        xic[f] = {l: group_spearman(wr_date, lab_date[l], g_date, MIN_CROSS) for l in LABELS}
+        tsic[f] = {
+            l: group_spearman(wr_sym, lab_sym[l], g_sym, MIN_OBS) for l in LABELS
+        }
+        xic[f] = {
+            l: group_spearman(wr_date, lab_date[l], g_date, MIN_CROSS) for l in LABELS
+        }
     ts = {w: _wtsic(tsic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     xs = {w: _wtsic(xic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     cells = {
-        "TS日": ts[1], "TS周": ts[5], "TS月": ts[20],
-        "XS日": xs[1], "XS周": xs[5], "XS月": xs[20],
+        "TS日": ts[1],
+        "TS周": ts[5],
+        "TS月": ts[20],
+        "XS日": xs[1],
+        "XS周": xs[5],
+        "XS月": xs[20],
     }
     return cells
 
@@ -78,15 +85,19 @@ def main():
         bdf = bdf.sort_values(["symbol", "date"]).reset_index(drop=True)
         sub = panel[["symbol", "date", "close", "close_hfq"]].merge(
             bdf[["symbol", "date", "close", "close_hfq"]],
-            on=["symbol", "date"], suffixes=("_panel", "_clean"), how="inner"
+            on=["symbol", "date"],
+            suffixes=("_panel", "_clean"),
+            how="inner",
         )
         n = len(sub)
         d_close = (sub["close_panel"] - sub["close_clean"]).abs().max()
         d_hfq = (sub["close_hfq_panel"] - sub["close_hfq_clean"]).abs().max()
         n_virt = int(bdf["is_virtual"].fillna(0).sum()) if "is_virtual" in bdf else 0
-        lines.append(f"[{b}] 清洗后 rows={len(bdf):,} 虚拟行={n_virt:,} | "
-                     f"重叠(symbol,date)={n:,} | close 最大差={d_close:.4f} | "
-                     f"close_hfq 最大差={d_hfq:.4f}")
+        lines.append(
+            f"[{b}] 清洗后 rows={len(bdf):,} 虚拟行={n_virt:,} | "
+            f"重叠(symbol,date)={n:,} | close 最大差={d_close:.4f} | "
+            f"close_hfq 最大差={d_hfq:.4f}"
+        )
 
     # delisted_virtual_ret 值
     dvr = getattr(cleaner.cfg, "delisted_virtual_ret", None)
@@ -100,7 +111,9 @@ def main():
     both = LabelEngine.mask_recent_days(both, days=MASK_RECENT_DAYS)
     cutoff = both["date"].max() - pd.DateOffset(years=3)
     work = both[both["date"] >= cutoff].reset_index(drop=True)
-    lines.append(f"run_train 口径 3y: rows={len(work):,} stocks={work['symbol'].nunique():,}")
+    lines.append(
+        f"run_train 口径 3y: rows={len(work):,} stocks={work['symbol'].nunique():,}"
+    )
 
     for c in ["close", "close_hfq"]:
         if c not in work.columns:

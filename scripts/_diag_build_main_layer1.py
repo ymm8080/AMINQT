@@ -4,6 +4,7 @@
 等价 build_features.py --board main 的 step2 部分, 但不跑 step1 registry adoption
 (避免改 feature_registry.json). 输出 data/factor_registry/features_main_{ts}.parquet (WORM).
 """
+
 import logging
 import os
 import sys
@@ -16,7 +17,9 @@ from config.settings import PANEL_V3_PATH
 
 import build_features as bf
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 
 
 def main():

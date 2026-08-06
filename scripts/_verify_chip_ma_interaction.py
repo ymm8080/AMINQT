@@ -12,6 +12,7 @@ HS300×1年 + 全市场×3年. 输出落盘 data/_verify_chip_ma_interaction_<ts
 
 用法: python scripts/_verify_chip_ma_interaction.py
 """
+
 import gc
 import logging
 import os
@@ -66,9 +67,7 @@ def _wtsic(tsic, name):
 
 def _feat_table(work, feats, out):
     tsic = per_stock_ts_ic(work, feats, LABELS, min_obs=MIN_OBS)
-    out.append(
-        f"{'feature':<26}{'wTSIC':>9}{'TS2d':>9}{'TS3d':>9}{'TS5d':>9}"
-    )
+    out.append(f"{'feature':<26}{'wTSIC':>9}{'TS2d':>9}{'TS3d':>9}{'TS5d':>9}")
     out.append("-" * 62)
     for name in feats:
         per = {lab: tsic[lab][name] for lab in LABELS}
@@ -102,9 +101,7 @@ def _report(tr, label, out):
 
     # 条件: 站上/跌破 bias_20 子窗口内 chip_p20 的 TSIC
     out.append("  条件子窗口 (bias_20 站上 vs 跌破) 内 chip_p20 TSIC:")
-    out.append(
-        f"{'feature':<20}{'bias20>0 wTSIC':>15}{'bias20<0 wTSIC':>15}"
-    )
+    out.append(f"{'feature':<20}{'bias20>0 wTSIC':>15}{'bias20<0 wTSIC':>15}")
     for c in CHIP_COLS:
         up = work[work["bias_20"] > 0]
         dn = work[work["bias_20"] <= 0]

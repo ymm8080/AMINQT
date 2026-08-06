@@ -9,6 +9,7 @@
 
 用法: python scripts/_diag_hs300_exclude.py
 """
+
 import gc
 import json
 import logging
@@ -17,17 +18,13 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
-import numpy as np
 import pandas as pd
 
 from config.settings import PANEL_V3_PATH
 from app.pipeline1.label_engine import LabelEngine
 from scripts._diag_column_feed import (
-    B_EVENT_PREFIX,
-    B_EXTRA,
     LABELS,
     MASK_RECENT_DAYS,
-    WEIGHTS,
     daily_rank_ic_multi,
     temporal_variation,
     tier_of,
@@ -116,15 +113,22 @@ def main() -> None:
     rows.sort(key=lambda r: -(abs(r["wIC"]) if r["wIC"] == r["wIC"] else float("inf")))
 
     lines = []
-    lines.append(f"训练窗口 {cutoff.date()} .. {latest.date()} | rows={len(tr):,} "
-                 f"stocks={tr['symbol'].nunique()}")
+    lines.append(
+        f"训练窗口 {cutoff.date()} .. {latest.date()} | rows={len(tr):,} "
+        f"stocks={tr['symbol'].nunique()}"
+    )
     lines.append("")
-    lines.append(f"{'col':<26}{'wIC':>8}{'IC2d':>8}{'IC3d':>8}{'IC5d':>8}{'chg':>7}  tier")
+    lines.append(
+        f"{'col':<26}{'wIC':>8}{'IC2d':>8}{'IC3d':>8}{'IC5d':>8}{'chg':>7}  tier"
+    )
     lines.append("-" * 74)
-    lines.append("wIC = 0.45*IC2d + 0.35*IC3d + 0.2*IC5d | tier: A=brute展开 B/C=仅level")
+    lines.append(
+        "wIC = 0.45*IC2d + 0.35*IC3d + 0.2*IC5d | tier: A=brute展开 B/C=仅level"
+    )
     for r in rows:
         cat = tier_of(r["chg"], r["col"])
-        fmt = lambda v: f"{v:+.4f}" if v == v else "   nan"
+        def fmt(v):
+            return f"{v:+.4f}" if v == v else "   nan"
         chg_s = f"{r['chg']:.3f}" if r["chg"] == r["chg"] else "  nan"
         lines.append(
             f"{r['col']:<26}{fmt(r['wIC']):>8}{fmt(r['IC2d']):>8}"
@@ -136,7 +140,7 @@ def main() -> None:
         counts[tier_of(r["chg"], r["col"])] += 1
     lines.append("")
     lines.append(
-        f"汇总: A={counts['A']} (brute展开 -> {counts['A']*32:,} 特征) | "
+        f"汇总: A={counts['A']} (brute展开 -> {counts['A'] * 32:,} 特征) | "
         f"B={counts['B']} (仅level) | C={counts['C']} (静态仅level)"
     )
 

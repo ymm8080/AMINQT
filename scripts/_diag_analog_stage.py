@@ -19,6 +19,7 @@ v2 修正:
         label_pm_3d_net 相关性 + 符号反转比例; 特征输出上重算 6格 是否漂移.
 输出: data/_diag_analog_stage_<ts>.log (WORM) + data/_diag_stage_main_3y.parquet (检查点).
 """
+
 import gc
 import os
 import sys
@@ -57,22 +58,32 @@ def classify(work, col):
     for f, wc in wins.items():
         wr_sym = wc.groupby(g_sym.values).rank()
         wr_date = wc.groupby(g_date.values).rank()
-        tsic[f] = {l: group_spearman(wr_sym, lab_sym[l], g_sym, MIN_OBS) for l in LABELS}
-        xic[f] = {l: group_spearman(wr_date, lab_date[l], g_date, MIN_CROSS) for l in LABELS}
+        tsic[f] = {
+            l: group_spearman(wr_sym, lab_sym[l], g_sym, MIN_OBS) for l in LABELS
+        }
+        xic[f] = {
+            l: group_spearman(wr_date, lab_date[l], g_date, MIN_CROSS) for l in LABELS
+        }
     ts = {w: _wtsic(tsic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     xs = {w: _wtsic(xic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     cells = {
-        "TS日": ts[1], "TS周": ts[5], "TS月": ts[20],
-        "XS日": xs[1], "XS周": xs[5], "XS月": xs[20],
+        "TS日": ts[1],
+        "TS周": ts[5],
+        "TS月": ts[20],
+        "XS日": xs[1],
+        "XS周": xs[5],
+        "XS月": xs[20],
     }
     return cells
 
 
 def _fmt_cells(cells):
     best = max(cells, key=lambda k: abs(cells[k]))
-    return (f"{_f(cells['TS日']):>8}{_f(cells['TS周']):>8}{_f(cells['TS月']):>8}"
-            f"{_f(cells['XS日']):>8}{_f(cells['XS周']):>8}{_f(cells['XS月']):>8}"
-            f"  ← {best} ({abs(cells[best]):.4f})")
+    return (
+        f"{_f(cells['TS日']):>8}{_f(cells['TS周']):>8}{_f(cells['TS月']):>8}"
+        f"{_f(cells['XS日']):>8}{_f(cells['XS周']):>8}{_f(cells['XS月']):>8}"
+        f"  ← {best} ({abs(cells[best]):.4f})"
+    )
 
 
 def main():
@@ -83,7 +94,9 @@ def main():
 
     lines = []
     lines.append("=" * 78)
-    lines.append("  features.build 污染钉死 v2 — 主板 (检查点复用协议: " + CHECKPOINT + ")")
+    lines.append(
+        "  features.build 污染钉死 v2 — 主板 (检查点复用协议: " + CHECKPOINT + ")"
+    )
     lines.append("=" * 78)
 
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
@@ -103,7 +116,9 @@ def main():
         base_df = LabelEngine.mask_recent_days(base_df, days=MASK_RECENT_DAYS)
         cutoff = base_df["date"].max() - pd.DateOffset(years=3)
         base_work = base_df[base_df["date"] >= cutoff].reset_index(drop=True)
-        lines.append(f"[A 面板直读] rows={len(base_work):,} stocks={base_work['symbol'].nunique():,}")
+        lines.append(
+            f"[A 面板直读] rows={len(base_work):,} stocks={base_work['symbol'].nunique():,}"
+        )
         for c in ["close", "close_hfq", "amount"]:
             lines.append(f"  {c:<12}{_fmt_cells(classify(base_work, c))}  [基准]")
         del base_df, base_work
@@ -118,22 +133,32 @@ def main():
         main_df, dual_df = CleaningPipeline().run_train(panel)
         del panel
         gc.collect()
-        lines.append(f"[B1 run_train main] rows={len(main_df):,} (dual 另行处理, 此处仅主板)")
-        clean_snap = main_df[["symbol", "date", "is_suspended", "close", "close_hfq", "amount"]].copy()
+        lines.append(
+            f"[B1 run_train main] rows={len(main_df):,} (dual 另行处理, 此处仅主板)"
+        )
+        clean_snap = main_df[
+            ["symbol", "date", "is_suspended", "close", "close_hfq", "amount"]
+        ].copy()
         if "price_1455" in main_df.columns:
             clean_snap["price_1455"] = main_df["price_1455"]
         fe = FeatureEngineV35()
         d = fe.build(main_df, None, cross_sectional_rank=False, registry=None)
         del main_df
         gc.collect()
-        lines.append(f"[B2 features.build] rows={len(d):,} cols={d.shape[1]:,} "
-                     f"(行数差 = {len(d) - len(clean_snap):,})")
-        lines.append(f"[B2b 清洗行集含 price_1455] {'是' if 'price_1455' in clean_snap.columns else '否'} | "
-                     f"features 输出含 price_1455: {'是' if 'price_1455' in d.columns else '否'}")
+        lines.append(
+            f"[B2 features.build] rows={len(d):,} cols={d.shape[1]:,} "
+            f"(行数差 = {len(d) - len(clean_snap):,})"
+        )
+        lines.append(
+            f"[B2b 清洗行集含 price_1455] {'是' if 'price_1455' in clean_snap.columns else '否'} | "
+            f"features 输出含 price_1455: {'是' if 'price_1455' in d.columns else '否'}"
+        )
 
         # B3: 逐行对比关键价列
         keys = [c for c in ["close", "close_hfq", "price_1455"] if c in d.columns]
-        m = clean_snap.merge(d[["symbol", "date"] + keys], on=["symbol", "date"], suffixes=("_c", "_b"))
+        m = clean_snap.merge(
+            d[["symbol", "date"] + keys], on=["symbol", "date"], suffixes=("_c", "_b")
+        )
         diffs = []
         for c in keys:
             diffs.append(f"{c} max|Δ|={abs(m[f'{c}_c'] - m[f'{c}_b']).max():.6f}")
@@ -149,10 +174,14 @@ def main():
         latest = d["date"].max()
         cutoff = latest - pd.DateOffset(years=3)
         d3 = d[d["date"] >= cutoff].reset_index(drop=True)
-        lines.append(f"[B4 生产切片] 全历史 rows={len(d):,} → 3y rows={len(d3):,} "
-                     f"stocks={d3['symbol'].nunique():,} | latest={latest:%Y-%m-%d}")
+        lines.append(
+            f"[B4 生产切片] 全历史 rows={len(d):,} → 3y rows={len(d3):,} "
+            f"stocks={d3['symbol'].nunique():,} | latest={latest:%Y-%m-%d}"
+        )
         d3.to_parquet(CHECKPOINT, index=False)
-        lines.append(f"[B4 检查点] 已落盘 {CHECKPOINT} ({os.path.getsize(CHECKPOINT)/1e9:.2f} GB)")
+        lines.append(
+            f"[B4 检查点] 已落盘 {CHECKPOINT} ({os.path.getsize(CHECKPOINT) / 1e9:.2f} GB)"
+        )
         del d
         gc.collect()
 
@@ -160,22 +189,30 @@ def main():
         try:
             # 顺序须与生产一致: build_labels → mask_suspension → mask_recent_days
             # (mask_* 引用 label_*d, 必须先有标签列, 否则 KeyError)
-            clean3 = clean_snap[clean_snap["date"] >= cutoff].sort_values(
-                ["symbol", "date"]).reset_index(drop=True)
+            clean3 = (
+                clean_snap[clean_snap["date"] >= cutoff]
+                .sort_values(["symbol", "date"])
+                .reset_index(drop=True)
+            )
             clean3 = LabelEngine.build_labels(clean3, session="PM")
             clean3 = LabelEngine.mask_suspension(clean3)
             clean3 = LabelEngine.mask_recent_days(clean3, days=MASK_RECENT_DAYS)
             lab_clean = clean3[["symbol", "date", "label_pm_3d_net"]]
             lab_built = LabelEngine.build_labels(
-                d3.sort_values(["symbol", "date"]).reset_index(drop=True).copy(), session="PM"
+                d3.sort_values(["symbol", "date"]).reset_index(drop=True).copy(),
+                session="PM",
             )[["symbol", "date", "label_pm_3d_net"]]
             j = lab_clean.merge(lab_built, on=["symbol", "date"], suffixes=("_c", "_b"))
             j = j.dropna(subset=["label_pm_3d_net_c", "label_pm_3d_net_b"])
             jc = j["label_pm_3d_net_c"].corr(j["label_pm_3d_net_b"])
             md = (j["label_pm_3d_net_c"] - j["label_pm_3d_net_b"]).abs().max()
-            flip = ((np.sign(j["label_pm_3d_net_c"]) != np.sign(j["label_pm_3d_net_b"]))).mean()
-            lines.append(f"[C 标签完整性] 重叠={len(j):,} | label_pm_3d_net 相关系数={jc:.4f} | "
-                         f"最大差={md:.6f} | 符号反转比例={flip:.2%}")
+            flip = (
+                np.sign(j["label_pm_3d_net_c"]) != np.sign(j["label_pm_3d_net_b"])
+            ).mean()
+            lines.append(
+                f"[C 标签完整性] 重叠={len(j):,} | label_pm_3d_net 相关系数={jc:.4f} | "
+                f"最大差={md:.6f} | 符号反转比例={flip:.2%}"
+            )
         except Exception as e:
             lines.append(f"[C 异常] {type(e).__name__}: {e}")
         del clean_snap, clean3, lab_clean, lab_built, j
@@ -186,7 +223,9 @@ def main():
             if c not in d3.columns:
                 lines.append(f"  {c:<12} (列缺失)")
                 continue
-            lines.append(f"  {c:<12}{_fmt_cells(classify(d3, c))}  [features.build 生产切片]")
+            lines.append(
+                f"  {c:<12}{_fmt_cells(classify(d3, c))}  [features.build 生产切片]"
+            )
         del d3
         gc.collect()
     except Exception as e:

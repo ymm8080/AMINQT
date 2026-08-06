@@ -8,6 +8,7 @@ hfq 重定基伪跳作废逻辑复用 lhb_v2_train_eval (2026-07-27 数据商重
 
 输出 (WORM): BACKTEST_RESULT_DIR/<ts>/lhb_fwd_ret_<ts>.{parquet,csv}
 """
+
 from __future__ import annotations
 
 import logging
@@ -139,7 +140,10 @@ def main() -> None:
 
     if "up_limit_raw" in pool.columns:
         tol = 0.005
-        _cond("涨停上榜 (close>=up_limit)", pool["close"] >= pool["up_limit_raw"] * (1 - tol))
+        _cond(
+            "涨停上榜 (close>=up_limit)",
+            pool["close"] >= pool["up_limit_raw"] * (1 - tol),
+        )
         _cond("非涨停上榜", pool["close"] < pool["up_limit_raw"] * (1 - tol))
 
     if "lhb_inst_buy" in pool.columns and "lhb_inst_sell" in pool.columns:

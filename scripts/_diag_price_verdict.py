@@ -9,17 +9,17 @@
 对 close / close_hfq / open / open_hfq 并排算 6格 → 看价格族判定是否自洽.
 输出: data/_diag_price_verdict_<ts>.log (WORM).
 """
+
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
-import numpy as np
 import pandas as pd
 
 from config.settings import PANEL_V3_PATH
 from app.pipeline1.label_engine import LabelEngine
-from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS, WEIGHTS
+from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS
 from scripts._classify_freq_full import (
     MIN_CROSS,
     MIN_OBS,
@@ -39,13 +39,21 @@ def classify(work, g_sym, g_date, lab_sym, lab_date, col):
     for f, wc in wins.items():
         wr_sym = wc.groupby(g_sym.values).rank()
         wr_date = wc.groupby(g_date.values).rank()
-        tsic[f] = {l: group_spearman(wr_sym, lab_sym[l], g_sym, MIN_OBS) for l in LABELS}
-        xic[f] = {l: group_spearman(wr_date, lab_date[l], g_date, MIN_CROSS) for l in LABELS}
+        tsic[f] = {
+            l: group_spearman(wr_sym, lab_sym[l], g_sym, MIN_OBS) for l in LABELS
+        }
+        xic[f] = {
+            l: group_spearman(wr_date, lab_date[l], g_date, MIN_CROSS) for l in LABELS
+        }
     ts = {w: _wtsic(tsic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     xs = {w: _wtsic(xic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     cells = {
-        "TS日": ts[1], "TS周": ts[5], "TS月": ts[20],
-        "XS日": xs[1], "XS周": xs[5], "XS月": xs[20],
+        "TS日": ts[1],
+        "TS周": ts[5],
+        "TS月": ts[20],
+        "XS日": xs[1],
+        "XS周": xs[5],
+        "XS月": xs[20],
     }
     return cells
 
@@ -56,7 +64,6 @@ def main():
     except Exception:
         pass
 
-    need = ["date", "symbol", "is_suspended", "close_hfq", "close", "open", "open_hfq"]
     cols = ["date", "symbol", "is_suspended"]
     for c in ["close_hfq", "close", "open", "open_hfq"]:
         if c in pd.read_parquet(PANEL_V3_PATH, columns=[c]).columns:
@@ -76,11 +83,15 @@ def main():
     lines = []
     lines.append("=" * 78)
     lines.append("  价格列判定矛盾定位 — 全量跑口径 (面板列 + LabelEngine + mask + 3y)")
-    lines.append(f"  rows={len(work):,} stocks={work['symbol'].nunique():,} "
-                 f"{work['date'].min():%Y-%m-%d} ~ {work['date'].max():%Y-%m-%d}")
+    lines.append(
+        f"  rows={len(work):,} stocks={work['symbol'].nunique():,} "
+        f"{work['date'].min():%Y-%m-%d} ~ {work['date'].max():%Y-%m-%d}"
+    )
     lines.append("=" * 78)
-    lines.append(f"{'col':<12}{'TS日':>8}{'TS周':>8}{'TS月':>8}"
-                 f"{'XS日':>8}{'XS周':>8}{'XS月':>8}  ← 判定")
+    lines.append(
+        f"{'col':<12}{'TS日':>8}{'TS周':>8}{'TS月':>8}"
+        f"{'XS日':>8}{'XS周':>8}{'XS月':>8}  ← 判定"
+    )
     lines.append("-" * 78)
 
     # close 与 close_hfq 的 20日变化相关性 (证明二者近乎同一条序列)
