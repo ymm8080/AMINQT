@@ -116,61 +116,78 @@ def _render_predictions() -> None:
 
 # ───────────────────────── 回测历史 ─────────────────────────
 def _render_backtests() -> None:
+    from app.streamlit import bt_report as btr
+
     base = BACKTEST_RESULT_DIR
     if not base.is_dir():
         st.info(f"回测目录不存在: {base}")
         return
-    rows = []
-    for child in sorted(os.listdir(base), reverse=True):
-        p = base / child
-        if p.is_dir():
-            jsons = sorted(str(x) for x in p.glob("*.json"))
-            rows.append(
-                {
-                    "run": child,
-                    "type": "目录",
-                    "json": len(jsons),
-                    "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime(
-                        "%Y-%m-%d %H:%M"
-                    ),
-                }
-            )
-            for j in jsons:
-                rows.append(
-                    {
-                        "run": f"  {os.path.basename(j)}",
-                        "type": "json",
-                        "json": 1,
-                        "mtime": "",
-                    }
-                )
-        elif child.endswith(".json"):
-            rows.append(
-                {
-                    "run": child,
-                    "type": "json",
-                    "json": 1,
-                    "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime(
-                        "%Y-%m-%d %H:%M"
-                    ),
-                }
-            )
-    if rows:
-        st.dataframe(pd.DataFrame(rows), use_container_width=True)
-    else:
-        st.info("回测目录暂无内容")
-
-    all_json = sorted(str(x) for x in base.glob("**/*.json")) if base.is_dir() else []
-    if not all_json:
-        st.info("暂无回测 JSON 可查看")
+    all_runs = btr.list_runs(str(base))
+    runs = [r for r in all_runs if (base / r["ts"] / "backtest.json").is_file()]
+    if not runs:
+        st.info("回测目录暂无含 backtest.json 的 run")
+        if all_runs:
+            st.dataframe(pd.DataFrame(all_runs), use_container_width=True)
         return
-    st.subheader("查看回测报告")
-    sel = st.selectbox("选择回测 JSON", all_json, key="archive_bt_file")
-    if sel:
-        import json
+    st.subheader("回测 run 列表")
+    st.dataframe(pd.DataFrame(runs), use_container_width=True)
 
-        with open(sel, "r", encoding="utf-8") as fh:
-            st.json(json.load(fh))
+    sel_ts = st.selectbox("选择回测 run", [r["ts"] for r in runs], key="archive_bt_run")
+    if not sel_ts:
+        return
+    d = btr.load_run_json(sel_ts, str(base))
+    if d is None:
+        st.warning("backtest.json 读取失败或损坏")
+        return
+    _render_bt_run(d, btr)
+    with st.expander("原始 backtest.json"):
+        st.json(d)
+
+
+def _render_bt_run(d: dict, btr) -> None:
+    """结构化渲染单个回测 run (结论/逐视界/系统/个股), 旧 schema 防御."""
+    boards = btr.list_boards(d)
+    if not boards:
+        st.info("该 run 无板块数据")
+        return
+    concl = btr.parse_conclusion_summary(d)
+    if not concl.empty:
+        st.subheader("结论判定 (cuts)")
+        st.dataframe(concl, use_container_width=True)
+    for board in boards:
+        st.subheader(f"板块: {board}")
+        ov = btr.parse_board_overview(d, board)
+        cuts = ov.get("cuts")
+        impr = ov.get("improvements")
+        if isinstance(cuts, dict) or impr:
+            col1, col2 = st.columns(2)
+            if isinstance(cuts, dict):
+                with col1:
+                    st.markdown("**Cuts 判定**")
+                    for cut, c in cuts.items():
+                        if not isinstance(c, dict):
+                            continue
+                        tag = "保留" if c.get("kept") else "剔除"
+                        st.write(
+                            f"{cut} → {tag} (wr {c.get('winrate')} / mag {c.get('mag')})"
+                        )
+            if impr:
+                with col2:
+                    st.markdown("**改进建议**")
+                    for line in impr:
+                        st.write(f"- {line}")
+        ph = btr.parse_per_horizon(d, board, "top5")
+        if not ph.empty:
+            st.markdown("**TOP-5 逐视界胜率 vs 基线**")
+            st.bar_chart(ph.set_index("horizon")[["winrate", "base_winrate"]], height=280)
+        sysdf = btr.parse_systems(d, board)
+        if not sysdf.empty:
+            st.markdown("**系统对比 (OOS.6m)**")
+            st.dataframe(sysdf, use_container_width=True)
+        picks = btr.parse_picks(d, board)
+        if not picks.empty:
+            st.markdown("**近日入选个股**")
+            st.dataframe(picks, use_container_width=True)
 
 
 # ───────────────────────── 落盘清单 ─────────────────────────
