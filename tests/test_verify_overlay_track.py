@@ -187,7 +187,11 @@ class TestLoadSnapshots:
         )
         snap = vt.load_snapshots(tmp_path)
         assert len(snap) == 2
-        assert str(snap["symbol"].dtype) in ("object", "str", "string")  # dtype=str 读回, 不丢前导零
+        assert str(snap["symbol"].dtype) in (
+            "object",
+            "str",
+            "string",
+        )  # dtype=str 读回, 不丢前导零
         assert list(snap["date"]) == ["2026-08-04", "2026-08-05"]
 
     def test_empty_dir(self, tmp_path):
