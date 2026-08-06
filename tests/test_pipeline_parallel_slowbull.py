@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.pipeline_parallel import indicators, screener, signals
+from app.pipeline_parallel import backtest, indicators, screener, signals
 from app.pipeline_parallel.config import ADX_SPEC, ADX_SCORE_WEIGHTS, SLOW_BULL
 from app.pipeline_parallel.scoring import cross_rank, pool_score, select_topn
 
@@ -619,3 +619,70 @@ def test_daily_pool_includes_market_regime():
     assert not pool.empty
     assert "slow_bull_regime" in pool.columns
     assert pool["slow_bull_regime"].nunique() == 1  # 市场状态是日级标志
+
+
+# ── trail8 收盘移动止盈退出 (2026-08-06, 上升段运营退出) ──
+def test_add_trail8_columns_pit_and_trigger():
+    dates = pd.bdate_range("2024-11-01", periods=12)
+    close = [10.0, 10.2, 10.5, 10.8, 11.0, 11.0, 10.7, 10.3, 10.0, 10.0, 10.1, 10.2]
+    df = pd.DataFrame(
+        [
+            {"symbol": "0000000", "date": d, "close_cont": c, "close_hfq": c,
+             "close": c, "high": c * 1.01, "low": c * 0.99, "open": c}
+            for d, c in zip(dates, close)
+        ]
+    )
+    spec = {"max_hold": 40, "trail_pct": 0.08}
+    out = signals.add_trail8_columns(df.copy(), spec)
+    assert "trail8_dd" in out.columns and "trail8_trigger" in out.columns
+    peak_row = out[out["date"] == dates[4]].iloc[0]  # 峰值 11.0 → dd=0
+    assert abs(peak_row["trail8_dd"]) < 1e-9
+    assert not peak_row["trail8_trigger"]
+    drop_row = out[out["date"] == dates[8]].iloc[0]  # 10.0/11.0-1 = -9.1% ≤ -8%
+    assert drop_row["trail8_dd"] == pytest.approx(10.0 / 11.0 - 1)
+    assert bool(drop_row["trail8_trigger"]) is True
+    assert not out[out["date"] == dates[6]].iloc[0]["trail8_trigger"]  # -2.7% 不触发
+    # PIT: 截断重算, 中期日期值不变
+    mid = dates[8]
+    half = signals.add_trail8_columns(df[df["date"] <= mid].copy(), spec)
+    v_full = out[out["date"] == dates[5]].iloc[0]["trail8_dd"]
+    v_half = half[half["date"] == dates[5]].iloc[0]["trail8_dd"]
+    assert v_full == v_half
+
+
+def test_slowbull_exit_rets_trail8():
+    # 入场 T+1 收盘 10.0 → 峰 11.5 (+15%) → 收盘 10.5 (-8.7% 距峰) 触发 trail8, hold=7
+    close = [10.0, 10.0, 10.5, 11.0, 11.5, 11.5, 11.2, 11.0, 10.5] + [10.6] * 36
+    dates = pd.bdate_range("2024-11-01", periods=len(close))
+    rows = [
+        {
+            "symbol": "0000000", "date": d, "close_hfq": c, "low_hfq": c * 0.995,
+            "ma20": 10.0, "adv20": 1e9,
+            "below_ma20": False, "adx_broken": False, "big_drop": False,
+            "below_ma5_3d": False, "turnover_spike": False, "tp_80_div": False,
+        }
+        for d, c in zip(dates, close)
+    ]
+    A = backtest._slowbull_sim_arrays(pd.DataFrame(rows))
+    picks = pd.DataFrame({"symbol": ["0000000"], "date": [dates[0]]})
+    rets, holds = backtest._slowbull_exit_rets(picks, "trail8", A)
+    assert holds[0] == 8  # k 从入场次日计: 峰 11.5 后第 8 日收盘 10.5 触发
+    cost = backtest.COST + 2 * backtest.slippage_tier(1e9)
+    assert rets[0] == pytest.approx(close[8] / close[1] - 1 - cost)
+
+
+def test_simulate_slowbull_realized_structure():
+    work = _slow_work()
+    signals.add_market_regime(work, {"ma_window": 20, "def": "A"})
+    dates = np.sort(work["date"].unique())
+    out = backtest.simulate_slowbull_realized(work, dates, {"6m": 60})
+    assert "main" in out and "dual" in out
+    assert out["dual"].get("n_picks", 0) == 0  # 合成面板无 30xxxx 过门
+    main = out["main"]
+    assert "full" in main and "6m" in main
+    w = main["full"]
+    assert {"n_picks", "cur", "trail8_all", "op_rule"} <= set(w)
+    assert w["n_picks"] > 0
+    assert w["cur"]["n"] > 0  # 有足够历史可平仓
+    assert w["op_rule"]["n"] <= w["n_picks"]  # 上升段才开仓
+    assert 0 <= w["op_rule"]["n"]

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.pipeline_parallel.config import ADX_SPEC
+from app.pipeline_parallel.config import ADX_SPEC, SLOW_BULL_REGIME
 from app.pipeline_parallel.scoring import pool_score, select_topn
 
 
@@ -121,6 +121,28 @@ def add_signal_columns(df: pd.DataFrame, spec: dict | None = None) -> pd.DataFra
     buy_signals(df, spec)
     no_buy_flags(df, spec)
     sell_signals(df, spec)
+    add_trail8_columns(df)
+    return df
+
+
+def add_trail8_columns(df: pd.DataFrame, spec: dict | None = None) -> pd.DataFrame:
+    """加 trail8 收盘移动止盈信号列 (2026-08-06, 上升段运营退出).
+
+    trail8_dd      = close_cont / 近 max_hold 日滚动峰值 - 1 (峰值自入场跟踪的代理,
+                     PIT 只用 t 及更早)
+    trail8_trigger = trail8_dd <= -trail_pct (收盘自峰值回落 trail_pct 走)
+    """
+    if spec is None:
+        spec = SLOW_BULL_REGIME
+    win = int(spec["max_hold"])
+    trail = float(spec["trail_pct"])
+    peak = (
+        df["close_cont"].groupby(df["symbol"]).rolling(win, min_periods=1).max()
+        .reset_index(level=0, drop=True)
+    )
+    dd = df["close_cont"] / peak - 1.0
+    df["trail8_dd"] = dd
+    df["trail8_trigger"] = dd <= -trail
     return df
 
 
@@ -222,6 +244,8 @@ def daily_slowbull_pool(
         "turnover_spike",
         "tp_80_div",
         "slow_bull_regime",
+        "trail8_dd",
+        "trail8_trigger",
     )
     have = [c for c in cols if c in day.columns and c not in ("symbol", "date")]
     out = top.merge(day[["symbol", "date"] + have], on=["symbol", "date"], how="left")

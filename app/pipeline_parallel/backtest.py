@@ -302,6 +302,173 @@ def rank_bands(
     }
 
 
+# ── 慢牛实得回测 (2026-08-06) ──
+# 现行 run_system 测的是池子 MFE 天花板 (持有期内最高价可兑现的最大收益);
+# 实得回测模拟真实持仓: T+1 收盘入场 → 收盘判定退出, 净成本.
+# 运营规则 = 上升段 trail8 (收盘自峰值回落 trail_pct 走 + 硬止损 + max_hold),
+#            下降段不开仓 (no_open). 对照 = 现行 cur 6 信号 + 锁盈棘轮.
+_SELL_COLS = (
+    "below_ma20",
+    "adx_broken",
+    "big_drop",
+    "below_ma5_3d",
+    "turnover_spike",
+    "tp_80_div",
+)
+
+
+def _slowbull_picks(work: pd.DataFrame, board: str, top_n: int) -> pd.DataFrame:
+    """慢牛每日 Top-N 池 (gate 行 + 权重池分截面 TOP-N), 同 daily_slowbull_pool 口径."""
+    wb = work[(work["board"] == board) & work["gate_slow_bull"]]
+    if wb.empty:
+        return pd.DataFrame()
+    score = pool_score(wb, SLOW_BULL.pool, weights=SLOW_BULL.pool_weights)
+    return select_topn(wb, score, top_n)
+
+
+def _slowbull_sim_arrays(work: pd.DataFrame) -> dict:
+    """慢牛实得回测预计算数组 (按 symbol/date 排序, 与 _diag_slowbull_regime 同构)."""
+    w = work.sort_values(["symbol", "date"]).reset_index(drop=True)
+    uniques, codes = np.unique(w["symbol"].values, return_inverse=True)
+    sizes = np.bincount(codes)
+    starts = np.zeros(len(uniques), dtype=np.int64)
+    starts[1:] = np.cumsum(sizes)[:-1]
+    ends = np.cumsum(sizes)
+    sell = {c: w[c].values.astype(bool) for c in _SELL_COLS}
+    any_sell = np.zeros(len(w), dtype=bool)
+    for c in _SELL_COLS:
+        any_sell |= sell[c]
+    cost = COST + 2 * np.array([slippage_tier(v) for v in w["adv20"].values])
+    return {
+        "sym_code": {s: int(c) for c, s in enumerate(uniques)},
+        "starts": starts,
+        "ends": ends,
+        "dates": w["date"].values.astype("datetime64[ns]"),
+        "close": w["close_hfq"].values,
+        "low": w["low_hfq"].values,
+        "ma20": w["ma20"].values,
+        "any_sell": any_sell,
+        "cost": cost,
+    }
+
+
+def _slowbull_exit_rets(
+    picks: pd.DataFrame, mode: str, A: dict
+) -> tuple[np.ndarray, np.ndarray]:
+    """对一批 (symbol,date) 模拟退出, 返回与 picks 行对齐的 (净收益, 持有天数).
+
+    NaN = 跳过 (未来数据不足 / 入场价非法). mode: cur / trail5 / trail8 / trail15 /
+    hardonly. 退出收盘判定; 硬止损 hard_stop; max_hold 到期平.
+    """
+    sym_code, starts, ends = A["sym_code"], A["starts"], A["ends"]
+    dates_dt, close, low, ma20 = A["dates"], A["close"], A["low"], A["ma20"]
+    any_sell, cost_arr = A["any_sell"], A["cost"]
+    M = int(SLOW_BULL_REGIME["max_hold"])
+    hard = float(SLOW_BULL_REGIME["hard_stop"])
+    rets = np.full(len(picks), np.nan)
+    holds = np.full(len(picks), np.nan)
+    for i, (sym, T) in enumerate(zip(picks["symbol"], picks["date"])):
+        c = sym_code[str(sym)]
+        lo, hi = starts[c], ends[c]
+        base = lo + int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))
+        r0 = base + 1
+        if r0 + M >= hi:
+            continue
+        entry = close[r0]
+        if not np.isfinite(entry) or entry <= 0:
+            continue
+        cost = cost_arr[base]
+        peak = 0.0
+        exit_ret = None
+        for k in range(1, M + 1):
+            r = base + k
+            if mode == "cur":
+                peak = max(peak, low[r] / entry - 1.0)
+                stop_hit = low[r] < signals.trailing_stop_price(entry, peak, ma20[r])
+                if any_sell[r] or stop_hit:
+                    exit_ret = close[r] / entry - 1 - cost
+                    holds[i] = k
+                    break
+            else:
+                ret = close[r] / entry - 1.0
+                peak = max(peak, ret)
+                trail = 0.0 if mode == "hardonly" else float(mode[5:]) / 100.0
+                if ret <= peak - trail or ret <= hard - 1.0:
+                    exit_ret = close[r] / entry - 1 - cost
+                    holds[i] = k
+                    break
+        if exit_ret is None:
+            exit_ret = close[r0 + M] / entry - 1 - cost
+            holds[i] = M
+        rets[i] = exit_ret
+    return rets, holds
+
+
+def _slowbull_agg(rets: np.ndarray, holds: np.ndarray, mask: np.ndarray) -> dict:
+    sub_r = rets[mask]
+    sub_r = sub_r[np.isfinite(sub_r)]
+    if not len(sub_r):
+        return {"n": 0, "p_win": None, "avg": None, "median_hold": None}
+    sub_h = holds[mask]
+    sub_h = sub_h[np.isfinite(sub_h)]
+    return {
+        "n": int(len(sub_r)),
+        "p_win": round(float((sub_r > 0).mean()), 4),
+        "avg": round(float(sub_r.mean()), 4),
+        "median_hold": float(np.median(sub_h)) if len(sub_h) else None,
+    }
+
+
+def simulate_slowbull_realized(
+    work: pd.DataFrame, dates: np.ndarray, oos_windows: dict[str, int]
+) -> dict:
+    """慢牛实得收益逐窗对比 (2026-08-06).
+
+    运营规则 (op_rule) = 上升段 trail8 退出, 下降段不开仓 (no_open, 用户指令);
+    对照 = cur (现行 6 信号, 全开) / trail8_all (全开 trail8, 参考).
+    入场 T+1 收盘, 退出收盘判定, 净成本. 每窗: n_picks / cur / trail8_all / op_rule.
+    """
+    # 慢牛信号机制缺失 (非 load_panel 生产路径的合成面板) → 无可模拟, 跳过
+    need = (
+        ["gate_slow_bull", "slow_bull_regime", "adv20", "close_hfq", "low_hfq", "ma20"]
+        + list(_SELL_COLS)
+    )
+    if not all(c in work.columns for c in need):
+        return {}
+    A = _slowbull_sim_arrays(work)
+    reg = work[["date", "slow_bull_regime"]].drop_duplicates("date")
+    out: dict = {}
+    for b in BOARD_PREFIXES:
+        picks = _slowbull_picks(work, b, SLOW_BULL.top_n)
+        if picks.empty:
+            out[b] = {"n_picks": 0, "note": "无 gate 候选"}
+            continue
+        picks = picks[["symbol", "date"]].merge(reg, on="date", how="left")
+        up = picks["slow_bull_regime"].fillna(False).values
+        cur_r, cur_h = _slowbull_exit_rets(picks, "cur", A)
+        tr_r, tr_h = _slowbull_exit_rets(picks, "trail8", A)
+        op_r = np.full(len(picks), np.nan)
+        op_h = np.full(len(picks), np.nan)
+        if up.any():
+            sub_r, sub_h = _slowbull_exit_rets(picks[up], "trail8", A)
+            op_r[up] = sub_r
+            op_h[up] = sub_h
+        windows = {"full": (dates[0], dates[-1])}
+        for lab, d in oos_windows.items():
+            windows[lab] = (dates[-d], dates[-1])
+        cell: dict = {}
+        for lab, (d0, d1) in windows.items():
+            m = (picks["date"].values >= d0) & (picks["date"].values <= d1)
+            cell[lab] = {
+                "n_picks": int(m.sum()),
+                "cur": _slowbull_agg(cur_r, cur_h, m),
+                "trail8_all": _slowbull_agg(tr_r, tr_h, m),
+                "op_rule": _slowbull_agg(op_r, op_h, m),
+            }
+        out[b] = cell
+    return out
+
+
 def run_all(
     work: pd.DataFrame,
     ts: str,
@@ -409,6 +576,11 @@ def run_all(
         }
         del sub
         gc.collect()
+    # 慢牛实得收益 (2026-08-06): 运营规则=上升段 trail8 + 下降段不开仓, 逐窗对比 cur
+    realized = simulate_slowbull_realized(work, dates, oos_windows)
+    for b in BOARD_PREFIXES:
+        if "slow_bull" in out["boards"][b]["systems"]:
+            out["boards"][b]["systems"]["slow_bull"]["realized"] = realized.get(b, {})
     return out
 
 
