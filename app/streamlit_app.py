@@ -23,6 +23,7 @@ import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from app.streamlit import (  # noqa: E402
+    page_archive,
     page_config,
     page_data_feed,
     page_eval,
@@ -36,6 +37,7 @@ PAGES = {
     "选股看板": page_selection.render,
     "交易看板": page_trading.render,
     "预测评估中心": page_eval.render,
+    "训练/预测档案": page_archive.render,
     "数据管理": page_data_feed.render,
     "配置中心": page_config.render,
 }

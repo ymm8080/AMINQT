@@ -31,6 +31,19 @@ def _hermetic_block_trade_cache(tmp_path, monkeypatch):
 
     monkeypatch.setattr(risk_overlays, "block_trade_recent_scan", _scan)
 
+    # 解禁 (share_float) SCAN 同样隔离: 空缓存 → 空集, 不依赖外部文件状态
+    empty_sf = tmp_path / "empty_share_float.parquet"
+    pd.DataFrame(
+        columns=["symbol", "ann_date", "float_date", "float_ratio"]
+    ).to_parquet(empty_sf, index=False)
+    real_sf = risk_overlays.share_float_upcoming_scan
+
+    def _scan_sf(symbols, ref_date, **kwargs):
+        kwargs["cache_path"] = str(empty_sf)
+        return real_sf(symbols, ref_date, **kwargs)
+
+    monkeypatch.setattr(risk_overlays, "share_float_upcoming_scan", _scan_sf)
+
 
 def make_panel(symbols=("600519", "601318"), days=760, seed=21) -> pd.DataFrame:
     """760 交易日 (>720 窗口) 双股面板, 含 f1/f2 伪特征."""
@@ -120,7 +133,11 @@ class TestDailyPipeline:
         result = pipe.run("20260720", panel=panel)
         assert result["mode"] == "normal"
         lst = result["list"]
-        assert list(lst.columns) == SCHEMA_FIELDS
+        # SCHEMA_FIELDS 打头; run() 额外追加 model_version 戳 (回归分组键)
+        assert list(lst.columns)[: len(SCHEMA_FIELDS)] == SCHEMA_FIELDS
+        # model_version 仅在 model_meta.json 存在时注入 (CI 无该文件 → 列缺失, 容忍)
+        extra = list(lst.columns)[len(SCHEMA_FIELDS) :]
+        assert extra == ["model_version"] or extra == []
         assert 0 < len(lst) <= 2
         assert (lst["schema_version"] == "1.4").all()
 

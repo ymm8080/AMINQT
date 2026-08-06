@@ -40,7 +40,13 @@ MODEL_KINDS = (
     "5d_reg",
     "5d_cls",
 )
-EXTRA_KINDS = ("quantile_models", "pain_model", "rank_model")
+EXTRA_KINDS = (
+    "quantile_models",
+    "quantile_models_2d",
+    "quantile_models_3d",
+    "pain_model",
+    "rank_model",
+)
 
 
 # ──────────────────────────────────────────────

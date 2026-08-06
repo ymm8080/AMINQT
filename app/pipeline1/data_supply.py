@@ -1935,6 +1935,15 @@ class DataSupplyChain:
                     ).fillna(0)
                     change_amt = change_vol * avg_price
                     in_de = raw.get("in_de", raw.get("change_type", ""))
+                    change_ratio = pd.to_numeric(
+                        raw.get("change_ratio", np.nan), errors="coerce"
+                    )
+                    holder_type_raw = raw.get("holder_type", "")
+                    sh_holder_type = (
+                        holder_type_raw.fillna("").astype(str).str.upper()
+                        if isinstance(holder_type_raw, pd.Series)
+                        else str(holder_type_raw).upper()
+                    )
                     out = pd.DataFrame(
                         {
                             "symbol": raw["ts_code"]
@@ -1947,6 +1956,8 @@ class DataSupplyChain:
                             ),
                             "sh_change_vol": change_vol,
                             "sh_change_amt": change_amt,
+                            "sh_change_ratio": change_ratio,
+                            "sh_holder_type": sh_holder_type,
                             "sh_holder_name": raw.get("holder_name", ""),
                             "sh_change_type": in_de,
                             "announce_date": pd.to_datetime(

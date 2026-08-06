@@ -2632,11 +2632,12 @@ class FeatureEngineV35:
     # ---------------- ㉙ 股东增减持 (Alt-6) ----------------
     @staticmethod
     def dim29_holdertrade(df: pd.DataFrame) -> pd.DataFrame:
-        """从股东增减持数据提取 10 个内部人交易行为因子.
+        """从股东增减持数据提取 11 个内部人交易行为因子.
 
         上游列: sh_net_change_sign, sh_change_amt_total, sh_evt_start_date,
-                sh_evt_end_date (由 panel_builder enrich_alt_data
-                从 Tushare stk_holdertrade / AKShare 股东增减持 聚合而来)
+                sh_evt_end_date, sh_net_ratio, sh_g_ratio, sh_c_ratio
+                (由 panel_builder enrich_alt_data 从 Tushare stk_holdertrade /
+                AKShare 股东增减持 聚合而来)
 
         数据特点: 不定期公告, 非日频 — 用 ffill + rolling 处理稀疏性.
 
@@ -2651,9 +2652,16 @@ class FeatureEngineV35:
           8. sh_ann_decay         — 公告恐慌衰减 1/(1+max(0,T−A)), 公告日=1 随距公告天数递减
           9. sh_end_decay         — 结束日反弹效应 0(T<E) else 1/(1+T−E), 结束日=1 随后递减
           10. sh_is_executing     — 是否处于增减持执行期 (S≤T<E 为 1, 结束日视为已结束为 0)
+          11. sh_ratio_30d        — KIMI 30 交易日净增减持比例滚动累计 (fillna(0) 后
+                                    rolling(30).sum().shift(1), PIT 排除当日公告)
         """
         has_ht = any(
-            c in df.columns for c in ["sh_net_change_sign", "sh_change_amt_total"]
+            c in df.columns
+            for c in [
+                "sh_net_change_sign",
+                "sh_change_amt_total",
+                "sh_net_ratio",  # KIMI 比例源 (新增, 仅此列也可算 sh_ratio_30d)
+            ]
         )
         out_cols = [
             "sh_net_sign_20d",
@@ -2666,6 +2674,7 @@ class FeatureEngineV35:
             "sh_ann_decay",
             "sh_end_decay",
             "sh_is_executing",
+            "sh_ratio_30d",
         ]
         if not has_ht:
             for c in out_cols:
@@ -2726,6 +2735,20 @@ class FeatureEngineV35:
             else:
                 for c in ("sh_ann_decay", "sh_end_decay", "sh_is_executing"):
                     g[c] = np.nan
+
+            # KIMI 30 交易日净增减持比例滚动累计 (IC 评估明星特征, IR=0.10):
+            #   sum_{t-30..t-1} net_ratio — 未公告日净变动=0 (fillna(0)),
+            #   rolling(30).sum().shift(1) 用 T-1 及更早 → 当日公告不预测当日 (PIT)
+            if "sh_net_ratio" in g.columns:
+                g["sh_ratio_30d"] = (
+                    g["sh_net_ratio"]
+                    .fillna(0)
+                    .rolling(30, min_periods=1)
+                    .sum()
+                    .shift(1)
+                )
+            else:
+                g["sh_ratio_30d"] = np.nan
 
             return g
 
@@ -2813,19 +2836,22 @@ class FeatureEngineV35:
 
         return _apply_per_stock(df, per_stock)
 
-    # ---------------- ㉝ 大宗交易 EWMA 特征 (稳定负向风控信号, 半衰期 h=10) ----------------
+    # ---------------- ㉝ 大宗交易 EWMA 特征 (半衰期 h=10) ----------------
     @staticmethod
     def dim33_block_trade(df: pd.DataFrame) -> pd.DataFrame:
-        """大宗交易稳定负向 EWMA 特征 (功能说明书 §四, 保留 |IC| 最大的 4 个).
+        """大宗交易 EWMA 特征 (功能说明书 §四, 半衰期 h=10).
 
         稀疏事件 → EWMA 衰减记忆: 半衰期 h=10 → α=1−2^(−1/10)≈0.067.
         逐股 fillna(0).ewm(alpha=α, adjust=False).mean(): 事件日跃升,
         无事件日填 0 乘 (1−α) 缓慢衰减. PIT 安全: ewm 只含当日及更早, 无前瞻.
+        2026-08-03 事件池评估定案 (scripts/bt_v3_train_eval.py ic_full_vs_pool):
+        4 特征全部保留 — 事件池 LGBM 增益近似均匀 (~24-26%), 各自捕捉不同经济维度;
+        future selection 在事件池内评估, 由 gate 取舍 (见 memory blocktrade-v3-integration).
         产出 (4):
-          bt_act_ewma       ← bt_count              大宗活跃度
-          bt_disc_ewma      ← bt_disc_raw           折价压力 (raw=max(0,−discount), 非负)
-          bt_inst_abs_ewma  ← bt_inst_absorb        机构承接占比
-          bt_mv_ratio_ewma  ← bt_amt_ratio_float_mv 大宗/流通市值
+          bt_act_ewma       ← bt_count                大宗活跃度
+          bt_disc_ewma      ← bt_disc_raw             折价强度 (仅负折价)
+          bt_inst_abs_ewma  ← bt_inst_absorb          机构承接占比
+          bt_mv_ratio_ewma  ← bt_amt_ratio_float_mv   相对流通市值规模
         """
         upstream = [
             "bt_count",

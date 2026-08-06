@@ -53,6 +53,19 @@ def _hermetic_block_trade_cache(tmp_path, monkeypatch):
 
     monkeypatch.setattr(risk_overlays, "block_trade_recent_scan", _scan)
 
+    # 解禁 (share_float) SCAN 同样隔离: 空缓存 → 空集, 不依赖外部文件状态
+    empty_sf = tmp_path / "empty_share_float.parquet"
+    pd.DataFrame(
+        columns=["symbol", "ann_date", "float_date", "float_ratio"]
+    ).to_parquet(empty_sf, index=False)
+    real_sf = risk_overlays.share_float_upcoming_scan
+
+    def _scan_sf(symbols, ref_date, **kwargs):
+        kwargs["cache_path"] = str(empty_sf)
+        return real_sf(symbols, ref_date, **kwargs)
+
+    monkeypatch.setattr(risk_overlays, "share_float_upcoming_scan", _scan_sf)
+
 
 @pytest.fixture(scope="module")
 def chain(tmp_path_factory):

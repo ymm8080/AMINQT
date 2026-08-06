@@ -22,9 +22,17 @@ logger = logging.getLogger(__name__)
 
 
 def _newest_match(root: Path, pattern: str) -> Path | None:
-    """返回 root 下匹配 pattern 的文件中 mtime 最新者, 无匹配返回 None."""
-    matches = [p for p in root.glob(pattern) if p.is_file()]
-    return max(matches, key=lambda p: p.stat().st_mtime) if matches else None
+    """返回匹配 pattern 的文件中 mtime 最新者, 无匹配返回 None.
+
+    pattern 为仓库内相对路径时相对 root 解析; 绝对路径 (仓库外主数据,
+    如 D:/AMINQT/PARQUET/) 按自身解析, 同样支持 glob.
+    """
+    p = Path(pattern)
+    if p.is_absolute():
+        matches = [x for x in p.parent.glob(p.name) if x.is_file()]
+    else:
+        matches = [x for x in root.glob(pattern) if x.is_file()]
+    return max(matches, key=lambda x: x.stat().st_mtime) if matches else None
 
 
 def _prune_glob(pattern: str, suffix: str) -> str:

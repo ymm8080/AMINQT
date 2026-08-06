@@ -10,6 +10,9 @@ top_inst 返回每只上榜股票每日的全部席位及买卖金额 (exalter �
 
 from __future__ import annotations
 
+import numpy as np
+import pandas as pd
+
 # 机构专用席位 (Tushare top_inst 中 exalter 的规范名)
 INST_SEAT = "机构专用"
 
@@ -55,3 +58,76 @@ def classify_seat(exalter: str | None) -> str:
     if RETAIL_KEYWORD in name:
         return "retail"
     return "other"
+
+
+SEAT_COLS = [
+    "lhb_inst_buy",
+    "lhb_inst_sell",
+    "lhb_top_buy",
+    "lhb_top_sell",
+    "lhb_quant_buy",
+    "lhb_quant_sell",
+    "lhb_retail_buy",
+    "lhb_retail_sell",
+]
+
+
+def seat_wide_from_top_inst(raw: pd.DataFrame) -> pd.DataFrame:
+    """把单日 Tushare top_inst 原始行聚合为每股 8 席位列宽表 (symbol 维度).
+
+    语义与回填脚本 _backfill_lhb_seats_v2.py 完全一致:
+      - ts_code → symbol (剥 .SZ/.SH)
+      - 同 (symbol, exalter) 去重取 buy/sell max (同一席位因多个上榜原因重复出现)
+      - 分类用 classify_seat; retail = 拉萨 + 其他非 inst/top/quant 席位 (spec §2.4)
+      - 未上榜股票不在返回中, 缺席类别为 NaN (由调用方 map 到当日行)
+
+    Args:
+        raw: pro.top_inst(trade_date=...) 返回的原表 (ts_code/exalter/buy/sell).
+
+    Returns:
+        DataFrame [symbol, lhb_inst_buy, ..., lhb_retail_sell]; 空输入返回仅含列名的空表.
+    """
+    cols = ["symbol"] + SEAT_COLS
+    if raw is None or not len(raw):
+        return pd.DataFrame(columns=cols)
+    raw = raw.copy()
+    raw["symbol"] = (
+        raw["ts_code"]
+        .str.replace(".SZ", "", regex=False)
+        .str.replace(".SH", "", regex=False)
+    )
+    buy_col = next((c for c in ("buy", "buy_amount") if c in raw.columns), None)
+    sell_col = next((c for c in ("sell", "sell_amount") if c in raw.columns), None)
+    if buy_col is None or sell_col is None:
+        return pd.DataFrame(columns=cols)
+    raw["buy"] = pd.to_numeric(raw[buy_col], errors="coerce").fillna(0.0)
+    raw["sell"] = pd.to_numeric(raw[sell_col], errors="coerce").fillna(0.0)
+    seat = (
+        raw.groupby(["symbol", "exalter"])
+        .agg(buy=("buy", "max"), sell=("sell", "max"))
+        .reset_index()
+    )
+    seat["cls"] = seat["exalter"].map(classify_seat)
+    long = (
+        seat.groupby(["symbol", "cls"])
+        .agg(buy=("buy", "sum"), sell=("sell", "sum"))
+        .reset_index()
+    )
+    rows = []
+    for sym, g in long.groupby("symbol"):
+        rec = {"symbol": sym}
+        for cls in ("inst", "top", "quant"):
+            cg = g[g["cls"] == cls]
+            if len(cg):
+                rec[f"lhb_{cls}_buy"] = float(cg["buy"].sum())
+                rec[f"lhb_{cls}_sell"] = float(cg["sell"].sum())
+        cg = g[g["cls"].isin(["retail", "other"])]
+        if len(cg):
+            rec["lhb_retail_buy"] = float(cg["buy"].sum())
+            rec["lhb_retail_sell"] = float(cg["sell"].sum())
+        rows.append(rec)
+    out = pd.DataFrame(rows)
+    for c in SEAT_COLS:
+        if c not in out.columns:
+            out[c] = np.nan
+    return out[cols]

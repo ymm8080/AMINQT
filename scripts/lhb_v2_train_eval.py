@@ -35,7 +35,7 @@ from scipy.stats import spearmanr
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35 as FE  # noqa: E402
-from config.settings import DATA_OTHERS_DIR, LHB_V2_EVAL, PANEL_V3_PATH  # noqa: E402
+from config.settings import BACKTEST_RESULT_DIR, LHB_V2_EVAL, PANEL_V3_PATH  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -83,7 +83,6 @@ LOAD_COLS = (
         "up_limit_raw",
         "down_limit_raw",
         "circ_mv",
-        "is_st",
     ]
     + SEAT_COLS
     + BASE_LHB
@@ -361,8 +360,10 @@ def main():
     summary.insert(0, "n_test", n_tr)
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    xlsx_path = DATA_OTHERS_DIR / f"lhb_v2_eval_{ts}.xlsx"
-    pred_path = DATA_OTHERS_DIR / f"lhb_v2_preds_{ts}.parquet"
+    run_dir = BACKTEST_RESULT_DIR / ts
+    run_dir.mkdir(parents=True, exist_ok=True)
+    xlsx_path = run_dir / f"lhb_v2_eval_{ts}.xlsx"
+    pred_path = run_dir / f"lhb_v2_preds_{ts}.parquet"
     imp = res["importance"]
 
     pred_out = res["test"][["date", "symbol", "pred"] + labels]

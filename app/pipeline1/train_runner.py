@@ -21,7 +21,12 @@ from config.settings import data_others_path
 from .cleaning_pipeline import CleaningPipeline
 from .dual_track_trainer import DualTrackTrainer
 from .feature_engine_v35 import FeatureEngineV35
-from .feature_selector import BruteForceGenerator, FeatureSelector
+from .feature_selector import (
+    BRUTE_FAMILIES,
+    BruteForceGenerator,
+    FeatureSelector,
+    apply_event_scope_screens,
+)
 from .label_engine import LabelEngine
 
 logger = logging.getLogger(__name__)
@@ -53,6 +58,10 @@ def prepare_board_frame(
     return df
 
 
+# 事件类稀疏特征子数据集 IC 筛入配置见 feature_selector.EVENT_SCOPE_SCREENS
+# (增减持/大宗/LHB), 由 apply_event_scope_screens 统一执行 (训练主链路 + 独立工具共用).
+
+
 def select_features(
     df: pd.DataFrame,
     board: str,
@@ -72,12 +81,15 @@ def select_features(
     candidates = FeatureEngineV35.feature_columns(df)
 
     # ---- NaN-rate 预筛 + 类型过滤 (工程强制, 铁律 #1) ----
+    # 事件类稀疏特征 (holder/LHB/大宗, 覆盖率 ~0.4%) 豁免: 只要非空行数 >=
+    # MIN_SUPPORT 就保留, 由 scope_ic_union 在事件子数据集上评 IC 决定去留.
     NaN_DROP_THRESHOLD = 0.95
+    MIN_SUPPORT = 1000
     valid_candidates = []
     for col in candidates:
         if col in df.columns:
             nan_rate = df[col].isna().mean()
-            if nan_rate >= NaN_DROP_THRESHOLD:
+            if nan_rate >= NaN_DROP_THRESHOLD and df[col].notna().sum() < MIN_SUPPORT:
                 continue
             # 剔除非数值列 (name/tradestatus 等字符串列会破坏 LightGBM)
             if df[col].dtype == object:
@@ -105,6 +117,10 @@ def select_features(
     try:
         selected = selector.select(df, board)
 
+        # ── 子数据集 scope-IC 筛入 (事件类稀疏特征; 配置见
+        #    feature_selector.EVENT_SCOPE_SCREENS) ──
+        selected = apply_event_scope_screens(selected, df)
+
         # ── Post-selection BruteForce injection ──
         # _run_bruteforce_dedup generates BruteForce features internally for
         # correlation/dedup, but they land in a local df_exp copy.  Any
@@ -115,10 +131,16 @@ def select_features(
         if missing:
             gen = BruteForceGenerator()
             raw_cols = gen._eligible(df)
-            new_feats = gen.generate(df, raw_cols=raw_cols)
-            keep_cols = [c for c in missing if c in new_feats.columns]
+            # 内存安全: 族批生成, 只注入缺失的选中列, 不物化全量 brute 列.
+            keep_cols = []
+            for fam in BRUTE_FAMILIES:
+                new = gen.generate_family(df, fam, raw_cols=raw_cols, dtype="float32")
+                pick = [c for c in missing if c in new.columns]
+                if pick:
+                    keep_cols.extend(pick)
+                    df = df.join(new[pick])
+                del new
             if keep_cols:
-                df = df.join(new_feats[keep_cols])
                 logger.info(
                     "[%s] BruteForce 后注入 %d 个选中特征 (缺失 %d)",
                     board,

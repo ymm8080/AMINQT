@@ -170,7 +170,7 @@ class PredictionDB:
                         _safe_float(row, "weight"),
                         _safe_float(row, "pain_prob"),
                         _safe_float(row, "consensus_score"),
-                        int(row.get("signal_conflict", 0)),
+                        _safe_int(row, "signal_conflict"),
                     ),
                 )
             conn.commit()
@@ -325,3 +325,13 @@ def _safe_float(row, col: str) -> float | None:
         return round(float(val), 6)
     except (ValueError, TypeError):
         return None
+
+
+def _safe_int(row, col: str, default: int = 0) -> int:
+    val = row.get(col) if hasattr(row, "get") else row[col]
+    if val is None or (isinstance(val, float) and np.isnan(val)):
+        return default
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default

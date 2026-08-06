@@ -91,6 +91,25 @@ class BruteForceGenerator:
         "margin_trend_4q",
         "rev_yoy_trend",
         "quality_momentum",
+        # ── HS300×1y 与全市场×3y 双口径 |wIC|<0.02 低信息列
+        #    (2026-08-04 _diag_hs300_exclude_cross 结论, A 层 brute 展开纯浪费) ──
+        "circ_mv",
+        "resistance_dist",
+        "short_sell_vol",
+        "chip_entropy",
+        "peak_roc_20d",
+        "chip_gini",
+        "total_mv",
+        "bias_5_20_cross",
+        "short_balance",
+        "volume_ratio",
+        "conc_90_industry_rank",
+        "margin_balance",
+        "peak_roc_5d",
+        "pct_90_con",
+        "chip_skew_dist",
+        "cost_bias",
+        "pctChg",
     }
 
     def __init__(self, transforms=None, eligible_cols=None):
@@ -260,6 +279,21 @@ class BruteForceGenerator:
             time.time() - t0,
         )
         return new
+
+
+# Brute-force 变换族顺序 — 与 generate() 内层 for 完全一致 (pct→ma→std→max/min→d→mom→ema).
+# rolling_max 族同时产出 max+min 列 (见 generate_family), 故不含 rolling_min.
+# build_features / FeatureSelector._run_bruteforce_dedup / train_runner 后注入共用,
+# 保证候选列命名与族序恒定, 避免 RAM 优化后选择漂移.
+BRUTE_FAMILIES = [
+    "pct_change",
+    "rolling_mean",
+    "rolling_std",
+    "rolling_max",
+    "diff",
+    "momentum",
+    "EMA",
+]
 
 
 # ──────────────────────────────────────────────────────────
@@ -433,22 +467,453 @@ def gate_d_ablation(
 # ──────────────────────────────────────────────────────────
 
 
-def nan_filter(feats, df, threshold=0.95):
-    """Drop features with NaN rate >= threshold."""
+def nan_filter(feats, df, threshold=0.95, min_support=0):
+    """Drop features with NaN rate >= threshold.
+
+    min_support > 0 → 事件类稀疏特征豁免: 只要非空行数 >= min_support 就保留,
+    即便全局 NaN 率超 threshold (在事件 scope 内是稠密的, 全截面评价会误杀).
+    """
     from pandas.api.types import is_numeric_dtype
 
     good = []
     for c in feats:
-        if (
-            c in df.columns
-            and is_numeric_dtype(df[c])
-            and df[c].isna().mean() < threshold
+        if c not in df.columns or not is_numeric_dtype(df[c]):
+            continue
+        s = df[c]
+        if s.isna().mean() < threshold or (
+            min_support and s.notna().sum() >= min_support
         ):
             good.append(c)
     logger.info(
-        "NaN filter: %d -> %d (threshold=%.2f)", len(feats), len(good), threshold
+        "NaN filter: %d -> %d (threshold=%.2f, min_support=%d)",
+        len(feats),
+        len(good),
+        threshold,
+        min_support,
     )
     return good
+
+
+# ──────────────────────────────────────────────────────────
+# 子数据集 scope-IC 筛选 (事件类稀疏特征)
+# ──────────────────────────────────────────────────────────
+# 事件类特征 (增减持/龙虎榜/大宗) 全截面覆盖率极低 (holder ~0.4%),
+# 在全截面被 nan 过滤 + 增益排序误杀。改为在其事件 scope
+# (ht_stocks ± window 交易日) 内评日频 rank IC, |IC| >= ic_bar 者并入精选集。
+# 这正是 "在子数据集上训练/评估后并入特征选择" 的落地。
+
+
+def event_scope_mask(df, event_col, window=30):
+    """事件 scope 掩码: 行落在任一事件前后 window 个交易日内的位置."""
+    if event_col not in df.columns:
+        return pd.Series(False, index=df.index)
+    ev = df[event_col].notna().astype("int8")
+    grp = ev.groupby(df["symbol"], sort=False)
+    fwd = grp.transform(lambda s: s.rolling(window, min_periods=1).max())
+    bwd = grp.transform(
+        lambda s: s.iloc[::-1].rolling(window, min_periods=1).max().iloc[::-1]
+    )
+    return ((fwd > 0) | (bwd > 0)).fillna(False).astype(bool)
+
+
+def daily_rank_ic(df, feat, label, mask, min_cross=10, min_dates=10):
+    """scope 内按日 Spearman rank IC 均值 (跨日截面, 每日至少 min_cross 只)."""
+    sub = df.loc[mask, [feat, label, "date"]].dropna(subset=[feat, label])
+    if len(sub) < min_cross:
+        return 0.0
+    ics = []
+    for _, g in sub.groupby("date"):
+        if len(g) < min_cross:
+            continue
+        r = spearmanr(g[feat], g[label])[0]
+        if not np.isnan(r):
+            ics.append(r)
+    if len(ics) < min_dates:
+        return 0.0
+    return float(np.mean(ics))
+
+
+def scope_ic_union(
+    selected,
+    df,
+    event_col,
+    feats,
+    label_cols,
+    window=30,
+    ic_bar=0.01,
+    min_support=1000,
+    min_cross=10,
+    min_dates=10,
+):
+    """子数据集 IC 筛选 → 并入精选集. 返回扩展后的特征列表."""
+    if event_col not in df.columns:
+        return selected
+    support = int(df[event_col].notna().sum())
+    if support < min_support:
+        logger.info(
+            "scope_ic_union[%s]: 事件支撑不足 (%d < %d), 跳过",
+            event_col,
+            support,
+            min_support,
+        )
+        return selected
+    labels = [c for c in label_cols if c in df.columns]
+    if not labels:
+        logger.warning(
+            "scope_ic_union[%s]: 无可用 label (%s), 跳过", event_col, label_cols
+        )
+        return selected
+    mask = event_scope_mask(df, event_col, window=window)
+    if not mask.any():
+        return selected
+    added = []
+    for feat in feats:
+        if feat in selected or feat not in df.columns:
+            continue
+        ics = [
+            abs(daily_rank_ic(df, feat, lab, mask, min_cross, min_dates))
+            for lab in labels
+        ]
+        best = max(ics) if ics else 0.0
+        if best >= ic_bar:
+            added.append(feat)
+            logger.info(
+                "scope_ic_union[%s]: %s scope-IC=%.4f (bar=%.2f) -> 并入",
+                event_col,
+                feat,
+                best,
+                ic_bar,
+            )
+    if added:
+        logger.info(
+            "scope_ic_union[%s]: 并入 %d 个特征 %s", event_col, len(added), added
+        )
+    return selected + added
+
+
+# ──────────────────────────────────────────────────────────
+# 事件类稀疏特征子数据集 IC 筛入配置 (scope_ic_union 驱动表)
+# ──────────────────────────────────────────────────────────
+# 全截面评价会误杀这些 ~0.4% 覆盖率的事件特征 (增减持/大宗); 在其事件
+# scope 内评日频 rank IC, |IC| >= ic_bar 者并入精选集. 这是"在子数据集上
+# 训练/评估后并入特征选择"的落地. 训练主链路 (train_runner.select_features)
+# 与独立 Layer2 工具 (scripts/select_features.py) 共用本表, 口径一致.
+EVENT_SCOPE_SCREENS = [
+    {
+        "name": "dim29_holdertrade",
+        "event_col": "sh_net_ratio",
+        "window": 30,
+        "feats": ["sh_ratio_30d", "sh_net_ratio", "sh_g_ratio", "sh_c_ratio"],
+        "label_cols": ["label_pm_1d_net", "label_pm_3d_net", "label_pm_5d_net"],
+        "ic_bar": 0.01,
+        "min_support": 1000,
+    },
+    {
+        "name": "dim33_blocktrade",
+        "event_col": "bt_count",
+        "window": 30,
+        "feats": [
+            "bt_act_ewma",
+            "bt_disc_ewma",
+            "bt_inst_abs_ewma",
+            "bt_mv_ratio_ewma",
+        ],
+        "label_cols": ["label_pm_1d_net", "label_pm_3d_net", "label_pm_5d_net"],
+        "ic_bar": 0.01,
+        "min_support": 1000,
+    },
+    {
+        "name": "lhb_combined",
+        "event_col": "lhb_net_buy",
+        "window": 20,
+        "feats": [
+            # dim26_lhb_enhanced
+            "lhb_inst_net_buy_5d",
+            "lhb_inst_net_buy_20d",
+            "lhb_inst_count_5d",
+            "lhb_inst_buy_ratio",
+            "lhb_abnormal_score",
+            # dim32_lhb_glm
+            "lhb_inst_flow",
+            "lhb_retail_flow",
+            "lhb_sell_pressure",
+            "lhb_list_count_5d",
+            # dim34_lhb_v2 (KIMI)
+            "lhb2_inst_flow",
+            "lhb2_inst_shock",
+            "lhb2_top_flow",
+            "lhb2_quant_flow",
+            "lhb2_retail_flow",
+            "lhb2_sell_pressure",
+            "lhb2_sell_buy_ratio",
+            "lhb2_list_count_5d",
+            "lhb2_conboard_mem",
+            "lhb2_inst_strength",
+            "lhb2_inst_resolve",
+            "lhb2_inst_conboard",
+            "lhb2_inst_premium",
+            "lhb2_inst_lock",
+        ],
+        "label_cols": ["label_pm_1d_net", "label_pm_3d_net", "label_pm_5d_net"],
+        "ic_bar": 0.01,
+        "min_support": 1000,
+    },
+]
+
+
+def apply_event_scope_screens(selected, df, screens=None):
+    """Run all event-scope IC screens, union qualifying features into `selected`.
+
+    Shared by the training mainline (train_runner.select_features) and the
+    standalone Layer2 tool (scripts/select_features.py) so both produce the
+    same subset-evaluated feature list. 单个 screen 失败不阻断精选/训练.
+    """
+    screens = EVENT_SCOPE_SCREENS if screens is None else screens
+    for screen in screens:
+        try:
+            before = len(selected)
+            selected = scope_ic_union(
+                selected,
+                df,
+                screen["event_col"],
+                screen["feats"],
+                screen["label_cols"],
+                window=screen.get("window", 30),
+                ic_bar=screen.get("ic_bar", 0.01),
+                min_support=screen.get("min_support", 1000),
+            )
+            if len(selected) > before:
+                logger.info(
+                    "apply_event_scope_screens[%s]: 并入 %d 个特征",
+                    screen["name"],
+                    len(selected) - before,
+                )
+        except Exception as exc:
+            logger.warning(
+                "apply_event_scope_screens[%s] 失败 (%s), 忽略", screen["name"], exc
+            )
+    return selected
+
+
+# ──────────────────────────────────────────────────────────
+# 三频模型频率归属 (2026-08-04 全市场×3年 6格判定, _classify_freq_full.py)
+# ──────────────────────────────────────────────────────────
+# 每列 (feat → (freq, eval_type)): freq ∈ {月, 周, 日} 决定进哪个频率模型;
+# eval_type ∈ {TS, XS} 是评估口径 (per-stock 时序 vs 日截面), 记录方法论文档用.
+# 核心铁律: 月频特征不进日频模型. select_freq 按基列频率把选中特征路由到
+# {月, 周, 日} 三张表; brute-force 变体 (col_brute_*) 继承基列频率.
+# 事件类 (LHB/HOLDER/BT) 走事件池, 独立事件模块, 不进三频常规模.
+FREQ_ORDER = ("月", "周", "日")
+
+FREQ_ASSIGNMENT = {
+    # ── chip 筹码 ──
+    "pct_90_con": ("月", "TS"),
+    "pct_90_high": ("月", "TS"),
+    "weight_avg": ("月", "TS"),
+    "conc_trend_20d": ("月", "TS"),
+    "resistance_dist": ("月", "TS"),
+    "chip_entropy": ("日", "TS"),
+    "chip_gini": ("日", "TS"),
+    "peak_roc_5d": ("日", "TS"),
+    "chip_skew_dist": ("月", "XS"),
+    "conc_90_industry_rank": ("月", "XS"),
+    "peak_price": ("月", "XS"),
+    "peak_roc_20d": ("周", "TS"),
+    "cost_bias": ("周", "XS"),
+    "support_dist": ("周", "TS"),
+    # ── cost 成本线 ──
+    "cost_50pct": ("月", "TS"),
+    "cost_95pct": ("月", "TS"),
+    # ── price 价格 ──
+    "close_hfq": ("周", "TS"),
+    # ── vol 量 ──
+    "volume": ("月", "XS"),
+    "amount": ("月", "XS"),
+    "turnover_rate": ("月", "XS"),
+    "free_float_turnover_rate": ("月", "XS"),
+    "volume_ratio": ("月", "TS"),
+    "ma_vol_ratio_5_20": ("月", "XS"),
+    "vol_surge": ("月", "XS"),
+    "amt_surge": ("月", "XS"),
+    # ── ma 均线乖离 ──
+    "bias_5": ("周", "TS"),
+    "bias_10": ("周", "TS"),
+    "bias_20": ("月", "TS"),
+    "bias_60": ("日", "TS"),
+    "bias_120": ("月", "TS"),
+    "bias_250": ("月", "TS"),
+    "bias_5_20_cross": ("日", "XS"),
+    "bias_20_60_cross": ("日", "TS"),
+    # ── volatility 波动 ──
+    "amplitude_5d": ("月", "XS"),
+    "intraday_range": ("月", "XS"),
+    "winner_ratio": ("周", "TS"),
+    "pctChg": ("周", "TS"),
+    # ── valuation 估值市值 ──
+    "pe_ttm": ("周", "TS"),
+    "pb": ("周", "TS"),
+    "ps_ttm": ("周", "TS"),
+    "dv_ratio": ("月", "TS"),
+    "total_mv": ("周", "TS"),
+    "circ_mv": ("周", "TS"),
+    # ── margin 两融 ──
+    "margin_balance": ("月", "TS"),
+    "short_balance": ("周", "TS"),
+    "margin_buy_amt": ("月", "XS"),
+    "short_sell_vol": ("周", "TS"),
+    # ── fundamental 基本面 (盈利质量→月; 成长/每股→周) ──
+    "roe": ("月", "TS"),
+    "roe_deducted": ("月", "TS"),
+    "roa": ("月", "TS"),
+    "gross_margin": ("月", "TS"),
+    "debt_ratio": ("月", "TS"),
+    "current_ratio": ("月", "TS"),
+    "asset_turnover": ("月", "TS"),
+    "ar_turnover": ("月", "TS"),
+    "inventory_turnover": ("月", "TS"),
+    "rev_yoy": ("周", "TS"),
+    "net_margin": ("周", "TS"),
+    "eps_yoy": ("周", "TS"),
+    "profit_yoy": ("周", "TS"),
+    "ocfps": ("周", "TS"),
+    "revenue_ps": ("周", "TS"),
+    "bps": ("周", "TS"),
+    "eps": ("周", "TS"),
+    "dt_eps": ("周", "TS"),
+    "roe_yoy": ("周", "TS"),
+    "q_roe": ("周", "TS"),
+    "q_ocf_to_sales": ("周", "TS"),
+    "ocf_to_or": ("日", "TS"),
+}
+
+# ── 同族类比映射 (2026-08-04, 非单独6格判定) ──
+# 生产选中特征池含大量 brute-force 变体, 基列多为已判定列的同族副本或训练时生成
+# 变体 (_x/_y 后缀). 按与已判定同族列的函数一致性推导频率, 而非逐个重跑 6格:
+#   - OHLCV 价格族 → 周 (同 close_hfq 判 TS·周)
+#   - 换手/量/流动性 → 月·XS (同 turnover_rate 判 XS·月)
+#   - 股本/市值 → 周·TS (同 total_mv/circ_mv 判 TS·周)
+#   - 筹码/成本 _x/_y 变体 → 月·TS (同 pct_90_con/cost_50pct 判 TS·月)
+#   - dv_ttm → 月 (同 dv_ratio), 涨跌停 → 日 (快信号), 行业相对收益 → 周 (return 族)
+#   - 上市天数 → 月 (静态慢变)
+# 真新族 (benefit_part/churn_suspect 等) 不猜, 仍归 '未分类' 由覆盖率报告暴露.
+FAMILY_ANALOG = {
+    # 价格族 (close_hfq: TS·周)
+    "open": ("周", "TS"),
+    "high": ("周", "TS"),
+    "low": ("周", "TS"),
+    "close": ("周", "TS"),
+    "pre_close": ("周", "TS"),
+    "open_hfq": ("周", "TS"),
+    "high_hfq": ("周", "TS"),
+    "low_hfq": ("周", "TS"),
+    # 换手/量/流动性 (turnover_rate: XS·月)
+    "turn": ("月", "XS"),
+    "turnover_rate_f": ("月", "XS"),
+    "rank_ff_turnover": ("月", "XS"),
+    "rank_amount": ("月", "XS"),
+    "liquidity_score": ("月", "XS"),
+    "adv20": ("月", "XS"),
+    "turnover_stability_5": ("月", "XS"),
+    # 股本/市值 (total_mv/circ_mv: TS·周)
+    "total_share": ("周", "TS"),
+    "float_share": ("周", "TS"),
+    "free_share": ("周", "TS"),
+    # 筹码/成本 _x/_y 变体 (pct_90_con/cost_50pct: TS·月)
+    "pct_70_con_x": ("月", "TS"),
+    "pct_70_con_y": ("月", "TS"),
+    "pct_70_high_x": ("月", "TS"),
+    "pct_70_high_y": ("月", "TS"),
+    "pct_70_low_x": ("月", "TS"),
+    "pct_70_low_y": ("月", "TS"),
+    "pct_90_con_x": ("月", "TS"),
+    "pct_90_con_y": ("月", "TS"),
+    "pct_90_high_x": ("月", "TS"),
+    "pct_90_high_y": ("月", "TS"),
+    "pct_90_low_x": ("月", "TS"),
+    "pct_90_low_y": ("月", "TS"),
+    "cost_5pct_x": ("月", "TS"),
+    "cost_5pct_y": ("月", "TS"),
+    "cost_15pct_x": ("月", "TS"),
+    "cost_15pct_y": ("月", "TS"),
+    "cost_50pct_x": ("月", "TS"),
+    "cost_50pct_y": ("月", "TS"),
+    "cost_85pct_x": ("月", "TS"),
+    "cost_85pct_y": ("月", "TS"),
+    "cost_95pct_x": ("月", "TS"),
+    "cost_95pct_y": ("月", "TS"),
+    "avg_cost_x": ("月", "TS"),
+    "avg_cost_y": ("月", "TS"),
+    "weight_avg_x": ("月", "TS"),
+    "weight_avg_y": ("月", "TS"),
+    # 股息 (dv_ratio: TS·月)
+    "dv_ttm": ("月", "TS"),
+    # 涨跌停 (快信号 → 日)
+    "up_limit_raw": ("日", "TS"),
+    "down_limit_raw": ("日", "TS"),
+    # 行业/板块相对收益 (窗口后缀定频: _1d→日 _5d→周 _20d→月; 未6格判定)
+    "sw_ret_1d": ("日", "TS"),
+    "sw_ret_1d_x": ("日", "TS"),
+    "sw_ret_5d": ("周", "TS"),
+    "sector_return": ("周", "TS"),
+    "sector_return_5d": ("周", "TS"),
+    "sw_relative_strength": ("周", "TS"),
+    "sw_rotation_position": ("周", "TS"),
+    "sw_ret_20d": ("月", "TS"),
+    "sw_vol_20d": ("月", "TS"),
+    "ind_holder_trend_20d": ("月", "TS"),
+    "sw_momentum_accel": ("月", "TS"),
+    "ind_margin_accel": ("月", "TS"),
+    "ind_margin_chg_5d": ("周", "TS"),
+    "sw_index_close": ("周", "TS"),
+    "sw_index_vol": ("周", "TS"),
+    "market_turnover": ("周", "TS"),
+    "market_turnover_ratio_5d": ("周", "TS"),
+    "market_turnover_ratio_20d": ("月", "TS"),
+    "market_limit_up": ("日", "TS"),
+    # 波动/流动性 (同 amplitude_5d/turnover_rate: XS·月)
+    "ATR_pct": ("月", "XS"),
+    "amihud_illiq": ("月", "XS"),
+    "amihud_illiquidity": ("月", "XS"),
+    "sw_turnover_anomaly": ("月", "XS"),
+    "free_float_turnover_rate_xrank": ("月", "XS"),
+    "amount_xrank": ("月", "XS"),
+    "turnover_f_chg_5d": ("月", "XS"),
+    # 快价格信号 (日动量)
+    "close_vs_low": ("日", "TS"),
+    "overnight_ret": ("日", "TS"),
+    "ROC_3d": ("日", "TS"),
+    "gap_strength_5d": ("周", "TS"),
+    "gap_strength_20d": ("月", "TS"),
+    "gap_vs_ma5": ("周", "TS"),
+    # 日历月 (季节效应)
+    "month": ("月", "TS"),
+    # 上市天数 (静态慢变 → 月)
+    "list_days": ("月", "TS"),
+    # benefit_part = winner_ratio 旧名 (settings.py:44 别名; winner_ratio 判 TS·周)
+    "benefit_part_x": ("周", "TS"),
+    "benefit_part_y": ("周", "TS"),
+    # churn_suspect = 换手稳定性派生洗盘标志 (cleaning_pipeline:140, 同 turnover_stability_5)
+    "churn_suspect": ("月", "XS"),
+}
+
+# 事件类基列前缀 → 事件模块 (不进三频常规模)
+_EVENT_PREFIXES = ("sh_", "lhb", "bt_", "holder")
+
+
+def freq_of(feature: str) -> str:
+    """返回特征频率归属: 月/周/日 / 事件 / 未分类.
+
+    解析顺序: 已测 FREQ_ASSIGNMENT → 同族类比 FAMILY_ANALOG → 事件前缀 →
+    '未分类' (不静默默认, 由覆盖率报告暴露). brute-force 变体继承基列频率.
+    """
+    base = feature.split("_brute_")[0] if "_brute_" in feature else feature
+    if base in FREQ_ASSIGNMENT:
+        return FREQ_ASSIGNMENT[base][0]
+    if base in FAMILY_ANALOG:
+        return FAMILY_ANALOG[base][0]
+    if base.startswith(_EVENT_PREFIXES):
+        return "事件"
+    return "未分类"
 
 
 # ──────────────────────────────────────────────────────────
@@ -487,36 +952,128 @@ class FeatureSelector:
     # ── Selection ──
 
     def select(self, df, board, generator=None):
-        """Run feature selection for a board. Returns list of feature names."""
+        """Run feature selection for a board. Returns list of feature names.
+
+        每次选择结束都会落盘一个时间戳版本快照 (selected_{board}_{ts}.json,
+        不覆盖旧文件, WORM), 便于回看历次 dedup_l2 / gate_d 选中特征.
+        """
         board_cfg = self.config.get(board, self.config.get("fallback", {}))
         pipeline = board_cfg.get("pipeline", "ic_screener")
 
         if pipeline == "bruteforce_dedup":
-            return self._run_bruteforce_dedup(df, board, board_cfg, generator)
+            result = self._run_bruteforce_dedup(df, board, board_cfg, generator)
         elif pipeline == "gate_d":
-            return self._run_gate_d(df, board, board_cfg)
+            result = self._run_gate_d(df, board, board_cfg)
         else:
             from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 
-            return FeatureEngineV35.feature_columns(df)
+            result = FeatureEngineV35.feature_columns(df)
+
+        try:
+            self.save_version(
+                {
+                    "board": board,
+                    "pipeline": pipeline,
+                    "created": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                    "selected_count": len(result),
+                    "features": result,
+                },
+                board,
+                activate=False,
+            )
+        except Exception as exc:  # 快照失败不阻断选择
+            logger.warning("[%s] 保存选中特征快照失败: %s", board, exc)
+        return result
+
+    def select_freq(self, df, board, generator=None):
+        """三频选择: 运行常规 select() 后按基列频率路由到 {月, 周, 日} 三张表.
+
+        月频列特征 (含其 brute-force 变体) 只进月频表, 日频表不会混入月频特征
+        (铁律: 月频特征不进日频模型). 事件类特征独立成 '事件' 桶 (只报告不落训练表);
+        未在 FREQ_ASSIGNMENT 者进 '未分类' 桶并在覆盖率报告里暴露, 不静默默认.
+        每张表 + 覆盖率报告均落盘时间戳版本 (WORM, 不覆盖). select() 行为不变.
+        """
+        selected = self.select(df, board, generator=generator)
+        buckets = {freq: [] for freq in FREQ_ORDER}
+        buckets["事件"] = []
+        buckets["未分类"] = []
+        for f in selected:
+            buckets[freq_of(f)].append(f)
+
+        ts = datetime.now().strftime("%Y%m%dT%H%M%S")
+        for freq in FREQ_ORDER:
+            path = os.path.join(self.registry_dir, f"selected_{board}_{freq}_{ts}.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(
+                    {
+                        "board": board,
+                        "freq": freq,
+                        "created": ts,
+                        "selected_count": len(buckets[freq]),
+                        "features": buckets[freq],
+                    },
+                    fh,
+                    indent=2,
+                    ensure_ascii=False,
+                )
+        cov_path = os.path.join(self.registry_dir, f"selected_{board}_freq_{ts}.json")
+        with open(cov_path, "w", encoding="utf-8") as fh:
+            json.dump(
+                {
+                    "board": board,
+                    "ts": ts,
+                    "coverage": {k: len(v) for k, v in buckets.items()},
+                    "unknown": buckets["未分类"],
+                },
+                fh,
+                indent=2,
+                ensure_ascii=False,
+            )
+        logger.info(
+            "[%s] select_freq 覆盖率: %s",
+            board,
+            {k: len(v) for k, v in buckets.items()},
+        )
+        return buckets
 
     def _run_bruteforce_dedup(self, df, board, cfg, generator=None):
         if generator is None:
             generator = BruteForceGenerator()
         raw_cols = generator._eligible(df)
-        new = generator.generate(df, raw_cols=raw_cols)
-        df_exp = df.join(new)
-        all_cands = df_exp.columns.tolist()
-        # Also include original raw + curated columns that might exist
-        all_feats = [
+        threshold = cfg.get("nan_threshold", 0.95)
+        dedup_thr = cfg.get("dedup_threshold", 0.7)
+        base_numeric = [
             c
-            for c in all_cands
+            for c in df.columns
             if c not in BruteForceGenerator.EXCLUDE_COLS
             and not c.startswith("label_")
-            and df_exp[c].dtype in ("float64", "int64")
+            and df[c].dtype in ("float64", "int64")
         ]
-        valid = nan_filter(all_feats, df_exp, cfg.get("nan_threshold", 0.95))
-        selected = dedup_l2(valid, df_exp, cfg.get("dedup_threshold", 0.7))
+        # 内存安全: 绝不物化全量候选宽表 (2200+ 列 join 触 pandas block
+        # consolidation → 需 ~9GB 连续块, 15.8GB 物理机 OOM).
+        # 1) 逐列算 nan 率 (列无关, 无需宽表); 2) 只驻留固定 5000 行采样帧供
+        # dedup_l2 用 (与旧 dedup_l2 内部 df.sample(5000, random_state=42)
+        # 取同一行子集 → 相关性/方差相同 → 选择结果逐元素一致).
+        n_sample = min(5000, len(df))
+        sample_pos = df.sample(n_sample, random_state=42).index
+
+        cand_nan: dict[str, float] = {}
+        sample_cols: dict[str, np.ndarray] = {}
+        for c in base_numeric:
+            cand_nan[c] = float(df[c].isna().mean())
+            sample_cols[c] = df.loc[sample_pos, c].to_numpy()
+        for fam in BRUTE_FAMILIES:
+            new = generator.generate_family(df, fam, raw_cols=raw_cols, dtype="float32")
+            for c in new.columns:
+                if c in BruteForceGenerator.EXCLUDE_COLS or c.startswith("label_"):
+                    continue
+                cand_nan[c] = float(new[c].isna().mean())
+                sample_cols[c] = new.loc[sample_pos, c].to_numpy()
+            del new
+
+        valid = [c for c, rate in cand_nan.items() if rate < threshold]
+        sample_frame = pd.DataFrame(sample_cols, index=sample_pos)
+        selected = dedup_l2(valid, sample_frame, dedup_thr)
         return selected
 
     def _run_gate_d(self, df, board, cfg):

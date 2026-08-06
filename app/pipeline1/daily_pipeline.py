@@ -19,7 +19,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from config.settings import data_others_path
+from config.settings import PANEL_V3_PATH, data_others_path
 
 from .cleaning_pipeline import CleaningPipeline
 from .data_supply import DataSupplyChain, DataSupplyError
@@ -158,6 +158,14 @@ class DailySelectionPipeline:
 
         # 持久化 + 守卫 + DB入库
         if not result["empty"] and len(result["list"]):
+            # 模块版本戳: 每行记录产生该预测的 bundle 版本 (回归测试按 module 分组评估)
+            from .model_meta import board_tag, load_modules
+
+            mods = load_modules()
+            if "board" in result["list"].columns and mods:
+                result["list"]["model_version"] = result["list"]["board"].map(
+                    lambda b: board_tag(mods, b)
+                )
             result["list"].to_parquet(self._list_path(trade_date), index=False)
             self.guard.on_success(result["list"])
             result["mode"] = "normal"
@@ -204,11 +212,15 @@ class DailySelectionPipeline:
         """
         from .panel_builder import enrich_cyq
 
-        # 加载历史面板 (优先 enriched 版本)
-        for path in (
+        # 加载历史面板: 优先 canonical PANEL_V3_PATH (D:\AMINQT\PARQUET),
+        # 再回退仓库内相对路径 (历史位置)
+        candidates = [
+            str(PANEL_V3_PATH),
             "data/panel_full_enriched_v3.parquet",
             "data/panel_full_enriched_v2.parquet",
-        ):
+        ]
+        panel = None
+        for path in candidates:
             if os.path.exists(path):
                 panel = pd.read_parquet(path)
                 logger.info(
@@ -218,7 +230,7 @@ class DailySelectionPipeline:
                     len(panel),
                 )
                 break
-        else:
+        if panel is None:
             raise DataSupplyError("无可用历史面板缓存 (panel_*.parquet)")
 
         # 确保历史面板不含当日 (避免重复)
