@@ -127,8 +127,10 @@ def main() -> None:
     )
     for r in rows:
         cat = tier_of(r["chg"], r["col"])
+
         def fmt(v):
             return f"{v:+.4f}" if v == v else "   nan"
+
         chg_s = f"{r['chg']:.3f}" if r["chg"] == r["chg"] else "  nan"
         lines.append(
             f"{r['col']:<26}{fmt(r['wIC']):>8}{fmt(r['IC2d']):>8}"

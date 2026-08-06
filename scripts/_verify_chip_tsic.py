@@ -101,14 +101,18 @@ def _report(df, label, out):
     out.append("-" * 84)
     for name in feats:
         w = _wtsic(tsic, name)
+
         def f(v):
             return f"{v:+.4f}" if v == v else "   nan"
+
         out.append(f"{name:<22}{f(w):>14}{'':>18}{'':>13}{'':>13}")
     for c in CHIP_COLS:
         w = _wtsic(tsic, f"{c}_resid")
         per = {lab: tsic[lab][f"{c}_resid"] for lab in LABELS}
+
         def f(v):
             return f"{v:+.4f}" if v == v else "   nan"
+
         out.append(
             f"{c + '_resid':<22}{'':>14}{f(w):>18}"
             f"{f(per['label_pm_2d_net']):>13}{f(per['label_pm_5d_net']):>13}"

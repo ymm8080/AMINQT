@@ -1,0 +1,1059 @@
+{
+  "ts": "20260804_080206",
+  "rows": 1485180,
+  "n_match": 8,
+  "n_mismatch": 34,
+  "n_missing": 42,
+  "features": [
+    {
+      "feat": "open",
+      "family": "价格",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.022,
+        "TS周": -0.0492,
+        "TS月": -0.0645,
+        "XS日": -0.0123,
+        "XS周": -0.0332,
+        "XS月": -0.0463
+      },
+      "verdict": "TS月",
+      "ic": 0.0645,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "high",
+      "family": "价格",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0242,
+        "TS周": -0.054,
+        "TS月": -0.0675,
+        "XS日": -0.0178,
+        "XS周": -0.0373,
+        "XS月": -0.049
+      },
+      "verdict": "TS月",
+      "ic": 0.0675,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "low",
+      "family": "价格",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0263,
+        "TS周": -0.0505,
+        "TS月": -0.0649,
+        "XS日": -0.0158,
+        "XS周": -0.0339,
+        "XS月": -0.0454
+      },
+      "verdict": "TS月",
+      "ic": 0.0649,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "close",
+      "family": "价格",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0226,
+        "TS周": -0.0545,
+        "TS月": -0.0688,
+        "XS日": -0.015,
+        "XS周": -0.0371,
+        "XS月": -0.0484
+      },
+      "verdict": "TS月",
+      "ic": 0.0688,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "pre_close",
+      "family": "价格",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0217,
+        "TS周": -0.0465,
+        "TS月": -0.0624,
+        "XS日": -0.0131,
+        "XS周": -0.0317,
+        "XS月": -0.0459
+      },
+      "verdict": "TS月",
+      "ic": 0.0624,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "open_hfq",
+      "family": "价格",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0219,
+        "TS周": -0.049,
+        "TS月": -0.0642,
+        "XS日": -0.0121,
+        "XS周": -0.0326,
+        "XS月": -0.0448
+      },
+      "verdict": "TS月",
+      "ic": 0.0642,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "high_hfq",
+      "family": "价格",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0239,
+        "TS周": -0.0537,
+        "TS月": -0.0672,
+        "XS日": -0.0174,
+        "XS周": -0.0366,
+        "XS月": -0.0475
+      },
+      "verdict": "TS月",
+      "ic": 0.0672,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "low_hfq",
+      "family": "价格",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0261,
+        "TS周": -0.0502,
+        "TS月": -0.0647,
+        "XS日": -0.0156,
+        "XS周": -0.0333,
+        "XS月": -0.0439
+      },
+      "verdict": "TS月",
+      "ic": 0.0647,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "turn",
+      "family": "换手/流动性/波动",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "XS"
+    },
+    {
+      "feat": "turnover_rate_f",
+      "family": "换手/流动性/波动",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "XS"
+    },
+    {
+      "feat": "rank_ff_turnover",
+      "family": "换手/流动性/波动",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0124,
+        "TS周": -0.0251,
+        "TS月": -0.0319,
+        "XS日": -0.0088,
+        "XS周": -0.0178,
+        "XS月": -0.0271
+      },
+      "verdict": "TS月",
+      "ic": 0.0319,
+      "guess_freq": "月",
+      "guess_type": "XS",
+      "match": false
+    },
+    {
+      "feat": "rank_amount",
+      "family": "换手/流动性/波动",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0148,
+        "TS周": -0.0294,
+        "TS月": -0.0388,
+        "XS日": -0.015,
+        "XS周": -0.0282,
+        "XS月": -0.0433
+      },
+      "verdict": "XS月",
+      "ic": 0.0433,
+      "guess_freq": "月",
+      "guess_type": "XS",
+      "match": true
+    },
+    {
+      "feat": "liquidity_score",
+      "family": "换手/流动性/波动",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0137,
+        "TS周": -0.0283,
+        "TS月": -0.037,
+        "XS日": -0.0127,
+        "XS周": -0.0247,
+        "XS月": -0.038
+      },
+      "verdict": "XS月",
+      "ic": 0.038,
+      "guess_freq": "月",
+      "guess_type": "XS",
+      "match": true
+    },
+    {
+      "feat": "adv20",
+      "family": "换手/流动性/波动",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0373,
+        "TS周": -0.0306,
+        "TS月": -0.0276,
+        "XS日": -0.0451,
+        "XS周": -0.0426,
+        "XS月": -0.0338
+      },
+      "verdict": "XS日",
+      "ic": 0.0451,
+      "guess_freq": "月",
+      "guess_type": "XS",
+      "match": false
+    },
+    {
+      "feat": "turnover_stability_5",
+      "family": "换手/流动性/波动",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.007,
+        "TS周": -0.0018,
+        "TS月": -0.0116,
+        "XS日": -0.0018,
+        "XS周": -0.0066,
+        "XS月": -0.0093
+      },
+      "verdict": "TS月",
+      "ic": 0.0116,
+      "guess_freq": "月",
+      "guess_type": "XS",
+      "match": false
+    },
+    {
+      "feat": "total_share",
+      "family": "股息/股本/涨跌停",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0004,
+        "TS周": 0.0005,
+        "TS月": -0.003,
+        "XS日": 0.0024,
+        "XS周": 0.0045,
+        "XS月": 0.0034
+      },
+      "verdict": "XS周",
+      "ic": 0.0045,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "float_share",
+      "family": "股息/股本/涨跌停",
+      "status": "ok",
+      "cells": {
+        "TS日": 0.0042,
+        "TS周": 0.0083,
+        "TS月": 0.0114,
+        "XS日": 0.0052,
+        "XS周": 0.0093,
+        "XS月": 0.0091
+      },
+      "verdict": "TS月",
+      "ic": 0.0114,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "free_share",
+      "family": "股息/股本/涨跌停",
+      "status": "ok",
+      "cells": {
+        "TS日": 0.0003,
+        "TS周": 0.0012,
+        "TS月": 0.0022,
+        "XS日": 0.0033,
+        "XS周": 0.0057,
+        "XS月": 0.0049
+      },
+      "verdict": "XS周",
+      "ic": 0.0057,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "pct_70_con_x",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "pct_70_con_y",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "pct_70_high_x",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "pct_70_high_y",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "pct_70_low_x",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "pct_70_low_y",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "pct_90_con_x",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "pct_90_con_y",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "pct_90_high_x",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "pct_90_high_y",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "pct_90_low_x",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "pct_90_low_y",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "cost_5pct_x",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "cost_5pct_y",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "cost_15pct_x",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "cost_15pct_y",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "cost_50pct_x",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "cost_50pct_y",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "cost_85pct_x",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "cost_85pct_y",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "cost_95pct_x",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "cost_95pct_y",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "avg_cost_x",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "avg_cost_y",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "weight_avg_x",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "weight_avg_y",
+      "family": "筹码/成本变体",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "dv_ttm",
+      "family": "股息/股本/涨跌停",
+      "status": "ok",
+      "cells": {
+        "TS日": 0.0237,
+        "TS周": 0.0552,
+        "TS月": 0.0645,
+        "XS日": 0.0134,
+        "XS周": 0.0298,
+        "XS月": 0.0362
+      },
+      "verdict": "TS月",
+      "ic": 0.0645,
+      "guess_freq": "月",
+      "guess_type": "TS",
+      "match": true
+    },
+    {
+      "feat": "up_limit_raw",
+      "family": "股息/股本/涨跌停",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0229,
+        "TS周": -0.047,
+        "TS月": -0.0621,
+        "XS日": -0.0138,
+        "XS周": -0.0322,
+        "XS月": -0.0462
+      },
+      "verdict": "TS月",
+      "ic": 0.0621,
+      "guess_freq": "日",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "down_limit_raw",
+      "family": "股息/股本/涨跌停",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0229,
+        "TS周": -0.0469,
+        "TS月": -0.062,
+        "XS日": -0.0138,
+        "XS周": -0.0321,
+        "XS月": -0.0461
+      },
+      "verdict": "TS月",
+      "ic": 0.062,
+      "guess_freq": "日",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "sw_ret_1d",
+      "family": "行业/市场",
+      "status": "missing",
+      "guess_freq": "日",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "sw_ret_1d_x",
+      "family": "行业/市场",
+      "status": "missing",
+      "guess_freq": "日",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "sw_ret_5d",
+      "family": "行业/市场",
+      "status": "missing",
+      "guess_freq": "周",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "sector_return",
+      "family": "行业/市场",
+      "status": "ok",
+      "cells": {
+        "TS日": 0.0052,
+        "TS周": 0.0092,
+        "TS月": -0.0024,
+        "XS日": 0.004,
+        "XS周": 0.0008,
+        "XS月": 0.0014
+      },
+      "verdict": "TS周",
+      "ic": 0.0092,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": true
+    },
+    {
+      "feat": "sector_return_5d",
+      "family": "行业/市场",
+      "status": "ok",
+      "cells": {
+        "TS日": 0.0065,
+        "TS周": -0.002,
+        "TS月": -0.0036,
+        "XS日": 0.0013,
+        "XS周": 0.001,
+        "XS月": 0.003
+      },
+      "verdict": "TS日",
+      "ic": 0.0065,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "sw_relative_strength",
+      "family": "行业/市场",
+      "status": "missing",
+      "guess_freq": "周",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "sw_rotation_position",
+      "family": "行业/市场",
+      "status": "missing",
+      "guess_freq": "周",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "sw_ret_20d",
+      "family": "行业/市场",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "sw_vol_20d",
+      "family": "行业/市场",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "ind_holder_trend_20d",
+      "family": "行业/市场",
+      "status": "ok",
+      "cells": {
+        "TS日": null,
+        "TS周": null,
+        "TS月": null,
+        "XS日": null,
+        "XS周": null,
+        "XS月": null
+      },
+      "verdict": "TS日",
+      "ic": NaN,
+      "guess_freq": "月",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "sw_momentum_accel",
+      "family": "行业/市场",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "ind_margin_accel",
+      "family": "行业/市场",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0125,
+        "TS周": -0.005,
+        "TS月": -0.0038,
+        "XS日": -0.0043,
+        "XS周": 0.0044,
+        "XS月": 0.0035
+      },
+      "verdict": "TS日",
+      "ic": 0.0125,
+      "guess_freq": "月",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "ind_margin_chg_5d",
+      "family": "行业/市场",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0091,
+        "TS周": -0.0016,
+        "TS月": -0.0082,
+        "XS日": -0.0089,
+        "XS周": -0.0046,
+        "XS月": -0.0034
+      },
+      "verdict": "TS日",
+      "ic": 0.0091,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "sw_index_close",
+      "family": "行业/市场",
+      "status": "missing",
+      "guess_freq": "周",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "sw_index_vol",
+      "family": "行业/市场",
+      "status": "missing",
+      "guess_freq": "周",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "market_turnover",
+      "family": "行业/市场",
+      "status": "ok",
+      "cells": {
+        "TS日": 0.0199,
+        "TS周": 0.0185,
+        "TS月": 0.0308,
+        "XS日": -0.0096,
+        "XS周": -0.0018,
+        "XS月": -0.0067
+      },
+      "verdict": "TS月",
+      "ic": 0.0308,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "market_turnover_ratio_5d",
+      "family": "行业/市场",
+      "status": "ok",
+      "cells": {
+        "TS日": 0.0158,
+        "TS周": 0.0086,
+        "TS月": -0.0011,
+        "XS日": -0.0066,
+        "XS周": -0.0044,
+        "XS月": -0.0057
+      },
+      "verdict": "TS日",
+      "ic": 0.0158,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "market_turnover_ratio_20d",
+      "family": "行业/市场",
+      "status": "ok",
+      "cells": {
+        "TS日": 0.0158,
+        "TS周": 0.0112,
+        "TS月": 0.0254,
+        "XS日": -0.0048,
+        "XS周": 0.0024,
+        "XS月": -0.0079
+      },
+      "verdict": "TS月",
+      "ic": 0.0254,
+      "guess_freq": "月",
+      "guess_type": "TS",
+      "match": true
+    },
+    {
+      "feat": "market_limit_up",
+      "family": "行业/市场",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0091,
+        "TS周": -0.0041,
+        "TS月": 0.0039,
+        "XS日": -0.0021,
+        "XS周": -0.0051,
+        "XS月": -0.001
+      },
+      "verdict": "TS日",
+      "ic": 0.0091,
+      "guess_freq": "日",
+      "guess_type": "TS",
+      "match": true
+    },
+    {
+      "feat": "ATR_pct",
+      "family": "换手/流动性/波动",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0082,
+        "TS周": -0.0044,
+        "TS月": 0.0226,
+        "XS日": -0.0135,
+        "XS周": -0.0102,
+        "XS月": -0.0107
+      },
+      "verdict": "TS月",
+      "ic": 0.0226,
+      "guess_freq": "月",
+      "guess_type": "XS",
+      "match": false
+    },
+    {
+      "feat": "amihud_illiq",
+      "family": "换手/流动性/波动",
+      "status": "ok",
+      "cells": {
+        "TS日": 0.0174,
+        "TS周": 0.0187,
+        "TS月": 0.0382,
+        "XS日": 0.0146,
+        "XS周": 0.0232,
+        "XS月": 0.0268
+      },
+      "verdict": "TS月",
+      "ic": 0.0382,
+      "guess_freq": "月",
+      "guess_type": "XS",
+      "match": false
+    },
+    {
+      "feat": "amihud_illiquidity",
+      "family": "换手/流动性/波动",
+      "status": "ok",
+      "cells": {
+        "TS日": 0.0212,
+        "TS周": 0.0366,
+        "TS月": 0.0389,
+        "XS日": 0.017,
+        "XS周": 0.0287,
+        "XS月": 0.0231
+      },
+      "verdict": "TS月",
+      "ic": 0.0389,
+      "guess_freq": "月",
+      "guess_type": "XS",
+      "match": false
+    },
+    {
+      "feat": "sw_turnover_anomaly",
+      "family": "行业/市场",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "XS"
+    },
+    {
+      "feat": "free_float_turnover_rate_xrank",
+      "family": "换手/流动性/波动",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0139,
+        "TS周": -0.0236,
+        "TS月": -0.0308,
+        "XS日": -0.013,
+        "XS周": -0.0215,
+        "XS月": -0.0336
+      },
+      "verdict": "XS月",
+      "ic": 0.0336,
+      "guess_freq": "月",
+      "guess_type": "XS",
+      "match": true
+    },
+    {
+      "feat": "amount_xrank",
+      "family": "换手/流动性/波动",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0195,
+        "TS周": -0.0294,
+        "TS月": -0.0395,
+        "XS日": -0.0215,
+        "XS周": -0.0315,
+        "XS月": -0.047
+      },
+      "verdict": "XS月",
+      "ic": 0.047,
+      "guess_freq": "月",
+      "guess_type": "XS",
+      "match": true
+    },
+    {
+      "feat": "turnover_f_chg_5d",
+      "family": "换手/流动性/波动",
+      "status": "ok",
+      "cells": {
+        "TS日": null,
+        "TS周": null,
+        "TS月": null,
+        "XS日": null,
+        "XS周": null,
+        "XS月": null
+      },
+      "verdict": "TS日",
+      "ic": NaN,
+      "guess_freq": "月",
+      "guess_type": "XS",
+      "match": false
+    },
+    {
+      "feat": "close_vs_low",
+      "family": "价格",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0043,
+        "TS周": -0.0066,
+        "TS月": -0.0102,
+        "XS日": -0.0029,
+        "XS周": -0.0073,
+        "XS月": -0.0133
+      },
+      "verdict": "XS月",
+      "ic": 0.0133,
+      "guess_freq": "日",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "overnight_ret",
+      "family": "快价格信号",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0024,
+        "TS周": 0.004,
+        "TS月": 0.002,
+        "XS日": -0.0022,
+        "XS周": -0.0005,
+        "XS月": -0.0022
+      },
+      "verdict": "TS周",
+      "ic": 0.004,
+      "guess_freq": "日",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "ROC_3d",
+      "family": "快价格信号",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0006,
+        "TS周": -0.0073,
+        "TS月": -0.0004,
+        "XS日": -0.0009,
+        "XS周": -0.005,
+        "XS月": 0.0017
+      },
+      "verdict": "TS周",
+      "ic": 0.0073,
+      "guess_freq": "日",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "gap_strength_5d",
+      "family": "快价格信号",
+      "status": "ok",
+      "cells": {
+        "TS日": 0.0064,
+        "TS周": 0.0064,
+        "TS月": 0.0096,
+        "XS日": 0.0004,
+        "XS周": 0.0017,
+        "XS月": 0.0033
+      },
+      "verdict": "TS月",
+      "ic": 0.0096,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "gap_strength_20d",
+      "family": "快价格信号",
+      "status": "ok",
+      "cells": {
+        "TS日": 0.0056,
+        "TS周": 0.0159,
+        "TS月": 0.0079,
+        "XS日": 0.0021,
+        "XS周": 0.0042,
+        "XS月": 0.0041
+      },
+      "verdict": "TS周",
+      "ic": 0.0159,
+      "guess_freq": "月",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "gap_vs_ma5",
+      "family": "快价格信号",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0023,
+        "TS周": -0.0003,
+        "TS月": -0.0003,
+        "XS日": -0.0005,
+        "XS周": -0.0008,
+        "XS月": -0.0005
+      },
+      "verdict": "TS日",
+      "ic": 0.0023,
+      "guess_freq": "周",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "month",
+      "family": "日历",
+      "status": "ok",
+      "cells": {
+        "TS日": 0.0132,
+        "TS周": 0.0463,
+        "TS月": 0.0306,
+        "XS日": 0.0255,
+        "XS周": 0.0355,
+        "XS月": 0.0201
+      },
+      "verdict": "TS周",
+      "ic": 0.0463,
+      "guess_freq": "月",
+      "guess_type": "TS",
+      "match": false
+    },
+    {
+      "feat": "list_days",
+      "family": "日历",
+      "status": "missing",
+      "guess_freq": "月",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "benefit_part_x",
+      "family": "赢家占比/洗盘",
+      "status": "missing",
+      "guess_freq": "周",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "benefit_part_y",
+      "family": "赢家占比/洗盘",
+      "status": "missing",
+      "guess_freq": "周",
+      "guess_type": "TS"
+    },
+    {
+      "feat": "churn_suspect",
+      "family": "赢家占比/洗盘",
+      "status": "ok",
+      "cells": {
+        "TS日": -0.0091,
+        "TS周": -0.0192,
+        "TS月": -0.0297,
+        "XS日": -0.0078,
+        "XS周": -0.0188,
+        "XS月": -0.025
+      },
+      "verdict": "TS月",
+      "ic": 0.0297,
+      "guess_freq": "月",
+      "guess_type": "XS",
+      "match": false
+    }
+  ]
+}

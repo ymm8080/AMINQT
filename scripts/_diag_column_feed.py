@@ -181,8 +181,10 @@ def main() -> None:
     print("wIC = 0.45*IC2d + 0.35*IC3d + 0.2*IC5d | tier: A=brute展开 B/C=仅level")
     for c, wic, i2, i3, i5, chg in rows:
         cat = tier_of(chg, c)
+
         def fmt(v):
             return f"{v:+.4f}" if v == v else "   nan"
+
         chg_s = f"{chg:.3f}" if chg == chg else "  nan"
         print(
             f"{c:<26}{fmt(wic):>8}{fmt(i2):>8}{fmt(i3):>8}{fmt(i5):>8}{chg_s:>7}  {cat}"

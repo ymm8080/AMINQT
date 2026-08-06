@@ -36,17 +36,19 @@ def classify(work, col):
     for w in WINDOWS.values():
         wins[f"{col}_p{w}"] = (work[col] / g_grp[col].shift(w) - 1.0).astype("float64")
     g_sym, g_date = work["symbol"], work["date"]
-    lab_sym = {l: work.groupby("symbol")[l].rank() for l in LABELS}
-    lab_date = {l: work.groupby("date")[l].rank() for l in LABELS}
+    lab_sym = {label: work.groupby("symbol")[label].rank() for label in LABELS}
+    lab_date = {label: work.groupby("date")[label].rank() for label in LABELS}
     tsic, xic = {}, {}
     for f, wc in wins.items():
         wr_sym = wc.groupby(g_sym.values).rank()
         wr_date = wc.groupby(g_date.values).rank()
         tsic[f] = {
-            l: group_spearman(wr_sym, lab_sym[l], g_sym, MIN_OBS) for l in LABELS
+            label: group_spearman(wr_sym, lab_sym[label], g_sym, MIN_OBS)
+            for label in LABELS
         }
         xic[f] = {
-            l: group_spearman(wr_date, lab_date[l], g_date, MIN_CROSS) for l in LABELS
+            label: group_spearman(wr_date, lab_date[label], g_date, MIN_CROSS)
+            for label in LABELS
         }
     ts = {w: _wtsic(tsic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     xs = {w: _wtsic(xic[f"{col}_p{w}"]) for w in (1, 5, 20)}
