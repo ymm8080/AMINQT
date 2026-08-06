@@ -3,7 +3,6 @@
 # Script for chip weekly analysis
 # =============================================================================
 
-import pandas as pd
 import numpy as np
 
 
