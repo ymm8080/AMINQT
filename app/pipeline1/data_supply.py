@@ -44,6 +44,8 @@ _MARGIN_PAGE_SIZE = int(_DS_CFG.get("margin_page_size", 3000))
 _MARGIN_PAGE_SLEEP = float(_DS_CFG.get("margin_page_sleep", 0.3))
 _SECTOR_INDEX_MAX_WORKERS = int(_DS_CFG.get("sector_index_max_workers", 4))
 _SECTOR_INDEX_FETCH_TIMEOUT = float(_DS_CFG.get("sector_index_fetch_timeout", 60))
+_FINA_MAX_WORKERS = int(_DS_CFG.get("fina_per_stock_max_workers", 4))
+_FINA_PER_STOCK_RETRIES = int(_DS_CFG.get("fina_per_stock_retries", 3))
 _FETCH_TODAY_SOURCES = list(
     _DS_CFG.get(
         "fetch_today_sources",
@@ -75,6 +77,63 @@ def _with_timeout(fn, timeout: float = FETCH_TIMEOUT):
     if "error" in box:
         raise box["error"]
     return box.get("value")
+
+
+_FINA_COL_RENAME = {
+    "ts_code": "_ts_code",
+    "ann_date": "announce_date",
+    "end_date": "report_period",
+    "roe": "roe",
+    "roe_dt": "roe_deducted",
+    "roa": "roa",
+    "np_margin": "net_margin",
+    "gross_margin": "gross_margin",
+    "eps": "eps",
+    "ocfps": "ocfps",
+    "bps": "bps",
+    "revenue_ps": "revenue_ps",
+    "eps_yoy": "eps_yoy",
+    "or_yoy": "rev_yoy",
+    "profit_yoy": "profit_yoy",
+    "cf_sales": "op_cf_ratio",
+    "debt_to_assets": "debt_ratio",
+    "current_ratio": "current_ratio",
+    "assets_turn": "asset_turnover",
+    "ar_turn": "ar_turnover",
+    "inv_turn": "inventory_turnover",
+    "ocf_to_or": "ocf_to_or",
+}
+_FINA_FIELDS = (
+    "ts_code,ann_date,end_date,roe,roe_dt,roa,np_margin,gross_margin,"
+    "eps,ocfps,bps,revenue_ps,"
+    "eps_yoy,or_yoy,profit_yoy,cf_sales,debt_to_assets,current_ratio,"
+    "assets_turn,ar_turn,inv_turn,ocf_to_or"
+)
+
+
+def _fina_convert(raw: pd.DataFrame) -> pd.DataFrame:
+    """Tushare fina_indicator 原始行 → 面板财务列标准 schema.
+
+    Args:
+        raw: pro.fina_indicator 返回的 DataFrame (含 ts_code/ann_date/end_date)
+
+    Returns:
+        DataFrame [symbol, announce_date, report_period, roe, ...] 数值列已转 float.
+    """
+    out = pd.DataFrame()
+    out["symbol"] = raw["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
+    for old, new in _FINA_COL_RENAME.items():
+        if old in raw.columns and new != "announce_date" and new != "report_period":
+            out[new] = pd.to_numeric(raw[old], errors="coerce")
+    out["announce_date"] = pd.to_datetime(
+        raw.get("ann_date", raw.get("f_ann_date", None)),
+        format="%Y%m%d",
+        errors="coerce",
+    )
+    out["report_period"] = pd.to_datetime(
+        raw.get("end_date", None), format="%Y%m%d", errors="coerce"
+    )
+    return out
 
 
 def _ak_call(
@@ -1399,20 +1458,14 @@ class DataSupplyChain:
 
         pro = self._tushare_pro()
         if pro is not None:
-            kwargs: dict = {
-                "fields": (
-                    "ts_code,ann_date,end_date,roe,roe_dt,roa,np_margin,gross_margin,"
-                    "eps,ocfps,bps,revenue_ps,"
-                    "eps_yoy,or_yoy,profit_yoy,cf_sales,debt_to_assets,current_ratio,"
-                    "assets_turn,ar_turn,inv_turn,ocf_to_or"
-                ),
-            }
+            kwargs: dict = {"fields": _FINA_FIELDS}
             if ts_code:
                 kwargs["ts_code"] = ts_code
             if period:
                 kwargs["period"] = period
-            # fina_indicator 的 start_date/end_date 是 ann_date (公告日) 过滤
-            # 部分token不支持此参数 → 先尝试带日期, 失败则不带日期做全量拉取
+            # fina_indicator 的 start_date/end_date 过滤的是报告期 end_date (0331/0630/
+            # 0930/1231), 不是公告日. 部分 token 不支持此参数 → 先尝试带日期, 失败则不带
+            # 日期做全量拉取.
             date_kwargs = {}
             if start_date:
                 date_kwargs["start_date"] = start_date
@@ -1432,47 +1485,19 @@ class DataSupplyChain:
                         logger.warning("Tushare fina_indicator 失败: %s", exc)
                     continue
             if raw is not None and len(raw) > 0:
-                col_rename = {
-                    "ts_code": "_ts_code",
-                    "ann_date": "announce_date",
-                    "end_date": "report_period",
-                    "roe": "roe",
-                    "roe_dt": "roe_deducted",
-                    "roa": "roa",
-                    "np_margin": "net_margin",
-                    "gross_margin": "gross_margin",
-                    "eps": "eps",
-                    "ocfps": "ocfps",
-                    "bps": "bps",
-                    "revenue_ps": "revenue_ps",
-                    "eps_yoy": "eps_yoy",
-                    "or_yoy": "rev_yoy",
-                    "profit_yoy": "profit_yoy",
-                    "cf_sales": "op_cf_ratio",
-                    "debt_to_assets": "debt_ratio",
-                    "current_ratio": "current_ratio",
-                    "assets_turn": "asset_turnover",
-                    "ar_turn": "ar_turnover",
-                    "inv_turn": "inventory_turnover",
-                    "ocf_to_or": "ocf_to_or",
-                }
-                out = pd.DataFrame()
-                out["symbol"] = (
-                    raw["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
-                )
-                for old, new in col_rename.items():
-                    if old in raw.columns:
-                        out[new] = pd.to_numeric(raw[old], errors="coerce")
-                out["announce_date"] = pd.to_datetime(
-                    raw.get("ann_date", raw.get("f_ann_date", None)),
-                    format="%Y%m%d",
-                    errors="coerce",
-                )
-                out["report_period"] = pd.to_datetime(
-                    raw.get("end_date", None), format="%Y%m%d", errors="coerce"
-                )
+                out = _fina_convert(raw)
                 out.to_parquet(path, index=False)
                 return out
+
+            # 免费/低积分 token 不支持全市场或日期范围 fina_indicator 查询
+            # (Tushare 报 "参数错误: ts_code")。降级: 逐股按 ts_code 拉取 (ann_date 过滤).
+            if ts_code is None and (start_date or end_date):
+                per_stock = self._fetch_fina_indicator_per_stock(
+                    start_date=start_date, end_date=end_date
+                )
+                if per_stock is not None and len(per_stock):
+                    per_stock.to_parquet(path, index=False)
+                    return per_stock
 
         # AKShare 降级 — 新浪财务分析指标 (单股)
         if ts_code:
@@ -1512,6 +1537,134 @@ class DataSupplyChain:
                 logger.warning("AKShare 财务指标失败: %s", exc)
 
         return pd.DataFrame()
+
+    def _fina_universe(self) -> list[str]:
+        """面板最新交易日股票池 (逐股 fina 拉取用).
+
+        Returns:
+            symbol 列表 (6位代码, 无交易所后缀). 面板不可用回退 Tushare stock_basic.
+        """
+        panel = os.getenv(
+            "PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
+        )
+        try:
+            import pyarrow.parquet as pq
+
+            t = pq.read_table(panel, columns=["symbol", "date"])
+            df = t.to_pandas()
+            if len(df):
+                max_date = df["date"].max()
+                symbols = sorted(
+                    df.loc[df["date"] == max_date, "symbol"].unique().tolist()
+                )
+                logger.info(
+                    "fina per-stock universe: %d symbols (max date %s)",
+                    len(symbols),
+                    max_date,
+                )
+                return symbols
+        except Exception as exc:
+            logger.warning("fina universe (panel) 读取失败, 回退 stock_basic: %s", exc)
+        pro = self._tushare_pro()
+        basic = self._get_stock_basic_cached(pro) if pro is not None else None
+        if basic is not None and len(basic):
+            return sorted(basic["ts_code"].str.split(".").str[0].unique().tolist())
+        return []
+
+    def _fetch_fina_indicator_per_stock(
+        self,
+        start_date: str | None,
+        end_date: str | None,
+    ) -> pd.DataFrame:
+        """逐股拉取 fina_indicator, Python 侧按公告日过滤 — 免费 token 的降级路径.
+
+        全市场/日期范围查询被 Tushare 拒绝 (缺 ts_code 权限) 时, 按 ts_code 逐股
+        查询. 线程池 + 每线程独立 pro client (tushare 非线程安全).
+
+        注意: Tushare fina_indicator 的 start_date/end_date 过滤的是报告期 end_date
+        (0331/0630/0930/1231), 不是公告日. 因此这里不带日期参数逐股拉全量, 再按
+        announce_date 做 PIT 过滤.
+
+        Args:
+            start_date: 'YYYYMMDD' (公告日起始)
+            end_date:   'YYYYMMDD' (公告日截止)
+
+        Returns:
+            DataFrame [symbol, announce_date, report_period, roe, ...], 仅含公告日在
+            [start_date, end_date] 内的行.
+        """
+        symbols = self._fina_universe()
+        if not symbols:
+            logger.warning("fina per-stock: universe empty, skip")
+            return pd.DataFrame()
+
+        pro_clients = [self._tushare_pro() for _ in range(_FINA_MAX_WORKERS)]
+        pro_clients = [c for c in pro_clients if c is not None]
+        if not pro_clients:
+            logger.warning("fina per-stock: no Tushare client, skip")
+            return pd.DataFrame()
+
+        frames: list[pd.DataFrame] = []
+        errors: list[tuple[str, str]] = []
+
+        def _fetch_one(i: int) -> pd.DataFrame:
+            sym = symbols[i]
+            ts_code = f"{sym}.{'SZ' if sym.startswith(('0', '3', '1')) else 'SH'}"
+            client = pro_clients[i % len(pro_clients)]
+            for attempt in range(_FINA_PER_STOCK_RETRIES):
+                try:
+                    raw = _with_timeout(
+                        lambda: client.fina_indicator(
+                            ts_code=ts_code, fields=_FINA_FIELDS
+                        )
+                    )
+                    if raw is not None and len(raw) > 0:
+                        return _fina_convert(raw)
+                    return pd.DataFrame()
+                except Exception as exc:
+                    if attempt == _FINA_PER_STOCK_RETRIES - 1:
+                        errors.append((ts_code, str(exc)[:120]))
+                        return pd.DataFrame()
+                    time.sleep(1.0)
+            return pd.DataFrame()
+
+        with ThreadPoolExecutor(max_workers=_FINA_MAX_WORKERS) as exe:
+            futs = {exe.submit(_fetch_one, i): i for i in range(len(symbols))}
+            for f in as_completed(futs):
+                try:
+                    r = f.result()
+                    if r is not None and len(r) > 0:
+                        frames.append(r)
+                except Exception:
+                    pass
+
+        if not frames:
+            logger.warning(
+                "fina per-stock: 0/%d stocks (errors: %s)",
+                len(symbols),
+                errors[:5] if errors else "none",
+            )
+            return pd.DataFrame()
+
+        out = pd.concat(frames, ignore_index=True)
+        out = out.drop_duplicates(["symbol", "announce_date", "report_period"])
+        if start_date or end_date:
+            lo = pd.Timestamp(start_date) if start_date else pd.Timestamp.min
+            hi = pd.Timestamp(end_date) if end_date else pd.Timestamp.max
+            before = len(out)
+            out = out[(out["announce_date"] >= lo) & (out["announce_date"] <= hi)]
+            logger.info(
+                "fina per-stock: %d/%d rows in ann window [%s, %s] from %d/%d stocks "
+                "(%d errors)",
+                len(out),
+                before,
+                start_date,
+                end_date,
+                out["symbol"].nunique() if len(out) else 0,
+                len(symbols),
+                len(errors),
+            )
+        return out
 
     # ── 4. 龙虎榜 ──
     def fetch_lhb(
