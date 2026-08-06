@@ -10,6 +10,7 @@ exit_causes 发现: below_ma20/below_ma5_3d/adx_broken (MA/ADX 破位退出)
                 峰值<12% 无止损 (去掉 ma20 保底触发, 靠破位守门)
 max_hold=40 (8 周), 成本=COST+2×滑点. WORM 落盘.
 """
+
 from __future__ import annotations
 
 import gc
@@ -23,8 +24,14 @@ from app.pipeline_parallel.backtest import COST, load_panel, slippage_tier
 from app.pipeline_parallel.config import OOS_WINDOWS, SLOW_BULL
 from app.pipeline_parallel.signals import daily_slowbull_pool
 
-SELL_COLS = ("below_ma20", "adx_broken", "big_drop",
-             "below_ma5_3d", "turnover_spike", "tp_80_div")
+SELL_COLS = (
+    "below_ma20",
+    "adx_broken",
+    "big_drop",
+    "below_ma5_3d",
+    "turnover_spike",
+    "tp_80_div",
+)
 TREND_BREAK = ("below_ma20", "adx_broken", "below_ma5_3d")
 M = 40
 
@@ -38,7 +45,7 @@ def stop_px(mode: str, entry: float, peak: float, ma20: float) -> float | None:
             return entry * 1.40
         if peak >= 0.2:
             return entry * 1.15
-        return ma20                       # 现行: <20% 峰值 → ma20 保底
+        return ma20  # 现行: <20% 峰值 → ma20 保底
     if mode == "g0":
         if peak >= 1.0:
             return ma20
@@ -46,14 +53,14 @@ def stop_px(mode: str, entry: float, peak: float, ma20: float) -> float | None:
             return entry * 1.40
         if peak >= 0.2:
             return entry * 1.15
-        return None                       # <20% 无止损 (靠破位守门)
+        return None  # <20% 无止损 (靠破位守门)
     if mode == "g0_ratchet":
         if peak >= 1.0:
             return ma20
         if peak >= 0.5:
             return entry * 1.40
         if peak >= 0.12:
-            return entry * 1.08           # 提前棘轮: +12% 锁 +8%
+            return entry * 1.08  # 提前棘轮: +12% 锁 +8%
         return None
     raise ValueError(mode)
 
@@ -61,7 +68,7 @@ def stop_px(mode: str, entry: float, peak: float, ma20: float) -> float | None:
 def main() -> int:
     work = load_panel()
     dates = np.sort(work["date"].unique())
-    oos_dates = dates[-OOS_WINDOWS["6m"]:]
+    oos_dates = dates[-OOS_WINDOWS["6m"] :]
 
     w = work.sort_values(["symbol", "date"]).reset_index(drop=True)
     uniques, codes = np.unique(w["symbol"].values, return_inverse=True)
@@ -85,7 +92,9 @@ def main() -> int:
             pool = daily_slowbull_pool(work, d, board, SLOW_BULL, SLOW_BULL.top_n)
             if len(pool):
                 picks.append(pool[["symbol", "date"]])
-        picks_all[board] = pd.concat(picks, ignore_index=True) if picks else pd.DataFrame()
+        picks_all[board] = (
+            pd.concat(picks, ignore_index=True) if picks else pd.DataFrame()
+        )
     del work
     gc.collect()
 
@@ -113,8 +122,11 @@ def main() -> int:
                 sp = stop_px(mode, entry, peak, ma20[r])
                 stop_hit = sp is not None and low[r] < sp
                 trend_break = any(sell[cx][r] for cx in TREND_BREAK) and profit < 0
-                other_sig = (sell["big_drop"][r] or sell["turnover_spike"][r]
-                             or sell["tp_80_div"][r])
+                other_sig = (
+                    sell["big_drop"][r]
+                    or sell["turnover_spike"][r]
+                    or sell["tp_80_div"][r]
+                )
                 if stop_hit or trend_break or other_sig:
                     exit_ret = close[r] / entry - 1 - cost
                     holds.append(k)
@@ -128,8 +140,9 @@ def main() -> int:
                     continue
             rets.append(exit_ret)
             mcol = f"label_mfe_{M}d_net"
-            mfe.append(float(w.at[base, mcol]) if not pd.isna(w.at[base, mcol])
-                       else np.nan)
+            mfe.append(
+                float(w.at[base, mcol]) if not pd.isna(w.at[base, mcol]) else np.nan
+            )
         rr = np.array(rets)
         return {
             "n": int(len(rr)),
@@ -139,12 +152,14 @@ def main() -> int:
             "avg_mfe": round(float(np.nanmean(mfe)), 4) if mfe else None,
         }
 
-    out = {"oos_6m": {"start": str(pd.Timestamp(oos_dates[0]).date()),
-                      "end": str(pd.Timestamp(dates[-1]).date()),
-                      "max_hold": M,
-                      "note": "cur=现行; g0=破位退出仅当profit<0; "
-                              "g0_ratchet=g0+棘轮12%锁8%"}
-           }
+    out = {
+        "oos_6m": {
+            "start": str(pd.Timestamp(oos_dates[0]).date()),
+            "end": str(pd.Timestamp(dates[-1]).date()),
+            "max_hold": M,
+            "note": "cur=现行; g0=破位退出仅当profit<0; g0_ratchet=g0+棘轮12%锁8%",
+        }
+    }
     for board, pk in picks_all.items():
         if pk.empty:
             out[board] = {"n_picks": 0}

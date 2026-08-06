@@ -11,6 +11,7 @@ exit_variants 证明退出层改动救不回幅度 (median hold 恒 3 日, reali
 对比: 同池 T+1 收盘直买 (现行模拟) vs 低吸门控。
 WORM 落盘 data/_diag_slowbull_buy_entry_<ts>.json.
 """
+
 from __future__ import annotations
 
 import gc
@@ -24,8 +25,14 @@ from app.pipeline_parallel.backtest import COST, load_panel, slippage_tier
 from app.pipeline_parallel.config import OOS_WINDOWS, SLOW_BULL
 from app.pipeline_parallel.signals import daily_slowbull_pool, trailing_stop_price
 
-SELL_COLS = ("below_ma20", "adx_broken", "big_drop",
-             "below_ma5_3d", "turnover_spike", "tp_80_div")
+SELL_COLS = (
+    "below_ma20",
+    "adx_broken",
+    "big_drop",
+    "below_ma5_3d",
+    "turnover_spike",
+    "tp_80_div",
+)
 BUY_COLS = ("pullback_ma5", "pullback_ma10", "shrink_vol")
 NOBUY_COLS = ("chase_high", "vol_spike_up", "adx_falling")
 BUY_LOOKBACK = 10
@@ -35,7 +42,7 @@ M = 40
 def main() -> int:
     work = load_panel()
     dates = np.sort(work["date"].unique())
-    oos_dates = dates[-OOS_WINDOWS["6m"]:]
+    oos_dates = dates[-OOS_WINDOWS["6m"] :]
 
     w = work.sort_values(["symbol", "date"]).reset_index(drop=True)
     uniques, codes = np.unique(w["symbol"].values, return_inverse=True)
@@ -64,7 +71,9 @@ def main() -> int:
             pool = daily_slowbull_pool(work, d, board, SLOW_BULL, SLOW_BULL.top_n)
             if len(pool):
                 picks.append(pool[["symbol", "date"]])
-        picks_all[board] = pd.concat(picks, ignore_index=True) if picks else pd.DataFrame()
+        picks_all[board] = (
+            pd.concat(picks, ignore_index=True) if picks else pd.DataFrame()
+        )
     del work
     gc.collect()
 
@@ -129,17 +138,20 @@ def main() -> int:
             "avg_mfe_from_entry": round(float(np.mean(peaks)), 4) if peaks else None,
         }
 
-    out = {"oos_6m": {"start": str(pd.Timestamp(oos_dates[0]).date()),
-                      "end": str(pd.Timestamp(dates[-1]).date()),
-                      "max_hold": M, "buy_lookback": BUY_LOOKBACK,
-                      "note": "cur=T+1收盘直买; dip=10日内均线低吸(回踩且不追高)买"}
-           }
+    out = {
+        "oos_6m": {
+            "start": str(pd.Timestamp(oos_dates[0]).date()),
+            "end": str(pd.Timestamp(dates[-1]).date()),
+            "max_hold": M,
+            "buy_lookback": BUY_LOOKBACK,
+            "note": "cur=T+1收盘直买; dip=10日内均线低吸(回踩且不追高)买",
+        }
+    }
     for board, pk in picks_all.items():
         if pk.empty:
             out[board] = {"n_picks": 0}
             continue
-        out[board] = {"n_picks": len(pk),
-                      "cur": sim(pk, "cur"), "dip": sim(pk, "dip")}
+        out[board] = {"n_picks": len(pk), "cur": sim(pk, "cur"), "dip": sim(pk, "dip")}
         del pk
         gc.collect()
 

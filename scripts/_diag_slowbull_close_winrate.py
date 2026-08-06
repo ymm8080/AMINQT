@@ -10,6 +10,7 @@
   avg MFE vs avg 收盘收益  — 理想最优 vs 实际可得的幅度差
 结果 WORM 落盘 data/_diag_slowbull_close_winrate_<ts>.json.
 """
+
 from __future__ import annotations
 
 import gc
@@ -36,9 +37,9 @@ def main() -> int:
     cf = work[["symbol", "date", "close_hfq", "adv20"]].copy()
     cf = cf.sort_values(["symbol", "date"]).reset_index(drop=True)
     g = cf.groupby("symbol", sort=False)
-    cf["entry"] = g["close_hfq"].shift(-1)                 # T+1 收盘买价
+    cf["entry"] = g["close_hfq"].shift(-1)  # T+1 收盘买价
     for h in H:
-        cf[f"exit{h}"] = g["close_hfq"].shift(-(1 + h))    # T+1+h 收盘
+        cf[f"exit{h}"] = g["close_hfq"].shift(-(1 + h))  # T+1+h 收盘
     cf["cost"] = COST + 2 * cf["adv20"].map(slippage_tier)
     lut = cf.set_index(["symbol", "date"])
     del cf, g
@@ -47,11 +48,15 @@ def main() -> int:
     labels = tuple(f"label_mfe_{h}d_net" for h in H)
     lab = work[["symbol", "date", *labels]].set_index(["symbol", "date"])
 
-    out = {"oos_6m": {"start": str(pd.Timestamp(oos_dates[0]).date()),
-                      "end": str(pd.Timestamp(dates[-1]).date()),
-                      "trading_days": int(oos_d)},
-           "note": "mfe_win = P(窗口内最高价>买入); close_win = P(T+k收盘>买入); "
-                   "capture = avg(收盘收益)/avg(MFE) 理想可兑现比例"}
+    out = {
+        "oos_6m": {
+            "start": str(pd.Timestamp(oos_dates[0]).date()),
+            "end": str(pd.Timestamp(dates[-1]).date()),
+            "trading_days": int(oos_d),
+        },
+        "note": "mfe_win = P(窗口内最高价>买入); close_win = P(T+k收盘>买入); "
+        "capture = avg(收盘收益)/avg(MFE) 理想可兑现比例",
+    }
     for board in ("main", "dual"):
         picks = []
         for d in oos_dates:
@@ -75,8 +80,12 @@ def main() -> int:
                 "p_mfe_win": round(float((mfe > 0).mean()), 4) if mfe.size else None,
                 "avg_mfe": round(float(mfe.mean()), 4) if mfe.size else None,
                 "n_close": int(close_ret.size),
-                "p_close_win": round(float((close_ret > 0).mean()), 4) if close_ret.size else None,
-                "avg_close_ret": round(float(close_ret.mean()), 4) if close_ret.size else None,
+                "p_close_win": round(float((close_ret > 0).mean()), 4)
+                if close_ret.size
+                else None,
+                "avg_close_ret": round(float(close_ret.mean()), 4)
+                if close_ret.size
+                else None,
             }
             if row["n_close"] and row["avg_mfe"] and row["avg_mfe"] > 0:
                 row["capture"] = round(row["avg_close_ret"] / row["avg_mfe"], 3)

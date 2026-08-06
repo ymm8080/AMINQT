@@ -12,6 +12,7 @@ stability 证明 trail8 是趋势跟随放大器: 上升段 (h4/h5) +2~4pp, 下�
   C: ret20 > 0       (20 日市场动量为正)
 买入日 T 打标 (入场价在 T+1, 故 T 收盘信息 PIT 安全)。WORM 落盘.
 """
+
 from __future__ import annotations
 
 import gc
@@ -26,8 +27,14 @@ from app.pipeline_parallel.config import OOS_WINDOWS, SLOW_BULL
 from app.pipeline_parallel.scoring import pool_score, select_topn
 from app.pipeline_parallel.signals import trailing_stop_price
 
-SELL_COLS = ("below_ma20", "adx_broken", "big_drop",
-             "below_ma5_3d", "turnover_spike", "tp_80_div")
+SELL_COLS = (
+    "below_ma20",
+    "adx_broken",
+    "big_drop",
+    "below_ma5_3d",
+    "turnover_spike",
+    "tp_80_div",
+)
 MODES = ("cur", "trail5", "trail8", "trail15")
 REGIME_DEFS = ("A", "B", "C")
 M = 40
@@ -57,10 +64,13 @@ def build_sim_arrays(work: pd.DataFrame) -> dict:
         any_sell |= sell[c]
     return {
         "sym_code": {s: int(c) for c, s in enumerate(uniques)},
-        "starts": starts, "ends": ends,
+        "starts": starts,
+        "ends": ends,
         "dates": w["date"].values.astype("datetime64[ns]"),
-        "close": w["close_hfq"].values, "low": w["low_hfq"].values,
-        "ma20": w["ma20"].values, "any_sell": any_sell,
+        "close": w["close_hfq"].values,
+        "low": w["low_hfq"].values,
+        "ma20": w["ma20"].values,
+        "any_sell": any_sell,
         "cost": COST + 2 * np.array([slippage_tier(v) for v in w["adv20"].values]),
     }
 
@@ -110,10 +120,12 @@ def exit_rets(picks: pd.DataFrame, mode: str, A: dict) -> list[float]:
 
 def sim_agg(rets: list[float], holds: list[int] | None = None) -> dict:
     rr = np.array(rets)
-    return {"n": int(len(rr)),
-            "p_win": round(float((rr > 0).mean()), 4) if len(rr) else None,
-            "avg": round(float(rr.mean()), 4) if len(rr) else None,
-            "median_hold": float(np.median(holds)) if holds else None}
+    return {
+        "n": int(len(rr)),
+        "p_win": round(float((rr > 0).mean()), 4) if len(rr) else None,
+        "avg": round(float(rr.mean()), 4) if len(rr) else None,
+        "median_hold": float(np.median(holds)) if holds else None,
+    }
 
 
 def main() -> int:
@@ -133,7 +145,8 @@ def main() -> int:
 
     # 窗口 (复用 stability 切法)
     windows: dict[str, tuple[np.datetime64, np.datetime64]] = {
-        "full": (dates[0], dates[-1])}
+        "full": (dates[0], dates[-1])
+    }
     for i in range(6):
         s, e = i * HALF, min((i + 1) * HALF, D) - 1
         windows[f"h{i + 1}"] = (dates[s], dates[e])
@@ -144,8 +157,9 @@ def main() -> int:
         pk = gen_picks(work, b, SLOW_BULL.top_n)
         if not pk.empty:
             pk = pk[["symbol", "date"]].copy()
-            pk = pk.merge(reg[["A", "B", "C"]], left_on="date",
-                          right_index=True, how="left")
+            pk = pk.merge(
+                reg[["A", "B", "C"]], left_on="date", right_index=True, how="left"
+            )
             for d in REGIME_DEFS:
                 pk[f"r_{d}"] = pk[d].fillna(False).astype(bool)
                 pk = pk.drop(columns=[d])
@@ -158,12 +172,16 @@ def main() -> int:
     del work
     gc.collect()
 
-    out: dict = {"meta": {"panel": f"{dates[0]} → {dates[-1]}", "n_days": int(D),
-                          "regime_defs": {"A": "mkt>MA20", "B": "mkt>MA60",
-                                          "C": "ret20>0"},
-                          "market_proxy": "每日全股票 close_hfq 中位数 (PIT)",
-                          "conditional": "上升→trail8, 下降→cur",
-                          "note": "买入日 T 打标 (入场 T+1, PIT 安全)"}}
+    out: dict = {
+        "meta": {
+            "panel": f"{dates[0]} → {dates[-1]}",
+            "n_days": int(D),
+            "regime_defs": {"A": "mkt>MA20", "B": "mkt>MA60", "C": "ret20>0"},
+            "market_proxy": "每日全股票 close_hfq 中位数 (PIT)",
+            "conditional": "上升→trail8, 下降→cur",
+            "note": "买入日 T 打标 (入场 T+1, PIT 安全)",
+        }
+    }
     for b, pk in picks_all.items():
         out.setdefault(b, {})
         for rdef in REGIME_DEFS:
@@ -186,7 +204,11 @@ def main() -> int:
         for rdef in REGIME_DEFS:
             cond_rows, cur_rows = [], []
             for wname, (d0, d1) in windows.items():
-                sub = pk[(pk["date"] >= d0) & (pk["date"] <= d1)] if len(pk) else pd.DataFrame()
+                sub = (
+                    pk[(pk["date"] >= d0) & (pk["date"] <= d1)]
+                    if len(pk)
+                    else pd.DataFrame()
+                )
                 if len(sub) < N_MIN:
                     continue
                 up = sub[sub[f"r_{rdef}"]]
@@ -198,10 +220,14 @@ def main() -> int:
                 cond_rows.append((wname, c["n"], c["avg"]))
                 cur_rows.append((wname, cc["n"], cc["avg"]))
             out[b].setdefault(f"windows_{rdef}", []).append(
-                {"def": rdef,
-                 "rows": [{"window": w, "n": n,
-                           "cond_avg": c, "cur_avg": cu} for (w, n, c), (_, _, cu) in
-                          zip(cond_rows, cur_rows)]})
+                {
+                    "def": rdef,
+                    "rows": [
+                        {"window": w, "n": n, "cond_avg": c, "cur_avg": cu}
+                        for (w, n, c), (_, _, cu) in zip(cond_rows, cur_rows)
+                    ],
+                }
+            )
         del pk
         gc.collect()
 
@@ -215,21 +241,31 @@ def main() -> int:
         print(f"\n=== [{b}] ===")
         for rdef in REGIME_DEFS:
             c = out[b][rdef]
-            print(f"\n定义 {rdef} (mkt{('>MA20' if rdef=='A' else '>MA60' if rdef=='B' else ' ret20>0')}): "
-                  f"up {c['n_up']:,} / down {c['n_down']:,}")
-            print(f"  up  : cur {c['up']['cur']['avg'] * 100:7.2f}%  trail8 {c['up']['trail8']['avg'] * 100:7.2f}%  "
-                  f"trail15 {c['up']['trail15']['avg'] * 100:7.2f}%")
-            print(f"  down: cur {c['down']['cur']['avg'] * 100:7.2f}%  trail8 {c['down']['trail8']['avg'] * 100:7.2f}%  "
-                  f"trail15 {c['down']['trail15']['avg'] * 100:7.2f}%")
-            print(f"  条件 (up→trail8/down→cur): {c['conditional']['avg'] * 100:7.2f}%  vs 全池cur "
-                  f"{c['all_cur']['avg'] * 100:7.2f}%  (delta {((c['conditional']['avg'] - c['all_cur']['avg']) * 100):+.2f}pp)")
+            print(
+                f"\n定义 {rdef} (mkt{('>MA20' if rdef == 'A' else '>MA60' if rdef == 'B' else ' ret20>0')}): "
+                f"up {c['n_up']:,} / down {c['n_down']:,}"
+            )
+            print(
+                f"  up  : cur {c['up']['cur']['avg'] * 100:7.2f}%  trail8 {c['up']['trail8']['avg'] * 100:7.2f}%  "
+                f"trail15 {c['up']['trail15']['avg'] * 100:7.2f}%"
+            )
+            print(
+                f"  down: cur {c['down']['cur']['avg'] * 100:7.2f}%  trail8 {c['down']['trail8']['avg'] * 100:7.2f}%  "
+                f"trail15 {c['down']['trail15']['avg'] * 100:7.2f}%"
+            )
+            print(
+                f"  条件 (up→trail8/down→cur): {c['conditional']['avg'] * 100:7.2f}%  vs 全池cur "
+                f"{c['all_cur']['avg'] * 100:7.2f}%  (delta {((c['conditional']['avg'] - c['all_cur']['avg']) * 100):+.2f}pp)"
+            )
         wr = out[b].get("windows_A", [{}])[0].get("rows", [])
         if wr:
             print("\n  窗口稳定性 (定义A, 条件 vs cur):")
             for r in wr:
                 d = (r["cond_avg"] - r["cur_avg"]) * 100
-                print(f"    {r['window']:<7} n={r['n']:>5}  cond {r['cond_avg'] * 100:7.2f}%  "
-                      f"cur {r['cur_avg'] * 100:7.2f}%  delta {d:+.2f}pp")
+                print(
+                    f"    {r['window']:<7} n={r['n']:>5}  cond {r['cond_avg'] * 100:7.2f}%  "
+                    f"cur {r['cur_avg'] * 100:7.2f}%  delta {d:+.2f}pp"
+                )
     print(f"\n落盘: {fp}")
     return 0
 

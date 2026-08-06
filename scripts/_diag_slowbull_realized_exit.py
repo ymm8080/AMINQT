@@ -15,6 +15,7 @@
 结果 WORM 落盘 data/_diag_slowbull_realized_exit_<ts>.json.
 本脚本是交易模拟 (非特征计算), 逐 pick 循环 1400 级 × 40 日, 毫秒级。
 """
+
 from __future__ import annotations
 
 import gc
@@ -28,8 +29,14 @@ from app.pipeline_parallel.backtest import COST, load_panel, slippage_tier
 from app.pipeline_parallel.config import OOS_WINDOWS, SLOW_BULL
 from app.pipeline_parallel.signals import daily_slowbull_pool, trailing_stop_price
 
-SELL_COLS = ("below_ma20", "adx_broken", "big_drop",
-             "below_ma5_3d", "turnover_spike", "tp_80_div")
+SELL_COLS = (
+    "below_ma20",
+    "adx_broken",
+    "big_drop",
+    "below_ma5_3d",
+    "turnover_spike",
+    "tp_80_div",
+)
 CAPS = (10, 20, 40)
 
 
@@ -48,8 +55,10 @@ def main() -> int:
     ends = np.cumsum(sizes)
     sym_code = {s: int(c) for c, s in enumerate(uniques)}
 
-    arr = {col: w[col].values for col in ("close_hfq", "high_hfq", "low_hfq",
-                                          "ma20", "adv20", "date")}
+    arr = {
+        col: w[col].values
+        for col in ("close_hfq", "high_hfq", "low_hfq", "ma20", "adv20", "date")
+    }
     dates_dt = arr["date"].astype("datetime64[ns]")
     any_sell = np.zeros(len(w), dtype=bool)
     for col in SELL_COLS:
@@ -61,14 +70,14 @@ def main() -> int:
     def sim(picks: pd.DataFrame) -> dict:
         rows = {"n_picks": len(picks)}
         for M in CAPS:
-            realized, held, base_hold, mfe, hold_days = [], [], [], [], []
+            realized, _held, base_hold, mfe, hold_days = [], [], [], [], []
             for sym, T in zip(picks["symbol"], picks["date"]):
                 c = sym_code[str(sym)]
                 lo, hi = starts[c], ends[c]
                 j = int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))
                 base = lo + j
                 entry_r = base + 1
-                if entry_r >= hi:                       # 无 T+1 买价 → 弃
+                if entry_r >= hi:  # 无 T+1 买价 → 弃
                     continue
                 entry = close[entry_r]
                 if not np.isfinite(entry) or entry <= 0:
@@ -78,7 +87,7 @@ def main() -> int:
                 exit_ret = None
                 for k in range(1, M + 1):
                     r = base + k
-                    if r >= hi:                         # 未来窗截断 → 弃 (保守)
+                    if r >= hi:  # 未来窗截断 → 弃 (保守)
                         break
                     peak = max(peak, high[r] / entry - 1.0)
                     stop_px = trailing_stop_price(entry, peak, ma20[r])
@@ -97,29 +106,44 @@ def main() -> int:
                 bh = close[base + M] / entry - 1 - cost if (base + M) < hi else np.nan
                 base_hold.append(bh)
                 mcol = f"label_mfe_{M}d_net"
-                mfe.append(float(w.at[base, mcol]) if not pd.isna(w.at[base, mcol])
-                           else np.nan)
+                mfe.append(
+                    float(w.at[base, mcol]) if not pd.isna(w.at[base, mcol]) else np.nan
+                )
             realized = np.array(realized)
             base_hold = np.array(base_hold, dtype=float)
             mfe = np.array(mfe, dtype=float)
             rows[f"max_hold_{M}"] = {
                 "n": int(len(realized)),
-                "p_win": round(float((realized > 0).mean()), 4) if len(realized) else None,
-                "avg_realized": round(float(realized.mean()), 4) if len(realized) else None,
+                "p_win": round(float((realized > 0).mean()), 4)
+                if len(realized)
+                else None,
+                "avg_realized": round(float(realized.mean()), 4)
+                if len(realized)
+                else None,
                 "avg_baseline_hold": round(float(np.nanmean(base_hold)), 4)
-                    if np.isfinite(base_hold).any() else None,
-                "avg_mfe": round(float(np.nanmean(mfe)), 4) if np.isfinite(mfe).any() else None,
+                if np.isfinite(base_hold).any()
+                else None,
+                "avg_mfe": round(float(np.nanmean(mfe)), 4)
+                if np.isfinite(mfe).any()
+                else None,
                 "median_hold_days": float(np.median(hold_days)) if hold_days else None,
-                "delta_vs_hold": round(float(np.nanmean(realized) - np.nanmean(base_hold)), 4)
-                    if len(realized) and np.isfinite(base_hold).any() else None,
+                "delta_vs_hold": round(
+                    float(np.nanmean(realized) - np.nanmean(base_hold)), 4
+                )
+                if len(realized) and np.isfinite(base_hold).any()
+                else None,
             }
         return rows
 
-    out = {"oos_6m": {"start": str(pd.Timestamp(oos_dates[0]).date()),
-                      "end": str(pd.Timestamp(dates[-1]).date()),
-                      "trading_days": int(oos_d)},
-           "entry": "close_hfq[T+1] (同 MFE 基准); exit=首个卖出信号或止盈线, "
-                    "否则 T+cap 收盘; 成本=COST+2×滑点"}
+    out = {
+        "oos_6m": {
+            "start": str(pd.Timestamp(oos_dates[0]).date()),
+            "end": str(pd.Timestamp(dates[-1]).date()),
+            "trading_days": int(oos_d),
+        },
+        "entry": "close_hfq[T+1] (同 MFE 基准); exit=首个卖出信号或止盈线, "
+        "否则 T+cap 收盘; 成本=COST+2×滑点",
+    }
     for board in ("main", "dual"):
         picks = []
         for d in oos_dates:

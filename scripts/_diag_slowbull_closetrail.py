@@ -14,6 +14,7 @@ trail_pct 才走 (非日内 low 触线, 更现实/更温柔), + 硬止损 -8% + 
   hardonly  = 无移动止盈, 仅硬止损 -8% (纯砍亏, 其余持有到期)
 退出在收盘判定, exit_ret=close/entry-1-cost. WORM 落盘.
 """
+
 from __future__ import annotations
 
 import gc
@@ -27,8 +28,14 @@ from app.pipeline_parallel.backtest import COST, load_panel, slippage_tier
 from app.pipeline_parallel.config import OOS_WINDOWS, SLOW_BULL
 from app.pipeline_parallel.signals import daily_slowbull_pool, trailing_stop_price
 
-SELL_COLS = ("below_ma20", "adx_broken", "big_drop",
-             "below_ma5_3d", "turnover_spike", "tp_80_div")
+SELL_COLS = (
+    "below_ma20",
+    "adx_broken",
+    "big_drop",
+    "below_ma5_3d",
+    "turnover_spike",
+    "tp_80_div",
+)
 M = 40
 HARD_STOP = 0.92
 
@@ -36,7 +43,7 @@ HARD_STOP = 0.92
 def main() -> int:
     work = load_panel()
     dates = np.sort(work["date"].unique())
-    oos_dates = dates[-OOS_WINDOWS["6m"]:]
+    oos_dates = dates[-OOS_WINDOWS["6m"] :]
 
     picks_all = {}
     for b in ("main", "dual"):
@@ -101,24 +108,29 @@ def main() -> int:
                 holds.append(M)
             rets.append(exit_ret)
         rr = np.array(rets)
-        return {"n": int(len(rr)),
-                "p_win": round(float((rr > 0).mean()), 4),
-                "avg": round(float(rr.mean()), 4),
-                "median_hold": float(np.median(holds)) if holds else None}
+        return {
+            "n": int(len(rr)),
+            "p_win": round(float((rr > 0).mean()), 4),
+            "avg": round(float(rr.mean()), 4),
+            "median_hold": float(np.median(holds)) if holds else None,
+        }
 
     modes = ("cur", "trail5", "trail8", "trail15", "hardonly")
-    out = {"oos_6m": {"start": str(pd.Timestamp(oos_dates[0]).date()),
-                      "end": str(pd.Timestamp(dates[-1]).date()),
-                      "max_hold": M, "hard_stop": HARD_STOP,
-                      "note": "收盘价移动止盈: 收盘从峰值回落 X% 走 (非日内触线), "
-                              "收盘判定, 硬止损 -8%"}
-           }
+    out = {
+        "oos_6m": {
+            "start": str(pd.Timestamp(oos_dates[0]).date()),
+            "end": str(pd.Timestamp(dates[-1]).date()),
+            "max_hold": M,
+            "hard_stop": HARD_STOP,
+            "note": "收盘价移动止盈: 收盘从峰值回落 X% 走 (非日内触线), "
+            "收盘判定, 硬止损 -8%",
+        }
+    }
     for b, pk in picks_all.items():
         if pk.empty:
             out[b] = {"n_picks": 0}
             continue
-        out[b] = {"n_picks": len(pk),
-                  **{m: sim(pk, m) for m in modes}}
+        out[b] = {"n_picks": len(pk), **{m: sim(pk, m) for m in modes}}
         del pk
         gc.collect()
 

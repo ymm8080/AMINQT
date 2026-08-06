@@ -53,14 +53,23 @@ def write_slowbull_pool(work: pd.DataFrame, board: str, date=None) -> str:
         f"slowbull_pool_{board}_{stamp}__slow_bull_{SLOW_BULL_VERSION}.csv"
     )
     # 市场状态条件退出 (2026-08-06): 上升段 trail8 正常出候选; 下行段 + no_open → 不开仓
-    up = bool(pool["slow_bull_regime"].iloc[0]) \
-        if "slow_bull_regime" in pool.columns else True
+    up = (
+        bool(pool["slow_bull_regime"].iloc[0])
+        if "slow_bull_regime" in pool.columns
+        else True
+    )
     if not up and SLOW_BULL_REGIME["down_mode"] == "no_open":
         note = pd.DataFrame(
-            {"board": [board], "date": [str(pd.Timestamp(latest).date())],
-             "slow_bull_regime": [False],
-             "note": ["下行阶段不开仓 (slow_bull down_mode=no_open, def="
-                      f"{SLOW_BULL_REGIME['def']}), 今日无候选"]})
+            {
+                "board": [board],
+                "date": [str(pd.Timestamp(latest).date())],
+                "slow_bull_regime": [False],
+                "note": [
+                    "下行阶段不开仓 (slow_bull down_mode=no_open, def="
+                    f"{SLOW_BULL_REGIME['def']}), 今日无候选"
+                ],
+            }
+        )
         note.to_csv(fp, index=False)
         return fp.name
     pool.to_csv(fp, index=False)

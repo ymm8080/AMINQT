@@ -12,6 +12,7 @@
    回答: 高预期幅度子集用 ht 能否兑现.
 WORM 落盘 data/_diag_slowbull_selectivity_<ts>.json.
 """
+
 from __future__ import annotations
 
 import gc
@@ -22,12 +23,18 @@ import numpy as np
 import pandas as pd
 
 from app.pipeline_parallel.backtest import COST, load_panel, slippage_tier
-from app.pipeline_parallel.config import ADX_SPEC, OOS_WINDOWS, SLOW_BULL
+from app.pipeline_parallel.config import OOS_WINDOWS, SLOW_BULL
 from app.pipeline_parallel.scoring import pool_score
 from app.pipeline_parallel.signals import daily_slowbull_pool, trailing_stop_price
 
-SELL_COLS = ("below_ma20", "adx_broken", "big_drop",
-             "below_ma5_3d", "turnover_spike", "tp_80_div")
+SELL_COLS = (
+    "below_ma20",
+    "adx_broken",
+    "big_drop",
+    "below_ma5_3d",
+    "turnover_spike",
+    "tp_80_div",
+)
 M = 40
 HARD_STOP = 0.92  # 硬止损: 跌破成本-8% 平
 
@@ -35,14 +42,14 @@ HARD_STOP = 0.92  # 硬止损: 跌破成本-8% 平
 def main() -> int:
     work = load_panel()
     dates = np.sort(work["date"].unique())
-    oos_dates = dates[-OOS_WINDOWS["6m"]:]
+    oos_dates = dates[-OOS_WINDOWS["6m"] :]
     gc_col = f"gate_{SLOW_BULL.gate}"
 
     # ---- 全 gated 池: 逐 OOS 日逐板取掩码 + score, 收集 (board,symbol,date,score) ----
     rows = []
     for d in oos_dates:
         for b in ("main", "dual"):
-            mask = ((work["date"] == d) & (work["board"] == b) & work[gc_col])
+            mask = (work["date"] == d) & (work["board"] == b) & work[gc_col]
             day = work[mask]
             if day.empty:
                 continue
@@ -57,8 +64,7 @@ def main() -> int:
     if gated.empty:
         print("全 gated 池为空")
         return 0
-    print(f"全 gated 池: {len(gated)} picks / "
-          f"{gated['symbol'].nunique()} 只")
+    print(f"全 gated 池: {len(gated)} picks / {gated['symbol'].nunique()} 只")
 
     # ---- top-20 运营池 (逐 OOS 日) ----
     picks_all = {}
@@ -94,8 +100,10 @@ def main() -> int:
         lbl = df.index.to_numpy()
         syms = df["symbol"].to_numpy()
         Ts = df["date"].to_numpy()
-        out = {k: pd.Series(np.nan, index=lbl, dtype=float)
-               for k in ("mfe40", "c10", "c20", "c40")}
+        out = {
+            k: pd.Series(np.nan, index=lbl, dtype=float)
+            for k in ("mfe40", "c10", "c20", "c40")
+        }
         for pos in range(len(df)):
             c = sym_code[str(syms[pos])]
             lo, hi = starts[c], ends[c]
@@ -107,7 +115,9 @@ def main() -> int:
             if not np.isfinite(entry) or entry <= 0:
                 continue
             cost = cost_arr[base]
-            out["mfe40"].at[lbl[pos]] = high[r0 + 1:r0 + M + 1].max() / entry - 1 - cost
+            out["mfe40"].at[lbl[pos]] = (
+                high[r0 + 1 : r0 + M + 1].max() / entry - 1 - cost
+            )
             out["c10"].at[lbl[pos]] = close[r0 + 10] / entry - 1 - cost
             out["c20"].at[lbl[pos]] = close[r0 + 20] / entry - 1 - cost
             out["c40"].at[lbl[pos]] = close[r0 + 40] / entry - 1 - cost
@@ -116,8 +126,11 @@ def main() -> int:
     def summarize(arr: np.ndarray) -> dict:
         if len(arr) < 5:
             return {"n": int(len(arr)), "avg": None, "p_pos": None}
-        return {"n": int(len(arr)), "avg": round(float(arr.mean()), 4),
-                "p_pos": round(float((arr > 0).mean()), 4)}
+        return {
+            "n": int(len(arr)),
+            "avg": round(float(arr.mean()), 4),
+            "p_pos": round(float((arr > 0).mean()), 4),
+        }
 
     def sim_exit(picks: pd.DataFrame, mode: str) -> dict:
         """mode=cur 现行 | ht 持有到底(锁盈棘轮+硬止损, max_hold=40)."""
@@ -160,18 +173,24 @@ def main() -> int:
                 holds.append(M)
             rets.append(exit_ret)
         rr = np.array(rets)
-        return {"n": int(len(rr)),
-                "p_win": round(float((rr > 0).mean()), 4),
-                "avg": round(float(rr.mean()), 4),
-                "median_hold": float(np.median(holds)) if holds else None}
+        return {
+            "n": int(len(rr)),
+            "p_win": round(float((rr > 0).mean()), 4),
+            "avg": round(float(rr.mean()), 4),
+            "median_hold": float(np.median(holds)) if holds else None,
+        }
 
-    out = {"oos_6m": {"start": str(pd.Timestamp(oos_dates[0]).date()),
-                      "end": str(pd.Timestamp(dates[-1]).date()),
-                      "max_hold": M, "hard_stop": HARD_STOP,
-                      "note": "score=加权截面分位(gated池内); "
-                              "mfemax40=离场前峰值; close_k=持有k日收盘(含成本). "
-                              "ht=持有到底(仅锁盈棘轮+硬止损-8%)"}
-           }
+    out = {
+        "oos_6m": {
+            "start": str(pd.Timestamp(oos_dates[0]).date()),
+            "end": str(pd.Timestamp(dates[-1]).date()),
+            "max_hold": M,
+            "hard_stop": HARD_STOP,
+            "note": "score=加权截面分位(gated池内); "
+            "mfemax40=离场前峰值; close_k=持有k日收盘(含成本). "
+            "ht=持有到底(仅锁盈棘轮+硬止损-8%)",
+        }
+    }
 
     # 1) 全 gated 池 score 五分位 → 前瞻幅度
     out["gated_quintiles"] = {}
@@ -185,11 +204,16 @@ def main() -> int:
         blob = {}
         for q in sorted(sub["q"].unique()):
             idx = sub.index[sub["q"] == q]
-            blob[f"q{int(q)}"] = {"score_range": [
+            blob[f"q{int(q)}"] = {
+                "score_range": [
                     round(float(sub["score"].loc[idx].min()), 3),
-                    round(float(sub["score"].loc[idx].max()), 3)],
-                **{k: summarize(fwd_all[k].loc[idx].dropna().to_numpy())
-                   for k in fwd_all}}
+                    round(float(sub["score"].loc[idx].max()), 3),
+                ],
+                **{
+                    k: summarize(fwd_all[k].loc[idx].dropna().to_numpy())
+                    for k in fwd_all
+                },
+            }
         out["gated_quintiles"][b] = {"n_picks": len(sub), **blob}
         del sub
         gc.collect()

@@ -10,6 +10,7 @@ route A 回测发现: 卖出规则在 ~3 日接近保本离场, 捕获不到 MFE
 选出的正是处于高位的强势股 → 选股当天即触发, 保本离场。此脚本验证之。
 结果 WORM 落盘 data/_diag_slowbull_exit_causes_<ts>.json.
 """
+
 from __future__ import annotations
 
 import gc
@@ -23,15 +24,21 @@ from app.pipeline_parallel.backtest import COST, load_panel, slippage_tier
 from app.pipeline_parallel.config import OOS_WINDOWS, SLOW_BULL
 from app.pipeline_parallel.signals import daily_slowbull_pool, trailing_stop_price
 
-SELL_COLS = ("below_ma20", "adx_broken", "big_drop",
-             "below_ma5_3d", "turnover_spike", "tp_80_div")
+SELL_COLS = (
+    "below_ma20",
+    "adx_broken",
+    "big_drop",
+    "below_ma5_3d",
+    "turnover_spike",
+    "tp_80_div",
+)
 M = 40  # max hold (8 周)
 
 
 def main() -> int:
     work = load_panel()
     dates = np.sort(work["date"].unique())
-    oos_dates = dates[-OOS_WINDOWS["6m"]:]
+    oos_dates = dates[-OOS_WINDOWS["6m"] :]
 
     w = work.sort_values(["symbol", "date"]).reset_index(drop=True)
     uniques, codes = np.unique(w["symbol"].values, return_inverse=True)
@@ -59,7 +66,9 @@ def main() -> int:
             pool = daily_slowbull_pool(work, d, board, SLOW_BULL, SLOW_BULL.top_n)
             if len(pool):
                 picks.append(pool[["symbol", "date"]])
-        picks_all[board] = pd.concat(picks, ignore_index=True) if picks else pd.DataFrame()
+        picks_all[board] = (
+            pd.concat(picks, ignore_index=True) if picks else pd.DataFrame()
+        )
     del work
     gc.collect()
 
@@ -124,15 +133,23 @@ def main() -> int:
                 "avg": round(float(rr.mean()), 4) if len(rr) else None,
                 "p_win": round(float((rr > 0).mean()), 4) if len(rr) else None,
             }
-        for name, rr in (("stop_only", np.array(stop_only)),
-                         ("sig_only", np.array(sig_only))):
-            rows[name] = {"n": int(len(rr)),
-                          "avg": round(float(rr.mean()), 4) if len(rr) else None,
-                          "p_win": round(float((rr > 0).mean()), 4) if len(rr) else None}
+        for name, rr in (
+            ("stop_only", np.array(stop_only)),
+            ("sig_only", np.array(sig_only)),
+        ):
+            rows[name] = {
+                "n": int(len(rr)),
+                "avg": round(float(rr.mean()), 4) if len(rr) else None,
+                "p_win": round(float((rr > 0).mean()), 4) if len(rr) else None,
+            }
         return rows
 
-    out = {"oos_6m": {"start": str(pd.Timestamp(oos_dates[0]).date()),
-                      "end": str(pd.Timestamp(dates[-1]).date())}}
+    out = {
+        "oos_6m": {
+            "start": str(pd.Timestamp(oos_dates[0]).date()),
+            "end": str(pd.Timestamp(dates[-1]).date()),
+        }
+    }
     for board, pk in picks_all.items():
         if pk.empty:
             out[board] = {"n_picks": 0}
