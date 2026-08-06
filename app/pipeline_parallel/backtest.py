@@ -36,6 +36,7 @@ from app.pipeline_parallel.config import (
     OOS_WINDOWS,
     PANEL,
     SLOW_BULL,
+    SLOW_BULL_REGIME,
     SNIPER,
     SYSTEMS,
     board_of,
@@ -47,7 +48,6 @@ from app.pipeline_parallel.scoring import (
     select_topn,
 )
 from config.settings import BACKTEST_RESULT_DIR
-from scripts._reclassify_all_features import _finalize_slice
 
 
 def add_mfe_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
@@ -129,6 +129,10 @@ def load_panel() -> pd.DataFrame:
     额外加 MFE 净标签 (2026-08-04 用户: 目标是持有期内最大涨幅),
     再按 PIT 可交易性门剔除慢性停牌股, 并按代码前缀标 board 列.
     """
+    # 惰性导入: _reclassify_all_features 依赖链较重 (scripts._diag_column_feed 等),
+    # 仅在生产 load_panel 路径需要, 避免 pytest 收集时触发 ImportError.
+    from scripts._reclassify_all_features import _finalize_slice
+
     slices = []
     for ckpt in (PANEL.main_checkpoint, PANEL.dual_checkpoint):
         df = _finalize_slice(pd.read_parquet(ckpt))
@@ -147,6 +151,15 @@ def load_panel() -> pd.DataFrame:
     work = indicators.prepare_adx(work)
     signals.add_signal_columns(work)
     work["gate_slow_bull"] = screener.compute_gate(work, "slow_bull")
+    # 市场状态 (上升/下降) — 慢牛条件退出用 (2026-08-06); PIT, 仅 t 及更早
+    signals.add_market_regime(work, SLOW_BULL_REGIME)
+    _n_up = int(work.loc[work["gate_slow_bull"], "slow_bull_regime"].sum())
+    _n_gate = int(work["gate_slow_bull"].sum())
+    print(
+        f"慢牛市场状态: 上升段 {_n_up:,} / {_n_gate:,} gate 行 "
+        f"({_n_up / _n_gate:.0%} 可开仓)",
+        flush=True,
+    )
     print(
         f"可交易性门: 剔除 {gate['removed_rows']:,} 行 / "
         f"{gate['removed_stocks']} 只 (近{gate['lookback']}交易日"
