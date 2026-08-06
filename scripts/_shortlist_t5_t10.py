@@ -10,9 +10,10 @@
     → 按 score 分位桶校准 → 每股逐视界 预期涨幅(MFE) + 达到概率 (前瞻, 非历史回看)
   - backtest.json                           : 系统级 OOS 逐视界 胜率/期望 (SUMMARY 段)
 
-**概率口径 (2026-08-05 用户定案):** 概率 = 该股达到其"预期涨幅"的真实概率
-(= 同 score 桶内 已实现 MFE ≥ 桶期望 的样本占比). 不是 P(MFE>0) — 那曾是 85-99%
-被用户否决 "incorrectly high". 真实口径下命中率仅 ~31-44%, 原 "概率>60%" 门槛不可达.
+**概率口径 (2026-08-06 用户定案):** 概率 = 该股**逐股自然概率** (每股唯一真值)
+= P(该股该视界已实现 MFE ≥ 固定绝对目标) via 逐股 Platt 平滑校准 — 替代旧桶级共享值
+(同 score 桶内每股同值, 用户: "natural, not bulk probability"). 不是 P(MFE>0) —
+那曾是 85-99% 被用户否决 "incorrectly high".
 
 **制度自适应门 (2026-08-05 用户):** 输出哪个 (板块, 系统) 组合**不写死**, 用最新 OOS
 市场数据 (固定视界净收益 label_pm) 每日判定: top-quantile 选股平均净收益 > 池基线 + margin
@@ -44,6 +45,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
+from sklearn.linear_model import LogisticRegression
 
 from config.settings import (
     STOCK_LIST_DIR,
@@ -75,13 +77,16 @@ HORIZON_ORDER = ("2d", "3d", "5d", "10d")
 # OOS score→前视涨幅校准 (前瞻预测): score 分位桶数 / 单桶最少已实现样本
 CAL_BINS = 6
 CAL_MIN_N = 5
+# [2026-08-06] 达到概率改逐股自然概率 (用户: "natural, not bulk probability"):
+# 口径 = P(该股该视界达到固定绝对涨幅) — 每股唯一真值 (score 单调略增, 非桶内共享).
+ABS_TARGET = {"2d": 0.02, "3d": 0.03, "5d": 0.04, "10d": 0.06}
 
 
 def load_system_stats(records: dict) -> dict:
-    """OOS 逐股记录 → {(board, system): {h: {"mag", "hit", "n"}}} (SUMMARY 段, 真实口径).
+    """OOS 逐股记录 → {(board, system): {h: {"mag", "hit", "n"}}} (SUMMARY 段, 系统级汇总).
 
-    与个股口径一致: mag=期望涨幅(桶期望), hit=P(已实现 MFE ≥ 期望) — 不再是 P(MFE>0)
-    的虚高系统胜率 (旧 82-94% 被用户否决 "not convincing")."""
+    系统级单一值 (非个股值): mag=系统期望涨幅(均值), hit=P(已实现 MFE ≥ 系统期望) —
+    不是 P(MFE>0) 的虚高系统胜率 (旧 82-94% 被用户否决 "not convincing")."""
     stats = {}
     for (board, key), rec in records.items():
         if key == "both":
@@ -252,13 +257,33 @@ def fmt_regime(gate: dict) -> list[str]:
     return lines
 
 
-def calibrate(records: dict, board: str, key: str, score: float) -> dict[str, tuple]:
-    """把最新 score 映射到 OOS 同分位桶的 已实现 MFE 期望 + 达到期望概率 (逐视界).
+def _fit_prob_calibrators(records: dict) -> dict[tuple, object]:
+    """[2026-08-06] 逐股平滑自然概率: 对每 (board, key, h) 预拟合 Platt
+    (score → P(mfe_h ≥ ABS_TARGET[h])). 每股唯一真值, 替代 CAL_BINS 桶级共享值."""
+    cals = {}
+    for (board, key), rec in records.items():
+        for h in HORIZONS:
+            col = f"mfe_{h}"
+            sub = rec[["score", col]].dropna()
+            if len(sub) < 20:
+                continue
+            lr = LogisticRegression()
+            lr.fit(
+                sub[["score"]].to_numpy(),
+                (sub[col] >= ABS_TARGET[h]).astype(int).to_numpy(),
+            )
+            cals[(board, key, h)] = lr
+    return cals
 
-    概率 = P(已实现 MFE ≥ 桶期望) — 该股达到其"预期涨幅"的真实概率
-    (用户定案: "probability to represent the possibility of stock to gain that price
-    increase during the horizon"). 旧口径 P(MFE>0)=85-99% 被否决.
-    返回 {h: (exp_mfe, hit_prob, n_bin)}; 桶样本不足或无校准数据 → (NaN, NaN, 0).
+
+def calibrate(
+    records: dict, board: str, key: str, score: float, cals: dict
+) -> dict[str, tuple]:
+    """最新 score → 逐视界 (预期涨幅, 自然达到概率).
+
+    概率 = P(该股该视界达到固定绝对涨幅 ABS_TARGET) via Platt (逐股平滑唯一真值,
+    非桶级共享); 预期涨幅 = OOS 同分位桶已实现 MFE 均值 (保留桶级 — 涨幅本身无判别力).
+    返回 {h: (exp_mfe, hit_prob, n_bin)}; 无校准数据 → (NaN, NaN, 0).
     """
     out = {h: (float("nan"), float("nan"), 0) for h in HORIZONS}
     rec = records.get((board, key))
@@ -278,12 +303,19 @@ def calibrate(records: dict, board: str, key: str, score: float) -> dict[str, tu
         if len(v) < CAL_MIN_N:
             continue
         exp = float(v.mean())
-        out[h] = (exp, float((v >= exp).mean()), len(v))
+        lr = cals.get((board, key, h))
+        prob = (
+            float(lr.predict_proba(np.array([[score]]))[0, 1])
+            if lr is not None
+            else float("nan")
+        )
+        out[h] = (exp, prob, len(v))
     return out
 
 
 def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
-    """每只短名单股: 用最新 score 经 OOS 校准给 逐视界 前瞻 预期涨幅(MFE)+达到概率."""
+    """每只短名单股: 用最新 score 经 OOS 校准给 逐视界 前瞻 预期涨幅(MFE)+逐股自然概率."""
+    cals = _fit_prob_calibrators(records)
     out = res.copy()
     for h in HORIZONS:
         out[f"pred_mag_{h}"], out[f"pred_prob_{h}"], out[f"pred_n_{h}"] = (
@@ -293,7 +325,7 @@ def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
         )
     for idx, r in out.iterrows():
         key = r["systems"] if r["systems"] in ("sniper", "fusion") else "both"
-        cal = calibrate(records, r["board"], key, float(r["score"]))
+        cal = calibrate(records, r["board"], key, float(r["score"]), cals)
         for h in HORIZONS:
             mag, prob, n = cal[h]
             out.at[idx, f"pred_mag_{h}"] = mag
@@ -314,8 +346,8 @@ def _sel_reason(r: pd.Series) -> str:
 def select_confident(res: pd.DataFrame, prob_min: float = 0.0) -> pd.DataFrame:
     """IRON RULE (用户): 只列预测上涨股 — 主视界(T+3)预期涨幅>0.
 
-    概率口径已改 (用户 2026-08-05): 概率=达到该预期涨幅的真实概率 (P(实现MFE ≥ 桶期望)),
-    实测仅 ~31-44%, 原 ">60%" 门槛 (基于 P(MFE>0)≈90% 旧口径) 不可达, 故默认不设概率门槛.
+    概率口径 (用户 2026-08-06): 概率=逐股自然概率 (P(该股达到固定绝对目标)), 每股唯一
+    真值. 原 ">60%" 门槛 (基于 P(MFE>0)≈90% 旧口径) 不可达, 故默认不设概率门槛.
     保留 prob_min 参数以便后续收紧. 主视界 T+3 (2026-08-05 用户: 短持 3 天)."""
     keep = (res["pred_mag_3d"] > 0.0) & (res["pred_prob_3d"] > prob_min)
     dropped = res[~keep]
@@ -394,7 +426,8 @@ def fmt_merged(m: pd.DataFrame) -> list[str]:
         ]
     lines = [
         f"── 合并短名单 (主板+双创合一, 共 {len(m)} 只; 仅正预期涨幅; "
-        f"预期=该股最新score经OOS校准的今后涨幅(MFE); 达到概率=P(实现≥该预期), 真实口径) ──",
+        f"预期=该股最新score经OOS校准的今后涨幅(MFE); 达到概率=逐股自然概率 "
+        f"P(该股达到固定绝对目标), 每股唯一真值, 非桶级共享) ──",
         hdr,
     ]
     for _, r in m.iterrows():
@@ -456,10 +489,11 @@ def build_summary(res: pd.DataFrame, stats: dict, sel_date: pd.Timestamp) -> lis
         "\n每只个股逐视界预期 = 该股最新 score 经 OOS 同分位校准的 今后涨幅(MFE) (前瞻, 非历史回看)."
     )
     lines.append(
-        "达到概率 = P(已实现 MFE ≥ 该预期) — 真实口径 (旧 P(MFE>0) 85-99% 已废, 2026-08-05 用户定案)."
+        "达到概率 = 逐股自然概率 P(该股达到固定绝对目标) — 每股唯一真值, 非桶级共享 "
+        "(旧 P(MFE>0) 85-99% 已废, 2026-08-05 用户定案)."
     )
     lines.append(
-        "建议: 优先 score_w 高者 (预期涨幅×概率加权); est_wr 为系统级 OOS 参考."
+        "建议: 优先 score_w 高者 (预期涨幅×概率加权); 系统级期望/胜率见 SUMMARY 段."
     )
     return lines
 
@@ -484,7 +518,7 @@ def write_docx(
         doc.add_paragraph(
             "rank=score_w 降序 (预期涨幅×达到概率加权, T+3 主视界短持) · "
             "systems=命中模块(共现=双系统) · T5=该股是否入选所在板块T-5 · 仅保留 T+3 预期涨幅>0 的股 · "
-            "每视界(T+2/3/5/10) 预期涨幅(MFE)=最新score经OOS校准的今后表现; 达到概率=P(实现≥该预期) (真实口径)"
+            "每视界(T+2/3/5/10) 预期涨幅(MFE)=最新score经OOS校准的今后表现; 达到概率=逐股自然概率 P(该股达到固定绝对目标), 每股唯一真值"
         )
         mcols = ["rank", "symbol", "board", "module", "score", "score_w", "in_t5"] + [
             f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")
@@ -532,7 +566,7 @@ def write_docx(
                 continue
             doc.add_paragraph(
                 f"{cut} · score_w 降序(预期涨幅×达到概率加权) · 仅正预期涨幅股 · "
-                f"预期涨幅(MFE)=最新score经OOS校准的今后表现; 达到概率=P(实现≥该预期)"
+                f"预期涨幅(MFE)=最新score经OOS校准的今后表现; 达到概率=逐股自然概率 P(该股达到固定绝对目标)"
             )
             t = doc.add_table(rows=1, cols=len(cols))
             for j, c in enumerate(cols):
