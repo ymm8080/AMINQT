@@ -48,7 +48,8 @@ class TestLambdaRank:
         trained = trainer.train_window(df, "main", ["f1"])
         assert "rank_model" in trained
         model, label = trained["rank_model"]
-        assert label == "label_1d"
+        # ranker 使用循环最后视界的 label (5d), 非 1d
+        assert label == "label_5d"
         path = trainer.save(trained, "t")
         bundle = dtt.DualTrackTrainer.load(path)
         assert "rank_model" in bundle

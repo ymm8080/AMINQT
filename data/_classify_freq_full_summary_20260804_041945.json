@@ -1,0 +1,489 @@
+{
+  "ts": "20260804_041945",
+  "rows": 2284985,
+  "features": [
+    {
+      "group": "chip 筹码",
+      "feat": "pct_90_con",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.0240763832123763
+    },
+    {
+      "group": "chip 筹码",
+      "feat": "pct_90_high",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.028994341029307334
+    },
+    {
+      "group": "chip 筹码",
+      "feat": "weight_avg",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.04431358918562925
+    },
+    {
+      "group": "chip 筹码",
+      "feat": "chip_entropy",
+      "freq": "日",
+      "type": "TS",
+      "ic": 0.008190365603692702
+    },
+    {
+      "group": "chip 筹码",
+      "feat": "chip_gini",
+      "freq": "日",
+      "type": "TS",
+      "ic": 0.013005605595391934
+    },
+    {
+      "group": "chip 筹码",
+      "feat": "chip_skew_dist",
+      "freq": "月",
+      "type": "XS",
+      "ic": 0.006493024814809471
+    },
+    {
+      "group": "chip 筹码",
+      "feat": "conc_trend_20d",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.014713717001568464
+    },
+    {
+      "group": "chip 筹码",
+      "feat": "conc_90_industry_rank",
+      "freq": "月",
+      "type": "XS",
+      "ic": 0.010918514108571684
+    },
+    {
+      "group": "chip 筹码",
+      "feat": "peak_price",
+      "freq": "月",
+      "type": "XS",
+      "ic": 0.019531945260327692
+    },
+    {
+      "group": "chip 筹码",
+      "feat": "peak_roc_5d",
+      "freq": "日",
+      "type": "TS",
+      "ic": 0.0069456674777483955
+    },
+    {
+      "group": "chip 筹码",
+      "feat": "peak_roc_20d",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.0021630522681028853
+    },
+    {
+      "group": "chip 筹码",
+      "feat": "cost_bias",
+      "freq": "周",
+      "type": "XS",
+      "ic": 0.00907633971690089
+    },
+    {
+      "group": "chip 筹码",
+      "feat": "resistance_dist",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.015129834225078269
+    },
+    {
+      "group": "chip 筹码",
+      "feat": "support_dist",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.004744535224207174
+    },
+    {
+      "group": "cost 成本线",
+      "feat": "cost_50pct",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.0380175207488707
+    },
+    {
+      "group": "cost 成本线",
+      "feat": "cost_95pct",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.03185421592452935
+    },
+    {
+      "group": "price 价格",
+      "feat": "close_hfq",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.042972785400085665
+    },
+    {
+      "group": "vol 量",
+      "feat": "volume",
+      "freq": "月",
+      "type": "XS",
+      "ic": 0.032989524987264825
+    },
+    {
+      "group": "vol 量",
+      "feat": "amount",
+      "freq": "月",
+      "type": "XS",
+      "ic": 0.036238544302739456
+    },
+    {
+      "group": "vol 量",
+      "feat": "turnover_rate",
+      "freq": "月",
+      "type": "XS",
+      "ic": 0.03286970534263455
+    },
+    {
+      "group": "vol 量",
+      "feat": "free_float_turnover_rate",
+      "freq": "月",
+      "type": "XS",
+      "ic": 0.03263949516931737
+    },
+    {
+      "group": "vol 量",
+      "feat": "volume_ratio",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.023639363706962766
+    },
+    {
+      "group": "vol 量",
+      "feat": "ma_vol_ratio_5_20",
+      "freq": "月",
+      "type": "XS",
+      "ic": 0.018590905496804273
+    },
+    {
+      "group": "vol 量",
+      "feat": "vol_surge",
+      "freq": "月",
+      "type": "XS",
+      "ic": 0.022030205043767313
+    },
+    {
+      "group": "vol 量",
+      "feat": "amt_surge",
+      "freq": "月",
+      "type": "XS",
+      "ic": 0.022894400430691606
+    },
+    {
+      "group": "ma 均线乖离",
+      "feat": "bias_5",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.005580309111713289
+    },
+    {
+      "group": "ma 均线乖离",
+      "feat": "bias_10",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.006769504693325267
+    },
+    {
+      "group": "ma 均线乖离",
+      "feat": "bias_20",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.009849461896790729
+    },
+    {
+      "group": "ma 均线乖离",
+      "feat": "bias_60",
+      "freq": "日",
+      "type": "TS",
+      "ic": 0.006361153201000774
+    },
+    {
+      "group": "ma 均线乖离",
+      "feat": "bias_120",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.01278816226836555
+    },
+    {
+      "group": "ma 均线乖离",
+      "feat": "bias_250",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.02480728585245357
+    },
+    {
+      "group": "ma 均线乖离",
+      "feat": "bias_5_20_cross",
+      "freq": "日",
+      "type": "XS",
+      "ic": 0.011823818759047798
+    },
+    {
+      "group": "ma 均线乖离",
+      "feat": "bias_20_60_cross",
+      "freq": "日",
+      "type": "TS",
+      "ic": NaN
+    },
+    {
+      "group": "volatility 波动",
+      "feat": "amplitude_5d",
+      "freq": "月",
+      "type": "XS",
+      "ic": 0.025760160772481257
+    },
+    {
+      "group": "volatility 波动",
+      "feat": "intraday_range",
+      "freq": "月",
+      "type": "XS",
+      "ic": 0.024384298861889368
+    },
+    {
+      "group": "volatility 波动",
+      "feat": "winner_ratio",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.017547692326752684
+    },
+    {
+      "group": "volatility 波动",
+      "feat": "pctChg",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.01177020354834433
+    },
+    {
+      "group": "valuation 估值市值",
+      "feat": "pe_ttm",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.04186493146106774
+    },
+    {
+      "group": "valuation 估值市值",
+      "feat": "pb",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.0435872157243133
+    },
+    {
+      "group": "valuation 估值市值",
+      "feat": "ps_ttm",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.041989802893514436
+    },
+    {
+      "group": "valuation 估值市值",
+      "feat": "dv_ratio",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.04597159790376794
+    },
+    {
+      "group": "valuation 估值市值",
+      "feat": "total_mv",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.042306786932725604
+    },
+    {
+      "group": "valuation 估值市值",
+      "feat": "circ_mv",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.04183306520618225
+    },
+    {
+      "group": "margin 两融",
+      "feat": "margin_balance",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.03220774756908611
+    },
+    {
+      "group": "margin 两融",
+      "feat": "short_balance",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.021709968404051837
+    },
+    {
+      "group": "margin 两融",
+      "feat": "margin_buy_amt",
+      "freq": "月",
+      "type": "XS",
+      "ic": 0.0292484042364706
+    },
+    {
+      "group": "margin 两融",
+      "feat": "short_sell_vol",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.01253616337011429
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "roe",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.017077113089237643
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "roe_deducted",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.013051118538653804
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "roa",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.018465872997174154
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "gross_margin",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.026356931480569393
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "rev_yoy",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.011583718127503792
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "debt_ratio",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.005536439172812205
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "current_ratio",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.007829092639850736
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "asset_turnover",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.027327303045822437
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "ar_turnover",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.012107773872558462
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "inventory_turnover",
+      "freq": "月",
+      "type": "TS",
+      "ic": 0.011351966372575701
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "ocf_to_or",
+      "freq": "日",
+      "type": "TS",
+      "ic": 0.00946484935481152
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "net_margin",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.01216597932697025
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "eps_yoy",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.007013131388795927
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "profit_yoy",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.0077825951450825916
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "ocfps",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.004631454205382987
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "revenue_ps",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.030058577913695227
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "bps",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.015177799214087264
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "eps",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.01586383765204072
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "dt_eps",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.01557926201586985
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "roe_yoy",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.007258435602062806
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "q_roe",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.011589576567122496
+    },
+    {
+      "group": "fundamental 基本面",
+      "feat": "q_ocf_to_sales",
+      "freq": "周",
+      "type": "TS",
+      "ic": 0.012648745827758157
+    }
+  ]
+}

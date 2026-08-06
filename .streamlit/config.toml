@@ -1,0 +1,17 @@
+# Streamlit 服务端配置 — 让看板稳定常驻
+# 参考: https://docs.streamlit.io/develop/api-reference/configuration
+[server]
+# 无浏览器模式启动(常驻服务必需, 不自动弹浏览器)
+headless = true
+# 监听所有网卡, 局域网其他设备(手机/别的电脑)也能访问
+address = "0.0.0.0"
+# 固定端口, 避免每次随机变化
+port = 8501
+# 关闭文件监视, 避免改动文件时反复重载/占用 CPU
+fileWatcherType = "none"
+# 关闭"保存即重跑", 避免误触发
+runOnSave = false
+
+[browser]
+# 不上传使用统计
+gatherUsageStats = false

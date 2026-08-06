@@ -187,11 +187,8 @@ class TestLoadSnapshots:
         )
         snap = vt.load_snapshots(tmp_path)
         assert len(snap) == 2
-        assert str(snap["symbol"].dtype) in (
-            "object",
-            "str",
-            "string",
-        )  # dtype=str 读回, 不丢前导零
+        # pandas 3.0: dtype=str 返回 StringDtype 而非 object; 两者均可保前导零
+        assert pd.api.types.is_string_dtype(snap["symbol"])
         assert list(snap["date"]) == ["2026-08-04", "2026-08-05"]
 
     def test_empty_dir(self, tmp_path):
