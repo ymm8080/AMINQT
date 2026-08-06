@@ -482,7 +482,7 @@ class DualTrackTrainer:
                 )
 
             # 阶段四: LambdaRank (标签=净收益截面分位 gain 0-4, group=date)
-            if "rank_model" not in done_extras:
+            if "rank_model" not in out:
                 try:
                     out["rank_model"] = self._train_ranker(out, q_label)
                     logger.info("[%s] LambdaRank 排序模型训练完成", out["board"])

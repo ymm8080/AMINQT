@@ -1553,6 +1553,8 @@ class DataSupplyChain:
             t = pq.read_table(panel, columns=["symbol", "date"])
             df = t.to_pandas()
             if len(df):
+                # 确保日期为 datetime 类型, 避免字符串比较问题
+                df["date"] = pd.to_datetime(df["date"])
                 max_date = df["date"].max()
                 symbols = sorted(
                     df.loc[df["date"] == max_date, "symbol"].unique().tolist()
