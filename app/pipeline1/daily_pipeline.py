@@ -162,7 +162,7 @@ class DailySelectionPipeline:
             from .model_meta import board_tag, load_modules
 
             mods = load_modules()
-            if "board" in result["list"].columns and mods:
+            if "board" in result["list"].columns:
                 result["list"]["model_version"] = result["list"]["board"].map(
                     lambda b: board_tag(mods, b)
                 )
