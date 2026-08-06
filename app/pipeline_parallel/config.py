@@ -226,6 +226,21 @@ SLOW_BULL = SystemSpec(
 
 SYSTEMS: dict[str, SystemSpec] = {s.name: s for s in (SNIPER, FUSION, SLOW_BULL)}
 
+# ── SLOW_BULL 市场状态条件退出 (2026-08-06) ──
+# 依据 data/_diag_slowbull_stability_* + _diag_slowbull_regime_*: trail8 是趋势跟随
+# 放大器 (上升段 +2~4pp, 下行段 -1.4~-5.2pp); 下行段池子所有退出都亏 (cur -0.68%/
+# dual -0.86%) → 默认下行不开仓 (no_open), 符合用户"预期收益不够高就不开仓".
+# 市场代理 = 面板每日全部股票 close_hfq 中位数 (PIT, 自洽无外部依赖).
+SLOW_BULL_REGIME: dict = {
+    "market_proxy": "median_close",  # 市场代理: 每日全股票 close_hfq 中位数
+    "def": "A",  # A: 代理 > MA20 (经典短趋势) / B: > MA60 / C: 20日动量为正
+    "ma_window": 20,  # 代理 MA 窗口 (交易日)
+    "trail_pct": 0.08,  # 上升段退出: 收盘自峰值回落 8% 走 (trail8)
+    "hard_stop": 0.92,  # 上升段硬止损 -8%
+    "max_hold": 40,  # 最长持有 (交易日)
+    "down_mode": "no_open",  # 下行段: no_open=不开仓 / cur=仍出候选但按现行退出
+}
+
 
 @dataclass(frozen=True)
 class PanelSource:

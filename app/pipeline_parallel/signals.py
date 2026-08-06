@@ -124,6 +124,32 @@ def add_signal_columns(df: pd.DataFrame, spec: dict | None = None) -> pd.DataFra
     return df
 
 
+def add_market_regime(df: pd.DataFrame, regime_spec: dict) -> pd.DataFrame:
+    """加慢牛市场状态列 slow_bull_regime (PIT): True=上升段 / False=下降段.
+
+    市场代理 = 每日全部股票 close_hfq 中位数 (等权、PIT、自洽无外部依赖).
+    定义 (regime_spec['def'], 2026-08-06 稳定性/regime 诊断定):
+      A: 代理 > 其 MA(ma_window)      (经典短趋势, 默认)
+      B: 代理 > 其 MA(ma_window*3)
+      C: 代理 ma_window 日动量为正
+    只用 t 及更早 (rolling/pct_change PIT); 入场在 T+1 → 买入日 T 打标安全.
+    """
+    mkt = df.groupby("date")["close_hfq"].median().sort_index()
+    win = int(regime_spec["ma_window"])
+    d = regime_spec.get("def", "A")
+    if d == "A":
+        flag = mkt > mkt.rolling(win, min_periods=win).mean()
+    elif d == "B":
+        flag = mkt > mkt.rolling(win * 3, min_periods=win * 3).mean()
+    elif d == "C":
+        flag = mkt.pct_change(win) > 0
+    else:
+        raise ValueError(f"未知 regime def={d} (须 A/B/C)")
+    lookup = dict(zip(flag.index.values, flag.values))
+    df["slow_bull_regime"] = df["date"].map(lookup).fillna(False).astype(bool)
+    return df
+
+
 def trailing_stop_pct(profit_pct: float, spec: dict | None = None) -> float | None:
     """移动止盈: 浮盈对应锁盈比 (成本之上比例). 盈利>=100% → 用 ma20 规则 (返回 None)."""
     if spec is None:
@@ -195,6 +221,7 @@ def daily_slowbull_pool(
         "below_ma5_3d",
         "turnover_spike",
         "tp_80_div",
+        "slow_bull_regime",
     )
     have = [c for c in cols if c in day.columns and c not in ("symbol", "date")]
     out = top.merge(day[["symbol", "date"] + have], on=["symbol", "date"], how="left")

@@ -543,3 +543,79 @@ def test_system_spec_gate_and_weights_configured():
     assert SLOW_BULL.horizons == ("10d", "20d", "40d")
     assert SLOW_BULL.pool_weights == ADX_SCORE_WEIGHTS
     assert "slow_bull" in screener.GATES
+
+
+# ── 市场状态条件退出 (2026-08-06): slow_bull_regime 列 ──
+def _mkt_panel(n_dates=140, decline=60):
+    """市场代理专用面板: 两股共享同一价格路径 → 每日中位数 = 该路径.
+
+    前 decline 日从 10.0 阴跌到 9.0 (市场下行), 后段从 9.0 涨到 12.0 (市场上行).
+    """
+    dates = pd.bdate_range("2024-11-01", periods=n_dates)
+    path = np.concatenate(
+        [np.linspace(10.0, 9.0, decline), np.linspace(9.0, 12.0, n_dates - decline)]
+    )
+    rows = []
+    for sym in ("0000000", "3000002"):
+        for i, d in enumerate(dates):
+            rows.append(
+                {
+                    "symbol": sym,
+                    "date": d,
+                    "close_hfq": path[i],
+                    "close": path[i],
+                    "high": path[i] * 1.01,
+                    "low": path[i] * 0.99,
+                    "open": path[i],
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def test_market_regime_up_late_down_early():
+    df = _mkt_panel()
+    out = signals.add_market_regime(df, {"ma_window": 20, "def": "A"})
+    dates = np.sort(df["date"].unique())
+    early_dn = out.loc[out["date"] < dates[30], "slow_bull_regime"]
+    late_up = out.loc[out["date"] >= dates[-10], "slow_bull_regime"]
+    assert out["slow_bull_regime"].dtype == bool
+    assert not early_dn.any()  # 阴跌段 → 全 false
+    assert late_up.all()  # 上涨段 (MA20 已跟上) → 全 true
+
+
+def test_market_regime_pit_no_future_leak():
+    # 截断到中间日期重算 → 该日 regime 不变 (只用 t 及更早)
+    df = _mkt_panel()
+    spec = {"ma_window": 20, "def": "A"}
+    full = signals.add_market_regime(df.copy(), spec)
+    mid = np.sort(df["date"].unique())[70]
+    half = signals.add_market_regime(df[df["date"] <= mid].copy(), spec)
+    for d in np.sort(df["date"].unique())[:50]:
+        v_full = full.loc[full["date"] == d, "slow_bull_regime"].iloc[0]
+        v_half = half.loc[half["date"] == d, "slow_bull_regime"].iloc[0]
+        assert v_full == v_half, f"date {d} regime 依赖未来数据"
+
+
+def test_market_regime_def_choices_and_errors():
+    df = _mkt_panel()
+    for d in ("A", "B", "C"):
+        out = signals.add_market_regime(df.copy(), {"ma_window": 20, "def": d})
+        assert out["slow_bull_regime"].dtype == bool
+    # 预热: MA20 不满 min_periods → 前 19 日全 false
+    out = signals.add_market_regime(df.copy(), {"ma_window": 20, "def": "A"})
+    dates = np.sort(df["date"].unique())
+    assert not out.loc[out["date"] < dates[19], "slow_bull_regime"].any()
+    with pytest.raises(ValueError):
+        signals.add_market_regime(df.copy(), {"ma_window": 20, "def": "Z"})
+
+
+def test_daily_pool_includes_market_regime():
+    work = _slow_work()
+    signals.add_market_regime(work, {"ma_window": 20, "def": "A"})
+    dates = np.sort(work["date"].unique())
+    pool = signals.daily_slowbull_pool(
+        work, dates[-30], "main", SLOW_BULL, SLOW_BULL.top_n
+    )
+    assert not pool.empty
+    assert "slow_bull_regime" in pool.columns
+    assert pool["slow_bull_regime"].nunique() == 1  # 市场状态是日级标志

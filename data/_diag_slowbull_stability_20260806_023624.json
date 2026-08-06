@@ -1,0 +1,495 @@
+{
+  "meta": {
+    "panel": "2023-08-07T00:00:00.000000000 → 2026-08-05T00:00:00.000000000",
+    "n_days": 726,
+    "max_hold": 40,
+    "hard_stop": 0.92,
+    "n_min": 30,
+    "half_window_days": 121,
+    "note": "窗口按买入日期切分; 退出用买入后行情; cur=现行6信号+low触线移动止盈, trailX=收盘回落X%走+硬止损-8%"
+  },
+  "full": {
+    "main": {
+      "n_picks": 5196,
+      "cur": {
+        "n": 5047,
+        "p_win": 0.3182,
+        "avg": 0.0013,
+        "median_hold": 4.0
+      },
+      "trail5": {
+        "n": 5047,
+        "p_win": 0.3646,
+        "avg": 0.0102,
+        "median_hold": 6.0
+      },
+      "trail8": {
+        "n": 5047,
+        "p_win": 0.4018,
+        "avg": 0.0174,
+        "median_hold": 11.0
+      },
+      "trail15": {
+        "n": 5047,
+        "p_win": 0.3796,
+        "avg": 0.0256,
+        "median_hold": 17.0
+      }
+    },
+    "dual": {
+      "n_picks": 3007,
+      "cur": {
+        "n": 2929,
+        "p_win": 0.3448,
+        "avg": 0.0061,
+        "median_hold": 4.0
+      },
+      "trail5": {
+        "n": 2929,
+        "p_win": 0.3776,
+        "avg": 0.0172,
+        "median_hold": 6.0
+      },
+      "trail8": {
+        "n": 2929,
+        "p_win": 0.4152,
+        "avg": 0.0294,
+        "median_hold": 11.0
+      },
+      "trail15": {
+        "n": 2929,
+        "p_win": 0.4036,
+        "avg": 0.0405,
+        "median_hold": 17.0
+      }
+    }
+  },
+  "h1": {
+    "main": {
+      "n_picks": 139,
+      "cur": {
+        "n": 139,
+        "p_win": 0.1871,
+        "avg": -0.014,
+        "median_hold": 3.0
+      },
+      "trail5": {
+        "n": 139,
+        "p_win": 0.1583,
+        "avg": -0.0393,
+        "median_hold": 6.0
+      },
+      "trail8": {
+        "n": 139,
+        "p_win": 0.1367,
+        "avg": -0.066,
+        "median_hold": 11.0
+      },
+      "trail15": {
+        "n": 139,
+        "p_win": 0.0719,
+        "avg": -0.0826,
+        "median_hold": 13.0
+      }
+    },
+    "dual": {
+      "n_picks": 99,
+      "cur": {
+        "n": 99,
+        "p_win": 0.2121,
+        "avg": -0.0187,
+        "median_hold": 4.0
+      },
+      "trail5": {
+        "n": 99,
+        "p_win": 0.1111,
+        "avg": -0.0541,
+        "median_hold": 7.0
+      },
+      "trail8": {
+        "n": 99,
+        "p_win": 0.1414,
+        "avg": -0.0687,
+        "median_hold": 10.0
+      },
+      "trail15": {
+        "n": 99,
+        "p_win": 0.0808,
+        "avg": -0.0863,
+        "median_hold": 11.0
+      }
+    }
+  },
+  "h2": {
+    "main": {
+      "n_picks": 360,
+      "cur": {
+        "n": 360,
+        "p_win": 0.275,
+        "avg": -0.0098,
+        "median_hold": 4.0
+      },
+      "trail5": {
+        "n": 360,
+        "p_win": 0.2611,
+        "avg": -0.0095,
+        "median_hold": 7.0
+      },
+      "trail8": {
+        "n": 360,
+        "p_win": 0.3389,
+        "avg": -0.0067,
+        "median_hold": 13.0
+      },
+      "trail15": {
+        "n": 360,
+        "p_win": 0.3111,
+        "avg": -0.0158,
+        "median_hold": 21.0
+      }
+    },
+    "dual": {
+      "n_picks": 100,
+      "cur": {
+        "n": 100,
+        "p_win": 0.26,
+        "avg": -0.0148,
+        "median_hold": 4.0
+      },
+      "trail5": {
+        "n": 100,
+        "p_win": 0.24,
+        "avg": -0.026,
+        "median_hold": 6.0
+      },
+      "trail8": {
+        "n": 100,
+        "p_win": 0.3,
+        "avg": -0.0182,
+        "median_hold": 11.0
+      },
+      "trail15": {
+        "n": 100,
+        "p_win": 0.27,
+        "avg": -0.0309,
+        "median_hold": 16.0
+      }
+    }
+  },
+  "h3": {
+    "main": {
+      "n_picks": 602,
+      "cur": {
+        "n": 602,
+        "p_win": 0.2243,
+        "avg": -0.0089,
+        "median_hold": 3.0
+      },
+      "trail5": {
+        "n": 602,
+        "p_win": 0.2641,
+        "avg": -0.0109,
+        "median_hold": 5.0
+      },
+      "trail8": {
+        "n": 602,
+        "p_win": 0.2542,
+        "avg": -0.0229,
+        "median_hold": 8.0
+      },
+      "trail15": {
+        "n": 602,
+        "p_win": 0.2126,
+        "avg": -0.0332,
+        "median_hold": 10.0
+      }
+    },
+    "dual": {
+      "n_picks": 263,
+      "cur": {
+        "n": 263,
+        "p_win": 0.1939,
+        "avg": -0.0125,
+        "median_hold": 3.0
+      },
+      "trail5": {
+        "n": 263,
+        "p_win": 0.308,
+        "avg": 0.0142,
+        "median_hold": 4.0
+      },
+      "trail8": {
+        "n": 263,
+        "p_win": 0.2738,
+        "avg": 0.0032,
+        "median_hold": 6.0
+      },
+      "trail15": {
+        "n": 263,
+        "p_win": 0.27,
+        "avg": 0.0097,
+        "median_hold": 8.0
+      }
+    }
+  },
+  "h4": {
+    "main": {
+      "n_picks": 1375,
+      "cur": {
+        "n": 1361,
+        "p_win": 0.3181,
+        "avg": 0.0002,
+        "median_hold": 4.0
+      },
+      "trail5": {
+        "n": 1361,
+        "p_win": 0.4173,
+        "avg": 0.0198,
+        "median_hold": 8.0
+      },
+      "trail8": {
+        "n": 1361,
+        "p_win": 0.4864,
+        "avg": 0.0397,
+        "median_hold": 15.0
+      },
+      "trail15": {
+        "n": 1361,
+        "p_win": 0.5026,
+        "avg": 0.0638,
+        "median_hold": 27.0
+      }
+    },
+    "dual": {
+      "n_picks": 915,
+      "cur": {
+        "n": 909,
+        "p_win": 0.3663,
+        "avg": 0.0108,
+        "median_hold": 4.0
+      },
+      "trail5": {
+        "n": 909,
+        "p_win": 0.429,
+        "avg": 0.0362,
+        "median_hold": 8.0
+      },
+      "trail8": {
+        "n": 909,
+        "p_win": 0.549,
+        "avg": 0.0746,
+        "median_hold": 17.0
+      },
+      "trail15": {
+        "n": 909,
+        "p_win": 0.5754,
+        "avg": 0.1067,
+        "median_hold": 31.0
+      }
+    }
+  },
+  "h5": {
+    "main": {
+      "n_picks": 1946,
+      "cur": {
+        "n": 1900,
+        "p_win": 0.3621,
+        "avg": 0.0066,
+        "median_hold": 4.0
+      },
+      "trail5": {
+        "n": 1900,
+        "p_win": 0.4047,
+        "avg": 0.0174,
+        "median_hold": 7.0
+      },
+      "trail8": {
+        "n": 1900,
+        "p_win": 0.4326,
+        "avg": 0.0274,
+        "median_hold": 11.0
+      },
+      "trail15": {
+        "n": 1900,
+        "p_win": 0.3979,
+        "avg": 0.0342,
+        "median_hold": 17.0
+      }
+    },
+    "dual": {
+      "n_picks": 1158,
+      "cur": {
+        "n": 1125,
+        "p_win": 0.3822,
+        "avg": 0.0103,
+        "median_hold": 3.0
+      },
+      "trail5": {
+        "n": 1125,
+        "p_win": 0.3982,
+        "avg": 0.0146,
+        "median_hold": 6.0
+      },
+      "trail8": {
+        "n": 1125,
+        "p_win": 0.3867,
+        "avg": 0.0166,
+        "median_hold": 10.0
+      },
+      "trail15": {
+        "n": 1125,
+        "p_win": 0.3698,
+        "avg": 0.0229,
+        "median_hold": 16.0
+      }
+    }
+  },
+  "h6": {
+    "main": {
+      "n_picks": 774,
+      "cur": {
+        "n": 685,
+        "p_win": 0.3285,
+        "avg": 0.007,
+        "median_hold": 3.0
+      },
+      "trail5": {
+        "n": 685,
+        "p_win": 0.3328,
+        "avg": 0.0106,
+        "median_hold": 5.0
+      },
+      "trail8": {
+        "n": 685,
+        "p_win": 0.365,
+        "avg": 0.0101,
+        "median_hold": 9.0
+      },
+      "trail15": {
+        "n": 685,
+        "p_win": 0.3299,
+        "avg": 0.0212,
+        "median_hold": 11.0
+      }
+    },
+    "dual": {
+      "n_picks": 472,
+      "cur": {
+        "n": 433,
+        "p_win": 0.3441,
+        "avg": 0.0071,
+        "median_hold": 3.0
+      },
+      "trail5": {
+        "n": 433,
+        "p_win": 0.351,
+        "avg": 0.012,
+        "median_hold": 5.0
+      },
+      "trail8": {
+        "n": 433,
+        "p_win": 0.3834,
+        "avg": 0.0172,
+        "median_hold": 8.0
+      },
+      "trail15": {
+        "n": 433,
+        "p_win": 0.3164,
+        "avg": 0.011,
+        "median_hold": 11.0
+      }
+    }
+  },
+  "oos6m": {
+    "main": {
+      "n_picks": 854,
+      "cur": {
+        "n": 761,
+        "p_win": 0.3193,
+        "avg": 0.0041,
+        "median_hold": 3.0
+      },
+      "trail5": {
+        "n": 761,
+        "p_win": 0.3233,
+        "avg": 0.006,
+        "median_hold": 5.0
+      },
+      "trail8": {
+        "n": 761,
+        "p_win": 0.3587,
+        "avg": 0.0081,
+        "median_hold": 9.0
+      },
+      "trail15": {
+        "n": 761,
+        "p_win": 0.3259,
+        "avg": 0.0189,
+        "median_hold": 12.0
+      }
+    },
+    "dual": {
+      "n_picks": 523,
+      "cur": {
+        "n": 481,
+        "p_win": 0.3368,
+        "avg": 0.0048,
+        "median_hold": 3.0
+      },
+      "trail5": {
+        "n": 481,
+        "p_win": 0.3306,
+        "avg": 0.0058,
+        "median_hold": 5.0
+      },
+      "trail8": {
+        "n": 481,
+        "p_win": 0.3721,
+        "avg": 0.0132,
+        "median_hold": 8.0
+      },
+      "trail15": {
+        "n": 481,
+        "p_win": 0.3098,
+        "avg": 0.0071,
+        "median_hold": 11.0
+      }
+    }
+  },
+  "summary": {
+    "main": {
+      "judge_windows": [
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "oos6m"
+      ],
+      "n_windows": 7,
+      "trail8_beats_cur": 5,
+      "pwin_not_worse": 6,
+      "margin_mean_pp": 0.06,
+      "margin_min_pp": -5.2,
+      "margin_max_pp": 3.95
+    },
+    "dual": {
+      "judge_windows": [
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "oos6m"
+      ],
+      "n_windows": 7,
+      "trail8_beats_cur": 5,
+      "pwin_not_worse": 6,
+      "margin_mean_pp": 0.73,
+      "margin_min_pp": -5.0,
+      "margin_max_pp": 6.38
+    }
+  }
+}
