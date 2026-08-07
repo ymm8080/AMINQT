@@ -1,0 +1,29 @@
+{
+  "ts": "2026-08-04",
+  "type": "sniper_pool_decision",
+  "basis": "data/_reclassify_all_20260804_111828.json (473 特征, 5d/10d 单端 TOP-10 绝对验收) + data/_baseline_check_topn_*.log (无条件基准 T+5 47.3% / T+10 48.9% 胜率)",
+  "decision_maker": "Claude (用户 2026-08-04 拍板委托: DONT ASK ME, YOU DECIDE)",
+  "decisions": [
+    {
+      "item": "small_mv_premium",
+      "verdict": "KEEP (入狙击池, 高风险档)",
+      "why": "T+10 胜率 67.2% / 幅度 +10.36%, 是净成本口径下最强信号之一, 通过用户自定义的绝对验收标准; 本质是小市值风险因子角, 归入狙击池但须在融合方案中按高风险档给仓位纪律"
+    },
+    {
+      "item": "amihud_illiq vs amihud_illiquidity (近重复)",
+      "verdict": "KEEP amihud_illiquidity (dim19), DROP amihud_illiq (dim17)",
+      "why": "同属 Amihud 非流动性族, 保留生产维护版 dim19: 复权 close_hfq、t-1 防前瞻、20日稳化窗、V3.8 纳入 IC 筛选与 B8 剪枝; dim17 为老版改编(原始 close/10日窗/min5), 更噪且有除权跳变伪信号; 2pp 胜率差在 n~7000 内属噪声"
+    },
+    {
+      "item": "7 个通过特征是否入狙击池",
+      "verdict": "YES — 去重后 6 个独立特征组成狙击候选池",
+      "pool": ["amihud_illiquidity", "VAR51", "down_gap_pct", "limit_dist_pct", "ret_reversal_5d", "small_mv_premium"],
+      "why": "6 个全部显著跑赢 T+10 无条件基准 (胜率 Δ+7~18pp), 且 5/6 在 T+5 基础持有视界也通过; 作为 TOP-10 绝对选股狙击池的特征集, 喂入融合方案 A/B/C (task #11)"
+    }
+  ],
+  "caveats": [
+    "label 执行价用 close_hfq[T+1] (检查点无 price_1455) — 小盘/一字板股票实际买入成本可能高于该代理价, 影响所有特征, 小市值角更显著",
+    "limit_dist_pct / ret_reversal_5d 仅 10d 视界出边 — 5 天基础持有无优势, 须持有 10 天(趋势复利段)才兑现",
+    "down_gap_pct rankIC 仅 0.0049 却绝对 TOP-10 胜率 59.6% — 绝对口径抓到了 rankIC 漏掉的尾部分选 (LHB 教训反证)"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "ts": "2026-08-04",
+  "type": "sniper_pool_decision_v2",
+  "basis": "data/_sniper_acceptance_20260804_120456.json (修正版, 473 特征, T+2/3/5 三视界双头 TOP-5/3 验收)",
+  "baseline": {"T+2d": {"mag": -0.0006, "winrate": 0.451},
+               "T+3d": {"mag": 0.0007, "winrate": 0.462},
+               "T+5d": {"mag": 0.0033, "winrate": 0.473}},
+  "decision_maker": "Claude (用户 2026-08-04 委托拍板 + 口径指令: 任一视界过即保留, 优先级 3d>2d>5d, 双头幅度>0且胜率>=55%)",
+  "rules": "狙击系统: 每日输出 3-5 只, T+1 买, 持有 T+2/T+3/T+5 任一 (任一视界累计涨幅高+确定性高即保留)",
+  "pool_top5": [
+    {"col": "amihud_illiq", "verdict": "T+3d", "pass": ["2d", "3d", "5d"], "top5_T3d": {"mag": 0.0453, "winrate": 0.616}},
+    {"col": "small_mv_premium", "verdict": "T+3d", "pass": ["2d", "3d", "5d"], "top5_T3d": {"mag": 0.0340, "winrate": 0.608}},
+    {"col": "amihud_illiquidity", "verdict": "T+3d", "pass": ["2d", "3d", "5d"], "top5_T3d": {"mag": 0.0312, "winrate": 0.582}},
+    {"col": "down_gap_pct", "verdict": "T+3d", "pass": ["3d", "5d"], "top5_T3d": {"mag": 0.0299, "winrate": 0.570}},
+    {"col": "VAR51", "verdict": "T+5d", "pass": ["5d"], "top5_T5d": {"mag": 0.0367, "winrate": 0.565}}
+  ],
+  "pool_top3_extra": ["ret_reversal_5d (仅5d)"],
+  "notes": [
+    "核心 3 特征 (amihud_illiq/small_mv_premium/amihud_illiquidity) 在 3d 主视界 + 2d 快视界都过 — 快进快出可用",
+    "VAR51 / ret_reversal_5d 仅 5d 出边 — 5d 被排最低优先级, 这两须持有 5 天才兑现",
+    "limit_dist_pct 在 TOP-5 全视界不过 — TOP-10 专属, 不进狙击池 (进融合池)",
+    "数据反直觉: 全部特征 5d 胜率/幅度最高, 3d 是资金周转与确定性的折中; 3>2>5 按用户偏好执行",
+    "修正 bug: 首版 ok5_h 过滤漏 5d (TOP5 4→5, TOP3 4→6), 已修并重跑落盘正确版"
+  ]
+}

@@ -1,0 +1,8550 @@
+{
+  "ts": "20260804_114717",
+  "system": "sniper",
+  "rules": "T+1 买, T+2 卖 (1 天持有), 每日输出 3-5 只",
+  "window": {
+    "end": "2026-07-31 00:00:00",
+    "years": 3
+  },
+  "rows": 1490800,
+  "stocks": 3225,
+  "n_features": 473,
+  "meta": {
+    "top_n": 5,
+    "top_n_alt": 3,
+    "per": "date",
+    "end": "high_only",
+    "label": "label_pm_2d_net",
+    "min_winrate": 0.55,
+    "min_mag": 0.0,
+    "dual_head": true
+  },
+  "baseline": {
+    "overall": {
+      "mag": -0.0005568486514444327,
+      "winrate": 0.45082937947369595
+    },
+    "per_date": {
+      "mag": -0.0007583776044043102,
+      "winrate": 0.46482758620689657
+    }
+  },
+  "n_pass_top5": 3,
+  "n_pass_top3": 4,
+  "features": [
+    {
+      "col": "A04",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005839681963908511,
+        "winrate": 0.4306246545052515,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004787822559747366,
+        "winrate": 0.43496309963099633,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "A08",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0008799562990364178,
+        "winrate": 0.45509977827050996,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0021357557714474108,
+        "winrate": 0.44967682363804246,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "A0A_density_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002560711738192042,
+        "winrate": 0.4438591627391184,
+        "n": 3607,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002626345140689581,
+        "winrate": 0.4359685621821544,
+        "n": 2163,
+        "ok": false
+      }
+    },
+    {
+      "col": "A0A_density_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0016757641270848894,
+        "winrate": 0.4465077605321508,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0015663486754529193,
+        "winrate": 0.44598337950138506,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "A0A_density_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002460788019971824,
+        "winrate": 0.44315030504714364,
+        "n": 3606,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0023715958619329918,
+        "winrate": 0.43371824480369514,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "A1",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0008343708215259506,
+        "winrate": 0.424150317767339,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00028098165063651485,
+        "winrate": 0.4166666666666667,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "A2",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0009103490481343709,
+        "winrate": 0.424150317767339,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0004374302948784871,
+        "winrate": 0.4143646408839779,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "A3",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0009491072776019602,
+        "winrate": 0.424150317767339,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0004088180451203121,
+        "winrate": 0.4148250460405157,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "A4",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0007657505015743479,
+        "winrate": 0.4266371925946394,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0006426018988200333,
+        "winrate": 0.4139042357274402,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "A5",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0008495895248741747,
+        "winrate": 0.42770251589715236,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0006523238448310148,
+        "winrate": 0.4134438305709024,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "A6",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0009225843201577552,
+        "winrate": 0.4231194690265487,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0007522075966288565,
+        "winrate": 0.4134438305709024,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "ATR_pct",
+      "family": "换手/流动性/波动",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.014182823427716934,
+        "winrate": 0.4915675974564556,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.015793165695935876,
+        "winrate": 0.49331489165514064,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "BB_lower",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001816271137384705,
+        "winrate": 0.42485469139219484,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0012711027465689296,
+        "winrate": 0.4247460757156048,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "BB_pctB",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0025048310248135747,
+        "winrate": 0.4267515923566879,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003445630711819671,
+        "winrate": 0.41920590951061865,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "BB_upper",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0012518065337973352,
+        "winrate": 0.4301134791032383,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0010392862598772128,
+        "winrate": 0.4307479224376731,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "BB_width",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0011198184420485127,
+        "winrate": 0.4632190265486726,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0014784363978386295,
+        "winrate": 0.4633133364097831,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "CCI",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0039718852227323504,
+        "winrate": 0.4212129603987815,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0037210600055243245,
+        "winrate": 0.42705447830101567,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "D",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005418549950445224,
+        "winrate": 0.43450567709775684,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005498558314009998,
+        "winrate": 0.4407014305491463,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "J",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005282629213121422,
+        "winrate": 0.42619772916089727,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005125570730188415,
+        "winrate": 0.4376731301939058,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "K",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0038882069514954844,
+        "winrate": 0.442382271468144,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004739865742700885,
+        "winrate": 0.44321329639889195,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "MA10_dist",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.012310180121474812,
+        "winrate": 0.40797121505673956,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.012364324044372973,
+        "winrate": 0.41024457775726814,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "MA120_dist",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005749537830974563,
+        "winrate": 0.4225352112676056,
+        "n": 3621,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005322115126311308,
+        "winrate": 0.4360036832412523,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "MA20_dist",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.014981382858654978,
+        "winrate": 0.40298507462686567,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.017747307530533534,
+        "winrate": 0.3933671119299862,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "MA250_dist",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004389754863652121,
+        "winrate": 0.4409345179335308,
+        "n": 3039,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004503819405706586,
+        "winrate": 0.4371224601867106,
+        "n": 1821,
+        "ok": false
+      }
+    },
+    {
+      "col": "MA5_dist",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.009237276945320198,
+        "winrate": 0.4157210074730141,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.010167199513144425,
+        "winrate": 0.4165129151291513,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "MA60_dist",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.010178310532377374,
+        "winrate": 0.413602432955488,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00956872710261951,
+        "winrate": 0.4153988012909175,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "MACD",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0011187451022733207,
+        "winrate": 0.4445979552362531,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0002844094183863157,
+        "winrate": 0.45161290322580644,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "MACD_hist",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001977520204018908,
+        "winrate": 0.4310249307479224,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0016110293180035945,
+        "winrate": 0.4279778393351801,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "MACD_signal",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0012351540039845102,
+        "winrate": 0.44656172328086163,
+        "n": 3621,
+        "ok": false
+      },
+      "top3": {
+        "mag": -9.707617669256942e-06,
+        "winrate": 0.4530386740331492,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "MAZL",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0033909055267311292,
+        "winrate": 0.4444444444444444,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0017851037414174076,
+        "winrate": 0.4467005076142132,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "MFI",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005753514005678664,
+        "winrate": 0.4257617728531856,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0079829364426364,
+        "winrate": 0.41412742382271467,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "OBV_trend",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 6.292822549177898e-05,
+        "winrate": 0.4464483906770255,
+        "n": 3604,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.00042967670111717336,
+        "winrate": 0.4477335800185014,
+        "n": 2162,
+        "ok": false
+      }
+    },
+    {
+      "col": "OBV_trend_chg",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00040458148495802783,
+        "winrate": 0.451165371809101,
+        "n": 3604,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00030601387089989544,
+        "winrate": 0.45609981515711645,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "ROC_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.011747788619815307,
+        "winrate": 0.41798063623789766,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.01378267101119512,
+        "winrate": 0.40506912442396314,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "ROC_1d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.003010627066617222,
+        "winrate": 0.4387952473058856,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004361889417972668,
+        "winrate": 0.4368663594470046,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "ROC_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.009280040069377047,
+        "winrate": 0.4212565734846388,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.008690100782661513,
+        "winrate": 0.42085832948777113,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "ROC_20d_accel",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.007811890384046024,
+        "winrate": 0.42358803986710963,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0077376952975388045,
+        "winrate": 0.4298245614035088,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "ROC_3d",
+      "family": "快价格信号",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.008198784080032261,
+        "winrate": 0.4229172432881262,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.010261225356702184,
+        "winrate": 0.4178208679593721,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "ROC_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00944162568747675,
+        "winrate": 0.41618176780271543,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.008712596843347038,
+        "winrate": 0.41735918744228995,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "ROC_5d_accel",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00016863231895813835,
+        "winrate": 0.44626038781163435,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0024077351528747474,
+        "winrate": 0.43787528868360276,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "ROC_60d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004356143333200445,
+        "winrate": 0.4364991717283269,
+        "n": 3622,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005194998882849023,
+        "winrate": 0.43278084714548803,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "RSI",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0036528404324567376,
+        "winrate": 0.4353364718914428,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0006953324488336093,
+        "winrate": 0.4412171507607192,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "SS_density_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0005041760678073726,
+        "winrate": 0.44939159292035397,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0005019397587045935,
+        "winrate": 0.4456221198156682,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "SS_density_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001157684022144832,
+        "winrate": 0.4517021865485746,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0019598686262106276,
+        "winrate": 0.44951590594744123,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "SS_density_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0013368255395253663,
+        "winrate": 0.4492392807745505,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0024821482328151487,
+        "winrate": 0.4382488479262673,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "VAR5",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00040261279807221915,
+        "winrate": 0.4437379043406138,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0004889976853826673,
+        "winrate": 0.4472106961733518,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "VAR51",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.014015126968964505,
+        "winrate": 0.5211111111111111,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.013646729916464003,
+        "winrate": 0.5138504155124654,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "WilliamsR",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004844816545911539,
+        "winrate": 0.4167820548324564,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005030150993334292,
+        "winrate": 0.4196675900277008,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "adv20",
+      "family": "换手/流动性/波动",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001417966266260588,
+        "winrate": 0.4391592920353982,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0008023472255540714,
+        "winrate": 0.4470534069981584,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "alpha006",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.003511735838940568,
+        "winrate": 0.46437482672581093,
+        "n": 3607,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0034727045940458373,
+        "winrate": 0.47088724584103514,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "alpha012",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0026132337743048654,
+        "winrate": 0.4530646051905025,
+        "n": 3622,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0034729155481652463,
+        "winrate": 0.4521178637200737,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "alpha041",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00426121822955392,
+        "winrate": 0.418025988388167,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005605665813802349,
+        "winrate": 0.4115207373271889,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "alpha042_ts",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0021851157143393837,
+        "winrate": 0.4284528092997509,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004248747750921441,
+        "winrate": 0.4125519150899862,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "alpha054_ts",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.005211802522973046,
+        "winrate": 0.4781405644714997,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.006328550856399051,
+        "winrate": 0.4817888427846934,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "amihud_illiq",
+      "family": "换手/流动性/波动",
+      "ok_top5": true,
+      "ok_top3": true,
+      "top5": {
+        "mag": 0.030763289024493434,
+        "winrate": 0.5992729306487695,
+        "n": 3576,
+        "ok": true
+      },
+      "top3": {
+        "mag": 0.032064845915334365,
+        "winrate": 0.6099488609948861,
+        "n": 2151,
+        "ok": true
+      }
+    },
+    {
+      "col": "amihud_illiquidity",
+      "family": "换手/流动性/波动",
+      "ok_top5": true,
+      "ok_top3": true,
+      "top5": {
+        "mag": 0.0208984545428153,
+        "winrate": 0.5690376569037657,
+        "n": 3585,
+        "ok": true
+      },
+      "top3": {
+        "mag": 0.020450924706339225,
+        "winrate": 0.5736793327154773,
+        "n": 2158,
+        "ok": true
+      }
+    },
+    {
+      "col": "amount",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0019363141170296262,
+        "winrate": 0.4314538419016031,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004596247043197453,
+        "winrate": 0.4203499079189687,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "amount_xrank",
+      "family": "换手/流动性/波动",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.001620142809633926,
+        "winrate": 0.4577777777777778,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0012453530412010337,
+        "winrate": 0.46435185185185185,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "amplitude_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.014099517647494116,
+        "winrate": 0.38151724137931037,
+        "n": 3625,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.016669654403276182,
+        "winrate": 0.3659770114942529,
+        "n": 2175,
+        "ok": false
+      }
+    },
+    {
+      "col": "amt_surge",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.01087054747499301,
+        "winrate": 0.38959601549529604,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.015882641994304485,
+        "winrate": 0.36900369003690037,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "ann_count_60d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002107076947822292,
+        "winrate": 0.4362880886426593,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0021004699399799465,
+        "winrate": 0.4319335486848177,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "ar_turnover",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002676296053666214,
+        "winrate": 0.4172203765227021,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0023617102323683905,
+        "winrate": 0.4213197969543147,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "asset_turnover",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -8.065437412105178e-05,
+        "winrate": 0.43474646716541976,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0008663232231197934,
+        "winrate": 0.4356252884171666,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "bearish_intensity_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.000441882088187964,
+        "winrate": 0.4465321912130423,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0006662116621778325,
+        "winrate": 0.4483870967741935,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "bearish_intensity_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.000438209119784068,
+        "winrate": 0.45446996955438695,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0007257024375151056,
+        "winrate": 0.46079335793357934,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "bearish_intensity_60d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.003043249603674831,
+        "winrate": 0.47078371642204375,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.005546483757596032,
+        "winrate": 0.4930747922437673,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "bias_10",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.01452635433372561,
+        "winrate": 0.3946275270008308,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.014757830000668397,
+        "winrate": 0.40147669589293955,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "bias_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.012310180121474812,
+        "winrate": 0.40797121505673956,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.012364324044372973,
+        "winrate": 0.41024457775726814,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "bias_120",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005857600883232185,
+        "winrate": 0.4326339039204859,
+        "n": 3622,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003974283752034247,
+        "winrate": 0.44244935543278086,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "bias_120d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005749537830974563,
+        "winrate": 0.4225352112676056,
+        "n": 3621,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005322115126311308,
+        "winrate": 0.4360036832412523,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "bias_20",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.017012873304645813,
+        "winrate": 0.39125622578859987,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.01605364895779882,
+        "winrate": 0.3906826568265683,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "bias_20_60_cross",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0015593233523793087,
+        "winrate": 0.44763746891406464,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.001698848557195645,
+        "winrate": 0.4483870967741935,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "bias_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.014981382858654978,
+        "winrate": 0.40298507462686567,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.017747307530533534,
+        "winrate": 0.3933671119299862,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "bias_250",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005881590423818413,
+        "winrate": 0.4290885159591971,
+        "n": 3039,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003927936582154356,
+        "winrate": 0.43468715697036225,
+        "n": 1822,
+        "ok": false
+      }
+    },
+    {
+      "col": "bias_5",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0123570797724246,
+        "winrate": 0.4012721238938053,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.012393975485618046,
+        "winrate": 0.4066390041493776,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "bias_5_20_cross",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001726852158996674,
+        "winrate": 0.45857578276530897,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0007047284562375241,
+        "winrate": 0.4649122807017544,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "bias_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.009237276945320198,
+        "winrate": 0.4157210074730141,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.010167199513144425,
+        "winrate": 0.4165129151291513,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "bias_60",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.011020628871503894,
+        "winrate": 0.41095132743362833,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.010878828275243104,
+        "winrate": 0.4153988012909175,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "bias_60d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.010178310532377374,
+        "winrate": 0.413602432955488,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00956872710261951,
+        "winrate": 0.4153988012909175,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "big_black_density_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0003944911401621368,
+        "winrate": 0.45814855875831484,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0008222295357163425,
+        "winrate": 0.4533271719038817,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "big_black_density_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.000529831786974197,
+        "winrate": 0.46256239600665555,
+        "n": 3606,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0005553295503784863,
+        "winrate": 0.4638888888888889,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "big_white_density_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0007745516132625803,
+        "winrate": 0.46807329261521374,
+        "n": 3602,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00039649382375582623,
+        "winrate": 0.4673762147154095,
+        "n": 2161,
+        "ok": false
+      }
+    },
+    {
+      "col": "big_white_density_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.000328560534177534,
+        "winrate": 0.46109111049570756,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.001273518346891213,
+        "winrate": 0.4739270881402861,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "black_streak",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004068058028503146,
+        "winrate": 0.42778085224128387,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004603421857426404,
+        "winrate": 0.4235023041474654,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "body_dir_consistency_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.003296000776224076,
+        "winrate": 0.4655792092894664,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.005382697524596782,
+        "winrate": 0.4774193548387097,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "body_dir_consistency_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0007176380016103566,
+        "winrate": 0.45071982281284606,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0009889092046394831,
+        "winrate": 0.44993077988001845,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "body_pct",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002057171671581372,
+        "winrate": 0.43019390581717454,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0018622787005632825,
+        "winrate": 0.43331795108444854,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "body_pct_ma20",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.004983372162550926,
+        "winrate": 0.49137931034482757,
+        "n": 3596,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.006390421555162908,
+        "winrate": 0.49675925925925923,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "body_pct_ma5",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0017001143048286814,
+        "winrate": 0.44342762063227953,
+        "n": 3606,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0009809358226244786,
+        "winrate": 0.4429033749422099,
+        "n": 2163,
+        "ok": false
+      }
+    },
+    {
+      "col": "body_shadow_ratio_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.004983372162550926,
+        "winrate": 0.49137931034482757,
+        "n": 3596,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.006390421555162908,
+        "winrate": 0.49675925925925923,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "body_shadow_ratio_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0017001143048286814,
+        "winrate": 0.44342762063227953,
+        "n": 3606,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0009809358226244786,
+        "winrate": 0.4429033749422099,
+        "n": 2163,
+        "ok": false
+      }
+    },
+    {
+      "col": "bps",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0012337234788438653,
+        "winrate": 0.42042623858289513,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0010200722699640855,
+        "winrate": 0.4195481788842785,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "bt_act_ewma",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00020755419192000356,
+        "winrate": 0.4533406957482054,
+        "n": 3622,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0011791107346869657,
+        "winrate": 0.4496551724137931,
+        "n": 2175,
+        "ok": false
+      }
+    },
+    {
+      "col": "bt_amt_ratio_float_mv",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0008643761094618926,
+        "winrate": 0.4508015478164732,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0005729548654513717,
+        "winrate": 0.46245969599263015,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "bt_disc_ewma",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0012289611827482165,
+        "winrate": 0.44177704194260486,
+        "n": 3624,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0020583621923078365,
+        "winrate": 0.43494252873563216,
+        "n": 2175,
+        "ok": false
+      }
+    },
+    {
+      "col": "bt_disc_raw",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001974049269403642,
+        "winrate": 0.43824260845537444,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0030904298341076692,
+        "winrate": 0.4251497005988024,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "bt_inst_abs_ewma",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0005038464740583751,
+        "winrate": 0.4326417704011065,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0009160420543467781,
+        "winrate": 0.42343173431734316,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "bt_inst_absorb",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00040961476900642027,
+        "winrate": 0.44112769485903813,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0017924889913344102,
+        "winrate": 0.4534562211981567,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "bt_mv_ratio_ewma",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.002020430678871689,
+        "winrate": 0.4746467165419784,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0018920125198544652,
+        "winrate": 0.4792243767313019,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "bullish_intensity_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00025334167167118956,
+        "winrate": 0.4407202216066482,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0004351204834486808,
+        "winrate": 0.4409048938134811,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "bullish_intensity_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002411290049510047,
+        "winrate": 0.43834857301191466,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002999496498885733,
+        "winrate": 0.43134535367545074,
+        "n": 2163,
+        "ok": false
+      }
+    },
+    {
+      "col": "bullish_intensity_60d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0014856994021147272,
+        "winrate": 0.44644339883753115,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0010895344044286235,
+        "winrate": 0.45643153526970953,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "chip_entropy",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0036510582582138912,
+        "winrate": 0.43027446631549765,
+        "n": 3607,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003399212130492472,
+        "winrate": 0.43498380379453955,
+        "n": 2161,
+        "ok": false
+      }
+    },
+    {
+      "col": "chip_gini",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0003557288894844134,
+        "winrate": 0.4119922630560928,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00011402256453925387,
+        "winrate": 0.4099493321050207,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "chip_skew_dist",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.00126526182859781,
+        "winrate": 0.4424141749723145,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.002098253531419361,
+        "winrate": 0.4381918819188192,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "circ_mv",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001049623967793624,
+        "winrate": 0.4553003044561306,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0017166513545051885,
+        "winrate": 0.4390581717451524,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "close",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0009720607736961186,
+        "winrate": 0.42332135949157224,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00042177977153323097,
+        "winrate": 0.4152854511970534,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "close_hfq",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0012869033909531135,
+        "winrate": 0.43047091412742383,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0017741355238183364,
+        "winrate": 0.420129270544783,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "close_hfq_xrank",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0014394428820692306,
+        "winrate": 0.43972222222222224,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0015068914166672023,
+        "winrate": 0.449537037037037,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "close_position",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.003825283626646827,
+        "winrate": 0.43291839557399725,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004115093766060983,
+        "winrate": 0.4326568265682657,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "close_position_ma20",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00045553500506036025,
+        "winrate": 0.45693713652727774,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0018900989547049095,
+        "winrate": 0.45408398707891096,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "close_position_ma5",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.007250154220102126,
+        "winrate": 0.4366509564735237,
+        "n": 3607,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.008874002083916317,
+        "winrate": 0.42606284658040666,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "close_vs_high",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005081476993871508,
+        "winrate": 0.42975893599334997,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005121550703475035,
+        "winrate": 0.4307479224376731,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "close_vs_low",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.009267660960761018,
+        "winrate": 0.40607734806629836,
+        "n": 3620,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.009884606614239034,
+        "winrate": 0.4068108605614358,
+        "n": 2173,
+        "ok": false
+      }
+    },
+    {
+      "col": "close_xrank",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0004554180432713272,
+        "winrate": 0.44472222222222224,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.001160436109004247,
+        "winrate": 0.44814814814814813,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "conc_90_industry_rank",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001831610033392347,
+        "winrate": 0.4281760309991697,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0018704146740470206,
+        "winrate": 0.42178126442085834,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "conc_trend_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.003987565326089025,
+        "winrate": 0.4714047751249306,
+        "n": 3602,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.004688182444061435,
+        "winrate": 0.4697459584295612,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "consecutive_board",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005167844993829586,
+        "winrate": 0.42049861495844876,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005540996677550614,
+        "winrate": 0.4228993536472761,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_50pct",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0006463617172945361,
+        "winrate": 0.4242675511332228,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0012986857184977508,
+        "winrate": 0.4093001841620626,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_50pct_chg1",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00793397227275144,
+        "winrate": 0.41602209944751384,
+        "n": 3620,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.007721400432970538,
+        "winrate": 0.4161290322580645,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_50pct_chg10",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0033202805507090622,
+        "winrate": 0.4304251794588625,
+        "n": 3622,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002986980644373934,
+        "winrate": 0.422457432121491,
+        "n": 2173,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_50pct_chg20",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.003197219935128059,
+        "winrate": 0.42967670627245097,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004004378108898791,
+        "winrate": 0.4210041455550438,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_50pct_chg3",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.008973032620727973,
+        "winrate": 0.40293141592920356,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.008557205744686462,
+        "winrate": 0.40506912442396314,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_50pct_chg5",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00742644511422739,
+        "winrate": 0.40911602209944753,
+        "n": 3620,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0075379542697178205,
+        "winrate": 0.40304007369875633,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_50pct_pct_chg1",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.008207877452439333,
+        "winrate": 0.4089651355838406,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.01019272596611595,
+        "winrate": 0.4059907834101382,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_50pct_pct_chg10",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.012620884793844114,
+        "winrate": 0.4102351313969571,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.013184159021480393,
+        "winrate": 0.41013824884792627,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_50pct_pct_chg20",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0087165468079154,
+        "winrate": 0.41404090657822,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.010709460673184176,
+        "winrate": 0.413093591516828,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_50pct_pct_chg3",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.012207145575712074,
+        "winrate": 0.40448504983388706,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.013542481745464865,
+        "winrate": 0.40839870789109367,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_50pct_pct_chg5",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.012551746938222105,
+        "winrate": 0.400221422640465,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.013903734079221462,
+        "winrate": 0.40147669589293955,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_50pct_xrank",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00039718429015893016,
+        "winrate": 0.435,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.00021814542529424312,
+        "winrate": 0.4462962962962963,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_95pct",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0012119195689928512,
+        "winrate": 0.40917887752280896,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0012409914055450948,
+        "winrate": 0.40101289134438306,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_95pct_chg1",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00870404468546936,
+        "winrate": 0.40824799335732076,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.009908156935779719,
+        "winrate": 0.40544280442804426,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_95pct_chg10",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0035986652130347825,
+        "winrate": 0.4268360022087245,
+        "n": 3622,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005267704706256822,
+        "winrate": 0.4250229990800368,
+        "n": 2174,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_95pct_chg20",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0039695897914681175,
+        "winrate": 0.42371475953565507,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0044305037941520615,
+        "winrate": 0.42738589211618255,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_95pct_chg3",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.010204815334989232,
+        "winrate": 0.39313399778516056,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.009642897284472405,
+        "winrate": 0.3943726937269373,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_95pct_chg5",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.006714855934745255,
+        "winrate": 0.4118948824343015,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.007424453302512831,
+        "winrate": 0.4096774193548387,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_95pct_pct_chg1",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0076360634578910075,
+        "winrate": 0.4099585062240664,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.006081284305097277,
+        "winrate": 0.42304147465437786,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_95pct_pct_chg10",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.010907549245390702,
+        "winrate": 0.41415537738457286,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.012385542232840175,
+        "winrate": 0.41409488714877934,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_95pct_pct_chg20",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.006743359452190381,
+        "winrate": 0.43086283185840707,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.007811900713450084,
+        "winrate": 0.4213197969543147,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_95pct_pct_chg3",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.013726784464558968,
+        "winrate": 0.39700996677740863,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.015991376496267116,
+        "winrate": 0.3906826568265683,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_95pct_pct_chg5",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.011735691296179181,
+        "winrate": 0.40171650055370983,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.013125263598262252,
+        "winrate": 0.40239963082602676,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_95pct_xrank",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0007535288511886705,
+        "winrate": 0.43444444444444447,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0008367547388860725,
+        "winrate": 0.45046296296296295,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "cost_bias",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -9.682740191796337e-05,
+        "winrate": 0.4445983379501385,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0016154062448283939,
+        "winrate": 0.45891043397968606,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "current_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0017938773198197552,
+        "winrate": 0.476506357103372,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.00013040461040226544,
+        "winrate": 0.4604051565377532,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "days_since_last_ann",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0007780846142566373,
+        "winrate": 0.43923418423973365,
+        "n": 3604,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0018370556933073644,
+        "winrate": 0.43061979648473636,
+        "n": 2162,
+        "ok": false
+      }
+    },
+    {
+      "col": "debt_leveraging",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.003070624745890677,
+        "winrate": 0.4740925464117484,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0038498048772453056,
+        "winrate": 0.48151571164510165,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "debt_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0031516847065431626,
+        "winrate": 0.4554785020804438,
+        "n": 3605,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.003206915704946757,
+        "winrate": 0.45013850415512463,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "dn_streak",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0005908151225989691,
+        "winrate": 0.45318559556786703,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0005435994951149061,
+        "winrate": 0.45777572681125983,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "down_gap_pct",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": true,
+      "top5": {
+        "mag": 0.019297754506861897,
+        "winrate": 0.5455056179775281,
+        "n": 3560,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.024334283747237256,
+        "winrate": 0.5599812558575445,
+        "n": 2134,
+        "ok": true
+      }
+    },
+    {
+      "col": "down_limit_raw",
+      "family": "股息/股本/涨跌停",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0010198022827042539,
+        "winrate": 0.41779497098646035,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": 5.307882250878958e-05,
+        "winrate": 0.4134438305709024,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "dt_eps",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0028985136908172907,
+        "winrate": 0.404037610619469,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002495604732088605,
+        "winrate": 0.40525587828492393,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "dv_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0017007547795920707,
+        "winrate": 0.43795013850415515,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0011523705841844196,
+        "winrate": 0.44967682363804246,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "dv_ttm",
+      "family": "股息/股本/涨跌停",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0010888754826285183,
+        "winrate": 0.442318358291736,
+        "n": 3606,
+        "ok": false
+      },
+      "top3": {
+        "mag": 4.398101195744437e-05,
+        "winrate": 0.4609699769053118,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "efficiency_chg",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0007477236091353932,
+        "winrate": 0.4449375866851595,
+        "n": 3605,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0005806918254994704,
+        "winrate": 0.4398148148148148,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "eps",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0029961340763615778,
+        "winrate": 0.40486725663716816,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002296028085222458,
+        "winrate": 0.4098662978331028,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "eps_yoy",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0006650963941238578,
+        "winrate": 0.43667035398230086,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0001445941204473112,
+        "winrate": 0.4389119409866298,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "exp_days_to_next_ann",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0008934237735337787,
+        "winrate": 0.4460431654676259,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0010054391942114767,
+        "winrate": 0.44813278008298757,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "fear_greed",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0011415068217141642,
+        "winrate": 0.43411927877947293,
+        "n": 1442,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0011415068217141642,
+        "winrate": 0.43411927877947293,
+        "n": 1442,
+        "ok": false
+      }
+    },
+    {
+      "col": "fisher_transform",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0023060054085870486,
+        "winrate": 0.4400110834026046,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003960398264766761,
+        "winrate": 0.4457274826789838,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "float_share",
+      "family": "股息/股本/涨跌停",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0007745370125753381,
+        "winrate": 0.46731301939058173,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0003235234906693933,
+        "winrate": 0.47460757156048017,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "float_share_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0016792114888229944,
+        "winrate": 0.4539164129532245,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.003408731322897092,
+        "winrate": 0.4425473004153207,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "free_float_pct",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0021743363635762557,
+        "winrate": 0.4411520354472445,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0021762552875067044,
+        "winrate": 0.4411628980156899,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "free_float_turnover_rate",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.019811656262434203,
+        "winrate": 0.36044260027662517,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.01971469035434879,
+        "winrate": 0.36376210235131395,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "free_float_turnover_rate_xrank",
+      "family": "换手/流动性/波动",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.007454203067734837,
+        "winrate": 0.40144564915207115,
+        "n": 3597,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.010289107135099283,
+        "winrate": 0.38924930491195553,
+        "n": 2158,
+        "ok": false
+      }
+    },
+    {
+      "col": "free_share",
+      "family": "股息/股本/涨跌停",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0011697132067662083,
+        "winrate": 0.44930747922437675,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00038964560086856117,
+        "winrate": 0.47645429362880887,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "gap_strength_20d",
+      "family": "快价格信号",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001790721879639895,
+        "winrate": 0.4470914127423823,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0006656146879306457,
+        "winrate": 0.4558483587609801,
+        "n": 2163,
+        "ok": false
+      }
+    },
+    {
+      "col": "gap_strength_5d",
+      "family": "快价格信号",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0014129565477745923,
+        "winrate": 0.4377076411960133,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0008042244824735837,
+        "winrate": 0.4407014305491463,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "gap_unfilled_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0007682341381797115,
+        "winrate": 0.451300498063088,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0017912337329063946,
+        "winrate": 0.43726937269372695,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "gap_vs_ma5",
+      "family": "快价格信号",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.00592821620288289,
+        "winrate": 0.4713216957605985,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.005981460705472637,
+        "winrate": 0.4651270207852194,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "gross_margin",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0014294554426470018,
+        "winrate": 0.44182825484764543,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0016429658809552548,
+        "winrate": 0.4445983379501385,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "growth_accel",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0013798214456036046,
+        "winrate": 0.46034816247582205,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0005490976655286247,
+        "winrate": 0.4513600737667128,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "gtja_001_ts",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001316910581826992,
+        "winrate": 0.4456130639357874,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0011864584910467597,
+        "winrate": 0.4476234425473004,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "gtja_004",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.00214812337272101,
+        "winrate": 0.46585568150400886,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0020849047669401688,
+        "winrate": 0.46593001841620624,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "high",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0008569354768433974,
+        "winrate": 0.4227687206410611,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0004352415748581292,
+        "winrate": 0.4157458563535912,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "high_hfq",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0012291079543557991,
+        "winrate": 0.4307479224376731,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0016374012958614483,
+        "winrate": 0.4224376731301939,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "high_hfq_xrank",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.001511287089821242,
+        "winrate": 0.44027777777777777,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.001311636531590333,
+        "winrate": 0.44722222222222224,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "high_xrank",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0006046063961808818,
+        "winrate": 0.4436111111111111,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0011852916740496201,
+        "winrate": 0.4476851851851852,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "ind_capital_flow",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0003639459889646246,
+        "winrate": 0.45650372825186414,
+        "n": 3621,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.001510522222213306,
+        "winrate": 0.4686924493554328,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "ind_lhb_net_flow_5d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0008263536452902928,
+        "winrate": 0.4566121430551705,
+        "n": 3607,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0012930685576777708,
+        "winrate": 0.45030050855293574,
+        "n": 2163,
+        "ok": false
+      }
+    },
+    {
+      "col": "ind_margin_accel",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0011981769277406005,
+        "winrate": 0.4528092997508995,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0016658918896387664,
+        "winrate": 0.4605080831408776,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "ind_margin_chg_5d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0011777768779811105,
+        "winrate": 0.4490472245236123,
+        "n": 3621,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0004746217173419902,
+        "winrate": 0.4594843462246777,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "intra_strength",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002300519743406606,
+        "winrate": 0.4213296398891967,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0018892349957960331,
+        "winrate": 0.42382271468144045,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "intra_strength_ma5",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0014939292647105846,
+        "winrate": 0.40964523281596454,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0009816010131230841,
+        "winrate": 0.4235565819861432,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "intraday_amplitude",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.007990643931241884,
+        "winrate": 0.40811258278145696,
+        "n": 3624,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.010170274543226547,
+        "winrate": 0.40781609195402296,
+        "n": 2175,
+        "ok": false
+      }
+    },
+    {
+      "col": "intraday_momentum",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.006995453742907751,
+        "winrate": 0.41066003866335266,
+        "n": 3621,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.008314543499004725,
+        "winrate": 0.40515653775322286,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "intraday_range",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.007961772648451418,
+        "winrate": 0.4083885209713024,
+        "n": 3624,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.010170274543226547,
+        "winrate": 0.40781609195402296,
+        "n": 2175,
+        "ok": false
+      }
+    },
+    {
+      "col": "inventory_turnover",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -4.4941755366490605e-05,
+        "winrate": 0.44059817225145387,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.001718032558165802,
+        "winrate": 0.4492151431209603,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb2_conboard_mem",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.009380798748622405,
+        "winrate": 0.4074792243767313,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.01267141259158548,
+        "winrate": 0.4002770083102493,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb2_inst_conboard",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0026756641226614235,
+        "winrate": 0.4263565891472868,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0026036540873459117,
+        "winrate": 0.4280442804428044,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb2_inst_flow",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0014930834034845586,
+        "winrate": 0.43468655067660866,
+        "n": 3621,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002764733876957736,
+        "winrate": 0.4221915285451197,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb2_inst_premium",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.007239767214489192,
+        "winrate": 0.40653558571032955,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0063703610924819186,
+        "winrate": 0.41209044762344255,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb2_inst_resolve",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0021218135022866725,
+        "winrate": 0.429125138427464,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.001918401406490746,
+        "winrate": 0.4307479224376731,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb2_inst_shock",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00578624612208323,
+        "winrate": 0.4133738601823708,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0058012857665476645,
+        "winrate": 0.40902809765085213,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb2_inst_strength",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0033198824292731254,
+        "winrate": 0.43406137683162843,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003881248717246544,
+        "winrate": 0.4274527867342239,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb2_list_count_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.013340239357939763,
+        "winrate": 0.3893805309734513,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.01326507865758764,
+        "winrate": 0.39410681399631675,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb2_quant_flow",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005330075497450294,
+        "winrate": 0.4081237911025145,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005610438445486361,
+        "winrate": 0.4093836246550138,
+        "n": 2174,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb2_retail_flow",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.007752440042021259,
+        "winrate": 0.3992248062015504,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.006040504733091671,
+        "winrate": 0.40323325635103924,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb2_sell_buy_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.008363779363508263,
+        "winrate": 0.41648230088495575,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.008009311175987554,
+        "winrate": 0.4129032258064516,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb2_sell_pressure",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.011875847769936972,
+        "winrate": 0.39961283185840707,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.011537431581189002,
+        "winrate": 0.39825046040515655,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb2_top_flow",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0065627739130809356,
+        "winrate": 0.4051962410171365,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.007119297879087553,
+        "winrate": 0.39953917050691246,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_abnormal_score",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005108269792347965,
+        "winrate": 0.41482300884955753,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0027322208343368245,
+        "winrate": 0.42415859843245735,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_buy_amt",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.007178829922677903,
+        "winrate": 0.41687413554633473,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0082799612031955,
+        "winrate": 0.4183579335793358,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_inst_buy",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0057768733000250795,
+        "winrate": 0.4223946784922395,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.006471164745804549,
+        "winrate": 0.43054914628518687,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_inst_flow",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0018907888311184382,
+        "winrate": 0.43283582089552236,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003576320228814558,
+        "winrate": 0.42376784891754954,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_inst_sell",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00918412388102522,
+        "winrate": 0.40687361419068735,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.007069914266635193,
+        "winrate": 0.41051660516605165,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_list_count_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.013340239357939763,
+        "winrate": 0.3893805309734513,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.01326507865758764,
+        "winrate": 0.39410681399631675,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_net_buy",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0058644915689980235,
+        "winrate": 0.42414174972314506,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00584123391175457,
+        "winrate": 0.4312730627306273,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_net_buy_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.006362744965084562,
+        "winrate": 0.40719225449515906,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.007231036636125878,
+        "winrate": 0.39493087557603684,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_quant_buy",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.010801276515116259,
+        "winrate": 0.39106967615309124,
+        "n": 2038,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.008244026528612674,
+        "winrate": 0.4042981867024849,
+        "n": 1489,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_quant_sell",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.011580659712398009,
+        "winrate": 0.39352306182531893,
+        "n": 2038,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.013942330034086643,
+        "winrate": 0.39355271994627267,
+        "n": 1489,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_retail_buy",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.008331173094833852,
+        "winrate": 0.41129255466371434,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.009819706574291978,
+        "winrate": 0.4086715867158672,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_retail_flow",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.010073353378531505,
+        "winrate": 0.39861687413554636,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.008622960059834305,
+        "winrate": 0.39640883977900554,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_retail_sell",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.009427494413020645,
+        "winrate": 0.4067515218594355,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.009326523900035029,
+        "winrate": 0.40802213001383125,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_sell_amt",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.008587754976468015,
+        "winrate": 0.4094052558782849,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00885517625788707,
+        "winrate": 0.40682656826568264,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_sell_pressure",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004390275672483833,
+        "winrate": 0.4389502762430939,
+        "n": 3620,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0061714877812596445,
+        "winrate": 0.4394288346384155,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_top_buy",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.007716109333351551,
+        "winrate": 0.4042145593869732,
+        "n": 3132,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.006562735318080784,
+        "winrate": 0.4157740993184031,
+        "n": 2054,
+        "ok": false
+      }
+    },
+    {
+      "col": "lhb_top_sell",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0089412141492626,
+        "winrate": 0.39719029374201786,
+        "n": 3132,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00943580780473362,
+        "winrate": 0.39746712128592304,
+        "n": 2053,
+        "ok": false
+      }
+    },
+    {
+      "col": "limit_asymmetry",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0019051833070846459,
+        "winrate": 0.46535476718403546,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0008412456365703936,
+        "winrate": 0.46349353049907577,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "limit_dist_pct",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.015235902602214316,
+        "winrate": 0.487292817679558,
+        "n": 3620,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.015699133738923697,
+        "winrate": 0.4859641049240681,
+        "n": 2173,
+        "ok": false
+      }
+    },
+    {
+      "col": "limit_down_dist_pct",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00473087165833701,
+        "winrate": 0.4165056582942313,
+        "n": 3623,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005695475345537918,
+        "winrate": 0.4183156925908882,
+        "n": 2173,
+        "ok": false
+      }
+    },
+    {
+      "col": "limit_up_days_10",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.013194693329851674,
+        "winrate": 0.39861495844875344,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.01430785649906858,
+        "winrate": 0.39935364727608497,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "limit_up_days_20",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.009419808317910713,
+        "winrate": 0.41329639889196673,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.008055491446808916,
+        "winrate": 0.4168975069252078,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "liquidity_score",
+      "family": "换手/流动性/波动",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.009049854683001898,
+        "winrate": 0.41445182724252494,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.009243190614910112,
+        "winrate": 0.4113573407202216,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "liquidity_score_v2",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0014386799117494528,
+        "winrate": 0.43019390581717454,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002544735181308439,
+        "winrate": 0.4240886017535764,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "low",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.000939953440144396,
+        "winrate": 0.42359767891682787,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00029466438439857697,
+        "winrate": 0.4175874769797422,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "low_hfq",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0013246445522857293,
+        "winrate": 0.43019390581717454,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0018190999598133731,
+        "winrate": 0.42059095106186517,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "low_hfq_xrank",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0013704977241168104,
+        "winrate": 0.43972222222222224,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0007692337715925429,
+        "winrate": 0.44351851851851853,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "low_xrank",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.00023889000998490137,
+        "winrate": 0.44277777777777777,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0010606917255033452,
+        "winrate": 0.45046296296296295,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "lower_shadow_chg_5d",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0008215044547121077,
+        "winrate": 0.4469675990030462,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0006802388038800278,
+        "winrate": 0.44930875576036866,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "lower_shadow_ma5",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0056447160977859635,
+        "winrate": 0.4260387811634349,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.007829916000813059,
+        "winrate": 0.4178208679593721,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "lower_shadow_pct",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0020416442058556862,
+        "winrate": 0.4456130639357874,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0011212717102310372,
+        "winrate": 0.43983402489626555,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "ma_bull_score",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0026344869811497336,
+        "winrate": 0.4257617728531856,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0019588191925737834,
+        "winrate": 0.43536472760849493,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "ma_vol_ratio_5_20",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005907670870050389,
+        "winrate": 0.4100221483942414,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.007001813028087838,
+        "winrate": 0.41124942369755646,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "margin_balance",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0009678091132247863,
+        "winrate": 0.4315295416896742,
+        "n": 3622,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.001487163012486305,
+        "winrate": 0.42357274401473294,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "margin_balance_chg_1d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.000970481937770804,
+        "winrate": 0.429125138427464,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004478382065318645,
+        "winrate": 0.4174354243542435,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "margin_balance_chg_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0020031341285740556,
+        "winrate": 0.44023242944106256,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0018162588308155744,
+        "winrate": 0.4426002766251729,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "margin_balance_ma20_dev",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.000709090298977402,
+        "winrate": 0.4499861457467442,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.000349328238802853,
+        "winrate": 0.45592985694508537,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "margin_balance_yoy",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0011445700008574416,
+        "winrate": 0.45881574594773405,
+        "n": 3023,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0018574568827244117,
+        "winrate": 0.45234159779614325,
+        "n": 1815,
+        "ok": false
+      }
+    },
+    {
+      "col": "margin_buy_amt",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0011509317994407226,
+        "winrate": 0.43654962676251036,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0032415507904507367,
+        "winrate": 0.4231123388581952,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "margin_buy_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0015206396750493787,
+        "winrate": 0.456992230854606,
+        "n": 3604,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.002419365214884635,
+        "winrate": 0.4676524953789279,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "margin_chg",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0028532600493696506,
+        "winrate": 0.4293628808864266,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002180550232482985,
+        "winrate": 0.43536472760849493,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "margin_pressure_score",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0018681171051884015,
+        "winrate": 0.4281362503461645,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0020514390894291147,
+        "winrate": 0.4300876788186433,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "margin_trend_4q",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0021621482397682435,
+        "winrate": 0.4275290215588723,
+        "n": 3015,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0029016881145245295,
+        "winrate": 0.4295190713101161,
+        "n": 1809,
+        "ok": false
+      }
+    },
+    {
+      "col": "market_limit_down",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0017159212186574635,
+        "winrate": 0.44219573052398115,
+        "n": 3607,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.001717297820759702,
+        "winrate": 0.4417744916820702,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "market_limit_up",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0014592668974846713,
+        "winrate": 0.4334811529933481,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0016633278116439522,
+        "winrate": 0.4240184757505774,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "market_turnover",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0013368894161855129,
+        "winrate": 0.44438280166435506,
+        "n": 3605,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0009094991317831193,
+        "winrate": 0.4477818853974122,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "market_turnover_ratio_20d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0006599341555785425,
+        "winrate": 0.45225574314973704,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00045060647216083337,
+        "winrate": 0.44808491001384404,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "market_turnover_ratio_5d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0005176943944039104,
+        "winrate": 0.45550027639579876,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.00047117994584960335,
+        "winrate": 0.4656840165822202,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "momentum_consistency",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0020434978294246826,
+        "winrate": 0.4417704011065007,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0017955298544997545,
+        "winrate": 0.4441881918819188,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "month",
+      "family": "日历",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0023676591982646714,
+        "winrate": 0.43466223698781836,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002733119333503982,
+        "winrate": 0.4307479224376731,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "mv_log",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0013768680754461574,
+        "winrate": 0.4470914127423823,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0014775203127960577,
+        "winrate": 0.44321329639889195,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "mv_ma20_dev",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.013476675862282636,
+        "winrate": 0.40548021035150844,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.014493350913373294,
+        "winrate": 0.39345018450184505,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "net_intensity_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0010950664511565691,
+        "winrate": 0.44973691498199947,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0014269141310993693,
+        "winrate": 0.44803695150115475,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "net_intensity_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00017352603194417194,
+        "winrate": 0.44724453060094155,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.001272950263213634,
+        "winrate": 0.4582371942778034,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "net_intensity_60d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0006565986747329855,
+        "winrate": 0.4547216837441152,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0008658513625423359,
+        "winrate": 0.4630655586334257,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "net_margin",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0014028439773552152,
+        "winrate": 0.421606648199446,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.001678342695943627,
+        "winrate": 0.4182825484764543,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "new_high_ratio_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004946635626302847,
+        "winrate": 0.4324473975636766,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005621601809055424,
+        "winrate": 0.42850553505535055,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "new_high_streak",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.003238622714212707,
+        "winrate": 0.442382271468144,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005464166872591361,
+        "winrate": 0.4372114496768236,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "new_low_streak",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0002444499000244437,
+        "winrate": 0.4620077648363838,
+        "n": 3606,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0004910421637265933,
+        "winrate": 0.46836027713625866,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "ocf_to_or",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0026595648089856884,
+        "winrate": 0.42280022136137246,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0023250317103204955,
+        "winrate": 0.4203968620212275,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "ocfps",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0014383637142210536,
+        "winrate": 0.4083102493074792,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0015259892652881657,
+        "winrate": 0.4067405355493998,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "open",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0008931475723553576,
+        "winrate": 0.424150317767339,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00044117985405159815,
+        "winrate": 0.4152854511970534,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "open_hfq",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0012941364718761913,
+        "winrate": 0.4307479224376731,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0018950856319507852,
+        "winrate": 0.42197599261311175,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "open_hfq_xrank",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.001607109244706741,
+        "winrate": 0.4413888888888889,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0008828153213917753,
+        "winrate": 0.4439814814814815,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "open_xrank",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.00038421775799712515,
+        "winrate": 0.4419444444444444,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0011388922015672168,
+        "winrate": 0.45231481481481484,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "overnight_ret",
+      "family": "快价格信号",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0020877543932834664,
+        "winrate": 0.4590481460985058,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0019441484470657836,
+        "winrate": 0.45018450184501846,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "pb",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002276422948521764,
+        "winrate": 0.4272274488101826,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -2.404404501329266e-05,
+        "winrate": 0.435163820950623,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "pb_pct",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0005857827514881731,
+        "winrate": 0.43884892086330934,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0007967646709282497,
+        "winrate": 0.43331795108444854,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "pctChg",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005781945567358719,
+        "winrate": 0.4136313465783664,
+        "n": 3624,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.008499801171561572,
+        "winrate": 0.40781609195402296,
+        "n": 2175,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_con",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0018360777297867427,
+        "winrate": 0.4404860535763601,
+        "n": 3621,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0014538426467830062,
+        "winrate": 0.44659300184162065,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_con_chg1",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.006824971305165317,
+        "winrate": 0.4859213827711179,
+        "n": 3587,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.00847293572858939,
+        "winrate": 0.4832558139534884,
+        "n": 2150,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_con_chg10",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0006355353105157998,
+        "winrate": 0.45308162132148805,
+        "n": 3602,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.002232934714418937,
+        "winrate": 0.4566929133858268,
+        "n": 2159,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_con_chg20",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0006922178342789572,
+        "winrate": 0.4562326869806094,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0023353073006752174,
+        "winrate": 0.4640221402214022,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_con_chg3",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0032473098772513214,
+        "winrate": 0.4594669627984453,
+        "n": 3602,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0036729840127137457,
+        "winrate": 0.4625,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_con_chg5",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0033080286638362774,
+        "winrate": 0.45070813662871423,
+        "n": 3601,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.004100808408625873,
+        "winrate": 0.4514338575393155,
+        "n": 2162,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_con_pct_chg1",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.004410575506649731,
+        "winrate": 0.4657534246575342,
+        "n": 3577,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.006381296399950992,
+        "winrate": 0.46781716417910446,
+        "n": 2144,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_con_pct_chg10",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0035052174313153785,
+        "winrate": 0.47201336675020883,
+        "n": 3591,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0023995679453116567,
+        "winrate": 0.46870653685674546,
+        "n": 2157,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_con_pct_chg20",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.003987565326089025,
+        "winrate": 0.4714047751249306,
+        "n": 3602,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.004688182444061435,
+        "winrate": 0.4697459584295612,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_con_pct_chg3",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0035608612319491854,
+        "winrate": 0.4659217877094972,
+        "n": 3580,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0060782468306196085,
+        "winrate": 0.47392923649906893,
+        "n": 2148,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_con_pct_chg5",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0044707056834732495,
+        "winrate": 0.4722299748813843,
+        "n": 3583,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0037694929383117384,
+        "winrate": 0.47815985130111527,
+        "n": 2152,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_con_xrank",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0005445391294984715,
+        "winrate": 0.4375,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0008842506616459459,
+        "winrate": 0.44907407407407407,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_high",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001381823087998348,
+        "winrate": 0.4072948328267477,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0012152038855219986,
+        "winrate": 0.40101289134438306,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_high_chg1",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.007978834590317061,
+        "winrate": 0.40945534973735137,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00902939398566662,
+        "winrate": 0.4046961325966851,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_high_chg10",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0043221758806228396,
+        "winrate": 0.42048591938155716,
+        "n": 3622,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005640311770078167,
+        "winrate": 0.4199632014719411,
+        "n": 2174,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_high_chg20",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0038146611203309826,
+        "winrate": 0.4227687206410611,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004466353031100937,
+        "winrate": 0.4240331491712707,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_high_chg3",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.009247974478407459,
+        "winrate": 0.3957411504424779,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.010160767127967636,
+        "winrate": 0.38968217411331185,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_high_chg5",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.006540932536068379,
+        "winrate": 0.41143962420558167,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00772598199146613,
+        "winrate": 0.4056169429097606,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_high_pct_chg1",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.008047572666277498,
+        "winrate": 0.41046221976197067,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.006906307792196267,
+        "winrate": 0.42362713428703275,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_high_pct_chg10",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.010743908116881333,
+        "winrate": 0.41641337386018235,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.012064962709828314,
+        "winrate": 0.4159373560571165,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_high_pct_chg20",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.006609207943630061,
+        "winrate": 0.4325594250967385,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.007289955772870302,
+        "winrate": 0.4266605166051661,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_high_pct_chg3",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.012632859469916193,
+        "winrate": 0.39944674965421856,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.014739282199183563,
+        "winrate": 0.39603503918856614,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_high_pct_chg5",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.011631074454307316,
+        "winrate": 0.4040906578220011,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.013122635094873625,
+        "winrate": 0.4055299539170507,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "pct_90_high_xrank",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.000262940433584292,
+        "winrate": 0.4388888888888889,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.001543023302372092,
+        "winrate": 0.4537037037037037,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "pe_pb_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0014924187139466198,
+        "winrate": 0.46443398837531136,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0014537716038500465,
+        "winrate": 0.4568925772245274,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "pe_pct",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.001261651267056612,
+        "winrate": 0.4618362831858407,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": 9.380057347187726e-05,
+        "winrate": 0.4568925772245274,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "pe_ttm",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0007904785577449337,
+        "winrate": 0.4540182270091135,
+        "n": 3621,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.002229854845588861,
+        "winrate": 0.4666666666666667,
+        "n": 2175,
+        "ok": false
+      }
+    },
+    {
+      "col": "peak_price",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0010881702824029774,
+        "winrate": 0.425414364640884,
+        "n": 3620,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0013574151017664553,
+        "winrate": 0.4106813996316759,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "peak_roc_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.006944005228232384,
+        "winrate": 0.41452637392985364,
+        "n": 3621,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.007541289038746764,
+        "winrate": 0.4065377532228361,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "peak_roc_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.009151910728643027,
+        "winrate": 0.4046434494195688,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.009344507133444804,
+        "winrate": 0.4096774193548387,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "pre_close",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0008783400042544429,
+        "winrate": 0.42304504006631666,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0002018522715738787,
+        "winrate": 0.4162062615101289,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "pre_close_xrank",
+      "family": "价格",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.00041778957293674634,
+        "winrate": 0.44277777777777777,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0010052097737259715,
+        "winrate": 0.45,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "profit_accel",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0007166583695690401,
+        "winrate": 0.4539928156949434,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0008786427052313981,
+        "winrate": 0.4534990791896869,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "profit_yoy",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0003911947999189996,
+        "winrate": 0.4433075221238938,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0007512983155845677,
+        "winrate": 0.44536652835408025,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "ps_ttm",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0023782057950337407,
+        "winrate": 0.440696709980647,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0025432954893051117,
+        "winrate": 0.43139963167587475,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "pv_divergence",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0009127193274495718,
+        "winrate": 0.4607271718012767,
+        "n": 3603,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0022528044517835643,
+        "winrate": 0.45235892691951896,
+        "n": 2162,
+        "ok": false
+      }
+    },
+    {
+      "col": "pv_sync_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002531292874425166,
+        "winrate": 0.4340720221606648,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002478194055797153,
+        "winrate": 0.4293628808864266,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "pv_sync_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002090533525647527,
+        "winrate": 0.4309055663251177,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0022995519100359125,
+        "winrate": 0.4185509921550531,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "pv_sync_direct_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002370426081824339,
+        "winrate": 0.4217668235945721,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002432325500828969,
+        "winrate": 0.4146678966789668,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "pv_sync_direct_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0016101082643361032,
+        "winrate": 0.4377944028816847,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0015376483522451818,
+        "winrate": 0.42566943674976915,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "q_ocf_to_sales",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0020640735874984098,
+        "winrate": 0.41682812067533903,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003108656947879851,
+        "winrate": 0.41874422899353647,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "q_roe",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0009081352077658878,
+        "winrate": 0.43019390581717454,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0005231054397867924,
+        "winrate": 0.438134810710988,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "quality_momentum",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0034997813952806845,
+        "winrate": 0.4185595567867036,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003856222661472918,
+        "winrate": 0.4233610341643583,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "rank_amount",
+      "family": "换手/流动性/波动",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0023442088500619123,
+        "winrate": 0.4325221238938053,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0014857258414139303,
+        "winrate": 0.4438305709023941,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "rank_ff_turnover",
+      "family": "换手/流动性/波动",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.015464382884586141,
+        "winrate": 0.3788716814159292,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.01207196190873746,
+        "winrate": 0.38720073664825044,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "resistance_dist",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0005513569559877615,
+        "winrate": 0.43919292426755113,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0003516167483742589,
+        "winrate": 0.43773062730627305,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "ret_pct",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.003010627066617222,
+        "winrate": 0.4387952473058856,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004361889417972668,
+        "winrate": 0.4368663594470046,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "ret_reversal_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.020403576551554517,
+        "winrate": 0.5316067947646895,
+        "n": 3591,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0199352917084577,
+        "winrate": 0.5315398886827458,
+        "n": 2156,
+        "ok": false
+      }
+    },
+    {
+      "col": "rev_yoy",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0017659056496743771,
+        "winrate": 0.4524073049252905,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0006358238765220732,
+        "winrate": 0.45244690674053556,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "rev_yoy_trend",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0008131328960247158,
+        "winrate": 0.4495200264812976,
+        "n": 3021,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0008449354752206607,
+        "winrate": 0.4492273730684327,
+        "n": 1812,
+        "ok": false
+      }
+    },
+    {
+      "col": "revenue_ps",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0017597882706412117,
+        "winrate": 0.4411520354472445,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0027971696332168778,
+        "winrate": 0.4282418089524688,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "reversal_intensity_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0010682376422525629,
+        "winrate": 0.4670177383592018,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.00217382881225068,
+        "winrate": 0.47434119278779474,
+        "n": 2163,
+        "ok": false
+      }
+    },
+    {
+      "col": "roa",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0002579314290516135,
+        "winrate": 0.4208344846642719,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00023930616708179244,
+        "winrate": 0.42160919540229885,
+        "n": 2175,
+        "ok": false
+      }
+    },
+    {
+      "col": "roa_qoq",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0012352076354326725,
+        "winrate": 0.4395908211224772,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": 8.03269134823709e-05,
+        "winrate": 0.447926267281106,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "roe",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0005141215326601982,
+        "winrate": 0.43646408839779005,
+        "n": 3620,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00011582283018913227,
+        "winrate": 0.42672811059907834,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "roe_deducted",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0005912547049566287,
+        "winrate": 0.43220807969009406,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -9.675286338864451e-05,
+        "winrate": 0.4287690179806362,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "roe_qoq",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.001764238838884152,
+        "winrate": 0.45121951219512196,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0030941291949981428,
+        "winrate": 0.44886626561776954,
+        "n": 2161,
+        "ok": false
+      }
+    },
+    {
+      "col": "roe_trend_4q",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001969113508354442,
+        "winrate": 0.42965905329361137,
+        "n": 3021,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0014576691679029012,
+        "winrate": 0.434878587196468,
+        "n": 1812,
+        "ok": false
+      }
+    },
+    {
+      "col": "roe_yoy",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0003998821476311025,
+        "winrate": 0.44294003868471954,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.00010499336357705522,
+        "winrate": 0.4438305709023941,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "sector_limit_up_count",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.000781623111412048,
+        "winrate": 0.4494039367895758,
+        "n": 3607,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00033031029519178394,
+        "winrate": 0.45055452865064693,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "sector_return",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0028425338455717545,
+        "winrate": 0.4529607083563918,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.003189369927964859,
+        "winrate": 0.4548802946593002,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "sector_return_5d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0028337541816253298,
+        "winrate": 0.48904299583911237,
+        "n": 3605,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.002413523242426862,
+        "winrate": 0.4896265560165975,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_amt_vs_amount",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0024518560028453143,
+        "winrate": 0.4477983937967322,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002139051726315126,
+        "winrate": 0.44967682363804246,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_ann_decay",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0006046871570501402,
+        "winrate": 0.4463198671831765,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0008812945460802583,
+        "winrate": 0.44377880184331797,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_c_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0010827301292751909,
+        "winrate": 0.4491498235482836,
+        "n": 3117,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0010230612343486933,
+        "winrate": 0.44438902743142145,
+        "n": 2005,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_change_amt_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0027008760720111523,
+        "winrate": 0.4254082479933573,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002521293745347322,
+        "winrate": 0.41770401106500693,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_change_amt_60d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002584278567073888,
+        "winrate": 0.422640464987545,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0026819028464818697,
+        "winrate": 0.4190871369294606,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_change_amt_total",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001805737151935879,
+        "winrate": 0.4364991717283269,
+        "n": 3622,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0014419224345477613,
+        "winrate": 0.43784530386740333,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_change_frequency",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0029349198283333223,
+        "winrate": 0.43639380530973454,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002001729722679392,
+        "winrate": 0.4352236053480867,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_change_vol",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0031344338494640085,
+        "winrate": 0.42105263157894735,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0018186269148518929,
+        "winrate": 0.4279778393351801,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_end_decay",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0005484765726865656,
+        "winrate": 0.45394190871369294,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00018924260638299116,
+        "winrate": 0.4578146611341632,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_g_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0003927472840195995,
+        "winrate": 0.45422535211267606,
+        "n": 3124,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00032176787859624896,
+        "winrate": 0.4470412729985082,
+        "n": 2011,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_insider_signal",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0021929148594870417,
+        "winrate": 0.42042623858289513,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002998436220552762,
+        "winrate": 0.4094052558782849,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_net_change_sign",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.00036014855803898034,
+        "winrate": 0.4390581717451524,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0013865486915187418,
+        "winrate": 0.44321329639889195,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_net_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0004580731889575271,
+        "winrate": 0.45539152759948653,
+        "n": 3116,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0020922805787060234,
+        "winrate": 0.45862412761714855,
+        "n": 2006,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_net_sign",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.000589495526473996,
+        "winrate": 0.4452433628318584,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0009408132608820337,
+        "winrate": 0.43614568925772246,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_net_sign_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.00036582365451782973,
+        "winrate": 0.4405652535328346,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0014089623984087085,
+        "winrate": 0.4445983379501385,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_net_sign_60d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0005709808032761976,
+        "winrate": 0.4329639889196676,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.001075027057283938,
+        "winrate": 0.43674976915974145,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_p_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -4.834659064474718e-05,
+        "winrate": 0.4564102564102564,
+        "n": 3120,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.00046811199831306465,
+        "winrate": 0.45870646766169154,
+        "n": 2010,
+        "ok": false
+      }
+    },
+    {
+      "col": "sh_ratio_30d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0010130021977640834,
+        "winrate": 0.47432694976408546,
+        "n": 3603,
+        "ok": false
+      },
+      "top3": {
+        "mag": -7.27235996366999e-05,
+        "winrate": 0.47197776748494674,
+        "n": 2159,
+        "ok": false
+      }
+    },
+    {
+      "col": "shadow_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0011133671079455098,
+        "winrate": 0.45013850415512463,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0010590282071809305,
+        "winrate": 0.4513151822796493,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "shadow_ratio_ma5",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.001302252123802342,
+        "winrate": 0.452783162558848,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0010956865565422953,
+        "winrate": 0.4503464203233256,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "short_balance",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0037622469337983693,
+        "winrate": 0.4050913115661317,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005270534021263856,
+        "winrate": 0.3948339483394834,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "short_balance_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004694980104504097,
+        "winrate": 0.40498614958448753,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004714938044407122,
+        "winrate": 0.40951061865189287,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "short_sell_vol",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004209604063734137,
+        "winrate": 0.40072002215452784,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003590626245206572,
+        "winrate": 0.3987078910936779,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "small_mv_premium",
+      "family": "其他",
+      "ok_top5": true,
+      "ok_top3": true,
+      "top5": {
+        "mag": 0.022842085385649743,
+        "winrate": 0.5743905855982068,
+        "n": 3569,
+        "ok": true
+      },
+      "top3": {
+        "mag": 0.02634951664660571,
+        "winrate": 0.5862873134328358,
+        "n": 2144,
+        "ok": true
+      }
+    },
+    {
+      "col": "support_dist",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0016664172761861487,
+        "winrate": 0.4421749930996412,
+        "n": 3623,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0030561475037609396,
+        "winrate": 0.4411223551057958,
+        "n": 2174,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l1_amount",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0008943501191741967,
+        "winrate": 0.4488950276243094,
+        "n": 3620,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0010472422012375018,
+        "winrate": 0.4429097605893186,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l1_close",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002922027588927068,
+        "winrate": 0.3930058284762698,
+        "n": 3603,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003923293454563524,
+        "winrate": 0.3885291396854764,
+        "n": 2162,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l1_momentum_accel",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0007304688463174842,
+        "winrate": 0.4448753462603878,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -3.462759785173029e-05,
+        "winrate": 0.4476717381281697,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l1_pb",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0023502463877362297,
+        "winrate": 0.4281767955801105,
+        "n": 3620,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0025298582338540224,
+        "winrate": 0.43021649009672963,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l1_pe",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002182931320476658,
+        "winrate": 0.44589345172031075,
+        "n": 3604,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0030753072273393637,
+        "winrate": 0.43853974121996303,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l1_relative_strength",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.003814142824018946,
+        "winrate": 0.429125138427464,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0032759045508572483,
+        "winrate": 0.4344413665743306,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l1_ret_1d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0018206585887071227,
+        "winrate": 0.448657625242181,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0022831452625639687,
+        "winrate": 0.4416243654822335,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l1_ret_20d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0027942240718210054,
+        "winrate": 0.4275843007186291,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00183416786308321,
+        "winrate": 0.4389682174113312,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l1_ret_5d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004120089256537196,
+        "winrate": 0.4246537396121884,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004606701808101228,
+        "winrate": 0.4215143120960296,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l1_rotation_position",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00377714612917327,
+        "winrate": 0.4367720465890183,
+        "n": 3606,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0036076345899516914,
+        "winrate": 0.44495837187789083,
+        "n": 2162,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l1_turnover_anomaly",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0016735786729165094,
+        "winrate": 0.4473392461197339,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0024262456414743025,
+        "winrate": 0.44870609981515713,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l1_vol",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00035653478741816885,
+        "winrate": 0.46034816247582205,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0010943027411641198,
+        "winrate": 0.4622467771639042,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l1_vol_20d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 2.718462174254281e-05,
+        "winrate": 0.45879424778761063,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0013165779984723092,
+        "winrate": 0.45525830258302585,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l2_amount",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0017580071306543162,
+        "winrate": 0.438034777808446,
+        "n": 3623,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0011628261967506917,
+        "winrate": 0.44684767602393005,
+        "n": 2173,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l2_close",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005473392169491448,
+        "winrate": 0.3709856035437431,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005003927710445792,
+        "winrate": 0.37055837563451777,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l2_momentum_accel",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0020841478073854685,
+        "winrate": 0.43493909191583613,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0030713087338030205,
+        "winrate": 0.4306131857999078,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l2_pb",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002735534959207949,
+        "winrate": 0.4131455399061033,
+        "n": 3621,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002956128324619651,
+        "winrate": 0.40791896869244937,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l2_relative_strength",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0047271517630595485,
+        "winrate": 0.43066298342541437,
+        "n": 3620,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00495267700772283,
+        "winrate": 0.43370165745856354,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l2_ret_1d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002419164080949964,
+        "winrate": 0.4366002214839424,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0013403178612973812,
+        "winrate": 0.4462390401476696,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l2_ret_20d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00522168648338582,
+        "winrate": 0.4267551133222775,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0053602810464086605,
+        "winrate": 0.41724296911018904,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l2_ret_5d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0031719854903357408,
+        "winrate": 0.428373510667775,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002106827867664963,
+        "winrate": 0.4300230946882217,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l2_rotation_position",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002720320925441615,
+        "winrate": 0.4305901911886949,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0028571575144161116,
+        "winrate": 0.42909930715935335,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l2_turnover_anomaly",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004336446180860223,
+        "winrate": 0.4172901080631754,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004216935940266927,
+        "winrate": 0.4178208679593721,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l2_vol",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0038453760874186636,
+        "winrate": 0.4174757281553398,
+        "n": 3605,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0034298529178707357,
+        "winrate": 0.4167437557816836,
+        "n": 2162,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l2_vol_20d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0013906562838841882,
+        "winrate": 0.4348669623059867,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0008729201842961252,
+        "winrate": 0.4378178455848359,
+        "n": 2163,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l3_amount",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0016047593174231699,
+        "winrate": 0.438121546961326,
+        "n": 3620,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0018780772447752872,
+        "winrate": 0.4427059364933272,
+        "n": 2173,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l3_close",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0030589498765801718,
+        "winrate": 0.39540675152185945,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0027851378824879946,
+        "winrate": 0.39593908629441626,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l3_momentum_accel",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0023765177250273293,
+        "winrate": 0.4369281951760466,
+        "n": 3607,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0013592174182899105,
+        "winrate": 0.44665127020785217,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l3_pb",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0019182533364315525,
+        "winrate": 0.42454394693200664,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002100837374817487,
+        "winrate": 0.42304147465437786,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l3_relative_strength",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005316944217332224,
+        "winrate": 0.41751865156120477,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004605142390579877,
+        "winrate": 0.4200829111008752,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l3_ret_20d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.006156758152466486,
+        "winrate": 0.4116510215350635,
+        "n": 3622,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.006474527903385969,
+        "winrate": 0.4146341463414634,
+        "n": 2173,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l3_ret_5d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0058441274700052545,
+        "winrate": 0.3947951273532669,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005608748277292518,
+        "winrate": 0.39252767527675275,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l3_rotation_position",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0051934529951629125,
+        "winrate": 0.4029354749376904,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.006042025301742991,
+        "winrate": 0.38994000922934935,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l3_turnover_anomaly",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004616959453900818,
+        "winrate": 0.41733591802824704,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004475202045814689,
+        "winrate": 0.41024457775726814,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l3_vol",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0035264285490477615,
+        "winrate": 0.41161825726141077,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003753974760436642,
+        "winrate": 0.4071000461041955,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "sw_l3_vol_20d",
+      "family": "行业/市场",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005116354471343575,
+        "winrate": 0.41101577636313313,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0063687205223001905,
+        "winrate": 0.4061779621945597,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "total_mv",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0013768680754461574,
+        "winrate": 0.4470914127423823,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0014775203127960577,
+        "winrate": 0.44321329639889195,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "total_share",
+      "family": "股息/股本/涨跌停",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0003956071695912081,
+        "winrate": 0.4772853185595568,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0003235234906693933,
+        "winrate": 0.47460757156048017,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "turnover_rate",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.01460188134607477,
+        "winrate": 0.38245906189286705,
+        "n": 3603,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.01413950818456487,
+        "winrate": 0.3837263060564031,
+        "n": 2163,
+        "ok": false
+      }
+    },
+    {
+      "col": "turnover_rate_industry_rank",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00466715953878084,
+        "winrate": 0.4187274242845235,
+        "n": 3599,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0053354537587871394,
+        "winrate": 0.41473586654309547,
+        "n": 2158,
+        "ok": false
+      }
+    },
+    {
+      "col": "turnover_rate_xrank",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.007519507503628131,
+        "winrate": 0.400278940027894,
+        "n": 3585,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.007301010975972382,
+        "winrate": 0.400278940027894,
+        "n": 2151,
+        "ok": false
+      }
+    },
+    {
+      "col": "turnover_stability_5",
+      "family": "换手/流动性/波动",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005508059841137716,
+        "winrate": 0.413230002767783,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.006814080410543889,
+        "winrate": 0.4079372404245501,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "up_gap_pct",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0020877543932834664,
+        "winrate": 0.4590481460985058,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0019392003880212595,
+        "winrate": 0.45018450184501846,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "up_limit_raw",
+      "family": "股息/股本/涨跌停",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0003623457445458391,
+        "winrate": 0.42359767891682787,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00040488270262919416,
+        "winrate": 0.4125230202578269,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "up_streak",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0013914451339762178,
+        "winrate": 0.42809642560266004,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002062315250894728,
+        "winrate": 0.4289012003693444,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "upper_shadow_chg_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0015626569539987298,
+        "winrate": 0.44749238016070936,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0034947373450602195,
+        "winrate": 0.44993077988001845,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "upper_shadow_ma5",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 3.947979331536412e-05,
+        "winrate": 0.45640741765845555,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0010523375931679154,
+        "winrate": 0.4654059040590406,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "upper_shadow_pct",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0041843825303496075,
+        "winrate": 0.43680709534368073,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.006098457538356936,
+        "winrate": 0.4307479224376731,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "value_composite",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0008989354681019224,
+        "winrate": 0.44349030470914125,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0001629908028798014,
+        "winrate": 0.4558891454965358,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "vol_adj_mom_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.009237750432060638,
+        "winrate": 0.42058660763696737,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.011499961620563819,
+        "winrate": 0.4133640552995392,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "vol_adj_mom_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004556676990461746,
+        "winrate": 0.4368421052631579,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005592526245744694,
+        "winrate": 0.4344413665743306,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "vol_price_divergence",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.00015408036943859217,
+        "winrate": 0.4448753462603878,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0017215146311546053,
+        "winrate": 0.45265588914549654,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "vol_ratio_MA20",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.008078071461200901,
+        "winrate": 0.39579296983116524,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.006959604393463569,
+        "winrate": 0.40682656826568264,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "vol_ratio_MA5",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004817140270272454,
+        "winrate": 0.39806362378976484,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00370830054244867,
+        "winrate": 0.4066390041493776,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "vol_ratio_ma5",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.002376879689892253,
+        "winrate": 0.4403771491957848,
+        "n": 3606,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0009465106148269701,
+        "winrate": 0.4345018450184502,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "vol_surge",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00677294042016351,
+        "winrate": 0.4043730971491835,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.011148771399787339,
+        "winrate": 0.3885556068297185,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "volume",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005185978188522521,
+        "winrate": 0.4004430905566325,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005195982434695523,
+        "winrate": 0.40120036934441367,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "volume_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 2.3001629225559615e-05,
+        "winrate": 0.43490304709141275,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0008755369572130093,
+        "winrate": 0.4224376731301939,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "volume_xrank",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004245941533216793,
+        "winrate": 0.4041666666666667,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003871521650800404,
+        "winrate": 0.39675925925925926,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "weight_avg",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0006761823497410994,
+        "winrate": 0.42304504006631666,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00174375136927878,
+        "winrate": 0.4102209944751381,
+        "n": 2172,
+        "ok": false
+      }
+    },
+    {
+      "col": "weight_avg_chg1",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.008830972279562158,
+        "winrate": 0.40916620651573715,
+        "n": 3622,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.009984974425284234,
+        "winrate": 0.41030358785648574,
+        "n": 2174,
+        "ok": false
+      }
+    },
+    {
+      "col": "weight_avg_chg10",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004090062083456734,
+        "winrate": 0.42865028981507036,
+        "n": 3623,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005161720262750385,
+        "winrate": 0.4190432382704692,
+        "n": 2174,
+        "ok": false
+      }
+    },
+    {
+      "col": "weight_avg_chg20",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0031917755603430745,
+        "winrate": 0.42774247029566176,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00464967068841483,
+        "winrate": 0.42061665899677864,
+        "n": 2173,
+        "ok": false
+      }
+    },
+    {
+      "col": "weight_avg_chg3",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.009508349915254424,
+        "winrate": 0.396023198011599,
+        "n": 3621,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.012421555274298671,
+        "winrate": 0.3865623561895996,
+        "n": 2173,
+        "ok": false
+      }
+    },
+    {
+      "col": "weight_avg_chg5",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.008786079035220013,
+        "winrate": 0.41048275862068967,
+        "n": 3625,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.009440209261953214,
+        "winrate": 0.4018390804597701,
+        "n": 2175,
+        "ok": false
+      }
+    },
+    {
+      "col": "weight_avg_pct_chg1",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.011031837288337185,
+        "winrate": 0.4042612064194798,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.009605720369805023,
+        "winrate": 0.408944213923467,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "weight_avg_pct_chg10",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.011100783615894446,
+        "winrate": 0.422640464987545,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.012230682291182852,
+        "winrate": 0.4149377593360996,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "weight_avg_pct_chg20",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.008506102644781199,
+        "winrate": 0.4184887904788265,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00954815627670159,
+        "winrate": 0.41478060046189374,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "weight_avg_pct_chg3",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.01132335701368608,
+        "winrate": 0.40680309734513276,
+        "n": 3616,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.010982768691190012,
+        "winrate": 0.41244239631336405,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "weight_avg_pct_chg5",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.012514067776042024,
+        "winrate": 0.40359612724757954,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.012577627690261202,
+        "winrate": 0.4119815668202765,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "weight_avg_xrank",
+      "family": "筹码/成本变体",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0004987613907803086,
+        "winrate": 0.4436111111111111,
+        "n": 3600,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.000499840440210378,
+        "winrate": 0.4449074074074074,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "white_streak",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0007187114710371902,
+        "winrate": 0.46271139451067367,
+        "n": 3607,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0011101467824528317,
+        "winrate": 0.46072088724584104,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "winner_ratio",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0027511448424001415,
+        "winrate": 0.43706777316735823,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00338511730222802,
+        "winrate": 0.4385076001842469,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "winner_ratio_chg1",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0012575193942756875,
+        "winrate": 0.4587486157253599,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.00012985354341816383,
+        "winrate": 0.4519852262234534,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "winner_ratio_chg10",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002833192319020249,
+        "winrate": 0.4436756158317188,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004089723337510522,
+        "winrate": 0.4362880886426593,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "winner_ratio_chg20",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.003372697060787663,
+        "winrate": 0.42730545555247856,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0038683541261654974,
+        "winrate": 0.4358264081255771,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "winner_ratio_chg3",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.000704195809872151,
+        "winrate": 0.44954382084600497,
+        "n": 3617,
+        "ok": false
+      },
+      "top3": {
+        "mag": -8.816392908107766e-05,
+        "winrate": 0.4536652835408022,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "winner_ratio_chg5",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0009600386231141818,
+        "winrate": 0.45185390149418925,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": 3.931839668188021e-05,
+        "winrate": 0.4547970479704797,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "winner_ratio_pct_chg1",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0024989165717792606,
+        "winrate": 0.47254575707154745,
+        "n": 3606,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0012489818410021147,
+        "winrate": 0.4542513863216266,
+        "n": 2164,
+        "ok": false
+      }
+    },
+    {
+      "col": "winner_ratio_pct_chg10",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0008088141896555276,
+        "winrate": 0.4475873544093178,
+        "n": 3606,
+        "ok": false
+      },
+      "top3": {
+        "mag": -9.880717992292064e-05,
+        "winrate": 0.44321329639889195,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "winner_ratio_pct_chg20",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0010028700615643236,
+        "winrate": 0.4457998336567785,
+        "n": 3607,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0002651622527075092,
+        "winrate": 0.44829178208679593,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "winner_ratio_pct_chg3",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -3.291534234361433e-06,
+        "winrate": 0.46271139451067367,
+        "n": 3607,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00037909445186226404,
+        "winrate": 0.46833102172908,
+        "n": 2163,
+        "ok": false
+      }
+    },
+    {
+      "col": "winner_ratio_pct_chg5",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0012467937438824872,
+        "winrate": 0.4704904405652535,
+        "n": 3609,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0007599303620015746,
+        "winrate": 0.4677121771217712,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "winner_ratio_xrank",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0031167649594685473,
+        "winrate": 0.4317486794551015,
+        "n": 3597,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.005345050823338343,
+        "winrate": 0.4235403151065802,
+        "n": 2158,
+        "ok": false
+      }
+    },
+    {
+      "col": "中期线",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0040544148956583505,
+        "winrate": 0.44281362503461646,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0036817820466143476,
+        "winrate": 0.4427516158818098,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "主力轨迹",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005543900972866553,
+        "winrate": 0.42785931874826916,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003664704973514271,
+        "winrate": 0.4370096908167974,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "低位金叉_density_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0008770270940296047,
+        "winrate": 0.4476454293628809,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0015057370093617558,
+        "winrate": 0.4517766497461929,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "低位金叉_density_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00029306674192636006,
+        "winrate": 0.4411520354472445,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00023671099684122637,
+        "winrate": 0.45018450184501846,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "低位金叉_density_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0002684553952267952,
+        "winrate": 0.45429362880886426,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.00032788856192245163,
+        "winrate": 0.45958429561200925,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "出货_density_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.001983382201477458,
+        "winrate": 0.4411520354472445,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.001500597143705491,
+        "winrate": 0.43536472760849493,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "出货_density_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0024477668635654024,
+        "winrate": 0.4368770764119601,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0019094260631131142,
+        "winrate": 0.4339796860572484,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "出货_density_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0024863373846903667,
+        "winrate": 0.43173636111880365,
+        "n": 3611,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0027665182890873907,
+        "winrate": 0.42369755647763946,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "吸筹_density_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.00036903114896840854,
+        "winrate": 0.45062240663900416,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0003958347543709683,
+        "winrate": 0.44003690036900367,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "吸筹_density_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00017966041692630798,
+        "winrate": 0.44106253458771444,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0001227308809907708,
+        "winrate": 0.454587367450438,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "吸筹_density_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0005113384476655923,
+        "winrate": 0.4501527353512913,
+        "n": 3601,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0003022066629234576,
+        "winrate": 0.4564814814814815,
+        "n": 2160,
+        "ok": false
+      }
+    },
+    {
+      "col": "多头排列_density_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.003598085643523814,
+        "winrate": 0.43090105030403536,
+        "n": 3618,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00563650412961998,
+        "winrate": 0.4190871369294606,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "多头排列_density_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002397785616966064,
+        "winrate": 0.4366509564735237,
+        "n": 3607,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0013421029980167363,
+        "winrate": 0.4401294498381877,
+        "n": 2163,
+        "ok": false
+      }
+    },
+    {
+      "col": "多头排列_density_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": 0.0007420643374918737,
+        "winrate": 0.43706777316735823,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0007280970600409274,
+        "winrate": 0.4435743896821741,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "底部区域_density_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0010647518411973375,
+        "winrate": 0.44548976203652463,
+        "n": 3614,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0009791232644112918,
+        "winrate": 0.44280442804428044,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "底部区域_density_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0005886249732465874,
+        "winrate": 0.4350954885137005,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00027029967911430905,
+        "winrate": 0.42566943674976915,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "底部区域_density_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -3.803955950667421e-05,
+        "winrate": 0.44785615491009684,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": 0.0002601356474217731,
+        "winrate": 0.45785352372178717,
+        "n": 2171,
+        "ok": false
+      }
+    },
+    {
+      "col": "拉高_density_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.005989327700313809,
+        "winrate": 0.4267921394962635,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.008624210381239181,
+        "winrate": 0.4140156754264638,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "拉高_density_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0014111738966976677,
+        "winrate": 0.4520055325034578,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0007893123236887778,
+        "winrate": 0.4536652835408022,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "拉高_density_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.004950337077142159,
+        "winrate": 0.42105263157894735,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.006104844247379052,
+        "winrate": 0.4118190212373038,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "洗盘_density_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.003158713004577683,
+        "winrate": 0.42967884828349945,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.004205958582971665,
+        "winrate": 0.41301338255652975,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "洗盘_density_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0018192174545855644,
+        "winrate": 0.4349267753523073,
+        "n": 3619,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0024334869801343434,
+        "winrate": 0.441785549930971,
+        "n": 2173,
+        "ok": false
+      }
+    },
+    {
+      "col": "洗盘_density_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.003046495283137753,
+        "winrate": 0.4250069309675631,
+        "n": 3607,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0029567648886483448,
+        "winrate": 0.41986143187066977,
+        "n": 2165,
+        "ok": false
+      }
+    },
+    {
+      "col": "短期线",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0030255526529328154,
+        "winrate": 0.4290858725761773,
+        "n": 3610,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002651894395758183,
+        "winrate": 0.43536472760849493,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "红蓝距离",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.00164013492506428,
+        "winrate": 0.44993065187239945,
+        "n": 3605,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0014329988823555471,
+        "winrate": 0.45235892691951896,
+        "n": 2162,
+        "ok": false
+      }
+    },
+    {
+      "col": "获利盘",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0039413545101355425,
+        "winrate": 0.43237250554323725,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003337542196154332,
+        "winrate": 0.4358264081255771,
+        "n": 2166,
+        "ok": false
+      }
+    },
+    {
+      "col": "见顶_density_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0030596400134053486,
+        "winrate": 0.42821576763485475,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0028585374535212,
+        "winrate": 0.4294280442804428,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "见顶_density_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002788221983615217,
+        "winrate": 0.4317741489067257,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0015295510428118473,
+        "winrate": 0.4447004608294931,
+        "n": 2170,
+        "ok": false
+      }
+    },
+    {
+      "col": "见顶_density_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0034705450153623327,
+        "winrate": 0.41798063623789766,
+        "n": 3615,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0025513617256568235,
+        "winrate": 0.4188191881918819,
+        "n": 2168,
+        "ok": false
+      }
+    },
+    {
+      "col": "长期线",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.002208650617677581,
+        "winrate": 0.4436756158317188,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.00300652330858136,
+        "winrate": 0.43931702814951545,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "顶部_density_10d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.0025132397143501216,
+        "winrate": 0.42153335178522006,
+        "n": 3613,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.002579486866497759,
+        "winrate": 0.4218533886583679,
+        "n": 2169,
+        "ok": false
+      }
+    },
+    {
+      "col": "顶部_density_20d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.000704921913542225,
+        "winrate": 0.44518272425249167,
+        "n": 3612,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.0002466793763688668,
+        "winrate": 0.4485463774803876,
+        "n": 2167,
+        "ok": false
+      }
+    },
+    {
+      "col": "顶部_density_5d",
+      "family": "其他",
+      "ok_top5": false,
+      "ok_top3": false,
+      "top5": {
+        "mag": -0.003911915214679602,
+        "winrate": 0.43098669623059865,
+        "n": 3608,
+        "ok": false
+      },
+      "top3": {
+        "mag": -0.003480714267407793,
+        "winrate": 0.43048498845265587,
+        "n": 2165,
+        "ok": false
+      }
+    }
+  ]
+}

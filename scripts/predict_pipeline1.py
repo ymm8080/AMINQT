@@ -21,7 +21,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 from app.pipeline1.panel_builder import assemble_panel, load_or_fetch_meta  # noqa: E402
-from app.pipeline1.predict_runner import find_bundles, run_prediction  # noqa: E402
+from app.pipeline1.predict_runner import (  # noqa: E402
+    find_bundles,
+    resolve_current_bundles,
+    run_prediction,
+)
 from scripts.train_pipeline1 import load_symbols  # noqa: E402
 
 logging.basicConfig(
@@ -49,7 +53,13 @@ def main() -> dict:
 
     trade_date = args.trade_date or datetime.now().strftime("%Y%m%d")
     symbols = load_symbols(args)
-    bundles = find_bundles(args.model_dir, tag=args.tag)
+    # 无显式 tag 时按 current_meta.json 解析当前生效模型 (训练后指针提升的唯一真相源),
+    # 而非文件名字典序 (会误选 *_backup.pkl 等旧包).
+    bundles = (
+        find_bundles(args.model_dir, tag=args.tag)
+        if args.tag
+        else resolve_current_bundles(args.model_dir)
+    )
     logger.info("trade_date=%s, bundles=%s", trade_date, bundles)
 
     supply = DataSupplyChain()
