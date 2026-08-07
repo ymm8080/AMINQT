@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Backfill 2023-01 block-trade data into the V3 panel (4 bt_ cols) + raw cache.
 
 Background: the raw cache `block_trade_full.parquet` and the panel bt_ columns
@@ -33,9 +32,8 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-from dotenv import load_dotenv
-
 import tushare as ts
+from dotenv import load_dotenv
 
 load_dotenv()
 

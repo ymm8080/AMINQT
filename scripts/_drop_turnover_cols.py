@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 """Drop turnover_rate and turnover_rate_f columns from V3 panel (102 -> 100 cols).
 
 free_float_turnover_rate (= turnover_rate_f) and turn (= turnover_rate) are kept.
 """
 
-import os
 import gc
+import os
+
 import pyarrow as pa
 import pyarrow.parquet as pq
 

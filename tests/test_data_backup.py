@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """app.pipeline1.backup 单元测试.
 
 验证目标 (意图):

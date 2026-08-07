@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_hs300_exclude.py — HS300 成分股 × 最近1年 列诊断 → EXCLUDE_COLS 候选.
 
 复用 _diag_column_feed.py 的 IC/chg/tier 函数, 只把窗口从全市场3年换成 HS300×1年:
@@ -20,8 +19,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.label_engine import LabelEngine
+from config.settings import PANEL_V3_PATH
 from scripts._diag_column_feed import (
     LABELS,
     MASK_RECENT_DAYS,
@@ -57,8 +56,8 @@ def main() -> None:
     except Exception:
         pass
 
-    from scripts._diag_column_feed import _schema_cols
     from app.pipeline1.feature_selector import BruteForceGenerator
+    from scripts._diag_column_feed import _schema_cols
 
     hs300 = _fetch_hs300()
     print(f"HS300 成分股 {len(hs300)} 只")

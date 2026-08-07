@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Full alt data fetch + IC evaluation + PIPELINE1 integration.
 Step 1: Fetch all alt data (margin, moneyflow, holdernumber, northbound, lhb)
 Step 2: Merge into panel
@@ -7,11 +6,12 @@ Step 4: IC per dim -> verdict
 Step 5: Save results + factor registry
 """
 
-import sys
-import os
-import time
-import logging
 import json
+import logging
+import os
+import sys
+import time
+
 import numpy as np
 import pandas as pd
 
@@ -21,8 +21,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct  # noqa: E402
+from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 
 supply = DataSupplyChain()
 pro = supply._tushare_pro()
@@ -43,7 +43,7 @@ logger.info(
 # Industry
 basic = pro.stock_basic(exchange="", list_status="L", fields="ts_code,industry")
 basic["symbol"] = basic["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
-ind_map = dict(zip(basic["symbol"], basic["industry"].fillna("综合")))
+ind_map = dict(zip(basic["symbol"], basic["industry"].fillna("综合"), strict=False))
 df["industry"] = df["symbol"].map(ind_map).fillna("综合")
 df["board"] = df["symbol"].map(board_of)
 logger.info("Industry: %d unique", df["industry"].nunique())
@@ -310,7 +310,7 @@ logger.info("=== STEP 7: Build features ===")
 df["is_st"] = False
 df["is_suspended"] = False
 df["list_days"] = df.groupby("symbol").cumcount() + 1
-df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
+df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)]
 
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35  # noqa: E402
 from app.pipeline1.label_engine import LabelEngine  # noqa: E402

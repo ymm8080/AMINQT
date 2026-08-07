@@ -1400,7 +1400,7 @@ class DataSupplyChain:
                 import akshare as ak
 
                 dt = trade_date or end_date or datetime.now().strftime("%Y%m%d")
-                for exchange, fn in [
+                for _exchange, fn in [
                     ("sse", ak.stock_margin_detail_sse),
                     ("szse", getattr(ak, "stock_margin_detail_szse", None)),
                 ]:

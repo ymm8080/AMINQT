@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_verify_freq_layering.py — 三频模型: 特征频率归属判定 (全市场×3年).
 
 用户 2026-08-04 方法论升级:
@@ -23,15 +22,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.label_engine import LabelEngine
+from config.settings import PANEL_V3_PATH
+from scripts._diag_chip_weekly import _apply, per_stock_ts_ic
 from scripts._diag_column_feed import (
     LABELS,
     MASK_RECENT_DAYS,
     daily_rank_ic_multi,
     weighted_ic,
 )
-from scripts._diag_chip_weekly import _apply, per_stock_ts_ic
 
 logging.disable(logging.CRITICAL)
 np.seterr(all="ignore")

@@ -31,7 +31,6 @@ from app.streamlit.components.trading_panel import (
 from services.order_manager import OrderManager
 from services.trading_state_machine import TradingStateMachine
 
-
 # Streamlit 会话级单例: 状态机 + 委托管理器
 
 

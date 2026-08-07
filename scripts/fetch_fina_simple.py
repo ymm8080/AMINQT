@@ -6,8 +6,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.pipeline1.data_supply import DataSupplyChain
 import pandas as pd
+
+from app.pipeline1.data_supply import DataSupplyChain
 
 panel = pd.read_parquet("data/panel_full_enriched_v3.parquet", columns=["date"])
 start = panel["date"].min().strftime("%Y%m%d")

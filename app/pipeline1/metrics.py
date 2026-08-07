@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.utils.daily_rank_ic import daily_rank_ic_series, icir as _icir
+from app.utils.daily_rank_ic import daily_rank_ic_series
+from app.utils.daily_rank_ic import icir as _icir
 
 # 阶段一点火门禁 (P19.0 通过标准)
 IGNITION_IC_MIN = 0.03

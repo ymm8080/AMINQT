@@ -14,8 +14,9 @@ Only fills NaN values; existing non-NaN data is preserved.
 Safe write: temp file + atomic rename.
 """
 
-import os
 import logging
+import os
+
 import numpy as np
 import pandas as pd
 

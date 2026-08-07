@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Refill real LHB (龙虎榜) 2023-01-03 ~ 2023-12-29 into the PARQUET V3 panel.
 
 2024-26 LHB was refilled by scripts/_refill_lhb_2024_26.py; 2023 was left nearly

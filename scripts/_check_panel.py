@@ -1,7 +1,8 @@
 """Quick check of V3 panel structure."""
 
-import pandas as pd
 import os
+
+import pandas as pd
 
 os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Enrich v3 panel with baostock HFQ data, CYQ fill, and bias features.
 

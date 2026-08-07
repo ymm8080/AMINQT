@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tail UTF-16 log, emit matching lines as events (runs under Monitor's bash env)."""
 
 import re

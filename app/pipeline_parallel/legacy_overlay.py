@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """LEGACY 推理叠加模块 (做法一, 2026-08-05).
 
 把并行 PIPELINE 今日合并短名单 (狙击TOP-5 ∪ 融合TOP-10, 共现优先) 的 symbol

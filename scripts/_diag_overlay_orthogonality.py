@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """池分 vs LEGACY prob 正交性 + 叠加 OOS 双头 (2026-08-05).
 
 用户: "池是因子不是模型, LEGACY 是唯一训练模型. 池分与 LEGACY prob 是否正交?
@@ -154,7 +153,7 @@ def orthogonality(sub: pd.DataFrame) -> dict:
     """每日期截面 Spearman(池分, prob) 的均值/std/min/max."""
     s = sub[["date", "pool_score", "prob_up"]].dropna()
     rs = []
-    for day, g in s.groupby("date"):
+    for _day, g in s.groupby("date"):
         if len(g) < 10:
             continue
         res = spearmanr(g["pool_score"], g["prob_up"])
@@ -178,7 +177,7 @@ def measure(sub: pd.DataFrame, score: pd.Series, spec, bcrit) -> dict:
         sub[["date", "symbol"] + list(spec.labels)], on=["date", "symbol"], how="left"
     )
     per = {}
-    for h, lab in zip(spec.horizons, spec.labels):
+    for h, lab in zip(spec.horizons, spec.labels, strict=False):
         m = measure_dual_head(picks, lab)
         per[h] = {
             "mag": m["mag"],
@@ -228,8 +227,8 @@ def main() -> int:
     except Exception:
         pass
 
-    from app.pipeline1.predictor import V35Predictor
     from app.pipeline1.predict_runner import resolve_current_bundles
+    from app.pipeline1.predictor import V35Predictor
 
     bundles = resolve_current_bundles(MODEL_DIR)
     if not bundles:

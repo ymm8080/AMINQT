@@ -41,7 +41,7 @@ def load_symbols_from_panel(panel_path: str = "data/panel_3y.parquet") -> list[s
 def load_done() -> set[str]:
     if not os.path.exists(PROGRESS):
         return set()
-    with open(PROGRESS, "r") as f:
+    with open(PROGRESS) as f:
         return set(line.strip() for line in f if line.strip())
 
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for Three-Layer Feature Selection: BruteForceGenerator, dedup_l2, gate_d_ablation, nan_filter, FeatureSelector."""
 
 import json
@@ -13,14 +12,13 @@ from app.pipeline1.feature_selector import (
     BRUTE_FAMILIES,
     BruteForceGenerator,
     FeatureSelector,
+    daily_rank_ic,
     dedup_l2,
+    event_scope_mask,
     gate_d_ablation,
     nan_filter,
-    event_scope_mask,
-    daily_rank_ic,
     scope_ic_union,
 )
-
 
 # ── Synthetic data helpers ──────────────────────────────────────────
 

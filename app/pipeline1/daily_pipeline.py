@@ -183,7 +183,7 @@ class DailySelectionPipeline:
                 pq_path = str(data_others_path("data/priority.json"))
                 existing = set()
                 if os.path.exists(pq_path):
-                    with open(pq_path, "r", encoding="utf-8") as f:
+                    with open(pq_path, encoding="utf-8") as f:
                         existing = set(json.load(f).get("symbols", []))
                 new_symbols = set(result["list"]["symbol"].tolist())
                 merged = sorted(existing | new_symbols)

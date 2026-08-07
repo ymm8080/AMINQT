@@ -49,7 +49,9 @@ GW, PW = SHORTLIST_SCORE["gain_w"], SHORTLIST_SCORE["prob_w"]
 ALPHA, SMOOTH_K = 0.35, 12
 
 
-def ema_series(df: pd.DataFrame, col: str, alpha: float, k: int = SMOOTH_K) -> pd.Series:
+def ema_series(
+    df: pd.DataFrame, col: str, alpha: float, k: int = SMOOTH_K
+) -> pd.Series:
     """每股 forecast 列的 EMA 重放: 每个交易日的值 = [当日]+近 k-1 日 raw 的衰减加权均值."""
     w = np.array([alpha * (1 - alpha) ** j for j in range(k)])
     w /= w.sum()
@@ -76,8 +78,12 @@ def collect_shortlist_union() -> set[str]:
         "stocklist": Path("D:/AMINQT/DAILY OPERATION/STOCK LIST"),
         "lists": Path("D:/AMINQT/AMINQT CODES/data/lists"),
     }
-    pats = ["legacy_stocklist_2026080*.csv", "STOCK LIST 2026080*.xlsx",
-            "parallel_shortlist_2026080*.csv", "list_2026080*.parquet"]
+    pats = [
+        "legacy_stocklist_2026080*.csv",
+        "STOCK LIST 2026080*.xlsx",
+        "parallel_shortlist_2026080*.csv",
+        "list_2026080*.parquet",
+    ]
     for root in roots.values():
         for pat in pats:
             for fp in sorted(root.glob(pat)):
@@ -101,7 +107,11 @@ def realized_from_panel(panel: pd.DataFrame) -> pd.DataFrame:
     for h in HORIZONS:
         out[f"ret_{h}d"] = g.shift(-h) / out["close_hfq"] - 1
         out[f"up_{h}d"] = (out[f"ret_{h}d"] > CLS_THRESHOLD).astype(float)
-    return out[["symbol", "date"] + [f"ret_{h}d" for h in HORIZONS] + [f"up_{h}d" for h in HORIZONS]]
+    return out[
+        ["symbol", "date"]
+        + [f"ret_{h}d" for h in HORIZONS]
+        + [f"up_{h}d" for h in HORIZONS]
+    ]
 
 
 def daily_ic_mean(df: pd.DataFrame, pred: str, real: str, min_n: int = 5) -> float:
@@ -131,7 +141,8 @@ def score_w(df: pd.DataFrame) -> pd.DataFrame:
         out[gh] = ((g - glo) / (ghi - glo)).fillna(0.0) if ghi > glo else 0.0
         out[ph] = ((p - plo) / (phi - plo)).fillna(0.0) if phi > plo else 0.0
     out["score_w"] = sum(
-        HW[h] * (GW * out[f"norm_g_{h}"] + PW * out[f"norm_p_{h}"]) for h in ("2d", "3d", "5d")
+        HW[h] * (GW * out[f"norm_g_{h}"] + PW * out[f"norm_p_{h}"])
+        for h in ("2d", "3d", "5d")
     )
     return out
 
@@ -152,7 +163,10 @@ def main() -> None:
     all_dates = sorted(panel["date"].unique())
     cut = all_dates[-300]
     panel = panel[panel["date"] >= cut].reset_index(drop=True)
-    print(f"[panel] {len(panel):,}r  {cut.date()}..{all_dates[-1].date()} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[panel] {len(panel):,}r  {cut.date()}..{all_dates[-1].date()} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     cleaner = CleaningPipeline()
     main_df, dual_df, _valve = cleaner.run_inference(panel)
@@ -165,7 +179,10 @@ def main() -> None:
         feats[board] = FeatureEngineV35().build(
             df, None, inference_cols=cols, cross_sectional_rank=(board == "dual")
         )
-        print(f"[feat] {board}: {len(feats[board]):,}r ({time.time()-t0:.0f}s)", flush=True)
+        print(
+            f"[feat] {board}: {len(feats[board]):,}r ({time.time() - t0:.0f}s)",
+            flush=True,
+        )
 
     days = [d for d in all_dates if d >= all_dates[-WINDOW]]
     raw_frames = []
@@ -183,18 +200,28 @@ def main() -> None:
         day_raw["date"] = D
         raw_frames.append(day_raw)
     raw = pd.concat(raw_frames, ignore_index=True)
-    print(f"[raw] {len(raw):,} 预测行 ({len(raw['date'].unique())} 交易日) ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[raw] {len(raw):,} 预测行 ({len(raw['date'].unique())} 交易日) ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     # ── 平滑: 内嵌 EMA (与生产同公式) 逐 forecast 列重放 ──
     from app.pipeline1.model_meta import load_modules, module_id
 
     mod = module_id(load_modules())
-    forecast_cols = [c for c in raw.columns if c.startswith("pred_ret_")
-                     or c.startswith("prob_up") or c.startswith("pred_q50")]
+    forecast_cols = [
+        c
+        for c in raw.columns
+        if c.startswith("pred_ret_")
+        or c.startswith("prob_up")
+        or c.startswith("pred_q50")
+    ]
     smooth = raw.copy()
     for col in forecast_cols:
         smooth[col] = ema_series(raw, col, ALPHA, SMOOTH_K)
-    print(f"[smooth] 完成, {len(forecast_cols)} 列 ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[smooth] 完成, {len(forecast_cols)} 列 ({time.time() - t0:.0f}s)", flush=True
+    )
 
     # 落盘全表 (WORM)
     raw.to_parquet(out_dir / "raw.parquet")
@@ -204,19 +231,32 @@ def main() -> None:
     raw = raw.merge(realized, on=["symbol", "date"], how="left")
     smooth = smooth.merge(realized, on=["symbol", "date"], how="left")
 
-    summary: dict = {"ts": ts, "window_days": WINDOW, "module": mod,
-                     "n_days": len(days), "shortlist_union_n": len(shortlist_union)}
+    summary: dict = {
+        "ts": ts,
+        "window_days": WINDOW,
+        "module": mod,
+        "n_days": len(days),
+        "shortlist_union_n": len(shortlist_union),
+    }
 
     # ── 1. 逐日 shortlist 范围 3d IC (退化是否稳定) ──
     ic_rows = []
     for tag, df in (("raw", raw), ("smooth", smooth)):
-        sl = df[df["symbol"].isin(shortlist_union)].dropna(subset=["pred_ret_3d", "ret_3d"])
+        sl = df[df["symbol"].isin(shortlist_union)].dropna(
+            subset=["pred_ret_3d", "ret_3d"]
+        )
         for _d, g in sl.groupby("date"):
             if len(g) < 5 or g["ret_3d"].nunique() < 2:
                 continue
             r = spearmanr(g["pred_ret_3d"], g["ret_3d"])
-            ic_rows.append({"tag": tag, "date": _d, "n": len(g),
-                            "ic_3d": r.statistic if r.statistic == r.statistic else np.nan})
+            ic_rows.append(
+                {
+                    "tag": tag,
+                    "date": _d,
+                    "n": len(g),
+                    "ic_3d": r.statistic if r.statistic == r.statistic else np.nan,
+                }
+            )
     ic_df = pd.DataFrame(ic_rows)
     pivot = ic_df.pivot_table(index="date", columns="tag", values="ic_3d")
     pivot["delta"] = pivot.get("smooth", np.nan) - pivot.get("raw", np.nan)
@@ -237,9 +277,15 @@ def main() -> None:
                 if len(g) < max(N, 5):
                     continue
                 top = g.nlargest(N, "score_w")
-                vals.append({"date": _d, "top_n": N, "tag": tag,
-                             "ret3d_top": float(top["ret_3d"].mean()),
-                             "n": int(len(top))})
+                vals.append(
+                    {
+                        "date": _d,
+                        "top_n": N,
+                        "tag": tag,
+                        "ret3d_top": float(top["ret_3d"].mean()),
+                        "n": int(len(top)),
+                    }
+                )
             ddf = pd.DataFrame(vals)
             dec_rows.append(ddf)
     dec = pd.concat(dec_rows, ignore_index=True)
@@ -249,14 +295,18 @@ def main() -> None:
         sub = dec[dec["top_n"] == N]
         pivot2 = sub.pivot_table(index="date", columns="tag", values="ret3d_top")
         pivot2["delta"] = pivot2["smooth"] - pivot2["raw"]
-        print(f"TOP-{N}: raw_mean={pivot2['raw'].mean():+.4f} "
-              f"smooth_mean={pivot2['smooth'].mean():+.4f} "
-              f"delta={pivot2['delta'].mean():+.4f} "
-              f"(delta<0 天数 {int((pivot2['delta']<0).sum())}/{len(pivot2)})")
+        print(
+            f"TOP-{N}: raw_mean={pivot2['raw'].mean():+.4f} "
+            f"smooth_mean={pivot2['smooth'].mean():+.4f} "
+            f"delta={pivot2['delta'].mean():+.4f} "
+            f"(delta<0 天数 {int((pivot2['delta'] < 0).sum())}/{len(pivot2)})"
+        )
         summary[f"top{N}"] = {
-            "raw": float(pivot2["raw"].mean()), "smooth": float(pivot2["smooth"].mean()),
+            "raw": float(pivot2["raw"].mean()),
+            "smooth": float(pivot2["smooth"].mean()),
             "delta": float(pivot2["delta"].mean()),
-            "neg_days": int((pivot2["delta"] < 0).sum()), "n_days": int(len(pivot2)),
+            "neg_days": int((pivot2["delta"] < 0).sum()),
+            "n_days": int(len(pivot2)),
         }
 
     # ── 3. alpha 敏感性 (shortlist 3d IC) ──
@@ -277,7 +327,7 @@ def main() -> None:
     summary["out_dir"] = str(out_dir)
     with open(out_dir / "summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2, default=str)
-    print(f"\n[done] {time.time()-t0:.0f}s → {out_dir}")
+    print(f"\n[done] {time.time() - t0:.0f}s → {out_dir}")
 
 
 if __name__ == "__main__":

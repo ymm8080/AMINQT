@@ -1,7 +1,8 @@
 """检查缓存数据源的内容."""
 
-import pandas as pd
 import os
+
+import pandas as pd
 
 # Check enrich_parts
 parts_dir = "data/enrich_parts"
@@ -23,7 +24,7 @@ for f in sorted(os.listdir(parts_dir)):
 # Check supply_cache/alt_data
 print("\n=== supply_cache/alt_data 缓存 ===")
 alt_dir = "data/supply_cache/alt_data"
-for root, dirs, files in os.walk(alt_dir):
+for root, _dirs, files in os.walk(alt_dir):
     rel = os.path.relpath(root, alt_dir)
     parquet_files = [f for f in files if f.endswith(".parquet")]
     if parquet_files:

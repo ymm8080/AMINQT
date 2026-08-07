@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """一次性拉取 holdertrade 全字段 (含 change_ratio/holder_type) 用于 GLM vs Kimi 方案 IC 对比.
 
 不修改生产 fetch_holdertrade (其输出裁剪了 change_ratio/holder_type);
@@ -7,8 +6,8 @@
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 import time
 
 import numpy as np
@@ -102,8 +101,7 @@ def main() -> None:
     print("in_de dist:", out["in_de"].value_counts().to_dict())
     print("ratio missing: %.2f%%" % (out["change_ratio"].isna().mean() * 100))
     print(
-        "evt_start missing: %.2f%%, evt_end missing: %.2f%%"
-        % (
+        "evt_start missing: {:.2f}%, evt_end missing: {:.2f}%".format(
             out["evt_start_date"].isna().mean() * 100,
             out["evt_end_date"].isna().mean() * 100,
         )

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Legacy 候选诊断: 复现 daily_pipeline.run() 但逐候选拆解 E7 准入闸.
 
 背景 (2026-08-05): main_current/dual_current 已回滚为 8-03 干净模型,
@@ -21,11 +20,11 @@ import gc
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH, data_others_path
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.list_generator import ListGenerator
 from app.pipeline1.predictor import V35Predictor
+from config.settings import PANEL_V3_PATH, data_others_path
 
 BUNDLES = {
     "main": "models/pipeline1/main_current.pkl",

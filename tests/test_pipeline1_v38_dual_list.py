@@ -57,9 +57,8 @@ class TestLambdaRank:
         assert len(preds) == 8
 
     def test_predictor_outputs_rank_score(self, tmp_path):
-        from app.pipeline1.predictor import V35Predictor
-
         import app.pipeline1.dual_track_trainer as dtt
+        from app.pipeline1.predictor import V35Predictor
 
         dtt.LGB_PARAMS_REG["n_estimators"] = 5
         dtt.LGB_PARAMS_CLS["n_estimators"] = 5

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """prediction_db 多视界概率持久化 (v1.4: prob_up_2d/3d/5d)."""
 
 from __future__ import annotations

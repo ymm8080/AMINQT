@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """卖出信号评估器单元测试: 级别判定 + 优先级 + 价格硬止损 + 缺失列安全."""
 
 import pandas as pd
@@ -113,7 +112,7 @@ def test_multiple_symbols_vectorized():
         _row(symbol="600003"),
     ]
     out = evaluate_sell_signal(pd.DataFrame(rows))
-    got = dict(zip(out["symbol"], out["sell_signal"]))
+    got = dict(zip(out["symbol"], out["sell_signal"], strict=False))
     assert got == {
         "600000": "strong_sell",
         "600001": "sell",

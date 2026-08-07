@@ -19,8 +19,9 @@ import logging
 import os
 import sys
 import time
-import pandas as pd
+
 import baostock as bs
+import pandas as pd
 
 logging.basicConfig(
     level=logging.INFO,

@@ -31,7 +31,7 @@ class TestPersistence:
         assert rec["ticks"]["is_watchlist"] is True
 
     def test_file_is_valid_json(self, mgr, pool_file):
-        with open(pool_file, "r", encoding="utf-8") as f:
+        with open(pool_file, encoding="utf-8") as f:
             data = json.load(f)
         assert "pool" in data and "last_updated" in data
         assert len(data["pool"]) == 3

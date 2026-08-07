@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Fetch historical SW daily index data for L1/L2/L3 from Tushare.
 
 Reads sw_stock_classification.csv to get all unique SW index codes,
@@ -15,11 +14,12 @@ Usage:
   python scripts/fetch_sw_daily_history.py --incremental      # Append new dates only
 """
 
+import argparse
+import logging
 import os
 import sys
 import time
-import logging
-import argparse
+
 import pandas as pd
 import tushare as ts
 from dotenv import load_dotenv

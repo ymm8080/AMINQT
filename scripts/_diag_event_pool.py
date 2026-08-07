@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_event_pool.py — 通用事件池时间对齐研究 (BT 大宗 / HOLDER 增减持).
 
 方法论 (用户 2026-08-04, MEMORIZE IT): EVENT 是事件性的 — 把同类事件聚合,

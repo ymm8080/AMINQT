@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 D-16: 全文档硬阈值审计 (IMPLEMENTATION_PLAN_v3.2 P26)
 ======================================================
@@ -45,7 +44,7 @@ def scan_file(filepath: str) -> list[dict]:
     """扫描单个文件中的硬编码数字赋值."""
     findings = []
     try:
-        with open(filepath, "r", encoding="utf-8") as fh:
+        with open(filepath, encoding="utf-8") as fh:
             source = fh.read()
     except Exception:
         return findings
@@ -81,7 +80,7 @@ def _classify(name: str, value: float, filepath: str) -> str:
     # JUSTIFIED: 经济学/法规依据
     lower = name.lower()
     text = f"{name}={value}"
-    for jname, pattern in JUSTIFIED_PATTERNS.items():
+    for _jname, pattern in JUSTIFIED_PATTERNS.items():
         if re.search(pattern, text):
             return "JUSTIFIED_HARD"
 

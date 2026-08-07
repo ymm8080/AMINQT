@@ -6,8 +6,9 @@ Values <= 1 are already correct (either baostock 0-1 or rare Tushare <1%).
 Safe write: temp + atomic rename.
 """
 
-import os
 import logging
+import os
+
 import pandas as pd
 
 logging.basicConfig(

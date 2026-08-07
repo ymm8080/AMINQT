@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Reconcile sw_stock_classification.csv at the DATA_OTHERS mapped path.
 
 fetch_sw_classification.py --incremental wrote only the 9 new rows to the

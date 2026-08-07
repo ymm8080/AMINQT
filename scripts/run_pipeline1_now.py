@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 实盘前 Pipeline1 预测 (收盘前跑)
 =================================
@@ -157,10 +156,10 @@ def run_pipeline(panel: pd.DataFrame, trade_date: str) -> dict:
     from app.pipeline1.cleaning_pipeline import CleaningPipeline
     from app.pipeline1.feature_engine_v35 import FeatureEngineV35
     from app.pipeline1.list_generator import ListGenerator, MarketEnv
-    from app.pipeline1.predictor import V35Predictor
 
     # 1. 定位最新模型包
     from app.pipeline1.predict_runner import find_bundles
+    from app.pipeline1.predictor import V35Predictor
 
     bundles = find_bundles(model_dir=MODEL_DIR)
     if "main" not in bundles:
@@ -256,7 +255,7 @@ def _sync_priority(list_df: pd.DataFrame) -> None:
     pq_path = os.path.join("data", "priority.json")
     existing = set()
     if os.path.exists(pq_path):
-        with open(pq_path, "r", encoding="utf-8") as f:
+        with open(pq_path, encoding="utf-8") as f:
             existing = set(json.load(f).get("symbols", []))
     new_syms = set(list_df["symbol"].tolist())
     merged = sorted(existing | new_syms)

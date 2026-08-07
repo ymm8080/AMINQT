@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_sniper_acceptance.py — 狙击系统特征验收 (2026-08-04).
 
 并行系统架构第 1 轨: 狙击系统 每日输出 3-5 只, T+1 买.
@@ -23,13 +22,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 import pandas as pd
 
+from scripts._classify_freq_analog import family_of
 from scripts._reclassify_all_features import (
-    MAIN_CHECKPOINT,
     DUAL_CHECKPOINT,
+    MAIN_CHECKPOINT,
     _finalize_slice,
     feature_cols,
 )
-from scripts._classify_freq_analog import family_of
 
 # 狙击口径 (2026-08-04 用户: 每日 3-5 只, T+1买; 持有 T+2/T+3/T+5 任一视界
 # 累计涨幅高+确定性高即保留; 双头 幅度>0 且 胜率>=55%)

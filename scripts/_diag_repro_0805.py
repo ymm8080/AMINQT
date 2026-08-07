@@ -66,10 +66,23 @@ def main() -> None:
         res2 = S.add_score(res)
         res2["regime_active"] = True
         m = S.build_merged(res2)
-        print(m[m["symbol"] == WATCH][
-            ["rank", "board", "systems", "co_occur", "score", "score_w", "regime_active",
-             "pred_mag_2d", "pred_prob_2d", "pred_mag_3d", "pred_prob_3d"]
-        ].to_string(index=False))
+        print(
+            m[m["symbol"] == WATCH][
+                [
+                    "rank",
+                    "board",
+                    "systems",
+                    "co_occur",
+                    "score",
+                    "score_w",
+                    "regime_active",
+                    "pred_mag_2d",
+                    "pred_prob_2d",
+                    "pred_mag_3d",
+                    "pred_prob_3d",
+                ]
+            ].to_string(index=False)
+        )
     else:
         print("  -> 被 select_confident 剔除 (pred_mag_3d <= 0 或 prob <= 0)")
 
@@ -78,10 +91,21 @@ def main() -> None:
     res2["regime_active"] = True
     m = S.build_merged(res2)
     md = m[m["board"] == "dual"]
-    print(md[
-        ["rank", "symbol", "systems", "co_occur", "score", "score_w", "regime_active",
-         "pred_mag_2d", "pred_mag_3d"]
-    ].to_string(index=False))
+    print(
+        md[
+            [
+                "rank",
+                "symbol",
+                "systems",
+                "co_occur",
+                "score",
+                "score_w",
+                "regime_active",
+                "pred_mag_2d",
+                "pred_mag_3d",
+            ]
+        ].to_string(index=False)
+    )
 
 
 if __name__ == "__main__":

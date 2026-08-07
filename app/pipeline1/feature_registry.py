@@ -243,7 +243,7 @@ class FeatureRegistry:
     def get_active_dim_groups(self) -> set[str]:
         """返回至少有一个 active 特征的 dim_group."""
         active_groups: set[str] = set()
-        for name, meta in self._data["features"].items():
+        for _name, meta in self._data["features"].items():
             if meta.get("active", True):
                 active_groups.add(meta.get("dim_group", "unknown"))
         return active_groups
@@ -443,7 +443,7 @@ class FeatureRegistry:
         Returns: 停用数量.
         """
         count = 0
-        for name, meta in self._data["features"].items():
+        for _name, meta in self._data["features"].items():
             if meta.get("grade") == "dead" and meta.get("active", True):
                 meta["active"] = False
                 count += 1

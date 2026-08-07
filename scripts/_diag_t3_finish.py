@@ -24,8 +24,10 @@ from scipy.stats import spearmanr
 
 from config.settings import BACKTEST_RESULT_DIR, PANEL_V3_PATH, SHORTLIST_SCORE
 
-OUT_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else (
-    BACKTEST_RESULT_DIR / "t3_decision_20260807_002008"
+OUT_DIR = (
+    Path(sys.argv[1])
+    if len(sys.argv) > 1
+    else (BACKTEST_RESULT_DIR / "t3_decision_20260807_002008")
 )
 CLS_THRESHOLD = 0.005
 HORIZONS = (1, 2, 3, 5)
@@ -34,7 +36,9 @@ GW, PW = SHORTLIST_SCORE["gain_w"], SHORTLIST_SCORE["prob_w"]
 ALPHA, SMOOTH_K = 0.35, 12
 
 
-def ema_series(df: pd.DataFrame, col: str, alpha: float, k: int = SMOOTH_K) -> pd.Series:
+def ema_series(
+    df: pd.DataFrame, col: str, alpha: float, k: int = SMOOTH_K
+) -> pd.Series:
     """每股 forecast 列的 EMA 重放: 每个交易日的值 = [当日]+近 k-1 日 raw 的衰减加权均值."""
     w = np.array([alpha * (1 - alpha) ** j for j in range(k)])
     w /= w.sum()
@@ -61,8 +65,12 @@ def collect_shortlist_union() -> set[str]:
         "stocklist": Path("D:/AMINQT/DAILY OPERATION/STOCK LIST"),
         "lists": Path("D:/AMINQT/AMINQT CODES/data/lists"),
     }
-    pats = ["legacy_stocklist_2026080*.csv", "STOCK LIST 2026080*.xlsx",
-            "parallel_shortlist_2026080*.csv", "list_2026080*.parquet"]
+    pats = [
+        "legacy_stocklist_2026080*.csv",
+        "STOCK LIST 2026080*.xlsx",
+        "parallel_shortlist_2026080*.csv",
+        "list_2026080*.parquet",
+    ]
     for root in roots.values():
         for pat in pats:
             for fp in sorted(root.glob(pat)):
@@ -86,7 +94,11 @@ def realized_from_panel(panel: pd.DataFrame) -> pd.DataFrame:
     for h in HORIZONS:
         out[f"ret_{h}d"] = g.shift(-h) / out["close_hfq"] - 1
         out[f"up_{h}d"] = (out[f"ret_{h}d"] > CLS_THRESHOLD).astype(float)
-    return out[["symbol", "date"] + [f"ret_{h}d" for h in HORIZONS] + [f"up_{h}d" for h in HORIZONS]]
+    return out[
+        ["symbol", "date"]
+        + [f"ret_{h}d" for h in HORIZONS]
+        + [f"up_{h}d" for h in HORIZONS]
+    ]
 
 
 def score_w(df: pd.DataFrame) -> pd.DataFrame:
@@ -100,7 +112,8 @@ def score_w(df: pd.DataFrame) -> pd.DataFrame:
         out[gh] = ((g - glo) / (ghi - glo)).fillna(0.0) if ghi > glo else 0.0
         out[ph] = ((p - plo) / (phi - plo)).fillna(0.0) if phi > plo else 0.0
     out["score_w"] = sum(
-        HW[h] * (GW * out[f"norm_g_{h}"] + PW * out[f"norm_p_{h}"]) for h in ("2d", "3d", "5d")
+        HW[h] * (GW * out[f"norm_g_{h}"] + PW * out[f"norm_p_{h}"])
+        for h in ("2d", "3d", "5d")
     )
     return out
 
@@ -142,9 +155,11 @@ def main() -> None:
         "raw_mean": float(ic["raw"].mean()),
         "smooth_mean": float(ic["smooth"].mean()),
     }
-    print(f"[IC] shortlist 3d IC: raw_mean={ic['raw'].mean():+.4f} "
-          f"smooth_mean={ic['smooth'].mean():+.4f} delta_mean={ic['delta'].mean():+.4f} "
-          f"neg {n_neg}/{n_tot}")
+    print(
+        f"[IC] shortlist 3d IC: raw_mean={ic['raw'].mean():+.4f} "
+        f"smooth_mean={ic['smooth'].mean():+.4f} delta_mean={ic['delta'].mean():+.4f} "
+        f"neg {n_neg}/{n_tot}"
+    )
 
     # ── 2. 全池 top-N 决策对比 (生产 score_w, 按已实现 3d) ──
     dec_rows = []
@@ -156,8 +171,15 @@ def main() -> None:
                 if len(g) < max(N, 5):
                     continue
                 top = g.nlargest(N, "score_w")
-                vals.append({"date": _d, "top_n": N, "tag": tag,
-                             "ret3d_top": float(top["ret_3d"].mean()), "n": int(len(top))})
+                vals.append(
+                    {
+                        "date": _d,
+                        "top_n": N,
+                        "tag": tag,
+                        "ret3d_top": float(top["ret_3d"].mean()),
+                        "n": int(len(top)),
+                    }
+                )
             dec_rows.append(pd.DataFrame(vals))
     dec = pd.concat(dec_rows, ignore_index=True)
     dec.to_csv(OUT_DIR / "decision_topn_ret3d.csv", index=False)
@@ -166,14 +188,18 @@ def main() -> None:
         sub = dec[dec["top_n"] == N]
         pivot2 = sub.pivot_table(index="date", columns="tag", values="ret3d_top")
         pivot2["delta"] = pivot2["smooth"] - pivot2["raw"]
-        print(f"TOP-{N}: raw_mean={pivot2['raw'].mean():+.4f} "
-              f"smooth_mean={pivot2['smooth'].mean():+.4f} "
-              f"delta={pivot2['delta'].mean():+.4f} "
-              f"(delta<0 天数 {int((pivot2['delta'] < 0).sum())}/{len(pivot2)})")
+        print(
+            f"TOP-{N}: raw_mean={pivot2['raw'].mean():+.4f} "
+            f"smooth_mean={pivot2['smooth'].mean():+.4f} "
+            f"delta={pivot2['delta'].mean():+.4f} "
+            f"(delta<0 天数 {int((pivot2['delta'] < 0).sum())}/{len(pivot2)})"
+        )
         summary[f"top{N}"] = {
-            "raw": float(pivot2["raw"].mean()), "smooth": float(pivot2["smooth"].mean()),
+            "raw": float(pivot2["raw"].mean()),
+            "smooth": float(pivot2["smooth"].mean()),
             "delta": float(pivot2["delta"].mean()),
-            "neg_days": int((pivot2["delta"] < 0).sum()), "n_days": int(len(pivot2)),
+            "neg_days": int((pivot2["delta"] < 0).sum()),
+            "n_days": int(len(pivot2)),
         }
 
     # ── 3. alpha 敏感性 (shortlist 3d IC) ──

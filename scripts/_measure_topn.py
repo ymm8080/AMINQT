@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_measure_topn.py — 用户裁决口径: TOP-N 绝对上涨幅度 + 上涨概率 (2026-08-04).
 
 rank IC 是相对排序, 会把"跌得少"当正信号 → 误导 (LHB 教训). 用户明确:
@@ -108,9 +107,7 @@ def measure_topn(
         "per": per,
         "best_horizon": best_h,
         "passed_horizons": passed,
-        "notes": "胜率>={winrate:.0%} 且 平均净收益>0".format(
-            winrate=winrate_threshold
-        ),
+        "notes": f"胜率>={winrate_threshold:.0%} 且 平均净收益>0",
     }
     return res
 

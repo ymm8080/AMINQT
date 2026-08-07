@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """P19.0 阶段一点火验收脚本 e2e 测试 (合成面板 + small 模式 + 伪特征 stub)."""
 
 from __future__ import annotations

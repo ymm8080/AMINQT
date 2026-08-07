@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Assemble final enriched panel from per-source partials.
 
 Reads panel_full_enriched_v3.parquet as base, left-joins each

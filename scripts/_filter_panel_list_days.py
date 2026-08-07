@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Remove V3 panel rows whose TRUE trading-days-since-IPO < 150.
 
 Semantics (chosen over the codebase sentinel for a retroactive backfill):

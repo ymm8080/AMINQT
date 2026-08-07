@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛 regime 条件退出验证 (2026-08-06).
 
 stability 证明 trail8 是趋势跟随放大器: 上升段 (h4/h5) +2~4pp, 下行段 (h1/h3)
@@ -81,7 +80,7 @@ def exit_rets(picks: pd.DataFrame, mode: str, A: dict) -> list[float]:
     dates_dt, close, low, ma20 = A["dates"], A["close"], A["low"], A["ma20"]
     any_sell, cost_arr = A["any_sell"], A["cost"]
     rets, holds = [], []
-    for sym, T in zip(picks["symbol"], picks["date"]):
+    for sym, T in zip(picks["symbol"], picks["date"], strict=False):
         c = sym_code[str(sym)]
         lo, hi = starts[c], ends[c]
         base = lo + int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))
@@ -224,7 +223,7 @@ def main() -> int:
                     "def": rdef,
                     "rows": [
                         {"window": w, "n": n, "cond_avg": c, "cur_avg": cu}
-                        for (w, n, c), (_, _, cu) in zip(cond_rows, cur_rows)
+                        for (w, n, c), (_, _, cu) in zip(cond_rows, cur_rows, strict=False)
                     ],
                 }
             )

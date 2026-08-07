@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_classify_freq_analog.py — FAMILY_ANALOG 类比列 6格实测 (替换同族猜测, 2026-08-04).
 
 对 feature_selector.FAMILY_ANALOG 的全部类比列 (84) 跑真实 6格判定:
@@ -26,12 +25,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.feature_selector import FAMILY_ANALOG
 from app.pipeline1.train_runner import prepare_board_frame
-from scripts._diag_column_feed import LABELS
+from config.settings import PANEL_V3_PATH
 from scripts._classify_freq_full import (
     MIN_CROSS,
     MIN_OBS,
@@ -39,6 +37,7 @@ from scripts._classify_freq_full import (
     _wtsic,
     group_spearman,
 )
+from scripts._diag_column_feed import LABELS
 
 logging.disable(logging.CRITICAL)
 np.seterr(all="ignore")

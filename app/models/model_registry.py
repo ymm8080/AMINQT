@@ -44,7 +44,7 @@ class ModelRegistry:
         if not os.path.exists(self.registry_path):
             return {"models": {}}
         try:
-            with open(self.registry_path, "r", encoding="utf-8") as f:
+            with open(self.registry_path, encoding="utf-8") as f:
                 data = json.load(f)
             if "models" not in data:
                 raise ValueError("missing 'models' key")

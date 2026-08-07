@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """一次性拉取 holdertrade 尾部缺口 (20260801~20260803) 追加进 data/_holder_cmp_raw.parquet.
 
 保持与 _holder_cmp_fetch.py 完全相同的 schema 与字段语义:

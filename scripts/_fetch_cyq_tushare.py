@@ -3,16 +3,17 @@
 优化: 短超时(15s) + 单次重试 + 跳过失败 + 断点续传.
 """
 
-import sys
 import os
+import sys
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import pandas as pd  # noqa: E402
 import logging  # noqa: E402
+
+import pandas as pd  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()

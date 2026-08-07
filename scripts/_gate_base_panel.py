@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """一次性: V3 基座面板入库门 (ST + 上市 <150 交易日) + 物理删除 is_st/list_days 两列.
 
 在 ingest gate 上线前, 基座面板仍含历史 ST/次新行 (旧 cleaning 阶段才剔).
@@ -28,8 +27,8 @@ import tushare as ts
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config.settings import INGEST_MIN_LIST_DAYS  # noqa: E402
 from app.core.universe_manager import name_is_st  # noqa: E402
+from config.settings import INGEST_MIN_LIST_DAYS  # noqa: E402
 
 load_dotenv()
 

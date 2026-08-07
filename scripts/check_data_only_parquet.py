@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Enforce that AMINQT CODES/DATA contains only parquet datasets.
 
 Allowed entries under DATA/:

@@ -127,7 +127,7 @@ class TestRollback:
     def test_rollback_persisted(self, engine, paths):
         engine.compute_selection_mix({"selection_ic_gap": 1.0})
         engine.rollback()
-        with open(paths[1], "r", encoding="utf-8") as f:
+        with open(paths[1], encoding="utf-8") as f:
             state = json.load(f)
         assert state["current"]["scoring_mix"]["model_weight"] == pytest.approx(0.6)
         assert state["history"] == []

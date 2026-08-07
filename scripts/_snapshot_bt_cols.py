@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Snapshot the 4 V3 panel block-trade upstream columns to a standalone WORM parquet.
 
 Purpose: dim33_block_trade's 4 EWMA features (bt_act/disc/inst_abs/mv_ratio_ewma)

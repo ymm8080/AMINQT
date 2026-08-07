@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """bt_ rolling snapshot (dim33 upstream 4 columns) refresh tests.
 
 The rolling snapshot is the restore source for the 4 V3 panel block-trade

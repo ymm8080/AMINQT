@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛 开仓选择性 (预期收益门) 诊断 (2026-08-05).
 
 用户原则: 预期收益不够高就不开仓. 前四条诊断证明退出/买入规则改动救不回
@@ -135,7 +134,7 @@ def main() -> int:
     def sim_exit(picks: pd.DataFrame, mode: str) -> dict:
         """mode=cur 现行 | ht 持有到底(锁盈棘轮+硬止损, max_hold=40)."""
         rets, holds = [], []
-        for sym, T in zip(picks["symbol"], picks["date"]):
+        for sym, T in zip(picks["symbol"], picks["date"], strict=False):
             c = sym_code[str(sym)]
             lo, hi = starts[c], ends[c]
             base = lo + int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))

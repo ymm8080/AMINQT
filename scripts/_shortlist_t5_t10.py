@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_shortlist_t5_t10.py — 今日最终短名单 (狙击 TOP-5 ∪ 融合 TOP-10) 前瞻预测输出.
 
 数据源 = 最后一次 FULL RUN 回测产物 (用户 2026-08-05: "已有 full run 基于昨日数据
@@ -49,14 +48,14 @@ import pandas as pd
 import pyarrow.parquet as pq
 from sklearn.linear_model import LogisticRegression
 
-from config.settings import (
-    STOCK_LIST_DIR,
-    DATA_OTHERS_DIR,
-    DATA_DIR,
-    SHORTLIST_SCORE,
-    REGIME_GATE,
-)
 from app.pipeline_parallel.config import HORIZONS
+from config.settings import (
+    DATA_DIR,
+    DATA_OTHERS_DIR,
+    REGIME_GATE,
+    SHORTLIST_SCORE,
+    STOCK_LIST_DIR,
+)
 
 try:
     from docx import Document

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """预测准确度 (WMAPE/bias) 测试."""
 
 from __future__ import annotations

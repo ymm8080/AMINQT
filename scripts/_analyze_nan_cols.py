@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Analyze the 31 NaN columns in v3 panel."""
 
 import pyarrow.parquet as pq

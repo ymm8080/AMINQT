@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Fetch fina_indicator for 2022 Q3 + 2022 annual reports (announced Oct 2022 ~ Apr 2023).
 
 These announcements are needed to forward-fill H1 2023 (Jan-Mar) trading days
@@ -11,10 +10,10 @@ Save to all_20220101_20230701.parquet (WORM: no overwrite of old file).
 
 import os
 import sys
-import time
 import threading
-from pathlib import Path
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 _project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_project_root))

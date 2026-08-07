@@ -1,18 +1,19 @@
-# -*- coding: utf-8 -*-
 """Quick IC eval for new bias/derived features — works directly on panel data."""
 
-import sys
-import os
 import json
+import os
+import sys
 
 sys.path.insert(0, ".")
 
-import pandas as pd
 from datetime import datetime
+
+import pandas as pd
+
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
-from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from app.utils.daily_rank_ic import mean_rank_ic, daily_rank_ic_series
+from app.pipeline1.label_engine import LabelEngine
+from app.utils.daily_rank_ic import daily_rank_ic_series, mean_rank_ic
 
 tag = datetime.now().strftime("%Y%m%d_%H%M%S")
 NEW_FEATURES = [
@@ -66,7 +67,7 @@ for board, board_df in [("main", main_df), ("dual", dual_df)]:
         nan_rate = df[col].isna().mean()
 
         ic_vals = {}
-        for k, lbl_sfx in [(1, "1d"), (3, "3d"), (5, "5d")]:
+        for _k, lbl_sfx in [(1, "1d"), (3, "3d"), (5, "5d")]:
             lbl = (
                 f"label_{lbl_sfx}_net"
                 if f"label_{lbl_sfx}_net" in df.columns
@@ -107,7 +108,7 @@ for board, board_df in [("main", main_df), ("dual", dual_df)]:
     out = {
         "window_id": f"new_features_{board}_{tag}",
         "factors": [c for c in NEW_FEATURES if c in df.columns],
-        "detail": dict(zip([c for c in NEW_FEATURES if c in df.columns], results)),
+        "detail": dict(zip([c for c in NEW_FEATURES if c in df.columns], results, strict=False)),
     }
     os.makedirs("data/factor_registry", exist_ok=True)
     path = f"data/factor_registry/factors_new_{board}_{tag}.json"

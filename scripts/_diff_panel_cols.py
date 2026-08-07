@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Diff V3 panel column sets across WORM snapshots to explain column growth."""
 
 import os
 import sys
+
 import pyarrow.parquet as pq
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

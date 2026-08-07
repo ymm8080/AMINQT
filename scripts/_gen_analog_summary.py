@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_gen_analog_summary.py — 类比列 6格分类实测总结 Word 文档 (WORM 日期后缀).
 
 素材: scripts/_classify_freq_analog.py 实测结果 (2026-08-04):

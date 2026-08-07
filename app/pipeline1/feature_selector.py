@@ -6,17 +6,16 @@ Layer2: DedupL2 (MAIN), GateD (DUAL), versioning, save/load
 """
 
 import json
+import logging
 import os
 import re
 import time
-import logging
 from datetime import datetime
 
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
-
-import lightgbm as lgb
 
 from config.settings import data_others_path
 

@@ -1,11 +1,12 @@
 """Fix calibrator and re-predict with 1d_cls probability."""
 
-import pickle
-import pandas as pd
-import numpy as np
-import pyarrow.parquet as pq
 import os
+import pickle
 import sys
+
+import numpy as np
+import pandas as pd
+import pyarrow.parquet as pq
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sklearn.linear_model import LogisticRegression

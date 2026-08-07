@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Sampled feature evaluation for main + dual boards (2024-now data).
 
 Avoids OOM by sampling stocks per board and handling inf replacement column-wise.

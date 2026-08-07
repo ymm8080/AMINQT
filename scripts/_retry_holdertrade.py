@@ -1,9 +1,10 @@
 """Retry stk_holdertrade fetch + merge into V4 panel."""
 
+import logging
 import os
 import sys
 import time
-import logging
+
 import pandas as pd
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,6 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger("holdertrade")
 
 import tushare as ts
+
 from config import settings
 
 pro = ts.pro_api(settings.TUSHARE_TOKEN)

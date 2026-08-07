@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_analog_pipeline.py — 定位类比列跑的价格判定污染源 (2026-08-04).
 
 现象: 面板直读口径 (LabelEngine) 下 close = TS·周 负 -0.042; 类比列跑 (run_train +
@@ -16,10 +15,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.label_engine import LabelEngine
-from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS
+from config.settings import PANEL_V3_PATH
 from scripts._classify_freq_full import (
     MIN_CROSS,
     MIN_OBS,
@@ -28,6 +26,7 @@ from scripts._classify_freq_full import (
     _wtsic,
     group_spearman,
 )
+from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS
 
 
 def classify(work, col):

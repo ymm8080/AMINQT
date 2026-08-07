@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 替代数据源独立训练IC评估 (自包含)
 ===============================
@@ -359,7 +358,7 @@ def fetch_and_merge_alt_data(
                 df = supply.fetch_sector_index(start_date=start, end_date=end)
                 if len(df) and "industry" in panel.columns:
                     # 行业映射
-                    sw_names = dict(zip(df["index_name"], df["index_code"]))
+                    sw_names = dict(zip(df["index_name"], df["index_code"], strict=False))
                     ind_map = {}
                     for ind in panel["industry"].dropna().unique():
                         for sw in sw_names:
@@ -418,7 +417,7 @@ def evaluate_and_report(panel: pd.DataFrame, output_dir: str = "data/factor_regi
         from app.pipeline1.cleaning_pipeline import get_limit_pct
 
         panel["limit_pct"] = [
-            get_limit_pct(b, d) for b, d in zip(panel["board"], panel["date"])
+            get_limit_pct(b, d) for b, d in zip(panel["board"], panel["date"], strict=False)
         ]
 
     fe = FeatureEngineV35()

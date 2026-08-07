@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """模块5: BacktestEngine — 日频多周期盘中触发回测引擎 (v4.0 + V5.2日内规则融合).
 
 核心特性:
@@ -24,7 +23,6 @@
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -118,7 +116,7 @@ class BacktestEngine:
         config: BacktestConfig,
         pred_df: pd.DataFrame,
         price_df: pd.DataFrame,
-        trade_dates: List[pd.Timestamp],
+        trade_dates: list[pd.Timestamp],
         data_version_hash: str,
         market_df: pd.DataFrame | None = None,
     ):
@@ -147,7 +145,7 @@ class BacktestEngine:
             PositionMode.SNIPER_MAX: 1.00,
         }[self.position_mode]
 
-        self._price_index: Dict[Tuple, pd.Series] = {}
+        self._price_index: dict[tuple, pd.Series] = {}
         for _, row in self.price_df.iterrows():
             self._price_index[(row["date"], row["stock"])] = row
 
@@ -157,10 +155,10 @@ class BacktestEngine:
         """重置回测状态."""
         self.available_cash_fen: int = self._price_to_fen(self.config.initial_capital)
         self.frozen_cash_fen: int = 0
-        self.holdings: List[Holding] = []
-        self.trades: List[Trade] = []
-        self.daily_records: List[dict] = []
-        self.holdings_history: List[dict] = []
+        self.holdings: list[Holding] = []
+        self.trades: list[Trade] = []
+        self.daily_records: list[dict] = []
+        self.holdings_history: list[dict] = []
         self.consecutive_loss_days: int = 0
         self.cooldown_days: int = 0
         self.stop_new_positions: bool = False
@@ -169,10 +167,10 @@ class BacktestEngine:
         self._daily_total: int = 0
         self._daily_loss_days: int = 0
         # V5.2 新增
-        self._atr_cache: Dict[str, float] = {}  # {stock: atr_pct}
-        self._median_2d_cache: Dict[str, float] = {}  # {stock: median_2d_return}
+        self._atr_cache: dict[str, float] = {}  # {stock: atr_pct}
+        self._median_2d_cache: dict[str, float] = {}  # {stock: median_2d_return}
         self._peak_nav_fen: int = self._price_to_fen(self.config.initial_capital)
-        self._daily_pnl_history: List[float] = []  # 用于2σ计算
+        self._daily_pnl_history: list[float] = []  # 用于2σ计算
         self._system_halted: bool = False
 
     # ── 价格工具 (fen 精度) ─────────────────────────────────
@@ -400,7 +398,7 @@ class BacktestEngine:
 
     def _check_buy_eligible(
         self, date: pd.Timestamp, stock: str, row: pd.Series
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """检查买入资格 (除价格触发外).
 
         Returns:
@@ -442,7 +440,7 @@ class BacktestEngine:
 
     def _check_sell_eligible(
         self, date: pd.Timestamp, stock: str, row: pd.Series, holding: Holding
-    ) -> Tuple[bool, int, str]:
+    ) -> tuple[bool, int, str]:
         """检查是否可卖出.
 
         Returns:
@@ -466,10 +464,10 @@ class BacktestEngine:
 
     def _resolve_position_conflict(
         self,
-        candidates: List[dict],
-        holdings: List[Holding],
-        price_row_map: Dict[str, pd.Series],
-    ) -> Tuple[List[dict], List[Tuple[str, str]]]:
+        candidates: list[dict],
+        holdings: list[Holding],
+        price_row_map: dict[str, pd.Series],
+    ) -> tuple[list[dict], list[tuple[str, str]]]:
         """持仓冲突处理: 比较收益/风险后决定保留或替换.
 
         策略:
@@ -487,8 +485,8 @@ class BacktestEngine:
             (更新后的候选列表, 需卖出的持仓 [(stock, reason), ...]).
         """
         held_stocks = {h.stock: h for h in holdings}
-        sells_to_execute: List[Tuple[str, str]] = []
-        filtered_candidates: List[dict] = []
+        sells_to_execute: list[tuple[str, str]] = []
+        filtered_candidates: list[dict] = []
 
         for cand in candidates:
             stock = cand["stock"]
@@ -537,9 +535,9 @@ class BacktestEngine:
 
     def _allocate_capital(
         self,
-        candidates: List[Tuple[str, float, float, float]],
+        candidates: list[tuple[str, float, float, float]],
         available_cash_fen: int,
-    ) -> List[Tuple[str, int, int]]:
+    ) -> list[tuple[str, int, int]]:
         """资金分配: Softmax 加权 + 单只上限 + 一次截断重分配.
 
         Args:
@@ -611,7 +609,7 @@ class BacktestEngine:
         board: str = "main",
         stop_price_fen: int = 0,
         median_2d_return: float = 0.0,
-    ) -> Tuple[bool, dict]:
+    ) -> tuple[bool, dict]:
         """执行买入.
 
         Args:
@@ -751,9 +749,9 @@ class BacktestEngine:
     def _check_risk(
         self,
         date: pd.Timestamp,
-        holdings: List[Holding],
-        price_row_map: Dict[str, pd.Series],
-    ) -> List[Tuple[str, str, int]]:
+        holdings: list[Holding],
+        price_row_map: dict[str, pd.Series],
+    ) -> list[tuple[str, str, int]]:
         """V5.2 开盘前风控检查 (基于前一日收盘价).
 
         卖出优先级:
@@ -813,7 +811,7 @@ class BacktestEngine:
         return sells
 
     def _update_holdings(
-        self, date: pd.Timestamp, price_row_map: Dict[str, pd.Series]
+        self, date: pd.Timestamp, price_row_map: dict[str, pd.Series]
     ) -> None:
         """更新持仓: days_held +1, max_close_fen 更新 (用收盘价)."""
         for h in self.holdings:
@@ -827,7 +825,7 @@ class BacktestEngine:
 
     # ── 对账与检查点 ────────────────────────────────────────
 
-    def _calc_market_value(self, price_row_map: Dict[str, pd.Series]) -> int:
+    def _calc_market_value(self, price_row_map: dict[str, pd.Series]) -> int:
         """计算持仓市值 (分)."""
         mv = 0
         for h in self.holdings:
@@ -838,7 +836,7 @@ class BacktestEngine:
         return mv
 
     def _reconcile(
-        self, date: pd.Timestamp, price_row_map: Dict[str, pd.Series]
+        self, date: pd.Timestamp, price_row_map: dict[str, pd.Series]
     ) -> bool:
         """每日对账: assert 总资产 = 现金 + 市值, 偏差 < 1分."""
         mv = self._calc_market_value(price_row_map)
@@ -882,7 +880,7 @@ class BacktestEngine:
         """
         self._reset_state()
 
-        pred_by_date: Dict[pd.Timestamp, list] = {}
+        pred_by_date: dict[pd.Timestamp, list] = {}
         for _, row in self.pred_df.iterrows():
             d = row["date"]
             pred_by_date.setdefault(d, []).append(row)
@@ -910,7 +908,7 @@ class BacktestEngine:
             stocks_to_remove: set[str] = set()
 
             # ── 1. 开盘前: 风控检查 (基于昨日收盘) ──
-            pending_sells: List[Tuple[str, str, int]] = []
+            pending_sells: list[tuple[str, str, int]] = []
             if self.holdings:
                 pending_sells = self._check_risk(
                     today, self.holdings, yesterday_price_map
@@ -958,7 +956,7 @@ class BacktestEngine:
                     if r.get(prob_col, 0) >= self.config.prob_threshold
                 ]
 
-                candidates: List[dict] = []
+                candidates: list[dict] = []
                 for r in signal_filtered:
                     stock = r["stock"]
                     row = price_row_map.get(stock)
@@ -1114,7 +1112,7 @@ class BacktestEngine:
                 ]
 
             # ── 5. 收盘: 到期卖出 ──
-            maturity_sells: List[Holding] = []
+            maturity_sells: list[Holding] = []
             effective_period = (
                 self.config.holding_period
                 if self.config.holding_period > 0
@@ -1298,7 +1296,7 @@ class BacktestEngine:
             return pd.DataFrame()
         return pd.DataFrame(self.holdings_history)
 
-    def get_metrics(self) -> Dict:
+    def get_metrics(self) -> dict:
         """计算绩效指标.
 
         Returns:
@@ -1389,7 +1387,7 @@ class BacktestEngine:
         }
 
     @staticmethod
-    def _empty_metrics() -> Dict:
+    def _empty_metrics() -> dict:
         """空绩效指标."""
         return {
             "total_return": 0.0,

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_verify_combined_factors.py — 用户方法论全量实测 (per-stock TSIC).
 
 用户 2026-08-04 方法论 (全部实验验证):
@@ -31,10 +30,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.label_engine import LabelEngine
-from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS, weighted_ic
+from config.settings import PANEL_V3_PATH
 from scripts._diag_chip_weekly import _apply, per_stock_ts_ic
+from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS, weighted_ic
 from scripts._verify_chip_tsic import _residualize
 
 logging.disable(logging.CRITICAL)

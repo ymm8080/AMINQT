@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """模块1: ConfigManager — 配置管理.
 
 所有参数从 config.yaml 读取, 禁止魔法数字.

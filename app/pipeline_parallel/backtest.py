@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """PIPELINE 并行多系统 回测/验收 (2026-08-04).
 
 目标口径 = MFE (持有期内最大涨幅, 2026-08-04 用户需求), 非目标日收盘.
@@ -224,7 +223,7 @@ def run_system(
     gc.collect()
 
     per = {}
-    for h, lab in zip(spec.horizons, spec.labels):
+    for h, lab in zip(spec.horizons, spec.labels, strict=False):
         if lab not in sub.columns:
             per[h] = {"mag": float("nan"), "winrate": float("nan"), "n": 0, "ok": False}
             continue
@@ -255,7 +254,7 @@ def _dual_per_horizon(
     """对选中切片 sel (含 symbol/date) 逐视界量双头, 基准取 sub 窗口."""
     min_wr, min_mag = crit if crit is not None else (MIN_WINRATE, MIN_MAG)
     per = {}
-    for h, lab in zip(spec.horizons, spec.labels):
+    for h, lab in zip(spec.horizons, spec.labels, strict=False):
         if lab not in sub.columns:
             per[h] = {"mag": float("nan"), "winrate": float("nan"), "n": 0, "ok": False}
             continue
@@ -367,7 +366,7 @@ def _slowbull_exit_rets(
     hard = float(SLOW_BULL_REGIME["hard_stop"])
     rets = np.full(len(picks), np.nan)
     holds = np.full(len(picks), np.nan)
-    for i, (sym, T) in enumerate(zip(picks["symbol"], picks["date"])):
+    for i, (sym, T) in enumerate(zip(picks["symbol"], picks["date"], strict=False)):
         c = sym_code[str(sym)]
         lo, hi = starts[c], ends[c]
         base = lo + int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))
@@ -858,7 +857,7 @@ def last_days_report(work: pd.DataFrame, n_days: int = 15) -> dict:
             top["rk"] = top["score"].rank(ascending=False, method="first").astype(int)
             top = top.sort_values("rk")
             figure = {}
-            for h, lab in zip(horizons, lab_cols):
+            for h, lab in zip(horizons, lab_cols, strict=False):
                 v = work.loc[top.index, lab].dropna()
                 figure[f"{h}d"] = {
                     "mag": round(float(v.mean()), 6) if len(v) else None,
@@ -872,7 +871,7 @@ def last_days_report(work: pd.DataFrame, n_days: int = 15) -> dict:
                     "rk": int(row["rk"]),
                     "score": round(float(row["score"]), 4),
                 }
-                for h, lab in zip(horizons, lab_cols):
+                for h, lab in zip(horizons, lab_cols, strict=False):
                     val = work.loc[row_name, lab]
                     pick[f"mfe_{h}d"] = None if pd.isna(val) else round(float(val), 4)
                 picks.append(pick)
@@ -884,7 +883,7 @@ def last_days_report(work: pd.DataFrame, n_days: int = 15) -> dict:
     # 长视界需更远未来价 → 可测末日期更早, 可测天数更少, 但测试日(选股日)同一.
     win = set(last)
     last_testable = {}
-    for h, lab in zip(horizons, lab_cols):
+    for h, lab in zip(horizons, lab_cols, strict=False):
         v = work.loc[(work["date"].isin(win)) & work[lab].notna(), "date"]
         last_testable[f"{h}d"] = {
             "last_date": (str(pd.Timestamp(v.max()).date()) if len(v) else None),
@@ -1053,12 +1052,12 @@ def build_conclusion(out: dict) -> dict:
                 .get("per_horizon", {})
             )
             kept = bool(
-                (
+
                     merged.get(cut, {})
                     .get("oos", {})
                     .get(oos_label, {})
                     .get("kept", False)
-                )
+
             )
             best_h, best = _best_horizon(ph)
             if best is None:

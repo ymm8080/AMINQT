@@ -465,6 +465,7 @@ class ZooModel:
             self.estimator.eval()
         else:
             from app.utils.safe_load import safe_pickle_load
+
             payload = safe_pickle_load(path)
             if isinstance(payload, dict) and payload.get("format") == "zoo_model":
                 self.name = payload["name"]
@@ -494,6 +495,7 @@ def load_model(path: str) -> ZooModel:
         )
         return ZooModel(name).load(path)
     from app.utils.safe_load import safe_pickle_load
+
     payload = safe_pickle_load(path)
     if isinstance(payload, dict) and payload.get("format") == "zoo_model":
         model = ZooModel(

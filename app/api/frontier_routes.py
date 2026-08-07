@@ -117,8 +117,9 @@ def get_signals(symbol: str) -> dict:
             stop_price = last_bar["close"] * (1 + max(-0.04, -1.5 * atr_pct))
 
             # Pipeline2 买入信号
-            from app.intraday.v51.buy_engine import BuyContext, trigger as buy_trigger
             from app.intraday.v51.buy_engine import Bar as BuyBar
+            from app.intraday.v51.buy_engine import BuyContext
+            from app.intraday.v51.buy_engine import trigger as buy_trigger
 
             ctx = BuyContext(
                 symbol=symbol,
@@ -178,11 +179,13 @@ def get_signals(symbol: str) -> dict:
 
         # 3. Pipeline2 V5.1 卖出信号
         try:
+            from app.intraday.v51.position import Position
             from app.intraday.v51.sell_engine import (
                 SellContext,
+            )
+            from app.intraday.v51.sell_engine import (
                 trigger as sell_trigger,
             )
-            from app.intraday.v51.position import Position
 
             intraday = ds.fetch_real_intraday(symbol)
             if intraday is None:
@@ -518,7 +521,7 @@ def get_forecast_quality() -> dict:
             reverse=True,
         )
         if files:
-            with open(os.path.join(acc_dir, files[0]), "r", encoding="utf-8") as fh:
+            with open(os.path.join(acc_dir, files[0]), encoding="utf-8") as fh:
                 report = json.load(fh)
             latest_1d = report.get("horizons", {}).get("1", {})
             return {
@@ -601,6 +604,7 @@ MODEL_DIR = "models/pipeline1"
 # the frontend polls /pipeline/status (panel_mtime) to detect changes.
 import subprocess as _subprocess  # noqa: E402
 import threading as _threading  # noqa: E402
+
 from config.settings import PROJECT_ROOT as _PROJECT_ROOT  # noqa: E402
 
 _PIPELINE_SCRIPTS = {

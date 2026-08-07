@@ -15,7 +15,8 @@ from app.intraday.v51.buy_engine import (
 from app.intraday.v51.cost_model import round_trip_cost, slippage_tier
 from app.intraday.v51.fund_manager import FundManager
 from app.intraday.v51.position import Position
-from app.intraday.v51.sell_engine import SellContext, trigger as sell_trigger
+from app.intraday.v51.sell_engine import SellContext
+from app.intraday.v51.sell_engine import trigger as sell_trigger
 from app.intraday.v51.sessions import buy_window_open, sell_window_open
 from app.intraday.v51.state_machine import ParamStateMachine, shadow_gate
 from app.intraday.v51.traffic_light import IntradayTrafficLight, plateau_drift

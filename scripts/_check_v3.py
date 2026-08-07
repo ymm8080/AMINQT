@@ -1,7 +1,8 @@
 """快速检查 v3 面板状态."""
 
-import pandas as pd
 import os
+
+import pandas as pd
 
 f = "data/panel_full_enriched_v3.parquet"
 print(f"Exists: {os.path.exists(f)}")

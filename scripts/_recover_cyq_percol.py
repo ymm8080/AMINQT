@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """恢复被 render 崩溃中断的 per-column 输出.
 
 主脚本 _verify_cyq_drop.py 在 extract_importances 处崩溃 (feature_name→feature_name_),
@@ -16,9 +15,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pandas as pd
-
 import _verify_cyq_drop as V  # noqa: E402  (导入即应用其 monkeypatch, 无害)
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("recover_cyq_percol")

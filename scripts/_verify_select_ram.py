@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """验证: legacy 周频 select (train_runner.select_features, MAIN) 的峰值内存.
 
 用法:
@@ -21,16 +20,15 @@ import psutil
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s - %(message)s")
 
-from config.settings import PANEL_V3_PATH, data_others_path
-
-from app.pipeline1.feature_selector import FeatureSelector
-from app.pipeline1.feature_registry import FeatureRegistry
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+from app.pipeline1.feature_registry import FeatureRegistry
+from app.pipeline1.feature_selector import FeatureSelector
 from app.pipeline1.train_runner import (
     CleaningPipeline,
     prepare_board_frame,
     select_features,
 )
+from config.settings import PANEL_V3_PATH, data_others_path
 
 
 def _fmt(gb):
