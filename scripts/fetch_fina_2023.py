@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Fetch fina_indicator for 2023 Q1-Q3 (early announcements) + retry missing stocks.
 
 Two gaps to fill:
@@ -11,10 +10,10 @@ Save to new cache file all_20230101_20260728.parquet (WORM: no overwrite of old 
 
 import os
 import sys
-import time
 import threading
-from pathlib import Path
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 _project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_project_root))

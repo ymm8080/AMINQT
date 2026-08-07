@@ -2,8 +2,8 @@
 """Verify that pct_70_low == cost_15pct etc. in the baostock panel
 (which has all CYQ columns from the local calculator)."""
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 df = pd.read_parquet("data/panel_full.parquet")
 df = df.dropna(

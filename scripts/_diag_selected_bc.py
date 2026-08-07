@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_selected_bc.py — 统计当前选中特征里, 有多少(哪些)从 B/C 原始列衍生 (只读).
 
 "衍生" = brute 变体 (base_brute_*) 或该 B/C 列本身的 level.
@@ -20,14 +19,14 @@ sys.path.insert(
 )  # import _diag_column_feed
 
 import pandas as pd
-
-from config.settings import PANEL_V3_PATH
 from _diag_column_feed import (
     B_EVENT_PREFIX,
     B_EXTRA,
     temporal_variation,
     tier_of,
 )
+
+from config.settings import PANEL_V3_PATH
 
 B_EVENT_OR_EXTRA = {c for c in B_EXTRA} | set(B_EVENT_PREFIX)
 

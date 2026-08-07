@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Final comprehensive patch for _daily_fetch.py."""
 
 import pathlib

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Aggregate all per-dimension IC evaluations into a unified decision report.
 Reads existing ic_dim_main_g*.json files and produces:
 1. Consolidated ranking (top 100 by |IC_5d|)
@@ -6,8 +5,8 @@ Reads existing ic_dim_main_g*.json files and produces:
 3. Decision table: which dimensions should be INCLUDE vs SKIP vs DELETE
 """
 
-import json
 import glob
+import json
 import os
 from collections import defaultdict
 from datetime import datetime

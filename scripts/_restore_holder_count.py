@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Restore holder_count column from backup into the 98-col panel."""
 
-import os
 import gc
+import os
+
 import pyarrow as pa
 import pyarrow.parquet as pq
 

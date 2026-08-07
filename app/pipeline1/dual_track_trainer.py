@@ -205,6 +205,7 @@ class DualTrackTrainer:
         self, kind: str, segs: dict[str, pd.DataFrame], feature_cols: list[str]
     ):
         import gc
+
         import lightgbm as lgb
 
         label = {
@@ -680,8 +681,9 @@ class DualTrackTrainer:
 
     @staticmethod
     def load(path: str) -> dict:
-        with open(path, "rb") as fh:
-            return pickle.load(fh)
+        from app.utils.safe_load import safe_pickle_load
+
+        return safe_pickle_load(path)
 
     # ---------------- 特征相似度回退 ----------------
     @staticmethod

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Fix winner_ratio = winner_rate / 100 (restore [0,1] range)."""
 
 import pathlib

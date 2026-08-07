@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """V3 面板逐列覆盖率 + 数据质量审计 (2023-01-01 ~ 今日).
 
 对 panel_full_enriched_v3.parquet (data/ 下的已恢复版本) 每个列:

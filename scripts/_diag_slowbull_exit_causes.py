@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛 离场触发归因 (2026-08-05).
 
 route A 回测发现: 卖出规则在 ~3 日接近保本离场, 捕获不到 MFE。
@@ -77,7 +76,7 @@ def main() -> int:
         causes["trail_stop"] = {"n": 0, "ret": []}
         causes["cap"] = {"n": 0, "ret": []}
         stop_only, sig_only = [], []
-        for sym, T in zip(picks["symbol"], picks["date"]):
+        for sym, T in zip(picks["symbol"], picks["date"], strict=False):
             c = sym_code[str(sym)]
             lo, hi = starts[c], ends[c]
             base = lo + int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))

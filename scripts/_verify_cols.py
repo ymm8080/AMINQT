@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Analyze chip_concentration, profit_ratio, free_float_turnover_rate vs their potential duplicates."""
 
 import pyarrow.parquet as pq

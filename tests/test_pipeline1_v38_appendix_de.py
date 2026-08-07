@@ -196,5 +196,5 @@ class TestDynamicEngine:
         assert not r["high_vol_ok"] and r["action"] == "dampen"
 
     def test_knobs_frozen(self):
-        with pytest.raises(Exception):
+        with pytest.raises((AttributeError, TypeError)):
             DynamicKnobs().min_win_prob = 0.7  # frozen: 旋钮只能季度窗口改

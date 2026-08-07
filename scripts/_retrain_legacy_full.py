@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """全量周频重训 (V3 面板直读, 含当日) — 2026-08-05 用户确认跑全量.
 
 与 run_weekly_retrain.py 的区别: 训练面板直接读 PANEL_V3_PATH (已含当日, 免 akshare
@@ -20,8 +19,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.train_runner import run_training
+from config.settings import PANEL_V3_PATH
 
 MODEL_DIR = "models/pipeline1"
 

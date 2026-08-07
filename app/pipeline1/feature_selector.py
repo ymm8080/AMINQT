@@ -6,17 +6,16 @@ Layer2: DedupL2 (MAIN), GateD (DUAL), versioning, save/load
 """
 
 import json
+import logging
 import os
 import re
 import time
-import logging
 from datetime import datetime
 
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
-
-import lightgbm as lgb
 
 from config.settings import data_others_path
 
@@ -321,7 +320,7 @@ def dedup_l2(feats, df, threshold=0.7):
         groups.setdefault(base, []).append(c)
 
     kept = []
-    for base, cols in groups.items():
+    for _base, cols in groups.items():
         if len(cols) <= 1:
             kept.extend(cols)
             continue
@@ -942,12 +941,12 @@ class FeatureSelector:
         "fallback": {"pipeline": "ic_screener"},
     }
 
-    def __init__(
-        self, config=None, registry_dir=str(data_others_path("data/factor_registry"))
-    ):
+    def __init__(self, config=None, registry_dir=None):
         self.config = config or self.DEFAULT_CONFIG
-        self.registry_dir = registry_dir
-        os.makedirs(registry_dir, exist_ok=True)
+        self.registry_dir = registry_dir or str(
+            data_others_path("data/factor_registry")
+        )
+        os.makedirs(self.registry_dir, exist_ok=True)
 
     # ── Selection ──
 

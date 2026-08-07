@@ -175,7 +175,7 @@ class CleaningPipeline:
             return df, "full"
         out = df.copy()
         out["limit_pct"] = [
-            get_limit_pct(b, d) for b, d in zip(out["board"], out["date"])
+            get_limit_pct(b, d) for b, d in zip(out["board"], out["date"], strict=False)
         ]
         out["limit_up_price"] = (out["pre_close"] * (1 + out["limit_pct"])).round(2)
         tol = np.maximum(0.01, out["limit_up_price"] * 0.001)  # B5: 相对容差

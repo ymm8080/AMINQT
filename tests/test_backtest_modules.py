@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Backtest module coverage tests: SignalEvaluator, DataValidator,
 ComparativeAnalyzer, DataLoader."""
 
@@ -6,7 +5,6 @@ import pandas as pd
 import pytest
 
 from app.backtest.config_manager import BacktestConfig
-
 
 # ── Shared fixtures ──
 

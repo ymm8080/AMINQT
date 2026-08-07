@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """模块8: BacktestPipeline — 回测全流程编排.
 
 编排顺序:
@@ -15,7 +14,7 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -36,16 +35,16 @@ class PipelineResult:
 
     success: bool
     config: BacktestConfig
-    squad_metrics: Dict[str, Any] = field(default_factory=dict)
-    sniper_metrics: Dict[str, Any] = field(default_factory=dict)
-    squad_result_df: Optional[pd.DataFrame] = None
-    sniper_result_df: Optional[pd.DataFrame] = None
-    squad_trades_df: Optional[pd.DataFrame] = None
-    sniper_trades_df: Optional[pd.DataFrame] = None
-    signal_report: Optional[Dict[str, Any]] = None
-    comparison: Optional[Dict[str, Any]] = None
-    report_paths: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    squad_metrics: dict[str, Any] = field(default_factory=dict)
+    sniper_metrics: dict[str, Any] = field(default_factory=dict)
+    squad_result_df: pd.DataFrame | None = None
+    sniper_result_df: pd.DataFrame | None = None
+    squad_trades_df: pd.DataFrame | None = None
+    sniper_trades_df: pd.DataFrame | None = None
+    signal_report: dict[str, Any] | None = None
+    comparison: dict[str, Any] | None = None
+    report_paths: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
 
 class BacktestPipeline:
@@ -59,10 +58,10 @@ class BacktestPipeline:
         config_path: str = "config.yaml",
         pred_path: str = "",
         price_path: str = "",
-        benchmark_path: Optional[str] = None,
-        market_path: Optional[str] = None,
+        benchmark_path: str | None = None,
+        market_path: str | None = None,
         output_dir: str = "reports",
-        modes: Optional[List[str]] = None,
+        modes: list[str] | None = None,
         horizon: int = 2,
     ):
         """初始化回测管线.
@@ -86,13 +85,13 @@ class BacktestPipeline:
         self.modes = modes or ["squad", "sniper"]
         self.horizon = horizon
 
-        self.config: Optional[BacktestConfig] = None
-        self.loader: Optional[DataLoader] = None
-        self.pred_df: Optional[pd.DataFrame] = None
-        self.price_df: Optional[pd.DataFrame] = None
-        self.benchmark_df: Optional[pd.DataFrame] = None
-        self.market_df: Optional[pd.DataFrame] = None
-        self.trade_dates: List[pd.Timestamp] = []
+        self.config: BacktestConfig | None = None
+        self.loader: DataLoader | None = None
+        self.pred_df: pd.DataFrame | None = None
+        self.price_df: pd.DataFrame | None = None
+        self.benchmark_df: pd.DataFrame | None = None
+        self.market_df: pd.DataFrame | None = None
+        self.trade_dates: list[pd.Timestamp] = []
         self.data_version_hash: str = ""
 
         logger.info(
@@ -107,7 +106,7 @@ class BacktestPipeline:
         Returns:
             PipelineResult: 包含所有模式结果、信号报告、对比分析、报告路径.
         """
-        errors: List[str] = []
+        errors: list[str] = []
 
         # ── Step 1: 加载配置 ──
         try:
@@ -168,7 +167,7 @@ class BacktestPipeline:
             errors.append(msg)
 
         # ── Step 4: 信号评估 ──
-        signal_report: Optional[Dict[str, Any]] = None
+        signal_report: dict[str, Any] | None = None
         try:
             evaluator = SignalEvaluator(
                 pred_df=self.pred_df,
@@ -184,7 +183,7 @@ class BacktestPipeline:
             errors.append(msg)
 
         # ── Step 5: 运行回测 (多模式) ──
-        mode_results: Dict[str, Tuple[pd.DataFrame, pd.DataFrame, Dict]] = {}
+        mode_results: dict[str, tuple[pd.DataFrame, pd.DataFrame, dict]] = {}
         for mode in self.modes:
             try:
                 result_df, trades_df, metrics = self._run_single_mode(mode)
@@ -209,7 +208,7 @@ class BacktestPipeline:
             )
 
         # ── Step 6: 对比分析 (如果有两个以上模式) ──
-        comparison: Optional[Dict[str, Any]] = None
+        comparison: dict[str, Any] | None = None
         if (
             len(mode_results) >= 2
             and "squad" in mode_results
@@ -235,7 +234,7 @@ class BacktestPipeline:
                 errors.append(msg)
 
         # ── Step 7: 生成报告 ──
-        report_paths: List[str] = []
+        report_paths: list[str] = []
         try:
             reporter = ReportGenerator(
                 config=self.config,
@@ -278,7 +277,7 @@ class BacktestPipeline:
 
     def _run_single_mode(
         self, mode: str
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, Any]]:
+    ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
         """运行单个模式的回测.
 
         Args:

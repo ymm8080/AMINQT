@@ -58,7 +58,7 @@ class StockPoolManager:
         """从磁盘加载股票池."""
         if os.path.exists(self.pool_path):
             try:
-                with open(self.pool_path, "r", encoding="utf-8") as f:
+                with open(self.pool_path, encoding="utf-8") as f:
                     data = json.load(f)
                 data.setdefault("pool", [])
                 return data

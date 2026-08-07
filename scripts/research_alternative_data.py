@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 替代数据源调研与可行性评估 (2026-07-27)
 ==========================================
@@ -41,7 +40,6 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
 from config import settings  # noqa: E402
-
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 A股量化交易系统 — Streamlit 看板 (P10)
 =====================================================
@@ -19,6 +18,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 import os  # noqa: E402
+
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 

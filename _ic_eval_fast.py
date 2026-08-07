@@ -19,7 +19,7 @@ def ic(df,col,label):
         try:
             v=spearmanr(g[col],g[label]).statistic
             if not np.isnan(v): ics.append(v)
-        except: pass
+        except Exception: pass
     if len(ics)<10: return None
     a=np.array(ics)
     return {'mean_abs':float(abs(a).mean()),'mean':float(a.mean()),'n':len(a),'std':float(a.std())}

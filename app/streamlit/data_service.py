@@ -11,11 +11,12 @@ import glob
 import json
 import logging
 import os
+import re
 
 import numpy as np
 import pandas as pd
 
-from config.settings import data_others_path
+from config.settings import STOCK_LIST_DIR, data_others_path
 
 LIST_DIR = "data/lists"
 TUNING_REPORT = str(data_others_path("data/tuning_report.json"))
@@ -243,6 +244,229 @@ def demo_list(seed: int = 42) -> pd.DataFrame:
 
 
 # ============================================================
+# 个股预测查询 (模块标签在文件名, 2026-08-06)
+# STOCK_LIST_DIR 预测文件族 → 统一列, 供档案页·个股预测查询.
+# ============================================================
+_PRED_FAMILY_PREFIXES = (
+    ("legacy_stocklist", "legacy"),
+    ("legacy_preds_raw", "legacy_raw"),
+    ("parallel_shortlist", "parallel"),
+    ("parallel_preds_raw", "parallel_raw"),
+    ("slowbull_pool", "slow_bull"),
+)
+_PRED_FNAME_RE = re.compile(r"^(?P<prefix>[\w]+)_(?P<date>\d{8})(?P<mod>__.+)?\.csv$")
+_PRED_HORIZONS = ("2d", "3d", "5d", "10d")
+# *_raw (平滑前底稿) 归并入其交付族; 同 date+module 优先交付族, 少重复行.
+_FAMILY_GROUP = {
+    "legacy": "legacy",
+    "legacy_raw": "legacy",
+    "parallel": "parallel",
+    "parallel_raw": "parallel",
+    "slow_bull": "slow_bull",
+}
+_FAMILY_PRIORITY = {
+    "legacy": 0,
+    "parallel": 0,
+    "slow_bull": 0,
+    "legacy_raw": 1,
+    "parallel_raw": 1,
+}
+_UNIFIED_COLS = [
+    "symbol",
+    "date",
+    "module",
+    "family",
+    "board",
+    "system",
+    "score",
+    "rk",
+    "gain_2d",
+    "gain_3d",
+    "gain_5d",
+    "gain_10d",
+    "prob_2d",
+    "prob_3d",
+    "prob_5d",
+    "prob_10d",
+]
+
+
+def list_prediction_files(list_dir: str = STOCK_LIST_DIR) -> list[dict]:
+    """扫描目录下预测 CSV, 逐文件解析 {family, date, module, path}.
+
+    文件名 `{prefix}_{YYYYMMDD}{__module}.csv` (module=na 时无 __ 后缀).
+    无法识别为预测文件的直接跳过 (不抛异常).
+    """
+    out: list[dict] = []
+    if not os.path.isdir(list_dir):
+        return out
+    for fname in os.listdir(list_dir):
+        if not fname.endswith(".csv"):
+            continue
+        m = _PRED_FNAME_RE.match(fname)
+        if not m:
+            continue
+        prefix = m.group("prefix")
+        family = next(
+            (f for p, f in _PRED_FAMILY_PREFIXES if prefix.startswith(p)), None
+        )
+        if family is None:
+            continue
+        mod = m.group("mod")
+        out.append(
+            {
+                "family": family,
+                "date": m.group("date"),
+                "module": (mod[2:] if mod else "na"),
+                "path": os.path.join(list_dir, fname),
+            }
+        )
+    return out
+
+
+def _normalize_pred_rows(
+    family: str, date_compact: str, module: str, df: pd.DataFrame
+) -> pd.DataFrame:
+    """单文件族预测行 → 统一列 (date 输出 YYYY-MM-DD).
+
+    legacy/legacy_raw: gain=pred_ret_{h}, prob=prob_up_{h} (h=2/3/5), system=V35
+    parallel/parallel_raw: gain=pred_mag_{h}, prob=pred_prob_{h} (h=2/3/5/10), system=systems 列
+    slow_bull: 无涨幅/概率, system=slow_bull
+    """
+    date_iso = f"{date_compact[:4]}-{date_compact[4:6]}-{date_compact[6:]}"
+    out = pd.DataFrame(index=df.index, columns=_UNIFIED_COLS, dtype=object)
+    out["symbol"] = df["symbol"]
+    out["date"] = date_iso
+    out["module"] = module
+    out["family"] = family
+    out["board"] = df["board"] if "board" in df.columns else "na"
+
+    if family in ("legacy", "legacy_raw"):
+        gain_src = {f"gain_{h}": f"pred_ret_{h}" for h in ("2d", "3d", "5d")}
+        prob_src = {f"prob_{h}": f"prob_up_{h}" for h in ("2d", "3d", "5d")}
+        fixed_system = "V35"
+    elif family in ("parallel", "parallel_raw"):
+        gain_src = {f"gain_{h}": f"pred_mag_{h}" for h in _PRED_HORIZONS}
+        prob_src = {f"prob_{h}": f"pred_prob_{h}" for h in _PRED_HORIZONS}
+        fixed_system = ""  # 正常必有 systems 列
+    else:  # slow_bull
+        gain_src, prob_src = {}, {}
+        fixed_system = "slow_bull"
+
+    out["system"] = df["systems"] if "systems" in df.columns else fixed_system
+    out["score"] = df["score"] if "score" in df.columns else pd.NA
+    out["rk"] = df["rk"] if "rk" in df.columns else pd.NA
+    for col in _UNIFIED_COLS:
+        if col in gain_src and gain_src[col] in df.columns:
+            out[col] = df[gain_src[col]]
+        if col in prob_src and prob_src[col] in df.columns:
+            out[col] = df[prob_src[col]]
+    # 统一数值列为 float (全 NA 列也是 float64), 避免 concat all-NA FutureWarning
+    numeric_cols = (
+        ("score", "rk")
+        + tuple(f"gain_{h}" for h in _PRED_HORIZONS)
+        + tuple(f"prob_{h}" for h in _PRED_HORIZONS)
+    )
+    for col in numeric_cols:
+        out[col] = pd.to_numeric(out[col], errors="coerce")
+    return out[_UNIFIED_COLS].copy()
+
+
+def load_stock_prediction_history(
+    symbol: str, list_dir: str = STOCK_LIST_DIR, max_dates: int = 5
+) -> pd.DataFrame:
+    """查询某股最近 max_dates 个交易日的预测历史 (跨模块, 模块标签保留).
+
+    遍历 STOCK_LIST_DIR 预测文件 → 按 symbol 过滤 → 规范化拼接 →
+    取最近 max_dates 个不同日期 (同日多模块行都保留). 无匹配 → 空 DataFrame.
+    """
+    symbol = str(symbol).strip()
+    frames = []
+    for info in list_prediction_files(list_dir):
+        try:
+            df = pd.read_csv(info["path"], dtype={"symbol": str})
+        except Exception:
+            _data_logger.warning(
+                "预测文件读取失败 (跳过): %s", info["path"], exc_info=True
+            )
+            continue
+        if df is None or df.empty or "symbol" not in df.columns:
+            continue
+        sub = df[df["symbol"].astype(str).str.strip() == symbol]
+        if sub.empty:
+            continue
+        norm = _normalize_pred_rows(info["family"], info["date"], info["module"], sub)
+        if norm.empty:
+            continue
+        frames.append(norm)
+    if not frames:
+        return pd.DataFrame(columns=_UNIFIED_COLS)
+    hist = pd.concat(frames, ignore_index=True)
+    hist["_grp"] = hist["family"].map(_FAMILY_GROUP)
+    hist["_prio"] = hist["family"].map(_FAMILY_PRIORITY)
+    # 同 date+module+族: 保留一条 (交付族优先, 其次 rk 最小), 去 cut/raw 重复.
+    hist = hist.sort_values(
+        ["date", "_prio", "rk"], ascending=[False, True, True], na_position="last"
+    )
+    hist = hist.drop_duplicates(subset=["date", "module", "_grp"], keep="first")
+    hist = hist.drop(columns=["_grp", "_prio"])
+    keep = set(hist["date"].drop_duplicates().head(max_dates))
+    return (
+        hist[hist["date"].isin(keep)]
+        .sort_values("date", ascending=False)
+        .reset_index(drop=True)
+    )
+
+
+def list_prediction_dates(list_dir: str = STOCK_LIST_DIR) -> list[str]:
+    """所有出现预测文件的日期, 降序 (YYYYMMDD)."""
+    dates = {f["date"] for f in list_prediction_files(list_dir)}
+    return sorted(dates, reverse=True)
+
+
+def load_stock_list_on_date(
+    date_compact: str, list_dir: str = STOCK_LIST_DIR
+) -> pd.DataFrame:
+    """某日交付股票清单预测明细 (跨模块, 模块标签保留, 含 symbol).
+
+    只列交付列表 (legacy/parallel/slow_bull), 不含 *_raw 全市场底稿.
+    同 symbol+module+族: 保留一条 (交付族优先, 其次 rk 最小), 去 cut 重复.
+    无该日文件 → 空 DataFrame.
+    """
+    date_compact = str(date_compact).strip()
+    frames = []
+    for info in list_prediction_files(list_dir):
+        if info["date"] != date_compact:
+            continue
+        if info["family"].endswith("_raw"):
+            continue  # 日期清单只列交付列表, 不含 *_raw 全市场底稿
+        try:
+            df = pd.read_csv(info["path"], dtype={"symbol": str})
+        except Exception:
+            _data_logger.warning(
+                "预测文件读取失败 (跳过): %s", info["path"], exc_info=True
+            )
+            continue
+        if df is None or df.empty or "symbol" not in df.columns:
+            continue
+        norm = _normalize_pred_rows(info["family"], info["date"], info["module"], df)
+        if norm.empty:
+            continue
+        frames.append(norm)
+    if not frames:
+        return pd.DataFrame(columns=_UNIFIED_COLS)
+    rows = pd.concat(frames, ignore_index=True)
+    rows["_grp"] = rows["family"].map(_FAMILY_GROUP)
+    rows["_prio"] = rows["family"].map(_FAMILY_PRIORITY)
+    rows = rows.sort_values(["_prio", "rk"], ascending=[True, True], na_position="last")
+    rows = rows.drop_duplicates(subset=["symbol", "module", "_grp"], keep="first")
+    rows = rows.drop(columns=["_grp", "_prio"])
+    return rows.sort_values(["family", "module", "rk"], na_position="last").reset_index(
+        drop=True
+    )
+
+
+# ============================================================
 # 行情面板 (K线用)
 # ============================================================
 def demo_ohlc(symbol: str, days: int = 120, seed: int | None = None) -> pd.DataFrame:
@@ -297,7 +521,8 @@ def demo_sector_changes(seed: int = 11) -> pd.DataFrame:
         "有色": 1.3,
     }
     pct = np.array(
-        [p * multipliers.get(s, 1.0) for s, p in zip(sectors, pct)], dtype=float
+        [p * multipliers.get(s, 1.0) for s, p in zip(sectors, pct, strict=False)],
+        dtype=float,
     )
     df = pd.DataFrame(
         {
@@ -905,3 +1130,183 @@ def append_audit_log(entry: dict) -> None:
             json.dump(log, fh, ensure_ascii=False, indent=1)
     except Exception as exc:
         _data_logger.error("写入审计日志失败: %s", exc)
+
+
+# ============================================================
+# 预测文件 (STOCK_LIST_DIR) — 各模块按 日期__模块 落盘的交付清单
+# ============================================================
+# 文件名模式: {prefix}_{YYYYMMDD}[__{module}].csv
+#   legacy_stocklist_ → legacy (交付)      legacy_preds_raw_ → legacy_raw (底稿)
+#   parallel_shortlist_ → parallel (交付)   parallel_preds_raw_ → parallel_raw (底稿)
+#   slowbull_pool_{board}_ → slow_bull
+_PRED_FILE_RE = re.compile(r"^(?P<prefix>[\w]+)_(?P<date>\d{8})(?P<mod>__.+)?\.csv$")
+_PRED_FAMILY = {
+    "legacy_stocklist": "legacy",
+    "legacy_preds_raw": "legacy_raw",
+    "parallel_shortlist": "parallel",
+    "parallel_preds_raw": "parallel_raw",
+    "slowbull_pool": "slow_bull",
+}
+_FAMILY_GROUP = {
+    "legacy": "legacy",
+    "legacy_raw": "legacy",
+    "parallel": "parallel",
+    "parallel_raw": "parallel",
+    "slow_bull": "slow_bull",
+}
+# 同 symbol+module+族 去重时: 交付族优先 (0), 底稿次之 (1)
+_FAMILY_PRIORITY = {
+    "legacy": 0,
+    "parallel": 0,
+    "slow_bull": 0,
+    "legacy_raw": 1,
+    "parallel_raw": 1,
+}
+_UNIFIED_COLS = [
+    "symbol",
+    "date",
+    "module",
+    "family",
+    "board",
+    "system",
+    "score",
+    "rk",
+    "gain_2d",
+    "gain_3d",
+    "gain_5d",
+    "gain_10d",
+    "prob_2d",
+    "prob_3d",
+    "prob_5d",
+    "prob_10d",
+]
+
+
+def list_prediction_files(list_dir: str = STOCK_LIST_DIR) -> list[dict]:  # noqa: F811
+    """扫描 STOCK_LIST_DIR 预测 CSV, 解析出 {family, date, module, path}.
+
+    解析失败 / 非预测文件跳过 (不抛异常). module 缺省为 "na".
+    """
+    if not os.path.isdir(list_dir):
+        return []
+    out: list[dict] = []
+    for fname in os.listdir(list_dir):
+        m = _PRED_FILE_RE.match(fname)
+        if not m:
+            continue
+        prefix = m.group("prefix")
+        family = None
+        for key, fam in _PRED_FAMILY.items():
+            if prefix.startswith(key):
+                family = fam
+                break
+        if family is None:
+            continue
+        mod = m.group("mod")
+        out.append(
+            {
+                "family": family,
+                "date": m.group("date"),
+                "module": mod[2:] if mod else "na",
+                "path": os.path.join(list_dir, fname),
+            }
+        )
+    return out
+
+
+def _normalize_pred_rows(
+    family: str, date: str, module: str, df: pd.DataFrame
+) -> pd.DataFrame:
+    """把各文件族列名映射到统一列 (date/module/family/board/system/score/rk/gain_*/prob_*).
+
+    gain_h = 预期涨幅 (legacy pred_ret_, parallel pred_mag_);
+    prob_h = 概率 (legacy prob_up_, parallel pred_prob_);
+    slow_bull 无涨幅/概率 (风控观察池), 留空.
+    """
+    out = pd.DataFrame(index=df.index, columns=_UNIFIED_COLS, dtype=object)
+    out["symbol"] = df["symbol"].astype(str)
+    out["date"] = f"{date[:4]}-{date[4:6]}-{date[6:]}"  # 文件名 YYYYMMDD → YYYY-MM-DD
+    out["module"] = module
+    out["family"] = family
+    out["board"] = df["board"] if "board" in df.columns else "na"
+    out["system"] = (
+        "V35"
+        if family.startswith("legacy")
+        else (df["systems"] if "systems" in df.columns else "na")
+    )
+    out["score"] = df["score"] if "score" in df.columns else None
+    out["rk"] = df["rk"] if "rk" in df.columns else None
+    if family == "slow_bull":
+        out["system"] = "slow_bull"
+        return out
+    if family.startswith("legacy"):
+        for h in ("2d", "3d", "5d"):
+            out[f"gain_{h}"] = df.get(f"pred_ret_{h}")
+            out[f"prob_{h}"] = df.get(f"prob_up_{h}")
+    else:  # parallel
+        for h in ("2d", "3d", "5d", "10d"):
+            out[f"gain_{h}"] = df.get(f"pred_mag_{h}")
+            out[f"prob_{h}"] = df.get(f"pred_prob_{h}")
+    return out
+
+
+def list_prediction_dates(list_dir: str = STOCK_LIST_DIR) -> list[str]:  # noqa: F811
+    """预测文件出现的不同日期, 降序."""
+    dates = {info["date"] for info in list_prediction_files(list_dir)}
+    return sorted(dates, reverse=True)
+
+
+def load_stock_list_on_date(  # noqa: F811
+    date_compact: str, list_dir: str = STOCK_LIST_DIR
+) -> pd.DataFrame:
+    """某日交付股票清单预测明细 (跨模块, 模块标签保留).
+
+    只列交付列表 (legacy/parallel/slow_bull), 不含 *_raw 全市场底稿.
+    同 symbol+module+族: 保留一条 (交付族优先, 其次 rk 最小), 去 cut 重复.
+    无该日文件 → 空 DataFrame.
+    """
+    date_compact = str(date_compact).strip()
+    frames = []
+    for info in list_prediction_files(list_dir):
+        if info["date"] != date_compact:
+            continue
+        if info["family"].endswith("_raw"):
+            continue  # 日期清单只列交付列表, 不含 *_raw 全市场底稿
+        try:
+            df = pd.read_csv(info["path"], dtype={"symbol": str})
+        except Exception:
+            _data_logger.warning(
+                "预测文件读取失败 (跳过): %s", info["path"], exc_info=True
+            )
+            continue
+        if df is None or df.empty or "symbol" not in df.columns:
+            continue
+        norm = _normalize_pred_rows(info["family"], info["date"], info["module"], df)
+        if norm.empty:
+            continue
+        frames.append(norm)
+    if not frames:
+        return pd.DataFrame(columns=_UNIFIED_COLS)
+    rows = pd.concat(frames, ignore_index=True)
+    rows["_grp"] = rows["family"].map(_FAMILY_GROUP)
+    rows["_prio"] = rows["family"].map(_FAMILY_PRIORITY)
+    rows = rows.sort_values(["_prio", "rk"], ascending=[True, True], na_position="last")
+    rows = rows.drop_duplicates(subset=["symbol", "module", "_grp"], keep="first")
+    rows = rows.drop(columns=["_grp", "_prio"])
+    return rows.sort_values(["family", "module", "rk"], na_position="last").reset_index(
+        drop=True
+    )
+
+
+def load_stock_list_on_dates(
+    dates: list[str], list_dir: str = STOCK_LIST_DIR
+) -> pd.DataFrame:
+    """多个日期的交付清单预测明细纵向拼接 (页面多选日期用)."""
+    frames = []
+    for d in dates:
+        df = load_stock_list_on_date(d, list_dir=list_dir)
+        if df is not None and not df.empty:
+            frames.append(df)
+    if not frames:
+        return pd.DataFrame(columns=_UNIFIED_COLS)
+    return pd.concat(frames, ignore_index=True)

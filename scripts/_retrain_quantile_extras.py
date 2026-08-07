@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """E7 闸3 改造 (2026-08-05): 补训 2d/3d/5d 分位数五模型并合入现有 bundle.
 
 背景: E7 闸3 原用 pred_q50 (1d 中位数), T+1 不可执行且全市场为负 → 0 只过闸.
@@ -30,17 +29,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.dual_track_trainer import (
-    DualTrackTrainer,
-    LGB_PARAMS_REG,
-    risk_filter,
     ES_PATIENCE,
+    LGB_PARAMS_REG,
+    DualTrackTrainer,
+    risk_filter,
 )
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.quantile_models import QuantileModelSet
+from config.settings import PANEL_V3_PATH
 
 MODEL_DIR = "models/pipeline1"
 SLICE_DAYS = 300  # 与 diag 同切片, 已验证内存安全

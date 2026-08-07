@@ -11,8 +11,9 @@ import argparse
 import logging
 import os
 import time
-import pandas as pd
+
 import baostock as bs
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)

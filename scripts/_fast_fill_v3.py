@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """快速填充 v3: 从缓存填充所有数据源."""
 
-import sys
 import os
+import sys
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-import pandas as pd  # noqa: E402
 import logging  # noqa: E402
+
+import pandas as pd  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"

@@ -1,7 +1,6 @@
-# -*- coding: utf-8 -*-
+import datetime
 import os
 import time
-import datetime
 from collections import defaultdict
 
 cache_root = "data/supply_cache"
@@ -10,7 +9,7 @@ agg = defaultdict(lambda: [0, 0])  # src -> [n_files, bytes]
 samples = defaultdict(list)
 mtime_range = defaultdict(lambda: [None, None])
 
-for dirpath, dirnames, filenames in os.walk(cache_root):
+for dirpath, _dirnames, filenames in os.walk(cache_root):
     for fn in filenames:
         fp = os.path.join(dirpath, fn)
         mtime = os.path.getmtime(fp)

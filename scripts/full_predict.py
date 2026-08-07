@@ -1,17 +1,18 @@
 """Full prediction: 1d/3d/5d reg + 1d_cls + q10/q90 + pain. Uses existing 1d_reg/1d_cls, trains rest."""
 
-import pickle
-import pandas as pd
-import numpy as np
-import pyarrow.parquet as pq
 import os
+import pickle
 import sys
 import time
 import warnings
 
+import numpy as np
+import pandas as pd
+import pyarrow.parquet as pq
+
 warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from lightgbm import LGBMRegressor, LGBMClassifier
+from lightgbm import LGBMClassifier, LGBMRegressor
 from sklearn.linear_model import LogisticRegression
 
 FPATH = "data/factor_registry/features_main_20260730T195247.parquet"

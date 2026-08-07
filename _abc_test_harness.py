@@ -66,7 +66,7 @@ def fast_var_filter(feats, df_ref, min_var=1e-8):
             try:
                 if df_ref[c].var() > min_var:
                     good.append(c)
-            except:
+            except Exception:
                 pass
     return good
 

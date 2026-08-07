@@ -237,7 +237,7 @@ class TestE6:
         out = CleaningPipeline().step5_amount_bottom(df)
         # 每日期剔除成交额最小 2 只 (rank_pct 0.1/0.2 不 > 0.2)
         assert len(out) == 16
-        for d, g in out.groupby("date"):
+        for _d, g in out.groupby("date"):
             assert g["amount"].min() > 2e8
 
     def test_liquidity_cap(self):

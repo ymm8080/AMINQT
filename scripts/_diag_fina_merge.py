@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Diagnose why fina_indicator fill didn't improve 2023 coverage."""
 
-import sys
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-import pandas as pd
 import logging
+
+import pandas as pd
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"

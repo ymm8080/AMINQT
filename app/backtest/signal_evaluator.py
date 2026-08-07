@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """模块4: SignalEvaluator — 信号质量评估.
 
 不交易, 只验证模型信号本身是否有预测力.
@@ -10,7 +9,6 @@ v4.0 变更:
 """
 
 import logging
-from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -35,7 +33,7 @@ class SignalEvaluator:
         self,
         pred_df: pd.DataFrame,
         price_df: pd.DataFrame,
-        trade_dates: List[pd.Timestamp],
+        trade_dates: list[pd.Timestamp],
         config: BacktestConfig,
     ):
         """初始化信号评估器.
@@ -185,7 +183,7 @@ class SignalEvaluator:
         prob_col: str = "prob_up_h2",
         horizon: int = 2,
         k: int = 5,
-    ) -> Dict:
+    ) -> dict:
         """TopK 命中率统计."""
         df = self._calc_actual_returns(
             score_col, horizon, self.config.signal_simulate_trigger
@@ -235,7 +233,7 @@ class SignalEvaluator:
         }
 
     @staticmethod
-    def _empty_hit_rate() -> Dict:
+    def _empty_hit_rate() -> dict:
         """空命中率结果."""
         return {
             "top1_hit_rate": 0.0,
@@ -252,7 +250,7 @@ class SignalEvaluator:
         prob_col: str = "prob_up_h2",
         horizon: int = 2,
         k: int = 5,
-    ) -> Dict:
+    ) -> dict:
         """触发率统计."""
         df = self._calc_actual_returns(score_col, horizon, simulate_trigger=False)
         if df.empty:
@@ -294,7 +292,7 @@ class SignalEvaluator:
         }
 
     @staticmethod
-    def _empty_trigger_stats() -> Dict:
+    def _empty_trigger_stats() -> dict:
         """空触发统计结果."""
         return {
             "trigger_rate": 0.0,
@@ -306,7 +304,7 @@ class SignalEvaluator:
 
     def calc_prediction_bias(
         self, pred_col: str = "pred_ret_h2", horizon: int = 2
-    ) -> Dict:
+    ) -> dict:
         """预测偏差分析. Returns: {mae, rmse, wmape, bias, correlation}."""
         score_col = f"score_h{horizon}"
         df = self._calc_actual_returns(
@@ -465,7 +463,7 @@ class SignalEvaluator:
 
         return _safe_div(float(confirmed_count), float(total_count))
 
-    def run_full_report(self) -> Dict:
+    def run_full_report(self) -> dict:
         """运行完整信号评估, 输出所有指标.
 
         对 H1/H2/H4 三个周期分别计算所有指标.
@@ -473,7 +471,7 @@ class SignalEvaluator:
         Returns:
             dict: {h1: {...}, h2: {...}, h4: {...}}
         """
-        report: Dict = {}
+        report: dict = {}
         for horizon in self.config.signal_horizons:
             score_col = f"score_h{horizon}"
             prob_col = f"prob_up_h{horizon}"

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """模块6: ComparativeAnalyzer — 对比分析器.
 
 对比 Squad vs Sniper 模式的绩效差异.
@@ -6,7 +5,6 @@
 """
 
 import logging
-from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -32,8 +30,8 @@ class ComparativeAnalyzer:
         sniper_result: pd.DataFrame,
         squad_trades: pd.DataFrame,
         sniper_trades: pd.DataFrame,
-        squad_metrics: Dict,
-        sniper_metrics: Dict,
+        squad_metrics: dict,
+        sniper_metrics: dict,
         benchmark_df: pd.DataFrame | None = None,
     ):
         """初始化对比分析器.
@@ -149,7 +147,7 @@ class ComparativeAnalyzer:
 
         return f"squad_final_nav={squad_final:.2f}, sniper_final_nav={sniper_final:.2f}, benchmark={bench_final:.2f}"
 
-    def generate_comparison_report(self) -> Dict:
+    def generate_comparison_report(self) -> dict:
         """生成对比报告.
 
         Returns:

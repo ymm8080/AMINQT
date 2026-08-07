@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """V3 入库扫描 (ingest gate): 剔 ST/*ST 股 和 上市不足 N 天的新股.
 
 _daily_fetch.py 在追加当日行前调用 apply_ingest_scan, 使 ST 股与次新股

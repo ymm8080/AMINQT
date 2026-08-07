@@ -18,8 +18,8 @@ import os
 import re
 import subprocess
 import sys
-from urllib.error import HTTPError
 import urllib.request
+from urllib.error import HTTPError
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)

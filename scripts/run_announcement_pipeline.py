@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Pipeline 2: 每日 22:40 公告数据拉取 + V3 面板更新.
 
 22:40 拉取当日及前日发布的公告类数据:

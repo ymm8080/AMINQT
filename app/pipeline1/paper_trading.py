@@ -138,7 +138,7 @@ class ShadowListTracker:
         if pending:
             last = pending[-1]
             self._consumed_upto = last["date"]
-            for sym, w in zip(last["symbols"], last["weights"]):
+            for sym, w in zip(last["symbols"], last["weights"], strict=False):
                 if sym in prices.index and sym not in self._positions:
                     amount = self._cash * float(w)
                     if amount > 0:

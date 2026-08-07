@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_analog_stage.py — 钉死 features.build 是否污染 close/close_hfq/price_1455 与标签 (2026-08-04 v2).
 
 v1 教训: C 段用 label_pm_20d_net 但 LABEL_HORIZONS=(1,2,3,5) 不产 20d → 必 KeyError,
@@ -29,11 +28,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.label_engine import LabelEngine
-from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS
+from config.settings import PANEL_V3_PATH
 from scripts._classify_freq_full import (
     MIN_CROSS,
     MIN_OBS,
@@ -42,6 +40,7 @@ from scripts._classify_freq_full import (
     _wtsic,
     group_spearman,
 )
+from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS
 
 CHECKPOINT = os.path.join("data", "_diag_stage_main_3y.parquet")
 

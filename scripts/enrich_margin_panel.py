@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Step 1: Enrich panel cache with margin data — run once, persist result."""
 
 import logging
@@ -6,8 +5,9 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 
 import pandas as pd  # noqa: E402
-from app.pipeline1.panel_builder import enrich_alt_data  # noqa: E402
+
 from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
+from app.pipeline1.panel_builder import enrich_alt_data  # noqa: E402
 
 PANEL_PATH = r"D:\AMINQT\AMINQT CODES\data\panel_full_enriched.parquet"
 

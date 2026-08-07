@@ -309,7 +309,7 @@ class TestBuyPath:
             "09:48",
         ]
         buys = []
-        for t, px in zip(times, seq):
+        for t, px in zip(times, seq, strict=False):
             ticks = {"600519": Tick(t, px, volume=1.6, turnover=8, big_order_net=5e6)}
             out = eng.on_tick(2, ticks, [c], pf, {"600519": 100.0}, 0.62, [])
             buys += [o for o in out if o.action == Action.BUY]

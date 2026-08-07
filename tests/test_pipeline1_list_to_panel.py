@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """PIPELINE1 → 选股看板 连通性单元测试.
 
 验证从 PIPELINE1 生成的清单 (list_YYYYMMDD.parquet) 到选股看板
@@ -33,7 +32,6 @@ from app.streamlit.data_service import (  # noqa: E402
     save_priority_symbols,
     toggle_priority,
 )
-
 
 # ── 合成 V1.4 schema 清单 ──
 

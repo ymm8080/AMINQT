@@ -2,6 +2,7 @@
 """Compare Tushare-derived vs akshare-reported CYQ for 600671 on 2 dates."""
 
 import os
+
 import pandas as pd
 
 # Load Tushare token
@@ -12,8 +13,8 @@ with open(".env", encoding="utf-8") as f:
             k, v = line.split("=", 1)
             os.environ.setdefault(k.strip(), v.strip())
 
-import tushare as ts
 import akshare as ak
+import tushare as ts
 
 TS_CODE = "600671.SH"
 SYMBOL = "600671"

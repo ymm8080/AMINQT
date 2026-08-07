@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for app/pipeline_parallel 慢牛系统 (SLOW_BULL, ADX 设计文档 v1.0, 2026-08-05).
 
 覆盖: ADX 指标 (强趋势 vs 震荡) / 四道硬门槛 / 权重打分缺列重归一 /
@@ -11,7 +10,7 @@ import pandas as pd
 import pytest
 
 from app.pipeline_parallel import backtest, indicators, screener, signals
-from app.pipeline_parallel.config import ADX_SPEC, ADX_SCORE_WEIGHTS, SLOW_BULL
+from app.pipeline_parallel.config import ADX_SCORE_WEIGHTS, ADX_SPEC, SLOW_BULL
 from app.pipeline_parallel.scoring import cross_rank, pool_score, select_topn
 
 _T = "0000000"  # 慢牛趋势样本符号 (漂移加速)
@@ -637,7 +636,7 @@ def test_add_trail8_columns_pit_and_trigger():
                 "low": c * 0.99,
                 "open": c,
             }
-            for d, c in zip(dates, close)
+            for d, c in zip(dates, close, strict=False)
         ]
     )
     spec = {"max_hold": 40, "trail_pct": 0.08}
@@ -677,7 +676,7 @@ def test_slowbull_exit_rets_trail8():
             "turnover_spike": False,
             "tp_80_div": False,
         }
-        for d, c in zip(dates, close)
+        for d, c in zip(dates, close, strict=False)
     ]
     A = backtest._slowbull_sim_arrays(pd.DataFrame(rows))
     picks = pd.DataFrame({"symbol": ["0000000"], "date": [dates[0]]})

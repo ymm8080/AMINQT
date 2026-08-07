@@ -1,8 +1,9 @@
 """Quick analysis of panel symbols vs fina_indicator cache coverage."""
 
-import pandas as pd
 import os
 import re
+
+import pandas as pd
 
 panel = pd.read_parquet("D:/AMINQT/AMINQT CODES/data/panel_3y.parquet")
 panel_symbols = set(panel["symbol"].unique())

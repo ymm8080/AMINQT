@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_refresh_parallel_checkpoints.py — 重建 parallel pipeline 的 main/dual 3y 检查点 (2026-08-04).
 
 parallel pipeline (app/pipeline_parallel) 的 load_panel 读取两个 3y 检查点:
@@ -19,9 +18,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+from config.settings import PANEL_V3_PATH
 from scripts._reclassify_all_features import (
     DUAL_CHECKPOINT,
     MAIN_CHECKPOINT,

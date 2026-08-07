@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """IC 评估与特征筛选 — MAIN vs DUAL 独立运行.
 
 使用缓存的 panel_full_enriched_v3.parquet + 追加当日数据
@@ -19,10 +18,10 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from app.pipeline1.label_engine import LabelEngine
-from app.pipeline1.ic_screener import ICScreener
 from app.pipeline1.data_supply import DataSupplyChain
+from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+from app.pipeline1.ic_screener import ICScreener
+from app.pipeline1.label_engine import LabelEngine
 
 logging.basicConfig(
     level=logging.INFO,

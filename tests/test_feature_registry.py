@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for FeatureRegistry (P19 auto-adoption)."""
 
 import os

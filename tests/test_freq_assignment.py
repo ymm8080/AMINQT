@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """freq_of / FREQ_ASSIGNMENT 一致性单测 — 与 _classify_freq_full.py 确认判定对齐.
 
 核心铁律: 月频特征不进日频模型. 三频模型特征路由按基列频率,
@@ -8,12 +7,11 @@ brute-force 变体继承基列频率, 事件类归事件模块, 未知列必须�
 import pytest
 
 from app.pipeline1.feature_selector import (
+    FAMILY_ANALOG,
     FREQ_ASSIGNMENT,
     FREQ_ORDER,
-    FAMILY_ANALOG,
     freq_of,
 )
-
 
 # ── 与 2026-08-04 全市场×3年 6格判定一致 (scripts/_classify_freq_full.py) ──
 CONFIRMED = {

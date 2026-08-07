@@ -99,7 +99,8 @@ def grid_search(param_grid: dict, evaluate_fn, top_k: int = 1) -> list[dict]:
     """
     names = list(param_grid)
     combos = [
-        dict(zip(names, v)) for v in itertools.product(*(param_grid[n] for n in names))
+        dict(zip(names, v, strict=False))
+        for v in itertools.product(*(param_grid[n] for n in names))
     ]
     scored = [(c, evaluate_fn(c)) for c in combos]
     scored.sort(key=lambda x: x[1], reverse=True)

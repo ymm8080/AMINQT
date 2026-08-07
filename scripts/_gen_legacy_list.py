@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """诊断: 用本地面板 (PANEL_V3_PATH, 含当日) 直接生成 legacy 清单, 绕开生产 _assemble_panel 的网络依赖.
 
 用法: python scripts/_gen_legacy_list.py [YYYYMMDD]
@@ -12,9 +11,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
-from app.pipeline1.data_supply import DataSupplyChain
 from app.pipeline1.daily_pipeline import DailySelectionPipeline
+from app.pipeline1.data_supply import DataSupplyChain
+from config.settings import PANEL_V3_PATH
 
 BUNDLES = {
     "main": "models/pipeline1/main_current.pkl",

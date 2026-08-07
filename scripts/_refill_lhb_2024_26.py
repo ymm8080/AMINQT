@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Refill real LHB (龙虎榜) 2024-01-02 ~ 2026-07-27 into the PARQUET V3 panel.
 
 Root cause of the all-zero rows: scripts/fetch_alt_bulk.py searched AKShare

@@ -6,11 +6,12 @@ Simplified: use existing cache, sample to 1500 stocks.
 import warnings
 
 warnings.filterwarnings("ignore")
-import pandas as pd  # noqa: E402
-import numpy as np  # noqa: E402
-import time  # noqa: E402
 import os  # noqa: E402
 import sys  # noqa: E402
+import time  # noqa: E402
+
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
@@ -32,7 +33,7 @@ from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct  # noqa: E40
 
 panel["board"] = panel["symbol"].map(board_of)
 panel["limit_pct"] = [
-    get_limit_pct(b, d) for b, d in zip(panel["board"], panel["date"])
+    get_limit_pct(b, d) for b, d in zip(panel["board"], panel["date"], strict=False)
 ]
 panel["is_suspended"] = False
 panel["is_st"] = False

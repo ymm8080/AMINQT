@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """去激活 5 个失源列的 _auto_adopted 注册项 (2026-08-02 审计).
 
 面板已删除 source_cols: holder_count / sw_ret_1d / sw_index_close / sw_index_vol / turn.
@@ -11,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
-from datetime import datetime, date
+from datetime import date, datetime
 from pathlib import Path
 
 REG = Path(

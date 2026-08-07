@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """验证 v3 填充后的数据覆盖率."""
 
-import pandas as pd
 import os
 import sys
+
+import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

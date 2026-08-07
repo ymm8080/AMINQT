@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """V3 面板 3 年窗口训练 + 今日预测 → MAIN/DUAL 名单.
 
 面板源: config PANEL_V3_PATH (已含当日, 由 _daily_fetch 追加, 含 4 个 bt_ 原始列).
@@ -19,8 +18,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 import pandas as pd
 
-from app.pipeline1.train_runner import run_training
 from app.pipeline1.predict_runner import run_prediction
+from app.pipeline1.train_runner import run_training
 from config.settings import PANEL_V3_PATH, PROJECT_ROOT
 
 logging.basicConfig(

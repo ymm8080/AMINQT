@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Restore 6 holdertrade columns from data/ backup into the 96-col PARQUET v3 panel."""
 
-import os
 import gc
+import os
+
 import pyarrow as pa
 import pyarrow.parquet as pq
 

@@ -1,4 +1,5 @@
 import os
+
 import pandas as pd
 
 path = "D:/AMINQT/AMINQT CODES/data/supply_cache/alt_data/fina_indicator/all_20240102_20260727.parquet"

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Rolling snapshot of the 4 V3 panel block-trade columns (dim33 upstream).
 
 dim33_block_trade's 4 EWMA features are computed at train time from the 4

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_moneyflow_cs.py — 主力持仓比例代理 截面诊断 (逐日横截面 Rank IC + 分位单调性).
 
 背景 (2026-08-06): 用户质疑个股时序 wTSIC -0.066 是否掩盖了截面判别力.
@@ -49,7 +48,7 @@ def _ts():
 def daily_cs_ic(work: pd.DataFrame, feat: str, label: str) -> dict:
     """逐日横截面 Spearman Rank IC → 加权均值 / IR / 同号占比."""
     ics, ns = [], []
-    for d, sub in work.groupby("date", sort=True):
+    for _d, sub in work.groupby("date", sort=True):
         x, y = sub[feat].values, sub[label].values
         m = ~(np.isnan(x) | np.isnan(y))
         if m.sum() < MIN_N:

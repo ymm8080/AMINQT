@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """一次性脚本: 将 holdertrade (股东增减持) 数据 enrich 到 panel_full_enriched.parquet"""
 
 from __future__ import annotations

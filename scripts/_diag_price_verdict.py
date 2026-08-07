@@ -1,12 +1,11 @@
-# -*- coding: utf-8 -*-
-"""_diag_price_verdict.py ?价格列判定矛盾定?(2026-08-04).
+"""_diag_price_verdict.py — 价格列判定矛盾定位 (2026-08-04).
 
-现象: 全量?(69? _classify_freq_full.py) close_hfq = TS·??-0.043 (反转);
-类比列跑 (_classify_freq_analog.py) close/open_hfq ?= TS·??+0.06x (动量).
+现象: 全量跑 (69列, _classify_freq_full.py) close_hfq = TS·周 负 -0.043 (反转);
+类比列跑 (_classify_freq_analog.py) close/open_hfq 等 = TS·月 正 +0.06x (动量).
 两个脚本方法不同: 全量跑直接读面板+LabelEngine.build_labels; 类比跑走完整训练管线.
 
-本脚本用与全量跑完全相同的口?(面板?+ LabelEngine.build_labels + mask + 3y),
-?close / close_hfq / open / open_hfq 并排?6??看价格族判定是否自洽.
+本脚本用与全量跑完全相同的口径 (面板列 + LabelEngine.build_labels + mask + 3y),
+对 close / close_hfq / open / open_hfq 并排算 6格 → 看价格族判定是否自洽.
 输出: data/_diag_price_verdict_<ts>.log (WORM).
 """
 
@@ -17,9 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.label_engine import LabelEngine
-from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS
+from config.settings import PANEL_V3_PATH
 from scripts._classify_freq_full import (
     MIN_CROSS,
     MIN_OBS,
@@ -28,6 +26,7 @@ from scripts._classify_freq_full import (
     _wtsic,
     group_spearman,
 )
+from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS
 
 
 def classify(work, g_sym, g_date, lab_sym, lab_date, col):
@@ -40,22 +39,21 @@ def classify(work, g_sym, g_date, lab_sym, lab_date, col):
         wr_sym = wc.groupby(g_sym.values).rank()
         wr_date = wc.groupby(g_date.values).rank()
         tsic[f] = {
-            label: group_spearman(wr_sym, lab_sym[label], g_sym, MIN_OBS)
-            for label in LABELS
+            lab: group_spearman(wr_sym, lab_sym[lab], g_sym, MIN_OBS) for lab in LABELS
         }
         xic[f] = {
-            label: group_spearman(wr_date, lab_date[label], g_date, MIN_CROSS)
-            for label in LABELS
+            lab: group_spearman(wr_date, lab_date[lab], g_date, MIN_CROSS)
+            for lab in LABELS
         }
     ts = {w: _wtsic(tsic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     xs = {w: _wtsic(xic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     cells = {
-        "TS1": ts[1],
-        "TS5": ts[5],
-        "TS20": ts[20],
-        "XS1": xs[1],
-        "XS5": xs[5],
-        "XS20": xs[20],
+        "TS日": ts[1],
+        "TS周": ts[5],
+        "TS月": ts[20],
+        "XS日": xs[1],
+        "XS周": xs[5],
+        "XS月": xs[20],
     }
     return cells
 
@@ -79,24 +77,24 @@ def main():
     cutoff = df["date"].max() - pd.DateOffset(years=3)
     work = df[df["date"] >= cutoff].reset_index(drop=True)
     g_sym, g_date = work["symbol"], work["date"]
-    lab_sym = {label: work.groupby("symbol")[label].rank() for label in LABELS}
-    lab_date = {label: work.groupby("date")[label].rank() for label in LABELS}
+    lab_sym = {lab: work.groupby("symbol")[lab].rank() for lab in LABELS}
+    lab_date = {lab: work.groupby("date")[lab].rank() for lab in LABELS}
 
     lines = []
     lines.append("=" * 78)
-    lines.append("  价格列判定矛盾定??全量跑口?(面板?+ LabelEngine + mask + 3y)")
+    lines.append("  价格列判定矛盾定位 — 全量跑口径 (面板列 + LabelEngine + mask + 3y)")
     lines.append(
         f"  rows={len(work):,} stocks={work['symbol'].nunique():,} "
         f"{work['date'].min():%Y-%m-%d} ~ {work['date'].max():%Y-%m-%d}"
     )
     lines.append("=" * 78)
     lines.append(
-        f"{'col':<12}{'TS1':>8}{'TS5':>8}{'TS20':>8}"
-        f"{'XS1':>8}{'XS5':>8}{'XS20':>8}  ?判定"
+        f"{'col':<12}{'TS日':>8}{'TS周':>8}{'TS月':>8}"
+        f"{'XS日':>8}{'XS周':>8}{'XS月':>8}  ← 判定"
     )
     lines.append("-" * 78)
 
-    # close ?close_hfq ?20日变化相关?(证明二者近乎同一条序?
+    # close 与 close_hfq 的 20日变化相关性 (证明二者近乎同一条序列)
     if "close" in work.columns and "close_hfq" in work.columns:
         gg = work.groupby("symbol")
         p_close = work["close"] / gg["close"].shift(20) - 1.0
@@ -107,14 +105,14 @@ def main():
 
     for c in ["close_hfq", "close", "open", "open_hfq"]:
         if c not in work.columns:
-            lines.append(f"{c:<12}  (列缺?")
+            lines.append(f"{c:<12}  (列缺失)")
             continue
         cells = classify(work, g_sym, g_date, lab_sym, lab_date, c)
         best = max(cells, key=lambda k: abs(cells[k]))
         lines.append(
-            f"{c:<12}{_f(cells['TS1']):>8}{_f(cells['TS5']):>8}{_f(cells['TS20']):>8}"
-            f"{_f(cells['XS1']):>8}{_f(cells['XS5']):>8}{_f(cells['XS20']):>8}"
-            f"  ?{best} ({abs(cells[best]):.4f})"
+            f"{c:<12}{_f(cells['TS日']):>8}{_f(cells['TS周']):>8}{_f(cells['TS月']):>8}"
+            f"{_f(cells['XS日']):>8}{_f(cells['XS周']):>8}{_f(cells['XS月']):>8}"
+            f"  ← {best} ({abs(cells[best]):.4f})"
         )
 
     text = "\n".join(lines)

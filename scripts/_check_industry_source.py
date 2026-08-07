@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Check stock_basic.industry: source, coverage, history."""
 
-import tushare as ts
 import os
+
+import tushare as ts
 from dotenv import load_dotenv
 
 load_dotenv()

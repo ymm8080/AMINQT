@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Replace benefit_part -> winner_ratio in all Python files.
 Also change winner_rate/100 -> winner_rate (no division) where applicable.
 """

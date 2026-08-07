@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """一次性脚本: 给现存 V3 面板回填 4 个 KIMI 式股东增减持比例列.
 
   sh_net_ratio  = sum(signed_ratio)          按公告日聚合 (ann_date, 无 shift → 无 look-ahead)

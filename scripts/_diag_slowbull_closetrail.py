@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛 收盘价移动止盈 (close-trailing) 退出回测 (2026-08-05).
 
 selectivity 证明 score 无法区分预期收益 (MFE40 扁平 24-40%), 瓶颈是兑现
@@ -73,7 +72,7 @@ def main() -> int:
 
     def sim(picks: pd.DataFrame, mode: str) -> dict:
         rets, holds = [], []
-        for sym, T in zip(picks["symbol"], picks["date"]):
+        for sym, T in zip(picks["symbol"], picks["date"], strict=False):
             c = sym_code[str(sym)]
             lo, hi = starts[c], ends[c]
             base = lo + int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))

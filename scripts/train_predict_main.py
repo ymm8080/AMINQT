@@ -25,11 +25,11 @@ import argparse
 import gc
 import glob
 import json
+import logging
 import os
 import signal
 import sys
 import time
-import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -38,9 +38,9 @@ import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from app.pipeline1.checkpoint import PipelineState
 from app.pipeline1.dual_track_trainer import DualTrackTrainer
 from app.pipeline1.predict_runner import find_bundles, run_prediction
-from app.pipeline1.checkpoint import PipelineState
 from config.settings import data_others_path
 
 logging.basicConfig(
@@ -387,8 +387,8 @@ def step_predict(
     logger.info("Model: main -> %s", os.path.basename(bundles["main"]))
 
     # ── 内存优化: PyArrow predicate pushdown (只读主板, 非 GEM/STAR) ──
-    import pyarrow.parquet as pq
     import pyarrow.compute as pc
+    import pyarrow.parquet as pq
 
     pf = pq.ParquetFile(PANEL_PATH)
     if low_memory:

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """关键数据文件备份 — 防 automation git 操作误删.
 
 背景: 主仓库目录的 automation 会执行 checkout/reset --hard, 工作区中

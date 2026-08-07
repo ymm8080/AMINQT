@@ -230,7 +230,7 @@ def test_edge_cases():
     # Missing columns
     try:
         add_all_ths_indicators(pd.DataFrame({"close": [1, 2, 3]}))
-        assert False, "Should raise KeyError"
+        raise AssertionError("Should raise KeyError")
     except KeyError:
         print("[OK] Missing columns correctly raises KeyError")
 
