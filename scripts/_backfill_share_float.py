@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Backfill the full 限售股解禁 (Tushare `share_float`) calendar into a raw cache.
 
 The FINAL STOCK SCAN reads this cache to exclude candidates whose cumulative
@@ -31,9 +30,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pandas as pd
 import pyarrow.parquet as pq
-from dotenv import load_dotenv
-
 import tushare as ts
+from dotenv import load_dotenv
 
 load_dotenv()
 

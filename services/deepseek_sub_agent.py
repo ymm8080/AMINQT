@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """DeepSeek V4 Flash — Claude Code sub-agent MCP server.
 
 Provides MCP tools that delegate to DeepSeek's API for specialized tasks:

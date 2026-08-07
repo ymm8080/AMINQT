@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """一次性: 修复 V3 面板 07-27..07-31 尾部的 board/industry/is_st/list_days 元数据列.
 
 背景 (2026-08-03): 基建面板 (panel_builder) 的元数据语义是 —
@@ -22,9 +21,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pandas as pd
 
 from app.pipeline1.cleaning_pipeline import board_of
 

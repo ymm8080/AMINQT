@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """把 legacy 清单 (list_{trade_date}.parquet) 交付到 STOCK LIST 目录 (WORM).
 
 文件名含 交易日(date) + 模块版本(module) — 回归测试按 module 分组评估各版本表现:

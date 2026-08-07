@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """B 基础15列 vs 扩展候选列: 同一 C bundle, 同一 July OOS 帧.
 
 对每列 (BASE_15 + 5个扩展候选) 输出:
@@ -17,9 +16,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pandas as pd
-
 import _verify_cyq_drop as V  # noqa: E402
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("compare_base15_vs_ext")

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Replace SW code columns with SW name columns in V3 panel.
 
 Remove: sw_l1_code, sw_l2_code, sw_l3_code
@@ -7,10 +6,11 @@ Add:    sw_l1_name, sw_l2_name, sw_l3_name (string)
 Usage: python scripts/add_sw_cols_to_panel.py
 """
 
+import logging
 import os
 import shutil
 import sys
-import logging
+
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq

@@ -8,12 +8,13 @@ Frontier 前端数据 API (React SPA 后端)
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.pipeline1.backtest_v35 import BacktestEngineV35, BacktestProtocol
 from app.pipeline1.param_tuner import ParamTuner
@@ -116,8 +117,9 @@ def get_signals(symbol: str) -> dict:
             stop_price = last_bar["close"] * (1 + max(-0.04, -1.5 * atr_pct))
 
             # Pipeline2 买入信号
-            from app.intraday.v51.buy_engine import BuyContext, trigger as buy_trigger
             from app.intraday.v51.buy_engine import Bar as BuyBar
+            from app.intraday.v51.buy_engine import BuyContext
+            from app.intraday.v51.buy_engine import trigger as buy_trigger
 
             ctx = BuyContext(
                 symbol=symbol,
@@ -177,11 +179,13 @@ def get_signals(symbol: str) -> dict:
 
         # 3. Pipeline2 V5.1 卖出信号
         try:
+            from app.intraday.v51.position import Position
             from app.intraday.v51.sell_engine import (
                 SellContext,
+            )
+            from app.intraday.v51.sell_engine import (
                 trigger as sell_trigger,
             )
-            from app.intraday.v51.position import Position
 
             intraday = ds.fetch_real_intraday(symbol)
             if intraday is None:
@@ -517,7 +521,7 @@ def get_forecast_quality() -> dict:
             reverse=True,
         )
         if files:
-            with open(os.path.join(acc_dir, files[0]), "r", encoding="utf-8") as fh:
+            with open(os.path.join(acc_dir, files[0]), encoding="utf-8") as fh:
                 report = json.load(fh)
             latest_1d = report.get("horizons", {}).get("1", {})
             return {
@@ -600,6 +604,7 @@ MODEL_DIR = "models/pipeline1"
 # the frontend polls /pipeline/status (panel_mtime) to detect changes.
 import subprocess as _subprocess  # noqa: E402
 import threading as _threading  # noqa: E402
+
 from config.settings import PROJECT_ROOT as _PROJECT_ROOT  # noqa: E402
 
 _PIPELINE_SCRIPTS = {
@@ -615,6 +620,16 @@ _pipeline_lock = _threading.Lock()
 class TriggerRequest(BaseModel):
     script: str  # "daily_fetch" | "announcement"
     trade_date: str | None = None  # YYYYMMDD, None=今天
+
+    @field_validator("trade_date")
+    @classmethod
+    def _validate_trade_date(cls, v: str | None) -> str | None:
+        """Ensure trade_date is YYYYMMDD format (8 digits)."""
+        if v is None:
+            return v
+        if not re.match(r"^\d{8}$", v):
+            raise ValueError("trade_date must be YYYYMMDD (8 digits)")
+        return v
 
 
 def _run_pipeline_subprocess(task_id: str, script_path: str, args: list[str]) -> None:
@@ -662,6 +677,16 @@ class AppendDailyRequest(BaseModel):
     trade_date: str | None = None  # YYYYMMDD, None=今天
     market_state: str = "range"  # bull / bear / range
     save_panel: bool = True  # 追加后保存面板 (WORM 备份)
+
+    @field_validator("trade_date")
+    @classmethod
+    def _validate_trade_date(cls, v: str | None) -> str | None:
+        """Ensure trade_date is YYYYMMDD format (8 digits)."""
+        if v is None:
+            return v
+        if not re.match(r"^\d{8}$", v):
+            raise ValueError("trade_date must be YYYYMMDD (8 digits)")
+        return v
 
 
 @router.get("/pipeline/status")

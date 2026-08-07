@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛 真实离场规则回测 (2026-08-05, 用户路线 A).
 
 把文档 §4.2 卖出信号 + §4.3 移动止盈真正模拟进回测, 测"实际离场收益"。
@@ -71,7 +70,7 @@ def main() -> int:
         rows = {"n_picks": len(picks)}
         for M in CAPS:
             realized, _held, base_hold, mfe, hold_days = [], [], [], [], []
-            for sym, T in zip(picks["symbol"], picks["date"]):
+            for sym, T in zip(picks["symbol"], picks["date"], strict=False):
                 c = sym_code[str(sym)]
                 lo, hi = starts[c], ends[c]
                 j = int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))

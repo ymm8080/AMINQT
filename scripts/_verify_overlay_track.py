@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_verify_overlay_track.py — 前向跟踪验证: overlay 快照 × 已实现 MFE (2026-08-05).
 
 用户批准轻量前向跟踪 ("改动正不正两周后给实盘答案"): 每次 legacy_overlay 交付时

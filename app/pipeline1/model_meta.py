@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """模型包版本元数据 — 预测/清单文件打模块版本戳, 供回归测试评估各模块表现.
 
 current_meta.json 结构 (models/pipeline1/):
@@ -21,7 +20,7 @@ META_PATH = "models/pipeline1/current_meta.json"
 def load_modules(meta_path: str = META_PATH) -> dict:
     """{board: {tag, file, updated}}; 缺失/损坏返回 {} (调用方回退 'na')."""
     try:
-        with open(meta_path, "r", encoding="utf-8") as fh:
+        with open(meta_path, encoding="utf-8") as fh:
             return json.load(fh)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return {}

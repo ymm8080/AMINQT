@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_build_main_layer1.py — 重建 main Layer1 特征 (仅 step2, 不动 registry).
 
 等价 build_features.py --board main 的 step2 部分, 但不跑 step1 registry adoption
@@ -13,9 +12,9 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-from config.settings import PANEL_V3_PATH
-
 import build_features as bf
+
+from config.settings import PANEL_V3_PATH
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"

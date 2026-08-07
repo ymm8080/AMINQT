@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """填充 fina_indicator: 季度数据, 用 announce_date forward-fill 到交易日."""
 
-import sys
 import os
+import sys
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-import pandas as pd  # noqa: E402
 import logging  # noqa: E402
+
+import pandas as pd  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"

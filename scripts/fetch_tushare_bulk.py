@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Bulk-fetch missing alt data from Tushare and rebuild panel v4.
 
 Fixes:
@@ -37,6 +36,7 @@ logging.basicConfig(
 logger = logging.getLogger("fetch_bulk")
 
 import tushare as ts  # noqa: E402
+
 from config import settings  # noqa: E402
 
 pro = ts.pro_api(settings.TUSHARE_TOKEN)

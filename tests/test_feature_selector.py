@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for Three-Layer Feature Selection: BruteForceGenerator, dedup_l2, gate_d_ablation, nan_filter, FeatureSelector."""
 
 import json
@@ -13,14 +12,13 @@ from app.pipeline1.feature_selector import (
     BRUTE_FAMILIES,
     BruteForceGenerator,
     FeatureSelector,
+    daily_rank_ic,
     dedup_l2,
+    event_scope_mask,
     gate_d_ablation,
     nan_filter,
-    event_scope_mask,
-    daily_rank_ic,
     scope_ic_union,
 )
-
 
 # ── Synthetic data helpers ──────────────────────────────────────────
 
@@ -842,7 +840,7 @@ def _make_event_panel(n_symbols=12, n_dates=80, seed=7):
     dates = pd.bdate_range("2024-01-01", periods=n_dates)
     rows = []
     for sym in symbols:
-        for i, d in enumerate(dates):
+        for _i, d in enumerate(dates):
             rows.append({"symbol": sym, "date": d})
     df = pd.DataFrame(rows)
     df["label"] = np.random.randn(len(df))

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_select_freq_three.py — 三频选择: 真实面板跑 select_freq → {月/周/日} 三表.
 
 复刻 train_runner.run_training 的 board 切分序列 (cleaner.run_train →
@@ -22,7 +21,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH, data_others_path
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.feature_selector import (
@@ -31,6 +29,7 @@ from app.pipeline1.feature_selector import (
     FeatureSelector,
 )
 from app.pipeline1.train_runner import prepare_board_frame
+from config.settings import PANEL_V3_PATH, data_others_path
 
 logging.disable(logging.CRITICAL)
 

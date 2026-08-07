@@ -52,7 +52,7 @@ class TestAnnouncementFactor:
 
     def test_sector_freeze(self):
         af = AnnouncementFactor()
-        for i, sym in enumerate(["600001", "600002", "600003"]):
+        for _i, sym in enumerate(["600001", "600002", "600003"]):
             af.add_manual_entry(
                 sym, "2026-07-25", "风险提示", score=-0.5, industry="白酒"
             )

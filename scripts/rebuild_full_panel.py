@@ -11,12 +11,13 @@ Handles edge cases:
 import warnings
 
 warnings.filterwarnings("ignore")
-import pandas as pd  # noqa: E402
-import numpy as np  # noqa: E402
 import logging  # noqa: E402
 import os  # noqa: E402
-import time  # noqa: E402
 import sys  # noqa: E402
+import time  # noqa: E402
+
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -55,7 +56,9 @@ if pro is not None:
                 .str.replace(".SZ", "", regex=False)
                 .str.replace(".SH", "", regex=False)
             )
-            ind_map = dict(zip(basic["symbol"], basic["industry"].fillna("综合")))
+            ind_map = dict(
+                zip(basic["symbol"], basic["industry"].fillna("综合"), strict=False)
+            )
             panel["industry"] = panel["symbol"].map(ind_map).fillna("综合")
             industry_fixed = True
             logger.info(
@@ -270,7 +273,7 @@ sw_paths = [
 sw_path = next((p for p in sw_paths if os.path.exists(p)), None)
 if sw_path and "industry" in panel.columns:
     sw = safe_date(pd.read_parquet(sw_path))
-    name_to_code = dict(zip(sw["index_name"], sw["index_code"]))
+    name_to_code = dict(zip(sw["index_name"], sw["index_code"], strict=False))
     ind_map = {}
     for ind_name in panel["industry"].dropna().unique():
         if ind_name in name_to_code:

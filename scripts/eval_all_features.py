@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Evaluate ALL V3 feature columns (not just top-20) on sampled data.
 Small sample (100 stocks, latest 250d) to complete in reasonable time.
 """
@@ -195,7 +194,7 @@ def main():
     rng = np.random.RandomState(RANDOM_SEED)
 
     # Sample separately per board
-    for board_val, label, n in [
+    for _board_val, _label, _n in [
         ("main", "main", N_STOCKS),
         ("GEM", "dual", N_STOCKS // 2),
         ("STAR", "dual", N_STOCKS // 2),

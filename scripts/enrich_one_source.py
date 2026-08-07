@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Single-source enrichment driver — one agent per data source.
 
 Usage:

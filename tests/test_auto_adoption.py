@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for auto-adoption mechanism (Phase 2)."""
 
 import os

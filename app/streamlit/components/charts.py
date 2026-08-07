@@ -224,7 +224,7 @@ def drawdown_chart(nav_df: pd.DataFrame, title: str = "回撤") -> go.Figure:
 def factor_radar(factors: dict, top_n: int = 10, title: str = "因子雷达") -> go.Figure:
     """Top-N 因子值雷达图."""
     items = list(factors.items())[:top_n]
-    labels, values = zip(*items) if items else ([], [])
+    labels, values = zip(*items, strict=False) if items else ([], [])
     fig = go.Figure()
     fig.add_trace(
         go.Scatterpolar(

@@ -7,11 +7,12 @@
 
 from __future__ import annotations
 
-import os
 import logging
+import os
+from datetime import datetime
+
 import pandas as pd
 import streamlit as st
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,11 @@ def _load_panel(symbols: list[str] | None = None) -> pd.DataFrame | None:
 
 def _run_prediction(symbols: list[str] | None = None) -> dict | None:
     """运行预测, 返回结果 dict (ic, filtered, all_preds, report_path)."""
+    import predict_only  # 复用 predict_only.py 的辅助函数
     from app.pipeline1.cleaning_pipeline import CleaningPipeline
     from app.pipeline1.feature_engine_v35 import FeatureEngineV35
     from app.pipeline1.predict_runner import find_bundles
     from app.pipeline1.predictor import V35Predictor
-    import predict_only  # 复用 predict_only.py 的辅助函数
 
     panel = _load_panel(symbols)
     if panel is None or len(panel) == 0:

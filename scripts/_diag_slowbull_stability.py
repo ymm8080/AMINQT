@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛 trail8 稳定性验证 (2026-08-06).
 
 closetrail 在末 6 个月 OOS (2026-01-26→08-04) 发现 trail8 (收盘回落 8% 走 + 硬止损 -8%)
@@ -85,7 +84,7 @@ def sim(picks: pd.DataFrame, mode: str, A: dict) -> dict:
     dates_dt, close, low, ma20 = A["dates"], A["close"], A["low"], A["ma20"]
     any_sell, cost_arr = A["any_sell"], A["cost"]
     rets, holds = [], []
-    for sym, T in zip(picks["symbol"], picks["date"]):
+    for sym, T in zip(picks["symbol"], picks["date"], strict=False):
         c = sym_code[str(sym)]
         lo, hi = starts[c], ends[c]
         base = lo + int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))

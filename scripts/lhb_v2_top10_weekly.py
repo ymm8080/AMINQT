@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """KIMI LHB v2.0 TOP10 周频选股能力评估 — 测试模型能否可靠选出"值得买"的标的.
 
 设计: 两个训练目标 × 两个实际持有期, 全面测模型能力:
@@ -76,7 +75,7 @@ def pick_top10(sub: pd.DataFrame, pred_col: str, top_n: int) -> pd.DataFrame:
     sub = sub[sub["r3"].notna() & sub["r5"].notna()].copy()
     sub = sub.sort_values(["date", pred_col], ascending=[True, False])
     blocks = []
-    for d, g in sub.groupby("date"):
+    for _d, g in sub.groupby("date"):
         g = g.head(top_n).copy()
         g["pick_rank"] = np.arange(len(g))
         blocks.append(g)

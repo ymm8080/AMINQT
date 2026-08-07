@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """V3 实际 CYQ 列分析 — 针对 A 面板 (_x/_y 双源原始列) + dim21 派生列.
 
 用户纠正: 我之前的基础15列 keep/drop 分析针对 Calculator base-15 (干净名),
@@ -23,9 +22,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pandas as pd
-
 import _verify_cyq_drop as V  # noqa: E402
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("analyze_v3_cyq_cols")

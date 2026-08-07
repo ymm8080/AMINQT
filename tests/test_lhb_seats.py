@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Unit tests for lhb_seats — 席位静态分类 + top_inst → 8 列席位聚合 (LHB v2 上游)."""
 
 import numpy as np

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Global configuration: paths, stock pool, date ranges, execution mode.
 
 Secrets (iFinD credentials) are loaded from environment / .env — never
@@ -41,6 +40,14 @@ STOCK_LIST_DIR = DAILY_OPERATION_DIR / "STOCK LIST"
 for _d in (RAW_DIR, INTRADAY_DIR, PROCESSED_DIR, MODEL_DIR, DATA_OTHERS_DIR,
            BACKTEST_RESULT_DIR, STOCK_LIST_DIR):
     _d.mkdir(parents=True, exist_ok=True)
+
+# ── 预测稳定性: 输出级时间平滑 (2026-08-06, 对齐 parallel _shortlist_t5_t10) ──
+# 同一只股票相邻交易日预测/概率剧变 → 每股 forecast 列 = 近 K 个可用交易日 raw 预测的
+# 衰减加权均值 (w_k = α·(1-α)^k, 归一化, gap-robust). α 越大越信任今日. 历史底稿 WORM
+# 落盘 legacy_preds_raw_<date>__<module>.csv (模块标签见 module-tag 约定).
+LEGACY_SMOOTH_ENABLED = True
+LEGACY_SMOOTH_ALPHA = 0.35
+LEGACY_SMOOTH_K = 12
 
 # ── V3 Panel (single source of truth) ────────────────────────
 # Override via PANEL_PATH env var; defaults to D:/AMINQT/PARQUET/ directory.
@@ -228,6 +235,14 @@ SHORTLIST_SCORE = {
     "horizon_w": {"2d": 0.25, "3d": 0.40, "5d": 0.25, "10d": 0.10},  # 主视界 T+3 (短持)
     "gain_w": 0.50,   # 预期涨幅权重
     "prob_w": 0.50,   # 达到概率(convincing rate)权重
+    # 入选门 (2026-08-07 用户: "考虑 T+2,T+3 一起", 301326 08-05 教训: T+3 边际转负整只被剔)
+    # 保留 ⇔ (T+3 > t3_min) 或 (T+2 > t2_min 且 T+3 > t3_floor)
+    # T+3 仍为首要 (主门); 副门让 T+2 强看涨、T+3 仅边际转负的股不被误杀.
+    "select_gate": {
+        "t3_min": 0.00,   # 主门: T+3 预期涨幅下限 (原 select_confident 硬门)
+        "t2_min": 0.01,   # 副门: T+2 预期涨幅下限 (须强看涨才算"有 T+2 理由")
+        "t3_floor": -0.01,  # 副门: T+3 允许最深负值 (低于此深转负直接剔除)
+    },
 }
 
 # ── 板块×系统 制度自适应门 (2026-08-05 用户: 砍板块不能写死, 按最新市场数据动态决定) ──

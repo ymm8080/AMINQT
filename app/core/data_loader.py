@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Local Parquet loader + column canonicalization + OHLCV validation.
 
 Reads raw Parquet files written by scripts/download_data.py and renames any

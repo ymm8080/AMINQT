@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """模块2: DataValidator — 数据完整性校验.
 
 回测前检查:
@@ -15,7 +14,6 @@
 """
 
 import logging
-from typing import List, Tuple
 
 import pandas as pd
 
@@ -65,13 +63,13 @@ class DataValidator:
         self.benchmark_df = benchmark_df
         self.market_df = market_df
 
-    def validate_prices(self) -> List[Tuple[str, str]]:
+    def validate_prices(self) -> list[tuple[str, str]]:
         """校验行情表.
 
         Returns:
             错误列表 [(error_code, detail), ...].
         """
-        errors: List[Tuple[str, str]] = []
+        errors: list[tuple[str, str]] = []
 
         # E003: close <= 0
         bad_close = self.price_df[self.price_df["close"] <= 0]
@@ -103,13 +101,13 @@ class DataValidator:
         logger.info("行情表校验: %d 个问题", len(errors))
         return errors
 
-    def validate_predictions(self) -> List[Tuple[str, str]]:
+    def validate_predictions(self) -> list[tuple[str, str]]:
         """校验预测表.
 
         Returns:
             错误列表.
         """
-        errors: List[Tuple[str, str]] = []
+        errors: list[tuple[str, str]] = []
 
         # 检查概率范围
         for h in [1, 2, 4]:
@@ -139,7 +137,7 @@ class DataValidator:
             return False
 
         issues = 0
-        for stock, grp in self.price_df.groupby("stock"):
+        for _stock, grp in self.price_df.groupby("stock"):
             grp = grp.sort_values("date")
             if len(grp) < 3:
                 continue
@@ -160,7 +158,7 @@ class DataValidator:
             return True
         return False
 
-    def check_pit_data(self) -> List[str]:
+    def check_pit_data(self) -> list[str]:
         """PIT 数据警告.
 
         检查 is_st / is_halt / board 是否可能包含未来信息.
@@ -168,7 +166,7 @@ class DataValidator:
         Returns:
             警告列表.
         """
-        warnings: List[str] = []
+        warnings: list[str] = []
 
         # 检查 board 列是否在预测表中 (应在 T 日快照)
         if "board" not in self.pred_df.columns:
@@ -219,7 +217,7 @@ class DataValidator:
         df = self.price_df.copy()
         to_drop: list[int] = []
 
-        for stock, grp in df.groupby("stock"):
+        for _stock, grp in df.groupby("stock"):
             grp = grp.sort_values("date")
             if len(grp) < min_listing_days:
                 # 整个股票数据不足, 删除前 min_listing_days 天
@@ -236,13 +234,13 @@ class DataValidator:
         )
         return df
 
-    def run_all_checks(self) -> List[Tuple[str, str]]:
+    def run_all_checks(self) -> list[tuple[str, str]]:
         """运行所有校验.
 
         Returns:
             所有错误和警告列表.
         """
-        all_issues: List[Tuple[str, str]] = []
+        all_issues: list[tuple[str, str]] = []
         all_issues.extend(self.validate_prices())
         all_issues.extend(self.validate_predictions())
 

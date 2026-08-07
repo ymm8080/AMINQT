@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """ADX 慢牛系统 — 买入/卖出/移动止盈信号 (2026-08-05, ADX 设计文档 v1.0 §3-4).
 
 买入 (§3.1, 均线附近低吸): pullback_ma5 / pullback_ma10 / shrink_vol;
@@ -170,7 +169,7 @@ def add_market_regime(df: pd.DataFrame, regime_spec: dict) -> pd.DataFrame:
         flag = mkt.pct_change(win) > 0
     else:
         raise ValueError(f"未知 regime def={d} (须 A/B/C)")
-    lookup = dict(zip(flag.index.values, flag.values))
+    lookup = dict(zip(flag.index.values, flag.values, strict=False))
     df["slow_bull_regime"] = df["date"].map(lookup).fillna(False).astype(bool)
     return df
 

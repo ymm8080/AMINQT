@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """P19.0 阶段一点火验收脚本 e2e 测试 (合成面板 + small 模式 + 伪特征 stub)."""
 
 from __future__ import annotations
@@ -27,8 +26,8 @@ def make_panel(days: int = 780, seed: int = 21) -> pd.DataFrame:
     """780 交易日 (>750 窗口) 双板块面板: 主板/双创各 6 只 (日 IC 需 >5 只/日)."""
     rng = np.random.default_rng(seed)
     dates = pd.bdate_range("2023-01-02", periods=days)
-    symbols = [("60051%d" % i, "main", "白酒") for i in range(6)] + [
-        ("30001%d" % i, "GEM", "电子") for i in range(6)
+    symbols = [(f"60051{i}", "main", "白酒") for i in range(6)] + [
+        (f"30001{i}", "GEM", "电子") for i in range(6)
     ]
     frames = []
     for sym, board, industry in symbols:

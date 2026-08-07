@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
 """V5.0/V5.2 回测模块单元测试."""
 
-import os
 import json
+import os
 
 import pandas as pd
 import pytest

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 DIM21-DIM29 特征 IC 评估脚本 (v1.0)
 ====================================
@@ -240,7 +239,9 @@ def add_industry_board(
     try:
         basic = pro.stock_basic(exchange="", list_status="L", fields="ts_code,industry")
         basic["symbol"] = basic["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
-        ind_map = dict(zip(basic["symbol"], basic["industry"].fillna("综合")))
+        ind_map = dict(
+            zip(basic["symbol"], basic["industry"].fillna("综合"), strict=False)
+        )
         df["industry"] = df["symbol"].map(ind_map).fillna("综合")
     except Exception as exc:
         logger.warning("Industry fetch failed: %s", exc)
@@ -291,7 +292,9 @@ def _ensure_scaffold(df: pd.DataFrame) -> pd.DataFrame:
     if "list_days" not in df.columns:
         df["list_days"] = df.groupby("symbol").cumcount() + 1
     if "limit_pct" not in df.columns:
-        df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
+        df["limit_pct"] = [
+            get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)
+        ]
     return df
 
 
@@ -787,7 +790,7 @@ def _update_eval_log(output: dict) -> None:
         log = {"entries": []}
     else:
         try:
-            with open(EVAL_LOG_PATH, "r", encoding="utf-8") as f:
+            with open(EVAL_LOG_PATH, encoding="utf-8") as f:
                 log = json.load(f)
         except (json.JSONDecodeError, Exception):
             log = {"entries": []}

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 L2 Family Dedup — Feature Registry Deduplication Script (P0)
 ============================================================

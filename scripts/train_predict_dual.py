@@ -10,10 +10,10 @@ Usage:
 
 import argparse
 import json
+import logging
 import os
 import sys
 import time
-import logging
 from datetime import datetime
 
 import numpy as np

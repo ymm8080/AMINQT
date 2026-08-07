@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
 """Backfill missing L3 SW daily indices."""
 
+import logging
 import os
 import time
-import logging
+
 import pandas as pd
 import tushare as ts
 from dotenv import load_dotenv

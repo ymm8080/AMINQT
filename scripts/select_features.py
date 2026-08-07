@@ -15,22 +15,23 @@ Memory-safe for MAIN: reads only schema + sample rows from Layer1 parquet.
 import argparse
 import glob
 import json
+import logging
 import os
 import sys
 import time
-import logging
-import pyarrow.parquet as pq
+
 import pandas as pd
+import pyarrow.parquet as pq
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.pipeline1.feature_selector import (
-    FeatureSelector,
     BruteForceGenerator,
-    nan_filter,
+    FeatureSelector,
+    apply_event_scope_screens,
     dedup_l2,
     gate_d_ablation,
-    apply_event_scope_screens,
+    nan_filter,
 )
 from config.settings import data_others_path
 

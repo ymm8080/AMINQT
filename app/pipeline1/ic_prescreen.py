@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """IC pre-screen module (Gate A) for auto-adoption.
 
 This module handles forward return label construction and Spearman rank IC

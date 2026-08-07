@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Drop 'turn' column from V3 panel (100 -> 99 cols). Keep free_float_turnover_rate only."""
 
-import os
 import gc
+import os
+
 import pyarrow as pa
 import pyarrow.parquet as pq
 

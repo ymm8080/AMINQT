@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """诊断: 双板原始预测截面 (最新交易日, 生产同路径推理).
 
 镜像 _gen_legacy_list 的数据通路 (300 交易日切片 → CleaningPipeline.run_train →
@@ -22,10 +21,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.predictor import V35Predictor
+from config.settings import PANEL_V3_PATH
 
 MODEL_DIR = "models/pipeline1"
 SLICE_DAYS = 300

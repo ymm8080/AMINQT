@@ -8,19 +8,20 @@ Usage:
 import json
 import logging
 import os
-import sys
 import pickle
+import sys
+
 import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
-from config.settings import PANEL_V3_PATH
-from app.pipeline1.train_runner import run_training
-from app.pipeline1.cleaning_pipeline import CleaningPipeline, CleaningConfig
+from app.pipeline1.cleaning_pipeline import CleaningConfig, CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.predict_runner import find_bundles
 from app.pipeline1.predictor import V35Predictor
+from app.pipeline1.train_runner import run_training
+from config.settings import PANEL_V3_PATH
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

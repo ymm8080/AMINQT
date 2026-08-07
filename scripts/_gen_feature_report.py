@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_gen_feature_report.py — 生成《特征全貌调研报告》Word 文档 (WORM 日期后缀).
 
 素材来源 (2026-08-04 实地核查):

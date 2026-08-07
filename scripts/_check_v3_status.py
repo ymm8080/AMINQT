@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """检查 v3 最新状态和数据覆盖率."""
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd

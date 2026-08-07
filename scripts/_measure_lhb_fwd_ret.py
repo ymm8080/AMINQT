@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """LHB 上榜池前向收益测量: T+2/T+3/T+5/T+10 (T+1 开盘买入, hfq).
 
 上榜池 = 当日任一 lhb_buy_amt/lhb_sell_amt/lhb_net_buy 非空的行 (dim34 I(List) 同定义).

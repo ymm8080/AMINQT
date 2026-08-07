@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Consolidate _x/_y duplicate columns + remove holder columns from v3 panel.
 
 Operations:
@@ -9,8 +8,9 @@ Operations:
 Result: 116 cols -> 96 cols.
 """
 
-import os
 import gc
+import os
+
 import pyarrow as pa
 import pyarrow.parquet as pq
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """V3 CYQ KEEP-15 落地验证 (2026-08-02): 面板列 + 注册中心 + 切片 build.
 
 面板 CYQ = 15 (7 基础 + 5 扩展 + 3 派生). chip_gini/resistance_dist/support_dist
@@ -26,8 +25,8 @@ load_dotenv()
 
 import pandas as pd
 
-from config.settings import CYQ_BASE_DELETE, CYQ_BASE_KEEP, PANEL_V3_PATH
 from app.pipeline1 import cyq_ext
+from config.settings import CYQ_BASE_DELETE, CYQ_BASE_KEEP, PANEL_V3_PATH
 
 REG = Path(
     os.getenv(
@@ -115,8 +114,8 @@ def main() -> None:
 
     # ── 3. 切片 build 断言 (可选) ──
     if "--build" in sys.argv:
-        from app.pipeline1.feature_registry import FeatureRegistry
         from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+        from app.pipeline1.feature_registry import FeatureRegistry
 
         main = panel[panel["board"] == "main"]
         syms = sorted(main["symbol"].unique())[:3]

@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Measure coverage (non-null rate) of holder-related columns in current V3 panel."""
 
 import os
 import sys
+
 import pyarrow.parquet as pq
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

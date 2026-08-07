@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """回测报告解析 (只读) — 从 backtest.json 提取结构化展示数据.
 
 纯函数: dict in → DataFrame/dict out, 供 page_archive 回测历史 tab 渲染.

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_route_selected_freq.py — 把生产精选特征路由到 {月/周/日} 三张表.
 
 读 factor_registry 里最新 selected_{board}_*.json (真实训练产物), 按 freq_of
@@ -20,7 +19,6 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 from app.pipeline1.feature_selector import FREQ_ORDER, freq_of
-
 from config.settings import data_others_path
 
 REGISTRY = str(data_others_path("data/factor_registry"))

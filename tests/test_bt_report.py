@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """测试 app.streamlit.bt_report — 回测 backtest.json 纯解析.
 
 用内联合成 fixture 覆盖: 新 schema 全字段 / 旧 schema (无 conclusion) 防御 /

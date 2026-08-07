@@ -6,6 +6,7 @@ Tushare formula(hi-lo)/(hi+lo) from Tushare's own cost_5pct/cost_95pct
 """
 
 import os
+
 import pandas as pd
 
 with open(".env", encoding="utf-8") as f:

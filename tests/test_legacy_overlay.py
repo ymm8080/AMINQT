@@ -96,7 +96,7 @@ class TestRerank:
         # 共现两组在前
         assert list(res["symbol"][:2]) == ["000001", "000002"]
         # 组内 final_score 降序
-        for grp, sub in res.groupby("co_occur"):
+        for _grp, sub in res.groupby("co_occur"):
             assert list(sub["final_score"]) == sorted(sub["final_score"], reverse=True)
 
     def test_rk_final_continuous_and_rk_pool_kept(self):

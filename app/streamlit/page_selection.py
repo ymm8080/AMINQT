@@ -12,8 +12,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import streamlit as st
+from plotly.subplots import make_subplots
 
 from . import data_service as ds
 from .components import (
@@ -25,7 +25,6 @@ from .components import (
     main_force_chips_chart,
     trend_top_bottom_chart,
 )
-
 
 # ---------- 数据加载 ----------
 

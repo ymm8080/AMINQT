@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 回填 V3 面板 up_limit_raw/down_limit_raw (2023-2025 + 2026 缺口).
 审计发现: up/down_limit_raw 仅 2026 有 97% 覆盖, 2023/2024 ≈0%, 2025 27%.

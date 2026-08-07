@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_classify_freq_full.py — 全特征集 6格判定 + 事件组事件池归属 (用户 2026-08-04).
 
 目标: 对 feature_engine 全部候选特征, 按功能分组, 判定每组特征在
@@ -26,8 +25,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.label_engine import LabelEngine
+from config.settings import PANEL_V3_PATH
 from scripts._diag_column_feed import (
     LABELS,
     MASK_RECENT_DAYS,

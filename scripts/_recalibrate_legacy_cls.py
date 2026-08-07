@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """legacy 双板 cls 校准器重校 (Platt) — 概率坍缩修复 (2026-08-06)
 ================================================================
 只重拟合 1/2/3/5d_cls 的 ProbCalibrator: isotonic 阶跃把生产原始概率带
@@ -29,12 +28,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH, data_others_path
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.dual_track_trainer import DualTrackTrainer
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.feature_registry import FeatureRegistry
 from app.pipeline1.train_runner import prepare_board_frame
+from config.settings import PANEL_V3_PATH, data_others_path
 
 MODEL_DIR = "models/pipeline1"
 BOARDS = ("main", "dual")

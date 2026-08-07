@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_verify_chip_tsic.py — 筹码 per-stock TSIC 结论稳健性验证.
 
 验证「筹码=个股 time-series IC, 月频最强」是否成立:
@@ -24,10 +23,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.label_engine import LabelEngine
-from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS, weighted_ic
+from config.settings import PANEL_V3_PATH
 from scripts._diag_chip_weekly import _apply, per_stock_ts_ic
+from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS, weighted_ic
 
 logging.disable(logging.CRITICAL)
 
@@ -66,7 +65,7 @@ def _build_feats(df, cols):
 def _residualize(work, target, on, out_name, min_obs=MIN_OBS):
     """个股内 OLS: target ~ on + const, 残差为 target 正交于 on 的部分."""
     work[out_name] = np.nan
-    for sym, g in work.groupby("symbol"):
+    for _sym, g in work.groupby("symbol"):
         x = g[on].astype(float)
         y = g[target].astype(float)
         m = x.notna() & y.notna()

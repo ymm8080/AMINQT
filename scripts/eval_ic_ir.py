@@ -1,15 +1,15 @@
-# -*- coding: utf-8 -*-
 """Evaluate ALL columns with IC + IR (Information Ratio = IC_mean / IC_std) per feature."""
+
+import os
+import sys
 
 import numpy as np
 import pandas as pd
-import sys
-import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app.utils.daily_rank_ic import daily_rank_ic_series, mean_rank_ic
-from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.cleaning_pipeline import board_of
+from app.pipeline1.label_engine import LabelEngine
+from app.utils.daily_rank_ic import daily_rank_ic_series, mean_rank_ic
 
 panel = pd.read_parquet("data/panel_full_enriched_v3.parquet")
 if "board" not in panel.columns:

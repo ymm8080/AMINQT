@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_event_pool.py — 通用事件池时间对齐研究 (BT 大宗 / HOLDER 增减持).
 
 方法论 (用户 2026-08-04, MEMORIZE IT): EVENT 是事件性的 — 把同类事件聚合,
@@ -115,8 +114,9 @@ def report_event(out, title, df, ev_mask, feat_cols, f0_col):
     out.append("\n  2) 事件后分点位平均收益 (相对事件日收盘):")
     out.append(f"{'分组':<16}{'T+2':>10}{'T+3':>10}{'T+5':>10}{'T+10':>10}{'T+20':>10}")
     ev_feat = df.loc[ev_mask, feat_cols].reset_index(drop=True)
+    piv = win.pivot_table(index="evt_id", columns="off", values="rel")
 
-    def _row(tag, idx):
+    def _row(tag, idx, piv=piv):
         parts = [f"{tag:<16}"]
         for h in HORIZONS:
             s = piv.loc[idx, h].dropna()

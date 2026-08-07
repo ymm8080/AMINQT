@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
 """One-time fix: pct_90_con fallback formula in feature_engine_v35.py."""
 
 f = "app/pipeline1/feature_engine_v35.py"
-s = open(f, "r", encoding="utf-8").read()
+s = open(f, encoding="utf-8").read()
 
 # Fix 1: docstring
 s = s.replace(

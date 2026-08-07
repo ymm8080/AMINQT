@@ -384,7 +384,7 @@ class IwencaiAgent:
         """放量上涨缩量回踩: 放量上涨日后, 回踩且量能逐级萎缩."""
         d = df.iloc[-10:]
         surge = (d["volume"] > 1.8 * d["vol_ma5_prev"]) & (d["close"] > d["close_prev"])
-        surge_idx = [i for i, v in zip(d.index, surge) if v]
+        surge_idx = [i for i, v in zip(d.index, surge, strict=False) if v]
         if not surge_idx:
             return False
         j = surge_idx[-1]

@@ -497,7 +497,10 @@ class ListGenerator:
             final["momentum"] = [
                 self.compute_momentum(a, b, c)
                 for a, b, c in zip(
-                    final["pred_ret_1d"], final["pred_ret_3d"], final["pred_ret_5d"]
+                    final["pred_ret_1d"],
+                    final["pred_ret_3d"],
+                    final["pred_ret_5d"],
+                    strict=False,
                 )
             ]
         # 决定 mode

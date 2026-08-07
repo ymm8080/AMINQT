@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """修复 panel *_hfq 复权因子系统性跳变 + 受污染的存储衍生 bias 列.
 
 根因 (2026-08-03 实盘确认):
@@ -144,7 +143,7 @@ def main() -> None:
 
     # ── 3. 重算 *_hfq ──
     panel = panel.copy()
-    for raw, hfq in zip(RAW_COLS, HFQ_COLS):
+    for raw, hfq in zip(RAW_COLS, HFQ_COLS, strict=False):
         panel[hfq] = panel[raw] * factor.values
 
     # ── 4. 重算存储 bias_* + cross ──
@@ -152,7 +151,7 @@ def main() -> None:
     for col, w in BIAS_WINDOWS.items():
         if col in panel.columns:
             ma = srt.groupby("symbol")["close_hfq"].transform(
-                lambda x: x.rolling(w, min_periods=w).mean()
+                lambda x, w=w: x.rolling(w, min_periods=w).mean()
             )
             srt[col] = srt["close_hfq"] / ma - 1
     for cross_col, a, b in CROSS_PAIRS:

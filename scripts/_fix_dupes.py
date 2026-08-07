@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Fix duplicate blocks in _daily_fetch.py caused by patch script."""
 
 p = "_daily_fetch.py"

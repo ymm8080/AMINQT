@@ -2,6 +2,7 @@
 
 import pandas as pd
 import tushare as ts
+
 from config import settings
 
 pro = ts.pro_api(settings.TUSHARE_TOKEN)

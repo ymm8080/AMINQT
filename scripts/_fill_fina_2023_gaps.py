@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Surgical fill of 4 fina fields gapped in 2023 from the 20260802 backfill cache.
 
 Root cause: fetch_fina_2023.py FIELDS omitted roe_dt/ar_turn/inv_turn/ocf_to_or,
@@ -86,7 +85,7 @@ def main() -> None:
     shutil.copy2(V3_PATH, backup)
     logger.info("备份: %s", backup)
 
-    for raw, col in FILL_MAP.items():
+    for _raw, col in FILL_MAP.items():
         if col not in v3.columns:
             logger.info("  v3 无列 %s, 跳过", col)
             continue

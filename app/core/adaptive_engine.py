@@ -53,7 +53,7 @@ class AdaptiveEngine:
         """
         self.config_path = config_path
         self.state_path = state_path
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             self._spec: dict = yaml.safe_load(f) or {}
         # 当前值: 优先取持久化状态, 否则取 initial
         persisted = self._load_state()
@@ -84,7 +84,7 @@ class AdaptiveEngine:
         """从磁盘加载自适应状态."""
         if os.path.exists(self.state_path):
             try:
-                with open(self.state_path, "r", encoding="utf-8") as f:
+                with open(self.state_path, encoding="utf-8") as f:
                     return json.load(f)
             except (OSError, json.JSONDecodeError) as exc:
                 logger.warning("自适应状态加载失败 (%s), 使用 initial", exc)

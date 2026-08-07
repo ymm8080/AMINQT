@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for app/core/data_loader — Parquet load + canonicalize + OHLCV validation."""
 
 import pandas as pd

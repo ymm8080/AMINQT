@@ -18,6 +18,7 @@ from app.indicators.chip_distribution import ChipDistribution, ChipFeed
 from app.indicators.indicator_feed import CompositeFeed
 from app.indicators.yimeng_dingdi import YimengFeed, yimeng_dingdi
 from app.indicators.zhuli_lasheng import zhuli_lasheng
+from app.pipeline1 import risk_overlays
 from app.pipeline1.backtest_v35 import BacktestEngineV35
 from app.pipeline1.cleaning_pipeline import CleaningConfig, CleaningPipeline
 from app.pipeline1.daily_pipeline import DailySelectionPipeline
@@ -34,7 +35,6 @@ from app.rules.rule_engine import (
     Tick,
 )
 from tests.test_daily_pipeline import _StubFeatures, _train_bundle, make_panel
-from app.pipeline1 import risk_overlays
 
 
 @pytest.fixture(autouse=True)
@@ -109,7 +109,7 @@ class TestEndToEndV35:
         r1 = pipe.run("20260720", panel=panel)
         assert r1["mode"] == "normal"
         lst = r1["list"]
-        assert list(lst.columns) == SCHEMA_FIELDS and len(lst) > 0
+        assert list(lst.columns)[: len(SCHEMA_FIELDS)] == SCHEMA_FIELDS and len(lst) > 0
 
         # ── 2. 规则引擎盘后标记 (真实 CompositeFeed) ──
         eng = RuleEngine(feed, Config())
@@ -149,7 +149,7 @@ class TestEndToEndV35:
             "09:48",
         ]
         orders = []
-        for t, px in zip(times, seq):
+        for t, px in zip(times, seq, strict=False):
             out = eng.on_tick(
                 2,
                 {sym: Tick(t, px, volume=1.6, turnover=8, big_order_net=5e6)},

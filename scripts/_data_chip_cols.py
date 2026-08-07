@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """候选筹码形态列的数据报告: chip_entropy / chip_skew_dist / peak_roc_5d/20d / peak_mass.
 
 对 main/dual 的 July OOS 帧, 输出每个候选列的:
@@ -18,9 +17,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pandas as pd
-
 import _verify_cyq_drop as V  # noqa: E402
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("data_chip_cols")

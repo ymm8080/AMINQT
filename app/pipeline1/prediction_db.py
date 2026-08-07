@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 预测池数据库 (SQLite) — 每日清单入库 + 实际收益回填
 ====================================================
@@ -29,6 +28,35 @@ from config.settings import data_others_path
 logger = logging.getLogger(__name__)
 
 DB_PATH = str(data_others_path("data/predictions.db"))
+
+SHADOW_POOL_N = (
+    30  # 影子池宽度: 每板块按 pred_ret_3d (幅度) 取 TOP-N; 须比生产清单宽才有重排意义
+)
+
+
+def shadow_pool_frame(candidates: pd.DataFrame, n: int = SHADOW_POOL_N) -> pd.DataFrame:
+    """从全量候选构建影子池: 每板块 pred_ret_3d 降序 TOP-N (legacy 双轨影子, 2026-08-07).
+
+    镜像并行候选池思路: 排名键 = 每股预期幅度; 与生产 prob_up/d3 混合排名做 A/B.
+    输入 candidates 为每日预测输出 (含 symbol/board/pred_ret_3d/prob_up_*).
+    """
+    if candidates is None or not len(candidates):
+        return pd.DataFrame(
+            columns=["symbol", "board", "pred_ret_3d", "prob_up_3d", "prob_up"]
+        )
+    keep = ["symbol", "pred_ret_3d", "prob_up_3d", "prob_up"]
+    df = candidates[keep].copy()
+    df["board"] = candidates["board"] if "board" in candidates.columns else "main"
+    df = df[df["pred_ret_3d"].notna()]
+    if df.empty:
+        return df
+    return (
+        df.sort_values("pred_ret_3d", ascending=False)
+        .groupby("board", sort=False)
+        .head(n)
+        .reset_index(drop=True)
+    )
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS prediction_runs (
@@ -78,6 +106,26 @@ CREATE TABLE IF NOT EXISTS prediction_outcomes (
 CREATE INDEX IF NOT EXISTS idx_stocks_date ON prediction_stocks(date);
 CREATE INDEX IF NOT EXISTS idx_stocks_symbol ON prediction_stocks(symbol);
 CREATE INDEX IF NOT EXISTS idx_outcomes_date ON prediction_outcomes(date);
+
+-- 双轨影子 (2026-08-07): legacy 排名键 A/B 对比底稿 — 每日同一份平滑候选按
+-- pred_ret_3d (幅度) 排名入库, 与生产 prob_up 排名 (prediction_stocks) 并存;
+-- 1~2 月后真实结局对比 (eval_legacy_dual_track.py). 自含结局列, 不污染生产表.
+CREATE TABLE IF NOT EXISTS prediction_shadow (
+    date         TEXT NOT NULL,
+    symbol       TEXT NOT NULL,
+    board        TEXT NOT NULL DEFAULT 'main',
+    rank_by_ret  INTEGER NOT NULL DEFAULT 0,
+    pred_ret_3d  REAL,
+    prob_up_3d   REAL,
+    prob_up      REAL,
+    actual_ret_1d REAL,
+    actual_ret_2d REAL,
+    actual_ret_3d REAL,
+    actual_ret_5d REAL,
+    computed_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    PRIMARY KEY (date, symbol)
+);
+CREATE INDEX IF NOT EXISTS idx_shadow_date ON prediction_shadow(date);
 """
 
 
@@ -221,6 +269,88 @@ class PredictionDB:
             conn.commit()
         logger.info("回填 %s: %d 条实际收益", date_str, count)
         return count
+
+    # ── 双轨影子 (legacy 排名键 A/B, 2026-08-07) ──
+    def insert_shadow(
+        self, date_str: str, df: pd.DataFrame, schema_version: str = "1.4"
+    ) -> int:
+        """影子排名入库: df 已按 pred_ret_3d 降序 (rank_by_ret 由顺序赋值). 幂等."""
+        if df is None or not len(df):
+            return 0
+        with sqlite3.connect(self.path) as conn:
+            for rank, (_, row) in enumerate(df.iterrows(), 1):
+                conn.execute(
+                    """INSERT OR REPLACE INTO prediction_shadow
+                       (date, symbol, board, rank_by_ret, pred_ret_3d, prob_up_3d, prob_up)
+                       VALUES (?,?,?,?,?,?,?)""",
+                    (
+                        date_str,
+                        str(row["symbol"]),
+                        str(row.get("board", "main")),
+                        rank,
+                        _safe_float(row, "pred_ret_3d"),
+                        _safe_float(row, "prob_up_3d"),
+                        _safe_float(row, "prob_up"),
+                    ),
+                )
+            conn.commit()
+        logger.info("影子排名 %s: %d 只入库", date_str, len(df))
+        return len(df)
+
+    def backfill_shadow_outcomes(self, date_str: str, outcomes: pd.DataFrame) -> int:
+        """回填影子池 T+1/3/5 实际收益 (收盘后调用, 自含结局列)."""
+        count = 0
+        with sqlite3.connect(self.path) as conn:
+            for _, row in outcomes.iterrows():
+                sym = str(row["symbol"])
+                cur = conn.execute(
+                    """UPDATE prediction_shadow SET
+                       actual_ret_1d=?, actual_ret_2d=?, actual_ret_3d=?, actual_ret_5d=?
+                       WHERE date=? AND symbol=?""",
+                    (
+                        _safe_float(row, "actual_ret_1d"),
+                        _safe_float(row, "actual_ret_2d"),
+                        _safe_float(row, "actual_ret_3d"),
+                        _safe_float(row, "actual_ret_5d"),
+                        date_str,
+                        sym,
+                    ),
+                )
+                count += cur.rowcount
+            conn.commit()
+        logger.info("影子回填 %s: %d 条实际收益", date_str, count)
+        return count
+
+    def get_shadow(self, date_str: str) -> list[dict]:
+        """返回影子池逐股明细 (按 rank_by_ret 升序)."""
+        with sqlite3.connect(self.path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM prediction_shadow WHERE date=? ORDER BY rank_by_ret",
+                (date_str,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def list_shadow_dates(self, limit: int = 60) -> list[dict]:
+        """列出已有影子排名的日期."""
+        with sqlite3.connect(self.path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT date, COUNT(*) as n FROM prediction_shadow "
+                "GROUP BY date ORDER BY date DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def shadow_quality(self, date_str: str) -> dict:
+        """影子池已回填 T+3 实际收益条数 (评估前检查结局成熟度)."""
+        with sqlite3.connect(self.path) as conn:
+            row = conn.execute(
+                "SELECT COUNT(*), SUM(CASE WHEN actual_ret_3d IS NOT NULL THEN 1 ELSE 0 END) "
+                "FROM prediction_shadow WHERE date=?",
+                (date_str,),
+            ).fetchone()
+            return {"n": int(row[0] or 0), "matured_3d": int(row[1] or 0)}
 
     # ── 查询 ──
     def get_run(self, date_str: str) -> dict | None:

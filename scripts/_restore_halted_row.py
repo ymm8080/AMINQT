@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Restore 300333 (兆日科技) 2026-07-29 row from the tailfix backup into the panel.
 
 Background: the 07-29 backfill anchored the symbol universe to the panel's max
@@ -12,6 +11,7 @@ WORM: backs up the current panel before writing.
 import os
 import shutil
 import time
+
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """GLM 3特征 vs Kimi 6特征 — 日线截面 Rank IC 对比 (一次性 A/B 测试).
 
 数据:
@@ -48,7 +47,7 @@ def per_symbol_features(df: pd.DataFrame) -> pd.DataFrame:
     """在已 merge 每日事件聚合的面板上, 按 symbol 计算两套特征."""
     df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
     out = []
-    for sym, g in df.groupby("symbol", sort=True):
+    for _sym, g in df.groupby("symbol", sort=True):
         g = g.sort_values("date").reset_index(drop=True)
         evt = g["net_ratio"].notna()  # 当日有公告记录
 

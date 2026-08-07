@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """模块3: DataLoader — 数据加载与对齐.
 
 职责:
@@ -16,7 +15,6 @@ BacktestEngine 内部统一转换为分 (fen).
 import hashlib
 import logging
 import os
-from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -96,10 +94,10 @@ class DataLoader:
         self.price_df: pd.DataFrame | None = None
         self.benchmark_df: pd.DataFrame | None = None
         self.market_df: pd.DataFrame | None = None
-        self.trade_dates: List[pd.Timestamp] = []
+        self.trade_dates: list[pd.Timestamp] = []
         self._data_version_hash: str = ""
 
-    def load(self) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def load(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """加载并对齐数据.
 
         Returns:
@@ -196,10 +194,12 @@ class DataLoader:
         self.price_df["stock"] = self.price_df["stock"].astype(str)
 
         # 创建行情表的 (date, stock) 索引集合
-        price_keys = set(zip(self.price_df["date"], self.price_df["stock"]))
+        price_keys = set(
+            zip(self.price_df["date"], self.price_df["stock"], strict=False)
+        )
 
         # 删除预测表中行情缺失的行
-        pred_keys = list(zip(self.pred_df["date"], self.pred_df["stock"]))
+        pred_keys = list(zip(self.pred_df["date"], self.pred_df["stock"], strict=False))
         mask = [k in price_keys for k in pred_keys]
         before = len(self.pred_df)
         self.pred_df = self.pred_df[mask].copy()
@@ -250,7 +250,7 @@ class DataLoader:
         self.trade_dates = sorted(self.price_df["date"].unique())
         logger.info("交易日历构建: %d 个交易日", len(self.trade_dates))
 
-    def get_trade_dates(self) -> List[pd.Timestamp]:
+    def get_trade_dates(self) -> list[pd.Timestamp]:
         """获取所有交易日列表 (按时间排序).
 
         Returns:

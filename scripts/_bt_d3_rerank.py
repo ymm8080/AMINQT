@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """d3 目标重排序 vs 旧 score 排序 — OOS 回测验证 (2026-08-05 用户请求).
 
 问题: legacy 清单 2026-08-05 起改按 d3 目标排序
@@ -214,7 +213,7 @@ def run_days(feat_main, feat_dual, test_start, realized) -> pd.DataFrame:
 
     rows = []
     days_with_list = 0
-    for i, date in enumerate(scored):
+    for _i, date in enumerate(scored):
         cand_frames = []
         for board, feat in (("main", feat_main), ("dual", feat_dual)):
             today = feat[feat["date"] == date].copy()
@@ -318,7 +317,7 @@ def summarize(admitted: pd.DataFrame, test_start: pd.Timestamp) -> dict:
     res.update(_per_ranking(admitted))
 
     ok = admitted.dropna(subset=["c2c_3"])
-    from scipy.stats import spearmanr, pearsonr
+    from scipy.stats import pearsonr, spearmanr
 
     res["corr"] = {}
     for pred_col in ("rank_score", "rank_d3", "pred_ret_3d", "prob_up_3d", "d3_blend"):

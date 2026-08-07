@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """量化增减持日频数据的整体经济影响 (ht 股票 + ±1月窗口)."""
 
 from __future__ import annotations

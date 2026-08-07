@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 页面 3: 回测中心 (P10, V3.5 + V5.2 双引擎回测 + 参数调优)
 =====================================================
@@ -23,8 +22,8 @@ import streamlit as st
 
 from app.pipeline1.backtest_v35 import BacktestEngineV35, BacktestProtocol
 from app.pipeline1.param_tuner import (
-    ParamTuner,
     TUNABLE_ENGINE,
+    ParamTuner,
 )
 from app.rules.config import TUNABLE_BOUNDS
 
@@ -487,9 +486,9 @@ def _render_comparison_tab(data_choice, window, capital, benchmark_sel) -> None:
             st.error("数据加载失败")
             return
 
+        from app.backtest.comparative_analyzer import ComparativeAnalyzer
         from app.backtest.config_manager import BacktestConfig
         from app.backtest.engine import BacktestEngine
-        from app.backtest.comparative_analyzer import ComparativeAnalyzer
 
         results = {}
         navs = {}
@@ -737,8 +736,8 @@ def _render_report_tab() -> None:
 
     if st.button("📄 生成报告", type="primary", key="btn_report"):
         try:
-            from app.backtest.report_generator import ReportGenerator
             from app.backtest.config_manager import ConfigManager
+            from app.backtest.report_generator import ReportGenerator
 
             config = ConfigManager.load("config/backtest_config.yaml")
             gen = ReportGenerator(config=config, output_dir=output_dir)

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """一次性脚本: 给 V3 面板回填龙虎榜席位分类金额 (KIMI LHB v2.0 上游数据).
 
 按 panel 的每个交易日拉取 Tushare top_inst (机构席位 + 全席位买卖明细),

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """一次性拉取 holdertrade 尾部缺口 (20260801~20260803) 追加进 data/_holder_cmp_raw.parquet.
 
 保持与 _holder_cmp_fetch.py 完全相同的 schema 与字段语义:
@@ -125,12 +124,8 @@ def main() -> None:
     combined.to_parquet(OUT, index=False)
     print(f"saved: {OUT} ({combined.shape})")
     print(
-        "date range now: %s ~ %s, new rows added: %d"
-        % (
-            combined["date"].min().strftime("%Y%m%d"),
-            combined["date"].max().strftime("%Y%m%d"),
-            new_rows,
-        )
+        f"date range now: {combined['date'].min().strftime('%Y%m%d')} ~ "
+        f"{combined['date'].max().strftime('%Y%m%d')}, new rows added: {new_rows}"
     )
     print("08-03 rows:", len(combined[combined["date"] == "2026-08-03"]))
 
