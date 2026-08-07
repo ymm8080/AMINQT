@@ -256,6 +256,7 @@ def _cands(rows: list[dict]) -> pd.DataFrame:
         "industry": "白酒",
         "pred_ret_3d": 0.03,
         "pred_ret_5d": 0.05,
+        "pred_ret_10d": 0.07,
         "prob_up": 0.70,
         "pred_ret_1d": 0.02,
         "pred_ret_2d": 0.03,
@@ -374,28 +375,33 @@ class TestDynamicEntry:
         assert list(out["list"]["symbol"]) == ["600002"]
 
     def test_emit_ranks_by_magnitude(self):
-        """排序 (2026-08-07 定案): 纯 pred_ret_3d 幅度降序 (回测赢 d3 混合, 旧混合降级影子).
+        """排序 (2026-08-07 定案): 纯 pred_ret_10d 幅度降序 (close-to-close 实得口径赢 3d/组合,
+        diag_10d_point_ret_20260807_100807; 旧 3d 混合降级影子).
 
-        幅度最高 → 第 1, 即使 prob/score 都低 (旧 0.5×norm(mag)+0.5×norm(prob) 混合会把它压到第 2).
+        10d 幅度最高 → 第 1, 即使 prob/score 都低; 且 3d 幅度刻意反序 —
+        600001 3d 最低却 10d 最高, 若误按 3d 排应得 [600002,600003,600001], 断言即失效.
         """
         gen = ListGenerator(entry_prob=0.0)
         cands = _cands(
             [
-                {  # 幅度最高但 prob/score 都低 → 纯幅度仍第 1
+                {  # 10d 幅度最高 (但 3d 幅度最低, prob/score 都低) → 纯 10d 幅度仍第 1
                     "symbol": "600001",
-                    "pred_ret_3d": 0.08,
+                    "pred_ret_10d": 0.08,
+                    "pred_ret_3d": 0.01,
                     "prob_up_3d": 0.55,
                     "score": 0.20,
                 },
-                {  # prob/score 最高但幅度居中 → 第 2 (旧混合会抬到第 1)
+                {  # 10d 居中 (但 3d 最高, prob/score 最高) → 第 2
                     "symbol": "600002",
-                    "pred_ret_3d": 0.03,
+                    "pred_ret_10d": 0.05,
+                    "pred_ret_3d": 0.08,
                     "prob_up_3d": 0.80,
                     "score": 0.95,
                 },
-                {  # 幅度最低 → 最后
+                {  # 10d 幅度最低 → 最后
                     "symbol": "600003",
-                    "pred_ret_3d": 0.01,
+                    "pred_ret_10d": 0.02,
+                    "pred_ret_3d": 0.05,
                     "prob_up_3d": 0.65,
                     "score": 0.50,
                 },

@@ -37,12 +37,13 @@ class TestLambdaRank:
                         "label_2d": rng.normal(0, 0.015, 750),
                         "label_3d": rng.normal(0, 0.02, 750),
                         "label_5d": rng.normal(0, 0.03, 750),
+                        "label_10d": rng.normal(0, 0.04, 750),
                     }
                 )
             )
         df = pd.concat(frames, ignore_index=True)
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
-        for k in (2, 3, 5):
+        for k in (2, 3, 5, 10):
             df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         trained = trainer.train_window(df, "main", ["f1"])
@@ -78,12 +79,13 @@ class TestLambdaRank:
                         "label_2d": rng.normal(0, 0.015, 750),
                         "label_3d": rng.normal(0, 0.02, 750),
                         "label_5d": rng.normal(0, 0.03, 750),
+                        "label_10d": rng.normal(0, 0.04, 750),
                     }
                 )
             )
         df = pd.concat(frames, ignore_index=True)
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
-        for k in (2, 3, 5):
+        for k in (2, 3, 5, 10):
             df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         path = trainer.save(trainer.train_window(df, "main", ["f1"]), "t")

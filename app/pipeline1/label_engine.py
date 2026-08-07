@@ -17,11 +17,12 @@ import numpy as np
 import pandas as pd
 from numpy.lib.stride_tricks import sliding_window_view
 
-LABEL_HORIZONS = (1, 2, 3, 5)
-# 评估/排序跨视界权重 (用户 2026-08-02 裁决: 预测 1/2/3/5d 收益+概率, 权重 1:0/2:0.45/3:0.35/5:0.2).
+LABEL_HORIZONS = (1, 2, 3, 5, 10)
+# 评估/排序跨视界权重 (用户 2026-08-02 裁决: 预测 1/2/3/5d 收益+概率, 权重 1:0/2:0.45/3:0.35/5:0.2;
+# 2026-08-07 加 10d 视界权重 0.10 — 排名键已改纯 10d 幅度, 综合分仅作准入).
 # 1d 权重=0 — T+1 制度买入当日不可卖, t+1 收益不可执行, 不贡献清单排序; 3d 历史预测力最强.
 # 修改此字典即全局生效 (validate_oos 加权 IC + predictor/list_generator 综合分).
-LABEL_WEIGHTS = {1: 0.0, 2: 0.45, 3: 0.35, 5: 0.2}
+LABEL_WEIGHTS = {1: 0.0, 2: 0.45, 3: 0.35, 5: 0.2, 10: 0.10}
 CLS_THRESHOLD = 0.005  # +0.5% 覆盖双边成本 (佣金万2.5x2 + 印花税0.05% + 滑点0.05% ≈ 0.13%, 留安全垫)
 COST = 0.0013  # round-trip 费用: 佣金万2.5双边 + 印花税0.05%卖出 (E5 净标签口径)
 # E5 滑点分层 (按 ADV20): >5亿→0.05% / 1~5亿→0.10% / <1亿→0.15% (双边计入)
@@ -117,8 +118,8 @@ class LabelEngine:
             # [B9] PM 执行口径分类标签: label_pm_cls 基于 PM 验收标签, 非研究口径 label_1d
             df["label_pm_cls"] = (df["label_pm_1d"] > CLS_THRESHOLD).astype("float")
             df.loc[df["label_pm_1d"].isna(), "label_pm_cls"] = np.nan
-            # [B9 多视界] PM 执行口径分类标签 2/3/5d (守卫列存在, AM 会话无 label_pm_*)
-            for k in (2, 3, 5):
+            # [B9 多视界] PM 执行口径分类标签 2/3/5/10d (守卫列存在, AM 会话无 label_pm_*)
+            for k in (2, 3, 5, 10):
                 pm_col = f"label_pm_{k}d"
                 if pm_col in df.columns:
                     df[f"label_pm_{k}d_cls"] = (df[pm_col] > CLS_THRESHOLD).astype(
@@ -128,8 +129,8 @@ class LabelEngine:
         # 研究口径分类标签 (PM 存在时 label_pm_cls 优先; 仅作回退)
         df["label_cls"] = (df["label_1d"] > CLS_THRESHOLD).astype("float")
         df.loc[df["label_1d"].isna(), "label_cls"] = np.nan
-        # 多视界研究口径分类标签 2/3/5d (概率模型训练标签)
-        for k in (2, 3, 5):
+        # 多视界研究口径分类标签 2/3/5/10d (概率模型训练标签)
+        for k in (2, 3, 5, 10):
             df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > CLS_THRESHOLD).astype("float")
             df.loc[df[f"label_{k}d"].isna(), f"label_{k}d_cls"] = np.nan
         df = LabelEngine.add_net_labels(df)
@@ -165,8 +166,8 @@ class LabelEngine:
         if "label_1d_net" in df.columns:
             df["label_cls_net"] = (df["label_1d_net"] > 0).astype("float")
             df.loc[df["label_1d_net"].isna(), "label_cls_net"] = np.nan
-        # [B9 多视界] 分类净标签 (净收益>0, 2/3/5d; 守卫列存在)
-        for k in (2, 3, 5):
+        # [B9 多视界] 分类净标签 (净收益>0, 2/3/5/10d; 守卫列存在)
+        for k in (2, 3, 5, 10):
             for base, col in (
                 (f"label_{k}d_net", f"label_{k}d_cls_net"),
                 (f"label_pm_{k}d_net", f"label_pm_{k}d_cls_net"),
@@ -293,7 +294,7 @@ class LabelEngine:
                 df["label_pm_1d_net"].notna(), np.nan
             )
         # 多视界分类标签同步遮蔽 (label_{k}d / _net 为 NaN 时)
-        for k in (2, 3, 5):
+        for k in (2, 3, 5, 10):
             for base, col in (
                 (f"label_{k}d", f"label_{k}d_cls"),
                 (f"label_{k}d_net", f"label_{k}d_cls_net"),

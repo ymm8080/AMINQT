@@ -52,10 +52,12 @@ SCHEMA_FIELDS = [
     "pred_ret_2d",
     "pred_ret_3d",
     "pred_ret_5d",
+    "pred_ret_10d",
     "prob_up",
     "prob_up_2d",
     "prob_up_3d",
     "prob_up_5d",
+    "prob_up_10d",
     "momentum",
     "consensus_score",
     "signal_conflict",
@@ -385,16 +387,18 @@ class ListGenerator:
 
     @staticmethod
     def _rank_by_magnitude(df: pd.DataFrame) -> pd.DataFrame:
-        """E7 准入后按预测幅度排序: pred_ret_3d 降序 (2026-08-07 定案).
+        """E7 准入后按预测幅度排序: pred_ret_10d 降序 (2026-08-07 定案).
 
-        回测依据: 并行 250d OOS 纯幅度排名赢 d3 混合 (把握度×幅度) 排名; legacy
-        main 两信号 +0.74 重合 (换≈no-op), GEM/STAR 反相关 (换=幅度优先, E7 准入
-        仍保证只列预测上涨股). 旧混合排名 (0.5×norm(pred_ret_3d)+0.5×norm(prob_up_3d))
-        降级为影子对照组 (prediction_shadow), 真实数据 1~2 月后裁决, 打脸则 revert.
-        缺 pred_ret_3d → 回退 score 降序.
+        回测依据: 并行 250d OOS 纯 10d 幅度排名在 close-to-close 实得口径下赢纯 3d
+        (main 5d实得 +1.02% vs +0.06%) 与 T3+T5 组合 (+0.16%); 10d 挑的是全程强势票,
+        前 3-5 天实得同样更高, 非"后程发力" (diag_10d_point_ret_20260807_100807).
+        旧混合排名 (0.5×norm(pred_ret_3d)+0.5×norm(prob_up_3d)) 降级为影子对照组
+        (prediction_shadow), 真实数据 1~2 月后裁决, 打脸则 revert.
+        缺 pred_ret_10d (旧 bundle) → 级联回退 pred_ret_5d → pred_ret_3d → score 降序.
         """
-        if "pred_ret_3d" in df.columns and df["pred_ret_3d"].notna().any():
-            return df.sort_values("pred_ret_3d", ascending=False)
+        for col in ("pred_ret_10d", "pred_ret_5d", "pred_ret_3d"):
+            if col in df.columns and df[col].notna().any():
+                return df.sort_values(col, ascending=False)
         return df.sort_values("score", ascending=False)
 
     def emit(
@@ -517,7 +521,7 @@ class ListGenerator:
         final["weight"] = self._compute_weights(final)
         if "prob_up" in final.columns:
             final["prob_up"] = final["prob_up"].round(3)
-        for col in ("prob_up_2d", "prob_up_3d", "prob_up_5d"):
+        for col in ("prob_up_2d", "prob_up_3d", "prob_up_5d", "prob_up_10d"):
             if col in final.columns:
                 final[col] = final[col].round(3)
         for col in ("is_limit_up_close", "is_one_word_limit"):
@@ -525,9 +529,11 @@ class ListGenerator:
                 final[col] = 0
         for col in (
             "day_change",
+            "pred_ret_10d",
             "prob_up_2d",
             "prob_up_3d",
             "prob_up_5d",
+            "prob_up_10d",
             "pred_q10",
             "pred_q50",
             "pred_q90",

@@ -86,13 +86,16 @@ class V35Predictor:
         latest["pred_ret_2d"] = models["2d_reg"][0].predict(X)
         latest["pred_ret_3d"] = models["3d_reg"][0].predict(X)
         latest["pred_ret_5d"] = models["5d_reg"][0].predict(X)
+        latest["pred_ret_10d"] = (
+            models["10d_reg"][0].predict(X) if "10d_reg" in models else np.nan
+        )
         raw_prob = models["1d_cls"][0].predict_proba(X)[:, 1]
         # 校准 (校准器缺失时回退原始 predict_proba)
         cal = bundle.get("calibrator")
         latest["prob_up"] = cal.predict_proba(raw_prob) if cal is not None else raw_prob
-        # [多视界] 2/3/5d 分类概率 (各视界校准器; 缺失时回退 raw / 缺 kind 跳过)
+        # [多视界] 2/3/5/10d 分类概率 (各视界校准器; 缺失时回退 raw / 缺 kind 跳过)
         calibrators = bundle.get("calibrators", {})
-        for k in (2, 3, 5):
+        for k in (2, 3, 5, 10):
             kind = f"{k}d_cls"
             if kind not in models:
                 continue
@@ -101,12 +104,16 @@ class V35Predictor:
             latest[f"prob_up_{k}d"] = (
                 cal_k.predict_proba(raw) if cal_k is not None else raw
             )
-        # 综合排序分: LABEL_WEIGHTS 加权 (1d/2d/3d/5d, 修改字典即全局生效)
-        total_w = sum(LABEL_WEIGHTS.values())
+        # 综合排序分: LABEL_WEIGHTS 加权 (修改字典即全局生效; 旧 bundle 缺 pred_ret_10d 时
+        # 只对已预测的视界加权并按各自权重和归一, 保证新旧 bundle 得分口径一致)
+        present_w = {
+            k: w for k, w in LABEL_WEIGHTS.items() if f"pred_ret_{k}d" in latest.columns
+        }
+        total_w = sum(present_w.values())
         latest["composite_score"] = (
             sum(
-                LABEL_WEIGHTS[k] * latest[f"pred_ret_{k}d"].values
-                for k in LABEL_WEIGHTS
+                present_w[k] * latest[f"pred_ret_{k}d"].values
+                for k in present_w
             )
             / total_w
         )
@@ -124,6 +131,11 @@ class V35Predictor:
             "prob_up_3d",
             "prob_up_5d",
         ]
+        # [10d] 新视界 (旧 bundle 无 10d 模型 → 补 NaN, 兼容回退)
+        for col in ("pred_ret_10d", "prob_up_10d"):
+            if col not in latest.columns:
+                latest[col] = np.nan
+            keep.append(col)
         # [E1] 分位数分布预测 (bundle 含 quantile_models 时)
         # 1d (向后兼容) + 2d/3d/5d (E7 闸3 自 2026-08-05 用 2d/3d/5d 中位数)
         if "quantile_models" in bundle:
