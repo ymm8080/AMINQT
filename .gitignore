@@ -22,6 +22,7 @@ data/**/*.pid
 data/**/*.md
 data/**/*.txt
 data/**/*.csv
+data/**/*.json
 !data/raw/.gitkeep
 !data/intraday/.gitkeep
 !data/processed/.gitkeep
