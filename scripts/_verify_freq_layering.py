@@ -98,7 +98,7 @@ def _report(tr, out):
     _build(work)
 
     # --- 6格判定: 口径(TS时序/XS截面) × 频率(日/周/月) ---
-    def freq6(title, base_cols, col_fn):
+    def freq6(title, base_cols, col_fn, work=work):
         out.append(f"  [{title}] 6格判定 (TS=个股时序 IC / XS=日截面 rank IC):")
         out.append(
             f"{'feature':<18}{'TS日':>8}{'TS周':>8}{'TS月':>8}"
