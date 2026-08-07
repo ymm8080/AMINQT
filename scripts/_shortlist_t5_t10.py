@@ -321,7 +321,10 @@ def _add_mfe(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-_PANEL_CACHE: dict = {"ready": False, "data": {}}  # _panel_per_stock 结果缓存 (被候选池+校准各调一次)
+_PANEL_CACHE: dict = {
+    "ready": False,
+    "data": {},
+}  # _panel_per_stock 结果缓存 (被候选池+校准各调一次)
 
 
 def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
@@ -409,11 +412,11 @@ def expand_candidates(full: pd.DataFrame) -> pd.DataFrame:
                     "board": board,
                     "symbol": sym,
                     "systems": (
-                        "fusion+sniper" if in_s and in_f else ("sniper" if in_s else "fusion")
+                        "fusion+sniper"
+                        if in_s and in_f
+                        else ("sniper" if in_s else "fusion")
                     ),
-                    "score": float(
-                        max(sscore.get(sym, -1.0), fscore.get(sym, -1.0))
-                    ),
+                    "score": float(max(sscore.get(sym, -1.0), fscore.get(sym, -1.0))),
                     "co_occur": bool(in_s and in_f),
                     "rk": 0,
                     "cut": "T-10",
@@ -731,7 +734,9 @@ def rank_and_truncate(res: pd.DataFrame) -> pd.DataFrame:
         top5 = b.head(5).copy()
         top10 = b.head(10).copy()
         out.append(
-            pd.concat([top5.assign(cut="T-5"), top10.assign(cut="T-10")], ignore_index=True)
+            pd.concat(
+                [top5.assign(cut="T-5"), top10.assign(cut="T-10")], ignore_index=True
+            )
         )
     return pd.concat(out, ignore_index=True).reset_index(drop=True)
 
@@ -817,7 +822,9 @@ def build_summary(res: pd.DataFrame, stats: dict, sel_date: pd.Timestamp) -> lis
         if b.empty:
             continue
         label = BOARD_LABEL.get(board, board)
-        co = b[b["co_occur"]].sort_values(["cut", CAND_RANK_KEY], ascending=[True, False])
+        co = b[b["co_occur"]].sort_values(
+            ["cut", CAND_RANK_KEY], ascending=[True, False]
+        )
         lines.append(
             f"\n[{label}] 两系统共识(共现)股: "
             f"{', '.join(str(s) for s in co['symbol'].unique()) if not co.empty else '无'}"

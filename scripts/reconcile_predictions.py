@@ -42,7 +42,9 @@ def load_ohlcv_panel(list_dir: str = "data/lists") -> pd.DataFrame | None:
         panel["date"] = pd.to_datetime(panel["date"])
         panel["close"] = panel["close_hfq"]  # 复权价算收益, 股息/拆股不被误算
         panel = panel[["symbol", "date", "close"]].drop_duplicates(["symbol", "date"])
-        logger.info("本地 V3 面板: %d 只 / %d 行", panel["symbol"].nunique(), len(panel))
+        logger.info(
+            "本地 V3 面板: %d 只 / %d 行", panel["symbol"].nunique(), len(panel)
+        )
         return panel.set_index("symbol")
     except Exception:
         logger.warning("本地 V3 面板不可用, 回退 akshare", exc_info=True)

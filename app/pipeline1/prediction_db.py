@@ -29,7 +29,9 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = str(data_others_path("data/predictions.db"))
 
-SHADOW_POOL_N = 30  # 影子池宽度: 每板块按 pred_ret_3d (幅度) 取 TOP-N; 须比生产清单宽才有重排意义
+SHADOW_POOL_N = (
+    30  # 影子池宽度: 每板块按 pred_ret_3d (幅度) 取 TOP-N; 须比生产清单宽才有重排意义
+)
 
 
 def shadow_pool_frame(candidates: pd.DataFrame, n: int = SHADOW_POOL_N) -> pd.DataFrame:
@@ -39,7 +41,9 @@ def shadow_pool_frame(candidates: pd.DataFrame, n: int = SHADOW_POOL_N) -> pd.Da
     输入 candidates 为每日预测输出 (含 symbol/board/pred_ret_3d/prob_up_*).
     """
     if candidates is None or not len(candidates):
-        return pd.DataFrame(columns=["symbol", "board", "pred_ret_3d", "prob_up_3d", "prob_up"])
+        return pd.DataFrame(
+            columns=["symbol", "board", "pred_ret_3d", "prob_up_3d", "prob_up"]
+        )
     keep = ["symbol", "pred_ret_3d", "prob_up_3d", "prob_up"]
     df = candidates[keep].copy()
     df["board"] = candidates["board"] if "board" in candidates.columns else "main"
@@ -52,6 +56,7 @@ def shadow_pool_frame(candidates: pd.DataFrame, n: int = SHADOW_POOL_N) -> pd.Da
         .head(n)
         .reset_index(drop=True)
     )
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS prediction_runs (

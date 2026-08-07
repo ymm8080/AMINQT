@@ -99,7 +99,15 @@ def _shadow_candidates() -> pd.DataFrame:
     """三板块候选, pred_ret_3d 不排序 (验证 shadow_pool_frame 按幅度排序+每板块截断)."""
     return pd.DataFrame(
         {
-            "symbol": ["600001", "600002", "600003", "300001", "300002", "300003", "688001"],
+            "symbol": [
+                "600001",
+                "600002",
+                "600003",
+                "300001",
+                "300002",
+                "300003",
+                "688001",
+            ],
             "board": ["main", "main", "main", "GEM", "GEM", "GEM", "STAR"],
             "pred_ret_3d": [0.01, 0.05, None, 0.02, 0.09, 0.04, 0.07],
             "prob_up_3d": [0.5, 0.6, 0.55, 0.45, 0.7, 0.5, 0.65],
@@ -113,10 +121,7 @@ class TestShadowTrack:
         from app.pipeline1.prediction_db import shadow_pool_frame
 
         df = shadow_pool_frame(_shadow_candidates(), n=2)
-        got = {
-            b: df[df["board"] == b]["symbol"].tolist()
-            for b in df["board"].unique()
-        }
+        got = {b: df[df["board"] == b]["symbol"].tolist() for b in df["board"].unique()}
         assert got == {
             "main": ["600002", "600001"],  # pred_ret_3d 0.05, 0.01
             "GEM": ["300002", "300003"],  # 0.09, 0.04

@@ -40,7 +40,11 @@ HORIZONS = ("3d", "5d")
 
 def _top_by(df: list[dict], key: str, ascending: bool, board: str, n: int = TOP_N):
     sub = [r for r in df if r.get("board") == board and pd.notna(r.get(key))]
-    sub = sorted(sub, key=lambda r: (r[key] if r[key] is not None else float("-inf")), reverse=not ascending)
+    sub = sorted(
+        sub,
+        key=lambda r: r[key] if r[key] is not None else float("-inf"),
+        reverse=not ascending,
+    )
     return sub[:n]
 
 
@@ -118,9 +122,15 @@ def main() -> None:
     daily.to_csv(out_dir / "daily_3d.csv", index=False)
 
     agg_rows = []
-    print("========== legacy 双轨影子: 生产(把握度) vs 影子(幅度) TOP-5 ==========", flush=True)
-    print(f"{'板块':<6}{'日':>4}{'重合':>6}{'生产均3d':>10}{'影子均3d':>10}"
-          f"{'Δ3d':>9}{'生产涨率':>9}{'影子涨率':>9}", flush=True)
+    print(
+        "========== legacy 双轨影子: 生产(把握度) vs 影子(幅度) TOP-5 ==========",
+        flush=True,
+    )
+    print(
+        f"{'板块':<6}{'日':>4}{'重合':>6}{'生产均3d':>10}{'影子均3d':>10}"
+        f"{'Δ3d':>9}{'生产涨率':>9}{'影子涨率':>9}",
+        flush=True,
+    )
     for board in ("main", "GEM", "STAR"):
         sub = daily[daily["board"] == board]
         if sub.empty:
