@@ -37,18 +37,27 @@ SRC = (
 )
 BOARDS = ("main", "dual")
 POOL_N, TOP_N = 30, 10
-W = {"2d": 0.25, "3d": 0.40, "5d": 0.25, "10d": 0.10}  # 与 config SHORTLIST_SCORE horizon_w 一致
+W = {
+    "2d": 0.25,
+    "3d": 0.40,
+    "5d": 0.25,
+    "10d": 0.10,
+}  # 与 config SHORTLIST_SCORE horizon_w 一致
 
 
 def _keys(df: pd.DataFrame) -> pd.DataFrame:
     d = df.copy()
     d["pred_comp"] = (
-        W["2d"] * d["mag_2d"] + W["3d"] * d["mag_3d"]
-        + W["5d"] * d["mag_5d"] + W["10d"] * d["mag_10d"]
+        W["2d"] * d["mag_2d"]
+        + W["3d"] * d["mag_3d"]
+        + W["5d"] * d["mag_5d"]
+        + W["10d"] * d["mag_10d"]
     )
     d["real_comp"] = (
-        W["2d"] * d["real_2d"] + W["3d"] * d["real_3d"]
-        + W["5d"] * d["real_5d"] + W["10d"] * d["real_10d"]
+        W["2d"] * d["real_2d"]
+        + W["3d"] * d["real_3d"]
+        + W["5d"] * d["real_5d"]
+        + W["10d"] * d["real_10d"]
     )
     d["pred_t23"] = 0.5 * d["mag_2d"] + 0.5 * d["mag_3d"]
     s = d["score"].rank(pct=True)
@@ -70,14 +79,25 @@ def main() -> None:
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date")
     dates = sorted(df["date"].unique())
-    keep = set(dates[-args.trailing_days:])
+    keep = set(dates[-args.trailing_days :])
     df = df[df["date"].isin(keep)].reset_index(drop=True)
-    need = ["real_2d", "real_3d", "real_5d", "real_10d",
-            "mag_2d", "mag_3d", "mag_5d", "mag_10d"]
+    need = [
+        "real_2d",
+        "real_3d",
+        "real_5d",
+        "real_10d",
+        "mag_2d",
+        "mag_3d",
+        "mag_5d",
+        "mag_10d",
+    ]
     df = df.dropna(subset=need)
     df = _keys(df)
-    print(f"[data] {len(df):,} 行 / {df['date'].nunique()} 交易日 "
-          f"({df['date'].min().date()}..{df['date'].max().date()})", flush=True)
+    print(
+        f"[data] {len(df):,} 行 / {df['date'].nunique()} 交易日 "
+        f"({df['date'].min().date()}..{df['date'].max().date()})",
+        flush=True,
+    )
 
     KEYS = (
         ("mag_3d", "纯 mag_3d (并行现状)"),
@@ -97,7 +117,10 @@ def main() -> None:
                 lst = pool.sort_values(key, ascending=False).head(TOP_N)
                 rows.append(
                     {
-                        "date": _d, "board": board, "key": key, "label": label,
+                        "date": _d,
+                        "board": board,
+                        "key": key,
+                        "label": label,
                         "n": len(lst),
                         "comp": float(lst["real_comp"].mean()),
                         "ret3d": float(lst["real_3d"].mean()),
@@ -111,13 +134,19 @@ def main() -> None:
     daily.to_csv(out_dir / "daily.csv", index=False)
 
     agg_rows = []
-    print(f"\n===== T+2/T+3 merge 排名键 vs 纯 mag_3d (最近 {args.trailing_days} 交易日) =====", flush=True)
+    print(
+        f"\n===== T+2/T+3 merge 排名键 vs 纯 mag_3d (最近 {args.trailing_days} 交易日) =====",
+        flush=True,
+    )
     for board in BOARDS:
         sub = daily[daily["board"] == board]
         if sub.empty:
             continue
         print(f"\n[{board}]  (结局=模块自身目标口径 real_comp 加权 MFE)", flush=True)
-        print(f"  {'键':<28}{'日':>4}{'comp':>9}{'3d':>9}{'2d':>9}{'comp涨率':>9}{'3d涨率':>9}", flush=True)
+        print(
+            f"  {'键':<28}{'日':>4}{'comp':>9}{'3d':>9}{'2d':>9}{'comp涨率':>9}{'3d涨率':>9}",
+            flush=True,
+        )
         for key, label in KEYS:
             g = sub[sub["key"] == key]
             if g.empty:
@@ -130,7 +159,9 @@ def main() -> None:
             )
             agg_rows.append(
                 {
-                    "board": board, "key": key, "label": label,
+                    "board": board,
+                    "key": key,
+                    "label": label,
                     "n_days": int(len(g)),
                     "comp": round(float(r["comp"]), 5),
                     "ret3d": round(float(r["ret3d"]), 5),
@@ -146,14 +177,18 @@ def main() -> None:
             common = base.index.intersection(other.index)
             if len(common):
                 wins = int((other[common] > base[common]).sum())
-                print(f"  逐日 {label} comp 赢 mag_3d: {wins}/{len(common)} 天", flush=True)
+                print(
+                    f"  逐日 {label} comp 赢 mag_3d: {wins}/{len(common)} 天",
+                    flush=True,
+                )
 
     pd.DataFrame(agg_rows).to_csv(out_dir / "agg.csv", index=False)
     summary = {
-        "ts": ts, "trailing_days": args.trailing_days,
+        "ts": ts,
+        "trailing_days": args.trailing_days,
         "horizon_w": W,
         "note": "干净 OOS; real=MFE (触摸天花板口径); "
-                "pred_comp/blend 均为每日池内预测值排名, 无偷看",
+        "pred_comp/blend 均为每日池内预测值排名, 无偷看",
         "boards": agg_rows,
     }
     with open(out_dir / "summary.json", "w", encoding="utf-8") as fh:
