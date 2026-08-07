@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_lhb_ts_vs_cross.py — LHB 龙虎榜: 个股 time-series IC vs 截面 IC vs 事件研究.
 
 方法论 (用户 2026-08-04): 个股类特征用 per-stock TSIC, 截面类用横截面,
@@ -22,15 +21,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.label_engine import LabelEngine
+from config.settings import PANEL_V3_PATH
+from scripts._diag_chip_weekly import per_stock_ts_ic
 from scripts._diag_column_feed import (
     LABELS,
     MASK_RECENT_DAYS,
     daily_rank_ic_multi,
     weighted_ic,
 )
-from scripts._diag_chip_weekly import per_stock_ts_ic
 
 logging.disable(logging.CRITICAL)
 

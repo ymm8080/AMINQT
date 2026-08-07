@@ -6,11 +6,12 @@ Simplified: use existing cache, sample to 1500 stocks.
 import warnings
 
 warnings.filterwarnings("ignore")
-import pandas as pd  # noqa: E402
-import numpy as np  # noqa: E402
-import time  # noqa: E402
 import os  # noqa: E402
 import sys  # noqa: E402
+import time  # noqa: E402
+
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)

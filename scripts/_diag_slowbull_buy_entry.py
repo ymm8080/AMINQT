@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛 买入纪律(均线低吸)门控入场回测 (2026-08-05, route A 补全).
 
 exit_variants 证明退出层改动救不回幅度 (median hold 恒 3 日, realized≈0)。

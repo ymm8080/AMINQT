@@ -152,6 +152,26 @@ class DailySelectionPipeline:
         yesterday = self._load_yesterday(trade_date)
         candidates = V35Predictor.mark_yesterday_list(candidates, yesterday)
 
+        # 全量候选预测持久化 (WORM): 供任意 symbol 当日预测即时查询, 免重算 (2026-08-06)
+        try:
+            cand_path = os.path.join(self.list_dir, f"candidates_{trade_date}.parquet")
+            candidates.to_parquet(cand_path, index=False)
+        except Exception:
+            logger.warning("候选预测落盘失败 (非阻塞)", exc_info=True)
+
+        # [2026-08-06] 输出级时间平滑: 单股预测/概率逐日剧变 → EMA 衰减 (Layer 2).
+        # 在 emit 之前平滑 forecast 列 (pred_ret_*/prob_up*/pred_q50*), 使 E7 准入 + d3
+        # 排名用稳定值; raw 底稿 WORM 落盘 legacy_preds_raw_<date>__<module>.csv.
+        try:
+            from .model_meta import load_modules, module_id
+            from .pred_smoothing import persist_raw_preds, smooth_preds
+
+            mod = module_id(load_modules())
+            persist_raw_preds(candidates, trade_date, mod)
+            candidates = smooth_preds(candidates, trade_date, mod)
+        except Exception:
+            logger.warning("预测平滑失败 (非阻塞)", exc_info=True)
+
         # 清单生成 (含 D18 空仓触发)
         result = self.lister.emit(candidates, env=env, market_state=market_state)
         result["valve_state"] = valve_state
@@ -183,7 +203,7 @@ class DailySelectionPipeline:
                 pq_path = str(data_others_path("data/priority.json"))
                 existing = set()
                 if os.path.exists(pq_path):
-                    with open(pq_path, "r", encoding="utf-8") as f:
+                    with open(pq_path, encoding="utf-8") as f:
                         existing = set(json.load(f).get("symbols", []))
                 new_symbols = set(result["list"]["symbol"].tolist())
                 merged = sorted(existing | new_symbols)

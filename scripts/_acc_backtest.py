@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """预测准确率 A/B 回测 — 当前特征集 vs +Kimi holdertrade 特征.
 
 目标 (用户: "个股上涨幅度和上涨概率 正确是第一位的"):
@@ -335,7 +334,7 @@ def _topk(te, tr, Xcols, cache, tag):
     res["all"] = {"hit": all_hit, "mean": float(np.mean(data["label_pm_5d_net"]))}
     for topk in (5, 10, 20):
         hits, means, dhs = [], [], []
-        for d, g in data.groupby("date"):
+        for _d, g in data.groupby("date"):
             top = g.nlargest(topk, "p_ret5")
             hits.append(float((top["label_pm_5d_net"] > 0).mean()))
             means.append(float(top["label_pm_5d_net"].mean()))

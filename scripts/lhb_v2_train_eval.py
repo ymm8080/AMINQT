@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """KIMI LHB v2.0 训练/预测/评估 — 仅龙虎榜上榜股票池 (spec §5.3).
 
 工作流:
@@ -35,7 +34,11 @@ from scipy.stats import spearmanr
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35 as FE  # noqa: E402
-from config.settings import BACKTEST_RESULT_DIR, LHB_V2_EVAL, PANEL_V3_PATH  # noqa: E402
+from config.settings import (  # noqa: E402
+    BACKTEST_RESULT_DIR,
+    LHB_V2_EVAL,
+    PANEL_V3_PATH,
+)
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"

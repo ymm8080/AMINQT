@@ -1,6 +1,7 @@
 """Test Tushare API availability and points level for the missing data columns."""
 
 import tushare as ts
+
 from config import settings
 
 token = settings.TUSHARE_TOKEN

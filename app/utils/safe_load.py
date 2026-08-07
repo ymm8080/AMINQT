@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Safe model loading utilities — mitigate pickle deserialization RCE.
 
 pickle.load() can execute arbitrary Python code.  These helpers use

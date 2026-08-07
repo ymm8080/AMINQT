@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Build FULLY enriched panel with ALL alt data for 3227 stocks."""
 
+import glob
 import logging
 import os
-import glob
 
 import pandas as pd
 

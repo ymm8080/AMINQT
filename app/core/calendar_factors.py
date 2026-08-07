@@ -68,7 +68,7 @@ def load_holidays(holidays_path: str) -> set[pd.Timestamp]:
         logger.warning("节假日文件缺失: %s — 使用 weekend-only 降级", holidays_path)
         return set()
     try:
-        with open(holidays_path, "r", encoding="utf-8") as f:
+        with open(holidays_path, encoding="utf-8") as f:
             data = json.load(f)
         holidays: set[pd.Timestamp] = set()
         _collect_date_strings(data, holidays)

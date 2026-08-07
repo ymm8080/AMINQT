@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """模块7: ReportGenerator — 回测报告生成器.
 
 生成文本/JSON/HTML 格式的回测报告, 包含:
@@ -16,7 +15,7 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -60,10 +59,10 @@ class ReportGenerator:
         mode_name: str,
         result_df: pd.DataFrame,
         trades_df: pd.DataFrame,
-        metrics: Dict[str, Any],
-        signal_report: Optional[Dict[str, Any]] = None,
-        comparison: Optional[Dict[str, Any]] = None,
-        holdings_history: Optional[pd.DataFrame] = None,
+        metrics: dict[str, Any],
+        signal_report: dict[str, Any] | None = None,
+        comparison: dict[str, Any] | None = None,
+        holdings_history: pd.DataFrame | None = None,
         data_version_hash: str = "",
     ) -> str:
         """生成完整回测报告 (文本 + JSON + HTML).
@@ -132,14 +131,14 @@ class ReportGenerator:
         mode_name: str,
         result_df: pd.DataFrame,
         trades_df: pd.DataFrame,
-        metrics: Dict[str, Any],
-        signal_report: Optional[Dict],
-        comparison: Optional[Dict],
+        metrics: dict[str, Any],
+        signal_report: dict | None,
+        comparison: dict | None,
         data_version_hash: str,
     ) -> None:
         """写入 JSON 格式报告."""
         try:
-            report: Dict[str, Any] = {
+            report: dict[str, Any] = {
                 "meta": {
                     "mode": mode_name,
                     "timestamp": self._timestamp,
@@ -169,13 +168,13 @@ class ReportGenerator:
         mode_name: str,
         result_df: pd.DataFrame,
         trades_df: pd.DataFrame,
-        metrics: Dict[str, Any],
-        signal_report: Optional[Dict],
-        comparison: Optional[Dict],
+        metrics: dict[str, Any],
+        signal_report: dict | None,
+        comparison: dict | None,
         data_version_hash: str,
     ) -> None:
         """写入纯文本格式报告."""
-        lines: List[str] = []
+        lines: list[str] = []
         sep = "=" * 70
 
         lines.append(sep)
@@ -323,9 +322,9 @@ class ReportGenerator:
         mode_name: str,
         result_df: pd.DataFrame,
         trades_df: pd.DataFrame,
-        metrics: Dict[str, Any],
-        signal_report: Optional[Dict],
-        comparison: Optional[Dict],
+        metrics: dict[str, Any],
+        signal_report: dict | None,
+        comparison: dict | None,
         data_version_hash: str,
     ) -> None:
         """写入 HTML 格式报告 (含内嵌 CSS, 无外部依赖)."""
@@ -465,7 +464,7 @@ class ReportGenerator:
             logger.error("HTML 报告写入失败: %s", e)
 
     @staticmethod
-    def _trades_summary(trades_df: pd.DataFrame) -> Dict[str, Any]:
+    def _trades_summary(trades_df: pd.DataFrame) -> dict[str, Any]:
         """生成交易明细摘要."""
         if trades_df is None or trades_df.empty:
             return {
@@ -488,7 +487,7 @@ class ReportGenerator:
         }
 
     @staticmethod
-    def _nav_summary(result_df: pd.DataFrame) -> Dict[str, Any]:
+    def _nav_summary(result_df: pd.DataFrame) -> dict[str, Any]:
         """生成 NAV 曲线摘要."""
         if result_df is None or result_df.empty:
             return {"final_nav": 0.0, "num_days": 0, "max_nav": 0.0, "min_nav": 0.0}

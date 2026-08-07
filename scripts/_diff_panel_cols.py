@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Diff V3 panel column sets across WORM snapshots to explain column growth."""
 
 import os
 import sys
+
 import pyarrow.parquet as pq
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -52,7 +52,7 @@ for label, fn in SNAPS:
 # cumulative diff from earliest existing snapshot
 prev = None
 prev_label = None
-for label, fn in SNAPS:
+for label, _fn in SNAPS:
     cur = names[label]
     if cur is None:
         continue

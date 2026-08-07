@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_main_retrain_ic.py — 判断 main 重训值不值: 新选中特征在 OOS 尾部有无预测力.
 
 对 selected_main_*.json 的选中特征, 在 features_main 末 250 交易日 (OOS) 逐日算

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for app/pipeline_parallel (并行多系统, 2026-08-04).
 
 覆盖: MFE 净标签 / 池合成打分 / TOP-N 选股 / 双头量测 / 配置完整性 /
@@ -11,14 +10,14 @@ import pytest
 
 from app.pipeline_parallel.config import (
     FUSION,
-    PANEL,
-    SNIPER,
-    SYSTEMS,
-    SLOW_BULL,
-    MIN_MAG,
-    MIN_WINRATE,
     HORIZONS,
     MFE_LABELS,
+    MIN_MAG,
+    MIN_WINRATE,
+    PANEL,
+    SLOW_BULL,
+    SNIPER,
+    SYSTEMS,
 )
 from app.pipeline_parallel.scoring import (
     cross_rank,
@@ -321,7 +320,7 @@ def test_run_all_reports_per_board_oos():
             # 2026-08-04 用户: 验收只看 OOS, full 不参与保留判定
             assert s["full"]["kept"] is None
             assert set(s["oos"]) == {"oos"}  # oos_days=4 → 单窗
-            for w, ow in s["oos"].items():
+            for _w, ow in s["oos"].items():
                 assert ow["kept"] is True  # 合成持久因子下 OOS 双头必过
                 assert ow["primary"]["passed"]
             assert set(s["full"]["primary"]["per_horizon"]) == set(HORIZONS)
@@ -559,7 +558,7 @@ def test_build_merged_shortlist_ranked():
     assert sl.duplicated(["date", "symbol"]).sum() == 0
     # rk 按日期截断到 top_n
     assert sl["rk"].max() <= 10
-    for d, g in sl.groupby("date"):
+    for _d, g in sl.groupby("date"):
         assert set(g["rk"]) == set(range(1, len(g) + 1))
         co = g.loc[g["co_occur"]]
         no = g.loc[~g["co_occur"]]
@@ -584,7 +583,7 @@ def test_evaluate_merged_reports_per_horizon():
     per = evaluate_merged(df, top_n=10, crit=(MIN_WINRATE, MIN_MAG))
     assert set(per) == set(HORIZONS)
     # TOP-10 短名单在合成持久因子下, 各视界应有足量可测样本
-    for h, r in per.items():
+    for _h, r in per.items():
         assert r["n"] > 0
         assert "mag" in r and "winrate" in r and "ok" in r
     # 合成 f1 高分 = 高 MFE → 短名单双头通过

@@ -1,19 +1,21 @@
 """Scan VarThresh thresholds with chronological signed IC backtest."""
 
-import pandas as pd
-import numpy as np
-import warnings
-import sys
 import os
+import sys
 import time
+import warnings
+
+import numpy as np
+import pandas as pd
 
 warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lightgbm import LGBMRegressor
 from scipy.stats import spearmanr
-from app.pipeline1.label_engine import LabelEngine
+
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.feature_selector import BruteForceGenerator, dedup_l2
+from app.pipeline1.label_engine import LabelEngine
 
 t0 = time.time()
 print("Loading + generating...", flush=True)
@@ -66,9 +68,7 @@ numeric_cols = [
     if all_feats[c].dtype in ("float64", "float32", "int64", "int32")
 ]
 print(
-    "{} cols, {} rows ({}s)".format(
-        len(numeric_cols), len(all_feats), int(time.time() - t0)
-    )
+    f"{len(numeric_cols)} cols, {len(all_feats)} rows ({int(time.time() - t0)}s)"
 )
 
 # Chronological split
@@ -78,9 +78,7 @@ cut_date = uniq_dates[int(len(uniq_dates) * 0.75)]
 train_mask = dates_arr < cut_date
 test_mask = dates_arr >= cut_date
 print(
-    "Train: {} rows, Test: {} rows, cutoff={}".format(
-        train_mask.sum(), test_mask.sum(), str(cut_date)[:10]
-    )
+    f"Train: {train_mask.sum()} rows, Test: {test_mask.sum()} rows, cutoff={str(cut_date)[:10]}"
 )
 
 # DedupL2
@@ -110,11 +108,9 @@ variances = np.array(variances)
 num_features = all_feats[numeric_cols].fillna(0).values.astype(np.float32)
 num_idx = {c: i for i, c in enumerate(numeric_cols)}
 
-print("After Mode+Invalid: {} features".format(len(variances)))
+print(f"After Mode+Invalid: {len(variances)} features")
 print(
-    "Variance: min={:.6f} p50={:.6f} max={:.4f}".format(
-        variances.min(), np.median(variances), variances.max()
-    )
+    f"Variance: min={variances.min():.6f} p50={np.median(variances):.6f} max={variances.max():.4f}"
 )
 
 header = "{:<10} {:<6} {:>9} {:>9} {:>9} {:>7}".format(
@@ -163,9 +159,7 @@ for th in [0.001, 0.0015, 0.002, 0.0022, 0.0025, 0.0028, 0.003]:
     pos = (ic_s > 0).mean() * 100
 
     print(
-        "{:<10} {:<6} {:>+.4f}     {:>+.4f}    {:>+.3f} {:>6.1f}%".format(
-            th, len(keep), mean_ic, ic_std, ir, pos
-        )
+        f"{th:<10} {len(keep):<6} {mean_ic:>+.4f}     {ic_std:>+.4f}    {ir:>+.3f} {pos:>6.1f}%"
     )
 
-print("\nDone ({}s)".format(int(time.time() - t0)))
+print(f"\nDone ({int(time.time() - t0)}s)")

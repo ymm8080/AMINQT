@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 DIM21-DIM29 特征 IC 评估脚本 (v1.0)
 ====================================
@@ -787,7 +786,7 @@ def _update_eval_log(output: dict) -> None:
         log = {"entries": []}
     else:
         try:
-            with open(EVAL_LOG_PATH, "r", encoding="utf-8") as f:
+            with open(EVAL_LOG_PATH, encoding="utf-8") as f:
                 log = json.load(f)
         except (json.JSONDecodeError, Exception):
             log = {"entries": []}

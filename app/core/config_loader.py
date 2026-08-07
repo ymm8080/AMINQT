@@ -32,7 +32,7 @@ def load_config(name: str) -> dict:
         logger.warning("配置文件不存在: %s, 返回空配置 {}", path)
         return {}
 
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
     if cfg is None:

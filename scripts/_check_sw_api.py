@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Check Tushare APIs for SW industry membership."""
 
-import tushare as ts
 import os
+
+import tushare as ts
 from dotenv import load_dotenv
 
 load_dotenv()

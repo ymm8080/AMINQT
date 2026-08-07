@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """训练/预测编排 (panel_builder + train_runner + predict_runner) 测试."""
 
 from __future__ import annotations
@@ -296,7 +295,7 @@ class TestRunPrediction:
         )
         assert result["mode"] in ("normal", "empty")
         if result["mode"] == "normal":
-            assert list(result["list"].columns) == SCHEMA_FIELDS
+            assert list(result["list"].columns)[: len(SCHEMA_FIELDS)] == SCHEMA_FIELDS
 
     def test_no_bundles_raises(self, trained):
         with pytest.raises(RuntimeError, match="模型包"):

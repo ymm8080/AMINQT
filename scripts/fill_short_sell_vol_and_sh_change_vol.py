@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Fill short_sell_vol and sh_change_vol in V3 panel from Tushare API.
 
 Sources:
@@ -35,6 +34,7 @@ logging.basicConfig(
 logger = logging.getLogger("fill_v3")
 
 import tushare as ts  # noqa: E402
+
 from config import settings  # noqa: E402
 
 pro = ts.pro_api(settings.TUSHARE_TOKEN)

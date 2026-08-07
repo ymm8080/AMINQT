@@ -1,7 +1,8 @@
 """Quick inspection of alt data cache files."""
 
-import pandas as pd
 import os
+
+import pandas as pd
 
 os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

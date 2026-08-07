@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛 离场规则变体回测 (2026-08-05, route A 放大幅度).
 
 exit_causes 发现: below_ma20/below_ma5_3d/adx_broken (MA/ADX 破位退出)

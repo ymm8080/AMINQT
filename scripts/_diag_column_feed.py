@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_column_feed.py — 诊断列喂入质量 (只读, 不改任何训练逻辑).
 
 指标 (训练窗口最近 3 年, 无未来函数):
@@ -29,9 +28,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.feature_selector import BruteForceGenerator
 from app.pipeline1.label_engine import LabelEngine
+from config.settings import PANEL_V3_PATH
 
 logging.disable(logging.CRITICAL)
 
@@ -47,8 +46,8 @@ B_EXTRA = {"float_share"}
 
 
 def _schema_cols(path):
-    import pyarrow.parquet as pq
     import pyarrow as pa
+    import pyarrow.parquet as pq
 
     sch = pq.read_schema(path)
     return [f.name for f in sch if f.type in (pa.float64(), pa.int64())]

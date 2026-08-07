@@ -109,7 +109,11 @@ def _train_bundle(tmp_path, panel):
 
 
 @pytest.fixture()
-def pipeline(tmp_path):
+def pipeline(tmp_path, monkeypatch):
+    # 预测平滑 (2026-08-06) 的历史底稿目录 → tmp, 不写真实 STOCK LIST 目录
+    from app.pipeline1 import pred_smoothing
+
+    monkeypatch.setattr(pred_smoothing, "STOCK_LIST_DIR", tmp_path / "smooth")
     panel = make_panel()
     bundle = _train_bundle(tmp_path, panel)
     pipe = DailySelectionPipeline(

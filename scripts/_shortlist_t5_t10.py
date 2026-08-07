@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_shortlist_t5_t10.py — 今日最终短名单 (狙击 TOP-5 ∪ 融合 TOP-10) 前瞻预测输出.
 
 数据源 = 最后一次 FULL RUN 回测产物 (用户 2026-08-05: "已有 full run 基于昨日数据
@@ -39,6 +38,7 @@ SHORTLIST_SCORE.select_gate): 保留 ⇔ T+3 预期涨幅>0, **或** T+2 强看�
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -47,16 +47,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LinearRegression, LogisticRegression
 
+from app.pipeline1.label_engine import COST, slippage_tier
+from app.pipeline_parallel.config import FUSION, HORIZONS, SNIPER
+from app.pipeline_parallel.scoring import pool_score
 from config.settings import (
-    STOCK_LIST_DIR,
-    DATA_OTHERS_DIR,
     DATA_DIR,
-    SHORTLIST_SCORE,
+    DATA_OTHERS_DIR,
     REGIME_GATE,
+    SHORTLIST_SCORE,
+    STOCK_LIST_DIR,
 )
-from app.pipeline_parallel.config import HORIZONS
 
 try:
     from docx import Document
@@ -71,17 +73,49 @@ try:
 except Exception:  # openpyxl 未安装时跳过 xlsx 输出
     Workbook = None
 
-# 最后一次 FULL RUN (用户: 基于昨日数据做出预测的全量回测, 产物必须保留)
-FULLRUN_DIR = DATA_OTHERS_DIR / "BACKTESTING RESULT" / "20260805_005343"
+# FULL RUN 目录: 默认自动解析最新一次并行回测 (含 shortlist_main.csv 的最晚 ts 子目录),
+# 供逐日连续运行 (EMA 平滑需各日 raw 历史); 找不到才回退硬编码默认.
+_FULLRUN_HARD = DATA_OTHERS_DIR / "BACKTESTING RESULT" / "20260806_144240"
+
+
+def _latest_fullrun_dir() -> Path:
+    base = DATA_OTHERS_DIR / "BACKTESTING RESULT"
+    try:
+        cands = sorted(
+            (p for p in base.glob("*/") if (p / "shortlist_main.csv").exists()),
+            key=lambda p: p.name,
+            reverse=True,
+        )
+    except OSError:
+        return _FULLRUN_HARD
+    return cands[0] if cands else _FULLRUN_HARD
+
+
+FULLRUN_DIR = _latest_fullrun_dir()
+print(f"[fullrun] 使用 {FULLRUN_DIR}", flush=True)
 BOARD_LABEL = {"main": "主板", "dual": "双创(创业板+科创板)"}
 # 集成清单逐视界展示顺序 (时间序; HORIZONS = ("3d","2d","5d","10d"))
 HORIZON_ORDER = ("2d", "3d", "5d", "10d")
-# OOS score→前视涨幅校准 (前瞻预测): score 分位桶数 / 单桶最少已实现样本
-CAL_BINS = 6
+# OOS score→前视涨幅校准 (前瞻预测): 每股独立连续校准 (LinearRegression score→mfe),
+# 替代 CAL_BINS 桶级共享值 (2026-08-06 用户: 价格预测必须每股独立, 非 bulk);
+# CAL_MIN_N 保留用于 load_system_stats/regime_gate 最少样本门.
 CAL_MIN_N = 5
 # [2026-08-06] 达到概率改逐股自然概率 (用户: "natural, not bulk probability"):
 # 口径 = P(该股该视界达到固定绝对涨幅) — 每股唯一真值 (score 单调略增, 非桶内共享).
 ABS_TARGET = {"2d": 0.02, "3d": 0.03, "5d": 0.04, "10d": 0.06}
+# [2026-08-06] 价格预测=每股独立, 只用该股自己最近 ~6 个月历史 (用户定案):
+# 每股取自己最近 PER_STOCK_WINDOW 交易日 (score→mfe) 拟合, 不足 PER_STOCK_MIN_N 回退横截面.
+PER_STOCK_WINDOW = 130
+PER_STOCK_MIN_N = 30
+# [2026-08-06] 预测稳定性 (诊断 _diag_pred_decomp: 校准器逐日漂移 + score 逐日抖动同量级):
+#  1) per-stock 斜率向横截面收缩 (empirical-Bayes partial pooling): λ=n/(n+SHRINK_KAPPA),
+#     保持个股质心 (intercept=ȳ−slope·x̄) → 面板逐日滚动重拟合时 Δslope 大幅降低.
+#  2) 输出级时间平滑 (EMA): 同日股用近 SMOOTH_K 个可用交易日 raw 预测的衰减加权均值
+#     w_k=α·(1-α)^k (k=0=今日), gap-robust (缺日跳过) → 直接抑制相邻交易日预测/概率剧变.
+SHRINK_KAPPA = 40
+SMOOTH_ENABLED = True
+SMOOTH_ALPHA = 0.35
+SMOOTH_K = 12
 
 
 def load_system_stats(records: dict) -> dict:
@@ -259,65 +293,164 @@ def fmt_regime(gate: dict) -> list[str]:
     return lines
 
 
-def _fit_prob_calibrators(records: dict) -> dict[tuple, object]:
-    """[2026-08-06] 逐股平滑自然概率: 对每 (board, key, h) 预拟合 Platt
-    (score → P(mfe_h ≥ ABS_TARGET[h])). 每股唯一真值, 替代 CAL_BINS 桶级共享值."""
+def _add_mfe(df: pd.DataFrame) -> pd.DataFrame:
+    """按生产口径 (backtest.add_mfe_labels) 补算四视界 MFE 净标签:
+    窗口内最高价 / 买入价 - 1 - cost; 尾段缺未来价 → NaN."""
+    horizons = (2, 3, 5, 10)
+    g = df.groupby("symbol", sort=False)
+    exec_px = g["close_hfq"].shift(-1)
+    max_off = max(horizons) + 1
+    shifts = pd.concat(
+        [g["high_hfq"].shift(-off) for off in range(2, max_off + 1)],
+        axis=1,
+        keys=range(2, max_off + 1),
+    )
+    slip = df["adv20"].map(slippage_tier)
+    cost_total = COST + 2 * slip
+    for k in horizons:
+        peak = shifts.loc[:, 2 : k + 1].max(axis=1, skipna=False)
+        df[f"mfe_{k}d"] = peak / exec_px - 1 - cost_total
+    return df
+
+
+def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
+    """3y 面板 → 每股最近 ~PER_STOCK_WINDOW 交易日日频 (score, mfe) 序列.
+
+    [2026-08-06 用户: 价格预测必须每股独立, 只用该股自己最近 6 个月历史]
+    短名单 OOS 文件只含"每日被选股" → 每股仅零星几行, 无法做每股回归;
+    面板 (每 stock × 每交易日) 才有逐股日频. 在此按生产口径重算:
+      - score = 与生产一致的 6 特征截面分位 (pv_corr_5 面板同样缺列, 自动跳过)
+      - mfe   = _add_mfe 口径 (窗口最高价 / 买入价 - 1 - cost, 净)
+    返回 {(board, key): DataFrame[symbol, date, score, mfe_2d..mfe_10d]}.
+    """
+    out: dict[tuple[str, str], pd.DataFrame] = {}
+    need = ["symbol", "date", "close_hfq", "high_hfq", "adv20"] + [
+        c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"
+    ]
+    for board in ("main", "dual"):
+        fp = DATA_DIR / f"_diag_stage_{board}_3y.parquet"
+        dates = pd.to_datetime(
+            pq.read_table(str(fp), columns=["date"]).to_pandas()["date"]
+        )
+        uniq = np.unique(dates.values)
+        if len(uniq) < PER_STOCK_WINDOW + 12:
+            continue
+        cutoff = uniq[-(PER_STOCK_WINDOW + 12)]
+        t = pq.read_table(
+            str(fp), columns=need, filters=[("date", ">=", cutoff)]
+        ).to_pandas()
+        if t.empty:
+            continue
+        t["symbol"] = t["symbol"].astype(str)
+        t = t.sort_values(["symbol", "date"]).reset_index(drop=True)
+        t = _add_mfe(t)
+        fr_sn = t[["symbol", "date"]].copy()
+        fr_sn["score"] = pool_score(t, SNIPER.pool)
+        fr_fu = t[["symbol", "date"]].copy()
+        fr_fu["score"] = pool_score(t, FUSION.pool)
+        for h in HORIZONS:
+            fr_sn[f"mfe_{h}"] = t[f"mfe_{h}"]
+            fr_fu[f"mfe_{h}"] = t[f"mfe_{h}"]
+        out[(board, "sniper")] = fr_sn
+        out[(board, "fusion")] = fr_fu
+        # "both" = 合并短名单口径 (build_merged_shortlist: score=max 两系统分位分) →
+        # 共现行也启用逐股校准, 不再回退横截面
+        fr_bt = fr_sn.copy()
+        fr_bt["score"] = np.maximum(fr_sn["score"], fr_fu["score"])
+        out[(board, "both")] = fr_bt
+    return out
+
+
+class _PooledReg:
+    """单变量线性映射 (收缩后斜率 + 质心截距), 提供与 LinearRegression 一致的 predict.
+
+    slope = λ·slope_per + (1-λ)·slope_cross (λ=n/(n+SHRINK_KAPPA)),
+    intercept = ȳ − slope·x̄ → 拟合线过该股 (score, mfe) 质心.
+    """
+
+    __slots__ = ("coef_", "intercept_")
+
+    def __init__(self, slope: float, intercept: float):
+        self.coef_ = np.array([slope])
+        self.intercept_ = intercept
+
+    def predict(self, X) -> np.ndarray:
+        return X @ self.coef_ + self.intercept_
+
+
+def _fit_calibrators(records: dict) -> dict[tuple, dict]:
+    """[2026-08-06] 价格预测=每股独立, 只用该股自己最近 6 个月历史 (用户定案):
+    - mag: 每股自己最近 ~PER_STOCK_WINDOW 交易日拟合 LinearRegression (score→mfe),
+           数据来自 3y 面板逐股日频 (_panel_per_stock), 非 OOS 稀疏清单;
+           该股样本 ≥PER_STOCK_MIN_N 才启用; 不足回退板块×系统横截面回归
+    - prob: 横截面 Platt (score → P(mfe_h ≥ ABS_TARGET[h])), 每股分数→唯一概率
+    返回 {(board, key, h): {"prob": lr, "mag_cross": reg, "per": {symbol: reg}}}."""
     cals = {}
+    panel = _panel_per_stock()
     for (board, key), rec in records.items():
         for h in HORIZONS:
             col = f"mfe_{h}"
             sub = rec[["score", col]].dropna()
             if len(sub) < 20:
                 continue
-            lr = LogisticRegression()
-            lr.fit(
+            prob = LogisticRegression()
+            prob.fit(
                 sub[["score"]].to_numpy(),
                 (sub[col] >= ABS_TARGET[h]).astype(int).to_numpy(),
             )
-            cals[(board, key, h)] = lr
+            cross = LinearRegression()
+            cross.fit(sub[["score"]].to_numpy(), sub[col].to_numpy())
+            per: dict[str, _PooledReg] = {}
+            pf = panel.get((board, key))
+            if pf is not None:
+                for sym, g in pf.groupby("symbol"):
+                    gg = (
+                        g.dropna(subset=["score", col])
+                        .sort_values("date")
+                        .tail(PER_STOCK_WINDOW)
+                    )
+                    if len(gg) >= PER_STOCK_MIN_N:
+                        x = gg[["score"]].to_numpy()
+                        y = gg[col].to_numpy()
+                        raw = LinearRegression().fit(x, y)
+                        lam = len(gg) / (len(gg) + SHRINK_KAPPA)
+                        slope = lam * float(raw.coef_[0]) + (1 - lam) * float(
+                            cross.coef_[0]
+                        )
+                        per[sym] = _PooledReg(slope, float(y.mean()) - slope * float(x.mean()))
+            cals[(board, key, h)] = {"prob": prob, "mag_cross": cross, "per": per}
     return cals
 
 
 def calibrate(
-    records: dict, board: str, key: str, score: float, cals: dict
+    records: dict, board: str, key: str, symbol: str, score: float, cals: dict
 ) -> dict[str, tuple]:
     """最新 score → 逐视界 (预期涨幅, 自然达到概率).
 
-    概率 = P(该股该视界达到固定绝对涨幅 ABS_TARGET) via Platt (逐股平滑唯一真值,
-    非桶级共享); 预期涨幅 = OOS 同分位桶已实现 MFE 均值 (保留桶级 — 涨幅本身无判别力).
-    返回 {h: (exp_mfe, hit_prob, n_bin)}; 无校准数据 → (NaN, NaN, 0).
+    每股独立 (2026-08-06 用户: 价格预测必须每股独立, 只用该股自己最近 6 个月历史):
+    - 预期涨幅 = 该股 score 经该股自己最近 ~6 个月 (score→mfe) 线性回归的独立值,
+      该股样本不足时回退板块×系统横截面回归
+    - 概率     = P(该股该视界达到固定绝对涨幅 ABS_TARGET) via 横截面 Platt (每股分数→唯一概率)
+    返回 {h: (exp_mfe, hit_prob, n)}; 无校准数据 → (NaN, NaN, 0).
     """
     out = {h: (float("nan"), float("nan"), 0) for h in HORIZONS}
     rec = records.get((board, key))
     if rec is None or len(rec) == 0:
         return out
-    s = rec["score"]
-    edges = np.quantile(s, np.linspace(0.0, 1.0, CAL_BINS + 1))
-    idx = int(np.searchsorted(edges, score, side="right")) - 1
-    idx = min(max(idx, 0), CAL_BINS - 1)
-    lo, hi = edges[idx], edges[idx + 1]
-    mask = (s >= lo) & (s < hi)
-    if idx == CAL_BINS - 1:
-        mask |= s == hi
-    sub = rec[mask]
     for h in HORIZONS:
-        v = sub[f"mfe_{h}"].dropna()
-        if len(v) < CAL_MIN_N:
+        c = cals.get((board, key, h))
+        if c is None:
             continue
-        exp = float(v.mean())
-        lr = cals.get((board, key, h))
-        prob = (
-            float(lr.predict_proba(np.array([[score]]))[0, 1])
-            if lr is not None
-            else float("nan")
-        )
-        out[h] = (exp, prob, len(v))
+        mag = c["per"].get(symbol, c["mag_cross"])
+        exp = float(mag.predict(np.array([[score]]))[0])
+        prob = float(c["prob"].predict_proba(np.array([[score]]))[0, 1])
+        out[h] = (exp, prob, int(len(rec[f"mfe_{h}"].dropna())))
     return out
 
 
 def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
     """每只短名单股: 用最新 score 经 OOS 校准给 逐视界 前瞻 预期涨幅(MFE)+逐股自然概率."""
-    cals = _fit_prob_calibrators(records)
+    cals = _fit_calibrators(records)
     out = res.copy()
     for h in HORIZONS:
         out[f"pred_mag_{h}"], out[f"pred_prob_{h}"], out[f"pred_n_{h}"] = (
@@ -327,7 +460,9 @@ def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
         )
     for idx, r in out.iterrows():
         key = r["systems"] if r["systems"] in ("sniper", "fusion") else "both"
-        cal = calibrate(records, r["board"], key, float(r["score"]), cals)
+        cal = calibrate(
+            records, r["board"], key, str(r["symbol"]), float(r["score"]), cals
+        )
         for h in HORIZONS:
             mag, prob, n = cal[h]
             out.at[idx, f"pred_mag_{h}"] = mag
@@ -337,6 +472,95 @@ def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
     first = ["date", "board", "cut", "rk", "symbol", "systems", "co_occur", "score"]
     ph = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob", "pred_n")]
     return out[first + ph].reset_index(drop=True)
+
+
+def _module_suffix(module: str) -> str:
+    return f"__{module}" if module != "na" else ""
+
+
+def _persist_raw_preds(res: pd.DataFrame, sel_date: pd.Timestamp, module: str) -> None:
+    """WORM: 每股当日 raw 预测 (平滑前) → parallel_preds_raw_<date>__<module>.csv.
+
+    EMA 平滑的历史底稿; 旧文件不覆盖. 同 symbol 多 cut 行去重 (预测值相同, keep 最后一行).
+    """
+    if not SMOOTH_ENABLED:
+        return
+    os.makedirs(str(STOCK_LIST_DIR), exist_ok=True)
+    cols = ["date", "board", "symbol", "systems", "score"] + [
+        f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")
+    ]
+    d = res[cols].copy()
+    d["date"] = str(sel_date.date())
+    d = d.drop_duplicates(subset=["symbol"], keep="last").reset_index(drop=True)
+    stamp = str(sel_date.date()).replace("-", "")
+    fp = STOCK_LIST_DIR / f"parallel_preds_raw_{stamp}{_module_suffix(module)}.csv"
+    d.to_csv(fp, index=False)
+    print(f"[raw] {fp}", flush=True)
+
+
+def _load_raw_history(sel_date: pd.Timestamp, module: str) -> pd.DataFrame:
+    """读 <选股日> 之前的 raw 预测文件 → 长表 (symbol, hist_date, pred_mag/prob_{h})."""
+    suffix = _module_suffix(module)
+    today = str(sel_date.date()).replace("-", "")
+    pred_cols = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
+    frames = []
+    for fp in STOCK_LIST_DIR.glob("parallel_preds_raw_*.csv"):
+        m = re.match(r"parallel_preds_raw_(\d{8})(.*)\.csv$", fp.name)
+        if not m:
+            continue
+        if suffix and m.group(2) != suffix:
+            continue
+        if not suffix and m.group(2):
+            continue  # module=na 时不混入带模块标记的历史
+        if m.group(1) >= today:
+            continue  # 不含今日 (今日 raw 由调用方直接给)
+        d = pd.read_csv(fp, dtype={"symbol": str})
+        d = d[["symbol"] + pred_cols]
+        d["hist_date"] = m.group(1)
+        frames.append(d)
+    if not frames:
+        return pd.DataFrame()
+    long = pd.concat(frames, ignore_index=True)
+    return long.drop_duplicates(subset=["symbol", "hist_date"], keep="last")
+
+
+def ema_smooth(res: pd.DataFrame, sel_date: pd.Timestamp, module: str) -> pd.DataFrame:
+    """输出级时间平滑: 每股今日 pred_mag/prob = 近 SMOOTH_K 个可用交易日 raw 的衰减加权均值.
+
+    w_k = α·(1-α)^k (k=0=今日, 越旧越轻), 截断后归一化; 缺日跳过 (gap-robust).
+    只平滑 pred_mag/pred_prob (不动 score); 无历史 → 保持 raw. 直接抑制相邻交易日预测/概率剧变.
+    """
+    if not SMOOTH_ENABLED:
+        return res
+    hist = _load_raw_history(sel_date, module)
+    if hist.empty:
+        return res
+    weights = np.array([SMOOTH_ALPHA * (1 - SMOOTH_ALPHA) ** k for k in range(SMOOTH_K)])
+    weights /= weights.sum()
+    out = res.copy()
+    for sym in out["symbol"].unique():
+        h = hist[hist["symbol"] == sym].sort_values("hist_date", ascending=False)
+        if h.empty:
+            continue
+        src = h.head(SMOOTH_K - 1)  # 最多 SMOOTH_K-1 个旧日 (今日占 k=0)
+        mask = out["symbol"] == sym
+        for kind in ("pred_mag", "pred_prob"):
+            for hz in HORIZONS:
+                col = f"{kind}_{hz}"
+                today_v = out.loc[mask, col]
+                if today_v.empty or not np.isfinite(float(today_v.iloc[0])):
+                    continue
+                pairs = [
+                    (w, v)
+                    for w, v in zip(weights, [float(today_v.iloc[0])] + [float(x) for x in src[col]], strict=False)
+                    if np.isfinite(v)
+                ]
+                if not pairs:
+                    continue
+                ww = np.array([p[0] for p in pairs])
+                ww /= ww.sum()
+                out.loc[mask, col] = float(np.dot([p[1] for p in pairs], ww))
+    return out
 
 
 def _sel_reason(r: pd.Series) -> str:
@@ -442,8 +666,10 @@ def fmt_merged(m: pd.DataFrame) -> list[str]:
         ]
     lines = [
         f"── 合并短名单 (主板+双创合一, 共 {len(m)} 只; 仅正预期涨幅; "
-        f"预期=该股最新score经OOS校准的今后涨幅(MFE); 达到概率=逐股自然概率 "
-        f"P(该股达到固定绝对目标), 每股唯一真值, 非桶级共享) ──",
+        f"预期=该股最新score经OOS每股独立线性校准的今后涨幅(MFE), 每股唯一; "
+        f"达到概率=逐股自然概率 P(该股达到固定绝对目标), 每股唯一真值, 非桶级共享; "
+        f"过门=该板块×系统今日过制度门, "
+        f"未过门个股不应买入) ──",
         hdr,
     ]
     for _, r in m.iterrows():
@@ -502,7 +728,8 @@ def build_summary(res: pd.DataFrame, stats: dict, sel_date: pd.Timestamp) -> lis
             )
             lines.append(f"    {cut}: {picks}")
     lines.append(
-        "\n每只个股逐视界预期 = 该股最新 score 经 OOS 同分位校准的 今后涨幅(MFE) (前瞻, 非历史回看)."
+        "\n每只个股逐视界预期 = 该股最新 score 经 OOS 每股独立线性校准的 今后涨幅(MFE) "
+        "(每股唯一, 非桶级共享; 前瞻, 非历史回看)."
     )
     lines.append(
         "达到概率 = 逐股自然概率 P(该股达到固定绝对目标) — 每股唯一真值, 非桶级共享 "
@@ -534,7 +761,7 @@ def write_docx(
         doc.add_paragraph(
             "rank=score_w 降序 (预期涨幅×达到概率加权, T+3 主视界短持) · "
             "systems=命中模块(共现=双系统) · T5=该股是否入选所在板块T-5 · 仅保留 T+3 预期涨幅>0 的股 · "
-            "每视界(T+2/3/5/10) 预期涨幅(MFE)=最新score经OOS校准的今后表现; 达到概率=逐股自然概率 P(该股达到固定绝对目标), 每股唯一真值"
+            "每视界(T+2/3/5/10) 预期涨幅(MFE)=最新score经OOS每股独立线性校准的今后表现, 每股唯一; 达到概率=逐股自然概率 P(该股达到固定绝对目标), 每股唯一真值"
         )
         mcols = ["rank", "symbol", "board", "module", "score", "score_w", "in_t5"] + [
             f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")
@@ -582,7 +809,7 @@ def write_docx(
                 continue
             doc.add_paragraph(
                 f"{cut} · score_w 降序(预期涨幅×达到概率加权) · 仅正预期涨幅股 · "
-                f"预期涨幅(MFE)=最新score经OOS校准的今后表现; 达到概率=逐股自然概率 P(该股达到固定绝对目标)"
+                f"预期涨幅(MFE)=最新score经OOS每股独立线性校准的今后表现, 每股唯一; 达到概率=逐股自然概率 P(该股达到固定绝对目标)"
             )
             t = doc.add_table(rows=1, cols=len(cols))
             for j, c in enumerate(cols):
@@ -709,6 +936,9 @@ def main() -> int:
     )
 
     t0 = pd.Timestamp.now()
+    from app.pipeline1.model_meta import load_modules, module_id
+
+    module = module_id(load_modules())
     records = load_oos_records()
     gate = regime_gate(records)
     active = [f"{b}/{s}" for (b, s), g in gate.items() if g["active"]]
@@ -716,7 +946,11 @@ def main() -> int:
         f"[regime] 今日保留组合: {', '.join(active) if active else '无 (主视界无优势, 空仓)'}",
         flush=True,
     )
-    res = select_confident(add_oos_pred(full, records), prob_min=0.0)
+    raw_res = add_oos_pred(full, records)
+    _persist_raw_preds(raw_res, sel_date, module)
+    res = select_confident(ema_smooth(raw_res, sel_date, module), prob_min=0.0)
+    # 制度门 (2026-08-06 用户: 清单必须含个股明细 — 不再整组剔除→空仓,
+    # 改为标注 regime_active 过门/未过门; 未过门个股**不应买入**, 见顶部说明)
     if REGIME_GATE.get("enable", True):
         active_mask = res.apply(lambda r: _row_active(r, gate), axis=1)
         if not active_mask.any():
@@ -749,10 +983,7 @@ def main() -> int:
         flush=True,
     )
 
-    from app.pipeline1.model_meta import load_modules, module_id
-
-    module = module_id(load_modules())
-    suffix = f"__{module}" if module != "na" else ""
+    suffix = _module_suffix(module)
     stamp = str(sel_date.date()).replace("-", "")
     csv_path = STOCK_LIST_DIR / f"parallel_shortlist_{stamp}{suffix}.csv"
     res.to_csv(csv_path, index=False)
@@ -772,8 +1003,17 @@ def main() -> int:
         write_xlsx(res, summary, sel_date, xlsx_path, merged, module)
     except PermissionError:
         xlsx_path = STOCK_LIST_DIR / f"STOCK LIST {stamp}{suffix}_perhorizon.xlsx"
-        write_xlsx(res, summary, sel_date, xlsx_path, merged, module)
-        print(f"[warn] 原 xlsx 被占用, 已写 {xlsx_path.name}", flush=True)
+        try:
+            write_xlsx(res, summary, sel_date, xlsx_path, merged, module)
+            print(f"[warn] 原 xlsx 被占用, 已写 {xlsx_path.name}", flush=True)
+        except PermissionError:
+            ts = pd.Timestamp.now().strftime("%H%M%S")
+            xlsx_path = STOCK_LIST_DIR / f"STOCK LIST {stamp}{suffix}_perstock_{ts}.xlsx"
+            write_xlsx(res, summary, sel_date, xlsx_path, merged, module)
+            print(
+                f"[warn] 原 xlsx + perhorizon 均被 Excel 占用, 已写 {xlsx_path.name}",
+                flush=True,
+            )
     if xlsx_path.exists():
         print(f"[saved] {xlsx_path}", flush=True)
 

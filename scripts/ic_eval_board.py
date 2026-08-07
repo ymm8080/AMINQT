@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """IC 评估与特征筛选 — 单板块 (main 或 dual).
 
 用法: python scripts/ic_eval_board.py main
@@ -18,10 +17,10 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from app.pipeline1.label_engine import LabelEngine
-from app.pipeline1.ic_screener import ICScreener
 from app.pipeline1.cleaning_pipeline import board_of
+from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+from app.pipeline1.ic_screener import ICScreener
+from app.pipeline1.label_engine import LabelEngine
 
 logging.basicConfig(
     level=logging.INFO,

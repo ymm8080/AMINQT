@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_lhb_event_pool.py — LHB 事件池研究 (用户 2026-08-04 方法论).
 
 EVENT 是事件性的: 不是把单只股票的 LHB 与非 LHB 时段混在一起训练,
@@ -118,7 +117,7 @@ def main() -> None:
     # 每个事件在 horizon 点的 rel
     piv = win.pivot_table(index="evt_id", columns="off", values="rel")
 
-    def _row(tag, idx):
+    def _row(tag, idx, piv=piv):
         parts = [f"{tag:<16}"]
         for h in HORIZONS:
             s = piv.loc[idx, h].dropna()

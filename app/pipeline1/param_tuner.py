@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 参数调优器 (用户 2026-07-22 需求: 预定义买卖/持仓规则参数由回测结果调整)
 ============================================================================
@@ -21,10 +20,9 @@ import os
 import numpy as np
 import pandas as pd
 
-from config.settings import data_others_path
-
 from app.pipeline1.backtest_v35 import BacktestEngineV35, BacktestProtocol
 from app.rules.config import TUNABLE_BOUNDS
+from config.settings import data_others_path
 
 logger = logging.getLogger(__name__)
 

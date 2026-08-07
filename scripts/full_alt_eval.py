@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 """Full alt data evaluation — all Tushare APIs + feature engine + IC."""
 
-import sys
-import os
-import time
-import logging
 import json
+import logging
+import os
+import sys
+import time
+
 import numpy as np
 import pandas as pd
 
@@ -22,8 +22,8 @@ syms = rng.choice(df["symbol"].unique(), 500, replace=False)
 df = df[df["symbol"].isin(syms)].sort_values(["symbol", "date"]).reset_index(drop=True)
 logger.info("Panel: %d stocks, %d rows", df["symbol"].nunique(), len(df))
 
-from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct  # noqa: E402
+from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 
 supply = DataSupplyChain()
 pro = supply._tushare_pro()
@@ -55,7 +55,7 @@ for sym in test_syms:
         if raw is not None and len(raw) > 0:
             raw["symbol"] = sym
             fin_frames.append(raw)
-    except:  # noqa: E722
+    except Exception:  # noqa: E722
         pass
     time.sleep(0.05)
 if fin_frames:
@@ -140,7 +140,7 @@ for sym in df["symbol"].unique():
                 raw.get("holder_num", 0), errors="coerce"
             )
             hn_all.append(raw[["symbol", "announce_date", "holder_count"]])
-    except:  # noqa: E722
+    except Exception:  # noqa: E722
         pass
     time.sleep(0.03)
 if hn_all:
@@ -175,7 +175,7 @@ for d in sample_dates:
                 if c in raw.columns:
                     raw[c] = pd.to_numeric(raw[c], errors="coerce")
             mg_frames.append(raw[["symbol", "date", "rzye", "rqye", "rzmre", "rqmcl"]])
-    except:  # noqa: E722
+    except Exception:  # noqa: E722
         pass
     time.sleep(0.3)
 if mg_frames:
@@ -222,7 +222,7 @@ for d in sample_dates:
                     ]
                 ]
             )
-    except:  # noqa: E722
+    except Exception:  # noqa: E722
         pass
     time.sleep(0.3)
 if mf_frames:

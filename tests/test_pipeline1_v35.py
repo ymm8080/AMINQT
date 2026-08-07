@@ -14,7 +14,7 @@ from app.pipeline1.cleaning_pipeline import (
     is_limit_up,
     limit_up_price,
 )
-from app.pipeline1.feature_engine_v35 import FeatureEngineV35, _LHB_ALPHA
+from app.pipeline1.feature_engine_v35 import _LHB_ALPHA, FeatureEngineV35
 from app.pipeline1.ic_screener import ICScreener
 from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.list_generator import (
@@ -39,7 +39,7 @@ def make_panel(
     rng = np.random.default_rng(seed)
     dates = pd.bdate_range("2025-01-01", periods=days)
     frames = []
-    for i, sym in enumerate(symbols):
+    for _i, sym in enumerate(symbols):
         board = board_of(sym)
         close = 100 * np.cumprod(1 + rng.normal(0.0005, 0.02, days))
         open_ = close * (1 + rng.normal(0, 0.005, days))

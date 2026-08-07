@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Enrich v3 panel with baostock HFQ data, CYQ fill, and bias features.
 
@@ -160,7 +159,7 @@ def main():
     for w in BIAS_WINDOWS:
         col = f"bias_{w}"
         ma = v3.groupby("symbol")["close_hfq"].transform(
-            lambda x: x.rolling(window=w, min_periods=1).mean()
+            lambda x, w=w: x.rolling(window=w, min_periods=1).mean()
         )
         v3[col] = v3["close_hfq"] / ma - 1
         logger.info("  bias_%d done", w)

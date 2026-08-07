@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
 """Bulk fetch fina_indicator with per-thread API clients for thread-safety."""
 
 import os
-import time
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -11,6 +10,7 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 import pandas as pd  # noqa: E402
+
 from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 
 # Get stock list (do this once in main thread)

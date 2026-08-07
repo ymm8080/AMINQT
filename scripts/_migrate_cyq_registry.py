@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """V3 CYQ 特征注册中心迁移 (2026-08-02 A/B/C 删列决策).
 
 - DEACTIVATE: 所有不在 KEEP-15 的 CYQ 条目 (过时 _x/_y 孪生、benefit_*、

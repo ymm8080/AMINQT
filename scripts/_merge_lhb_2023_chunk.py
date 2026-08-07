@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Merge the LHB 2023-06 chunk (cached, unmerged) into the V3 panel.
 
 Panel lhb_net_buy/buy_amt/sell_amt cover 2024-01-02 ~ latest but have ZERO

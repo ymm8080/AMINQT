@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """检查行业板块数据: v3 中的 industry 列 + sector_index 缓存详情."""
 
-import pandas as pd
 import os
 import sys
+
+import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Global configuration: paths, stock pool, date ranges, execution mode.
 
 Secrets (iFinD credentials) are loaded from environment / .env — never
@@ -41,6 +40,14 @@ STOCK_LIST_DIR = DAILY_OPERATION_DIR / "STOCK LIST"
 for _d in (RAW_DIR, INTRADAY_DIR, PROCESSED_DIR, MODEL_DIR, DATA_OTHERS_DIR,
            BACKTEST_RESULT_DIR, STOCK_LIST_DIR):
     _d.mkdir(parents=True, exist_ok=True)
+
+# ── 预测稳定性: 输出级时间平滑 (2026-08-06, 对齐 parallel _shortlist_t5_t10) ──
+# 同一只股票相邻交易日预测/概率剧变 → 每股 forecast 列 = 近 K 个可用交易日 raw 预测的
+# 衰减加权均值 (w_k = α·(1-α)^k, 归一化, gap-robust). α 越大越信任今日. 历史底稿 WORM
+# 落盘 legacy_preds_raw_<date>__<module>.csv (模块标签见 module-tag 约定).
+LEGACY_SMOOTH_ENABLED = True
+LEGACY_SMOOTH_ALPHA = 0.35
+LEGACY_SMOOTH_K = 12
 
 # ── V3 Panel (single source of truth) ────────────────────────
 # Override via PANEL_PATH env var; defaults to D:/AMINQT/PARQUET/ directory.

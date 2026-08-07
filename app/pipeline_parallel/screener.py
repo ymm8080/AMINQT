@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """ADX 慢牛系统 — 硬门槛 (2026-08-05, ADX 设计文档 v1.0 §2.2).
 
 四道门槛全部满足 (AND) 才进打分池:
@@ -14,7 +13,7 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import pandas as pd
 

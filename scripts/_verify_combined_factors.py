@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_verify_combined_factors.py — 用户方法论全量实测 (per-stock TSIC).
 
 用户 2026-08-04 方法论 (全部实验验证):
@@ -31,10 +30,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.label_engine import LabelEngine
-from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS, weighted_ic
+from config.settings import PANEL_V3_PATH
 from scripts._diag_chip_weekly import _apply, per_stock_ts_ic
+from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS, weighted_ic
 from scripts._verify_chip_tsic import _residualize
 
 logging.disable(logging.CRITICAL)
@@ -104,12 +103,12 @@ def _build(work):
 
     # --- B. 5/10/20 日均线变化的组合 ---
     for w in (5, 10, 20):
-        work[f"ma{w}"] = g["close_hfq"].transform(lambda x: x.rolling(w).mean())
+        work[f"ma{w}"] = g["close_hfq"].transform(lambda x, w=w: x.rolling(w).mean())
         work[f"bias{w}"] = work["close_hfq"] / work[f"ma{w}"] - 1.0
     work["g5_10"] = work["ma5"] / work["ma10"] - 1.0
     work["g10_20"] = work["ma10"] / work["ma20"] - 1.0
     for w, n in ((5, 5), (10, 10), (20, 20)):
-        work[f"ma_chg{w}"] = g[f"ma{w}"].transform(lambda x: _apply("pct_change", n, x))
+        work[f"ma_chg{w}"] = g[f"ma{w}"].transform(lambda x, n=n: _apply("pct_change", n, x))
     work["ma_combo"] = work["ma_chg5"] + work["ma_chg10"] + work["ma_chg20"]
     work["align"] = np.sign(work["g5_10"]) * np.sign(work["g10_20"])
 

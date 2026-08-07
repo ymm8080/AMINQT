@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Full alt data fetch + IC evaluation + PIPELINE1 integration.
 Step 1: Fetch all alt data (margin, moneyflow, holdernumber, northbound, lhb)
 Step 2: Merge into panel
@@ -7,11 +6,12 @@ Step 4: IC per dim -> verdict
 Step 5: Save results + factor registry
 """
 
-import sys
-import os
-import time
-import logging
 import json
+import logging
+import os
+import sys
+import time
+
 import numpy as np
 import pandas as pd
 
@@ -21,8 +21,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct  # noqa: E402
+from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 
 supply = DataSupplyChain()
 pro = supply._tushare_pro()
@@ -137,7 +137,7 @@ for i, d in enumerate(all_dates[::10]):
                     ]
                 ]
             )
-    except:  # noqa: E722
+    except Exception:  # noqa: E722
         pass
     if (i + 1) % 20 == 0:
         logger.info("  moneyflow: %d/%d", i + 1, len(all_dates[::10]))
@@ -195,7 +195,7 @@ else:
                     raw.get("holder_num", 0), errors="coerce"
                 )
                 hn_frames.append(raw[["symbol", "announce_date", "holder_count"]])
-        except:  # noqa: E722
+        except Exception:  # noqa: E722
             pass
         if (i + 1) % 500 == 0:
             logger.info("  holdernumber: %d/%d", i + 1, len(all_symbols))
@@ -246,7 +246,7 @@ for i, d in enumerate(all_dates[::5][:100]):  # Sample ~100 dates
                 if c in raw.columns:
                     raw[c] = pd.to_numeric(raw[c], errors="coerce")
             nb_frames.append(raw[["symbol", "date", "vol", "ratio"]])
-    except:  # noqa: E722
+    except Exception:  # noqa: E722
         pass
     if (i + 1) % 50 == 0:
         logger.info("  northbound: %d/%d", i + 1, min(100, len(all_dates[::5])))
@@ -264,7 +264,7 @@ logger.info("Northbound: %d days", len(nb_frames))
 # ====== STEP 6: Fetch LHB (sample dates) ======
 logger.info("=== STEP 6: Fetch LHB ===")
 lhb_frames = []
-for i, d in enumerate(all_dates[::3][:50]):  # Sample ~50 dates
+for _i, d in enumerate(all_dates[::3][:50]):  # Sample ~50 dates
     dt = d.strftime("%Y%m%d")
     try:
         raw = pro.top_list(trade_date=dt)
@@ -277,7 +277,7 @@ for i, d in enumerate(all_dates[::3][:50]):  # Sample ~50 dates
             lhb_frames.append(
                 raw[["symbol", "date", "net_buy", "buy_amount", "sell_amount"]]
             )
-    except:  # noqa: E722
+    except Exception:  # noqa: E722
         pass
     time.sleep(0.2)
 if lhb_frames:

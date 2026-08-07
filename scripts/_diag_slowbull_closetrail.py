@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛 收盘价移动止盈 (close-trailing) 退出回测 (2026-08-05).
 
 selectivity 证明 score 无法区分预期收益 (MFE40 扁平 24-40%), 瓶颈是兑现

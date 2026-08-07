@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_price_verdict.py — 价格列判定矛盾定位 (2026-08-04).
 
 现象: 全量跑 (69列, _classify_freq_full.py) close_hfq = TS·周 负 -0.043 (反转);
@@ -17,9 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.label_engine import LabelEngine
-from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS
+from config.settings import PANEL_V3_PATH
 from scripts._classify_freq_full import (
     MIN_CROSS,
     MIN_OBS,
@@ -28,6 +26,7 @@ from scripts._classify_freq_full import (
     _wtsic,
     group_spearman,
 )
+from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS
 
 
 def classify(work, g_sym, g_date, lab_sym, lab_date, col):

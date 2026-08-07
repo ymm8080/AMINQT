@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 v3 面板数据获取管道 — 填充 panel_full_enriched_v3.parquet 所有列.
 

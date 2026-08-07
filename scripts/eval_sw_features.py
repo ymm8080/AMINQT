@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
 """SW feature eval: T+1, T+3, T+5."""
 
+import logging
 import os
 import sys
-import logging
+
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
-import lightgbm as lgb
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 

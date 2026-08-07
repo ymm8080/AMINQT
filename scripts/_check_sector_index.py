@@ -1,8 +1,9 @@
 """检查 sector_index 缓存和 fetch 方法."""
 
-import pandas as pd
 import os
 import sys
+
+import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.pipeline1.data_supply import DataSupplyChain

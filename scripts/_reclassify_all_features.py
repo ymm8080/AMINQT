@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_reclassify_all_features.py — 统一口径重审全部特征 (2026-08-04).
 
 用户裁决口径 (2026-08-04 定稿): 只关心 TOP-10 — 每日期截面按特征排名取 TOP-10,
@@ -27,12 +26,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.label_engine import COST, LabelEngine, slippage_tier
-from scripts._diag_column_feed import MASK_RECENT_DAYS
-from scripts._measure_topn import HORIZONS, measure_topn
+from config.settings import PANEL_V3_PATH
 from scripts._classify_freq_analog import family_of
 from scripts._classify_freq_full import (
     MIN_CROSS,
@@ -41,6 +38,8 @@ from scripts._classify_freq_full import (
     _wtsic,
     group_spearman,
 )
+from scripts._diag_column_feed import MASK_RECENT_DAYS
+from scripts._measure_topn import HORIZONS, measure_topn
 
 MAIN_CHECKPOINT = os.path.join("data", "_diag_stage_main_3y.parquet")
 DUAL_CHECKPOINT = os.path.join("data", "_diag_stage_dual_3y.parquet")

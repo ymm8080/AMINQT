@@ -205,6 +205,7 @@ class DualTrackTrainer:
         self, kind: str, segs: dict[str, pd.DataFrame], feature_cols: list[str]
     ):
         import gc
+
         import lightgbm as lgb
 
         label = {

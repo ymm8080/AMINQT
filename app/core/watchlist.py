@@ -48,7 +48,7 @@ class WatchlistManager:
         """从磁盘加载 watchlist."""
         if os.path.exists(self.path):
             try:
-                with open(self.path, "r", encoding="utf-8") as f:
+                with open(self.path, encoding="utf-8") as f:
                     return json.load(f)
             except (OSError, json.JSONDecodeError) as exc:
                 logger.warning("Watchlist 加载失败: %s", exc)

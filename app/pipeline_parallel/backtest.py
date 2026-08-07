@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """PIPELINE 并行多系统 回测/验收 (2026-08-04).
 
 目标口径 = MFE (持有期内最大涨幅, 2026-08-04 用户需求), 非目标日收盘.
@@ -1053,12 +1052,12 @@ def build_conclusion(out: dict) -> dict:
                 .get("per_horizon", {})
             )
             kept = bool(
-                (
+
                     merged.get(cut, {})
                     .get("oos", {})
                     .get(oos_label, {})
                     .get("kept", False)
-                )
+
             )
             best_h, best = _best_horizon(ph)
             if best is None:

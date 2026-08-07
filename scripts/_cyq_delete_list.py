@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """从缓存 OOS 帧 + C bundle 模型 + DedupL2 输出 CYQ 删列/保留清单.
 
 复用 _compare_base15_vs_ext 已缓存的 _oos_{board}.parquet, 避免重算特征引擎.
@@ -15,10 +14,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pandas as pd
-
-import _verify_cyq_drop as V  # noqa: E402
 import _compare_base15_vs_ext as C  # noqa: E402
+import _verify_cyq_drop as V  # noqa: E402
+import pandas as pd
 
 REDUN_REFUSE = 0.70  # 冗余度超过此值判高冗余
 

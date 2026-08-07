@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """M3 — Executor interface + execution-mode toggle.
 
 Two modes (settings.ExecutionMode):

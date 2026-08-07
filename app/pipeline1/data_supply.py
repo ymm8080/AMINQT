@@ -427,7 +427,7 @@ class DataSupplyChain:
             if name in down:
                 continue
             try:
-                result = _with_timeout(lambda: fn(symbol, start, end), FETCH_TIMEOUT)
+                result = _with_timeout(lambda fn=fn: fn(symbol, start, end), FETCH_TIMEOUT)
                 fail_counters[name] = 0  # 成功后重置连续失败计数
                 return result
             except Exception as exc:
@@ -1229,8 +1229,8 @@ class DataSupplyChain:
                     if end_date:
                         kwargs["end_date"] = end_date
 
-                def _call():
-                    return pro.hk_hold(**kwargs)
+                def _call(_kwargs=kwargs):
+                    return pro.hk_hold(**_kwargs)
 
                 raw = _with_timeout(_call)
                 if raw is not None and len(raw) > 0:
@@ -1400,7 +1400,7 @@ class DataSupplyChain:
                 import akshare as ak
 
                 dt = trade_date or end_date or datetime.now().strftime("%Y%m%d")
-                for exchange, fn in [
+                for _exchange, fn in [
                     ("sse", ak.stock_margin_detail_sse),
                     ("szse", getattr(ak, "stock_margin_detail_szse", None)),
                 ]:
@@ -1477,7 +1477,7 @@ class DataSupplyChain:
                 kwargs,  # 尝试2: 不带日期 (全量)
             ):
                 try:
-                    raw = _with_timeout(lambda: pro.fina_indicator(**attempt_kwargs))
+                    raw = _with_timeout(lambda _kw=attempt_kwargs: pro.fina_indicator(**_kw))
                     if raw is not None and len(raw) > 0:
                         break
                 except Exception as exc:
@@ -2069,7 +2069,7 @@ class DataSupplyChain:
                         "offset": offset,
                         "fields": _FIELDS,
                     }
-                    raw = _with_timeout(lambda: pro.stk_holdertrade(**page_kwargs))
+                    raw = _with_timeout(lambda _kw=page_kwargs: pro.stk_holdertrade(**_kw))
                     if raw is None or len(raw) == 0:
                         break
                     all_pages.append(raw)

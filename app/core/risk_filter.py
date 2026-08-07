@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Hard-constraint risk filter applied after model prediction (Phase 4).
 
 Rules (selection_config.yaml::risk_filter):

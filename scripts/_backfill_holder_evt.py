@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """一次性脚本: 给现存 V3 面板回填 sh_evt_start_date / sh_evt_end_date.
 
 Surgical merge — 只并 2 列事件窗口日期, 不复跑 enrich_alt_data:

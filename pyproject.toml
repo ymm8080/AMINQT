@@ -1,3 +1,6 @@
+[tool.ruff]
+target-version = "py39"
+
 [tool.ruff.lint]
 # E   — pycodestyle errors
 # W   — pycodestyle warnings
@@ -7,6 +10,8 @@
 # UP  — pyupgrade (modernize syntax)
 # N   — pep8-naming
 select = ["E4", "E7", "E9", "F", "W", "I", "B", "UP", "N"]
+# B905 (zip-without-explicit-strict) requires Python 3.10+; project targets 3.9+
+ignore = ["B905"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/test_ths_indicators.py" = ["E402"]
@@ -15,15 +20,18 @@ select = ["E4", "E7", "E9", "F", "W", "I", "B", "UP", "N"]
 "scripts/verify_cyq_akshare.py" = ["E402"]
 "scripts/full_predict.py" = ["E402"]
 "scripts/scan_varthresh.py" = ["E402"]
+# Scripts — diagnostic/utility tools, allow loose naming + E402
+"scripts/*.py" = ["E402", "N802", "N803", "N806", "N812", "N814"]
 # Root-level experimental scripts — allow loose style
 "_*.py" = ["E402", "N802", "N803", "N806"]
 # Tests — allow non-PEP8 names for readability
 "tests/*.py" = ["N802", "N803", "N806"]
 # ML code uses uppercase X/y for feature matrices (standard convention)
-"app/models/*.py" = ["N803", "N806"]
-"app/pipeline1/*.py" = ["N803", "N806"]
+"app/models/*.py" = ["N803", "N806", "N812"]
+"app/pipeline1/*.py" = ["N803", "N806", "N814"]
 "app/core/factor_discovery.py" = ["N803", "N806"]
 "app/core/indicator_weighter.py" = ["N803", "N806"]
+"app/core/ths_indicators.py" = ["N806"]
 "app/pipeline_parallel/backtest.py" = ["N803", "N806"]
 # Chinese-named indicator functions (同花顺 formula translations)
 "app/indicators/*.py" = ["N802", "N803", "N806"]

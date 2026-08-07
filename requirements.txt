@@ -28,6 +28,7 @@ plotly>=5.20
 # ── Utils ─────────────────────────────────────────────────────
 pyyaml
 python-dotenv
+requests
 
 # ── MCP (Claude Code Sub-Agent) ───────────────────────────────
 mcp>=1.0.0

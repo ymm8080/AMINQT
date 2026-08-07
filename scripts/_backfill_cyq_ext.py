@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """V3 CYQ 列整理: 删除 7 个 DELETE 基础列 + 补齐 5 个筹码形态目标列
 (peak_price/chip_entropy/chip_skew_dist/peak_roc_5d/peak_roc_20d).
 

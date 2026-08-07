@@ -11,12 +11,13 @@ Handles edge cases:
 import warnings
 
 warnings.filterwarnings("ignore")
-import pandas as pd  # noqa: E402
-import numpy as np  # noqa: E402
 import logging  # noqa: E402
 import os  # noqa: E402
-import time  # noqa: E402
 import sys  # noqa: E402
+import time  # noqa: E402
+
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"

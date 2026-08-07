@@ -43,7 +43,7 @@ class QuantileModelSet:
         sample_weight: np.ndarray | None = None,
         eval_set: tuple[np.ndarray, np.ndarray] | None = None,
         es_patience: int = 100,
-    ) -> "QuantileModelSet":
+    ) -> QuantileModelSet:
         """训练五分位模型 (objective='quantile', alpha=q). 早停 patience=100 (V3.8 §2.1)."""
         import lightgbm as lgb
 
@@ -102,7 +102,7 @@ class PainModel:
         sample_weight: np.ndarray | None = None,
         eval_set: tuple[np.ndarray, np.ndarray] | None = None,
         es_patience: int = 100,
-    ) -> "PainModel":
+    ) -> PainModel:
         import lightgbm as lgb
 
         params = {**self.base_params, "objective": "binary"}

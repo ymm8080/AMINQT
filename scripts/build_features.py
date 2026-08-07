@@ -11,11 +11,11 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import shutil
 import sys
 import time
-import logging
 from datetime import datetime
 
 import numpy as np
@@ -24,10 +24,10 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
-from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from app.pipeline1.feature_selector import BRUTE_FAMILIES, BruteForceGenerator
 from app.pipeline1.feature_registry import FeatureRegistry
+from app.pipeline1.feature_selector import BRUTE_FAMILIES, BruteForceGenerator
+from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.train_runner import prepare_board_frame
 from config.settings import data_others_path
 
@@ -82,7 +82,7 @@ def step1_update_registry(panel):
 
     # Get registered source cols
     registered_cols = set()
-    for name, meta in registry.get_all().items():
+    for _name, meta in registry.get_all().items():
         for sc in meta.get("source_cols", []):
             registered_cols.add(sc)
 
@@ -206,6 +206,7 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
         # Write each family to a temp parquet, then use pyarrow columnar
         # concat to avoid pandas block consolidation OOM (needs 5GB+ contiguous).
         import tempfile
+
         import pyarrow.parquet as pq
 
         gen = BruteForceGenerator()

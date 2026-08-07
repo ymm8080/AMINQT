@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """ADX 慢牛系统 — 买入/卖出/移动止盈信号 (2026-08-05, ADX 设计文档 v1.0 §3-4).
 
 买入 (§3.1, 均线附近低吸): pullback_ma5 / pullback_ma10 / shrink_vol;

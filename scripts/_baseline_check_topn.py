@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_baseline_check_topn.py — 验收基准校验 (2026-08-04).
 
 7/473 特征在 (5,10) 视界通过. 关键问题: 若整个 3y 窗口无条件 10d 净收益
@@ -17,12 +16,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 import pandas as pd
 
+from scripts._measure_topn import HORIZONS, LABEL_COLS
 from scripts._reclassify_all_features import (
-    MAIN_CHECKPOINT,
     DUAL_CHECKPOINT,
+    MAIN_CHECKPOINT,
     _finalize_slice,
 )
-from scripts._measure_topn import HORIZONS, LABEL_COLS
 
 PASSED = [
     "VAR51",

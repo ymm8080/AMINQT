@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 修复 V3 面板审计发现的数据质量问题 (2026-08-02):
   1. volume 为 null 的 2,250 行是停牌日 (open==high==low==close), 但 is_suspended 错误为 False.

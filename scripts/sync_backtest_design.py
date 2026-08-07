@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """双向同步 backtest_design.md.
 
 副本1: docs/backtest_design.md (项目代码库)

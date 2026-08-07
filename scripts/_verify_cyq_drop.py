@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """A/B 验证: 当前面板(_x Tushare + _y Calculator) vs Calculator-only.
 
 问题: 去掉 Tushare CYQ、只用 Calculator, 是否会提升(或至少不损害)预测质量?
@@ -33,16 +32,15 @@ import pandas as pd
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("verify_cyq_drop")
 
+# ── 样本测试: 仅训练 + 评估 t+3 视界 ──
+# 跳过 1d/2d/5d 与 E1/E2/LambdaRank extras; 校准器 no-op (fit_calibrator 硬依赖 1d_cls)
+import app.pipeline1.dual_track_trainer as _dtt
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.cyq_ext import compute_cyq_panel
 from app.pipeline1.dual_track_trainer import DualTrackTrainer
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.ic_screener import ICScreener
 from app.pipeline1.train_runner import prepare_board_frame, run_training
-
-# ── 样本测试: 仅训练 + 评估 t+3 视界 ──
-# 跳过 1d/2d/5d 与 E1/E2/LambdaRank extras; 校准器 no-op (fit_calibrator 硬依赖 1d_cls)
-import app.pipeline1.dual_track_trainer as _dtt
 
 _dtt.MODEL_KINDS = ("3d_reg",)
 _dtt.DualTrackTrainer._train_extras = lambda self, out, checkpoint=None: None

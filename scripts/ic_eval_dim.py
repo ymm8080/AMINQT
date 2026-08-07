@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """IC 评估 — 按 DIM 分组, 单板块, 单 dim 组.
 
 用法: python scripts/ic_eval_dim.py main dim01,dim02,dim03
@@ -13,15 +12,16 @@ import os
 import sys
 import time
 from datetime import datetime
+
 import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from app.pipeline1.label_engine import LabelEngine
-from app.pipeline1.ic_screener import ICScreener
 from app.pipeline1.cleaning_pipeline import board_of
+from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+from app.pipeline1.ic_screener import ICScreener
+from app.pipeline1.label_engine import LabelEngine
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"

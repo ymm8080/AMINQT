@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛 regime 条件退出验证 (2026-08-06).
 
 stability 证明 trail8 是趋势跟随放大器: 上升段 (h4/h5) +2~4pp, 下行段 (h1/h3)

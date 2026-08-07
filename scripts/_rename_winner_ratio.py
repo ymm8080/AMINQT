@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Rename benefit_part -> winner_ratio in V3 panel parquet."""
 
-import os
 import gc
+import os
+
 import pyarrow as pa
 import pyarrow.parquet as pq
 

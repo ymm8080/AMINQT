@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_moneyflow_hold.py — 主力持仓比例代理 诊断 (Tushare moneyflow).
 
 背景: 用户问"同花顺主力持仓比例取得到嘛". 结论 (2026-08-05):
@@ -32,10 +31,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.label_engine import LabelEngine
-from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS, weighted_ic
+from config.settings import PANEL_V3_PATH
 from scripts._diag_chip_weekly import per_stock_ts_ic
+from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS, weighted_ic
 from scripts._measure_topn import HORIZONS, MIN_WINRATE, measure_topn
 from scripts._reclassify_all_features import add_label_pm_10d_net
 
@@ -272,7 +271,7 @@ def main() -> None:
     out.append(f"{'feature':<28}{'wTSIC':>9}{'TS2d':>9}{'TS3d':>9}{'TS5d':>9}")
     out.append("-" * 64)
     tsic_res = {}
-    for name, label in feats.items():
+    for name, _label in feats.items():
         per = per_stock_ts_ic(work, {name: work[name]}, LABELS, min_obs=MIN_OBS)
         row = {lab: per[lab][name] for lab in LABELS}
         tsic_res[name] = {

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_verify_chip_ma_interaction.py — 筹码结构变化 × 价格均线 组合信号验证.
 
 用户纠正 (2026-08-04): 「筹码结构变化是要与价格均线一起做组合来预测的，
@@ -23,10 +22,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.label_engine import LabelEngine
-from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS, weighted_ic
+from config.settings import PANEL_V3_PATH
 from scripts._diag_chip_weekly import _apply, per_stock_ts_ic
+from scripts._diag_column_feed import LABELS, MASK_RECENT_DAYS, weighted_ic
 from scripts._verify_chip_tsic import _residualize
 
 logging.disable(logging.CRITICAL)

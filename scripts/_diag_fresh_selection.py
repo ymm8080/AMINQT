@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_fresh_selection.py — 按"目标分层设计"在当前面板上重选 MAIN 特征, 输出 B/C 归属 (只读).
 
 目标设计 (用户裁决 + 提案):
@@ -24,8 +23,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pandas as pd
+from _diag_column_feed import (
+    temporal_variation,
+    tier_of,
+)
 
-from config.settings import PANEL_V3_PATH
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.feature_selector import (
@@ -34,10 +36,7 @@ from app.pipeline1.feature_selector import (
     apply_event_scope_screens,
 )
 from app.pipeline1.train_runner import prepare_board_frame
-from _diag_column_feed import (
-    temporal_variation,
-    tier_of,
-)
+from config.settings import PANEL_V3_PATH
 
 logging.disable(logging.CRITICAL)
 

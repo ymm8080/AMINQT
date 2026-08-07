@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_repair_panel_amount_units.py — 修复 V3 面板尾部 volume/amount 单位 bug (2026-08-04).
 
 背景: _daily_fetch 从 Tushare pro.daily 取数, 其 amount 单位=千元, vol 单位=手.

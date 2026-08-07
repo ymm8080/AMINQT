@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 """Direct IC eval — dim21-28 daily + time-series features. No API calls."""
 
-import sys
-import os
-import time
-import logging
 import json
+import logging
+import os
+import sys
+import time
+
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -20,8 +20,8 @@ df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
 logger.info("Panel: %d stocks, %d rows", df["symbol"].nunique(), len(df))
 
 # Industry + board
-from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct  # noqa: E402
+from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 
 supply = DataSupplyChain()
 pro = supply._tushare_pro()

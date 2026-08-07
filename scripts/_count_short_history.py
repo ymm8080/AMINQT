@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
 """Count panel rows belonging to symbols with short trading history (< 150 days in panel)."""
 
 import sys
+
 import pyarrow.parquet as pq
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

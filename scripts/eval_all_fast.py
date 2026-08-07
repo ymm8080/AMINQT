@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Fast evaluation of ALL columns: evaluate raw 107 cols + core dim features
 WITHOUT the slow _chgN/_pct_chgN generation. Those are linear transforms.
 
@@ -9,9 +8,10 @@ import json
 import logging
 import os
 import sys
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
-from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 logging.basicConfig(

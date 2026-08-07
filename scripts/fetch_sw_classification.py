@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Fetch stock -> Shenwan (SW) L1/L2/L3 industry classification mapping.
 
 Full rebuild mode (default):
@@ -16,13 +15,14 @@ Output: data/processed/sw_stock_classification.csv
            sw_l2_code, sw_l2_name, sw_l3_code, sw_l3_name, in_date
 """
 
+import argparse
+import logging
 import os
 import sys
 import time
-import logging
-import argparse
-import pandas as pd
 from datetime import datetime
+
+import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -112,14 +112,14 @@ def fetch_tushare_classification():
             if len(l2_df) > 0 and "parent_code" in l2_df.columns:
                 for _, row in l2_df.iterrows():
                     l2_code = row["index_code"]
-                    for l3c, info in l3_to_parent.items():
+                    for _l3c, info in l3_to_parent.items():
                         if info["l2_code"] == l2_code:
                             info["l1_code"] = row.get("parent_code", "")
                             info["l2_name"] = row.get("industry_name", "")
 
             if len(l1_df) > 0:
                 l1_names = dict(zip(l1_df["index_code"], l1_df["industry_name"]))
-                for l3c, info in l3_to_parent.items():
+                for _l3c, info in l3_to_parent.items():
                     info["l1_name"] = l1_names.get(info.get("l1_code", ""), "")
         else:
             l3_to_parent = None
@@ -438,7 +438,7 @@ def main():
         if args.incremental:
             codes = [c.strip() for c in args.incremental.split(",") if c.strip()]
         if args.incremental_file:
-            with open(args.incremental_file, "r", encoding="utf-8") as f:
+            with open(args.incremental_file, encoding="utf-8") as f:
                 codes = [line.strip() for line in f if line.strip()]
         if not codes:
             logger.error("No ts_codes provided for incremental update")

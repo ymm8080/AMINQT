@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """V3 面板落 3 个 CYQ 派生列 (cost_bias / conc_trend_20d / conc_90_industry_rank).
 
 用户 2026-08-02 决策: 不回填 chip_gini/resistance_dist/support_dist, 只补 3 派生列,

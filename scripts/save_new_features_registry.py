@@ -1,21 +1,22 @@
-# -*- coding: utf-8 -*-
 """Save new bias/derived feature IC results to factor registry.
 
 Uses the full ICScreener.screen() for proper grading with all thresholds.
 """
 
-import sys
-import json
 import gc
+import json
+import sys
 
 sys.path.insert(0, ".")
 
-import pandas as pd
 from datetime import datetime
-from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+
+import pandas as pd
+
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
-from app.pipeline1.label_engine import LabelEngine
+from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.ic_screener import ICScreener
+from app.pipeline1.label_engine import LabelEngine
 
 tag = datetime.now().strftime("%Y%m%d_%H%M%S")
 

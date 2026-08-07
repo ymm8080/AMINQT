@@ -1,5 +1,5 @@
-import pyarrow.parquet as pq
 import pandas as pd
+import pyarrow.parquet as pq
 
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
 cols = ["symbol", "date", "holder_count", "sh_change_vol", "sh_change_amt"]

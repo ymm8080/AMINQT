@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """CYQ 筹码分布计算器 — Python 移植自东方财富 JS 算法.
 
 原算法: akshare stock_cyq_em (https://quote.eastmoney.com)

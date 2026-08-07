@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Consolidate _x/_y duplicate columns in v3 panel into single original-named columns.
 
 _x has better coverage (0.65% NaN) vs _y (7.39% NaN).
@@ -8,6 +7,7 @@ Reduces 116 cols -> 102 cols.
 """
 
 import os
+
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -52,7 +52,7 @@ def main():
 
     # Build new column list (preserving order, replacing _x position with new name)
     new_names = []
-    for i, name in enumerate(old_names):
+    for _i, name in enumerate(old_names):
         if name in cols_to_drop:
             # Skip both _x and _y, but insert consolidated name at _x position
             if name.endswith("_x") and name in [p[0] for p in PAIRS]:

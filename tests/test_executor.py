@@ -1,14 +1,13 @@
-# -*- coding: utf-8 -*-
 """Tests for services/executor — mode toggle + risk-filter gate + T+1 (M3)."""
 
 from decimal import Decimal
 
 import pytest
 
+import services.executor_base as executor_base
 from config import settings
 from services.executor_base import Executor, Order
 from services.sim_executor import SimExecutor
-import services.executor_base as executor_base
 
 
 class _StubExecutor(Executor):

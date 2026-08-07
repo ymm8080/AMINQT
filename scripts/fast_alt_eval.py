@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 """FAST alt data eval — skip per-stock APIs, use bulk + cached."""
 
-import sys
-import os
-import time
-import logging
 import json
+import logging
+import os
+import sys
+import time
+
 import numpy as np
 import pandas as pd
 
@@ -22,8 +22,8 @@ syms = rng.choice(df["symbol"].unique(), 500, replace=False)
 df = df[df["symbol"].isin(syms)].sort_values(["symbol", "date"]).reset_index(drop=True)
 logger.info("Panel: %d stocks, %d rows", df["symbol"].nunique(), len(df))
 
-from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct  # noqa: E402
+from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 
 supply = DataSupplyChain()
 pro = supply._tushare_pro()
@@ -77,7 +77,7 @@ for d in sample_dates:
                 if c in raw.columns:
                     raw[c] = pd.to_numeric(raw[c], errors="coerce")
             mg_frames.append(raw[["symbol", "date", "rzye", "rqye", "rzmre", "rqmcl"]])
-    except:  # noqa: E722
+    except Exception:  # noqa: E722
         pass
     time.sleep(0.2)
 if mg_frames:
@@ -115,7 +115,7 @@ for d in sample_dates:
                     raw["net_mf_amount"], errors="coerce"
                 )
             mf_frames.append(raw[["symbol", "date", "net_mf_amount"]])
-    except:  # noqa: E722
+    except Exception:  # noqa: E722
         pass
     time.sleep(0.2)
 if mf_frames:
