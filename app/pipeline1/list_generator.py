@@ -384,21 +384,17 @@ class ListGenerator:
         return pd.Timestamp(datetime.date.today())
 
     @staticmethod
-    def _rank_by_d3_target(df: pd.DataFrame) -> pd.DataFrame:
-        """E7 准入后按 d3 目标排序: 0.5×norm(pred_ret_3d) + 0.5×norm(prob_up_3d).
+    def _rank_by_magnitude(df: pd.DataFrame) -> pd.DataFrame:
+        """E7 准入后按预测幅度排序: pred_ret_3d 降序 (2026-08-07 定案).
 
-        用户 2026-08-05 定案: legacy 清单目标 = 最高 d3 涨幅 + d3 概率
-        (镜像并行 pipeline score_w 口径, 涨幅/概率按当批入选股 min-max 归一化).
-        缺列或 d3 涨幅/概率为常数 (归一化除零) → 回退 score 降序.
+        回测依据: 并行 250d OOS 纯幅度排名赢 d3 混合 (把握度×幅度) 排名; legacy
+        main 两信号 +0.74 重合 (换≈no-op), GEM/STAR 反相关 (换=幅度优先, E7 准入
+        仍保证只列预测上涨股). 旧混合排名 (0.5×norm(pred_ret_3d)+0.5×norm(prob_up_3d))
+        降级为影子对照组 (prediction_shadow), 真实数据 1~2 月后裁决, 打脸则 revert.
+        缺 pred_ret_3d → 回退 score 降序.
         """
-        need = {"pred_ret_3d", "prob_up_3d"}
-        if need <= set(df.columns):
-            g, p = df["pred_ret_3d"], df["prob_up_3d"]
-            if g.max() > g.min() and p.max() > p.min():
-                blend = 0.5 * (g - g.min()) / (g.max() - g.min()) + 0.5 * (
-                    p - p.min()
-                ) / (p.max() - p.min())
-                return df.assign(d3_rank=blend).sort_values("d3_rank", ascending=False)
+        if "pred_ret_3d" in df.columns and df["pred_ret_3d"].notna().any():
+            return df.sort_values("pred_ret_3d", ascending=False)
         return df.sort_values("score", ascending=False)
 
     def emit(
@@ -454,8 +450,8 @@ class ListGenerator:
                 "empty": True,
                 "schema_version": SCHEMA_VERSION,
             }
-        # 按 d3 目标排序取 TOP_N (用户 2026-08-05: 最高 d3 涨幅+d3 概率; 行业分散在清单层面)
-        passed = self._rank_by_d3_target(passed)
+        # 按预测幅度排序取 TOP_N (2026-08-07: 纯 pred_ret_3d 幅度, 回测赢 d3 混合; 行业分散在清单层面)
+        passed = self._rank_by_magnitude(passed)
         # 行业集中度限制: 同一行业 <= MAX_PER_INDUSTRY 只
         final = self.apply_industry_limit(passed).reset_index(drop=True)
         # D18 降仓 → 仅 Top 5; 正常 → Top 15

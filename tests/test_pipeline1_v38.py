@@ -373,36 +373,36 @@ class TestDynamicEntry:
         out = gen.emit(cands)
         assert list(out["list"]["symbol"]) == ["600002"]
 
-    def test_emit_ranks_by_d3_target(self):
-        """排序 (2026-08-05): d3 目标 = 50% norm(pred_ret_3d) + 50% norm(prob_up_3d).
+    def test_emit_ranks_by_magnitude(self):
+        """排序 (2026-08-07 定案): 纯 pred_ret_3d 幅度降序 (回测赢 d3 混合, 旧混合降级影子).
 
-        score 最高但 d3 涨幅/概率最低 → 落最后; d3 涨幅+概率双高 → 排第一.
+        幅度最高 → 第 1, 即使 prob/score 都低 (旧 0.5×norm(mag)+0.5×norm(prob) 混合会把它压到第 2).
         """
         gen = ListGenerator(entry_prob=0.0)
         cands = _cands(
             [
-                {  # d3 涨幅高 + d3 概率高 → 第 1
+                {  # 幅度最高但 prob/score 都低 → 纯幅度仍第 1
                     "symbol": "600001",
-                    "pred_ret_3d": 0.05,
-                    "prob_up_3d": 0.70,
-                    "score": 0.10,
+                    "pred_ret_3d": 0.08,
+                    "prob_up_3d": 0.55,
+                    "score": 0.20,
                 },
-                {  # score 最高但 d3 涨幅/概率最低 → 应落最后
+                {  # prob/score 最高但幅度居中 → 第 2 (旧混合会抬到第 1)
                     "symbol": "600002",
-                    "pred_ret_3d": 0.005,
-                    "prob_up_3d": 0.60,
+                    "pred_ret_3d": 0.03,
+                    "prob_up_3d": 0.80,
                     "score": 0.95,
                 },
-                {  # 中间
+                {  # 幅度最低 → 最后
                     "symbol": "600003",
-                    "pred_ret_3d": 0.02,
+                    "pred_ret_3d": 0.01,
                     "prob_up_3d": 0.65,
                     "score": 0.50,
                 },
             ]
         )
         out = gen.emit(cands)
-        assert list(out["list"]["symbol"]) == ["600001", "600003", "600002"]
+        assert list(out["list"]["symbol"]) == ["600001", "600002", "600003"]
 
 
 class TestScorePainPenalty:
