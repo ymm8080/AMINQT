@@ -116,7 +116,7 @@ def report_event(out, title, df, ev_mask, feat_cols, f0_col):
     out.append(f"{'分组':<16}{'T+2':>10}{'T+3':>10}{'T+5':>10}{'T+10':>10}{'T+20':>10}")
     ev_feat = df.loc[ev_mask, feat_cols].reset_index(drop=True)
 
-    def _row(tag, idx):
+    def _row(tag, idx, piv=piv):
         parts = [f"{tag:<16}"]
         for h in HORIZONS:
             s = piv.loc[idx, h].dropna()

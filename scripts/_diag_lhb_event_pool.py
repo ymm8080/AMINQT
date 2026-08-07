@@ -118,7 +118,7 @@ def main() -> None:
     # 每个事件在 horizon 点的 rel
     piv = win.pivot_table(index="evt_id", columns="off", values="rel")
 
-    def _row(tag, idx):
+    def _row(tag, idx, piv=piv):
         parts = [f"{tag:<16}"]
         for h in HORIZONS:
             s = piv.loc[idx, h].dropna()

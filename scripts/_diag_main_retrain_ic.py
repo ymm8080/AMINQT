@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""_diag_main_retrain_ic.py �?判断 main 重训值不�? 新选中特征�?OOS 尾部有无预测�?
+"""_diag_main_retrain_ic.py ?判断 main 重训值不? 新选中特征?OOS 尾部有无预测?
 
-�?selected_main_*.json 的选中特征, �?features_main �?250 交易�?(OOS) 逐日�?
-横截�?Rank IC vs label_pm_{1,3,5}d_net, 输出单特�?IC 分布 + 复合�?IC (等权
-横截�?pct-rank 均�?. RAM 安全: 分块读列, �?chunk 累加滚动统计 (不存全量 IC).
+?selected_main_*.json 的选中特征, ?features_main ?250 交易?(OOS) 逐日?
+横截?Rank IC vs label_pm_{1,3,5}d_net, 输出单特?IC 分布 + 复合?IC (等权
+横截?pct-rank 均?. RAM 安全: 分块读列, ?chunk 累加滚动统计 (不存全量 IC).
 
 用法: python scripts/_diag_main_retrain_ic.py [--features <parquet>] [--oos 250]
 输出: data/_diag_main_retrain_ic_{ts}.json (WORM)
@@ -50,7 +50,7 @@ def main():
     all_cols = [pf.schema_arrow.field(i).name for i in range(pf.metadata.num_columns)]
     feats = [f for f in selected if f in all_cols]
     missing = [f for f in selected if f not in all_cols]
-    labels = [label for label in LABELS if l in all_cols]
+    labels = [label for label in LABELS if label in all_cols]
     brute_set = {f for f in feats if "_brute_" in f}
 
     t0 = time.time()
@@ -70,7 +70,7 @@ def main():
     if not feats:
         raise RuntimeError("No selected features present in features parquet")
 
-    # �?(date, symbol) 行的复合分累�?(全选中 / brute 子集) + label 原始�?
+    # ?(date, symbol) 行的复合分累?(全选中 / brute 子集) + label 原始?
     acc = pd.read_parquet(feats_path, columns=["date", "symbol"])
     acc = acc[acc["date"].isin(oos)].reset_index(drop=True)
     acc["comp_all"] = 0.0
@@ -85,7 +85,7 @@ def main():
     for lab in labels:
         acc[lab] = lab_df[lab].values
 
-    # 逐特征滚动统�? sum_ic / sum_sq / count / pos_count per label.
+    # 逐特征滚动统? sum_ic / sum_sq / count / pos_count per label.
     stats = {lab: {} for lab in labels}
 
     def upd(stats_lab, feat, s, sq, c, p):
@@ -110,7 +110,7 @@ def main():
         rstd = g[chunk].transform("std")
         rz = (ranks - rmean) / rstd
 
-        # 复合�? 等权 pct-rank 均�?(skipna, 缺失特征不影响行权重).
+        # 复合? 等权 pct-rank 均?(skipna, 缺失特征不影响行权重).
         acc["comp_all"] += ranks.mean(axis=1, skipna=True).values
         acc["n_all"] += ranks.notna().sum(axis=1).values
         bmask = [c for c in chunk if c in brute_set]
@@ -138,7 +138,7 @@ def main():
             flush=True,
         )
 
-    # ---- 汇�?----
+    # ---- 汇?----
     def dist(st):
         vals = {f: v[0] / v[2] for f, v in st.items() if v[2] > 30}
         if not vals:
@@ -196,14 +196,14 @@ def main():
     for lab in labels:
         c = comp[lab]["comp_all"]
         if c is None:
-            verdicts[lab] = "无数�?
+            verdicts[lab] = "无数?"
             continue
         strong = c["mean_ic"] > 0.02 and c["pos_day_ratio"] > 0.60
         weak_pos = c["mean_ic"] > 0 and c["pos_day_ratio"] > 0.50
         verdicts[lab] = (
             "池有信号, 重训值得"
             if strong
-            else "池信号弱但为�? 重训可能小幅改善"
+            else "池信号弱但为? 重训可能小幅改善"
             if weak_pos
             else "池信号≈0或负, 重训无济于事"
         )

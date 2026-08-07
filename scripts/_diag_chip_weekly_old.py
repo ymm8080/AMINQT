@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""_diag_chip_weekly.py �?筹码形态列�?双周/月频变换 **个股 time-series IC** 测试.
+"""_diag_chip_weekly.py ?筹码形态列?双周/月频变换 **个股 time-series IC** 测试.
 
-用户修正: 筹码形态是**个股自身的时间序列状态变�?*, 跨股票横截面比较混入
-个股结构性差�? 应采�?**per-stock time-series IC**: 对每只股�? 将该股自�?
-历史上筹码特征序列与未来收益序列�?rank 相关, 再对全样本股票取平均.
+用户修正: 筹码形态是**个股自身的时间序列状态变?*, 跨股票横截面比较混入
+个股结构性差? 应采?**per-stock time-series IC**: 对每只股? 将该股自?
+历史上筹码特征序列与未来收益序列?rank 相关, 再对全样本股票取平均.
 
-对每�?chip �?× 各变�?windows 5/10/20)计算个股时序 IC, �?HS300×1年窗�?
+对每?chip ?× 各变?windows 5/10/20)计算个股时序 IC, ?HS300×1年窗?
 输出落盘 data/_diag_chip_weekly_<ts>.log (WORM).
 
 用法: python scripts/_diag_chip_weekly.py [--hs300|--full]
@@ -41,11 +41,11 @@ CHIP_COLS = [
     "winner_ratio",
 ]
 
-# 对照: 纯价格水平列 �?检验成本线�?成本线列本身是价�?�?level TSIC
-# 是否只是个股价格均值回�? 而非筹码结构信息.
+# 对照: 纯价格水平列 ?检验成本线?成本线列本身是价??level TSIC
+# 是否只是个股价格均值回? 而非筹码结构信息.
 CONTROL_COLS = ["close_hfq", "low_hfq"]
 
-# (name, transform spec) �?周频=5, 双周=10, 月频=20
+# (name, transform spec) ?周频=5, 双周=10, 月频=20
 TRANSFORMS = [
     ("level", None),
     ("ma5", ("rolling_mean", 5)),
@@ -81,8 +81,8 @@ def _apply(family, win, s):
 
 
 def per_stock_ts_ic(work, feats, labels, min_obs=20):
-    """个股时序 IC: 对每只股�? 用该�?*自身**历史序列, 计算特征�?T+2/T+3/T+5
-    涨幅(label_pm_{2,3,5}d_net)�?rank 相关(Spearman), 再对全样本股票取平均.
+    """个股时序 IC: 对每只股? 用该?*自身**历史序列, 计算特征?T+2/T+3/T+5
+    涨幅(label_pm_{2,3,5}d_net)?rank 相关(Spearman), 再对全样本股票取平均.
     feats: {name: pd.Series index 对齐 work}. 返回 {label: {name: mean_tsic}}."""
     res = {lab: {t: [] for t in feats} for lab in labels}
     for sym, g in work.groupby("symbol"):
@@ -141,7 +141,7 @@ def run(df, label, out):
         if col not in df.columns:
             continue
         _emit(df, col, out)
-    out.append("--- 对照: 纯价格水平列 (level TSIC 是否=价格均值回�? ---")
+    out.append("--- 对照: 纯价格水平列 (level TSIC 是否=价格均值回? ---")
     for col in CONTROL_COLS:
         if col not in df.columns:
             continue
@@ -176,7 +176,7 @@ def main() -> None:
         import akshare as ak
 
         cons = ak.index_stock_cons(symbol="000300")
-        col = "品种代码" if "品种代码" in cons.columns else "成分券代�?
+        col = "品种代码" if "品种代码" in cons.columns else "成分券代?"
         syms = [str(s).strip().split(".")[0] for s in cons[col]]
         df = df[df["symbol"].isin(syms)].reset_index(drop=True)
 
