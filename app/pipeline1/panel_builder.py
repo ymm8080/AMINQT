@@ -86,7 +86,7 @@ def load_or_fetch_meta(
     import akshare as ak
 
     spot = _ak_call(ak.stock_zh_a_spot_em)
-    name_map = dict(zip(spot["代码"].astype(str).str[-6:], spot["名称"].astype(str)))
+    name_map = dict(zip(spot["代码"].astype(str).str[-6:], spot["名称"].astype(str), strict=False))
 
     boards = _ak_call(ak.stock_board_industry_name_em)
     industry_map: dict[str, str] = {}

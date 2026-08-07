@@ -79,7 +79,7 @@ def main() -> int:
     def sim(picks: pd.DataFrame, mode: str) -> dict:
         # mode = "cur"(T+1 直买) | "dip"(低吸门控)
         rets, holds, peaks, no_entry = [], [], [], 0
-        for sym, T in zip(picks["symbol"], picks["date"]):
+        for sym, T in zip(picks["symbol"], picks["date"], strict=False):
             c = sym_code[str(sym)]
             lo, hi = starts[c], ends[c]
             base = lo + int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))

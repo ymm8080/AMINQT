@@ -177,7 +177,7 @@ def measure(sub: pd.DataFrame, score: pd.Series, spec, bcrit) -> dict:
         sub[["date", "symbol"] + list(spec.labels)], on=["date", "symbol"], how="left"
     )
     per = {}
-    for h, lab in zip(spec.horizons, spec.labels):
+    for h, lab in zip(spec.horizons, spec.labels, strict=False):
         m = measure_dual_head(picks, lab)
         per[h] = {
             "mag": m["mag"],

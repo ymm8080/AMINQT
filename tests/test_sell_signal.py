@@ -112,7 +112,7 @@ def test_multiple_symbols_vectorized():
         _row(symbol="600003"),
     ]
     out = evaluate_sell_signal(pd.DataFrame(rows))
-    got = dict(zip(out["symbol"], out["sell_signal"]))
+    got = dict(zip(out["symbol"], out["sell_signal"], strict=False))
     assert got == {
         "600000": "strong_sell",
         "600001": "sell",

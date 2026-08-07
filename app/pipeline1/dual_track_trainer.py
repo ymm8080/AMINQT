@@ -682,6 +682,7 @@ class DualTrackTrainer:
     @staticmethod
     def load(path: str) -> dict:
         from app.utils.safe_load import safe_pickle_load
+
         return safe_pickle_load(path)
 
     # ---------------- 特征相似度回退 ----------------

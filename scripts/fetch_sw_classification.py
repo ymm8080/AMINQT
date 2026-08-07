@@ -118,7 +118,7 @@ def fetch_tushare_classification():
                             info["l2_name"] = row.get("industry_name", "")
 
             if len(l1_df) > 0:
-                l1_names = dict(zip(l1_df["index_code"], l1_df["industry_name"]))
+                l1_names = dict(zip(l1_df["index_code"], l1_df["industry_name"], strict=False))
                 for _l3c, info in l3_to_parent.items():
                     info["l1_name"] = l1_names.get(info.get("l1_code", ""), "")
         else:

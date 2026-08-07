@@ -71,7 +71,7 @@ class TestHolderKimiFeatures:
             + [0.01] * 4  # idx36-39 idx5 滑出 30 日窗 (只余 idx15+idx25)
         )
         assert len(r) == 40 and len(expected) == 40
-        for i, (got, exp) in enumerate(zip(r, expected)):
+        for i, (got, exp) in enumerate(zip(r, expected, strict=False)):
             if np.isnan(exp):
                 assert np.isnan(got), f"idx {i}: expect NaN, got {got}"
             else:

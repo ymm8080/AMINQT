@@ -76,7 +76,7 @@ def main() -> int:
         causes["trail_stop"] = {"n": 0, "ret": []}
         causes["cap"] = {"n": 0, "ret": []}
         stop_only, sig_only = [], []
-        for sym, T in zip(picks["symbol"], picks["date"]):
+        for sym, T in zip(picks["symbol"], picks["date"], strict=False):
             c = sym_code[str(sym)]
             lo, hi = starts[c], ends[c]
             base = lo + int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))

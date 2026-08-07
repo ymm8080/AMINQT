@@ -27,7 +27,7 @@ supply = DataSupplyChain()
 pro = supply._tushare_pro()
 basic = pro.stock_basic(exchange="", list_status="L", fields="ts_code,industry")
 basic["symbol"] = basic["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
-ind_map = dict(zip(basic["symbol"], basic["industry"].fillna("综合")))
+ind_map = dict(zip(basic["symbol"], basic["industry"].fillna("综合"), strict=False))
 df["industry"] = df["symbol"].map(ind_map).fillna("综合")
 df["board"] = df["symbol"].map(board_of)
 
@@ -78,7 +78,7 @@ if "is_suspended" not in df.columns:
 if "list_days" not in df.columns:
     df["list_days"] = df.groupby("symbol").cumcount() + 1
 if "limit_pct" not in df.columns:
-    df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
+    df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)]
 
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35  # noqa: E402
 from app.pipeline1.label_engine import LabelEngine  # noqa: E402

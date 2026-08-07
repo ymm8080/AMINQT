@@ -143,7 +143,7 @@ def main() -> None:
 
     # ── 3. 重算 *_hfq ──
     panel = panel.copy()
-    for raw, hfq in zip(RAW_COLS, HFQ_COLS):
+    for raw, hfq in zip(RAW_COLS, HFQ_COLS, strict=False):
         panel[hfq] = panel[raw] * factor.values
 
     # ── 4. 重算存储 bias_* + cross ──

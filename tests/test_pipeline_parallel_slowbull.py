@@ -636,7 +636,7 @@ def test_add_trail8_columns_pit_and_trigger():
                 "low": c * 0.99,
                 "open": c,
             }
-            for d, c in zip(dates, close)
+            for d, c in zip(dates, close, strict=False)
         ]
     )
     spec = {"max_hold": 40, "trail_pct": 0.08}
@@ -676,7 +676,7 @@ def test_slowbull_exit_rets_trail8():
             "turnover_spike": False,
             "tp_80_div": False,
         }
-        for d, c in zip(dates, close)
+        for d, c in zip(dates, close, strict=False)
     ]
     A = backtest._slowbull_sim_arrays(pd.DataFrame(rows))
     picks = pd.DataFrame({"symbol": ["0000000"], "date": [dates[0]]})

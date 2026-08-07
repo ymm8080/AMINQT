@@ -215,7 +215,7 @@ def main():
             from app.pipeline1.cleaning_pipeline import get_limit_pct
 
             df["limit_pct"] = [
-                get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])
+                get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)
             ]
         logger.info("  (computed limit_pct: mean=%.3f)", df["limit_pct"].mean())
 

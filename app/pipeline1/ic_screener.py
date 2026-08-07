@@ -121,7 +121,7 @@ class ICScreener:
         daily_ic = daily_rank_ic_series(sub, factor, label)
         rolls = [
             daily_ic.loc[d0:d1].mean()
-            for d0, d1 in zip(dates[:-window], dates[window:])
+            for d0, d1 in zip(dates[:-window], dates[window:], strict=False)
         ]
         rolls = pd.Series(rolls).dropna()
         if len(rolls) == 0:

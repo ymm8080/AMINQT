@@ -194,10 +194,10 @@ class DataLoader:
         self.price_df["stock"] = self.price_df["stock"].astype(str)
 
         # 创建行情表的 (date, stock) 索引集合
-        price_keys = set(zip(self.price_df["date"], self.price_df["stock"]))
+        price_keys = set(zip(self.price_df["date"], self.price_df["stock"], strict=False))
 
         # 删除预测表中行情缺失的行
-        pred_keys = list(zip(self.pred_df["date"], self.pred_df["stock"]))
+        pred_keys = list(zip(self.pred_df["date"], self.pred_df["stock"], strict=False))
         mask = [k in price_keys for k in pred_keys]
         before = len(self.pred_df)
         self.pred_df = self.pred_df[mask].copy()

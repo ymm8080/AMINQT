@@ -183,6 +183,7 @@ class TrainingCheckpoint:
             return None
         try:
             from app.utils.safe_load import safe_pickle_load
+
             bundle = safe_pickle_load(self.bundle_path)
             logger.info(
                 "[%s/%s] Checkpoint loaded: %d model kinds, extras=%s",

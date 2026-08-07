@@ -42,7 +42,8 @@ def classify(work, g_sym, g_date, lab_sym, lab_date, col):
             lab: group_spearman(wr_sym, lab_sym[lab], g_sym, MIN_OBS) for lab in LABELS
         }
         xic[f] = {
-            lab: group_spearman(wr_date, lab_date[lab], g_date, MIN_CROSS) for lab in LABELS
+            lab: group_spearman(wr_date, lab_date[lab], g_date, MIN_CROSS)
+            for lab in LABELS
         }
     ts = {w: _wtsic(tsic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     xs = {w: _wtsic(xic[f"{col}_p{w}"]) for w in (1, 5, 20)}

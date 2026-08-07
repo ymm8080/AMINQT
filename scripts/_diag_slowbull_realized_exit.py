@@ -70,7 +70,7 @@ def main() -> int:
         rows = {"n_picks": len(picks)}
         for M in CAPS:
             realized, _held, base_hold, mfe, hold_days = [], [], [], [], []
-            for sym, T in zip(picks["symbol"], picks["date"]):
+            for sym, T in zip(picks["symbol"], picks["date"], strict=False):
                 c = sym_code[str(sym)]
                 lo, hi = starts[c], ends[c]
                 j = int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))

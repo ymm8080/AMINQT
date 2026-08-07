@@ -31,7 +31,7 @@ pro = supply._tushare_pro()
 # Industry from Tushare
 basic = pro.stock_basic(exchange="", list_status="L", fields="ts_code,industry")
 basic["symbol"] = basic["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
-ind_map = dict(zip(basic["symbol"], basic["industry"].fillna("综合")))
+ind_map = dict(zip(basic["symbol"], basic["industry"].fillna("综合"), strict=False))
 df["industry"] = df["symbol"].map(ind_map).fillna("综合")
 df["board"] = df["symbol"].map(board_of)
 logger.info("Industry: %d unique", df["industry"].nunique())
@@ -247,7 +247,7 @@ for c in ["roe", "holder_count", "margin_balance", "main_money_flow"]:
 df["is_st"] = False
 df["is_suspended"] = False
 df["list_days"] = df.groupby("symbol").cumcount() + 1
-df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
+df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)]
 
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35  # noqa: E402
 from app.pipeline1.label_engine import LabelEngine  # noqa: E402

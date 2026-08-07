@@ -151,7 +151,7 @@ class TestEnrichPanel:
 
     def test_defaults(self):
         out = enrich_panel(self._mini())
-        board = dict(zip(out["symbol"], out["board"]))
+        board = dict(zip(out["symbol"], out["board"], strict=False))
         assert board == {"600519": "main", "300750": "GEM", "688981": "STAR"}
         assert out["is_suspended"].eq(False).all()
         assert out["industry"].eq("UNKNOWN").all()

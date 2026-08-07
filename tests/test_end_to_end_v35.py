@@ -149,7 +149,7 @@ class TestEndToEndV35:
             "09:48",
         ]
         orders = []
-        for t, px in zip(times, seq):
+        for t, px in zip(times, seq, strict=False):
             out = eng.on_tick(
                 2,
                 {sym: Tick(t, px, volume=1.6, turnover=8, big_order_net=5e6)},

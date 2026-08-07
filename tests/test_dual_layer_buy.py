@@ -180,7 +180,7 @@ def _bars(closes, opens=None, lows=None):
     if opens is None:
         opens = [closes[0]] + closes[:-1]
     if lows is None:
-        lows = [min(o, c) - 0.05 for o, c in zip(opens, closes)]
+        lows = [min(o, c) - 0.05 for o, c in zip(opens, closes, strict=False)]
     return pd.DataFrame({"open": opens, "close": closes, "low": lows})
 
 

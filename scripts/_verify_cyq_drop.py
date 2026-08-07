@@ -240,7 +240,7 @@ def extract_importances(bundle: dict) -> dict[str, float]:
         if not kind.endswith("_reg"):
             continue
         model = pair[0]
-        for name, val in zip(fc, model.feature_importances_):
+        for name, val in zip(fc, model.feature_importances_, strict=False):
             imp[name] = imp.get(name, 0.0) + float(val)
     return imp
 

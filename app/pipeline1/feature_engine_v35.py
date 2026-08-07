@@ -1016,7 +1016,7 @@ class FeatureEngineV35:
             )
         close_col = "close_hfq" if "close_hfq" in df.columns else "close"
         df["ret_pct"] = df.groupby("symbol")[close_col].pct_change()
-        df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"])]
+        df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)]
         return df
 
     # ---------------- ⑦涨停基因 + ⑪连板高度 ----------------
@@ -1466,12 +1466,12 @@ class FeatureEngineV35:
             nxt = [np.searchsorted(hol, d, side="left") for d in dates]
             df["days_to_holiday"] = [
                 (hol[i] - d) / np.timedelta64(1, "D") if i < len(hol) else np.nan
-                for d, i in zip(dates, nxt)
+                for d, i in zip(dates, nxt, strict=False)
             ]
             prv = [np.searchsorted(hol, d, side="right") - 1 for d in dates]
             df["days_after_holiday"] = [
                 (d - hol[i]) / np.timedelta64(1, "D") if i >= 0 else np.nan
-                for d, i in zip(dates, prv)
+                for d, i in zip(dates, prv, strict=False)
             ]
         df["is_pre_holiday"] = (df["days_to_holiday"] <= 3).astype(int)
         df["is_post_holiday"] = (df["days_after_holiday"] <= 3).astype(int)
@@ -2875,7 +2875,7 @@ class FeatureEngineV35:
 
         def per_stock(g: pd.DataFrame) -> pd.DataFrame:
             g = g.sort_values("date")
-            for raw, feat in zip(upstream, out_cols):
+            for raw, feat in zip(upstream, out_cols, strict=False):
                 if raw in g.columns:
                     g[feat] = g[raw].fillna(0).ewm(alpha=a, adjust=False).mean()
                 else:

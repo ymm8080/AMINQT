@@ -33,7 +33,7 @@ from app.pipeline1.cleaning_pipeline import board_of, get_limit_pct  # noqa: E40
 
 panel["board"] = panel["symbol"].map(board_of)
 panel["limit_pct"] = [
-    get_limit_pct(b, d) for b, d in zip(panel["board"], panel["date"])
+    get_limit_pct(b, d) for b, d in zip(panel["board"], panel["date"], strict=False)
 ]
 panel["is_suspended"] = False
 panel["is_st"] = False

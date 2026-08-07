@@ -101,7 +101,7 @@ def test_both_systems_full_horizon_matrix():
     for spec in (SNIPER, FUSION):
         assert set(spec.horizons) == set(HORIZONS)
         assert len(spec.horizons) == len(spec.labels)
-        for h, lab in zip(spec.horizons, spec.labels):
+        for h, lab in zip(spec.horizons, spec.labels, strict=False):
             assert lab == f"label_mfe_{h}_net"
     assert set(HORIZONS) == {"2d", "3d", "5d", "10d"}
     assert len(MFE_LABELS) == 4

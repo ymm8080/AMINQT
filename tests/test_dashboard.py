@@ -77,20 +77,30 @@ class TestStockPredictionQuery:
 
     def test_list_prediction_files_parsing(self, tmp_path):
         self._mkfile(
-            tmp_path, "legacy_stocklist_20260805__modA.csv",
+            tmp_path,
+            "legacy_stocklist_20260805__modA.csv",
             pd.DataFrame({"symbol": ["000001"], "board": ["main"]}),
         )
         self._mkfile(
-            tmp_path, "legacy_preds_raw_20260804.csv",
+            tmp_path,
+            "legacy_preds_raw_20260804.csv",
             pd.DataFrame({"symbol": ["000002"]}),
         )
         self._mkfile(
-            tmp_path, "parallel_shortlist_20260806__modB.csv",
-            pd.DataFrame({"symbol": ["000003"], "date": ["2026-08-06"],
-                          "board": ["main"], "systems": ["sniper"]}),
+            tmp_path,
+            "parallel_shortlist_20260806__modB.csv",
+            pd.DataFrame(
+                {
+                    "symbol": ["000003"],
+                    "date": ["2026-08-06"],
+                    "board": ["main"],
+                    "systems": ["sniper"],
+                }
+            ),
         )
         self._mkfile(
-            tmp_path, "slowbull_pool_main_20260731__slow_bull_v1_0.csv",
+            tmp_path,
+            "slowbull_pool_main_20260731__slow_bull_v1_0.csv",
             pd.DataFrame({"symbol": ["000004"], "board": ["main"]}),
         )
         (tmp_path / "STOCK LIST 20260806.csv").write_text(
@@ -188,60 +198,89 @@ class TestStockPredictionQuery:
 
     def test_list_prediction_dates_sorted_desc(self, tmp_path):
         self._mkfile(
-            tmp_path, "legacy_stocklist_20260805__modA.csv",
+            tmp_path,
+            "legacy_stocklist_20260805__modA.csv",
             pd.DataFrame({"symbol": ["000001"]}),
         )
         self._mkfile(
-            tmp_path, "parallel_shortlist_20260806__modB.csv",
+            tmp_path,
+            "parallel_shortlist_20260806__modB.csv",
             pd.DataFrame({"symbol": ["000001"], "date": ["2026-08-06"]}),
         )
         self._mkfile(
-            tmp_path, "slowbull_pool_main_20260731__slow_bull_v1_0.csv",
+            tmp_path,
+            "slowbull_pool_main_20260731__slow_bull_v1_0.csv",
             pd.DataFrame({"symbol": ["000001"]}),
         )
         assert ds.list_prediction_dates(str(tmp_path)) == [
-            "20260806", "20260805", "20260731",
+            "20260806",
+            "20260805",
+            "20260731",
         ]
 
     def test_load_stock_list_on_date(self, tmp_path):
         # 交付族 + raw 同 symbol+module → 只列交付族, raw 全排除 (含仅存在于 raw 的股票)
         self._mkfile(
-            tmp_path, "legacy_stocklist_20260806__modA.csv",
-            pd.DataFrame({
-                "symbol": ["000001", "000002"], "board": ["main", "main"],
-                "score": [0.5, 0.4],
-                "pred_ret_2d": [0.01, 0.02], "pred_ret_3d": [0.02, 0.03],
-                "pred_ret_5d": [0.03, 0.04],
-                "prob_up": [0.55, 0.53], "prob_up_2d": [0.56, 0.54],
-                "prob_up_3d": [0.57, 0.55], "prob_up_5d": [0.58, 0.56],
-            }),
+            tmp_path,
+            "legacy_stocklist_20260806__modA.csv",
+            pd.DataFrame(
+                {
+                    "symbol": ["000001", "000002"],
+                    "board": ["main", "main"],
+                    "score": [0.5, 0.4],
+                    "pred_ret_2d": [0.01, 0.02],
+                    "pred_ret_3d": [0.02, 0.03],
+                    "pred_ret_5d": [0.03, 0.04],
+                    "prob_up": [0.55, 0.53],
+                    "prob_up_2d": [0.56, 0.54],
+                    "prob_up_3d": [0.57, 0.55],
+                    "prob_up_5d": [0.58, 0.56],
+                }
+            ),
         )
         self._mkfile(
-            tmp_path, "legacy_preds_raw_20260806__modA.csv",
-            pd.DataFrame({
-                "symbol": ["000001", "000004"],  # 000004 仅存在于 raw → 不显示
-                "pred_ret_2d": [0.011, 0.0], "pred_ret_3d": [0.021, 0.0],
-                "pred_ret_5d": [0.031, 0.0],
-                "prob_up": [0.551, 0.5], "prob_up_2d": [0.561, 0.5],
-                "prob_up_3d": [0.571, 0.5], "prob_up_5d": [0.581, 0.5],
-            }),
+            tmp_path,
+            "legacy_preds_raw_20260806__modA.csv",
+            pd.DataFrame(
+                {
+                    "symbol": ["000001", "000004"],  # 000004 仅存在于 raw → 不显示
+                    "pred_ret_2d": [0.011, 0.0],
+                    "pred_ret_3d": [0.021, 0.0],
+                    "pred_ret_5d": [0.031, 0.0],
+                    "prob_up": [0.551, 0.5],
+                    "prob_up_2d": [0.561, 0.5],
+                    "prob_up_3d": [0.571, 0.5],
+                    "prob_up_5d": [0.581, 0.5],
+                }
+            ),
         )
         # parallel 多 cut → 去重保留 rk 最小
         self._mkfile(
-            tmp_path, "parallel_shortlist_20260806__modB.csv",
-            pd.DataFrame({
-                "date": ["2026-08-06", "2026-08-06"], "board": ["main", "main"],
-                "symbol": ["000003", "000003"], "systems": ["fusion", "fusion"],
-                "score": [0.8, 0.8], "rk": [1, 2],
-                "pred_mag_2d": [0.02, 0.02], "pred_prob_2d": [0.52, 0.52],
-                "pred_mag_3d": [0.03, 0.03], "pred_prob_3d": [0.53, 0.53],
-                "pred_mag_5d": [0.04, 0.04], "pred_prob_5d": [0.54, 0.54],
-                "pred_mag_10d": [0.05, 0.05], "pred_prob_10d": [0.55, 0.55],
-            }),
+            tmp_path,
+            "parallel_shortlist_20260806__modB.csv",
+            pd.DataFrame(
+                {
+                    "date": ["2026-08-06", "2026-08-06"],
+                    "board": ["main", "main"],
+                    "symbol": ["000003", "000003"],
+                    "systems": ["fusion", "fusion"],
+                    "score": [0.8, 0.8],
+                    "rk": [1, 2],
+                    "pred_mag_2d": [0.02, 0.02],
+                    "pred_prob_2d": [0.52, 0.52],
+                    "pred_mag_3d": [0.03, 0.03],
+                    "pred_prob_3d": [0.53, 0.53],
+                    "pred_mag_5d": [0.04, 0.04],
+                    "pred_prob_5d": [0.54, 0.54],
+                    "pred_mag_10d": [0.05, 0.05],
+                    "pred_prob_10d": [0.55, 0.55],
+                }
+            ),
         )
         # 其它日期不应混入
         self._mkfile(
-            tmp_path, "legacy_stocklist_20260805__modA.csv",
+            tmp_path,
+            "legacy_stocklist_20260805__modA.csv",
             pd.DataFrame({"symbol": ["000009"]}),
         )
         rows = ds.load_stock_list_on_date("20260806", list_dir=str(tmp_path))
@@ -258,11 +297,13 @@ class TestStockPredictionQuery:
 
     def test_load_stock_list_on_dates(self, tmp_path):
         self._mkfile(
-            tmp_path, "legacy_stocklist_20260806__modA.csv",
+            tmp_path,
+            "legacy_stocklist_20260806__modA.csv",
             pd.DataFrame({"symbol": ["000001"]}),
         )
         self._mkfile(
-            tmp_path, "parallel_shortlist_20260805__modB.csv",
+            tmp_path,
+            "parallel_shortlist_20260805__modB.csv",
             pd.DataFrame({"symbol": ["000002"], "date": ["2026-08-05"]}),
         )
         rows = ds.load_stock_list_on_dates(

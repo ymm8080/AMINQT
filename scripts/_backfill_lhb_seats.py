@@ -61,7 +61,7 @@ def _lhb_stock_days() -> list[tuple[str, str]]:
     """面板中所有有 LHB 记录的 (symbol, date_str), 按日期升序."""
     sub = pd.read_parquet(PANEL_PATH, columns=["symbol", "date", "lhb_buy_amt"])
     sub = sub[sub["lhb_buy_amt"].notna()]
-    rows = list(zip(sub["symbol"], sub["date"].dt.strftime("%Y%m%d")))
+    rows = list(zip(sub["symbol"], sub["date"].dt.strftime("%Y%m%d"), strict=False))
     return sorted(set(rows), key=lambda x: x[1])
 
 

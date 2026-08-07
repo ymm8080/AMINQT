@@ -134,7 +134,7 @@ def main() -> int:
     def sim_exit(picks: pd.DataFrame, mode: str) -> dict:
         """mode=cur 现行 | ht 持有到底(锁盈棘轮+硬止损, max_hold=40)."""
         rets, holds = [], []
-        for sym, T in zip(picks["symbol"], picks["date"]):
+        for sym, T in zip(picks["symbol"], picks["date"], strict=False):
             c = sym_code[str(sym)]
             lo, hi = starts[c], ends[c]
             base = lo + int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))

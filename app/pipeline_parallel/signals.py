@@ -169,7 +169,7 @@ def add_market_regime(df: pd.DataFrame, regime_spec: dict) -> pd.DataFrame:
         flag = mkt.pct_change(win) > 0
     else:
         raise ValueError(f"未知 regime def={d} (须 A/B/C)")
-    lookup = dict(zip(flag.index.values, flag.values))
+    lookup = dict(zip(flag.index.values, flag.values, strict=False))
     df["slow_bull_regime"] = df["date"].map(lookup).fillna(False).astype(bool)
     return df
 
