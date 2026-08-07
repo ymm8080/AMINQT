@@ -234,6 +234,7 @@ def demo_list(seed: int = 42) -> pd.DataFrame:
             "compound_ret": np.round(rng.uniform(0.0, 0.06, n), 6),
             "compound_prob": np.round(rng.uniform(0.42, 0.62, n), 6),
             "schema_version": "1.4",
+            "model_version": "",
         }
     )
     df["name"] = df["symbol"].map(DEMO_NAMES)
