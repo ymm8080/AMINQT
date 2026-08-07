@@ -253,9 +253,7 @@ _PRED_FAMILY_PREFIXES = (
     ("parallel_preds_raw", "parallel_raw"),
     ("slowbull_pool", "slow_bull"),
 )
-_PRED_FNAME_RE = re.compile(
-    r"^(?P<prefix>[\w]+)_(?P<date>\d{8})(?P<mod>__.+)?\.csv$"
-)
+_PRED_FNAME_RE = re.compile(r"^(?P<prefix>[\w]+)_(?P<date>\d{8})(?P<mod>__.+)?\.csv$")
 _PRED_HORIZONS = ("2d", "3d", "5d", "10d")
 # *_raw (平滑前底稿) 归并入其交付族; 同 date+module 优先交付族, 少重复行.
 _FAMILY_GROUP = {
@@ -363,9 +361,11 @@ def _normalize_pred_rows(
         if col in prob_src and prob_src[col] in df.columns:
             out[col] = df[prob_src[col]]
     # 统一数值列为 float (全 NA 列也是 float64), 避免 concat all-NA FutureWarning
-    numeric_cols = ("score", "rk") + tuple(
-        f"gain_{h}" for h in _PRED_HORIZONS
-    ) + tuple(f"prob_{h}" for h in _PRED_HORIZONS)
+    numeric_cols = (
+        ("score", "rk")
+        + tuple(f"gain_{h}" for h in _PRED_HORIZONS)
+        + tuple(f"prob_{h}" for h in _PRED_HORIZONS)
+    )
     for col in numeric_cols:
         out[col] = pd.to_numeric(out[col], errors="coerce")
     return out[_UNIFIED_COLS].copy()
@@ -385,16 +385,16 @@ def load_stock_prediction_history(
         try:
             df = pd.read_csv(info["path"], dtype={"symbol": str})
         except Exception:
-            _data_logger.warning("预测文件读取失败 (跳过): %s", info["path"], exc_info=True)
+            _data_logger.warning(
+                "预测文件读取失败 (跳过): %s", info["path"], exc_info=True
+            )
             continue
         if df is None or df.empty or "symbol" not in df.columns:
             continue
         sub = df[df["symbol"].astype(str).str.strip() == symbol]
         if sub.empty:
             continue
-        norm = _normalize_pred_rows(
-            info["family"], info["date"], info["module"], sub
-        )
+        norm = _normalize_pred_rows(info["family"], info["date"], info["module"], sub)
         if norm.empty:
             continue
         frames.append(norm)
@@ -448,9 +448,7 @@ def load_stock_list_on_date(
             continue
         if df is None or df.empty or "symbol" not in df.columns:
             continue
-        norm = _normalize_pred_rows(
-            info["family"], info["date"], info["module"], df
-        )
+        norm = _normalize_pred_rows(info["family"], info["date"], info["module"], df)
         if norm.empty:
             continue
         frames.append(norm)
@@ -459,16 +457,11 @@ def load_stock_list_on_date(
     rows = pd.concat(frames, ignore_index=True)
     rows["_grp"] = rows["family"].map(_FAMILY_GROUP)
     rows["_prio"] = rows["family"].map(_FAMILY_PRIORITY)
-    rows = rows.sort_values(
-        ["_prio", "rk"], ascending=[True, True], na_position="last"
-    )
-    rows = rows.drop_duplicates(
-        subset=["symbol", "module", "_grp"], keep="first"
-    )
+    rows = rows.sort_values(["_prio", "rk"], ascending=[True, True], na_position="last")
+    rows = rows.drop_duplicates(subset=["symbol", "module", "_grp"], keep="first")
     rows = rows.drop(columns=["_grp", "_prio"])
-    return (
-        rows.sort_values(["family", "module", "rk"], na_position="last")
-        .reset_index(drop=True)
+    return rows.sort_values(["family", "module", "rk"], na_position="last").reset_index(
+        drop=True
     )
 
 
@@ -527,7 +520,8 @@ def demo_sector_changes(seed: int = 11) -> pd.DataFrame:
         "有色": 1.3,
     }
     pct = np.array(
-        [p * multipliers.get(s, 1.0) for s, p in zip(sectors, pct, strict=False)], dtype=float
+        [p * multipliers.get(s, 1.0) for s, p in zip(sectors, pct, strict=False)],
+        dtype=float,
     )
     df = pd.DataFrame(
         {

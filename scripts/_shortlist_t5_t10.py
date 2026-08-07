@@ -417,7 +417,9 @@ def _fit_calibrators(records: dict) -> dict[tuple, dict]:
                         slope = lam * float(raw.coef_[0]) + (1 - lam) * float(
                             cross.coef_[0]
                         )
-                        per[sym] = _PooledReg(slope, float(y.mean()) - slope * float(x.mean()))
+                        per[sym] = _PooledReg(
+                            slope, float(y.mean()) - slope * float(x.mean())
+                        )
             cals[(board, key, h)] = {"prob": prob, "mag_cross": cross, "per": per}
     return cals
 
@@ -535,7 +537,9 @@ def ema_smooth(res: pd.DataFrame, sel_date: pd.Timestamp, module: str) -> pd.Dat
     hist = _load_raw_history(sel_date, module)
     if hist.empty:
         return res
-    weights = np.array([SMOOTH_ALPHA * (1 - SMOOTH_ALPHA) ** k for k in range(SMOOTH_K)])
+    weights = np.array(
+        [SMOOTH_ALPHA * (1 - SMOOTH_ALPHA) ** k for k in range(SMOOTH_K)]
+    )
     weights /= weights.sum()
     out = res.copy()
     for sym in out["symbol"].unique():
@@ -552,7 +556,11 @@ def ema_smooth(res: pd.DataFrame, sel_date: pd.Timestamp, module: str) -> pd.Dat
                     continue
                 pairs = [
                     (w, v)
-                    for w, v in zip(weights, [float(today_v.iloc[0])] + [float(x) for x in src[col]], strict=False)
+                    for w, v in zip(
+                        weights,
+                        [float(today_v.iloc[0])] + [float(x) for x in src[col]],
+                        strict=False,
+                    )
                     if np.isfinite(v)
                 ]
                 if not pairs:
@@ -1008,7 +1016,9 @@ def main() -> int:
             print(f"[warn] 原 xlsx 被占用, 已写 {xlsx_path.name}", flush=True)
         except PermissionError:
             ts = pd.Timestamp.now().strftime("%H%M%S")
-            xlsx_path = STOCK_LIST_DIR / f"STOCK LIST {stamp}{suffix}_perstock_{ts}.xlsx"
+            xlsx_path = (
+                STOCK_LIST_DIR / f"STOCK LIST {stamp}{suffix}_perstock_{ts}.xlsx"
+            )
             write_xlsx(res, summary, sel_date, xlsx_path, merged, module)
             print(
                 f"[warn] 原 xlsx + perhorizon 均被 Excel 占用, 已写 {xlsx_path.name}",

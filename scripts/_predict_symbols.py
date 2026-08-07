@@ -41,16 +41,16 @@ def main() -> int:
             boards = args[i + 1 :]
     t0 = time.time()
     if not symbols:
-        print("[usage] python scripts/_predict_symbols.py YYYYMMDD SYMBOL...", flush=True)
+        print(
+            "[usage] python scripts/_predict_symbols.py YYYYMMDD SYMBOL...", flush=True
+        )
         return 1
 
     # 1) 末 300 交易日切片 (pyarrow row filter, 列全读)
     dates = pq.read_table(str(PANEL_V3_PATH), columns=["date"]).to_pandas()["date"]
     uniq = np.unique(dates.values)
     cut = pd.Timestamp(uniq[-300])
-    panel = pq.read_table(
-        str(PANEL_V3_PATH), filters=[("date", ">=", cut)]
-    ).to_pandas()
+    panel = pq.read_table(str(PANEL_V3_PATH), filters=[("date", ">=", cut)]).to_pandas()
     print(
         f"[panel] {len(panel):,}r 切片 {cut.date()}..{pd.Timestamp(uniq[-1]).date()} "
         f"({time.time() - t0:.0f}s)",
@@ -97,23 +97,50 @@ def main() -> int:
             .groupby("symbol")
             .tail(1)
         )
-        for col in ("close", "pre_close", "ATR_pct", "adv20", "amount", "turnover_rate"):
+        for col in (
+            "close",
+            "pre_close",
+            "ATR_pct",
+            "adv20",
+            "amount",
+            "turnover_rate",
+        ):
             if col in latest.columns:
-                pred[col] = latest.set_index("symbol").reindex(pred["symbol"])[col].values
+                pred[col] = (
+                    latest.set_index("symbol").reindex(pred["symbol"])[col].values
+                )
         out_frames.append(pred)
 
     if not out_frames:
-        print(f"[miss] 目标股 {sorted(want)} 不在可预测板块 (被清洗剔除或缺模型)", flush=True)
+        print(
+            f"[miss] 目标股 {sorted(want)} 不在可预测板块 (被清洗剔除或缺模型)",
+            flush=True,
+        )
         return 1
     res = pd.concat(out_frames, ignore_index=True)
 
     show = [
-        "symbol", "board", "industry", "close", "day_change",
-        "pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d",
-        "prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d",
-        "pred_q10", "pred_q50", "pred_q90",
-        "pain_prob", "rank_score", "composite_score",
-        "ATR_pct", "adv20",
+        "symbol",
+        "board",
+        "industry",
+        "close",
+        "day_change",
+        "pred_ret_1d",
+        "pred_ret_2d",
+        "pred_ret_3d",
+        "pred_ret_5d",
+        "prob_up",
+        "prob_up_2d",
+        "prob_up_3d",
+        "prob_up_5d",
+        "pred_q10",
+        "pred_q50",
+        "pred_q90",
+        "pain_prob",
+        "rank_score",
+        "composite_score",
+        "ATR_pct",
+        "adv20",
     ]
     show = [c for c in show if c in res.columns]
     pd.set_option("display.width", 250)
@@ -131,8 +158,25 @@ def main() -> int:
             lst["symbol"] = lst["symbol"].astype(str).str.zfill(6)
             hit = lst[lst["symbol"].isin(want)]
             if len(hit):
-                print("\n[对比] 当日已落盘清单 (生产 _gen_legacy_list 输出):", flush=True)
-                cmp_cols = [c for c in ("symbol", "pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d", "prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d", "score") if c in hit.columns]
+                print(
+                    "\n[对比] 当日已落盘清单 (生产 _gen_legacy_list 输出):", flush=True
+                )
+                cmp_cols = [
+                    c
+                    for c in (
+                        "symbol",
+                        "pred_ret_1d",
+                        "pred_ret_2d",
+                        "pred_ret_3d",
+                        "pred_ret_5d",
+                        "prob_up",
+                        "prob_up_2d",
+                        "prob_up_3d",
+                        "prob_up_5d",
+                        "score",
+                    )
+                    if c in hit.columns
+                ]
                 print(hit[cmp_cols].to_string(index=False), flush=True)
     return 0
 

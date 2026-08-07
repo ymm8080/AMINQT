@@ -81,13 +81,17 @@ def plan_steps(
 
 def _log_fh(tag: str):
     os.makedirs(LOG_DIR, exist_ok=True)
-    return open(os.path.join(LOG_DIR, f"daily_automation_{tag}.log"), "a", encoding="utf-8")
+    return open(
+        os.path.join(LOG_DIR, f"daily_automation_{tag}.log"), "a", encoding="utf-8"
+    )
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="四模块每日自动化")
     ap.add_argument("--dry-run", action="store_true", help="只打印计划不执行")
-    ap.add_argument("--skip-checkpoints", action="store_true", help="跳过并行检查点刷新")
+    ap.add_argument(
+        "--skip-checkpoints", action="store_true", help="跳过并行检查点刷新"
+    )
     ap.add_argument("--skip-retrain", action="store_true", help="跳过 legacy 周频重训")
     ap.add_argument("--skip-parallel", action="store_true", help="跳过并行系统重生成")
     ap.add_argument("--tag", default=None, help="清单交易日 YYYYMMDD (默认今天)")
@@ -126,7 +130,10 @@ def main() -> int:
     )
     if args.dry_run:
         for s in steps:
-            print(f"  [dry] {s}: python {' '.join(_STEPS[s])}".replace("{tag}", tag), flush=True)
+            print(
+                f"  [dry] {s}: python {' '.join(_STEPS[s])}".replace("{tag}", tag),
+                flush=True,
+            )
         return 0
 
     failures: list[str] = []
@@ -156,11 +163,16 @@ def main() -> int:
             t0 = time.time()
             # 统一子进程 stdout 为 UTF-8: 有的脚本 reconfigure 有的不, 混合编码会污染日志文件.
             env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
-            rc = subprocess.call(argv, cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT, env=env)
+            rc = subprocess.call(
+                argv, cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT, env=env
+            )
             dt = time.time() - t0
             ok = rc == 0
             status = "ok" if ok else "FAIL"
-            print(f"[{_dt.datetime.now():%H:%M:%S} {status}] {step} rc={rc} ({dt:.0f}s)", flush=True)
+            print(
+                f"[{_dt.datetime.now():%H:%M:%S} {status}] {step} rc={rc} ({dt:.0f}s)",
+                flush=True,
+            )
             print(
                 f"[{_dt.datetime.now():%H:%M:%S} {status}] {step} rc={rc} ({dt:.0f}s)",
                 file=fh,

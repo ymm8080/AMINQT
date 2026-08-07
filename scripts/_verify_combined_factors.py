@@ -108,7 +108,9 @@ def _build(work):
     work["g5_10"] = work["ma5"] / work["ma10"] - 1.0
     work["g10_20"] = work["ma10"] / work["ma20"] - 1.0
     for w, n in ((5, 5), (10, 10), (20, 20)):
-        work[f"ma_chg{w}"] = g[f"ma{w}"].transform(lambda x, n=n: _apply("pct_change", n, x))
+        work[f"ma_chg{w}"] = g[f"ma{w}"].transform(
+            lambda x, n=n: _apply("pct_change", n, x)
+        )
     work["ma_combo"] = work["ma_chg5"] + work["ma_chg10"] + work["ma_chg20"]
     work["align"] = np.sign(work["g5_10"]) * np.sign(work["g10_20"])
 

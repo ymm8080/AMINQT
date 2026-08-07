@@ -1016,7 +1016,9 @@ class FeatureEngineV35:
             )
         close_col = "close_hfq" if "close_hfq" in df.columns else "close"
         df["ret_pct"] = df.groupby("symbol")[close_col].pct_change()
-        df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)]
+        df["limit_pct"] = [
+            get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)
+        ]
         return df
 
     # ---------------- ⑦涨停基因 + ⑪连板高度 ----------------

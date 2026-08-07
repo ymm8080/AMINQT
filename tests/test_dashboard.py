@@ -116,26 +116,44 @@ class TestStockPredictionQuery:
 
     def test_load_history_symbol_filter_module_kept(self, tmp_path):
         self._mkfile(
-            tmp_path, "legacy_stocklist_20260806__modA.csv",
-            pd.DataFrame({
-                "symbol": ["000001", "999999"], "board": ["main", "main"],
-                "score": [0.5, 0.4],
-                "pred_ret_2d": [0.01, 0.0], "pred_ret_3d": [0.02, 0.0],
-                "pred_ret_5d": [0.03, 0.0],
-                "prob_up": [0.55, 0.5], "prob_up_2d": [0.56, 0.5],
-                "prob_up_3d": [0.57, 0.5], "prob_up_5d": [0.58, 0.5],
-            }),
+            tmp_path,
+            "legacy_stocklist_20260806__modA.csv",
+            pd.DataFrame(
+                {
+                    "symbol": ["000001", "999999"],
+                    "board": ["main", "main"],
+                    "score": [0.5, 0.4],
+                    "pred_ret_2d": [0.01, 0.0],
+                    "pred_ret_3d": [0.02, 0.0],
+                    "pred_ret_5d": [0.03, 0.0],
+                    "prob_up": [0.55, 0.5],
+                    "prob_up_2d": [0.56, 0.5],
+                    "prob_up_3d": [0.57, 0.5],
+                    "prob_up_5d": [0.58, 0.5],
+                }
+            ),
         )
         self._mkfile(
-            tmp_path, "parallel_shortlist_20260806__modB.csv",
-            pd.DataFrame({
-                "date": ["2026-08-06"], "board": ["main"], "symbol": ["000001"],
-                "systems": ["fusion+sniper"], "score": [0.8], "rk": [1],
-                "pred_mag_2d": [0.02], "pred_prob_2d": [0.52],
-                "pred_mag_3d": [0.03], "pred_prob_3d": [0.53],
-                "pred_mag_5d": [0.04], "pred_prob_5d": [0.54],
-                "pred_mag_10d": [0.05], "pred_prob_10d": [0.55],
-            }),
+            tmp_path,
+            "parallel_shortlist_20260806__modB.csv",
+            pd.DataFrame(
+                {
+                    "date": ["2026-08-06"],
+                    "board": ["main"],
+                    "symbol": ["000001"],
+                    "systems": ["fusion+sniper"],
+                    "score": [0.8],
+                    "rk": [1],
+                    "pred_mag_2d": [0.02],
+                    "pred_prob_2d": [0.52],
+                    "pred_mag_3d": [0.03],
+                    "pred_prob_3d": [0.53],
+                    "pred_mag_5d": [0.04],
+                    "pred_prob_5d": [0.54],
+                    "pred_mag_10d": [0.05],
+                    "pred_prob_10d": [0.55],
+                }
+            ),
         )
         hist = ds.load_stock_prediction_history("000001", list_dir=str(tmp_path))
         assert len(hist) == 2  # legacy + parallel, 同日不同模块都保留
@@ -152,41 +170,72 @@ class TestStockPredictionQuery:
     def test_last_five_dates_limit_and_dedup(self, tmp_path):
         for i in range(1, 9):  # 20260801..20260808
             self._mkfile(
-                tmp_path, f"legacy_stocklist_2026080{i}__modA.csv",
-                pd.DataFrame({
-                    "symbol": ["000001"], "board": ["main"], "score": [0.5],
-                    "pred_ret_2d": [0.01], "pred_ret_3d": [0.02], "pred_ret_5d": [0.03],
-                    "prob_up": [0.55], "prob_up_2d": [0.56], "prob_up_3d": [0.57],
-                    "prob_up_5d": [0.58],
-                }),
+                tmp_path,
+                f"legacy_stocklist_2026080{i}__modA.csv",
+                pd.DataFrame(
+                    {
+                        "symbol": ["000001"],
+                        "board": ["main"],
+                        "score": [0.5],
+                        "pred_ret_2d": [0.01],
+                        "pred_ret_3d": [0.02],
+                        "pred_ret_5d": [0.03],
+                        "prob_up": [0.55],
+                        "prob_up_2d": [0.56],
+                        "prob_up_3d": [0.57],
+                        "prob_up_5d": [0.58],
+                    }
+                ),
             )
         # 同 date+module 的 raw 底稿 → 去重保留交付族 (gain_3d=0.02, 非 raw 0.021)
         self._mkfile(
-            tmp_path, "legacy_preds_raw_20260808__modA.csv",
-            pd.DataFrame({
-                "symbol": ["000001"], "pred_ret_2d": [0.011], "pred_ret_3d": [0.021],
-                "pred_ret_5d": [0.031], "prob_up": [0.551], "prob_up_2d": [0.561],
-                "prob_up_3d": [0.571], "prob_up_5d": [0.581],
-            }),
+            tmp_path,
+            "legacy_preds_raw_20260808__modA.csv",
+            pd.DataFrame(
+                {
+                    "symbol": ["000001"],
+                    "pred_ret_2d": [0.011],
+                    "pred_ret_3d": [0.021],
+                    "pred_ret_5d": [0.031],
+                    "prob_up": [0.551],
+                    "prob_up_2d": [0.561],
+                    "prob_up_3d": [0.571],
+                    "prob_up_5d": [0.581],
+                }
+            ),
         )
         # 同 symbol+module 多 cut 行 → 去重保留 rk 最小一行
         self._mkfile(
-            tmp_path, "parallel_shortlist_20260808__modB.csv",
-            pd.DataFrame({
-                "date": ["2026-08-08", "2026-08-08"], "board": ["main", "main"],
-                "symbol": ["000001", "000001"], "systems": ["fusion", "fusion"],
-                "score": [0.8, 0.8], "rk": [1, 2],
-                "pred_mag_2d": [0.02, 0.02], "pred_prob_2d": [0.52, 0.52],
-                "pred_mag_3d": [0.03, 0.03], "pred_prob_3d": [0.53, 0.53],
-                "pred_mag_5d": [0.04, 0.04], "pred_prob_5d": [0.54, 0.54],
-                "pred_mag_10d": [0.05, 0.05], "pred_prob_10d": [0.55, 0.55],
-            }),
+            tmp_path,
+            "parallel_shortlist_20260808__modB.csv",
+            pd.DataFrame(
+                {
+                    "date": ["2026-08-08", "2026-08-08"],
+                    "board": ["main", "main"],
+                    "symbol": ["000001", "000001"],
+                    "systems": ["fusion", "fusion"],
+                    "score": [0.8, 0.8],
+                    "rk": [1, 2],
+                    "pred_mag_2d": [0.02, 0.02],
+                    "pred_prob_2d": [0.52, 0.52],
+                    "pred_mag_3d": [0.03, 0.03],
+                    "pred_prob_3d": [0.53, 0.53],
+                    "pred_mag_5d": [0.04, 0.04],
+                    "pred_prob_5d": [0.54, 0.54],
+                    "pred_mag_10d": [0.05, 0.05],
+                    "pred_prob_10d": [0.55, 0.55],
+                }
+            ),
         )
         hist = ds.load_stock_prediction_history(
             "000001", list_dir=str(tmp_path), max_dates=5
         )
         assert sorted(set(hist["date"])) == [
-            "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-08",
+            "2026-08-04",
+            "2026-08-05",
+            "2026-08-06",
+            "2026-08-07",
+            "2026-08-08",
         ]
         aug8 = hist[hist["date"] == "2026-08-08"]
         assert len(aug8) == 2
@@ -312,6 +361,7 @@ class TestStockPredictionQuery:
         assert set(rows["date"]) == {"2026-08-05", "2026-08-06"}
         assert len(rows) == 2
         assert ds.load_stock_list_on_dates(["20991231"], list_dir=str(tmp_path)).empty
+
 
 class TestPageImports:
     def test_pages_importable(self):

@@ -58,10 +58,14 @@ def test_ema_smooth_blends_today_and_history(tmp_path, monkeypatch):
     pd.DataFrame(
         {
             "symbol": ["000001"],
-            "pred_mag_3d": [0.04], "pred_prob_3d": [0.50],
-            "pred_mag_2d": [0.03], "pred_prob_2d": [0.52],
-            "pred_mag_5d": [0.05], "pred_prob_5d": [0.50],
-            "pred_mag_10d": [0.07], "pred_prob_10d": [0.50],
+            "pred_mag_3d": [0.04],
+            "pred_prob_3d": [0.50],
+            "pred_mag_2d": [0.03],
+            "pred_prob_2d": [0.52],
+            "pred_mag_5d": [0.05],
+            "pred_prob_5d": [0.50],
+            "pred_mag_10d": [0.07],
+            "pred_prob_10d": [0.50],
         }
     ).to_csv(tmp_path / "parallel_preds_raw_20260806__testmod.csv", index=False)
 
@@ -79,7 +83,9 @@ def test_ema_smooth_blends_today_and_history(tmp_path, monkeypatch):
 def test_ema_smooth_no_history_returns_raw(tmp_path, monkeypatch):
     monkeypatch.setattr("scripts._shortlist_t5_t10.STOCK_LIST_DIR", tmp_path)
     res = _res_row()
-    pd.testing.assert_frame_equal(ema_smooth(res, pd.Timestamp("2026-08-07"), "testmod"), res)
+    pd.testing.assert_frame_equal(
+        ema_smooth(res, pd.Timestamp("2026-08-07"), "testmod"), res
+    )
 
 
 def test_ema_smooth_gap_symbol_without_history_unchanged(tmp_path, monkeypatch):
@@ -87,14 +93,20 @@ def test_ema_smooth_gap_symbol_without_history_unchanged(tmp_path, monkeypatch):
     pd.DataFrame(
         {
             "symbol": ["000002"],
-            "pred_mag_3d": [0.04], "pred_prob_3d": [0.50],
-            "pred_mag_2d": [0.03], "pred_prob_2d": [0.52],
-            "pred_mag_5d": [0.05], "pred_prob_5d": [0.50],
-            "pred_mag_10d": [0.07], "pred_prob_10d": [0.50],
+            "pred_mag_3d": [0.04],
+            "pred_prob_3d": [0.50],
+            "pred_mag_2d": [0.03],
+            "pred_prob_2d": [0.52],
+            "pred_mag_5d": [0.05],
+            "pred_prob_5d": [0.50],
+            "pred_mag_10d": [0.07],
+            "pred_prob_10d": [0.50],
         }
     ).to_csv(tmp_path / "parallel_preds_raw_20260806__testmod.csv", index=False)
     res = _res_row(symbol="000001")  # 历史里没有 000001 → 原样
-    pd.testing.assert_frame_equal(ema_smooth(res, pd.Timestamp("2026-08-07"), "testmod"), res)
+    pd.testing.assert_frame_equal(
+        ema_smooth(res, pd.Timestamp("2026-08-07"), "testmod"), res
+    )
 
 
 def test_load_raw_history_filters_module_and_date(tmp_path, monkeypatch):
@@ -102,14 +114,10 @@ def test_load_raw_history_filters_module_and_date(tmp_path, monkeypatch):
     cases = [
         ("parallel_preds_raw_20260805__testmod.csv", "000001"),  # 昨日匹配 → 保留
         ("parallel_preds_raw_20260807__testmod.csv", "000002"),  # 今日 → 排除
-        ("parallel_preds_raw_20260805__other.csv", "000003"),    # 模块不匹配 → 排除
-        ("parallel_preds_raw_20260805.csv", "000004"),           # 无模块 → 排除
+        ("parallel_preds_raw_20260805__other.csv", "000003"),  # 模块不匹配 → 排除
+        ("parallel_preds_raw_20260805.csv", "000004"),  # 无模块 → 排除
     ]
-    pred_cols = {
-        f"{k}_{h}": 0.04
-        for h in HORIZONS
-        for k in ("pred_mag", "pred_prob")
-    }
+    pred_cols = {f"{k}_{h}": 0.04 for h in HORIZONS for k in ("pred_mag", "pred_prob")}
     for fname, sym in cases:
         pd.DataFrame({"symbol": [sym], **pred_cols}).to_csv(
             tmp_path / fname, index=False

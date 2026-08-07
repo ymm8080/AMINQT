@@ -941,11 +941,11 @@ class FeatureSelector:
         "fallback": {"pipeline": "ic_screener"},
     }
 
-    def __init__(
-        self, config=None, registry_dir=None
-    ):
+    def __init__(self, config=None, registry_dir=None):
         self.config = config or self.DEFAULT_CONFIG
-        self.registry_dir = registry_dir or str(data_others_path("data/factor_registry"))
+        self.registry_dir = registry_dir or str(
+            data_others_path("data/factor_registry")
+        )
         os.makedirs(self.registry_dir, exist_ok=True)
 
     # ── Selection ──

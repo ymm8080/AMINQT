@@ -56,7 +56,9 @@ if pro is not None:
                 .str.replace(".SZ", "", regex=False)
                 .str.replace(".SH", "", regex=False)
             )
-            ind_map = dict(zip(basic["symbol"], basic["industry"].fillna("综合"), strict=False))
+            ind_map = dict(
+                zip(basic["symbol"], basic["industry"].fillna("综合"), strict=False)
+            )
             panel["industry"] = panel["symbol"].map(ind_map).fillna("综合")
             industry_fixed = True
             logger.info(

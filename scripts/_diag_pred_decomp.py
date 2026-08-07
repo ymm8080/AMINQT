@@ -15,6 +15,7 @@
 
 用法: python scripts/_diag_pred_decomp.py
 """
+
 import json
 import os
 import sys
@@ -32,10 +33,10 @@ from config.settings import DATA_OTHERS_DIR
 
 FULLRUN_DIR = DATA_OTHERS_DIR / "BACKTESTING RESULT" / "20260806_144240"
 ABS_TARGET = {"2d": 0.02, "3d": 0.03, "5d": 0.04, "10d": 0.06}
-CAL_WINDOW = 130          # 校准窗口 (对齐 PER_STOCK_WINDOW, 生产 OOS≈126 交易日)
-CAL_MIN_N = 30            # 拟合最少样本 (对齐 PER_STOCK_MIN_N)
-PROBE_SCORE = 0.85        # 入选股代表分位 (打分进入排名的分位区域)
-SCORE_DATES = 150         # 模拟滚动校准的末 N 个交易日
+CAL_WINDOW = 130  # 校准窗口 (对齐 PER_STOCK_WINDOW, 生产 OOS≈126 交易日)
+CAL_MIN_N = 30  # 拟合最少样本 (对齐 PER_STOCK_MIN_N)
+PROBE_SCORE = 0.85  # 入选股代表分位 (打分进入排名的分位区域)
+SCORE_DATES = 150  # 模拟滚动校准的末 N 个交易日
 
 
 def load_full(board: str, sysname: str) -> pd.DataFrame:
@@ -100,7 +101,9 @@ def main() -> int:
         out["boards"][key] = {
             "n_stocks": int(full["symbol"].nunique()),
             "n_stocks_ge30obs": n_used,
-            "per_stock_fit_usage_pct": round(100.0 * n_used / full["symbol"].nunique(), 2),
+            "per_stock_fit_usage_pct": round(
+                100.0 * n_used / full["symbol"].nunique(), 2
+            ),
             "horizons": {},
         }
         sj = score_jitter(full)
@@ -125,12 +128,16 @@ def main() -> int:
                 "mean_abs_dprob085": round(float(np.mean(np.abs(dprob))), 5),
                 "calibrator_only_abs_dpred": round(float(np.mean(cal_dpred)), 5),
                 "score_jitter_abs_dpred": round(float(score_dpred), 5),
-                "score_jitter_abs_dscore": round(float(sj), 5) if np.isfinite(sj) else None,
+                "score_jitter_abs_dscore": round(float(sj), 5)
+                if np.isfinite(sj)
+                else None,
             }
         print(
             f"[{key}] stocks={full['symbol'].nunique()} per-stock≥30obs={n_used} "
             f"({out['boards'][key]['per_stock_fit_usage_pct']}%) score_jitter_|Δscore|="
-            f"{sj:.4f}" if np.isfinite(sj) else f"[{key}] stocks={full['symbol'].nunique()} per-stock≥30obs={n_used}",
+            f"{sj:.4f}"
+            if np.isfinite(sj)
+            else f"[{key}] stocks={full['symbol'].nunique()} per-stock≥30obs={n_used}",
             flush=True,
         )
         for h, v in out["boards"][key]["horizons"].items():

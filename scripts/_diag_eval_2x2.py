@@ -26,8 +26,10 @@ from scipy.stats import spearmanr
 
 from config.settings import BACKTEST_RESULT_DIR, PANEL_V3_PATH, SHORTLIST_SCORE
 
-SRC_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else (
-    BACKTEST_RESULT_DIR / "t3_decision_20260807_002008"
+SRC_DIR = (
+    Path(sys.argv[1])
+    if len(sys.argv) > 1
+    else (BACKTEST_RESULT_DIR / "t3_decision_20260807_002008")
 )
 CLS_THRESHOLD = 0.005
 HORIZONS = (1, 2, 3, 5)
@@ -42,8 +44,12 @@ def collect_shortlist_union() -> set[str]:
         "stocklist": Path("D:/AMINQT/DAILY OPERATION/STOCK LIST"),
         "lists": Path("D:/AMINQT/AMINQT CODES/data/lists"),
     }
-    pats = ["legacy_stocklist_2026080*.csv", "STOCK LIST 2026080*.xlsx",
-            "parallel_shortlist_2026080*.csv", "list_2026080*.parquet"]
+    pats = [
+        "legacy_stocklist_2026080*.csv",
+        "STOCK LIST 2026080*.xlsx",
+        "parallel_shortlist_2026080*.csv",
+        "list_2026080*.parquet",
+    ]
     for root in roots.values():
         for pat in pats:
             for fp in sorted(root.glob(pat)):
@@ -79,7 +85,8 @@ def score_w(df: pd.DataFrame) -> pd.DataFrame:
         out[gh] = ((g - glo) / (ghi - glo)).fillna(0.0) if ghi > glo else 0.0
         out[ph] = ((p - plo) / (phi - plo)).fillna(0.0) if phi > plo else 0.0
     out["score_w"] = sum(
-        HW[h] * (GW * out[f"norm_g_{h}"] + PW * out[f"norm_p_{h}"]) for h in ("2d", "3d", "5d")
+        HW[h] * (GW * out[f"norm_g_{h}"] + PW * out[f"norm_p_{h}"])
+        for h in ("2d", "3d", "5d")
     )
     return out
 
@@ -140,11 +147,17 @@ def main() -> None:
                 icd = daily_ic_series(base, f"pred_ret_{lab}", f"ret_{h}d")
                 for period, pn in (("month", None), ("week", 5)):
                     m, n = mean_of(icd, pn)
-                    ic_rows.append({
-                        "scope": scope_key, "scope_label": scope_label,
-                        "period": period, "horizon": lab, "tag": tag,
-                        "ic_mean": m, "n_days": n,
-                    })
+                    ic_rows.append(
+                        {
+                            "scope": scope_key,
+                            "scope_label": scope_label,
+                            "period": period,
+                            "horizon": lab,
+                            "tag": tag,
+                            "ic_mean": m,
+                            "n_days": n,
+                        }
+                    )
     ic_df = pd.DataFrame(ic_rows)
     ic_df.to_csv(out_dir / "ic_2x2.csv", index=False)
     print("\n========== 逐日 IC 均值 (raw→smooth) ==========")
@@ -156,8 +169,12 @@ def main() -> None:
             piv["Δ"] = piv["smooth"] - piv["raw"]
             piv["更差天数"] = ""
             for h in piv.index:
-                r0 = ic_df[(ic_df.scope == scope_key) & (ic_df.period == period)
-                           & (ic_df.horizon == h) & (ic_df.tag == "raw")]["n_days"].iloc[0]
+                r0 = ic_df[
+                    (ic_df.scope == scope_key)
+                    & (ic_df.period == period)
+                    & (ic_df.horizon == h)
+                    & (ic_df.tag == "raw")
+                ]["n_days"].iloc[0]
                 piv.loc[h, "更差天数"] = "-"
             print(piv.round(4).to_string())
 
@@ -175,18 +192,26 @@ def main() -> None:
                     by_day[_d] = float(g.nlargest(N, "score_w")["ret_3d"].mean())
                 for period, pn in (("month", None), ("week", 5)):
                     m, n = mean_of(by_day, pn)
-                    topn_rows.append({
-                        "scope": scope_key, "scope_label": scope_label,
-                        "period": period, "top_n": N, "tag": tag,
-                        "ret3d_mean": m, "n_days": n,
-                    })
+                    topn_rows.append(
+                        {
+                            "scope": scope_key,
+                            "scope_label": scope_label,
+                            "period": period,
+                            "top_n": N,
+                            "tag": tag,
+                            "ret3d_mean": m,
+                            "n_days": n,
+                        }
+                    )
     topn_df = pd.DataFrame(topn_rows)
     topn_df.to_csv(out_dir / "topn_ret3d_2x2.csv", index=False)
     print("\n========== top-N 已实现 3d 收益均值 (raw→smooth) ==========")
     for scope_key in scopes:
         for period in periods:
             print(f"\n[{scopes[scope_key]} / {periods[period]}]")
-            sub = topn_df[(topn_df["scope"] == scope_key) & (topn_df["period"] == period)]
+            sub = topn_df[
+                (topn_df["scope"] == scope_key) & (topn_df["period"] == period)
+            ]
             piv = sub.pivot_table(index="top_n", columns="tag", values="ret3d_mean")
             piv["Δ"] = piv["smooth"] - piv["raw"]
             print(piv.round(4).to_string())
@@ -202,25 +227,31 @@ def main() -> None:
                     r0 = row[row["tag"] == "raw"]["ic_mean"].iloc[0]
                     s0 = row[row["tag"] == "smooth"]["ic_mean"].iloc[0]
                     ic_piv[f"{scope_key}/{period}/{h}"] = {
-                        "raw": float(r0), "smooth": float(s0), "delta": float(s0 - r0),
+                        "raw": float(r0),
+                        "smooth": float(s0),
+                        "delta": float(s0 - r0),
                     }
     tn_piv = {}
     for scope_key in scopes:
         for period in periods:
-            sub = topn_df[(topn_df["scope"] == scope_key) & (topn_df["period"] == period)]
+            sub = topn_df[
+                (topn_df["scope"] == scope_key) & (topn_df["period"] == period)
+            ]
             for N in (5, 10, 14):
                 row = sub[sub["top_n"] == N]
                 if len(row):
                     r0 = row[row["tag"] == "raw"]["ret3d_mean"].iloc[0]
                     s0 = row[row["tag"] == "smooth"]["ret3d_mean"].iloc[0]
                     tn_piv[f"{scope_key}/{period}/top{N}"] = {
-                        "raw": float(r0), "smooth": float(s0), "delta": float(s0 - r0),
+                        "raw": float(r0),
+                        "smooth": float(s0),
+                        "delta": float(s0 - r0),
                     }
     summary["ic"] = ic_piv
     summary["topn_ret3d"] = tn_piv
     with open(out_dir / "summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2, default=str)
-    print(f"\n[done] {time.time()-t0:.0f}s → {out_dir}")
+    print(f"\n[done] {time.time() - t0:.0f}s → {out_dir}")
 
 
 if __name__ == "__main__":

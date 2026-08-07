@@ -33,7 +33,10 @@ def main():
     panel = panel[panel["date"] >= dates[-300]]
     cleaner = CleaningPipeline()
     _, dual_df, _ = cleaner.run_inference(panel)
-    print(f"[clean] dual={len(dual_df):,} watch={_watch_present(dual_df)} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[clean] dual={len(dual_df):,} watch={_watch_present(dual_df)} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     print(f"[sym dtype] {dual_df['symbol'].dtype}", flush=True)
 
     fe = FeatureEngineV35()
@@ -51,7 +54,10 @@ def main():
                 out = self._obj(df, *a, **k)
             else:
                 out = self._obj(fe, df, *a, **k)
-            print(f"[{self._nm}] rows={len(out):,} watch={_watch_present(out)} ({time.time()-t:.0f}s)", flush=True)
+            print(
+                f"[{self._nm}] rows={len(out):,} watch={_watch_present(out)} ({time.time() - t:.0f}s)",
+                flush=True,
+            )
             return out
 
     for nm in dir(fe):
@@ -59,8 +65,12 @@ def main():
             obj = getattr(type(fe), nm)
             static = isinstance(vars(type(fe)).get(nm), staticmethod)
             setattr(fe, nm, _T(obj, nm, static))
-    for nm in ("_add_time_series_changes", "_add_cross_sectional_ranks",
-               "industry_neutralize", "add_missingness_flags"):
+    for nm in (
+        "_add_time_series_changes",
+        "_add_cross_sectional_ranks",
+        "industry_neutralize",
+        "add_missingness_flags",
+    ):
         if hasattr(fe, nm):
             obj = getattr(type(fe), nm)
             static = isinstance(vars(type(fe)).get(nm), staticmethod)
@@ -68,14 +78,21 @@ def main():
 
     # 从 bundle 取 dual 的 feature_cols (与生产推理一致)
     import pickle
+
     bundle = pickle.load(open("models/pipeline1/dual_current.pkl", "rb"))
     dual_cols = bundle["feature_cols"]
     print(f"[dual feature_cols] n={len(dual_cols)}", flush=True)
 
     out = fe.build(
-        dual_df, float_shares_map=None, cross_sectional_rank=True, inference_cols=dual_cols
+        dual_df,
+        float_shares_map=None,
+        cross_sectional_rank=True,
+        inference_cols=dual_cols,
     )
-    print(f"[build out] rows={len(out):,} watch={_watch_present(out)} total {time.time()-t0:.0f}s", flush=True)
+    print(
+        f"[build out] rows={len(out):,} watch={_watch_present(out)} total {time.time() - t0:.0f}s",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

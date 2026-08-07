@@ -223,7 +223,9 @@ def main() -> int:
                     "def": rdef,
                     "rows": [
                         {"window": w, "n": n, "cond_avg": c, "cur_avg": cu}
-                        for (w, n, c), (_, _, cu) in zip(cond_rows, cur_rows, strict=False)
+                        for (w, n, c), (_, _, cu) in zip(
+                            cond_rows, cur_rows, strict=False
+                        )
                     ],
                 }
             )

@@ -67,9 +67,7 @@ numeric_cols = [
     for c in all_feats.columns
     if all_feats[c].dtype in ("float64", "float32", "int64", "int32")
 ]
-print(
-    f"{len(numeric_cols)} cols, {len(all_feats)} rows ({int(time.time() - t0)}s)"
-)
+print(f"{len(numeric_cols)} cols, {len(all_feats)} rows ({int(time.time() - t0)}s)")
 
 # Chronological split
 dates_arr = all_feats["date"].values

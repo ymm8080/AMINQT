@@ -310,7 +310,9 @@ logger.info("=== STEP 7: Build features ===")
 df["is_st"] = False
 df["is_suspended"] = False
 df["list_days"] = df.groupby("symbol").cumcount() + 1
-df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)]
+df["limit_pct"] = [
+    get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)
+]
 
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35  # noqa: E402
 from app.pipeline1.label_engine import LabelEngine  # noqa: E402

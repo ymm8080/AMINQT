@@ -67,7 +67,9 @@ def build_calibration(
     plat = _platt_fit(rec["score"].to_numpy(), (rec["mfe"] >= target).to_numpy())
 
     def _apply(score: float) -> tuple[float, float, int]:
-        b = int(np.clip(np.searchsorted(edges, score, side="right") - 1, 0, CAL_BINS - 1))
+        b = int(
+            np.clip(np.searchsorted(edges, score, side="right") - 1, 0, CAL_BINS - 1)
+        )
         n = int((idx == b).sum())
         mag = float(bin_mag.get(b, np.nan))
         prob = float(plat(score))
@@ -77,13 +79,26 @@ def build_calibration(
 
 
 POOL_COLS = [
-    "VAR51", "amihud_illiq", "amihud_illiquidity", "down_gap_pct",
-    "limit_dist_pct", "ret_reversal_5d", "small_mv_premium",
+    "VAR51",
+    "amihud_illiq",
+    "amihud_illiquidity",
+    "down_gap_pct",
+    "limit_dist_pct",
+    "ret_reversal_5d",
+    "small_mv_premium",
 ]
 NEEDED_COLS = sorted(
     set(
-        ["symbol", "date", "close_hfq", "high_hfq", "low_hfq", "volume",
-         "turnover_rate", "adv20"]
+        [
+            "symbol",
+            "date",
+            "close_hfq",
+            "high_hfq",
+            "low_hfq",
+            "volume",
+            "turnover_rate",
+            "adv20",
+        ]
         + POOL_COLS
     )
 )
@@ -183,12 +198,9 @@ def main() -> None:
         if not frames:
             continue
         merged = pd.concat(frames, ignore_index=True)
-        g = (
-            merged.groupby(["symbol", "board"], as_index=False)
-            .agg(
-                systems=("system", lambda x: "+".join(sorted(set(x)))),
-                score=("score", "max"),
-            )
+        g = merged.groupby(["symbol", "board"], as_index=False).agg(
+            systems=("system", lambda x: "+".join(sorted(set(x)))),
+            score=("score", "max"),
         )
         g["co_occur"] = g["systems"].str.contains("+", regex=False)
         g = g.sort_values(["co_occur", "score"], ascending=[False, False])
@@ -196,12 +208,18 @@ def main() -> None:
         g["date"] = D
         short_frames.append(g)
     short = pd.concat(short_frames, ignore_index=True)
-    print(f"[shortlist] 每日合并短名单: {len(short):,} 行 / {len(short['date'].unique())} 日", flush=True)
+    print(
+        f"[shortlist] 每日合并短名单: {len(short):,} 行 / {len(short['date'].unique())} 日",
+        flush=True,
+    )
 
     # ── walk-forward 校准: 前 126 日全池 fit → 末 30 日 apply ──
     cal_dates = all_dates[:-EVAL_DAYS]
     eval_dates = all_dates[-EVAL_DAYS:]
-    print(f"[calib] 校准 {len(cal_dates)} 日 ({cal_dates[0].date()}..{cal_dates[-1].date()})", flush=True)
+    print(
+        f"[calib] 校准 {len(cal_dates)} 日 ({cal_dates[0].date()}..{cal_dates[-1].date()})",
+        flush=True,
+    )
 
     cal_pool = work[work["date"].isin(cal_dates)].copy()
     # 每 (board, h): 全池两系统 max score → mfe 校准
@@ -257,8 +275,10 @@ def main() -> None:
                 continue
             sel_rows.append(
                 {
-                    "horizon": h, "group": tag,
-                    "n": len(sub), "n_days": sub["date"].nunique(),
+                    "horizon": h,
+                    "group": tag,
+                    "n": len(sub),
+                    "n_days": sub["date"].nunique(),
                     "mfe_mean": float(sub[realcol].mean()),
                     "win_pct": float((sub[realcol] > 0).mean()),
                     "win_cls_pct": float((sub[realcol] > CLS_THRESHOLD).mean()),
@@ -279,13 +299,19 @@ def main() -> None:
             f"Δ {s['mfe_mean'] - p['mfe_mean']:+.4f}"
         )
         summary[f"q1_{h}"] = {
-            "pool_mfe": float(p["mfe_mean"]), "short_mfe": float(s["mfe_mean"]),
+            "pool_mfe": float(p["mfe_mean"]),
+            "short_mfe": float(s["mfe_mean"]),
             "delta": float(s["mfe_mean"] - p["mfe_mean"]),
-            "pool_win": float(p["win_pct"]), "short_win": float(s["win_pct"]),
-            "pool_hit": float(p["hit_target_pct"]), "short_hit": float(s["hit_target_pct"]),
+            "pool_win": float(p["win_pct"]),
+            "short_win": float(s["win_pct"]),
+            "pool_hit": float(p["hit_target_pct"]),
+            "short_hit": float(s["hit_target_pct"]),
         }
 
-    print("\n========== Q2 预测&概率质量: pred vs 已实现 rank IC (全池 vs 短名单) ==========", flush=True)
+    print(
+        "\n========== Q2 预测&概率质量: pred vs 已实现 rank IC (全池 vs 短名单) ==========",
+        flush=True,
+    )
     ic_rows = []
     for h in HORIZONS:
         realcol = f"mfe_{h}"
@@ -299,8 +325,11 @@ def main() -> None:
                     continue
                 ic_rows.append(
                     {
-                        "horizon": h, "group": tag, "pred": "mag" if "mag" in pred else "prob",
-                        "ic_mean": float(np.mean(v)), "n_days": len(v),
+                        "horizon": h,
+                        "group": tag,
+                        "pred": "mag" if "mag" in pred else "prob",
+                        "ic_mean": float(np.mean(v)),
+                        "n_days": len(v),
                     }
                 )
     icd = pd.DataFrame(ic_rows)
@@ -318,7 +347,8 @@ def main() -> None:
                 f"Δ {s['ic_mean'] - p['ic_mean']:+.4f}"
             )
             summary[f"q2_{h}_{pred}"] = {
-                "pool_ic": float(p["ic_mean"]), "short_ic": float(s["ic_mean"]),
+                "pool_ic": float(p["ic_mean"]),
+                "short_ic": float(s["ic_mean"]),
                 "delta": float(s["ic_mean"] - p["ic_mean"]),
             }
 
@@ -330,8 +360,11 @@ def main() -> None:
             for D, g in df.dropna(subset=[realcol]).groupby("date"):
                 daily_rows.append(
                     {
-                        "date": str(D.date()), "horizon": h, "group": tag,
-                        "n": len(g), "mfe": float(g[realcol].mean()),
+                        "date": str(D.date()),
+                        "horizon": h,
+                        "group": tag,
+                        "n": len(g),
+                        "mfe": float(g[realcol].mean()),
                         "win": float((g[realcol] > 0).mean()),
                     }
                 )

@@ -42,24 +42,37 @@ from app.pipeline_parallel.config import FUSION, PANEL, SNIPER, board_of
 from app.pipeline_parallel.scoring import pool_score
 from config.settings import BACKTEST_RESULT_DIR
 
-CAL_N = 160      # 滚动校准窗口长度 (交易日)
-EVAL_DAYS = 30   # 评估窗口
+CAL_N = 160  # 滚动校准窗口长度 (交易日)
+EVAL_DAYS = 30  # 评估窗口
 PER_STOCK_WINDOW = 130  # 与生产一致: 每股自用最近交易日
-PER_STOCK_MIN_N = 30    # 与生产一致: 每股回归最小样本, 不足回退横截面
-SHRINK_KAPPA = 40       # 与生产一致: 收缩强度
-TOP_N = 10              # 每板块短名单档位 (与交付 10 main + 10 dual 对齐)
+PER_STOCK_MIN_N = 30  # 与生产一致: 每股回归最小样本, 不足回退横截面
+SHRINK_KAPPA = 40  # 与生产一致: 收缩强度
+TOP_N = 10  # 每板块短名单档位 (与交付 10 main + 10 dual 对齐)
 ABS_TARGET = {"2d": 0.02, "3d": 0.03, "5d": 0.04, "10d": 0.06}
 HORIZONS = ("3d", "2d", "5d", "10d")
 CLS_THRESHOLD = 0.005
 
 POOL_COLS = [
-    "amihud_illiq", "small_mv_premium", "amihud_illiquidity",
-    "down_gap_pct", "VAR51", "ret_reversal_5d", "limit_dist_pct",
+    "amihud_illiq",
+    "small_mv_premium",
+    "amihud_illiquidity",
+    "down_gap_pct",
+    "VAR51",
+    "ret_reversal_5d",
+    "limit_dist_pct",
 ]
 NEEDED_COLS = sorted(
     set(
-        ["symbol", "date", "close_hfq", "high_hfq", "low_hfq", "volume",
-         "turnover_rate", "adv20"]
+        [
+            "symbol",
+            "date",
+            "close_hfq",
+            "high_hfq",
+            "low_hfq",
+            "volume",
+            "turnover_rate",
+            "adv20",
+        ]
         + POOL_COLS
     )
 )
@@ -132,7 +145,9 @@ def main() -> None:
     # 预计算已实现 MFE 列 (每 horizon 一个)
     real = {h: f"label_mfe_{h}_net" for h in HORIZONS}
     if not all(c in work.columns for c in real.values()):
-        print(f"[fatal] 缺 MFE 标签列: {[c for c in real.values() if c not in work.columns]}")
+        print(
+            f"[fatal] 缺 MFE 标签列: {[c for c in real.values() if c not in work.columns]}"
+        )
         return
 
     # ── walk-forward: 每评估日 D 用 [D-CAL_N, D-1] 拟合 → 对 D 打分排名 ──
@@ -141,10 +156,16 @@ def main() -> None:
     rows_overlap = []
     dump_frames = []  # 逐日逐股 (score, mag/prob_h, 已实现 MFE) 供两段式策略离线复测
     summary: dict = {
-        "ts": ts, "type": "parallel_rank_compare",
-        "cal_days": cal_window_days, "eval_days": len(eval_dates),
-        "top_n": TOP_N, "per_stock": {"window": PER_STOCK_WINDOW,
-                                      "min_n": PER_STOCK_MIN_N, "kappa": SHRINK_KAPPA},
+        "ts": ts,
+        "type": "parallel_rank_compare",
+        "cal_days": cal_window_days,
+        "eval_days": len(eval_dates),
+        "top_n": TOP_N,
+        "per_stock": {
+            "window": PER_STOCK_WINDOW,
+            "min_n": PER_STOCK_MIN_N,
+            "kappa": SHRINK_KAPPA,
+        },
         "boards": {},
     }
 
@@ -205,8 +226,12 @@ def main() -> None:
                     prob[i] = float(plat.predict_proba([[sc]])[0, 1])
 
                 rank_df = pd.DataFrame(
-                    {"symbol": day_sym, "score": day_scores, f"mag_{h}": mag,
-                     f"prob_{h}": prob}
+                    {
+                        "symbol": day_sym,
+                        "score": day_scores,
+                        f"mag_{h}": mag,
+                        f"prob_{h}": prob,
+                    }
                 )
                 mag_all[h] = mag
                 prob_all[h] = prob
@@ -218,13 +243,22 @@ def main() -> None:
                 fs, ps_ = set(F["symbol"]), set(P["symbol"])
                 overlap = len(fs & ps_)
                 rows_overlap.append(
-                    {"board": board, "h": h, "date": str(D.date()),
-                     "n_overlap": overlap, "n_total": TOP_N,
-                     "overlap_pct": overlap / TOP_N}
+                    {
+                        "board": board,
+                        "h": h,
+                        "date": str(D.date()),
+                        "n_overlap": overlap,
+                        "n_total": TOP_N,
+                        "overlap_pct": overlap / TOP_N,
+                    }
                 )
                 # 已实现 MFE
                 lab = daysub.set_index("symbol")[realcol]
-                for name, pick in (("F_feature", F), ("P_predmag", P), ("C_predprob", C)):
+                for name, pick in (
+                    ("F_feature", F),
+                    ("P_predmag", P),
+                    ("C_predprob", C),
+                ):
                     syms = pick["symbol"]
                     y = lab.reindex(syms).dropna()
                     if y.empty:
@@ -232,16 +266,26 @@ def main() -> None:
                     win = (y > 0).sum()
                     (y >= ABS_TARGET[h]).sum()
                     rows_daily.append(
-                        {"board": board, "h": h, "date": str(D.date()),
-                         "method": name, "n": int(len(y)),
-                         "mfe": float(y.mean()), "win": float(win / len(y))}
+                        {
+                            "board": board,
+                            "h": h,
+                            "date": str(D.date()),
+                            "method": name,
+                            "n": int(len(y)),
+                            "mfe": float(y.mean()),
+                            "win": float(win / len(y)),
+                        }
                     )
                 # Spearman(score, mag) 当日截面 (排名差异有多大)
                 sm = rank_df.dropna(subset=["score", f"mag_{h}"])
                 rho = float("nan")
                 if len(sm) >= 10 and sm[f"mag_{h}"].nunique() > 1:
                     rho = float(spearmanr(sm["score"], sm[f"mag_{h}"]).statistic)
-                sd = summary.setdefault("boards", {}).setdefault(board, {}).setdefault(h, {})
+                sd = (
+                    summary.setdefault("boards", {})
+                    .setdefault(board, {})
+                    .setdefault(h, {})
+                )
                 sd["spearman_days"] = sd.get("spearman_days", []) + [rho]
             # 逐日逐股帧 (两段式策略离线复测底稿)
             dump = pd.DataFrame({"symbol": day_sym, "score": day_scores})
@@ -267,8 +311,12 @@ def main() -> None:
     print(f"[dump] rank_daily.parquet {len(dumpdf):,}r", flush=True)
     agg = (
         daily.groupby(["board", "h", "method"])
-        .agg(n_days=("date", "nunique"), n=("n", "sum"),
-             mfe_mean=("mfe", "mean"), win_pct=("win", "mean"))
+        .agg(
+            n_days=("date", "nunique"),
+            n=("n", "sum"),
+            mfe_mean=("mfe", "mean"),
+            win_pct=("win", "mean"),
+        )
         .reset_index()
     )
     hit = (
@@ -281,14 +329,24 @@ def main() -> None:
     daily.to_csv(out_dir / "q_daily.csv", index=False)
     pd.DataFrame(rows_overlap).to_csv(out_dir / "overlap.csv", index=False)
 
-    print("\n========== 并行模块内: 特征排名 vs 预测排名 (每板块 TOP-10) ==========", flush=True)
-    print(f"    {'板块':<5}{'视界':>5}{'方法':<13}{'日':>4}{'均MFE':>9}{'上涨率':>9}{'达标率':>9}", flush=True)
+    print(
+        "\n========== 并行模块内: 特征排名 vs 预测排名 (每板块 TOP-10) ==========",
+        flush=True,
+    )
+    print(
+        f"    {'板块':<5}{'视界':>5}{'方法':<13}{'日':>4}{'均MFE':>9}{'上涨率':>9}{'达标率':>9}",
+        flush=True,
+    )
     for b in ("main", "dual"):
         for h in HORIZONS:
             sub = agg[(agg["board"] == b) & (agg["h"] == h)]
             if sub.empty:
                 continue
-            rho = np.nanmean(summary["boards"][b][h]["spearman_days"]) if h in summary["boards"].get(b, {}) else np.nan
+            rho = (
+                np.nanmean(summary["boards"][b][h]["spearman_days"])
+                if h in summary["boards"].get(b, {})
+                else np.nan
+            )
             for _, r in sub.iterrows():
                 print(
                     f"    {b:<5}{h:>5}{r['method']:<13}{int(r['n_days']):>4}"
@@ -300,9 +358,10 @@ def main() -> None:
             if not line.empty and not pln.empty:
                 F, P = line.iloc[0], pln.iloc[0]
                 print(
-                    f"      → 预测排名 vs 特征排名: ΔMFE {P['mfe_mean']-F['mfe_mean']:+.4f} "
-                    f"Δ上涨率 {P['win_pct']-F['win_pct']:+.1%} "
-                    f"(Spearman(score,mag) {rho:+.3f})", flush=True
+                    f"      → 预测排名 vs 特征排名: ΔMFE {P['mfe_mean'] - F['mfe_mean']:+.4f} "
+                    f"Δ上涨率 {P['win_pct'] - F['win_pct']:+.1%} "
+                    f"(Spearman(score,mag) {rho:+.3f})",
+                    flush=True,
                 )
     print(f"\n[done] {time.time() - t0:.0f}s → {out_dir}", flush=True)
 

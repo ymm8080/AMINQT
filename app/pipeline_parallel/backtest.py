@@ -1052,12 +1052,7 @@ def build_conclusion(out: dict) -> dict:
                 .get("per_horizon", {})
             )
             kept = bool(
-
-                    merged.get(cut, {})
-                    .get("oos", {})
-                    .get(oos_label, {})
-                    .get("kept", False)
-
+                merged.get(cut, {}).get("oos", {}).get(oos_label, {}).get("kept", False)
             )
             best_h, best = _best_horizon(ph)
             if best is None:

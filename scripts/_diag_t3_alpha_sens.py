@@ -52,8 +52,12 @@ def load_shortlist_union() -> set[str]:
         "stocklist": Path("D:/AMINQT/DAILY OPERATION/STOCK LIST"),
         "lists": Path("D:/AMINQT/AMINQT CODES/data/lists"),
     }
-    pats = ["legacy_stocklist_2026080*.csv", "STOCK LIST 2026080*.xlsx",
-            "parallel_shortlist_2026080*.csv", "list_2026080*.parquet"]
+    pats = [
+        "legacy_stocklist_2026080*.csv",
+        "STOCK LIST 2026080*.xlsx",
+        "parallel_shortlist_2026080*.csv",
+        "list_2026080*.parquet",
+    ]
     for root in roots.values():
         for pat in pats:
             for fp in sorted(root.glob(pat)):
@@ -130,7 +134,10 @@ def main() -> None:
     raw["date"] = pd.to_datetime(raw["date"])
     smooth["date"] = pd.to_datetime(smooth["date"])
     days = sorted(raw["date"].unique())
-    print(f"[src] {src.name} | module={mod} | {len(days)} 交易日 | raw {len(raw):,}r", flush=True)
+    print(
+        f"[src] {src.name} | module={mod} | {len(days)} 交易日 | raw {len(raw):,}r",
+        flush=True,
+    )
 
     shortlist_union = load_shortlist_union()
     print(f"[universe] 短名单并集 {len(shortlist_union)} 只", flush=True)
@@ -150,8 +157,11 @@ def main() -> None:
     merged["prod"] = prod.reindex(raw.set_index(["symbol", "date"]).index).values
     valid = merged.dropna(subset=["prod"])
     diff = (valid["replay"] - valid["prod"]).abs().max()
-    print(f"[validate] ema_series(α=0.35) vs 生产 smooth_preds: max|Δ|={diff:.3e} "
-          f"(n={len(valid):,})", flush=True)
+    print(
+        f"[validate] ema_series(α=0.35) vs 生产 smooth_preds: max|Δ|={diff:.3e} "
+        f"(n={len(valid):,})",
+        flush=True,
+    )
     if diff > 1e-9:
         print("[validate] FAIL → ema_series 与生产不一致, 禁止下结论", flush=True)
         (out_dir / "VALIDATION_FAIL.txt").write_text(
@@ -186,28 +196,45 @@ def main() -> None:
         ic_sl = daily_ic(sl, "pred_ret_3d", "ret_3d")
         ic_full = daily_ic(sm, "pred_ret_3d", "ret_3d")
         stab = mean_abs_delta(sm, "pred_ret_3d")
-        rows.append({"alpha": alpha, "shortlist_ic_3d": ic_sl,
-                     "full_ic_3d": ic_full, "stab_mean_abs_delta": stab})
-        print(f"[α={alpha:.2f}] shortlist 3d IC={ic_sl:+.4f} | full 3d IC={ic_full:+.4f} "
-              f"| 稳定度 mean|Δ|={stab:.5f}", flush=True)
+        rows.append(
+            {
+                "alpha": alpha,
+                "shortlist_ic_3d": ic_sl,
+                "full_ic_3d": ic_full,
+                "stab_mean_abs_delta": stab,
+            }
+        )
+        print(
+            f"[α={alpha:.2f}] shortlist 3d IC={ic_sl:+.4f} | full 3d IC={ic_full:+.4f} "
+            f"| 稳定度 mean|Δ|={stab:.5f}",
+            flush=True,
+        )
 
     adf = pd.DataFrame(rows)
-    raw_ic_sl = daily_ic(raw[raw["symbol"].isin(shortlist_union)], "pred_ret_3d", "ret_3d")
+    raw_ic_sl = daily_ic(
+        raw[raw["symbol"].isin(shortlist_union)], "pred_ret_3d", "ret_3d"
+    )
     raw_stab = mean_abs_delta(raw, "pred_ret_3d")
     adf.to_csv(out_dir / "alpha_sensitivity_prod.csv", index=False)
     summary = {
-        "ts": ts, "source_dir": str(src), "module": mod,
-        "validation_max_abs_delta": float(diff), "validation_n": int(len(valid)),
-        "raw_shortlist_ic_3d": raw_ic_sl, "raw_stab_mean_abs_delta": raw_stab,
+        "ts": ts,
+        "source_dir": str(src),
+        "module": mod,
+        "validation_max_abs_delta": float(diff),
+        "validation_n": int(len(valid)),
+        "raw_shortlist_ic_3d": raw_ic_sl,
+        "raw_stab_mean_abs_delta": raw_stab,
         "alpha_table": adf.to_dict("records"),
     }
     with open(out_dir / "summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2, default=str)
 
-    print(f"\n--- α 敏感性汇总 (raw 基准: shortlist 3d IC={raw_ic_sl:+.4f}, "
-          f"stab={raw_stab:.5f}) ---")
+    print(
+        f"\n--- α 敏感性汇总 (raw 基准: shortlist 3d IC={raw_ic_sl:+.4f}, "
+        f"stab={raw_stab:.5f}) ---"
+    )
     print(adf.round(4).to_string())
-    print(f"\n[done] {time.time()-t0:.0f}s → {out_dir}")
+    print(f"\n[done] {time.time() - t0:.0f}s → {out_dir}")
 
 
 if __name__ == "__main__":

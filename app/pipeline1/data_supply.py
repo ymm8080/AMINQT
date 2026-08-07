@@ -427,7 +427,9 @@ class DataSupplyChain:
             if name in down:
                 continue
             try:
-                result = _with_timeout(lambda fn=fn: fn(symbol, start, end), FETCH_TIMEOUT)
+                result = _with_timeout(
+                    lambda fn=fn: fn(symbol, start, end), FETCH_TIMEOUT
+                )
                 fail_counters[name] = 0  # 成功后重置连续失败计数
                 return result
             except Exception as exc:
@@ -1477,7 +1479,9 @@ class DataSupplyChain:
                 kwargs,  # 尝试2: 不带日期 (全量)
             ):
                 try:
-                    raw = _with_timeout(lambda _kw=attempt_kwargs: pro.fina_indicator(**_kw))
+                    raw = _with_timeout(
+                        lambda _kw=attempt_kwargs: pro.fina_indicator(**_kw)
+                    )
                     if raw is not None and len(raw) > 0:
                         break
                 except Exception as exc:
@@ -2069,7 +2073,9 @@ class DataSupplyChain:
                         "offset": offset,
                         "fields": _FIELDS,
                     }
-                    raw = _with_timeout(lambda _kw=page_kwargs: pro.stk_holdertrade(**_kw))
+                    raw = _with_timeout(
+                        lambda _kw=page_kwargs: pro.stk_holdertrade(**_kw)
+                    )
                     if raw is None or len(raw) == 0:
                         break
                     all_pages.append(raw)

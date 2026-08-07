@@ -323,7 +323,9 @@ def clean_panel(df: pd.DataFrame) -> pd.DataFrame:
     if "limit_pct" not in df.columns:
         from app.pipeline1.cleaning_pipeline import get_limit_pct
 
-        df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)]
+        df["limit_pct"] = [
+            get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)
+        ]
 
     logger.info("Cleaned panel: %d cols -> %d cols", orig_cols, len(df.columns))
     return df
@@ -377,7 +379,9 @@ def _ensure_scaffold(df: pd.DataFrame) -> pd.DataFrame:
     if "list_days" not in df.columns:
         df["list_days"] = df.groupby("symbol").cumcount() + 1
     if "limit_pct" not in df.columns:
-        df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)]
+        df["limit_pct"] = [
+            get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)
+        ]
     return df
 
 

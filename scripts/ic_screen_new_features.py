@@ -108,7 +108,9 @@ for board, board_df in [("main", main_df), ("dual", dual_df)]:
     out = {
         "window_id": f"new_features_{board}_{tag}",
         "factors": [c for c in NEW_FEATURES if c in df.columns],
-        "detail": dict(zip([c for c in NEW_FEATURES if c in df.columns], results, strict=False)),
+        "detail": dict(
+            zip([c for c in NEW_FEATURES if c in df.columns], results, strict=False)
+        ),
     }
     os.makedirs("data/factor_registry", exist_ok=True)
     path = f"data/factor_registry/factors_new_{board}_{tag}.json"

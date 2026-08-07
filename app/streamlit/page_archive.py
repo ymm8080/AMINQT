@@ -293,7 +293,9 @@ def _render_stock_query() -> None:
         else:
             frames.append(hist)
     if not frames:
-        st.info(f"以下代码最近 5 个交易日无预测记录 (仅列出被预测/入选的股票): {', '.join(missing)}")
+        st.info(
+            f"以下代码最近 5 个交易日无预测记录 (仅列出被预测/入选的股票): {', '.join(missing)}"
+        )
         return
     hist = pd.concat(frames, ignore_index=True)
     disp = pd.DataFrame()

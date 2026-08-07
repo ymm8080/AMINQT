@@ -43,7 +43,8 @@ def ohlcv_violations(df: pd.DataFrame) -> pd.DataFrame:
         m = m.fillna(False).values
         mask |= m
         reasons = [
-            f"{r};{n}" if mm else r for r, n, mm in zip(reasons, [name] * len(df), m, strict=False)
+            f"{r};{n}" if mm else r
+            for r, n, mm in zip(reasons, [name] * len(df), m, strict=False)
         ]
     out = df[mask].copy()
     out["violation"] = [r.lstrip(";") for r in np.array(reasons)[mask]]

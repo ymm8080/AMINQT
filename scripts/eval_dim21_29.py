@@ -239,7 +239,9 @@ def add_industry_board(
     try:
         basic = pro.stock_basic(exchange="", list_status="L", fields="ts_code,industry")
         basic["symbol"] = basic["ts_code"].str.replace(".SZ", "").str.replace(".SH", "")
-        ind_map = dict(zip(basic["symbol"], basic["industry"].fillna("综合"), strict=False))
+        ind_map = dict(
+            zip(basic["symbol"], basic["industry"].fillna("综合"), strict=False)
+        )
         df["industry"] = df["symbol"].map(ind_map).fillna("综合")
     except Exception as exc:
         logger.warning("Industry fetch failed: %s", exc)
@@ -290,7 +292,9 @@ def _ensure_scaffold(df: pd.DataFrame) -> pd.DataFrame:
     if "list_days" not in df.columns:
         df["list_days"] = df.groupby("symbol").cumcount() + 1
     if "limit_pct" not in df.columns:
-        df["limit_pct"] = [get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)]
+        df["limit_pct"] = [
+            get_limit_pct(b, d) for b, d in zip(df["board"], df["date"], strict=False)
+        ]
     return df
 
 

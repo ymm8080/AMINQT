@@ -20,10 +20,25 @@ import pandas as pd
 LIST_DIR = "data/lists"
 
 _COLS = [
-    "symbol", "board", "pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d",
-    "prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d",
-    "pred_q50", "pred_q50_2d", "pred_q50_3d", "pred_q50_5d",
-    "pain_prob", "score", "weight", "compound_ret", "model_version",
+    "symbol",
+    "board",
+    "pred_ret_1d",
+    "pred_ret_2d",
+    "pred_ret_3d",
+    "pred_ret_5d",
+    "prob_up",
+    "prob_up_2d",
+    "prob_up_3d",
+    "prob_up_5d",
+    "pred_q50",
+    "pred_q50_2d",
+    "pred_q50_3d",
+    "pred_q50_5d",
+    "pain_prob",
+    "score",
+    "weight",
+    "compound_ret",
+    "model_version",
 ]
 
 
@@ -95,16 +110,19 @@ def main():
     panel = pd.read_parquet(str(PANEL_V3_PATH))
     dates = sorted(panel["date"].unique())
     panel = panel[panel["date"] >= dates[-300]]
-    print(f"[panel] {len(panel):,}r slice300 ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[panel] {len(panel):,}r slice300 ({time.time() - t0:.0f}s)", flush=True)
     pipe = DailySelectionPipeline(supply=DataSupplyChain(), bundle_paths=BUNDLES)
     main_df, dual_df, valve = pipe.cleaner.run_inference(panel)
-    print(f"[clean] main={len(main_df):,} dual={len(dual_df):,} valve={valve}", flush=True)
+    print(
+        f"[clean] main={len(main_df):,} dual={len(dual_df):,} valve={valve}", flush=True
+    )
     frames = []
     for board, dfb, csr in (("main", main_df, False), ("dual", dual_df, True)):
         if not len(dfb):
             continue
         f = pipe.features.build(
-            dfb, pipe.float_shares_map,
+            dfb,
+            pipe.float_shares_map,
             inference_cols=pipe.predictor.bundles[board]["feature_cols"],
             cross_sectional_rank=csr,
         )

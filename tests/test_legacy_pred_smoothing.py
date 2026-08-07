@@ -15,13 +15,22 @@ from app.pipeline1.pred_smoothing import (
 )
 
 FORECAST_COLS = [
-    "pred_ret_1d", "pred_ret_3d", "prob_up", "prob_up_3d", "pred_q50_3d",
+    "pred_ret_1d",
+    "pred_ret_3d",
+    "prob_up",
+    "prob_up_3d",
+    "pred_q50_3d",
 ]
 
 
 def _cand(symbol="600519", vals=None):
-    vals = vals or {"pred_ret_1d": 0.05, "pred_ret_3d": 0.06, "prob_up": 0.50,
-                    "prob_up_3d": 0.55, "pred_q50_3d": 0.04}
+    vals = vals or {
+        "pred_ret_1d": 0.05,
+        "pred_ret_3d": 0.06,
+        "prob_up": 0.50,
+        "prob_up_3d": 0.55,
+        "pred_q50_3d": 0.04,
+    }
     return pd.DataFrame(
         {
             "symbol": [symbol],
@@ -50,9 +59,18 @@ def test_smooth_blends_today_and_history(tmp_path, monkeypatch):
     monkeypatch.setattr(pred_smoothing, "STOCK_LIST_DIR", tmp_path)
     # 昨日: pred_ret_3d=0.05, prob_up_3d=0.50; 今日: 0.06 / 0.55
     persist_raw_preds(
-        _cand("600519", {"pred_ret_1d": 0.05, "pred_ret_3d": 0.05, "prob_up": 0.50,
-                         "prob_up_3d": 0.50, "pred_q50_3d": 0.04}),
-        "20260805", "testmod",
+        _cand(
+            "600519",
+            {
+                "pred_ret_1d": 0.05,
+                "pred_ret_3d": 0.05,
+                "prob_up": 0.50,
+                "prob_up_3d": 0.50,
+                "pred_q50_3d": 0.04,
+            },
+        ),
+        "20260805",
+        "testmod",
     )
     res = _cand("600519")
     out = smooth_preds(res, "20260806", "testmod")
@@ -90,8 +108,8 @@ def test_load_history_filters_module_and_date(tmp_path, monkeypatch):
     cases = [
         ("legacy_preds_raw_20260804__testmod.csv", "000001"),  # 昨日匹配 → 保留
         ("legacy_preds_raw_20260806__testmod.csv", "000002"),  # 今日 → 排除
-        ("legacy_preds_raw_20260804__other.csv", "000003"),    # 模块不匹配 → 排除
-        ("legacy_preds_raw_20260804.csv", "000004"),           # 无模块 → 排除
+        ("legacy_preds_raw_20260804__other.csv", "000003"),  # 模块不匹配 → 排除
+        ("legacy_preds_raw_20260804.csv", "000004"),  # 无模块 → 排除
     ]
     for fname, sym in cases:
         pd.DataFrame({"symbol": [sym], **{c: [0.04] for c in FORECAST_COLS}}).to_csv(
