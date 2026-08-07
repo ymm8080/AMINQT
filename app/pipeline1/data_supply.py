@@ -973,13 +973,13 @@ class DataSupplyChain:
         return os.path.join(d, f"{key}.parquet")
 
     def _tushare_pro(self):
-        """懒加载 Tushare pro_api; 仅从环境变量 TUSHARE_TOKEN 读取 (禁止文件存储凭据)."""
-        token = settings.TUSHARE_TOKEN
+        """懒加载 Tushare pro_api; 优先环境变量 TUSHARE_TOKEN, 回退 tushare 本地 token (与 _daily_fetch 一致)."""
+        import tushare as ts
+
+        token = settings.TUSHARE_TOKEN or ts.get_token()
         if not token:
             return None
         try:
-            import tushare as ts
-
             return ts.pro_api(token)
         except Exception as exc:
             logger.warning("Tushare pro_api 初始化失败: %s", exc)
