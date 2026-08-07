@@ -92,3 +92,70 @@ class TestPredictionDB:
         run = db.get_run("2026-08-02")
         by_sym = {s["symbol"]: s for s in run["stocks"]}
         assert by_sym["600002"]["actual_ret_2d"] == pytest.approx(0.03)
+
+
+# ── legacy 双轨影子 (2026-08-07) ──
+def _shadow_candidates() -> pd.DataFrame:
+    """三板块候选, pred_ret_3d 不排序 (验证 shadow_pool_frame 按幅度排序+每板块截断)."""
+    return pd.DataFrame(
+        {
+            "symbol": ["600001", "600002", "600003", "300001", "300002", "300003", "688001"],
+            "board": ["main", "main", "main", "GEM", "GEM", "GEM", "STAR"],
+            "pred_ret_3d": [0.01, 0.05, None, 0.02, 0.09, 0.04, 0.07],
+            "prob_up_3d": [0.5, 0.6, 0.55, 0.45, 0.7, 0.5, 0.65],
+            "prob_up": [0.52, 0.61, 0.56, 0.46, 0.71, 0.51, 0.66],
+        }
+    )
+
+
+class TestShadowTrack:
+    def test_shadow_pool_frame_per_board_top_n(self):
+        from app.pipeline1.prediction_db import shadow_pool_frame
+
+        df = shadow_pool_frame(_shadow_candidates(), n=2)
+        got = {
+            b: df[df["board"] == b]["symbol"].tolist()
+            for b in df["board"].unique()
+        }
+        assert got == {
+            "main": ["600002", "600001"],  # pred_ret_3d 0.05, 0.01
+            "GEM": ["300002", "300003"],  # 0.09, 0.04
+            "STAR": ["688001"],
+        }
+        assert df["pred_ret_3d"].notna().all()  # NaN 剔除
+
+    def test_shadow_pool_frame_empty_and_missing_board(self):
+        from app.pipeline1.prediction_db import shadow_pool_frame
+
+        assert shadow_pool_frame(pd.DataFrame()).empty
+        no_board = _shadow_candidates().drop(columns=["board"])
+        df = shadow_pool_frame(no_board, n=2)
+        assert (df["board"] == "main").all()  # 缺 board 列回退 main
+
+    def test_insert_shadow_persists_rank_by_ret(self, tmp_path):
+        db = PredictionDB(path=str(tmp_path / "p.db"))
+        df = _shadow_candidates()
+        df = df[df["pred_ret_3d"].notna()].sort_values("pred_ret_3d", ascending=False)
+        assert db.insert_shadow("2026-08-07", df) == 6
+        shadow = db.get_shadow("2026-08-07")
+        by_sym = {s["symbol"]: s for s in shadow}
+        assert by_sym["300002"]["rank_by_ret"] == 1  # 幅度最大 → 排名 1
+        assert by_sym["600001"]["rank_by_ret"] == 6
+        assert by_sym["300002"]["pred_ret_3d"] == pytest.approx(0.09)
+        # 幂等: 重复插入覆盖不翻倍
+        assert db.insert_shadow("2026-08-07", df.head(3)) == 3
+        assert len(db.get_shadow("2026-08-07")) == 6
+
+    def test_backfill_shadow_outcomes_and_quality(self, tmp_path):
+        db = PredictionDB(path=str(tmp_path / "p.db"))
+        df = _shadow_candidates()
+        df = df[df["pred_ret_3d"].notna()].sort_values("pred_ret_3d", ascending=False)
+        db.insert_shadow("2026-08-07", df)
+        outcomes = pd.DataFrame(
+            {"symbol": ["300002", "600002"], "actual_ret_3d": [0.05, -0.02]}
+        )
+        assert db.backfill_shadow_outcomes("2026-08-07", outcomes) == 2
+        q = db.shadow_quality("2026-08-07")
+        assert q["n"] == 6 and q["matured_3d"] == 2
+        by_sym = {s["symbol"]: s for s in db.get_shadow("2026-08-07")}
+        assert by_sym["300002"]["actual_ret_3d"] == pytest.approx(0.05)

@@ -54,11 +54,9 @@ def main() -> None:
         print(f"[fatal] 缺 {src} (需重跑 _diag_parallel_rank_compare.py 生成)")
         return 1
     df = pd.read_parquet(src)
-    mag, prob, real = f"mag_{H}", f"prob_{H}", f"real_{H}"
-    df = df.dropna(subset=[mag, prob, real]).copy()
-    print(
-        f"[load] {len(df):,}r / 评估 {df['date'].nunique()} 日 (视界 {H})", flush=True
-    )
+    mag, real = f"mag_{H}", f"real_{H}"
+    df = df.dropna(subset=[mag, real]).copy()
+    print(f"[load] {len(df):,}r / 评估 {df['date'].nunique()} 日 (视界 {H})", flush=True)
 
     strategies = {
         "A_feature10": lambda g: pick_top(g, "score"),
@@ -67,10 +65,8 @@ def main() -> None:
         "E_mag_first": lambda g: pick_top(pick_top(g, mag, STAGE1_N), "score"),
         "F_blend": lambda g: (
             lambda gg: pick_top(
-                gg.assign(
-                    blend=0.5 * gg["score"].rank(pct=True)
-                    + 0.5 * gg[mag].rank(pct=True)
-                ),
+                gg.assign(blend=0.5 * gg["score"].rank(pct=True)
+                          + 0.5 * gg[mag].rank(pct=True)),
                 "blend",
             )
         )(g),
@@ -79,11 +75,8 @@ def main() -> None:
         ),
     }
 
-    print(
-        f"\n{'板块':<5}{'策略':<16}{'日':>4}{'N':>5}{'均MFE':>10}{'上涨率':>9}{'达标率':>9}"
-        f"{'单日>3%占比':>11}",
-        flush=True,
-    )
+    print(f"\n{'板块':<5}{'策略':<16}{'日':>4}{'N':>5}{'均MFE':>10}{'上涨率':>9}{'达标率':>9}"
+          f"{'单日>3%占比':>11}", flush=True)
     rows = []
     for b in ("main", "dual"):
         sub = df[df["board"] == b]
@@ -95,26 +88,18 @@ def main() -> None:
                 if y.empty:
                     continue
                 dres.append(
-                    {
-                        "date": D,
-                        "n": int(len(y)),
-                        "mfe": float(y.mean()),
-                        "win": float((y > 0).mean()),
-                        "hit": float((y >= ABS_TARGET[H]).mean()),
-                    }
+                    {"date": D, "n": int(len(y)), "mfe": float(y.mean()),
+                     "win": float((y > 0).mean()),
+                     "hit": float((y >= ABS_TARGET[H]).mean())}
                 )
             d = pd.DataFrame(dres)
             if d.empty:
                 continue
             rows.append(
                 {
-                    "board": b,
-                    "strategy": name,
-                    "n_days": int(d["date"].nunique()),
-                    "n": int(d["n"].sum()),
-                    "mfe_mean": float(d["mfe"].mean()),
-                    "win_pct": float(d["win"].mean()),
-                    "hit_pct": float(d["hit"].mean()),
+                    "board": b, "strategy": name, "n_days": int(d["date"].nunique()),
+                    "n": int(d["n"].sum()), "mfe_mean": float(d["mfe"].mean()),
+                    "win_pct": float(d["win"].mean()), "hit_pct": float(d["hit"].mean()),
                     "hit3_pct": float((d["hit"] > 0.3).mean()),
                 }
             )

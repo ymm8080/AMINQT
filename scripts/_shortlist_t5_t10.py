@@ -22,8 +22,10 @@
 顶部 SUMMARY = 主板+双创合并的单一集成排名清单 (rank/命中模块/预期涨幅/达到概率), 直接决策;
 明细表格保留每板块 T-5/T-10 逐视界.
 
-流程 (用户): 先给每只股 预期涨幅+达到概率 (预测), 再按权重 (SHORTLIST_SCORE) 合成综合分,
-再排名 — 绝不先排名后预测.
+流程 (用户): 先给每只股 预期涨幅+达到概率 (预测), 再排名 — 绝不先排名后预测.
+**排名键 (2026-08-07 定案):** 每股 pred_mag (主视界 T+3 预期幅度) 降序 — 250d OOS
+证明纯幅度排名 MFE 全视界赢特征/混合排名 +3.9~10.1pp, 上涨率打平. 候选池每系统特征
+TOP-30 加宽 (CAND_POOL_N), 再按 pred_mag 取每板块 TOP-10; score_w 降为平局裁决/展示.
 
 **主视界 (2026-08-05 用户定案):** T+3 (短持 3 天). 排名权重 3d=0.40 最高 (2d+3d 合计 0.65),
 入选门 = **T+2/T+3 联合门** (2026-08-07 用户: "考虑 T+2,T+3 一起"; 见 config
@@ -116,6 +118,12 @@ SHRINK_KAPPA = 40
 SMOOTH_ENABLED = True
 SMOOTH_ALPHA = 0.35
 SMOOTH_K = 12
+# [2026-08-07] 短名单排名定案: 按每股 pred_mag(主视界幅度) 排名, 替代原 score_w 混合排名.
+# 250d OOS (scripts/_diag_parallel_rank_compare.py + _diag_rank_strategies.py) 证明:
+# 纯 pred_mag 排名 MFE 全视界赢特征排名 +3.9~10.1pp, 上涨率打平; 混合/两段式全不如纯.
+# 原短名单仅 ~15 只 (特征 TOP-5∪TOP-10), pred_mag 在内重排近乎无效 → 需先把候选池加宽.
+CAND_POOL_N = 30  # 候选池宽度: 每系统特征分 TOP-N → 再按 pred_mag 取 TOP-10
+CAND_RANK_KEY = "pred_mag_3d"  # 排名键 = 主视界(T+3)每股预期幅度
 
 
 def load_system_stats(records: dict) -> dict:
@@ -313,6 +321,9 @@ def _add_mfe(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+_PANEL_CACHE: dict = {"ready": False, "data": {}}  # _panel_per_stock 结果缓存 (被候选池+校准各调一次)
+
+
 def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
     """3y 面板 → 每股最近 ~PER_STOCK_WINDOW 交易日日频 (score, mfe) 序列.
 
@@ -327,6 +338,8 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
     need = ["symbol", "date", "close_hfq", "high_hfq", "adv20"] + [
         c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"
     ]
+    if _PANEL_CACHE.get("ready"):
+        return _PANEL_CACHE["data"]
     for board in ("main", "dual"):
         fp = DATA_DIR / f"_diag_stage_{board}_3y.parquet"
         dates = pd.to_datetime(
@@ -358,7 +371,67 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
         fr_bt = fr_sn.copy()
         fr_bt["score"] = np.maximum(fr_sn["score"], fr_fu["score"])
         out[(board, "both")] = fr_bt
+    _PANEL_CACHE["ready"], _PANEL_CACHE["data"] = True, out
     return out
+
+
+def expand_candidates(full: pd.DataFrame) -> pd.DataFrame:
+    """FULL RUN 短名单加宽: 每系统特征分 TOP-{CAND_POOL_N} 候选 ∪ 原短名单.
+
+    2026-08-07 定案: 250d OOS 证明"每股 pred_mag(幅度) 排名"胜过"特征分排名"
+    (MFE 全视界 +3.9~10.1pp, 上涨率打平). 原短名单仅 ~15 只 (特征 TOP-5∪TOP-10),
+    pred_mag 在其内重排近乎无效 → 用面板最新截面把候选池加宽到每系统特征 TOP-30,
+    再由 rank_and_truncate 按 pred_mag 取 TOP-10. 沿用 _panel_per_stock 与生产一致的
+    截面分 (不重算特征); 原"不重选股"约定被本定案取代 (选股宽进→预测细排).
+    """
+    panel = _panel_per_stock()
+    rows = []
+    for board in ("main", "dual"):
+        sn = panel.get((board, "sniper"))
+        fu = panel.get((board, "fusion"))
+        if sn is None or fu is None or sn.empty or fu.empty:
+            continue
+        last = max(sn["date"].max(), fu["date"].max())
+
+        def _top(pf: pd.DataFrame, last=last) -> pd.DataFrame:
+            cs = pf[pf["date"] == last][["symbol", "score"]].dropna()
+            return cs.sort_values("score", ascending=False).head(CAND_POOL_N)
+
+        sn30, fu30 = _top(sn), _top(fu)
+        sset, fset = set(sn30["symbol"]), set(fu30["symbol"])
+        sscore = sn30.set_index("symbol")["score"]
+        fscore = fu30.set_index("symbol")["score"]
+        for sym in sset | fset:
+            in_s, in_f = sym in sset, sym in fset
+            rows.append(
+                {
+                    "date": str(pd.Timestamp(last).date()),
+                    "board": board,
+                    "symbol": sym,
+                    "systems": (
+                        "fusion+sniper" if in_s and in_f else ("sniper" if in_s else "fusion")
+                    ),
+                    "score": float(
+                        max(sscore.get(sym, -1.0), fscore.get(sym, -1.0))
+                    ),
+                    "co_occur": bool(in_s and in_f),
+                    "rk": 0,
+                    "cut": "T-10",
+                }
+            )
+    cands = pd.DataFrame(rows)
+    base = ["date", "board", "symbol", "systems", "score", "co_occur", "rk", "cut"]
+    keep = full[base].copy()
+    keep["date"] = keep["date"].astype(str).str.slice(0, 10)
+    cands["date"] = cands["date"].astype(str).str.slice(0, 10)
+    merged = pd.concat([cands, keep], ignore_index=True)
+    merged = merged.drop_duplicates(subset=["board", "symbol"], keep="first")
+    print(
+        f"[cand] 候选池: 原短名单 {len(full):,} → 加宽 {len(merged):,} "
+        f"(面板候选 {len(cands):,}, 每系统特征 TOP-{CAND_POOL_N})",
+        flush=True,
+    )
+    return merged
 
 
 class _PooledReg:
@@ -639,18 +712,42 @@ def add_score(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def rank_and_truncate(res: pd.DataFrame) -> pd.DataFrame:
+    """2026-08-07 定案: 短名单按 每股 pred_mag(主视界 T+3 幅度) 降序 取每板块 TOP-10.
+
+    替代原 score_w 混合排名 (250d OOS: 纯 pred_mag 排名 MFE 全视界赢, 混合/两段式全不如).
+    前 5 标记 T-5, 前 10 标记 T-10 (沿用原 cut 语义); 超 10 剔除. 排名键 = CAND_RANK_KEY.
+    """
+    key = CAND_RANK_KEY
+    if res.empty:
+        return res
+    out = []
+    for board in ("main", "dual"):
+        b = res[res["board"] == board].sort_values(
+            key, ascending=False, na_position="last"
+        )
+        if b.empty:
+            continue
+        top5 = b.head(5).copy()
+        top10 = b.head(10).copy()
+        out.append(
+            pd.concat([top5.assign(cut="T-5"), top10.assign(cut="T-10")], ignore_index=True)
+        )
+    return pd.concat(out, ignore_index=True).reset_index(drop=True)
+
+
 def build_merged(res: pd.DataFrame) -> pd.DataFrame:
     """合并短名单: T-5⊂T-10, 取 T-10 全集; main+dual 全局排名.
 
-    IRON RULE (用户): 先预测(涨幅+达到概率) → 按权重合成 score_w → 再排名.
-    排名=score_w 降序, 平局按 T+3 涨幅→达到概率; 负涨幅绝不在正涨幅之前 (已由 select 门保证).
-    共现仅作平局裁决参考.
+    IRON RULE (用户): 先预测(涨幅+达到概率) → 再排名.
+    排名=pred_mag_3d 降序 (2026-08-07 定案: 纯幅度排名 > score_w 混合), 平局按 score_w→
+    达到概率; 负涨幅绝不在正涨幅之前 (已由 select 门保证). 共现仅作平局裁决参考.
     """
     df = res[res["cut"] == "T-10"].copy()
     t5 = set(res[res["cut"] == "T-5"]["symbol"])
     df["in_t5"] = df["symbol"].isin(t5)
     df = add_score(df)
-    keys = ["score_w", "pred_mag_3d", "pred_prob_3d"]
+    keys = [CAND_RANK_KEY, "score_w", "pred_prob_3d"]
     df = df.sort_values(keys, ascending=False, na_position="last").reset_index(
         drop=True
     )
@@ -720,14 +817,14 @@ def build_summary(res: pd.DataFrame, stats: dict, sel_date: pd.Timestamp) -> lis
         if b.empty:
             continue
         label = BOARD_LABEL.get(board, board)
-        co = b[b["co_occur"]].sort_values(["cut", "score_w"], ascending=[True, False])
+        co = b[b["co_occur"]].sort_values(["cut", CAND_RANK_KEY], ascending=[True, False])
         lines.append(
             f"\n[{label}] 两系统共识(共现)股: "
             f"{', '.join(str(s) for s in co['symbol'].unique()) if not co.empty else '无'}"
         )
-        lines.append("  建议顺序 (score_w 降序: 预期涨幅×达到概率加权):")
+        lines.append(f"  建议顺序 ({CAND_RANK_KEY} 降序: 主视界每股预期幅度):")
         for cut in ("T-5", "T-10"):
-            g = b[b["cut"] == cut].sort_values("score_w", ascending=False)
+            g = b[b["cut"] == cut].sort_values(CAND_RANK_KEY, ascending=False)
             if g.empty:
                 continue
             picks = " > ".join(
@@ -954,7 +1051,8 @@ def main() -> int:
         f"[regime] 今日保留组合: {', '.join(active) if active else '无 (主视界无优势, 空仓)'}",
         flush=True,
     )
-    raw_res = add_oos_pred(full, records)
+    cands = expand_candidates(full)
+    raw_res = add_oos_pred(cands, records)
     _persist_raw_preds(raw_res, sel_date, module)
     res = select_confident(ema_smooth(raw_res, sel_date, module), prob_min=0.0)
     # 制度门 (2026-08-06 用户: 清单必须含个股明细 — 不再整组剔除→空仓,
@@ -982,6 +1080,7 @@ def main() -> int:
             )
             res = res[active_mask].copy().reset_index(drop=True)
     res = add_score(res)
+    res = rank_and_truncate(res)
     stats = load_system_stats(records)
     merged = build_merged(res)
     summary = build_summary(res, stats, sel_date)
@@ -1035,7 +1134,7 @@ def main() -> int:
             continue
         print(f"\n══ {board} ══")
         for cut, g in b.groupby("cut", sort=True):
-            g = g.sort_values("score_w", ascending=False)
+            g = g.sort_values(CAND_RANK_KEY, ascending=False)
             print(f"── {cut} ──")
             for i, (_, r) in enumerate(g.iterrows()):
                 tag = "★共现" if r["co_occur"] else "    "

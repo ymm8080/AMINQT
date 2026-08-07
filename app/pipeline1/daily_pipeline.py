@@ -196,6 +196,14 @@ class DailySelectionPipeline:
                 PredictionDB().insert_run(trade_date, result["list"])
             except Exception:
                 logger.warning("预测池DB入库失败 (非阻塞)", exc_info=True)
+            # 双轨影子 (2026-08-07): 同一份平滑候选按 pred_ret_3d 幅度排名入库,
+            # 与生产 prob_up 排名并存, 1~2 月后真实结局对比 (eval_legacy_dual_track.py).
+            try:
+                from .prediction_db import PredictionDB, shadow_pool_frame
+
+                PredictionDB().insert_shadow(trade_date, shadow_pool_frame(candidates))
+            except Exception:
+                logger.warning("影子排名入库失败 (非阻塞)", exc_info=True)
             # 同步到 priority.json (交易看板下拉框)
             try:
                 import json
