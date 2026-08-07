@@ -122,8 +122,10 @@ def _emit(df, col, out):
     for tname, _ in TRANSFORMS:
         per = {lab: tsic[lab][tname] for lab in LABELS}
         wic = weighted_ic(per)
+
         def f(v):
             return f"{v:+.4f}" if v == v else "   nan"
+
         out.append(
             f"{col:<20}{tname:<9}{f(wic):>9}"
             f"{f(per['label_pm_2d_net']):>9}{f(per['label_pm_3d_net']):>9}"

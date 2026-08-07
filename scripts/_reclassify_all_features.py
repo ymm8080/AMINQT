@@ -166,8 +166,7 @@ def route_one(work, g_sym, g_date, lab_sym, lab_date, col):
         wr_sym = wc.groupby(g_sym.values).rank()
         wr_date = wc.groupby(g_date.values).rank()
         tsic[f] = {
-            lab: group_spearman(wr_sym, lab_sym[lab], g_sym, MIN_OBS)
-            for lab in lab_sym
+            lab: group_spearman(wr_sym, lab_sym[lab], g_sym, MIN_OBS) for lab in lab_sym
         }
         xic[f] = {
             lab: group_spearman(wr_date, lab_date[lab], g_date, MIN_CROSS)
