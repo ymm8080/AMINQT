@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-"""_reclassify_all_features.py �?统一口径重审全部特征 (2026-08-04).
+"""_reclassify_all_features.py — 统一口径重审全部特征 (2026-08-04).
 
-用户裁决口径 (2026-08-04 定稿): 只关�?TOP-10 �?每日期截面按特征排名�?TOP-10,
-量这 10 只的「绝对上涨幅�?平均净收益) + 上涨概率(胜率)�? 后面的都不关�?
-验收规则: 任一视界 胜率>=55% �?平均净收益>0 �?保留.
+用户裁决口径 (2026-08-04 定稿): 只关心 TOP-10 — 每日期截面按特征排名取 TOP-10,
+量这 10 只的「绝对上涨幅度(平均净收益) + 上涨概率(胜率)」; 后面的都不关心.
+验收规则: 任一视界 胜率>=55% 且 平均净收益>0 → 保留.
 **单端 (2026-08-04 用户修正): 只测高值端 (特征值降序取 TOP-10), 不做双向.**
-路由 (--route, 默认�?: 仅对验收通过的特征做 6�?rankIC (TS/XS × �?�?�?
-  �?�?�?�?�?事件 模型 (rankIC 只管路由, 不参与验�?�?LHB 教训).
+路由 (--route, 默认关): 仅对验收通过的特征做 6格 rankIC (TS/XS × 日/周/月)
+  → 归 月/周/日/事件 模型 (rankIC 只管路由, 不参与验收 — LHB 教训).
 
-行集 = 生产行集 (�?prepare_board_frame 完全一�?:
-  run_train(每板�? �?features.build �?build_path_labels �?build_labels(B9晚盘净标签)
-  �?mask_suspension �?mask_recent_days �?3y 窗口.
-主板切片复用 _diag_analog_stage 检查点 data/_diag_stage_main_3y.parquet (若存�? 省重�?.
+行集 = 生产行集 (与 prepare_board_frame 完全一致):
+  run_train(每板块) → features.build → build_path_labels → build_labels(B9晚盘净标签)
+  → mask_suspension → mask_recent_days → 3y 窗口.
+主板切片复用 _diag_analog_stage 检查点 data/_diag_stage_main_3y.parquet (若存在, 省重建).
 
 输出 (WORM): data/_reclassify_all_<ts>.json + <ts>.log
 """
@@ -52,11 +52,11 @@ META_EXCLUDE = {"symbol", "date", "is_suspended", "board", "name", "code", "exec
 def add_label_pm_10d_net(df: pd.DataFrame) -> pd.DataFrame:
     """生产口径补算 label_pm_10d(_net) (2026-08-04 验收视界扩至 5d/10d).
 
-    �?label_engine.build_labels B9 + add_net_labels 完全一�?(检查点�?price_1455
-    �?日K近似执行�?exec=close_hfq[T+1]):
+    与 label_engine.build_labels B9 + add_net_labels 完全一致 (检查点无 price_1455
+    → 日K近似执行价 exec=close_hfq[T+1]):
       label_pm_10d     = close_hfq[T+11]/close_hfq[T+1] - 1
       label_pm_10d_net = label_pm_10d - (COST + 2×分层滑点)
-    再按生产 mask_suspension 逻辑遮蔽 [T,T+10] 含停牌的�?
+    再按生产 mask_suspension 逻辑遮蔽 [T,T+10] 含停牌的行.
     """
     df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
     g = df.groupby("symbol")["close_hfq"]
@@ -83,14 +83,14 @@ def add_label_pm_10d_net(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _finalize_slice(d3: pd.DataFrame) -> pd.DataFrame:
-    """�?10d 净标签 + 重跑 mask_recent_days (对既�?2/3/5 幂等)."""
+    """补 10d 净标签 + 重跑 mask_recent_days (对既有 2/3/5 幂等)."""
     d3 = add_label_pm_10d_net(d3)
     d3 = LabelEngine.mask_recent_days(d3, days=MASK_RECENT_DAYS)
     return d3
 
 
 def build_board_slice(cleaner, fe, board_df, board, checkpoint) -> pd.DataFrame:
-    """单板块生产切�?(features.build + labels + 掩码 + 3y), 复用检查点省重�?"""
+    """单板块生产切片 (features.build + labels + 掩码 + 3y), 复用检查点省重建."""
     if checkpoint and os.path.exists(checkpoint):
         df = pd.read_parquet(checkpoint)
         print(f"[{board}] 复用检查点 {checkpoint} rows={len(df):,}", flush=True)
@@ -116,14 +116,14 @@ def build_board_slice(cleaner, fe, board_df, board, checkpoint) -> pd.DataFrame:
     if checkpoint:
         d3.to_parquet(checkpoint, index=False)
         print(
-            f"[{board}] 检查点已落�?{checkpoint} ({os.path.getsize(checkpoint) / 1e9:.2f} GB)",
+            f"[{board}] 检查点已落盘 {checkpoint} ({os.path.getsize(checkpoint) / 1e9:.2f} GB)",
             flush=True,
         )
     return d3
 
 
 def feature_cols(work: pd.DataFrame) -> list:
-    """全部可验收特征列: 数值、非元数据、非标签、有变异�?"""
+    """全部可验收特征列: 数值、非元数据、非标签、有变异性."""
     cols = []
     for c in work.columns:
         if c in META_EXCLUDE or c.startswith("label_"):
@@ -139,10 +139,10 @@ def feature_cols(work: pd.DataFrame) -> list:
     return sorted(cols)
 
 
-def accept_one(work: pd.DataFrame, colabel: str) -> dict:
+def accept_one(work: pd.DataFrame, col: str) -> dict:
     """单端 TOP-10 绝对验收 (2026-08-04 用户口径: 只测高值端, 不做双向).
-    特征值降�?�?每日期截面取 TOP-10 �?测幅�?平均净收益)+胜率.
-    任一视界 胜率>=55% �?平均>0 即通过, 取综合分最高的视界为裁决视�?"""
+    特征值降序 → 每日期截面取 TOP-10 → 测幅度(平均净收益)+胜率.
+    任一视界 胜率>=55% 且 平均>0 即通过, 取综合分最高的视界为裁决视界."""
     r = measure_topn(work, col, top_n=10, per="date", ascending=False)
     best_h, best_score = None, -1.0
     if not (r.get("missing") or r.get("insufficient")):
@@ -156,7 +156,7 @@ def accept_one(work: pd.DataFrame, colabel: str) -> dict:
 
 
 def route_one(work, g_sym, g_date, lab_sym, lab_date, col):
-    """6�?rankIC (路由�?."""
+    """6格 rankIC (路由用)."""
     g_grp = work.groupby("symbol")
     wins = {}
     for w in WINDOWS.values():
@@ -166,20 +166,20 @@ def route_one(work, g_sym, g_date, lab_sym, lab_date, col):
         wr_sym = wc.groupby(g_sym.values).rank()
         wr_date = wc.groupby(g_date.values).rank()
         tsic[f] = {
-            label: group_spearman(wr_sym, lab_sym[l], g_sym, MIN_OBS) for l in lab_sym
+            lab: group_spearman(wr_sym, lab_sym[lab], g_sym, MIN_OBS) for lab in lab_sym
         }
         xic[f] = {
-            label: group_spearman(wr_date, lab_date[l], g_date, MIN_CROSS) for l in lab_date
+            lab: group_spearman(wr_date, lab_date[lab], g_date, MIN_CROSS) for lab in lab_date
         }
     ts = {w: _wtsic(tsic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     xs = {w: _wtsic(xic[f"{col}_p{w}"]) for w in (1, 5, 20)}
     cells = {
-        "TS�?: ts[1],
-        "TS�?: ts[5],
-        "TS�?: ts[20],
-        "XS�?: xs[1],
-        "XS�?: xs[5],
-        "XS�?: xs[20],
+        "TS日": ts[1],
+        "TS周": ts[5],
+        "TS月": ts[20],
+        "XS日": xs[1],
+        "XS周": xs[5],
+        "XS月": xs[20],
     }
     best = max(cells, key=lambda k: abs(cells[k]))
     return cells, best, abs(cells[best])
@@ -187,7 +187,7 @@ def route_one(work, g_sym, g_date, lab_sym, lab_date, col):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--route", action="store_true", help="验收通过后做 6�?rankIC 路由")
+    ap.add_argument("--route", action="store_true", help="验收通过后做 6格 rankIC 路由")
     args = ap.parse_args()
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -200,12 +200,12 @@ def main():
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     log_path = os.path.join("data", f"_reclassify_all_{ts}.log")
 
-    # ── 1. 生产行集 (两检查点齐全 �?快速路�? 跳过 panel/run_train/features.build) ──
+    # ── 1. 生产行集 (两检查点齐全 → 快速路径, 跳过 panel/run_train/features.build) ──
     both_ckpt = all(os.path.exists(p) for p in (MAIN_CHECKPOINT, DUAL_CHECKPOINT))
     fe = FeatureEngineV35()
     cleaner = CleaningPipeline()
     if both_ckpt:
-        prog("快速路�? 两检查点齐全, 跳过 panel/run_train/features.build")
+        prog("快速路径: 两检查点齐全, 跳过 panel/run_train/features.build")
         board_dfs = {}
     else:
         panel = pd.read_parquet(PANEL_V3_PATH)
@@ -218,7 +218,7 @@ def main():
     for board, ckpt in (("main", MAIN_CHECKPOINT), ("dual", DUAL_CHECKPOINT)):
         bdf = board_dfs.get(board)
         if not both_ckpt and (bdf is None or len(bdf) == 0):
-            print(f"[{board}] �? 跳过", flush=True)
+            print(f"[{board}] 空, 跳过", flush=True)
             continue
         slices.append(build_board_slice(cleaner, fe, bdf, board, ckpt))
         if bdf is not None:
@@ -227,7 +227,7 @@ def main():
     del board_dfs, fe, cleaner
     gc.collect()
 
-    # ignore_index 排序 �?不额外深拷贝 (降峰值内�? 上次 OOM �?reset_index 5.92GiB)
+    # ignore_index 排序 → 不额外深拷贝 (降峰值内存, 上次 OOM 在 reset_index 5.92GiB)
     work = pd.concat(slices, ignore_index=True).sort_values(
         ["symbol", "date"], ignore_index=True
     )
@@ -244,8 +244,8 @@ def main():
     header = (
         "="
         * 100
-        + "\n  TOP-10 绝对验收 (高值端 | 每日期截�?| 净收益标签 label_pm_*d_net | "
-        f"胜率>=55% �?平均>0 通过 | 视界 {list(HORIZONS)})" + "\n=" * 100
+        + "\n  TOP-10 绝对验收 (高值端 | 每日期截面 | 净收益标签 label_pm_*d_net | "
+        f"胜率>=55% 且 平均>0 通过 | 视界 {list(HORIZONS)})" + "\n=" * 100
     )
     prog(header)
     summary = []
@@ -256,7 +256,7 @@ def main():
         if best_h is None:
             n_skip += 1
             prog(
-                f"[{i + 1}/{len(cols)}] �?{colabel:<28} 不达�?高值端TOP10无胜�?=55%且幅�?0) | {family_of(col)}"
+                f"[{i + 1}/{len(cols)}] ✗ {col:<28} 不达标(高值端TOP10无胜率>=55%且幅度>0) | {family_of(col)}"
             )
             summary.append(
                 {
@@ -270,7 +270,7 @@ def main():
         n_pass += 1
         d_ = res.get(best_h, {})
         prog(
-            f"[{i + 1}/{len(cols)}] �?{colabel:<28} T+{best_h} "
+            f"[{i + 1}/{len(cols)}] ✓ {col:<28} T+{best_h} "
             f"幅度={d_.get('mag', float('nan')):+.2%} 胜率={d_.get('winrate', float('nan')):>6.1%} "
             f"n={d_.get('n', 0):,} | {family_of(col)}"
         )
@@ -285,21 +285,21 @@ def main():
         )
 
     prog("-" * 100)
-    prog(f"通过 {n_pass} / 未达�?{n_skip} / 合计 {len(cols)}")
+    prog(f"通过 {n_pass} / 未达标 {n_skip} / 合计 {len(cols)}")
 
-    # ── 3. 路由 (可�?: 仅验收通过特征�?6�?rankIC ──
+    # ── 3. 路由 (可选): 仅验收通过特征做 6格 rankIC ──
     if args.route:
         passed = [s for s in summary if s["accepted"]]
-        prog(f"\n路由: �?{len(passed)} 个通过特征�?6�?rankIC ...")
+        prog(f"\n路由: 对 {len(passed)} 个通过特征做 6格 rankIC ...")
         g_sym = work["symbol"]
         g_date = work["date"]
         lab_sym = {
-            label: work.groupby("symbol")[l].rank()
-            for l in (f"label_pm_{k}d_net" for k in (2, 3, 5))
+            lab: work.groupby("symbol")[lab].rank()
+            for lab in (f"label_pm_{k}d_net" for k in (2, 3, 5))
         }
         lab_date = {
-            label: work.groupby("date")[l].rank()
-            for l in (f"label_pm_{k}d_net" for k in (2, 3, 5))
+            lab: work.groupby("date")[lab].rank()
+            for lab in (f"label_pm_{k}d_net" for k in (2, 3, 5))
         }
         for i, s in enumerate(passed):
             col = s["col"]
@@ -309,7 +309,7 @@ def main():
                 "verdict": best,
                 "ic": round(ic, 4),
             }
-            prog(f"  [{i + 1}/{len(passed)}] {colabel:<28} {best} (|IC| {ic:.4f})")
+            prog(f"  [{i + 1}/{len(passed)}] {col:<28} {best} (|IC| {ic:.4f})")
         del g_sym, g_date, lab_sym, lab_date
         gc.collect()
 

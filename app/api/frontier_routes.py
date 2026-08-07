@@ -8,12 +8,13 @@ Frontier 前端数据 API (React SPA 后端)
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.pipeline1.backtest_v35 import BacktestEngineV35, BacktestProtocol
 from app.pipeline1.param_tuner import ParamTuner
@@ -616,6 +617,16 @@ class TriggerRequest(BaseModel):
     script: str  # "daily_fetch" | "announcement"
     trade_date: str | None = None  # YYYYMMDD, None=今天
 
+    @field_validator("trade_date")
+    @classmethod
+    def _validate_trade_date(cls, v: str | None) -> str | None:
+        """Ensure trade_date is YYYYMMDD format (8 digits)."""
+        if v is None:
+            return v
+        if not re.match(r"^\d{8}$", v):
+            raise ValueError("trade_date must be YYYYMMDD (8 digits)")
+        return v
+
 
 def _run_pipeline_subprocess(task_id: str, script_path: str, args: list[str]) -> None:
     """Run a pipeline script in a background thread, store result in _pipeline_tasks."""
@@ -662,6 +673,16 @@ class AppendDailyRequest(BaseModel):
     trade_date: str | None = None  # YYYYMMDD, None=今天
     market_state: str = "range"  # bull / bear / range
     save_panel: bool = True  # 追加后保存面板 (WORM 备份)
+
+    @field_validator("trade_date")
+    @classmethod
+    def _validate_trade_date(cls, v: str | None) -> str | None:
+        """Ensure trade_date is YYYYMMDD format (8 digits)."""
+        if v is None:
+            return v
+        if not re.match(r"^\d{8}$", v):
+            raise ValueError("trade_date must be YYYYMMDD (8 digits)")
+        return v
 
 
 @router.get("/pipeline/status")

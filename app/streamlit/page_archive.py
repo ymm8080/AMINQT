@@ -26,10 +26,10 @@ logger = logging.getLogger(__name__)
 MODEL_DIR = "models/pipeline1"
 
 
-def _safe(fn, default=None):
+def _safe(fn, default=None, **kwargs):
     """任一只读源失败都不让整页崩溃 (缺失目录 / 损坏文件 → 提示)."""
     try:
-        return fn()
+        return fn(**kwargs)
     except Exception as exc:
         logger.warning("档案读取失败: %s", exc, exc_info=True)
         st.warning(f"数据源读取失败 (跳过): {exc}")
@@ -104,12 +104,10 @@ def _render_predictions() -> None:
         st.dataframe(df, use_container_width=True)
 
     st.subheader("单日详情")
-    dates = list(runs[0]["date"]) if isinstance(runs[0], dict) else runs
-    date_sel = st.selectbox(
-        "选择运行日期", sorted(dates, reverse=True), key="archive_pred_date"
-    )
+    dates = sorted({str(r["date"]) for r in runs}, reverse=True)
+    date_sel = st.selectbox("选择运行日期", dates, key="archive_pred_date")
     if date_sel:
-        run = _safe(db.get_run, date_sel)
+        run = _safe(db.get_run, date_str=date_sel)
         if run and run.get("stocks"):
             st.dataframe(pd.DataFrame(run["stocks"]), use_container_width=True)
 
@@ -178,7 +176,7 @@ def _render_bt_run(d: dict, btr) -> None:
                         st.write(f"- {line}")
         ph = btr.parse_per_horizon(d, board, "top5")
         if not ph.empty:
-            st.markdown("**TOP-5 逐视界胜率 vs 基线**")
+            st.markdown("**TOP-5 逐视界胜率 vs 基线 (OOS)**")
             st.bar_chart(
                 ph.set_index("horizon")[["winrate", "base_winrate"]], height=280
             )
@@ -223,6 +221,90 @@ def _render_lists() -> None:
     _list_dir(os.path.join("data", "lists"), "data/lists")
 
 
+# ───────────────────────── 日期清单 (预测明细) ─────────────────────────
+def _fmt_gain(v) -> str:
+    if v is None or pd.isna(v):
+        return ""
+    try:
+        return f"{float(v):+.1%}"
+    except (ValueError, TypeError):
+        return str(v)
+
+
+def _fmt_prob(v) -> str:
+    if v is None or pd.isna(v):
+        return ""
+    try:
+        return f"{float(v):.0%}"
+    except (ValueError, TypeError):
+        return str(v)
+
+
+def _render_date_list() -> None:
+    """按日期看交付清单预测明细 — 日期/模块均可多选, 选择即自动刷新."""
+    from app.streamlit import data_service as ds
+
+    st.subheader("股票清单预测明细 (按日期)")
+    st.caption(
+        "选择日期 (可多选) 与模块 (可多选), 数据随选择自动刷新. "
+        "模块列 = 来源系统·模型标签; 系统列 = parallel 的融合/狙击子系统. "
+        "legacy `prob_up`=上涨概率 / `pred_ret`=预期涨幅; "
+        "parallel `pred_prob`=达到概率 / `pred_mag`=预期幅度."
+    )
+    avail = _safe(ds.list_prediction_dates)
+    if not avail:
+        st.info("STOCK_LIST_DIR 暂无预测文件")
+        return
+    today = datetime.now().strftime("%Y%m%d")
+    default_dates = [today] if today in avail else [avail[0]]
+    if today not in avail:
+        st.caption(f"今天 {today} 暂无预测文件, 已选最近可用日期 {avail[0]}")
+    sel_dates = st.multiselect(
+        "选择日期 (可多选)",
+        avail,
+        default=default_dates,
+        key="archive_date_multi",
+    )
+    if not sel_dates:
+        st.info("未选择日期, 无数据显示")
+        return
+    df = _safe(ds.load_stock_list_on_dates, dates=sel_dates)
+    if df is None or df.empty:
+        st.info("所选日期均无预测记录")
+        return
+    df["_mod"] = df["family"] + "·" + df["module"].astype(str)
+    mod_opts = sorted(df["_mod"].unique())
+    # key 绑定所选日期: 换日期即重建模块选项并默认全选, 新日期数据立即可见
+    chosen = st.multiselect(
+        "模块筛选 (可多选)",
+        mod_opts,
+        default=mod_opts,
+        key="archive_module_multi_" + "_".join(sorted(sel_dates)),
+    )
+    if not chosen:
+        st.info("未选择任何模块, 无数据显示")
+        return
+    df = df[df["_mod"].isin(chosen)].drop(columns=["_mod"])
+    disp = pd.DataFrame()
+    disp["日期"] = df["date"]
+    disp["代码"] = df["symbol"]
+    disp["模块"] = df["family"] + "·" + df["module"]
+    disp["板块"] = df["board"].fillna("")
+    disp["系统"] = df["system"].fillna("")
+    disp["rk"] = df["rk"]
+    disp["score"] = df["score"]
+    for h in ("2d", "3d", "5d", "10d"):
+        disp[f"涨{h}"] = df[f"gain_{h}"].map(_fmt_gain)
+        disp[f"概率{h}"] = df[f"prob_{h}"].map(_fmt_prob)
+    disp = disp.sort_values(["日期", "模块", "rk"], na_position="last")
+    st.dataframe(disp, use_container_width=True, hide_index=True)
+    st.caption(
+        f"共 {len(df)} 条预测 ({df['date'].nunique()} 个交易日 · "
+        f"{df['symbol'].nunique()} 只股票 · {df['family'].nunique()} 类模块). "
+        "同日不同模块 = 各系统各自的预测."
+    )
+
+
 # ───────────────────────── 页面 ─────────────────────────
 def render() -> None:
     st.title("训练/预测档案 (只读)")
@@ -230,8 +312,8 @@ def render() -> None:
         "从持久化存储读取历史训练/预测结果, 供存储与回看. "
         "数据源: 模型包 / 预测DB / 回测报告 / 落盘清单. 本页不做任何重算."
     )
-    tab_models, tab_pred, tab_bt, tab_lists = st.tabs(
-        ["模型档案", "每日预测", "回测历史", "落盘清单"]
+    tab_models, tab_pred, tab_bt, tab_lists, tab_datelist = st.tabs(
+        ["模型档案", "每日预测", "回测历史", "落盘清单", "日期清单"]
     )
     with tab_models:
         _render_models()
@@ -241,6 +323,8 @@ def render() -> None:
         _render_backtests()
     with tab_lists:
         _render_lists()
+    with tab_datelist:
+        _render_date_list()
 
 
 if __name__ == "__main__":

@@ -27,8 +27,10 @@
 再排名 — 绝不先排名后预测.
 
 **主视界 (2026-08-05 用户定案):** T+3 (短持 3 天). 排名权重 3d=0.40 最高 (2d+3d 合计 0.65),
-入选门 = T+3 预期涨幅>0 (select_confident), 平局裁决用 T+3. 四视界 T+2/3/5/10 预期涨幅+达到概率
-仍全部展示 (T+10 降为参考视界).
+入选门 = **T+2/T+3 联合门** (2026-08-07 用户: "考虑 T+2,T+3 一起"; 见 config
+SHORTLIST_SCORE.select_gate): 保留 ⇔ T+3 预期涨幅>0, **或** T+2 强看涨(>t2_min)且 T+3 未深度转负
+(>t3_floor) — T+3 仍为首要, 但 T+2 强烈看涨的股不会因 T+3 边际转负被整只剔除.
+平局裁决用 T+3. 四视界 T+2/3/5/10 预期涨幅+达到概率仍全部展示 (T+10 降为参考视界).
 
 用法: python scripts/_shortlist_t5_t10.py [YYYYMMDD 选股日, 默认=full run 短名单日期]
 可选: 传 symbol 列表 (空格分隔) 查看这些股今日预测 (未入选股模型今日无打分, 无预测).
@@ -339,26 +341,40 @@ def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
 
 def _sel_reason(r: pd.Series) -> str:
     p = "n/a" if pd.isna(r["pred_prob_3d"]) else f"{r['pred_prob_3d']:.0%}"
-    m = "n/a" if pd.isna(r["pred_mag_3d"]) else f"{r['pred_mag_3d']:+.1%}"
-    return f"{r['symbol']}(T+3 达到概率 {p}, 预期涨幅 {m})"
+    m3 = "n/a" if pd.isna(r["pred_mag_3d"]) else f"{r['pred_mag_3d']:+.1%}"
+    m2 = "n/a" if pd.isna(r["pred_mag_2d"]) else f"{r['pred_mag_2d']:+.1%}"
+    return f"{r['symbol']}(T+3 {m3}/{p}, T+2 {m2})"
 
 
 def select_confident(res: pd.DataFrame, prob_min: float = 0.0) -> pd.DataFrame:
-    """IRON RULE (用户): 只列预测上涨股 — 主视界(T+3)预期涨幅>0.
+    """IRON RULE (用户): 只列预测上涨股. 入选门 = T+2/T+3 联合门.
+
+    2026-08-07 用户: "考虑 T+2,T+3 一起" (301326 08-05 教训: 该股 raw score dual 第 1,
+    但 T+3 预期涨幅边际转负即被整只剔除, 实际 2 天 +12%). 联合门 (config
+    SHORTLIST_SCORE.select_gate):
+      保留 ⇔ (T+3 > t3_min)                     # 主门: T+3 预期涨幅>0 (原硬门)
+             OR (T+2 > t2_min 且 T+3 > t3_floor) # 副门: T+2 强看涨 + T+3 未深度转负
+    T+3 仍为首要 (主门); 副门只救 T+3 边际转负但 T+2 强看涨的股, 不救深转负.
 
     概率口径 (用户 2026-08-06): 概率=逐股自然概率 (P(该股达到固定绝对目标)), 每股唯一
     真值. 原 ">60%" 门槛 (基于 P(MFE>0)≈90% 旧口径) 不可达, 故默认不设概率门槛.
     保留 prob_min 参数以便后续收紧. 主视界 T+3 (2026-08-05 用户: 短持 3 天)."""
-    keep = (res["pred_mag_3d"] > 0.0) & (res["pred_prob_3d"] > prob_min)
+    g3 = res["pred_mag_3d"]
+    g2 = res["pred_mag_2d"]
+    sg = SHORTLIST_SCORE.get("select_gate", {})
+    t3_min = sg.get("t3_min", 0.0)
+    t2_min = sg.get("t2_min", 0.01)
+    t3_floor = sg.get("t3_floor", -0.01)
+    keep = (g3 > t3_min) | ((g2 > t2_min) & (g3 > t3_floor))
+    if prob_min > 0:
+        keep = keep & (res["pred_prob_3d"] > prob_min)
     dropped = res[~keep]
     if len(dropped):
+        prob_txt = "" if prob_min <= 0 else f" 或 达到概率≤{prob_min:.0%}"
         print(
-            "[select] 剔除 %d 只 (T+3 预期涨幅≤0%s): %s"
-            % (
-                len(dropped),
-                "" if prob_min <= 0 else f" 或 达到概率≤{prob_min:.0%}",
-                ", ".join(dropped.apply(_sel_reason, axis=1)),
-            ),
+            f"[select] 剔除 {len(dropped)} 只 (T+3≤{t3_min:.1%} 且 "
+            f"(T+2≤{t2_min:.1%} 或 T+3≤{t3_floor:.1%}){prob_txt}): "
+            f"{', '.join(dropped.apply(_sel_reason, axis=1))}",
             flush=True,
         )
     return res[keep].copy().reset_index(drop=True)

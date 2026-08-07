@@ -179,7 +179,6 @@ class DailySelectionPipeline:
             # 同步到 priority.json (交易看板下拉框)
             try:
                 import json
-                import os
 
                 pq_path = str(data_others_path("data/priority.json"))
                 existing = set()
@@ -335,7 +334,6 @@ class DailySelectionPipeline:
             quality_report dict (MAE/BIAS/方向准确率/分桶BIAS/红灯状态).
         """
         import json
-        import os
 
         actual = actual_returns.get(
             "label_pm_1d_net", actual_returns.get("label_1d_net", None)

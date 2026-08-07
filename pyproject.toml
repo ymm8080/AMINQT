@@ -1,5 +1,12 @@
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
+# E   — pycodestyle errors
+# W   — pycodestyle warnings
+# F   — pyflakes (unused imports, undefined names, etc.)
+# I   — isort (import sorting)
+# B   — flake8-bugbear (common gotchas)
+# UP  — pyupgrade (modernize syntax)
+# N   — pep8-naming
+select = ["E4", "E7", "E9", "F", "W", "I", "B", "UP", "N"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/test_ths_indicators.py" = ["E402"]
@@ -8,3 +15,20 @@ select = ["E4", "E7", "E9", "F"]
 "scripts/verify_cyq_akshare.py" = ["E402"]
 "scripts/full_predict.py" = ["E402"]
 "scripts/scan_varthresh.py" = ["E402"]
+# Root-level experimental scripts — allow loose style
+"_*.py" = ["E402", "N802", "N803", "N806"]
+# Tests — allow non-PEP8 names for readability
+"tests/*.py" = ["N802", "N803", "N806"]
+# ML code uses uppercase X/y for feature matrices (standard convention)
+"app/models/*.py" = ["N803", "N806"]
+"app/pipeline1/*.py" = ["N803", "N806"]
+"app/core/factor_discovery.py" = ["N803", "N806"]
+"app/core/indicator_weighter.py" = ["N803", "N806"]
+"app/pipeline_parallel/backtest.py" = ["N803", "N806"]
+# Chinese-named indicator functions (同花顺 formula translations)
+"app/indicators/*.py" = ["N802", "N803", "N806"]
+# Legacy Chinese column names in data service
+"app/streamlit/data_service.py" = ["N803"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "config", "services", "data"]

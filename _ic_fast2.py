@@ -62,7 +62,7 @@ def ic_bulk(df,cols,label):
             try:
                 s=spearmanr(g['x'],g['y']).statistic
                 if not np.isnan(s): ics.append(s)
-            except: pass
+            except Exception: pass
         if len(ics)>=10:
             a=np.array(ics)
             results.append(abs(a).mean())

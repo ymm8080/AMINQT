@@ -98,7 +98,7 @@ def _report(tr, out):
     _build(work)
 
     # --- 6格判定: 口径(TS时序/XS截面) × 频率(日/周/月) ---
-    def freq6(title, base_cols, col_fn):
+    def freq6(title, base_cols, col_fn, work_df):
         out.append(f"  [{title}] 6格判定 (TS=个股时序 IC / XS=日截面 rank IC):")
         out.append(
             f"{'feature':<18}{'TS日':>8}{'TS周':>8}{'TS月':>8}"
@@ -107,9 +107,9 @@ def _report(tr, out):
         out.append("-" * 82)
         for c in base_cols:
             ks = {w: col_fn(c, w) for w in (1, 5, 20)}
-            feats = {ks[w]: work[ks[w]] for w in (1, 5, 20)}
-            tsic = per_stock_ts_ic(work, feats, LABELS, min_obs=MIN_OBS)
-            xic = daily_rank_ic_multi(work, list(feats), LABELS)
+            feats = {ks[w]: work_df[ks[w]] for w in (1, 5, 20)}
+            tsic = per_stock_ts_ic(work_df, feats, LABELS, min_obs=MIN_OBS)
+            xic = daily_rank_ic_multi(work_df, list(feats), LABELS)
             ts = {w: _wtsic(tsic, ks[w]) for w in (1, 5, 20)}
             xs = {
                 w: weighted_ic({lab: xic[lab][ks[w]] for lab in LABELS})
@@ -134,14 +134,14 @@ def _report(tr, out):
     def win_fn(c, w):
         return f"{c}_p{w}"
 
-    freq6("筹码组", CHIP_COLS, win_fn)
-    freq6("COST成本线组", COST_COLS, win_fn)
-    freq6("价格组", ["close_hfq"], win_fn)
+    freq6("筹码组", CHIP_COLS, win_fn, work)
+    freq6("COST成本线组", COST_COLS, win_fn, work)
+    freq6("价格组", ["close_hfq"], win_fn, work)
 
     def pv_fn(c, w):
         return f"pv{w}"
 
-    freq6("价量组(price×vol)", ["pv"], pv_fn)
+    freq6("价量组(price×vol)", ["pv"], pv_fn, work)
 
     # 同频 vs 跨频组合对照 (月度筹码 × MA状态)
     out.append("  [同频/跨频组合对照] 月度筹码 × MA 状态:")

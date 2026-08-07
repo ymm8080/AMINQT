@@ -455,7 +455,7 @@ class ZooModel:
             _require_dep(self.name)
             import torch
 
-            payload = torch.load(path, map_location="cpu", weights_only=False)
+            payload = torch.load(path, map_location="cpu", weights_only=True)
             if not isinstance(payload, dict) or "state_dict" not in payload:
                 raise ValueError(f"{path} 不是 ZooModel torch 存档")
             self.params = payload.get("params", self.params)
@@ -464,8 +464,8 @@ class ZooModel:
             self.estimator.load_state_dict(payload["state_dict"])
             self.estimator.eval()
         else:
-            with open(path, "rb") as f:
-                payload = pickle.load(f)
+            from app.utils.safe_load import safe_pickle_load
+            payload = safe_pickle_load(path)
             if isinstance(payload, dict) and payload.get("format") == "zoo_model":
                 self.name = payload["name"]
                 self.params = payload.get("params", {})
@@ -489,12 +489,12 @@ def load_model(path: str) -> ZooModel:
         _require_dep("lstm")  # 借时序名检查 torch 是否可用
         import torch
 
-        name = torch.load(path, map_location="cpu", weights_only=False).get(
+        name = torch.load(path, map_location="cpu", weights_only=True).get(
             "name", "lstm"
         )
         return ZooModel(name).load(path)
-    with open(path, "rb") as f:
-        payload = pickle.load(f)
+    from app.utils.safe_load import safe_pickle_load
+    payload = safe_pickle_load(path)
     if isinstance(payload, dict) and payload.get("format") == "zoo_model":
         model = ZooModel(
             payload["name"],

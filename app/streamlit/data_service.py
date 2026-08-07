@@ -11,11 +11,12 @@ import glob
 import json
 import logging
 import os
+import re
 
 import numpy as np
 import pandas as pd
 
-from config.settings import data_others_path
+from config.settings import STOCK_LIST_DIR, data_others_path
 
 LIST_DIR = "data/lists"
 TUNING_REPORT = str(data_others_path("data/tuning_report.json"))
@@ -904,3 +905,148 @@ def append_audit_log(entry: dict) -> None:
             json.dump(log, fh, ensure_ascii=False, indent=1)
     except Exception as exc:
         _data_logger.error("写入审计日志失败: %s", exc)
+
+
+# ============================================================
+# 预测文件 (STOCK_LIST_DIR) — 各模块按 日期__模块 落盘的交付清单
+# ============================================================
+# 文件名模式: {prefix}_{YYYYMMDD}[__{module}].csv
+#   legacy_stocklist_ → legacy (交付)      legacy_preds_raw_ → legacy_raw (底稿)
+#   parallel_shortlist_ → parallel (交付)   parallel_preds_raw_ → parallel_raw (底稿)
+#   slowbull_pool_{board}_ → slow_bull
+_PRED_FILE_RE = re.compile(
+    r"^(?P<prefix>[\w]+)_(?P<date>\d{8})(?P<mod>__.+)?\.csv$"
+)
+_PRED_FAMILY = {
+    "legacy_stocklist": "legacy",
+    "legacy_preds_raw": "legacy_raw",
+    "parallel_shortlist": "parallel",
+    "parallel_preds_raw": "parallel_raw",
+    "slowbull_pool": "slow_bull",
+}
+_FAMILY_GROUP = {"legacy_raw": "legacy", "parallel_raw": "parallel"}
+# 同 symbol+module+族 去重时: 交付族优先 (0), 底稿次之 (1)
+_FAMILY_PRIORITY = {"legacy": 0, "parallel": 0, "slow_bull": 0, "legacy_raw": 1, "parallel_raw": 1}
+_UNIFIED_COLS = [
+    "symbol", "date", "module", "family", "board", "system",
+    "score", "rk", "gain_2d", "gain_3d", "gain_5d", "gain_10d",
+    "prob_2d", "prob_3d", "prob_5d", "prob_10d",
+]
+
+
+def list_prediction_files(list_dir: str = STOCK_LIST_DIR) -> list[dict]:
+    """扫描 STOCK_LIST_DIR 预测 CSV, 解析出 {family, date, module, path}.
+
+    解析失败 / 非预测文件跳过 (不抛异常). module 缺省为 "na".
+    """
+    if not os.path.isdir(list_dir):
+        return []
+    out: list[dict] = []
+    for fname in os.listdir(list_dir):
+        m = _PRED_FILE_RE.match(fname)
+        if not m:
+            continue
+        prefix = m.group("prefix")
+        family = None
+        for key, fam in _PRED_FAMILY.items():
+            if prefix.startswith(key):
+                family = fam
+                break
+        if family is None:
+            continue
+        mod = m.group("mod")
+        out.append(
+            {
+                "family": family,
+                "date": m.group("date"),
+                "module": mod[2:] if mod else "na",
+                "path": os.path.join(list_dir, fname),
+            }
+        )
+    return out
+
+
+def _normalize_pred_rows(family: str, date: str, module: str, df: pd.DataFrame) -> pd.DataFrame:
+    """把各文件族列名映射到统一列 (date/module/family/board/system/score/rk/gain_*/prob_*).
+
+    gain_h = 预期涨幅 (legacy pred_ret_, parallel pred_mag_);
+    prob_h = 概率 (legacy prob_up_, parallel pred_prob_);
+    slow_bull 无涨幅/概率 (风控观察池), 留空.
+    """
+    out = pd.DataFrame(index=df.index, columns=_UNIFIED_COLS, dtype=object)
+    out["symbol"] = df["symbol"].astype(str)
+    out["date"] = f"{date[:4]}-{date[4:6]}-{date[6:]}"  # 文件名 YYYYMMDD → YYYY-MM-DD
+    out["module"] = module
+    out["family"] = family
+    out["board"] = df["board"] if "board" in df.columns else "na"
+    out["system"] = "V35" if family.startswith("legacy") else (
+        df["systems"] if "systems" in df.columns else "na"
+    )
+    out["score"] = df["score"] if "score" in df.columns else None
+    out["rk"] = df["rk"] if "rk" in df.columns else None
+    if family == "slow_bull":
+        out["system"] = "slow_bull"
+        return out
+    if family.startswith("legacy"):
+        for h in ("2d", "3d", "5d"):
+            out[f"gain_{h}"] = df.get(f"pred_ret_{h}")
+            out[f"prob_{h}"] = df.get(f"prob_up_{h}")
+    else:  # parallel
+        for h in ("2d", "3d", "5d", "10d"):
+            out[f"gain_{h}"] = df.get(f"pred_mag_{h}")
+            out[f"prob_{h}"] = df.get(f"pred_prob_{h}")
+    return out
+
+
+def list_prediction_dates(list_dir: str = STOCK_LIST_DIR) -> list[str]:
+    """预测文件出现的不同日期, 降序."""
+    dates = {info["date"] for info in list_prediction_files(list_dir)}
+    return sorted(dates, reverse=True)
+
+
+def load_stock_list_on_date(date_compact: str, list_dir: str = STOCK_LIST_DIR) -> pd.DataFrame:
+    """某日交付股票清单预测明细 (跨模块, 模块标签保留).
+
+    只列交付列表 (legacy/parallel/slow_bull), 不含 *_raw 全市场底稿.
+    同 symbol+module+族: 保留一条 (交付族优先, 其次 rk 最小), 去 cut 重复.
+    无该日文件 → 空 DataFrame.
+    """
+    date_compact = str(date_compact).strip()
+    frames = []
+    for info in list_prediction_files(list_dir):
+        if info["date"] != date_compact:
+            continue
+        if info["family"].endswith("_raw"):
+            continue  # 日期清单只列交付列表, 不含 *_raw 全市场底稿
+        try:
+            df = pd.read_csv(info["path"], dtype={"symbol": str})
+        except Exception:
+            _data_logger.warning("预测文件读取失败 (跳过): %s", info["path"], exc_info=True)
+            continue
+        if df is None or df.empty or "symbol" not in df.columns:
+            continue
+        norm = _normalize_pred_rows(info["family"], info["date"], info["module"], df)
+        if norm.empty:
+            continue
+        frames.append(norm)
+    if not frames:
+        return pd.DataFrame(columns=_UNIFIED_COLS)
+    rows = pd.concat(frames, ignore_index=True)
+    rows["_grp"] = rows["family"].map(_FAMILY_GROUP)
+    rows["_prio"] = rows["family"].map(_FAMILY_PRIORITY)
+    rows = rows.sort_values(["_prio", "rk"], ascending=[True, True], na_position="last")
+    rows = rows.drop_duplicates(subset=["symbol", "module", "_grp"], keep="first")
+    rows = rows.drop(columns=["_grp", "_prio"])
+    return rows.sort_values(["family", "module", "rk"], na_position="last").reset_index(drop=True)
+
+
+def load_stock_list_on_dates(dates: list[str], list_dir: str = STOCK_LIST_DIR) -> pd.DataFrame:
+    """多个日期的交付清单预测明细纵向拼接 (页面多选日期用)."""
+    frames = []
+    for d in dates:
+        df = load_stock_list_on_date(d, list_dir=list_dir)
+        if df is not None and not df.empty:
+            frames.append(df)
+    if not frames:
+        return pd.DataFrame(columns=_UNIFIED_COLS)
+    return pd.concat(frames, ignore_index=True)
