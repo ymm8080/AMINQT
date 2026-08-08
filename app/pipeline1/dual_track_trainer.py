@@ -107,6 +107,39 @@ LGB_PARAMS_CLS = {
     "random_state": 42,
     "verbosity": -1,
 }
+
+
+# 超参覆盖表 (2026-08-08 扫描定案): (board, kind) → num_leaves.
+# 未列出 → 家族默认 (num_leaves=31, LightGBM 出厂). 只列有扫描证据的条目:
+#   cls main 1d-10d = 15: 3d/5d/10d 跨视界一致赢 (IC/TOP-N 复验), 1d/2d 保持已产状态
+#   reg dual 3d/5d/10d = 15: 10d 复验双指标+扰动稳定, 5d IC 赢, 3d 平; 1d/2d 未扫 → 默认 31
+#   pain (label_pain=3日浮亏单模型): 两板 15, 与 cls 表解耦
+NUM_LEAVES_OVERRIDE: dict[tuple[str, str], int] = {
+    ("main", "1d_cls"): 15,
+    ("main", "2d_cls"): 15,
+    ("main", "3d_cls"): 15,
+    ("main", "5d_cls"): 15,
+    ("main", "10d_cls"): 15,
+    ("dual", "3d_reg"): 15,
+    ("dual", "5d_reg"): 15,
+    ("dual", "10d_reg"): 15,
+    ("main", "pain"): 15,
+    ("dual", "pain"): 15,
+}
+
+
+def model_params(board: str, kind: str) -> dict:
+    """按 (board, kind) 解析 LGBM 超参: 命中覆盖表则覆盖 num_leaves, 否则家族默认.
+
+    kind 可为 "1d_cls"..."10d_cls"/"1d_reg"..."10d_reg"/"pain"/"cls"/"reg".
+    """
+    is_cls = kind == "pain" or kind.endswith("cls")
+    base = LGB_PARAMS_CLS if is_cls else LGB_PARAMS_REG
+    params = dict(base)
+    nl = NUM_LEAVES_OVERRIDE.get((board, kind))
+    if nl is not None:
+        params["num_leaves"] = nl
+    return params
 MODEL_KINDS = (
     "1d_reg",
     "1d_cls",
@@ -240,7 +273,11 @@ class DualTrackTrainer:
         return label if label in columns else None
 
     def _train_one(
-        self, kind: str, segs: dict[str, pd.DataFrame], feature_cols: list[str]
+        self,
+        kind: str,
+        segs: dict[str, pd.DataFrame],
+        feature_cols: list[str],
+        board: str,
     ):
         import gc
 
@@ -275,9 +312,9 @@ class DualTrackTrainer:
         gc.collect()
 
         if kind.endswith("cls"):
-            model = lgb.LGBMClassifier(**LGB_PARAMS_CLS)
+            model = lgb.LGBMClassifier(**model_params(board, kind))
         else:
-            model = lgb.LGBMRegressor(**LGB_PARAMS_REG)
+            model = lgb.LGBMRegressor(**model_params(board, kind))
         # es_dates 从 segs 取 (train/es DataFrame 已释放, segs 仍持有 es 引用)
         es_dates = (
             segs["es"]["date"].nunique() if "date" in segs["es"].columns else len(y_es)
@@ -390,7 +427,7 @@ class DualTrackTrainer:
             if self._resolve_label(kind, segs["train"].columns) is None:
                 logger.info("[%s] %s — 标签列缺失, 跳过", board, kind)
                 continue
-            model, label = self._train_one(kind, segs, feature_cols)
+            model, label = self._train_one(kind, segs, feature_cols, board)
             out["models"][kind] = (model, label)
             logger.info(
                 "[%s] %s 训练完成, 样本 %d",
@@ -525,7 +562,9 @@ class DualTrackTrainer:
                     train, X, y = _xy("train", "label_pain")
                     _, X_es, y_es = _xy("es", "label_pain")
                     params = {
-                        k: v for k, v in LGB_PARAMS_CLS.items() if k != "objective"
+                        k: v
+                        for k, v in model_params(out["board"], "pain").items()
+                        if k != "objective"
                     }
                     pain = PainModel(params).fit(
                         X,

@@ -28,9 +28,20 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
-from app.pipeline1.feature_selector import BruteForceGenerator
+from app.pipeline1.feature_selector import (
+    TIER_EVENT_EXTRA,
+    TIER_EVENT_PREFIX,
+    BruteForceGenerator,
+    temporal_variation,
+    tier_of,
+)
 from app.pipeline1.label_engine import LabelEngine
 from config.settings import PANEL_V3_PATH
+
+# 用户裁决: 事件列 + float_share → B (仅 level, 不 brute 展开)
+# 别名保留给 _diag_selected_bc 等下游脚本 (feature_selector 为唯一实现源).
+B_EVENT_PREFIX = TIER_EVENT_PREFIX
+B_EXTRA = TIER_EVENT_EXTRA
 
 logging.disable(logging.CRITICAL)
 
@@ -39,11 +50,6 @@ MASK_RECENT_DAYS = 6  # 与 train_runner.prepare_board_frame 一致
 LABELS = (f"label_pm_{k}d_net" for k in (2, 3, 5))
 LABELS = tuple(LABELS)
 WEIGHTS = {2: 0.45, 3: 0.35, 5: 0.2}  # LABEL_WEIGHTS 去 1d(权重0)
-
-# 用户裁决: 事件列 + float_share → B (仅 level, 不 brute 展开)
-B_EVENT_PREFIX = ("lhb_", "bt_", "sh_")
-B_EXTRA = {"float_share"}
-
 
 def _schema_cols(path):
     import pyarrow as pa
@@ -81,18 +87,6 @@ def daily_rank_ic_multi(df, feats, labels):
     return out
 
 
-def temporal_variation(df, feats, n_stocks=300, seed=0):
-    """样本股票内相邻日 diff≠0 占比 (忽略 NaN 过渡) → 静态列识别."""
-    stocks = df["symbol"].drop_duplicates().sample(n_stocks, random_state=seed)
-    sub = df[df["symbol"].isin(stocks)].sort_values(["symbol", "date"])
-    out = {}
-    for c in feats:
-        chg = sub.groupby("symbol", sort=False)[c].diff()
-        valid = chg.notna()
-        out[c] = float((chg[valid] != 0).mean()) if valid.sum() > 0 else float("nan")
-    return out
-
-
 def weighted_ic(ics):
     """按 LABEL_WEIGHTS (2/3/5d) 加权 IC; 仅用非 NaN 视界, 权重按占比归一."""
     acc = 0.0
@@ -103,16 +97,6 @@ def weighted_ic(ics):
             acc += w * v
             wsum += w
     return acc / wsum if wsum > 0 else float("nan")
-
-
-def tier_of(chg, col):
-    if col in B_EXTRA or col.startswith(B_EVENT_PREFIX):
-        return "B"
-    if np.isnan(chg) or chg < 0.01:
-        return "C"
-    if chg < 0.1:
-        return "B"
-    return "A"
 
 
 def main() -> None:
