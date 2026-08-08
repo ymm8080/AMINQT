@@ -698,3 +698,100 @@ class TestIsotonicDefault:
         # Isotonic 单调性: 校准曲线单调不减
         order = np.argsort(raw)
         assert (np.diff(prob[order]) >= -1e-12).all()
+
+
+# ============================================================
+# 10d 视界推理 (Gap 2: bundle 含/缺 10d 模型 → 输出/NaN 回退)
+# ============================================================
+class _FakeConstModel:
+    """恒定输出模型: predict → 常量, predict_proba → 二分类列向量."""
+
+    def __init__(self, const: float):
+        self.const = float(const)
+
+    def predict(self, X):
+        return np.full(len(X), self.const)
+
+    def predict_proba(self, X):
+        p = float(np.clip(self.const, 0.05, 0.95))
+        return np.column_stack([np.full(len(X), 1 - p), np.full(len(X), p)])
+
+
+class _FakeConstCal:
+    """恒定输出校准器 (predict_proba 单调映射, 不改变量纲)."""
+
+    def predict_proba(self, raw):
+        return np.clip(np.asarray(raw, dtype=float), 0.05, 0.95)
+
+
+def _save_10d_bundle(tmp_path, with_10d: bool) -> str:
+    """落盘 fake bundle (feature_cols=['f1'], 全视界 reg/cls + 校准器).
+
+    with_10d=False → 模拟旧 bundle (无 10d_reg/10d_cls), 触发级联 NaN 回退.
+    """
+    import app.pipeline1.dual_track_trainer as dtt
+
+    models = {
+        "1d_reg": (_FakeConstModel(0.01), "label_1d"),
+        "2d_reg": (_FakeConstModel(0.02), "label_2d"),
+        "3d_reg": (_FakeConstModel(0.03), "label_3d"),
+        "5d_reg": (_FakeConstModel(0.05), "label_5d"),
+        "1d_cls": (_FakeConstModel(0.70), "label_1d_cls"),
+        "2d_cls": (_FakeConstModel(0.72), "label_2d_cls"),
+        "3d_cls": (_FakeConstModel(0.74), "label_3d_cls"),
+        "5d_cls": (_FakeConstModel(0.76), "label_5d_cls"),
+    }
+    calibrators = {k: _FakeConstCal() for k in (2, 3, 5)}
+    if with_10d:
+        models["10d_reg"] = (_FakeConstModel(0.08), "label_10d")
+        models["10d_cls"] = (_FakeConstModel(0.78), "label_10d_cls")
+        calibrators[10] = _FakeConstCal()
+    trained = {
+        "board": "main",
+        "feature_cols": ["f1"],
+        "models": models,
+        "calibrator": _FakeConstCal(),
+        "calibrators": calibrators,
+    }
+    trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
+    return trainer.save(trained, "t")
+
+
+def _10d_feats() -> pd.DataFrame:
+    dates = pd.bdate_range("2025-01-01", periods=3)
+    rows = []
+    for d in dates:
+        for sym in ("600001", "600002"):
+            rows.append(
+                {
+                    "symbol": sym,
+                    "date": d,
+                    "f1": 1.0,
+                    "board": "main",
+                    "industry": "白酒",
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+class TestPredictor10d:
+    def test_bundle_with_10d_populates_columns(self, tmp_path):
+        from app.pipeline1.predictor import V35Predictor
+
+        path = _save_10d_bundle(tmp_path, with_10d=True)
+        out = V35Predictor({"main": path}).predict(_10d_feats(), "main")
+        assert "pred_ret_10d" in out.columns and "prob_up_10d" in out.columns
+        assert out["pred_ret_10d"].notna().all()
+        assert np.isfinite(out["pred_ret_10d"]).all()
+        assert np.allclose(out["pred_ret_10d"], 0.08)
+        assert out["prob_up_10d"].between(0, 1).all()
+        assert np.allclose(out["prob_up_10d"], 0.78)
+
+    def test_bundle_without_10d_nan_fallback(self, tmp_path):
+        from app.pipeline1.predictor import V35Predictor
+
+        path = _save_10d_bundle(tmp_path, with_10d=False)
+        out = V35Predictor({"main": path}).predict(_10d_feats(), "main")
+        assert "pred_ret_10d" in out.columns and "prob_up_10d" in out.columns
+        assert out["pred_ret_10d"].isna().all()
+        assert out["prob_up_10d"].isna().all()

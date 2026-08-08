@@ -81,10 +81,12 @@ CREATE TABLE IF NOT EXISTS prediction_stocks (
     pred_ret_2d  REAL,
     pred_ret_3d  REAL,
     pred_ret_5d  REAL,
+    pred_ret_10d REAL,
     prob_up      REAL,
     prob_up_2d   REAL,
     prob_up_3d   REAL,
     prob_up_5d   REAL,
+    prob_up_10d  REAL,
     score        REAL,
     momentum     TEXT,
     weight       REAL,
@@ -178,6 +180,16 @@ class PredictionDB:
                     "ALTER TABLE prediction_stocks ADD COLUMN prob_up_5d REAL",
                 ),
                 (
+                    "prediction_stocks",
+                    "pred_ret_10d",
+                    "ALTER TABLE prediction_stocks ADD COLUMN pred_ret_10d REAL",
+                ),
+                (
+                    "prediction_stocks",
+                    "prob_up_10d",
+                    "ALTER TABLE prediction_stocks ADD COLUMN prob_up_10d REAL",
+                ),
+                (
                     "prediction_shadow",
                     "pred_ret_10d",
                     "ALTER TABLE prediction_shadow ADD COLUMN pred_ret_10d REAL",
@@ -215,9 +227,10 @@ class PredictionDB:
                 conn.execute(
                     """INSERT OR IGNORE INTO prediction_stocks
                        (date, symbol, board, rank, pred_ret_1d, pred_ret_2d, pred_ret_3d, pred_ret_5d,
-                        prob_up, prob_up_2d, prob_up_3d, prob_up_5d,
+                        pred_ret_10d,
+                        prob_up, prob_up_2d, prob_up_3d, prob_up_5d, prob_up_10d,
                         score, momentum, weight, pain_prob, consensus_score, signal_conflict)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         date_str,
                         str(row.get("symbol", "")),
@@ -227,10 +240,12 @@ class PredictionDB:
                         _safe_float(row, "pred_ret_2d"),
                         _safe_float(row, "pred_ret_3d"),
                         _safe_float(row, "pred_ret_5d"),
+                        _safe_float(row, "pred_ret_10d"),
                         _safe_float(row, "prob_up"),
                         _safe_float(row, "prob_up_2d"),
                         _safe_float(row, "prob_up_3d"),
                         _safe_float(row, "prob_up_5d"),
+                        _safe_float(row, "prob_up_10d"),
                         _safe_float(row, "score"),
                         str(row.get("momentum", "")),
                         _safe_float(row, "weight"),
