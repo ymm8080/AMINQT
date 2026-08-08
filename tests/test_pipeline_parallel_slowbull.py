@@ -74,6 +74,47 @@ def _slow_work(**kw):
     return df
 
 
+def _slow_rps_work(n_main=6, n_dual=6, n_dates=170, seed=3):
+    """双板趋势面板 + 受控 rps_60 (测 rps 第二道门过滤逻辑, 不测 rps 计算本身).
+
+    两板各 n 只漂移加速趋势股 (全过 gate). 每板内 rps_60 覆盖 1/n..n/n (受控排序);
+    floor=0.5 → 每板保留 rps ≥ 0.5 的高相对强度一半. PIT: 门只用当日截面, 无前瞻.
+    """
+    rng = np.random.default_rng(seed)
+    dates = pd.bdate_range("2024-11-01", periods=n_dates)
+    t = np.arange(n_dates)
+    frames = []
+    for i in range(n_main + n_dual):
+        board = "main" if i < n_main else "dual"
+        sym = f"000{i:04d}" if board == "main" else f"300{i:04d}"
+        rets = 0.002 + 0.00005 * t + rng.normal(0, 0.002, n_dates)
+        close = 10.0 * np.exp(np.cumsum(rets))
+        op = np.concatenate([[close[0]], close[:-1]])
+        hi = close * (1 + 0.004)
+        lo = close * (1 - 0.004)
+        vol = 100.0 * (1 + 0.008 * t) * (1 + rng.normal(0, 0.005, n_dates))
+        frames.append(
+            pd.DataFrame(
+                {
+                    "symbol": sym, "date": dates, "board": board,
+                    "open": op, "high": hi, "low": lo, "close": close,
+                    "open_hfq": op, "high_hfq": hi, "low_hfq": lo, "close_hfq": close,
+                    "volume": vol, "turnover_rate": 5.0, "volume_ratio": 1.0,
+                    "margin_balance_chg_5d": 0.01, "pct_70_con": 0.5, "adv20": 1e8,
+                }
+            )
+        )
+    work = pd.concat(frames, ignore_index=True)
+    work = indicators.prepare_adx(work)
+    signals.add_signal_columns(work)
+    work["gate_slow_bull"] = screener.compute_gate(work, "slow_bull")
+    for k, sym in enumerate(sorted(s for s in work["symbol"].unique() if s.startswith("30"))):
+        work.loc[work["symbol"] == sym, "rps_60"] = (k + 1) / n_dual
+    for k, sym in enumerate(sorted(s for s in work["symbol"].unique() if not s.startswith("30"))):
+        work.loc[work["symbol"] == sym, "rps_60"] = (k + 1) / n_main
+    return work
+
+
 # ── ADX 指标 ──
 def test_adx_trend_strong_rising_pdi_above_mdi():
     work = _slow_work()
@@ -497,6 +538,52 @@ def test_daily_slowbull_pool_requires_gate_column():
         signals.daily_slowbull_pool(
             df, df["date"].max(), "main", SLOW_BULL, SLOW_BULL.top_n
         )
+
+
+# ── rps_60 第二道门 (2026-08-08) ──
+def test_slowbull_rps_gate_dual_filters_low_rps():
+    work = _slow_rps_work()
+    date = work["date"].max()
+    pool = signals.daily_slowbull_pool(work, date, "dual", SLOW_BULL, SLOW_BULL.top_n)
+    rps = work[work["date"] == date].set_index("symbol")["rps_60"]
+    dual_kept = {s for s in rps.index if s.startswith("30") and rps[s] >= 0.5}
+    assert len(pool) == len(dual_kept) == 4  # floor=0.5 → 保留高相对强度一半
+    assert set(pool["symbol"]) == dual_kept
+    # 门内全部候选 rps_60 ≥ floor
+    assert (rps[list(pool["symbol"])] >= 0.5).all()
+
+
+def test_slowbull_rps_gate_main_disabled():
+    work = _slow_rps_work()
+    date = work["date"].max()
+    pool = signals.daily_slowbull_pool(work, date, "main", SLOW_BULL, SLOW_BULL.top_n)
+    assert len(pool) == 6  # main 板未启用 → 全部 gated 候选保留 (不过滤)
+
+
+def test_slowbull_rps_gate_backtest_consistent():
+    work = _slow_rps_work()
+    date = work["date"].max()
+    op = signals.daily_slowbull_pool(work, date, "dual", SLOW_BULL, SLOW_BULL.top_n)
+    bt = backtest._slowbull_picks(work, "dual", SLOW_BULL.top_n)
+    last_day = bt[bt["date"] == date]
+    assert set(last_day["symbol"]) == set(op["symbol"])
+
+
+def test_slowbull_rps_gate_disabled_noop(monkeypatch):
+    from app.pipeline_parallel.config import SLOW_BULL_RPS_GATE
+
+    monkeypatch.setitem(SLOW_BULL_RPS_GATE, "enabled", False)
+    work = _slow_rps_work()
+    date = work["date"].max()
+    pool = signals.daily_slowbull_pool(work, date, "dual", SLOW_BULL, SLOW_BULL.top_n)
+    assert len(pool) == 6  # 配置关闭 → 门 no-op
+
+
+def test_slowbull_rps_gate_skips_when_column_missing():
+    work = _slow_rps_work().drop(columns=["rps_60"])
+    date = work["date"].max()
+    pool = signals.daily_slowbull_pool(work, date, "dual", SLOW_BULL, SLOW_BULL.top_n)
+    assert len(pool) == 6  # 缺 rps_60 列 → 门跳过, 全保留
 
 
 # ── 独立导出 (70% 资金仓, 不并入 merged) ──

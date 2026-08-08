@@ -161,7 +161,6 @@ SNIPER = SystemSpec(
         "amihud_illiq",
         "small_mv_premium",
         "amihud_illiquidity",
-        "down_gap_pct",
         "VAR51",
         "ret_reversal_5d",
         "pv_corr_5",
@@ -175,6 +174,7 @@ SNIPER = SystemSpec(
         "VAR51 / ret_reversal_5d 长视界出边 — 须持有多天才兑现",
         "limit_dist_pct TOP-5 全视界不过 → 只进融合池",
         "2026-08-05 池内相关 OOS 边际: +pv_corr_5 → dual 全视界 Δwr +1.7~3.6% (5d +3.6% 最强)",
+        "2026-08-08 c2c LOO 审计 (250/300/200d): 剔除 down_gap_pct → 双板 STABLE_WIN +0.45~+0.72pp (MFE 选入但 c2c 不兑现)",
         "目标 = MFE (窗口内最高价可兑现的最大收益), 非目标日收盘",
     ),
 )
@@ -187,7 +187,6 @@ FUSION = SystemSpec(
     pool=(
         "amihud_illiquidity",
         "VAR51",
-        "down_gap_pct",
         "limit_dist_pct",
         "ret_reversal_5d",
         "small_mv_premium",
@@ -201,6 +200,7 @@ FUSION = SystemSpec(
         "limit_dist_pct 长视界出边 — 融合方案须容忍较长持有",
         "small_mv_premium 高风险档 — 仓位纪律必需",
         "2026-08-05 池内相关 OOS 边际: +pv_corr_5 → dual 全视界 Δwr +1.7~2.2%",
+        "2026-08-08 c2c LOO 审计 (250/300/200d): 剔除 down_gap_pct → 双板 STABLE_WIN +0.45~+0.72pp (MFE 选入但 c2c 不兑现)",
         "目标 = MFE (窗口内最高价可兑现的最大收益), 非目标日收盘",
     ),
 )
@@ -240,6 +240,20 @@ SLOW_BULL_REGIME: dict = {
     "hard_stop": 0.92,  # 上升段硬止损 -8%
     "max_hold": 40,  # 最长持有 (交易日)
     "down_mode": "no_open",  # 下行段: no_open=不开仓 / cur=仍出候选但按现行退出
+}
+
+# ── SLOW_BULL rps_60 第二道门 (2026-08-08, factor_gradient + rps_gate 诊断) ──
+# gate 内单因子梯度: rps_60 截面分位是唯一双板单调的"守得住"预测因子 (main d10-d1
+# +4.08pp / dual +5.71pp, spearman 0.73/0.65). 策略模拟显示该信号只在 dual 未被
+# 收割: main 合成 score 含 rps_60 权重 0.15 已部分捕获 → 硬门槛反覆盖合成择优
+# (main 0.5 门 −0.06pp, 非单调); dual 池薄 (~6/日) 合成 score 近乎 no-op → 门槛直接
+# +0.80pp (OOS 250d, 4 档单调, 3/4 季度正, 下跌季 Q4 最强 +2.17pp, 横盘季 Q3 唯一负
+# −0.46pp 噪声级). 集中度无塌缩 (dual 门后仍 447 只/250d). 符合用户"预期收益不够高
+# 就不开仓". floor 为 gate 内日截面 rps_60 百分位下限.
+SLOW_BULL_RPS_GATE: dict = {
+    "enabled": True,
+    "floor": 0.50,
+    "boards": {"main": False, "dual": True},  # main 合成 score 已捕获 → 不启
 }
 
 

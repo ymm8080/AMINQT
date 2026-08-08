@@ -108,6 +108,13 @@ def test_pv_corr_5_in_both_short_horizon_pools():
     assert "pv_corr_5" in FUSION.pool
 
 
+def test_down_gap_pct_pruned_from_short_horizon_pools():
+    # 2026-08-08 c2c LOO 审计 (250/300/200d OOS): 剔除 down_gap_pct 双板 STABLE_WIN
+    # +0.45~+0.72pp — MFE 目标选入, 但 c2c 排名下不兑现 (down-gap→反弹→max-high 不传收盘)
+    assert "down_gap_pct" not in SNIPER.pool
+    assert "down_gap_pct" not in FUSION.pool
+
+
 def test_both_systems_full_horizon_matrix():
     # 2026-08-04 用户: TOP-10 也要看 T+2/T+3; 两套统一测 T+2/3/5/10
     for spec in (SNIPER, FUSION):
