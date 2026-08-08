@@ -112,8 +112,15 @@ def process_board(
         # 验证模式: 报告列对齐情况, 不写回
         nan_share = aug[ckpt_cols].isna().mean()
         na_cols = nan_share[nan_share > 0].sort_values(ascending=False)
-        pool = ["amihud_illiq", "small_mv_premium", "amihud_illiquidity",
-                "down_gap_pct", "VAR51", "ret_reversal_5d", "limit_dist_pct"]
+        pool = [
+            "amihud_illiq",
+            "small_mv_premium",
+            "amihud_illiquidity",
+            "down_gap_pct",
+            "VAR51",
+            "ret_reversal_5d",
+            "limit_dist_pct",
+        ]
         return {
             "board": board,
             "aug_rows": len(aug),
@@ -148,8 +155,15 @@ def main() -> int:
     except Exception:
         pass
     ap = argparse.ArgumentParser()
-    ap.add_argument("--window-days", type=int, default=400, help="面板窗口日历天数 (默认 400 ≈ 270 交易日)")
-    ap.add_argument("--limit-syms", type=int, default=0, help=">0 验证模式: 只取前 N 符号, 不写回")
+    ap.add_argument(
+        "--window-days",
+        type=int,
+        default=400,
+        help="面板窗口日历天数 (默认 400 ≈ 270 交易日)",
+    )
+    ap.add_argument(
+        "--limit-syms", type=int, default=0, help=">0 验证模式: 只取前 N 符号, 不写回"
+    )
     args = ap.parse_args()
 
     ts = time.strftime("%Y%m%d_%H%M%S")
@@ -160,8 +174,10 @@ def main() -> int:
         print(msg, flush=True)
         print(msg, file=log, flush=True)
 
-    emit(f"[{time.strftime('%H:%M:%S')}] 增量 append 检查点 | window-days={args.window_days} "
-         f"limit-syms={args.limit_syms or 'all'}")
+    emit(
+        f"[{time.strftime('%H:%M:%S')}] 增量 append 检查点 | window-days={args.window_days} "
+        f"limit-syms={args.limit_syms or 'all'}"
+    )
     t0 = time.time()
 
     latest = pd.read_parquet(PANEL_V3_PATH, columns=["date"])["date"].max()
@@ -169,13 +185,18 @@ def main() -> int:
     emit(f"[panel] latest={latest:%Y-%m-%d} cutoff={cutoff.date()}")
 
     panel = pd.read_parquet(PANEL_V3_PATH)
-    emit(f"[panel] 已读 {len(panel):,} 行 ({time.time()-t0:.0f}s)")
+    emit(f"[panel] 已读 {len(panel):,} 行 ({time.time() - t0:.0f}s)")
 
     for ckpt_path, board in ((MAIN_CHECKPOINT, "main"), (DUAL_CHECKPOINT, "dual")):
         try:
             r = process_board(
-                panel, ckpt_path, board, latest, cutoff,
-                limit_syms=args.limit_syms, write=(args.limit_syms == 0),
+                panel,
+                ckpt_path,
+                board,
+                latest,
+                cutoff,
+                limit_syms=args.limit_syms,
+                write=(args.limit_syms == 0),
             )
         except Exception as e:
             import traceback
@@ -187,7 +208,7 @@ def main() -> int:
 
     del panel
     gc.collect()
-    emit(f"[done] {time.time()-t0:.0f}s | log={logf}")
+    emit(f"[done] {time.time() - t0:.0f}s | log={logf}")
     log.close()
     return 0
 

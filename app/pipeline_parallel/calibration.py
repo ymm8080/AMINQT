@@ -136,7 +136,9 @@ def calibrate_mag10d(
             # i_end = 首行 date > bdates[di-11] → 纳入日期 ≤ bdates[di-11] 的全部行.
             i_lo = int(np.searchsorted(bd, np.datetime64(cal_lo), side="left"))
             i_end = int(
-                np.searchsorted(bd, np.datetime64(bdates[di - _REALIZED_DROP]), side="right")
+                np.searchsorted(
+                    bd, np.datetime64(bdates[di - _REALIZED_DROP]), side="right"
+                )
             )
             n = i_end - i_lo
             if n < MAG10D_CAL["cross_min_n"]:

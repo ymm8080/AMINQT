@@ -68,9 +68,7 @@ def load_module_picks(list_dir: str = STOCK_LIST_DIR) -> pd.DataFrame:
             continue
         if df is None or df.empty or "symbol" not in df.columns:
             continue
-        norm = ds._normalize_pred_rows(
-            info["family"], info["date"], info["module"], df
-        )
+        norm = ds._normalize_pred_rows(info["family"], info["date"], info["module"], df)
         if norm.empty:
             continue
         # 选股日优先内部 date 列; 无 rk 列的清单按文件行序赋隐式排名
@@ -78,8 +76,10 @@ def load_module_picks(list_dir: str = STOCK_LIST_DIR) -> pd.DataFrame:
         if "rk" not in df.columns or df["rk"].isna().all():
             norm["rk"] = np.arange(1, len(norm) + 1)
         # 统一数值列 float64, 避免 concat 全 NA 列触发 FutureWarning
-        for c in ("score", "rk") + tuple(f"gain_{h}" for h in HORIZONS) + tuple(
-            f"prob_{h}" for h in HORIZONS
+        for c in (
+            ("score", "rk")
+            + tuple(f"gain_{h}" for h in HORIZONS)
+            + tuple(f"prob_{h}" for h in HORIZONS)
         ):
             norm[c] = pd.to_numeric(norm[c], errors="coerce")
         frames.append(norm)
@@ -87,17 +87,17 @@ def load_module_picks(list_dir: str = STOCK_LIST_DIR) -> pd.DataFrame:
         return pd.DataFrame(columns=_UNIFIED_COLS + ["module_id"])
     out = pd.concat(frames, ignore_index=True)
     out["module_id"] = out["family"] + "·" + out["module"].astype(str)
-    for c in ("rk", "score") + tuple(f"gain_{h}" for h in HORIZONS) + tuple(
-        f"prob_{h}" for h in HORIZONS
+    for c in (
+        ("rk", "score")
+        + tuple(f"gain_{h}" for h in HORIZONS)
+        + tuple(f"prob_{h}" for h in HORIZONS)
     ):
         out[c] = pd.to_numeric(out[c], errors="coerce")
     return out[_UNIFIED_COLS + ["module_id"]].copy()
 
 
 # ───────────────────────── 已实现收益 (对齐面板) ─────────────────────────
-def compute_realized_returns(
-    picks: pd.DataFrame, panel: pd.DataFrame
-) -> pd.DataFrame:
+def compute_realized_returns(picks: pd.DataFrame, panel: pd.DataFrame) -> pd.DataFrame:
     """给清单补已实现 close-to-close 收益 real_2d/3d/5d/10d.
 
     panel 需含 date(datetime)/symbol/close_hfq. 逐股向量化 (unstack + shift),
@@ -187,7 +187,9 @@ def perf_summary(perf: pd.DataFrame, horizon: str) -> pd.DataFrame:
         "p10": g.quantile(0.10).values,
         "p90": g.quantile(0.90).values,
     }
-    return pd.DataFrame(rows).sort_values("mean", ascending=False).reset_index(drop=True)
+    return (
+        pd.DataFrame(rows).sort_values("mean", ascending=False).reset_index(drop=True)
+    )
 
 
 def daily_mean_return(perf: pd.DataFrame, horizon: str) -> pd.DataFrame:

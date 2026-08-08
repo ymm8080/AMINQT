@@ -342,7 +342,9 @@ def _load_close_panel() -> pd.DataFrame | None:
     try:
         return pd.read_parquet(PANEL_V3_PATH, columns=["date", "symbol", "close_hfq"])
     except Exception:
-        logger.warning("面板收盘列读取失败 (跳过已实现收益): %s", PANEL_V3_PATH, exc_info=True)
+        logger.warning(
+            "面板收盘列读取失败 (跳过已实现收益): %s", PANEL_V3_PATH, exc_info=True
+        )
         return None
 
 
@@ -364,9 +366,14 @@ def _render_module_perf() -> None:
         return
 
     scope = st.radio(
-        "数据范围", ["交付短名单", "全市场底稿", "全部"], horizontal=True, key="mp_scope"
+        "数据范围",
+        ["交付短名单", "全市场底稿", "全部"],
+        horizontal=True,
+        key="mp_scope",
     )
-    topk = st.selectbox("Top-N (按每日模块内排名)", [5, 10, 20, "全部"], index=1, key="mp_topk")
+    topk = st.selectbox(
+        "Top-N (按每日模块内排名)", [5, 10, 20, "全部"], index=1, key="mp_topk"
+    )
     n = None if topk == "全部" else int(topk)
     sub = mp.filter_scope(realized, scope)
     sub = mp.top_k(sub, n)

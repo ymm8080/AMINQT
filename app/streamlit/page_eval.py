@@ -468,7 +468,12 @@ def render() -> None:
 
     with tab_compare:
         _render_comparison_tab(
-            pred_result, bt_start, bt_end, capital, benchmark_sel, horizon if use_v52 else 2
+            pred_result,
+            bt_start,
+            bt_end,
+            capital,
+            benchmark_sel,
+            horizon if use_v52 else 2,
         )
 
     with tab_tune:
