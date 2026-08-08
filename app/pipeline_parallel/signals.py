@@ -15,7 +15,12 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.pipeline_parallel.config import ADX_SPEC, SLOW_BULL_REGIME, SLOW_BULL_RPS_GATE
+from app.pipeline_parallel.config import (
+    ADX_SPEC,
+    SLOW_BULL_RANK,
+    SLOW_BULL_REGIME,
+    SLOW_BULL_RPS_GATE,
+)
 from app.pipeline_parallel.scoring import pool_score, select_topn
 
 
@@ -211,10 +216,26 @@ def apply_slowbull_rps_gate(df: pd.DataFrame, board: str) -> pd.DataFrame:
     return df[rk >= floor]
 
 
+def slowbull_rank_score(day: pd.DataFrame, board: str, spec) -> pd.Series:
+    """慢牛排名键 (2026-08-08 rank_ab A/B): dual=rps_60, main=合成 score.
+
+    缺排名列 (或板未启用) → 回退合成 score. 排名用当日截面值 (PIT, 入场 T+1).
+    """
+    rank = SLOW_BULL_RANK
+    if rank.get("boards", {}).get(board, False) and rank.get("key") in day.columns:
+        return day[rank["key"]]
+    return pool_score(day, spec.pool, weights=spec.pool_weights)
+
+
+def slowbull_effective_top_n(board: str, default_top_n: int) -> int:
+    """慢牛按板档位 (2026-08-08): dual 收紧到 10 让 rps 排名在深池日生效, main 保持 20."""
+    return int(SLOW_BULL_RANK.get("top_n", {}).get(board, default_top_n))
+
+
 def daily_slowbull_pool(
     work: pd.DataFrame, date, board: str, spec, top_n: int
 ) -> pd.DataFrame:
-    """运营日输出: 该日该板 → 硬门槛 → rps_60 第二道门 → 权重打分 → Top-N.
+    """运营日输出: 该日该板 → 硬门槛 → rps_60 第二道门 → 排名键 (dual=rps_60) → Top-N.
 
     work 须含 prepare_adx 指标列 + gate_slow_bull 掩码列 + 信号布尔列
     (load_panel 已一次性算好). 返回含 rk/score/dev5/各信号列的清单.
@@ -232,8 +253,8 @@ def daily_slowbull_pool(
     day = apply_slowbull_rps_gate(day, board)
     if day.empty:
         return pd.DataFrame()
-    score = pool_score(day, spec.pool, weights=spec.pool_weights)
-    top = select_topn(day, score, top_n)
+    score = slowbull_rank_score(day, board, spec)
+    top = select_topn(day, score, slowbull_effective_top_n(board, top_n))
     if top.empty:
         return top
     top = top.copy()

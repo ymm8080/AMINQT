@@ -586,6 +586,36 @@ def test_slowbull_rps_gate_skips_when_column_missing():
     assert len(pool) == 6  # 缺 rps_60 列 → 门跳过, 全保留
 
 
+# ── 排名键 A/B 落地 (2026-08-08): dual=rps_60 + top-10, main=合成 score + top-20 ──
+def test_slowbull_rank_dual_uses_rps60_top10():
+    work = _slow_rps_work(n_main=4, n_dual=24)
+    date = work["date"].max()
+    pool = signals.daily_slowbull_pool(work, date, "dual", SLOW_BULL, SLOW_BULL.top_n)
+    # 门后 12 只 (rps≥0.5) → dual top_n 收紧到 10 → 裁到 10
+    assert len(pool) == 10
+    assert pool["score"].is_monotonic_decreasing  # 按 rps_60 降序
+    sub = work[(work["board"] == "dual") & (work["date"] == date) & work["gate_slow_bull"]]
+    rps = sub.set_index("symbol")["rps_60"]
+    # score 列 = rps_60 截面相对强度 (非合成 score)
+    assert np.allclose(pool["score"].values, rps.loc[pool["symbol"]].values)
+    assert (rps.loc[pool["symbol"]] >= 0.5).all()  # 排名前先过第二道门
+
+
+def test_slowbull_rank_main_keeps_score_top20():
+    work = _slow_rps_work(n_main=24, n_dual=4)
+    date = work["date"].max()
+    pool = signals.daily_slowbull_pool(work, date, "main", SLOW_BULL, SLOW_BULL.top_n)
+    # main 无 rps 门 → 24 只 gated 候选 → main top_n 保持 20
+    assert len(pool) == 20
+    sub = work[(work["board"] == "main") & (work["date"] == date) & work["gate_slow_bull"]]
+    sc = pool_score(sub, SLOW_BULL.pool, weights=SLOW_BULL.pool_weights)
+    # score 列 = 合成 score (非 rps_60 单因子)
+    sc_map = dict(zip(sub["symbol"], sc))
+    assert np.allclose(pool["score"].values, [sc_map[s] for s in pool["symbol"]])
+    rps = sub.set_index("symbol")["rps_60"]
+    assert not np.allclose(pool["score"].values, rps.loc[pool["symbol"]].values)
+
+
 # ── 独立导出 (70% 资金仓, 不并入 merged) ──
 def test_export_slowbull_lists(monkeypatch, tmp_path):
     import app.pipeline_parallel.backtest as bt

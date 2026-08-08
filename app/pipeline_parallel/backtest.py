@@ -354,15 +354,15 @@ _SELL_COLS = (
 
 
 def _slowbull_picks(work: pd.DataFrame, board: str, top_n: int) -> pd.DataFrame:
-    """慢牛每日 Top-N 池 (gate + rps_60 第二道门 + 权重池分截面 TOP-N), 同 daily_slowbull_pool."""
+    """慢牛每日 Top-N 池 (gate + rps_60 第二道门 + 排名键 + 按板档位), 同 daily_slowbull_pool."""
     wb = work[(work["board"] == board) & work["gate_slow_bull"]]
     if wb.empty:
         return pd.DataFrame()
     wb = signals.apply_slowbull_rps_gate(wb, board)
     if wb.empty:
         return pd.DataFrame()
-    score = pool_score(wb, SLOW_BULL.pool, weights=SLOW_BULL.pool_weights)
-    return select_topn(wb, score, top_n)
+    score = signals.slowbull_rank_score(wb, board, SLOW_BULL)
+    return select_topn(wb, score, signals.slowbull_effective_top_n(board, top_n))
 
 
 def _slowbull_sim_arrays(work: pd.DataFrame) -> dict:

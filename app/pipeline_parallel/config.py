@@ -256,6 +256,19 @@ SLOW_BULL_RPS_GATE: dict = {
     "boards": {"main": False, "dual": True},  # main 合成 score 已捕获 → 不启
 }
 
+# ── SLOW_BULL 排名键 (2026-08-08, rank_ab 诊断) ──
+# 受控 A/B (gate∩上升段→Top-N→trail8 op_rule 实得, OOS 250d): dual 用 rps_60 排名
+# 全档赢合成 score (top10 +1.15pp / top5 +0.52pp / top3 +1.19pp, 3/4 季度稳定, 下跌季
+# 最强), 机制同门: dual 池薄合成 score 近乎 no-op → rps 信号未收割; main 合成 score
+# 含 rps_60 权重 0.15 已部分捕获 → 纯 rps 排名反更差 (+0.39pp 输 @top10, 且季度方向
+# 不净). top_n 按板收紧: 现状 top-20 全收 (池 ~6-13/日 < 20) 排名不生效; dual 收紧到
+# 10 让排名在深池日生效 (门后 ~6/日, 仅深池日裁到 top-10), main 保持 20.
+SLOW_BULL_RANK: dict = {
+    "key": "rps_60",  # 排名键: dual=rps_60 相对强度; main=合成 score (boards 关)
+    "boards": {"main": False, "dual": True},
+    "top_n": {"main": 20, "dual": 10},
+}
+
 
 @dataclass(frozen=True)
 class PanelSource:
