@@ -18,8 +18,6 @@ from app.pipeline1.feature_selector import (
     gate_d_ablation,
     nan_filter,
     scope_ic_union,
-    temporal_variation,
-    tier_of,
 )
 
 # ── Synthetic data helpers ──────────────────────────────────────────
@@ -1019,93 +1017,3 @@ def test_run_bruteforce_dedup_ram_safe_parity():
     assert new == old, (
         f"RAM 优化改变选择: old={len(old)} new={len(new)}; diff={set(old) ^ set(new)}"
     )
-
-
-# ═══════════════════════════════════════════════════════════════════
-# 分层 A/B/C brute 展开 — tiered design
-# ═══════════════════════════════════════════════════════════════════
-
-
-def _make_tier_df(n_symbols=4, n_dates=60, seed=7):
-    """A=日频(close) + B=事件(lhb_count) + C=常量(limit_pct) 三层共存的小面板."""
-    np.random.seed(seed)
-    symbols = [f"{i:06d}" for i in range(1, n_symbols + 1)]
-    dates = pd.bdate_range("2025-07-01", periods=n_dates)
-    rows = []
-    for sym in symbols:
-        base = 10.0 + hash(sym) % 30
-        for i, d in enumerate(dates):
-            close = base + np.cumsum(np.random.randn(n_dates) * 0.2)[i]
-            rows.append(
-                {
-                    "symbol": sym,
-                    "date": d,
-                    "close": close,
-                    "limit_pct": 10.0,  # C: 常量列
-                    "lhb_count": 1 if i in (20, 40) else 0,  # B: 事件列 (稀疏阶跃)
-                }
-            )
-    return pd.DataFrame(rows)
-
-
-def test_tier_of_classification():
-    """tier_of: 事件前缀/float_share → B; 常量 → C; 慢变 → B; 日频 → A."""
-    assert tier_of(0.0, "limit_pct") == "C"          # 常量
-    assert tier_of(0.0, "lhb_count") == "B"          # 事件前缀覆盖
-    assert tier_of(1.0, "float_share") == "B"        # B_EXTRA 覆盖
-    assert tier_of(0.03, "some_slow_col") == "B"     # chg∈[0.01,0.1)
-    assert tier_of(0.5, "some_daily_col") == "A"     # chg≥0.1
-    assert tier_of(float("nan"), "nan_col") == "C"   # NaN → C
-
-
-def test_temporal_variation_small_sample():
-    """n_stocks guard: 少于 300 只股票不报错, 常量列 chg≈0, 日频列 chg≈1."""
-    df = _make_tier_df(n_symbols=4, n_dates=60)
-    tv = temporal_variation(df, ["close", "limit_pct", "lhb_count"], n_stocks=300)
-    assert tv["close"] > 0.5
-    assert tv["limit_pct"] < 0.01
-    assert 0 < tv["lhb_count"] < 0.2
-
-
-def test_tiered_bruteforce_only_a():
-    """tier enable=True: brute 变体只来自 A 基列; B/C 基列仅 level 不展开."""
-    df = _make_tier_df(n_symbols=4, n_dates=60)
-    cfg = {
-        "nan_threshold": 0.95,
-        "dedup_threshold": 0.7,
-        "tier": {"enable": True, "chg_a": 0.1, "chg_c": 0.01},
-    }
-    with tempfile.TemporaryDirectory() as tmp:
-        sel = FeatureSelector(registry_dir=tmp)
-        selected = sel._run_bruteforce_dedup(df, "main", cfg)
-
-    # 全部 brute 变体基列 = close (A 层)
-    brute_bases = {c.split("_brute_")[0] for c in selected if "_brute_" in c}
-    assert brute_bases == {"close"}, f"非 A 层 brute 展开: {brute_bases}"
-    # B/C 基列保留为 level, 且无其 brute 变体
-    assert "limit_pct" in selected
-    assert "lhb_count" in selected
-    assert not any(c.startswith("limit_pct_brute_") for c in selected)
-    assert not any(c.startswith("lhb_count_brute_") for c in selected)
-    # 分层池 ⊆ 全展开池 (严格子集)
-    full_cfg = {"nan_threshold": 0.95, "dedup_threshold": 0.7}
-    with tempfile.TemporaryDirectory() as tmp2:
-        sel2 = FeatureSelector(registry_dir=tmp2)
-        full = sel2._run_bruteforce_dedup(df, "main", full_cfg)
-    assert set(selected) <= set(full), "分层池应 ⊆ 全展开池"
-    assert len(full) > len(selected), "全展开应多于分层"
-
-
-def test_tier_no_key_defaults_off():
-    """cfg 无 tier 键 → 分层关闭, 行为=现状 (B/C 也 brute 展开)."""
-    df = _make_tier_df(n_symbols=4, n_dates=60)
-    cfg = {"nan_threshold": 0.95, "dedup_threshold": 0.7}
-    with tempfile.TemporaryDirectory() as tmp:
-        sel = FeatureSelector(registry_dir=tmp)
-        selected = sel._run_bruteforce_dedup(df, "main", cfg)
-    # 无 tier: lhb_count 也被 brute 展开
-    assert any(c.startswith("lhb_count_brute_") for c in selected), (
-        "tier 关闭时事件列应照旧 brute 展开"
-    )
-    # 与参考实现 parity
-    assert selected == _old_bruteforce_dedup(df, cfg)

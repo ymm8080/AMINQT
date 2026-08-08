@@ -357,53 +357,6 @@ def dedup_l2(feats, df, threshold=0.7):
 
 
 # ──────────────────────────────────────────────────────────
-# 分层 A/B/C — 决定哪些基础列做 brute 展开 (瘦身 MAIN 池)
-# A = 日频变化 → brute 展开; B = 事件/慢变 → 仅 level; C = 常量 → 仅 level.
-# 全部 level (A+B+C) 照常流经 dedup_l2. 阈值集中在 config, 不写死.
-# ──────────────────────────────────────────────────────────
-
-TIER_EVENT_PREFIX = ("lhb_", "bt_", "sh_")
-TIER_EVENT_EXTRA = {"float_share"}
-
-
-def temporal_variation(df, feats, n_stocks=300, seed=0):
-    """抽样股票内相邻日 diff≠0 占比 (忽略 NaN 过渡) → 静态列识别.
-
-    固定 seed 保证可复现; n_stocks 超过股票总数时取全部 (guard 小样本测试).
-    逐列 groupby diff, 内存安全 (RAM 15.8GB, 一次只物化一列).
-    """
-    n_uniq = df["symbol"].nunique()
-    stocks = df["symbol"].drop_duplicates().sample(
-        min(n_stocks, n_uniq), random_state=seed
-    )
-    sub = df[df["symbol"].isin(stocks)].sort_values(["symbol", "date"])
-    out = {}
-    for c in feats:
-        chg = sub.groupby("symbol", sort=False)[c].diff()
-        valid = chg.notna()
-        out[c] = float((chg[valid] != 0).mean()) if valid.sum() > 0 else float("nan")
-    return out
-
-
-def tier_of(chg, col, chg_a=0.1, chg_c=0.01):
-    if col in TIER_EVENT_EXTRA or col.startswith(TIER_EVENT_PREFIX):
-        return "B"
-    if np.isnan(chg) or chg < chg_c:
-        return "C"
-    if chg < chg_a:
-        return "B"
-    return "A"
-
-
-def tier_brute_cols(df, eligible, tier_cfg):
-    """返回应 brute 展开的 A 层基础列 (tier_cfg: {enable, chg_a, chg_c})."""
-    chg_a = tier_cfg.get("chg_a", 0.1)
-    chg_c = tier_cfg.get("chg_c", 0.01)
-    tv = temporal_variation(df, eligible)
-    return [c for c in eligible if tier_of(tv[c], c, chg_a, chg_c) == "A"]
-
-
-# ──────────────────────────────────────────────────────────
 # Gate D (Layer2, DUAL)
 # ──────────────────────────────────────────────────────────
 
@@ -975,9 +928,6 @@ class FeatureSelector:
             "pipeline": "bruteforce_dedup",
             "nan_threshold": 0.95,
             "dedup_threshold": 0.7,
-            # 分层 A/B/C: enable=False = 现状(全 eligible brute 展开), 验证门通过才开.
-            # A=日频(chg≥chg_a) brute 展开; B/C=仅 level. 全部 level 照常走 dedup_l2.
-            "tier": {"enable": False, "chg_a": 0.1, "chg_c": 0.01},
         },
         "dual": {
             "pipeline": "gate_d",
@@ -1019,15 +969,12 @@ class FeatureSelector:
             result = FeatureEngineV35.feature_columns(df)
 
         try:
-            meta = getattr(self, "_last_meta", None) or {}
             self.save_version(
                 {
                     "board": board,
                     "pipeline": pipeline,
                     "created": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
                     "selected_count": len(result),
-                    "design": meta.get("design", "full brute"),
-                    "tier_counts": meta.get("tier"),
                     "features": result,
                 },
                 board,
@@ -1092,33 +1039,6 @@ class FeatureSelector:
         if generator is None:
             generator = BruteForceGenerator()
         raw_cols = generator._eligible(df)
-        # 分层 A/B/C: tier.enable 时只对 A 层 brute 展开; 无 tier 键 = 关闭 (兼容现状).
-        self._last_meta = {"design": "full brute", "tier": None}
-        tier_cfg = cfg.get("tier")
-        if tier_cfg and tier_cfg.get("enable"):
-            chg_a = tier_cfg.get("chg_a", 0.1)
-            chg_c = tier_cfg.get("chg_c", 0.01)
-            tv = temporal_variation(df, raw_cols)
-            a_cols = [
-                c for c in raw_cols if tier_of(tv[c], c, chg_a, chg_c) == "A"
-            ]
-            counts = {"A": 0, "B": 0, "C": 0}
-            for c in raw_cols:
-                counts[tier_of(tv[c], c, chg_a, chg_c)] += 1
-            self._last_meta = {
-                "design": "tiered A-brute",
-                "tier": counts,
-                "a_brute_raw": len(a_cols),
-            }
-            logger.info(
-                "[%s] 分层: eligible=%d A=%d B=%d C=%d → brute 只展开 A",
-                board,
-                len(raw_cols),
-                counts["A"],
-                counts["B"],
-                counts["C"],
-            )
-            raw_cols = a_cols
         threshold = cfg.get("nan_threshold", 0.95)
         dedup_thr = cfg.get("dedup_threshold", 0.7)
         base_numeric = [

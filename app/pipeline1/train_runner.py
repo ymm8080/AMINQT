@@ -25,7 +25,6 @@ from .feature_selector import (
     BruteForceGenerator,
     FeatureSelector,
     apply_event_scope_screens,
-    tier_brute_cols,
 )
 from .label_engine import LabelEngine
 
@@ -131,11 +130,6 @@ def select_features(
         if missing:
             gen = BruteForceGenerator()
             raw_cols = gen._eligible(df)
-            # 分层开启时只重生成 A-brute (选中缺失列都是 A-brute), 省内存且与选择一致.
-            if selector is not None:
-                tc = selector.config.get("main", {}).get("tier")
-                if tc and tc.get("enable"):
-                    raw_cols = tier_brute_cols(df, raw_cols, tc)
             # 内存安全: 族批生成, 只注入缺失的选中列, 不物化全量 brute 列.
             keep_cols = []
             for fam in BRUTE_FAMILIES:
