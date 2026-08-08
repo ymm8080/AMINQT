@@ -73,6 +73,8 @@ NEEDED_COLS = sorted(
         + POOL_COLS
     )
 )
+
+
 def _avail(work: pd.DataFrame, pool) -> list[str]:
     return [c for c in pool if c in work.columns]
 
@@ -159,7 +161,9 @@ def _safe_nanmean(a: np.ndarray) -> float:
     return float(a.mean()) if len(a) else float("nan")
 
 
-def build_score_cols(work: pd.DataFrame, sniper_avail, fusion_avail) -> dict[float, np.ndarray]:
+def build_score_cols(
+    work: pd.DataFrame, sniper_avail, fusion_avail
+) -> dict[float, np.ndarray]:
     """每乘子 m: score_m = max(SNIPER 加权, FUSION 等权) 池分 (跨板块日期截面)."""
     r_s = {c: cross_rank(work, c).to_numpy(float) for c in sniper_avail}
     r_f = {c: cross_rank(work, c).to_numpy(float) for c in fusion_avail}
@@ -193,11 +197,27 @@ def build_cross(work: pd.DataFrame, score_cols: dict[float, np.ndarray]) -> dict
             yv = y[valid]
             by[m] = (
                 bd,
-                np.concatenate([[0.0], np.cumsum(np.bincount(bin_idx, minlength=nb).astype(float))]),
-                np.concatenate([[0.0], np.cumsum(np.bincount(bin_idx, weights=xv, minlength=nb))]),
-                np.concatenate([[0.0], np.cumsum(np.bincount(bin_idx, weights=yv, minlength=nb))]),
-                np.concatenate([[0.0], np.cumsum(np.bincount(bin_idx, weights=xv * xv, minlength=nb))]),
-                np.concatenate([[0.0], np.cumsum(np.bincount(bin_idx, weights=xv * yv, minlength=nb))]),
+                np.concatenate(
+                    [[0.0], np.cumsum(np.bincount(bin_idx, minlength=nb).astype(float))]
+                ),
+                np.concatenate(
+                    [[0.0], np.cumsum(np.bincount(bin_idx, weights=xv, minlength=nb))]
+                ),
+                np.concatenate(
+                    [[0.0], np.cumsum(np.bincount(bin_idx, weights=yv, minlength=nb))]
+                ),
+                np.concatenate(
+                    [
+                        [0.0],
+                        np.cumsum(np.bincount(bin_idx, weights=xv * xv, minlength=nb)),
+                    ]
+                ),
+                np.concatenate(
+                    [
+                        [0.0],
+                        np.cumsum(np.bincount(bin_idx, weights=xv * yv, minlength=nb)),
+                    ]
+                ),
             )
         cross[board] = by
         del bm
@@ -228,7 +248,7 @@ def main() -> None:
         flush=True,
     )
     all_dates = sorted(work["date"].unique())
-    eval_dates = all_dates[-args.eval_days:]
+    eval_dates = all_dates[-args.eval_days :]
     date_idx = {d: i for i, d in enumerate(all_dates)}
     print(
         f"[panel] {len(work):,}r / {work['symbol'].nunique():,}只 / "
@@ -288,7 +308,9 @@ def main() -> None:
         slope = (n * Sxy - Sx * Sy) / var
         return (slope, (Sy - slope * Sx) / n, n)
 
-    print(f"[calib] walk-forward 逐日重拟合 × {len(MULTS)} 乘子 (无前瞻窗)...", flush=True)
+    print(
+        f"[calib] walk-forward 逐日重拟合 × {len(MULTS)} 乘子 (无前瞻窗)...", flush=True
+    )
     rows: list[dict] = []
     cs_cache: dict = {}
     for di_abs, D in enumerate(eval_dates):
@@ -328,7 +350,9 @@ def main() -> None:
             if base is None:
                 continue
             base_syms = set(base["symbol"].astype(str))
-            chosen_syms = set(chosen["symbol"].astype(str)) if chosen is not None else set()
+            chosen_syms = (
+                set(chosen["symbol"].astype(str)) if chosen is not None else set()
+            )
             for m in MULTS:
                 pick = tops.get(m)
                 if pick is None or len(pick) < 5:
@@ -347,10 +371,14 @@ def main() -> None:
                         "pr3d": _safe_nanmean(pr[:, 1]),
                         "pr5d": _safe_nanmean(pr[:, 2]),
                         "pr10d": _safe_nanmean(pr[:, 3]),
-                        "win5d": float((pr[:, 2] > 0).sum() / (~np.isnan(pr[:, 2])).sum())
+                        "win5d": float(
+                            (pr[:, 2] > 0).sum() / (~np.isnan(pr[:, 2])).sum()
+                        )
                         if (~np.isnan(pr[:, 2])).sum()
                         else float("nan"),
-                        "win10d": float((pr[:, 3] > 0).sum() / (~np.isnan(pr[:, 3])).sum())
+                        "win10d": float(
+                            (pr[:, 3] > 0).sum() / (~np.isnan(pr[:, 3])).sum()
+                        )
                         if (~np.isnan(pr[:, 3])).sum()
                         else float("nan"),
                         "overlap": ov_ref,
@@ -360,22 +388,33 @@ def main() -> None:
         del day_info[D]
         gc.collect()
         if (di_abs + 1) % 50 == 0:
-            print(f"  ... {di_abs + 1}/{len(eval_dates)} 日 ({time.time() - t0:.0f}s)", flush=True)
+            print(
+                f"  ... {di_abs + 1}/{len(eval_dates)} 日 ({time.time() - t0:.0f}s)",
+                flush=True,
+            )
 
     daily = pd.DataFrame(rows)
     daily.to_csv(out_dir / "daily.csv", index=False)
 
     # ---------------- 汇总 + 扰动判定 ----------------
-    print(f"\n===== small_mv_premium 权重乘子扰动检验 [{args.eval_days}d OOS] =====", flush=True)
+    print(
+        f"\n===== small_mv_premium 权重乘子扰动检验 [{args.eval_days}d OOS] =====",
+        flush=True,
+    )
     for board in BOARDS:
         sub = daily[daily["board"] == board]
         ref_p10 = sub.loc[sub["m"] == 1.0, "pr10d"].mean()
         print(f"\n=== [{board}]  ref(m=1.0) pr10d={ref_p10:+.4f} ===", flush=True)
-        print(f"  {'m':>5}{'pr10d':>9}{'pr5d':>9}{'win10d':>8}{'ov_ref':>8}"
-              f"{'ov_chosen':>10}  Q1-Q4 pr10d(neg=*)/win vs ref", flush=True)
+        print(
+            f"  {'m':>5}{'pr10d':>9}{'pr5d':>9}{'win10d':>8}{'ov_ref':>8}"
+            f"{'ov_chosen':>10}  Q1-Q4 pr10d(neg=*)/win vs ref",
+            flush=True,
+        )
         # 季度边界 (用全期日期)
-        qb = [daily["date"].min() + (daily["date"].max() - daily["date"].min()) * i / 4
-              for i in range(5)]
+        qb = [
+            daily["date"].min() + (daily["date"].max() - daily["date"].min()) * i / 4
+            for i in range(5)
+        ]
         for m in MULTS:
             c = sub[sub["m"] == m]
             if c.empty:
@@ -391,9 +430,12 @@ def main() -> None:
                 qpr.append(f"{p10c:+.3f}{'*' if p10c < 0 else ''}")
                 qwin.append("W" if p10c > rr.mean() else ".")
             oc = c["overlap_chosen"].mean() if m != CHOSEN else float("nan")
-            print(f"  {m:>5.1f}{c['pr10d'].mean():>+9.4f}{c['pr5d'].mean():>+9.4f}"
-                  f"{c['win10d'].mean():>8.1%}{c['overlap'].mean():>8.2f}"
-                  f"{oc:>10.2f}  {' '.join(qpr)} | {' '.join(qwin)}", flush=True)
+            print(
+                f"  {m:>5.1f}{c['pr10d'].mean():>+9.4f}{c['pr5d'].mean():>+9.4f}"
+                f"{c['win10d'].mean():>8.1%}{c['overlap'].mean():>8.2f}"
+                f"{oc:>10.2f}  {' '.join(qpr)} | {' '.join(qwin)}",
+                flush=True,
+            )
         # 扰动判定 (文档 #8): m=2.0 ±20% 邻点与 2.0 清单平均重合 <5/10 → 弃用
         c_chosen = sub[sub["m"] == CHOSEN]
         for pm in PERTURB:
@@ -402,7 +444,10 @@ def main() -> None:
                 continue
             ov = c_pm["overlap_chosen"].mean()
             tag = "PASS" if ov >= MIN_OVERLAP_CHOSEN else "FAIL(list大变)"
-            print(f"  [扰动] m={CHOSEN:g} vs m={pm:g}: 平均重合 {ov:.2f}/10 → {tag}", flush=True)
+            print(
+                f"  [扰动] m={CHOSEN:g} vs m={pm:g}: 平均重合 {ov:.2f}/10 → {tag}",
+                flush=True,
+            )
 
     # 供 _diag_param_sweep_verify 复用 (需 date/board/config/pr5d/pr10d/win5d/win10d/overlap)
     summary = {

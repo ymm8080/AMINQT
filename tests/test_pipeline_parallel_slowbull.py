@@ -96,11 +96,23 @@ def _slow_rps_work(n_main=6, n_dual=6, n_dates=170, seed=3):
         frames.append(
             pd.DataFrame(
                 {
-                    "symbol": sym, "date": dates, "board": board,
-                    "open": op, "high": hi, "low": lo, "close": close,
-                    "open_hfq": op, "high_hfq": hi, "low_hfq": lo, "close_hfq": close,
-                    "volume": vol, "turnover_rate": 5.0, "volume_ratio": 1.0,
-                    "margin_balance_chg_5d": 0.01, "pct_70_con": 0.5, "adv20": 1e8,
+                    "symbol": sym,
+                    "date": dates,
+                    "board": board,
+                    "open": op,
+                    "high": hi,
+                    "low": lo,
+                    "close": close,
+                    "open_hfq": op,
+                    "high_hfq": hi,
+                    "low_hfq": lo,
+                    "close_hfq": close,
+                    "volume": vol,
+                    "turnover_rate": 5.0,
+                    "volume_ratio": 1.0,
+                    "margin_balance_chg_5d": 0.01,
+                    "pct_70_con": 0.5,
+                    "adv20": 1e8,
                 }
             )
         )
@@ -108,9 +120,13 @@ def _slow_rps_work(n_main=6, n_dual=6, n_dates=170, seed=3):
     work = indicators.prepare_adx(work)
     signals.add_signal_columns(work)
     work["gate_slow_bull"] = screener.compute_gate(work, "slow_bull")
-    for k, sym in enumerate(sorted(s for s in work["symbol"].unique() if s.startswith("30"))):
+    for k, sym in enumerate(
+        sorted(s for s in work["symbol"].unique() if s.startswith("30"))
+    ):
         work.loc[work["symbol"] == sym, "rps_60"] = (k + 1) / n_dual
-    for k, sym in enumerate(sorted(s for s in work["symbol"].unique() if not s.startswith("30"))):
+    for k, sym in enumerate(
+        sorted(s for s in work["symbol"].unique() if not s.startswith("30"))
+    ):
         work.loc[work["symbol"] == sym, "rps_60"] = (k + 1) / n_main
     return work
 
@@ -594,7 +610,9 @@ def test_slowbull_rank_dual_uses_rps60_top10():
     # 门后 12 只 (rps≥0.5) → dual top_n 收紧到 10 → 裁到 10
     assert len(pool) == 10
     assert pool["score"].is_monotonic_decreasing  # 按 rps_60 降序
-    sub = work[(work["board"] == "dual") & (work["date"] == date) & work["gate_slow_bull"]]
+    sub = work[
+        (work["board"] == "dual") & (work["date"] == date) & work["gate_slow_bull"]
+    ]
     rps = sub.set_index("symbol")["rps_60"]
     # score 列 = rps_60 截面相对强度 (非合成 score)
     assert np.allclose(pool["score"].values, rps.loc[pool["symbol"]].values)
@@ -607,7 +625,9 @@ def test_slowbull_rank_main_keeps_score_top20():
     pool = signals.daily_slowbull_pool(work, date, "main", SLOW_BULL, SLOW_BULL.top_n)
     # main 无 rps 门 → 24 只 gated 候选 → main top_n 保持 20
     assert len(pool) == 20
-    sub = work[(work["board"] == "main") & (work["date"] == date) & work["gate_slow_bull"]]
+    sub = work[
+        (work["board"] == "main") & (work["date"] == date) & work["gate_slow_bull"]
+    ]
     sc = pool_score(sub, SLOW_BULL.pool, weights=SLOW_BULL.pool_weights)
     # score 列 = 合成 score (非 rps_60 单因子)
     sc_map = dict(zip(sub["symbol"], sc))

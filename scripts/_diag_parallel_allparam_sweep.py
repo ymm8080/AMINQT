@@ -134,7 +134,9 @@ def build_configs() -> list[dict]:
     # b. cross_min_n
     for v in (30, 80):
         d = dict(REF, cross_min_n=v)
-        cfg.append({"name": f"cross_{v}", "param": "cross_min_n", "param_value": v, **d})
+        cfg.append(
+            {"name": f"cross_{v}", "param": "cross_min_n", "param_value": v, **d}
+        )
 
     # c. top_n
     for v in (5, 15):
@@ -148,7 +150,9 @@ def build_configs() -> list[dict]:
         ("fusion", "score_fusion"),
     ):
         d = dict(REF, score_col=col)
-        cfg.append({"name": f"score_{name}", "param": "score", "param_value": name, **d})
+        cfg.append(
+            {"name": f"score_{name}", "param": "score", "param_value": name, **d}
+        )
 
     # e. 池特征权重 (每池每可用特征 2× 等权)
     for f in SNIPER_AVAIL:
@@ -195,8 +199,15 @@ PARAM_CURRENT = {
     "w_fusion": "等权",
 }
 PARAM_ORDER = [
-    "cal_n", "kappa", "minn", "cross_min_n", "top_n",
-    "score", "w_sniper", "w_fusion", "joint",
+    "cal_n",
+    "kappa",
+    "minn",
+    "cross_min_n",
+    "top_n",
+    "score",
+    "w_sniper",
+    "w_fusion",
+    "joint",
 ]
 
 
@@ -284,7 +295,9 @@ def add_score_variants(work: pd.DataFrame) -> None:
             for c in avail:
                 r = cross_rank(sub, c).to_numpy(float)
                 ranks[c] = r
-                sum_all = r if sum_all is None else sum_all + r  # 加链传播 NaN (与 pool_score 一致)
+                sum_all = (
+                    r if sum_all is None else sum_all + r
+                )  # 加链传播 NaN (与 pool_score 一致)
             eq[idx] = sum_all / len(avail)
             for f in avail:
                 # pool_score 权重 {f:2.0} → 归一化 w_f=2/7, 其余 1/7 → (Σall + rank_f)/7
@@ -297,7 +310,9 @@ def add_score_variants(work: pd.DataFrame) -> None:
     _bm = work["board"].values == "main"
     _sub = work.iloc[np.nonzero(_bm)[0]]
     _sp = pool_score(_sub, SNIPER.pool).to_numpy(float)
-    if not np.allclose(work.loc[_bm, "pool_sniper"].to_numpy(float), _sp, equal_nan=True):
+    if not np.allclose(
+        work.loc[_bm, "pool_sniper"].to_numpy(float), _sp, equal_nan=True
+    ):
         raise RuntimeError("sniper 等权分数与 pool_score 不一致")
     del _sp
     gc.collect()
@@ -305,7 +320,9 @@ def add_score_variants(work: pd.DataFrame) -> None:
     work["score_sniper"] = work["pool_sniper"]
     work["score_fusion"] = work["pool_fusion"]
     # max/mean 用 np.fmax / 手动均值 (skipna 语义, 与模板 max(axis=1) 一致)
-    work["score_max"] = np.fmax(work["score_sniper"].to_numpy(float), work["score_fusion"].to_numpy(float))
+    work["score_max"] = np.fmax(
+        work["score_sniper"].to_numpy(float), work["score_fusion"].to_numpy(float)
+    )
     _a = work["score_sniper"].to_numpy(float)
     _b = work["score_fusion"].to_numpy(float)
     _both = np.isfinite(_a) & np.isfinite(_b)
@@ -403,7 +420,7 @@ def main() -> None:
     print(f"[panel] 尾部加载 {tail_days} 交易日...", flush=True)
     work = load_panel_tail(tail_days)
     all_dates = sorted(work["date"].unique())
-    eval_dates = all_dates[-args.eval_days:]
+    eval_dates = all_dates[-args.eval_days :]
     date_idx = {d: i for i, d in enumerate(all_dates)}
     print(
         f"[panel] {len(work):,}r / {work['symbol'].nunique():,}只 / "
@@ -422,7 +439,10 @@ def main() -> None:
     gc.collect()
     print(f"[closes] {len(closes):,} 只", flush=True)
 
-    print(f"[score] 预计算 {len(SCORE_COLS)} 个 score 变体列 (等权/加权池分+组合)...", flush=True)
+    print(
+        f"[score] 预计算 {len(SCORE_COLS)} 个 score 变体列 (等权/加权池分+组合)...",
+        flush=True,
+    )
     add_score_variants(work)
     print(f"[score] done ({time.time() - t0:.0f}s)", flush=True)
 
@@ -433,7 +453,10 @@ def main() -> None:
     # 每股预提取: 只存 (gd, gs_ref, gy, pos). 本扫描全部 minn≥50 且无前瞻下每股已实现
     # 样本 ≤ ~17 (cal_n≤28) → 每股回归分支永不触发, gs_ref 不会被读取 (纯横截面).
     ref_col = REF["score_col"]
-    print(f"[stock] 每股预提取 (score_col={ref_col}, label_pm_10d_net, valid_pos)...", flush=True)
+    print(
+        f"[stock] 每股预提取 (score_col={ref_col}, label_pm_10d_net, valid_pos)...",
+        flush=True,
+    )
     stock = work[["symbol", "date", ref_col, "label_pm_10d_net"]]
     sd64 = stock["date"].to_numpy().astype("datetime64[ns]")
     sym_data: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = {}
@@ -446,7 +469,9 @@ def main() -> None:
         sym_data[str(sym)] = (gd, gs, gy, pos)
     del stock
     gc.collect()
-    print(f"[stock] {len(sym_data):,} 只预提取完成 ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[stock] {len(sym_data):,} 只预提取完成 ({time.time() - t0:.0f}s)", flush=True
+    )
 
     print("[day] 逐日截面预提取 (syms + score 矩阵)...", flush=True)
     day_info: dict = {}
@@ -462,7 +487,9 @@ def main() -> None:
         day_info[D] = db
     del work, day
     gc.collect()
-    print(f"[day] 逐日截面预提取 {len(day_info)} 日 ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[day] 逐日截面预提取 {len(day_info)} 日 ({time.time() - t0:.0f}s)", flush=True
+    )
 
     def cross_slope_int(board: str, score_col: str, cal_lo, cutoff_date):
         """横截面窗 = [cal_lo, cutoff_date] 只用已实现标签 (行 t 卖价 ≤ cutoff_date)."""
@@ -485,7 +512,10 @@ def main() -> None:
         slope = (n * Sxy - Sx * Sy) / var
         return (slope, (Sy - slope * Sx) / n, n)
 
-    print(f"[calib] walk-forward 逐日重拟合 × {len(CONFIGS)} configs (无前瞻窗)...", flush=True)
+    print(
+        f"[calib] walk-forward 逐日重拟合 × {len(CONFIGS)} configs (无前瞻窗)...",
+        flush=True,
+    )
     rows: list[dict] = []
     cs_cache: dict = {}
     mag_cache: dict = {}
@@ -505,7 +535,9 @@ def main() -> None:
                 cutoff_date = all_dates[di - REALIZED_DROP]
                 ckey = (board, cfg["score_col"], cal_lo, cutoff_date)
                 if ckey not in cs_cache:
-                    cs_cache[ckey] = cross_slope_int(board, cfg["score_col"], cal_lo, cutoff_date)
+                    cs_cache[ckey] = cross_slope_int(
+                        board, cfg["score_col"], cal_lo, cutoff_date
+                    )
                 cs_ent = cs_cache[ckey]
                 if cs_ent is None:
                     tops[cfg["name"]] = None
@@ -529,13 +561,15 @@ def main() -> None:
                         gd, gs, gy, pos = sd
                         iLo = int(np.searchsorted(gd, cal_lo64, side="left"))
                         # 无前瞻: 该股行 t 可用 ⟺ t+11 交易日严格早于 D ⟺ 索引 < N_lt(D) - 11
-                        iEnd = int(np.searchsorted(gd, D64, side="left")) - REALIZED_DROP
+                        iEnd = (
+                            int(np.searchsorted(gd, D64, side="left")) - REALIZED_DROP
+                        )
                         vLo = int(np.searchsorted(pos, iLo, side="left"))
                         vEnd = int(np.searchsorted(pos, iEnd, side="left"))
                         vc = vEnd - vLo
                         if vc >= cfg["minn"]:  # 本扫描永不触发 (minn≥50 > ~17)
                             take = min(vc, cfg["psw"])
-                            r = pos[vEnd - take: vEnd]
+                            r = pos[vEnd - take : vEnd]
                             x = gs[r]
                             y = gy[r]
                             raw_slope, _ = _ols_slope_intercept(x, y)
@@ -548,7 +582,11 @@ def main() -> None:
                     mag_cache[mkey] = mag_arr
                 mag_arr = mag_cache[mkey]
                 rank_df = pd.DataFrame(
-                    {"symbol": syms, "score": smat[:, SCORE_COL_IDX[cfg["score_col"]]], "mag": mag_arr}
+                    {
+                        "symbol": syms,
+                        "score": smat[:, SCORE_COL_IDX[cfg["score_col"]]],
+                        "mag": mag_arr,
+                    }
                 ).dropna(subset=["mag"])
                 if rank_df.empty:
                     tops[cfg["name"]] = None
@@ -587,10 +625,14 @@ def main() -> None:
                         "pr3d": _safe_nanmean(pr[:, 1]),
                         "pr5d": _safe_nanmean(pr[:, 2]),
                         "pr10d": _safe_nanmean(pr[:, 3]),
-                        "win5d": float((pr[:, 2] > 0).sum() / (~np.isnan(pr[:, 2])).sum())
+                        "win5d": float(
+                            (pr[:, 2] > 0).sum() / (~np.isnan(pr[:, 2])).sum()
+                        )
                         if (~np.isnan(pr[:, 2])).sum()
                         else float("nan"),
-                        "win10d": float((pr[:, 3] > 0).sum() / (~np.isnan(pr[:, 3])).sum())
+                        "win10d": float(
+                            (pr[:, 3] > 0).sum() / (~np.isnan(pr[:, 3])).sum()
+                        )
                         if (~np.isnan(pr[:, 3])).sum()
                         else float("nan"),
                         "overlap": overlap,
@@ -608,11 +650,20 @@ def main() -> None:
     daily.to_csv(out_dir / "daily.csv", index=False)
 
     # ---------------- 汇总 ----------------
-    print(f"\n===== 并行全参数/旋钮扫描 [无前瞻 realized labels]: TOP-N c2c 实得 "
-          f"(最近 {args.eval_days} 交易日) =====", flush=True)
-    print("评估 = close-to-close 点对点 (买=close[T+1], 卖=close[T+1+k]); "
-          "校准 = 每股收缩回归, target=label_pm_10d_net", flush=True)
-    print(f"拟合窗 = [D-cal_n, D-{REALIZED_DROP}) 只用已实现标签 (无前瞻); 每 config 独立 cross_min_n", flush=True)
+    print(
+        f"\n===== 并行全参数/旋钮扫描 [无前瞻 realized labels]: TOP-N c2c 实得 "
+        f"(最近 {args.eval_days} 交易日) =====",
+        flush=True,
+    )
+    print(
+        "评估 = close-to-close 点对点 (买=close[T+1], 卖=close[T+1+k]); "
+        "校准 = 每股收缩回归, target=label_pm_10d_net",
+        flush=True,
+    )
+    print(
+        f"拟合窗 = [D-cal_n, D-{REALIZED_DROP}) 只用已实现标签 (无前瞻); 每 config 独立 cross_min_n",
+        flush=True,
+    )
     print(
         f"参考配置 ref = (cal_n={REF['cal_n']}, psw={REF['psw']}, minn={REF['minn']}, "
         f"kappa={REF['kappa']}, cross_min_n={REF['cross_min_n']}, top_n={REF['top_n']}, "
@@ -642,11 +693,17 @@ def main() -> None:
             m5, m10 = int(m5v.sum()), int(m10v.sum())
             if m5:
                 w5 = int(
-                    (a.loc[common, "pr5d"].values[m5v] > b.loc[common, "pr5d"].values[m5v]).sum()
+                    (
+                        a.loc[common, "pr5d"].values[m5v]
+                        > b.loc[common, "pr5d"].values[m5v]
+                    ).sum()
                 )
             if m10:
                 w10 = int(
-                    (a.loc[common, "pr10d"].values[m10v] > b.loc[common, "pr10d"].values[m10v]).sum()
+                    (
+                        a.loc[common, "pr10d"].values[m10v]
+                        > b.loc[common, "pr10d"].values[m10v]
+                    ).sum()
                 )
         return w5, m5, w10, m10
 
@@ -677,7 +734,11 @@ def main() -> None:
                 r = g.mean(numeric_only=True)
                 n = int(len(g))
                 w5, m5, w10, m10 = h2h_wins(g, b)
-                ov = float(g["overlap"].mean()) if not g["overlap"].isna().all() else float("nan")
+                ov = (
+                    float(g["overlap"].mean())
+                    if not g["overlap"].isna().all()
+                    else float("nan")
+                )
                 tag = f"{str(pv):>22}" if name != "ref" else "  ref    "
                 print(
                     f"  {tag}{n:>4}{r['pr2d']:>+9.4f}{r['pr3d']:>+9.4f}"
@@ -742,10 +803,7 @@ def main() -> None:
             f"横截面按日期桶截取"
         ),
         "reference_config": REF,
-        "configs": [
-            {k: v for k, v in c.items() if k != "param"}
-            for c in CONFIGS
-        ],
+        "configs": [{k: v for k, v in c.items() if k != "param"} for c in CONFIGS],
         "score_cols": SCORE_COLS,
         "sweep_summary": summary_boards,
         "agg": agg_rows,

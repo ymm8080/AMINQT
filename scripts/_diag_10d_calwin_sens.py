@@ -97,8 +97,15 @@ def build_configs() -> list[dict]:
             shrink_kappa=k,
             tag=f"cal{cal_n}_w{w}_mn{mn}_k{k}",
             group=group,
-            baseline=(key == (BASELINE["cal_n"], BASELINE["per_stock_window"],
-                              BASELINE["per_stock_min_n"], BASELINE["shrink_kappa"])),
+            baseline=(
+                key
+                == (
+                    BASELINE["cal_n"],
+                    BASELINE["per_stock_window"],
+                    BASELINE["per_stock_min_n"],
+                    BASELINE["shrink_kappa"],
+                )
+            ),
         )
 
     # 主扫描: 只动 cal_n, 其余生产默认
@@ -179,7 +186,9 @@ def point_rets(closes: dict, sym: str, d, ks: tuple[int, ...]) -> list[float]:
     if sym not in closes:
         return [np.nan] * len(ks)
     dates, close = closes[sym]
-    d = np.datetime64(d)  # Timestamp → datetime64 (numpy searchsorted 不认 pandas Timestamp)
+    d = np.datetime64(
+        d
+    )  # Timestamp → datetime64 (numpy searchsorted 不认 pandas Timestamp)
     i = int(np.searchsorted(dates, d))
     if i >= len(dates) or dates[i] != d or i + 1 >= len(dates):
         return [np.nan] * len(ks)
@@ -253,8 +262,10 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     tail_days = max_cal_n + eval_days + 40
-    print(f"[panel] 尾部加载 {tail_days} 交易日 (单进程复用于全部 {len(configs)} config)...",
-          flush=True)
+    print(
+        f"[panel] 尾部加载 {tail_days} 交易日 (单进程复用于全部 {len(configs)} config)...",
+        flush=True,
+    )
     work = load_panel_tail(tail_days)
     all_dates = sorted(work["date"].unique())
     eval_dates = all_dates[-eval_days:]
@@ -334,12 +345,19 @@ def main() -> None:
                 mags: dict[str, np.ndarray] = {}
                 for cfg in cal_cfgs:
                     mag = _fit_mag_arr(
-                        day_sym, day_scores, by_sym, cross_slope, cross_int,
-                        cfg["per_stock_window"], cfg["per_stock_min_n"],
+                        day_sym,
+                        day_scores,
+                        by_sym,
+                        cross_slope,
+                        cross_int,
+                        cfg["per_stock_window"],
+                        cfg["per_stock_min_n"],
                         cfg["shrink_kappa"],
                     )
                     mags[cfg["tag"]] = mag
-                    rk = pd.DataFrame({"symbol": day_sym, "mag": mag}).dropna(subset=["mag"])
+                    rk = pd.DataFrame({"symbol": day_sym, "mag": mag}).dropna(
+                        subset=["mag"]
+                    )
                     top_sets[cfg["tag"]] = set(
                         rk.sort_values("mag", ascending=False).head(TOP_N)["symbol"]
                     )
@@ -372,7 +390,9 @@ def main() -> None:
                             "win5d": float(np.sum(win5 > 0) / np.sum(~np.isnan(win5)))
                             if np.sum(~np.isnan(win5))
                             else float("nan"),
-                            "win10d": float(np.sum(win10 > 0) / np.sum(~np.isnan(win10)))
+                            "win10d": float(
+                                np.sum(win10 > 0) / np.sum(~np.isnan(win10))
+                            )
                             if np.sum(~np.isnan(win10))
                             else float("nan"),
                             "overlap": len(set(pick) & base_set),
@@ -381,8 +401,11 @@ def main() -> None:
         del cal, day
         gc.collect()
         if (k + 1) % 50 == 0 or k + 1 == len(eval_dates):
-            print(f"[calib] {k + 1}/{len(eval_dates)} 评估日 done "
-                  f"({time.time() - t0:.0f}s)", flush=True)
+            print(
+                f"[calib] {k + 1}/{len(eval_dates)} 评估日 done "
+                f"({time.time() - t0:.0f}s)",
+                flush=True,
+            )
 
     daily = pd.DataFrame(rows)
     if daily.empty:
@@ -392,13 +415,19 @@ def main() -> None:
     print(f"[out] daily.csv {len(daily):,} 行 ({time.time() - t0:.0f}s)", flush=True)
 
     # 汇总: 逐 config×board 均值 + 日级上涨率 + 头对头 vs BASELINE
-    print(f"\n===== mag_10d 校准参数敏感度 (最近 {eval_days} 交易日, c2c 目标) =====", flush=True)
+    print(
+        f"\n===== mag_10d 校准参数敏感度 (最近 {eval_days} 交易日, c2c 目标) =====",
+        flush=True,
+    )
     agg_rows: list[dict] = []
     for board in BOARDS:
         sub = daily[daily["board"] == board]
         if sub.empty:
             continue
-        print(f"\n[{board}] 评估 = close-to-close 实得 (买=close[T+1], 卖=close[T+1+k])", flush=True)
+        print(
+            f"\n[{board}] 评估 = close-to-close 实得 (买=close[T+1], 卖=close[T+1+k])",
+            flush=True,
+        )
         base_daily = sub[sub["baseline"]].set_index("date")[["pr5d", "pr10d"]]
         for cfg in configs:
             g = sub[sub["config"] == cfg["tag"]]
@@ -446,9 +475,9 @@ def main() -> None:
                     "pr3d": round(float(r["pr3d"]), 5),
                     "pr5d": round(float(r["pr5d"]), 5),
                     "pr10d": round(float(r["pr10d"]), 5),
-                    "win5d_day": round(day_win5, 4),   # 日级: 平均 pr5d>0 的天数占比
+                    "win5d_day": round(day_win5, 4),  # 日级: 平均 pr5d>0 的天数占比
                     "win10d_day": round(day_win10, 4),
-                    "h2h_wins_pr5d": w5,               # 逐日 TOP10 平均 pr5d 高于 baseline 的天数
+                    "h2h_wins_pr5d": w5,  # 逐日 TOP10 平均 pr5d 高于 baseline 的天数
                     "h2h_n_pr5d": int(v5.sum()),
                     "h2h_wins_pr10d": w10,
                     "h2h_n_pr10d": int(v10.sum()),
@@ -463,8 +492,8 @@ def main() -> None:
         "smoke": args.smoke,
         "metric": "close-to-close point returns (买=close[T+1], 卖=close[T+1+k]); NOT MFE",
         "calibration": "每股收缩回归 target=label_pm_10d_net; "
-                       "mag = λ*raw_slope+(1-λ)*cross_slope, λ=len/(len+κ), "
-                       "len=该股最近 per_stock_window 行, 不足 per_stock_min_n 回退横截面",
+        "mag = λ*raw_slope+(1-λ)*cross_slope, λ=len/(len+κ), "
+        "len=该股最近 per_stock_window 行, 不足 per_stock_min_n 回退横截面",
         "baseline": BASELINE,
         "baseline_tag": baseline["tag"],
         "scanned": {
@@ -474,8 +503,18 @@ def main() -> None:
             "shrink_kappa": list(KAPPAS),
         },
         "configs": [
-            {k: c[k] for k in ("tag", "group", "cal_n", "per_stock_window",
-                               "per_stock_min_n", "shrink_kappa", "baseline")}
+            {
+                k: c[k]
+                for k in (
+                    "tag",
+                    "group",
+                    "cal_n",
+                    "per_stock_window",
+                    "per_stock_min_n",
+                    "shrink_kappa",
+                    "baseline",
+                )
+            }
             for c in configs
         ],
         "definitions": {

@@ -144,7 +144,8 @@ class BruteForceGenerator:
 
                 for w in self.transforms.get("pct_change", {}).get("windows", ()):
                     o = np.full(n, np.nan)
-                    o[w:] = (s[w:] - s[:-w]) / np.abs(s[:-w]) * 100
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        o[w:] = (s[w:] - s[:-w]) / np.abs(s[:-w]) * 100
                     feats[f"{col}_brute_pct{w}"] = o
 
                 for w in self.transforms.get("rolling_mean", {}).get("windows", ()):
@@ -153,9 +154,10 @@ class BruteForceGenerator:
                     )
 
                 for w in self.transforms.get("rolling_std", {}).get("windows", ()):
-                    feats[f"{col}_brute_std{w}"] = (
-                        pd.Series(s).rolling(w, min_periods=1).std().values
-                    )
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        feats[f"{col}_brute_std{w}"] = (
+                            pd.Series(s).rolling(w, min_periods=1).std().values
+                        )
 
                 for w in self.transforms.get("rolling_max", {}).get("windows", ()):
                     r = pd.Series(s).rolling(w, min_periods=1)
@@ -169,7 +171,8 @@ class BruteForceGenerator:
 
                 for w in self.transforms.get("momentum", {}).get("windows", ()):
                     o = np.full(n, np.nan)
-                    o[w:] = s[w:] / np.abs(s[:-w])
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        o[w:] = s[w:] / np.abs(s[:-w])
                     feats[f"{col}_brute_mom{w}"] = o
 
                 for w in self.transforms.get("EMA", {}).get("windows", ()):
@@ -216,7 +219,8 @@ class BruteForceGenerator:
                 if family_name == "pct_change":
                     for w in windows:
                         o = np.full(n, np.nan, dtype=np.float32)
-                        o[w:] = (s[w:] - s[:-w]) / np.abs(s[:-w]) * 100
+                        with np.errstate(divide="ignore", invalid="ignore"):
+                            o[w:] = (s[w:] - s[:-w]) / np.abs(s[:-w]) * 100
                         feats[f"{col}_brute_{suffix}{w}"] = o
                 elif family_name == "rolling_mean":
                     for w in windows:
@@ -228,12 +232,13 @@ class BruteForceGenerator:
                         )
                 elif family_name == "rolling_std":
                     for w in windows:
-                        feats[f"{col}_brute_{suffix}{w}"] = (
-                            pd.Series(s)
-                            .rolling(w, min_periods=1)
-                            .std()
-                            .values.astype(np.float32)
-                        )
+                        with np.errstate(divide="ignore", invalid="ignore"):
+                            feats[f"{col}_brute_{suffix}{w}"] = (
+                                pd.Series(s)
+                                .rolling(w, min_periods=1)
+                                .std()
+                                .values.astype(np.float32)
+                            )
                 elif family_name in ("rolling_max", "rolling_min"):
                     for w in windows:
                         feats[f"{col}_brute_max{w}"] = (
@@ -256,7 +261,8 @@ class BruteForceGenerator:
                 elif family_name == "momentum":
                     for w in windows:
                         o = np.full(n, np.nan, dtype=np.float32)
-                        o[w:] = s[w:] / np.abs(s[:-w])
+                        with np.errstate(divide="ignore", invalid="ignore"):
+                            o[w:] = s[w:] / np.abs(s[:-w])
                         feats[f"{col}_brute_{suffix}{w}"] = o.astype(np.float32)
                 elif family_name == "EMA":
                     for w in windows:
@@ -421,7 +427,13 @@ def gate_d_ablation(
             if len(g) >= 10
         ]
         a = np.array([x for x in ics if not np.isnan(x)])
-        return float(round(a.mean() / a.std() if a.std() > 0 else 0, 4))
+        # len(a)<=1 时 std 必然为 0 (原式也返回 0), 提前短路避免 numpy
+        # "Degrees of freedom <= 0" RuntimeWarning (单样本 var).
+        if len(a) > 1:
+            sd = a.std()
+            if sd > 0:
+                return float(round(a.mean() / sd, 4))
+        return 0.0
 
     # Quick ablation
     ab_params = dict(base_params)

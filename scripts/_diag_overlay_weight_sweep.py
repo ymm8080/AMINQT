@@ -114,11 +114,18 @@ def main() -> int:
 
         prob, pc = load_probs(board, predictor, oos_start)
         sub = sub.merge(prob, on=["date", "symbol"], how="left")
-        print(f"LEGACY prob 列 = {pc} | OOS 覆盖 {sub['prob_up'].notna().mean():.1%}", flush=True)
+        print(
+            f"LEGACY prob 列 = {pc} | OOS 覆盖 {sub['prob_up'].notna().mean():.1%}",
+            flush=True,
+        )
         del prob
         gc.collect()
 
-        board_out: dict = {"prob_col": pc, "latest": str(sub["date"].max()), "systems": {}}
+        board_out: dict = {
+            "prob_col": pc,
+            "latest": str(sub["date"].max()),
+            "systems": {},
+        }
         for name, spec in SYSTEMS.items():
             print(f"\n── 系统 [{name}] TOP-{spec.top_n} ──")
             s = sub.copy()
@@ -146,7 +153,11 @@ def main() -> int:
                 }
                 # 主视界 3d + 全视界加权 (C2C 口径, LABEL_WEIGHTS)
                 w3 = rows[f"{wp:.2f}"]["per_horizon"]["3d"]
-                lab_w = {3: LABEL_WEIGHTS[3], 5: LABEL_WEIGHTS[5], 10: LABEL_WEIGHTS[10]}
+                lab_w = {
+                    3: LABEL_WEIGHTS[3],
+                    5: LABEL_WEIGHTS[5],
+                    10: LABEL_WEIGHTS[10],
+                }
                 wsum, wtot = 0.0, 0.0
                 for h, w in lab_w.items():
                     mag = rows[f"{wp:.2f}"]["per_horizon"][f"{h}d"]["mag"]
@@ -164,7 +175,10 @@ def main() -> int:
             _m = rows["1.00"]["per_horizon"].get("3d", {}).get("mag")
             _r = ref["per_horizon"].get("3d", {}).get("mag")
             ok = _m is not None and _r is not None and abs(_m - _r) < 1e-9
-            print(f"  自检 w_pool=1.0 mag_3d==run_system: {'✓' if ok else '✗'}", flush=True)
+            print(
+                f"  自检 w_pool=1.0 mag_3d==run_system: {'✓' if ok else '✗'}",
+                flush=True,
+            )
             board_out["systems"][name] = {
                 "top_n": spec.top_n,
                 "selfcheck": bool(ok),

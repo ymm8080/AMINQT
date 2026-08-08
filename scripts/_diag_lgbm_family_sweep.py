@@ -35,7 +35,9 @@ def run(board: str, kind: str) -> str:
     out = (r.stdout or "") + (r.stderr or "")
     # 只保留进度行 + 错误 (过滤 lightgbm 噪音)
     for line in out.splitlines():
-        if any(skip in line for skip in ("DeprecationWarning", "eval_set =", "  eval_X")):
+        if any(
+            skip in line for skip in ("DeprecationWarning", "eval_set =", "  eval_X")
+        ):
             continue
         print("  " + line, flush=True)
     if r.returncode != 0:

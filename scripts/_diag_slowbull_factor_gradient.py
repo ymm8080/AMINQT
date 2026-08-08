@@ -44,21 +44,44 @@ from config.settings import BACKTEST_RESULT_DIR
 # ── 候选因子 ──
 # 打分池 7 因子 (prepare_adx 产出) + 追高/守得住代理 (面板列)
 POOL_FACTORS = (
-    "adx_score", "ma_tightness", "sharpe_20", "rps_60",
-    "pv_corr_5", "margin_balance_chg_5d", "pct_70_con",
+    "adx_score",
+    "ma_tightness",
+    "sharpe_20",
+    "rps_60",
+    "pv_corr_5",
+    "margin_balance_chg_5d",
+    "pct_70_con",
 )
 EXTRA_FACTORS = (
-    "close_position", "ret_reversal_5d", "up_streak", "bias_5d", "pct_90_con",
+    "close_position",
+    "ret_reversal_5d",
+    "up_streak",
+    "bias_5d",
+    "pct_90_con",
 )
 FACTORS = POOL_FACTORS + EXTRA_FACTORS
 
 NEED = [
-    "symbol", "date", "close_hfq", "high_hfq", "low_hfq", "open_hfq",
-    "adv20", "volume", "turnover_rate", "volume_ratio", "margin_balance_chg_5d",
+    "symbol",
+    "date",
+    "close_hfq",
+    "high_hfq",
+    "low_hfq",
+    "open_hfq",
+    "adv20",
+    "volume",
+    "turnover_rate",
+    "volume_ratio",
+    "margin_balance_chg_5d",
 ] + list(EXTRA_FACTORS)
 
 SELL_COLS = (
-    "below_ma20", "adx_broken", "big_drop", "below_ma5_3d", "turnover_spike", "tp_80_div",
+    "below_ma20",
+    "adx_broken",
+    "big_drop",
+    "below_ma5_3d",
+    "turnover_spike",
+    "tp_80_div",
 )
 
 OOS_DAYS = 250
@@ -71,7 +94,9 @@ def build_base_panel() -> pd.DataFrame:
         slices.append(df)
         del df
         gc.collect()
-    work = pd.concat(slices, ignore_index=True).sort_values(["symbol", "date"], ignore_index=True)
+    work = pd.concat(slices, ignore_index=True).sort_values(
+        ["symbol", "date"], ignore_index=True
+    )
     del slices
     gc.collect()
     work["board"] = work["symbol"].map(board_of)
@@ -80,7 +105,9 @@ def build_base_panel() -> pd.DataFrame:
     signals.add_signal_columns(work)
     work["gate_slow_bull"] = screener.slow_bull_gate(work, ADX_SPEC)
     signals.add_market_regime(work, SLOW_BULL_REGIME)
-    work["adx_score"] = work["adx"].clip(lower=0.0, upper=float(ADX_SPEC["adx_optimal_max"]))
+    work["adx_score"] = work["adx"].clip(
+        lower=0.0, upper=float(ADX_SPEC["adx_optimal_max"])
+    )
     print(
         f"基础面板 rows={len(work):,} stocks={work['symbol'].nunique():,} "
         f"dates={work['date'].nunique():,} | 可交易门剔除 {gate['removed_stocks']} 只",
@@ -108,15 +135,24 @@ def build_arrays(work: pd.DataFrame) -> dict:
         "ma20": work["ma20"].values,
         "any_sell": any_sell,
         "cost": COST + 2 * np.array([slippage_tier(v) for v in work["adv20"].values]),
-        "regime_lut": dict(zip(work["date"].values, work["slow_bull_regime"].values, strict=False)),
+        "regime_lut": dict(
+            zip(work["date"].values, work["slow_bull_regime"].values, strict=False)
+        ),
     }
     return A
 
 
-def exit_rets(picks: pd.DataFrame, A: dict, trail_pct: float, hard_stop: float, max_hold: int) -> tuple[np.ndarray, np.ndarray]:
+def exit_rets(
+    picks: pd.DataFrame, A: dict, trail_pct: float, hard_stop: float, max_hold: int
+) -> tuple[np.ndarray, np.ndarray]:
     """trail8 退出 (收盘自峰值回落 trail_pct 走 + 硬止损 hard_stop), 返回 (净收益, 持有天数)."""
     sym_code, starts, ends = A["sym_code"], A["starts"], A["ends"]
-    dates_dt, close, _any_sell, cost_arr = A["dates"], A["close"], A["any_sell"], A["cost"]
+    dates_dt, close, _any_sell, cost_arr = (
+        A["dates"],
+        A["close"],
+        A["any_sell"],
+        A["cost"],
+    )
     M = int(max_hold)
     hard = float(hard_stop)
     rets = np.full(len(picks), np.nan)
@@ -171,7 +207,9 @@ def percentile_rank(work: pd.DataFrame, cols) -> pd.DataFrame:
     return r
 
 
-def gradient_table(ranks: np.ndarray, rets: np.ndarray, holds: np.ndarray, dates: np.ndarray) -> dict:
+def gradient_table(
+    ranks: np.ndarray, rets: np.ndarray, holds: np.ndarray, dates: np.ndarray
+) -> dict:
     """按截面百分位切 10 档, 每档聚合; 返回档表 + d10-d1 + Spearman."""
     m = np.isfinite(rets) & np.isfinite(ranks)
     if m.sum() < 20:
@@ -184,8 +222,14 @@ def gradient_table(ranks: np.ndarray, rets: np.ndarray, holds: np.ndarray, dates
     for di in range(int(q.max()) + 1):
         sel = np.asarray(q) == di
         agg = _agg(rets[m][sel], holds[m][sel], dates[m][sel])
-        dec_rows.append({"decile": int(di), "lo": round(float(r[sel].min()), 3),
-                         "hi": round(float(r[sel].max()), 3), **agg})
+        dec_rows.append(
+            {
+                "decile": int(di),
+                "lo": round(float(r[sel].min()), 3),
+                "hi": round(float(r[sel].max()), 3),
+                **agg,
+            }
+        )
         if agg["realized"] is not None:
             d10s.append((di, agg["realized"]))
     out["deciles"] = dec_rows
@@ -197,10 +241,18 @@ def gradient_table(ranks: np.ndarray, rets: np.ndarray, holds: np.ndarray, dates
         diffs = np.diff(arr)
         out["mono_frac"] = round(float((diffs > 0).mean()), 3)
         if len(arr) >= 3:
-            sp = pd.Series(arr).rank().corr(pd.Series(range(len(arr))).rank(), method="spearman")
+            sp = (
+                pd.Series(arr)
+                .rank()
+                .corr(pd.Series(range(len(arr))).rank(), method="spearman")
+            )
             out["spearman"] = round(float(sp), 3) if not np.isnan(sp) else None
         hi_idx = arr >= arr.mean()
-        out["top_half_minus_bottom"] = round(float(arr[hi_idx].mean() - arr[~hi_idx].mean()), 5) if hi_idx.any() and (~hi_idx).any() else None
+        out["top_half_minus_bottom"] = (
+            round(float(arr[hi_idx].mean() - arr[~hi_idx].mean()), 5)
+            if hi_idx.any() and (~hi_idx).any()
+            else None
+        )
     return out
 
 
@@ -213,7 +265,10 @@ def main() -> int:
     work = build_base_panel()
     dates = np.sort(work["date"].unique())
     oos_start = dates[-OOS_DAYS]
-    print(f"全窗 {dates[0]} → {dates[-1]} ({len(dates)}d) | OOS {OOS_DAYS}d 起 {oos_start}", flush=True)
+    print(
+        f"全窗 {dates[0]} → {dates[-1]} ({len(dates)}d) | OOS {OOS_DAYS}d 起 {oos_start}",
+        flush=True,
+    )
     A = build_arrays(work)
 
     # 合成 pool_score 的截面百分位 (同样板内日截面)
@@ -230,18 +285,30 @@ def main() -> int:
         "ts": pd.Timestamp.now().strftime("%Y%m%d_%H%M%S"),
         "objective": "gate 内单因子截面百分位 → trail8 实得收益梯度 (守得住涨幅第二道门筛查)",
         "oos_days": OOS_DAYS,
-        "window": {"start": str(pd.Timestamp(oos_start).date()), "end": str(pd.Timestamp(dates[-1]).date()), "n_days": OOS_DAYS},
+        "window": {
+            "start": str(pd.Timestamp(oos_start).date()),
+            "end": str(pd.Timestamp(dates[-1]).date()),
+            "n_days": OOS_DAYS,
+        },
         "entry_exit": "close_hfq[T+1] 入场, trail8 收盘判定退出, 成本=COST+2×滑点",
         "boards": {},
     }
 
     for b in ("main", "dual"):
-        mask = (work["board"] == b) & work["gate_slow_bull"] & (work["date"] >= oos_start)
+        mask = (
+            (work["board"] == b) & work["gate_slow_bull"] & (work["date"] >= oos_start)
+        )
         wb = work[mask].copy()
         rk_b = rk[mask]
         print(f"\n=== board={b}: gated OOS picks={len(wb):,} ===", flush=True)
         pk = wb[["symbol", "date"]]
-        tr, th = exit_rets(pk, A, SLOW_BULL_REGIME["trail_pct"], SLOW_BULL_REGIME["hard_stop"], SLOW_BULL_REGIME["max_hold"])
+        tr, th = exit_rets(
+            pk,
+            A,
+            SLOW_BULL_REGIME["trail_pct"],
+            SLOW_BULL_REGIME["hard_stop"],
+            SLOW_BULL_REGIME["max_hold"],
+        )
         up = pk["date"].map(A["regime_lut"]).fillna(False).values
         pdate = pk["date"].values
         # op_rule = 仅上升段 (生产开仓); all = 不分 regime
@@ -251,15 +318,23 @@ def main() -> int:
         bres["all_trail"] = agg_all
         bres["op_rule"] = agg_op
         bres["n_up"] = int(up.sum())
-        print(f"  all_trail: {agg_all['realized']} n={agg_all['n']} | op_rule(up): {agg_op['realized']} n={agg_op['n']}", flush=True)
+        print(
+            f"  all_trail: {agg_all['realized']} n={agg_all['n']} | op_rule(up): {agg_op['realized']} n={agg_op['n']}",
+            flush=True,
+        )
         for c in FACTOR_LIST:
             rk_col = rk_b[f"rk_{c}"].values
             g = gradient_table(rk_col, tr, th, pdate)
             g_up = gradient_table(rk_col[up], tr[up], th[up], pdate[up])
             bres["factors"][c] = {"all": g, "op_rule": g_up}
-            f"d10-d1={g_up.get('d10_minus_d1')}" if g_up.get("d10_minus_d1") is not None else "n/a"
-            print(f"    {c:<24} op_rule d10-d1={g_up.get('d10_minus_d1')} "
-                  f"sp={g_up.get('spearman')} mono={g_up.get('mono_frac')} n={g_up.get('n')} | all d10-d1={g.get('d10_minus_d1')}", flush=True)
+            f"d10-d1={g_up.get('d10_minus_d1')}" if g_up.get(
+                "d10_minus_d1"
+            ) is not None else "n/a"
+            print(
+                f"    {c:<24} op_rule d10-d1={g_up.get('d10_minus_d1')} "
+                f"sp={g_up.get('spearman')} mono={g_up.get('mono_frac')} n={g_up.get('n')} | all d10-d1={g.get('d10_minus_d1')}",
+                flush=True,
+            )
         out["boards"][b] = bres
 
     del work, rk

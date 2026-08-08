@@ -117,7 +117,9 @@ def apply_config(work: pd.DataFrame, adx_spec: dict, regime_spec: dict) -> None:
     """就地按配置重算: 卖出信号列 + 硬门槛 + adx_score + 市场状态."""
     signals.sell_signals(work, adx_spec)
     work["gate_slow_bull"] = screener.slow_bull_gate(work, adx_spec)
-    work["adx_score"] = work["adx"].clip(lower=0.0, upper=float(adx_spec["adx_optimal_max"]))
+    work["adx_score"] = work["adx"].clip(
+        lower=0.0, upper=float(adx_spec["adx_optimal_max"])
+    )
     signals.add_market_regime(work, regime_spec)
 
 
@@ -190,9 +192,7 @@ def exit_rets(
     hard = float(hard_stop)
     rets = np.full(len(picks), np.nan)
     holds = np.full(len(picks), np.nan)
-    for i, (sym, T) in enumerate(
-        zip(picks["symbol"], picks["date"], strict=False)
-    ):
+    for i, (sym, T) in enumerate(zip(picks["symbol"], picks["date"], strict=False)):
         c = sym_code[str(sym)]
         lo, hi = starts[c], ends[c]
         base = lo + int(np.searchsorted(dates_dt[lo:hi], np.datetime64(T)))
@@ -234,7 +234,13 @@ def _agg(rets: np.ndarray, holds: np.ndarray, dates: np.ndarray) -> dict:
     m = np.isfinite(rets)
     rr = rets[m]
     if not len(rr):
-        return {"n": 0, "realized": None, "p_win": None, "median_hold": None, "max_dd": None}
+        return {
+            "n": 0,
+            "realized": None,
+            "p_win": None,
+            "median_hold": None,
+            "max_dd": None,
+        }
     hh = holds[m]
     order = np.argsort(dates[m], kind="stable")  # 按入场日排序 → 顺序权益曲线
     eq = np.cumprod(1 + rr[order])
@@ -255,7 +261,10 @@ def _concentration(rets: np.ndarray) -> dict:
         return {"best_trade": None, "frac_of_total": None}
     total = float(rr.sum())
     best = float(np.max(rr))
-    return {"best_trade": round(best, 4), "frac_of_total": round(best / total, 3) if total > 0 else None}
+    return {
+        "best_trade": round(best, 4),
+        "frac_of_total": round(best / total, 3) if total > 0 else None,
+    }
 
 
 def eval_board(
@@ -296,24 +305,48 @@ def eval_board(
 
 
 def build_configs() -> list[dict]:
-    cfgs = [{"name": "prod_ref", "kind": "ref", "param": None, "value": None,
-             "adx": deepcopy(ADX_SPEC), "regime": deepcopy(SLOW_BULL_REGIME)}]
+    cfgs = [
+        {
+            "name": "prod_ref",
+            "kind": "ref",
+            "param": None,
+            "value": None,
+            "adx": deepcopy(ADX_SPEC),
+            "regime": deepcopy(SLOW_BULL_REGIME),
+        }
+    ]
     for param, spec in ADX_PERTURBS.items():
         prod_val = ADX_SPEC[param]
         for v in spec["vals"]:
             adx = deepcopy(ADX_SPEC)
             adx[param] = v
-            cfgs.append({"name": f"{param}={v}", "kind": "adx", "param": param,
-                         "value": v, "prod": prod_val, "adx": adx,
-                         "regime": deepcopy(SLOW_BULL_REGIME)})
+            cfgs.append(
+                {
+                    "name": f"{param}={v}",
+                    "kind": "adx",
+                    "param": param,
+                    "value": v,
+                    "prod": prod_val,
+                    "adx": adx,
+                    "regime": deepcopy(SLOW_BULL_REGIME),
+                }
+            )
     for param, spec in REGIME_PERTURBS.items():
         prod_val = SLOW_BULL_REGIME[param]
         for v in spec["vals"]:
             reg = deepcopy(SLOW_BULL_REGIME)
             reg[param] = v
-            cfgs.append({"name": f"{param}={v}", "kind": "regime", "param": param,
-                         "value": v, "prod": prod_val, "adx": deepcopy(ADX_SPEC),
-                         "regime": reg})
+            cfgs.append(
+                {
+                    "name": f"{param}={v}",
+                    "kind": "regime",
+                    "param": param,
+                    "value": v,
+                    "prod": prod_val,
+                    "adx": deepcopy(ADX_SPEC),
+                    "regime": reg,
+                }
+            )
     return cfgs
 
 
@@ -339,12 +372,24 @@ def main() -> int:
     out = {
         "ts": pd.Timestamp.now().strftime("%Y%m%d_%H%M%S"),
         "objective": "慢牛实得回测: op_rule=上升段trail退出+下降段按down_mode; "
-                     "cur_all=全部cur退出(参考). 验收只看 OOS 末 250 交易日",
+        "cur_all=全部cur退出(参考). 验收只看 OOS 末 250 交易日",
         "oos_days": OOS_DAYS,
         "window": {
-            "full": {"start": str(dates[0]), "end": str(dates[-1]), "n_days": int(len(dates))},
-            "oos": {"start": str(pd.Timestamp(oos_start).date()), "end": str(pd.Timestamp(dates[-1]).date()), "n_days": OOS_DAYS},
-            "oos63": {"start": str(pd.Timestamp(oos63_start).date()), "end": str(pd.Timestamp(dates[-1]).date()), "n_days": OOS_CROSSCHECK_DAYS},
+            "full": {
+                "start": str(dates[0]),
+                "end": str(dates[-1]),
+                "n_days": int(len(dates)),
+            },
+            "oos": {
+                "start": str(pd.Timestamp(oos_start).date()),
+                "end": str(pd.Timestamp(dates[-1]).date()),
+                "n_days": OOS_DAYS,
+            },
+            "oos63": {
+                "start": str(pd.Timestamp(oos63_start).date()),
+                "end": str(pd.Timestamp(dates[-1]).date()),
+                "n_days": OOS_CROSSCHECK_DAYS,
+            },
         },
         "entry_exit": "close_hfq[T+1] 入场, 收盘判定退出, 成本=COST+2×滑点",
         "max_dd_note": "顺序权益曲线近似 (每笔=1单位, 前一笔了结后续接), 用于跨配置横向对比",
@@ -376,9 +421,12 @@ def main() -> int:
             out["oos63_prod_ref"] = ck
         mop = boards["main"].get("op_rule", {})
         dop = boards["dual"].get("op_rule", {})
-        print(f"[{ci + 1}/{len(cfgs)}] {cfg['name']:<22} "
-              f"main op={mop.get('realized')} n={mop.get('n')} | "
-              f"dual op={dop.get('realized')} n={dop.get('n')}", flush=True)
+        print(
+            f"[{ci + 1}/{len(cfgs)}] {cfg['name']:<22} "
+            f"main op={mop.get('realized')} n={mop.get('n')} | "
+            f"dual op={dop.get('realized')} n={dop.get('n')}",
+            flush=True,
+        )
 
     del work, A
     gc.collect()
@@ -426,9 +474,17 @@ def main() -> int:
             lines.append(f"    {'cfg':<16} | {'main':>42} | {'dual':>42}")
         mb = r["boards"]["main"].get("op_rule", {})
         db = r["boards"]["dual"].get("op_rule", {})
+
         def fmt(x):
-            return (f"{x['realized'] * 100:+.2f}%/wr{x['p_win']:.0%}/"
-                                 f"n{x['n']}/dd{x['max_dd']:.1%}") if x.get("realized") is not None else "n/a"
+            return (
+                (
+                    f"{x['realized'] * 100:+.2f}%/wr{x['p_win']:.0%}/"
+                    f"n{x['n']}/dd{x['max_dd']:.1%}"
+                )
+                if x.get("realized") is not None
+                else "n/a"
+            )
+
         lines.append(f"    {r['name']:<16} | {fmt(mb):>42} | {fmt(db):>42}")
     lines.append("-" * 90)
     lines.append(f"落盘: {fp}")

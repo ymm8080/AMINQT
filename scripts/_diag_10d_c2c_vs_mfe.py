@@ -135,7 +135,9 @@ def point_rets(closes: dict, sym: str, d, ks: tuple[int, ...]) -> list[float]:
     if sym not in closes:
         return [np.nan] * len(ks)
     dates, close = closes[sym]
-    d = np.datetime64(d)  # Timestamp → datetime64 (numpy searchsorted 不认 pandas Timestamp)
+    d = np.datetime64(
+        d
+    )  # Timestamp → datetime64 (numpy searchsorted 不认 pandas Timestamp)
     i = int(np.searchsorted(dates, d))
     if i >= len(dates) or dates[i] != d or i + 1 >= len(dates):
         return [np.nan] * len(ks)
@@ -278,10 +280,14 @@ def main() -> None:
                         "pr3d": _safe_nanmean(pr[:, 1]),
                         "pr5d": _safe_nanmean(pr[:, 2]),
                         "pr10d": _safe_nanmean(pr[:, 3]),
-                        "win5d": float((pr[:, 2] > 0).sum() / (~np.isnan(pr[:, 2])).sum())
+                        "win5d": float(
+                            (pr[:, 2] > 0).sum() / (~np.isnan(pr[:, 2])).sum()
+                        )
                         if (~np.isnan(pr[:, 2])).sum()
                         else float("nan"),
-                        "win10d": float((pr[:, 3] > 0).sum() / (~np.isnan(pr[:, 3])).sum())
+                        "win10d": float(
+                            (pr[:, 3] > 0).sum() / (~np.isnan(pr[:, 3])).sum()
+                        )
                         if (~np.isnan(pr[:, 3])).sum()
                         else float("nan"),
                         "overlap": overlap,
@@ -294,9 +300,15 @@ def main() -> None:
     daily.to_csv(out_dir / "daily.csv", index=False)
 
     # 汇总: 逐板块 两组均值 + 头对头逐日胜负
-    print(f"\n===== TOP10 校准口径头对头: close-to-close vs MFE "
-          f"(最近 {args.eval_days} 交易日) =====", flush=True)
-    print("评估 = close-to-close 实得 (买=close[T+1], 卖=close[T+1+k]); 校准 = 每股收缩回归", flush=True)
+    print(
+        f"\n===== TOP10 校准口径头对头: close-to-close vs MFE "
+        f"(最近 {args.eval_days} 交易日) =====",
+        flush=True,
+    )
+    print(
+        "评估 = close-to-close 实得 (买=close[T+1], 卖=close[T+1+k]); 校准 = 每股收缩回归",
+        flush=True,
+    )
     agg_rows: list[dict] = []
     for board in BOARDS:
         sub = daily[daily["board"] == board]
@@ -323,10 +335,23 @@ def main() -> None:
         b = sub[sub["method"] == "mfe"].set_index("date")[["pr5d", "pr10d", "win5d"]]
         common = a.index.intersection(b.index)
         if len(common):
-            m5 = ~np.isnan(a.loc[common, "pr5d"].values) & ~np.isnan(b.loc[common, "pr5d"].values)
-            m10 = ~np.isnan(a.loc[common, "pr10d"].values) & ~np.isnan(b.loc[common, "pr10d"].values)
-            w5 = int((a.loc[common, "pr5d"].values[m5] > b.loc[common, "pr5d"].values[m5]).sum())
-            w10 = int((a.loc[common, "pr10d"].values[m10] > b.loc[common, "pr10d"].values[m10]).sum())
+            m5 = ~np.isnan(a.loc[common, "pr5d"].values) & ~np.isnan(
+                b.loc[common, "pr5d"].values
+            )
+            m10 = ~np.isnan(a.loc[common, "pr10d"].values) & ~np.isnan(
+                b.loc[common, "pr10d"].values
+            )
+            w5 = int(
+                (
+                    a.loc[common, "pr5d"].values[m5] > b.loc[common, "pr5d"].values[m5]
+                ).sum()
+            )
+            w10 = int(
+                (
+                    a.loc[common, "pr10d"].values[m10]
+                    > b.loc[common, "pr10d"].values[m10]
+                ).sum()
+            )
             print(
                 f"  逐日 c2c 赢 MFE: 5d实得 {w5}/{m5.sum()} 天, "
                 f"10d实得 {w10}/{m10.sum()} 天, "
@@ -367,7 +392,7 @@ def main() -> None:
         "eval_days": args.eval_days,
         "metric": "close-to-close point returns (买=close[T+1], 卖=close[T+1+k]); NOT MFE",
         "calibration": "每股收缩回归 (κ=40, 窗130, min_n=30, 回退横截面); "
-                       "c2c target=label_pm_10d_net, mfe target=label_mfe_10d_net",
+        "c2c target=label_pm_10d_net, mfe target=label_mfe_10d_net",
         "cal_window_days": CAL_N,
         "top_n": TOP_N,
         "boards": agg_rows,

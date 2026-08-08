@@ -39,11 +39,27 @@ from app.pipeline_parallel.scoring import pool_score, select_topn
 from config.settings import BACKTEST_RESULT_DIR
 
 NEED = [
-    "symbol", "date", "close_hfq", "high_hfq", "low_hfq", "open_hfq",
-    "adv20", "volume", "turnover_rate", "volume_ratio", "margin_balance_chg_5d",
+    "symbol",
+    "date",
+    "close_hfq",
+    "high_hfq",
+    "low_hfq",
+    "open_hfq",
+    "adv20",
+    "volume",
+    "turnover_rate",
+    "volume_ratio",
+    "margin_balance_chg_5d",
 ]
 
-SELL_COLS = ("below_ma20", "adx_broken", "big_drop", "below_ma5_3d", "turnover_spike", "tp_80_div")
+SELL_COLS = (
+    "below_ma20",
+    "adx_broken",
+    "big_drop",
+    "below_ma5_3d",
+    "turnover_spike",
+    "tp_80_div",
+)
 
 OOS_DAYS = 250
 THRESHOLDS = (0.0, 0.3, 0.5, 0.7)
@@ -57,7 +73,9 @@ def build_base_panel() -> pd.DataFrame:
         slices.append(df)
         del df
         gc.collect()
-    work = pd.concat(slices, ignore_index=True).sort_values(["symbol", "date"], ignore_index=True)
+    work = pd.concat(slices, ignore_index=True).sort_values(
+        ["symbol", "date"], ignore_index=True
+    )
     del slices
     gc.collect()
     work["board"] = work["symbol"].map(board_of)
@@ -66,8 +84,13 @@ def build_base_panel() -> pd.DataFrame:
     signals.add_signal_columns(work)
     work["gate_slow_bull"] = screener.slow_bull_gate(work, ADX_SPEC)
     signals.add_market_regime(work, SLOW_BULL_REGIME)
-    work["adx_score"] = work["adx"].clip(lower=0.0, upper=float(ADX_SPEC["adx_optimal_max"]))
-    print(f"面板 rows={len(work):,} stocks={work['symbol'].nunique():,} dates={work['date'].nunique():,}", flush=True)
+    work["adx_score"] = work["adx"].clip(
+        lower=0.0, upper=float(ADX_SPEC["adx_optimal_max"])
+    )
+    print(
+        f"面板 rows={len(work):,} stocks={work['symbol'].nunique():,} dates={work['date'].nunique():,}",
+        flush=True,
+    )
     return work
 
 
@@ -82,16 +105,23 @@ def build_arrays(work: pd.DataFrame) -> dict:
         any_sell |= work[c].values.astype(bool)
     return {
         "sym_code": {s: int(c) for c, s in enumerate(uniques)},
-        "starts": starts, "ends": ends,
+        "starts": starts,
+        "ends": ends,
         "dates": work["date"].values.astype("datetime64[ns]"),
-        "close": work["close_hfq"].values, "low": work["low_hfq"].values,
-        "ma20": work["ma20"].values, "any_sell": any_sell,
+        "close": work["close_hfq"].values,
+        "low": work["low_hfq"].values,
+        "ma20": work["ma20"].values,
+        "any_sell": any_sell,
         "cost": COST + 2 * np.array([slippage_tier(v) for v in work["adv20"].values]),
-        "regime_lut": dict(zip(work["date"].values, work["slow_bull_regime"].values, strict=False)),
+        "regime_lut": dict(
+            zip(work["date"].values, work["slow_bull_regime"].values, strict=False)
+        ),
     }
 
 
-def exit_rets(picks: pd.DataFrame, A: dict, trail_pct: float, hard_stop: float, max_hold: int) -> np.ndarray:
+def exit_rets(
+    picks: pd.DataFrame, A: dict, trail_pct: float, hard_stop: float, max_hold: int
+) -> np.ndarray:
     sym_code, starts, ends = A["sym_code"], A["starts"], A["ends"]
     dates_dt, close, cost_arr = A["dates"], A["close"], A["cost"]
     M, hard = int(max_hold), float(hard_stop)
@@ -127,13 +157,20 @@ def _agg(rets: np.ndarray) -> dict:
     rr = rets[m]
     if not len(rr):
         return {"n": 0, "realized": None, "p_win": None}
-    return {"n": int(len(rr)), "realized": round(float(rr.mean()), 5),
-            "p_win": round(float((rr > 0).mean()), 4)}
+    return {
+        "n": int(len(rr)),
+        "realized": round(float(rr.mean()), 5),
+        "p_win": round(float((rr > 0).mean()), 4),
+    }
 
 
-def sim_board(work: pd.DataFrame, A: dict, board: str, oos_start, thresh: float) -> dict:
+def sim_board(
+    work: pd.DataFrame, A: dict, board: str, oos_start, thresh: float
+) -> dict:
     """板内逐日: gate ∩ rps60≥thresh ∩ 上升段 → Top-20 → trail8 实得 (op_rule)."""
-    mask = (work["board"] == board) & work["gate_slow_bull"] & (work["date"] >= oos_start)
+    mask = (
+        (work["board"] == board) & work["gate_slow_bull"] & (work["date"] >= oos_start)
+    )
     wb = work[mask].copy()
     # gate 内日截面 rps_60 百分位
     wb["rk_rps60"] = wb.groupby("date")["rps_60"].rank(pct=True)
@@ -150,9 +187,20 @@ def sim_board(work: pd.DataFrame, A: dict, board: str, oos_start, thresh: float)
         top = select_topn(cand, score, SLOW_BULL.top_n)
         picks_rows.append(top[["symbol", "date"]])
     if not picks_rows:
-        return {"n_picks": 0, "n_days_open": 0, "picks_per_open_day": 0.0, **{k: None for k in ("realized", "p_win", "n")}}
+        return {
+            "n_picks": 0,
+            "n_days_open": 0,
+            "picks_per_open_day": 0.0,
+            **{k: None for k in ("realized", "p_win", "n")},
+        }
     pk = pd.concat(picks_rows, ignore_index=True)
-    rets = exit_rets(pk, A, SLOW_BULL_REGIME["trail_pct"], SLOW_BULL_REGIME["hard_stop"], SLOW_BULL_REGIME["max_hold"])
+    rets = exit_rets(
+        pk,
+        A,
+        SLOW_BULL_REGIME["trail_pct"],
+        SLOW_BULL_REGIME["hard_stop"],
+        SLOW_BULL_REGIME["max_hold"],
+    )
     agg = _agg(rets)
     return {
         "n_picks": int(len(pk)),
@@ -168,7 +216,12 @@ def sim_quarter(work: pd.DataFrame, A: dict, board: str, q_start, q_end) -> dict
     """季度子窗: ref vs thresh=0.5 的 op_rule (开仓日数少, 仅对比 realized)."""
     out = {}
     for th in (0.0, GATE_THRESH):
-        mask = (work["board"] == board) & work["gate_slow_bull"] & (work["date"] >= q_start) & (work["date"] <= q_end)
+        mask = (
+            (work["board"] == board)
+            & work["gate_slow_bull"]
+            & (work["date"] >= q_start)
+            & (work["date"] <= q_end)
+        )
         wb = work[mask].copy()
         if wb.empty:
             out[th] = {"n": 0, "realized": None}
@@ -183,12 +236,20 @@ def sim_quarter(work: pd.DataFrame, A: dict, board: str, q_start, q_end) -> dict
             if cand.empty:
                 continue
             score = pool_score(cand, SLOW_BULL.pool, weights=SLOW_BULL.pool_weights)
-            picks_rows.append(select_topn(cand, score, SLOW_BULL.top_n)[["symbol", "date"]])
+            picks_rows.append(
+                select_topn(cand, score, SLOW_BULL.top_n)[["symbol", "date"]]
+            )
         if not picks_rows:
             out[th] = {"n": 0, "realized": None}
             continue
         pk = pd.concat(picks_rows, ignore_index=True)
-        rets = exit_rets(pk, A, SLOW_BULL_REGIME["trail_pct"], SLOW_BULL_REGIME["hard_stop"], SLOW_BULL_REGIME["max_hold"])
+        rets = exit_rets(
+            pk,
+            A,
+            SLOW_BULL_REGIME["trail_pct"],
+            SLOW_BULL_REGIME["hard_stop"],
+            SLOW_BULL_REGIME["max_hold"],
+        )
         out[th] = _agg(rets)
     return out
 
@@ -218,8 +279,11 @@ def main() -> int:
         for th in THRESHOLDS:
             s = sim_board(work, A, b, oos_start, th)
             bres["thresholds"][str(th)] = s
-            print(f"  [{b}] thresh={th}: picks/day={s.get('picks_per_open_day')} "
-                  f"realized={s.get('realized')} p_win={s.get('p_win')} n={s.get('n')}", flush=True)
+            print(
+                f"  [{b}] thresh={th}: picks/day={s.get('picks_per_open_day')} "
+                f"realized={s.get('realized')} p_win={s.get('p_win')} n={s.get('n')}",
+                flush=True,
+            )
         # 4 季度稳定性
         q_bounds = pd.date_range(oos_start, dates[-1], periods=5)
         for qi in range(4):

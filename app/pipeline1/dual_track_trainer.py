@@ -140,6 +140,8 @@ def model_params(board: str, kind: str) -> dict:
     if nl is not None:
         params["num_leaves"] = nl
     return params
+
+
 MODEL_KINDS = (
     "1d_reg",
     "1d_cls",

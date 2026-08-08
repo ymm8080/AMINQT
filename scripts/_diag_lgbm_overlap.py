@@ -118,20 +118,26 @@ def main() -> int:
         jacs.append(len(set_a[d] & set_b[d]) / len(u) if u else 1.0)
     jacs = np.asarray(jacs, dtype=float)
     res = {
-        "board": args.board, "kind": args.kind, "n": args.n,
-        "a": parse_cand(args.a), "b": parse_cand(args.b),
+        "board": args.board,
+        "kind": args.kind,
+        "n": args.n,
+        "a": parse_cand(args.a),
+        "b": parse_cand(args.b),
         "n_days": int(len(common)),
         "mean_jaccard": float(jacs.mean()) if len(jacs) else np.nan,
         "median_jaccard": float(np.median(jacs)) if len(jacs) else np.nan,
         "change_pct": float((1 - jacs.mean()) * 100) if len(jacs) else np.nan,
-        "pct_days_change_gt50": float((jacs < 0.5).mean() * 100) if len(jacs) else np.nan,
+        "pct_days_change_gt50": float((jacs < 0.5).mean() * 100)
+        if len(jacs)
+        else np.nan,
         "els": float(time.time() - t0),
     }
     print(
         f"[overlap] {args.board}/{args.kind} N={args.n} "
         f"{args.a} vs {args.b} -> mean_jaccard={res['mean_jaccard']:.3f} "
         f"change={res['change_pct']:.1f}% days_gt50={res['pct_days_change_gt50']:.0f}% "
-        f"({len(common)}d)", flush=True
+        f"({len(common)}d)",
+        flush=True,
     )
     out_path = (
         f"data/_diag_lgbm_overlap_{args.board}_{args.kind}_"

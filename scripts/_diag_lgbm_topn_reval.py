@@ -37,14 +37,26 @@ ORDER = ("10d_cls", "10d_reg", "pain", "10d_rank", "10d_q")
 def run(board: str, kind: str) -> str:
     """跑一个 (board, kind) TOP-N 复验, 返回输出 JSON 路径."""
     env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-    cmd = [sys.executable, SWEEP, "--board", board, "--kind", kind,
-           "--cand", CAND[kind], "--n", "15"]
+    cmd = [
+        sys.executable,
+        SWEEP,
+        "--board",
+        board,
+        "--kind",
+        kind,
+        "--cand",
+        CAND[kind],
+        "--n",
+        "15",
+    ]
     print(f"\n=== {board} / {kind} @ {time.strftime('%H:%M:%S')} ===", flush=True)
     time.time()
     r = subprocess.run(cmd, env=env, capture_output=True, text=True)
     out = (r.stdout or "") + (r.stderr or "")
     for line in out.splitlines():
-        if any(skip in line for skip in ("DeprecationWarning", "eval_set =", "  eval_X")):
+        if any(
+            skip in line for skip in ("DeprecationWarning", "eval_set =", "  eval_X")
+        ):
             continue
         print("  " + line, flush=True)
     if r.returncode != 0:
@@ -58,8 +70,11 @@ def run(board: str, kind: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--boards", default="main,dual")
-    ap.add_argument("--kinds", default=",".join(ORDER),
-                    help="逗号分隔的子集, 如 10d_cls,10d_reg (family 扫描已覆盖 pain/q/rank 时可只补 cls/reg)")
+    ap.add_argument(
+        "--kinds",
+        default=",".join(ORDER),
+        help="逗号分隔的子集, 如 10d_cls,10d_reg (family 扫描已覆盖 pain/q/rank 时可只补 cls/reg)",
+    )
     args = ap.parse_args()
     boards = [b.strip() for b in args.boards.split(",") if b.strip()]
     kinds = [k.strip() for k in args.kinds.split(",") if k.strip() in CAND]
@@ -68,7 +83,9 @@ def main() -> int:
         for kind in kinds:
             path = run(board, kind)
             manifest.setdefault("kinds", {}).setdefault(kind, {})[board] = path
-    out_path = f"data/_diag_lgbm_topn_reval_manifest_{time.strftime('%Y%m%d_%H%M%S')}.json"
+    out_path = (
+        f"data/_diag_lgbm_topn_reval_manifest_{time.strftime('%Y%m%d_%H%M%S')}.json"
+    )
     with open(out_path, "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, ensure_ascii=False, indent=1)
     print(f"\n[saved manifest] {out_path}", flush=True)

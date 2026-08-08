@@ -1,4 +1,5 @@
 """诊断: AppTest 验证 page_archive.render 无异常 (含新 模块绩效 tab)."""
+
 from __future__ import annotations
 
 import sys

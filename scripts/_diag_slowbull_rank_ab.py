@@ -46,18 +46,34 @@ from app.pipeline_parallel.scoring import pool_score, select_topn
 from config.settings import BACKTEST_RESULT_DIR
 
 NEED = [
-    "symbol", "date", "close_hfq", "high_hfq", "low_hfq", "open_hfq",
-    "adv20", "volume", "turnover_rate", "volume_ratio", "margin_balance_chg_5d",
+    "symbol",
+    "date",
+    "close_hfq",
+    "high_hfq",
+    "low_hfq",
+    "open_hfq",
+    "adv20",
+    "volume",
+    "turnover_rate",
+    "volume_ratio",
+    "margin_balance_chg_5d",
 ]
 
 SELL_COLS = (
-    "below_ma20", "adx_broken", "big_drop", "below_ma5_3d", "turnover_spike", "tp_80_div",
+    "below_ma20",
+    "adx_broken",
+    "big_drop",
+    "below_ma5_3d",
+    "turnover_spike",
+    "tp_80_div",
 )
 
 OOS_DAYS = 250
 TOP_N_LIST = (10, 5, 3)
 RPS_FLOOR = float(SLOW_BULL_RPS_GATE.get("floor", 0.5))
-GATE_BOARDS = frozenset(b for b, on in SLOW_BULL_RPS_GATE.get("boards", {}).items() if on)
+GATE_BOARDS = frozenset(
+    b for b, on in SLOW_BULL_RPS_GATE.get("boards", {}).items() if on
+)
 
 
 def build_base_panel() -> pd.DataFrame:
@@ -67,7 +83,9 @@ def build_base_panel() -> pd.DataFrame:
         slices.append(df)
         del df
         gc.collect()
-    work = pd.concat(slices, ignore_index=True).sort_values(["symbol", "date"], ignore_index=True)
+    work = pd.concat(slices, ignore_index=True).sort_values(
+        ["symbol", "date"], ignore_index=True
+    )
     del slices
     gc.collect()
     work["board"] = work["symbol"].map(board_of)
@@ -76,7 +94,9 @@ def build_base_panel() -> pd.DataFrame:
     signals.add_signal_columns(work)
     work["gate_slow_bull"] = screener.slow_bull_gate(work, ADX_SPEC)
     signals.add_market_regime(work, SLOW_BULL_REGIME)
-    work["adx_score"] = work["adx"].clip(lower=0.0, upper=float(ADX_SPEC["adx_optimal_max"]))
+    work["adx_score"] = work["adx"].clip(
+        lower=0.0, upper=float(ADX_SPEC["adx_optimal_max"])
+    )
     print(
         f"面板 rows={len(work):,} stocks={work['symbol'].nunique():,} "
         f"dates={work['date'].nunique():,} | 可交易门剔除 {gate['removed_stocks']} 只",
@@ -104,12 +124,16 @@ def build_arrays(work: pd.DataFrame) -> dict:
         "ma20": work["ma20"].values,
         "any_sell": any_sell,
         "cost": COST + 2 * np.array([slippage_tier(v) for v in work["adv20"].values]),
-        "regime_lut": dict(zip(work["date"].values, work["slow_bull_regime"].values, strict=False)),
+        "regime_lut": dict(
+            zip(work["date"].values, work["slow_bull_regime"].values, strict=False)
+        ),
     }
     return A
 
 
-def exit_rets(picks: pd.DataFrame, A: dict, trail_pct: float, hard_stop: float, max_hold: int) -> tuple[np.ndarray, np.ndarray]:
+def exit_rets(
+    picks: pd.DataFrame, A: dict, trail_pct: float, hard_stop: float, max_hold: int
+) -> tuple[np.ndarray, np.ndarray]:
     """trail8 退出 (收盘自峰值回落 trail_pct 走 + 硬止损 hard_stop), 返回 (净收益, 持有天数)."""
     sym_code, starts, ends = A["sym_code"], A["starts"], A["ends"]
     dates_dt, close, cost_arr = A["dates"], A["close"], A["cost"]
@@ -159,7 +183,9 @@ def _agg(rets: np.ndarray, holds: np.ndarray) -> dict:
     }
 
 
-def sim_variants(work: pd.DataFrame, A: dict, board: str, d0, d1, top_n: int, use_gate: bool) -> dict | None:
+def sim_variants(
+    work: pd.DataFrame, A: dict, board: str, d0, d1, top_n: int, use_gate: bool
+) -> dict | None:
     """gate∩[d0,d1]∩上升段 → Top-N: score 排名 vs rps_60 排名 (同门配置).
 
     返回两变体的聚合 + diff_days (两种排名选出集合不同的天数) + 填充度.
@@ -201,7 +227,11 @@ def sim_variants(work: pd.DataFrame, A: dict, board: str, d0, d1, top_n: int, us
     for tag, rows in (("score", sc_rows), ("rps60", rp_rows)):
         pk = pd.concat(rows, ignore_index=True)
         rets, holds = exit_rets(
-            pk, A, SLOW_BULL_REGIME["trail_pct"], SLOW_BULL_REGIME["hard_stop"], SLOW_BULL_REGIME["max_hold"]
+            pk,
+            A,
+            SLOW_BULL_REGIME["trail_pct"],
+            SLOW_BULL_REGIME["hard_stop"],
+            SLOW_BULL_REGIME["max_hold"],
         )
         res[tag] = _agg(rets, holds)
     total_sc = sum(len(r) for r in sc_rows)
@@ -220,14 +250,21 @@ def main() -> int:
     work = build_base_panel()
     dates = np.sort(work["date"].unique())
     oos_start = dates[-OOS_DAYS]
-    print(f"全窗 {dates[0]} → {dates[-1]} ({len(dates)}d) | OOS {OOS_DAYS}d 起 {oos_start}", flush=True)
+    print(
+        f"全窗 {dates[0]} → {dates[-1]} ({len(dates)}d) | OOS {OOS_DAYS}d 起 {oos_start}",
+        flush=True,
+    )
     A = build_arrays(work)
 
     out = {
         "ts": pd.Timestamp.now().strftime("%Y%m%d_%H%M%S"),
         "objective": "慢牛排名键 A/B: 合成 score vs rps_60 (gate∩上升段→Top-N→trail8 op_rule 实得)",
         "oos_days": OOS_DAYS,
-        "window": {"start": str(pd.Timestamp(oos_start).date()), "end": str(pd.Timestamp(dates[-1]).date()), "n_days": OOS_DAYS},
+        "window": {
+            "start": str(pd.Timestamp(oos_start).date()),
+            "end": str(pd.Timestamp(dates[-1]).date()),
+            "n_days": OOS_DAYS,
+        },
         "entry_exit": "close_hfq[T+1] 入场, trail8 收盘判定退出, 成本=COST+2×滑点",
         "top_n_list": list(TOP_N_LIST),
         "rps_gate": {"floor": RPS_FLOOR, "boards": sorted(GATE_BOARDS)},
@@ -247,7 +284,9 @@ def main() -> int:
             )
         for tn in TOP_N_LIST:
             v = sim_variants(work, A, b, oos_start, dates[-1], tn, use_gate=True)
-            v_nogate = sim_variants(work, A, b, oos_start, dates[-1], tn, use_gate=False)
+            v_nogate = sim_variants(
+                work, A, b, oos_start, dates[-1], tn, use_gate=False
+            )
             cell: dict = {}
             if v is not None:
                 cell["score"] = v["score"]
@@ -258,17 +297,30 @@ def main() -> int:
             if v_nogate is not None:
                 cell["rps60_nogate"] = v_nogate["rps60"]
             bres["variants"][str(tn)] = cell
-            sc_r = v["score"]["realized"] if v and v["score"].get("realized") is not None else "n/a"
-            rp_r = v["rps60"]["realized"] if v and v["rps60"].get("realized") is not None else "n/a"
+            sc_r = (
+                v["score"]["realized"]
+                if v and v["score"].get("realized") is not None
+                else "n/a"
+            )
+            rp_r = (
+                v["rps60"]["realized"]
+                if v and v["rps60"].get("realized") is not None
+                else "n/a"
+            )
             dd = v["diff_days"] if v else "n/a"
             fill = v["picks_per_open_day"] if v else "n/a"
-            print(f"  [{b}] top{tn}: score={sc_r} rps60={rp_r} diff_days={dd}/{v['n_open'] if v else 'n/a'} fills={fill}", flush=True)
+            print(
+                f"  [{b}] top{tn}: score={sc_r} rps60={rp_r} diff_days={dd}/{v['n_open'] if v else 'n/a'} fills={fill}",
+                flush=True,
+            )
         # 季度稳定 (top-10, 生产门配置)
         q_bounds = pd.date_range(oos_start, dates[-1], periods=5)
         for qi in range(4):
             qs = q_bounds[qi]
             qe = q_bounds[qi + 1] - pd.Timedelta(days=1)
-            q = sim_variants(work, A, b, np.datetime64(qs), np.datetime64(qe), 10, use_gate=True)
+            q = sim_variants(
+                work, A, b, np.datetime64(qs), np.datetime64(qe), 10, use_gate=True
+            )
             if q is not None:
                 bres["quarters_top10"][f"Q{qi + 1}"] = {
                     "score": q["score"],

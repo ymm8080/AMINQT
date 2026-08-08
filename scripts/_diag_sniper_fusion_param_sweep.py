@@ -77,17 +77,37 @@ ADD_CANDIDATES: tuple[str, ...] = (
 
 # 两池并集特征 (生产口径: load_panel 经 prepare_adx 加 pv_corr_5)
 # 第四轮在剔除 down_gap_pct 后的生产池上测加法 → 把 ADD_CANDIDATES 一并纳入 rank 预计算
-_BASE_UNION = ("amihud_illiq", "amihud_illiquidity", "small_mv_premium", "down_gap_pct",
-               "VAR51", "ret_reversal_5d", "pv_corr_5", "limit_dist_pct")
+_BASE_UNION = (
+    "amihud_illiq",
+    "amihud_illiquidity",
+    "small_mv_premium",
+    "down_gap_pct",
+    "VAR51",
+    "ret_reversal_5d",
+    "pv_corr_5",
+    "limit_dist_pct",
+)
 UNION = list(_BASE_UNION) + [c for c in ADD_CANDIDATES if c not in _BASE_UNION]
 
 CONFIGS: list[dict] = []
 
 
-def _add(name: str, weights: dict | None = None, combo: str = "max",
-         drop: tuple[str, ...] = (), add: tuple[str, ...] = ()) -> None:
-    CONFIGS.append({"name": name, "weights": dict(weights or {}), "combo": combo,
-                    "drop": tuple(drop), "add": tuple(add)})
+def _add(
+    name: str,
+    weights: dict | None = None,
+    combo: str = "max",
+    drop: tuple[str, ...] = (),
+    add: tuple[str, ...] = (),
+) -> None:
+    CONFIGS.append(
+        {
+            "name": name,
+            "weights": dict(weights or {}),
+            "combo": combo,
+            "drop": tuple(drop),
+            "add": tuple(add),
+        }
+    )
 
 
 _add("ref_eq_max")  # 生产剔除后全池: 等权 + max(sniper, fusion)
@@ -200,7 +220,9 @@ def _safe_nanmean(a: np.ndarray) -> float:
     return float(a.mean()) if len(a) else float("nan")
 
 
-def weighted_score(r_arrays: dict[str, np.ndarray], pool: list[str], weights: dict) -> np.ndarray:
+def weighted_score(
+    r_arrays: dict[str, np.ndarray], pool: list[str], weights: dict
+) -> np.ndarray:
     ws = [weights.get(c, 1.0) for c in pool]
     total = sum(ws)
     return np.sum([w * r_arrays[c] for w, c in zip(ws, pool)], axis=0) / total
@@ -238,11 +260,27 @@ def build_cross(work: pd.DataFrame, score_arrs: dict[str, np.ndarray]) -> dict:
             yv = y[valid]
             by[name] = (
                 bd,
-                np.concatenate([[0.0], np.cumsum(np.bincount(bin_idx, minlength=nb).astype(float))]),
-                np.concatenate([[0.0], np.cumsum(np.bincount(bin_idx, weights=xv, minlength=nb))]),
-                np.concatenate([[0.0], np.cumsum(np.bincount(bin_idx, weights=yv, minlength=nb))]),
-                np.concatenate([[0.0], np.cumsum(np.bincount(bin_idx, weights=xv * xv, minlength=nb))]),
-                np.concatenate([[0.0], np.cumsum(np.bincount(bin_idx, weights=xv * yv, minlength=nb))]),
+                np.concatenate(
+                    [[0.0], np.cumsum(np.bincount(bin_idx, minlength=nb).astype(float))]
+                ),
+                np.concatenate(
+                    [[0.0], np.cumsum(np.bincount(bin_idx, weights=xv, minlength=nb))]
+                ),
+                np.concatenate(
+                    [[0.0], np.cumsum(np.bincount(bin_idx, weights=yv, minlength=nb))]
+                ),
+                np.concatenate(
+                    [
+                        [0.0],
+                        np.cumsum(np.bincount(bin_idx, weights=xv * xv, minlength=nb)),
+                    ]
+                ),
+                np.concatenate(
+                    [
+                        [0.0],
+                        np.cumsum(np.bincount(bin_idx, weights=xv * yv, minlength=nb)),
+                    ]
+                ),
             )
         cross[board] = by
         del bm
@@ -293,7 +331,7 @@ def main() -> None:
         flush=True,
     )
     all_dates = sorted(work["date"].unique())
-    eval_dates = all_dates[-args.eval_days:]
+    eval_dates = all_dates[-args.eval_days :]
     date_idx = {d: i for i, d in enumerate(all_dates)}
     print(
         f"[panel] {len(work):,}r / {work['symbol'].nunique():,}只 / "
@@ -311,7 +349,10 @@ def main() -> None:
     del cc
     gc.collect()
 
-    print(f"[score] 预计算 {len(UNION)} 特征截面分位 + {len(CONFIGS)} 配置组合 score...", flush=True)
+    print(
+        f"[score] 预计算 {len(UNION)} 特征截面分位 + {len(CONFIGS)} 配置组合 score...",
+        flush=True,
+    )
     r_all = {c: cross_rank(work, c).to_numpy(float) for c in UNION}
     # r_s/r_f 需覆盖 ADD_CANDIDATES (第四轮加法): 池特征 + 候选都在 UNION 内
     r_s = {c: r_all[c] for c in UNION if c in work.columns}
@@ -361,7 +402,10 @@ def main() -> None:
     gc.collect()
     print(f"[day] {len(day_info)} 日预提取完成 ({time.time() - t0:.0f}s)", flush=True)
 
-    print(f"[calib] walk-forward 逐日重拟合 × {len(CONFIGS)} 配置 (无前瞻窗)...", flush=True)
+    print(
+        f"[calib] walk-forward 逐日重拟合 × {len(CONFIGS)} 配置 (无前瞻窗)...",
+        flush=True,
+    )
     rows: list[dict] = []
     ref_cfg = CONFIGS[0]["name"]
     for di_abs, D in enumerate(eval_dates):
@@ -403,7 +447,9 @@ def main() -> None:
                     continue
                 for k in CUTS:
                     pick = pick_all.head(k)
-                    pr = np.array([point_rets(closes, s, D, H_K) for s in pick["symbol"]])
+                    pr = np.array(
+                        [point_rets(closes, s, D, H_K) for s in pick["symbol"]]
+                    )
                     # 净 10d (生产实得口径): 从决策行 label 取 (含成本, 与 syms 同序)
                     pick_syms = pick["symbol"].astype(str).to_numpy()
                     net10 = _safe_nanmean(yday[np.array([pos[s] for s in pick_syms])])
@@ -421,10 +467,14 @@ def main() -> None:
                             "pr5d": _safe_nanmean(pr[:, 2]),
                             "pr10d": _safe_nanmean(pr[:, 3]),
                             "pr10d_net": net10,
-                            "win5d": float((pr[:, 2] > 0).sum() / (~np.isnan(pr[:, 2])).sum())
+                            "win5d": float(
+                                (pr[:, 2] > 0).sum() / (~np.isnan(pr[:, 2])).sum()
+                            )
                             if (~np.isnan(pr[:, 2])).sum()
                             else float("nan"),
-                            "win10d": float((pr[:, 3] > 0).sum() / (~np.isnan(pr[:, 3])).sum())
+                            "win10d": float(
+                                (pr[:, 3] > 0).sum() / (~np.isnan(pr[:, 3])).sum()
+                            )
                             if (~np.isnan(pr[:, 3])).sum()
                             else float("nan"),
                             "overlap_ref": ov,
@@ -433,13 +483,18 @@ def main() -> None:
         del day_info[D]
         gc.collect()
         if (di_abs + 1) % 50 == 0:
-            print(f"  ... {di_abs + 1}/{len(eval_dates)} 日 ({time.time() - t0:.0f}s)", flush=True)
+            print(
+                f"  ... {di_abs + 1}/{len(eval_dates)} 日 ({time.time() - t0:.0f}s)",
+                flush=True,
+            )
 
     daily = pd.DataFrame(rows)
     daily.to_csv(out_dir / "daily.csv", index=False)
 
     # ---------------- 汇总 + 判定 ----------------
-    print(f"\n===== SNIPER/FUSION 模块参数扫描 [{args.eval_days}d OOS] =====", flush=True)
+    print(
+        f"\n===== SNIPER/FUSION 模块参数扫描 [{args.eval_days}d OOS] =====", flush=True
+    )
     summary: dict = {}
     for board in BOARDS:
         sub = daily[daily["board"] == board]
@@ -447,13 +502,19 @@ def main() -> None:
         ref = sub10[sub10["config"] == ref_cfg]
         ref_p10 = ref["pr10d"].mean()
         ref_n10 = ref["win10d"].mean()
-        print(f"\n=== [{board}]  ref(等权,max,top10) pr10d={ref_p10:+.4f} win10d={ref_n10:.1%} ===", flush=True)
+        print(
+            f"\n=== [{board}]  ref(等权,max,top10) pr10d={ref_p10:+.4f} win10d={ref_n10:.1%} ===",
+            flush=True,
+        )
         print(
             f"  {'config':<22}{'pr10d':>9}{'pr5d':>9}{'win10d':>8}{'ov_ref':>8}  "
-            f"Q1-Q4 pr10d(neg=*)/win vs ref", flush=True
+            f"Q1-Q4 pr10d(neg=*)/win vs ref",
+            flush=True,
         )
-        qb = [daily["date"].min() + (daily["date"].max() - daily["date"].min()) * i / 4
-              for i in range(5)]
+        qb = [
+            daily["date"].min() + (daily["date"].max() - daily["date"].min()) * i / 4
+            for i in range(5)
+        ]
         board_res: dict = {}
         for cfg in CONFIGS:
             name = cfg["name"]
@@ -494,7 +555,8 @@ def main() -> None:
             print(
                 f"  {name:<22}{c['pr10d'].mean():>+9.4f}{c['pr5d'].mean():>+9.4f}"
                 f"{c['win10d'].mean():>8.1%}{ov:>8.2f}  "
-                f"{' '.join(qpr)} | {' '.join(qwin)}{tag}", flush=True
+                f"{' '.join(qpr)} | {' '.join(qwin)}{tag}",
+                flush=True,
             )
         summary[board] = board_res
 
@@ -508,7 +570,7 @@ def main() -> None:
             c = sub[sub["config"] == name]
             if c.empty:
                 continue
-            cut_s = " ".join(f"{k}:{c[c['n']==k]['pr10d'].mean():+.4f}" for k in CUTS)
+            cut_s = " ".join(f"{k}:{c[c['n'] == k]['pr10d'].mean():+.4f}" for k in CUTS)
             print(f"  {name:<22}{cut_s}", flush=True)
 
     summary_meta = {
@@ -519,7 +581,9 @@ def main() -> None:
         "note": "STABLE_WIN = pr10d>ref 且无负季度 且 ≥2/4 季度赢 ref; gain<0.3pp 判噪声",
     }
     with open(out_dir / "summary.json", "w", encoding="utf-8") as f:
-        json.dump({"meta": summary_meta, "boards": summary}, f, ensure_ascii=False, indent=1)
+        json.dump(
+            {"meta": summary_meta, "boards": summary}, f, ensure_ascii=False, indent=1
+        )
 
     print(f"\nWORM: {out_dir}", flush=True)
     print(f"done ({time.time() - t0:.0f}s)", flush=True)

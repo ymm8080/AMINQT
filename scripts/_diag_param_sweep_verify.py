@@ -82,9 +82,12 @@ def verify_ranking(sweep_dir: str, out_dir) -> dict:
             raise RuntimeError(f"daily.csv 缺列 {c} (columns={list(daily.columns)})")
     daily["date"] = pd.to_datetime(daily["date"])
     all_dates = sorted(daily["date"].unique())
-    print(f"[verify] {os.path.basename(sweep_dir)}: {len(all_dates)} 交易日 / "
-          f"{daily['board'].nunique()} 板块 / configs="
-          f"{sorted(daily['config'].unique())}", flush=True)
+    print(
+        f"[verify] {os.path.basename(sweep_dir)}: {len(all_dates)} 交易日 / "
+        f"{daily['board'].nunique()} 板块 / configs="
+        f"{sorted(daily['config'].unique())}",
+        flush=True,
+    )
 
     ref_name = "ref"
     results = {"sweep_dir": sweep_dir, "n_days": len(all_dates), "boards": {}}
@@ -94,27 +97,40 @@ def verify_ranking(sweep_dir: str, out_dir) -> dict:
         if ref.empty:
             print(f"  [{board}] 无 ref, 跳过", flush=True)
             continue
-        b_res = {"ref_pr10d": _nmean(ref["pr10d"]), "ref_pr5d": _nmean(ref["pr5d"]),
-                 "configs": []}
+        b_res = {
+            "ref_pr10d": _nmean(ref["pr10d"]),
+            "ref_pr5d": _nmean(ref["pr5d"]),
+            "configs": [],
+        }
         # 子窗口稳定性: 每个 config 只建一条记录, 各窗口往里填
         for cname in sorted(sub["config"].unique()):
             c = sub[sub["config"] == cname]
-            rec = {"config": cname, "overall_pr10d": _nmean(c["pr10d"]),
-                   "overall_pr5d": _nmean(c["pr5d"]),
-                   "win10d_rate": _nmean(c["win10d"]), "overlap": _nmean(c["overlap"]),
-                   "windows": {}}
+            rec = {
+                "config": cname,
+                "overall_pr10d": _nmean(c["pr10d"]),
+                "overall_pr5d": _nmean(c["pr5d"]),
+                "win10d_rate": _nmean(c["win10d"]),
+                "overlap": _nmean(c["overlap"]),
+                "windows": {},
+            }
             for wname, k in WINDOW_SPLITS:
-                bounds = [all_dates[i * len(all_dates) // k] for i in range(k)] + [all_dates[-1] + pd.Timedelta(days=1)]
+                bounds = [all_dates[i * len(all_dates) // k] for i in range(k)] + [
+                    all_dates[-1] + pd.Timedelta(days=1)
+                ]
                 for i in range(k):
                     m = (c["date"] >= bounds[i]) & (c["date"] < bounds[i + 1])
                     mr = (ref["date"] >= bounds[i]) & (ref["date"] < bounds[i + 1])
                     p10c, p10r = _nmean(c.loc[m, "pr10d"]), _nmean(ref.loc[mr, "pr10d"])
                     p5c, p5r = _nmean(c.loc[m, "pr5d"]), _nmean(ref.loc[mr, "pr5d"])
                     rec["windows"][f"{wname}{i}"] = {
-                        "pr10d": p10c, "pr10d_ref": p10r,
-                        "pr5d": p5c, "pr5d_ref": p5r,
-                        "win10": p10c > p10r, "win5": p5c > p5r,
-                        "neg10": p10c < 0, "neg5": p5c < 0,
+                        "pr10d": p10c,
+                        "pr10d_ref": p10r,
+                        "pr5d": p5c,
+                        "pr5d_ref": p5r,
+                        "win10": p10c > p10r,
+                        "win5": p5c > p5r,
+                        "neg10": p10c < 0,
+                        "neg5": p5c < 0,
                     }
             b_res["configs"].append(rec)
         # 汇总 verdict (只在 quarter 窗上判, 更严)
@@ -129,7 +145,12 @@ def verify_ranking(sweep_dir: str, out_dir) -> dict:
             better = rec["overall_pr10d"] > b_res["ref_pr10d"]
             if len(w10) == 4 and all(w10) and not any(neg10) and better:
                 rec["verdict"] = "STABLE_WIN"
-            elif len(w10) >= 2 and sum(w10) >= len(w10) // 2 and not any(neg10) and better:
+            elif (
+                len(w10) >= 2
+                and sum(w10) >= len(w10) // 2
+                and not any(neg10)
+                and better
+            ):
                 rec["verdict"] = "MARGINAL"
             else:
                 rec["verdict"] = "FRAGILE"
@@ -146,15 +167,24 @@ def verify_ranking(sweep_dir: str, out_dir) -> dict:
 
 def print_ranking(results: dict) -> None:
     for board, b in results["boards"].items():
-        print(f"\n=== [{board}]  ref pr10d={b['ref_pr10d']:+.4f} pr5d={b['ref_pr5d']:+.4f} ===", flush=True)
-        print(f"  {'config':<22}{'pr10d':>9}{'pr5d':>9}{'win10d':>8}{'overlap':>9}"
-              f"{'qwin':>6}{'negq':>6}  {'verdict':<12}{'sensitivity'}", flush=True)
+        print(
+            f"\n=== [{board}]  ref pr10d={b['ref_pr10d']:+.4f} pr5d={b['ref_pr5d']:+.4f} ===",
+            flush=True,
+        )
+        print(
+            f"  {'config':<22}{'pr10d':>9}{'pr5d':>9}{'win10d':>8}{'overlap':>9}"
+            f"{'qwin':>6}{'negq':>6}  {'verdict':<12}{'sensitivity'}",
+            flush=True,
+        )
         for rec in sorted(b["configs"], key=lambda r: r["overall_pr10d"], reverse=True):
             q = f"{rec['win10_quarters']}/{rec['n_quarters']}"
             neg = "Y" if rec["neg10_any_quarter"] else "."
-            print(f"  {rec['config']:<22}{rec['overall_pr10d']:>+9.4f}{rec['overall_pr5d']:>+9.4f}"
-                  f"{rec['win10d_rate']:>8.1%}{rec['overlap']:>9.2f}{q:>6}{neg:>6}  "
-                  f"{rec['verdict']:<12}{rec['sensitivity']}", flush=True)
+            print(
+                f"  {rec['config']:<22}{rec['overall_pr10d']:>+9.4f}{rec['overall_pr5d']:>+9.4f}"
+                f"{rec['win10d_rate']:>8.1%}{rec['overlap']:>9.2f}{q:>6}{neg:>6}  "
+                f"{rec['verdict']:<12}{rec['sensitivity']}",
+                flush=True,
+            )
 
 
 def verify_lgbm(json_path: str, out_dir) -> dict:
@@ -171,15 +201,24 @@ def verify_lgbm(json_path: str, out_dir) -> dict:
                 v = params[p]
                 if v < lo or v > hi:
                     flags.append(f"{p}={v}(建议{lo}-{hi})")
-        rows.append({"combo": key, "weighted_ic": rec.get("weighted_ic"),
-                     "flags": "; ".join(flags) or "OK", "params": params})
+        rows.append(
+            {
+                "combo": key,
+                "weighted_ic": rec.get("weighted_ic"),
+                "flags": "; ".join(flags) or "OK",
+                "params": params,
+            }
+        )
     df = pd.DataFrame(rows)
     if df.empty:
         print("[lgbm] 无结果", flush=True)
         return {"json": json_path, "note": "empty"}
     df = df.sort_values("weighted_ic", ascending=False, na_position="last")
-    print(f"\n=== LGBM leaderboard {os.path.basename(json_path)} "
-          f"(board={meta.get('board')}, grid={meta.get('grid')}) ===", flush=True)
+    print(
+        f"\n=== LGBM leaderboard {os.path.basename(json_path)} "
+        f"(board={meta.get('board')}, grid={meta.get('grid')}) ===",
+        flush=True,
+    )
     for _, r in df.iterrows():
         flag = "  << OUT-OF-PRIOR" if r["flags"] != "OK" else ""
         print(f"  {r['weighted_ic']:.5f}  [{r['combo']}]{flag}", flush=True)
@@ -191,8 +230,12 @@ def verify_lgbm(json_path: str, out_dir) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("sweep_dir", nargs="?", default=None,
-                    help="含 daily.csv 的扫描目录 (默认最新 diag_parallel_allparam_*)")
+    ap.add_argument(
+        "sweep_dir",
+        nargs="?",
+        default=None,
+        help="含 daily.csv 的扫描目录 (默认最新 diag_parallel_allparam_*)",
+    )
     ap.add_argument("--lgbm", default="", help="LGBM JSON 结果文件, 做表2 prior 对照")
     ap.add_argument("--json", action="store_true", help="只出 JSON 汇总不打印明细")
     args = ap.parse_args()
@@ -207,7 +250,9 @@ def main() -> int:
 
     sweep_dir = args.sweep_dir
     if sweep_dir is None and not args.lgbm:
-        cands = sorted(BACKTEST_RESULT_DIR.glob("diag_parallel_allparam_*"), reverse=True)
+        cands = sorted(
+            BACKTEST_RESULT_DIR.glob("diag_parallel_allparam_*"), reverse=True
+        )
         sweep_dir = str(cands[0]) if cands else None
     if sweep_dir:
         res["ranking"] = verify_ranking(sweep_dir, out_dir)

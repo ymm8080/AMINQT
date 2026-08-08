@@ -215,12 +215,19 @@ def main() -> None:
                 }
             )
         base = sub[sub["key"] == "mag_3d"].set_index("date")["pr5d"]
-        for key, label in (("t35", "组合"), ("gate_10d_t35", "10d门"), ("mag_10d", "纯10d")):
+        for key, label in (
+            ("t35", "组合"),
+            ("gate_10d_t35", "10d门"),
+            ("mag_10d", "纯10d"),
+        ):
             other = sub[sub["key"] == key].set_index("date")["pr5d"]
             common = base.index.intersection(other.index)
             if len(common):
                 wins = int((other[common] > base[common]).sum())
-                print(f"  逐日 {label} 5d实得 赢 纯3d: {wins}/{len(common)} 天", flush=True)
+                print(
+                    f"  逐日 {label} 5d实得 赢 纯3d: {wins}/{len(common)} 天",
+                    flush=True,
+                )
 
     pd.DataFrame(agg_rows).to_csv(out_dir / "agg.csv", index=False)
     summary = {

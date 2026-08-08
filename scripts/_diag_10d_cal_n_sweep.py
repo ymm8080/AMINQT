@@ -101,6 +101,7 @@ def load_panel_tail(tail_days: int) -> pd.DataFrame:
 
 # ---------------- 内联 helper (从 _diag_10d_c2c_vs_mfe.py / backtest.py 抄) ----------------
 
+
 def add_mfe_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
     """补算 MFE 净标签: MFE = max(high_hfq[T+2..T+1+k]) / close_hfq[T+1] - 1 - cost.
 
@@ -272,11 +273,15 @@ def main() -> None:
         sym_data[str(sym)] = (gd, gs, gy, pos)
     del stock
     gc.collect()
-    print(f"[stock] {len(sym_data):,} 只预提取完成 ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[stock] {len(sym_data):,} 只预提取完成 ({time.time() - t0:.0f}s)", flush=True
+    )
 
     # 每板块横截面 OLS 前缀和 (跨 cal_n/D 复用; 需按 date 排序)
     print("[cross] 每板块 score→label 前缀和...", flush=True)
-    cross: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = {}
+    cross: dict[
+        str, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+    ] = {}
     for board in BOARDS:
         bm = work[work["board"] == board]
         bvalid = np.isfinite(bm["score"].to_numpy(float)) & np.isfinite(
@@ -308,7 +313,9 @@ def main() -> None:
                 sub["score"].to_numpy(float),
             )
         day_info[D] = db
-    print(f"[day] 逐日截面预提取 {len(day_info)} 日 ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[day] 逐日截面预提取 {len(day_info)} 日 ({time.time() - t0:.0f}s)", flush=True
+    )
 
     def cross_slope_int(board: str, cal_lo, D):
         bd, psx, psy, psxx, psxy = cross[board]
@@ -403,10 +410,14 @@ def main() -> None:
                         "pr3d": _safe_nanmean(pr[:, 1]),
                         "pr5d": _safe_nanmean(pr[:, 2]),
                         "pr10d": _safe_nanmean(pr[:, 3]),
-                        "win5d": float((pr[:, 2] > 0).sum() / (~np.isnan(pr[:, 2])).sum())
+                        "win5d": float(
+                            (pr[:, 2] > 0).sum() / (~np.isnan(pr[:, 2])).sum()
+                        )
                         if (~np.isnan(pr[:, 2])).sum()
                         else float("nan"),
-                        "win10d": float((pr[:, 3] > 0).sum() / (~np.isnan(pr[:, 3])).sum())
+                        "win10d": float(
+                            (pr[:, 3] > 0).sum() / (~np.isnan(pr[:, 3])).sum()
+                        )
                         if (~np.isnan(pr[:, 3])).sum()
                         else float("nan"),
                         "overlap": overlap,
@@ -425,11 +436,16 @@ def main() -> None:
     daily.to_csv(out_dir / "daily.csv", index=False)
 
     # ---------------- 汇总 ----------------
-    print(f"\n===== cal_n 扫描: mag_10d TOP10 c2c 实得 "
-          f"(最近 {args.eval_days} 交易日) =====", flush=True)
-    print("评估 = close-to-close 点对点 (买=close[T+1], 卖=close[T+1+k]); "
-          "校准 = 每股收缩回归(κ=40,窗130,min_n=30,回退横截面), target=label_pm_10d_net",
-          flush=True)
+    print(
+        f"\n===== cal_n 扫描: mag_10d TOP10 c2c 实得 "
+        f"(最近 {args.eval_days} 交易日) =====",
+        flush=True,
+    )
+    print(
+        "评估 = close-to-close 点对点 (买=close[T+1], 卖=close[T+1+k]); "
+        "校准 = 每股收缩回归(κ=40,窗130,min_n=30,回退横截面), target=label_pm_10d_net",
+        flush=True,
+    )
 
     agg_rows: list[dict] = []
     summary_boards: dict = {}
@@ -466,13 +482,23 @@ def main() -> None:
                 m5, m10 = int(m5v.sum()), int(m10v.sum())
                 if m5:
                     w5 = int(
-                        (a.loc[common, "pr5d"].values[m5v] > b.loc[common, "pr5d"].values[m5v]).sum()
+                        (
+                            a.loc[common, "pr5d"].values[m5v]
+                            > b.loc[common, "pr5d"].values[m5v]
+                        ).sum()
                     )
                 if m10:
                     w10 = int(
-                        (a.loc[common, "pr10d"].values[m10v] > b.loc[common, "pr10d"].values[m10v]).sum()
+                        (
+                            a.loc[common, "pr10d"].values[m10v]
+                            > b.loc[common, "pr10d"].values[m10v]
+                        ).sum()
                     )
-            ov = float(g["overlap"].mean()) if not g["overlap"].isna().all() else float("nan")
+            ov = (
+                float(g["overlap"].mean())
+                if not g["overlap"].isna().all()
+                else float("nan")
+            )
             print(
                 f"  {cal_n:>5}{n:>4}{r['pr2d']:>+9.4f}{r['pr3d']:>+9.4f}"
                 f"{r['pr5d']:>+9.4f}{r['pr10d']:>+9.4f}"
@@ -537,7 +563,7 @@ def main() -> None:
         "eval_days": args.eval_days,
         "metric": "close-to-close point returns (买=close[T+1], 卖=close[T+1+k]); NOT MFE",
         "calibration": "每股收缩回归 (κ=40, 窗130, min_n=30, 回退横截面); "
-                       "target=label_pm_10d_net",
+        "target=label_pm_10d_net",
         "cal_n_values": list(CAL_N_VALUES),
         "baseline_cal_n": BASE_CAL_N,
         "per_stock_window": PER_STOCK_WINDOW,
@@ -545,7 +571,7 @@ def main() -> None:
         "shrink_kappa": SHRINK_KAPPA,
         "top_n": TOP_N,
         "score_note": "score=max(sniper,fusion); 未用 prepare_adx → pv_corr_5 自动跳过 "
-                      "(各 cal_n 同口径, 头对头仍有效)",
+        "(各 cal_n 同口径, 头对头仍有效)",
         "boards": summary_boards,
         "agg": agg_rows,
     }

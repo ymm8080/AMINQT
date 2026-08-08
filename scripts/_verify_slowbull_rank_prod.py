@@ -46,8 +46,15 @@ def main() -> int:
         "ts": pd.Timestamp.now().strftime("%Y%m%d_%H%M%S"),
         "objective": "慢牛排名键落地生产面板验证 (daily_slowbull_pool 生产路径)",
         "oos_days": OOS_DAYS,
-        "window": {"start": str(pd.Timestamp(oos_start).date()), "end": str(pd.Timestamp(dates[-1]).date())},
-        "rank": {"key": SLOW_BULL_RANK["key"], "boards": SLOW_BULL_RANK["boards"], "top_n": SLOW_BULL_RANK["top_n"]},
+        "window": {
+            "start": str(pd.Timestamp(oos_start).date()),
+            "end": str(pd.Timestamp(dates[-1]).date()),
+        },
+        "rank": {
+            "key": SLOW_BULL_RANK["key"],
+            "boards": SLOW_BULL_RANK["boards"],
+            "top_n": SLOW_BULL_RANK["top_n"],
+        },
         "rps_floor": floor,
         "boards": {},
     }
@@ -71,7 +78,9 @@ def main() -> int:
                 order_viol += 1
             if b == "dual":
                 # 门口径 = gate 内日截面 rps_60 百分位 ≥ floor (非全市场原始 rps_60)
-                cand = work[(work["date"] == d) & (work["board"] == b) & work["gate_slow_bull"]]
+                cand = work[
+                    (work["date"] == d) & (work["board"] == b) & work["gate_slow_bull"]
+                ]
                 if len(cand):
                     rk = cand.groupby("date")["rps_60"].rank(pct=True)
                     rk_map = dict(zip(cand["symbol"], rk))

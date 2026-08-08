@@ -23,7 +23,11 @@ def main() -> int:
         print(f"\n=== board={b} ===", flush=True)
         for d in last_dates:
             day = wb[wb["date"] == d]
-            n_gate = int(day["gate_slow_bull"].sum()) if "gate_slow_bull" in day.columns else -1
+            n_gate = (
+                int(day["gate_slow_bull"].sum())
+                if "gate_slow_bull" in day.columns
+                else -1
+            )
             n_up = int((day.loc[day["gate_slow_bull"], "slow_bull_regime"]).sum())
             pool = daily_slowbull_pool(wb, d, b, SLOW_BULL, SLOW_BULL.top_n)
             print(

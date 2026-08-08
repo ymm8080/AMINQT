@@ -97,10 +97,24 @@ KIND_LABEL = {
     "pain": "label_pain",
 }
 KIND_HORIZON = {
-    "1d_reg": 1, "2d_reg": 2, "3d_reg": 3, "5d_reg": 5, "10d_reg": 10,
-    "1d_cls": 1, "2d_cls": 2, "3d_cls": 3, "5d_cls": 5, "10d_cls": 10,
-    "1d_q": 1, "2d_q": 2, "3d_q": 3, "5d_q": 5, "10d_q": 10,
-    "3d_rank": 3, "5d_rank": 5, "10d_rank": 10,
+    "1d_reg": 1,
+    "2d_reg": 2,
+    "3d_reg": 3,
+    "5d_reg": 5,
+    "10d_reg": 10,
+    "1d_cls": 1,
+    "2d_cls": 2,
+    "3d_cls": 3,
+    "5d_cls": 5,
+    "10d_cls": 10,
+    "1d_q": 1,
+    "2d_q": 2,
+    "3d_q": 3,
+    "5d_q": 5,
+    "10d_q": 10,
+    "3d_rank": 3,
+    "5d_rank": 5,
+    "10d_rank": 10,
 }
 
 
@@ -161,8 +175,11 @@ def per_day_topn(
         e = np.asarray(out[n]["excess"], dtype=float)
         if len(e) == 0:
             res[str(n)] = {
-                "excess": np.nan, "top_ret": np.nan, "pool_ret": np.nan,
-                "pos_day": np.nan, "n_days": 0,
+                "excess": np.nan,
+                "top_ret": np.nan,
+                "pool_ret": np.nan,
+                "pos_day": np.nan,
+                "n_days": 0,
             }
             continue
         res[str(n)] = {
@@ -229,7 +246,7 @@ def build_slices(
     if len(dates) <= oos_n + es_n + 50:
         raise RuntimeError(f"日期不足: total={len(dates)} oos={oos_n} es={es_n}")
     oos_dates = set(dates[-oos_n:])
-    train_dates = dates[: -oos_n]  # 全部 OOS 前日期
+    train_dates = dates[:-oos_n]  # 全部 OOS 前日期
     es_dates = set(train_dates[-es_n:])
     fit_dates = set(train_dates[:-es_n])
 
@@ -250,22 +267,35 @@ def build_slices(
             oos_df = oos_df.dropna(subset=[real_label])
 
     # 铁律: 特征矩阵只含 feature_cols, label 只能作 y (绝不能混进 X, 否则模型拿 label 预测自己 → 假 IC=1)
-    X = np.nan_to_num(fit_df[feature_cols].values.astype("float32", copy=False), nan=0.0)
+    X = np.nan_to_num(
+        fit_df[feature_cols].values.astype("float32", copy=False), nan=0.0
+    )
     y = fit_df[label].values
-    X_es = np.nan_to_num(es_df[feature_cols].values.astype("float32", copy=False), nan=0.0)
+    X_es = np.nan_to_num(
+        es_df[feature_cols].values.astype("float32", copy=False), nan=0.0
+    )
     y_es = es_df[label].values
-    oos_X = np.nan_to_num(oos_df[feature_cols].values.astype("float32", copy=False), nan=0.0)
+    oos_X = np.nan_to_num(
+        oos_df[feature_cols].values.astype("float32", copy=False), nan=0.0
+    )
     return {
-        "X": X, "y": y, "w": time_weights(fit_df),
+        "X": X,
+        "y": y,
+        "w": time_weights(fit_df),
         "fit_dates": fit_df["date"].values,  # 与 X 行对齐, rank 模型按 date 分组
-        "X_es": X_es, "y_es": y_es,
+        "X_es": X_es,
+        "y_es": y_es,
         "es_dates": es_df["date"].values,
-        "oos_frame": oos_df[["date", "symbol", label] + ([real_label] if real_label != label else [])].copy(),
+        "oos_frame": oos_df[
+            ["date", "symbol", label] + ([real_label] if real_label != label else [])
+        ].copy(),
         "oos_X": oos_X,
         "label": label,
         "real_label": real_label,
-        "n_fit_days": len(fit_dates), "n_es_days": len(es_dates),
-        "n_train": int(len(fit_df)), "n_oos": int(len(oos_df)),
+        "n_fit_days": len(fit_dates),
+        "n_es_days": len(es_dates),
+        "n_train": int(len(fit_df)),
+        "n_oos": int(len(oos_df)),
     }
 
 
@@ -273,7 +303,9 @@ def _fit_regressor(s: dict, params: dict):
     use_es = len(s["y_es"]) >= 1000
     model = lgb.LGBMRegressor(**params)
     model.fit(
-        s["X"], s["y"], sample_weight=s["w"],
+        s["X"],
+        s["y"],
+        sample_weight=s["w"],
         eval_set=[(s["X_es"], s["y_es"])] if use_es else None,
         callbacks=[lgb.early_stopping(ES_PATIENCE, verbose=False)] if use_es else None,
     )
@@ -287,7 +319,9 @@ def _fit_classifier(s: dict, params: dict):
     cls_params["objective"] = "binary"
     model = lgb.LGBMClassifier(**cls_params)
     model.fit(
-        s["X"], s["y"], sample_weight=s["w"],
+        s["X"],
+        s["y"],
+        sample_weight=s["w"],
         eval_set=[(s["X_es"], s["y_es"])] if use_es else None,
         callbacks=[lgb.early_stopping(ES_PATIENCE, verbose=False)] if use_es else None,
     )
@@ -301,13 +335,18 @@ def _fit_quantile(s: dict, params: dict):
     use_es = len(s["y_es"]) >= 1000
     base = {k: v for k, v in params.items() if k != "objective"}
     qset = QuantileModelSet(base).fit(
-        s["X"], s["y"], sample_weight=s["w"],
+        s["X"],
+        s["y"],
+        sample_weight=s["w"],
         eval_set=(s["X_es"], s["y_es"]) if use_es else None,
         es_patience=ES_PATIENCE,
     )
     pred = qset.predict(s["oos_X"])["pred_q50"].values
     # n_trees 取中位数分位模型 (代表)
-    n_trees = int(getattr(qset.models[0.50], "best_iteration_", 0) or params.get("n_estimators", 0))
+    n_trees = int(
+        getattr(qset.models[0.50], "best_iteration_", 0)
+        or params.get("n_estimators", 0)
+    )
     return pred, n_trees
 
 
@@ -320,7 +359,11 @@ def _sort_by_date(X: np.ndarray, y: np.ndarray, dates: np.ndarray, w: np.ndarray
 def _rank_gains(y: np.ndarray, dates: np.ndarray) -> np.ndarray:
     """生产口径 (dual_track_trainer._train_ranker): date 截面分位 → gain 0-4."""
     df = pd.DataFrame({"date": dates, "y": y})
-    g = df.groupby("date")["y"].rank(pct=True).pipe(lambda s: (s * 5).clip(0, 4.999).astype(int))
+    g = (
+        df.groupby("date")["y"]
+        .rank(pct=True)
+        .pipe(lambda s: (s * 5).clip(0, 4.999).astype(int))
+    )
     return g.values
 
 
@@ -344,7 +387,9 @@ def _fit_ranker(s: dict, params: dict):
     group = _group_sizes(dates)
     kwargs = {}
     if use_es:
-        X_es, y_es, dates_es, w_es = _sort_by_date(s["X_es"], s["y_es"], s["es_dates"], np.ones(len(s["es_dates"])))
+        X_es, y_es, dates_es, w_es = _sort_by_date(
+            s["X_es"], s["y_es"], s["es_dates"], np.ones(len(s["es_dates"]))
+        )
         gains_es = _rank_gains(y_es, dates_es)
         kwargs = {
             "eval_set": [(X_es, gains_es)],
@@ -364,12 +409,16 @@ def _fit_pain(s: dict, params: dict):
     use_es = len(s["y_es"]) >= 1000
     base = {k: v for k, v in params.items() if k != "objective"}
     pain = PainModel(base).fit(
-        s["X"], s["y"], sample_weight=s["w"],
+        s["X"],
+        s["y"],
+        sample_weight=s["w"],
         eval_set=(s["X_es"], s["y_es"]) if use_es else None,
         es_patience=ES_PATIENCE,
     )
     pred = pain.predict_proba(s["oos_X"])
-    n_trees = int(getattr(pain.model, "best_iteration_", 0) or params.get("n_estimators", 0))
+    n_trees = int(
+        getattr(pain.model, "best_iteration_", 0) or params.get("n_estimators", 0)
+    )
     return pred, n_trees
 
 
@@ -461,8 +510,11 @@ def expand_grid(grid: dict) -> list[dict]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--board", default="main", choices=["main", "dual"])
-    ap.add_argument("--kind", default="3d_reg",
-                    help="逗号分隔 reg 族 (默认 3d_reg; 终选可用 2d,3d,5d,10d_reg)")
+    ap.add_argument(
+        "--kind",
+        default="3d_reg",
+        help="逗号分隔 reg 族 (默认 3d_reg; 终选可用 2d,3d,5d,10d_reg)",
+    )
     ap.add_argument("--grid", default="leaves_ms", choices=list(GRIDS))
     ap.add_argument(
         "--fixed",
@@ -476,7 +528,9 @@ def main() -> int:
     )
     ap.add_argument("--oos", type=int, default=250)
     ap.add_argument("--es", type=int, default=20)
-    ap.add_argument("--n", type=int, default=15, help="TOP-N 金标准评估的名单长度 (默认 15)")
+    ap.add_argument(
+        "--n", type=int, default=15, help="TOP-N 金标准评估的名单长度 (默认 15)"
+    )
     ap.add_argument("--max-n", type=int, default=0, help=">0 时只跑前 N 个组合 (调试)")
     args = ap.parse_args()
     args.kind = args.kind.replace(" ", "")
@@ -509,7 +563,8 @@ def main() -> int:
                 print(f"[derive] {col} <- {base}>0", flush=True)
     print(
         f"[data] board={args.board} rows={len(panel):,} dates={panel['date'].nunique()} "
-        f"feats={len(feature_cols)} ({time.time() - t0:.0f}s)", flush=True
+        f"feats={len(feature_cols)} ({time.time() - t0:.0f}s)",
+        flush=True,
     )
 
     kinds = [k.strip() for k in args.kind.split(",") if k.strip() in KIND_LABEL]
@@ -535,16 +590,21 @@ def main() -> int:
         s = build_slices(panel, feature_cols, kind, args.oos, args.es)
         print(
             f"[{kind}] train={s['n_train']:,}r/{s['n_fit_days']}d es={s['n_es_days']}d "
-            f"oos={s['n_oos']:,}r label={s['label']}", flush=True
+            f"oos={s['n_oos']:,}r label={s['label']}",
+            flush=True,
         )
         for ci, combo in enumerate(combos):
             params = {**BASE_PARAMS, **fixed, **combo}
             pkey = ",".join(f"{k}={v}" for k, v in combo.items()) or "default"
-            print(f"  [{ci+1}/{len(combos)}] {pkey} ...", flush=True)
+            print(f"  [{ci + 1}/{len(combos)}] {pkey} ...", flush=True)
             ic = fit_eval(s, params, "_pred", kind, args.n)
             results.setdefault(pkey, {"params": combo, "kinds": {}})
             results[pkey]["kinds"][kind] = ic
-            met = f"auc={ic['mean_auc']:.4f}" if "mean_auc" in ic else f"ic={ic['mean_ic']:.5f}"
+            met = (
+                f"auc={ic['mean_auc']:.4f}"
+                if "mean_auc" in ic
+                else f"ic={ic['mean_ic']:.5f}"
+            )
             tn = ic.get("topn", {}).get(str(args.n))
             tn_s = f" topn{args.n}exc={tn['excess']:.4f}" if tn else ""
             wins = ic.get("windows")
@@ -562,7 +622,8 @@ def main() -> int:
             print(
                 f"    -> {met} icir={ic.get('icir', 0):.2f} "
                 f"pos={ic['pos_day_ratio']:.2f} trees={ic['n_trees']} "
-                f"n_days={ic['n_days']} ({time.time() - t0:.0f}s){tn_s}{win_s}", flush=True
+                f"n_days={ic['n_days']} ({time.time() - t0:.0f}s){tn_s}{win_s}",
+                flush=True,
             )
         del s
         gc.collect()
@@ -583,14 +644,17 @@ def main() -> int:
         rec["weighted_ic"] = tot / wt if wt else np.nan
 
     rows = sorted(
-        results.items(), key=lambda kv: (kv[1]["weighted_ic"] is np.nan, kv[1]["weighted_ic"]),
+        results.items(),
+        key=lambda kv: (kv[1]["weighted_ic"] is np.nan, kv[1]["weighted_ic"]),
         reverse=True,
     )
     print("\n=== leaderboard (weighted_ic) ===", flush=True)
     for _pkey, rec in rows:
         kk = ",".join(f"{k}={v}" for k, v in rec["params"].items())
-        print(f"  {rec['weighted_ic']:.5f}  [{kk}]  " + "  ".join(
-            f"{k}:{_ic_val(v):.5f}" for k, v in rec['kinds'].items()), flush=True
+        print(
+            f"  {rec['weighted_ic']:.5f}  [{kk}]  "
+            + "  ".join(f"{k}:{_ic_val(v):.5f}" for k, v in rec["kinds"].items()),
+            flush=True,
         )
 
     # TOP-N 金标准 leaderboard (按第一 kind 的 topN 超额收益排序)
@@ -614,12 +678,24 @@ def main() -> int:
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     out = {
         "meta": {
-            "board": args.board, "kinds": kinds, "grid": args.grid, "oos_days": args.oos,
-            "es_days": args.es, "n_top": args.n, "ckpt": os.path.basename(ckpt_path),
-            "n_feats": len(feature_cols), "run_at": ts,
+            "board": args.board,
+            "kinds": kinds,
+            "grid": args.grid,
+            "oos_days": args.oos,
+            "es_days": args.es,
+            "n_top": args.n,
+            "ckpt": os.path.basename(ckpt_path),
+            "n_feats": len(feature_cols),
+            "run_at": ts,
         },
-        "results": {k: {"params": v["params"], "kinds": v["kinds"],
-                        "weighted_ic": v["weighted_ic"]} for k, v in results.items()},
+        "results": {
+            k: {
+                "params": v["params"],
+                "kinds": v["kinds"],
+                "weighted_ic": v["weighted_ic"],
+            }
+            for k, v in results.items()
+        },
     }
     path = f"data/_diag_lgbm_{args.grid}_{ts}.json"
     with open(path, "w", encoding="utf-8") as fh:
