@@ -5,7 +5,7 @@
 - 数据选择: 演示合成数据 / 真实 v3 面板 (panel_full_enriched_v3.parquet)
 - 全指标展示: 总收益/年化/净超额/最大回撤/夏普/Sortino/胜率/盈亏比/OOS IC
 - 基准对比: 净值曲线叠加基准 (沪深300/中证1000)
-- 多模式对比: Squad vs Sniper → ComparativeAnalyzer (集中度/Jensen Alpha)
+- 多模式对比: 分散持股5 vs 集中持股2 → ComparativeAnalyzer (集中度/Jensen Alpha)
 - 参数调优: 全部 16 个 TUNABLE_BOUNDS 参数 (V35/V5.2 双引擎)
 - 持久化报告: ReportGenerator 生成 JSON/TXT/HTML 三格式
 """
@@ -35,6 +35,13 @@ from .components import (
 )
 
 logger = logging.getLogger(__name__)
+
+# 仓位模式显示名 (内部值保持 squad/sniper/sniper_max, 仅界面用中文)
+_MODE_LABELS = {
+    "squad": "每天分散持股5",
+    "sniper": "集中持股2",
+    "sniper_max": "全仓1只",
+}
 
 
 # ---------- 演示面板 ----------
@@ -247,7 +254,8 @@ def render() -> None:
             position_mode = st.selectbox(
                 "仓位模式",
                 ["squad", "sniper", "sniper_max"],
-                help="squad: 分散5只; sniper: 集中2只; sniper_max: 全仓1只",
+                format_func=lambda m: _MODE_LABELS[m],
+                help="每天分散持股5: 持有5只; 集中持股2: 持有2只; 全仓1只: 只押第1名",
             )
             horizon = st.selectbox("持有期 (交易日)", [1, 2, 4], index=1)
 
@@ -477,7 +485,7 @@ def _get_benchmark_df(
 
 
 def _render_comparison_tab(data_choice, window, capital, benchmark_sel) -> None:
-    st.subheader("Squad vs Sniper 多模式对比")
+    st.subheader("分散持股5 vs 集中持股2 多模式对比")
     st.caption("运行两种仓位模式回测, 对比绩效差异 (集中度风险/Jensen Alpha)")
 
     if st.button("▶ 运行多模式对比", type="primary", key="btn_compare"):
@@ -493,7 +501,7 @@ def _render_comparison_tab(data_choice, window, capital, benchmark_sel) -> None:
         results = {}
         navs = {}
         for mode in ["squad", "sniper"]:
-            with st.spinner(f"运行 {mode} 模式..."):
+            with st.spinner(f"运行 {_MODE_LABELS[mode]} 模式..."):
                 config = BacktestConfig(
                     **{k: v for k, v in vars(v52_data["config"]).items()}
                 )
@@ -512,7 +520,7 @@ def _render_comparison_tab(data_choice, window, capital, benchmark_sel) -> None:
                     "trades": eng.get_trades(),
                     "metrics": eng.get_metrics(),
                 }
-                navs[mode.upper()] = results[mode]["nav"][["date", "nav"]]
+                navs[_MODE_LABELS[mode]] = results[mode]["nav"][["date", "nav"]]
 
         # 添加基准
         if benchmark_sel != "无":
@@ -538,14 +546,14 @@ def _render_comparison_tab(data_choice, window, capital, benchmark_sel) -> None:
         col1.metric(
             "集中度风险系数",
             f"{comparison['concentration_risk_ratio']:.2f}",
-            help="Sniper最大回撤/Squad最大回撤, >1表示Sniper风险更高",
+            help="集中持股2最大回撤/分散持股5最大回撤, >1表示集中持股2风险更高",
         )
-        col2.metric("Squad 夏普", f"{comparison['squad_sharpe']:.2f}")
-        col3.metric("Sniper 夏普", f"{comparison['sniper_sharpe']:.2f}")
+        col2.metric("分散5 夏普", f"{comparison['squad_sharpe']:.2f}")
+        col3.metric("集中2 夏普", f"{comparison['sniper_sharpe']:.2f}")
 
         col4, col5, col6 = st.columns(3)
-        col4.metric("Squad 总收益", f"{comparison['squad_total_return']:+.1%}")
-        col5.metric("Sniper 总收益", f"{comparison['sniper_total_return']:+.1%}")
+        col4.metric("分散5 总收益", f"{comparison['squad_total_return']:+.1%}")
+        col5.metric("集中2 总收益", f"{comparison['sniper_total_return']:+.1%}")
         rec_map = {
             "concentrated": "集中策略更优",
             "diversified": "分散策略更优",
@@ -557,8 +565,8 @@ def _render_comparison_tab(data_choice, window, capital, benchmark_sel) -> None:
         )
 
         with st.expander("Jensen Alpha"):
-            st.metric("Squad Alpha", f"{comparison['jensen_alpha_squad']:+.2%}")
-            st.metric("Sniper Alpha", f"{comparison['jensen_alpha_sniper']:+.2%}")
+            st.metric("分散5 Alpha", f"{comparison['jensen_alpha_squad']:+.2%}")
+            st.metric("集中2 Alpha", f"{comparison['jensen_alpha_sniper']:+.2%}")
 
         st.session_state["comparison_result"] = comparison
 

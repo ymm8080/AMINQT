@@ -208,10 +208,12 @@ def demo_list(seed: int = 42) -> pd.DataFrame:
             "pred_ret_2d": rng.uniform(-0.03, 0.08, n),
             "pred_ret_3d": rng.uniform(-0.03, 0.09, n),
             "pred_ret_5d": rng.uniform(-0.04, 0.12, n),
+            "pred_ret_10d": rng.uniform(-0.05, 0.15, n),
             "prob_up": np.round(rng.uniform(0.42, 0.62, n), 3),
             "prob_up_2d": np.round(rng.uniform(0.40, 0.66, n), 3),
             "prob_up_3d": np.round(rng.uniform(0.38, 0.68, n), 3),
             "prob_up_5d": np.round(rng.uniform(0.36, 0.70, n), 3),
+            "prob_up_10d": np.round(rng.uniform(0.34, 0.72, n), 3),
             "momentum": rng.choice(["high", "medium", "low"], n, p=[0.3, 0.5, 0.2]),
             "consensus_score": rng.uniform(1, n, n),
             "signal_conflict": rng.choice([0, 1], n, p=[0.8, 0.2]),
@@ -234,7 +236,6 @@ def demo_list(seed: int = 42) -> pd.DataFrame:
             "compound_ret": np.round(rng.uniform(0.0, 0.06, n), 6),
             "compound_prob": np.round(rng.uniform(0.42, 0.62, n), 6),
             "schema_version": "1.4",
-            "model_version": "",
         }
     )
     df["name"] = df["symbol"].map(DEMO_NAMES)

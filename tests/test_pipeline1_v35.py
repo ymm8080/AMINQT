@@ -959,12 +959,13 @@ def make_candidates(n=20, seed=1) -> pd.DataFrame:
             "pred_ret_2d": rng.uniform(-0.07, 0.12, n),
             "pred_ret_3d": rng.uniform(-0.08, 0.10, n),
             "pred_ret_5d": rng.uniform(-0.10, 0.15, n),
+            "pred_ret_10d": rng.uniform(-0.12, 0.20, n),
             "prob_up": rng.uniform(0.35, 0.65, n),
             "is_in_yesterday_list": [i % 2 for i in range(n)],
         }
     )
     # 多视界概率列缺省 = prob_up (compound_prob 精确回退 == prob_up, 现有断言不变)
-    for k in (2, 3, 5):
+    for k in (2, 3, 5, 10):
         df[f"prob_up_{k}d"] = df["prob_up"]
     return df
 
@@ -981,6 +982,9 @@ class TestListGenerator:
     def test_industry_limit(self):
         cands = make_candidates(n=20)
         cands["industry"] = "白酒"  # 全部同行业 → 最多 4 只
+        # 600019 在块交易扫描缓存里有近期大宗交易, FINAL STOCK SCAN 会剔除 →
+        # 压出 top-4, 避免扫描耦合破坏行业上限断言 (2026-08-07 排名键改 10d 后暴露)
+        cands.loc[cands["symbol"] == "600019", "pred_ret_10d"] = -1.0
         out = ListGenerator(**GATE_OFF).emit(cands)
         assert len(out["list"]) == 4
 

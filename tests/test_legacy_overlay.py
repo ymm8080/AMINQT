@@ -313,7 +313,7 @@ class TestPickProbCol:
 
 class TestCrossSection:
     def test_filters_to_requested_date(self, tmp_path):
-        """临时 parquet: 只取指定日期全截面 (含 symbol/date/industry/池特征)."""
+        """临时 parquet: 返回决策日历史窗 (mag_10d 校准用, 含 board 列), 窗内含指定日期."""
         df = pd.DataFrame(
             {
                 "symbol": ["000001", "000002"] * 2,
@@ -330,8 +330,16 @@ class TestCrossSection:
         ov.CHECKPOINTS["main"] = str(p)
         got, day = ov.cross_section("main", date="2026-08-04")
         assert day == pd.Timestamp("2026-08-04")
-        assert list(got["symbol"]) == ["000001", "000002"]
-        assert got["date"].nunique() == 1
+        # 2026-08-07: cross_section 返回决策日前历史窗 (窗宽 cal_n+rd+40 交易日,
+        # 本例仅 2 日 → 全含), 不再只取单日
+        assert set(got["date"]) == {
+            pd.Timestamp("2026-08-01"),
+            pd.Timestamp("2026-08-04"),
+        }
+        assert "board" in got.columns and (got["board"] == "main").all()
+        assert set(got["symbol"]) == {"000001", "000002"}
+        # 决策日全截面仍可筛出
+        assert list(got[got["date"] == day]["symbol"]) == ["000001", "000002"]
 
     def test_latest_date_default(self, tmp_path):
         df = pd.DataFrame(
@@ -347,4 +355,6 @@ class TestCrossSection:
         ov.CHECKPOINTS["main"] = str(p)
         got, day = ov.cross_section("main")
         assert day == pd.Timestamp("2026-08-04")
-        assert list(got["symbol"]) == ["000001"]
+        # 历史窗含两日 (决策日 + 更早)
+        assert got["date"].nunique() == 2
+        assert list(got["symbol"]) == ["000001", "000001"]

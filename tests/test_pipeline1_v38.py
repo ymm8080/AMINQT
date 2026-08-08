@@ -256,6 +256,7 @@ def _cands(rows: list[dict]) -> pd.DataFrame:
         "industry": "白酒",
         "pred_ret_3d": 0.03,
         "pred_ret_5d": 0.05,
+        "pred_ret_10d": 0.07,
         "prob_up": 0.70,
         "pred_ret_1d": 0.02,
         "pred_ret_2d": 0.03,
@@ -373,36 +374,41 @@ class TestDynamicEntry:
         out = gen.emit(cands)
         assert list(out["list"]["symbol"]) == ["600002"]
 
-    def test_emit_ranks_by_d3_target(self):
-        """排序 (2026-08-05): d3 目标 = 50% norm(pred_ret_3d) + 50% norm(prob_up_3d).
+    def test_emit_ranks_by_magnitude(self):
+        """排序 (2026-08-07 定案): 纯 pred_ret_10d 幅度降序 (close-to-close 实得口径赢 3d/组合,
+        diag_10d_point_ret_20260807_100807; 旧 3d 混合降级影子).
 
-        score 最高但 d3 涨幅/概率最低 → 落最后; d3 涨幅+概率双高 → 排第一.
+        10d 幅度最高 → 第 1, 即使 prob/score 都低; 且 3d 幅度刻意反序 —
+        600001 3d 最低却 10d 最高, 若误按 3d 排应得 [600002,600003,600001], 断言即失效.
         """
         gen = ListGenerator(entry_prob=0.0)
         cands = _cands(
             [
-                {  # d3 涨幅高 + d3 概率高 → 第 1
+                {  # 10d 幅度最高 (但 3d 幅度最低, prob/score 都低) → 纯 10d 幅度仍第 1
                     "symbol": "600001",
-                    "pred_ret_3d": 0.05,
-                    "prob_up_3d": 0.70,
-                    "score": 0.10,
+                    "pred_ret_10d": 0.08,
+                    "pred_ret_3d": 0.01,
+                    "prob_up_3d": 0.55,
+                    "score": 0.20,
                 },
-                {  # score 最高但 d3 涨幅/概率最低 → 应落最后
+                {  # 10d 居中 (但 3d 最高, prob/score 最高) → 第 2
                     "symbol": "600002",
-                    "pred_ret_3d": 0.005,
-                    "prob_up_3d": 0.60,
+                    "pred_ret_10d": 0.05,
+                    "pred_ret_3d": 0.08,
+                    "prob_up_3d": 0.80,
                     "score": 0.95,
                 },
-                {  # 中间
+                {  # 10d 幅度最低 → 最后
                     "symbol": "600003",
-                    "pred_ret_3d": 0.02,
+                    "pred_ret_10d": 0.02,
+                    "pred_ret_3d": 0.05,
                     "prob_up_3d": 0.65,
                     "score": 0.50,
                 },
             ]
         )
         out = gen.emit(cands)
-        assert list(out["list"]["symbol"]) == ["600001", "600003", "600002"]
+        assert list(out["list"]["symbol"]) == ["600001", "600002", "600003"]
 
 
 class TestScorePainPenalty:
@@ -692,3 +698,100 @@ class TestIsotonicDefault:
         # Isotonic 单调性: 校准曲线单调不减
         order = np.argsort(raw)
         assert (np.diff(prob[order]) >= -1e-12).all()
+
+
+# ============================================================
+# 10d 视界推理 (Gap 2: bundle 含/缺 10d 模型 → 输出/NaN 回退)
+# ============================================================
+class _FakeConstModel:
+    """恒定输出模型: predict → 常量, predict_proba → 二分类列向量."""
+
+    def __init__(self, const: float):
+        self.const = float(const)
+
+    def predict(self, X):
+        return np.full(len(X), self.const)
+
+    def predict_proba(self, X):
+        p = float(np.clip(self.const, 0.05, 0.95))
+        return np.column_stack([np.full(len(X), 1 - p), np.full(len(X), p)])
+
+
+class _FakeConstCal:
+    """恒定输出校准器 (predict_proba 单调映射, 不改变量纲)."""
+
+    def predict_proba(self, raw):
+        return np.clip(np.asarray(raw, dtype=float), 0.05, 0.95)
+
+
+def _save_10d_bundle(tmp_path, with_10d: bool) -> str:
+    """落盘 fake bundle (feature_cols=['f1'], 全视界 reg/cls + 校准器).
+
+    with_10d=False → 模拟旧 bundle (无 10d_reg/10d_cls), 触发级联 NaN 回退.
+    """
+    import app.pipeline1.dual_track_trainer as dtt
+
+    models = {
+        "1d_reg": (_FakeConstModel(0.01), "label_1d"),
+        "2d_reg": (_FakeConstModel(0.02), "label_2d"),
+        "3d_reg": (_FakeConstModel(0.03), "label_3d"),
+        "5d_reg": (_FakeConstModel(0.05), "label_5d"),
+        "1d_cls": (_FakeConstModel(0.70), "label_1d_cls"),
+        "2d_cls": (_FakeConstModel(0.72), "label_2d_cls"),
+        "3d_cls": (_FakeConstModel(0.74), "label_3d_cls"),
+        "5d_cls": (_FakeConstModel(0.76), "label_5d_cls"),
+    }
+    calibrators = {k: _FakeConstCal() for k in (2, 3, 5)}
+    if with_10d:
+        models["10d_reg"] = (_FakeConstModel(0.08), "label_10d")
+        models["10d_cls"] = (_FakeConstModel(0.78), "label_10d_cls")
+        calibrators[10] = _FakeConstCal()
+    trained = {
+        "board": "main",
+        "feature_cols": ["f1"],
+        "models": models,
+        "calibrator": _FakeConstCal(),
+        "calibrators": calibrators,
+    }
+    trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
+    return trainer.save(trained, "t")
+
+
+def _10d_feats() -> pd.DataFrame:
+    dates = pd.bdate_range("2025-01-01", periods=3)
+    rows = []
+    for d in dates:
+        for sym in ("600001", "600002"):
+            rows.append(
+                {
+                    "symbol": sym,
+                    "date": d,
+                    "f1": 1.0,
+                    "board": "main",
+                    "industry": "白酒",
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+class TestPredictor10d:
+    def test_bundle_with_10d_populates_columns(self, tmp_path):
+        from app.pipeline1.predictor import V35Predictor
+
+        path = _save_10d_bundle(tmp_path, with_10d=True)
+        out = V35Predictor({"main": path}).predict(_10d_feats(), "main")
+        assert "pred_ret_10d" in out.columns and "prob_up_10d" in out.columns
+        assert out["pred_ret_10d"].notna().all()
+        assert np.isfinite(out["pred_ret_10d"]).all()
+        assert np.allclose(out["pred_ret_10d"], 0.08)
+        assert out["prob_up_10d"].between(0, 1).all()
+        assert np.allclose(out["prob_up_10d"], 0.78)
+
+    def test_bundle_without_10d_nan_fallback(self, tmp_path):
+        from app.pipeline1.predictor import V35Predictor
+
+        path = _save_10d_bundle(tmp_path, with_10d=False)
+        out = V35Predictor({"main": path}).predict(_10d_feats(), "main")
+        assert "pred_ret_10d" in out.columns and "prob_up_10d" in out.columns
+        assert out["pred_ret_10d"].isna().all()
+        assert out["prob_up_10d"].isna().all()
