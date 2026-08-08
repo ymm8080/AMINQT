@@ -226,7 +226,9 @@ class DualTrackTrainer:
         # [B9] PM 执行口径验收标签优先 (label_pm_kd / label_pm_cls), 缺失时回退研究口径
         if kind.endswith("cls"):
             pm_label = (
-                "label_pm_cls" if kind == "1d_cls" else f"label_pm_{kind.split('d')[0]}d_cls"
+                "label_pm_cls"
+                if kind == "1d_cls"
+                else f"label_pm_{kind.split('d')[0]}d_cls"
             )
         else:
             pm_label = f"label_pm_{kind.split('d')[0]}d"

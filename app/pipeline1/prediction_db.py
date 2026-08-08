@@ -42,7 +42,14 @@ def shadow_pool_frame(candidates: pd.DataFrame, n: int = SHADOW_POOL_N) -> pd.Da
     """
     if candidates is None or not len(candidates):
         return pd.DataFrame(
-            columns=["symbol", "board", "pred_ret_3d", "pred_ret_10d", "prob_up_3d", "prob_up"]
+            columns=[
+                "symbol",
+                "board",
+                "pred_ret_3d",
+                "pred_ret_10d",
+                "prob_up_3d",
+                "prob_up",
+            ]
         )
     # pred_ret_10d 仅新 bundle 有 (旧 bundle 无此列 → 不选, 保证 candidates[keep] 不 KeyError)
     keep = [

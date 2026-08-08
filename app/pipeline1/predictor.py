@@ -111,10 +111,7 @@ class V35Predictor:
         }
         total_w = sum(present_w.values())
         latest["composite_score"] = (
-            sum(
-                present_w[k] * latest[f"pred_ret_{k}d"].values
-                for k in present_w
-            )
+            sum(present_w[k] * latest[f"pred_ret_{k}d"].values for k in present_w)
             / total_w
         )
         keep = [
