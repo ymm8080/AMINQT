@@ -577,7 +577,9 @@ def test_build_merged_shortlist_ranked():
         pool_score(df, SNIPER.pool).values, pool_score(df, FUSION.pool).values
     )
     mag = calibrate_mag10d(
-        scored.dropna(subset=["score"]), score_col="score", target_col="label_pm_10d_net"
+        scored.dropna(subset=["score"]),
+        score_col="score",
+        target_col="label_pm_10d_net",
     )
     if mag.empty:
         pytest.skip("合成面板无足够已实现横截面 (校准不出票)")

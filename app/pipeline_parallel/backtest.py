@@ -984,9 +984,7 @@ def build_merged_shortlist(
     del score_s, score_f
     gc.collect()
     # mag_10d 校准 (walk-forward, 只用已实现标签) → 全池逐日 mag
-    mag = calibrate_mag10d(
-        scored, score_col="score", target_col="label_pm_10d_net"
-    )
+    mag = calibrate_mag10d(scored, score_col="score", target_col="label_pm_10d_net")
     if mag.empty:
         return pd.DataFrame()
     join_on = ["symbol", "date"] + (["board"] if "board" in scored.columns else [])
@@ -1382,7 +1380,9 @@ def build_daily_shortlists(
     if "board" not in res.columns:
         res.insert(1, "board", board)
     else:
-        res = res[["date", "board"] + [c for c in res.columns if c not in ("date", "board")]]
+        res = res[
+            ["date", "board"] + [c for c in res.columns if c not in ("date", "board")]
+        ]
     return res
 
 

@@ -245,7 +245,9 @@ def _row_active(row, gate: dict) -> bool:
 
     2026-08-07: 全板块候选 systems="" (旧 top-N 之外) 走合并 "both" 校准 (score=max
     两系统池分) → 同 "both": 任一系统保留即算, 不因无系统标签被整批误杀."""
-    combos = ("sniper", "fusion") if row["systems"] in ("", "both") else (row["systems"],)
+    combos = (
+        ("sniper", "fusion") if row["systems"] in ("", "both") else (row["systems"],)
+    )
     return any(gate.get((row["board"], s), {}).get("active", False) for s in combos)
 
 
@@ -416,8 +418,12 @@ def expand_candidates(full: pd.DataFrame) -> pd.DataFrame:
         sscore = sn_cs.set_index("symbol")["score"]
         fscore = fu_cs.set_index("symbol")["score"]
         # 旧 top-N 标签 (元数据): 狙击 top5 / 融合 top10, 按各自特征分
-        sset = set(sn_cs.sort_values("score", ascending=False).head(SNIPER.top_n)["symbol"])
-        fset = set(fu_cs.sort_values("score", ascending=False).head(FUSION.top_n)["symbol"])
+        sset = set(
+            sn_cs.sort_values("score", ascending=False).head(SNIPER.top_n)["symbol"]
+        )
+        fset = set(
+            fu_cs.sort_values("score", ascending=False).head(FUSION.top_n)["symbol"]
+        )
         # 全板块: latest 截面全部有分股 (不再 TOP-30 预筛)
         for sym in sscore.index.union(fscore.index):
             in_s, in_f = sym in sset, sym in fset

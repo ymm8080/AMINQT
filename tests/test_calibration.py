@@ -144,8 +144,12 @@ def test_d_shrinkage_pulls_toward_cross_section():
 
     # 取尾日 (每股窗口已满, 避免早期稀疏回退横截面); 该日全股 mag 均值近似横截面参考
     d0 = out_weak["date"].max()
-    mag_w = out_weak.loc[(out_weak["symbol"] == sym) & (out_weak["date"] == d0), "mag"].iloc[0]
-    mag_s = out_strong.loc[(out_strong["symbol"] == sym) & (out_strong["date"] == d0), "mag"].iloc[0]
+    mag_w = out_weak.loc[
+        (out_weak["symbol"] == sym) & (out_weak["date"] == d0), "mag"
+    ].iloc[0]
+    mag_s = out_strong.loc[
+        (out_strong["symbol"] == sym) & (out_strong["date"] == d0), "mag"
+    ].iloc[0]
     cross_ref = out_weak.loc[out_weak["date"] == d0, "mag"].mean()
     # 强收缩应比弱收缩更接近横截面
     assert abs(mag_s - cross_ref) < abs(mag_w - cross_ref)
@@ -182,9 +186,9 @@ def test_e_lookahead_boundary_exact():
     c2.loc[80 - 10, "label_pm_10d_net"] = 5.0
 
     def _mag(df, d):
-        return calibrate_mag10d(df, cal_n=60).loc[
-            lambda s: s["date"] == d, "mag"
-        ].iloc[0]
+        return (
+            calibrate_mag10d(df, cal_n=60).loc[lambda s: s["date"] == d, "mag"].iloc[0]
+        )
 
     assert _mag(c1, D) != pytest.approx(_mag(clean, D), abs=1e-9)
     assert _mag(c2, D) == pytest.approx(_mag(clean, D), abs=1e-9)
