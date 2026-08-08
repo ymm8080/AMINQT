@@ -110,8 +110,8 @@ def calibrate_mag10d(
         sub = work.loc[bm, ["date", "symbol", score_col]]
         dates = sorted(sub["date"].unique())
         board_dates[board] = dates
-        for D, g in sub.groupby("date", sort=True):
-            day_cross[(board, D)] = (
+        for dt, g in sub.groupby("date", sort=True):
+            day_cross[(board, dt)] = (
                 g["symbol"].to_numpy(str),
                 g[score_col].to_numpy(float),
             )
@@ -121,40 +121,40 @@ def calibrate_mag10d(
         bdates = board_dates[board]
         date_idx = {d: i for i, d in enumerate(bdates)}
         bd, psx, psy, psxx, psxy = cross[board]
-        for D in bdates:
-            dc = day_cross.get((board, D))
+        for dt in bdates:
+            dc = day_cross.get((board, dt))
             if dc is None:
                 continue
             syms, scores = dc
             if len(syms) == 0:
                 continue
-            di = date_idx[D]
+            di = date_idx[dt]
             if di < _REALIZED_DROP:
                 continue  # 尚无已实现标签 → 该板块当日不出票
             cal_lo = bdates[max(0, di - cal_n)]
             # 横截面只用到已实现标签: 行 t 可用 ⇔ t+11 ≤ di (卖价 close[bdates[t+11]] 在决策时已打印).
-            # iEnd = 首行 date > bdates[di-11] → 纳入日期 ≤ bdates[di-11] 的全部行.
-            iLo = int(np.searchsorted(bd, np.datetime64(cal_lo), side="left"))
-            iEnd = int(
+            # i_end = 首行 date > bdates[di-11] → 纳入日期 ≤ bdates[di-11] 的全部行.
+            i_lo = int(np.searchsorted(bd, np.datetime64(cal_lo), side="left"))
+            i_end = int(
                 np.searchsorted(
                     bd, np.datetime64(bdates[di - _REALIZED_DROP]), side="right"
                 )
             )
-            n = iEnd - iLo
+            n = i_end - i_lo
             if n < MAG10D_CAL["cross_min_n"]:
                 continue  # 该板块当日横截面不足 → 不出票
-            Sx = psx[iEnd] - psx[iLo]
-            Sy = psy[iEnd] - psy[iLo]
-            Sxx = psxx[iEnd] - psxx[iLo]
-            Sxy = psxy[iEnd] - psxy[iLo]
-            var = n * Sxx - Sx * Sx
+            sx = psx[i_end] - psx[i_lo]
+            sy = psy[i_end] - psy[i_lo]
+            sxx = psxx[i_end] - psxx[i_lo]
+            sxy = psxy[i_end] - psxy[i_lo]
+            var = n * sxx - sx * sx
             if var <= 1e-12:
-                cs, ci = 0.0, (Sy / n if n else 0.0)
+                cs, ci = 0.0, (sy / n if n else 0.0)
             else:
-                cs = (n * Sxy - Sx * Sy) / var
-                ci = (Sy - cs * Sx) / n
+                cs = (n * sxy - sx * sy) / var
+                ci = (sy - cs * sx) / n
             cal_lo64 = np.datetime64(cal_lo)
-            D64 = np.datetime64(D)
+            d64 = np.datetime64(dt)
             # 每股窗口 OLS + 收缩 (per-symbol numpy 循环, 与诊断脚本一致)
             for i in range(len(syms)):
                 sc = scores[i]
@@ -164,19 +164,19 @@ def calibrate_mag10d(
                 if sd is None:
                     continue
                 gd, gs, gy, pos = sd
-                vD = int(
+                vd = int(
                     np.searchsorted(
                         pos,
-                        int(np.searchsorted(gd, D64, side="right")) - _REALIZED_DROP,
+                        int(np.searchsorted(gd, d64, side="right")) - _REALIZED_DROP,
                         side="left",
                     )
                 )
-                sym_iLo = int(np.searchsorted(gd, cal_lo64, side="left"))
-                vLo = int(np.searchsorted(pos, sym_iLo, side="left"))
-                vc = vD - vLo
+                sym_i_lo = int(np.searchsorted(gd, cal_lo64, side="left"))
+                v_lo = int(np.searchsorted(pos, sym_i_lo, side="left"))
+                vc = vd - v_lo
                 if vc >= per_stock_min_n:
                     take = min(vc, per_stock_window)
-                    r = pos[vD - take : vD]
+                    r = pos[vd - take : vd]
                     x = gs[r]
                     y = gy[r]
                     raw_slope, _ = _ols_slope_intercept(x, y)
@@ -187,7 +187,7 @@ def calibrate_mag10d(
                     slope, intercept = cs, ci
                 mag = slope * sc + intercept
                 if np.isfinite(mag):
-                    rows.append((syms[i], D, board, mag))
+                    rows.append((syms[i], dt, board, mag))
 
     if not rows:
         return pd.DataFrame(columns=["symbol", "date", "board", "mag"])
