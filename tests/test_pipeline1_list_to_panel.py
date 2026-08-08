@@ -75,6 +75,7 @@ def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
             "announce_score": rng.uniform(-1.0, 1.0, n),
             "weight": np.round(rng.uniform(0.02, 0.10, n), 4),
             "schema_version": "1.4",
+            "model_version": "",
         }
     )
 

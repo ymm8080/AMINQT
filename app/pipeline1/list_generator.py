@@ -80,6 +80,7 @@ SCHEMA_FIELDS = [
     "announce_score",
     "weight",
     "schema_version",
+    "model_version",
 ]
 
 
@@ -551,6 +552,7 @@ class ListGenerator:
                 final[col] = np.nan
         final["market_state"] = market_state
         final["schema_version"] = SCHEMA_VERSION
+        final["model_version"] = ""
         return {
             "mode": mode,
             "list": final[SCHEMA_FIELDS].reset_index(drop=True),
