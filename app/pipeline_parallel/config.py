@@ -251,3 +251,23 @@ class PanelSource:
 
 
 PANEL = PanelSource()
+
+# ── mag_10d 校准参数 (2026-08-07 定案, diag_10d_param_sweep_nl_20260807_200540) ──
+# 并行系统 (除慢牛) 短名单排名 = 每股收缩回归 score→label_pm_10d_net (T+10
+# close-to-close 校准幅度) 的全板块日截面降序 → TOP5/TOP10. 拟合窗 [D-cal_n, D)
+# 只用**已实现**标签: 行 t 的卖价 close_hfq[T+11] 须在决策日 D 之前已打印 → 拟合边界
+# 比 D 提前 realized_drop = buy_lag + label_horizon = 11 个交易日 (无前瞻, 铁律).
+# 无前瞻扫描 (横截面按日期裁 11 交易日, 250d OOS) 定案:
+#   cal_n=21 (10 已实现日) + per_stock_min_n=50 (=纯板块横截面 OLS) 双板块最优;
+#   每股回归无前瞻下样本 ~10-31 太噪 (minn=15/20 为负), psw 完全 no-op, kappa=10 最优.
+MAG10D_CAL = {
+    "cal_n": 21,  # 校准窗 (交易日; cal_n 扫描最优 = 短窗, 对近期 regime 适应快)
+    "per_stock_window": 130,  # 每股自用最近交易日 (no-op, 纯横截面下不触发)
+    "per_stock_min_n": 50,  # 每股回归最小样本, 不足回退横截面; =50 强制纯横截面 OLS
+    "shrink_kappa": 10.0,  # 收缩强度 (λ = take/(take+κ))
+    "score_col": "score",  # 校准输入: score = max(sniper, fusion) 池分
+    "target_col": "label_pm_10d_net",  # 校准目标: T+10 close-to-close 净幅度
+    "cross_min_n": 50,  # 横截面最小样本, 不足该板块当日不出票
+    "buy_lag": 1,  # 买在 close[T+1] (相对决策日 D)
+    "label_horizon": 10,  # 视界 10 交易日
+}

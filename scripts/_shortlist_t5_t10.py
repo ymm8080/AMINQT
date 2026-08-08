@@ -23,9 +23,11 @@
 明细表格保留每板块 T-5/T-10 逐视界.
 
 流程 (用户): 先给每只股 预期涨幅+达到概率 (预测), 再排名 — 绝不先排名后预测.
-**排名键 (2026-08-07 定案):** 每股 pred_mag (主视界 T+3 预期幅度) 降序 — 250d OOS
-证明纯幅度排名 MFE 全视界赢特征/混合排名 +3.9~10.1pp, 上涨率打平. 候选池每系统特征
-TOP-30 加宽 (CAND_POOL_N), 再按 pred_mag 取每板块 TOP-10; score_w 降为平局裁决/展示.
+**排名键 (2026-08-07 定案):** 每股 pred_mag_10d — 共享 calibrate_mag10d
+(score→label_pm_10d_net, T+10 close-to-close 校准幅度) 全板块日截面降序 → 每板块
+TOP-10, 与并行 build_merged_shortlist 同源 (d10 c2c 定案). 候选池=全板块 (latest 截面
+全部有分股, 不再 TOP-30 预筛); 旧 top-N (狙击 top5 / 融合 top10, 按特征分) 仅作
+systems/co_occur 元数据标注; score_w 降为平局裁决/展示.
 
 **主视界 (2026-08-05 用户定案):** T+3 (短持 3 天). 排名权重 3d=0.40 最高 (2d+3d 合计 0.65),
 入选门 = **T+2/T+3 联合门** (2026-08-07 用户: "考虑 T+2,T+3 一起"; 见 config
@@ -52,6 +54,7 @@ import pyarrow.parquet as pq
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from app.pipeline1.label_engine import COST, slippage_tier
+from app.pipeline_parallel.calibration import calibrate_mag10d
 from app.pipeline_parallel.config import FUSION, HORIZONS, SNIPER
 from app.pipeline_parallel.scoring import pool_score
 from config.settings import (
@@ -118,12 +121,13 @@ SHRINK_KAPPA = 40
 SMOOTH_ENABLED = True
 SMOOTH_ALPHA = 0.35
 SMOOTH_K = 12
-# [2026-08-07] 短名单排名定案: 按每股 pred_mag(主视界幅度) 排名, 替代原 score_w 混合排名.
+# [2026-08-07] 短名单排名定案: 按每股 pred_mag_10d (共享 calibrate_mag10d, score→
+# label_pm_10d_net, T+10 close-to-close 校准幅度) 排名, 替代原 score_w 混合排名.
 # 250d OOS (scripts/_diag_parallel_rank_compare.py + _diag_rank_strategies.py) 证明:
 # 纯 pred_mag 排名 MFE 全视界赢特征排名 +3.9~10.1pp, 上涨率打平; 混合/两段式全不如纯.
-# 原短名单仅 ~15 只 (特征 TOP-5∪TOP-10), pred_mag 在内重排近乎无效 → 需先把候选池加宽.
-CAND_POOL_N = 30  # 候选池宽度: 每系统特征分 TOP-N → 再按 pred_mag 取 TOP-10
-CAND_RANK_KEY = "pred_mag_3d"  # 排名键 = 主视界(T+3)每股预期幅度
+# 原短名单仅 ~15 只 (特征 TOP-5∪TOP-10), pred_mag 在内重排近乎无效 → 候选池加宽到
+# 全板块 (latest 截面全部有分股), 再按 pred_mag_10d 取每板块 TOP-10 (TOP-30 预筛已废).
+CAND_RANK_KEY = "pred_mag_10d"  # 排名键 = 每股 mag_10d 预期幅度 (2026-08-07 定案)
 
 
 def load_system_stats(records: dict) -> dict:
@@ -237,8 +241,11 @@ def regime_gate(records: dict) -> dict:
 
 
 def _row_active(row, gate: dict) -> bool:
-    """该短名单行 (board, systems) 是否命中今日保留的组合; 共现股=任一所涉系统保留即算."""
-    combos = ("sniper", "fusion") if row["systems"] == "both" else (row["systems"],)
+    """该短名单行 (board, systems) 是否命中今日保留的组合; 共现股=任一所涉系统保留即算.
+
+    2026-08-07: 全板块候选 systems="" (旧 top-N 之外) 走合并 "both" 校准 (score=max
+    两系统池分) → 同 "both": 任一系统保留即算, 不因无系统标签被整批误杀."""
+    combos = ("sniper", "fusion") if row["systems"] in ("", "both") else (row["systems"],)
     return any(gate.get((row["board"], s), {}).get("active", False) for s in combos)
 
 
@@ -338,7 +345,7 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
     返回 {(board, key): DataFrame[symbol, date, score, mfe_2d..mfe_10d]}.
     """
     out: dict[tuple[str, str], pd.DataFrame] = {}
-    need = ["symbol", "date", "close_hfq", "high_hfq", "adv20"] + [
+    need = ["symbol", "date", "close_hfq", "high_hfq", "adv20", "label_pm_10d_net"] + [
         c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"
     ]
     if _PANEL_CACHE.get("ready"):
@@ -367,25 +374,31 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
         for h in HORIZONS:
             fr_sn[f"mfe_{h}"] = t[f"mfe_{h}"]
             fr_fu[f"mfe_{h}"] = t[f"mfe_{h}"]
+        # 共享 calibrate_mag10d 的目标列 (mag_10d 排名键, 2026-08-07 定案)
+        fr_sn["label_pm_10d_net"] = t["label_pm_10d_net"]
+        fr_fu["label_pm_10d_net"] = t["label_pm_10d_net"]
         out[(board, "sniper")] = fr_sn
         out[(board, "fusion")] = fr_fu
         # "both" = 合并短名单口径 (build_merged_shortlist: score=max 两系统分位分) →
         # 共现行也启用逐股校准, 不再回退横截面
         fr_bt = fr_sn.copy()
         fr_bt["score"] = np.maximum(fr_sn["score"], fr_fu["score"])
+        fr_bt["label_pm_10d_net"] = t["label_pm_10d_net"]
         out[(board, "both")] = fr_bt
     _PANEL_CACHE["ready"], _PANEL_CACHE["data"] = True, out
     return out
 
 
 def expand_candidates(full: pd.DataFrame) -> pd.DataFrame:
-    """FULL RUN 短名单加宽: 每系统特征分 TOP-{CAND_POOL_N} 候选 ∪ 原短名单.
+    """FULL RUN 短名单加宽: 全板块候选 → 按 pred_mag_10d 取每板块 TOP-10.
 
     2026-08-07 定案: 250d OOS 证明"每股 pred_mag(幅度) 排名"胜过"特征分排名"
     (MFE 全视界 +3.9~10.1pp, 上涨率打平). 原短名单仅 ~15 只 (特征 TOP-5∪TOP-10),
-    pred_mag 在其内重排近乎无效 → 用面板最新截面把候选池加宽到每系统特征 TOP-30,
-    再由 rank_and_truncate 按 pred_mag 取 TOP-10. 沿用 _panel_per_stock 与生产一致的
-    截面分 (不重算特征); 原"不重选股"约定被本定案取代 (选股宽进→预测细排).
+    pred_mag 在其内重排近乎无效 → 候选池加宽到**全板块** (latest 截面全部有分股,
+    不再 TOP-30 预筛), 再由 rank_and_truncate 按 pred_mag_10d 取 TOP-10.
+    systems/co_occur = 旧 top-N 标签 (狙击 top5 / 融合 top10, 按特征分) 纯元数据标注
+    (与并行 build_merged_shortlist 同约定); 两系统 top-N 之外 → systems="", co_occur=False.
+    沿用 _panel_per_stock 与生产一致的截面分 (不重算特征); 原"不重选股"约定被本定案取代.
     """
     panel = _panel_per_stock()
     rows = []
@@ -396,15 +409,17 @@ def expand_candidates(full: pd.DataFrame) -> pd.DataFrame:
             continue
         last = max(sn["date"].max(), fu["date"].max())
 
-        def _top(pf: pd.DataFrame, last=last) -> pd.DataFrame:
-            cs = pf[pf["date"] == last][["symbol", "score"]].dropna()
-            return cs.sort_values("score", ascending=False).head(CAND_POOL_N)
+        def _cs(pf: pd.DataFrame, last=last) -> pd.DataFrame:
+            return pf[pf["date"] == last][["symbol", "score"]].dropna()
 
-        sn30, fu30 = _top(sn), _top(fu)
-        sset, fset = set(sn30["symbol"]), set(fu30["symbol"])
-        sscore = sn30.set_index("symbol")["score"]
-        fscore = fu30.set_index("symbol")["score"]
-        for sym in sset | fset:
+        sn_cs, fu_cs = _cs(sn), _cs(fu)
+        sscore = sn_cs.set_index("symbol")["score"]
+        fscore = fu_cs.set_index("symbol")["score"]
+        # 旧 top-N 标签 (元数据): 狙击 top5 / 融合 top10, 按各自特征分
+        sset = set(sn_cs.sort_values("score", ascending=False).head(SNIPER.top_n)["symbol"])
+        fset = set(fu_cs.sort_values("score", ascending=False).head(FUSION.top_n)["symbol"])
+        # 全板块: latest 截面全部有分股 (不再 TOP-30 预筛)
+        for sym in sscore.index.union(fscore.index):
             in_s, in_f = sym in sset, sym in fset
             rows.append(
                 {
@@ -414,7 +429,7 @@ def expand_candidates(full: pd.DataFrame) -> pd.DataFrame:
                     "systems": (
                         "fusion+sniper"
                         if in_s and in_f
-                        else ("sniper" if in_s else "fusion")
+                        else ("sniper" if in_s else ("fusion" if in_f else ""))
                     ),
                     "score": float(max(sscore.get(sym, -1.0), fscore.get(sym, -1.0))),
                     "co_occur": bool(in_s and in_f),
@@ -430,8 +445,8 @@ def expand_candidates(full: pd.DataFrame) -> pd.DataFrame:
     merged = pd.concat([cands, keep], ignore_index=True)
     merged = merged.drop_duplicates(subset=["board", "symbol"], keep="first")
     print(
-        f"[cand] 候选池: 原短名单 {len(full):,} → 加宽 {len(merged):,} "
-        f"(面板候选 {len(cands):,}, 每系统特征 TOP-{CAND_POOL_N})",
+        f"[cand] 候选池: 原短名单 {len(full):,} → 全板块 {len(merged):,} "
+        f"(latest 截面有分股 {len(cands):,}; 旧 top-N 仅作 systems 标注)",
         flush=True,
     )
     return merged
@@ -526,8 +541,37 @@ def calibrate(
     return out
 
 
+def _mag10d_latest(panel: dict, board: str, last) -> pd.Series:
+    """共享 calibrate_mag10d (score→label_pm_10d_net) 的决策日每股 mag.
+
+    2026-08-07 定案: 排名键 pred_mag_10d 与并行 build_merged_shortlist 同源 (d10 c2c),
+    不再是每股 MFE 回归的 pred_mag_10d. 用合并 "both" 面板 (score=max 两系统池分),
+    calibrate_mag10d 内部已做无前瞻 (已实现边界 buy_lag+label_horizon=11 交易日).
+    last 必须等于该板块面板最新交易日 (= 决策日). 返回 symbol→mag Series.
+    """
+    fr = panel.get((board, "both"))
+    if fr is None or fr.empty or "label_pm_10d_net" not in fr.columns:
+        return pd.Series(dtype=float)
+    # _panel_per_stock 的帧不含 board 列 → 补上 (该帧本就是单板块, 赋常量 board 正确)
+    work = fr[["symbol", "date", "score", "label_pm_10d_net"]].copy()
+    work["board"] = board
+    m = calibrate_mag10d(work)
+    if m.empty:
+        return pd.Series(dtype=float)
+    row = m[m["date"] == last]
+    if row.empty:
+        return pd.Series(dtype=float)
+    return row.set_index("symbol")["mag"]
+
+
 def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
-    """每只短名单股: 用最新 score 经 OOS 校准给 逐视界 前瞻 预期涨幅(MFE)+逐股自然概率."""
+    """每只短名单股: 用最新 score 经 OOS 校准给 逐视界 前瞻 预期涨幅(MFE)+逐股自然概率.
+
+    2026-08-07: 排名键 pred_mag_10d 用共享 calibrate_mag10d (score→label_pm_10d_net,
+    T+10 close-to-close 校准幅度) 覆盖 — 与并行 build_merged_shortlist 同源; 其余
+    pred_mag_{2,3,5}d 与全部 pred_prob 保持每股 MFE/自然概率口径不变 (prob 校准与
+    select_confident T+2/T+3 门不动).
+    """
     cals = _fit_calibrators(records)
     out = res.copy()
     for h in HORIZONS:
@@ -546,6 +590,17 @@ def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
             out.at[idx, f"pred_mag_{h}"] = mag
             out.at[idx, f"pred_prob_{h}"] = prob
             out.at[idx, f"pred_n_{h}"] = n
+    # 排名键覆盖: pred_mag_10d ← 共享 calibrate_mag10d (无前瞻, 全板块日截面)
+    panel = _panel_per_stock()
+    for board in ("main", "dual"):
+        fr = panel.get((board, "both"))
+        if fr is None or fr.empty:
+            continue
+        mag10 = _mag10d_latest(panel, board, fr["date"].max())
+        if mag10.empty:
+            continue
+        mask = out["board"] == board
+        out.loc[mask, "pred_mag_10d"] = out.loc[mask, "symbol"].map(mag10)
     # est_wr 已移除: 系统级常量 (同系统每股同值), 且是旧 P(MFE>0) 虚高口径 (用户 2026-08-05 否决)
     first = ["date", "board", "cut", "rk", "symbol", "systems", "co_occur", "score"]
     ph = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob", "pred_n")]

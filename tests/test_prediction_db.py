@@ -75,6 +75,30 @@ class TestPredictionDB:
         assert "actual_ret_2d" in out_cols
         for col in ("prob_up_2d", "prob_up_3d", "prob_up_5d"):
             assert col in stock_cols
+        # [10d] 2026-08-07 生产排名改 pred_ret_10d, 历史 DB 迁移须补列
+        for col in ("pred_ret_10d", "prob_up_10d"):
+            assert col in stock_cols
+
+    def test_insert_run_persists_pred_ret_10d(self, tmp_path):
+        stocks = _stocks()
+        stocks["pred_ret_10d"] = [0.07, 0.08]
+        stocks["prob_up_10d"] = [0.66, 0.76]
+        db = PredictionDB(path=str(tmp_path / "p.db"))
+        assert db.insert_run("2026-08-07", stocks) == 2
+        run = db.get_run("2026-08-07")
+        by_sym = {s["symbol"]: s for s in run["stocks"]}
+        assert by_sym["600001"]["pred_ret_10d"] == pytest.approx(0.07)
+        assert by_sym["600001"]["prob_up_10d"] == pytest.approx(0.66)
+        assert by_sym["600002"]["pred_ret_10d"] == pytest.approx(0.08)
+
+    def test_insert_run_none_10d_without_source_col(self, tmp_path):
+        """源行缺 pred_ret_10d/prob_up_10d (旧预测) → 落库 NULL, 不 KeyError."""
+        db = PredictionDB(path=str(tmp_path / "p.db"))
+        assert db.insert_run("2026-08-07", _stocks()) == 2
+        run = db.get_run("2026-08-07")
+        by_sym = {s["symbol"]: s for s in run["stocks"]}
+        assert by_sym["600001"]["pred_ret_10d"] is None
+        assert by_sym["600001"]["prob_up_10d"] is None
 
     def test_backfill_outcomes_persists_actual_ret_2d(self, tmp_path):
         db = PredictionDB(path=str(tmp_path / "p.db"))

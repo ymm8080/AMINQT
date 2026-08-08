@@ -42,9 +42,14 @@ def shadow_pool_frame(candidates: pd.DataFrame, n: int = SHADOW_POOL_N) -> pd.Da
     """
     if candidates is None or not len(candidates):
         return pd.DataFrame(
-            columns=["symbol", "board", "pred_ret_3d", "prob_up_3d", "prob_up"]
+            columns=["symbol", "board", "pred_ret_3d", "pred_ret_10d", "prob_up_3d", "prob_up"]
         )
-    keep = ["symbol", "pred_ret_3d", "prob_up_3d", "prob_up"]
+    # pred_ret_10d 仅新 bundle 有 (旧 bundle 无此列 → 不选, 保证 candidates[keep] 不 KeyError)
+    keep = [
+        c
+        for c in ("symbol", "pred_ret_3d", "pred_ret_10d", "prob_up_3d", "prob_up")
+        if c in candidates.columns
+    ]
     df = candidates[keep].copy()
     df["board"] = candidates["board"] if "board" in candidates.columns else "main"
     df = df[df["pred_ret_3d"].notna()]
@@ -76,10 +81,12 @@ CREATE TABLE IF NOT EXISTS prediction_stocks (
     pred_ret_2d  REAL,
     pred_ret_3d  REAL,
     pred_ret_5d  REAL,
+    pred_ret_10d REAL,
     prob_up      REAL,
     prob_up_2d   REAL,
     prob_up_3d   REAL,
     prob_up_5d   REAL,
+    prob_up_10d  REAL,
     score        REAL,
     momentum     TEXT,
     weight       REAL,
@@ -108,7 +115,8 @@ CREATE INDEX IF NOT EXISTS idx_stocks_symbol ON prediction_stocks(symbol);
 CREATE INDEX IF NOT EXISTS idx_outcomes_date ON prediction_outcomes(date);
 
 -- 双轨影子 (2026-08-07): legacy 排名键 A/B 对比底稿 — 每日同一份平滑候选按
--- pred_ret_3d (幅度) 排名入库, 与生产 prob_up 排名 (prediction_stocks) 并存;
+-- pred_ret_3d (幅度) 排名入库 (2026-08-07 生产排名改 pred_ret_10d, 影子保留 3d 作对照臂,
+-- 同时存 pred_ret_10d 列供事后重排), 与生产排名 (prediction_stocks) 并存;
 -- 1~2 月后真实结局对比 (eval_legacy_dual_track.py). 自含结局列, 不污染生产表.
 CREATE TABLE IF NOT EXISTS prediction_shadow (
     date         TEXT NOT NULL,
@@ -116,12 +124,14 @@ CREATE TABLE IF NOT EXISTS prediction_shadow (
     board        TEXT NOT NULL DEFAULT 'main',
     rank_by_ret  INTEGER NOT NULL DEFAULT 0,
     pred_ret_3d  REAL,
+    pred_ret_10d REAL,
     prob_up_3d   REAL,
     prob_up      REAL,
     actual_ret_1d REAL,
     actual_ret_2d REAL,
     actual_ret_3d REAL,
     actual_ret_5d REAL,
+    actual_ret_10d REAL,
     computed_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     PRIMARY KEY (date, symbol)
 );
@@ -169,6 +179,26 @@ class PredictionDB:
                     "prob_up_5d",
                     "ALTER TABLE prediction_stocks ADD COLUMN prob_up_5d REAL",
                 ),
+                (
+                    "prediction_stocks",
+                    "pred_ret_10d",
+                    "ALTER TABLE prediction_stocks ADD COLUMN pred_ret_10d REAL",
+                ),
+                (
+                    "prediction_stocks",
+                    "prob_up_10d",
+                    "ALTER TABLE prediction_stocks ADD COLUMN prob_up_10d REAL",
+                ),
+                (
+                    "prediction_shadow",
+                    "pred_ret_10d",
+                    "ALTER TABLE prediction_shadow ADD COLUMN pred_ret_10d REAL",
+                ),
+                (
+                    "prediction_shadow",
+                    "actual_ret_10d",
+                    "ALTER TABLE prediction_shadow ADD COLUMN actual_ret_10d REAL",
+                ),
             ):
                 cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
                 if col not in cols:
@@ -197,9 +227,10 @@ class PredictionDB:
                 conn.execute(
                     """INSERT OR IGNORE INTO prediction_stocks
                        (date, symbol, board, rank, pred_ret_1d, pred_ret_2d, pred_ret_3d, pred_ret_5d,
-                        prob_up, prob_up_2d, prob_up_3d, prob_up_5d,
+                        pred_ret_10d,
+                        prob_up, prob_up_2d, prob_up_3d, prob_up_5d, prob_up_10d,
                         score, momentum, weight, pain_prob, consensus_score, signal_conflict)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         date_str,
                         str(row.get("symbol", "")),
@@ -209,10 +240,12 @@ class PredictionDB:
                         _safe_float(row, "pred_ret_2d"),
                         _safe_float(row, "pred_ret_3d"),
                         _safe_float(row, "pred_ret_5d"),
+                        _safe_float(row, "pred_ret_10d"),
                         _safe_float(row, "prob_up"),
                         _safe_float(row, "prob_up_2d"),
                         _safe_float(row, "prob_up_3d"),
                         _safe_float(row, "prob_up_5d"),
+                        _safe_float(row, "prob_up_10d"),
                         _safe_float(row, "score"),
                         str(row.get("momentum", "")),
                         _safe_float(row, "weight"),
@@ -281,14 +314,16 @@ class PredictionDB:
             for rank, (_, row) in enumerate(df.iterrows(), 1):
                 conn.execute(
                     """INSERT OR REPLACE INTO prediction_shadow
-                       (date, symbol, board, rank_by_ret, pred_ret_3d, prob_up_3d, prob_up)
-                       VALUES (?,?,?,?,?,?,?)""",
+                       (date, symbol, board, rank_by_ret, pred_ret_3d, pred_ret_10d,
+                        prob_up_3d, prob_up)
+                       VALUES (?,?,?,?,?,?,?,?)""",
                     (
                         date_str,
                         str(row["symbol"]),
                         str(row.get("board", "main")),
                         rank,
                         _safe_float(row, "pred_ret_3d"),
+                        _safe_float(row, "pred_ret_10d"),
                         _safe_float(row, "prob_up_3d"),
                         _safe_float(row, "prob_up"),
                     ),
@@ -305,13 +340,15 @@ class PredictionDB:
                 sym = str(row["symbol"])
                 cur = conn.execute(
                     """UPDATE prediction_shadow SET
-                       actual_ret_1d=?, actual_ret_2d=?, actual_ret_3d=?, actual_ret_5d=?
+                       actual_ret_1d=?, actual_ret_2d=?, actual_ret_3d=?, actual_ret_5d=?,
+                       actual_ret_10d=?
                        WHERE date=? AND symbol=?""",
                     (
                         _safe_float(row, "actual_ret_1d"),
                         _safe_float(row, "actual_ret_2d"),
                         _safe_float(row, "actual_ret_3d"),
                         _safe_float(row, "actual_ret_5d"),
+                        _safe_float(row, "actual_ret_10d"),
                         date_str,
                         sym,
                     ),

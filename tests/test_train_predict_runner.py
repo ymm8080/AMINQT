@@ -302,14 +302,15 @@ class TestRunPrediction:
             run_prediction(trained["panel"], "20260720", {})
 
 
-# ---------------- 跨视界权重 (1d/2d/3d/5d) + 加权 OOS ----------------
+# ---------------- 跨视界权重 (1d/2d/3d/5d/10d) + 加权 OOS ----------------
 class TestHorizonWeights:
-    def test_horizons_and_weights_cover_1_2_3_5(self):
+    def test_horizons_and_weights_cover_1_2_3_5_10(self):
         from app.pipeline1.label_engine import LABEL_HORIZONS, LABEL_WEIGHTS
 
-        assert LABEL_HORIZONS == (1, 2, 3, 5)
-        assert set(LABEL_WEIGHTS) == {1, 2, 3, 5}
-        assert sum(LABEL_WEIGHTS.values()) == pytest.approx(1.0)
+        # 2026-08-07 加 10d 视界 (排名键): sum=1.1 (权重未归一化, composite/IC 各自按实际权重和归一)
+        assert LABEL_HORIZONS == (1, 2, 3, 5, 10)
+        assert set(LABEL_WEIGHTS) == {1, 2, 3, 5, 10}
+        assert sum(LABEL_WEIGHTS.values()) == pytest.approx(1.1)
 
     def test_component_weights_single_source(self):
         from app.pipeline1.label_engine import LABEL_WEIGHTS
@@ -324,12 +325,12 @@ class TestHorizonWeights:
         dtt.LGB_PARAMS_CLS["n_estimators"] = 5
         dtt.ES_PATIENCE = 2
         df = make_panel(days=760).copy()
-        for k in (1, 2, 3, 5):
+        for k in (1, 2, 3, 5, 10):
             df[f"label_{k}d"] = (
                 df.groupby("symbol")["close_hfq"].shift(-k) / df["close_hfq"] - 1
             )
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
-        for k in (2, 3, 5):
+        for k in (2, 3, 5, 10):
             df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         trained = trainer.train_window(df, "main", ["f1", "f2"])
