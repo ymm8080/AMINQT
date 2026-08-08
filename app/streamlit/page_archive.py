@@ -2,11 +2,11 @@
 
 数据源 (仓库外 / 落盘 WORM, 防 automation git 误删):
   - 模型档案: models/pipeline1/current_meta.json + *.pkl
-  - 每日预测: PredictionDB (SQLite, DATA_OTHERS/data/predictions.db)
   - 回测历史: BACKTEST_RESULT_DIR (每趟=日期子目录, 含 backtest.json)
   - 落盘清单: STOCK_LIST_DIR (交付) + data/lists (仓库内, 易被清理)
+  - 模块绩效: 落盘清单 × V3 面板 close_hfq → 已实现收益/命中率
 
-本页全部为只读查询, 无任何重算/写入.
+本页只读: 模块绩效按落盘清单+收盘价现算, 其余纯回看, 不重算训练/不写盘.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from config.settings import BACKTEST_RESULT_DIR, STOCK_LIST_DIR
+from config.settings import BACKTEST_RESULT_DIR, PANEL_V3_PATH, STOCK_LIST_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -82,57 +82,6 @@ def _render_models() -> None:
         pd.DataFrame(files).sort_values("mtime", ascending=False),
         use_container_width=True,
     )
-
-
-# ───────────────────────── 每日预测 ─────────────────────────
-def _render_predictions() -> None:
-    from app.pipeline1.prediction_db import PredictionDB
-
-    db = PredictionDB()
-    runs = _safe(db.list_runs, limit=60)
-    if not runs:
-        st.info("预测DB暂无运行记录")
-        return
-    st.subheader("运行历史")
-    st.dataframe(pd.DataFrame(runs), use_container_width=True)
-
-    st.subheader("每日预测规模 (股票数)")
-    rdf = pd.DataFrame(runs)
-    rdf["date_dt"] = pd.to_datetime(rdf["date"], errors="coerce")
-    rdf["n_stocks"] = pd.to_numeric(rdf["n_stocks"], errors="coerce")
-    rdf = rdf.dropna(subset=["date_dt", "n_stocks"]).sort_values("date_dt")
-    if not rdf.empty:
-        st.bar_chart(rdf.set_index("date_dt")["n_stocks"], height=240)
-
-    st.subheader("预测质量趋势 (方向准确率)")
-    qual = _safe(db.all_quality, limit=60)
-    if qual:
-        qdf = pd.DataFrame(qual)
-        qdf["date_dt"] = pd.to_datetime(qdf["date"], errors="coerce")
-        qdf["direction_accuracy"] = pd.to_numeric(
-            qdf["direction_accuracy"], errors="coerce"
-        )
-        qdf = qdf.dropna(subset=["date_dt", "direction_accuracy"]).sort_values(
-            "date_dt"
-        )
-        if not qdf.empty:
-            st.line_chart(qdf.set_index("date_dt")["direction_accuracy"], height=240)
-            st.dataframe(
-                qdf.sort_values("date_dt", ascending=False),
-                use_container_width=True,
-            )
-        else:
-            st.info("预测质量趋势暂无有效数据")
-    else:
-        st.info("预测质量趋势暂无数据 — 方向准确率需收盘后回填 (prediction_outcomes)")
-
-    st.subheader("单日详情")
-    dates = sorted({str(r["date"]) for r in runs}, reverse=True)
-    date_sel = st.selectbox("选择运行日期", dates, key="archive_pred_date")
-    if date_sel:
-        run = _safe(db.get_run, date_str=date_sel)
-        if run and run.get("stocks"):
-            st.dataframe(pd.DataFrame(run["stocks"]), use_container_width=True)
 
 
 # ───────────────────────── 回测历史 ─────────────────────────
@@ -385,16 +334,62 @@ def _render_date_list() -> None:
     )
 
 
+@st.cache_data(show_spinner=False, ttl=600)
+def _load_close_panel() -> pd.DataFrame | None:
+    """只读 V3 面板 date/symbol/close_hfq 三列 (已实现收益对齐, 避免整面板 OOM)."""
+    if not os.path.exists(PANEL_V3_PATH):
+        return None
+    try:
+        return pd.read_parquet(PANEL_V3_PATH, columns=["date", "symbol", "close_hfq"])
+    except Exception:
+        logger.warning("面板收盘列读取失败 (跳过已实现收益): %s", PANEL_V3_PATH, exc_info=True)
+        return None
+
+
+def _render_module_perf() -> None:
+    """模块绩效: 按模块追踪每日清单的已实现收益/命中率 (只读, 不重算训练)."""
+    from app.streamlit import module_perf as mp
+
+    picks = mp.load_module_picks()
+    if picks is None or picks.empty:
+        st.info("暂无预测清单数据 (STOCK_LIST_DIR 为空)")
+        return
+    panel = _load_close_panel()
+    if panel is None or panel.empty:
+        st.info("缺少 V3 面板收盘数据, 无法计算已实现收益")
+        return
+    realized = mp.compute_realized_returns(picks, panel)
+    if realized is None or realized.empty or "real_3d" not in realized.columns:
+        st.info("已实现收益不可用 (清单日期太新 / 面板缺失)")
+        return
+
+    scope = st.radio(
+        "数据范围", ["交付短名单", "全市场底稿", "全部"], horizontal=True, key="mp_scope"
+    )
+    topk = st.selectbox("Top-N (按每日模块内排名)", [5, 10, 20, "全部"], index=1, key="mp_topk")
+    n = None if topk == "全部" else int(topk)
+    sub = mp.filter_scope(realized, scope)
+    sub = mp.top_k(sub, n)
+    if sub is None or sub.empty:
+        st.info("该范围无数据")
+        return
+    for h in mp.HORIZONS:
+        summary = mp.perf_summary(sub, h)
+        if summary is not None and not summary.empty:
+            with st.expander(f"持有 {h} 已实现收益 / 命中率", expanded=(h == "3d")):
+                st.dataframe(summary, use_container_width=True, hide_index=True)
+
+
 # ───────────────────────── 页面 ─────────────────────────
 def render() -> None:
     st.title("训练/预测档案 (只读)")
     st.caption(
         "从持久化存储读取历史训练/预测结果, 供存储与回看. "
-        "数据源: 模型包 / 预测DB / 回测报告 / 落盘清单. 本页不做任何重算."
+        "数据源: 模型包 / 回测报告 / 落盘清单. 模块绩效按落盘清单+收盘价现算, 其余只读回看."
     )
     (
         tab_models,
-        tab_pred,
+        tab_module_perf,
         tab_bt,
         tab_lists,
         tab_query,
@@ -402,7 +397,7 @@ def render() -> None:
     ) = st.tabs(
         [
             "模型档案",
-            "每日预测",
+            "模块绩效",
             "回测历史",
             "落盘清单",
             "个股预测查询",
@@ -411,8 +406,8 @@ def render() -> None:
     )
     with tab_models:
         _render_models()
-    with tab_pred:
-        _render_predictions()
+    with tab_module_perf:
+        _render_module_perf()
     with tab_bt:
         _render_backtests()
     with tab_lists:

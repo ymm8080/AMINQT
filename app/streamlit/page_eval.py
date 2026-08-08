@@ -2,9 +2,9 @@
 页面: 预测评估中心 (预测中心 + 回测中心 合并)
 =====================================================
 一次预测 → 多角度 REVIEW:
-  Tab 1 预测质量: IC / 候选清单 / 入选原因 (原 page_prediction)
-  Tab 2 回测绩效: 净值 / 回撤 / 15 指标 (原 page_backtest)
-  Tab 3 多模式对比: Squad vs Sniper / Jensen Alpha
+  Tab 1 预测质量: IC / 候选清单 / 入选原因
+  Tab 2 回测绩效: 净值 / 回撤 / 15 指标
+  Tab 3 多模式对比: 分散持股5 vs 集中持股2 / Jensen Alpha
   Tab 4 参数调优: 16 个 TUNABLE_BOUNDS 网格搜索
   Tab 5 报告管理: JSON/TXT/HTML 持久化
 
@@ -40,8 +40,16 @@ from .components import (
 logger = logging.getLogger(__name__)
 
 
+# 仓位模式显示名 (内部值保持 squad/sniper/sniper_max, 界面仅显示中文)
+_MODE_LABELS = {
+    "squad": "每天分散持股5",
+    "sniper": "集中持股2",
+    "sniper_max": "全仓1只",
+}
+
+
 # ══════════════════════════════════════════════════════════
-# 预测管道 (原 page_prediction._run_prediction)
+# 预测管道
 # ══════════════════════════════════════════════════════════
 
 
@@ -395,7 +403,8 @@ def render() -> None:
             position_mode = st.selectbox(
                 "仓位模式",
                 ["squad", "sniper", "sniper_max"],
-                help="squad: 分散5只; sniper: 集中2只; sniper_max: 全仓1只",
+                format_func=lambda m: _MODE_LABELS[m],
+                help="每天分散持股5: 持有5只; 集中持股2: 持有2只; 全仓1只: 只押第1名",
             )
             horizon = st.selectbox("持有期", [1, 2, 4], index=1)
 
@@ -458,7 +467,9 @@ def render() -> None:
         )
 
     with tab_compare:
-        _render_comparison_tab(pred_result, bt_start, bt_end, capital, benchmark_sel)
+        _render_comparison_tab(
+            pred_result, bt_start, bt_end, capital, benchmark_sel, horizon if use_v52 else 2
+        )
 
     with tab_tune:
         _render_tuning_tab(pred_result, bt_start, bt_end)
@@ -759,9 +770,9 @@ def _run_v52_backtest(
 
 
 def _render_comparison_tab(
-    pred_result, bt_start, bt_end, capital, benchmark_sel
+    pred_result, bt_start, bt_end, capital, benchmark_sel, horizon
 ) -> None:
-    st.subheader("Squad vs Sniper 多模式对比")
+    st.subheader("分散持股5 vs 集中持股2 多模式对比")
     st.caption("运行两种仓位模式回测, 对比绩效差异 (集中度风险/Jensen Alpha)")
 
     if st.button("▶ 运行多模式对比", type="primary", key="btn_compare"):
@@ -777,7 +788,7 @@ def _render_comparison_tab(
         results = {}
         navs = {}
         for mode in ["squad", "sniper"]:
-            with st.spinner(f"运行 {mode} 模式..."):
+            with st.spinner(f"运行 {_MODE_LABELS[mode]} 模式..."):
                 config = BacktestConfig(
                     **{k: v for k, v in vars(v52_data["config"]).items()}
                 )
@@ -790,13 +801,12 @@ def _render_comparison_tab(
                     trade_dates=v52_data["trade_dates"],
                     data_version_hash=v52_data["data_version_hash"],
                 )
-                eng.run(horizon=2, topk=5)
                 results[mode] = {
-                    "nav": eng.run(horizon=2, topk=5),
+                    "nav": eng.run(horizon=horizon, topk=5),
                     "trades": eng.get_trades(),
                     "metrics": eng.get_metrics(),
                 }
-                navs[mode.upper()] = results[mode]["nav"][["date", "nav"]]
+                navs[_MODE_LABELS[mode]] = results[mode]["nav"][["date", "nav"]]
 
         if benchmark_sel != "无":
             bench_df = _get_benchmark_df(benchmark_sel, results["squad"]["nav"])
@@ -817,12 +827,12 @@ def _render_comparison_tab(
 
         col1, col2, col3 = st.columns(3)
         col1.metric("集中度风险系数", f"{comparison['concentration_risk_ratio']:.2f}")
-        col2.metric("Squad 夏普", f"{comparison['squad_sharpe']:.2f}")
-        col3.metric("Sniper 夏普", f"{comparison['sniper_sharpe']:.2f}")
+        col2.metric("分散5 夏普", f"{comparison['squad_sharpe']:.2f}")
+        col3.metric("集中2 夏普", f"{comparison['sniper_sharpe']:.2f}")
 
         col4, col5, col6 = st.columns(3)
-        col4.metric("Squad 总收益", f"{comparison['squad_total_return']:+.1%}")
-        col5.metric("Sniper 总收益", f"{comparison['sniper_total_return']:+.1%}")
+        col4.metric("分散5 总收益", f"{comparison['squad_total_return']:+.1%}")
+        col5.metric("集中2 总收益", f"{comparison['sniper_total_return']:+.1%}")
         rec_map = {
             "concentrated": "集中策略更优",
             "diversified": "分散策略更优",
@@ -834,8 +844,8 @@ def _render_comparison_tab(
         )
 
         with st.expander("Jensen Alpha"):
-            st.metric("Squad Alpha", f"{comparison['jensen_alpha_squad']:+.2%}")
-            st.metric("Sniper Alpha", f"{comparison['jensen_alpha_sniper']:+.2%}")
+            st.metric("分散5 Alpha", f"{comparison['jensen_alpha_squad']:+.2%}")
+            st.metric("集中2 Alpha", f"{comparison['jensen_alpha_sniper']:+.2%}")
 
 
 # ══════════════════════════════════════════════════════════
