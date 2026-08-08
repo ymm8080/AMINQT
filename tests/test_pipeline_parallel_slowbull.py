@@ -428,10 +428,10 @@ def test_trailing_stop_price():
 
 # ── run_system 带 gate + 权重 (慢牛长视界) ──
 def test_run_system_slowbull_full_flow():
-    from app.pipeline_parallel.backtest import add_mfe_labels, run_system
+    from app.pipeline_parallel.backtest import add_c2c_labels, run_system
 
     work = _slow_work()
-    work = add_mfe_labels(work, horizons=(10, 20, 40))
+    work = add_c2c_labels(work, horizons=(10, 20, 40))
     res = run_system(work, SLOW_BULL, top_n=SLOW_BULL.top_n)
     assert set(res["per_horizon"]) == {"10d", "20d", "40d"}
     assert res["per_horizon"]["10d"]["n"] > 0
@@ -441,10 +441,10 @@ def test_run_system_slowbull_full_flow():
 
 
 def test_run_system_slowbull_gate_empty_on_unprepared_panel():
-    from app.pipeline_parallel.backtest import add_mfe_labels, run_system
+    from app.pipeline_parallel.backtest import add_c2c_labels, run_system
 
     df = _slow_panel(n_trend=2, n_osc=0, n_dates=60)
-    df = add_mfe_labels(df, horizons=(10,))
+    df = add_c2c_labels(df, horizons=(10,))
     # 未 prepare 指标列 → 慢牛无候选, 不崩
     res = run_system(df, SLOW_BULL, top_n=SLOW_BULL.top_n)
     assert res["n_picks"] == 0
