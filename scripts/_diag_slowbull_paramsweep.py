@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛 ADX_SPEC + SLOW_BULL_REGIME 单因子参数扫描 (2026-08-08).
 
 围绕生产默认值对 ~10 个高杠杆 ADX_SPEC 阈值 + 全部 SLOW_BULL_REGIME 旋钮
@@ -28,7 +27,7 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from app.pipeline_parallel import indicators, screener, signals
-from app.pipeline_parallel.backtest import COST, tradability_gate, slippage_tier
+from app.pipeline_parallel.backtest import COST, slippage_tier, tradability_gate
 from app.pipeline_parallel.config import (
     ADX_SPEC,
     PANEL,
@@ -400,7 +399,7 @@ def main() -> int:
         "=" * 90,
         f"面板 {out['window']['full']['start']} → {out['window']['full']['end']} "
         f"({out['window']['full']['n_days']}d)",
-        f"prod_ref (op_rule realized/p_win/n/max_dd, cur_all in 括号):",
+        "prod_ref (op_rule realized/p_win/n/max_dd, cur_all in 括号):",
     ]
     for b in ("main", "dual"):
         r = ref["boards"][b].get("op_rule", {})
@@ -427,8 +426,9 @@ def main() -> int:
             lines.append(f"    {'cfg':<16} | {'main':>42} | {'dual':>42}")
         mb = r["boards"]["main"].get("op_rule", {})
         db = r["boards"]["dual"].get("op_rule", {})
-        fmt = lambda x: (f"{x['realized'] * 100:+.2f}%/wr{x['p_win']:.0%}/"
-                         f"n{x['n']}/dd{x['max_dd']:.1%}") if x.get("realized") is not None else "n/a"
+        def fmt(x):
+            return (f"{x['realized'] * 100:+.2f}%/wr{x['p_win']:.0%}/"
+                                 f"n{x['n']}/dd{x['max_dd']:.1%}") if x.get("realized") is not None else "n/a"
         lines.append(f"    {r['name']:<16} | {fmt(mb):>42} | {fmt(db):>42}")
     lines.append("-" * 90)
     lines.append(f"落盘: {fp}")

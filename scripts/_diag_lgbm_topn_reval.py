@@ -40,7 +40,7 @@ def run(board: str, kind: str) -> str:
     cmd = [sys.executable, SWEEP, "--board", board, "--kind", kind,
            "--cand", CAND[kind], "--n", "15"]
     print(f"\n=== {board} / {kind} @ {time.strftime('%H:%M:%S')} ===", flush=True)
-    t0 = time.time()
+    time.time()
     r = subprocess.run(cmd, env=env, capture_output=True, text=True)
     out = (r.stdout or "") + (r.stderr or "")
     for line in out.splitlines():

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛排名键落地 生产面板验证 (2026-08-08): dual=rps_60+top-10 / main=score+top-20.
 
 复用 rank_ab 诊断的窄面板构建, 用**生产路径** daily_slowbull_pool 逐 OOS 日跑两板,
@@ -20,7 +19,11 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from app.pipeline_parallel import signals
-from app.pipeline_parallel.config import SLOW_BULL, SLOW_BULL_RANK, SLOW_BULL_REGIME, SLOW_BULL_RPS_GATE
+from app.pipeline_parallel.config import (
+    SLOW_BULL,
+    SLOW_BULL_RANK,
+    SLOW_BULL_RPS_GATE,
+)
 from config.settings import BACKTEST_RESULT_DIR
 from scripts._diag_slowbull_rank_ab import build_arrays, build_base_panel
 

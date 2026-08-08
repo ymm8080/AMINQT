@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛"守得住涨幅"因子梯度诊断 (2026-08-08).
 
 问题: 慢牛退出已定案 (上升段 trail8 + 下降段 no_open), 门槛/退出参数扫描平坦
@@ -24,7 +23,6 @@ import gc
 import json
 import os
 import sys
-from copy import deepcopy
 
 import numpy as np
 import pandas as pd
@@ -32,8 +30,14 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from app.pipeline_parallel import indicators, screener, signals
-from app.pipeline_parallel.backtest import COST, tradability_gate, slippage_tier
-from app.pipeline_parallel.config import ADX_SPEC, PANEL, SLOW_BULL, SLOW_BULL_REGIME, board_of
+from app.pipeline_parallel.backtest import COST, slippage_tier, tradability_gate
+from app.pipeline_parallel.config import (
+    ADX_SPEC,
+    PANEL,
+    SLOW_BULL,
+    SLOW_BULL_REGIME,
+    board_of,
+)
 from app.pipeline_parallel.scoring import pool_score
 from config.settings import BACKTEST_RESULT_DIR
 
@@ -112,7 +116,7 @@ def build_arrays(work: pd.DataFrame) -> dict:
 def exit_rets(picks: pd.DataFrame, A: dict, trail_pct: float, hard_stop: float, max_hold: int) -> tuple[np.ndarray, np.ndarray]:
     """trail8 退出 (收盘自峰值回落 trail_pct 走 + 硬止损 hard_stop), 返回 (净收益, 持有天数)."""
     sym_code, starts, ends = A["sym_code"], A["starts"], A["ends"]
-    dates_dt, close, any_sell, cost_arr = A["dates"], A["close"], A["any_sell"], A["cost"]
+    dates_dt, close, _any_sell, cost_arr = A["dates"], A["close"], A["any_sell"], A["cost"]
     M = int(max_hold)
     hard = float(hard_stop)
     rets = np.full(len(picks), np.nan)
@@ -253,7 +257,7 @@ def main() -> int:
             g = gradient_table(rk_col, tr, th, pdate)
             g_up = gradient_table(rk_col[up], tr[up], th[up], pdate[up])
             bres["factors"][c] = {"all": g, "op_rule": g_up}
-            tag = f"d10-d1={g_up.get('d10_minus_d1')}" if g_up.get("d10_minus_d1") is not None else "n/a"
+            f"d10-d1={g_up.get('d10_minus_d1')}" if g_up.get("d10_minus_d1") is not None else "n/a"
             print(f"    {c:<24} op_rule d10-d1={g_up.get('d10_minus_d1')} "
                   f"sp={g_up.get('spearman')} mono={g_up.get('mono_frac')} n={g_up.get('n')} | all d10-d1={g.get('d10_minus_d1')}", flush=True)
         out["boards"][b] = bres

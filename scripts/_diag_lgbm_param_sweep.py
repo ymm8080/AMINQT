@@ -113,7 +113,7 @@ def per_day_rank_ic(df: pd.DataFrame, pred_col: str, label_col: str) -> dict:
         {"date": df["date"].values, "pred": pred_r.values, "lab": lab_r.values}
     )
     vals = []
-    for d, sub in tmp.groupby("date"):
+    for _d, sub in tmp.groupby("date"):
         if len(sub) < 5:
             continue
         cc = np.corrcoef(sub["pred"].values, sub["lab"].values)[0, 1]
@@ -378,7 +378,7 @@ def per_day_auc(df: pd.DataFrame, pred_col: str, label_col: str) -> dict:
     from sklearn.metrics import roc_auc_score
 
     vals = []
-    for d, sub in df.groupby("date"):
+    for _d, sub in df.groupby("date"):
         if len(sub) < 5:
             continue
         try:
@@ -571,7 +571,7 @@ def main() -> int:
     def _ic_val(ic: dict) -> float:
         return ic.get("mean_ic", ic.get("mean_auc", float("nan")))
 
-    for pkey, rec in results.items():
+    for _pkey, rec in results.items():
         tot, wt = 0.0, 0.0
         for k, ic in rec["kinds"].items():
             v = ic.get("mean_ic", float("nan"))
@@ -587,7 +587,7 @@ def main() -> int:
         reverse=True,
     )
     print("\n=== leaderboard (weighted_ic) ===", flush=True)
-    for pkey, rec in rows:
+    for _pkey, rec in rows:
         kk = ",".join(f"{k}={v}" for k, v in rec["params"].items())
         print(f"  {rec['weighted_ic']:.5f}  [{kk}]  " + "  ".join(
             f"{k}:{_ic_val(v):.5f}" for k, v in rec['kinds'].items()), flush=True
@@ -606,7 +606,7 @@ def main() -> int:
         reverse=True,
     )
     print(f"\n=== leaderboard (topn{args.n} excess, 金标准) ===", flush=True)
-    for pkey, rec in trows:
+    for _pkey, rec in trows:
         e = _tn_exc(rec)
         kk = ",".join(f"{k}={v}" for k, v in rec["params"].items())
         print(f"  topn{args.n}exc={e:.4f}  [{kk}]", flush=True)

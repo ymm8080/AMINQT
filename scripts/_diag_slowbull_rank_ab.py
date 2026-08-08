@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛排名键 A/B (2026-08-08): 合成 score 排名 vs rps_60 排名.
 
 背景: 主系统排名键已定 mag_10d; 慢牛仍用 ADX 合成 score (7 加权因子). 梯度诊断
@@ -34,7 +33,7 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from app.pipeline_parallel import indicators, screener, signals
-from app.pipeline_parallel.backtest import COST, tradability_gate, slippage_tier
+from app.pipeline_parallel.backtest import COST, slippage_tier, tradability_gate
 from app.pipeline_parallel.config import (
     ADX_SPEC,
     PANEL,

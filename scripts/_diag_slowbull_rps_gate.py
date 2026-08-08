@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """慢牛 rps_60 第二道门 策略模拟 + 子窗口稳定性 (2026-08-08).
 
 因子梯度诊断 (diag_slowbull_factor_gradient_20260808_080116) 发现 rps_60 截面分位
@@ -21,7 +20,6 @@ import gc
 import json
 import os
 import sys
-from copy import deepcopy
 
 import numpy as np
 import pandas as pd
@@ -29,8 +27,14 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from app.pipeline_parallel import indicators, screener, signals
-from app.pipeline_parallel.backtest import COST, tradability_gate, slippage_tier
-from app.pipeline_parallel.config import ADX_SPEC, PANEL, SLOW_BULL, SLOW_BULL_REGIME, board_of
+from app.pipeline_parallel.backtest import COST, slippage_tier, tradability_gate
+from app.pipeline_parallel.config import (
+    ADX_SPEC,
+    PANEL,
+    SLOW_BULL,
+    SLOW_BULL_REGIME,
+    board_of,
+)
 from app.pipeline_parallel.scoring import pool_score, select_topn
 from config.settings import BACKTEST_RESULT_DIR
 
@@ -135,7 +139,6 @@ def sim_board(work: pd.DataFrame, A: dict, board: str, oos_start, thresh: float)
     wb["rk_rps60"] = wb.groupby("date")["rps_60"].rank(pct=True)
     dates = np.sort(wb["date"].unique())
     picks_rows = []
-    pick_dates = []
     for d in dates:
         if not A["regime_lut"].get(d, False):  # 下降段 no_open
             continue

@@ -520,7 +520,7 @@ def main() -> None:
             best5v, best10v = -1e9, -1e9
             # ref 本身也打印一次 (它不属于任何 param 组, 归入 p=首参组展示)
             shown_ref = False
-            for v in (("ref",) if not shown_ref else ()) + tuple(vals):
+            for _v in (("ref",) if not shown_ref else ()) + tuple(vals):
                 pass
             for name, pv in [("ref", 0)] + [(f"{p}_{v}", v) for v in vals]:
                 g = sub[sub["config"] == name]

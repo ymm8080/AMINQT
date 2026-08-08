@@ -414,7 +414,7 @@ def main() -> None:
             common5 = base_daily["pr5d"].index.intersection(gi["pr5d"].index)
             common10 = base_daily["pr10d"].index.intersection(gi["pr10d"].index)
             b5 = base_daily.loc[common5, "pr5d"].to_numpy(float)
-            c5 = gi.loc[m5, "pr5d"].to_numpy(float)
+            c5 = gi.loc[common5, "pr5d"].to_numpy(float)
             v5 = np.isfinite(b5) & np.isfinite(c5)
             b10 = base_daily.loc[common10, "pr10d"].to_numpy(float)
             c10 = gi.loc[common10, "pr10d"].to_numpy(float)

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """诊断: 08-07 慢牛池为何为空. 加载 load_panel, 查末 5 交易日 gate_slow_bull 计数 + daily_slowbull_pool 结果."""
 
 from __future__ import annotations
@@ -8,7 +7,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-import pandas as pd
 
 from app.pipeline_parallel.backtest import load_panel
 from app.pipeline_parallel.config import SLOW_BULL

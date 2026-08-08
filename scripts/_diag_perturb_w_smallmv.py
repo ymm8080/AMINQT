@@ -248,7 +248,7 @@ def main() -> None:
 
     print(f"[score] 预计算 {len(MULTS)} 个加权 score 列 (乘子 {MULTS})...", flush=True)
     score_cols = build_score_cols(work, sniper_avail, fusion_avail)
-    print(f"[cross] 每 (板块, 乘子) 日期桶前缀和...", flush=True)
+    print("[cross] 每 (板块, 乘子) 日期桶前缀和...", flush=True)
     cross = build_cross(work, score_cols)
 
     print(f"[day] 逐日截面预提取 (syms + score 矩阵[{len(MULTS)}])...", flush=True)
@@ -293,7 +293,7 @@ def main() -> None:
     cs_cache: dict = {}
     for di_abs, D in enumerate(eval_dates):
         di = date_idx[D]
-        D64 = np.datetime64(D)
+        np.datetime64(D)
         for board in BOARDS:
             ent = day_info[D].get(board)
             if ent is None:
