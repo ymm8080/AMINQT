@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_append_latest_day_checkpoints.py — 增量把最新交易日 append 到并行 main/dual 检查点.
 
 背景 (2026-08-07 确认): 全量 refresh (_refresh_parallel_checkpoints.py) 在本机 402 列 V3
@@ -33,11 +32,11 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
-import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 
-from app.pipeline1.cleaning_pipeline import CleaningPipeline, board_of as p1_board_of
+from app.pipeline1.cleaning_pipeline import CleaningPipeline
+from app.pipeline1.cleaning_pipeline import board_of as p1_board_of
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from config.settings import PANEL_V3_PATH
 from scripts._reclassify_all_features import DUAL_CHECKPOINT, MAIN_CHECKPOINT
