@@ -16,8 +16,8 @@ from app.pipeline1.cleaning_pipeline import (
 )
 from app.pipeline1.feature_engine_v35 import (
     _LHB_ALPHA,
-    _apply_per_stock,
     FeatureEngineV35,
+    _apply_per_stock,
 )
 from app.pipeline1.ic_screener import ICScreener
 from app.pipeline1.label_engine import LabelEngine
