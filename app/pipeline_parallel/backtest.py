@@ -24,12 +24,14 @@ import pandas as pd
 
 from app.pipeline1.label_engine import COST, slippage_tier
 from app.pipeline_parallel import indicators, screener, signals
+from app.pipeline_parallel.calibration import calibrate_mag10d
 from app.pipeline_parallel.config import (
     ALL_HORIZON_INTS,
     BOARD_PREFIXES,
     BOARD_THRESHOLDS,
     FUSION,
     HORIZONS,
+    MAG10D_CAL,
     MIN_MAG,
     MIN_WINRATE,
     OOS_WINDOWS,
@@ -77,6 +79,40 @@ def add_mfe_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
         df[f"label_mfe_{k}d_net"] = peak / exec_px - 1 - cost_total
     del shifts
     gc.collect()
+    return df
+
+
+def add_c2c_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
+    """补算 close-to-close 净标签 label_pm_{k}d_net (2026-08-07 用户: 并行全模块改 c2c).
+
+    与生产 add_label_pm_10d_net 完全同口径 (检查点无 price_1455
+    → 日K近似执行价 exec=close_hfq[T+1]):
+      label_pm_{k}d_net = close_hfq[T+1+k]/close_hfq[T+1] - 1 - (COST + 2×分层滑点)
+    再按生产 mask_suspension 逻辑遮蔽 [T,T+k] 含停牌的行 (窗口 k+1).
+    slow_bull 长视界 20/40d 超出 label_engine.LABEL_HORIZONS → 检查点不产, 在此补算;
+    sniper/fusion 2/3/5/10 检查点已有, 重算保证全列齐全与口径一致.
+    """
+    df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
+    g = df.groupby("symbol")["close_hfq"]
+    exec_px = g.shift(-1)
+    slip = df["adv20"].map(slippage_tier) if "adv20" in df.columns else 0.0015
+    cost_total = COST + 2 * slip
+    for k in horizons:
+        net = g.shift(-(k + 1)) / exec_px - 1 - cost_total
+        if "is_suspended" in df.columns:
+            rolling_sum = (
+                df.groupby("symbol")["is_suspended"]
+                .rolling(k + 1)
+                .sum()
+                .reset_index(level=0, drop=True)
+            )
+            vals = rolling_sum.values
+            suspended_vals = np.zeros(len(vals), dtype=bool)
+            if len(vals) > k:
+                suspended_vals[: len(vals) - k] = vals[k:] > 0
+            suspended = pd.Series(suspended_vals, index=rolling_sum.index)
+            net = net.where(~suspended, np.nan)
+        df[f"label_pm_{k}d_net"] = net
     return df
 
 
@@ -136,6 +172,7 @@ def load_panel() -> pd.DataFrame:
     for ckpt in (PANEL.main_checkpoint, PANEL.dual_checkpoint):
         df = _finalize_slice(pd.read_parquet(ckpt))
         df = add_mfe_labels(df, horizons=ALL_HORIZON_INTS)
+        df = add_c2c_labels(df, horizons=ALL_HORIZON_INTS)
         slices.append(df)
         del df
         gc.collect()
@@ -317,17 +354,25 @@ _SELL_COLS = (
 
 
 def _slowbull_picks(work: pd.DataFrame, board: str, top_n: int) -> pd.DataFrame:
-    """慢牛每日 Top-N 池 (gate 行 + 权重池分截面 TOP-N), 同 daily_slowbull_pool 口径."""
+    """慢牛每日 Top-N 池 (gate + rps_60 第二道门 + 排名键 + 按板档位), 同 daily_slowbull_pool."""
     wb = work[(work["board"] == board) & work["gate_slow_bull"]]
     if wb.empty:
         return pd.DataFrame()
-    score = pool_score(wb, SLOW_BULL.pool, weights=SLOW_BULL.pool_weights)
-    return select_topn(wb, score, top_n)
+    wb = signals.apply_slowbull_rps_gate(wb, board)
+    if wb.empty:
+        return pd.DataFrame()
+    score = signals.slowbull_rank_score(wb, board, SLOW_BULL)
+    return select_topn(wb, score, signals.slowbull_effective_top_n(board, top_n))
 
 
 def _slowbull_sim_arrays(work: pd.DataFrame) -> dict:
     """慢牛实得回测预计算数组 (按 symbol/date 排序, 与 _diag_slowbull_regime 同构)."""
-    w = work.sort_values(["symbol", "date"]).reset_index(drop=True)
+    # 只取模拟所需列再排序: 全宽 (567 列) sort 触发 pandas block consolidation,
+    # 需 ~5 GiB 连续内存 → OOM (2026-08-08 并行步骤实得回测失败). 该 12 列即全部需求.
+    need = ["symbol", "date", "adv20", "close_hfq", "low_hfq", "ma20"] + list(
+        _SELL_COLS
+    )
+    w = work[need].sort_values(["symbol", "date"]).reset_index(drop=True)
     uniques, codes = np.unique(w["symbol"].values, return_inverse=True)
     sizes = np.bincount(codes)
     starts = np.zeros(len(uniques), dtype=np.int64)
@@ -927,39 +972,117 @@ def write_last_days_csv(ld: dict, run_dir: Path, board: str = "") -> str:
 # ── 最终短名单: 合并模块 (2026-08-04 用户: 一般管道设计, 验收/买入都基于最终短名单) ──
 
 
-def build_merged_shortlist(
-    work: pd.DataFrame, top_n: int, mask: np.ndarray | None = None
+def _old_top_tags(
+    sub: pd.DataFrame, score_s: pd.Series, score_f: pd.Series
 ) -> pd.DataFrame:
-    """合并模块 (核心阶段): 每日期 狙击TOP-5 ∪ 融合TOP-10, 去重, 共现优先+分数降序, 截 top_n.
+    """旧 top-N 标签 (纯标注, 不参与排序): 狙击TOP-5 / 融合TOP-10 按各自池分.
 
-    最终短名单 = 实际买入名单 (用户: "WHAT WE EVALUATING IS ON FINAL SHORT LIST").
-    排序: 共现 (fusion+sniper, 双系统一致=最高确定性) 优先, 组内按分数降序.
-    返回长表 date/symbol/systems/co_occur/score/rk (rk 为每日排名).
+    返回 DataFrame[symbol, date, systems] ("fusion+sniper"/"sniper"/"fusion").
+    用于给 mag_10d 选中的股打"命中了哪些旧 top-N" 元数据; 两系统皆未命中 → 空.
     """
-    sub = work if mask is None else work[mask]
     frames: list[pd.DataFrame] = []
-    for spec in (SNIPER, FUSION):
-        score = pool_score(sub, spec.pool)
+    for spec, score in ((SNIPER, score_s), (FUSION, score_f)):
         top = select_topn(sub, score, spec.top_n)
         if top.empty:
             continue
-        top = top.copy()
-        top["system"] = spec.name
-        frames.append(top)
-        del score
+        frames.append(top[["symbol", "date"]].assign(system=spec.name))
     if not frames:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["symbol", "date", "systems"])
     merged = pd.concat(frames, ignore_index=True)
-    del frames
-    gc.collect()
-    g = merged.groupby(["date", "symbol"], as_index=False).agg(
-        systems=("system", lambda x: "+".join(sorted(set(x)))),
-        score=("score", "max"),
+    return merged.groupby(["symbol", "date"], as_index=False).agg(
+        systems=("system", lambda x: "+".join(sorted(set(x))))
     )
-    g["co_occur"] = g["systems"].str.contains("+", regex=False)
-    g = g.sort_values(["date", "co_occur", "score"], ascending=[True, False, False])
-    g["rk"] = g.groupby("date").cumcount() + 1
-    return g[g["rk"] <= top_n].reset_index(drop=True)
+
+
+def build_merged_shortlist(
+    work: pd.DataFrame, top_n: int, mask: np.ndarray | None = None
+) -> pd.DataFrame:
+    """合并模块 (核心阶段): 每股 mag_10d 校准幅度 → 每日期截面降序 → 截 top_n.
+
+    2026-08-07 定案: 除慢牛外所有模块按 mag_10d (score→label_pm_10d_net 每股收缩回归,
+    T+10 close-to-close 校准幅度) 排名. 全池 score = max(狙击, 融合) 截面分位分,
+    无 top-30 预筛; 无前瞻 (calibrate_mag10d walk-forward, 只用已实现标签).
+
+    systems/co_occur 仅为元数据 (旧 top-N 标签: 狙击TOP-5 / 融合TOP-10 按各自池分),
+    不参与排序; 两系统皆未命中 → systems="", co_occur=False.
+    平局: co_occur 优先, 再 score 降序.
+    返回长表 date/symbol/[board]/systems/co_occur/score/rk (rk = 每日期排名 1..top_n).
+    """
+    if "label_pm_10d_net" not in work.columns:
+        raise ValueError(
+            "build_merged_shortlist 需要面板含 label_pm_10d_net (load_panel/_finalize_slice 已加)"
+        )
+    sub = work if mask is None else work[mask]
+    # 全池 score = max(sniper, fusion) 截面分位分 (自动跳过缺列, pv_corr_5 面板缺)
+    score_s = pool_score(sub, SNIPER.pool)
+    score_f = pool_score(sub, FUSION.pool)
+    scored = sub[["symbol", "date"]].copy()
+    if "board" in sub.columns:
+        scored["board"] = sub["board"].values
+    scored["score"] = np.maximum(score_s.values, score_f.values)
+    scored["label_pm_10d_net"] = sub["label_pm_10d_net"].values
+    scored = scored.dropna(subset=["score"])
+    if scored.empty:
+        return pd.DataFrame()
+    del score_s, score_f
+    gc.collect()
+    # mag_10d 校准 (walk-forward, 只用已实现标签) → 全池逐日 mag
+    mag = calibrate_mag10d(scored, score_col="score", target_col="label_pm_10d_net")
+    if mag.empty:
+        return pd.DataFrame()
+    join_on = ["symbol", "date"] + (["board"] if "board" in scored.columns else [])
+    res = scored.merge(mag, on=join_on, how="inner")
+    del scored, mag
+    gc.collect()
+    # 旧 top-N 标签 (纯标注) — 用 sub 重算 (mask 已作用于 sub; 标签只需 sub 内即可)
+    score_s = pool_score(sub, SNIPER.pool)
+    score_f = pool_score(sub, FUSION.pool)
+    tags = _old_top_tags(sub, score_s, score_f)
+    if not tags.empty:
+        res = res.merge(tags, on=["symbol", "date"], how="left")
+        res["systems"] = res["systems"].fillna("")
+    else:
+        res["systems"] = ""
+    res["co_occur"] = res["systems"].str.contains("+", regex=False)
+    # 排序: [board,] date, mag 降序; 平局 co_occur 优先, 再 score 降序
+    if "board" in res.columns:
+        res = res.sort_values(
+            ["board", "date", "mag", "co_occur", "score"],
+            ascending=[True, True, False, False, False],
+        )
+        res["rk"] = res.groupby(["board", "date"]).cumcount() + 1
+    else:
+        res = res.sort_values(
+            ["date", "mag", "co_occur", "score"], ascending=[True, False, False, False]
+        )
+        res["rk"] = res.groupby("date").cumcount() + 1
+    res = res[res["rk"] <= top_n]
+    cols = ["date", "symbol", "systems", "co_occur", "score", "rk"]
+    if "board" in res.columns:
+        cols = ["date", "symbol", "board", "systems", "co_occur", "score", "rk"]
+    return res[cols].reset_index(drop=True)
+
+
+def _horizon_nan_dict() -> dict:
+    """空短名单的逐视界 NaN 结果 (与历史空返回一致)."""
+    return {
+        h: {
+            "mag": float("nan"),
+            "winrate": float("nan"),
+            "n": 0,
+            "ok": False,
+            "baseline": None,
+            "delta_wr": None,
+        }
+        for h in FUSION.horizons
+    }
+
+
+def _merged_dual(sub: pd.DataFrame, sl: pd.DataFrame, crit) -> dict:
+    """merged 短名单 (sl) 对 sub 窗逐视界量双头; sl 空 → 全 NaN."""
+    if sl.empty:
+        return _horizon_nan_dict()
+    return _dual_per_horizon(sub, sl[["date", "symbol"]], FUSION, crit)
 
 
 def evaluate_merged(
@@ -973,20 +1096,12 @@ def evaluate_merged(
     用户 (2026-08-04): 验收/评估基于最终短名单 (T-5 / T-10).
     """
     sub = work if mask is None else work[mask]
-    sl = build_merged_shortlist(sub, top_n)
-    if sl.empty:
-        return {
-            h: {
-                "mag": float("nan"),
-                "winrate": float("nan"),
-                "n": 0,
-                "ok": False,
-                "baseline": None,
-                "delta_wr": None,
-            }
-            for h in FUSION.horizons
-        }
-    return _dual_per_horizon(sub, sl[["date", "symbol"]], FUSION, crit)
+    # mag_10d 校准用完整 work (拟合需 mask 之前的历史, 无前瞻), 量测只取 mask 内日期.
+    sl = build_merged_shortlist(work, top_n)
+    if mask is not None and not sl.empty:
+        keep = set(sub["date"])
+        sl = sl[sl["date"].isin(keep)]
+    return _merged_dual(sub, sl, crit)
 
 
 def _build_merged_eval(
@@ -995,16 +1110,26 @@ def _build_merged_eval(
     dates: np.ndarray,
     oos_windows: dict[str, int],
 ) -> dict:
-    """run_all 每板块 merged 段: T-5 / T-10 两档, full 仅参考 + 各 OOS 窗验收 (只看 OOS)."""
+    """run_all 每板块 merged 段: T-5 / T-10 两档, full 仅参考 + 各 OOS 窗验收 (只看 OOS).
+
+    2026-08-07: mag_10d 校准只做一次 (build_merged_shortlist(sub, 10) 含 rk 1..10),
+    各档 (rk<=n) 与各 OOS 窗 (日期过滤 + 子窗 sub_m) 从同一结果派生 — 旧逻辑每档每窗
+    重算全量校准 (实测单次 ~21s, 每板块 8 次纯冗余). 与 evaluate_merged 语义等价.
+    """
     merged: dict = {
-        "objective": "最终短名单 (狙击TOP-5 ∪ 融合TOP-10 去重, 共现优先, 分数降序) — 验收只看 OOS",
+        "objective": "最终短名单 (全板块 mag_10d 校准幅度日截面降序 TOP-10) — 验收只看 OOS",
         "cuts": {"top5": 5, "top10": 10},
     }
+    sl = build_merged_shortlist(sub, 10)
     for cut, n in (("top5", 5), ("top10", 10)):
-        full_ph = evaluate_merged(sub, n, crit=bcrit)
+        slc = sl[sl["rk"] <= n] if not sl.empty else sl
+        full_ph = _merged_dual(sub, slc, bcrit)
         oos = {}
         for lab, d in oos_windows.items():
-            mh = evaluate_merged(sub, n, sub["date"].values >= dates[-d], bcrit)
+            m = sub["date"].values >= dates[-d]
+            sub_m = sub[m]
+            sl_m = slc[slc["date"].isin(set(sub_m["date"]))] if not slc.empty else slc
+            mh = _merged_dual(sub_m, sl_m, bcrit)
             oos[lab] = {
                 "per_horizon": mh,
                 "kept": bool(any(r.get("ok") for r in mh.values())),
@@ -1210,9 +1335,22 @@ def build_daily_shortlists(
     MFE 列是已实现盈利 (需未来价) — 最新日无未来价 → NaN (今日买入名单以 score/est_wr/exp/prob 排序).
     """
     day = work[(work["date"] == date) & (work["board"] == board)]
+    # mag_10d 校准需板块历史 (决策日 D 拟合用到 D-11 天前的已实现标签);
+    # 先在整个板块历史上 build_merged_shortlist, 再过滤到目标日 (2026-08-07 定案).
+    # 历史窗: 足够覆盖 cal_n + realized_drop 拟合窗即可 (每日只取目标日, 防 3y 全量浪费).
+    _rd = int(MAG10D_CAL["buy_lag"]) + int(MAG10D_CAL["label_horizon"])
+    _win = int(MAG10D_CAL["cal_n"]) + _rd + 40
+    hist = work[work["board"] == board]
+    hist_dates = np.sort(hist["date"].unique())
+    _di = int(np.searchsorted(hist_dates, np.datetime64(date), side="right"))
+    _lo = hist_dates[max(0, _di - _win)]
+    hist = hist[hist["date"] >= _lo]
     frames: list[pd.DataFrame] = []
     for n in top_ns:
-        sl = build_merged_shortlist(day, n)
+        sl = build_merged_shortlist(hist, n)
+        if sl.empty:
+            continue
+        sl = sl[sl["date"] == date]
         if sl.empty:
             continue
         sl = sl.copy()
@@ -1267,16 +1405,27 @@ def build_daily_shortlists(
             pick[systems] = (
                 max(cand, key=lambda x: x[0]) if cand else (float("nan"), float("nan"))
             )
-        res[f"prob_{h}"] = res["systems"].map(lambda s, p=pick: p[s][0])
-        res[f"exp_{h}"] = res["systems"].map(lambda s, p=pick: p[s][1])
+        # systems="" (mag_10d 选中但旧 top-N 皆未命中) → 不在 pick 字典 → NaN
+        res[f"prob_{h}"] = res["systems"].map(
+            lambda s, p=pick: p.get(s, (float("nan"), float("nan")))[0]
+        )
+        res[f"exp_{h}"] = res["systems"].map(
+            lambda s, p=pick: p.get(s, (float("nan"), float("nan")))[1]
+        )
     lab_map = {f"label_mfe_{h}d_net": f"mfe_{h}d" for h in (2, 3, 5, 10)}
     mfe = day.set_index("symbol")[[c for c in lab_map]]
     for src, dst in lab_map.items():
         res[dst] = res["symbol"].map(mfe[src])
-    # build_merged_shortlist 输出已含 date 列 (groupby key) → 先摘再以格式化字符串置首
+    # build_merged_shortlist 输出已含 date 列 (groupby key) 与 board 列 (按 board 过滤的历史窗)
+    # → 先摘再以格式化字符串置首; board 已是本板块, 只需挪到 date 之后 (2026-08-07 回归)
     res = res.drop(columns=["date"])
     res.insert(0, "date", str(pd.Timestamp(date).date()))
-    res.insert(1, "board", board)
+    if "board" not in res.columns:
+        res.insert(1, "board", board)
+    else:
+        res = res[
+            ["date", "board"] + [c for c in res.columns if c not in ("date", "board")]
+        ]
     return res
 
 

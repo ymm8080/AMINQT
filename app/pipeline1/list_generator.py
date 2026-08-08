@@ -52,10 +52,12 @@ SCHEMA_FIELDS = [
     "pred_ret_2d",
     "pred_ret_3d",
     "pred_ret_5d",
+    "pred_ret_10d",
     "prob_up",
     "prob_up_2d",
     "prob_up_3d",
     "prob_up_5d",
+    "prob_up_10d",
     "momentum",
     "consensus_score",
     "signal_conflict",
@@ -78,7 +80,6 @@ SCHEMA_FIELDS = [
     "announce_score",
     "weight",
     "schema_version",
-    "model_version",
 ]
 
 
@@ -385,21 +386,19 @@ class ListGenerator:
         return pd.Timestamp(datetime.date.today())
 
     @staticmethod
-    def _rank_by_d3_target(df: pd.DataFrame) -> pd.DataFrame:
-        """E7 准入后按 d3 目标排序: 0.5×norm(pred_ret_3d) + 0.5×norm(prob_up_3d).
+    def _rank_by_magnitude(df: pd.DataFrame) -> pd.DataFrame:
+        """E7 准入后按预测幅度排序: pred_ret_10d 降序 (2026-08-07 定案).
 
-        用户 2026-08-05 定案: legacy 清单目标 = 最高 d3 涨幅 + d3 概率
-        (镜像并行 pipeline score_w 口径, 涨幅/概率按当批入选股 min-max 归一化).
-        缺列或 d3 涨幅/概率为常数 (归一化除零) → 回退 score 降序.
+        回测依据: 并行 250d OOS 纯 10d 幅度排名在 close-to-close 实得口径下赢纯 3d
+        (main 5d实得 +1.02% vs +0.06%) 与 T3+T5 组合 (+0.16%); 10d 挑的是全程强势票,
+        前 3-5 天实得同样更高, 非"后程发力" (diag_10d_point_ret_20260807_100807).
+        旧混合排名 (0.5×norm(pred_ret_3d)+0.5×norm(prob_up_3d)) 降级为影子对照组
+        (prediction_shadow), 真实数据 1~2 月后裁决, 打脸则 revert.
+        缺 pred_ret_10d (旧 bundle) → 级联回退 pred_ret_5d → pred_ret_3d → score 降序.
         """
-        need = {"pred_ret_3d", "prob_up_3d"}
-        if need <= set(df.columns):
-            g, p = df["pred_ret_3d"], df["prob_up_3d"]
-            if g.max() > g.min() and p.max() > p.min():
-                blend = 0.5 * (g - g.min()) / (g.max() - g.min()) + 0.5 * (
-                    p - p.min()
-                ) / (p.max() - p.min())
-                return df.assign(d3_rank=blend).sort_values("d3_rank", ascending=False)
+        for col in ("pred_ret_10d", "pred_ret_5d", "pred_ret_3d"):
+            if col in df.columns and df[col].notna().any():
+                return df.sort_values(col, ascending=False)
         return df.sort_values("score", ascending=False)
 
     def emit(
@@ -455,8 +454,8 @@ class ListGenerator:
                 "empty": True,
                 "schema_version": SCHEMA_VERSION,
             }
-        # 按 d3 目标排序取 TOP_N (用户 2026-08-05: 最高 d3 涨幅+d3 概率; 行业分散在清单层面)
-        passed = self._rank_by_d3_target(passed)
+        # 按预测幅度排序取 TOP_N (2026-08-07: 纯 pred_ret_3d 幅度, 回测赢 d3 混合; 行业分散在清单层面)
+        passed = self._rank_by_magnitude(passed)
         # 行业集中度限制: 同一行业 <= MAX_PER_INDUSTRY 只
         final = self.apply_industry_limit(passed).reset_index(drop=True)
         # D18 降仓 → 仅 Top 5; 正常 → Top 15
@@ -522,7 +521,7 @@ class ListGenerator:
         final["weight"] = self._compute_weights(final)
         if "prob_up" in final.columns:
             final["prob_up"] = final["prob_up"].round(3)
-        for col in ("prob_up_2d", "prob_up_3d", "prob_up_5d"):
+        for col in ("prob_up_2d", "prob_up_3d", "prob_up_5d", "prob_up_10d"):
             if col in final.columns:
                 final[col] = final[col].round(3)
         for col in ("is_limit_up_close", "is_one_word_limit"):
@@ -530,9 +529,11 @@ class ListGenerator:
                 final[col] = 0
         for col in (
             "day_change",
+            "pred_ret_10d",
             "prob_up_2d",
             "prob_up_3d",
             "prob_up_5d",
+            "prob_up_10d",
             "pred_q10",
             "pred_q50",
             "pred_q90",
@@ -550,7 +551,6 @@ class ListGenerator:
                 final[col] = np.nan
         final["market_state"] = market_state
         final["schema_version"] = SCHEMA_VERSION
-        final["model_version"] = ""
         return {
             "mode": mode,
             "list": final[SCHEMA_FIELDS].reset_index(drop=True),

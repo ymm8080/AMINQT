@@ -37,12 +37,13 @@ class TestLambdaRank:
                         "label_2d": rng.normal(0, 0.015, 750),
                         "label_3d": rng.normal(0, 0.02, 750),
                         "label_5d": rng.normal(0, 0.03, 750),
+                        "label_10d": rng.normal(0, 0.04, 750),
                     }
                 )
             )
         df = pd.concat(frames, ignore_index=True)
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
-        for k in (2, 3, 5):
+        for k in (2, 3, 5, 10):
             df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         trained = trainer.train_window(df, "main", ["f1"])
@@ -78,12 +79,13 @@ class TestLambdaRank:
                         "label_2d": rng.normal(0, 0.015, 750),
                         "label_3d": rng.normal(0, 0.02, 750),
                         "label_5d": rng.normal(0, 0.03, 750),
+                        "label_10d": rng.normal(0, 0.04, 750),
                     }
                 )
             )
         df = pd.concat(frames, ignore_index=True)
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
-        for k in (2, 3, 5):
+        for k in (2, 3, 5, 10):
             df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
         path = trainer.save(trainer.train_window(df, "main", ["f1"]), "t")
@@ -322,3 +324,71 @@ class TestDynamicOutputsWiring:
         out = simulate_invalidations(lists, {d1: {"B": "失效#5: 公告利空"}})
         assert list(out[d1]["symbol"]) == ["A"]
         assert list(out[d2]["symbol"]) == ["A", "C"]  # 无失效日不受影响
+
+
+# ============================================================
+# 超参按 (board, kind) 覆盖 (2026-08-08 复验定案, 架构=按视界分开配)
+#   cls main 1d-10d = 15 | cls dual 全默认 31
+#   reg dual 3d/5d/10d = 15 (1d/2d 未扫 → 默认 31) | reg main 全默认 31
+#   pain 两板 15 (与 cls 解耦: cls dual 仍 31)
+# ============================================================
+class TestModelParams:
+    def test_cls_main_leaves_15_all_horizons(self):
+        import app.pipeline1.dual_track_trainer as dtt
+
+        for h in (1, 2, 3, 5, 10):
+            assert dtt.model_params("main", f"{h}d_cls")["num_leaves"] == 15
+
+    def test_cls_dual_default_31(self):
+        import app.pipeline1.dual_track_trainer as dtt
+
+        assert dtt.model_params("dual", "10d_cls").get("num_leaves") is None  # 默认 31
+
+    def test_reg_main_default_31(self):
+        import app.pipeline1.dual_track_trainer as dtt
+
+        assert dtt.model_params("main", "10d_reg").get("num_leaves") is None  # 默认 31
+
+    def test_reg_dual_scoped_to_scanned_horizons(self):
+        import app.pipeline1.dual_track_trainer as dtt
+
+        # 3d/5d/10d 有扫描证据 → 15
+        assert dtt.model_params("dual", "3d_reg")["num_leaves"] == 15
+        assert dtt.model_params("dual", "5d_reg")["num_leaves"] == 15
+        assert dtt.model_params("dual", "10d_reg")["num_leaves"] == 15
+        # 1d/2d 未扫 → 保持默认 31 (架构支持按视界分开配)
+        assert dtt.model_params("dual", "1d_reg").get("num_leaves") is None
+        assert dtt.model_params("dual", "2d_reg").get("num_leaves") is None
+
+    def test_pain_leaves_15_both_boards_decoupled_from_cls(self):
+        import app.pipeline1.dual_track_trainer as dtt
+
+        assert dtt.model_params("main", "pain")["num_leaves"] == 15
+        assert dtt.model_params("dual", "pain")["num_leaves"] == 15
+        # 解耦: dual 板 cls 仍默认 31, pain 独立 15
+        assert dtt.model_params("dual", "10d_cls").get("num_leaves") is None
+
+    def test_returns_copy_not_module_const(self):
+        import app.pipeline1.dual_track_trainer as dtt
+
+        assert dtt.model_params("main", "10d_cls") is not dtt.LGB_PARAMS_CLS
+        assert dtt.model_params("dual", "10d_reg") is not dtt.LGB_PARAMS_REG
+
+    def test_kind_without_horizon_uses_family_default(self):
+        """_acc_backtest 等调用方传 'cls'/'reg' 无视界 → 家族默认."""
+        import app.pipeline1.dual_track_trainer as dtt
+
+        assert dtt.model_params("main", "cls").get("num_leaves") is None
+        assert dtt.model_params("main", "reg").get("num_leaves") is None
+
+    def test_module_mutation_propagates(self):
+        """调用时复制: 测试/调用方对 LGB_PARAMS_CLS 的修改必须传导到返回值."""
+        import app.pipeline1.dual_track_trainer as dtt
+
+        orig = dtt.LGB_PARAMS_CLS["n_estimators"]
+        dtt.LGB_PARAMS_CLS["n_estimators"] = 7
+        try:
+            assert dtt.model_params("main", "10d_cls")["n_estimators"] == 7
+            assert dtt.model_params("dual", "10d_cls")["n_estimators"] == 7
+        finally:
+            dtt.LGB_PARAMS_CLS["n_estimators"] = orig

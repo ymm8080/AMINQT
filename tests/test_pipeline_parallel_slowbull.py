@@ -74,6 +74,63 @@ def _slow_work(**kw):
     return df
 
 
+def _slow_rps_work(n_main=6, n_dual=6, n_dates=170, seed=3):
+    """双板趋势面板 + 受控 rps_60 (测 rps 第二道门过滤逻辑, 不测 rps 计算本身).
+
+    两板各 n 只漂移加速趋势股 (全过 gate). 每板内 rps_60 覆盖 1/n..n/n (受控排序);
+    floor=0.5 → 每板保留 rps ≥ 0.5 的高相对强度一半. PIT: 门只用当日截面, 无前瞻.
+    """
+    rng = np.random.default_rng(seed)
+    dates = pd.bdate_range("2024-11-01", periods=n_dates)
+    t = np.arange(n_dates)
+    frames = []
+    for i in range(n_main + n_dual):
+        board = "main" if i < n_main else "dual"
+        sym = f"000{i:04d}" if board == "main" else f"300{i:04d}"
+        rets = 0.002 + 0.00005 * t + rng.normal(0, 0.002, n_dates)
+        close = 10.0 * np.exp(np.cumsum(rets))
+        op = np.concatenate([[close[0]], close[:-1]])
+        hi = close * (1 + 0.004)
+        lo = close * (1 - 0.004)
+        vol = 100.0 * (1 + 0.008 * t) * (1 + rng.normal(0, 0.005, n_dates))
+        frames.append(
+            pd.DataFrame(
+                {
+                    "symbol": sym,
+                    "date": dates,
+                    "board": board,
+                    "open": op,
+                    "high": hi,
+                    "low": lo,
+                    "close": close,
+                    "open_hfq": op,
+                    "high_hfq": hi,
+                    "low_hfq": lo,
+                    "close_hfq": close,
+                    "volume": vol,
+                    "turnover_rate": 5.0,
+                    "volume_ratio": 1.0,
+                    "margin_balance_chg_5d": 0.01,
+                    "pct_70_con": 0.5,
+                    "adv20": 1e8,
+                }
+            )
+        )
+    work = pd.concat(frames, ignore_index=True)
+    work = indicators.prepare_adx(work)
+    signals.add_signal_columns(work)
+    work["gate_slow_bull"] = screener.compute_gate(work, "slow_bull")
+    for k, sym in enumerate(
+        sorted(s for s in work["symbol"].unique() if s.startswith("30"))
+    ):
+        work.loc[work["symbol"] == sym, "rps_60"] = (k + 1) / n_dual
+    for k, sym in enumerate(
+        sorted(s for s in work["symbol"].unique() if not s.startswith("30"))
+    ):
+        work.loc[work["symbol"] == sym, "rps_60"] = (k + 1) / n_main
+    return work
+
+
 # ── ADX 指标 ──
 def test_adx_trend_strong_rising_pdi_above_mdi():
     work = _slow_work()
@@ -428,10 +485,10 @@ def test_trailing_stop_price():
 
 # ── run_system 带 gate + 权重 (慢牛长视界) ──
 def test_run_system_slowbull_full_flow():
-    from app.pipeline_parallel.backtest import add_mfe_labels, run_system
+    from app.pipeline_parallel.backtest import add_c2c_labels, run_system
 
     work = _slow_work()
-    work = add_mfe_labels(work, horizons=(10, 20, 40))
+    work = add_c2c_labels(work, horizons=(10, 20, 40))
     res = run_system(work, SLOW_BULL, top_n=SLOW_BULL.top_n)
     assert set(res["per_horizon"]) == {"10d", "20d", "40d"}
     assert res["per_horizon"]["10d"]["n"] > 0
@@ -441,10 +498,10 @@ def test_run_system_slowbull_full_flow():
 
 
 def test_run_system_slowbull_gate_empty_on_unprepared_panel():
-    from app.pipeline_parallel.backtest import add_mfe_labels, run_system
+    from app.pipeline_parallel.backtest import add_c2c_labels, run_system
 
     df = _slow_panel(n_trend=2, n_osc=0, n_dates=60)
-    df = add_mfe_labels(df, horizons=(10,))
+    df = add_c2c_labels(df, horizons=(10,))
     # 未 prepare 指标列 → 慢牛无候选, 不崩
     res = run_system(df, SLOW_BULL, top_n=SLOW_BULL.top_n)
     assert res["n_picks"] == 0
@@ -497,6 +554,86 @@ def test_daily_slowbull_pool_requires_gate_column():
         signals.daily_slowbull_pool(
             df, df["date"].max(), "main", SLOW_BULL, SLOW_BULL.top_n
         )
+
+
+# ── rps_60 第二道门 (2026-08-08) ──
+def test_slowbull_rps_gate_dual_filters_low_rps():
+    work = _slow_rps_work()
+    date = work["date"].max()
+    pool = signals.daily_slowbull_pool(work, date, "dual", SLOW_BULL, SLOW_BULL.top_n)
+    rps = work[work["date"] == date].set_index("symbol")["rps_60"]
+    dual_kept = {s for s in rps.index if s.startswith("30") and rps[s] >= 0.5}
+    assert len(pool) == len(dual_kept) == 4  # floor=0.5 → 保留高相对强度一半
+    assert set(pool["symbol"]) == dual_kept
+    # 门内全部候选 rps_60 ≥ floor
+    assert (rps[list(pool["symbol"])] >= 0.5).all()
+
+
+def test_slowbull_rps_gate_main_disabled():
+    work = _slow_rps_work()
+    date = work["date"].max()
+    pool = signals.daily_slowbull_pool(work, date, "main", SLOW_BULL, SLOW_BULL.top_n)
+    assert len(pool) == 6  # main 板未启用 → 全部 gated 候选保留 (不过滤)
+
+
+def test_slowbull_rps_gate_backtest_consistent():
+    work = _slow_rps_work()
+    date = work["date"].max()
+    op = signals.daily_slowbull_pool(work, date, "dual", SLOW_BULL, SLOW_BULL.top_n)
+    bt = backtest._slowbull_picks(work, "dual", SLOW_BULL.top_n)
+    last_day = bt[bt["date"] == date]
+    assert set(last_day["symbol"]) == set(op["symbol"])
+
+
+def test_slowbull_rps_gate_disabled_noop(monkeypatch):
+    from app.pipeline_parallel.config import SLOW_BULL_RPS_GATE
+
+    monkeypatch.setitem(SLOW_BULL_RPS_GATE, "enabled", False)
+    work = _slow_rps_work()
+    date = work["date"].max()
+    pool = signals.daily_slowbull_pool(work, date, "dual", SLOW_BULL, SLOW_BULL.top_n)
+    assert len(pool) == 6  # 配置关闭 → 门 no-op
+
+
+def test_slowbull_rps_gate_skips_when_column_missing():
+    work = _slow_rps_work().drop(columns=["rps_60"])
+    date = work["date"].max()
+    pool = signals.daily_slowbull_pool(work, date, "dual", SLOW_BULL, SLOW_BULL.top_n)
+    assert len(pool) == 6  # 缺 rps_60 列 → 门跳过, 全保留
+
+
+# ── 排名键 A/B 落地 (2026-08-08): dual=rps_60 + top-10, main=合成 score + top-20 ──
+def test_slowbull_rank_dual_uses_rps60_top10():
+    work = _slow_rps_work(n_main=4, n_dual=24)
+    date = work["date"].max()
+    pool = signals.daily_slowbull_pool(work, date, "dual", SLOW_BULL, SLOW_BULL.top_n)
+    # 门后 12 只 (rps≥0.5) → dual top_n 收紧到 10 → 裁到 10
+    assert len(pool) == 10
+    assert pool["score"].is_monotonic_decreasing  # 按 rps_60 降序
+    sub = work[
+        (work["board"] == "dual") & (work["date"] == date) & work["gate_slow_bull"]
+    ]
+    rps = sub.set_index("symbol")["rps_60"]
+    # score 列 = rps_60 截面相对强度 (非合成 score)
+    assert np.allclose(pool["score"].values, rps.loc[pool["symbol"]].values)
+    assert (rps.loc[pool["symbol"]] >= 0.5).all()  # 排名前先过第二道门
+
+
+def test_slowbull_rank_main_keeps_score_top20():
+    work = _slow_rps_work(n_main=24, n_dual=4)
+    date = work["date"].max()
+    pool = signals.daily_slowbull_pool(work, date, "main", SLOW_BULL, SLOW_BULL.top_n)
+    # main 无 rps 门 → 24 只 gated 候选 → main top_n 保持 20
+    assert len(pool) == 20
+    sub = work[
+        (work["board"] == "main") & (work["date"] == date) & work["gate_slow_bull"]
+    ]
+    sc = pool_score(sub, SLOW_BULL.pool, weights=SLOW_BULL.pool_weights)
+    # score 列 = 合成 score (非 rps_60 单因子)
+    sc_map = dict(zip(sub["symbol"], sc))
+    assert np.allclose(pool["score"].values, [sc_map[s] for s in pool["symbol"]])
+    rps = sub.set_index("symbol")["rps_60"]
+    assert not np.allclose(pool["score"].values, rps.loc[pool["symbol"]].values)
 
 
 # ── 独立导出 (70% 资金仓, 不并入 merged) ──

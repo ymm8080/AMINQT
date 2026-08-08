@@ -1,7 +1,7 @@
 """
 双轨训练器 (DESIGN §14.4, PIPELINE1_V3.8 §二/§四/§七)
 =====================================================
-LightGBM 双轨×8: (1d_reg Huber + 1d_cls binary + 3d_reg + 5d_reg) × (主板/双创).
+LightGBM 双轨×10: (1d/2d/3d/5d/10d × reg + cls) × (主板/双创). 10d 视界 2026-08-07 加入 (排名键).
 **日线预测只用本地 LightGBM 模型 (用户 2026-07-22 裁决), 无云端/ONNX/LSTM 依赖.**
 - [V3.8] 750 日滚动窗口: 训练620 / 早停20 / 校准20 (与验证物理隔离!) / 测试90; patience=100
 - [B11] OHLCV 回填达标 (<1250 交易日) 前首个训练窗口降为 540 日过渡, 达标后恢复 750 日
@@ -107,6 +107,41 @@ LGB_PARAMS_CLS = {
     "random_state": 42,
     "verbosity": -1,
 }
+
+
+# 超参覆盖表 (2026-08-08 扫描定案): (board, kind) → num_leaves.
+# 未列出 → 家族默认 (num_leaves=31, LightGBM 出厂). 只列有扫描证据的条目:
+#   cls main 1d-10d = 15: 3d/5d/10d 跨视界一致赢 (IC/TOP-N 复验), 1d/2d 保持已产状态
+#   reg dual 3d/5d/10d = 15: 10d 复验双指标+扰动稳定, 5d IC 赢, 3d 平; 1d/2d 未扫 → 默认 31
+#   pain (label_pain=3日浮亏单模型): 两板 15, 与 cls 表解耦
+NUM_LEAVES_OVERRIDE: dict[tuple[str, str], int] = {
+    ("main", "1d_cls"): 15,
+    ("main", "2d_cls"): 15,
+    ("main", "3d_cls"): 15,
+    ("main", "5d_cls"): 15,
+    ("main", "10d_cls"): 15,
+    ("dual", "3d_reg"): 15,
+    ("dual", "5d_reg"): 15,
+    ("dual", "10d_reg"): 15,
+    ("main", "pain"): 15,
+    ("dual", "pain"): 15,
+}
+
+
+def model_params(board: str, kind: str) -> dict:
+    """按 (board, kind) 解析 LGBM 超参: 命中覆盖表则覆盖 num_leaves, 否则家族默认.
+
+    kind 可为 "1d_cls"..."10d_cls"/"1d_reg"..."10d_reg"/"pain"/"cls"/"reg".
+    """
+    is_cls = kind == "pain" or kind.endswith("cls")
+    base = LGB_PARAMS_CLS if is_cls else LGB_PARAMS_REG
+    params = dict(base)
+    nl = NUM_LEAVES_OVERRIDE.get((board, kind))
+    if nl is not None:
+        params["num_leaves"] = nl
+    return params
+
+
 MODEL_KINDS = (
     "1d_reg",
     "1d_cls",
@@ -116,6 +151,8 @@ MODEL_KINDS = (
     "3d_cls",
     "5d_reg",
     "5d_cls",
+    "10d_reg",
+    "10d_cls",
 )
 EXTRA_KINDS = (
     "quantile_models",
@@ -142,7 +179,7 @@ def risk_filter(df: pd.DataFrame) -> pd.DataFrame:
 
 
 class DualTrackTrainer:
-    """双轨训练 — 每个板块独立训练 4 个模型."""
+    """双轨训练 — 每个板块独立训练 10 个模型 (5 视界 × reg/cls)."""
 
     def __init__(self, model_dir: str = "models/pipeline1"):
         self.model_dir = model_dir
@@ -201,13 +238,14 @@ class DualTrackTrainer:
         return np.array([0.5 ** (age[d] / half_life) for d in df["date"]])
 
     # ---------------- 单模型训练 (低内存路径: float32 + gc) ----------------
-    def _train_one(
-        self, kind: str, segs: dict[str, pd.DataFrame], feature_cols: list[str]
-    ):
-        import gc
+    @staticmethod
+    def _resolve_label(kind: str, columns) -> str | None:
+        """解析 kind 的有效标签列 ([B9] PM / [E5] 净收益优先); 缺失返回 None.
 
-        import lightgbm as lgb
-
+        返回 None = 该视界标签在当前面板不可用 → 跳过训练 (向后兼容旧面板,
+        与 _train_extras 的"标签缺失时跳过"同一惯例). 缺失只发生在旧面板 /
+        测试夹具只构造部分视界; 生产面板由 label_engine 全量生成, 10 种齐备.
+        """
         label = {
             "1d_reg": "label_1d",
             "1d_cls": "label_cls",
@@ -217,19 +255,41 @@ class DualTrackTrainer:
             "3d_cls": "label_3d_cls",
             "5d_reg": "label_5d",
             "5d_cls": "label_5d_cls",
+            "10d_reg": "label_10d",
+            "10d_cls": "label_10d_cls",
         }[kind]
         # [B9] PM 执行口径验收标签优先 (label_pm_kd / label_pm_cls), 缺失时回退研究口径
         if kind.endswith("cls"):
             pm_label = (
-                "label_pm_cls" if kind == "1d_cls" else f"label_pm_{kind[0]}d_cls"
+                "label_pm_cls"
+                if kind == "1d_cls"
+                else f"label_pm_{kind.split('d')[0]}d_cls"
             )
         else:
-            pm_label = f"label_pm_{kind[0]}d"
-        if pm_label in segs["train"].columns:
+            pm_label = f"label_pm_{kind.split('d')[0]}d"
+        if pm_label in columns:
             label = pm_label
         # [E5] 净收益标签 (分层滑点) 优先于毛收益 — 训练/验收主标签口径 (D1)
-        if f"{label}_net" in segs["train"].columns:
+        if f"{label}_net" in columns:
             label = f"{label}_net"
+        return label if label in columns else None
+
+    def _train_one(
+        self,
+        kind: str,
+        segs: dict[str, pd.DataFrame],
+        feature_cols: list[str],
+        board: str,
+    ):
+        import gc
+
+        import lightgbm as lgb
+
+        label = self._resolve_label(kind, segs["train"].columns)
+        if label is None:
+            raise RuntimeError(
+                f"[{kind}] 标签列缺失, 不应到达 _train_one (train_window 已守卫)"
+            )
         train = segs["train"].dropna(subset=[label])  # per-model dropna (安全网 #7)
         es = segs["es"].dropna(subset=[label])
         train = risk_filter(train)
@@ -254,9 +314,9 @@ class DualTrackTrainer:
         gc.collect()
 
         if kind.endswith("cls"):
-            model = lgb.LGBMClassifier(**LGB_PARAMS_CLS)
+            model = lgb.LGBMClassifier(**model_params(board, kind))
         else:
-            model = lgb.LGBMRegressor(**LGB_PARAMS_REG)
+            model = lgb.LGBMRegressor(**model_params(board, kind))
         # es_dates 从 segs 取 (train/es DataFrame 已释放, segs 仍持有 es 引用)
         es_dates = (
             segs["es"]["date"].nunique() if "date" in segs["es"].columns else len(y_es)
@@ -297,7 +357,7 @@ class DualTrackTrainer:
         feature_cols: list[str],
         checkpoint=None,  # TrainingCheckpoint | None
     ) -> dict:
-        """训练一个板块的 4 个模型 + E1 分位数五模型 + E2 痛苦预警 (标签齐备时).
+        """训练一个板块的 10 个模型 (5 视界 × reg/cls) + E1 分位数五模型 + E2 痛苦预警 (标签齐备时).
 
         固定使用 WINDOW_TOTAL 窗口 (B11 过渡逻辑已废弃).
         段长按比例动态分配 (split_window), 保证 es/calib/test 各 >= 最小值.
@@ -366,7 +426,10 @@ class DualTrackTrainer:
             if checkpoint is not None and kind in (checkpoint.completed_kinds or []):
                 logger.info("[%s] %s — checkpoint 已完成, 跳过", board, kind)
                 continue
-            model, label = self._train_one(kind, segs, feature_cols)
+            if self._resolve_label(kind, segs["train"].columns) is None:
+                logger.info("[%s] %s — 标签列缺失, 跳过", board, kind)
+                continue
+            model, label = self._train_one(kind, segs, feature_cols, board)
             out["models"][kind] = (model, label)
             logger.info(
                 "[%s] %s 训练完成, 样本 %d",
@@ -501,7 +564,9 @@ class DualTrackTrainer:
                     train, X, y = _xy("train", "label_pain")
                     _, X_es, y_es = _xy("es", "label_pain")
                     params = {
-                        k: v for k, v in LGB_PARAMS_CLS.items() if k != "objective"
+                        k: v
+                        for k, v in model_params(out["board"], "pain").items()
+                        if k != "objective"
                     }
                     pain = PainModel(params).fit(
                         X,
@@ -585,8 +650,7 @@ class DualTrackTrainer:
         for k in LABEL_HORIZONS:
             kind = f"{k}d_cls"
             if kind not in trained["models"]:
-                calibrators[k] = None
-                continue
+                continue  # 该视界未训练 (标签列缺失) → 不注册校准器
             model, label = trained["models"][kind]
             calib = trained["segs"]["calib"].dropna(subset=[label])
             cols = trained["feature_cols"]

@@ -28,8 +28,7 @@ from sklearn.metrics import roc_auc_score  # noqa: E402
 
 from app.pipeline1.cleaning_pipeline import CleaningPipeline  # noqa: E402
 from app.pipeline1.dual_track_trainer import (  # noqa: E402
-    LGB_PARAMS_CLS,
-    LGB_PARAMS_REG,
+    model_params,
     risk_filter,
 )
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35  # noqa: E402
@@ -265,9 +264,9 @@ def _fit_model(rows, Xcols, kind, k, es_days: int = 40):
     if kind == "cls":
         y = (y > 0).astype(int)
         y_es = (y_es > 0).astype(int)
-        model = lgb.LGBMClassifier(**LGB_PARAMS_CLS)
+        model = lgb.LGBMClassifier(**model_params("main", "cls"))
     else:
-        model = lgb.LGBMRegressor(**LGB_PARAMS_REG)
+        model = lgb.LGBMRegressor(**model_params("main", "reg"))
     model.fit(
         X,
         y,

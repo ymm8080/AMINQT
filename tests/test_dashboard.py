@@ -365,7 +365,6 @@ class TestStockPredictionQuery:
 
 class TestPageImports:
     def test_pages_importable(self):
-        import app.streamlit.page_backtest
         import app.streamlit.page_config
         import app.streamlit.page_selection
         import app.streamlit.page_trading  # noqa: F401

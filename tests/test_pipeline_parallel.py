@@ -9,9 +9,9 @@ import pandas as pd
 import pytest
 
 from app.pipeline_parallel.config import (
+    C2C_LABELS,
     FUSION,
     HORIZONS,
-    MFE_LABELS,
     MIN_MAG,
     MIN_WINRATE,
     PANEL,
@@ -28,7 +28,7 @@ from app.pipeline_parallel.scoring import (
 )
 
 
-def _panel(n_dates=14, n_stocks=20, extra_cols=()):
+def _panel(n_dates=60, n_stocks=20, extra_cols=()):
     """合成面板: 每日期截面 n_stocks 只, 偶数→主板(00xxxxx), 奇数→双创(30xxxxx).
 
     f1 = 持久横截面因子 + 噪声 → 高分股今天高明天也高, 选股有真实 edge
@@ -54,15 +54,24 @@ def _panel(n_dates=14, n_stocks=20, extra_cols=()):
 
 
 def _with_labels(df):
-    """合成价格路径 + 调 add_mfe_labels 补 MFE 净标签 (测真实函数) + board 列."""
-    from app.pipeline_parallel.backtest import add_mfe_labels
+    """合成价格路径 + add_mfe_labels (MFE) + add_c2c_labels (close-to-close) + board 列."""
+    from app.pipeline_parallel.backtest import add_c2c_labels, add_mfe_labels
     from app.pipeline_parallel.config import board_of
 
     df = df.copy()
     rng = np.random.default_rng(7)
-    # 每 symbol 价格路径: 基准 10, 随 f1 抬升 (0.12 放大 → 高分股 MFE 显著正)
+    day_idx = df.groupby("symbol").cumcount()
+    # 漂移用 symbol 平滑 f1 (组均值, 无日噪声): 归一化到 [0,1] → 指数漂移恒正单调,
+    # close 永不为负/零. 2026-08-07 并行验收改 close-to-close: MFE 曾靠 high_hfq
+    # 放大幅度, c2c 需价格路径本身上行才能过双头门 (threshold main 3%/dual 4%).
+    f1 = df["f1"]
+    f1_sym = df.groupby("symbol")["f1"].transform("mean")
+    f1_pos = (f1_sym - f1_sym.min()) / (f1_sym.max() - f1_sym.min())
     df["close_hfq"] = (
-        10.0 * (1 + 0.12 * df["f1"]) * np.exp(rng.normal(0, 0.05, len(df)))
+        10.0
+        * (1 + 0.12 * f1)
+        * np.exp(0.08 * f1_pos * day_idx)
+        * np.exp(rng.normal(0, 0.01, len(df)))
     )
     # 日内高点 >= 收盘 (OHLCV 不变量), 放大倍数随 f1 → 高 f1 的 MFE 更大
     df["high_hfq"] = np.maximum(
@@ -71,6 +80,9 @@ def _with_labels(df):
     )
     df["adv20"] = rng.uniform(1e7, 1e9, len(df))
     df = add_mfe_labels(df, horizons=(2, 3, 5, 10))
+    # close-to-close 净标签 (生产口径, add_c2c_labels): label_pm_{k}d_net 全视界齐
+    # (含 slow_bull 长视界 20/40d; mag_10d 校准目标列 label_pm_10d_net 同款)
+    df = add_c2c_labels(df, horizons=(2, 3, 5, 10, 20, 40))
     df["board"] = df["symbol"].map(board_of)
     return df
 
@@ -96,15 +108,23 @@ def test_pv_corr_5_in_both_short_horizon_pools():
     assert "pv_corr_5" in FUSION.pool
 
 
+def test_down_gap_pct_pruned_from_short_horizon_pools():
+    # 2026-08-08 c2c LOO 审计 (250/300/200d OOS): 剔除 down_gap_pct 双板 STABLE_WIN
+    # +0.45~+0.72pp — MFE 目标选入, 但 c2c 排名下不兑现 (down-gap→反弹→max-high 不传收盘)
+    assert "down_gap_pct" not in SNIPER.pool
+    assert "down_gap_pct" not in FUSION.pool
+
+
 def test_both_systems_full_horizon_matrix():
     # 2026-08-04 用户: TOP-10 也要看 T+2/T+3; 两套统一测 T+2/3/5/10
     for spec in (SNIPER, FUSION):
         assert set(spec.horizons) == set(HORIZONS)
         assert len(spec.horizons) == len(spec.labels)
         for h, lab in zip(spec.horizons, spec.labels, strict=False):
-            assert lab == f"label_mfe_{h}_net"
+            # 2026-08-07 用户: 并行验收改 close-to-close (可兑现), 非 MFE 触摸天花板
+            assert lab == f"label_pm_{h}_net"
     assert set(HORIZONS) == {"2d", "3d", "5d", "10d"}
-    assert len(MFE_LABELS) == 4
+    assert len(C2C_LABELS) == 4
 
 
 def test_config_panel_checkpoints_exist():
@@ -547,7 +567,11 @@ def _pool():
 
 
 def test_build_merged_shortlist_ranked():
+    """2026-08-07 定案: 短名单按 mag_10d (score→label_pm_10d_net 校准幅度) 日截面降序,
+    不再是共现优先; 共现仅作平局裁决. 排名键 mag 不在输出列 → 独立重算校准幅度验证次序."""
     from app.pipeline_parallel.backtest import build_merged_shortlist
+    from app.pipeline_parallel.calibration import calibrate_mag10d
+    from app.pipeline_parallel.scoring import pool_score
 
     df = _with_labels(_panel(extra_cols=_pool()))
     sl = build_merged_shortlist(df, top_n=10)
@@ -558,21 +582,67 @@ def test_build_merged_shortlist_ranked():
     assert sl.duplicated(["date", "symbol"]).sum() == 0
     # rk 按日期截断到 top_n
     assert sl["rk"].max() <= 10
-    for _d, g in sl.groupby("date"):
+    # 独立重算 mag_10d (全池 score = max(sniper, fusion) 池分, 同 build_merged_shortlist)
+    # → join 回输出, 验证每 (board,date) 组内 rk 按 mag 降序
+    scored = df[["symbol", "date", "board", "label_pm_10d_net"]].copy()
+    scored["score"] = np.maximum(
+        pool_score(df, SNIPER.pool).values, pool_score(df, FUSION.pool).values
+    )
+    mag = calibrate_mag10d(
+        scored.dropna(subset=["score"]),
+        score_col="score",
+        target_col="label_pm_10d_net",
+    )
+    if mag.empty:
+        pytest.skip("合成面板无足够已实现横截面 (校准不出票)")
+    check = sl.merge(mag, on=["symbol", "date", "board"], how="left")
+    assert check["mag"].notna().any(), "校准幅度缺失, 无法验证 mag 排序"
+    for (_b, _d), g in check.groupby(["board", "date"]):
         assert set(g["rk"]) == set(range(1, len(g) + 1))
-        co = g.loc[g["co_occur"]]
-        no = g.loc[~g["co_occur"]]
-        # 共现优先: 共现行 rk 全部小于单系统行 rk
-        if len(co) and len(no):
-            assert co["rk"].max() < no["rk"].min()
-        # 组内分数降序 (共现块内与单系统块内各自降序; 块边界允许回跳)
-        assert g["score"].is_monotonic_decreasing or (
-            g.loc[co.index, "score"].is_monotonic_decreasing
-            and g.loc[no.index, "score"].is_monotonic_decreasing
-        )
-        # 共现行 systems 必含双系统
-        if len(co):
-            assert (co["systems"].str.contains("+", regex=False)).all()
+        assert g["mag"].is_monotonic_decreasing
+    # 共现标注: co_occur=True 的 systems 必含双系统; co_occur=False 的 systems 可为 "" (旧 top-N 之外)
+    co = sl.loc[sl["co_occur"]]
+    if len(co):
+        assert (co["systems"].str.contains("+", regex=False)).all()
+    assert set(sl["systems"]).issubset({"", "sniper", "fusion", "fusion+sniper"})
+
+
+def test_merged_shortlist_systems_blank_outside_old_topn():
+    """systems="" 契约: 旧 top-N (狙击 top5 / 融合 top10, 按各自池分) 之外被 mag_10d
+    选中的股 → systems="", co_occur=False; build_daily_shortlists 对 systems="" 行
+    的 prob/exp 走 NaN 兜底 (defensive map, 不崩溃).
+
+    合成持久因子面板下 mag_10d 次序与特征分次序略有差异 → 旧 top-N 之外的股自然入选,
+    systems="" 行天然出现 (不需要人造场景)."""
+    from app.pipeline_parallel.backtest import (
+        build_daily_shortlists,
+        build_merged_shortlist,
+        run_all,
+    )
+    from app.pipeline_parallel.config import BOARD_PREFIXES
+
+    df = _with_labels(_panel(extra_cols=_pool()))
+    # co_occur ⟺ systems 含双系统; systems 取值域含 "" (旧 top-N 之外)
+    sl = build_merged_shortlist(df, top_n=10)
+    if sl.empty:
+        pytest.skip("合成面板校准不出票")
+    assert (sl["co_occur"] == sl["systems"].str.contains("+", regex=False)).all()
+    assert set(sl["systems"]).issubset({"", "sniper", "fusion", "fusion+sniper"})
+    assert (sl["systems"] == "").any(), "期望 systems='' 行自然出现"
+
+    # build_daily_shortlists 必须能在 systems="" 存在时不崩溃 (defensive map)
+    out = run_all(df, "20260804_000000", oos_days=4)
+    date = df["date"].max()
+    for board in BOARD_PREFIXES:
+        res = build_daily_shortlists(df, out, board, date)
+        if res.empty:
+            continue
+        assert "systems" in res.columns
+        blank_rows = res[res["systems"] == ""]
+        # systems="" 行: prob/exp 走 NaN 兜底 (p.get("", ...) → (nan,nan)), 不崩溃
+        if len(blank_rows):
+            assert blank_rows["prob_2d"].isna().all()
+            assert blank_rows["exp_2d"].isna().all()
 
 
 def test_evaluate_merged_reports_per_horizon():

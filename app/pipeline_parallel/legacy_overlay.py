@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from app.pipeline_parallel.config import OVERLAY_WEIGHTS
+from app.pipeline_parallel.config import MAG10D_CAL, OVERLAY_WEIGHTS
 
 MODEL_DIR = "models/pipeline1"
 CHECKPOINTS = {
@@ -49,13 +49,25 @@ _LEGACY_COLS = (
 
 
 def cross_section(board: str, date=None) -> tuple[pd.DataFrame, pd.Timestamp]:
-    """读该板块检查点某交易日全截面 (轻量: 只取当日, 不加载 3y).
+    """读该板块检查点决策日历史窗 (含 label_pm_10d_net + board 列), 供 mag_10d 校准.
 
-    date=None → 最新交易日. 返回 (df, 该日 date).
+    2026-08-07: build_merged_shortlist 改按 mag_10d (score→label_pm_10d_net) 排名,
+    需决策日前 cal_n+realized_drop 个交易日的已实现标签做拟合 → 返回历史窗而非单日.
+    窗: [决策日 - (cal_n + realized_drop + 40 交易日), 决策日]. date=None → 最新交易日.
+    返回 (df, 该日 date); df 多日, 调用方以 df[df["date"]==day] 取当日截面.
     """
     d = pd.read_parquet(CHECKPOINTS[board], columns=["date"])
     day = pd.Timestamp(date) if date is not None else d["date"].max()
-    df = pd.read_parquet(CHECKPOINTS[board], filters=[("date", "==", day)])
+    dates = np.sort(d["date"].unique())
+    di = int(np.searchsorted(dates, np.datetime64(day), side="right"))
+    _rd = int(MAG10D_CAL["buy_lag"]) + int(MAG10D_CAL["label_horizon"])
+    _win = int(MAG10D_CAL["cal_n"]) + _rd + 40
+    lo = dates[max(0, di - _win)]
+    df = pd.read_parquet(
+        CHECKPOINTS[board], filters=[("date", ">=", lo), ("date", "<=", day)]
+    )
+    df = df.copy()
+    df["board"] = board
     return df, day
 
 
@@ -273,12 +285,15 @@ def main() -> int:
         if df.empty:
             print(f"[{board}] {pd.Timestamp(day).date()} 截面为空")
             continue
-        print(f"[{board}] 截面 {day.date()} 行数 {len(df):,}")
+        print(f"[{board}] 决策日 {day.date()} 历史窗行数 {len(df):,}")
+        # 2026-08-07: build_merged_shortlist 需完整历史窗做 mag_10d 校准,
+        # 输出全窗逐日短名单 → 只取决策日.
         sl = build_merged_shortlist(df, top_n=10)
+        sl = sl[sl["date"] == day] if not sl.empty else sl
         if sl.empty:
             print(f"[{board}] 合并短名单为空")
             continue
-        leg = legacy_predict(df, board, predictor, set(sl["symbol"]))
+        leg = legacy_predict(df[df["date"] == day], board, predictor, set(sl["symbol"]))
         w_pool, w_prob = overlay_weights(board)
         if args.w_pool is not None:
             w_pool = args.w_pool
@@ -286,6 +301,9 @@ def main() -> int:
             w_prob = args.w_prob
         res = rerank(sl, leg, w_pool, w_prob)
         prob_col = res.attrs.get("prob_col", "")
+        # build_merged_shortlist 现输出 board 列 (跨板块历史窗) → 去重后规范置首
+        if "board" in res.columns:
+            res = res.drop(columns=["board"])
         res.insert(0, "board", board)
         res["date"] = str(pd.Timestamp(day).date())
         frames.append(res)

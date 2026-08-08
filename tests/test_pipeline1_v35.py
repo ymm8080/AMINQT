@@ -14,7 +14,11 @@ from app.pipeline1.cleaning_pipeline import (
     is_limit_up,
     limit_up_price,
 )
-from app.pipeline1.feature_engine_v35 import _LHB_ALPHA, FeatureEngineV35
+from app.pipeline1.feature_engine_v35 import (
+    _LHB_ALPHA,
+    FeatureEngineV35,
+    _apply_per_stock,
+)
 from app.pipeline1.ic_screener import ICScreener
 from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.list_generator import (
@@ -959,12 +963,13 @@ def make_candidates(n=20, seed=1) -> pd.DataFrame:
             "pred_ret_2d": rng.uniform(-0.07, 0.12, n),
             "pred_ret_3d": rng.uniform(-0.08, 0.10, n),
             "pred_ret_5d": rng.uniform(-0.10, 0.15, n),
+            "pred_ret_10d": rng.uniform(-0.12, 0.20, n),
             "prob_up": rng.uniform(0.35, 0.65, n),
             "is_in_yesterday_list": [i % 2 for i in range(n)],
         }
     )
     # 多视界概率列缺省 = prob_up (compound_prob 精确回退 == prob_up, 现有断言不变)
-    for k in (2, 3, 5):
+    for k in (2, 3, 5, 10):
         df[f"prob_up_{k}d"] = df["prob_up"]
     return df
 
@@ -981,6 +986,9 @@ class TestListGenerator:
     def test_industry_limit(self):
         cands = make_candidates(n=20)
         cands["industry"] = "白酒"  # 全部同行业 → 最多 4 只
+        # 600019 在块交易扫描缓存里有近期大宗交易, FINAL STOCK SCAN 会剔除 →
+        # 压出 top-4, 避免扫描耦合破坏行业上限断言 (2026-08-07 排名键改 10d 后暴露)
+        cands.loc[cands["symbol"] == "600019", "pred_ret_10d"] = -1.0
         out = ListGenerator(**GATE_OFF).emit(cands)
         assert len(out["list"]) == 4
 
@@ -1227,3 +1235,61 @@ class TestDataSupplyB11:
         panel = chain.backfill_ohlcv(["600519", "300750"], years=5, end="2026-07-24")
         assert set(panel["symbol"]) == {"600519"}  # 失败股被跳过
         assert chain.check_backfill_depth(panel) is True
+
+
+# ═══════════════════════════════════════════════════════════════
+# _apply_per_stock 内存优化 identity (安全网 #5 参考语义)
+# ═══════════════════════════════════════════════════════════════
+def _ref_apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
+    """旧实现参考: 全部 parts 驻留 + 一次性 pd.concat (安全网 #5 原语义)."""
+    parts = [fn(g.copy()) for _, g in df.groupby("symbol")]
+    return pd.concat(parts).sort_values(["symbol", "date"]).reset_index(drop=True)
+
+
+def test_apply_per_stock_memory_lean_identity():
+    """内存优化后 _apply_per_stock 与旧语义逐字节一致 (值/dtype/列序/索引).
+
+    RAM 优化只改内部累积方式 (预分配单块帧替代 list-of-parts), 不得改变输出.
+    """
+    df = make_panel(symbols=("600519", "300750", "601318"), days=120)
+
+    def per_stock(g):
+        g = g.sort_values("date")
+        g["ma5"] = g["close"].rolling(5, min_periods=1).mean()
+        g["mom1"] = g["close"] / g["close"].shift(1) - 1
+        return g
+
+    out = _apply_per_stock(df, per_stock)
+    ref = _ref_apply_per_stock(df, per_stock)
+    assert out.equals(ref)
+    assert list(out.columns) == list(ref.columns)
+    assert out.dtypes.to_dict() == ref.dtypes.to_dict()
+    assert out.index.equals(ref.index)
+
+
+def test_apply_per_stock_zero_close_row_preserved():
+    """零收盘价行不被过滤/丢失; 逐股应用保留全部行 (含除零数据行)."""
+    df = make_panel(symbols=("600519", "300750"), days=30)
+    df.loc[df["symbol"] == "600519", "close"] = 0.0
+
+    def per_stock(g):
+        g = g.sort_values("date")
+        g["zero_flag"] = (g["close"] == 0).astype(int)
+        return g
+
+    out = _apply_per_stock(df, per_stock)
+    assert len(out) == len(df)
+    assert (out.loc[out["symbol"] == "600519", "zero_flag"] == 1).all()
+    assert (out.loc[out["symbol"] == "300750", "zero_flag"] == 0).all()
+
+
+def test_apply_per_stock_row_dropping_fn_trim():
+    """fn 过滤行 (非保行) 时, 输出与旧语义一致 (尾部裁剪)."""
+    df = make_panel(symbols=("600519", "300750"), days=20)
+
+    def per_stock(g):
+        return g[g["close"] > g["close"].median()]
+
+    out = _apply_per_stock(df, per_stock)
+    ref = _ref_apply_per_stock(df, per_stock)
+    assert out.equals(ref)

@@ -1017,3 +1017,41 @@ def test_run_bruteforce_dedup_ram_safe_parity():
     assert new == old, (
         f"RAM 优化改变选择: old={len(old)} new={len(new)}; diff={set(old) ^ set(new)}"
     )
+
+
+def test_generate_divide_by_zero_silent():
+    """零收盘价 (除零) 不产生 divide/invalid RuntimeWarning 洪流, 输出无 inf.
+
+    pct_change/momentum 对零分母应静默出 NaN (errstate 抑制), 值已被
+    replace([inf,-inf], nan) 清理 — 只降噪, 不改预测.
+    """
+    import warnings
+
+    df = _make_small_df(n_symbols=3, n_dates=40)
+    df.loc[df["symbol"] == "000001", "close"] = 0.0  # 人为制造除零
+    gen = BruteForceGenerator()
+    raw = gen._eligible(df)
+
+    for name, call in (
+        ("generate", lambda: gen.generate(df, raw_cols=raw)),
+        (
+            "generate_family",
+            lambda: gen.generate_family(
+                df, "pct_change", raw_cols=raw, dtype="float32"
+            ),
+        ),
+    ):
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always")
+            new = call()
+        bad = [
+            w
+            for w in rec
+            if issubclass(w.category, RuntimeWarning)
+            and (
+                "divide" in str(w.message).lower()
+                or "invalid" in str(w.message).lower()
+            )
+        ]
+        assert not bad, f"{name}: 除零警告未抑制: {[str(w.message) for w in bad]}"
+        assert not np.isinf(new.values).any(), f"{name}: 输出含 inf"

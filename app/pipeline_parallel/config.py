@@ -64,6 +64,8 @@ def board_of(symbol) -> str:
 # 两套系统统一测 T+2/T+3/T+5/T+10 四视界矩阵 (用户: "TOP5 与 TOP10 都要看 T+2,T+3,T+5,T+10").
 HORIZONS: tuple[str, ...] = ("3d", "2d", "5d", "10d")
 MFE_LABELS: tuple[str, ...] = tuple(f"label_mfe_{h}_net" for h in HORIZONS)
+# 2026-08-07 用户: 并行全模块验收改 close-to-close (可兑现收益), 非 MFE 触摸天花板
+C2C_LABELS: tuple[str, ...] = tuple(f"label_pm_{h}_net" for h in HORIZONS)
 
 # ── 最终排名权重 (2026-08-04 用户: 上涨率35% + 概率45% + 第三项2%待确认) ──
 RANK_W = {"mag": 0.35, "prob": 0.45, "third": 0.02}
@@ -159,7 +161,6 @@ SNIPER = SystemSpec(
         "amihud_illiq",
         "small_mv_premium",
         "amihud_illiquidity",
-        "down_gap_pct",
         "VAR51",
         "ret_reversal_5d",
         "pv_corr_5",
@@ -167,12 +168,13 @@ SNIPER = SystemSpec(
     top_n=5,
     top_n_alt=3,
     horizons=HORIZONS,
-    labels=MFE_LABELS,
+    labels=C2C_LABELS,
     notes=(
         "核心 3 特征 (amihud_illiq/small_mv_premium/amihud_illiquidity) 3d+2d 都过, 快进快出可用",
         "VAR51 / ret_reversal_5d 长视界出边 — 须持有多天才兑现",
         "limit_dist_pct TOP-5 全视界不过 → 只进融合池",
         "2026-08-05 池内相关 OOS 边际: +pv_corr_5 → dual 全视界 Δwr +1.7~3.6% (5d +3.6% 最强)",
+        "2026-08-08 c2c LOO 审计 (250/300/200d): 剔除 down_gap_pct → 双板 STABLE_WIN +0.45~+0.72pp (MFE 选入但 c2c 不兑现)",
         "目标 = MFE (窗口内最高价可兑现的最大收益), 非目标日收盘",
     ),
 )
@@ -185,7 +187,6 @@ FUSION = SystemSpec(
     pool=(
         "amihud_illiquidity",
         "VAR51",
-        "down_gap_pct",
         "limit_dist_pct",
         "ret_reversal_5d",
         "small_mv_premium",
@@ -194,11 +195,12 @@ FUSION = SystemSpec(
     top_n=10,
     top_n_alt=10,
     horizons=HORIZONS,
-    labels=MFE_LABELS,
+    labels=C2C_LABELS,
     notes=(
         "limit_dist_pct 长视界出边 — 融合方案须容忍较长持有",
         "small_mv_premium 高风险档 — 仓位纪律必需",
         "2026-08-05 池内相关 OOS 边际: +pv_corr_5 → dual 全视界 Δwr +1.7~2.2%",
+        "2026-08-08 c2c LOO 审计 (250/300/200d): 剔除 down_gap_pct → 双板 STABLE_WIN +0.45~+0.72pp (MFE 选入但 c2c 不兑现)",
         "目标 = MFE (窗口内最高价可兑现的最大收益), 非目标日收盘",
     ),
 )
@@ -213,7 +215,7 @@ SLOW_BULL = SystemSpec(
     top_n=20,
     top_n_alt=10,
     horizons=SLOW_BULL_HORIZONS,
-    labels=SLOW_BULL_MFE_LABELS,
+    labels=tuple(f"label_pm_{h}_net" for h in SLOW_BULL_HORIZONS),
     gate="slow_bull",
     pool_weights=dict(ADX_SCORE_WEIGHTS),
     notes=(
@@ -240,6 +242,33 @@ SLOW_BULL_REGIME: dict = {
     "down_mode": "no_open",  # 下行段: no_open=不开仓 / cur=仍出候选但按现行退出
 }
 
+# ── SLOW_BULL rps_60 第二道门 (2026-08-08, factor_gradient + rps_gate 诊断) ──
+# gate 内单因子梯度: rps_60 截面分位是唯一双板单调的"守得住"预测因子 (main d10-d1
+# +4.08pp / dual +5.71pp, spearman 0.73/0.65). 策略模拟显示该信号只在 dual 未被
+# 收割: main 合成 score 含 rps_60 权重 0.15 已部分捕获 → 硬门槛反覆盖合成择优
+# (main 0.5 门 −0.06pp, 非单调); dual 池薄 (~6/日) 合成 score 近乎 no-op → 门槛直接
+# +0.80pp (OOS 250d, 4 档单调, 3/4 季度正, 下跌季 Q4 最强 +2.17pp, 横盘季 Q3 唯一负
+# −0.46pp 噪声级). 集中度无塌缩 (dual 门后仍 447 只/250d). 符合用户"预期收益不够高
+# 就不开仓". floor 为 gate 内日截面 rps_60 百分位下限.
+SLOW_BULL_RPS_GATE: dict = {
+    "enabled": True,
+    "floor": 0.50,
+    "boards": {"main": False, "dual": True},  # main 合成 score 已捕获 → 不启
+}
+
+# ── SLOW_BULL 排名键 (2026-08-08, rank_ab 诊断) ──
+# 受控 A/B (gate∩上升段→Top-N→trail8 op_rule 实得, OOS 250d): dual 用 rps_60 排名
+# 全档赢合成 score (top10 +1.15pp / top5 +0.52pp / top3 +1.19pp, 3/4 季度稳定, 下跌季
+# 最强), 机制同门: dual 池薄合成 score 近乎 no-op → rps 信号未收割; main 合成 score
+# 含 rps_60 权重 0.15 已部分捕获 → 纯 rps 排名反更差 (+0.39pp 输 @top10, 且季度方向
+# 不净). top_n 按板收紧: 现状 top-20 全收 (池 ~6-13/日 < 20) 排名不生效; dual 收紧到
+# 10 让排名在深池日生效 (门后 ~6/日, 仅深池日裁到 top-10), main 保持 20.
+SLOW_BULL_RANK: dict = {
+    "key": "rps_60",  # 排名键: dual=rps_60 相对强度; main=合成 score (boards 关)
+    "boards": {"main": False, "dual": True},
+    "top_n": {"main": 20, "dual": 10},
+}
+
 
 @dataclass(frozen=True)
 class PanelSource:
@@ -251,3 +280,23 @@ class PanelSource:
 
 
 PANEL = PanelSource()
+
+# ── mag_10d 校准参数 (2026-08-07 定案, diag_10d_param_sweep_nl_20260807_200540) ──
+# 并行系统 (除慢牛) 短名单排名 = 每股收缩回归 score→label_pm_10d_net (T+10
+# close-to-close 校准幅度) 的全板块日截面降序 → TOP5/TOP10. 拟合窗 [D-cal_n, D)
+# 只用**已实现**标签: 行 t 的卖价 close_hfq[T+11] 须在决策日 D 之前已打印 → 拟合边界
+# 比 D 提前 realized_drop = buy_lag + label_horizon = 11 个交易日 (无前瞻, 铁律).
+# 无前瞻扫描 (横截面按日期裁 11 交易日, 250d OOS) 定案:
+#   cal_n=21 (10 已实现日) + per_stock_min_n=50 (=纯板块横截面 OLS) 双板块最优;
+#   每股回归无前瞻下样本 ~10-31 太噪 (minn=15/20 为负), psw 完全 no-op, kappa=10 最优.
+MAG10D_CAL = {
+    "cal_n": 21,  # 校准窗 (交易日; cal_n 扫描最优 = 短窗, 对近期 regime 适应快)
+    "per_stock_window": 130,  # 每股自用最近交易日 (no-op, 纯横截面下不触发)
+    "per_stock_min_n": 50,  # 每股回归最小样本, 不足回退横截面; =50 强制纯横截面 OLS
+    "shrink_kappa": 10.0,  # 收缩强度 (λ = take/(take+κ))
+    "score_col": "score",  # 校准输入: score = max(sniper, fusion) 池分
+    "target_col": "label_pm_10d_net",  # 校准目标: T+10 close-to-close 净幅度
+    "cross_min_n": 50,  # 横截面最小样本, 不足该板块当日不出票
+    "buy_lag": 1,  # 买在 close[T+1] (相对决策日 D)
+    "label_horizon": 10,  # 视界 10 交易日
+}
