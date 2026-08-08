@@ -9,9 +9,9 @@ import pandas as pd
 import pytest
 
 from app.pipeline_parallel.config import (
+    C2C_LABELS,
     FUSION,
     HORIZONS,
-    MFE_LABELS,
     MIN_MAG,
     MIN_WINRATE,
     PANEL,
@@ -54,15 +54,24 @@ def _panel(n_dates=60, n_stocks=20, extra_cols=()):
 
 
 def _with_labels(df):
-    """合成价格路径 + 调 add_mfe_labels 补 MFE 净标签 + 生产口径 label_pm_10d_net + board 列."""
-    from app.pipeline_parallel.backtest import add_mfe_labels
+    """合成价格路径 + add_mfe_labels (MFE) + add_c2c_labels (close-to-close) + board 列."""
+    from app.pipeline_parallel.backtest import add_c2c_labels, add_mfe_labels
     from app.pipeline_parallel.config import board_of
 
     df = df.copy()
     rng = np.random.default_rng(7)
-    # 每 symbol 价格路径: 基准 10, 随 f1 抬升 (0.12 放大 → 高分股 MFE 显著正)
+    day_idx = df.groupby("symbol").cumcount()
+    # 漂移用 symbol 平滑 f1 (组均值, 无日噪声): 归一化到 [0,1] → 指数漂移恒正单调,
+    # close 永不为负/零. 2026-08-07 并行验收改 close-to-close: MFE 曾靠 high_hfq
+    # 放大幅度, c2c 需价格路径本身上行才能过双头门 (threshold main 3%/dual 4%).
+    f1 = df["f1"]
+    f1_sym = df.groupby("symbol")["f1"].transform("mean")
+    f1_pos = (f1_sym - f1_sym.min()) / (f1_sym.max() - f1_sym.min())
     df["close_hfq"] = (
-        10.0 * (1 + 0.12 * df["f1"]) * np.exp(rng.normal(0, 0.05, len(df)))
+        10.0
+        * (1 + 0.12 * f1)
+        * np.exp(0.08 * f1_pos * day_idx)
+        * np.exp(rng.normal(0, 0.01, len(df)))
     )
     # 日内高点 >= 收盘 (OHLCV 不变量), 放大倍数随 f1 → 高 f1 的 MFE 更大
     df["high_hfq"] = np.maximum(
@@ -71,14 +80,9 @@ def _with_labels(df):
     )
     df["adv20"] = rng.uniform(1e7, 1e9, len(df))
     df = add_mfe_labels(df, horizons=(2, 3, 5, 10))
-    # label_pm_10d_net (生产口径, 同 scripts/_reclassify_all_features.add_label_pm_10d_net):
-    # close_hfq[T+11]/close_hfq[T+1]-1 - (COST + 2×分层滑点) — mag_10d 校准目标列
-    from app.pipeline1.label_engine import COST, slippage_tier
-
-    g = df.groupby("symbol")["close_hfq"]
-    df["label_pm_10d_net"] = (
-        g.shift(-11) / g.shift(-1) - 1 - (COST + 2 * df["adv20"].map(slippage_tier))
-    )
+    # close-to-close 净标签 (生产口径, add_c2c_labels): label_pm_{k}d_net 全视界齐
+    # (含 slow_bull 长视界 20/40d; mag_10d 校准目标列 label_pm_10d_net 同款)
+    df = add_c2c_labels(df, horizons=(2, 3, 5, 10, 20, 40))
     df["board"] = df["symbol"].map(board_of)
     return df
 
@@ -110,9 +114,10 @@ def test_both_systems_full_horizon_matrix():
         assert set(spec.horizons) == set(HORIZONS)
         assert len(spec.horizons) == len(spec.labels)
         for h, lab in zip(spec.horizons, spec.labels, strict=False):
-            assert lab == f"label_mfe_{h}_net"
+            # 2026-08-07 用户: 并行验收改 close-to-close (可兑现), 非 MFE 触摸天花板
+            assert lab == f"label_pm_{h}_net"
     assert set(HORIZONS) == {"2d", "3d", "5d", "10d"}
-    assert len(MFE_LABELS) == 4
+    assert len(C2C_LABELS) == 4
 
 
 def test_config_panel_checkpoints_exist():

@@ -82,6 +82,40 @@ def add_mfe_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
     return df
 
 
+def add_c2c_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
+    """补算 close-to-close 净标签 label_pm_{k}d_net (2026-08-07 用户: 并行全模块改 c2c).
+
+    与生产 add_label_pm_10d_net 完全同口径 (检查点无 price_1455
+    → 日K近似执行价 exec=close_hfq[T+1]):
+      label_pm_{k}d_net = close_hfq[T+1+k]/close_hfq[T+1] - 1 - (COST + 2×分层滑点)
+    再按生产 mask_suspension 逻辑遮蔽 [T,T+k] 含停牌的行 (窗口 k+1).
+    slow_bull 长视界 20/40d 超出 label_engine.LABEL_HORIZONS → 检查点不产, 在此补算;
+    sniper/fusion 2/3/5/10 检查点已有, 重算保证全列齐全与口径一致.
+    """
+    df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
+    g = df.groupby("symbol")["close_hfq"]
+    exec_px = g.shift(-1)
+    slip = df["adv20"].map(slippage_tier) if "adv20" in df.columns else 0.0015
+    cost_total = COST + 2 * slip
+    for k in horizons:
+        net = g.shift(-(k + 1)) / exec_px - 1 - cost_total
+        if "is_suspended" in df.columns:
+            rolling_sum = (
+                df.groupby("symbol")["is_suspended"]
+                .rolling(k + 1)
+                .sum()
+                .reset_index(level=0, drop=True)
+            )
+            vals = rolling_sum.values
+            suspended_vals = np.zeros(len(vals), dtype=bool)
+            if len(vals) > k:
+                suspended_vals[: len(vals) - k] = vals[k:] > 0
+            suspended = pd.Series(suspended_vals, index=rolling_sum.index)
+            net = net.where(~suspended, np.nan)
+        df[f"label_pm_{k}d_net"] = net
+    return df
+
+
 def tradability_gate(
     work: pd.DataFrame, lookback: int = 20, min_presence: float = 0.8
 ) -> tuple[pd.DataFrame, dict]:
@@ -138,6 +172,7 @@ def load_panel() -> pd.DataFrame:
     for ckpt in (PANEL.main_checkpoint, PANEL.dual_checkpoint):
         df = _finalize_slice(pd.read_parquet(ckpt))
         df = add_mfe_labels(df, horizons=ALL_HORIZON_INTS)
+        df = add_c2c_labels(df, horizons=ALL_HORIZON_INTS)
         slices.append(df)
         del df
         gc.collect()
@@ -329,7 +364,12 @@ def _slowbull_picks(work: pd.DataFrame, board: str, top_n: int) -> pd.DataFrame:
 
 def _slowbull_sim_arrays(work: pd.DataFrame) -> dict:
     """慢牛实得回测预计算数组 (按 symbol/date 排序, 与 _diag_slowbull_regime 同构)."""
-    w = work.sort_values(["symbol", "date"]).reset_index(drop=True)
+    # 只取模拟所需列再排序: 全宽 (567 列) sort 触发 pandas block consolidation,
+    # 需 ~5 GiB 连续内存 → OOM (2026-08-08 并行步骤实得回测失败). 该 12 列即全部需求.
+    need = ["symbol", "date", "adv20", "close_hfq", "low_hfq", "ma20"] + list(
+        _SELL_COLS
+    )
+    w = work[need].sort_values(["symbol", "date"]).reset_index(drop=True)
     uniques, codes = np.unique(w["symbol"].values, return_inverse=True)
     sizes = np.bincount(codes)
     starts = np.zeros(len(uniques), dtype=np.int64)

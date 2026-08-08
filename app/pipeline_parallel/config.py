@@ -64,6 +64,8 @@ def board_of(symbol) -> str:
 # 两套系统统一测 T+2/T+3/T+5/T+10 四视界矩阵 (用户: "TOP5 与 TOP10 都要看 T+2,T+3,T+5,T+10").
 HORIZONS: tuple[str, ...] = ("3d", "2d", "5d", "10d")
 MFE_LABELS: tuple[str, ...] = tuple(f"label_mfe_{h}_net" for h in HORIZONS)
+# 2026-08-07 用户: 并行全模块验收改 close-to-close (可兑现收益), 非 MFE 触摸天花板
+C2C_LABELS: tuple[str, ...] = tuple(f"label_pm_{h}_net" for h in HORIZONS)
 
 # ── 最终排名权重 (2026-08-04 用户: 上涨率35% + 概率45% + 第三项2%待确认) ──
 RANK_W = {"mag": 0.35, "prob": 0.45, "third": 0.02}
@@ -167,7 +169,7 @@ SNIPER = SystemSpec(
     top_n=5,
     top_n_alt=3,
     horizons=HORIZONS,
-    labels=MFE_LABELS,
+    labels=C2C_LABELS,
     notes=(
         "核心 3 特征 (amihud_illiq/small_mv_premium/amihud_illiquidity) 3d+2d 都过, 快进快出可用",
         "VAR51 / ret_reversal_5d 长视界出边 — 须持有多天才兑现",
@@ -194,7 +196,7 @@ FUSION = SystemSpec(
     top_n=10,
     top_n_alt=10,
     horizons=HORIZONS,
-    labels=MFE_LABELS,
+    labels=C2C_LABELS,
     notes=(
         "limit_dist_pct 长视界出边 — 融合方案须容忍较长持有",
         "small_mv_premium 高风险档 — 仓位纪律必需",
@@ -213,7 +215,7 @@ SLOW_BULL = SystemSpec(
     top_n=20,
     top_n_alt=10,
     horizons=SLOW_BULL_HORIZONS,
-    labels=SLOW_BULL_MFE_LABELS,
+    labels=tuple(f"label_pm_{h}_net" for h in SLOW_BULL_HORIZONS),
     gate="slow_bull",
     pool_weights=dict(ADX_SCORE_WEIGHTS),
     notes=(

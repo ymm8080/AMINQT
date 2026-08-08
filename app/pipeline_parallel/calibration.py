@@ -154,7 +154,7 @@ def calibrate_mag10d(
                 cs = (n * sxy - sx * sy) / var
                 ci = (sy - cs * sx) / n
             cal_lo64 = np.datetime64(cal_lo)
-            d64 = np.datetime64(dt)
+            dt64 = np.datetime64(dt)
             # 每股窗口 OLS + 收缩 (per-symbol numpy 循环, 与诊断脚本一致)
             for i in range(len(syms)):
                 sc = scores[i]
@@ -164,19 +164,19 @@ def calibrate_mag10d(
                 if sd is None:
                     continue
                 gd, gs, gy, pos = sd
-                vd = int(
+                v_d = int(
                     np.searchsorted(
                         pos,
-                        int(np.searchsorted(gd, d64, side="right")) - _REALIZED_DROP,
+                        int(np.searchsorted(gd, dt64, side="right")) - _REALIZED_DROP,
                         side="left",
                     )
                 )
                 sym_i_lo = int(np.searchsorted(gd, cal_lo64, side="left"))
                 v_lo = int(np.searchsorted(pos, sym_i_lo, side="left"))
-                vc = vd - v_lo
+                vc = v_d - v_lo
                 if vc >= per_stock_min_n:
                     take = min(vc, per_stock_window)
-                    r = pos[vd - take : vd]
+                    r = pos[v_d - take : v_d]
                     x = gs[r]
                     y = gy[r]
                     raw_slope, _ = _ols_slope_intercept(x, y)
