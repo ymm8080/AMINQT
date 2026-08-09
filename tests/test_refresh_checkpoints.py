@@ -4,6 +4,7 @@
 且每板块用对应检查点路径. 该脚本的参考内存是在 build_board_slice 之前
 用 dict.pop 释放已处理板块的清洗切片, 避免 main/dual 两个切片同时常驻.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -33,13 +34,13 @@ class TestRefreshCheckpoints:
         mod = _load_refresh_module(monkeypatch)
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
-        monkeypatch.setattr(
-            mod.pd, "read_parquet", lambda path: _tiny_board("main")
-        )
+        monkeypatch.setattr(mod.pd, "read_parquet", lambda path: _tiny_board("main"))
         main_df = _tiny_board("main")
         dual_df = _tiny_board("dual")
         monkeypatch.setattr(
-            mod.CleaningPipeline, "run_train", lambda self, df, board=None: (main_df, dual_df)
+            mod.CleaningPipeline,
+            "run_train",
+            lambda self, df, board=None: (main_df, dual_df),
         )
         monkeypatch.setattr(mod, "FeatureEngineV35", lambda: object())
 
@@ -47,7 +48,9 @@ class TestRefreshCheckpoints:
         monkeypatch.setattr(
             mod,
             "build_board_slice",
-            lambda cleaner, fe, bdf, board, ckpt: calls.append((board, ckpt, bdf)) or bdf,
+            lambda cleaner, fe, bdf, board, ckpt: (
+                calls.append((board, ckpt, bdf)) or bdf
+            ),
         )
 
         rc = mod.main()
@@ -64,9 +67,7 @@ class TestRefreshCheckpoints:
         mod = _load_refresh_module(monkeypatch)
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
-        monkeypatch.setattr(
-            mod.pd, "read_parquet", lambda path: _tiny_board("main")
-        )
+        monkeypatch.setattr(mod.pd, "read_parquet", lambda path: _tiny_board("main"))
         monkeypatch.setattr(
             mod.CleaningPipeline,
             "run_train",
@@ -193,7 +194,9 @@ class TestRefreshFingerprintSkip:
             mod.pd, "read_parquet", lambda path, **kw: _tiny_board("main")
         )
         monkeypatch.setattr(
-            mod.CleaningPipeline, "run_train", lambda self, df, board=None: (_tiny_board("main"), _tiny_board("dual"))
+            mod.CleaningPipeline,
+            "run_train",
+            lambda self, df, board=None: (_tiny_board("main"), _tiny_board("dual")),
         )
         monkeypatch.setattr(mod, "FeatureEngineV35", lambda: object())
         monkeypatch.setattr(

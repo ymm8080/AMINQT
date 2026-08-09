@@ -151,7 +151,8 @@ def recent_module_ids(picks: pd.DataFrame, n: int = 5) -> list[str]:
     if picks is None or picks.empty or "module_id" not in picks.columns:
         return []
     rec = (
-        picks.groupby("module_id")["date"].max()
+        picks.groupby("module_id")["date"]
+        .max()
         .reset_index()
         .sort_values(["date", "module_id"], ascending=[False, False])
     )
@@ -170,9 +171,7 @@ def recent_module_ids_per_model(picks: pd.DataFrame, n: int = 5) -> list[str]:
         picks.groupby(["module_id", "family"])["date"]
         .max()
         .reset_index()
-        .sort_values(
-            ["family", "date", "module_id"], ascending=[True, False, False]
-        )
+        .sort_values(["family", "date", "module_id"], ascending=[True, False, False])
     )
     out: list[str] = []
     for _fam, grp in rec.groupby("family"):

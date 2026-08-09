@@ -221,9 +221,13 @@ def test_f_label_horizon_shifts_realized_boundary():
     D = clean["date"].iloc[80]
 
     def _mag(df):
-        return calibrate_mag10d(
-            df, cal_n=60, target_col="label_pm_5d_net", label_horizon=5
-        ).loc[lambda s: s["date"] == D, "mag"].iloc[0]
+        return (
+            calibrate_mag10d(
+                df, cal_n=60, target_col="label_pm_5d_net", label_horizon=5
+            )
+            .loc[lambda s: s["date"] == D, "mag"]
+            .iloc[0]
+        )
 
     c1 = clean.copy()
     c1.loc[80 - 6, "label_pm_5d_net"] = 5.0  # D-6 可用 → mag 变
@@ -238,7 +242,5 @@ def test_g_label_horizon_default_equals_10d():
     """默认 label_horizon 与显式 10 行为一致 (回归)."""
     df = _panel()
     a = calibrate_mag10d(df, cal_n=42, target_col="label_pm_10d_net")
-    b = calibrate_mag10d(
-        df, cal_n=42, target_col="label_pm_10d_net", label_horizon=10
-    )
+    b = calibrate_mag10d(df, cal_n=42, target_col="label_pm_10d_net", label_horizon=10)
     assert a["mag"].equals(b["mag"])

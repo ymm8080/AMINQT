@@ -30,9 +30,7 @@ def main() -> None:
     assert "持仓" in hdrs, f"缺持仓区块: {hdrs}"
     pos_idx = hdrs.index("持仓")
     print(f"持仓 subheader 位置: {pos_idx}/{len(hdrs)}")
-    assert any(
-        "行情" in h for h in hdrs[pos_idx:]
-    ), "持仓应位于行情之前 (置顶)"
+    assert any("行情" in h for h in hdrs[pos_idx:]), "持仓应位于行情之前 (置顶)"
     print("OK: page_trading.render 无异常, 持仓已置顶")
 
 

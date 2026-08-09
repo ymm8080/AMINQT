@@ -1021,9 +1021,15 @@ class TestListGenerator:
         assert ListGenerator.compute_momentum(-0.01, 0.05, 0.10) == "medium"
         assert ListGenerator.compute_momentum(0.0005, 0.001, 0.002) == "medium"
         assert ListGenerator.compute_momentum(0.02, 0.09, 0.20) == "high"  # 加速
-        assert ListGenerator.compute_momentum(0.05, 0.10, 0.10) == "medium"  # 5d 强但 10d 衰减
-        assert ListGenerator.compute_momentum(0.05, 0.02, 0.12) == "low"  # 5d 日化显著弱于 3d
-        assert ListGenerator.compute_momentum(0.05, 0.10, 0.08) == "medium"  # 非加速非弱化
+        assert (
+            ListGenerator.compute_momentum(0.05, 0.10, 0.10) == "medium"
+        )  # 5d 强但 10d 衰减
+        assert (
+            ListGenerator.compute_momentum(0.05, 0.02, 0.12) == "low"
+        )  # 5d 日化显著弱于 3d
+        assert (
+            ListGenerator.compute_momentum(0.05, 0.10, 0.08) == "medium"
+        )  # 非加速非弱化
 
     def test_holding_bonus(self):
         """向后兼容: 无 holding_day 列时, is_in_yesterday_list=1 视为 day1 (weight=1.0)."""

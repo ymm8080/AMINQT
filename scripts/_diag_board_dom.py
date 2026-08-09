@@ -1,4 +1,5 @@
 """诊断: 抓取运行中看板选股池表格的列头与首几行数值."""
+
 import time
 
 from playwright.sync_api import sync_playwright
@@ -10,7 +11,9 @@ with sync_playwright() as p:
     time.sleep(10)
     hdrs = pg.eval_on_selector_all("thead th", "els => els.map(e => e.innerText)")
     print("HEADERS:", hdrs)
-    rows = pg.eval_on_selector_all("tbody tr", "els => els.slice(0, 6).map(tr => tr.innerText)")
+    rows = pg.eval_on_selector_all(
+        "tbody tr", "els => els.slice(0, 6).map(tr => tr.innerText)"
+    )
     for i, r in enumerate(rows):
         # 表格前几个字段(代码/名称/模型/入选/评分/3d/5d/10d), 截断跳过 sparkline
         cells = r.split("\n")

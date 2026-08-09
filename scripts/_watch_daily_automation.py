@@ -1,11 +1,27 @@
 """监控 daily_automation 日志: 步骤开始/完成 + OOM/失败信号 (GBK 解码)."""
+
 import time
 
 PATH = r"logs/daily_automation_20260809.log"
 KEYS = (
-    "[start]", "[done]", "[stale]", "MemoryError", "Unable to allocate",
-    "allocate", "Traceback", "ERROR", "Error", "FAIL", "失败", "完成",
-    "成功", "switched", "current_meta", "OOS", "publish", "交付",
+    "[start]",
+    "[done]",
+    "[stale]",
+    "MemoryError",
+    "Unable to allocate",
+    "allocate",
+    "Traceback",
+    "ERROR",
+    "Error",
+    "FAIL",
+    "失败",
+    "完成",
+    "成功",
+    "switched",
+    "current_meta",
+    "OOS",
+    "publish",
+    "交付",
 )
 
 

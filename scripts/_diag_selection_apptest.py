@@ -54,10 +54,12 @@ def main() -> None:
     assert len(models) > 0, "模型列全空"
     print("模型样例:", models.unique()[:5])
     print("入选样例:", pool["入选"].dropna().astype(str).unique()[:5])
-    print("预期样例(3d/5d/10d):",
-          pool["3d 预期"].head(2).tolist(),
-          pool["5d 预期"].head(2).tolist(),
-          pool["10d 预期"].head(2).tolist())
+    print(
+        "预期样例(3d/5d/10d):",
+        pool["3d 预期"].head(2).tolist(),
+        pool["5d 预期"].head(2).tolist(),
+        pool["10d 预期"].head(2).tolist(),
+    )
     # 个股明细顶部: 模型推荐 strip (STOCK LIST 真实 3/5/10d, 两行 markdown)
     mds = [m.value for m in at.markdown]
     recs = [m for m in mds if "模型推荐" in m]

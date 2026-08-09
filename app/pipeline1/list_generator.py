@@ -338,12 +338,9 @@ class ListGenerator:
                 )
             ok &= compound > 0
             # 闸3 (2026-08-05 定案 2d/3d/5d, 2026-08-09 去 2d): 3d/5d 中位数均须为正; 回退 1d pred_q50 (旧 bundle)
-            if all(
-                c in df.columns for c in ("pred_q50_3d", "pred_q50_5d")
-            ):
-                ok &= (
-                    (df["pred_q50_3d"].fillna(compound) > 0)
-                    & (df["pred_q50_5d"].fillna(compound) > 0)
+            if all(c in df.columns for c in ("pred_q50_3d", "pred_q50_5d")):
+                ok &= (df["pred_q50_3d"].fillna(compound) > 0) & (
+                    df["pred_q50_5d"].fillna(compound) > 0
                 )
             elif "pred_q50" in df.columns and df["pred_q50"].notna().any():
                 ok &= df["pred_q50"].fillna(compound) > 0

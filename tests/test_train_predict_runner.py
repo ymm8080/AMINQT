@@ -423,8 +423,13 @@ class TestRunTrainingSequentialBoards:
 
         events = []
 
-        def fake_prepare(board_df, features, float_shares_map=None,
-                         cross_sectional_rank=False, registry=None):
+        def fake_prepare(
+            board_df,
+            features,
+            float_shares_map=None,
+            cross_sectional_rank=False,
+            registry=None,
+        ):
             events.append(("prepare", board_df["board"].iloc[0]))
             return board_df.copy()
 
@@ -434,9 +439,7 @@ class TestRunTrainingSequentialBoards:
 
         def fake_weekly(self, panels, feature_cols_by_board, tag, resume=False):
             events.append(("train", next(iter(panels))))
-            assert len(panels) == 1, (
-                "每板块应单独训练: 不同时持有两板块增强帧"
-            )
+            assert len(panels) == 1, "每板块应单独训练: 不同时持有两板块增强帧"
             board = next(iter(panels))
             return {
                 board: {

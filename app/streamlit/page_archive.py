@@ -334,8 +334,7 @@ def _render_module_perf() -> None:
             (delivered["date"] >= w_start) & (delivered["date"] <= w_end)
         ]
         st.caption(
-            f"评估窗口: {w_start} ~ {w_end} "
-            f"(共 {delivered['date'].nunique()} 个选股日)"
+            f"评估窗口: {w_start} ~ {w_end} (共 {delivered['date'].nunique()} 个选股日)"
         )
     else:
         st.caption(
@@ -365,9 +364,7 @@ def _render_module_perf() -> None:
     out = pd.DataFrame(rows)[
         ["horizon", "n", "hit_rate", "mean", "median", "p10", "p90"]
     ]
-    out["horizon"] = out["horizon"].map(
-        {"3d": "T+3", "5d": "T+5", "10d": "T+10"}
-    )
+    out["horizon"] = out["horizon"].map({"3d": "T+3", "5d": "T+5", "10d": "T+10"})
     out["hit_rate"] = out["hit_rate"].map(lambda v: f"{v:.1%}")
     for c in ("mean", "median", "p10", "p90"):
         out[c] = out[c].map(lambda v: f"{v:+.2%}")

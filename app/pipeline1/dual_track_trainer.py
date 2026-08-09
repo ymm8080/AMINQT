@@ -712,7 +712,9 @@ class DualTrackTrainer:
             "models": trained["models"],
             "calibrator": trained["calibrator"],
         }
-        for extra in (  # 多视界校准器 + E1/E2/排序 (quantile 3d/5d 必须落盘, gate3 用其中位数)
+        for (
+            extra
+        ) in (  # 多视界校准器 + E1/E2/排序 (quantile 3d/5d 必须落盘, gate3 用其中位数)
             "calibrators",
             "quantile_models_3d",
             "quantile_models_5d",

@@ -247,11 +247,7 @@ def _row_active(row, gate: dict) -> bool:
     2026-08-09: 共现股 systems="fusion+sniper" 同样算任一系统保留 (原漏判 → 共现股被
     误标 未过, 已修)."""
     sys = str(row["systems"])
-    combos = (
-        ("sniper", "fusion")
-        if sys in ("", "both", "fusion+sniper")
-        else (sys,)
-    )
+    combos = ("sniper", "fusion") if sys in ("", "both", "fusion+sniper") else (sys,)
     return any(gate.get((row["board"], s), {}).get("active", False) for s in combos)
 
 
@@ -316,14 +312,10 @@ def fmt_regime(gate: dict) -> list[str]:
             f"未过门组合个股已标注 过门=未过"
         )
         fail = [
-            (b, s)
-            for (b, s), g in gate.items()
-            if g and g["per"] and not g["active"]
+            (b, s) for (b, s), g in gate.items() if g and g["per"] and not g["active"]
         ]
         if fail:
-            btext = "、".join(
-                sorted({BOARD_LABEL.get(b, b) for b, _ in fail})
-            )
+            btext = "、".join(sorted({BOARD_LABEL.get(b, b) for b, _ in fail}))
             lines.append(
                 f"  ⚠ 今日制度门 {cfg['primary_horizon']} 未过: "
                 f"{', '.join(f'{b}/{s}' for b, s in fail)} "
@@ -594,7 +586,9 @@ def _c2c_latest(panel: dict, board: str, h: str, last) -> pd.Series:
     # _panel_per_stock 的帧不含 board 列 → 补上 (该帧本就是单板块, 赋常量 board 正确)
     work = fr[["symbol", "date", "score", f"label_pm_{h}_net"]].copy()
     work["board"] = board
-    m = calibrate_mag10d(work, target_col=f"label_pm_{h}_net", label_horizon=int(h[:-1]))
+    m = calibrate_mag10d(
+        work, target_col=f"label_pm_{h}_net", label_horizon=int(h[:-1])
+    )
     if m.empty:
         return pd.Series(dtype=float)
     row = m[m["date"] == last]

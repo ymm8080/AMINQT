@@ -82,6 +82,8 @@ def stock_names() -> dict[str, str]:
     except Exception:
         _STOCK_NAMES_CACHE = dict(DEMO_NAMES)
     return _STOCK_NAMES_CACHE
+
+
 DEMO_SECTOR_BASE_INDEX: dict[str, float] = {
     "白酒": 1.0,
     "电池": 1.0,
