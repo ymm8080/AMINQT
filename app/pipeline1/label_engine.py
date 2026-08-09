@@ -22,11 +22,12 @@ from app.core.config_loader import load_config
 _LABELS_CFG = load_config("training_config").get("labels", {})
 
 LABEL_HORIZONS = (1, 2, 3, 5, 10)
-# 评估/排序跨视界权重 (用户 2026-08-02 裁决: 预测 1/2/3/5d 收益+概率, 权重 1:0/2:0.45/3:0.35/5:0.2;
-# 2026-08-07 加 10d 视界权重 0.10 — 排名键已改纯 10d 幅度, 综合分仅作准入).
-# 1d 权重=0 — T+1 制度买入当日不可卖, t+1 收益不可执行, 不贡献清单排序; 3d 历史预测力最强.
+# 评估/排序跨视界权重 (用户 2026-08-08 裁决: 弃 2d 权重, 3d 相对 5d 最小化;
+# 排名键=纯 10d 幅度 (d10-c2c 定案), 综合分仅作准入).
+# 1d 权重=0 — T+1 制度买入当日不可卖, t+1 收益不可执行, 不贡献清单排序.
+# 10d=0.50 最高 — 生产资金窗口 (main eval window). 5d=0.40 次之. 3d=0.10 最小化.
 # 修改此字典即全局生效 (validate_oos 加权 IC + predictor/list_generator 综合分).
-LABEL_WEIGHTS = {1: 0.0, 2: 0.45, 3: 0.35, 5: 0.2, 10: 0.10}
+LABEL_WEIGHTS = {1: 0.0, 2: 0.0, 3: 0.10, 5: 0.40, 10: 0.50}
 # 阈值来自 config/training_config.yaml labels 段 (铁律: 阈值入 config, 不写死代码)
 CLS_THRESHOLD = float(_LABELS_CFG.get("cls_threshold", 0.005))  # +0.5% 覆盖双边成本 (佣金万2.5x2 + 印花税0.05% + 滑点0.05% ≈ 0.13%, 留安全垫)
 MASK_RECENT_DAYS = int(_LABELS_CFG.get("mask_recent_days", 6))  # 近端标签未成熟掩码 (交易日)

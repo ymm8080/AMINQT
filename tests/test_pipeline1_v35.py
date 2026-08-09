@@ -1027,10 +1027,20 @@ class TestListGenerator:
     def test_holding_bonus(self):
         """向后兼容: 无 holding_day 列时, is_in_yesterday_list=1 视为 day1 (weight=1.0)."""
         cands = make_candidates(n=2, seed=3)
-        cands.loc[:, ["pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d"]] = (
-            0.02
-        )
-        cands.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d"]] = 0.5
+        # 新 COMPOUND_W 含 10d → 10d 也设平, 保证两票 base 分相等, 分差仅来自 bonus
+        cands.loc[
+            :,
+            [
+                "pred_ret_1d",
+                "pred_ret_2d",
+                "pred_ret_3d",
+                "pred_ret_5d",
+                "pred_ret_10d",
+            ],
+        ] = 0.02
+        cands.loc[
+            :, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d", "prob_up_10d"]
+        ] = 0.5
         cands["is_in_yesterday_list"] = [1, 0]
         out = ListGenerator(**GATE_OFF).emit(cands)
         # 昨日在清单内的票 +0.2 加成 → 排第一, 分差 ≈ 0.2
@@ -1042,10 +1052,21 @@ class TestListGenerator:
     def test_holding_bonus_decay_b3(self):
         """B3: Holding Bonus 按持仓天数衰减 day1=1.0/day2=0.5/day3=0.0."""
         cands = make_candidates(n=3, seed=3)
-        cands.loc[:, ["pred_ret_1d", "pred_ret_2d", "pred_ret_3d", "pred_ret_5d"]] = (
-            0.02
-        )
-        cands.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d"]] = 0.5
+        # 新 COMPOUND_W 含 10d (权重最高), 必须连 10d 一起设平 → 三票 base 分等,
+        # 只让 holding bonus (0.2/0.1/0.0) 产生差异
+        cands.loc[
+            :,
+            [
+                "pred_ret_1d",
+                "pred_ret_2d",
+                "pred_ret_3d",
+                "pred_ret_5d",
+                "pred_ret_10d",
+            ],
+        ] = 0.02
+        cands.loc[
+            :, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d", "prob_up_10d"]
+        ] = 0.5
         cands["is_in_yesterday_list"] = [1, 1, 1]
         cands["holding_day"] = [1, 2, 3]  # day1/day2/day3
         gen = ListGenerator(**GATE_OFF)
@@ -1064,11 +1085,15 @@ class TestListGenerator:
         gen = ListGenerator()
         # 第一次 emit: 单日均值 = 滚动均值 (仅1天)
         c1 = make_candidates(n=5, seed=1)
-        c1.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d"]] = 0.50
+        c1.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d", "prob_up_10d"]] = (
+            0.50
+        )
         gen.emit(c1)
         # 第二次 emit: 不同均值, base_rate 应为前2天平均
         c2 = make_candidates(n=5, seed=2)
-        c2.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d"]] = 0.60
+        c2.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d", "prob_up_10d"]] = (
+            0.60
+        )
         df2 = gen.compute_scores(c2)
         # 20日滚动 = (0.50 + 0.60) / 2 = 0.55
         assert df2["base_rate"].iloc[0] == pytest.approx(0.55, abs=0.01)
@@ -1089,20 +1114,29 @@ class TestListGenerator:
         assert "GEM" in boards_in_list
 
     def test_compound_prob_weighting(self):
-        """多视界加权概率: compound_prob = w2*p2 + w3*p3 + w5*p5 (t+1 权重=0)."""
+        """多视界加权概率: compound_prob = w3*p3 + w5*p5 + w10*p10 (1d/2d 权重=0)."""
         n = 3
         cands = make_candidates(n=n, seed=7)
-        cands.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d"]] = [
-            [0.5, 0.5, 0.5, 0.5],
-            [0.4, 0.6, 0.7, 0.8],
-            [0.3, 0.2, 0.9, 1.0],
+        cands.loc[
+            :,
+            [
+                "prob_up",
+                "prob_up_2d",
+                "prob_up_3d",
+                "prob_up_5d",
+                "prob_up_10d",
+            ],
+        ] = [
+            [0.5, 0.5, 0.5, 0.5, 0.5],
+            [0.4, 0.6, 0.7, 0.8, 0.9],
+            [0.3, 0.2, 0.9, 1.0, 0.6],
         ]
         scored = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0).compute_scores(cands)
         cp = scored["compound_prob"]
-        w2, w3, w5 = 0.45, 0.35, 0.2
+        w3, w5, w10 = 0.10, 0.40, 0.50
         assert cp.iloc[0] == pytest.approx(0.5)
-        assert cp.iloc[1] == pytest.approx(w2 * 0.6 + w3 * 0.7 + w5 * 0.8)
-        assert cp.iloc[2] == pytest.approx(w2 * 0.2 + w3 * 0.9 + w5 * 1.0)
+        assert cp.iloc[1] == pytest.approx(w3 * 0.7 + w5 * 0.8 + w10 * 0.9)
+        assert cp.iloc[2] == pytest.approx(w3 * 0.9 + w5 * 1.0 + w10 * 0.6)
 
     def test_compound_prob_fallback_when_columns_missing(self):
         """旧 bundle 缺 2/3/5d 概率列 → compound_prob 精确回退 prob_up."""
