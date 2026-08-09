@@ -1340,6 +1340,27 @@ def test_apply_per_stock_zero_close_row_preserved():
     assert (out.loc[out["symbol"] == "300750", "zero_flag"] == 0).all()
 
 
+def test_apply_per_stock_nan_int_dtype_no_crash():
+    """跨股票混合填充: 首股 int 列, 后续股缺值 NaN → 不得 IntCastingNaNError.
+
+    dtype 恢复只对全有限列生效; 含 NaN 的列保持 float 保留缺失
+    (LightGBM 原生处理, 非静默丢弃) — 回归: audit 提交 08875218 后重训崩溃.
+    """
+    df = make_panel(symbols=("600519", "300750"), days=5)
+
+    def per_stock(g):
+        g = g.sort_values("date")
+        if g["symbol"].iloc[0] == "600519":
+            g["exp_days"] = np.arange(len(g), dtype="int64")
+        else:
+            g["exp_days"] = np.full(len(g), np.nan)
+        return g
+
+    out = _apply_per_stock(df, per_stock)
+    assert out.loc[out["symbol"] == "300750", "exp_days"].isna().all()
+    assert pd.api.types.is_float_dtype(out["exp_days"])
+
+
 def test_apply_per_stock_row_dropping_fn_trim():
     """fn 过滤行 (非保行) 时, 输出与旧语义一致 (尾部裁剪)."""
     df = make_panel(symbols=("600519", "300750"), days=20)
