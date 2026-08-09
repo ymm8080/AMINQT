@@ -307,16 +307,18 @@ class TestHorizonWeights:
     def test_horizons_and_weights_cover_1_2_3_5_10(self):
         from app.pipeline1.label_engine import LABEL_HORIZONS, LABEL_WEIGHTS
 
-        # 2026-08-07 加 10d 视界 (排名键): sum=1.1 (权重未归一化, composite/IC 各自按实际权重和归一)
+        # 2026-08-08 用户裁决: 弃 2d 权重 (0), 3d 最小化 vs 5d, 10d 最高 (资金窗口)
         assert LABEL_HORIZONS == (1, 2, 3, 5, 10)
         assert set(LABEL_WEIGHTS) == {1, 2, 3, 5, 10}
-        assert sum(LABEL_WEIGHTS.values()) == pytest.approx(1.1)
+        assert LABEL_WEIGHTS[2] == 0.0  # 2d 权重剔除
+        assert LABEL_WEIGHTS[3] < LABEL_WEIGHTS[5]  # 3d 相对 5d 最小化
+        assert sum(LABEL_WEIGHTS.values()) == pytest.approx(1.0)
 
     def test_component_weights_single_source(self):
         from app.pipeline1.label_engine import LABEL_WEIGHTS
         from app.pipeline1.list_generator import COMPOUND_W
 
-        assert COMPOUND_W == tuple(LABEL_WEIGHTS[k] for k in (1, 2, 3, 5))
+        assert COMPOUND_W == tuple(LABEL_WEIGHTS[k] for k in (1, 2, 3, 5, 10))
 
     def test_validate_oos_weighted_ic_formula(self, tmp_path):
         from app.pipeline1.label_engine import LABEL_WEIGHTS
