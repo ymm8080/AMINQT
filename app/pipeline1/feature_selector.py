@@ -306,13 +306,17 @@ BRUTE_FAMILIES = [
 # ──────────────────────────────────────────────────────────
 
 
-def dedup_l2(feats, df, threshold=0.7):
+def dedup_l2(feats, df, threshold=0.7, order=None):
     """Correlation dedup within same base column group.
 
     For brute-force features, base column is prefix before '_brute_'.
     For curated features, base column is dim prefix or raw col name.
     Keeps features greedily: sort by variance descending, drop if
     |r| > threshold with any already-kept feature in the same group.
+
+    order: pd.Series indexed by feature → keep score (e.g. mean|IC|).  When
+    given, each group is sorted by |order| descending instead of variance
+    (predictive-priority dedup).  Default None → 原方差降序行为不变.
     """
     groups = {}
     for c in feats:
@@ -341,10 +345,13 @@ def dedup_l2(feats, df, threshold=0.7):
         sample = df[avail].sample(n_sample, random_state=42)
         corr = sample.corr(method="spearman").abs()
 
-        # Sort by variance (proxy for importance), keep if |r| < threshold
-        vars_ = sample.var().sort_values(ascending=False)
+        # Sort by variance (proxy for importance) or by order score, keep if |r| < threshold
+        if order is not None:
+            ordered = sorted(avail, key=lambda c: abs(order.get(c, 0.0)), reverse=True)
+        else:
+            vars_ = sample.var().sort_values(ascending=False)
+            ordered = [c for c in vars_.index if c in avail]
         dropped = set()
-        ordered = [c for c in vars_.index if c in avail]
         for i, ci in enumerate(ordered):
             if ci in dropped:
                 continue
@@ -360,6 +367,51 @@ def dedup_l2(feats, df, threshold=0.7):
         "DedupL2: %d -> %d features (|r|>%.2f)", len(feats), len(kept), threshold
     )
     return kept
+
+
+def feature_mean_abs_ic(
+    feat_frame: pd.DataFrame,
+    date_ser: pd.Series,
+    label_ser: pd.Series,
+) -> dict[str, float]:
+    """Per-feature 日度截面 |Spearman IC| 时间均值 (内存有界, 全量安全).
+
+    用于 MAIN IC 排序 dedup (dedup_key="ic"): 在给定日期子集上, 对每个特征
+    计算每日截面 Spearman IC 后取绝对值的时间均值. NaN 安全 (组内 rank + corrwith,
+    与 light 测试验证口径一致). 只评估特征质量, 不参与特征构造, 无 look-ahead.
+    float32 输入保持 float32 (仅 rank 输出为 float64). 逐日 corrwith 用
+    按日排序边界切片, 免去每日全表布尔扫描.
+    """
+    feat_cols = list(feat_frame.columns)
+    if not feat_cols:
+        return {}
+    d = feat_frame.copy()
+    # reindex 按 index 标签对齐: feat_frame 可能来自 brute family (symbol-major
+    # 顺序, 是 df index 的排列), 而 date/label 是 df 原始顺序, 位置对齐会错配标签.
+    d["__lab"] = label_ser.reindex(d.index).to_numpy()
+    d["__date"] = date_ser.reindex(d.index).to_numpy()
+    # 组内 rank (NaN 保持 NaN) → Spearman = rank 的 Pearson.
+    # rank 输出 float64 → 立即降 float32 (rank∈[0,1], 相关精度足够), 防大族
+    # (rolling_max ~1260 列) 生成 12GB+ float64 秩矩阵触 commit 上限.
+    ranked = (
+        d.groupby("__date", observed=True)[feat_cols + ["__lab"]]
+        .rank(pct=True)
+        .astype(np.float32)
+    )
+    dts = d["__date"].to_numpy()
+    order = np.argsort(dts, kind="stable")
+    ranked = ranked.iloc[order].reset_index(drop=True)
+    dto = dts[order]
+    bounds = np.flatnonzero(np.diff(dto) != 0) + 1
+    segs = np.concatenate(([0], bounds, [len(dto)]))
+    acc: dict[str, list[float]] = {c: [] for c in feat_cols}
+    for s, e in zip(segs[:-1], segs[1:]):
+        block = ranked.iloc[s:e]
+        corr = block[feat_cols].corrwith(block["__lab"])
+        for c, v in corr.items():
+            if not pd.isna(v):
+                acc[c].append(float(abs(v)))
+    return {c: float(np.nanmean(v)) for c, v in acc.items() if v}
 
 
 # ──────────────────────────────────────────────────────────
@@ -1068,11 +1120,32 @@ class FeatureSelector:
         n_sample = min(5000, len(df))
         sample_pos = df.sample(n_sample, random_state=42).index
 
+        # IC 排序 dedup (dedup_key="ic", 默认关): 组内按 |IC| 降序 greedy keep,
+        # 而非方差. IC 只在 ic_cut_date 之前的行上评估 (诚实, 防 OOS label 泄漏进选择).
+        need_ic = cfg.get("dedup_key") == "ic"
+        ic_label = cfg.get("ic_label", "label_pm_5d_net")
+        ic_cut = cfg.get("ic_cut_date")
+        if need_ic:
+            if ic_cut is not None:
+                pre_mask = df["date"] < pd.Timestamp(ic_cut)
+            else:
+                pre_mask = pd.Series(True, index=df.index)
+            ic_date = df.loc[pre_mask, "date"]
+            ic_lab = df.loc[pre_mask, ic_label]
+        else:
+            pre_mask = ic_date = ic_lab = None
+        ic_accum: dict[str, float] = {}
+
         cand_nan: dict[str, float] = {}
         sample_cols: dict[str, np.ndarray] = {}
         for c in base_numeric:
             cand_nan[c] = float(df[c].isna().mean())
             sample_cols[c] = df.loc[sample_pos, c].to_numpy()
+        if need_ic and base_numeric:
+            # 一次批量评 IC (避免 90 次单独 groupby rank)
+            ic_accum.update(
+                feature_mean_abs_ic(df.loc[pre_mask, base_numeric], ic_date, ic_lab)
+            )
         for fam in BRUTE_FAMILIES:
             new = generator.generate_family(df, fam, raw_cols=raw_cols, dtype="float32")
             for c in new.columns:
@@ -1080,11 +1153,14 @@ class FeatureSelector:
                     continue
                 cand_nan[c] = float(new[c].isna().mean())
                 sample_cols[c] = new.loc[sample_pos, c].to_numpy()
+            if need_ic:
+                ic_accum.update(feature_mean_abs_ic(new.loc[pre_mask], ic_date, ic_lab))
             del new
 
         valid = [c for c, rate in cand_nan.items() if rate < threshold]
         sample_frame = pd.DataFrame(sample_cols, index=sample_pos)
-        selected = dedup_l2(valid, sample_frame, dedup_thr)
+        order = pd.Series({c: ic_accum.get(c, 0.0) for c in valid}) if need_ic else None
+        selected = dedup_l2(valid, sample_frame, dedup_thr, order=order)
         return selected
 
     def _run_gate_d(self, df, board, cfg):

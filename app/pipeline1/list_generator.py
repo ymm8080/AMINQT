@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 SCHEMA_VERSION = "1.4"
 TOP_N = 15
 MAX_PER_INDUSTRY = 4
-COMPOUND_W = tuple(LABEL_WEIGHTS[k] for k in (1, 2, 3, 5))  # 1d/2d/3d/5d
+COMPOUND_W = tuple(LABEL_WEIGHTS[k] for k in (1, 2, 3, 5, 10))  # 1d/2d/3d/5d/10d
 HOLDING_BONUS = 0.2
 # B3: Holding Bonus 按持仓天数衰减 day1=1.0/day2=0.5/day3=0.0
 HOLDING_DAY_WEIGHTS = {0: 0.0, 1: 1.0, 2: 0.5, 3: 0.0}
@@ -139,28 +139,42 @@ class ListGenerator:
 
     # ---------------- 排序分 ----------------
     def compute_scores(self, df: pd.DataFrame) -> pd.DataFrame:
-        """compound_ret = 0.5*pred_1d + 0.35*pred_3d + 0.15*pred_5d
+        """compound_ret = LABEL_WEIGHTS 加权 (1/2/3/5/10d; 弃 2d, 10d 权重最高).
         [V3.7] rank_score 存在时: score = rank_score × (1 + 0.3·tanh(compound×100))
                × (prob_up / base_rate); 否则回退 V3.5 公式 compound_ret × prob_adjust.
         [E2] 痛苦惩罚: score × (1 - 0.5×pain_prob)  (pain_prob=0.3 → ×0.85)
         [公告] score × (1 + 0.3×announce_score)  (安全网 #17)
         adjusted = score + 0.2 * holding_day_weight * is_in_yesterday_list  (B3 衰减)"""
-        w1, w2, w3, w5 = COMPOUND_W
+        w1, w2, w3, w5, w10 = COMPOUND_W
         df = df.copy()
-        df["compound_ret"] = (
-            w1 * df["pred_ret_1d"]
-            + w2 * df["pred_ret_2d"]
-            + w3 * df["pred_ret_3d"]
-            + w5 * df["pred_ret_5d"]
-        )
-        # [多视界] 加权概率 (t+1 权重=0; 旧 bundle 缺 2/3/5d 概率列时精确回退 prob_up)
-        prob_cols = [f"prob_up_{k}d" for k in (2, 3, 5)]
-        if all(c in df.columns for c in prob_cols):
+        # 只对"存在且有有效值"的视界加权并按权重和归一 (旧 bundle 缺 10d 时精确回退,
+        # 与 predictor.composite_score 同款 present-weights 模式, 避免 NaN 污染 compound_ret).
+        ret_cols = {
+            1: "pred_ret_1d",
+            2: "pred_ret_2d",
+            3: "pred_ret_3d",
+            5: "pred_ret_5d",
+            10: "pred_ret_10d",
+        }
+        w_map = {1: w1, 2: w2, 3: w3, 5: w5, 10: w10}
+        present = {
+            k: c for k, c in ret_cols.items() if c in df.columns and df[c].notna().any()
+        }
+        tw = sum(w_map[k] for k in present)
+        if tw > 1e-12:
+            df["compound_ret"] = sum(w_map[k] * df[c] for k, c in present.items()) / tw
+        else:
+            df["compound_ret"] = 0.0
+        # [多视界] 加权概率 (t+1 权重=0; 旧 bundle 缺 2/3/5/10d 概率列/有效值 → 精确回退 prob_up)
+        prob_cols = [f"prob_up_{k}d" for k in (2, 3, 5, 10)]
+        p_present = [c for c in prob_cols if c in df.columns and df[c].notna().any()]
+        if len(p_present) == len(prob_cols):
             df["compound_prob"] = (
                 w1 * df["prob_up"]
                 + w2 * df["prob_up_2d"]
                 + w3 * df["prob_up_3d"]
                 + w5 * df["prob_up_5d"]
+                + w10 * df["prob_up_10d"]
             )
         else:
             df["compound_prob"] = df["prob_up"]
@@ -311,8 +325,8 @@ class ListGenerator:
         新闸 (全部基于当日预测数据计算):
           1. prob_up > base_rate (B4 20日滚动基准率; bear 按 entry_prob_bear/
              entry_prob 参数比率收紧, 不引入新常数)
-          2. compound_ret (1d/3d/5d 净预测按 COMPOUND_W 加权) > 0 — 净预期为正,
-             成本已在训练标签口径内扣除
+          2. compound_ret (1/2/3/5/10d 净预测按 COMPOUND_W 加权, 弃 2d/10d 最高) > 0 —
+             净预期为正, 成本已在训练标签口径内扣除
           3. pred_q50_2d/3d/5d > 0 (E1 2d/3d/5d 可执行视界中位数均为正;
              2026-08-05 用户定案: 用 2d/3d/5d 中位数替代 1d, 1d 不可执行易误杀;
              旧 bundle 无 2d/3d/5d 列时回退 1d pred_q50)
@@ -345,13 +359,27 @@ class ListGenerator:
             if "compound_ret" in df.columns:
                 compound = df["compound_ret"]
             else:
-                w1, w2, w3, w5 = COMPOUND_W
-                compound = (
-                    w1 * df["pred_ret_1d"]
-                    + w2 * df["pred_ret_2d"]
-                    + w3 * df["pred_ret_3d"]
-                    + w5 * df["pred_ret_5d"]
-                )
+                # present-weights 回退 (与 compute_scores 同款): 旧 bundle 缺 10d
+                # 或其他视界列时, 只对存在且有有效值的视界加权并按权重和归一, 防 KeyError.
+                w1, w2, w3, w5, w10 = COMPOUND_W
+                ret_cols = {
+                    1: "pred_ret_1d",
+                    2: "pred_ret_2d",
+                    3: "pred_ret_3d",
+                    5: "pred_ret_5d",
+                    10: "pred_ret_10d",
+                }
+                w_map = {1: w1, 2: w2, 3: w3, 5: w5, 10: w10}
+                present = {
+                    k: c
+                    for k, c in ret_cols.items()
+                    if c in df.columns and df[c].notna().any()
+                }
+                tw = sum(w_map[k] for k in present)
+                if tw > 1e-12:
+                    compound = sum(w_map[k] * df[c] for k, c in present.items()) / tw
+                else:
+                    compound = pd.Series(0.0, index=df.index)
             ok &= compound > 0
             # 闸3 (2026-08-05): 2d/3d/5d 可执行视界中位数均须为正; 回退 1d pred_q50 (旧 bundle)
             if all(
