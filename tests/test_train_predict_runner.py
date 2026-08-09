@@ -172,7 +172,13 @@ class TestEnrichPanel:
 
 # ---------------- assemble_panel ----------------
 class TestAssemblePanel:
-    def test_backfill_enrich_cache(self, tmp_path):
+    def test_backfill_enrich_cache(self, tmp_path, monkeypatch):
+        # Mock enrich_alt_data to avoid network calls (AKShare/tushare) hanging in CI
+        from app.pipeline1 import panel_builder
+
+        monkeypatch.setattr(
+            panel_builder, "enrich_alt_data", lambda panel, *a, **kw: panel
+        )
         rng = np.random.default_rng(7)
         dates = pd.bdate_range("2025-01-01", periods=30)
 
