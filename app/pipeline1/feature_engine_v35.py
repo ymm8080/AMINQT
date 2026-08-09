@@ -100,10 +100,12 @@ def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
     """
     out = None
     pos = 0
+    ref_dtypes = None
     for _, g in df.groupby("symbol"):
         part = fn(g.copy())
         n = len(part)
         if out is None:
+            ref_dtypes = part.dtypes.to_dict()
             out = pd.DataFrame(index=range(len(df)), columns=part.columns)
             for col in part.columns:
                 out[col] = _empty_like(part[col], len(df))
@@ -114,7 +116,14 @@ def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
             )
         out.iloc[pos : pos + n] = part.reset_index(drop=True)
         pos += n
-    return out.iloc[:pos].sort_values(["symbol", "date"]).reset_index(drop=True)
+    result = out.iloc[:pos].sort_values(["symbol", "date"]).reset_index(drop=True)
+    # Ensure dtypes match pd.concat semantics (cross-platform consistency):
+    # iloc assignment can alter dtypes on some pandas/platform combinations.
+    if ref_dtypes is not None:
+        for col, dtype in ref_dtypes.items():
+            if result[col].dtype != dtype:
+                result[col] = result[col].astype(dtype)
+    return result
 
 
 def _safe_divide(numerator, denominator) -> pd.Series:

@@ -258,8 +258,9 @@ class TestWriteSnapshot:
         ov._write_snapshot(self._snap(), tmp_path, module="na")
         assert (tmp_path / "overlay_track_20260804.csv").exists()
 
-    def test_worm_skip_on_existing(self, tmp_path, capsys):
+    def test_worm_skip_on_existing(self, tmp_path, caplog):
         """同名文件已存在 → 不覆盖不追加, 内容保持不变."""
+        caplog.set_level("WARNING", logger="app.pipeline_parallel.legacy_overlay")
         ov._write_snapshot(self._snap(), tmp_path, module="v1")
         before = (tmp_path / "overlay_track_20260804__v1.csv").read_text(
             encoding="utf-8"
@@ -270,7 +271,7 @@ class TestWriteSnapshot:
         )
         assert before == after
         assert len(list(tmp_path.glob("overlay_track_*.csv"))) == 1
-        assert "跳过覆盖" in capsys.readouterr().out
+        assert "跳过覆盖" in caplog.text
 
 
 class TestLegacyPredict:
