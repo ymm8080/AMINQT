@@ -91,6 +91,7 @@ def predict_dual(trade_date: str) -> pd.DataFrame | None:
 
     # Limit to 300 stocks for speed
     if dual_panel["symbol"].nunique() > 300:
+        np.random.seed(42)  # 抽样可复现 (量化铁律)
         stocks = np.random.choice(
             dual_panel["symbol"].unique(), size=300, replace=False
         )

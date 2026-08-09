@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from app.core.config_loader import load_config
+from app.core.data_loader import validate_ohlcv
 from app.core.universe_manager import name_is_st
 from app.pipeline1.ingest_scan import apply_ingest_scan
 from config import settings
@@ -188,6 +189,14 @@ REQUIRED_COLUMNS = [
 
 class DataSupplyError(Exception):
     """数据拉取失败 (触发告警 + 降级)."""
+
+
+def _assert_ohlcv(df: pd.DataFrame, ctx: str) -> None:
+    """OHLCV 校验 (量化铁律): 异常数据不得静默丢弃; 失败以 DataSupplyError 上抛."""
+    try:
+        validate_ohlcv(df)
+    except ValueError as exc:
+        raise DataSupplyError(f"{ctx}: {exc}") from exc
 
 
 class DataSupplyChain:
@@ -749,7 +758,9 @@ class DataSupplyChain:
         """
         path = self._cache_path(trade_date)
         if not refresh and os.path.exists(path):
-            return pd.read_parquet(path)
+            df = pd.read_parquet(path)
+            _assert_ohlcv(df, f"fetch_daily(cache) {trade_date}")
+            return df
         try:
             df = self._fetcher(trade_date)
         except Exception as exc:
@@ -758,6 +769,7 @@ class DataSupplyChain:
         missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
         if missing:
             raise DataSupplyError(f"fetch_daily {trade_date}: 缺关键字段 {missing}")
+        _assert_ohlcv(df, f"fetch_daily {trade_date}")
         df.to_parquet(path, index=False)
         return df
 
@@ -767,12 +779,15 @@ class DataSupplyChain:
         """拉取个股历史日线 (hfq+raw)."""
         path = os.path.join(self.cache_dir, f"hist_{symbol}_{start}_{end}.parquet")
         if not refresh and os.path.exists(path):
-            return pd.read_parquet(path)
+            df = pd.read_parquet(path)
+            _assert_ohlcv(df, f"fetch_history(cache) {symbol}")
+            return df
         try:
             df = self._fetcher_hist(symbol, start, end)
         except Exception as exc:
             logger.error("历史数据拉取失败 %s: %s", symbol, exc)
             raise DataSupplyError(f"fetch_history {symbol}: {exc}") from exc
+        _assert_ohlcv(df, f"fetch_history {symbol}")
         df.to_parquet(path, index=False)
         return df
 

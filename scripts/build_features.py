@@ -165,6 +165,7 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
         panel = panel[panel["date"] >= cutoff]
     # else: 3Y / ALL — use full panel
 
+    np.random.seed(42)  # 抽样可复现 (量化铁律)
     if board == "main":
         # Full MAIN board (60/00/002/601/603/605), not just CSI 300
         board_panel = panel[~panel["board"].isin(["GEM", "STAR"])].copy()
