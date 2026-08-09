@@ -121,7 +121,8 @@ if __name__ == "__main__":
 
     logger.info("最近3日指标值：")
     logger.info(
-        "\n" + df[["time", "close", "主力轨迹", "MAZL", "VAR5", "VAR51"]]
+        "\n"
+        + df[["time", "close", "主力轨迹", "MAZL", "VAR5", "VAR51"]]
         .tail(3)
         .round(3)
         .to_string(index=False)

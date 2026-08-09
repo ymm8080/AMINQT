@@ -146,7 +146,9 @@ def main() -> int:
         logger.info(f"  {fn}")
     w = out["window"]
     for lab, ow in w["oos"].items():
-        logger.info(f"OOS[{lab}]: {ow['start']} → {ow['end']} ({ow['trading_days']} 交易日)")
+        logger.info(
+            f"OOS[{lab}]: {ow['start']} → {ow['end']} ({ow['trading_days']} 交易日)"
+        )
     for b, bd in out["boards"].items():
         logger.info(
             f"[板块 {b}] {bd['label']} | 行 {bd['rows']:,} "
