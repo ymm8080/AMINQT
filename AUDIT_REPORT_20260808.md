@@ -1,0 +1,71 @@
+# AMINQT 深度审计报告 — 2026-08-08
+
+> 审计方式: 5 路并行子智能体 (前瞻偏差 / 资金数值铁律 / 数据配置合规 / 安全复验 / 测试代码质量) + 关键项人工读码复核
+> 基线: 对比 2026-08-07 AUDIT_REPORT.md 复验 + 首次深挖 ML 管道 (pipeline1 / pipeline_parallel / backtest)
+> 范围: 659 个 .py, ~140k 行, 869 tracked files
+
+---
+
+## 一、CRITICAL (3)
+
+**C1. 真实 Tushare token 已入 git 历史 — 旧报告"从未提交"结论错误**
+`AUDIT_REPORT.md:34` 曾明文写入真实 token (`86237a96` 提交引入, 仍存于 `5a47a966`/`86237a96`/`7608b0ef` 历史)。
+`.env` 现已清空 (`TUSHARE_TOKEN=` 空值) 不缓解历史泄露。
+→ 已办: 报告中 token 已打码 (2026-08-08)。待办: **轮换 token** (Tushare 后台 regen) + 决定是否 purge 历史。
+
+**C2. 回测卖出口径"当日收盘裁决 + 当日开盘成交"未来泄漏 — 已修复**
+`app/pipeline1/backtest_v35.py` 默认 `exec_session="AM"` (:50):
+- 旧: 止损/移动止盈/概率衰减/到期四类退出用**当日** close/high 裁决, 却按**当日开盘**成交 (`_exec_sell_price` :126) → 先见收盘再回开盘逃顶, 系统性高估回测收益。
+- 新: 卖出裁决改用 **T-1 收盘** 信息, 当日开盘成交; 同步修掉 section 2 预算估值用当日收盘的同类泄漏 (等权仓位估值改用 T-1 收盘)。
+- 影响面: 生产链路 `frontier_routes` / `param_tuner` / `page_backtest` / `page_eval` 全走此引擎。
+- 验证: `test_backtest_tuner` + `test_end_to_end_v35` + `test_pipeline1_v35/v38/v38_appendix_de/rule_engine_v2/sell_signal` 全过; 新增回归测试 `test_am_exit_uses_t1_close_no_same_day_lookahead`。
+
+**C3. API 认证"代码层有、运行层关"**
+`app/main.py:27-78` X-API-Key 中间件已加, 但 `.env:21 AMINQT_API_KEY=` 为空 → 运行期认证实际禁用。
+`/api/frontier/pipeline/trigger`、`append-daily`、`/api/v1/execute` 仍可匿名调用 (本地绑定缓解)。
+→ 待办: 设 key 或明确只绑 localhost。
+
+## 二、HIGH (6)
+
+| # | 位置 | 问题 |
+|---|------|------|
+| H1 | `app/backtest/engine.py:503-506` | 持仓替换: 用当日收盘算盈亏决定替换, 替换卖出却按当日开盘成交 (乐观方向) |
+| H2 | `app/backtest/data_loader.py:160-173`, `app/pipeline1/data_supply.py`, `app/intraday/v51/data_5min.py:22-49` | OHLCV 校验孤岛: `validate_ohlcv` 只在 `app/core/data_loader.py` 自身用, 主数据链路无校验 (铁律"异常不得静默丢弃"未下沉) |
+| H3 | `scripts/build_features.py:173,184`, `train_predict_main.py:153,428`, `train_predict_dual.py:94` | `np.random.choice` 抽样本股无 seed → 训练样本不可复现 (LGBM 有 random_state=42, 入口抽样无) |
+| H4 | `mask_recent_days=6`(20+处), `CLS_THRESHOLD=0.005`(8处), `cleaning_pipeline.py:33-41` 涨跌停硬编码 0.10/0.20+"2020-08-24", `OOS_DAYS=250`(6处) | 硬编码阈值族应入 config |
+| H5 | `_daily_fetch.py:685-694` | V3 面板单文件就地原子覆盖, 无日期分片, 非严格 WORM |
+| H6 | `.gitignore` | 未覆盖 `predictions*.csv`/`result_*.json`/`_*.txt`; 已入库 `predictions_3y.csv`/`result_2026W31_*.json`/`pipeline1_result.txt`/`filtered_candidates.csv` |
+
+## 三、MEDIUM (选列)
+
+- M1 `app/backtest/engine.py:452-459` 跌停顺延用当日收盘判当日开盘 (保守方向, 不虚增收益)
+- M2 `app/pipeline_parallel/backtest.py:414-447` 慢牛回测 k=1 同日判退出违背 T+1; 止损 low 触发按 close 成交 (盘内乐观) [部分 GUESS]
+- M3 `intraday/v51/backtest_engine.py`、`backtest_v35`、`paper_trading.py:157` 资金用 float (Decimal 铁律仅覆盖实盘 `order_manager`/`executor_base`); `paper_trading.py:157` 价格=0 时除零→inf
+- M4 `feature_engine_v35.py:1056-1058` + `cleaning_pipeline.py:178` limit_pct 逐行推导, 全面板数百万行非向量化
+- M5 `app/utils/safe_load.py:63` 内层仍裸 `pickle.load` (可审计非防 RCE); scripts/ 7+ 脚本仍裸用 (不在生产链)
+- M6 死代码: `risk_overlays.py` 4 个零引用函数; 6 个根目录孤儿脚本 (`_gate_d.py`/`_build_features.py`/`_ic_eval_fast.py`/`_predict_today.py`/`_select_features_main.py`/`_main_list_gen.py`)
+- M7 潜在逻辑缺陷: `backtest_v35.py` `pos["high_hfq"]` 买入后从不更新 → "移动止盈"实际为"相对成本的回撤止盈", 未真正随高点移动 (待定案, 未改)
+
+## 四、亮点 (未坏)
+
+- 特征/标签/信号构造链路全干净: `feature_engine_v35`/`panel_builder`(merge_asof backward)/`label_engine`/`indicators`/`signals`/`scoring`/`data_5min` 均无未来函数
+- 三套回测成本 (佣金+滑点+印花税) 全计入; `engine.py` 用整数分记账规避 float 累积
+- 实盘链路 Decimal 正确 (`order_manager`/`executor_base`/`xt_executor`)
+- 1261 个测试 / 0 收集错误 / 8 个铁律模块全有测试 / 无空壳断言
+- 裸 `except:` 清零 (app/scripts 0 处); M1 lifespan / M2 CORS / M10 subprocess 白名单均已修
+- ruff 12 错 → 剩 1 错 (`config/__init__.py` UP009); 主数据链路 Parquet 全覆盖
+- 凭据管理: `.env` 未被 git 跟踪; web/ 前端无硬编码密钥; eval/exec 不在生产路径
+
+## 五、修复优先级
+
+| 优先级 | 事项 | 状态 |
+|---|---|---|
+| P0 | 轮换 Tushare token + 清 `AUDIT_REPORT.md:34` | 文件已打码, token 轮换待用户 |
+| P0 | 修 `backtest_v35` AM 卖出口径 (C2) | **已修 + 回归测试** |
+| P1 | 设 `AMINQT_API_KEY` 或锁 localhost | 待办 |
+| P1 | OHLCV 校验下沉主链路 (H2) | 待办 |
+| P1 | 训练脚本补 seed (H3) | 待办 |
+| P2 | 硬编码阈值进 config (H4) | 待办 |
+| P2 | V3 面板分区 (H5) + gitignore 补 rules/移除已入库结果 (H6) | 待办 |
+| P3 | 回测引擎 float→Decimal; limit_pct 向量化; 删死代码/孤儿脚本 | 待办 |
+| P3 | 评估 `engine.py` 替换路径与跌停顺延口径 (H1/M1) | 待办 |

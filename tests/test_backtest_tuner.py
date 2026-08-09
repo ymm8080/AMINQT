@@ -115,6 +115,59 @@ class TestBacktestProtocol:
         buys = result["trades"][result["trades"]["side"] == "buy"]
         assert not ((buys["date"] == d1) & (buys["symbol"] == "600519")).any()
 
+    def test_am_exit_uses_t1_close_no_same_day_lookahead(self):
+        """防未来函数铁律: 早盘口径卖出裁决用 T-1 收盘信息, 当日开盘成交.
+
+        当日收盘暴跌破止损时, 不得在当日开盘就"先知"逃顶 (旧行为会以当日开盘价卖出).
+        正确行为: 裁决基于 T-1 收盘, 卖出发生在暴跌次日开盘.
+        """
+        dates = list(pd.bdate_range("2025-01-01", periods=6))
+
+        def bar(d, o, h, lo, c, pc):
+            return {
+                "symbol": "600519",
+                "date": d,
+                "open": o,
+                "high": h,
+                "low": lo,
+                "close": c,
+                "pre_close": pc,
+                "board": "main",
+                "industry": "白酒",
+                "amount": 1e9,
+            }
+
+        panel = pd.DataFrame(
+            [
+                bar(dates[0], 100, 101, 99, 100, 100),
+                bar(dates[1], 100, 102, 99, 101, 100),  # T+1 买入日
+                bar(dates[2], 101, 103, 100, 102, 101),  # 正常日
+                bar(dates[3], 102, 103, 90, 90, 102),  # 开盘高位、收盘暴跌破止损
+                bar(dates[4], 90, 91, 89, 90, 90),
+                bar(dates[5], 90, 91, 89, 91, 90),
+            ]
+        )
+        lists = {
+            dates[0]: pd.DataFrame(
+                {
+                    "symbol": ["600519"],
+                    "score": [1.0],
+                    "prob_up": [0.9],
+                    "industry": ["白酒"],
+                }
+            )
+        }
+        proto = BacktestProtocol(
+            exec_session="AM", max_hold_days=10, hard_stop=-0.04, prob_exit=0.50
+        )
+        result = BacktestEngineV35(panel, proto).run(lists)
+        sells = result["trades"][result["trades"]["side"] == "sell"]
+        assert len(sells) == 1
+        # 旧(泄漏)行为: 当日收盘裁决后当日开盘卖出 → sell 落 dates[3] 开盘价≈102
+        # 新(正确)行为: T-1 收盘裁决, 卖出在 dates[4] 开盘 ≈90
+        assert sells.iloc[0]["date"] != dates[3]
+        assert not np.isclose(sells.iloc[0]["price"], 102, atol=0.1)
+
 
 class TestParamTuner:
     def test_grid_search_and_report(self, tmp_path):

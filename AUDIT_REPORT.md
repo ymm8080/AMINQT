@@ -31,7 +31,7 @@ AMINQT 是一个 A 股图形因子量化交易系统, 基于 K 线图形因子�
 #### C1. `.env` 文件包含真实 Tushare API Token
 
 - **文件**: `.env` 第 17 行
-- **问题**: `TUSHARE_TOKEN=ff1a00b005486505d1bdd87c72d63206d72f6a3ec0cdc062ec867a96`
+- **问题**: `TUSHARE_TOKEN=<REDACTED — 真实 token 已从本报告移除, 2026-08-08>`
 - **影响**: 任何获得文件系统访问权限的人可使用该 token 调用 Tushare API, 消耗积分或泄露数据
 - **缓解**: `.env` 已在 `.gitignore` 中, 且从未提交到 git 历史 (已验证)
 - **建议**:
