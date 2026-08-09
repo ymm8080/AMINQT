@@ -89,8 +89,9 @@ def _arm_daily(
     rows: pd.DataFrame,
     base_rate_ser: dict,
     gate_fn,
+    rank_key: str = "pred_10d",
 ) -> pd.DataFrame:
-    """逐日对 gate 通过集按 pred_ret_10d 取 TOP_N, 返回逐日清单度量."""
+    """逐日对 gate 通过集按 rank_key 取 TOP_N, 返回逐日清单度量."""
     recs = []
     for d, g in rows.groupby("date"):
         base = float(base_rate_ser.get(d, 0.5))
@@ -98,7 +99,7 @@ def _arm_daily(
         pool = g[ok]
         if len(pool) == 0:
             continue
-        top = pool.nlargest(TOP_N, "pred_10d")
+        top = pool.nlargest(TOP_N, rank_key)
         recs.append(
             {
                 "date": d,
@@ -251,6 +252,10 @@ def main() -> None:
         + NEW_W[5] * rows["pred_5d"]
         + NEW_W[10] * rows["pred_10d"]
     ) / sum(NEW_W.values())
+    # 排名键 (2026-08-09): 生产 NEW 权重在 {5d,10d} 上归一 → 加权 5d+10d 排名键.
+    rows["rank_w510"] = (
+        NEW_W[5] * rows["pred_5d"] + NEW_W[10] * rows["pred_10d"]
+    ) / (NEW_W[5] + NEW_W[10])
 
     # ADAPT: 逐日自适应权重 (walk-forward, 严格早于当日) = 各视界最近 adapt_w 交易日
     # 的逐日 Rank IC (pred vs 实得) 正值归一; 全非正 → 回退 NEW 固定权重.
@@ -317,6 +322,11 @@ def main() -> None:
     new_df = _arm_daily(rows, base_rate_ser, new_gate)
     adapt_df = _arm_daily(rows, base_rate_ser, adapt_gate)
 
+    # 排名键 A/B (2026-08-09): 同 gate=NEW compound, 仅排名键不同 → 隔离排名效应.
+    rank10_df = _arm_daily(rows, base_rate_ser, new_gate, "pred_10d")
+    rank510_df = _arm_daily(rows, base_rate_ser, new_gate, "rank_w510")
+    rankfull_df = _arm_daily(rows, base_rate_ser, new_gate, "compound_new")
+
     # 预测质量 (与 gate 无关): 逐日 Rank IC pred_10d vs label_pm_10d_net
     ics = []
     for _d, g in rows.groupby("date"):
@@ -344,6 +354,25 @@ def main() -> None:
         "NEW": summarize(new_df, "NEW"),
         "ADAPT": summarize(adapt_df, "ADAPT"),
     }
+    rank_arms = {
+        "RANK10": summarize(rank10_df, "RANK10"),
+        "RANK510": summarize(rank510_df, "RANK510"),
+        "RANKFULL": summarize(rankfull_df, "RANKFULL"),
+    }
+
+    def rank_ic(rows: pd.DataFrame, key: str) -> float:
+        ics = []
+        for _d, g in rows.groupby("date"):
+            if len(g) >= 20:
+                r = g[[key, "label_pm_10d_net"]].rank(pct=True)
+                ic = float(r[key].corr(r["label_pm_10d_net"]))
+                if np.isfinite(ic):
+                    ics.append(ic)
+        return float(np.mean(ics)) if ics else np.nan
+
+    rank_ic_10d = rank_ic(rows, "pred_10d")
+    rank_ic_510 = rank_ic(rows, "rank_w510")
+    rank_ic_full = rank_ic(rows, "compound_new")
 
     # 子窗稳定性 (OOS 三等分)
     chunks = np.array_split(np.array(oos_dates), 3)
@@ -361,6 +390,19 @@ def main() -> None:
                 [float(sub["hit10"].mean()), float(sub["mean10"].mean())]
                 if len(sub)
                 else [None, None]
+            )
+    rank_subwin = {}
+    for name, df_ in (
+        ("RANK10", rank10_df),
+        ("RANK510", rank510_df),
+        ("RANKFULL", rankfull_df),
+    ):
+        rank_subwin[name] = []
+        for ch in chunks:
+            sub = df_[df_["date"].isin(set(ch))]
+            rank_subwin[name].append(
+                [float(sub["hit10"].mean()), float(sub["mean10"].mean())]
+                if len(sub) else [None, None]
             )
 
     print(f"\n  OOS 逐日 Rank IC (pred_10d vs 实得): {forecast_ic:.4f}")
@@ -440,6 +482,39 @@ def main() -> None:
     print(f"  ==> {verdict}")
     print("=" * 96)
 
+    # ── 排名键 A/B (2026-08-09) ── 同 gate=NEW compound, 仅排名键不同, Top10 清单表现定案.
+    w510_hit = rank_arms["RANK510"]["hit10"] - rank_arms["RANK10"]["hit10"]
+    w510_mean = rank_arms["RANK510"]["mean10"] - rank_arms["RANK10"]["mean10"]
+    print("\n" + "=" * 96)
+    print("排名键 A/B (2026-08-09) — 同 gate=NEW compound, 仅排名键不同, Top10 表现定案")
+    print("   RANK10: pred_10d | RANK510: (0.444·pred_5d+0.556·pred_10d) | RANKFULL: 全 compound")
+    print("=" * 96)
+    print(f"{'metric':<14s} {'RANK10':>11s} {'RANK510':>11s} {'RANKFULL':>11s} {'ΔW510-10':>12s}")
+    print("-" * 96)
+    for k, lab in (("days", "清单日数"), ("avg_n_pick", "日均选股数"), ("hit10", "T+10 命中率"), ("mean10", "T+10 均值")):
+        r10 = rank_arms["RANK10"].get(k, 0.0)
+        r510 = rank_arms["RANK510"].get(k, 0.0)
+        rf = rank_arms["RANKFULL"].get(k, 0.0)
+        if k == "hit10":
+            print(f"{lab:<14s} {r10 * 100:>10.2f}% {r510 * 100:>10.2f}% {rf * 100:>10.2f}% {(r510 - r10) * 100:>+11.2f}pp")
+        elif k == "mean10":
+            print(f"{lab:<14s} {r10 * 100:>10.3f}% {r510 * 100:>10.3f}% {rf * 100:>10.3f}% {(r510 - r10) * 100:>+11.3f}pp")
+        else:
+            print(f"{lab:<14s} {r10:>11.2f} {r510:>11.2f} {rf:>11.2f} {(r510 - r10):>+12.2f}")
+    print(f"  排名键 IC (vs label_pm_10d_net): pred_10d={rank_ic_10d:+.4f}  w510={rank_ic_510:+.4f}  full={rank_ic_full:+.4f}")
+    w510_ge_10 = (
+        rank_arms["RANK510"]["hit10"] >= rank_arms["RANK10"]["hit10"] - HIT_TOL
+        and rank_arms["RANK510"]["mean10"] >= rank_arms["RANK10"]["mean10"] - HIT_TOL
+    )
+    if w510_ge_10:
+        verdict_rank = f"PASS → 加权 5d+10d 排名 ≥ 纯 pred_10d (hit {w510_hit * 100:+.2f}pp / mean {w510_mean * 100:+.3f}pp)"
+    elif w510_hit < -HIT_TOL or w510_mean < -HIT_TOL:
+        verdict_rank = f"FAIL → 加权 5d+10d 排名显著劣于纯 pred_10d (hit {w510_hit * 100:+.2f}pp / mean {w510_mean * 100:+.3f}pp)"
+    else:
+        verdict_rank = f"RANK510 vs RANK10 在噪声容差内打平 (hit {w510_hit * 100:+.2f}pp / mean {w510_mean * 100:+.3f}pp)"
+    print(f"  ==> {verdict_rank}")
+    print("=" * 96)
+
     ts = datetime.now().strftime("%Y%m%dT%H%M%S")
     out_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
@@ -458,8 +533,12 @@ def main() -> None:
         "forecast_ic_10d": forecast_ic,
         "arms": arms,
         "subwindow": subwin,
+        "rank_arms": rank_arms,
+        "rank_subwindow": rank_subwin,
+        "rank_ic": {"pred_10d": rank_ic_10d, "rank_w510": rank_ic_510, "compound_new": rank_ic_full},
         "avg_adapt_w": avg_w,
         "verdict": verdict,
+        "verdict_rank": verdict_rank,
     }
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as fh:
