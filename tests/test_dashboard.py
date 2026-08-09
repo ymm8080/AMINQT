@@ -466,6 +466,39 @@ class TestStockPredictionQuery:
         assert norm["gain_10d"].iloc[0] == 0.05
         assert norm["prob_10d"].iloc[0] == 0.55
 
+    def test_parallel_gain_prefers_pred_ret_average_over_pred_mag_mfe(self):
+        # 2026-08-09 用户: 看板预期列显示平均预测 (pred_ret_, close-to-close), 非 MFE 最大.
+        # 有 pred_ret_ 列 → 用平均; 无 → 回退 pred_mag_.
+        with_avg = pd.DataFrame(
+            {
+                "symbol": ["000001"],
+                "board": ["main"],
+                "systems": ["fusion"],
+                "score": [0.8],
+                "pred_mag_3d": [0.12],
+                "pred_mag_5d": [0.17],
+                "pred_mag_10d": [0.28],
+                "pred_ret_3d": [0.012],
+                "pred_ret_5d": [0.025],
+                "pred_ret_10d": [0.03],
+                "pred_prob_3d": [0.53],
+                "pred_prob_5d": [0.54],
+                "pred_prob_10d": [0.55],
+            }
+        )
+        norm_avg = ds._normalize_pred_rows("parallel", "20260807", "modA", with_avg)
+        assert norm_avg["gain_3d"].iloc[0] == 0.012  # 平均预测优先
+        assert norm_avg["gain_5d"].iloc[0] == 0.025
+        assert norm_avg["gain_10d"].iloc[0] == 0.03
+        assert norm_avg["prob_3d"].iloc[0] == 0.53  # 概率不变
+
+        # 旧交付无 pred_ret_ → 回退 pred_mag_ (兼容)
+        no_avg = with_avg.drop(columns=["pred_ret_3d", "pred_ret_5d", "pred_ret_10d"])
+        norm_fb = ds._normalize_pred_rows("parallel", "20260807", "modA", no_avg)
+        assert norm_fb["gain_3d"].iloc[0] == 0.12
+        assert norm_fb["gain_5d"].iloc[0] == 0.17
+        assert norm_fb["gain_10d"].iloc[0] == 0.28
+
     def test_load_official_run_shortlist(self, tmp_path):
         # 选股看板股票池源: 最新交付短名单, 去 *_raw, 默认最新日期
         self._mkfile(

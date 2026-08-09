@@ -306,55 +306,49 @@ class TestDynamicEntry:
         # bear: 0.70 < 0.65×(0.65/0.60)≈0.704 → 不过
         assert ListGenerator().emit(cands, market_state="bear")["empty"]
 
-    def test_bear_requires_positive_1d(self):
-        """bear 下 compound>0 但 pred_1d<0 也被剔 (最近端净预期必须为正)."""
+    def test_bear_requires_positive_3d(self):
+        """bear 下 compound>0 但 pred_3d<0 也被剔 (最近端净预期必须为正).
+
+        1d 视界 2026-08-09 删除, bear 门改用最近端 3d.
+        """
         cands = _cands(
             [
                 {
                     "symbol": "600001",
                     "prob_up": 0.90,  # 远高于 bear 收紧后基准
-                    "pred_ret_1d": -0.005,
-                    "pred_ret_3d": 0.05,
+                    "pred_ret_3d": -0.005,
                     "pred_ret_5d": 0.08,
                 },
                 {"symbol": "600002", "prob_up": 0.50},
             ]
         )
-        # range: compound = -.0025+.0175+.012 = .027 > 0 → 过
+        # range: compound = pred_ret_10d = .07 > 0 → 过
         assert len(ListGenerator().emit(cands, market_state="range")["list"]) == 1
-        # bear: pred_1d < 0 → 剔
+        # bear: pred_3d < 0 → 剔
         assert ListGenerator().emit(cands, market_state="bear")["empty"]
 
-    def test_gate_q50_uses_2d3d5d_medians_not_1d(self):
-        """闸3 (2026-08-05): 有 2d/3d/5d 中位数列时用它们 (均须为正), 不再用 1d pred_q50.
+    def test_gate_q50_uses_3d5d_medians_not_1d(self):
+        """闸3 (2026-08-09): 有 3d/5d 中位数列时用它们 (均须为正), 不再用 1d pred_q50.
 
-        1d 中位数可为负 (T+1 不可执行, 旧闸误杀), 2d/3d/5d 均为正即过闸.
+        1d 中位数可为负 (T+1 不可执行, 旧闸误杀), 3d/5d 均为正即过闸;
+        2d 视界 2026-08-09 删除, 2d 中位数列不再参与.
         """
         gen = ListGenerator(entry_prob=0.0)  # 跳过 prob 闸, 单独验闸3
         cands = _cands(
             [
                 {
                     "symbol": "600001",
-                    "pred_q50": -0.003,  # 1d 中位数负 (旧闸会误杀)
-                    "pred_q50_2d": 0.004,  # 2d 中位数正
+                    "pred_q50": -0.003,  # 1d 中位数负 (旧闸会误杀, 现在不影响)
                     "pred_q50_3d": 0.012,  # 3d 中位数正
                     "pred_q50_5d": 0.020,  # 5d 中位数正
                 },
-                {  # 2d 中位数为负 → 剔
-                    "symbol": "600002",
-                    "pred_q50_2d": -0.001,
-                    "pred_q50_3d": 0.012,
-                    "pred_q50_5d": 0.020,
-                },
                 {  # 3d 中位数为负 → 剔
-                    "symbol": "600003",
-                    "pred_q50_2d": 0.004,
+                    "symbol": "600002",
                     "pred_q50_3d": -0.005,
                     "pred_q50_5d": 0.020,
                 },
                 {  # 5d 中位数为负 → 剔
-                    "symbol": "600004",
-                    "pred_q50_2d": 0.004,
+                    "symbol": "600003",
                     "pred_q50_3d": 0.012,
                     "pred_q50_5d": -0.001,
                 },
@@ -363,8 +357,8 @@ class TestDynamicEntry:
         out = gen.emit(cands)
         assert list(out["list"]["symbol"]) == ["600001"]
 
-    def test_gate_q50_falls_back_to_1d_when_no_2d3d(self):
-        """旧 bundle (无 2d/3d 中位数列) 回退 1d pred_q50 闸."""
+    def test_gate_q50_falls_back_to_1d_when_no_3d5d(self):
+        """旧 bundle (无 3d/5d 中位数列) 回退 1d pred_q50 闸."""
         gen = ListGenerator(entry_prob=0.0)
         cands = _cands(
             [

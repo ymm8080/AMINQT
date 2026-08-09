@@ -134,7 +134,8 @@ def _render_pool_table(pool: pd.DataFrame, pool_date: str) -> None:
     show["模型"] = show["family"] + "·" + show["module"].astype(str)
     show["入选"] = pool_date
     for h, label in (("3d", "3d 预期"), ("5d", "5d 预期"), ("10d", "10d 预期")):
-        show[label] = show[f"gain_{h}"]
+        # NumberColumn printf 只支持 %d/%f/%g, 不会 ×100; gain 是分数, 展示前乘 100 配 +%.2f%%
+        show[label] = show[f"gain_{h}"] * 100
 
     # 日内走势 sparkline: 每个 symbol 120 根分时价格 (归一化为收益率序列)
     intraday_series = {}
@@ -147,18 +148,22 @@ def _render_pool_table(pool: pd.DataFrame, pool_date: str) -> None:
     # 日内买入标记: 来源 = pipeline 清单写盘的 priority.json; 勾选/取消即手工更改
     show["日内买入"] = show["symbol"].isin(ds.load_priority_symbols())
 
-    cols = [
-        "symbol",
-        "name",
-        "模型",
-        "入选",
-        "score",
-        "3d 预期",
-        "5d 预期",
-        "10d 预期",
-        "日内走势",
-        "日内买入",
-    ]
+    # 排名/过门 来自交付短名单 (2026-08-09: 全局质量排名 + 10d 制度门标注); 旧清单无则隐藏
+    if "rank" in show.columns:
+        show["排名"] = show["rank"]
+    if "过门" in show.columns:
+        show["过门"] = show["过门"]
+    # 按全局质量排名升序 (未排名 legacy/slow_bull 沉底), 非板块分组
+    if "排名" in show.columns:
+        show = show.sort_values("排名", na_position="last").reset_index(drop=True)
+
+    cols = ["symbol", "name"]
+    if "排名" in show.columns:
+        cols.append("排名")
+    cols += ["模型", "入选", "score"]
+    if "过门" in show.columns:
+        cols.append("过门")
+    cols += ["3d 预期", "5d 预期", "10d 预期", "日内走势", "日内买入"]
     display = show[cols].copy().reset_index(drop=True)
 
     # 编辑回调按行号回查 symbol (行号 = display 重置后的位置)
@@ -169,12 +174,14 @@ def _render_pool_table(pool: pd.DataFrame, pool_date: str) -> None:
         column_config={
             "symbol": st.column_config.TextColumn("代码"),
             "name": st.column_config.TextColumn("名称"),
+            "排名": st.column_config.NumberColumn("排名", format="%d"),
             "模型": st.column_config.TextColumn("模型"),
             "入选": st.column_config.TextColumn("入选"),
             "score": st.column_config.NumberColumn("评分", format="%.4f"),
-            "3d 预期": st.column_config.NumberColumn("3d 预期", format="+.2%%"),
-            "5d 预期": st.column_config.NumberColumn("5d 预期", format="+.2%%"),
-            "10d 预期": st.column_config.NumberColumn("10d 预期", format="+.2%%"),
+            "过门": st.column_config.TextColumn("过门"),
+            "3d 预期": st.column_config.NumberColumn("3d 预期", format="+%.2f%%"),
+            "5d 预期": st.column_config.NumberColumn("5d 预期", format="+%.2f%%"),
+            "10d 预期": st.column_config.NumberColumn("10d 预期", format="+%.2f%%"),
             "日内走势": st.column_config.LineChartColumn(
                 "日内走势", y_min=-0.03, y_max=0.03
             ),
@@ -189,6 +196,8 @@ def _render_pool_table(pool: pd.DataFrame, pool_date: str) -> None:
     )
     st.caption(
         "✔ 预期 = 官方交付短名单 (STOCK_LIST_DIR) 各模型的真实预测 (3/5/10d); "
+        "排名 = 按 10d 预期幅度降序的全局质量排名; "
+        "过门 = 该股板块×系统今日是否通过 10d 制度门 (未过不建议买入); "
         "日内买入来自 Pipeline 清单 (priority.json), 勾选/取消该列即手工更改"
     )
 
@@ -362,8 +371,8 @@ def _render_model_predictions(symbol: str) -> None:
     cells = []
     for h in ("3d", "5d", "10d"):
         g, p = r.get(f"gain_{h}"), r.get(f"prob_{h}")
-        g_txt = "—" if g is None or pd.isna(g) else f"{float(g):+.1%}"
-        p_txt = "—" if p is None or pd.isna(p) else f"{float(p):.0%}"
+        g_txt = "—" if g is None or pd.isna(g) else f"{float(g):+.2%}"
+        p_txt = "—" if p is None or pd.isna(p) else f"{float(p):.2%}"
         cells.append(f"**{h}** {g_txt} (概率 {p_txt})")
     st.markdown(" &nbsp;·&nbsp; ".join(cells))
 
@@ -525,6 +534,7 @@ def _render_sector_panel() -> None:
     """板块涨跌幅 + 小号板块日内曲线 sparkline."""
     st.subheader("板块行情")
     sector_df = ds.demo_sector_changes()
+    sector_df["涨跌幅"] = sector_df["涨跌幅"] * 100
     # 为每个板块生成日内分时收益序列
     sector_df["日内走势"] = sector_df["板块"].apply(
         lambda s: (
@@ -539,7 +549,7 @@ def _render_sector_panel() -> None:
         sector_df,
         column_config={
             "板块": st.column_config.TextColumn("板块"),
-            "涨跌幅": st.column_config.NumberColumn("涨跌幅", format="+.2%%"),
+            "涨跌幅": st.column_config.NumberColumn("涨跌幅", format="+%.2f%%"),
             "上涨家数": st.column_config.NumberColumn("上涨家数"),
             "下跌家数": st.column_config.NumberColumn("下跌家数"),
             "日内走势": st.column_config.LineChartColumn(

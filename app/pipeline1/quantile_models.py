@@ -1,7 +1,7 @@
 """
 E1 分位数回归五模型 + E2 痛苦预警模型 (PIPELINE1_V3.8 §四/§七, 检查清单 #65-#68)
 ================================================================================
-[E1] quantiles = [0.10, 0.25, 0.50, 0.75, 0.90] 五分位 LightGBM (label_1d_net 各分位):
+[E1] quantiles = [0.10, 0.25, 0.50, 0.75, 0.90] 五分位 LightGBM (label_pm_{k}d_net 各分位, k=3/5):
   - 单调性后处理 (必须): 每样本强制 q10<=q25<=q50<=q75<=q90, 违例做保序回归投影
   - uncertainty_width = pred_q90 - pred_q10 (仓位阻尼输入)
   - 纪律: 分位数用于仓位阻尼与风险提示, 严禁用 pred_q10>0 做买入闸门
@@ -27,7 +27,7 @@ PAIN_DEMOTE_THRESHOLD = 0.30  # E2: pain_prob>30% → 降仓50%或剔除 (季度
 
 
 class QuantileModelSet:
-    """E1 分位数五模型 (同一特征空间, label_1d_net 各分位)."""
+    """E1 分位数五模型 (同一特征空间, label_pm_{k}d_net 各分位, k=3/5)."""
 
     def __init__(self, base_params: dict | None = None):
         self.base_params = dict(base_params or {})

@@ -507,9 +507,9 @@ def _render_prediction_tab(pred_result: dict | None) -> None:
         ic_rows.append(
             {
                 "Board": board,
-                "IC_1d": f"{ics['1d_reg']:+.4f}",
                 "IC_3d": f"{ics['3d_reg']:+.4f}",
                 "IC_5d": f"{ics['5d_reg']:+.4f}",
+                "IC_10d": f"{ics['10d_reg']:+.4f}",
                 "Best": f"{best_key}={ics[best_key]:+.4f}",
             }
         )
@@ -528,9 +528,9 @@ def _render_prediction_tab(pred_result: dict | None) -> None:
                 "symbol",
                 "board",
                 "industry",
-                "pred_ret_1d",
                 "pred_ret_3d",
                 "pred_ret_5d",
+                "pred_ret_10d",
                 "prob_up",
                 "pain_prob",
                 "pred_q10",
@@ -564,9 +564,9 @@ def _render_prediction_tab(pred_result: dict | None) -> None:
                 f"{row.get('industry', '')}) — score={row.get('score', 0):.4f}"
             ):
                 param_cols = [
-                    "pred_ret_1d",
                     "pred_ret_3d",
                     "pred_ret_5d",
+                    "pred_ret_10d",
                     "prob_up",
                     "pain_prob",
                     "pred_q10",

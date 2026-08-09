@@ -29,7 +29,7 @@ from . import data_service as ds
 
 logger = logging.getLogger(__name__)
 
-HORIZONS = ("2d", "3d", "5d", "10d")
+HORIZONS = ("3d", "5d", "10d")
 _SCOPE_DELIVERED = ("legacy", "parallel", "slow_bull")
 _SCOPE_RAW = ("legacy_raw", "parallel_raw")
 
@@ -57,7 +57,7 @@ def load_module_picks(list_dir: str = STOCK_LIST_DIR) -> pd.DataFrame:
 
     Returns:
         DataFrame (date, symbol, family, module, board, system, rk, score,
-                   gain_2d/3d/5d/10d, prob_*, module_id) — 无文件 → 空.
+                   gain_3d/5d/10d, prob_*, module_id) — 无文件 → 空.
     """
     frames: list[pd.DataFrame] = []
     for info in ds.list_prediction_files(list_dir):
@@ -98,7 +98,7 @@ def load_module_picks(list_dir: str = STOCK_LIST_DIR) -> pd.DataFrame:
 
 # ───────────────────────── 已实现收益 (对齐面板) ─────────────────────────
 def compute_realized_returns(picks: pd.DataFrame, panel: pd.DataFrame) -> pd.DataFrame:
-    """给清单补已实现 close-to-close 收益 real_2d/3d/5d/10d.
+    """给清单补已实现 close-to-close 收益 real_3d/5d/10d.
 
     panel 需含 date(datetime)/symbol/close_hfq. 逐股向量化 (unstack + shift),
     无未来价 (数据未成熟/停牌缺行) → NaN 剔除.

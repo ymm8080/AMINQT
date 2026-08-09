@@ -56,10 +56,8 @@ def write_md(df: pd.DataFrame, path: str, module: str) -> None:
         "compound_ret",
         "prob_up",
         "prob_up_3d",
-        "pred_ret_2d",
         "pred_ret_3d",
         "pred_ret_5d",
-        "pred_q50_2d",
         "pred_q50_3d",
         "pred_q50_5d",
         "pain_prob",
@@ -76,7 +74,7 @@ def write_md(df: pd.DataFrame, path: str, module: str) -> None:
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(f"# LEGACY 股票清单 {trade_date} (module {module})\n\n")
         fh.write(
-            f"交易日 {trade_date} · module {module} · E7 闸3 = 2d/3d/5d 中位数均正 · "
+            f"交易日 {trade_date} · module {module} · E7 闸3 = 3d/5d 中位数均正 · "
             f"排序 = d3 目标 (50% d3涨幅 + 50% d3概率 归一化混合) · {len(sub)} 只\n\n"
         )
         fh.write(sub.to_markdown(index=False))
@@ -112,7 +110,7 @@ def main():
         doc.add_heading(f"LEGACY 股票清单 {trade_date} (module {module})", level=0)
         doc.add_paragraph(
             f"交易日 {trade_date} · module {module} · "
-            f"E7 闸3 = 2d/3d/5d 中位数均正 · 排序 = d3 目标 (50% d3涨幅 + 50% d3概率) · {len(df)} 只"
+            f"E7 闸3 = 3d/5d 中位数均正 · 排序 = d3 目标 (50% d3涨幅 + 50% d3概率) · {len(df)} 只"
         )
         cols = [
             "symbol",
@@ -122,10 +120,8 @@ def main():
             "compound_ret",
             "prob_up",
             "prob_up_3d",
-            "pred_ret_2d",
             "pred_ret_3d",
             "pred_ret_5d",
-            "pred_q50_2d",
             "pred_q50_3d",
             "pred_q50_5d",
             "pain_prob",

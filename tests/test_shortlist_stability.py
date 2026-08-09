@@ -125,3 +125,33 @@ def test_load_raw_history_filters_module_and_date(tmp_path, monkeypatch):
     hist = _load_raw_history(pd.Timestamp("2026-08-07"), "testmod")
     assert set(hist["symbol"]) == {"000001"}
     assert (hist["hist_date"] == "20260805").all()
+
+
+def test_c2c_latest_returns_per_symbol_mag():
+    """pred_ret_{h} 数据源 (2026-08-09): _c2c_latest 用每股 score→label_pm_{h}_net
+    校准, 决策日每股唯一 close-to-close 平均预期 (非 MFE)."""
+    from scripts._shortlist_t5_t10 import _c2c_latest
+
+    rng = np.random.default_rng(7)
+    dates = pd.bdate_range("2025-01-06", periods=120)
+    rows = []
+    for i in range(10):
+        slope = 0.08 + 0.01 * (i % 3)
+        base = 0.5 + 0.04 * i
+        for d in dates:
+            sc = base + 0.02 * rng.normal()
+            rows.append(
+                {
+                    "symbol": f"SYM{i:03d}",
+                    "date": d,
+                    "score": sc,
+                    "label_pm_5d_net": slope * sc + 0.001 * rng.normal(),
+                }
+            )
+    panel = {("main", "both"): pd.DataFrame(rows)}
+    last = dates[-1]
+    mag = _c2c_latest(panel, "main", "5d", last)
+    assert set(mag.index) == {f"SYM{i:03d}" for i in range(10)}
+    assert np.isfinite(mag).all()
+    # 与 MFE 无关: 结果是 close-to-close 平均预期量级 (score 0.4~0.7 × slope ~0.08 → 2~6%)
+    assert (mag.abs() < 0.15).all()

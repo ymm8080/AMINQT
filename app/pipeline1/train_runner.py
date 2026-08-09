@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import gc
 import logging
 import os
 
@@ -129,14 +130,19 @@ def select_features(
             gen = BruteForceGenerator()
             raw_cols = gen._eligible(df)
             # 内存安全: 族批生成, 只注入缺失的选中列, 不物化全量 brute 列.
+            # 每次 join 都强制 pandas block consolidation (~2× 宽帧连续块);
+            # 收集全部选中列后单次 join → consolidation 从 N 次降到 1 次.
             keep_cols = []
+            picks = []
             for fam in BRUTE_FAMILIES:
                 new = gen.generate_family(df, fam, raw_cols=raw_cols, dtype="float32")
                 pick = [c for c in missing if c in new.columns]
                 if pick:
                     keep_cols.extend(pick)
-                    df = df.join(new[pick])
+                    picks.append(new[pick])
                 del new
+            if picks:
+                df = df.join(pd.concat(picks, axis=1))
             if keep_cols:
                 logger.info(
                     "[%s] BruteForce 后注入 %d 个选中特征 (缺失 %d)",
@@ -235,9 +241,15 @@ def run_training(
                 )
                 registry = None
 
-    main_df, dual_df = cleaner.run_train(panel)
-    panels, cols_by_board = {}, {}
-    for board, board_df in (("main", main_df), ("dual", dual_df)):
+    # 内存分期: 逐板块 prepare→select→train→释放, 任意时刻只持一份增强帧.
+    # 两板块是独立模型 (独立特征/独立 OOS), 分期只降内存峰值, 不改模型内容.
+    board_dfs = dict(zip(("main", "dual"), cleaner.run_train(panel)))
+    del panel  # run_train 后 panel 不再需要 → 尽早归还内存
+    gc.collect()
+    trainer = DualTrackTrainer(model_dir=model_dir)
+    results: dict = {}
+    for board in ("main", "dual"):
+        board_df = board_dfs.pop(board)
         if len(board_df) == 0:
             logger.warning("[%s] 清洗后无样本, 跳过该板块训练", board)
             continue
@@ -249,19 +261,24 @@ def run_training(
             cross_sectional_rank=use_xrank,
             registry=registry,
         )
+        # 释放清洗切片: FeatureSelector 峰值期不白占 ~2GB 中间帧
+        del board_df
+        gc.collect()
         cols, augmented_df = select_features(
             df, board, tag, selector, registry=registry
         )
-        cols_by_board[board] = cols
-        panels[board] = augmented_df
-
-    if not panels:
-        raise RuntimeError("训练面板为空: 主板/双创清洗后均无样本")
-
-    trainer = DualTrackTrainer(model_dir=model_dir)
-    results = trainer.weekly_retrain(panels, cols_by_board, tag)
-    for board, res in results.items():
-        res["n_features"] = len(cols_by_board[board])
+        # 释放中间特征帧 (仅保留增强帧用于训练)
+        del df
+        gc.collect()
+        board_results = trainer.weekly_retrain(
+            {board: augmented_df}, {board: cols}, tag
+        )
+        n_features = len(cols)
+        del augmented_df, cols
+        gc.collect()
+        res = board_results[board]
+        res["n_features"] = n_features
+        results[board] = res
         logger.info(
             "[%s] 模型包 %s | OOS weighted_IC=%.4f | switched=%s",
             board,
@@ -269,4 +286,7 @@ def run_training(
             res["oos"].get("weighted_ic", 0.0),
             res["switched"],
         )
+
+    if not results:
+        raise RuntimeError("训练面板为空: 主板/双创清洗后均无样本")
     return results

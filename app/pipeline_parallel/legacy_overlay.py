@@ -36,16 +36,15 @@ CHECKPOINTS = {
     "dual": os.path.join("data", "_diag_stage_dual_3y.parquet"),
 }
 # rerank 输出的 prob/pred 列优先级 (prob_up_3d 匹配狙击主视界 T+3)
-_PROB_COL_PRIORITY = ("prob_up_3d", "prob_up_5d", "prob_up_2d", "prob_up")
+_PROB_COL_PRIORITY = ("prob_up_3d", "prob_up_5d", "prob_up_10d", "prob_up")
 _LEGACY_COLS = (
     "prob_up",
-    "prob_up_2d",
     "prob_up_3d",
     "prob_up_5d",
-    "pred_ret_1d",
-    "pred_ret_2d",
+    "prob_up_10d",
     "pred_ret_3d",
     "pred_ret_5d",
+    "pred_ret_10d",
     "composite_score",
     "rank_score",
 )

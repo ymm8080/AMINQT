@@ -28,7 +28,7 @@ def _make_fixture() -> dict:
     """合成一份新 schema backtest.json (结构与真实产出同构)."""
     per_h = {
         h: _horizon(0.05 + 0.01 * i, 0.81 + 0.01 * i, 500, 0.80 + 0.01 * i)
-        for i, h in enumerate(["2d", "3d", "5d", "10d"])
+        for i, h in enumerate(["3d", "5d", "10d"])
     }
     board = {
         "label": "主板",
@@ -63,7 +63,6 @@ def _make_fixture() -> dict:
                                 "symbol": "600519",
                                 "rk": 1,
                                 "score": 0.9,
-                                "mfe_2d": 0.01,
                                 "mfe_3d": 0.02,
                                 "mfe_5d": 0.03,
                                 "mfe_10d": None,
@@ -76,7 +75,6 @@ def _make_fixture() -> dict:
                                 "symbol": "000001",
                                 "rk": 1,
                                 "score": 0.85,
-                                "mfe_2d": 0.005,
                                 "mfe_3d": 0.01,
                                 "mfe_5d": 0.02,
                                 "mfe_10d": 0.04,
@@ -198,14 +196,14 @@ class TestParseNewSchema:
 
     def test_per_horizon(self):
         df = btr.parse_per_horizon(_make_fixture(), "main", "top5")
-        assert list(df["horizon"]) == ["2d", "3d", "5d", "10d"]
+        assert list(df["horizon"]) == ["3d", "5d", "10d"]
         assert df["winrate"].isna().sum() == 0
         assert (df["base_winrate"] < df["winrate"]).all()  # 合成值刻意 winrate>base
 
     def test_systems(self):
         df = btr.parse_systems(_make_fixture(), "main")
         assert set(df["system"]) == {"sniper", "fusion"}
-        assert len(df) == 8  # 2 系统 × 4 视界
+        assert len(df) == 6  # 2 系统 × 3 视界
 
     def test_picks(self):
         df = btr.parse_picks(_make_fixture(), "main")
@@ -216,7 +214,6 @@ class TestParseNewSchema:
             "rk",
             "symbol",
             "score",
-            "mfe_2d",
             "mfe_3d",
             "mfe_5d",
             "mfe_10d",
@@ -289,7 +286,7 @@ def _make_single_window() -> dict:
     """oos_days=N 单窗 run: 窗口 label = "oos" (非 6m/3m/10d)."""
     per_h = {
         h: _horizon(0.05 + 0.01 * i, 0.81 + 0.01 * i, 500, 0.80 + 0.01 * i)
-        for i, h in enumerate(["2d", "3d", "5d", "10d"])
+        for i, h in enumerate(["3d", "5d", "10d"])
     }
     board = {
         "label": "主板",
@@ -309,13 +306,13 @@ def _make_single_window() -> dict:
 class TestSingleWindowRun:
     def test_per_horizon(self):
         df = btr.parse_per_horizon(_make_single_window(), "main", "top5")
-        assert list(df["horizon"]) == ["2d", "3d", "5d", "10d"]
+        assert list(df["horizon"]) == ["3d", "5d", "10d"]
         assert df["winrate"].isna().sum() == 0
 
     def test_systems(self):
         df = btr.parse_systems(_make_single_window(), "main")
         assert set(df["system"]) == {"sniper"}
-        assert len(df) == 4  # 1 系统 × 4 视界
+        assert len(df) == 3  # 1 系统 × 3 视界
 
 
 # ───────────────────────── 真实数据冒烟 (若存在) ─────────────────────────

@@ -27,7 +27,7 @@ from .label_engine import LabelEngine
 
 logger = logging.getLogger(__name__)
 
-HORIZONS = (1, 2, 3, 5)
+HORIZONS = (3, 5, 10)  # 1d/2d 2026-08-09 删除
 ACCURACY_DIR = os.path.join("data", "forecast_accuracy")
 
 
@@ -110,7 +110,7 @@ def score_forecast(forecast_df, labeled_panel, forecast_date, horizons=HORIZONS)
     """对一期预测打分 (v3.2 扩展: 含 MAE/方向准确率).
 
     Args:
-        forecast_df: 往期清单 (含 symbol/pred_ret_1d/3d/5d)
+        forecast_df: 往期清单 (含 symbol/pred_ret_3d/5d/10d)
         labeled_panel: 含 label_pm_{k}d_net 列的面板
         forecast_date: 'YYYYMMDD'
 
@@ -167,7 +167,7 @@ def _labeled(panel, symbols):
 
 
 def score_matured_forecasts(list_dir, panel, out_dir=ACCURACY_DIR):
-    """扫描 list_dir 往期清单, 对 5d 视野成熟且未打分的打分 (幂等)."""
+    """扫描 list_dir 往期清单, 对 10d 视野成熟且未打分的打分 (幂等)."""
     os.makedirs(out_dir, exist_ok=True)
     if not os.path.isdir(list_dir):
         return []
@@ -184,7 +184,7 @@ def score_matured_forecasts(list_dir, panel, out_dir=ACCURACY_DIR):
         labeled = _labeled(panel, set(forecast_df["symbol"]))
         result = score_forecast(forecast_df, labeled, fdate)
         if not result["mature"]:
-            logger.info("预测 %s 5d 视野未成熟, 下次再评", fdate)
+            logger.info("预测 %s 10d 视野未成熟, 下次再评", fdate)
             continue
         detail = result.pop("detail")
         try:
@@ -196,14 +196,14 @@ def score_matured_forecasts(list_dir, panel, out_dir=ACCURACY_DIR):
         except Exception:
             logger.warning("准确度报告写入失败: %s (非阻塞)", fdate, exc_info=True)
             continue
-        h1 = result["horizons"][1]
+        h3 = result["horizons"][3]
         logger.info(
-            "预测 %s 准确度: MAE(1d)=%.4f bias(1d)=%+.4f dir_acc=%.2f n=%d",
+            "预测 %s 准确度: MAE(3d)=%.4f bias(3d)=%+.4f dir_acc=%.2f n=%d",
             fdate,
-            h1["mae_1d"],
-            h1["bias_1d"],
-            h1.get("direction_accuracy", float("nan")),
-            h1["n_samples"],
+            h3["mae_1d"],
+            h3["bias_1d"],
+            h3.get("direction_accuracy", float("nan")),
+            h3["n_samples"],
         )
         scored.append(result)
     return scored

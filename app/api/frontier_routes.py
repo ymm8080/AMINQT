@@ -934,9 +934,9 @@ def append_daily_and_predict(req: AppendDailyRequest) -> dict:
                     "symbol": str(row.get("symbol", "")),
                     "board": str(row.get("board", "")),
                     "prob_up": round(float(row.get("prob_up", 0)), 4),
-                    "pred_ret_1d": round(float(row.get("pred_ret_1d", 0)), 4),
                     "pred_ret_3d": round(float(row.get("pred_ret_3d", 0)), 4),
                     "pred_ret_5d": round(float(row.get("pred_ret_5d", 0)), 4),
+                    "pred_ret_10d": round(float(row.get("pred_ret_10d", 0)), 4),
                     "score": round(float(row.get("score", 0)), 4),
                     "weight": round(float(row.get("weight", 0)), 4),
                 }

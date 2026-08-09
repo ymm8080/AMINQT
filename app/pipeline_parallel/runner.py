@@ -171,7 +171,7 @@ def main() -> int:
                 "  各视界可测日期 (末 15 交易日, 同一选股日): "
                 + " ".join(
                     f"{h}=至{lt[h]['last_date']}({lt[h]['n']}日)"
-                    for h in ("2d", "3d", "5d", "10d")
+                    for h in ("3d", "5d", "10d")
                 )
             )
     return 0

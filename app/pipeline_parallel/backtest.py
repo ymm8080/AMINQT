@@ -748,7 +748,7 @@ def write_worm(out: dict, ts: str) -> tuple[Path, Path, Path]:
                 "  各视界可测日期 (末 15 交易日, 同一选股日): "
                 + " ".join(
                     f"{h}=至{lt[h]['last_date']}({lt[h]['n']}日)"
-                    for h in ("2d", "3d", "5d", "10d")
+                    for h in ("3d", "5d", "10d")
                 )
             )
         n_days = bd.get("last_days", {}).get("n_days", 15)
@@ -761,7 +761,7 @@ def write_worm(out: dict, ts: str) -> tuple[Path, Path, Path]:
             for name, tag in (("sniper_top5", "狙5"), ("fusion_top10", "融10")):
                 fig = day[name]["figure"]
                 bits = []
-                for h in ("2d", "3d", "5d", "10d"):
+                for h in ("3d", "5d", "10d"):
                     f = fig.get(h, {})
                     if f.get("n"):
                         bits.append(f"{h} +{f['mag']:.2%}/{f['winrate']:.0%}")
@@ -789,7 +789,7 @@ def export_stock_lists(work: pd.DataFrame, oos_start, run_dir: Path) -> list[str
     # runner 传的是 out["window"]["oos"]["start"] (str); 面板 date 是 datetime64,
     # 直接 >= 会触发 UFuncNoLoopError (真实数据回归 2026-08-04). 统一转 Timestamp.
     oos_start = pd.Timestamp(oos_start)
-    lab_cols = [f"label_mfe_{h}d_net" for h in (2, 3, 5, 10)]
+    lab_cols = [f"label_mfe_{h}d_net" for h in (3, 5, 10)]
     written: list[str] = []
     for b in BOARD_PREFIXES:
         bwork = work[work["board"] == b]
@@ -883,8 +883,8 @@ def last_days_report(work: pd.DataFrame, n_days: int = 15) -> dict:
     dates = np.sort(work["date"].unique())
     last = dates[-n_days:]
     sub = work[work["date"].isin(set(last))]
-    lab_cols = [f"label_mfe_{h}d_net" for h in (2, 3, 5, 10)]
-    horizons = (2, 3, 5, 10)
+    lab_cols = [f"label_mfe_{h}d_net" for h in (3, 5, 10)]
+    horizons = (3, 5, 10)
     systems = (
         ("sniper_top5", SNIPER, SNIPER.top_n),
         ("fusion_top10", FUSION, FUSION.top_n),
@@ -960,7 +960,6 @@ def write_last_days_csv(ld: dict, run_dir: Path, board: str = "") -> str:
                         "rk": p["rk"],
                         "symbol": p["symbol"],
                         "score": p["score"],
-                        "mfe_2d": p["mfe_2d"],
                         "mfe_3d": p["mfe_3d"],
                         "mfe_5d": p["mfe_5d"],
                         "mfe_10d": p["mfe_10d"],
@@ -1333,7 +1332,7 @@ def build_daily_shortlists(
 
     day 按 board 过滤 — 交叉截面排名不能混板 (2026-08-05 bug: 未过滤 → main 名单混入双创股).
     est_wr = 该股命中系统的 OOS 主窗最佳视界胜率; 共现股取两系统 max (双系统一致=更高确定性).
-    prob_{h}/exp_{h} (h=2d/3d/5d/10d) = 该股命中系统 OOS 主窗该视界的胜率/平均 MFE
+    prob_{h}/exp_{h} (h=3d/5d/10d) = 该股命中系统 OOS 主窗该视界的胜率/平均 MFE
       (2026-08-05 用户: 每只股票需各视界期望涨幅 + 概率); 共现股逐视界取胜率较高者.
     MFE 列是已实现盈利 (需未来价) — 最新日无未来价 → NaN (今日买入名单以 score/est_wr/exp/prob 排序).
     """
@@ -1415,7 +1414,7 @@ def build_daily_shortlists(
         res[f"exp_{h}"] = res["systems"].map(
             lambda s, p=pick: p.get(s, (float("nan"), float("nan")))[1]
         )
-    lab_map = {f"label_mfe_{h}d_net": f"mfe_{h}d" for h in (2, 3, 5, 10)}
+    lab_map = {f"label_mfe_{h}d_net": f"mfe_{h}d" for h in (3, 5, 10)}
     mfe = day.set_index("symbol")[[c for c in lab_map]]
     for src, dst in lab_map.items():
         res[dst] = res["symbol"].map(mfe[src])

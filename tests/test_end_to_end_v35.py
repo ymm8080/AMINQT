@@ -118,7 +118,7 @@ class TestEndToEndV35:
             Candidate(
                 str(r["symbol"]),
                 "白酒",
-                float(r["pred_ret_1d"]),
+                float(r["pred_ret_3d"]),
                 float(r["prob_up"]),
                 turnover_today=12,
                 daily_closes=[100, 101, 99, 102, 103],

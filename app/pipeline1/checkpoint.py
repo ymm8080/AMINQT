@@ -31,19 +31,16 @@ from config.settings import data_others_path
 logger = logging.getLogger(__name__)
 
 MODEL_KINDS = (
-    "1d_reg",
-    "1d_cls",
-    "2d_reg",
-    "2d_cls",
     "3d_reg",
     "3d_cls",
     "5d_reg",
     "5d_cls",
+    "10d_reg",
+    "10d_cls",
 )
 EXTRA_KINDS = (
-    "quantile_models",
-    "quantile_models_2d",
     "quantile_models_3d",
+    "quantile_models_5d",
     "pain_model",
     "rank_model",
 )
@@ -62,7 +59,7 @@ class TrainingCheckpoint:
 
     Usage:
         ck = TrainingCheckpoint("models/pipeline1", "main", "2026W31")
-        ck.save_progress(trained_dict, completed_kinds=["1d_reg"])
+        ck.save_progress(trained_dict, completed_kinds=["3d_reg"])
         # ... crash ...
         ck = TrainingCheckpoint("models/pipeline1", "main", "2026W31")
         if ck.exists():

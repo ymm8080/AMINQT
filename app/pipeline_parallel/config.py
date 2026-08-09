@@ -61,8 +61,8 @@ def board_of(symbol) -> str:
 
 # 目标口径 (2026-08-04 用户): MFE = 持有期内**最大涨幅** (潜在最优离场),
 # 非目标日收盘收益. 列名 label_mfe_{h}d_net, 由 backtest.add_mfe_labels 补算.
-# 两套系统统一测 T+2/T+3/T+5/T+10 四视界矩阵 (用户: "TOP5 与 TOP10 都要看 T+2,T+3,T+5,T+10").
-HORIZONS: tuple[str, ...] = ("3d", "2d", "5d", "10d")
+# 两套系统统一测 T+3/T+5/T+10 三视界矩阵 (2026-08-09 删 2d 视界).
+HORIZONS: tuple[str, ...] = ("3d", "5d", "10d")
 MFE_LABELS: tuple[str, ...] = tuple(f"label_mfe_{h}_net" for h in HORIZONS)
 # 2026-08-07 用户: 并行全模块验收改 close-to-close (可兑现收益), 非 MFE 触摸天花板
 C2C_LABELS: tuple[str, ...] = tuple(f"label_pm_{h}_net" for h in HORIZONS)
@@ -84,8 +84,8 @@ SLOW_BULL_HORIZONS: tuple[str, ...] = ("10d", "20d", "40d")
 SLOW_BULL_MFE_LABELS: tuple[str, ...] = tuple(
     f"label_mfe_{h}_net" for h in SLOW_BULL_HORIZONS
 )
-# add_mfe_labels 用全系统视界并集 (sniper/fusion 2/3/5/10 + slow_bull 10/20/40)
-ALL_HORIZON_INTS: tuple[int, ...] = (2, 3, 5, 10, 20, 40)
+# add_mfe_labels 用全系统视界并集 (sniper/fusion 3/5/10 + slow_bull 10/20/40)
+ALL_HORIZON_INTS: tuple[int, ...] = (3, 5, 10, 20, 40)
 # 慢牛模块版本戳 (清单文件名 module 后缀; 规则系统无训练模型 → 用设计文档版本号)
 SLOW_BULL_VERSION: str = "v1_0"
 
@@ -151,12 +151,12 @@ class SystemSpec:
     notes: tuple[str, ...] = field(default_factory=tuple)
 
 
-# 狙击系统: T+1 买, 目标 MFE (持有期内最大涨幅), 统一测 T+2/T+3/T+5/T+10 四视界;
-# 裁决优先级 3d > 2d > 5d > 10d (用户 2026-08-04).
+# 狙击系统: T+1 买, 目标 MFE (持有期内最大涨幅), 统一测 T+3/T+5/T+10 三视界;
+# 裁决优先级 3d > 5d > 10d (2026-08-09 删 2d 视界).
 # 池 = v2 裁决 pool_top5 (5 特征) + pool_top3_extra (ret_reversal_5d).
 SNIPER = SystemSpec(
     name="sniper",
-    desc="狙击: 每日 3-5 只, T+1 买, 目标 MFE, 四视界 T+2/3/5/10 任一过双头即保留 (3d>2d>5d>10d)",
+    desc="狙击: 每日 3-5 只, T+1 买, 目标 MFE, 三视界 T+3/5/10 任一过双头即保留 (3d>5d>10d)",
     pool=(
         "amihud_illiq",
         "small_mv_premium",
@@ -170,7 +170,7 @@ SNIPER = SystemSpec(
     horizons=HORIZONS,
     labels=C2C_LABELS,
     notes=(
-        "核心 3 特征 (amihud_illiq/small_mv_premium/amihud_illiquidity) 3d+2d 都过, 快进快出可用",
+        "核心 3 特征 (amihud_illiq/small_mv_premium/amihud_illiquidity) 3d 过, 快进快出可用",
         "VAR51 / ret_reversal_5d 长视界出边 — 须持有多天才兑现",
         "limit_dist_pct TOP-5 全视界不过 → 只进融合池",
         "2026-08-05 池内相关 OOS 边际: +pv_corr_5 → dual 全视界 Δwr +1.7~3.6% (5d +3.6% 最强)",
@@ -179,11 +179,11 @@ SNIPER = SystemSpec(
     ),
 )
 
-# 融合系统: 大仓位, 持有 3-5 天; 目标 MFE, 四视界 T+2/3/5/10 (2026-08-04 用户加 T+2/T+3).
+# 融合系统: 大仓位, 持有 3-5 天; 目标 MFE, 三视界 T+3/5/10 (2026-08-09 删 2d).
 # 池 = 6 独立特征 (去重后).
 FUSION = SystemSpec(
     name="fusion",
-    desc="融合: 大仓位, 持有 3-5 天, 目标 MFE, TOP-10 四视界 T+2/3/5/10 双头",
+    desc="融合: 大仓位, 持有 3-5 天, 目标 MFE, TOP-10 三视界 T+3/5/10 双头",
     pool=(
         "amihud_illiquidity",
         "VAR51",

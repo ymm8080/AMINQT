@@ -59,7 +59,7 @@ def _compute_signed_ic(feat_df, bundle, board):
     # 确保 label 列存在: 优先用 bundle 存储的 label, 缺失则从 close 计算
     feat_df = feat_df.copy()
     close_col = "close_hfq" if "close_hfq" in feat_df.columns else "close"
-    for horizon in (1, 3, 5):
+    for horizon in (3, 5, 10):
         label_name = models[f"{horizon}d_reg"][1]
         if label_name in feat_df.columns:
             continue
@@ -76,7 +76,7 @@ def _compute_signed_ic(feat_df, bundle, board):
 
     dates = sorted(feat_df["date"].unique())
     if len(dates) < 10:
-        return {"1d_reg": 0.0, "3d_reg": 0.0, "5d_reg": 0.0}
+        return {"3d_reg": 0.0, "5d_reg": 0.0, "10d_reg": 0.0}
 
     # test 段: 最后 60 个交易日, 排除当日 (当日无 future label)
     n_test = min(60, len(dates) - 1)
@@ -84,21 +84,21 @@ def _compute_signed_ic(feat_df, bundle, board):
     test_feat = feat_df[feat_df["date"].isin(test_dates)].copy()
 
     if len(test_feat) == 0:
-        return {"1d_reg": 0.0, "3d_reg": 0.0, "5d_reg": 0.0}
+        return {"3d_reg": 0.0, "5d_reg": 0.0, "10d_reg": 0.0}
 
     # 对 test 段跑模型推理
     X = np.nan_to_num(
         test_feat[cols].to_numpy(dtype=float), nan=0.0, posinf=0.0, neginf=0.0
     )
-    test_feat["_pred_1d"] = models["1d_reg"][0].predict(X)
     test_feat["_pred_3d"] = models["3d_reg"][0].predict(X)
     test_feat["_pred_5d"] = models["5d_reg"][0].predict(X)
+    test_feat["_pred_10d"] = models["10d_reg"][0].predict(X)
 
     ic_results = {}
     for kind, pred_col, horizon in [
-        ("1d_reg", "_pred_1d", 1),
         ("3d_reg", "_pred_3d", 3),
         ("5d_reg", "_pred_5d", 5),
+        ("10d_reg", "_pred_10d", 10),
     ]:
         label_name = models[kind][1]
         # resolve actual label column
@@ -217,13 +217,13 @@ def _write_report(trade_date, ic_by_board, filtered, all_preds, bundles):
     L.append("\n---\n## 1. Pipeline IC Summary (Signed Rank IC, OOS Test Segment)\n")
     L.append("IC > 0 = 模型有正向预测力; IC < 0 = 反向. "
              "Test segment = 最近 60 交易日 (排除当日).\n")
-    L.append("| Board | IC_1d | IC_3d | IC_5d | Best IC |")
-    L.append("|-------|-------|-------|-------|---------|")
+    L.append("| Board | IC_3d | IC_5d | IC_10d | Best IC |")
+    L.append("|-------|-------|-------|--------|---------|")
     for board, ics in ic_by_board.items():
         best_key = max(ics, key=lambda k: ics[k])
         L.append(
-            f"| {board} | {ics['1d_reg']:+.4f} | {ics['3d_reg']:+.4f} | "
-            f"{ics['5d_reg']:+.4f} | {best_key}={ics[best_key]:+.4f} |"
+            f"| {board} | {ics['3d_reg']:+.4f} | {ics['5d_reg']:+.4f} | "
+            f"{ics['10d_reg']:+.4f} | {best_key}={ics[best_key]:+.4f} |"
         )
 
     # ---- 2. Stock Recommendation List ----
@@ -231,8 +231,8 @@ def _write_report(trade_date, ic_by_board, filtered, all_preds, bundles):
     L.append("Filters: `0.55 <= prob_up < 0.99`, `pred_ret_3d > 1%`, "
              "`pred_ret_5d > 1%`, `pain_prob < 0.35`, `ATR_pct < 6%`\n")
     display_cols = [
-        "symbol", "board", "industry", "pred_ret_1d", "pred_ret_3d",
-        "pred_ret_5d", "prob_up", "pain_prob", "pred_q10", "pred_q50",
+        "symbol", "board", "industry", "pred_ret_3d", "pred_ret_5d",
+        "pred_ret_10d", "prob_up", "pain_prob", "pred_q10", "pred_q50",
         "pred_q90", "uncertainty_width", "score", "ATR_pct",
     ]
     available = [c for c in display_cols if c in filtered.columns]
@@ -262,7 +262,7 @@ def _write_report(trade_date, ic_by_board, filtered, all_preds, bundles):
         industry = row.get("industry", "")
         L.append(f"### {sym} ({board} / {industry})\n")
         param_cols = [
-            "pred_ret_1d", "pred_ret_3d", "pred_ret_5d", "prob_up",
+            "pred_ret_3d", "pred_ret_5d", "pred_ret_10d", "prob_up",
             "pain_prob", "pred_q10", "pred_q50", "pred_q90",
             "uncertainty_width", "score", "ATR_pct", "adv20",
             "turnover_rate", "close", "amount",
@@ -282,7 +282,7 @@ def _write_report(trade_date, ic_by_board, filtered, all_preds, bundles):
     for board in all_preds["board"].unique() if "board" in all_preds.columns else []:
         sub = all_preds[all_preds["board"] == board]
         L.append(f"\n### Board: {board} ({len(sub)} stocks)\n")
-        for c in ['pred_ret_1d', 'pred_ret_3d', 'pred_ret_5d', 'prob_up',
+        for c in ['pred_ret_3d', 'pred_ret_5d', 'pred_ret_10d', 'prob_up',
                    'pain_prob']:
             if c in sub.columns:
                 v = sub[c].dropna()
@@ -337,8 +337,8 @@ def main():
         ic = _compute_signed_ic(feats, bundle, board)
         ic_by_board[board] = ic
         logger.info(
-            f"[{board}] Signed IC: 1d={ic['1d_reg']:+.4f} "
-            f"3d={ic['3d_reg']:+.4f} 5d={ic['5d_reg']:+.4f}"
+            f"[{board}] Signed IC: 3d={ic['3d_reg']:+.4f} "
+            f"5d={ic['5d_reg']:+.4f} 10d={ic['10d_reg']:+.4f}"
         )
 
         pred = predictor.predict(feats, board)
@@ -351,7 +351,7 @@ def main():
                 pred[col] = latest.set_index("symbol").reindex(pred["symbol"])[col].values
 
         logger.info(f"{board}: {len(pred)} predictions")
-        for c in ['pred_ret_1d','pred_ret_3d','pred_ret_5d','prob_up']:
+        for c in ['pred_ret_3d','pred_ret_5d','pred_ret_10d','prob_up']:
             if c in pred.columns:
                 v = pred[c].dropna()
                 logger.info(f"  {c}: mean={v.mean():.6f} std={v.std():.6f} min={v.min():.6f} max={v.max():.6f}")
@@ -380,8 +380,8 @@ def main():
     )
     filtered = filtered.sort_values("score", ascending=False).reset_index(drop=True)
 
-    cols = ["symbol", "board", "industry", "pred_ret_1d", "pred_ret_3d",
-            "pred_ret_5d", "prob_up", "pain_prob", "score", "ATR_pct"]
+    cols = ["symbol", "board", "industry", "pred_ret_3d", "pred_ret_5d",
+            "pred_ret_10d", "prob_up", "pain_prob", "score", "ATR_pct"]
 
     print("\n" + "=" * 100)
     print(f"候选清单 (高收益+高概率+低风险): {len(filtered)} 只 / 总 {len(preds)} 只")

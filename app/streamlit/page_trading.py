@@ -189,13 +189,14 @@ def render() -> None:
 
         st.subheader("板块涨跌幅")
         sector_df = ds.demo_sector_changes()
+        sector_df["涨跌幅"] = sector_df["涨跌幅"] * 100
         st.dataframe(
             sector_df,
             column_config={
                 "板块": st.column_config.TextColumn("板块"),
                 "涨跌幅": st.column_config.NumberColumn(
                     "涨跌幅",
-                    format="+.2%%",
+                    format="+%.2f%%",
                 ),
                 "上涨家数": st.column_config.NumberColumn("上涨家数"),
                 "下跌家数": st.column_config.NumberColumn("下跌家数"),

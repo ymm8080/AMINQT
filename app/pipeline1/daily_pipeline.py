@@ -302,7 +302,7 @@ class DailySelectionPipeline:
         """对持仓股重跑预测并输出卖出信号 (16:00 主链之后运行).
 
         买入链路只预测当日候选; 持仓股需要每天用当日特征重算预测,
-        才能拿到新鲜 pred_ret_1d / prob_up / pain_prob 做卖出裁决.
+        才能拿到新鲜 pred_ret_3d / prob_up / pain_prob 做卖出裁决.
 
         Args:
             trade_date: 'YYYYMMDD'
@@ -312,7 +312,7 @@ class DailySelectionPipeline:
             panel: 完整面板 (含当日); None → _assemble_panel (生产路径)
 
         Returns:
-            DataFrame(symbol, board, close, pred_ret_1d/3d/5d, prob_up,
+            DataFrame(symbol, board, close, pred_ret_3d/5d/10d, prob_up,
                       pain_prob, pred_q10, [pnl], sell_signal, sell_reason);
             无持仓可预测时返回空 DataFrame.
         """
@@ -364,12 +364,12 @@ class DailySelectionPipeline:
         import json
 
         actual = actual_returns.get(
-            "label_pm_1d_net", actual_returns.get("label_1d_net", None)
+            "label_pm_3d_net", actual_returns.get("label_3d_net", None)
         )
         if actual is None or len(forecast_df) == 0:
             return None
 
-        pred = forecast_df["pred_ret_1d"].values
+        pred = forecast_df["pred_ret_3d"].values
         act = actual.values if hasattr(actual, "values") else actual
 
         metrics = compute_quality_metrics(act, pred)
@@ -399,7 +399,7 @@ class DailySelectionPipeline:
             logger.critical("BIAS 红灯触发: %s → E4-L1 模型降级", trade_date)
 
         logger.info(
-            "预测质量报告 %s: MAE=%.4f BIAS=%+.4f DirAcc=%.2f%% Light=%s",
+            "预测质量报告 %s (3d): MAE=%.4f BIAS=%+.4f DirAcc=%.2f%% Light=%s",
             trade_date,
             metrics["mae_1d"],
             metrics["bias_1d"],

@@ -173,7 +173,7 @@ def _render_stock_query() -> None:
     disp["系统"] = hist["system"].fillna("")
     disp["rk"] = hist["rk"]
     disp["score"] = hist["score"]
-    for h in ("2d", "3d", "5d", "10d"):
+    for h in ("3d", "5d", "10d"):
         disp[f"涨{h}"] = hist[f"gain_{h}"].map(_fmt_gain)
         disp[f"概率{h}"] = hist[f"prob_{h}"].map(_fmt_prob)
     disp = disp.sort_values(["日期", "代码"], ascending=[False, True])
@@ -240,7 +240,7 @@ def _render_date_list() -> None:
     disp["系统"] = df["system"].fillna("")
     disp["rk"] = df["rk"]
     disp["score"] = df["score"]
-    for h in ("2d", "3d", "5d", "10d"):
+    for h in ("3d", "5d", "10d"):
         disp[f"涨{h}"] = df[f"gain_{h}"].map(_fmt_gain)
         disp[f"概率{h}"] = df[f"prob_{h}"].map(_fmt_prob)
     disp = disp.sort_values(["日期", "模块", "rk"], na_position="last")
@@ -366,7 +366,7 @@ def _render_module_perf() -> None:
         ["horizon", "n", "hit_rate", "mean", "median", "p10", "p90"]
     ]
     out["horizon"] = out["horizon"].map(
-        {"2d": "T+2", "3d": "T+3", "5d": "T+5", "10d": "T+10"}
+        {"3d": "T+3", "5d": "T+5", "10d": "T+10"}
     )
     out["hit_rate"] = out["hit_rate"].map(lambda v: f"{v:.1%}")
     for c in ("mean", "median", "p10", "p90"):

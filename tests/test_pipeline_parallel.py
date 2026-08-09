@@ -79,10 +79,10 @@ def _with_labels(df):
         df["close_hfq"] * 1.0001,
     )
     df["adv20"] = rng.uniform(1e7, 1e9, len(df))
-    df = add_mfe_labels(df, horizons=(2, 3, 5, 10))
+    df = add_mfe_labels(df, horizons=(3, 5, 10))
     # close-to-close 净标签 (生产口径, add_c2c_labels): label_pm_{k}d_net 全视界齐
     # (含 slow_bull 长视界 20/40d; mag_10d 校准目标列 label_pm_10d_net 同款)
-    df = add_c2c_labels(df, horizons=(2, 3, 5, 10, 20, 40))
+    df = add_c2c_labels(df, horizons=(3, 5, 10, 20, 40))
     df["board"] = df["symbol"].map(board_of)
     return df
 
@@ -123,8 +123,8 @@ def test_both_systems_full_horizon_matrix():
         for h, lab in zip(spec.horizons, spec.labels, strict=False):
             # 2026-08-07 用户: 并行验收改 close-to-close (可兑现), 非 MFE 触摸天花板
             assert lab == f"label_pm_{h}_net"
-    assert set(HORIZONS) == {"2d", "3d", "5d", "10d"}
-    assert len(C2C_LABELS) == 4
+    assert set(HORIZONS) == {"3d", "5d", "10d"}
+    assert len(C2C_LABELS) == 3
 
 
 def test_config_panel_checkpoints_exist():
@@ -191,7 +191,7 @@ def test_add_mfe_labels_never_below_target_date_return():
 
     df = _with_labels(_panel(n_dates=8, n_stocks=5))
     g = df.groupby("symbol")
-    for k, lab in ((2, "label_mfe_2d_net"), (3, "label_mfe_3d_net")):
+    for k, lab in ((3, "label_mfe_3d_net"), (5, "label_mfe_5d_net")):
         close_f = g["close_hfq"].shift(-1)
         close_t = g["close_hfq"].shift(-(k + 1))
         gross = close_t / close_f - 1
@@ -326,7 +326,8 @@ def test_run_all_reports_per_board_oos():
 
     pool = tuple(dict.fromkeys(SNIPER.pool + FUSION.pool))
     df = _with_labels(_panel(extra_cols=pool))
-    out = run_all(df, "20260804_000000", oos_days=4)
+    # oos_days=12: c2c 标签需 k+1 个未来日 (3d 需 4), OOS 窗须足够长让短视界可测
+    out = run_all(df, "20260804_000000", oos_days=12)
     assert set(out["boards"]) == set(BOARD_PREFIXES)
     for b in BOARD_PREFIXES:
         systems = out["boards"][b]["systems"]
@@ -339,15 +340,15 @@ def test_run_all_reports_per_board_oos():
             s = systems[name]
             # 2026-08-04 用户: 验收只看 OOS, full 不参与保留判定
             assert s["full"]["kept"] is None
-            assert set(s["oos"]) == {"oos"}  # oos_days=4 → 单窗
+            assert set(s["oos"]) == {"oos"}  # oos_days=N → 单窗
             for _w, ow in s["oos"].items():
                 assert ow["kept"] is True  # 合成持久因子下 OOS 双头必过
                 assert ow["primary"]["passed"]
             assert set(s["full"]["primary"]["per_horizon"]) == set(HORIZONS)
-    # OOS 窗口边界正确 (末 4 个交易日)
+    # OOS 窗口边界正确 (末 12 个交易日)
     dates = np.sort(df["date"].unique())
-    assert out["window"]["oos"]["oos"]["start"] == str(dates[-4])
-    assert out["window"]["oos"]["oos"]["trading_days"] == 4
+    assert out["window"]["oos"]["oos"]["start"] == str(dates[-12])
+    assert out["window"]["oos"]["oos"]["trading_days"] == 12
 
 
 def test_run_all_default_windows_6m_3m_10d():
@@ -398,15 +399,15 @@ def test_run_all_compare_per_board_oos():
 
     pool = tuple(dict.fromkeys(SNIPER.pool + FUSION.pool))
     df = _with_labels(_panel(extra_cols=pool))
-    out = run_all(df, "20260804_000000", oos_days=4)
+    out = run_all(df, "20260804_000000", oos_days=12)
     for b in BOARD_PREFIXES:
         c = out["boards"][b]["compare"]
         assert "full" in c and "oos" in c
-        assert set(c["oos"]) == {"oos"}  # oos_days=4 → 单窗
+        assert set(c["oos"]) == {"oos"}  # oos_days=N → 单窗
         for comp in [c["full"]] + [c["oos"][w] for w in c["oos"]]:
             assert set(comp["fusion"]) == {"all10", "first5", "last5"}
-            assert comp["sniper_top5"]["2d"]["n"] > 0
-            assert comp["fusion"]["all10"]["2d"]["n"] > 0
+            assert comp["sniper_top5"]["3d"]["n"] > 0
+            assert comp["fusion"]["all10"]["3d"]["n"] > 0
 
 
 # ── 报告落盘: 每次回测一个日期命名目录 + 选股清单 ──
@@ -449,7 +450,7 @@ def test_export_stock_lists_csvs(monkeypatch, tmp_path):
             assert fname in files, fname
             assert (run_dir / fname).exists(), fname
     stocks = pd.read_csv(run_dir / "stocks_main_sniper_oos.csv")
-    assert {"date", "symbol", "score", "rk", "label_mfe_2d_net"}.issubset(
+    assert {"date", "symbol", "score", "rk", "label_mfe_3d_net"}.issubset(
         set(stocks.columns)
     )
     assert len(stocks) > 0
@@ -481,13 +482,12 @@ def test_last_days_report_per_day_picks_and_figures():
                 "symbol",
                 "rk",
                 "score",
-                "mfe_2d",
                 "mfe_3d",
                 "mfe_5d",
                 "mfe_10d",
             }
-        assert set(s["figure"]) == {"2d", "3d", "5d", "10d"}
-        assert set(f["figure"]) == {"2d", "3d", "5d", "10d"}
+        assert set(s["figure"]) == {"3d", "5d", "10d"}
+        assert set(f["figure"]) == {"3d", "5d", "10d"}
 
 
 def test_last_days_report_tail_horizons_nan():
@@ -500,12 +500,14 @@ def test_last_days_report_tail_horizons_nan():
     ld = last_days_report(df, n_days=10)
     # 末日: T+1 买价无未来价 → 所有视界 n=0 如实标注
     last_day = ld["days"][-1]["sniper_top5"]
-    assert all(last_day["figure"][h]["n"] == 0 for h in ("2d", "3d", "5d", "10d"))
-    assert all(p["mfe_2d"] is None for p in last_day["picks"])
-    # 倒数第 4 日: T+2 可测 (窗口 T+2..T+3 有价), T+10 无未来价 → n=0
-    d4 = ld["days"][-4]["sniper_top5"]
-    assert d4["figure"]["2d"]["n"] == 5
-    assert d4["figure"]["2d"]["mag"] is not None
+    assert all(last_day["figure"][h]["n"] == 0 for h in ("3d", "5d", "10d"))
+    assert all(p["mfe_3d"] is None for p in last_day["picks"])
+    # 倒数第 5 日: T+3 可测 (窗口 T+3..T+5 有价, 需 4 个未来日), T+10 无未来价 → n=0.
+    # 注: 3d MFE 标签需 t+4 未来价 → 末日倒数第 4 日起即不可测, 故用 -5
+    d4 = ld["days"][-5]["sniper_top5"]
+    assert d4["figure"]["3d"]["n"] == 5
+    assert d4["figure"]["3d"]["mag"] is not None
+    assert d4["figure"]["5d"]["n"] == 0  # 5d 需 t+6 未来价, 倒数第 5 日仍不够
     assert d4["figure"]["10d"]["n"] == 0
     assert d4["figure"]["10d"]["mag"] is None
     assert all(p["mfe_10d"] is None for p in d4["picks"])
@@ -523,14 +525,14 @@ def test_last_days_report_last_testable_dates():
     ld = last_days_report(df)  # 默认 n_days=15
     assert ld["n_days"] == 15
     lt = ld["last_testable"]
-    assert set(lt) == {"2d", "3d", "5d", "10d"}
+    assert set(lt) == {"3d", "5d", "10d"}
     assert all(lt[h]["n"] > 0 and lt[h]["last_date"] is not None for h in lt)
-    # T+2 需未来 2 日价, T+10 需未来 10 日价 → 后者的可测末日期更早或相等
+    # T+3 需未来 3 日价, T+10 需未来 10 日价 → 后者的可测末日期更早或相等
     lt_ts = {h: pd.Timestamp(lt[h]["last_date"]) for h in lt}
-    assert lt_ts["10d"] <= lt_ts["5d"] <= lt_ts["3d"] <= lt_ts["2d"]
+    assert lt_ts["10d"] <= lt_ts["5d"] <= lt_ts["3d"]
     # 视界越长可测天数越少 (T+10 需 11 日未来价 → 15 日内只有 ~5 日可测)
     ns = {h: lt[h]["n"] for h in lt}
-    assert ns["2d"] > ns["3d"] > ns["5d"] > ns["10d"]
+    assert ns["3d"] > ns["5d"] > ns["10d"]
     assert ns["10d"] >= 1
 
 
@@ -550,7 +552,6 @@ def test_write_last_days_csv(tmp_path):
         "rk",
         "symbol",
         "score",
-        "mfe_2d",
         "mfe_3d",
         "mfe_5d",
         "mfe_10d",
@@ -641,8 +642,8 @@ def test_merged_shortlist_systems_blank_outside_old_topn():
         blank_rows = res[res["systems"] == ""]
         # systems="" 行: prob/exp 走 NaN 兜底 (p.get("", ...) → (nan,nan)), 不崩溃
         if len(blank_rows):
-            assert blank_rows["prob_2d"].isna().all()
-            assert blank_rows["exp_2d"].isna().all()
+            assert blank_rows["prob_3d"].isna().all()
+            assert blank_rows["exp_3d"].isna().all()
 
 
 def test_evaluate_merged_reports_per_horizon():
@@ -690,7 +691,8 @@ def test_daily_shortlist_per_horizon_exp_prob():
     from app.pipeline_parallel.config import BOARD_PREFIXES, HORIZONS
 
     df = _with_labels(_panel(extra_cols=_pool()))
-    out = run_all(df, "20260804_000000", oos_days=4)
+    # oos_days=12: c2c 标签需 k+1 个未来日 (3d 需 4) → OOS 窗须足够长让短视界可测
+    out = run_all(df, "20260804_000000", oos_days=12)
     date = df["date"].max()
     for board in BOARD_PREFIXES:
         res = build_daily_shortlists(df, out, board, date)
@@ -699,11 +701,11 @@ def test_daily_shortlist_per_horizon_exp_prob():
         for h in HORIZONS:
             assert f"exp_{h}" in res.columns, f"缺 exp_{h}"
             assert f"prob_{h}" in res.columns, f"缺 prob_{h}"
-        # 短视界应有可测样本 (OOS 窗 ≥4 交易日); 长视界可能因缺未来价全 NaN, 允许
-        assert res["prob_2d"].notna().sum() > 0
-        assert res["exp_2d"].notna().sum() > 0
+        # 短视界应有可测样本 (OOS 窗 ≥ 最长视界+1 交易日); 长视界可能因缺未来价全 NaN, 允许
+        assert res["prob_3d"].notna().sum() > 0
+        assert res["exp_3d"].notna().sum() > 0
         # 概率在 (0,1] 区间 (合成面板无 0 胜率)
-        assert res["prob_2d"].dropna().between(0, 1).all()
+        assert res["prob_3d"].dropna().between(0, 1).all()
 
 
 def test_build_conclusion_has_verdicts():

@@ -19,7 +19,7 @@ close_hfq[T+11] (label_pm_10d_net[t] = close_hfq[T+11]/close_hfq[T+1]−1−cost
     不足 cross_min_n → 该板块当日不出票.
   - 每股: 有效样本计数 `vD = searchsorted(pos, searchsorted(gd, D, "right") - realized_drop, "left")`
     (gd = 该股日期数组, pos = 有效行位置数组), 恰好丢最后 realized_drop 行.
-    realized_drop = buy_lag + label_horizon = 11.
+    realized_drop = buy_lag + label_horizon (10d=11, 5d=6, 3d=4; 由 label_horizon 参数驱动).
 
 纯向量化横截面 (前缀和) + 每股 numpy 窗口 OLS (与诊断脚本同法), 禁 pandas 行循环.
 """
@@ -31,8 +31,8 @@ import pandas as pd
 
 from app.pipeline_parallel.config import MAG10D_CAL
 
-# 已实现边界 = 买日滞后 + 视界 (标签需未来 buy_lag+label_horizon 日的卖价)
-_REALIZED_DROP = int(MAG10D_CAL["buy_lag"]) + int(MAG10D_CAL["label_horizon"])
+# 已实现边界 = 买日滞后 + 视界 (标签需未来 buy_lag+label_horizon 日的卖价);
+# 按视界局部计算 (10d=11, 5d=6, 3d=4), 见 calibrate_mag10d 内 realized_drop.
 
 
 def _ols_slope_intercept(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
@@ -54,6 +54,7 @@ def calibrate_mag10d(
     shrink_kappa: float = MAG10D_CAL["shrink_kappa"],
     score_col: str = MAG10D_CAL["score_col"],
     target_col: str = MAG10D_CAL["target_col"],
+    label_horizon: int = MAG10D_CAL["label_horizon"],
 ) -> pd.DataFrame:
     """面板长表 (symbol/date/board/score_col/target_col) → DataFrame[symbol, date, board, mag].
 
@@ -66,6 +67,8 @@ def calibrate_mag10d(
         raise ValueError("calibrate_mag10d 要求 panel 携带 'board' 列 (两调用方均保证)")
     need = ["symbol", "date", "board", score_col, target_col]
     work = panel[need].copy()
+    # 已实现边界按视界算: buy_lag + label_horizon (10d=11, 5d=6, 3d=4 交易日)
+    realized_drop = int(MAG10D_CAL["buy_lag"]) + int(label_horizon)
     # 关键: 调用方可能传入被 mask/过滤的子帧 (索引非连续) → 复位为 RangeIndex,
     # 否则下方 s64[g.index] 会把索引标签误当位置索引 → IndexError (生产 build_merged_shortlist 同样受影响)
     work = work.reset_index(drop=True)
@@ -129,7 +132,7 @@ def calibrate_mag10d(
             if len(syms) == 0:
                 continue
             di = date_idx[dt]
-            if di < _REALIZED_DROP:
+            if di < realized_drop:
                 continue  # 尚无已实现标签 → 该板块当日不出票
             cal_lo = bdates[max(0, di - cal_n)]
             # 横截面只用到已实现标签: 行 t 可用 ⇔ t+11 ≤ di (卖价 close[bdates[t+11]] 在决策时已打印).
@@ -137,7 +140,7 @@ def calibrate_mag10d(
             i_lo = int(np.searchsorted(bd, np.datetime64(cal_lo), side="left"))
             i_end = int(
                 np.searchsorted(
-                    bd, np.datetime64(bdates[di - _REALIZED_DROP]), side="right"
+                    bd, np.datetime64(bdates[di - realized_drop]), side="right"
                 )
             )
             n = i_end - i_lo
@@ -167,7 +170,7 @@ def calibrate_mag10d(
                 v_d = int(
                     np.searchsorted(
                         pos,
-                        int(np.searchsorted(gd, dt64, side="right")) - _REALIZED_DROP,
+                        int(np.searchsorted(gd, dt64, side="right")) - realized_drop,
                         side="left",
                     )
                 )

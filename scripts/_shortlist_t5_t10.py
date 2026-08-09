@@ -29,11 +29,10 @@ TOP-10, 与并行 build_merged_shortlist 同源 (d10 c2c 定案). 候选池=全�
 全部有分股, 不再 TOP-30 预筛); 旧 top-N (狙击 top5 / 融合 top10, 按特征分) 仅作
 systems/co_occur 元数据标注; score_w 降为平局裁决/展示.
 
-**主视界 (2026-08-05 用户定案):** T+3 (短持 3 天). 排名权重 3d=0.40 最高 (2d+3d 合计 0.65),
-入选门 = **T+2/T+3 联合门** (2026-08-07 用户: "考虑 T+2,T+3 一起"; 见 config
-SHORTLIST_SCORE.select_gate): 保留 ⇔ T+3 预期涨幅>0, **或** T+2 强看涨(>t2_min)且 T+3 未深度转负
-(>t3_floor) — T+3 仍为首要, 但 T+2 强烈看涨的股不会因 T+3 边际转负被整只剔除.
-平局裁决用 T+3. 四视界 T+2/3/5/10 预期涨幅+达到概率仍全部展示 (T+10 降为参考视界).
+**主视界 (2026-08-05 用户定案):** T+3 (短持 3 天). 排名权重 3d=0.40 最高.
+入选门 = **纯 T+3 门** (2026-08-09 删 2d 视界后联合门退化为纯 T+3; 见 config
+SHORTLIST_SCORE.select_gate): 保留 ⇔ T+3 预期涨幅 > t3_min.
+平局裁决用 T+3. 三视界 T+3/5/10 预期涨幅+达到概率仍全部展示 (T+10 降为参考视界).
 
 用法: python scripts/_shortlist_t5_t10.py [YYYYMMDD 选股日, 默认=full run 短名单日期]
 可选: 传 symbol 列表 (空格分隔) 查看这些股今日预测 (未入选股模型今日无打分, 无预测).
@@ -99,15 +98,15 @@ def _latest_fullrun_dir() -> Path:
 FULLRUN_DIR = _latest_fullrun_dir()
 print(f"[fullrun] 使用 {FULLRUN_DIR}", flush=True)
 BOARD_LABEL = {"main": "主板", "dual": "双创(创业板+科创板)"}
-# 集成清单逐视界展示顺序 (时间序; HORIZONS = ("3d","2d","5d","10d"))
-HORIZON_ORDER = ("2d", "3d", "5d", "10d")
+# 集成清单逐视界展示顺序 (时间序; HORIZONS = ("3d","5d","10d"))
+HORIZON_ORDER = ("3d", "5d", "10d")
 # OOS score→前视涨幅校准 (前瞻预测): 每股独立连续校准 (LinearRegression score→mfe),
 # 替代 CAL_BINS 桶级共享值 (2026-08-06 用户: 价格预测必须每股独立, 非 bulk);
 # CAL_MIN_N 保留用于 load_system_stats/regime_gate 最少样本门.
 CAL_MIN_N = 5
 # [2026-08-06] 达到概率改逐股自然概率 (用户: "natural, not bulk probability"):
 # 口径 = P(该股该视界达到固定绝对涨幅) — 每股唯一真值 (score 单调略增, 非桶内共享).
-ABS_TARGET = {"2d": 0.02, "3d": 0.03, "5d": 0.04, "10d": 0.06}
+ABS_TARGET = {"3d": 0.03, "5d": 0.04, "10d": 0.06}
 # [2026-08-06] 价格预测=每股独立, 只用该股自己最近 ~6 个月历史 (用户定案):
 # 每股取自己最近 PER_STOCK_WINDOW 交易日 (score→mfe) 拟合, 不足 PER_STOCK_MIN_N 回退横截面.
 PER_STOCK_WINDOW = 130
@@ -244,9 +243,14 @@ def _row_active(row, gate: dict) -> bool:
     """该短名单行 (board, systems) 是否命中今日保留的组合; 共现股=任一所涉系统保留即算.
 
     2026-08-07: 全板块候选 systems="" (旧 top-N 之外) 走合并 "both" 校准 (score=max
-    两系统池分) → 同 "both": 任一系统保留即算, 不因无系统标签被整批误杀."""
+    两系统池分) → 同 "both": 任一系统保留即算, 不因无系统标签被整批误杀.
+    2026-08-09: 共现股 systems="fusion+sniper" 同样算任一系统保留 (原漏判 → 共现股被
+    误标 未过, 已修)."""
+    sys = str(row["systems"])
     combos = (
-        ("sniper", "fusion") if row["systems"] in ("", "both") else (row["systems"],)
+        ("sniper", "fusion")
+        if sys in ("", "both", "fusion+sniper")
+        else (sys,)
     )
     return any(gate.get((row["board"], s), {}).get("active", False) for s in combos)
 
@@ -299,14 +303,32 @@ def fmt_regime(gate: dict) -> list[str]:
             f"  {b}/{s:<9}: {'; '.join(seg)}  → {'保留' if g['active'] else '剔除'}"
         )
     if not active:
-        note = (
-            "无 (主视界无优势组合, 空仓观望)"
-            if REGIME_GATE.get("fallback") != "best"
-            else "无 (弱市兜底 best-alpha)"
-        )
+        note = "无"
     else:
         note = ", ".join(active)
-    lines.append(f"  今日输出组合: {note}")
+    if not REGIME_GATE.get("enable", True):
+        lines.append(
+            "  制度门已关闭 (enable=False) → 今日全部板块×系统照常出单, 上述 α 仅作参考"
+        )
+    else:
+        lines.append(
+            f"  今日过门组合: {note} — 清单全量输出全部候选, "
+            f"未过门组合个股已标注 过门=未过"
+        )
+        fail = [
+            (b, s)
+            for (b, s), g in gate.items()
+            if g and g["per"] and not g["active"]
+        ]
+        if fail:
+            btext = "、".join(
+                sorted({BOARD_LABEL.get(b, b) for b, _ in fail})
+            )
+            lines.append(
+                f"  ⚠ 今日制度门 {cfg['primary_horizon']} 未过: "
+                f"{', '.join(f'{b}/{s}' for b, s in fail)} "
+                f"→ 不建议今日买入 {btext} 板块股票"
+            )
     return lines
 
 
@@ -344,12 +366,19 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
     面板 (每 stock × 每交易日) 才有逐股日频. 在此按生产口径重算:
       - score = 与生产一致的 6 特征截面分位 (pv_corr_5 面板同样缺列, 自动跳过)
       - mfe   = _add_mfe 口径 (窗口最高价 / 买入价 - 1 - cost, 净)
-    返回 {(board, key): DataFrame[symbol, date, score, mfe_2d..mfe_10d]}.
+    返回 {(board, key): DataFrame[symbol, date, score, mfe_3d..mfe_10d]}.
     """
     out: dict[tuple[str, str], pd.DataFrame] = {}
-    need = ["symbol", "date", "close_hfq", "high_hfq", "adv20", "label_pm_10d_net"] + [
-        c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"
-    ]
+    need = [
+        "symbol",
+        "date",
+        "close_hfq",
+        "high_hfq",
+        "adv20",
+        "label_pm_3d_net",
+        "label_pm_5d_net",
+        "label_pm_10d_net",
+    ] + [c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"]
     if _PANEL_CACHE.get("ready"):
         return _PANEL_CACHE["data"]
     for board in ("main", "dual"):
@@ -376,16 +405,19 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
         for h in HORIZONS:
             fr_sn[f"mfe_{h}"] = t[f"mfe_{h}"]
             fr_fu[f"mfe_{h}"] = t[f"mfe_{h}"]
-        # 共享 calibrate_mag10d 的目标列 (mag_10d 排名键, 2026-08-07 定案)
-        fr_sn["label_pm_10d_net"] = t["label_pm_10d_net"]
-        fr_fu["label_pm_10d_net"] = t["label_pm_10d_net"]
+        # 共享 calibrate_mag10d 的目标列 (mag_10d 排名键, 2026-08-07 定案) + 平均预测目标
+        # (pred_ret_{3,5,10}d = close-to-close 净收益 label_pm_{h}_net, 非 MFE)
+        for _h in ("3d", "5d", "10d"):
+            fr_sn[f"label_pm_{_h}_net"] = t[f"label_pm_{_h}_net"]
+            fr_fu[f"label_pm_{_h}_net"] = t[f"label_pm_{_h}_net"]
         out[(board, "sniper")] = fr_sn
         out[(board, "fusion")] = fr_fu
         # "both" = 合并短名单口径 (build_merged_shortlist: score=max 两系统分位分) →
         # 共现行也启用逐股校准, 不再回退横截面
         fr_bt = fr_sn.copy()
         fr_bt["score"] = np.maximum(fr_sn["score"], fr_fu["score"])
-        fr_bt["label_pm_10d_net"] = t["label_pm_10d_net"]
+        for _h in ("3d", "5d", "10d"):
+            fr_bt[f"label_pm_{_h}_net"] = t[f"label_pm_{_h}_net"]
         out[(board, "both")] = fr_bt
     _PANEL_CACHE["ready"], _PANEL_CACHE["data"] = True, out
     return out
@@ -530,9 +562,9 @@ def calibrate(
     - 预期涨幅 = 该股 score 经该股自己最近 ~6 个月 (score→mfe) 线性回归的独立值,
       该股样本不足时回退板块×系统横截面回归
     - 概率     = P(该股该视界达到固定绝对涨幅 ABS_TARGET) via 横截面 Platt (每股分数→唯一概率)
-    返回 {h: (exp_mfe, hit_prob, n)}; 无校准数据 → (NaN, NaN, 0).
+    返回 {h: (exp_mfe, hit_prob)}; 无校准数据 → (NaN, NaN).
     """
-    out = {h: (float("nan"), float("nan"), 0) for h in HORIZONS}
+    out = {h: (float("nan"), float("nan")) for h in HORIZONS}
     rec = records.get((board, key))
     if rec is None or len(rec) == 0:
         return out
@@ -543,31 +575,37 @@ def calibrate(
         mag = c["per"].get(symbol, c["mag_cross"])
         exp = float(mag.predict(np.array([[score]]))[0])
         prob = float(c["prob"].predict_proba(np.array([[score]]))[0, 1])
-        out[h] = (exp, prob, int(len(rec[f"mfe_{h}"].dropna())))
+        out[h] = (exp, prob)
     return out
 
 
-def _mag10d_latest(panel: dict, board: str, last) -> pd.Series:
-    """共享 calibrate_mag10d (score→label_pm_10d_net) 的决策日每股 mag.
+def _c2c_latest(panel: dict, board: str, h: str, last) -> pd.Series:
+    """共享 calibrate_mag10d (score→label_pm_{h}_net) 的决策日每股 close-to-close 平均预期.
 
-    2026-08-07 定案: 排名键 pred_mag_10d 与并行 build_merged_shortlist 同源 (d10 c2c),
-    不再是每股 MFE 回归的 pred_mag_10d. 用合并 "both" 面板 (score=max 两系统池分),
-    calibrate_mag10d 内部已做无前瞻 (已实现边界 buy_lag+label_horizon=11 交易日).
+    h ∈ ("3d","5d","10d"). 排名键 pred_mag_10d 与并行 build_merged_shortlist 同源
+    (2026-08-07 d10 c2c 定案); 平均预测 pred_ret_{h} 复用同机制 (2026-08-09 用户:
+    看板显示平均预测而非 MFE 最大). 用合并 "both" 面板 (score=max 两系统池分),
+    calibrate_mag10d 内部已做无前瞻 (已实现边界 buy_lag+label_horizon 交易日, 按视界).
     last 必须等于该板块面板最新交易日 (= 决策日). 返回 symbol→mag Series.
     """
     fr = panel.get((board, "both"))
-    if fr is None or fr.empty or "label_pm_10d_net" not in fr.columns:
+    if fr is None or fr.empty or f"label_pm_{h}_net" not in fr.columns:
         return pd.Series(dtype=float)
     # _panel_per_stock 的帧不含 board 列 → 补上 (该帧本就是单板块, 赋常量 board 正确)
-    work = fr[["symbol", "date", "score", "label_pm_10d_net"]].copy()
+    work = fr[["symbol", "date", "score", f"label_pm_{h}_net"]].copy()
     work["board"] = board
-    m = calibrate_mag10d(work)
+    m = calibrate_mag10d(work, target_col=f"label_pm_{h}_net", label_horizon=int(h[:-1]))
     if m.empty:
         return pd.Series(dtype=float)
     row = m[m["date"] == last]
     if row.empty:
         return pd.Series(dtype=float)
     return row.set_index("symbol")["mag"]
+
+
+def _mag10d_latest(panel: dict, board: str, last) -> pd.Series:
+    """排名键 pred_mag_10d: 委托 _c2c_latest (score→label_pm_10d_net, T+10 c2c)."""
+    return _c2c_latest(panel, board, "10d", last)
 
 
 def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
@@ -577,25 +615,23 @@ def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
     T+10 close-to-close 校准幅度) 覆盖 — 与并行 build_merged_shortlist 同源; 其余
     pred_mag_{2,3,5}d 与全部 pred_prob 保持每股 MFE/自然概率口径不变 (prob 校准与
     select_confident T+2/T+3 门不动).
+    2026-08-09: 另输出 pred_ret_{3,5,10}d = 每股 close-to-close 平均预期 (score→
+    label_pm_{h}_net, 非 MFE 最大), 供看板"预期"列展示 (用户定案).
     """
     cals = _fit_calibrators(records)
     out = res.copy()
     for h in HORIZONS:
-        out[f"pred_mag_{h}"], out[f"pred_prob_{h}"], out[f"pred_n_{h}"] = (
-            float("nan"),
-            float("nan"),
-            0,
-        )
+        out[f"pred_mag_{h}"] = float("nan")
+        out[f"pred_prob_{h}"] = float("nan")
     for idx, r in out.iterrows():
         key = r["systems"] if r["systems"] in ("sniper", "fusion") else "both"
         cal = calibrate(
             records, r["board"], key, str(r["symbol"]), float(r["score"]), cals
         )
         for h in HORIZONS:
-            mag, prob, n = cal[h]
+            mag, prob = cal[h]
             out.at[idx, f"pred_mag_{h}"] = mag
             out.at[idx, f"pred_prob_{h}"] = prob
-            out.at[idx, f"pred_n_{h}"] = n
     # 排名键覆盖: pred_mag_10d ← 共享 calibrate_mag10d (无前瞻, 全板块日截面)
     panel = _panel_per_stock()
     for board in ("main", "dual"):
@@ -607,10 +643,26 @@ def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
             continue
         mask = out["board"] == board
         out.loc[mask, "pred_mag_10d"] = out.loc[mask, "symbol"].map(mag10)
+    # 平均预期 (close-to-close, 非 MFE): 每视界 每股 score→label_pm_{h}_net 校准
+    # (2026-08-09 用户: 看板显示平均预测而非 MFE 最大). 与排名键同源; pred_mag 保留不动.
+    for h in HORIZONS:
+        out[f"pred_ret_{h}"] = float("nan")
+    for board in ("main", "dual"):
+        fr = panel.get((board, "both"))
+        if fr is None or fr.empty:
+            continue
+        mask = out["board"] == board
+        last = fr["date"].max()
+        for h in HORIZONS:
+            mag = _c2c_latest(panel, board, h, last)
+            if mag.empty:
+                continue
+            out.loc[mask, f"pred_ret_{h}"] = out.loc[mask, "symbol"].map(mag)
     # est_wr 已移除: 系统级常量 (同系统每股同值), 且是旧 P(MFE>0) 虚高口径 (用户 2026-08-05 否决)
     first = ["date", "board", "cut", "rk", "symbol", "systems", "co_occur", "score"]
-    ph = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob", "pred_n")]
-    return out[first + ph].reset_index(drop=True)
+    ph = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
+    pr = [f"pred_ret_{h}" for h in HORIZONS]
+    return out[first + ph + pr].reset_index(drop=True)
 
 
 def _module_suffix(module: str) -> str:
@@ -711,38 +763,31 @@ def ema_smooth(res: pd.DataFrame, sel_date: pd.Timestamp, module: str) -> pd.Dat
 def _sel_reason(r: pd.Series) -> str:
     p = "n/a" if pd.isna(r["pred_prob_3d"]) else f"{r['pred_prob_3d']:.0%}"
     m3 = "n/a" if pd.isna(r["pred_mag_3d"]) else f"{r['pred_mag_3d']:+.1%}"
-    m2 = "n/a" if pd.isna(r["pred_mag_2d"]) else f"{r['pred_mag_2d']:+.1%}"
-    return f"{r['symbol']}(T+3 {m3}/{p}, T+2 {m2})"
+    return f"{r['symbol']}(T+3 {m3}/{p})"
 
 
 def select_confident(res: pd.DataFrame, prob_min: float = 0.0) -> pd.DataFrame:
-    """IRON RULE (用户): 只列预测上涨股. 入选门 = T+2/T+3 联合门.
+    """IRON RULE (用户): 只列预测上涨股. 入选门 = 纯 T+3 门.
 
-    2026-08-07 用户: "考虑 T+2,T+3 一起" (301326 08-05 教训: 该股 raw score dual 第 1,
-    但 T+3 预期涨幅边际转负即被整只剔除, 实际 2 天 +12%). 联合门 (config
+    2026-08-09 删 2d 视界: 原 T+2/T+3 联合门 (2026-08-07) 退化为纯 T+3 —
+    2d 视界及其 pred_mag_2d 不再存在, 副门 (T+2 强看涨) 随之删除 (config
     SHORTLIST_SCORE.select_gate):
-      保留 ⇔ (T+3 > t3_min)                     # 主门: T+3 预期涨幅>0 (原硬门)
-             OR (T+2 > t2_min 且 T+3 > t3_floor) # 副门: T+2 强看涨 + T+3 未深度转负
-    T+3 仍为首要 (主门); 副门只救 T+3 边际转负但 T+2 强看涨的股, 不救深转负.
+      保留 ⇔ T+3 预期涨幅 > t3_min
 
     概率口径 (用户 2026-08-06): 概率=逐股自然概率 (P(该股达到固定绝对目标)), 每股唯一
     真值. 原 ">60%" 门槛 (基于 P(MFE>0)≈90% 旧口径) 不可达, 故默认不设概率门槛.
     保留 prob_min 参数以便后续收紧. 主视界 T+3 (2026-08-05 用户: 短持 3 天)."""
     g3 = res["pred_mag_3d"]
-    g2 = res["pred_mag_2d"]
     sg = SHORTLIST_SCORE.get("select_gate", {})
     t3_min = sg.get("t3_min", 0.0)
-    t2_min = sg.get("t2_min", 0.01)
-    t3_floor = sg.get("t3_floor", -0.01)
-    keep = (g3 > t3_min) | ((g2 > t2_min) & (g3 > t3_floor))
+    keep = g3 > t3_min
     if prob_min > 0:
         keep = keep & (res["pred_prob_3d"] > prob_min)
     dropped = res[~keep]
     if len(dropped):
         prob_txt = "" if prob_min <= 0 else f" 或 达到概率≤{prob_min:.0%}"
         print(
-            f"[select] 剔除 {len(dropped)} 只 (T+3≤{t3_min:.1%} 且 "
-            f"(T+2≤{t2_min:.1%} 或 T+3≤{t3_floor:.1%}){prob_txt}): "
+            f"[select] 剔除 {len(dropped)} 只 (T+3≤{t3_min:.1%}{prob_txt}): "
             f"{', '.join(dropped.apply(_sel_reason, axis=1))}",
             flush=True,
         )
@@ -839,8 +884,8 @@ def fmt_merged(m: pd.DataFrame) -> list[str]:
         f"── 合并短名单 (主板+双创合一, 共 {len(m)} 只; 仅正预期涨幅; "
         f"预期=该股最新score经OOS每股独立线性校准的今后涨幅(MFE), 每股唯一; "
         f"达到概率=逐股自然概率 P(该股达到固定绝对目标), 每股唯一真值, 非桶级共享; "
-        f"过门=该板块×系统今日过制度门, "
-        f"未过门个股不应买入) ──",
+        f"过门=该板块×系统今日过10d制度门, "
+        f"未过门个股已标注 过门=未过, 不建议买入) ──",
         hdr,
     ]
     for _, r in m.iterrows():
@@ -936,9 +981,16 @@ def write_docx(
             "systems=命中模块(共现=双系统) · T5=该股是否入选所在板块T-5 · 仅保留 T+3 预期涨幅>0 的股 · "
             "每视界(T+2/3/5/10) 预期涨幅(MFE)=最新score经OOS每股独立线性校准的今后表现, 每股唯一; 达到概率=逐股自然概率 P(该股达到固定绝对目标), 每股唯一真值"
         )
-        mcols = ["rank", "symbol", "board", "module", "score", "score_w", "in_t5"] + [
-            f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")
-        ]
+        mcols = [
+            "rank",
+            "symbol",
+            "board",
+            "module",
+            "score",
+            "score_w",
+            "in_t5",
+            "过门",
+        ] + [f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")]
         t = doc.add_table(rows=1, cols=len(mcols))
         for j, c in enumerate(mcols):
             t.rows[0].cells[j].text = c
@@ -951,7 +1003,8 @@ def write_docx(
             cells[4].text = f"{float(r['score']):.4f}"
             cells[5].text = f"{float(r['score_w']):.4f}"
             cells[6].text = "Y" if bool(r["in_t5"]) else ""
-            j = 7
+            cells[7].text = str(r["过门"])
+            j = 8
             for h in HORIZON_ORDER:
                 cells[j].text = (
                     "n/a"
@@ -968,20 +1021,26 @@ def write_docx(
         p = doc.add_paragraph()
         run = p.add_run(line)
         run.font.size = Pt(9)
-    cols = ["rank", "symbol", "module", "co_occur", "score", "score_w"] + [
-        f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")
-    ]
+    cols = [
+        "rank",
+        "symbol",
+        "module",
+        "co_occur",
+        "score",
+        "score_w",
+        "过门",
+    ] + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
     for board in ("main", "dual"):
         b = res[res["board"] == board]
         if b.empty:
             continue
         doc.add_heading(f"{board} ({BOARD_LABEL.get(board, board)})", level=1)
         for cut in ("T-5", "T-10"):
-            g = b[b["cut"] == cut].sort_values("score_w", ascending=False)
+            g = b[b["cut"] == cut].sort_values(CAND_RANK_KEY, ascending=False)
             if g.empty:
                 continue
             doc.add_paragraph(
-                f"{cut} · score_w 降序(预期涨幅×达到概率加权) · 仅正预期涨幅股 · "
+                f"{cut} · 按 10d 预期幅度降序(全局质量排名, 非板块内排名) · 仅正预期涨幅股 · "
                 f"预期涨幅(MFE)=最新score经OOS每股独立线性校准的今后表现, 每股唯一; 达到概率=逐股自然概率 P(该股达到固定绝对目标)"
             )
             t = doc.add_table(rows=1, cols=len(cols))
@@ -989,19 +1048,20 @@ def write_docx(
                 t.rows[0].cells[j].text = c
             for i, (_, r) in enumerate(g.iterrows()):
                 cells = t.add_row().cells
-                cells[0].text = str(i + 1)
+                cells[0].text = str(r["rank"])
                 cells[1].text = str(r["symbol"])
                 cells[2].text = str(r["systems"])
                 cells[3].text = "★" if bool(r["co_occur"]) else ""
                 cells[4].text = f"{float(r['score']):.4f}"
                 cells[5].text = f"{float(r['score_w']):.4f}"
+                cells[6].text = str(r["过门"])
                 for j, h in enumerate(HORIZONS):
-                    cells[6 + 2 * j].text = (
+                    cells[7 + 2 * j].text = (
                         "n/a"
                         if pd.isna(r[f"pred_mag_{h}"])
                         else f"{float(r[f'pred_mag_{h}']):+.1%}"
                     )
-                    cells[7 + 2 * j].text = (
+                    cells[8 + 2 * j].text = (
                         "n/a"
                         if pd.isna(r[f"pred_prob_{h}"])
                         else f"{float(r[f'pred_prob_{h}']):.0%}"
@@ -1056,17 +1116,25 @@ def write_xlsx(
         "date",
         "board",
         "cut",
-        "rk",
+        "rank",
         "symbol",
         "module",
         "co_occur",
         "score",
-    ] + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob", "pred_n")]
+        "过门",
+    ] + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
     pct_cols = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
     if merged is not None and not merged.empty:
-        mcols = ["rank", "symbol", "board", "module", "score", "score_w", "in_t5"] + [
-            f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")
-        ]
+        mcols = [
+            "rank",
+            "symbol",
+            "board",
+            "module",
+            "score",
+            "score_w",
+            "in_t5",
+            "过门",
+        ] + [f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")]
         m = merged.copy().rename(columns={"systems": "module"})
         _sheet(
             wb.create_sheet("合并排名"),
@@ -1123,34 +1191,35 @@ def main() -> int:
     raw_res = add_oos_pred(cands, records)
     _persist_raw_preds(raw_res, sel_date, module)
     res = select_confident(ema_smooth(raw_res, sel_date, module), prob_min=0.0)
-    # 制度门 (2026-08-06 用户: 清单必须含个股明细 — 不再整组剔除→空仓,
-    # 改为标注 regime_active 过门/未过门; 未过门个股**不应买入**, 见顶部说明)
+    # 制度门 (2026-08-09 用户: STOCK LIST 显示 ALL CANDIDATES — 不整组剔除; 仍按
+    # 10d 门计算, 每行标注 过门=是/未过; 未过门个股不建议买入, 报告里写明)
     if REGIME_GATE.get("enable", True):
         active_mask = res.apply(lambda r: _row_active(r, gate), axis=1)
-        if not active_mask.any():
-            fb = gate_fallback(gate)
-            if fb:
-                print(
-                    f"[regime] 全组合未过线 → 弱市兜底: 仅保留 best-alpha {fb[0]}/{fb[1]}",
-                    flush=True,
-                )
-                active_mask = res.apply(
-                    lambda r: (
-                        r["board"] == fb[0]
-                        and (r["systems"] == fb[1] or r["systems"] == "both")
-                    ),
-                    axis=1,
-                )
-        n_drop = int((~active_mask).sum())
-        if n_drop:
+        res = res.copy()
+        res["regime_active"] = active_mask
+        res["过门"] = res["regime_active"].map({True: "是", False: "未过"})
+        n_fail = int((~active_mask).sum())
+        if n_fail:
             print(
-                f"[regime] 制度门剔除 {n_drop} 行 (所属板块×系统今日未过线)", flush=True
+                f"[regime] 制度门未过 {n_fail} 行 → 已标注 过门=未过 "
+                f"(清单全量输出, 未过门个股不建议买入)",
+                flush=True,
             )
-            res = res[active_mask].copy().reset_index(drop=True)
     res = add_score(res)
     res = rank_and_truncate(res)
     stats = load_system_stats(records)
     merged = build_merged(res)
+    # 全局质量排名 (2026-08-09 用户: 单一清单按预测质量排序, 不按板块分组;
+    # rank = 全池 T-10 内按 CAND_RANK_KEY(pred_mag_10d) 降序 1..20, T-5 行与对应 T-10 同号)
+    rank_map = merged.set_index("symbol")["rank"]
+    res["rank"] = res["symbol"].map(rank_map)
+    cut_ord = {"T-5": 0, "T-10": 1}
+    res = (
+        res.assign(_co=res["cut"].map(cut_ord))
+        .sort_values(["rank", "_co"], na_position="last")
+        .drop(columns=["_co"])
+        .reset_index(drop=True)
+    )
     summary = build_summary(res, stats, sel_date)
     summary = summary[:1] + fmt_regime(gate) + summary[1:]
     print(

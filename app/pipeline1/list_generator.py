@@ -18,14 +18,11 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from .label_engine import LABEL_WEIGHTS
-
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "1.4"
 TOP_N = 15
 MAX_PER_INDUSTRY = 4
-COMPOUND_W = tuple(LABEL_WEIGHTS[k] for k in (1, 2, 3, 5, 10))  # 1d/2d/3d/5d/10d
 HOLDING_BONUS = 0.2
 # B3: Holding Bonus 按持仓天数衰减 day1=1.0/day2=0.5/day3=0.0
 HOLDING_DAY_WEIGHTS = {0: 0.0, 1: 1.0, 2: 0.5, 3: 0.0}
@@ -48,13 +45,10 @@ SCHEMA_FIELDS = [
     "symbol",
     "board",
     "day_change",
-    "pred_ret_1d",
-    "pred_ret_2d",
     "pred_ret_3d",
     "pred_ret_5d",
     "pred_ret_10d",
     "prob_up",
-    "prob_up_2d",
     "prob_up_3d",
     "prob_up_5d",
     "prob_up_10d",
@@ -71,8 +65,7 @@ SCHEMA_FIELDS = [
     "pred_q10",
     "pred_q50",
     "pred_q90",
-    # E7 闸3 用 2d/3d/5d 中位数 (2026-08-05 用户定案, 替代 1d pred_q50)
-    "pred_q50_2d",
+    # E7 闸3 用 3d/5d 中位数 (2026-08-05 定案 2d/3d/5d, 2026-08-09 去 2d)
     "pred_q50_3d",
     "pred_q50_5d",
     "uncertainty_width",
@@ -106,7 +99,7 @@ class ListGenerator:
 
     Args:
         entry_prob: 正常状态 prob_up 准入门槛 [E7] (bear 自动收紧至 0.65 [E11])
-        entry_ret_mult: 正常状态 pred_ret_1d 准入门槛 = mult×COST (bear 3×)
+        entry_ret_mult: 正常状态 pred_ret_3d 准入门槛 = mult×COST (bear 3×)
     """
 
     def __init__(self, entry_prob: float = 0.60, entry_ret_mult: float = 2.0):
@@ -139,43 +132,21 @@ class ListGenerator:
 
     # ---------------- 排序分 ----------------
     def compute_scores(self, df: pd.DataFrame) -> pd.DataFrame:
-        """compound_ret = LABEL_WEIGHTS 加权 (1/2/3/5/10d; 弃 2d, 10d 权重最高).
+        """compound_ret = pred_ret_10d, compound_prob = prob_up_10d
+        (2026-08-09 用户裁决: 弃 COMPOUND_W 加权, 排名直接用 10d).
         [V3.7] rank_score 存在时: score = rank_score × (1 + 0.3·tanh(compound×100))
                × (prob_up / base_rate); 否则回退 V3.5 公式 compound_ret × prob_adjust.
         [E2] 痛苦惩罚: score × (1 - 0.5×pain_prob)  (pain_prob=0.3 → ×0.85)
         [公告] score × (1 + 0.3×announce_score)  (安全网 #17)
         adjusted = score + 0.2 * holding_day_weight * is_in_yesterday_list  (B3 衰减)"""
-        w1, w2, w3, w5, w10 = COMPOUND_W
         df = df.copy()
-        # 只对"存在且有有效值"的视界加权并按权重和归一 (旧 bundle 缺 10d 时精确回退,
-        # 与 predictor.composite_score 同款 present-weights 模式, 避免 NaN 污染 compound_ret).
-        ret_cols = {
-            1: "pred_ret_1d",
-            2: "pred_ret_2d",
-            3: "pred_ret_3d",
-            5: "pred_ret_5d",
-            10: "pred_ret_10d",
-        }
-        w_map = {1: w1, 2: w2, 3: w3, 5: w5, 10: w10}
-        present = {
-            k: c for k, c in ret_cols.items() if c in df.columns and df[c].notna().any()
-        }
-        tw = sum(w_map[k] for k in present)
-        if tw > 1e-12:
-            df["compound_ret"] = sum(w_map[k] * df[c] for k, c in present.items()) / tw
+        # 纯 10d 净收益 / 概率 (旧 bundle 缺 10d 列 → 精确回退 0 / 主概率 prob_up).
+        if "pred_ret_10d" in df.columns:
+            df["compound_ret"] = df["pred_ret_10d"].fillna(0.0)
         else:
             df["compound_ret"] = 0.0
-        # [多视界] 加权概率 (t+1 权重=0; 旧 bundle 缺 2/3/5/10d 概率列/有效值 → 精确回退 prob_up)
-        prob_cols = [f"prob_up_{k}d" for k in (2, 3, 5, 10)]
-        p_present = [c for c in prob_cols if c in df.columns and df[c].notna().any()]
-        if len(p_present) == len(prob_cols):
-            df["compound_prob"] = (
-                w1 * df["prob_up"]
-                + w2 * df["prob_up_2d"]
-                + w3 * df["prob_up_3d"]
-                + w5 * df["prob_up_5d"]
-                + w10 * df["prob_up_10d"]
-            )
+        if "prob_up_10d" in df.columns:
+            df["compound_prob"] = df["prob_up_10d"].fillna(df["prob_up"])
         else:
             df["compound_prob"] = df["prob_up"]
         # B4: base_rate = 20 日滚动均值 (compound_prob 加权概率)
@@ -232,23 +203,24 @@ class ListGenerator:
 
     # ---------------- 动量持续性 ----------------
     @staticmethod
-    def compute_momentum(pred_1d: float, pred_3d: float, pred_5d: float) -> str:
+    def compute_momentum(pred_3d: float, pred_5d: float, pred_10d: float) -> str:
         """盈亏防火墙优先, 否则日均衰减比率 (量纲对齐, 不用绝对值比较).
 
-        pred_1d < -3% → 强制 low;  < 0 → 最高 medium;  |pred_1d| < 0.1% → medium.
-        ratio_kd = (pred_kd/k)/pred_1d:  3d>1 且 5d>1 → high;  3d<0.8 → low;  余 medium.
+        pred_3d < -3% → 强制 low;  < 0 → 最高 medium;  |pred_3d| < 0.1% → medium.
+        ratio_kd = (pred_kd/k)/(pred_3d/3):  5d>1 且 10d>1 → high;  5d<0.8 → low;  余 medium.
+        (1d/2d 2026-08-09 删除, 3d 为最近端基准)
         """
-        if pred_1d < FW_HARD:
+        if pred_3d < FW_HARD:
             return "low"
-        if pred_1d < 0:
+        if pred_3d < 0:
             return "medium"
-        if abs(pred_1d) < FW_EPS:
+        if abs(pred_3d) < FW_EPS:
             return "medium"
-        ratio_3d = (pred_3d / 3) / pred_1d
-        ratio_5d = (pred_5d / 5) / pred_1d
-        if ratio_3d > RATIO_UP and ratio_5d > RATIO_UP:
+        ratio_5d = (pred_5d / 5) / (pred_3d / 3)
+        ratio_10d = (pred_10d / 10) / (pred_3d / 3)
+        if ratio_5d > RATIO_UP and ratio_10d > RATIO_UP:
             return "high"
-        if ratio_3d < RATIO_DOWN:
+        if ratio_5d < RATIO_DOWN:
             return "low"
         return "medium"
 
@@ -320,22 +292,21 @@ class ListGenerator:
     ) -> pd.DataFrame:
         """[E7] 计算型准入过滤 (2026-07-26 用户裁决: 门槛由数据算出, 不设绝对常数).
 
-        老常数闸 (prob>=entry_prob 且 pred_ret_1d>=mult*COST) 在净收益标签口径下
+        老常数闸 (prob>=entry_prob 且 pred_ret_3d>=mult*COST) 在净收益标签口径下
         82/82 天全不可达 (成本双算 + Huber 收缩), 评估见 scripts/eval_gate_options.py.
         新闸 (全部基于当日预测数据计算):
           1. prob_up > base_rate (B4 20日滚动基准率; bear 按 entry_prob_bear/
              entry_prob 参数比率收紧, 不引入新常数)
-          2. compound_ret (1/2/3/5/10d 净预测按 COMPOUND_W 加权, 弃 2d/10d 最高) > 0 —
-             净预期为正, 成本已在训练标签口径内扣除
-          3. pred_q50_2d/3d/5d > 0 (E1 2d/3d/5d 可执行视界中位数均为正;
-             2026-08-05 用户定案: 用 2d/3d/5d 中位数替代 1d, 1d 不可执行易误杀;
-             旧 bundle 无 2d/3d/5d 列时回退 1d pred_q50)
-          4. bear 额外要求 pred_ret_1d > 0 (最近端净预期为正) [E11]
+          2. compound_ret = pred_ret_10d > 0 — 净预期为正, 成本已在训练标签口径内扣除
+             (2026-08-09 弃 COMPOUND_W 加权, 排名/闸统一用 10d)
+          3. pred_q50_3d/5d > 0 (E1 3d/5d 可执行视界中位数均为正;
+             2026-08-05 定案 2d/3d/5d, 2026-08-09 去 2d; 旧 bundle 无 3d/5d 列时回退 1d pred_q50)
+          4. bear 额外要求 pred_ret_3d > 0 (最近端净预期为正) [E11]
         符合票可能为 0 — 这是特性不是故障.
         escape hatch (测试/研究): entry_prob<=0 跳过 prob 闸, entry_ret_mult<=0 跳过边际闸.
 
         Args:
-            df: compute_scores 输出 (含 score, prob_up, pred_ret_1d, base_rate, compound_ret)
+            df: compute_scores 输出 (含 score, prob_up, pred_ret_3d, base_rate, compound_ret)
             market_state: 'range' / 'bear'
             cost: 交易成本 (保留签名兼容; 计算闸不直接使用绝对成本阈值)
         """
@@ -354,46 +325,30 @@ class ListGenerator:
             ratio = self.entry_prob_bear / self.entry_prob if is_bear else 1.0
             cp = df["compound_prob"] if "compound_prob" in df.columns else df["prob_up"]
             ok &= cp > base * ratio
-        # 2/3/4. 净预期为正 (compound_ret > 0; pred_q50 > 0; bear 额外 pred_ret_1d > 0)
+        # 2/3/4. 净预期为正 (compound_ret > 0; pred_q50 > 0; bear 额外 pred_ret_3d > 0)
         if self.entry_ret_mult > 0:
             if "compound_ret" in df.columns:
                 compound = df["compound_ret"]
             else:
-                # present-weights 回退 (与 compute_scores 同款): 旧 bundle 缺 10d
-                # 或其他视界列时, 只对存在且有有效值的视界加权并按权重和归一, 防 KeyError.
-                w1, w2, w3, w5, w10 = COMPOUND_W
-                ret_cols = {
-                    1: "pred_ret_1d",
-                    2: "pred_ret_2d",
-                    3: "pred_ret_3d",
-                    5: "pred_ret_5d",
-                    10: "pred_ret_10d",
-                }
-                w_map = {1: w1, 2: w2, 3: w3, 5: w5, 10: w10}
-                present = {
-                    k: c
-                    for k, c in ret_cols.items()
-                    if c in df.columns and df[c].notna().any()
-                }
-                tw = sum(w_map[k] for k in present)
-                if tw > 1e-12:
-                    compound = sum(w_map[k] * df[c] for k, c in present.items()) / tw
-                else:
-                    compound = pd.Series(0.0, index=df.index)
+                # 纯 10d 回退 (与 compute_scores 同款): 旧 bundle 缺 pred_ret_10d → 0, 防 KeyError.
+                compound = (
+                    df["pred_ret_10d"].fillna(0.0)
+                    if "pred_ret_10d" in df.columns
+                    else pd.Series(0.0, index=df.index)
+                )
             ok &= compound > 0
-            # 闸3 (2026-08-05): 2d/3d/5d 可执行视界中位数均须为正; 回退 1d pred_q50 (旧 bundle)
+            # 闸3 (2026-08-05 定案 2d/3d/5d, 2026-08-09 去 2d): 3d/5d 中位数均须为正; 回退 1d pred_q50 (旧 bundle)
             if all(
-                c in df.columns for c in ("pred_q50_2d", "pred_q50_3d", "pred_q50_5d")
+                c in df.columns for c in ("pred_q50_3d", "pred_q50_5d")
             ):
                 ok &= (
-                    (df["pred_q50_2d"].fillna(compound) > 0)
-                    & (df["pred_q50_3d"].fillna(compound) > 0)
+                    (df["pred_q50_3d"].fillna(compound) > 0)
                     & (df["pred_q50_5d"].fillna(compound) > 0)
                 )
             elif "pred_q50" in df.columns and df["pred_q50"].notna().any():
                 ok &= df["pred_q50"].fillna(compound) > 0
             if is_bear:
-                ok &= df["pred_ret_1d"] > 0
+                ok &= df["pred_ret_3d"] > 0
         # [E2] 痛苦预警: pain_prob > 0.5 直接剔除 (安全网 #16)
         if "pain_prob" in df.columns:
             ok &= df["pain_prob"].fillna(0) <= 0.5
@@ -518,16 +473,16 @@ class ListGenerator:
                 )
         except Exception as exc:
             logger.warning("FINAL STOCK SCAN: 失败, 放行名单: %s", exc)
-        # 动量持续性 (盈亏防火墙)
-        if len(final) and {"pred_ret_1d", "pred_ret_3d", "pred_ret_5d"} <= set(
+        # 动量持续性 (盈亏防火墙; 3d/5d/10d, 1d 已删)
+        if len(final) and {"pred_ret_3d", "pred_ret_5d", "pred_ret_10d"} <= set(
             final.columns
         ):
             final["momentum"] = [
                 self.compute_momentum(a, b, c)
                 for a, b, c in zip(
-                    final["pred_ret_1d"],
                     final["pred_ret_3d"],
                     final["pred_ret_5d"],
+                    final["pred_ret_10d"],
                     strict=False,
                 )
             ]
@@ -549,7 +504,7 @@ class ListGenerator:
         final["weight"] = self._compute_weights(final)
         if "prob_up" in final.columns:
             final["prob_up"] = final["prob_up"].round(3)
-        for col in ("prob_up_2d", "prob_up_3d", "prob_up_5d", "prob_up_10d"):
+        for col in ("prob_up_3d", "prob_up_5d", "prob_up_10d"):
             if col in final.columns:
                 final[col] = final[col].round(3)
         for col in ("is_limit_up_close", "is_one_word_limit"):
@@ -558,14 +513,12 @@ class ListGenerator:
         for col in (
             "day_change",
             "pred_ret_10d",
-            "prob_up_2d",
             "prob_up_3d",
             "prob_up_5d",
             "prob_up_10d",
             "pred_q10",
             "pred_q50",
             "pred_q90",
-            "pred_q50_2d",
             "pred_q50_3d",
             "pred_q50_5d",
             "uncertainty_width",

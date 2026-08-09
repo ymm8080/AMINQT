@@ -48,16 +48,64 @@ SOURCE_COLORS = {
     "northbound": "#d62728",  # 红
     "lhb": "#9467bd",  # 紫
     "fina_indicator": "#8c564b",  # 棕
-    "holdernumber": "#e377c2",  # 粉
     "holdertrade": "#7f7f7f",  # 灰
     "sector_index": "#bcbd22",  # 黄绿
     "cyq_tushare": "#17becf",  # 青
+    "block_trade": "#e377c2",  # 粉
+    "announcement": "#c5b0d5",  # 淡紫
 }
+
+# 覆盖率图补充源 (面板现算, 非数据获取管道源)
+_EXTRA_COVERAGE = {
+    "block_trade": ("bt_count", "大宗交易"),
+    "announcement": ("announce_date", "公告数据"),
+}
+
+# 覆盖率图展示顺序 (不含股东户数)
+_COVERAGE_ORDER = [
+    "daily_basic",
+    "stk_limit",
+    "margin",
+    "northbound",
+    "lhb",
+    "fina_indicator",
+    "holdertrade",
+    "cyq_tushare",
+    "sector_index",
+    "block_trade",
+    "announcement",
+]
 
 
 def _check_v3_exists() -> bool:
     """检查 v3 面板是否存在."""
     return V3_PATH.exists()
+
+
+def _build_coverage(v3: pd.DataFrame) -> dict:
+    """面板覆盖率: 数据源源标记列 + 补充源 (大宗交易/公告) 现算."""
+    cov = compute_coverage(v3)
+    total = len(v3)
+    for src, (marker, _label) in _EXTRA_COVERAGE.items():
+        if marker in v3.columns:
+            non_na = int(v3[marker].notna().sum())
+            cov[src] = {
+                "marker": marker,
+                "non_na": non_na,
+                "total": total,
+                "coverage_pct": round(non_na / total * 100, 1),
+                "has_data": non_na > 0,
+            }
+        else:
+            cov[src] = {
+                "marker": marker,
+                "non_na": 0,
+                "total": total,
+                "coverage_pct": 0.0,
+                "has_data": False,
+                "missing": True,
+            }
+    return cov
 
 
 def _get_panel_info() -> dict | None:
@@ -72,7 +120,7 @@ def _get_panel_info() -> dict | None:
             "date_min": v3["date"].min(),
             "date_max": v3["date"].max(),
             "columns": sorted(v3.columns.tolist()),
-            "coverage": compute_coverage(v3),
+            "coverage": _build_coverage(v3),
         }
     except Exception as exc:
         st.error(f"读取 v3 面板失败: {exc}")
@@ -80,19 +128,30 @@ def _get_panel_info() -> dict | None:
 
 
 def _render_status_card(info: dict) -> None:
-    """渲染面板状态卡片."""
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("股票数量", f"{info['symbols']:,}")
-    with col2:
-        st.metric("数据行数", f"{info['shape'][0]:,}")
-    with col3:
-        st.metric("特征列数", info["shape"][1])
-    with col4:
-        st.metric(
-            "日期范围",
-            f"{info['date_min'].strftime('%Y%m%d')} ~ {info['date_max'].strftime('%Y%m%d')}",
-        )
+    """渲染面板状态卡片 (字体缩小, 仅限本卡片)."""
+    st.markdown(
+        """
+        <style>
+        .st-key-panel_overview [data-testid="stMetricValue"] { font-size: 1.5rem; }
+        .st-key-panel_overview [data-testid="stMetricLabel"] { font-size: 0.8rem; }
+        .st-key-panel_overview [data-testid="stMetricDelta"] { font-size: 0.8rem; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    with st.container(key="panel_overview"):
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("股票数量", f"{info['symbols']:,}")
+        with col2:
+            st.metric("数据行数", f"{info['shape'][0]:,}")
+        with col3:
+            st.metric("特征列数", info["shape"][1])
+        with col4:
+            st.metric(
+                "日期范围",
+                f"{info['date_min'].strftime('%Y%m%d')} ~ {info['date_max'].strftime('%Y%m%d')}",
+            )
 
 
 def _render_coverage_chart(info: dict) -> None:
@@ -103,8 +162,11 @@ def _render_coverage_chart(info: dict) -> None:
         return
 
     rows = []
-    for src, data in coverage.items():
-        label = SOURCE_GROUPS.get(src, src)
+    for src in _COVERAGE_ORDER:
+        data = coverage.get(src)
+        if data is None:
+            continue
+        label = SOURCE_GROUPS.get(src, _EXTRA_COVERAGE.get(src, (None, src))[1])
         rows.append(
             {
                 "数据源": label,
@@ -120,7 +182,8 @@ def _render_coverage_chart(info: dict) -> None:
         y="覆盖率 (%)",
         color="数据源",
         color_discrete_map={
-            SOURCE_GROUPS.get(src, src): color for src, color in SOURCE_COLORS.items()
+            SOURCE_GROUPS.get(src, _EXTRA_COVERAGE.get(src, (None, src))[1]): color
+            for src, color in SOURCE_COLORS.items()
         },
         text="覆盖率 (%)",
         height=400,
@@ -141,10 +204,15 @@ def _render_coverage_detail(info: dict) -> None:
         return
 
     rows = []
-    for src, data in coverage.items():
+    for src in _COVERAGE_ORDER:
+        data = coverage.get(src)
+        if data is None:
+            continue
         rows.append(
             {
-                "数据源": SOURCE_GROUPS.get(src, src),
+                "数据源": SOURCE_GROUPS.get(
+                    src, _EXTRA_COVERAGE.get(src, (None, src))[1]
+                ),
                 "标识列": data.get("marker", "-"),
                 "非空行数": f"{data.get('non_na', 0):,}",
                 "总行数": f"{data.get('total', 0):,}",

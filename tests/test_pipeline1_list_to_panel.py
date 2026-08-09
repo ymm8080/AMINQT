@@ -45,13 +45,10 @@ def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
             "symbol": list(symbols),
             "board": ["main"] * n,
             "day_change": rng.uniform(-0.03, 0.06, n),
-            "pred_ret_1d": rng.uniform(-0.02, 0.05, n),
-            "pred_ret_2d": rng.uniform(-0.03, 0.08, n),
             "pred_ret_3d": rng.uniform(-0.03, 0.09, n),
             "pred_ret_5d": rng.uniform(-0.04, 0.12, n),
             "pred_ret_10d": rng.uniform(-0.05, 0.16, n),
             "prob_up": np.round(rng.uniform(0.42, 0.62, n), 3),
-            "prob_up_2d": np.round(rng.uniform(0.40, 0.66, n), 3),
             "prob_up_3d": np.round(rng.uniform(0.38, 0.68, n), 3),
             "prob_up_5d": np.round(rng.uniform(0.36, 0.70, n), 3),
             "prob_up_10d": np.round(rng.uniform(0.34, 0.72, n), 3),
@@ -67,7 +64,6 @@ def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
             "pred_q10": rng.uniform(-0.04, 0.01, n),
             "pred_q50": rng.uniform(-0.01, 0.04, n),
             "pred_q90": rng.uniform(0.01, 0.10, n),
-            "pred_q50_2d": rng.uniform(-0.02, 0.05, n),
             "pred_q50_3d": rng.uniform(-0.02, 0.06, n),
             "pred_q50_5d": rng.uniform(-0.03, 0.08, n),
             "uncertainty_width": rng.uniform(0.02, 0.12, n),
@@ -202,18 +198,18 @@ class TestPrioritySync:
         assert not tagged.loc[tagged["symbol"] == "601318", "priority"].iloc[0]
 
     def test_pipeline_buy_candidates_with_pred_ret(self, tmp_list_dir):
-        """pipeline_buy_candidates: pred_ret_1d > 0 的股票被推荐."""
+        """pipeline_buy_candidates: pred_ret_3d > 0 的股票被推荐 (1d 2026-08-09 删除)."""
         lst = _make_schema_list(("600519", "300750", "601318"))
-        lst.loc[lst["symbol"] == "600519", "pred_ret_1d"] = 0.02
-        lst.loc[lst["symbol"] == "300750", "pred_ret_1d"] = -0.01
-        lst.loc[lst["symbol"] == "601318", "pred_ret_1d"] = 0.03
+        lst.loc[lst["symbol"] == "600519", "pred_ret_3d"] = 0.02
+        lst.loc[lst["symbol"] == "300750", "pred_ret_3d"] = -0.01
+        lst.loc[lst["symbol"] == "601318", "pred_ret_3d"] = 0.03
         candidates = pipeline_buy_candidates(lst)
         assert "600519" in candidates
         assert "601318" in candidates
         assert "300750" not in candidates
 
     def test_pipeline_buy_candidates_fallback_score(self):
-        """无 pred_ret_1d 列时 fallback 到 score 前 30%."""
+        """无 pred_ret_3d 列时 fallback 到 score 前 30%."""
         lst = pd.DataFrame(
             {
                 "symbol": ["A", "B", "C", "D", "E"],
@@ -261,9 +257,9 @@ class TestEndToEndListToPanel:
         # 4. priority 标记应全部为 True (刚同步)
         assert df["priority"].all()
 
-        # 5. pipeline_buy_candidates 应返回 pred_ret_1d > 0 的子集
+        # 5. pipeline_buy_candidates 应返回 pred_ret_3d > 0 的子集 (1d 2026-08-09 删除)
         candidates = pipeline_buy_candidates(df)
-        expected = set(df.loc[df["pred_ret_1d"] > 0, "symbol"])
+        expected = set(df.loc[df["pred_ret_3d"] > 0, "symbol"])
         assert candidates == expected
 
     def test_e2e_multi_day_yesterday_carryover(self, tmp_list_dir):
