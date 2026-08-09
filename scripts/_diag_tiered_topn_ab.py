@@ -56,7 +56,9 @@ from config.settings import PANEL_V3_PATH  # noqa: E402
 logging.disable(logging.CRITICAL)
 
 ES_DAYS = 40  # 训练尾部早停验证段 (与生产 es 段一致)
-PREP_DAYS = 750  # 特征构建窗 = 末 ~750 交易日 (3 年, 与生产 assemble_panel(years=3) 一致)
+PREP_DAYS = (
+    750  # 特征构建窗 = 末 ~750 交易日 (3 年, 与生产 assemble_panel(years=3) 一致)
+)
 HORIZONS = (2, 3, 5)  # 与 LABEL_WEIGHTS 主权重对齐
 TOPKS = (5, 10, 20)
 W_IC = {2: 0.45, 3: 0.35, 5: 0.2}  # 归一化 2/3/5d 权重 (LABEL_WEIGHTS 主项)
@@ -221,7 +223,7 @@ def _subwindow_topn(te, Xcols, cache, tag, k=5):
     edges = [0, n // 3, 2 * n // 3, n]
     out = {}
     for i in range(3):
-        seg = te[te["date"].isin(dates[edges[i]: edges[i + 1]])]
+        seg = te[te["date"].isin(dates[edges[i] : edges[i + 1]])]
         r = _topn_eval(seg, Xcols, cache, tag, k=k)
         out[f"seg{i + 1}"] = r.get("top10_ret", {"hit": np.nan, "mean": np.nan})
     return out
@@ -269,29 +271,56 @@ def _print_table(b, t):
     print(f"{'metric':<14s} {'BASE':>12s} {'TIER':>12s} {'Δ':>10s}  {'判据'}")
     print("-" * 96)
 
-    print(f"{'n_picked':<14s} {b['n_picked']:>12d} {t['n_picked']:>12d} {t['n_picked'] - b['n_picked']:>+10d}")
-    print(f"{'oos_weighted_IC':<14s} {b['oos_wic']:>12.4f} {t['oos_wic']:>12.4f} {t['oos_wic'] - b['oos_wic']:>+10.4f}  {'Δ>=%.3f' % (-WIC_TOL)}")
+    print(
+        f"{'n_picked':<14s} {b['n_picked']:>12d} {t['n_picked']:>12d} {t['n_picked'] - b['n_picked']:>+10d}"
+    )
+    print(
+        f"{'oos_weighted_IC':<14s} {b['oos_wic']:>12.4f} {t['oos_wic']:>12.4f} {t['oos_wic'] - b['oos_wic']:>+10.4f}  {'Δ>=%.3f' % (-WIC_TOL)}"
+    )
 
-    for key, lab in (("top5_ret", "TOP5 hit"), ("top10_ret", "TOP10 hit"), ("top20_ret", "TOP20 hit")):
+    for key, lab in (
+        ("top5_ret", "TOP5 hit"),
+        ("top10_ret", "TOP10 hit"),
+        ("top20_ret", "TOP20 hit"),
+    ):
         bh, th = b["topn5"][key]["hit"], t["topn5"][key]["hit"]
         ok = "PASS" if th >= bh - HIT_TOL else "FAIL"
-        print(f"{lab:<14s} {bh * 100:>11.2f}% {th * 100:>11.2f}% {(th - bh) * 100:>+9.2f}pp  {ok}")
-    for key, lab in (("top5_ret", "TOP5 mean"), ("top10_ret", "TOP10 mean"), ("top20_ret", "TOP20 mean")):
+        print(
+            f"{lab:<14s} {bh * 100:>11.2f}% {th * 100:>11.2f}% {(th - bh) * 100:>+9.2f}pp  {ok}"
+        )
+    for key, lab in (
+        ("top5_ret", "TOP5 mean"),
+        ("top10_ret", "TOP10 mean"),
+        ("top20_ret", "TOP20 mean"),
+    ):
         bm, tm = b["topn5"][key]["mean"], t["topn5"][key]["mean"]
         ok = "PASS" if tm >= bm - HIT_TOL else "FAIL"
-        print(f"{lab:<14s} {bm * 100:>11.3f}% {tm * 100:>11.3f}% {(tm - bm) * 100:>+9.3f}pp  {ok}")
+        print(
+            f"{lab:<14s} {bm * 100:>11.3f}% {tm * 100:>11.3f}% {(tm - bm) * 100:>+9.3f}pp  {ok}"
+        )
     bm0, tm0 = b["topn5"]["all"]["mean"], t["topn5"]["all"]["mean"]
-    print(f"{'ALL mean':<14s} {bm0 * 100:>11.3f}% {tm0 * 100:>11.3f}% {(tm0 - bm0) * 100:>+9.3f}pp")
+    print(
+        f"{'ALL mean':<14s} {bm0 * 100:>11.3f}% {tm0 * 100:>11.3f}% {(tm0 - bm0) * 100:>+9.3f}pp"
+    )
 
     for k in HORIZONS:
         print(f"\n--- {k}d  (OOS n={b['per_horizon'][k]['n']}) ---")
-        for metric, is_pct in (("dir_acc", True), ("auc", True), ("calib_err", False), ("hit50", True), ("hit55", True), ("hit60", True)):
+        for metric, is_pct in (
+            ("dir_acc", True),
+            ("auc", True),
+            ("calib_err", False),
+            ("hit50", True),
+            ("hit55", True),
+            ("hit60", True),
+        ):
             bv = b["per_horizon"][k].get(metric, np.nan)
             tv = t["per_horizon"][k].get(metric, np.nan)
             if np.isnan(bv) or np.isnan(tv):
                 continue
             if is_pct:
-                print(f"  {metric:<10s} {bv * 100:>10.2f}% {tv * 100:>10.2f}% {(tv - bv) * 100:>+8.2f}pp")
+                print(
+                    f"  {metric:<10s} {bv * 100:>10.2f}% {tv * 100:>10.2f}% {(tv - bv) * 100:>+8.2f}pp"
+                )
             else:
                 print(f"  {metric:<10s} {bv:>12.4f} {tv:>12.4f} {(tv - bv):>+9.4f}")
 
@@ -385,7 +414,9 @@ def main() -> None:
         flush=True,
     )
     assert args.window_days > args.oos_days, "--window-days 必须 > --oos-days"
-    assert args.window_days <= PREP_DAYS, f"--window-days 不能超过特征构建窗 {PREP_DAYS}"
+    assert args.window_days <= PREP_DAYS, (
+        f"--window-days 不能超过特征构建窗 {PREP_DAYS}"
+    )
     cleaner = CleaningPipeline()
     main_df, _ = cleaner.run_train(panel, board="main")
     del panel
@@ -423,7 +454,9 @@ def main() -> None:
         for k in HORIZONS:
             for kind in ("reg", "cls"):
                 t0 = time.time()
-                cache[(tag, k, kind)] = _fit_model(arms[tag]["tr"], arms[tag]["picked"], kind, k)
+                cache[(tag, k, kind)] = _fit_model(
+                    arms[tag]["tr"], arms[tag]["picked"], kind, k
+                )
                 print(f"  fit {tag} {k}d_{kind} {time.time() - t0:.1f}s", flush=True)
     for tag in arms:
         del arms[tag]["tr"]
@@ -453,11 +486,23 @@ def main() -> None:
 
     print("=" * 96)
     print("GATE 判定 (全部满足才允许落地 tier.enable=True):")
-    print(f"  主判据 Top5/10/20 hit+mean 不劣化:      {'PASS' if all(g['hit_pass'] and g['mean_pass'] for g in [gate['top5_ret'], gate['top10_ret'], gate['top20_ret']]) else 'FAIL'}")
-    print(f"  副判据 dir_acc/AUC/校准 不劣化>1pp:     {'PASS' if gate['sub_metrics_ok'] else 'FAIL'}")
-    print(f"  副判据 OOS weighted_IC 不劣化>0.005:   {'PASS' if gate['wic_ok'] else 'FAIL'}  (Δ={report['TIER']['oos_wic'] - report['BASE']['oos_wic']:+.4f})")
-    print(f"  稳定性 子窗 TIER>=BASE >= 2/3:          {'PASS' if gate['stable_ok'] else 'FAIL'}  ({gate['stable_windows']}/3)")
-    verdict = "PASS → 可落地 tier.enable=True" if gate["pass"] else "FAIL → 保持 tier.enable=False, 交用户定夺"
+    print(
+        f"  主判据 Top5/10/20 hit+mean 不劣化:      {'PASS' if all(g['hit_pass'] and g['mean_pass'] for g in [gate['top5_ret'], gate['top10_ret'], gate['top20_ret']]) else 'FAIL'}"
+    )
+    print(
+        f"  副判据 dir_acc/AUC/校准 不劣化>1pp:     {'PASS' if gate['sub_metrics_ok'] else 'FAIL'}"
+    )
+    print(
+        f"  副判据 OOS weighted_IC 不劣化>0.005:   {'PASS' if gate['wic_ok'] else 'FAIL'}  (Δ={report['TIER']['oos_wic'] - report['BASE']['oos_wic']:+.4f})"
+    )
+    print(
+        f"  稳定性 子窗 TIER>=BASE >= 2/3:          {'PASS' if gate['stable_ok'] else 'FAIL'}  ({gate['stable_windows']}/3)"
+    )
+    verdict = (
+        "PASS → 可落地 tier.enable=True"
+        if gate["pass"]
+        else "FAIL → 保持 tier.enable=False, 交用户定夺"
+    )
     print(f"  ==> {'=' * 4} {verdict} {'=' * 4}")
     print("=" * 96)
 
