@@ -162,16 +162,12 @@ class ListGenerator:
         }
         tw = sum(w_map[k] for k in present)
         if tw > 1e-12:
-            df["compound_ret"] = sum(
-                w_map[k] * df[c] for k, c in present.items()
-            ) / tw
+            df["compound_ret"] = sum(w_map[k] * df[c] for k, c in present.items()) / tw
         else:
             df["compound_ret"] = 0.0
         # [多视界] 加权概率 (t+1 权重=0; 旧 bundle 缺 2/3/5/10d 概率列/有效值 → 精确回退 prob_up)
         prob_cols = [f"prob_up_{k}d" for k in (2, 3, 5, 10)]
-        p_present = [
-            c for c in prob_cols if c in df.columns and df[c].notna().any()
-        ]
+        p_present = [c for c in prob_cols if c in df.columns and df[c].notna().any()]
         if len(p_present) == len(prob_cols):
             df["compound_prob"] = (
                 w1 * df["prob_up"]

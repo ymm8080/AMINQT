@@ -37,9 +37,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from app.pipeline1.cleaning_pipeline import CleaningPipeline  # noqa: E402
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35  # noqa: E402
@@ -141,7 +139,10 @@ def main() -> None:
         all_dates = np.array(sorted(df["date"].unique()))
         window_start = pd.Timestamp(all_dates[-args.window_days])
         oos_start = pd.Timestamp(all_dates[-args.oos_days])
-        print(f"[1/2] 载入预构建 frame {args.frame}: rows={len(df)} cols={len(df.columns)}", flush=True)
+        print(
+            f"[1/2] 载入预构建 frame {args.frame}: rows={len(df)} cols={len(df.columns)}",
+            flush=True,
+        )
         print(
             f"  窗 {window_start.date()}..{all_dates[-1].date()} | OOS {oos_start.date()}..",
             flush=True,
@@ -184,7 +185,10 @@ def main() -> None:
         print("[2/4] prepare_board_frame (V35 3y build + 标签) ...", flush=True)
         if args.board_cache and os.path.exists(args.board_cache):
             df = pd.read_parquet(args.board_cache)
-            print(f"  [cache] 载入 board frame rows={len(df)} cols={len(df.columns)}", flush=True)
+            print(
+                f"  [cache] 载入 board frame rows={len(df)} cols={len(df.columns)}",
+                flush=True,
+            )
             del main_df
             gc.collect()
         else:
@@ -237,15 +241,22 @@ def main() -> None:
 
     # OLD / NEW 固定 compound (present 归一; 全部在 → /1.0)
     rows["compound_old"] = (
-        OLD_W[2] * rows["pred_2d"] + OLD_W[3] * rows["pred_3d"] + OLD_W[5] * rows["pred_5d"]
+        OLD_W[2] * rows["pred_2d"]
+        + OLD_W[3] * rows["pred_3d"]
+        + OLD_W[5] * rows["pred_5d"]
     ) / sum(OLD_W.values())
     rows["compound_new"] = (
-        NEW_W[3] * rows["pred_3d"] + NEW_W[5] * rows["pred_5d"] + NEW_W[10] * rows["pred_10d"]
+        NEW_W[3] * rows["pred_3d"]
+        + NEW_W[5] * rows["pred_5d"]
+        + NEW_W[10] * rows["pred_10d"]
     ) / sum(NEW_W.values())
 
     # ADAPT: 逐日自适应权重 (walk-forward, 严格早于当日) = 各视界最近 adapt_w 交易日
     # 的逐日 Rank IC (pred vs 实得) 正值归一; 全非正 → 回退 NEW 固定权重.
-    print(f"  [ADAPT] 逐日自适应权重 (trail={args.adapt_w}日, 无 look-ahead) ...", flush=True)
+    print(
+        f"  [ADAPT] 逐日自适应权重 (trail={args.adapt_w}日, 无 look-ahead) ...",
+        flush=True,
+    )
     X_all = np.nan_to_num(aug[picked].to_numpy(dtype=float), nan=0.0)
     all_df = pd.DataFrame({"date": aug["date"].values})
     for k in HORIZONS:
@@ -278,9 +289,12 @@ def main() -> None:
             w[k] = float(np.mean(vals)) if vals else 0.0
         w = {k: max(v, 0.0) for k, v in w.items()}
         tot = sum(w.values())
-        adapt_w_by_date[d] = {k: v / tot for k, v in w.items()} if tot > 1e-12 else dict(NEW_W)
+        adapt_w_by_date[d] = (
+            {k: v / tot for k, v in w.items()} if tot > 1e-12 else dict(NEW_W)
+        )
     avg_w = {
-        k: float(np.mean([adapt_w_by_date[d].get(k, 0.0) for d in oos_dates])) for k in HORIZONS
+        k: float(np.mean([adapt_w_by_date[d].get(k, 0.0) for d in oos_dates]))
+        for k in HORIZONS
     }
 
     def pure_gate(g, base, d):
@@ -298,7 +312,7 @@ def main() -> None:
         return (g["prob10"] > base) & (comp > 0)
 
     pure_df = _arm_daily(rows, base_rate_ser, pure_gate)
-    old_df = _arm_daily(rows, base_rate_ser, old_gate)
+    _arm_daily(rows, base_rate_ser, old_gate)
     new_df = _arm_daily(rows, base_rate_ser, new_gate)
     adapt_df = _arm_daily(rows, base_rate_ser, adapt_gate)
 
@@ -338,33 +352,54 @@ def main() -> None:
             sub = df_[df_["date"].isin(set(ch))]
             subwin[name].append(
                 [float(sub["hit10"].mean()), float(sub["mean10"].mean())]
-                if len(sub) else [None, None]
+                if len(sub)
+                else [None, None]
             )
 
     print(f"\n  OOS 逐日 Rank IC (pred_10d vs 实得): {forecast_ic:.4f}")
-    print("  ADAPT 平均自适应权重: " + "  ".join(f"{k}d={avg_w.get(k, 0.0):.3f}" for k in HORIZONS))
+    print(
+        "  ADAPT 平均自适应权重: "
+        + "  ".join(f"{k}d={avg_w.get(k, 0.0):.3f}" for k in HORIZONS)
+    )
 
     print("\n" + "=" * 92)
-    print("legacy 选股方案 A/B — OOS 对比 (同模型/同池/同排名键 pred_10d, 仅准入门不同)")
+    print(
+        "legacy 选股方案 A/B — OOS 对比 (同模型/同池/同排名键 pred_10d, 仅准入门不同)"
+    )
     print("   PURE10: pred_10d>0 | NEW: 固定 compound>0 | ADAPT: 自适应 compound>0")
     print("=" * 92)
-    print(f"{'metric':<14s} {'PURE10':>12s} {'NEW fixed':>12s} {'ADAPT':>12s} {'ΔNEW':>9s} {'ΔADAPT':>9s}")
+    print(
+        f"{'metric':<14s} {'PURE10':>12s} {'NEW fixed':>12s} {'ADAPT':>12s} {'ΔNEW':>9s} {'ΔADAPT':>9s}"
+    )
     print("-" * 92)
-    for k, lab in (("days", "清单日数"), ("avg_n_pick", "日均选股数"), ("hit10", "T+10 命中率"), ("mean10", "T+10 均值")):
+    for k, lab in (
+        ("days", "清单日数"),
+        ("avg_n_pick", "日均选股数"),
+        ("hit10", "T+10 命中率"),
+        ("mean10", "T+10 均值"),
+    ):
         pv = arms["PURE10"].get(k, 0.0)
         nv = arms["NEW"].get(k, 0.0)
         av = arms["ADAPT"].get(k, 0.0)
         if k == "hit10":
-            print(f"{lab:<14s} {pv * 100:>11.2f}% {nv * 100:>11.2f}% {av * 100:>11.2f}% {(nv - pv) * 100:>+8.2f}pp {(av - pv) * 100:>+8.2f}pp")
+            print(
+                f"{lab:<14s} {pv * 100:>11.2f}% {nv * 100:>11.2f}% {av * 100:>11.2f}% {(nv - pv) * 100:>+8.2f}pp {(av - pv) * 100:>+8.2f}pp"
+            )
         elif k == "mean10":
-            print(f"{lab:<14s} {pv * 100:>11.3f}% {nv * 100:>11.3f}% {av * 100:>11.3f}% {(nv - pv) * 100:>+8.3f}pp {(av - pv) * 100:>+8.3f}pp")
+            print(
+                f"{lab:<14s} {pv * 100:>11.3f}% {nv * 100:>11.3f}% {av * 100:>11.3f}% {(nv - pv) * 100:>+8.3f}pp {(av - pv) * 100:>+8.3f}pp"
+            )
         else:
-            print(f"{lab:<14s} {pv:>12.2f} {nv:>12.2f} {av:>12.2f} {(nv - pv):>+9.2f} {(av - pv):>+9.2f}")
+            print(
+                f"{lab:<14s} {pv:>12.2f} {nv:>12.2f} {av:>12.2f} {(nv - pv):>+9.2f} {(av - pv):>+9.2f}"
+            )
     hit_pass = {
-        n: arms[n]["hit10"] >= arms["PURE10"]["hit10"] - HIT_TOL for n in ("NEW", "ADAPT")
+        n: arms[n]["hit10"] >= arms["PURE10"]["hit10"] - HIT_TOL
+        for n in ("NEW", "ADAPT")
     }
     mean_pass = {
-        n: arms[n]["mean10"] >= arms["PURE10"]["mean10"] - HIT_TOL for n in ("NEW", "ADAPT")
+        n: arms[n]["mean10"] >= arms["PURE10"]["mean10"] - HIT_TOL
+        for n in ("NEW", "ADAPT")
     }
     adapt_vs_new = (
         arms["ADAPT"]["hit10"] >= arms["NEW"]["hit10"] - HIT_TOL
@@ -372,12 +407,17 @@ def main() -> None:
     )
     print("=" * 92)
     for n in ("NEW", "ADAPT"):
-        print(f"  {n:<6s} vs PURE10: T+10 命中率 {'PASS' if hit_pass[n] else 'FAIL'} / 均值 {'PASS' if mean_pass[n] else 'FAIL'}")
+        print(
+            f"  {n:<6s} vs PURE10: T+10 命中率 {'PASS' if hit_pass[n] else 'FAIL'} / 均值 {'PASS' if mean_pass[n] else 'FAIL'}"
+        )
     if hit_pass["NEW"] and mean_pass["NEW"]:
         verdict = "PASS → 固定 compound 选股不劣于纯 10d"
     elif hit_pass["ADAPT"] and mean_pass["ADAPT"]:
         verdict = "PASS(ADAPT) → 固定 compound 劣化但自适应 compound 不劣化 → 用 ADAPT"
-    elif arms["PURE10"]["hit10"] >= arms["ADAPT"]["hit10"] - HIT_TOL and arms["PURE10"]["mean10"] >= arms["ADAPT"]["mean10"] - HIT_TOL:
+    elif (
+        arms["PURE10"]["hit10"] >= arms["ADAPT"]["hit10"] - HIT_TOL
+        and arms["PURE10"]["mean10"] >= arms["ADAPT"]["mean10"] - HIT_TOL
+    ):
         verdict = "纯 10d 门最优 → 无需 compound, 准入直接用 pred_10d"
     else:
         verdict = "FAIL → 三个方案均不占优, 需人工复核"
@@ -386,7 +426,12 @@ def main() -> None:
     print("=" * 92)
 
     ts = datetime.now().strftime("%Y%m%dT%H%M%S")
-    out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", f"_diag_weight_ab_{ts}.json")
+    out_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "data",
+        f"_diag_weight_ab_{ts}.json",
+    )
     payload = {
         "created": ts,
         "window_days": args.window_days,

@@ -29,8 +29,12 @@ LABEL_HORIZONS = (1, 2, 3, 5, 10)
 # 修改此字典即全局生效 (validate_oos 加权 IC + predictor/list_generator 综合分).
 LABEL_WEIGHTS = {1: 0.0, 2: 0.0, 3: 0.10, 5: 0.40, 10: 0.50}
 # 阈值来自 config/training_config.yaml labels 段 (铁律: 阈值入 config, 不写死代码)
-CLS_THRESHOLD = float(_LABELS_CFG.get("cls_threshold", 0.005))  # +0.5% 覆盖双边成本 (佣金万2.5x2 + 印花税0.05% + 滑点0.05% ≈ 0.13%, 留安全垫)
-MASK_RECENT_DAYS = int(_LABELS_CFG.get("mask_recent_days", 6))  # 近端标签未成熟掩码 (交易日)
+CLS_THRESHOLD = float(
+    _LABELS_CFG.get("cls_threshold", 0.005)
+)  # +0.5% 覆盖双边成本 (佣金万2.5x2 + 印花税0.05% + 滑点0.05% ≈ 0.13%, 留安全垫)
+MASK_RECENT_DAYS = int(
+    _LABELS_CFG.get("mask_recent_days", 6)
+)  # 近端标签未成熟掩码 (交易日)
 COST = 0.0013  # round-trip 费用: 佣金万2.5双边 + 印花税0.05%卖出 (E5 净标签口径)
 # E5 滑点分层 (按 ADV20): >5亿→0.05% / 1~5亿→0.10% / <1亿→0.15% (双边计入)
 ADV20_TIER_HIGH = 5e8

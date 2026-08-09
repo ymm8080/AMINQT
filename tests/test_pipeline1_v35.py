@@ -100,9 +100,7 @@ class TestCleaning:
 
     def test_limit_pct_series_matches_scalar(self):
         """M4: 向量化 limit_pct_series 与逐行 get_limit_pct 全等 (跨板块/分段日期)."""
-        boards = pd.Series(
-            ["main", "GEM", "star", "GEM", "main", "STAR", "gem"]
-        )
+        boards = pd.Series(["main", "GEM", "star", "GEM", "main", "STAR", "gem"])
         dates = pd.to_datetime(
             [
                 "2020-08-23",
@@ -118,7 +116,9 @@ class TestCleaning:
         want = [get_limit_pct(b, d) for b, d in zip(boards, dates)]
         assert list(got) == pytest.approx(want)
         with pytest.raises(ValueError):
-            limit_pct_series(pd.Series(["main", "BSE"]), pd.to_datetime(["2024-01-01", "2024-01-01"]))
+            limit_pct_series(
+                pd.Series(["main", "BSE"]), pd.to_datetime(["2024-01-01", "2024-01-01"])
+            )
 
     def test_limit_up_precise(self):
         """涨停价精确比对 round(pre_close*(1+pct),2), B5 相对容差 max(0.01, lu*0.1%)."""
@@ -1085,15 +1085,15 @@ class TestListGenerator:
         gen = ListGenerator()
         # 第一次 emit: 单日均值 = 滚动均值 (仅1天)
         c1 = make_candidates(n=5, seed=1)
-        c1.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d", "prob_up_10d"]] = (
-            0.50
-        )
+        c1.loc[
+            :, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d", "prob_up_10d"]
+        ] = 0.50
         gen.emit(c1)
         # 第二次 emit: 不同均值, base_rate 应为前2天平均
         c2 = make_candidates(n=5, seed=2)
-        c2.loc[:, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d", "prob_up_10d"]] = (
-            0.60
-        )
+        c2.loc[
+            :, ["prob_up", "prob_up_2d", "prob_up_3d", "prob_up_5d", "prob_up_10d"]
+        ] = 0.60
         df2 = gen.compute_scores(c2)
         # 20日滚动 = (0.50 + 0.60) / 2 = 0.55
         assert df2["base_rate"].iloc[0] == pytest.approx(0.55, abs=0.01)

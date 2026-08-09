@@ -347,9 +347,7 @@ def dedup_l2(feats, df, threshold=0.7, order=None):
 
         # Sort by variance (proxy for importance) or by order score, keep if |r| < threshold
         if order is not None:
-            ordered = sorted(
-                avail, key=lambda c: abs(order.get(c, 0.0)), reverse=True
-            )
+            ordered = sorted(avail, key=lambda c: abs(order.get(c, 0.0)), reverse=True)
         else:
             vars_ = sample.var().sort_values(ascending=False)
             ordered = [c for c in vars_.index if c in avail]
@@ -1146,9 +1144,7 @@ class FeatureSelector:
         if need_ic and base_numeric:
             # 一次批量评 IC (避免 90 次单独 groupby rank)
             ic_accum.update(
-                feature_mean_abs_ic(
-                    df.loc[pre_mask, base_numeric], ic_date, ic_lab
-                )
+                feature_mean_abs_ic(df.loc[pre_mask, base_numeric], ic_date, ic_lab)
             )
         for fam in BRUTE_FAMILIES:
             new = generator.generate_family(df, fam, raw_cols=raw_cols, dtype="float32")
@@ -1158,16 +1154,12 @@ class FeatureSelector:
                 cand_nan[c] = float(new[c].isna().mean())
                 sample_cols[c] = new.loc[sample_pos, c].to_numpy()
             if need_ic:
-                ic_accum.update(
-                    feature_mean_abs_ic(new.loc[pre_mask], ic_date, ic_lab)
-                )
+                ic_accum.update(feature_mean_abs_ic(new.loc[pre_mask], ic_date, ic_lab))
             del new
 
         valid = [c for c, rate in cand_nan.items() if rate < threshold]
         sample_frame = pd.DataFrame(sample_cols, index=sample_pos)
-        order = (
-            pd.Series({c: ic_accum.get(c, 0.0) for c in valid}) if need_ic else None
-        )
+        order = pd.Series({c: ic_accum.get(c, 0.0) for c in valid}) if need_ic else None
         selected = dedup_l2(valid, sample_frame, dedup_thr, order=order)
         return selected
 
