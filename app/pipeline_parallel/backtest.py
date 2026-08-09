@@ -425,7 +425,9 @@ def _slowbull_exit_rets(
         cost = cost_arr[base]
         peak = 0.0
         exit_ret = None
-        for k in range(1, M + 1):
+        # M2: k=1 是入场日 (T+1, r0=base+1) 本身 — 同日判退出违背 T+1;
+        #     最早可卖 = T+2, 故从 k=2 起判.
+        for k in range(2, M + 1):
             r = base + k
             if mode == "cur":
                 peak = max(peak, low[r] / entry - 1.0)

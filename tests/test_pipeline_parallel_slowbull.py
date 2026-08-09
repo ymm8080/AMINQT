@@ -483,6 +483,37 @@ def test_trailing_stop_price():
     assert np.isclose(signals.trailing_stop_price(10.0, 1.20, ma20=14.0), 14.0)
 
 
+def test_slowbull_exit_skips_entry_day_t_plus_1():
+    """M2: k=1 判入场日退出违背 T+1 — 入场日 (T+1) 卖信号不得触发同日平仓.
+
+    场景: 入场日 (行1) any_sell=True, 若判当日即平 → 净 -cost, holds=1; 之后价格
+    平稳上行无触发 → 应持有到 max_hold 到期 (holds=M, 收益=到期收盘净收益).
+    """
+    from app.pipeline_parallel.config import SLOW_BULL_REGIME
+
+    M = int(SLOW_BULL_REGIME["max_hold"])
+    n = M + 4  # 足够行: r0 + M = 1 + M < n
+    dates = pd.bdate_range("2025-01-01", periods=n)
+    idx = np.arange(n)
+    close = np.where(idx >= 1, 100.0 * 1.01 ** (idx - 1), 90.0)
+    A = {
+        "sym_code": {"600000": 0},
+        "starts": np.array([0]),
+        "ends": np.array([n]),
+        "dates": dates.values.astype("datetime64[ns]"),
+        "close": close,
+        "low": close.copy(),  # 无盘中回撤 → 后续日 stop 永不触发
+        "ma20": np.zeros(n),
+        "any_sell": np.zeros(n, dtype=bool),
+        "cost": np.full(n, 0.002),
+    }
+    A["any_sell"][1] = True  # 入场日卖信号 — T+1 陷阱
+    picks = pd.DataFrame({"symbol": ["600000"], "date": [pd.Timestamp(dates[0])]})
+    rets, holds = backtest._slowbull_exit_rets(picks, "cur", A)
+    assert holds[0] == M  # 未在入场日平仓 → 持有到到期
+    assert rets[0] == pytest.approx(close[1 + M] / close[1] - 1 - 0.002)
+
+
 # ── run_system 带 gate + 权重 (慢牛长视界) ──
 def test_run_system_slowbull_full_flow():
     from app.pipeline_parallel.backtest import add_c2c_labels, run_system
