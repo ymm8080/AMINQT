@@ -40,7 +40,7 @@
 
 - M1 `app/backtest/engine.py:452-459` 跌停顺延用当日收盘判当日开盘 (保守方向, 不虚增收益)
 - M2 `app/pipeline_parallel/backtest.py:414-447` 慢牛回测 k=1 同日判退出违背 T+1; 止损 low 触发按 close 成交 (盘内乐观) [部分 GUESS]
-- M3 `intraday/v51/backtest_engine.py`、`backtest_v35`、`paper_trading.py:157` 资金用 float (Decimal 铁律仅覆盖实盘 `order_manager`/`executor_base`); `paper_trading.py:157` 价格=0 时除零→inf
+- M3 `paper_trading.py:157` 资金用 float (Decimal 铁律仅覆盖实盘 `order_manager`/`executor_base`); `paper_trading.py:157` 价格=0 时除零→inf — **已修**: 建仓零/负价剔除 + 估值除零防护 (`cost>0` 才除, 否则按 0), 新增回归测试 `test_zero_cost_price_guard`. **已定案**: 回测引擎 (`backtest_v35`/`intraday/v51/backtest_engine`) 保持 float — 回测是模拟非真钱, `engine.py` 用整数分记账已规避累积误差, 转 Decimal 是纯性能回归; Decimal 铁律覆盖的实盘路径 (`order_manager`/`executor_base`/`core/backtest_engine`) 已核实正确
 - M4 `feature_engine_v35.py:1056-1058` + `cleaning_pipeline.py:178` limit_pct 逐行推导, 全面板数百万行非向量化
 - M5 `app/utils/safe_load.py:63` 内层仍裸 `pickle.load` (可审计非防 RCE); scripts/ 7+ 脚本仍裸用 (不在生产链)
 - M6 死代码: `risk_overlays.py` 4 个零引用函数; 6 个根目录孤儿脚本 (`_gate_d.py`/`_build_features.py`/`_ic_eval_fast.py`/`_predict_today.py`/`_select_features_main.py`/`_main_list_gen.py`)
@@ -67,5 +67,5 @@
 | P1 | 训练脚本补 seed (H3) | **已修** |
 | P2 | 硬编码阈值进 config (H4) | **已修** (生产路径; eval/诊断脚本未扫) |
 | P2 | V3 面板分区 (H5) + gitignore 补 rules/移除已入库结果 (H6) | H6 **已修**; H5 待办 |
-| P3 | 回测引擎 float→Decimal; limit_pct 向量化; 删死代码/孤儿脚本 | 待办 |
+| P3 | 回测引擎 float→Decimal (定案保持 float); limit_pct 向量化; 删死代码/孤儿脚本 | **paper_trading 除零已修**; 其余待办 |
 | P3 | 评估 `engine.py` 替换路径与跌停顺延口径 (H1/M1) | 待办 |

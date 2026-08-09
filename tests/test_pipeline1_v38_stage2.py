@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pandas as pd
 import pytest
 
@@ -131,6 +133,16 @@ class TestShadowList:
     def test_profile_guard(self):
         with pytest.raises(AssertionError):
             ShadowListTracker(profile="unknown")
+
+    def test_zero_cost_price_guard(self):
+        # 零价票: 不建仓, NAV 保持现金, 不产生 inf (M3 回归)
+        st = ShadowListTracker(profile="stable", initial_capital=100.0)
+        lst = pd.DataFrame({"symbol": ["A", "B"], "weight": [0.5, 0.25]})
+        st.record_list("2026-07-24", lst)
+        nav1 = st.mark_to_market("2026-07-25", pd.Series({"A": 0.0, "B": 20.0}))
+        assert nav1 == pytest.approx(100.0)  # A(价0) 不建仓, B 建仓后现金仍在
+        assert st._positions.get("A") is None
+        assert math.isfinite(nav1)
 
 
 # ============================================================
