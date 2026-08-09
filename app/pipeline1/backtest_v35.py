@@ -187,6 +187,11 @@ class BacktestEngineV35:
                     continue  # 无 T-1 裁决数据 (首日/停牌): 当日不裁决
                 pos["hold_days"] += 1
                 pos["high"] = max(pos["high"], dbar["high"])
+                # M7: 移动止盈棘轮 — 用 T-1 的 hfq 高点推进 (除权调整空间,
+                #     无未来函数; 旧代码从不更新 → 实为"相对成本回撤止盈")
+                pos["high_hfq"] = max(
+                    pos["high_hfq"], float(dbar.get("high_hfq", dbar["high"]))
+                )
                 px = self._px_close(dbar)
                 pnl = _safe_divide(px, pos["cost_hfq"]) - 1
                 dd_high = _safe_divide(px, pos["high_hfq"]) - 1

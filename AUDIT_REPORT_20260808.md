@@ -44,7 +44,7 @@
 - M4 `feature_engine_v35.py:1056-1058` + `cleaning_pipeline.py:178` limit_pct 逐行推导, 全面板数百万行非向量化
 - M5 `app/utils/safe_load.py:63` 内层仍裸 `pickle.load` (可审计非防 RCE); scripts/ 7+ 脚本仍裸用 (不在生产链)
 - M6 死代码: `risk_overlays.py` 4 个零引用函数; 6 个根目录孤儿脚本 (`_gate_d.py`/`_build_features.py`/`_ic_eval_fast.py`/`_predict_today.py`/`_select_features_main.py`/`_main_list_gen.py`)
-- M7 潜在逻辑缺陷: `backtest_v35.py` `pos["high_hfq"]` 买入后从不更新 → "移动止盈"实际为"相对成本的回撤止盈", 未真正随高点移动 (待定案, 未改)
+- M7 潜在逻辑缺陷: `backtest_v35.py` `pos["high_hfq"]` 买入后从不更新 → "移动止盈"实际为"相对成本的回撤止盈", 未真正随高点移动 — **已修**: 决策日棘轮推进 `pos["high_hfq"] = max(high_hfq, T-1 bar hfq 高点)` (无未来函数: 决策只用 T-1 数据), 回撤改从持仓最高点测量; 新增回归测试 `test_trailing_stop_uses_running_high_m7` (冲高+10%→回撤4.5%仍盈利, 旧代码不触发/新代码触发)
 
 ## 四、亮点 (未坏)
 

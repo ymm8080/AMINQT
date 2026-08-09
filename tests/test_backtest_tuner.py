@@ -168,6 +168,63 @@ class TestBacktestProtocol:
         assert sells.iloc[0]["date"] != dates[3]
         assert not np.isclose(sells.iloc[0]["price"], 102, atol=0.1)
 
+    def test_trailing_stop_uses_running_high_m7(self):
+        """M7 回归: 移动止盈必须从持仓最高点回撤测量, 而非从成本回撤.
+
+        场景: 买入后冲高 +10%, 随后从高点回撤 4.5% (但仍比成本高 5%).
+        正确行为: 高点回撤 4.5% ≤ trailing_drawdown 4% → 触发移动止盈.
+        旧(bug)行为: high_hfq 从不更新 → 回撤从成本算 = +3.96%, 永不触发.
+        """
+        dates = list(pd.bdate_range("2025-01-01", periods=6))
+
+        def bar(d, o, h, lo, c, pc):
+            return {
+                "symbol": "600519",
+                "date": d,
+                "open": o,
+                "high": h,
+                "low": lo,
+                "close": c,
+                "close_hfq": c,
+                "high_hfq": h,
+                "pre_close": pc,
+                "board": "main",
+                "industry": "白酒",
+                "amount": 1e9,
+            }
+
+        # d1 买入 (open=100); d2 冲高 110; d3 收盘 105 (自 110 回撤 4.5%)
+        panel = pd.DataFrame(
+            [
+                bar(dates[0], 100, 101, 99, 100, 100),
+                bar(dates[1], 100, 102, 99, 101, 100),  # 买入日
+                bar(dates[2], 102, 110, 101, 108, 101),  # 峰值日 high=110
+                bar(dates[3], 107, 108, 105, 105, 108),  # 回撤日: 105/110-1≈-4.5%
+                bar(dates[4], 105, 106, 104, 105, 105),
+                bar(dates[5], 105, 106, 104, 105, 105),
+            ]
+        )
+        lists = {
+            dates[0]: pd.DataFrame(
+                {
+                    "symbol": ["600519"],
+                    "score": [1.0],
+                    "prob_up": [0.9],
+                    "industry": ["白酒"],
+                }
+            )
+        }
+        proto = BacktestProtocol(
+            exec_session="AM", max_hold_days=10, hard_stop=-0.10, prob_exit=0.50
+        )
+        result = BacktestEngineV35(panel, proto).run(lists)
+        sells = result["trades"][result["trades"]["side"] == "sell"]
+        # 峰值 110 回撤 4.5% 必须触发移动止盈, 而非等到持仓到期
+        assert sells["reason"].str.contains("移动止盈").any()
+        # 触发日 = 回撤可见后的次日开盘 (d4, 用 d3 收盘裁决)
+        trailing = sells[sells["reason"].str.contains("移动止盈")]
+        assert trailing.iloc[0]["date"] == dates[4]
+
 
 class TestParamTuner:
     def test_grid_search_and_report(self, tmp_path):
