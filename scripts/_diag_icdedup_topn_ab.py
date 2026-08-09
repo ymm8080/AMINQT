@@ -224,7 +224,7 @@ def _oos_ic(te, Xcols, cache, tag):
             sub.rename(columns={"_pred": "score"}), "score", y_col
         )
     tw = sum(W_IC.values())
-    wic = sum(W_IC[k] * ics[k] for k in W_IC) / tw
+    wic = sum(W_IC[k] * ics[k] for k in W_IC) / tw if tw > 1e-12 else 0.0
     return ics, wic
 
 

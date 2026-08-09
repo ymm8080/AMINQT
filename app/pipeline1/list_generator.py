@@ -359,14 +359,29 @@ class ListGenerator:
             if "compound_ret" in df.columns:
                 compound = df["compound_ret"]
             else:
+                # present-weights 回退 (与 compute_scores 同款): 旧 bundle 缺 10d
+                # 或其他视界列时, 只对存在且有有效值的视界加权并按权重和归一, 防 KeyError.
                 w1, w2, w3, w5, w10 = COMPOUND_W
-                compound = (
-                    w1 * df["pred_ret_1d"]
-                    + w2 * df["pred_ret_2d"]
-                    + w3 * df["pred_ret_3d"]
-                    + w5 * df["pred_ret_5d"]
-                    + w10 * df["pred_ret_10d"]
-                )
+                ret_cols = {
+                    1: "pred_ret_1d",
+                    2: "pred_ret_2d",
+                    3: "pred_ret_3d",
+                    5: "pred_ret_5d",
+                    10: "pred_ret_10d",
+                }
+                w_map = {1: w1, 2: w2, 3: w3, 5: w5, 10: w10}
+                present = {
+                    k: c
+                    for k, c in ret_cols.items()
+                    if c in df.columns and df[c].notna().any()
+                }
+                tw = sum(w_map[k] for k in present)
+                if tw > 1e-12:
+                    compound = (
+                        sum(w_map[k] * df[c] for k, c in present.items()) / tw
+                    )
+                else:
+                    compound = pd.Series(0.0, index=df.index)
             ok &= compound > 0
             # 闸3 (2026-08-05): 2d/3d/5d 可执行视界中位数均须为正; 回退 1d pred_q50 (旧 bundle)
             if all(
