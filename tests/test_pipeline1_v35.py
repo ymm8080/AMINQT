@@ -1016,18 +1016,25 @@ class TestListGenerator:
         assert len(out["list"]) == 4
 
     def test_momentum_firewall(self):
-        """V3.4 陷阱修复: pred_1d=-8%, pred_3d=-2% → 旧规则误判 high, 新规则 low."""
+        """V3.4 陷阱修复: pred_3d=-8% → 强制 low (1d/2d 已删, 3d 为最近端基准)."""
         assert ListGenerator.compute_momentum(-0.08, -0.02, -0.01) == "low"
         assert ListGenerator.compute_momentum(-0.01, 0.05, 0.10) == "medium"
         assert ListGenerator.compute_momentum(0.0005, 0.001, 0.002) == "medium"
         assert ListGenerator.compute_momentum(0.02, 0.09, 0.20) == "high"  # 加速
-        assert ListGenerator.compute_momentum(0.05, 0.10, 0.10) == "low"  # 3d 衰减
-        assert ListGenerator.compute_momentum(0.03, 0.10, 0.12) == "medium"
+        assert (
+            ListGenerator.compute_momentum(0.05, 0.10, 0.10) == "medium"
+        )  # 5d 强但 10d 衰减
+        assert (
+            ListGenerator.compute_momentum(0.05, 0.02, 0.12) == "low"
+        )  # 5d 日化显著弱于 3d
+        assert (
+            ListGenerator.compute_momentum(0.05, 0.10, 0.08) == "medium"
+        )  # 非加速非弱化
 
     def test_holding_bonus(self):
         """向后兼容: 无 holding_day 列时, is_in_yesterday_list=1 视为 day1 (weight=1.0)."""
         cands = make_candidates(n=2, seed=3)
-        # 新 COMPOUND_W 含 10d → 10d 也设平, 保证两票 base 分相等, 分差仅来自 bonus
+        # 排名键 10d (2026-08-09 弃 COMPOUND_W) → 10d 设平, 保证两票 base 分相等, 分差仅来自 bonus
         cands.loc[
             :,
             [
@@ -1052,7 +1059,7 @@ class TestListGenerator:
     def test_holding_bonus_decay_b3(self):
         """B3: Holding Bonus 按持仓天数衰减 day1=1.0/day2=0.5/day3=0.0."""
         cands = make_candidates(n=3, seed=3)
-        # 新 COMPOUND_W 含 10d (权重最高), 必须连 10d 一起设平 → 三票 base 分等,
+        # 排名键 10d (2026-08-09 弃 COMPOUND_W) → 必须连 10d 一起设平 → 三票 base 分等,
         # 只让 holding bonus (0.2/0.1/0.0) 产生差异
         cands.loc[
             :,
@@ -1114,7 +1121,7 @@ class TestListGenerator:
         assert "GEM" in boards_in_list
 
     def test_compound_prob_weighting(self):
-        """多视界加权概率: compound_prob = w3*p3 + w5*p5 + w10*p10 (1d/2d 权重=0)."""
+        """纯 10d 概率: compound_prob = prob_up_10d (2026-08-09 弃 COMPOUND 加权)."""
         n = 3
         cands = make_candidates(n=n, seed=7)
         cands.loc[
@@ -1133,16 +1140,13 @@ class TestListGenerator:
         ]
         scored = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0).compute_scores(cands)
         cp = scored["compound_prob"]
-        w3, w5, w10 = 0.10, 0.40, 0.50
         assert cp.iloc[0] == pytest.approx(0.5)
-        assert cp.iloc[1] == pytest.approx(w3 * 0.7 + w5 * 0.8 + w10 * 0.9)
-        assert cp.iloc[2] == pytest.approx(w3 * 0.9 + w5 * 1.0 + w10 * 0.6)
+        assert cp.iloc[1] == pytest.approx(0.9)  # 纯 10d, 不是加权混合
+        assert cp.iloc[2] == pytest.approx(0.6)
 
     def test_compound_prob_fallback_when_columns_missing(self):
-        """旧 bundle 缺 2/3/5d 概率列 → compound_prob 精确回退 prob_up."""
-        cands = make_candidates(n=3, seed=7).drop(
-            columns=["prob_up_2d", "prob_up_3d", "prob_up_5d"]
-        )
+        """旧 bundle 缺 prob_up_10d 列 → compound_prob 精确回退 prob_up."""
+        cands = make_candidates(n=3, seed=7).drop(columns=["prob_up_10d"])
         scored = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0).compute_scores(cands)
         assert (scored["compound_prob"] == scored["prob_up"]).all()
 
@@ -1338,6 +1342,27 @@ def test_apply_per_stock_zero_close_row_preserved():
     assert len(out) == len(df)
     assert (out.loc[out["symbol"] == "600519", "zero_flag"] == 1).all()
     assert (out.loc[out["symbol"] == "300750", "zero_flag"] == 0).all()
+
+
+def test_apply_per_stock_nan_int_dtype_no_crash():
+    """跨股票混合填充: 首股 int 列, 后续股缺值 NaN → 不得 IntCastingNaNError.
+
+    dtype 恢复只对全有限列生效; 含 NaN 的列保持 float 保留缺失
+    (LightGBM 原生处理, 非静默丢弃) — 回归: audit 提交 08875218 后重训崩溃.
+    """
+    df = make_panel(symbols=("600519", "300750"), days=5)
+
+    def per_stock(g):
+        g = g.sort_values("date")
+        if g["symbol"].iloc[0] == "600519":
+            g["exp_days"] = np.arange(len(g), dtype="int64")
+        else:
+            g["exp_days"] = np.full(len(g), np.nan)
+        return g
+
+    out = _apply_per_stock(df, per_stock)
+    assert out.loc[out["symbol"] == "300750", "exp_days"].isna().all()
+    assert pd.api.types.is_float_dtype(out["exp_days"])
 
 
 def test_apply_per_stock_row_dropping_fn_trim():

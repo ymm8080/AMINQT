@@ -29,7 +29,7 @@ from . import data_service as ds
 
 logger = logging.getLogger(__name__)
 
-HORIZONS = ("2d", "3d", "5d", "10d")
+HORIZONS = ("3d", "5d", "10d")
 _SCOPE_DELIVERED = ("legacy", "parallel", "slow_bull")
 _SCOPE_RAW = ("legacy_raw", "parallel_raw")
 
@@ -57,7 +57,7 @@ def load_module_picks(list_dir: str = STOCK_LIST_DIR) -> pd.DataFrame:
 
     Returns:
         DataFrame (date, symbol, family, module, board, system, rk, score,
-                   gain_2d/3d/5d/10d, prob_*, module_id) — 无文件 → 空.
+                   gain_3d/5d/10d, prob_*, module_id) — 无文件 → 空.
     """
     frames: list[pd.DataFrame] = []
     for info in ds.list_prediction_files(list_dir):
@@ -98,7 +98,7 @@ def load_module_picks(list_dir: str = STOCK_LIST_DIR) -> pd.DataFrame:
 
 # ───────────────────────── 已实现收益 (对齐面板) ─────────────────────────
 def compute_realized_returns(picks: pd.DataFrame, panel: pd.DataFrame) -> pd.DataFrame:
-    """给清单补已实现 close-to-close 收益 real_2d/3d/5d/10d.
+    """给清单补已实现 close-to-close 收益 real_3d/5d/10d.
 
     panel 需含 date(datetime)/symbol/close_hfq. 逐股向量化 (unstack + shift),
     无未来价 (数据未成熟/停牌缺行) → NaN 剔除.
@@ -143,6 +143,42 @@ def compute_realized_returns(picks: pd.DataFrame, panel: pd.DataFrame) -> pd.Dat
 
 
 # ───────────────────────── 分档聚合 ─────────────────────────
+def recent_module_ids(picks: pd.DataFrame, n: int = 5) -> list[str]:
+    """最近活跃的 n 个模块 (按最后交付日降序; 同日在 module_id 倒序).
+
+    用于看板模型下拉: 取最近交付过的模型版本, 供用户选择回看其绩效.
+    """
+    if picks is None or picks.empty or "module_id" not in picks.columns:
+        return []
+    rec = (
+        picks.groupby("module_id")["date"]
+        .max()
+        .reset_index()
+        .sort_values(["date", "module_id"], ascending=[False, False])
+    )
+    return rec["module_id"].head(n).tolist()
+
+
+def recent_module_ids_per_model(picks: pd.DataFrame, n: int = 5) -> list[str]:
+    """每个模型族 (family) 各取最近 n 个版本, 拼成下拉选项.
+
+    module_id = family·module (family=legacy/parallel/slow_bull, module=版本);
+    以 family 为模型, module 为版本, 每族内按最后交付日取最新 n 个.
+    """
+    if picks is None or picks.empty or "module_id" not in picks.columns:
+        return []
+    rec = (
+        picks.groupby(["module_id", "family"])["date"]
+        .max()
+        .reset_index()
+        .sort_values(["family", "date", "module_id"], ascending=[True, False, False])
+    )
+    out: list[str] = []
+    for _fam, grp in rec.groupby("family"):
+        out.extend(grp["module_id"].head(n).tolist())
+    return out
+
+
 def filter_scope(picks: pd.DataFrame, scope: str) -> pd.DataFrame:
     """按数据源范围过滤: 交付短名单 / 全市场底稿 / 全部."""
     if picks is None or picks.empty or scope in ("全部", ""):

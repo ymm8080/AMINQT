@@ -1,12 +1,11 @@
 """训练/预测档案 (只读) — 从持久化存储回看历史, 不现场重算.
 
 数据源 (仓库外 / 落盘 WORM, 防 automation git 误删):
-  - 模型档案: models/pipeline1/current_meta.json + *.pkl
   - 回测历史: BACKTEST_RESULT_DIR (每趟=日期子目录, 含 backtest.json)
-  - 落盘清单: STOCK_LIST_DIR (交付) + data/lists (仓库内, 易被清理)
-  - 模块绩效: 落盘清单 × V3 面板 close_hfq → 已实现收益/命中率
+  - 交付清单: STOCK_LIST_DIR (预测/短名单交付)
+  - 模块绩效: 交付清单 × V3 面板 close_hfq → 已实现收益/命中率
 
-本页只读: 模块绩效按落盘清单+收盘价现算, 其余纯回看, 不重算训练/不写盘.
+本页只读: 模块绩效按交付清单+收盘价现算, 其余纯回看, 不重算训练/不写盘.
 """
 
 from __future__ import annotations
@@ -19,11 +18,9 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import streamlit as st
 
-from config.settings import BACKTEST_RESULT_DIR, PANEL_V3_PATH, STOCK_LIST_DIR
+from config.settings import BACKTEST_RESULT_DIR, PANEL_V3_PATH
 
 logger = logging.getLogger(__name__)
-
-MODEL_DIR = "models/pipeline1"
 
 
 def _safe(fn, default=None, **kwargs):
@@ -34,54 +31,6 @@ def _safe(fn, default=None, **kwargs):
         logger.warning("档案读取失败: %s", exc, exc_info=True)
         st.warning(f"数据源读取失败 (跳过): {exc}")
         return default
-
-
-# ───────────────────────── 模型档案 ─────────────────────────
-def _render_models() -> None:
-    st.subheader("当前生效模型 (current_meta.json)")
-    from app.pipeline1.model_meta import load_modules
-
-    mods = _safe(load_modules)
-    if mods:
-        rows = [
-            {
-                "board": board,
-                "tag": info.get("tag", ""),
-                "file": info.get("file", ""),
-                "updated": info.get("updated", ""),
-            }
-            for board, info in mods.items()
-        ]
-        st.dataframe(pd.DataFrame(rows), use_container_width=True)
-    else:
-        st.info(
-            "current_meta.json 缺失或为空 — 尚无模型被提升为当前 (运行 train_predict_bt3y 后自动提升)"
-        )
-
-    st.subheader("模型包文件")
-    if not os.path.isdir(MODEL_DIR):
-        st.info(f"模型目录不存在: {MODEL_DIR}")
-        return
-    files = []
-    for fname in os.listdir(MODEL_DIR):
-        if not fname.endswith(".pkl"):
-            continue
-        p = os.path.join(MODEL_DIR, fname)
-        s = os.stat(p)
-        files.append(
-            {
-                "file": fname,
-                "size_MB": round(s.st_size / 1e6, 1),
-                "mtime": datetime.fromtimestamp(s.st_mtime).strftime("%Y-%m-%d %H:%M"),
-            }
-        )
-    if not files:
-        st.info("模型目录为空")
-        return
-    st.dataframe(
-        pd.DataFrame(files).sort_values("mtime", ascending=False),
-        use_container_width=True,
-    )
 
 
 # ───────────────────────── 回测历史 ─────────────────────────
@@ -162,37 +111,6 @@ def _render_bt_run(d: dict, btr) -> None:
             st.dataframe(picks, use_container_width=True)
 
 
-# ───────────────────────── 落盘清单 ─────────────────────────
-def _list_dir(d: str, label: str) -> None:
-    if not os.path.isdir(d):
-        st.info(f"{label}: 目录不存在")
-        return
-    files = []
-    for fname in sorted(os.listdir(d), reverse=True)[:50]:
-        p = os.path.join(d, fname)
-        if not os.path.isfile(p):
-            continue
-        s = os.stat(p)
-        files.append(
-            {
-                "file": fname,
-                "KB": round(s.st_size / 1024, 1),
-                "mtime": datetime.fromtimestamp(s.st_mtime).strftime("%Y-%m-%d %H:%M"),
-            }
-        )
-    if files:
-        st.dataframe(pd.DataFrame(files), use_container_width=True)
-    else:
-        st.info(f"{label}: 暂无文件")
-
-
-def _render_lists() -> None:
-    st.subheader("交付清单 (STOCK_LIST_DIR, 仓库外持久)")
-    _list_dir(str(STOCK_LIST_DIR), "STOCK LIST")
-    st.subheader("data/lists (仓库内, 可能被 automation 清理)")
-    _list_dir(os.path.join("data", "lists"), "data/lists")
-
-
 # ───────────────────────── 个股预测查询 / 日期清单 ─────────────────────────
 def _fmt_gain(v) -> str:
     if v is None or pd.isna(v):
@@ -255,7 +173,7 @@ def _render_stock_query() -> None:
     disp["系统"] = hist["system"].fillna("")
     disp["rk"] = hist["rk"]
     disp["score"] = hist["score"]
-    for h in ("2d", "3d", "5d", "10d"):
+    for h in ("3d", "5d", "10d"):
         disp[f"涨{h}"] = hist[f"gain_{h}"].map(_fmt_gain)
         disp[f"概率{h}"] = hist[f"prob_{h}"].map(_fmt_prob)
     disp = disp.sort_values(["日期", "代码"], ascending=[False, True])
@@ -322,7 +240,7 @@ def _render_date_list() -> None:
     disp["系统"] = df["system"].fillna("")
     disp["rk"] = df["rk"]
     disp["score"] = df["score"]
-    for h in ("2d", "3d", "5d", "10d"):
+    for h in ("3d", "5d", "10d"):
         disp[f"涨{h}"] = df[f"gain_{h}"].map(_fmt_gain)
         disp[f"概率{h}"] = df[f"prob_{h}"].map(_fmt_prob)
     disp = disp.sort_values(["日期", "模块", "rk"], na_position="last")
@@ -349,7 +267,9 @@ def _load_close_panel() -> pd.DataFrame | None:
 
 
 def _render_module_perf() -> None:
-    """模块绩效: 按模块追踪每日清单的已实现收益/命中率 (只读, 不重算训练)."""
+    """模块绩效: 只交付短名单, 下拉选模型 → 该模型已实现收益/命中率 (只读)."""
+    from app.pipeline1.model_meta import load_modules
+    from app.pipeline1.model_meta import module_id as current_module_id
     from app.streamlit import module_perf as mp
 
     picks = mp.load_module_picks()
@@ -365,26 +285,91 @@ def _render_module_perf() -> None:
         st.info("已实现收益不可用 (清单日期太新 / 面板缺失)")
         return
 
-    scope = st.radio(
-        "数据范围",
-        ["交付短名单", "全市场底稿", "全部"],
-        horizontal=True,
-        key="mp_scope",
+    # 只交付短名单 (legacy/parallel/slow_bull), 不含全市场底稿
+    delivered = mp.filter_scope(realized, "交付短名单")
+    if delivered is None or delivered.empty:
+        st.info("交付短名单无数据")
+        return
+
+    # 当前模型 (current_meta.json), 在交付清单里标记 (当前)
+    mods = load_modules()
+    cur_tag = current_module_id(mods) if mods else None
+    if cur_tag:
+        st.caption(f"当前模型: {cur_tag}")
+        cur_ids = sorted(
+            delivered.loc[
+                delivered["module"].astype(str) == cur_tag, "module_id"
+            ].unique()
+        )
+    else:
+        st.caption("当前模型: 未设置 (current_meta.json 缺失或损坏)")
+        cur_ids = []
+
+    # 模型下拉: 每个模型族最近 5 个版本 + 当前模型置顶
+    options = mp.recent_module_ids_per_model(delivered, n=5)
+    for cid in cur_ids:
+        if cid not in options:
+            options.insert(0, cid)
+    if not options:
+        st.info("暂无可用模型 (交付清单无模块标签)")
+        return
+    default_idx = options.index(cur_ids[0]) if cur_ids else 0
+    sel = st.selectbox(
+        "选择模型",
+        options,
+        index=default_idx,
+        format_func=lambda mid: f"{mid} (当前)" if mid in cur_ids else mid,
     )
+
+    # 评估窗口 (选股日): 对所选模型一致应用, 保证跨模型可比
+    avail_dates = sorted(delivered["date"].dropna().unique())
+    if len(avail_dates) > 1:
+        w_start, w_end = st.select_slider(
+            "评估窗口 (选股日)",
+            options=avail_dates,
+            value=(avail_dates[0], avail_dates[-1]),
+            key="mp_eval_window",
+        )
+        delivered = delivered[
+            (delivered["date"] >= w_start) & (delivered["date"] <= w_end)
+        ]
+        st.caption(
+            f"评估窗口: {w_start} ~ {w_end} (共 {delivered['date'].nunique()} 个选股日)"
+        )
+    else:
+        st.caption(
+            f"评估窗口: {avail_dates[0] if avail_dates else '无'} (仅 1 个选股日)"
+        )
+
     topk = st.selectbox(
         "Top-N (按每日模块内排名)", [5, 10, 20, "全部"], index=1, key="mp_topk"
     )
     n = None if topk == "全部" else int(topk)
-    sub = mp.filter_scope(realized, scope)
-    sub = mp.top_k(sub, n)
+    sub = mp.top_k(delivered[delivered["module_id"] == sel].copy(), n)
     if sub is None or sub.empty:
-        st.info("该范围无数据")
+        st.info("该模型无已实现收益数据")
         return
+
+    rows = []
     for h in mp.HORIZONS:
         summary = mp.perf_summary(sub, h)
-        if summary is not None and not summary.empty:
-            with st.expander(f"持有 {h} 已实现收益 / 命中率", expanded=(h == "3d")):
-                st.dataframe(summary, use_container_width=True, hide_index=True)
+        if summary is None or summary.empty:
+            continue
+        r = summary.iloc[0][["n", "hit_rate", "mean", "median", "p10", "p90"]].to_dict()
+        r["horizon"] = h
+        rows.append(r)
+    if not rows:
+        st.info("该模型清单日期太新, 暂无已实现收益")
+        return
+    out = pd.DataFrame(rows)[
+        ["horizon", "n", "hit_rate", "mean", "median", "p10", "p90"]
+    ]
+    out["horizon"] = out["horizon"].map({"3d": "T+3", "5d": "T+5", "10d": "T+10"})
+    out["hit_rate"] = out["hit_rate"].map(lambda v: f"{v:.1%}")
+    for c in ("mean", "median", "p10", "p90"):
+        out[c] = out[c].map(lambda v: f"{v:+.2%}")
+    st.subheader(f"{sel} 已实现收益 / 命中率")
+    st.dataframe(out, use_container_width=True, hide_index=True)
 
 
 # ───────────────────────── 页面 ─────────────────────────
@@ -392,33 +377,25 @@ def render() -> None:
     st.title("训练/预测档案 (只读)")
     st.caption(
         "从持久化存储读取历史训练/预测结果, 供存储与回看. "
-        "数据源: 模型包 / 回测报告 / 落盘清单. 模块绩效按落盘清单+收盘价现算, 其余只读回看."
+        "模块绩效按落盘清单+收盘价现算, 其余只读回看."
     )
     (
-        tab_models,
         tab_module_perf,
         tab_bt,
-        tab_lists,
         tab_query,
         tab_datelist,
     ) = st.tabs(
         [
-            "模型档案",
             "模块绩效",
             "回测历史",
-            "落盘清单",
             "个股预测查询",
             "日期清单",
         ]
     )
-    with tab_models:
-        _render_models()
     with tab_module_perf:
         _render_module_perf()
     with tab_bt:
         _render_backtests()
-    with tab_lists:
-        _render_lists()
     with tab_query:
         _render_stock_query()
     with tab_datelist:

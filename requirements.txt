@@ -5,7 +5,7 @@ tushare>=1.4.0
 # xtquant  : NOT on pip — install via miniQMT client
 
 # ── Data / compute ────────────────────────────────────────────
-pandas>=2.0
+pandas>=2.0,<3.0
 numpy>=1.24
 scipy
 pyarrow>=14.0
@@ -35,5 +35,6 @@ mcp>=1.0.0
 
 # ── Test ──────────────────────────────────────────────────────
 pytest>=7.4
+pytest-timeout>=2.0
 httpx>=0.27
 baostock

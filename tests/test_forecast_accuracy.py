@@ -66,15 +66,14 @@ class TestScoreForecast:
         forecast = pd.DataFrame(
             {
                 "symbol": row["symbol"],
-                "pred_ret_1d": row["label_pm_1d_net"],
-                "pred_ret_2d": row["label_pm_2d_net"],
                 "pred_ret_3d": row["label_pm_3d_net"],
                 "pred_ret_5d": row["label_pm_5d_net"],
+                "pred_ret_10d": row["label_pm_10d_net"],
             }
         )
         out = score_forecast(forecast, labeled, fdate)
         assert out["mature"]
-        for k in (1, 2, 3, 5):
+        for k in (3, 5, 10):
             assert out["horizons"][k]["mae_1d"] == pytest.approx(0.0, abs=1e-4)
             assert out["horizons"][k]["bias_1d"] == pytest.approx(0.0, abs=1e-4)
             assert out["horizons"][k]["n_samples"] == 2
@@ -86,25 +85,23 @@ class TestScoreForecast:
         forecast = pd.DataFrame(
             {
                 "symbol": row["symbol"],
-                "pred_ret_1d": row["label_pm_1d_net"] + 0.01,  # 系统性高估 1%
-                "pred_ret_2d": row["label_pm_2d_net"] + 0.01,
-                "pred_ret_3d": row["label_pm_3d_net"] + 0.01,
+                "pred_ret_3d": row["label_pm_3d_net"] + 0.01,  # 系统性高估 1%
                 "pred_ret_5d": row["label_pm_5d_net"] + 0.01,
+                "pred_ret_10d": row["label_pm_10d_net"] + 0.01,
             }
         )
         out = score_forecast(forecast, labeled, fdate)
-        assert out["horizons"][1]["bias_1d"] == pytest.approx(0.01)
+        assert out["horizons"][3]["bias_1d"] == pytest.approx(0.01)
 
-    def test_immature_when_no_5d_actuals(self):
+    def test_immature_when_no_10d_actuals(self):
         labeled = _labeled_panel()
         fdate = labeled["date"].iloc[-1].strftime("%Y%m%d")  # 最后一天无未来数据
         forecast = pd.DataFrame(
             {
                 "symbol": ["AAA", "BBB"],
-                "pred_ret_1d": [0.01, 0.02],
-                "pred_ret_2d": [0.01, 0.02],
                 "pred_ret_3d": [0.01, 0.02],
                 "pred_ret_5d": [0.01, 0.02],
+                "pred_ret_10d": [0.01, 0.02],
             }
         )
         out = score_forecast(forecast, labeled, fdate)
@@ -125,10 +122,9 @@ class TestScoreMatured:
         pd.DataFrame(
             {
                 "symbol": row["symbol"],
-                "pred_ret_1d": row["label_pm_1d_net"] + 0.005,
-                "pred_ret_2d": row["label_pm_2d_net"] + 0.005,
                 "pred_ret_3d": row["label_pm_3d_net"] + 0.005,
                 "pred_ret_5d": row["label_pm_5d_net"] + 0.005,
+                "pred_ret_10d": row["label_pm_10d_net"] + 0.005,
             }
         ).to_parquet(list_dir / f"list_{fdate}.parquet", index=False)
         # 未成熟清单 (最后一天) 不应打分
@@ -136,17 +132,16 @@ class TestScoreMatured:
         pd.DataFrame(
             {
                 "symbol": ["AAA", "BBB"],
-                "pred_ret_1d": [0.01, 0.02],
-                "pred_ret_2d": [0.01, 0.02],
                 "pred_ret_3d": [0.01, 0.02],
                 "pred_ret_5d": [0.01, 0.02],
+                "pred_ret_10d": [0.01, 0.02],
             }
         ).to_parquet(list_dir / f"list_{fdate2}.parquet", index=False)
 
         scored = score_matured_forecasts(str(list_dir), panel, out_dir=str(out_dir))
         assert len(scored) == 1 and scored[0]["forecast_date"] == fdate
         summary = json.loads((out_dir / f"accuracy_{fdate}.json").read_text())
-        assert summary["horizons"]["1"]["bias_1d"] == pytest.approx(0.005)
+        assert summary["horizons"]["3"]["bias_1d"] == pytest.approx(0.005)
         assert (out_dir / f"detail_{fdate}.parquet").exists()
         # 幂等: 第二次不再重复打分
         assert score_matured_forecasts(str(list_dir), panel, out_dir=str(out_dir)) == []

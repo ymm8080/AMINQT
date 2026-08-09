@@ -24,7 +24,8 @@ class TestFrontierAPI:
         body = r.json()
         assert body["schema_version"] == "1.4"
         assert len(body["items"]) > 0
-        assert {"symbol", "score", "prob_up", "pred_ret_1d"} <= set(body["items"][0])
+        # 1d 视界 2026-08-09 删除, 最近端幅度列改 pred_ret_3d
+        assert {"symbol", "score", "prob_up", "pred_ret_3d"} <= set(body["items"][0])
 
     def test_list_dates_and_404(self):
         r = client.get("/api/frontier/list/20990101")

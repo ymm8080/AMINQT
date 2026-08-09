@@ -1,4 +1,4 @@
-"""诊断: AppTest 验证 page_archive.render 无异常 (含新 模块绩效 tab)."""
+"""诊断: AppTest 验证 page_archive.render (模块绩效 tab: 每模型5版本下拉 + 评估窗口)."""
 
 from __future__ import annotations
 
@@ -24,10 +24,15 @@ def main() -> None:
     at.run(timeout=300)
     print("exception:", at.exception)
     assert not at.exception, f"page_archive 渲染异常: {at.exception}"
-    # 模块绩效 tab 应产生 dataframe/plotly 元素
+    print("selectboxes:", [s.label for s in at.selectbox])
+    print("sliders:", [s.label for s in at.slider])
+    print("select_sliders:", len(at.select_slider))
     print("dataframes:", len(at.dataframe))
     print("plotly_charts:", len(at.get("plotly_chart")))
-    print("OK: page_archive.render 无异常, 模块绩效 tab 已渲染")
+    # 模块绩效 tab: 应有模型下拉 + 评估窗口 (select_slider)
+    labels = [s.label for s in at.selectbox]
+    assert any("模型" in lbl for lbl in labels), f"缺模型下拉: {labels}"
+    print("OK: page_archive.render 无异常, 模块绩效下拉/评估窗口已渲染")
 
 
 if __name__ == "__main__":

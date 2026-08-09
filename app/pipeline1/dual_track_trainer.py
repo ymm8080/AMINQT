@@ -1,14 +1,15 @@
 """
 双轨训练器 (DESIGN §14.4, PIPELINE1_V3.8 §二/§四/§七)
 =====================================================
-LightGBM 双轨×10: (1d/2d/3d/5d/10d × reg + cls) × (主板/双创). 10d 视界 2026-08-07 加入 (排名键).
+LightGBM 双轨×6: (3d/5d/10d × reg + cls) × (主板/双创). 10d 视界 2026-08-07 加入 (排名键);
+1d/2d 视界 2026-08-09 删除 (LABEL_WEIGHTS 权重 0, 复合排名分不引用, 1d 不可执行易误杀).
 **日线预测只用本地 LightGBM 模型 (用户 2026-07-22 裁决), 无云端/ONNX/LSTM 依赖.**
 - [V3.8] 750 日滚动窗口: 训练620 / 早停20 / 校准20 (与验证物理隔离!) / 测试90; patience=100
 - [B11] OHLCV 回填达标 (<1250 交易日) 前首个训练窗口降为 540 日过渡, 达标后恢复 750 日
 - [B10] 半衰期加权 250 天, 方向断言 weights[-1] > weights[0] (最新样本权重=1.0)
 - [B9] PM 验收标签 label_pm_kd 存在时优先于研究口径 label_kd
 - [E5] 净收益标签 label_*_net 存在时优先 (滑点分层口径, 训练/验收主标签)
-- [E1] 分位数五模型 (q10/25/50/75/90, label_1d_net) + 保序单调性后处理
+- [E1] 分位数五模型 (q10/25/50/75/90, label_3d/5d_net) + 保序单调性后处理
 - [E2] 痛苦预警模型 (label_pain 分类 → pain_prob)
 - [E1] 概率校准 Platt → Isotonic (月度滚动重校)
 - Huber loss; early_stopping patience=100 (V3.8 §2.1)
@@ -111,12 +112,10 @@ LGB_PARAMS_CLS = {
 
 # 超参覆盖表 (2026-08-08 扫描定案): (board, kind) → num_leaves.
 # 未列出 → 家族默认 (num_leaves=31, LightGBM 出厂). 只列有扫描证据的条目:
-#   cls main 1d-10d = 15: 3d/5d/10d 跨视界一致赢 (IC/TOP-N 复验), 1d/2d 保持已产状态
-#   reg dual 3d/5d/10d = 15: 10d 复验双指标+扰动稳定, 5d IC 赢, 3d 平; 1d/2d 未扫 → 默认 31
+#   cls main 3d/5d/10d = 15: 跨视界一致赢 (IC/TOP-N 复验); 1d/2d 已删 (2026-08-09)
+#   reg dual 3d/5d/10d = 15: 10d 复验双指标+扰动稳定, 5d IC 赢, 3d 平
 #   pain (label_pain=3日浮亏单模型): 两板 15, 与 cls 表解耦
 NUM_LEAVES_OVERRIDE: dict[tuple[str, str], int] = {
-    ("main", "1d_cls"): 15,
-    ("main", "2d_cls"): 15,
     ("main", "3d_cls"): 15,
     ("main", "5d_cls"): 15,
     ("main", "10d_cls"): 15,
@@ -131,7 +130,7 @@ NUM_LEAVES_OVERRIDE: dict[tuple[str, str], int] = {
 def model_params(board: str, kind: str) -> dict:
     """按 (board, kind) 解析 LGBM 超参: 命中覆盖表则覆盖 num_leaves, 否则家族默认.
 
-    kind 可为 "1d_cls"..."10d_cls"/"1d_reg"..."10d_reg"/"pain"/"cls"/"reg".
+    kind 可为 "3d_cls"..."10d_cls"/"3d_reg"..."10d_reg"/"pain"/"cls"/"reg".
     """
     is_cls = kind == "pain" or kind.endswith("cls")
     base = LGB_PARAMS_CLS if is_cls else LGB_PARAMS_REG
@@ -143,10 +142,6 @@ def model_params(board: str, kind: str) -> dict:
 
 
 MODEL_KINDS = (
-    "1d_reg",
-    "1d_cls",
-    "2d_reg",
-    "2d_cls",
     "3d_reg",
     "3d_cls",
     "5d_reg",
@@ -155,8 +150,6 @@ MODEL_KINDS = (
     "10d_cls",
 )
 EXTRA_KINDS = (
-    "quantile_models",
-    "quantile_models_2d",
     "quantile_models_3d",
     "quantile_models_5d",
     "pain_model",
@@ -179,7 +172,7 @@ def risk_filter(df: pd.DataFrame) -> pd.DataFrame:
 
 
 class DualTrackTrainer:
-    """双轨训练 — 每个板块独立训练 10 个模型 (5 视界 × reg/cls)."""
+    """双轨训练 — 每个板块独立训练 6 个模型 (3 视界 × reg/cls)."""
 
     def __init__(self, model_dir: str = "models/pipeline1"):
         self.model_dir = model_dir
@@ -247,10 +240,6 @@ class DualTrackTrainer:
         测试夹具只构造部分视界; 生产面板由 label_engine 全量生成, 10 种齐备.
         """
         label = {
-            "1d_reg": "label_1d",
-            "1d_cls": "label_cls",
-            "2d_reg": "label_2d",
-            "2d_cls": "label_2d_cls",
             "3d_reg": "label_3d",
             "3d_cls": "label_3d_cls",
             "5d_reg": "label_5d",
@@ -258,13 +247,9 @@ class DualTrackTrainer:
             "10d_reg": "label_10d",
             "10d_cls": "label_10d_cls",
         }[kind]
-        # [B9] PM 执行口径验收标签优先 (label_pm_kd / label_pm_cls), 缺失时回退研究口径
+        # [B9] PM 执行口径验收标签优先 (label_pm_kd / label_pm_kd_cls), 缺失时回退研究口径
         if kind.endswith("cls"):
-            pm_label = (
-                "label_pm_cls"
-                if kind == "1d_cls"
-                else f"label_pm_{kind.split('d')[0]}d_cls"
-            )
+            pm_label = f"label_pm_{kind.split('d')[0]}d_cls"
         else:
             pm_label = f"label_pm_{kind.split('d')[0]}d"
         if pm_label in columns:
@@ -357,7 +342,7 @@ class DualTrackTrainer:
         feature_cols: list[str],
         checkpoint=None,  # TrainingCheckpoint | None
     ) -> dict:
-        """训练一个板块的 10 个模型 (5 视界 × reg/cls) + E1 分位数五模型 + E2 痛苦预警 (标签齐备时).
+        """训练一个板块的 6 个模型 (3 视界 × reg/cls) + E1 分位数五模型(3d/5d) + E2 痛苦预警 (标签齐备时).
 
         固定使用 WINDOW_TOTAL 窗口 (B11 过渡逻辑已废弃).
         段长按比例动态分配 (split_window), 保证 es/calib/test 各 >= 最小值.
@@ -459,7 +444,7 @@ class DualTrackTrainer:
 
     # ---------------- E1/E2 + LambdaRank: 分位数 + 痛苦预警 + 排序 (支持断点续训) ----------------
     def _train_extras(self, out: dict, checkpoint=None) -> None:
-        """[E1] 分位数五模型 (1d/2d/3d 净标签) + [E2] 痛苦预警 (label_pain)
+        """[E1] 分位数五模型 (3d/5d 净标签) + [E2] 痛苦预警 (label_pain)
         + [阶段四] LambdaRank 排序模型 (lambdarank_truncation_level=25, 分位 gain).
 
         E1 沿用回归超参, 不单独搜索 (V3.8 §2.2, 避免调参维度爆炸).
@@ -486,9 +471,9 @@ class DualTrackTrainer:
             set(checkpoint.completed_extras or []) if checkpoint is not None else set()
         )
 
-        # E1: 多视界分位数五模型 (1d/2d/3d/5d; E7 闸3 自 2026-08-05 起用 2d/3d/5d 中位数)
+        # E1: 多视界分位数五模型 (3d/5d; 1d/2d 2026-08-09 删除)
         # label 偏好 label_pm_{k}d_net → label_{k}d_net → label_{k}d (与 _train_one 同口径)
-        for horizon in (1, 2, 3, 5):
+        for horizon in (3, 5):
             q_label = next(
                 (
                     c
@@ -503,7 +488,7 @@ class DualTrackTrainer:
             )
             if q_label is None:
                 continue
-            qkey = "quantile_models" if horizon == 1 else f"quantile_models_{horizon}d"
+            qkey = f"quantile_models_{horizon}d"
             if qkey not in done_extras:
                 try:
                     train, X, y = _xy("train", q_label)
@@ -639,8 +624,8 @@ class DualTrackTrainer:
         """用校准集 (与早停物理隔离) 拟合校准器 (安全网: 严禁原始 predict_proba).
 
         [E1/V3.8] Isotonic → Platt Scaling (小样本更稳定), 月度滚动重校.
-        [多视界] 每个 cls 视界 (1/2/3/5d) 一个 ProbCalibrator, 存
-        trained["calibrators"] = {k: cal}; 向后兼容: trained["calibrator"] = 1d 别名.
+        [多视界] 每个 cls 视界 (3/5/10d; 1d/2d 2026-08-09 删除) 一个 ProbCalibrator, 存
+        trained["calibrators"] = {k: cal}; 向后兼容: trained["calibrator"] = 3d 别名.
         校准集 < 30 交易日时强制 Platt (Isotonic 小样本退化为阶跃函数).
         """
         from .label_engine import LABEL_HORIZONS
@@ -678,7 +663,7 @@ class DualTrackTrainer:
                 )
             calibrators[k] = ProbCalibrator(method=method).fit(raw, calib[label].values)
         trained["calibrators"] = calibrators
-        trained["calibrator"] = calibrators.get(1)  # 1d 别名 (向后兼容)
+        trained["calibrator"] = calibrators.get(3)  # 3d 别名 (主概率, 1d 已删)
         return trained["calibrator"]
 
     # ---------------- OOS 验证 + 切换 ----------------
@@ -703,7 +688,7 @@ class DualTrackTrainer:
             ics[kind] = ICScreener.rank_ic(
                 sub.rename(columns={"_pred": "score"}), "score", label
             )
-        # 跨视界加权 IC (回归模型, 1d_cls 不参与 — 分类分不直接贡献收益率)
+        # 跨视界加权 IC (回归模型; 分类分不直接贡献收益率)
         total_w = sum(LABEL_WEIGHTS.values())
         weighted_ic = (
             sum(LABEL_WEIGHTS[k] * ics.get(f"{k}d_reg", 0.0) for k in LABEL_WEIGHTS)
@@ -727,9 +712,12 @@ class DualTrackTrainer:
             "models": trained["models"],
             "calibrator": trained["calibrator"],
         }
-        for extra in (  # 多视界校准器 + E1/E2/排序
+        for (
+            extra
+        ) in (  # 多视界校准器 + E1/E2/排序 (quantile 3d/5d 必须落盘, gate3 用其中位数)
             "calibrators",
-            "quantile_models",
+            "quantile_models_3d",
+            "quantile_models_5d",
             "pain_model",
             "rank_model",
         ):
@@ -756,13 +744,13 @@ class DualTrackTrainer:
         from scipy.stats import spearmanr
 
         imps = []
-        for kind in ("1d_reg", "2d_reg", "3d_reg", "5d_reg"):
+        for kind in ("3d_reg", "5d_reg", "10d_reg"):
             model, _ = trained["models"][kind]
             imps.append(pd.Series(model.feature_importances_).rank())
         corrs = [
             spearmanr(imps[i], imps[j]).statistic
-            for i in range(4)
-            for j in range(i + 1, 4)
+            for i in range(3)
+            for j in range(i + 1, 3)
         ]
         return bool(np.nanmean(corrs) > threshold)
 

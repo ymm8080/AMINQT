@@ -5,10 +5,10 @@
 
 信号级别 (预测驱动, 优先级 红 > 橙 > 黄 > 绿):
   hold         绿/持有: 无任何预警
-  watch        黄/警戒: prob_up<0.5 / pred_ret_1d<0 / pain_prob>=0.4
-  sell         橙/卖出: pred_ret_1d<=-0.5% / prob_up<0.45 / pain_prob>=0.5
-  strong_sell  红/强卖: pred_ret_1d<=-1.5% / (pred_ret_3d<=-2% 且 1d<0)
-                        / pain_prob>=0.6 / pred_q10<=-3%
+  watch        黄/警戒: prob_up<0.5 / pred_ret_3d<0 / pain_prob>=0.4
+  sell         橙/卖出: pred_ret_3d<=-0.5% / prob_up<0.45 / pain_prob>=0.5
+  strong_sell  红/强卖: pred_ret_3d<=-1.5% / pain_prob>=0.6 / pred_q10<=-3%
+  (1d/2d 视界 2026-08-09 删除, 最近端触发统一改 pred_ret_3d)
 价格硬止损 (用户 2026-08-02 裁决): pnl (现价/买入成本-1) <= -6% → 红/强卖,
 覆盖任何预测信号. 提供 pnl_col 时才启用.
 """
@@ -20,12 +20,11 @@ import pandas as pd
 
 SIGNAL_LEVELS = ["hold", "watch", "sell", "strong_sell"]
 
-# 预测驱动阈值 (默认; 可调)
+# 预测驱动阈值 (默认; 可调; 1d 触发 2026-08-09 改 3d, 阈值沿用)
 PROB_WATCH = 0.50
 PROB_SELL = 0.45
-RET1D_SELL = -0.005
-RET1D_STRONG = -0.015
-RET3D_STRONG = -0.02
+RET3D_SELL = -0.005
+RET3D_STRONG = -0.015
 PAIN_WATCH = 0.40
 PAIN_SELL = 0.50
 PAIN_STRONG = 0.60
@@ -43,7 +42,7 @@ def evaluate_sell_signal(
     """对预测行计算卖出信号级别 + 原因 (向量化).
 
     Args:
-        pred: predict() 输出, 含 pred_ret_1d/3d/5d, prob_up 等;
+        pred: predict() 输出, 含 pred_ret_3d/5d/10d, prob_up 等;
               缺失列按中性值处理 (prob_up→0.5, 其余→0)
         pnl_col: 列名, 内容为当前相对买入成本收益率 (现价/成本-1).
                  存在时 pnl <= price_hard_stop → 红/强卖 (覆盖预测信号)
@@ -62,7 +61,6 @@ def evaluate_sell_signal(
             return out[name].astype(float).fillna(default).to_numpy()
         return np.full(n, default, dtype=float)
 
-    r1 = col("pred_ret_1d", 0.0)
     r3 = col("pred_ret_3d", 0.0)
     prob = col("prob_up", 0.5)
     pain = col("pain_prob", 0.0)
@@ -78,11 +76,8 @@ def evaluate_sell_signal(
         reason[up] = make_reason(idx)
 
     # ---- 红/强卖 ----
-    def _r1_strong(idx):
-        return [f"次日预期{r1[i] * 100:+.1f}%≤{RET1D_STRONG * 100:.0f}%" for i in idx]
-
     def _r3_strong(idx):
-        return [f"3日预期{r3[i] * 100:+.1f}%且次日为负" for i in idx]
+        return [f"3日预期{r3[i] * 100:+.1f}%≤{RET3D_STRONG * 100:.0f}%" for i in idx]
 
     def _pain_strong(idx):
         return [f"浮亏预警{pain[i]:.2f}≥{PAIN_STRONG:.2f}" for i in idx]
@@ -90,14 +85,13 @@ def evaluate_sell_signal(
     def _q10_strong(idx):
         return [f"下行分位{q10[i] * 100:.1f}%≤{Q10_STRONG * 100:.0f}%" for i in idx]
 
-    hit(r1 <= RET1D_STRONG, 3, _r1_strong)
-    hit((r3 <= RET3D_STRONG) & (r1 < 0), 3, _r3_strong)
+    hit(r3 <= RET3D_STRONG, 3, _r3_strong)
     hit(pain >= PAIN_STRONG, 3, _pain_strong)
     hit(q10 <= Q10_STRONG, 3, _q10_strong)
 
     # ---- 橙/卖出 ----
-    def _r1_sell(idx):
-        return [f"次日预期{r1[i] * 100:+.1f}%≤{RET1D_SELL * 100:.1f}%" for i in idx]
+    def _r3_sell(idx):
+        return [f"3日预期{r3[i] * 100:+.1f}%≤{RET3D_SELL * 100:.1f}%" for i in idx]
 
     def _prob_sell(idx):
         return [f"胜率{prob[i]:.2f}<{PROB_SELL:.2f}" for i in idx]
@@ -105,7 +99,7 @@ def evaluate_sell_signal(
     def _pain_sell(idx):
         return [f"浮亏预警{pain[i]:.2f}≥{PAIN_SELL:.2f}" for i in idx]
 
-    hit(r1 <= RET1D_SELL, 2, _r1_sell)
+    hit(r3 <= RET3D_SELL, 2, _r3_sell)
     hit(prob < PROB_SELL, 2, _prob_sell)
     hit(pain >= PAIN_SELL, 2, _pain_sell)
 
@@ -113,14 +107,14 @@ def evaluate_sell_signal(
     def _prob_watch(idx):
         return [f"胜率{prob[i]:.2f}<{PROB_WATCH:.2f}" for i in idx]
 
-    def _r1_watch(idx):
-        return [f"次日预期转负{r1[i] * 100:.2f}%" for i in idx]
+    def _r3_watch(idx):
+        return [f"3日预期转负{r3[i] * 100:.2f}%" for i in idx]
 
     def _pain_watch(idx):
         return [f"浮亏预警{pain[i]:.2f}≥{PAIN_WATCH:.2f}" for i in idx]
 
     hit(prob < PROB_WATCH, 1, _prob_watch)
-    hit(r1 < 0.0, 1, _r1_watch)
+    hit(r3 < 0.0, 1, _r3_watch)
     hit(pain >= PAIN_WATCH, 1, _pain_watch)
 
     # ---- 价格硬止损 (覆盖一切预测信号) ----

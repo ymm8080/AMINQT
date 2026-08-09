@@ -15,7 +15,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-HORIZONS = ["2d", "3d", "5d", "10d"]
+HORIZONS = ["3d", "5d", "10d"]
 
 _PICKS_COLS = [
     "date",
@@ -23,7 +23,6 @@ _PICKS_COLS = [
     "rk",
     "symbol",
     "score",
-    "mfe_2d",
     "mfe_3d",
     "mfe_5d",
     "mfe_10d",
@@ -257,7 +256,6 @@ def parse_picks(d: dict, board: str) -> pd.DataFrame:
                         "rk": pk.get("rk"),
                         "symbol": pk.get("symbol"),
                         "score": pk.get("score"),
-                        "mfe_2d": pk.get("mfe_2d"),
                         "mfe_3d": pk.get("mfe_3d"),
                         "mfe_5d": pk.get("mfe_5d"),
                         "mfe_10d": pk.get("mfe_10d"),

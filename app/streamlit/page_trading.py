@@ -117,10 +117,27 @@ def render() -> None:
     sm = _get_state_machine()
     om = _get_order_manager()
 
+    # 账户信息置顶
+    acct = ds.load_real_account()
+    c1, c2 = st.columns(2)
+    c1.metric("总资产", f"{acct['total_asset']:,.0f}")
+    c2.metric("可用资金", f"{acct['available_cash']:,.0f}")
+    st.divider()
+
     # 顶栏: 交易控制按钮紧凑排布
     with st.container():
         st.subheader("交易控制")
         render_trading_control(sm, drawdown_pct=0.0)
+
+    st.divider()
+
+    # 持仓置顶 (整宽)
+    st.subheader("持仓")
+    positions = ds.load_real_positions()
+    if not positions:
+        positions = _demo_positions()
+        st.caption("⚠ 使用演示持仓 — 真实持仓需先标记 priority 股票")
+    render_position_list(positions)
 
     st.divider()
 
@@ -151,29 +168,35 @@ def render() -> None:
             "最新价", f"{last_price:.2f}", f"{(last_price / first_price - 1):+.2%}"
         )
 
-        # 日K线图 (放大 + 成交量)
-        st.plotly_chart(
-            kline_chart(ohlc, ma_list=(5, 10, 20), title=f"{symbol} 日K"),
-            use_container_width=True,
+        # 图类型选择: 日内 / 日K (一次只显示一张, 图更大)
+        chart_type = st.radio(
+            "图类型", ["日K", "日内"], horizontal=True, key="trading_chart_type"
         )
-
-        # 分时图 (带成交量/VWAP)
-        df = ds.demo_intraday(symbol)
-        st.plotly_chart(
-            intraday_chart(df, prev_close=first_price, title=f"{symbol} 分时"),
-            use_container_width=True,
-        )
+        if chart_type == "日K":
+            # 日K线图 (放大 + 成交量)
+            st.plotly_chart(
+                kline_chart(ohlc, ma_list=(5, 10, 20), title=f"{symbol} 日K"),
+                use_container_width=True,
+            )
+        else:
+            # 分时图 (带成交量/VWAP)
+            df = ds.demo_intraday(symbol)
+            st.plotly_chart(
+                intraday_chart(df, prev_close=first_price, title=f"{symbol} 日内"),
+                use_container_width=True,
+            )
         st.caption("五档盘口: 待 miniQMT xtdata.get_quote 接入")
 
         st.subheader("板块涨跌幅")
         sector_df = ds.demo_sector_changes()
+        sector_df["涨跌幅"] = sector_df["涨跌幅"] * 100
         st.dataframe(
             sector_df,
             column_config={
                 "板块": st.column_config.TextColumn("板块"),
                 "涨跌幅": st.column_config.NumberColumn(
                     "涨跌幅",
-                    format="+.2%%",
+                    format="+%.2f%%",
                 ),
                 "上涨家数": st.column_config.NumberColumn("上涨家数"),
                 "下跌家数": st.column_config.NumberColumn("下跌家数"),
@@ -194,21 +217,8 @@ def render() -> None:
             )
         render_signal_list(sm, om, signals)
 
-    # ---------- 右栏: 持仓/委托/成交 ----------
+    # ---------- 右栏: 委托/成交 (持仓已置顶) ----------
     with right:
-        st.subheader("账户")
-        acct = ds.load_real_account()
-        c1, c2 = st.columns(2)
-        c1.metric("总资产", f"{acct['total_asset']:,.0f}")
-        c2.metric("可用资金", f"{acct['available_cash']:,.0f}")
-
-        st.subheader("持仓")
-        positions = ds.load_real_positions()
-        if not positions:
-            positions = _demo_positions()
-            st.caption("⚠ 使用演示持仓 — 真实持仓需先标记 priority 股票")
-        render_position_list(positions)
-
         st.subheader("委托队列")
         render_order_queue(om)
 

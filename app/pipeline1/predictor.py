@@ -2,7 +2,7 @@
 V3.5 推理预测器 (P14 推理端)
 ================================
 加载板块模型包 (DualTrackTrainer.save) → 特征面板推理 →
-pred_ret_1d/3d/5d + Isotonic 校准 prob_up [E1] + 分布预测 pred_q10..q90
+pred_ret_3d/5d/10d + Isotonic 校准 prob_up [E1] + 分布预测 pred_q10..q90
 + uncertainty_width [E1] + pain_prob [E2] → ListGenerator 候选输入.
 维护 is_in_yesterday_list (Holding Bonus, 昨日清单回填).
 
@@ -58,7 +58,7 @@ class V35Predictor:
             board: 'main' / 'dual'
 
         Returns:
-            DataFrame: symbol, pred_ret_1d/3d/5d, prob_up (Platt 校准后)
+            DataFrame: symbol, pred_ret_3d/5d/10d, prob_up (Platt 校准后)
         """
         bundle = self.bundles.get(board)
         if bundle is None:
@@ -82,20 +82,18 @@ class V35Predictor:
             latest[cols].to_numpy(dtype=float), nan=0.0, posinf=0.0, neginf=0.0
         )
         models = bundle["models"]
-        latest["pred_ret_1d"] = models["1d_reg"][0].predict(X)
-        latest["pred_ret_2d"] = models["2d_reg"][0].predict(X)
         latest["pred_ret_3d"] = models["3d_reg"][0].predict(X)
         latest["pred_ret_5d"] = models["5d_reg"][0].predict(X)
         latest["pred_ret_10d"] = (
             models["10d_reg"][0].predict(X) if "10d_reg" in models else np.nan
         )
-        raw_prob = models["1d_cls"][0].predict_proba(X)[:, 1]
-        # 校准 (校准器缺失时回退原始 predict_proba)
+        raw_prob = models["3d_cls"][0].predict_proba(X)[:, 1]
+        # 校准 (校准器缺失时回退原始 predict_proba); prob_up = 3d 主概率 (1d 已删)
         cal = bundle.get("calibrator")
         latest["prob_up"] = cal.predict_proba(raw_prob) if cal is not None else raw_prob
-        # [多视界] 2/3/5/10d 分类概率 (各视界校准器; 缺失时回退 raw / 缺 kind 跳过)
+        # [多视界] 3/5/10d 分类概率 (各视界校准器; 缺失时回退 raw / 缺 kind 跳过)
         calibrators = bundle.get("calibrators", {})
-        for k in (2, 3, 5, 10):
+        for k in (3, 5, 10):
             kind = f"{k}d_cls"
             if kind not in models:
                 continue
@@ -119,12 +117,9 @@ class V35Predictor:
             "board",
             "industry",
             "composite_score",
-            "pred_ret_1d",
-            "pred_ret_2d",
             "pred_ret_3d",
             "pred_ret_5d",
             "prob_up",
-            "prob_up_2d",
             "prob_up_3d",
             "prob_up_5d",
         ]
@@ -134,13 +129,13 @@ class V35Predictor:
                 latest[col] = np.nan
             keep.append(col)
         # [E1] 分位数分布预测 (bundle 含 quantile_models 时)
-        # 1d (向后兼容) + 2d/3d/5d (E7 闸3 自 2026-08-05 用 2d/3d/5d 中位数)
+        # 旧 bundle 1d 集向后兼容; 新 bundle 只含 quantile_models_3d/5d
         if "quantile_models" in bundle:
             dist = bundle["quantile_models"].predict(X)
             for col in dist.columns:
                 latest[col] = dist[col].values
             keep += list(dist.columns)
-        for horizon in (2, 3, 5):
+        for horizon in (3, 5):
             qkey = f"quantile_models_{horizon}d"
             if qkey in bundle:
                 dist = bundle[qkey].predict(X)
@@ -152,21 +147,21 @@ class V35Predictor:
             latest["pain_prob"] = bundle["pain_model"].predict_proba(X)
             keep.append("pain_prob")
         # [阶段四] LambdaRank 排序分 (bundle 含 rank_model 时)
-        # 若 LambdaRank 退化 (常数输出) 或预测异常, 自动回退 pred_ret_1d 横截面排名
+        # 若 LambdaRank 退化 (常数输出) 或预测异常, 自动回退 pred_ret_3d 横截面排名
         if "rank_model" in bundle:
             try:
                 raw_rank = bundle["rank_model"][0].predict(X)
                 if np.std(raw_rank) < 1e-6:
                     logger.warning(
-                        "[%s] LambdaRank 退化 (std=%.6f), 回退 pred_ret_1d 排名",
+                        "[%s] LambdaRank 退化 (std=%.6f), 回退 pred_ret_3d 排名",
                         board,
                         np.std(raw_rank),
                     )
-                    reg_pred = models["1d_reg"][0].predict(X)
+                    reg_pred = models["3d_reg"][0].predict(X)
                     raw_rank = _cross_sectional_rank(reg_pred)
             except Exception:
-                logger.warning("[%s] LambdaRank 预测异常, 回退 pred_ret_1d 排名", board)
-                reg_pred = models["1d_reg"][0].predict(X)
+                logger.warning("[%s] LambdaRank 预测异常, 回退 pred_ret_3d 排名", board)
+                reg_pred = models["3d_reg"][0].predict(X)
                 raw_rank = _cross_sectional_rank(reg_pred)
             latest["rank_score"] = raw_rank
             keep.append("rank_score")
@@ -192,7 +187,7 @@ class V35Predictor:
 
         输入特征面板须已包含当日 (delta) bar — 由调用方将 delta 追加到历史后
         重算特征 (daily_pipeline.run 的 panel 路径已含当日).
-        pred_price_tomorrow = close_T * (1 + pred_ret_1d)  [点估计, 非承诺价]
+        pred_price_tomorrow = close_T * (1 + pred_ret_3d)  [点估计, 非承诺价]
 
         Returns:
             predict() 全部列 + pred_price_tomorrow
@@ -202,7 +197,7 @@ class V35Predictor:
             latest = features.sort_values("date").groupby("symbol").tail(1)
             out = out.merge(latest[["symbol", "close"]], on="symbol", how="left")
             out["pred_price_tomorrow"] = (
-                out["close"] * (1 + out["pred_ret_1d"])
+                out["close"] * (1 + out["pred_ret_3d"])
             ).round(3)
             return out.drop(columns=["close"])
         except Exception:

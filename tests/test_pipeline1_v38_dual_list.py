@@ -95,8 +95,8 @@ class TestLambdaRank:
         out = V35Predictor({"main": path}).predict(feats, "main")
         assert "rank_score" in out.columns
         assert out["rank_score"].notna().all()
-        # [多视界] 每个视界概率列存在且落在 [0,1]
-        for col in ("prob_up_2d", "prob_up_3d", "prob_up_5d"):
+        # [多视界] 每个视界概率列存在且落在 [0,1] (2d 2026-08-09 已删)
+        for col in ("prob_up_3d", "prob_up_5d", "prob_up_10d"):
             assert col in out.columns
             assert out[col].between(0, 1).all()
 
@@ -328,15 +328,15 @@ class TestDynamicOutputsWiring:
 
 # ============================================================
 # 超参按 (board, kind) 覆盖 (2026-08-08 复验定案, 架构=按视界分开配)
-#   cls main 1d-10d = 15 | cls dual 全默认 31
-#   reg dual 3d/5d/10d = 15 (1d/2d 未扫 → 默认 31) | reg main 全默认 31
+#   cls main 3d/5d/10d = 15 (1d/2d 已删) | cls dual 全默认 31
+#   reg dual 3d/5d/10d = 15 | reg main 全默认 31
 #   pain 两板 15 (与 cls 解耦: cls dual 仍 31)
 # ============================================================
 class TestModelParams:
     def test_cls_main_leaves_15_all_horizons(self):
         import app.pipeline1.dual_track_trainer as dtt
 
-        for h in (1, 2, 3, 5, 10):
+        for h in (3, 5, 10):
             assert dtt.model_params("main", f"{h}d_cls")["num_leaves"] == 15
 
     def test_cls_dual_default_31(self):
@@ -356,7 +356,7 @@ class TestModelParams:
         assert dtt.model_params("dual", "3d_reg")["num_leaves"] == 15
         assert dtt.model_params("dual", "5d_reg")["num_leaves"] == 15
         assert dtt.model_params("dual", "10d_reg")["num_leaves"] == 15
-        # 1d/2d 未扫 → 保持默认 31 (架构支持按视界分开配)
+        # 1d/2d 已删 (2026-08-09) → 不命中覆盖表 → 家族默认 31
         assert dtt.model_params("dual", "1d_reg").get("num_leaves") is None
         assert dtt.model_params("dual", "2d_reg").get("num_leaves") is None
 

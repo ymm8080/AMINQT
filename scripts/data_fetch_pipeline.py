@@ -105,7 +105,8 @@ SOURCE_COL_PREFIXES = {
     "lhb": ["lhb_"],
     "holdernumber": ["holder_count", "avg_shares_per_holder"],
     "holdertrade": ["sh_"],
-    "sector_index": ["sw_"],
+    # 只清 sector_index 自产的 3 列, 勿删 sw_l1/l2/l3_name (申万行业分类列, 属独立源)
+    "sector_index": ["sw_ret_1d", "sw_index_close", "sw_index_vol"],
     "daily_basic": [
         "turnover_rate_f",
         "volume_ratio",

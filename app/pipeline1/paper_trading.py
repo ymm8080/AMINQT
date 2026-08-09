@@ -204,13 +204,14 @@ def backtest_vs_paper_deviation(backtest_nav: pd.Series, paper_nav: pd.Series) -
 def bad_trade_review(
     predictions: pd.DataFrame, actual_returns: pd.Series, threshold: float = -0.05
 ) -> pd.DataFrame:
-    """坏单复盘: 预测大涨 (pred_ret_1d > 2×COST) 实际大跌 (< -5%) 的票.
+    """坏单复盘: 预测大涨 (pred_ret_3d > 2×COST) 实际大跌 (< -5%) 的票.
 
     输出人工归因清单 → 归因结论固化为清洗规则/特征 (#80 周机制).
+    (pred_ret_1d 2026-08-09 删除, 最近端幅度改 pred_ret_3d)
     """
     df = predictions.copy()
     df["actual_ret"] = df["symbol"].map(actual_returns)
-    bad = df[(df["pred_ret_1d"] > 2 * 0.0013) & (df["actual_ret"] < threshold)]
+    bad = df[(df["pred_ret_3d"] > 2 * 0.0013) & (df["actual_ret"] < threshold)]
     if len(bad):
         logger.error("E10 坏单复盘: %d 只预测大涨实际大跌, 待人工归因", len(bad))
-    return bad[["symbol", "pred_ret_1d", "actual_ret"]].reset_index(drop=True)
+    return bad[["symbol", "pred_ret_3d", "actual_ret"]].reset_index(drop=True)

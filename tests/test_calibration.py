@@ -192,3 +192,55 @@ def test_e_lookahead_boundary_exact():
 
     assert _mag(c1, D) != pytest.approx(_mag(clean, D), abs=1e-9)
     assert _mag(c2, D) == pytest.approx(_mag(clean, D), abs=1e-9)
+
+
+def _single_symbol_panel_any_target(n_dates=100, seed=3, target="label_pm_5d_net"):
+    """单股每日一行, 任意目标列 (label_horizon 参数化测试用)."""
+    dates = pd.bdate_range("2025-01-06", periods=n_dates)
+    rows = []
+    for t, d in enumerate(dates):
+        rows.append(
+            {
+                "symbol": "000001",
+                "date": d,
+                "board": "main",
+                "score": 0.5 + 0.01 * t,
+                target: 0.1 * (0.5 + 0.01 * t),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def test_f_label_horizon_shifts_realized_boundary():
+    """label_horizon=5 → realized_drop = buy_lag(1)+5 = 6.
+
+    决策日 D: 行 t 可用 ⇔ t+6 ≤ D. 污染 D-6 行 (可用) → D 的 mag 必须变;
+    污染 D-5 行 (不可用) → D 的 mag 必须不变 (与 10d 的 D-11/D-10 边界同构).
+    """
+    clean = _single_symbol_panel_any_target()
+    D = clean["date"].iloc[80]
+
+    def _mag(df):
+        return (
+            calibrate_mag10d(
+                df, cal_n=60, target_col="label_pm_5d_net", label_horizon=5
+            )
+            .loc[lambda s: s["date"] == D, "mag"]
+            .iloc[0]
+        )
+
+    c1 = clean.copy()
+    c1.loc[80 - 6, "label_pm_5d_net"] = 5.0  # D-6 可用 → mag 变
+    c2 = clean.copy()
+    c2.loc[80 - 5, "label_pm_5d_net"] = 5.0  # D-5 不可用 → mag 不变
+
+    assert _mag(c1) != pytest.approx(_mag(clean), abs=1e-9)
+    assert _mag(c2) == pytest.approx(_mag(clean), abs=1e-9)
+
+
+def test_g_label_horizon_default_equals_10d():
+    """默认 label_horizon 与显式 10 行为一致 (回归)."""
+    df = _panel()
+    a = calibrate_mag10d(df, cal_n=42, target_col="label_pm_10d_net")
+    b = calibrate_mag10d(df, cal_n=42, target_col="label_pm_10d_net", label_horizon=10)
+    assert a["mag"].equals(b["mag"])

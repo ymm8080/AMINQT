@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -59,6 +60,30 @@ DEMO_INDUSTRIES = {
     "000858": "白酒",
     "601899": "有色",
 }
+
+_STOCK_NAMES_CACHE: dict[str, str] | None = None
+
+
+def stock_names() -> dict[str, str]:
+    """代码→股票名称 静态映射 (sw_stock_classification.csv, 惰性缓存).
+
+    清单 parquet 不含 name 列, 页面用真实名称而非 DEMO_NAMES; 文件缺失回退 DEMO_NAMES.
+    """
+    global _STOCK_NAMES_CACHE
+    if _STOCK_NAMES_CACHE is not None:
+        return _STOCK_NAMES_CACHE
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "data/processed/sw_stock_classification.csv"
+    )
+    try:
+        df = pd.read_csv(path, dtype={"symbol": str})
+        _STOCK_NAMES_CACHE = dict(zip(df["symbol"], df["name"]))
+    except Exception:
+        _STOCK_NAMES_CACHE = dict(DEMO_NAMES)
+    return _STOCK_NAMES_CACHE
+
+
 DEMO_SECTOR_BASE_INDEX: dict[str, float] = {
     "白酒": 1.0,
     "电池": 1.0,
@@ -113,14 +138,14 @@ def pipeline_buy_candidates(df: pd.DataFrame) -> set[str]:
     """根据 Pipeline-1 清单规则选出推荐买入候选.
 
     规则优先级:
-    1. 存在 pred_ret_1d 列时, 取预测次日收益 > 0 的股票;
+    1. 存在 pred_ret_3d 列时, 取预测收益 > 0 的股票 (1d 2026-08-09 删除);
     2. 否则存在 score 列时, 取 score 前 30%;
     3. 否则取前 5 名。
     """
     if df is None or df.empty or "symbol" not in df.columns:
         return set()
-    if "pred_ret_1d" in df.columns:
-        return set(df.loc[df["pred_ret_1d"] > 0, "symbol"])
+    if "pred_ret_3d" in df.columns:
+        return set(df.loc[df["pred_ret_3d"] > 0, "symbol"])
     if "score" in df.columns:
         threshold = df["score"].quantile(0.7)
         return set(df.loc[df["score"] >= threshold, "symbol"])
@@ -205,12 +230,10 @@ def demo_list(seed: int = 42) -> pd.DataFrame:
             ],
             "day_change": rng.uniform(-0.03, 0.06, n),
             "pred_ret_1d": rng.uniform(-0.02, 0.05, n),
-            "pred_ret_2d": rng.uniform(-0.03, 0.08, n),
             "pred_ret_3d": rng.uniform(-0.03, 0.09, n),
             "pred_ret_5d": rng.uniform(-0.04, 0.12, n),
             "pred_ret_10d": rng.uniform(-0.05, 0.16, n),
             "prob_up": np.round(rng.uniform(0.42, 0.62, n), 3),
-            "prob_up_2d": np.round(rng.uniform(0.40, 0.66, n), 3),
             "prob_up_3d": np.round(rng.uniform(0.38, 0.68, n), 3),
             "prob_up_5d": np.round(rng.uniform(0.36, 0.70, n), 3),
             "prob_up_10d": np.round(rng.uniform(0.34, 0.72, n), 3),
@@ -225,7 +248,6 @@ def demo_list(seed: int = 42) -> pd.DataFrame:
             "pred_q10": rng.uniform(-0.04, 0.01, n),
             "pred_q50": rng.uniform(-0.01, 0.04, n),
             "pred_q90": rng.uniform(0.01, 0.10, n),
-            "pred_q50_2d": rng.uniform(-0.02, 0.05, n),
             "pred_q50_3d": rng.uniform(-0.02, 0.06, n),
             "pred_q50_5d": rng.uniform(-0.03, 0.08, n),
             "uncertainty_width": rng.uniform(0.02, 0.12, n),
@@ -594,7 +616,7 @@ def load_predictions_from_db(
             placeholders = ",".join("?" * len(date_strs))
             df = pd.read_sql(
                 f"""SELECT date, symbol, score, prob_up,
-                       pred_ret_1d, pred_ret_3d, pred_ret_5d
+                       pred_ret_3d, pred_ret_5d, pred_ret_10d
                     FROM prediction_stocks
                     WHERE date IN ({placeholders})""",
                 conn,
@@ -856,10 +878,10 @@ def load_real_signals() -> list[dict]:
         signals = []
         for _, row in matched.iterrows():
             sym = row["symbol"]
-            pred_ret = float(row.get("pred_ret_1d", 0))
+            pred_ret = float(row.get("pred_ret_3d", 0))
             prob = float(row.get("prob_up", 0))
             side = "buy" if pred_ret > 0 else "sell"
-            reason = f"prob={prob:.2f} pred_ret_1d={pred_ret:+.2%}"
+            reason = f"prob={prob:.2f} pred_ret_3d={pred_ret:+.2%}"
             signals.append(
                 {
                     "time": "14:50",
@@ -964,7 +986,9 @@ def append_audit_log(entry: dict) -> None:
 #   legacy_stocklist_ → legacy (交付)      legacy_preds_raw_ → legacy_raw (底稿)
 #   parallel_shortlist_ → parallel (交付)   parallel_preds_raw_ → parallel_raw (底稿)
 #   slowbull_pool_{board}_ → slow_bull
-_PRED_FILE_RE = re.compile(r"^(?P<prefix>[\w]+)_(?P<date>\d{8})(?P<mod>__.+)?\.csv$")
+# prefix 用非贪婪: 贪婪会把 `__20260807` 里的前一段 `_20260807` 吃进 prefix,
+# 使纯数字模块 (如当前模型 tag `20260807`) 被误解析成 "na"
+_PRED_FILE_RE = re.compile(r"^(?P<prefix>[\w]+?)_(?P<date>\d{8})(?P<mod>__.+)?\.csv$")
 _PRED_FAMILY = {
     "legacy_stocklist": "legacy",
     "legacy_preds_raw": "legacy_raw",
@@ -996,11 +1020,11 @@ _UNIFIED_COLS = [
     "system",
     "score",
     "rk",
-    "gain_2d",
+    "rank",
+    "过门",
     "gain_3d",
     "gain_5d",
     "gain_10d",
-    "prob_2d",
     "prob_3d",
     "prob_5d",
     "prob_10d",
@@ -1044,7 +1068,7 @@ def _normalize_pred_rows(
 ) -> pd.DataFrame:
     """把各文件族列名映射到统一列 (date/module/family/board/system/score/rk/gain_*/prob_*).
 
-    gain_h = 预期涨幅 (legacy pred_ret_, parallel pred_mag_);
+    gain_h = 预期涨幅 (legacy pred_ret_; parallel 优先 pred_ret_ 平均预测, 回退 pred_mag_ MFE);
     prob_h = 概率 (legacy prob_up_, parallel pred_prob_);
     slow_bull 无涨幅/概率 (风控观察池), 留空.
     """
@@ -1061,16 +1085,23 @@ def _normalize_pred_rows(
     )
     out["score"] = df["score"] if "score" in df.columns else None
     out["rk"] = df["rk"] if "rk" in df.columns else None
+    # 2026-08-09 并行交付新增: 全局质量排名 + 10d 制度门标注 (仅 parallel 清单含, legacy/slow_bull 留空)
+    out["rank"] = df["rank"] if "rank" in df.columns else None
+    out["过门"] = df["过门"] if "过门" in df.columns else None
     if family == "slow_bull":
         out["system"] = "slow_bull"
         return out
     if family.startswith("legacy"):
-        for h in ("2d", "3d", "5d"):
+        for h in ("3d", "5d", "10d"):
             out[f"gain_{h}"] = df.get(f"pred_ret_{h}")
             out[f"prob_{h}"] = df.get(f"prob_up_{h}")
     else:  # parallel
-        for h in ("2d", "3d", "5d", "10d"):
-            out[f"gain_{h}"] = df.get(f"pred_mag_{h}")
+        for h in ("3d", "5d", "10d"):
+            out[f"gain_{h}"] = (
+                df.get(f"pred_ret_{h}")
+                if f"pred_ret_{h}" in df.columns
+                else df.get(f"pred_mag_{h}")
+            )
             out[f"prob_{h}"] = df.get(f"pred_prob_{h}")
     return out
 
@@ -1121,6 +1152,25 @@ def load_stock_list_on_date(
     return rows.sort_values(["family", "module", "rk"], na_position="last").reset_index(
         drop=True
     )
+
+
+def load_official_run_shortlist(
+    date_compact: str | None = None, list_dir: str = STOCK_LIST_DIR
+) -> tuple[pd.DataFrame | None, str | None]:
+    """官方运行交付短名单 (STOCK_LIST_DIR, 已去 *_raw 底稿), 选股看板股票池源.
+
+    选股看板 fed by module prediction for each official run, 非回测:
+    默认最新交付日; 指定 date_compact 取当日交付短名单. 无数据 → (None, None).
+    """
+    dates = list_prediction_dates(list_dir)
+    if not dates:
+        return None, None
+    if date_compact is None:
+        date_compact = dates[0]
+    df = load_stock_list_on_date(date_compact, list_dir)
+    if df is None or df.empty:
+        return None, date_compact
+    return df, date_compact
 
 
 def load_stock_list_on_dates(

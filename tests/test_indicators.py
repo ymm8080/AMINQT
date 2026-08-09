@@ -249,23 +249,20 @@ class TestDualTrackTrainer:
             df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer()
         trained = trainer.train_window(df, "main", ["f1", "f2"])
+        # 1d/2d 已删, 本 df 无 label_10d → 只训 3d/5d 四模型
         assert set(trained["models"]) == {
-            "1d_reg",
-            "1d_cls",
-            "2d_reg",
-            "2d_cls",
             "3d_reg",
             "3d_cls",
             "5d_reg",
             "5d_cls",
         }
-        pred = trained["models"]["1d_reg"][0].predict(df[["f1", "f2"]].tail(5))
+        pred = trained["models"]["3d_reg"][0].predict(df[["f1", "f2"]].tail(5))
         assert len(pred) == 5
         oos = trainer.validate_oos(trained)
-        assert "1d_reg" in oos["ics"]
+        assert "3d_reg" in oos["ics"]
 
     def test_calibrators_multihorizon(self):
-        """fit_calibrator 产出 {1,2,3,5} 校准器字典 + 1d 兼容别名."""
+        """fit_calibrator 产出 {3,5} 校准器字典 (1d/2d 已删) + 3d 别名."""
         import app.pipeline1.dual_track_trainer as dtt
 
         dtt.LGB_PARAMS_REG["n_estimators"] = 10
@@ -291,6 +288,7 @@ class TestDualTrackTrainer:
         trainer = dtt.DualTrackTrainer()
         trained = trainer.train_window(df, "main", ["f1"])
         cal = trainer.fit_calibrator(trained)
-        assert set(trained["calibrators"]) == {1, 2, 3, 5}
-        assert trained["calibrator"] is trained["calibrators"][1]
+        # 1d/2d 已删, 本 df 无 label_10d → 只注册 3d/5d 校准器
+        assert set(trained["calibrators"]) == {3, 5}
+        assert trained["calibrator"] is trained["calibrators"][3]
         assert cal is trained["calibrator"]

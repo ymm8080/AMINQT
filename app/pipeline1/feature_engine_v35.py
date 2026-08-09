@@ -121,8 +121,19 @@ def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
     # iloc assignment can alter dtypes on some pandas/platform combinations.
     if ref_dtypes is not None:
         for col, dtype in ref_dtypes.items():
-            if result[col].dtype != dtype:
-                result[col] = result[col].astype(dtype)
+            if result[col].dtype == dtype:
+                continue
+            # iloc 混合填充后列可能含 NaN/inf (如无公告股票的缺失值); int 装不下
+            # 非有限值 → 保持 float 保留 NaN (LightGBM 原生处理, 非静默丢弃).
+            if np.issubdtype(dtype, np.integer):
+                try:
+                    finite = bool(np.isfinite(result[col].astype(float)).all())
+                except (TypeError, ValueError):
+                    finite = False
+                if not finite:
+                    result[col] = result[col].astype(float)
+                    continue
+            result[col] = result[col].astype(dtype)
     return result
 
 

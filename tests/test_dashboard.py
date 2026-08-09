@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
+import pytest
 
 from app.pipeline1.list_generator import SCHEMA_FIELDS
 from app.streamlit import data_service as ds
@@ -16,6 +19,20 @@ class TestDataService:
             assert col in df.columns, col
         assert (df["schema_version"] == "1.4").all()
         assert df["prob_up"].between(0, 1).all()
+
+    @pytest.mark.skipif(
+        not Path("data/processed/sw_stock_classification.csv").exists()
+        or not Path("data/lists/list_20260807.parquet").exists(),
+        reason="需要 sw_stock_classification.csv 和清单 parquet (CI 无数据文件)",
+    )
+    def test_stock_names_covers_pool(self):
+        # 真实名称映射 (sw 静态分类), 覆盖清单 + 知名股
+        names = ds.stock_names()
+        assert len(names) > 1000
+        assert names["600519"] == "贵州茅台"
+        pool = pd.read_parquet("data/lists/list_20260807.parquet")
+        pool["symbol"] = pool["symbol"].astype(str)
+        assert pool["symbol"].map(names).notna().all()
 
     def test_demo_ohlc_and_intraday(self):
         df = ds.demo_ohlc("600519", days=60)
@@ -69,6 +86,68 @@ class TestComponents:
         assert factor_radar({"MACD": 0.5, "RSI": 0.3}) is not None
 
 
+class TestModulePerfRecent:
+    def test_recent_module_ids_per_model(self):
+        from app.streamlit import module_perf as mp
+
+        df = pd.DataFrame(
+            {
+                "module_id": [
+                    "legacy·v1",
+                    "legacy·v2",
+                    "legacy·v3",
+                    "parallel·v1",
+                    "parallel·v2",
+                ],
+                "family": ["legacy", "legacy", "legacy", "parallel", "parallel"],
+                "date": [
+                    "2026-08-01",
+                    "2026-08-02",
+                    "2026-08-03",
+                    "2026-08-01",
+                    "2026-08-02",
+                ],
+            }
+        )
+        # 每个 family 取最新 n 个版本 (按交付日降序)
+        assert mp.recent_module_ids_per_model(df, n=2) == [
+            "legacy·v3",
+            "legacy·v2",
+            "parallel·v2",
+            "parallel·v1",
+        ]
+
+
+class TestSelectionPriorityEdit:
+    """选股池表格日内买入复选框 → priority.json 的对账逻辑."""
+
+    def test_apply_priority_edits(self):
+        from app.streamlit.page_selection import _apply_priority_edits
+
+        edited = {0: {"日内买入": True}, 2: {"日内买入": False}, 1: {"name": "改错列"}}
+        symbols = ["600519", "000001", "300750"]
+        assert _apply_priority_edits(edited, symbols) == {
+            "600519": True,
+            "300750": False,
+        }
+
+    def test_apply_priority_edits_ignores_out_of_range(self):
+        from app.streamlit.page_selection import _apply_priority_edits
+
+        assert _apply_priority_edits({9: {"日内买入": True}}, ["600519"]) == {}
+
+    def test_priority_toggles(self):
+        from app.streamlit.page_selection import _priority_toggles
+
+        desired = {"600519": True, "000001": False, "300750": True}
+        current = {"600519"}
+        # 600519 已标记→不动; 000001 未标记且目标未勾选→不动; 300750 未标记→需勾选
+        assert _priority_toggles(desired, current) == ["300750"]
+        # 目标与当前一致 → 不 toggle (幂等, 防编辑事件累积重复处理)
+        assert _priority_toggles({"600519": True}, {"600519"}) == []
+        assert _priority_toggles({"000001": False}, set()) == []
+
+
 class TestStockPredictionQuery:
     """STOCK_LIST_DIR 预测文件 → 个股预测历史 (含模块标签) + 日期清单 (交付族, 多日期可拼)."""
 
@@ -113,6 +192,19 @@ class TestStockPredictionQuery:
         assert ("parallel", "20260806", "modB") in parsed
         assert ("slow_bull", "20260731", "slow_bull_v1_0") in parsed
         assert len(files) == 4  # 非预测文件被跳过
+
+    def test_list_prediction_files_numeric_module(self, tmp_path):
+        """纯数字模块 (如当前模型 tag `20260807`) 不能被贪婪 prefix 吃掉."""
+        self._mkfile(
+            tmp_path,
+            "legacy_stocklist_20260807__20260807.csv",
+            pd.DataFrame({"symbol": ["000001"], "board": ["main"]}),
+        )
+        files = ds.list_prediction_files(str(tmp_path))
+        assert len(files) == 1
+        assert files[0]["family"] == "legacy"
+        assert files[0]["date"] == "20260807"
+        assert files[0]["module"] == "20260807"
 
     def test_load_history_symbol_filter_module_kept(self, tmp_path):
         self._mkfile(
@@ -361,6 +453,90 @@ class TestStockPredictionQuery:
         assert set(rows["date"]) == {"2026-08-05", "2026-08-06"}
         assert len(rows) == 2
         assert ds.load_stock_list_on_dates(["20991231"], list_dir=str(tmp_path)).empty
+
+    def test_legacy_10d_normalized(self):
+        # legacy 交付文件含 pred_ret_10d/prob_up_10d, 归一化必须保留 (看板 10d 预期)
+        df = pd.DataFrame(
+            {
+                "symbol": ["000001"],
+                "board": ["main"],
+                "pred_ret_2d": [0.01],
+                "pred_ret_3d": [0.02],
+                "pred_ret_5d": [0.03],
+                "pred_ret_10d": [0.05],
+                "prob_up_2d": [0.51],
+                "prob_up_3d": [0.52],
+                "prob_up_5d": [0.53],
+                "prob_up_10d": [0.55],
+            }
+        )
+        norm = ds._normalize_pred_rows("legacy", "20260807", "modA", df)
+        assert norm["gain_10d"].iloc[0] == 0.05
+        assert norm["prob_10d"].iloc[0] == 0.55
+
+    def test_parallel_gain_prefers_pred_ret_average_over_pred_mag_mfe(self):
+        # 2026-08-09 用户: 看板预期列显示平均预测 (pred_ret_, close-to-close), 非 MFE 最大.
+        # 有 pred_ret_ 列 → 用平均; 无 → 回退 pred_mag_.
+        with_avg = pd.DataFrame(
+            {
+                "symbol": ["000001"],
+                "board": ["main"],
+                "systems": ["fusion"],
+                "score": [0.8],
+                "pred_mag_3d": [0.12],
+                "pred_mag_5d": [0.17],
+                "pred_mag_10d": [0.28],
+                "pred_ret_3d": [0.012],
+                "pred_ret_5d": [0.025],
+                "pred_ret_10d": [0.03],
+                "pred_prob_3d": [0.53],
+                "pred_prob_5d": [0.54],
+                "pred_prob_10d": [0.55],
+            }
+        )
+        norm_avg = ds._normalize_pred_rows("parallel", "20260807", "modA", with_avg)
+        assert norm_avg["gain_3d"].iloc[0] == 0.012  # 平均预测优先
+        assert norm_avg["gain_5d"].iloc[0] == 0.025
+        assert norm_avg["gain_10d"].iloc[0] == 0.03
+        assert norm_avg["prob_3d"].iloc[0] == 0.53  # 概率不变
+
+        # 旧交付无 pred_ret_ → 回退 pred_mag_ (兼容)
+        no_avg = with_avg.drop(columns=["pred_ret_3d", "pred_ret_5d", "pred_ret_10d"])
+        norm_fb = ds._normalize_pred_rows("parallel", "20260807", "modA", no_avg)
+        assert norm_fb["gain_3d"].iloc[0] == 0.12
+        assert norm_fb["gain_5d"].iloc[0] == 0.17
+        assert norm_fb["gain_10d"].iloc[0] == 0.28
+
+    def test_load_official_run_shortlist(self, tmp_path):
+        # 选股看板股票池源: 最新交付短名单, 去 *_raw, 默认最新日期
+        self._mkfile(
+            tmp_path,
+            "legacy_stocklist_20260805__modA.csv",
+            pd.DataFrame({"symbol": ["000001"], "board": ["main"]}),
+        )
+        self._mkfile(
+            tmp_path,
+            "legacy_stocklist_20260806__modA.csv",
+            pd.DataFrame({"symbol": ["000002"], "board": ["main"]}),
+        )
+        self._mkfile(
+            tmp_path,
+            "legacy_preds_raw_20260806__modA.csv",
+            pd.DataFrame({"symbol": ["000004"]}),
+        )
+        # 默认最新日期 (20260806), 且不含 raw
+        df, date = ds.load_official_run_shortlist(list_dir=str(tmp_path))
+        assert date == "20260806"
+        assert df["symbol"].tolist() == ["000002"]
+        # 指定旧日期
+        df2, date2 = ds.load_official_run_shortlist("20260805", list_dir=str(tmp_path))
+        assert date2 == "20260805"
+        assert df2["symbol"].tolist() == ["000001"]
+        # 空目录 → (None, None)
+        assert ds.load_official_run_shortlist(list_dir=str(tmp_path / "empty")) == (
+            None,
+            None,
+        )
 
 
 class TestPageImports:

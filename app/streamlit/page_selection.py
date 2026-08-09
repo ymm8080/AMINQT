@@ -29,10 +29,11 @@ from .components import (
 # ---------- 数据加载 ----------
 
 
-def _pool_df() -> tuple:
-    """真实清单优先, 否则演示数据 (显著标记)."""
-    lst, date = ds.load_latest_list()
+def _pool_df(date_compact: str | None = None) -> tuple:
+    """官方运行交付短名单 (STOCK_LIST_DIR); 无数据 → 演示 (显著标记)."""
+    lst, date = ds.load_official_run_shortlist(date_compact)
     if lst is not None:
+        lst["priority"] = lst["symbol"].isin(ds.load_priority_symbols())
         return lst, date, False
     return ds.demo_list(), "DEMO", True
 
@@ -45,7 +46,7 @@ def _add_symbol_to_pool(pool: pd.DataFrame, symbol: str) -> pd.DataFrame:
     symbol = str(symbol).strip()
     if not symbol or symbol in pool["symbol"].values:
         return pool
-    row = {"symbol": symbol, "name": ds.DEMO_NAMES.get(symbol, symbol)}
+    row = {"symbol": symbol, "name": ds.stock_names().get(symbol, symbol)}
     # 复制同类型列的默认值
     for col in pool.columns:
         if col in row:
@@ -63,38 +64,25 @@ def _add_symbol_to_pool(pool: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return pd.concat([pool, pd.DataFrame([row])], ignore_index=True)
 
 
-# ---------- 显示列 ----------
-
-
-def _display_cols(pool: pd.DataFrame) -> list[str]:
-    """选股池展示列 (保持稳定的列顺序)."""
-    candidates = [
-        "symbol",
-        "name",
-        "score",
-        "prob_up",
-        "pred_ret_1d",
-        "pred_ret_3d",
-        "pred_ret_5d",
-        "momentum",
-        "signal_conflict",
-        "industry",
-    ]
-    return [c for c in candidates if c in pool.columns]
-
-
 # ---------- 页面入口 ----------
 
 
 def render() -> None:
     st.header("选股看板 · Pipeline 1 (V3.5)")
-    pool, pool_date, is_demo = _pool_df()
-    if is_demo:
-        st.warning(
-            "演示数据 — 未找到真实清单 (data/lists/), 运行 `python scripts/run_daily.py` 生成"
+    avail = ds.list_prediction_dates()
+    if avail:
+        pool_date = st.selectbox(
+            "选股日期 (官方交付短名单)", avail, index=0, key="sel_pool_date"
         )
     else:
-        st.caption(f"清单日期: {pool_date} | schema V1.0 | Top {len(pool)}")
+        pool_date = None
+    pool, pool_date, is_demo = _pool_df(pool_date)
+    if is_demo:
+        st.warning("演示数据 — 未找到 STOCK_LIST_DIR 官方交付短名单预测文件")
+    else:
+        st.caption(
+            f"交付日期: {pool_date} | 官方运行模块预测短名单 | 共 {len(pool)} 条推荐"
+        )
 
     # 人为添加股票
     with st.expander("➕ 添加股票到选股池", expanded=False):
@@ -119,17 +107,16 @@ def render() -> None:
 
     # ---------- Tab 1: 选股池 ----------
     with tab_pool:
-        left, right = st.columns([3, 2])
-
-        with left:
-            _render_pool_table(pool)
-
-        with right:
-            _render_detail_panel(pool)
+        # 选股池表格 (整宽)
+        _render_pool_table(pool, pool_date)
 
         # 板块行情 (涨跌幅 + 日内曲线)
         st.divider()
         _render_sector_panel()
+
+        # 个股详情 (放底部)
+        st.divider()
+        _render_detail_panel(pool)
 
     # ---------- Tab 2: 全市场 (演示) ----------
     with tab_market:
@@ -139,70 +126,110 @@ def render() -> None:
 # ---------- 选股池表格 ----------
 
 
-def _render_pool_table(pool: pd.DataFrame) -> None:
-    """渲染选股池表格, 含日内走势 sparkline 与买入标记."""
+def _render_pool_table(pool: pd.DataFrame, pool_date: str) -> None:
+    """渲染选股池表格: 推荐模型 + 3/5/10d 真实预期 + 日内买入标记."""
     show = pool.copy()
-    if "name" not in show.columns:
-        show["name"] = show["symbol"].map(ds.DEMO_NAMES).fillna("-")
+    show["name"] = show["symbol"].map(ds.stock_names()).fillna("-")
+    # 推荐模型 = 官方交付短名单里的来源模型 (family·module), 非按板块推断
+    show["模型"] = show["family"] + "·" + show["module"].astype(str)
+    show["入选"] = pool_date
+    for h, label in (("3d", "3d 预期"), ("5d", "5d 预期"), ("10d", "10d 预期")):
+        # NumberColumn printf 只支持 %d/%f/%g, 不会 ×100; gain 是分数, 展示前乘 100 配 +%.2f%%
+        show[label] = show[f"gain_{h}"] * 100
 
-    display = show[_display_cols(show)].copy()
-
-    # 日内走势 sparkline: 每个 symbol 120 根分时价格
+    # 日内走势 sparkline: 每个 symbol 120 根分时价格 (归一化为收益率序列)
     intraday_series = {}
     for sym in show["symbol"]:
         intra = ds.demo_intraday(sym)
-        # 归一化为收益率序列, 便于跨股比较
         p0 = intra["price"].iloc[0]
         intraday_series[sym] = ((intra["price"] / p0) - 1).tolist()
-    display["日内走势"] = display["symbol"].map(intraday_series)
+    show["日内走势"] = show["symbol"].map(intraday_series)
 
-    # 日内买入标记列
-    display["日内买入"] = display["symbol"].apply(
-        lambda s: (
-            bool(show.loc[show["symbol"] == s, "priority"].iloc[0])
-            if "priority" in show.columns
-            else False
-        )
-    )
+    # 日内买入标记: 来源 = pipeline 清单写盘的 priority.json; 勾选/取消即手工更改
+    show["日内买入"] = show["symbol"].isin(ds.load_priority_symbols())
 
-    # 列顺序: 代码/名称/走势/评分等
-    col_order = ["symbol", "name", "日内走势"] + [
-        c for c in display.columns if c not in ("symbol", "name", "日内走势")
-    ]
+    # 排名/过门 来自交付短名单 (2026-08-09: 全局质量排名 + 10d 制度门标注); 旧清单无则隐藏
+    if "rank" in show.columns:
+        show["排名"] = show["rank"]
+    if "过门" in show.columns:
+        show["过门"] = show["过门"]
+    # 按全局质量排名升序 (未排名 legacy/slow_bull 沉底), 非板块分组
+    if "排名" in show.columns:
+        show = show.sort_values("排名", na_position="last").reset_index(drop=True)
 
-    st.dataframe(
-        display[col_order].style.format(
-            {
-                "score": "{:.4f}",
-                "prob_up": "{:.3f}",
-                "pred_ret_1d": "{:+.2%}",
-                "pred_ret_3d": "{:+.2%}",
-                "pred_ret_5d": "{:+.2%}",
-            }
-        ),
+    cols = ["symbol", "name"]
+    if "排名" in show.columns:
+        cols.append("排名")
+    cols += ["模型", "入选", "score"]
+    if "过门" in show.columns:
+        cols.append("过门")
+    cols += ["3d 预期", "5d 预期", "10d 预期", "日内走势", "日内买入"]
+    display = show[cols].copy().reset_index(drop=True)
+
+    # 编辑回调按行号回查 symbol (行号 = display 重置后的位置)
+    st.session_state["pool_editor_symbols"] = display["symbol"].tolist()
+
+    st.data_editor(
+        display,
         column_config={
             "symbol": st.column_config.TextColumn("代码"),
             "name": st.column_config.TextColumn("名称"),
+            "排名": st.column_config.NumberColumn("排名", format="%d"),
+            "模型": st.column_config.TextColumn("模型"),
+            "入选": st.column_config.TextColumn("入选"),
+            "score": st.column_config.NumberColumn("评分", format="%.4f"),
+            "过门": st.column_config.TextColumn("过门"),
+            "3d 预期": st.column_config.NumberColumn("3d 预期", format="+%.2f%%"),
+            "5d 预期": st.column_config.NumberColumn("5d 预期", format="+%.2f%%"),
+            "10d 预期": st.column_config.NumberColumn("10d 预期", format="+%.2f%%"),
             "日内走势": st.column_config.LineChartColumn(
                 "日内走势", y_min=-0.03, y_max=0.03
             ),
+            "日内买入": st.column_config.CheckboxColumn("日内买入"),
         },
-        use_container_width=True,
+        disabled=[c for c in cols if c != "日内买入"],
+        hide_index=True,
+        key="pool_editor",
+        on_change=_on_priority_edit,
         height=420,
+        use_container_width=True,
+    )
+    st.caption(
+        "✔ 预期 = 官方交付短名单 (STOCK_LIST_DIR) 各模型的真实预测 (3/5/10d); "
+        "排名 = 按 10d 预期幅度降序的全局质量排名; "
+        "过门 = 该股板块×系统今日是否通过 10d 制度门 (未过不建议买入); "
+        "日内买入来自 Pipeline 清单 (priority.json), 勾选/取消该列即手工更改"
     )
 
-    # 手工点选日内买入标记
-    st.caption("手工标记/取消 日内买入候选")
-    cols = st.columns(min(len(show), 6))
-    for idx, row in show.iterrows():
-        symbol = row["symbol"]
-        name = row.get("name", symbol)
-        is_priority = bool(row.get("priority", False))
-        label = f"{'✅' if is_priority else '⬜'} {symbol} {name}"
-        with cols[idx % len(cols)]:
-            if st.button(label, key=f"toggle_priority_{symbol}"):
-                ds.toggle_priority(symbol)
-                st.rerun()
+
+def _apply_priority_edits(edited_rows: dict, symbols: list[str]) -> dict[str, bool]:
+    """表格编辑事件 → {symbol: 目标勾选状态} (只取日内买入列)."""
+    desired: dict[str, bool] = {}
+    for row_idx, changes in edited_rows.items():
+        if "日内买入" not in changes:
+            continue
+        idx = int(row_idx)
+        if 0 <= idx < len(symbols):
+            desired[symbols[idx]] = bool(changes["日内买入"])
+    return desired
+
+
+def _priority_toggles(desired: dict[str, bool], current: set[str]) -> list[str]:
+    """目标勾选状态与当前不一致的 symbol (需要 toggle)."""
+    return [s for s, want in desired.items() if (s in current) != want]
+
+
+def _on_priority_edit() -> None:
+    """日内买入复选框编辑回调 → 写回 priority.json (与 pipeline 同源, 幂等)."""
+    state = st.session_state.get("pool_editor") or {}
+    symbols = st.session_state.get("pool_editor_symbols", [])
+    desired = _apply_priority_edits(state.get("edited_rows", {}) or {}, symbols)
+    toggles = _priority_toggles(desired, ds.load_priority_symbols())
+    if not toggles:
+        return
+    for sym in toggles:
+        ds.toggle_priority(sym)
+    st.rerun()
 
 
 # ---------- 详情面板 ----------
@@ -230,7 +257,7 @@ def _render_detail_panel(pool: pd.DataFrame) -> None:
         "查看详情",
         symbols,
         index=st.session_state.sel_idx,
-        format_func=lambda s: f"{s} {ds.DEMO_NAMES.get(s, '')}",
+        format_func=lambda s: f"{s} {ds.stock_names().get(s, '')}",
         key="pool_select",
         on_change=_on_select_change,
     )
@@ -268,24 +295,31 @@ def _render_detail_panel(pool: pd.DataFrame) -> None:
 
 
 def _render_charts(symbol: str) -> None:
-    """个股 K线/分时 + 参考指标图案 + 筹码分布."""
-    st.subheader(f"{symbol} {ds.DEMO_NAMES.get(symbol, '')}")
+    """个股 K线/分时 + 筹码分布 (K线右侧) + 参考指标图案 + 因子雷达."""
+    st.subheader(f"{symbol} {ds.stock_names().get(symbol, '')}")
+    _render_model_predictions(symbol)
     period = st.radio("周期", ["日K", "分时"], horizontal=True, key=f"period_{symbol}")
 
     ohlc = ds.demo_ohlc(symbol)
-    if period == "日K":
-        st.plotly_chart(
-            kline_chart(ohlc, ma_list=(5, 10, 20), title=f"{symbol} 日K"),
-            use_container_width=True,
-        )
-        # MACD 副图
-        st.plotly_chart(_macd_chart(ohlc), use_container_width=True)
-    else:
-        df = ds.demo_intraday(symbol)
-        st.plotly_chart(
-            intraday_chart(df, prev_close=ohlc["close"].iloc[-1]),
-            use_container_width=True,
-        )
+    # K线/分时 左, 筹码分布 右
+    col_k, col_chip = st.columns([3, 2])
+    with col_k:
+        if period == "日K":
+            st.plotly_chart(
+                kline_chart(ohlc, ma_list=(5, 10, 20), title=f"{symbol} 日K"),
+                use_container_width=True,
+            )
+            # MACD 副图
+            st.plotly_chart(_macd_chart(ohlc), use_container_width=True)
+        else:
+            df = ds.demo_intraday(symbol)
+            st.plotly_chart(
+                intraday_chart(df, prev_close=ohlc["close"].iloc[-1]),
+                use_container_width=True,
+            )
+    with col_chip:
+        st.subheader("筹码分布")
+        st.plotly_chart(_chip_distribution_chart(ohlc), use_container_width=True)
 
     st.divider()
     st.subheader("参考指标")
@@ -300,11 +334,6 @@ def _render_charts(symbol: str) -> None:
         st.plotly_chart(find_bull_chart(ohlc), use_container_width=True)
     with ind4:
         st.plotly_chart(trend_top_bottom_chart(ohlc), use_container_width=True)
-
-    # 筹码分布
-    st.divider()
-    st.subheader("筹码分布")
-    st.plotly_chart(_chip_distribution_chart(ohlc), use_container_width=True)
 
     # 因子雷达 (B2)
     st.divider()
@@ -326,6 +355,26 @@ def _render_charts(symbol: str) -> None:
                 use_container_width=True,
                 hide_index=True,
             )
+
+
+def _render_model_predictions(symbol: str) -> None:
+    """个股明细顶部: 该股在官方交付短名单 (STOCK LIST) 的最新模型推荐.
+
+    3/5/10d 预期涨幅 + 概率 全部来自 STOCK_LIST_DIR 真实预测, 非演示.
+    """
+    hist = ds.load_stock_prediction_history(symbol, max_dates=1)
+    if hist is None or hist.empty:
+        st.caption("无 STOCK LIST 预测记录")
+        return
+    r = hist.iloc[0]
+    st.markdown(f"**模型推荐** `{r['family']}·{r['module']}` (选股日 {r['date']})")
+    cells = []
+    for h in ("3d", "5d", "10d"):
+        g, p = r.get(f"gain_{h}"), r.get(f"prob_{h}")
+        g_txt = "—" if g is None or pd.isna(g) else f"{float(g):+.2%}"
+        p_txt = "—" if p is None or pd.isna(p) else f"{float(p):.2%}"
+        cells.append(f"**{h}** {g_txt} (概率 {p_txt})")
+    st.markdown(" &nbsp;·&nbsp; ".join(cells))
 
 
 def _compute_factor_values(df: pd.DataFrame) -> dict:
@@ -485,6 +534,7 @@ def _render_sector_panel() -> None:
     """板块涨跌幅 + 小号板块日内曲线 sparkline."""
     st.subheader("板块行情")
     sector_df = ds.demo_sector_changes()
+    sector_df["涨跌幅"] = sector_df["涨跌幅"] * 100
     # 为每个板块生成日内分时收益序列
     sector_df["日内走势"] = sector_df["板块"].apply(
         lambda s: (
@@ -499,7 +549,7 @@ def _render_sector_panel() -> None:
         sector_df,
         column_config={
             "板块": st.column_config.TextColumn("板块"),
-            "涨跌幅": st.column_config.NumberColumn("涨跌幅", format="+.2%%"),
+            "涨跌幅": st.column_config.NumberColumn("涨跌幅", format="+%.2f%%"),
             "上涨家数": st.column_config.NumberColumn("上涨家数"),
             "下跌家数": st.column_config.NumberColumn("下跌家数"),
             "日内走势": st.column_config.LineChartColumn(

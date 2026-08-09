@@ -11,7 +11,11 @@ from app.pipeline1.data_supply import DataSupplyChain
 from app.pipeline1.list_generator import SCHEMA_FIELDS
 from app.pipeline1.panel_builder import assemble_panel, enrich_panel
 from app.pipeline1.predict_runner import find_bundles, run_prediction
-from app.pipeline1.train_runner import prepare_board_frame, run_training
+from app.pipeline1.train_runner import (
+    prepare_board_frame,
+    run_training,
+    select_features,
+)
 from tests.test_daily_pipeline import make_panel
 
 
@@ -168,7 +172,13 @@ class TestEnrichPanel:
 
 # ---------------- assemble_panel ----------------
 class TestAssemblePanel:
-    def test_backfill_enrich_cache(self, tmp_path):
+    def test_backfill_enrich_cache(self, tmp_path, monkeypatch):
+        # Mock enrich_alt_data to avoid network calls (AKShare/tushare) hanging in CI
+        from app.pipeline1 import panel_builder
+
+        monkeypatch.setattr(
+            panel_builder, "enrich_alt_data", lambda panel, *a, **kw: panel
+        )
         rng = np.random.default_rng(7)
         dates = pd.bdate_range("2025-01-01", periods=30)
 
@@ -265,6 +275,52 @@ class TestRunTraining:
         assert tail["label_1d"].isna().all()
 
 
+class TestSelectFeaturesBruteInjection:
+    """select_features 的 BruteForce 后注入: 单次 join (而非逐族 N 次) 不改变列值与对齐."""
+
+    def test_single_join_injects_missing_brute_col(self, monkeypatch):
+        from types import SimpleNamespace
+
+        import app.pipeline1.train_runner as tr
+        from app.pipeline1.feature_selector import BruteForceGenerator
+
+        rows = []
+        for s in ("600000", "600001"):
+            for t in range(25):
+                rows.append(
+                    {
+                        "symbol": s,
+                        "date": pd.Timestamp("2026-01-05") + pd.Timedelta(days=t),
+                        "f1": float(t),
+                    }
+                )
+        df = pd.DataFrame(rows)
+
+        gen = BruteForceGenerator()
+        brute = gen.generate_family(df, "pct_change", raw_cols=["f1"], dtype="float32")
+        assert len(brute.columns) > 0, "pct_change 族至少应生成 1 列"
+        brute_col = brute.columns[0]
+        selected = ["f1", brute_col]
+
+        fake_sel = SimpleNamespace(
+            config={"main": {"pipeline": "bruteforce_dedup"}},
+            select=lambda df, board: selected,
+        )
+        monkeypatch.setattr(
+            tr,
+            "apply_event_scope_screens",
+            lambda selected, df, screens=None: selected,
+        )
+
+        cols, aug = select_features(df, "main", "tag", fake_sel, registry=None)
+        assert brute_col in cols
+        assert brute_col in aug.columns
+        # 单次 join 值/索引对齐与逐族 join 完全一致 (index 即原 df 索引)
+        pd.testing.assert_series_equal(
+            aug[brute_col], brute[brute_col], check_names=False
+        )
+
+
 class TestFindBundles:
     def test_latest_and_tag(self, trained):
         import os
@@ -314,12 +370,6 @@ class TestHorizonWeights:
         assert LABEL_WEIGHTS[3] < LABEL_WEIGHTS[5]  # 3d 相对 5d 最小化
         assert sum(LABEL_WEIGHTS.values()) == pytest.approx(1.0)
 
-    def test_component_weights_single_source(self):
-        from app.pipeline1.label_engine import LABEL_WEIGHTS
-        from app.pipeline1.list_generator import COMPOUND_W
-
-        assert COMPOUND_W == tuple(LABEL_WEIGHTS[k] for k in (1, 2, 3, 5, 10))
-
     def test_validate_oos_weighted_ic_formula(self, tmp_path):
         from app.pipeline1.label_engine import LABEL_WEIGHTS
 
@@ -342,3 +392,90 @@ class TestHorizonWeights:
             LABEL_WEIGHTS[k] * oos["ics"].get(f"{k}d_reg", 0.0) for k in LABEL_WEIGHTS
         ) / sum(LABEL_WEIGHTS.values())
         assert oos["weighted_ic"] == pytest.approx(expected, abs=1e-6)
+
+
+# ---------------- run_training 逐板块分期 (内存减半, 模型不变) ----------------
+class TestRunTrainingSequentialBoards:
+    """回归: run_training 必须逐板块 prepare→select→train→释放,
+    而非先攒齐两板块特征帧再训 (内存峰值减半, 最终模型相同).
+
+    顺序约束 (分期关键):
+        prepare(main) → select(main) → train(main) → prepare(dual) → select(dual) → train(dual)
+    即 main 训完才允许开始 dual 的特征计算, 保证任意时刻至多一份增强帧在内存.
+    """
+
+    def test_boards_trained_sequentially_not_staged(self, monkeypatch):
+        import app.pipeline1.dual_track_trainer as dtt_mod
+        import app.pipeline1.train_runner as tr
+        from app.pipeline1 import cleaning_pipeline as cln
+
+        panel = pd.DataFrame(
+            {
+                "symbol": ["a", "b"],
+                "date": ["2026-08-07", "2026-08-07"],
+                "board": ["main", "dual"],
+            }
+        )
+        main_df = panel[panel["board"] == "main"].copy()
+        dual_df = panel[panel["board"] == "dual"].copy()
+
+        monkeypatch.setattr(
+            cln.CleaningPipeline,
+            "run_train",
+            lambda self, df, board=None: (main_df, dual_df),
+        )
+        # FeatureEngineV35 仅实例化, 不做真实特征 (prepare 已被 mock)
+        monkeypatch.setattr(tr, "FeatureEngineV35", lambda: object())
+
+        events = []
+
+        def fake_prepare(
+            board_df,
+            features,
+            float_shares_map=None,
+            cross_sectional_rank=False,
+            registry=None,
+        ):
+            events.append(("prepare", board_df["board"].iloc[0]))
+            return board_df.copy()
+
+        def fake_select(df, board, tag, selector=None, registry=None):
+            events.append(("select", board))
+            return ["f1", "f2"], df
+
+        def fake_weekly(self, panels, feature_cols_by_board, tag, resume=False):
+            events.append(("train", next(iter(panels))))
+            assert len(panels) == 1, "每板块应单独训练: 不同时持有两板块增强帧"
+            board = next(iter(panels))
+            return {
+                board: {
+                    "path": f"models/pipeline1/{board}_20260809.pkl",
+                    "oos": {"weighted_ic": 0.05, "pass": True},
+                    "switched": True,
+                }
+            }
+
+        monkeypatch.setattr(tr, "prepare_board_frame", fake_prepare)
+        monkeypatch.setattr(tr, "select_features", fake_select)
+        monkeypatch.setattr(dtt_mod.DualTrackTrainer, "weekly_retrain", fake_weekly)
+
+        results = run_training(
+            panel,
+            "20260809",
+            model_dir="models/pipeline1",
+            use_ic_screen=False,
+            use_registry=False,
+        )
+
+        expected = [
+            ("prepare", "main"),
+            ("select", "main"),
+            ("train", "main"),
+            ("prepare", "dual"),
+            ("select", "dual"),
+            ("train", "dual"),
+        ]
+        assert events == expected, f"分期顺序错误: {events}"
+        assert set(results) == {"main", "dual"}
+        assert results["main"]["n_features"] == 2
+        assert results["dual"]["switched"] is True
