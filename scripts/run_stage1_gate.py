@@ -83,7 +83,7 @@ def _evaluate_board(
 
     trained = trainer.train_window(df, board, cols)
     oos = trainer.validate_oos(trained)
-    model, label = trained["models"]["1d_reg"]
+    model, label = trained["models"]["3d_reg"]
     segs = trained["segs"]
 
     def _scored(seg: pd.DataFrame) -> pd.DataFrame:
@@ -94,7 +94,7 @@ def _evaluate_board(
     test = _scored(segs["test"])
     train = _scored(segs["train"])
 
-    # W3: OOS Rank IC / ICIR (1d_reg 模型, 验收口径标签)
+    # W3: OOS Rank IC / ICIR (3d_reg 模型, 验收口径标签)
     rank_ic = metrics.rank_ic(test, "score", label)
     icir = metrics.icir(test, "score", label)
     # 训练段 IC (泄漏哨兵口径: A股日频横截面 alpha 不可能稳定 > 0.15)

@@ -160,7 +160,7 @@ class TestDeviationAndBadTrades:
         preds = pd.DataFrame(
             {
                 "symbol": ["A", "B", "C"],
-                "pred_ret_1d": [0.03, 0.03, 0.001],  # C 未达预测大涨门槛
+                "pred_ret_3d": [0.03, 0.03, 0.001],  # C 未达预测大涨门槛
             }
         )
         actual = pd.Series({"A": -0.08, "B": 0.05, "C": -0.09})

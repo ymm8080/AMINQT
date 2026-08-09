@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
+import pytest
 
 from app.pipeline1.list_generator import SCHEMA_FIELDS
 from app.streamlit import data_service as ds
@@ -17,6 +20,11 @@ class TestDataService:
         assert (df["schema_version"] == "1.4").all()
         assert df["prob_up"].between(0, 1).all()
 
+    @pytest.mark.skipif(
+        not Path("data/processed/sw_stock_classification.csv").exists()
+        or not Path("data/lists/list_20260807.parquet").exists(),
+        reason="需要 sw_stock_classification.csv 和清单 parquet (CI 无数据文件)",
+    )
     def test_stock_names_covers_pool(self):
         # 真实名称映射 (sw 静态分类), 覆盖清单 + 知名股
         names = ds.stock_names()

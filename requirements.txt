@@ -5,7 +5,7 @@ tushare>=1.4.0
 # xtquant  : NOT on pip — install via miniQMT client
 
 # ── Data / compute ────────────────────────────────────────────
-pandas>=2.0
+pandas>=2.0,<3.0
 numpy>=1.24
 scipy
 pyarrow>=14.0
