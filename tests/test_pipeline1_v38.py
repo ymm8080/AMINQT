@@ -276,11 +276,12 @@ class TestDynamicEntry:
             [
                 {"symbol": "600001"},  # prob 0.70 > 基准 0.65, compound .028 > 0 → 过
                 {"symbol": "600002", "prob_up": 0.55},  # prob < 基准 → 剔
-                {  # 净预期为负 → 剔
+                {  # 净预期为负 → 剔 (含 10d, 避免继承 base 的 +0.07 使 10d 主导翻转)
                     "symbol": "600003",
                     "pred_ret_1d": -0.02,
                     "pred_ret_3d": -0.03,
                     "pred_ret_5d": -0.05,
+                    "pred_ret_10d": -0.07,
                 },
             ]
         )
