@@ -32,6 +32,7 @@ data/**/*.db
 
 # Local test / review artifacts
 *.log
+_*.txt
 _r*.txt
 _test_*.txt
 _test_fail*.txt
@@ -45,6 +46,12 @@ _new_review.txt
 _pr49_diff.txt
 _verify_output.txt
 *.patch
+
+# Backtest / prediction result artifacts (WORM: 结果落盘不入库)
+predictions*.csv
+result_*.json
+filtered_candidates.csv
+pipeline1_result.txt
 data/cyq_fetch_log.txt
 data/hk_hold_fetch_log.txt
 

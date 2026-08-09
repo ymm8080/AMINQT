@@ -34,7 +34,7 @@ class CatPawMonitor:
     def _load_config(self, config_file: str) -> dict[str, Any]:
         default = {
             "processes": [
-                {"name": "aminqt_api", "command": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+                {"name": "aminqt_api", "command": "uvicorn app.main:app --host 127.0.0.1 --port 8000",
                  "working_dir": r"D:\AMINQT\AMINQT CODES", "health_check_url": "http://localhost:8000/docs",
                  "health_check_timeout": 5, "restart_delay": 10, "max_restarts_per_hour": 5},
                 {"name": "aminqt_streamlit", "command": "streamlit run app/streamlit_app.py --server.port 8501",

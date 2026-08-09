@@ -226,7 +226,9 @@ def render() -> None:
         # 记录页面加载
         ds.append_audit_log(
             {
-                "时间": _dt.datetime.now().strftime("%H:%M:%S"),
+                "时间": _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8))).strftime(
+                    "%H:%M:%S"
+                ),
                 "操作": "页面加载",
                 "代码": "-",
                 "方向": "-",

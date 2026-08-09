@@ -28,7 +28,7 @@ from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.feature_registry import FeatureRegistry
 from app.pipeline1.feature_selector import BRUTE_FAMILIES, BruteForceGenerator
 from app.pipeline1.label_engine import LabelEngine
-from app.pipeline1.train_runner import prepare_board_frame
+from app.pipeline1.train_runner import MASK_RECENT_DAYS, prepare_board_frame
 from config.settings import data_others_path
 
 logging.basicConfig(
@@ -165,6 +165,7 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
         panel = panel[panel["date"] >= cutoff]
     # else: 3Y / ALL — use full panel
 
+    np.random.seed(42)  # 抽样可复现 (量化铁律)
     if board == "main":
         # Full MAIN board (60/00/002/601/603/605), not just CSI 300
         board_panel = panel[~panel["board"].isin(["GEM", "STAR"])].copy()
@@ -199,7 +200,7 @@ def step2_build_board(panel, board="main", window="3Y", max_stocks=0):
     df = LabelEngine.mask_suspension(df)
     # Must mask >= 5 days for label_5d horizon to avoid look-ahead bias
     # (train_runner.py uses MASK_RECENT_DAYS=6, all eval scripts use 6)
-    df = LabelEngine.mask_recent_days(df, days=6)
+    df = LabelEngine.mask_recent_days(df, days=MASK_RECENT_DAYS)
 
     if board == "main":
         # Family-based batching with pyarrow merge.

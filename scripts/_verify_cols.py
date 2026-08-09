@@ -1,8 +1,10 @@
 """Analyze chip_concentration, profit_ratio, free_float_turnover_rate vs their potential duplicates."""
 
+import os
+
 import pyarrow.parquet as pq
 
-PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
+PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
 
 cols = [
     "chip_concentration",

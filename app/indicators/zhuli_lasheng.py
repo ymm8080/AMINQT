@@ -14,8 +14,12 @@
     分母为0时前值填充（横盘保护），不改变信号方向逻辑。
 """
 
+import logging
+
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def EMA(s: pd.Series, n: int) -> pd.Series:
@@ -115,26 +119,27 @@ if __name__ == "__main__":
     df = pd.read_csv("/mnt/agents/output/data_600519_2y.csv")
     df = zhuli_lasheng(df)
 
-    print("最近3日指标值：")
-    print(
-        df[["time", "close", "主力轨迹", "MAZL", "VAR5", "VAR51"]]
+    logger.info("最近3日指标值：")
+    logger.info(
+        "\n"
+        + df[["time", "close", "主力轨迹", "MAZL", "VAR5", "VAR51"]]
         .tail(3)
         .round(3)
         .to_string(index=False)
     )
 
-    print("\n近两年信号分布：")
+    logger.info("\n近两年信号分布：")
     for sig in ["吸筹", "洗盘", "拉高", "出货", "吸筹峰", "上方死叉出货"]:
         dates = df.loc[df[sig], "time"].astype(str).tolist()
         # 按月归并，便于肉眼校验
         months = sorted({d[:6] for d in dates})
-        print(f"  {sig}: {len(dates)}次  月份{months}")
+        logger.info(f"  {sig}: {len(dates)}次  月份{months}")
 
-    print(f"\n近20日有吸筹峰: {had_accumulation_peak(df, 20)}")
+    logger.info(f"\n近20日有吸筹峰: {had_accumulation_peak(df, 20)}")
     # 锚点校验：2024年9月下旬大反弹前应有吸筹；9月底-10月初拉升段应有拉高
     for anchor in ["202409", "202410"]:
         seg = df[df["time"].astype(str).str.startswith(anchor)]
-        print(
+        logger.info(
             f"{anchor}: 吸筹{int(seg['吸筹'].sum())}天 拉高{int(seg['拉高'].sum())}天 "
             f"出货{int(seg['出货'].sum())}天"
         )

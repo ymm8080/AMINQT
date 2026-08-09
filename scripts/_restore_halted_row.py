@@ -16,8 +16,10 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
-BACKUP = r"D:\AMINQT\PARQUET\panel_full_enriched_v3_tailfix_20260803_002500.parquet"
+PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
+BACKUP = os.path.join(
+    os.path.dirname(PANEL), "panel_full_enriched_v3_tailfix_20260803_002500.parquet"
+)
 SYMBOL = "300333"
 TARGET_DATE = pd.Timestamp("2026-07-29")
 

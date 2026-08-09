@@ -26,11 +26,9 @@ from .feature_selector import (
     FeatureSelector,
     apply_event_scope_screens,
 )
-from .label_engine import LabelEngine
+from .label_engine import MASK_RECENT_DAYS, LabelEngine
 
 logger = logging.getLogger(__name__)
-
-MASK_RECENT_DAYS = 6  # 近端标签未成熟掩码 (与 test_pipeline1_v38 口径一致)
 
 
 def prepare_board_frame(

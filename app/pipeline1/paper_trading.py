@@ -140,10 +140,13 @@ class ShadowListTracker:
             self._consumed_upto = last["date"]
             for sym, w in zip(last["symbols"], last["weights"], strict=False):
                 if sym in prices.index and sym not in self._positions:
+                    cost = float(prices[sym])
+                    if cost <= 0:  # 零/负价剔除: 除零防护 + 非真实可成交价 (M3)
+                        continue
                     amount = self._cash * float(w)
                     if amount > 0:
                         self._positions[sym] = {
-                            "cost": float(prices[sym]),
+                            "cost": cost,
                             "amount": amount,
                             "hold_days": 0,
                         }
@@ -154,7 +157,8 @@ class ShadowListTracker:
             pos = self._positions[sym]
             pos["hold_days"] += 1
             px = float(prices.get(sym, pos["cost"]))
-            value = pos["amount"] * px / pos["cost"]
+            # 除零防护: 成本=0 的持仓按 0 估值, 不再 inf (M3)
+            value = pos["amount"] * px / pos["cost"] if pos["cost"] > 0 else 0.0
             nav += value
             if pos["hold_days"] >= 3:  # 持仓上限 3 日 (V3.8 §四 bis)
                 self._cash += value

@@ -9,6 +9,8 @@
        panel 无 adv20 列时回退固定滑点. slippage_multiplier=2 即 2 倍滑点敏感性测试
        (E5 强制门禁: 2倍滑点下净年化超额 ≥5% 方算稳健).
   涨跌停: T+1 一字涨停买单放弃; 跌停卖单顺延至下一可交易日
+  [防未来函数] 早盘口径卖出裁决只用 T-1 收盘信息 (当日开盘成交);
+               严禁"当日收盘裁决 + 当日开盘成交" (2026-08-08 修复)
   资金: 等权 1/Top_N, 单票 <= 10%, 行业 <= 4 只 (数量约束)
   成本: 佣金万2.5(双边) + 印花税0.05%(卖出) + 分层滑点 [E5]
   验收: 扣费后净超额 vs 基准 (默认中证1000, 可注入任意基准序列); Sortino 为主目标 [E11]
@@ -176,15 +178,21 @@ class BacktestEngineV35:
             self._by_date[date]
             cash *= 1 + cash_yield_daily  # [E11] 空仓资金逆回购收益计入
 
-            # ---- 1. 持仓估值 + 退出裁决 (止损/移动止盈/概率衰减/到期) ----
+            # ---- 1. 持仓退出裁决 (早盘口径防未来函数: T-1 收盘信息裁决, 当日开盘成交) ----
+            prev_date = self.dates[i - 1] if i > 0 else None
             for sym in list(positions):
                 pos = positions[sym]
-                bar = self._bar(date, sym)
-                if bar is None:
-                    continue
+                dbar = self._bar(prev_date, sym) if prev_date is not None else None
+                if dbar is None:
+                    continue  # 无 T-1 裁决数据 (首日/停牌): 当日不裁决
                 pos["hold_days"] += 1
-                pos["high"] = max(pos["high"], bar["high"])
-                px = self._px_close(bar)
+                pos["high"] = max(pos["high"], dbar["high"])
+                # M7: 移动止盈棘轮 — 用 T-1 的 hfq 高点推进 (除权调整空间,
+                #     无未来函数; 旧代码从不更新 → 实为"相对成本回撤止盈")
+                pos["high_hfq"] = max(
+                    pos["high_hfq"], float(dbar.get("high_hfq", dbar["high"]))
+                )
+                px = self._px_close(dbar)
                 pnl = _safe_divide(px, pos["cost_hfq"]) - 1
                 dd_high = _safe_divide(px, pos["high_hfq"]) - 1
                 prob = pos.get("prob_up", 1.0)
@@ -215,7 +223,6 @@ class BacktestEngineV35:
                         del positions[sym]
 
             # ---- 2. 执行昨日清单买入 (T+1) ----
-            prev_date = self.dates[i - 1] if i > 0 else None
             lst = daily_lists.get(prev_date) if prev_date is not None else None
             multiplier = float(daily_multiplier.get(date, 1.0))  # [E9/E11]
             if lst is not None and len(lst) and multiplier > 0:
@@ -234,12 +241,12 @@ class BacktestEngineV35:
                     ind_count[ind] = ind_count.get(ind, 0) + 1
                     if len(picks) >= cfg.top_n - len(positions):
                         break
-                # 等权 1/top_n, 单票 <= 10%
+                # 等权 1/top_n, 单票 <= 10% (估值用 T-1 收盘, 开盘时当日收盘未知)
                 nav_now = cash + sum(
                     p["shares"]
                     * (
-                        self._px_close(self._bar(date, s))
-                        if self._bar(date, s) is not None
+                        self._px_close(self._bar(prev_date, s))
+                        if self._bar(prev_date, s) is not None
                         else p["cost_hfq"]
                     )
                     for s, p in positions.items()

@@ -148,7 +148,7 @@ def _run_prediction(symbols: list[str] | None = None) -> dict | None:
 
     import predict_only
 
-    trade_date = datetime.now().strftime("%Y%m%d")
+    trade_date = datetime.now(_dt.timezone(_dt.timedelta(hours=8))).strftime("%Y%m%d")
     report_path = predict_only._write_report(
         trade_date, ic_by_board, filtered, preds, bundles
     )

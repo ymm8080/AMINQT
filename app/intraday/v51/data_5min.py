@@ -13,6 +13,8 @@ import time
 
 import pandas as pd
 
+from app.core.data_loader import validate_ohlcv
+
 logger = logging.getLogger(__name__)
 
 RETRY = 3
@@ -64,9 +66,11 @@ class IntradayDataLoader:
         """缓存优先, 缺失则拉取入库 (WORM: 已有文件不覆盖)."""
         path = self._cache_path(symbol, trade_date)
         if os.path.exists(path):
-            return pd.read_parquet(path)
-        df = self._fetch_with_retry(symbol, trade_date)
-        df.to_parquet(path, index=False)
+            df = pd.read_parquet(path)
+        else:
+            df = self._fetch_with_retry(symbol, trade_date)
+            df.to_parquet(path, index=False)
+        validate_ohlcv(df)  # 量化铁律: 异常数据不得静默丢弃
         return df
 
     def _fetch_with_retry(self, symbol: str, trade_date: str) -> pd.DataFrame:

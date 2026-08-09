@@ -13,6 +13,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from app.core.config_loader import load_config
+
 logger = logging.getLogger(__name__)
 
 MAIN_BOARD_PREFIXES = ("60", "000", "001", "002", "003")
@@ -30,15 +32,55 @@ def board_of(code: str) -> str:
     return "main"
 
 
+_DEFAULT_LIMIT_RULES = {
+    "main": 0.10,
+    "star": 0.20,
+    "gem": {"before_date": "2020-08-24", "before": 0.10, "after": 0.20},
+}
+_limit_cfg = load_config("trading_config").get("limit_rules", {})
+# 涨跌幅限制来自 config/trading_config.yaml limit_rules 段 (铁律: 阈值入 config)
+LIMIT_RULES = {
+    **_DEFAULT_LIMIT_RULES,
+    **(_limit_cfg if isinstance(_limit_cfg, dict) else {}),
+}
+
+
 def get_limit_pct(board: str, date: pd.Timestamp) -> float:
-    """涨跌幅分段 (安全网 #6): 创业板 2020-08-24 前 10% 后 20%."""
-    if board == "main":
-        return 0.10
-    if board == "STAR":
-        return 0.20
-    if board == "GEM":
-        return 0.10 if date < pd.Timestamp("2020-08-24") else 0.20
-    raise ValueError(f"Unknown board: {board}")
+    """涨跌幅分段 (安全网 #6): 创业板 2020-08-24 前 10% 后 20%.
+
+    规则: config/trading_config.yaml limit_rules 段, 行为与旧硬编码一致.
+    """
+    board = board.lower()
+    if board == "gem":
+        gem = LIMIT_RULES["gem"]
+        return float(
+            gem["before"] if date < pd.Timestamp(gem["before_date"]) else gem["after"]
+        )
+    if board not in LIMIT_RULES:
+        raise ValueError(f"Unknown board: {board}")
+    return float(LIMIT_RULES[board])
+
+
+def limit_pct_series(board: pd.Series, date: pd.Series) -> pd.Series:
+    """向量化涨跌幅 (M4): 与逐行 get_limit_pct 等价, 无 Python for 循环.
+
+    全市场数百万行逐行推导是性能瓶颈; 此版本用 pandas map + numpy where 一次算完.
+    未知板块仍抛 ValueError (与 get_limit_pct 一致).
+    """
+    b = board.astype(str).str.lower()
+    flat = {k: float(v) for k, v in LIMIT_RULES.items() if not isinstance(v, dict)}
+    known = set(flat) | {"gem"}
+    unknown = ~b.isin(known)
+    if unknown.any():
+        raise ValueError(f"Unknown board: {b[unknown].unique()}")
+    out = b.map(flat).astype(float)  # gem 行暂为 NaN, 下方按日期填充
+    gem = b.eq("gem")
+    if gem.any():
+        rule = LIMIT_RULES["gem"]
+        cut = pd.Timestamp(rule["before_date"])
+        before = pd.to_datetime(date[gem].to_numpy()) < cut
+        out.loc[gem] = np.where(before, rule["before"], rule["after"])
+    return out
 
 
 def limit_up_price(pre_close: float, limit_pct: float) -> float:
@@ -174,9 +216,7 @@ class CleaningPipeline:
         if not inference_only:
             return df, "full"
         out = df.copy()
-        out["limit_pct"] = [
-            get_limit_pct(b, d) for b, d in zip(out["board"], out["date"], strict=False)
-        ]
+        out["limit_pct"] = limit_pct_series(out["board"], out["date"])
         out["limit_up_price"] = (out["pre_close"] * (1 + out["limit_pct"])).round(2)
         tol = np.maximum(0.01, out["limit_up_price"] * 0.001)  # B5: 相对容差
         out["is_limit_up_close"] = (

@@ -23,6 +23,54 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# 常见 pickle RCE gadget 模块 (M5): find_class 拦截其类引用, 阻止
+# os.system / subprocess.Popen / builtins.eval / codecs.escape 等标准攻击链.
+# 模型类 (numpy / lightgbm / sklearn / app) 均不受影响; 按根模块拦截,
+# 覆盖 os.path / importlib.util 等子模块.
+_UNSAFE_PICKLE_MODULES = frozenset(
+    {
+        "os",
+        "posix",
+        "nt",
+        "posixpath",
+        "ntpath",
+        "genericpath",
+        "subprocess",
+        "builtins",
+        "codecs",
+        "_codecs",
+        "importlib",
+        "ctypes",
+        "marshal",
+        "sys",
+        "types",
+        "threading",
+        "multiprocessing",
+        "runpy",
+        "pkgutil",
+        "shlex",
+        "webbrowser",
+        "tempfile",
+        "platform",
+    }
+)
+
+
+class _SafeUnpickler(pickle.Unpickler):
+    """阻断危险模块类引用的 Unpickler (M5).
+
+    pickle.load 可执行任意代码; 此版在 find_class 时拦截已知 RCE gadget
+    模块, 其余类照常加载. 仅加防护, 不改审计日志行为.
+    """
+
+    def find_class(self, module: str, name: str) -> type:
+        root = module.split(".")[0]
+        if root in _UNSAFE_PICKLE_MODULES:
+            raise pickle.UnpicklingError(
+                f"blocked unsafe pickle module: {module}.{name}"
+            )
+        return super().find_class(module, name)
+
 
 def file_sha256(path: str | Path) -> str:
     """Compute SHA-256 hash of a file (first 64 chars)."""
@@ -60,7 +108,7 @@ def safe_pickle_load(path: str | Path) -> object:
 
     try:
         with open(p, "rb") as fh:
-            return pickle.load(fh)
+            return _SafeUnpickler(fh).load()
     except (pickle.UnpicklingError, EOFError, OSError) as exc:
         logger.error("Failed to load pickle %s: %s (sha256=%s)", p, exc, sha)
         raise

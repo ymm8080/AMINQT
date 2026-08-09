@@ -467,6 +467,7 @@ class BacktestEngine:
         candidates: list[dict],
         holdings: list[Holding],
         price_row_map: dict[str, pd.Series],
+        yesterday_price_map: dict[str, pd.Series],
     ) -> tuple[list[dict], list[tuple[str, str]]]:
         """持仓冲突处理: 比较收益/风险后决定保留或替换.
 
@@ -480,6 +481,8 @@ class BacktestEngine:
             candidates: 触发成功的候选列表 [{stock, prob, score, pred_ret, entry_price_fen}, ...].
             holdings: 当前持仓列表.
             price_row_map: 当日行情 {stock: Series}.
+            yesterday_price_map: 前一日行情 {stock: Series} — 盈亏裁决用 T-1 收盘
+                (替换卖当日开盘成交, 用当日收盘即前视).
 
         Returns:
             (更新后的候选列表, 需卖出的持仓 [(stock, reason), ...]).
@@ -500,9 +503,16 @@ class BacktestEngine:
                 filtered_candidates.append(cand)
                 continue
 
-            close_fen = self._price_to_fen(row["close"])
+            # H1: 用 T-1 收盘算当前盈亏 (替换卖按当日开盘成交; 当日收盘裁决即前视).
+            #     T-1 缺行 (次新/停牌) → 回退当日开盘价 (同为开盘已知信息, 非前视).
+            yrow = yesterday_price_map.get(stock)
+            ref_fen = (
+                self._price_to_fen(yrow["close"])
+                if yrow is not None
+                else self._price_to_fen(row["open"])
+            )
             current_pnl_pct = _safe_div(
-                close_fen - holding.entry_price_fen, holding.entry_price_fen
+                ref_fen - holding.entry_price_fen, holding.entry_price_fen
             )
 
             # 比较预期收益: 新信号 pred_ret vs 现有持仓当前收益
@@ -1034,7 +1044,7 @@ class BacktestEngine:
 
                 # 持仓冲突处理 (Minmin 修正)
                 candidates, conflict_sells = self._resolve_position_conflict(
-                    candidates, self.holdings, price_row_map
+                    candidates, self.holdings, price_row_map, yesterday_price_map
                 )
                 for stock, reason in conflict_sells:
                     h = next((x for x in self.holdings if x.stock == stock), None)

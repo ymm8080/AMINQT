@@ -283,6 +283,63 @@ class TestBacktestEngine:
         assert hasattr(h, "down_limit_days")
         assert h.down_limit_days == 0
 
+    def test_conflict_replacement_uses_prev_close_not_today_close(
+        self, sample_config, sample_pred_df, sample_price_df
+    ):
+        """H1: 持仓替换盈亏用 T-1 收盘裁决 (非当日收盘) — 当日收盘裁决+当日开盘成交是前视."""
+        from app.backtest.engine import BacktestEngine, Holding
+
+        engine = BacktestEngine(
+            config=sample_config,
+            pred_df=sample_pred_df,
+            price_df=sample_price_df,
+            trade_dates=sorted(sample_price_df["date"].unique()),
+            data_version_hash="sha256:test",
+        )
+        holding = Holding(
+            stock="000001",
+            entry_date=pd.Timestamp("2024-01-01"),
+            entry_price_fen=1000,  # 10.00 元
+            quantity=100,
+            horizon=2,
+            mode="squad",
+            prob_up=0.6,
+            pred_ret=0.05,
+            score=0.7,
+        )
+        # 当日: open=11.0 / close=9.0 (当日大跌); 昨日收盘 11.5 (昨日盈利 +15%)
+        today_row = pd.Series(
+            {
+                "open": 11.0,
+                "close": 9.0,
+                "high": 11.0,
+                "low": 8.9,
+                "down_limit": 8.0,
+                "up_limit": 12.0,
+                "is_halt": False,
+                "pre_close": 11.5,
+            }
+        )
+        candidates = [
+            {
+                "stock": "000001",
+                "prob": 0.6,
+                "score": 0.7,
+                "pred_ret": 0.02,
+                "entry_price_fen": 1000,
+            }
+        ]
+        # 旧代码 (当日收盘 -10%): holding_expected=0.05-0.10=-0.05 → 0.02>-0.04 → 替换
+        # 新代码 (T-1 收盘 +15%): holding_expected=0.05+0.15=0.20 → 0.02 不> 0.21 → 保留
+        filtered, sells = engine._resolve_position_conflict(
+            candidates,
+            [holding],
+            {"000001": today_row},
+            {"000001": pd.Series({"close": 11.5})},
+        )
+        assert sells == []
+        assert filtered == []
+
     def test_trade_has_is_swap(self):
         from app.backtest.engine import Trade
 

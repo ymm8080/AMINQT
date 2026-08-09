@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
@@ -113,7 +113,7 @@ def _run_prediction(symbols: list[str] | None = None) -> dict | None:
     filtered = filtered.sort_values("score", ascending=False).reset_index(drop=True)
 
     # 写报告
-    trade_date = datetime.now().strftime("%Y%m%d")
+    trade_date = datetime.now(timezone(timedelta(hours=8))).strftime("%Y%m%d")
     report_path = predict_only._write_report(
         trade_date, ic_by_board, filtered, preds, bundles
     )

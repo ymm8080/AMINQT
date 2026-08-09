@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import gc
+import logging
 import os
 import sys
 
@@ -30,6 +31,8 @@ from app.pipeline_parallel.backtest import (
 )
 from app.pipeline_parallel.config import SLOW_BULL, SLOW_BULL_REGIME, SLOW_BULL_VERSION
 from config.settings import STOCK_LIST_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def write_slowbull_pool(work: pd.DataFrame, board: str, date=None) -> str:
@@ -102,12 +105,11 @@ def main() -> int:
     except Exception:
         pass
 
-    print("加载行集 (快速路径: 复用 3y 检查点 + MFE 标签)...", flush=True)
+    logger.info("加载行集 (快速路径: 复用 3y 检查点 + MFE 标签)...")
     work = load_panel()
-    print(
+    logger.info(
         f"行集 rows={len(work):,} stocks={work['symbol'].nunique():,} "
-        f"latest={work['date'].max():%Y-%m-%d}",
-        flush=True,
+        f"latest={work['date'].max():%Y-%m-%d}"
     )
 
     if args.skip_backtest:
@@ -138,32 +140,34 @@ def main() -> int:
             keep = {args.system: bd["systems"].pop(args.system)}
             bd["systems"] = keep
 
-    print(f"\n落盘目录: {run_dir}")
-    print(f"  {p.name}\n  {log.name}")
+    logger.info(f"\n落盘目录: {run_dir}")
+    logger.info(f"  {p.name}\n  {log.name}")
     for fn in files:
-        print(f"  {fn}")
+        logger.info(f"  {fn}")
     w = out["window"]
     for lab, ow in w["oos"].items():
-        print(f"OOS[{lab}]: {ow['start']} → {ow['end']} ({ow['trading_days']} 交易日)")
+        logger.info(
+            f"OOS[{lab}]: {ow['start']} → {ow['end']} ({ow['trading_days']} 交易日)"
+        )
     for b, bd in out["boards"].items():
-        print(
+        logger.info(
             f"[板块 {b}] {bd['label']} | 行 {bd['rows']:,} "
             f"股票 {bd['stocks']:,} | 阈值: 胜率>={bd['criteria']['min_winrate']} "
             f"幅度>{bd['criteria']['min_mag']}"
         )
         for name, s in bd["systems"].items():
             if not s.get("enabled"):
-                print(f"  [{name}] 未启用 (占位)")
+                logger.info(f"  [{name}] 未启用 (占位)")
                 continue
             for lab, oos in s["oos"].items():
                 pr = oos["primary"]
-                print(
+                logger.info(
                     f"  [{name}|OOS {lab}] TOP-{s['top_n']['primary']}: "
                     f"通过 {pr['passed'] or '无'} | 保留={oos['kept']}"
                 )
         lt = bd["last_days"].get("last_testable") or {}
         if lt:
-            print(
+            logger.info(
                 "  各视界可测日期 (末 15 交易日, 同一选股日): "
                 + " ".join(
                     f"{h}=至{lt[h]['last_date']}({lt[h]['n']}日)"

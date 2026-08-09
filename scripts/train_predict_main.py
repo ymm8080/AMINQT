@@ -149,6 +149,7 @@ def load_features_for_training(
     gc.collect()
 
     if max_stocks and max_stocks > 0 and df["symbol"].nunique() > max_stocks:
+        np.random.seed(42)  # 抽样可复现 (量化铁律)
         stocks = sorted(
             np.random.choice(df["symbol"].unique(), size=max_stocks, replace=False)
         )
@@ -424,6 +425,7 @@ def step_predict(
     gc.collect()
 
     if max_stocks and max_stocks > 0:
+        np.random.seed(42)  # 抽样可复现 (量化铁律)
         stocks = sorted(
             np.random.choice(
                 main_panel["symbol"].unique(), size=max_stocks, replace=False

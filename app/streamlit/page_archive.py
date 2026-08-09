@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
@@ -284,7 +284,7 @@ def _render_date_list() -> None:
     if not avail:
         st.info("STOCK_LIST_DIR 暂无预测文件")
         return
-    today = datetime.now().strftime("%Y%m%d")
+    today = datetime.now(timezone(timedelta(hours=8))).strftime("%Y%m%d")
     default_dates = [today] if today in avail else [avail[0]]
     if today not in avail:
         st.caption(f"今天 {today} 暂无预测文件, 已选最近可用日期 {avail[0]}")

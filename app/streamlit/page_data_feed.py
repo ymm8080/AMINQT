@@ -14,7 +14,7 @@ import logging
 import subprocess
 import sys
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -214,7 +214,7 @@ def _render_run_pipeline_tab() -> None:
     st.subheader("运行数据获取管道")
 
     # 日期范围
-    today = datetime.now()
+    today = datetime.now(timezone(timedelta(hours=8)))
     default_start = today - timedelta(days=365 * 3)
     col1, col2 = st.columns(2)
     with col1:

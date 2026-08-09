@@ -12,6 +12,7 @@ from app.pipeline1.cleaning_pipeline import (
     board_of,
     get_limit_pct,
     is_limit_up,
+    limit_pct_series,
     limit_up_price,
 )
 from app.pipeline1.feature_engine_v35 import (
@@ -96,6 +97,28 @@ class TestCleaning:
         assert get_limit_pct("STAR", pd.Timestamp("2019-01-01")) == 0.20
         with pytest.raises(ValueError):
             get_limit_pct("BSE", pd.Timestamp("2024-01-01"))
+
+    def test_limit_pct_series_matches_scalar(self):
+        """M4: 向量化 limit_pct_series 与逐行 get_limit_pct 全等 (跨板块/分段日期)."""
+        boards = pd.Series(["main", "GEM", "star", "GEM", "main", "STAR", "gem"])
+        dates = pd.to_datetime(
+            [
+                "2020-08-23",
+                "2020-08-23",
+                "2019-01-01",
+                "2020-08-24",
+                "2024-01-01",
+                "2024-01-01",
+                "2020-08-23",
+            ]
+        )
+        got = limit_pct_series(boards, dates)
+        want = [get_limit_pct(b, d) for b, d in zip(boards, dates)]
+        assert list(got) == pytest.approx(want)
+        with pytest.raises(ValueError):
+            limit_pct_series(
+                pd.Series(["main", "BSE"]), pd.to_datetime(["2024-01-01", "2024-01-01"])
+            )
 
     def test_limit_up_precise(self):
         """涨停价精确比对 round(pre_close*(1+pct),2), B5 相对容差 max(0.01, lu*0.1%)."""
