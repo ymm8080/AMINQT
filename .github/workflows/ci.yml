@@ -127,6 +127,7 @@ jobs:
     name: Test
     needs: [lint, adr-validate]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -141,7 +142,7 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
-          pip install pytest pytest-cov ruff
+          pip install pytest pytest-cov pytest-timeout ruff
 
       - name: Run pytest with coverage
         run: |
@@ -152,6 +153,7 @@ jobs:
               --cov-fail-under=80 \
               --cov-report=term-missing \
               --cov-report=xml:coverage.xml \
+              --timeout=120 \
               -v || RET=$?
             if [ "${RET:-0}" = "5" ]; then
               echo "All tests skipped - pre-implementation phase - passing"
