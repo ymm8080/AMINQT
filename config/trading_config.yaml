@@ -43,6 +43,16 @@ position_management:
   min_cash_reserve_pct: 10     # 最低现金保留 %
   position_size: "equal"       # equal / score_weighted / kelly
 
+# ── 涨跌幅限制 (安全网 #6, 历史分段) ──
+# 与 cleaning_pipeline.get_limit_pct 语义一致; 创业板 2020-08-24 起改 20%.
+limit_rules:
+  main: 0.10
+  star: 0.20
+  gem:
+    before_date: "2020-08-24"
+    before: 0.10
+    after: 0.20
+
 # ── 买入规则 ──
 # 每条规则: name + enabled + conditions
 # conditions 支持 all (AND) 和 any (OR) 嵌套

@@ -13,6 +13,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from app.core.config_loader import load_config
+
 logger = logging.getLogger(__name__)
 
 MAIN_BOARD_PREFIXES = ("60", "000", "001", "002", "003")
@@ -30,15 +32,33 @@ def board_of(code: str) -> str:
     return "main"
 
 
+_DEFAULT_LIMIT_RULES = {
+    "main": 0.10,
+    "star": 0.20,
+    "gem": {"before_date": "2020-08-24", "before": 0.10, "after": 0.20},
+}
+_limit_cfg = load_config("trading_config").get("limit_rules", {})
+# 涨跌幅限制来自 config/trading_config.yaml limit_rules 段 (铁律: 阈值入 config)
+LIMIT_RULES = {
+    **_DEFAULT_LIMIT_RULES,
+    **(_limit_cfg if isinstance(_limit_cfg, dict) else {}),
+}
+
+
 def get_limit_pct(board: str, date: pd.Timestamp) -> float:
-    """涨跌幅分段 (安全网 #6): 创业板 2020-08-24 前 10% 后 20%."""
-    if board == "main":
-        return 0.10
-    if board == "STAR":
-        return 0.20
-    if board == "GEM":
-        return 0.10 if date < pd.Timestamp("2020-08-24") else 0.20
-    raise ValueError(f"Unknown board: {board}")
+    """涨跌幅分段 (安全网 #6): 创业板 2020-08-24 前 10% 后 20%.
+
+    规则: config/trading_config.yaml limit_rules 段, 行为与旧硬编码一致.
+    """
+    board = board.lower()
+    if board == "gem":
+        gem = LIMIT_RULES["gem"]
+        return float(
+            gem["before"] if date < pd.Timestamp(gem["before_date"]) else gem["after"]
+        )
+    if board not in LIMIT_RULES:
+        raise ValueError(f"Unknown board: {board}")
+    return float(LIMIT_RULES[board])
 
 
 def limit_up_price(pre_close: float, limit_pct: float) -> float:

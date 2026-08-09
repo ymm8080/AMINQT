@@ -32,7 +32,7 @@
 | H1 | `app/backtest/engine.py:503-506` | 持仓替换: 用当日收盘算盈亏决定替换, 替换卖出却按当日开盘成交 (乐观方向) |
 | H2 | `app/backtest/data_loader.py:160-173`, `app/pipeline1/data_supply.py`, `app/intraday/v51/data_5min.py:22-49` | OHLCV 校验孤岛 — **已修**: `validate_ohlcv` 下沉到 `data_supply.fetch_daily/fetch_history` (缓存命中+新拉取双路径, 失败以 DataSupplyError 上抛) 与 `data_5min.load` (唯一咽喉, 双路径都过); backtest 路径已有 DataValidator E003/E004 优雅降级, 不重复加严格 raise |
 | H3 | `scripts/build_features.py:173,184`, `train_predict_main.py:153,428`, `train_predict_dual.py:94` | `np.random.choice` 抽样本股无 seed → 训练样本不可复现 (LGBM 有 random_state=42, 入口抽样无) — **已修**: 3 脚本入口抽样前加 `np.random.seed(42)` |
-| H4 | `mask_recent_days=6`(20+处), `CLS_THRESHOLD=0.005`(8处), `cleaning_pipeline.py:33-41` 涨跌停硬编码 0.10/0.20+"2020-08-24", `OOS_DAYS=250`(6处) | 硬编码阈值族应入 config |
+| H4 | `mask_recent_days=6`(20+处), `CLS_THRESHOLD=0.005`(8处), `cleaning_pipeline.py:33-41` 涨跌停硬编码 0.10/0.20+"2020-08-24", `OOS_DAYS=250`(6处) | — **已修** (生产路径): `training_config.yaml labels.mask_recent_days/cls_threshold` + `trading_config.yaml limit_rules`; `label_engine`(CLS_THRESHOLD/MASK_RECENT_DAYS 单一真相源) + `train_runner`/`build_features` 引用 config, `cleaning_pipeline.get_limit_pct` 读 config, 行为全不变 (69 测试过)。审计"20+/8+/6处"高估: 多为 eval/诊断脚本 (mask 大量 `days=6` 硬编码于 scripts/eval_*.py, OOS_DAYS=250 全在 `scripts/_diag_*` 孤儿脚本), 未扫 (属 M6 清理范畴) |
 | H5 | `_daily_fetch.py:685-694` | V3 面板单文件就地原子覆盖, 无日期分片, 非严格 WORM |
 | H6 | `.gitignore` | — **已修**: 补 `_*.txt`/`predictions*.csv`/`result_*.json`/`filtered_candidates.csv`/`pipeline1_result.txt` 规则; `git rm --cached` 7 个已入库结果文件 (保留磁盘) |
 
@@ -65,7 +65,7 @@
 | P1 | 设 `AMINQT_API_KEY` 或锁 localhost | **已锁 localhost** (`monitor_catpaw` + json) |
 | P1 | OHLCV 校验下沉主链路 (H2) | **已修**: `data_supply.fetch_daily/fetch_history` + `data_5min.load` 接入 `validate_ohlcv` (backtest 路径已有 DataValidator 覆盖, 未重复加) |
 | P1 | 训练脚本补 seed (H3) | **已修** |
-| P2 | 硬编码阈值进 config (H4) | 待办 |
+| P2 | 硬编码阈值进 config (H4) | **已修** (生产路径; eval/诊断脚本未扫) |
 | P2 | V3 面板分区 (H5) + gitignore 补 rules/移除已入库结果 (H6) | H6 **已修**; H5 待办 |
 | P3 | 回测引擎 float→Decimal; limit_pct 向量化; 删死代码/孤儿脚本 | 待办 |
 | P3 | 评估 `engine.py` 替换路径与跌停顺延口径 (H1/M1) | 待办 |

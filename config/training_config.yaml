@@ -22,6 +22,11 @@ data_split_5min:
   test_end: "2024-12-31"
   oos_start: "2025-01-01"
 
+# ── 标签与近端掩码 (PIPELINE1_V3.8 §〇.1) ──
+labels:
+  mask_recent_days: 6           # 近端标签未成熟掩码 (交易日, 防未来函数)
+  cls_threshold: 0.005          # 分类标签涨幅阈值 (+0.5%, 覆盖双边成本安全垫)
+
 # ── 正则化参数 ──
 regularization:
   dropout: 0.2                   # 深度学习 Dropout (LSTM/GRU/Transformer/TCN)

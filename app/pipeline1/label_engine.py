@@ -17,13 +17,19 @@ import numpy as np
 import pandas as pd
 from numpy.lib.stride_tricks import sliding_window_view
 
+from app.core.config_loader import load_config
+
+_LABELS_CFG = load_config("training_config").get("labels", {})
+
 LABEL_HORIZONS = (1, 2, 3, 5, 10)
 # 评估/排序跨视界权重 (用户 2026-08-02 裁决: 预测 1/2/3/5d 收益+概率, 权重 1:0/2:0.45/3:0.35/5:0.2;
 # 2026-08-07 加 10d 视界权重 0.10 — 排名键已改纯 10d 幅度, 综合分仅作准入).
 # 1d 权重=0 — T+1 制度买入当日不可卖, t+1 收益不可执行, 不贡献清单排序; 3d 历史预测力最强.
 # 修改此字典即全局生效 (validate_oos 加权 IC + predictor/list_generator 综合分).
 LABEL_WEIGHTS = {1: 0.0, 2: 0.45, 3: 0.35, 5: 0.2, 10: 0.10}
-CLS_THRESHOLD = 0.005  # +0.5% 覆盖双边成本 (佣金万2.5x2 + 印花税0.05% + 滑点0.05% ≈ 0.13%, 留安全垫)
+# 阈值来自 config/training_config.yaml labels 段 (铁律: 阈值入 config, 不写死代码)
+CLS_THRESHOLD = float(_LABELS_CFG.get("cls_threshold", 0.005))  # +0.5% 覆盖双边成本 (佣金万2.5x2 + 印花税0.05% + 滑点0.05% ≈ 0.13%, 留安全垫)
+MASK_RECENT_DAYS = int(_LABELS_CFG.get("mask_recent_days", 6))  # 近端标签未成熟掩码 (交易日)
 COST = 0.0013  # round-trip 费用: 佣金万2.5双边 + 印花税0.05%卖出 (E5 净标签口径)
 # E5 滑点分层 (按 ADV20): >5亿→0.05% / 1~5亿→0.10% / <1亿→0.15% (双边计入)
 ADV20_TIER_HIGH = 5e8
@@ -307,8 +313,13 @@ class LabelEngine:
 
     # ---------------- 实盘标签遮蔽 ----------------
     @staticmethod
-    def mask_recent_days(df: pd.DataFrame, days: int = 6) -> pd.DataFrame:
-        """实盘训练剔除最近 N 天 (V3.8: 6 天 — label_5d 需 T+6 收盘价, 标签未生成)."""
+    def mask_recent_days(df: pd.DataFrame, days: int | None = None) -> pd.DataFrame:
+        """实盘训练剔除最近 N 天 (V3.8: 6 天 — label_5d 需 T+6 收盘价, 标签未生成).
+
+        默认取自 config/training_config.yaml labels.mask_recent_days.
+        """
+        if days is None:
+            days = MASK_RECENT_DAYS
         df["date"].max() - pd.Timedelta(days=days * 2)  # 自然日宽松上界
         recent_dates = sorted(df["date"].unique())[-days:]
         mask = df["date"].isin(recent_dates)
