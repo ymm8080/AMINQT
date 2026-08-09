@@ -253,9 +253,9 @@ def main() -> None:
         + NEW_W[10] * rows["pred_10d"]
     ) / sum(NEW_W.values())
     # 排名键 (2026-08-09): 生产 NEW 权重在 {5d,10d} 上归一 → 加权 5d+10d 排名键.
-    rows["rank_w510"] = (
-        NEW_W[5] * rows["pred_5d"] + NEW_W[10] * rows["pred_10d"]
-    ) / (NEW_W[5] + NEW_W[10])
+    rows["rank_w510"] = (NEW_W[5] * rows["pred_5d"] + NEW_W[10] * rows["pred_10d"]) / (
+        NEW_W[5] + NEW_W[10]
+    )
 
     # ADAPT: 逐日自适应权重 (walk-forward, 严格早于当日) = 各视界最近 adapt_w 交易日
     # 的逐日 Rank IC (pred vs 实得) 正值归一; 全非正 → 回退 NEW 固定权重.
@@ -402,7 +402,8 @@ def main() -> None:
             sub = df_[df_["date"].isin(set(ch))]
             rank_subwin[name].append(
                 [float(sub["hit10"].mean()), float(sub["mean10"].mean())]
-                if len(sub) else [None, None]
+                if len(sub)
+                else [None, None]
             )
 
     print(f"\n  OOS 逐日 Rank IC (pred_10d vs 实得): {forecast_ic:.4f}")
@@ -486,22 +487,41 @@ def main() -> None:
     w510_hit = rank_arms["RANK510"]["hit10"] - rank_arms["RANK10"]["hit10"]
     w510_mean = rank_arms["RANK510"]["mean10"] - rank_arms["RANK10"]["mean10"]
     print("\n" + "=" * 96)
-    print("排名键 A/B (2026-08-09) — 同 gate=NEW compound, 仅排名键不同, Top10 表现定案")
-    print("   RANK10: pred_10d | RANK510: (0.444·pred_5d+0.556·pred_10d) | RANKFULL: 全 compound")
+    print(
+        "排名键 A/B (2026-08-09) — 同 gate=NEW compound, 仅排名键不同, Top10 表现定案"
+    )
+    print(
+        "   RANK10: pred_10d | RANK510: (0.444·pred_5d+0.556·pred_10d) | RANKFULL: 全 compound"
+    )
     print("=" * 96)
-    print(f"{'metric':<14s} {'RANK10':>11s} {'RANK510':>11s} {'RANKFULL':>11s} {'ΔW510-10':>12s}")
+    print(
+        f"{'metric':<14s} {'RANK10':>11s} {'RANK510':>11s} {'RANKFULL':>11s} {'ΔW510-10':>12s}"
+    )
     print("-" * 96)
-    for k, lab in (("days", "清单日数"), ("avg_n_pick", "日均选股数"), ("hit10", "T+10 命中率"), ("mean10", "T+10 均值")):
+    for k, lab in (
+        ("days", "清单日数"),
+        ("avg_n_pick", "日均选股数"),
+        ("hit10", "T+10 命中率"),
+        ("mean10", "T+10 均值"),
+    ):
         r10 = rank_arms["RANK10"].get(k, 0.0)
         r510 = rank_arms["RANK510"].get(k, 0.0)
         rf = rank_arms["RANKFULL"].get(k, 0.0)
         if k == "hit10":
-            print(f"{lab:<14s} {r10 * 100:>10.2f}% {r510 * 100:>10.2f}% {rf * 100:>10.2f}% {(r510 - r10) * 100:>+11.2f}pp")
+            print(
+                f"{lab:<14s} {r10 * 100:>10.2f}% {r510 * 100:>10.2f}% {rf * 100:>10.2f}% {(r510 - r10) * 100:>+11.2f}pp"
+            )
         elif k == "mean10":
-            print(f"{lab:<14s} {r10 * 100:>10.3f}% {r510 * 100:>10.3f}% {rf * 100:>10.3f}% {(r510 - r10) * 100:>+11.3f}pp")
+            print(
+                f"{lab:<14s} {r10 * 100:>10.3f}% {r510 * 100:>10.3f}% {rf * 100:>10.3f}% {(r510 - r10) * 100:>+11.3f}pp"
+            )
         else:
-            print(f"{lab:<14s} {r10:>11.2f} {r510:>11.2f} {rf:>11.2f} {(r510 - r10):>+12.2f}")
-    print(f"  排名键 IC (vs label_pm_10d_net): pred_10d={rank_ic_10d:+.4f}  w510={rank_ic_510:+.4f}  full={rank_ic_full:+.4f}")
+            print(
+                f"{lab:<14s} {r10:>11.2f} {r510:>11.2f} {rf:>11.2f} {(r510 - r10):>+12.2f}"
+            )
+    print(
+        f"  排名键 IC (vs label_pm_10d_net): pred_10d={rank_ic_10d:+.4f}  w510={rank_ic_510:+.4f}  full={rank_ic_full:+.4f}"
+    )
     w510_ge_10 = (
         rank_arms["RANK510"]["hit10"] >= rank_arms["RANK10"]["hit10"] - HIT_TOL
         and rank_arms["RANK510"]["mean10"] >= rank_arms["RANK10"]["mean10"] - HIT_TOL
@@ -535,7 +555,11 @@ def main() -> None:
         "subwindow": subwin,
         "rank_arms": rank_arms,
         "rank_subwindow": rank_subwin,
-        "rank_ic": {"pred_10d": rank_ic_10d, "rank_w510": rank_ic_510, "compound_new": rank_ic_full},
+        "rank_ic": {
+            "pred_10d": rank_ic_10d,
+            "rank_w510": rank_ic_510,
+            "compound_new": rank_ic_full,
+        },
         "avg_adapt_w": avg_w,
         "verdict": verdict,
         "verdict_rank": verdict_rank,

@@ -377,9 +377,7 @@ class ListGenerator:
                 }
                 tw = sum(w_map[k] for k in present)
                 if tw > 1e-12:
-                    compound = (
-                        sum(w_map[k] * df[c] for k, c in present.items()) / tw
-                    )
+                    compound = sum(w_map[k] * df[c] for k, c in present.items()) / tw
                 else:
                     compound = pd.Series(0.0, index=df.index)
             ok &= compound > 0
