@@ -61,6 +61,28 @@ def get_limit_pct(board: str, date: pd.Timestamp) -> float:
     return float(LIMIT_RULES[board])
 
 
+def limit_pct_series(board: pd.Series, date: pd.Series) -> pd.Series:
+    """向量化涨跌幅 (M4): 与逐行 get_limit_pct 等价, 无 Python for 循环.
+
+    全市场数百万行逐行推导是性能瓶颈; 此版本用 pandas map + numpy where 一次算完.
+    未知板块仍抛 ValueError (与 get_limit_pct 一致).
+    """
+    b = board.astype(str).str.lower()
+    flat = {k: float(v) for k, v in LIMIT_RULES.items() if not isinstance(v, dict)}
+    known = set(flat) | {"gem"}
+    unknown = ~b.isin(known)
+    if unknown.any():
+        raise ValueError(f"Unknown board: {b[unknown].unique()}")
+    out = b.map(flat).astype(float)  # gem 行暂为 NaN, 下方按日期填充
+    gem = b.eq("gem")
+    if gem.any():
+        rule = LIMIT_RULES["gem"]
+        cut = pd.Timestamp(rule["before_date"])
+        before = pd.to_datetime(date[gem].to_numpy()) < cut
+        out.loc[gem] = np.where(before, rule["before"], rule["after"])
+    return out
+
+
 def limit_up_price(pre_close: float, limit_pct: float) -> float:
     """涨停价精确计算: 按分四舍五入 (安全网 #6)."""
     return round(pre_close * (1 + limit_pct), 2)
@@ -194,9 +216,7 @@ class CleaningPipeline:
         if not inference_only:
             return df, "full"
         out = df.copy()
-        out["limit_pct"] = [
-            get_limit_pct(b, d) for b, d in zip(out["board"], out["date"], strict=False)
-        ]
+        out["limit_pct"] = limit_pct_series(out["board"], out["date"])
         out["limit_up_price"] = (out["pre_close"] * (1 + out["limit_pct"])).round(2)
         tol = np.maximum(0.01, out["limit_up_price"] * 0.001)  # B5: 相对容差
         out["is_limit_up_close"] = (
