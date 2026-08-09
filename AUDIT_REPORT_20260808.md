@@ -29,7 +29,7 @@
 
 | # | 位置 | 问题 |
 |---|------|------|
-| H1 | `app/backtest/engine.py:503-506` | 持仓替换: 用当日收盘算盈亏决定替换, 替换卖出却按当日开盘成交 (乐观方向) |
+| H1 | `app/backtest/engine.py:503-506` | 持仓替换: 用当日收盘算盈亏决定替换, 替换卖出却按当日开盘成交 (乐观方向) — **已修**: 盈亏裁决改用 T-1 收盘 (替换卖按当日开盘成交, 当日收盘裁决即前视); T-1 缺行 (次新/停牌) 回退当日开盘价 (同为开盘已知信息, 非前视). 回归测试 `test_conflict_replacement_uses_prev_close_not_today_close` |
 | H2 | `app/backtest/data_loader.py:160-173`, `app/pipeline1/data_supply.py`, `app/intraday/v51/data_5min.py:22-49` | OHLCV 校验孤岛 — **已修**: `validate_ohlcv` 下沉到 `data_supply.fetch_daily/fetch_history` (缓存命中+新拉取双路径, 失败以 DataSupplyError 上抛) 与 `data_5min.load` (唯一咽喉, 双路径都过); backtest 路径已有 DataValidator E003/E004 优雅降级, 不重复加严格 raise |
 | H3 | `scripts/build_features.py:173,184`, `train_predict_main.py:153,428`, `train_predict_dual.py:94` | `np.random.choice` 抽样本股无 seed → 训练样本不可复现 (LGBM 有 random_state=42, 入口抽样无) — **已修**: 3 脚本入口抽样前加 `np.random.seed(42)` |
 | H4 | `mask_recent_days=6`(20+处), `CLS_THRESHOLD=0.005`(8处), `cleaning_pipeline.py:33-41` 涨跌停硬编码 0.10/0.20+"2020-08-24", `OOS_DAYS=250`(6处) | — **已修** (生产路径): `training_config.yaml labels.mask_recent_days/cls_threshold` + `trading_config.yaml limit_rules`; `label_engine`(CLS_THRESHOLD/MASK_RECENT_DAYS 单一真相源) + `train_runner`/`build_features` 引用 config, `cleaning_pipeline.get_limit_pct` 读 config, 行为全不变 (69 测试过)。审计"20+/8+/6处"高估: 多为 eval/诊断脚本 (mask 大量 `days=6` 硬编码于 scripts/eval_*.py, OOS_DAYS=250 全在 `scripts/_diag_*` 孤儿脚本), 未扫 (属 M6 清理范畴) |
@@ -38,7 +38,7 @@
 
 ## 三、MEDIUM (选列)
 
-- M1 `app/backtest/engine.py:452-459` 跌停顺延用当日收盘判当日开盘 (保守方向, 不虚增收益)
+- M1 `app/backtest/engine.py:452-459` 跌停顺延用当日收盘判当日开盘 (保守方向, 不虚增收益) — **已评估, 暂缓**: 属真实但保守的口径 (低估收益而非虚增); 修复需区分 MOO 开盘卖出 (开盘已知信息, 应改 T-1 跌停) 与收盘/触发卖出 (当日跌停不可卖, 当日收盘判合理), 改动面跨多调用方, 暂缓处理
 - M2 `app/pipeline_parallel/backtest.py:414-447` 慢牛回测 k=1 同日判退出违背 T+1; 止损 low 触发按 close 成交 (盘内乐观) [部分 GUESS]
 - M3 `paper_trading.py:157` 资金用 float (Decimal 铁律仅覆盖实盘 `order_manager`/`executor_base`); `paper_trading.py:157` 价格=0 时除零→inf — **已修**: 建仓零/负价剔除 + 估值除零防护 (`cost>0` 才除, 否则按 0), 新增回归测试 `test_zero_cost_price_guard`. **已定案**: 回测引擎 (`backtest_v35`/`intraday/v51/backtest_engine`) 保持 float — 回测是模拟非真钱, `engine.py` 用整数分记账已规避累积误差, 转 Decimal 是纯性能回归; Decimal 铁律覆盖的实盘路径 (`order_manager`/`executor_base`/`core/backtest_engine`) 已核实正确
 - M4 `feature_engine_v35.py:1056-1058` + `cleaning_pipeline.py:178` limit_pct 逐行推导, 全面板数百万行非向量化 — **已修**: 新增 `limit_pct_series` (pandas map + numpy where), 接入两处生产路径, 与逐行语义全等 (回归测试 `test_limit_pct_series_matches_scalar`); eval 脚本仍逐行 (非生产链)
@@ -68,4 +68,4 @@
 | P2 | 硬编码阈值进 config (H4) | **已修** (生产路径; eval/诊断脚本未扫) |
 | P2 | V3 面板分区 (H5) + gitignore 补 rules/移除已入库结果 (H6) | H6 **已修**; H5 待办 |
 | P3 | 回测引擎 float→Decimal (定案保持 float); limit_pct 向量化; 删死代码/孤儿脚本 | **paper_trading 除零 / M4 向量化 / M6 死代码清理已修** |
-| P3 | 评估 `engine.py` 替换路径与跌停顺延口径 (H1/M1) | 待办 |
+| P3 | 评估 `engine.py` 替换路径与跌停顺延口径 (H1/M1) | H1 **已修**; M1 已评估暂缓 (保守口径, 需跨调用方改造) |
