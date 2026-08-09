@@ -14,9 +14,12 @@
 
 from __future__ import annotations
 
+import logging
 import math
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 FACTOR = 150  # 价格分桶数
 RANGE_DAYS = 120  # 筹码计算回溯窗口
@@ -249,18 +252,18 @@ if __name__ == "__main__":
     try:
         panel = pd.read_parquet("data/panel_3y.parquet")
     except Exception as exc:
-        print(f"读取 parquet 失败: {exc}")
+        logger.error(f"读取 parquet 失败: {exc}")
         sys.exit(1)
     stock = panel[panel["symbol"] == "002881"].copy()
     if len(stock) == 0:
-        print("002881 not in panel")
+        logger.error("002881 not in panel")
         sys.exit(1)
 
     cyq = _compute_cyq_for_stock(stock)
     recent = cyq.tail(5)
     for _, row in recent.iterrows():
         d = str(row["date"])[:10]
-        print(
+        logger.info(
             f"{d} | 90%集中度={row['pct_90_con'] * 100:.2f}% | "
             f"获利盘={row['winner_ratio'] * 100:.1f}% | "
             f"90%区间=[{row['pct_90_low']:.2f}, {row['pct_90_high']:.2f}] | "

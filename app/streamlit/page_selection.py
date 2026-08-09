@@ -346,7 +346,7 @@ def _compute_factor_values(df: pd.DataFrame) -> dict:
         ema26 = close.ewm(span=26, adjust=False).mean()
         dif = ema12 - ema26
         result["MACD"] = (
-            float(dif.iloc[-1] / close.iloc[-1]) if close.iloc[-1] > 0 else 0
+            float(dif.iloc[-1] / close.iloc[-1]) if close.iloc[-1] != 0 else 0
         )
 
         # 2. RSI (14)
@@ -367,7 +367,7 @@ def _compute_factor_values(df: pd.DataFrame) -> dict:
         # 4. 布林带宽
         ma20 = close.rolling(20).mean()
         std20 = close.rolling(20).std()
-        boll_width = (ma20 + 2 * std20 - (ma20 - 2 * std20)) / ma20
+        boll_width = (ma20 + 2 * std20 - (ma20 - 2 * std20)) / ma20.replace(0, np.nan)
         result["BOLL宽"] = (
             float(boll_width.iloc[-1]) if not np.isnan(boll_width.iloc[-1]) else 0
         )
@@ -381,7 +381,7 @@ def _compute_factor_values(df: pd.DataFrame) -> dict:
             ),
         )
         atr = tr.rolling(14).mean()
-        atr_pct = atr / close
+        atr_pct = atr / close.replace(0, np.nan)
         result["ATR%"] = (
             float(atr_pct.iloc[-1]) if not np.isnan(atr_pct.iloc[-1]) else 0
         )
@@ -394,7 +394,7 @@ def _compute_factor_values(df: pd.DataFrame) -> dict:
         )
 
         # 7. 乖离率 (close vs MA20)
-        bias = (close - ma20) / ma20
+        bias = (close - ma20) / ma20.replace(0, np.nan)
         result["乖离MA20"] = float(bias.iloc[-1]) if not np.isnan(bias.iloc[-1]) else 0
 
         # 8. 量价背离 (相关性)
@@ -406,7 +406,7 @@ def _compute_factor_values(df: pd.DataFrame) -> dict:
         )
 
         # 9. 动量 (20日收益)
-        mom_20d = close / close.shift(20) - 1
+        mom_20d = close / close.shift(20).replace(0, np.nan) - 1
         result["动量20d"] = (
             float(mom_20d.iloc[-1]) if not np.isnan(mom_20d.iloc[-1]) else 0
         )

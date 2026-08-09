@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
@@ -28,6 +29,8 @@ import pandas as pd
 from app.pipeline_parallel.config import MAG10D_CAL, OVERLAY_WEIGHTS
 
 MODEL_DIR = "models/pipeline1"
+
+logger = logging.getLogger(__name__)
 CHECKPOINTS = {
     "main": os.path.join("data", "_diag_stage_main_3y.parquet"),
     "dual": os.path.join("data", "_diag_stage_dual_3y.parquet"),
@@ -184,7 +187,7 @@ def legacy_predict(
 def _print_overlay(
     res: pd.DataFrame, board: str, date, w_pool: float, w_prob: float, prob_col: str
 ) -> None:
-    print(
+    logger.info(
         f"\n=== 板块 [{board}] | {pd.Timestamp(date).date()} "
         f"| w_pool={w_pool:.2f} w_prob={w_prob:.2f} ({prob_col or '无 prob'}) ==="
     )
@@ -212,7 +215,7 @@ def _print_overlay(
     show["score"] = show["score"].map(lambda v: f"{v:.3f}")
     show["final_score"] = show["final_score"].map(lambda v: f"{v:.3f}")
     show["co_occur"] = show["co_occur"].map(lambda v: "*" if v else "")
-    print(show.to_string(index=False))
+    logger.info("\n" + show.to_string(index=False))
 
 
 def _write_snapshot(snap: pd.DataFrame, out_dir, module: str | None = None) -> None:
@@ -231,10 +234,10 @@ def _write_snapshot(snap: pd.DataFrame, out_dir, module: str | None = None) -> N
         stamp = str(day).replace("-", "")
         path = Path(out_dir) / f"overlay_track_{stamp}{suffix}.csv"
         if path.exists():
-            print(f"[warn] 快照已存在, 跳过覆盖 (WORM): {path.name}", flush=True)
+            logger.warning(f"快照已存在, 跳过覆盖 (WORM): {path.name}")
             continue
         grp.to_csv(path, index=False)
-        print(f"[snapshot] {path}", flush=True)
+        logger.info(f"[snapshot] {path}")
 
 
 def main() -> int:
@@ -269,29 +272,29 @@ def main() -> int:
 
     bundles = resolve_current_bundles(MODEL_DIR)
     if not bundles:
-        print(f"无可用模型包: {MODEL_DIR}")
+        logger.error(f"无可用模型包: {MODEL_DIR}")
         return 1
     predictor = V35Predictor(bundles)
-    print("模型包:", {b: os.path.basename(p) for b, p in bundles.items()})
+    logger.info(f"模型包: { {b: os.path.basename(p) for b, p in bundles.items()} }")
 
     boards = [args.board] if args.board else ["main", "dual"]
     frames: list[pd.DataFrame] = []
     snaps: list[pd.DataFrame] = []
     for board in boards:
         if board not in bundles:
-            print(f"[{board}] 无模型包, 跳过")
+            logger.info(f"[{board}] 无模型包, 跳过")
             continue
         df, day = cross_section(board, date=args.date)
         if df.empty:
-            print(f"[{board}] {pd.Timestamp(day).date()} 截面为空")
+            logger.info(f"[{board}] {pd.Timestamp(day).date()} 截面为空")
             continue
-        print(f"[{board}] 决策日 {day.date()} 历史窗行数 {len(df):,}")
+        logger.info(f"[{board}] 决策日 {day.date()} 历史窗行数 {len(df):,}")
         # 2026-08-07: build_merged_shortlist 需完整历史窗做 mag_10d 校准,
         # 输出全窗逐日短名单 → 只取决策日.
         sl = build_merged_shortlist(df, top_n=10)
         sl = sl[sl["date"] == day] if not sl.empty else sl
         if sl.empty:
-            print(f"[{board}] 合并短名单为空")
+            logger.info(f"[{board}] 合并短名单为空")
             continue
         leg = legacy_predict(df[df["date"] == day], board, predictor, set(sl["symbol"]))
         w_pool, w_prob = overlay_weights(board)
@@ -312,7 +315,7 @@ def main() -> int:
 
     if frames and args.out:
         pd.concat(frames, ignore_index=True).to_csv(args.out, index=False)
-        print(f"\nWORM 落盘: {args.out}")
+        logger.info(f"\nWORM 落盘: {args.out}")
     if snaps:
         _write_snapshot(pd.concat(snaps, ignore_index=True), STOCK_LIST_DIR)
     return 0

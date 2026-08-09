@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import gc
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -49,6 +50,8 @@ from app.pipeline_parallel.scoring import (
     select_topn,
 )
 from config.settings import BACKTEST_RESULT_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def add_mfe_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
@@ -191,17 +194,15 @@ def load_panel() -> pd.DataFrame:
     signals.add_market_regime(work, SLOW_BULL_REGIME)
     _n_up = int(work.loc[work["gate_slow_bull"], "slow_bull_regime"].sum())
     _n_gate = int(work["gate_slow_bull"].sum())
-    print(
+    logger.info(
         f"慢牛市场状态: 上升段 {_n_up:,} / {_n_gate:,} gate 行 "
-        f"({_n_up / _n_gate:.0%} 可开仓)",
-        flush=True,
+        f"({_n_up / _n_gate:.0%} 可开仓)"
     )
-    print(
+    logger.info(
         f"可交易性门: 剔除 {gate['removed_rows']:,} 行 / "
         f"{gate['removed_stocks']} 只 (近{gate['lookback']}交易日"
         f"有行比例<{gate['min_presence']}), 保留 {gate['kept_rows']:,} 行 / "
-        f"{gate['kept_stocks']} 只",
-        flush=True,
+        f"{gate['kept_stocks']} 只"
     )
     print(
         f"慢牛门槛: 通过 {int(work['gate_slow_bull'].sum()):,} 行 / "

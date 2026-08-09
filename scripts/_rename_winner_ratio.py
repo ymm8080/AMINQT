@@ -6,7 +6,7 @@ import os
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
+PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
 TMP = PANEL + ".tmp"
 OLD = "benefit_part"
 NEW = "winner_ratio"
