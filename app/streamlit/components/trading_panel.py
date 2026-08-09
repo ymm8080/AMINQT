@@ -115,7 +115,6 @@ def render_signal_list(
         for c in ["time", "symbol", "方向", "price", "qty", "priority", "reason"]
         if c in df.columns
     ]
-    st.dataframe(df[display_cols], use_container_width=True)
 
     # 自动模式: 为每个信号直接提交委托 (require_confirm=False)
     auto_executed = []
@@ -134,27 +133,29 @@ def render_signal_list(
         st.success(f"自动执行 {len(auto_executed)} 条信号")
         st.rerun()
 
-    # 手动模式: 提供逐条/批量确认
+    # 手动模式: 左侧信号列表 + 右侧执行按钮
     if sm.state in (TradingState.RUNNING, TradingState.STOPPED):
-        pending_ids: dict[str, str] = {}
-        cols = st.columns(min(len(signals), 4))
-        for idx, sig in enumerate(signals):
-            side = sig["side"]
-            with cols[idx % len(cols)]:
-                label = f"{_signal_action_label(side)} {sig['symbol']}"
-                if st.button(label, key=f"confirm_sig_{idx}"):
+        col_table, col_exec = st.columns([3, 1])
+        with col_table:
+            st.dataframe(df[display_cols], use_container_width=True)
+        with col_exec:
+            st.caption("操作")
+            for idx, sig in enumerate(signals):
+                if st.button("执行", key=f"exec_sig_{idx}", use_container_width=True):
                     oid = om.submit(
                         symbol=sig["symbol"],
-                        side=side,
+                        side=sig["side"],
                         price=sig.get("price", 0.0),
                         qty=sig.get("qty", 0),
                         require_confirm=True,
                     )
-                    pending_ids[oid] = label
-        if pending_ids:
-            confirmed = sum(1 for oid in pending_ids if om.manual_confirm(oid))
-            st.success(f"已确认 {confirmed}/{len(pending_ids)} 笔委托")
-            st.rerun()
+                    if om.manual_confirm(oid):
+                        st.success(
+                            f"已执行 {sig['symbol']} {_signal_action_label(sig['side'])}"
+                        )
+                    st.rerun()
+    else:
+        st.dataframe(df[display_cols], use_container_width=True)
 
 
 def render_order_queue(om: OrderManager) -> None:

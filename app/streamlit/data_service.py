@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -59,6 +60,28 @@ DEMO_INDUSTRIES = {
     "000858": "白酒",
     "601899": "有色",
 }
+
+_STOCK_NAMES_CACHE: dict[str, str] | None = None
+
+
+def stock_names() -> dict[str, str]:
+    """代码→股票名称 静态映射 (sw_stock_classification.csv, 惰性缓存).
+
+    清单 parquet 不含 name 列, 页面用真实名称而非 DEMO_NAMES; 文件缺失回退 DEMO_NAMES.
+    """
+    global _STOCK_NAMES_CACHE
+    if _STOCK_NAMES_CACHE is not None:
+        return _STOCK_NAMES_CACHE
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "data/processed/sw_stock_classification.csv"
+    )
+    try:
+        df = pd.read_csv(path, dtype={"symbol": str})
+        _STOCK_NAMES_CACHE = dict(zip(df["symbol"], df["name"]))
+    except Exception:
+        _STOCK_NAMES_CACHE = dict(DEMO_NAMES)
+    return _STOCK_NAMES_CACHE
 DEMO_SECTOR_BASE_INDEX: dict[str, float] = {
     "白酒": 1.0,
     "电池": 1.0,
@@ -964,7 +987,9 @@ def append_audit_log(entry: dict) -> None:
 #   legacy_stocklist_ → legacy (交付)      legacy_preds_raw_ → legacy_raw (底稿)
 #   parallel_shortlist_ → parallel (交付)   parallel_preds_raw_ → parallel_raw (底稿)
 #   slowbull_pool_{board}_ → slow_bull
-_PRED_FILE_RE = re.compile(r"^(?P<prefix>[\w]+)_(?P<date>\d{8})(?P<mod>__.+)?\.csv$")
+# prefix 用非贪婪: 贪婪会把 `__20260807` 里的前一段 `_20260807` 吃进 prefix,
+# 使纯数字模块 (如当前模型 tag `20260807`) 被误解析成 "na"
+_PRED_FILE_RE = re.compile(r"^(?P<prefix>[\w]+?)_(?P<date>\d{8})(?P<mod>__.+)?\.csv$")
 _PRED_FAMILY = {
     "legacy_stocklist": "legacy",
     "legacy_preds_raw": "legacy_raw",
@@ -1065,7 +1090,7 @@ def _normalize_pred_rows(
         out["system"] = "slow_bull"
         return out
     if family.startswith("legacy"):
-        for h in ("2d", "3d", "5d"):
+        for h in ("2d", "3d", "5d", "10d"):
             out[f"gain_{h}"] = df.get(f"pred_ret_{h}")
             out[f"prob_{h}"] = df.get(f"prob_up_{h}")
     else:  # parallel
@@ -1121,6 +1146,25 @@ def load_stock_list_on_date(
     return rows.sort_values(["family", "module", "rk"], na_position="last").reset_index(
         drop=True
     )
+
+
+def load_official_run_shortlist(
+    date_compact: str | None = None, list_dir: str = STOCK_LIST_DIR
+) -> tuple[pd.DataFrame | None, str | None]:
+    """官方运行交付短名单 (STOCK_LIST_DIR, 已去 *_raw 底稿), 选股看板股票池源.
+
+    选股看板 fed by module prediction for each official run, 非回测:
+    默认最新交付日; 指定 date_compact 取当日交付短名单. 无数据 → (None, None).
+    """
+    dates = list_prediction_dates(list_dir)
+    if not dates:
+        return None, None
+    if date_compact is None:
+        date_compact = dates[0]
+    df = load_stock_list_on_date(date_compact, list_dir)
+    if df is None or df.empty:
+        return None, date_compact
+    return df, date_compact
 
 
 def load_stock_list_on_dates(
