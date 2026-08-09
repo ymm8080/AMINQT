@@ -31,7 +31,7 @@ def main() -> None:
     print("plotly_charts:", len(at.get("plotly_chart")))
     # 模块绩效 tab: 应有模型下拉 + 评估窗口 (select_slider)
     labels = [s.label for s in at.selectbox]
-    assert any("模型" in l for l in labels), f"缺模型下拉: {labels}"
+    assert any("模型" in lbl for lbl in labels), f"缺模型下拉: {labels}"
     print("OK: page_archive.render 无异常, 模块绩效下拉/评估窗口已渲染")
 
 

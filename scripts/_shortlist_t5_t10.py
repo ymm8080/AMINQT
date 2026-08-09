@@ -1046,7 +1046,7 @@ def write_docx(
             t = doc.add_table(rows=1, cols=len(cols))
             for j, c in enumerate(cols):
                 t.rows[0].cells[j].text = c
-            for i, (_, r) in enumerate(g.iterrows()):
+            for _i, (_, r) in enumerate(g.iterrows()):
                 cells = t.add_row().cells
                 cells[0].text = str(r["rank"])
                 cells[1].text = str(r["symbol"])

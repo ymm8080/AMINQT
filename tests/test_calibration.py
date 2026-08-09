@@ -196,7 +196,6 @@ def test_e_lookahead_boundary_exact():
 
 def _single_symbol_panel_any_target(n_dates=100, seed=3, target="label_pm_5d_net"):
     """单股每日一行, 任意目标列 (label_horizon 参数化测试用)."""
-    rng = np.random.default_rng(seed)
     dates = pd.bdate_range("2025-01-06", periods=n_dates)
     rows = []
     for t, d in enumerate(dates):

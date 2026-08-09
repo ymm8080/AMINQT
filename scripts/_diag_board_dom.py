@@ -1,6 +1,7 @@
 """诊断: 抓取运行中看板选股池表格的列头与首几行数值."""
-from playwright.sync_api import sync_playwright
 import time
+
+from playwright.sync_api import sync_playwright
 
 with sync_playwright() as p:
     b = p.chromium.launch()

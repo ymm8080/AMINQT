@@ -11,7 +11,11 @@ from app.pipeline1.data_supply import DataSupplyChain
 from app.pipeline1.list_generator import SCHEMA_FIELDS
 from app.pipeline1.panel_builder import assemble_panel, enrich_panel
 from app.pipeline1.predict_runner import find_bundles, run_prediction
-from app.pipeline1.train_runner import prepare_board_frame, run_training, select_features
+from app.pipeline1.train_runner import (
+    prepare_board_frame,
+    run_training,
+    select_features,
+)
 from tests.test_daily_pipeline import make_panel
 
 

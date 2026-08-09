@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
 """监控 daily_automation 日志: 步骤开始/完成 + OOM/失败信号 (GBK 解码)."""
-import io
 import time
 
 PATH = r"logs/daily_automation_20260809.log"
@@ -15,7 +13,7 @@ def main() -> None:
     last = 0
     while True:
         try:
-            with io.open(PATH, "rb") as fp:
+            with open(PATH, "rb") as fp:
                 fp.seek(last)
                 chunk = fp.read()
         except FileNotFoundError:

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """对指定 symbols 用 legacy(main/dual) + 并行(sniper/fusion/slow_bull) 全模块做价格预测.
 
 - legacy:   V35Predictor 逐股 pred_ret_1d/2d/3d/5d + prob_up + pain_prob (切片 V3 面板末 300 交易日).
