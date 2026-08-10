@@ -405,6 +405,50 @@ class TestDynamicEntry:
         out = gen.emit(cands)
         assert list(out["list"]["symbol"]) == ["600001", "600002", "600003"]
 
+    def test_base_rate_is_per_board(self):
+        """E7 概率闸 base_rate 按板块独立 (2026-08-09 修复).
+
+        全市场单一 base_rate 会被双创退化模型的常数高概率 (1 树 LGBM → 常数 0.58/0.60)
+        抬高混合基线, 主板 prob_up_10d 系统性偏低 → 整块被 E7 误杀 (08-07 起全 dual 清单根因).
+        各板块对自家基线比较: main 0.50 vs 自家 0.495, 不被 dual 0.60 拖到混合 0.5475.
+        """
+        cands = _cands(
+            [
+                {"symbol": "600001", "board": "main", "prob_up_10d": 0.50},
+                {"symbol": "600002", "board": "main", "prob_up_10d": 0.49},
+                {"symbol": "300001", "board": "GEM", "prob_up_10d": 0.61},
+                {"symbol": "300002", "board": "GEM", "prob_up_10d": 0.59},
+            ]
+        )
+        gen = ListGenerator(entry_prob=0.60)
+        scored = gen.compute_scores(cands)
+        # 板块内 base_rate = 自家 prob 均值 (main 0.495 / GEM 0.60), 非全市场混合 0.5475
+        assert scored.loc[scored["symbol"] == "600001", "base_rate"].iloc[
+            0
+        ] == pytest.approx(0.495)
+        assert scored.loc[scored["symbol"] == "300001", "base_rate"].iloc[
+            0
+        ] == pytest.approx(0.60)
+        passed = gen.entry_filter(scored, market_state="range")
+        # 每板块各保留"高于自家基线"者: main 600001 / GEM 300001; 低于自家基线者剔
+        assert sorted(passed["symbol"]) == ["300001", "600001"]
+
+    def test_announce_blacklist_hard_excludes(self):
+        """announce_score == -1.0 (公告事件窗禁买标记) → 硬剔除, 非仅 ×0.7 惩罚.
+
+        安全网 #17: attach_scores 对事件窗口标的置 -1.0 并标记"禁买"; 旧实现只在
+        compute_scores 里乘 (1+0.3×-1.0)=0.7, 标记票仍可进 top-N → 禁买不生效.
+        """
+        cands = _cands(
+            [
+                {"symbol": "600001", "announce_score": 0.0},  # 无公告 → 过
+                {"symbol": "600002", "announce_score": -1.0},  # 禁买标记 → 硬剔
+            ]
+        )
+        gen = ListGenerator(entry_prob=0.0)  # 跳过 prob 闸, 单独验公告禁买
+        out = gen.emit(cands)
+        assert list(out["list"]["symbol"]) == ["600001"]
+
 
 class TestScorePainPenalty:
     def test_pain_penalty_lowers_score(self):

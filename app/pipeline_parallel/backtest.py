@@ -544,7 +544,7 @@ def run_all(
 
     out = {
         "ts": ts,
-        "objective": "MFE: 持有期内最大涨幅 (label_mfe_{h}d_net), 非目标日收盘",
+        "objective": "c2c: T+1 买 close[T+1], 目标日收盘 close[T+1+h] 净收益 (label_pm_{h}d_net), 非 MFE 触摸天花板",
         "window": {
             "full": {
                 "start": str(work["date"].min()),
@@ -834,9 +834,13 @@ def export_stock_lists(work: pd.DataFrame, oos_start, run_dir: Path) -> list[str
             written.append(fp.name)
 
     # 慢牛系统独立导出 (70% 独立资金仓, 不并入狙击/融合 merged OOS 名单).
-    # 门槛先行 → 权重打分 → Top-20; 每行附慢牛长视界 (10/20/40d) MFE 净标签.
+    # 选择逻辑与生产 daily_slowbull_pool 一致 (2026-08-09 修错配): 硬门槛 →
+    # rps_60 第二道门 → 排名键 (dual=rps_60) → 按板档位 Top-N;
+    # 每行附慢牛长视界 (10/20/40d) MFE 净标签.
+    # 需预计算 gate_slow_bull 列 (同 daily_slowbull_pool 契约; 缺列 → 慢牛不导出).
+    if f"gate_{SLOW_BULL.gate}" not in work.columns:
+        return written
     sb_lab_cols = [f"label_mfe_{h}d_net" for h in (10, 20, 40)]
-    sb_gate_col = f"gate_{SLOW_BULL.gate}"
     for b in BOARD_PREFIXES:
         bwork = work[work["board"] == b]
         if bwork.empty:
@@ -844,14 +848,7 @@ def export_stock_lists(work: pd.DataFrame, oos_start, run_dir: Path) -> list[str
         oos_mask = bwork["date"].values >= oos_start
         for tag, mask in (("full", None), ("oos", oos_mask)):
             sub = bwork if mask is None else bwork[mask]
-            if sb_gate_col in sub.columns:
-                sub = sub[sub[sb_gate_col]]
-            else:
-                sub = screener.apply_gate(sub, SLOW_BULL.gate)
-            if len(sub) == 0:
-                continue
-            score = pool_score(sub, SLOW_BULL.pool, weights=SLOW_BULL.pool_weights)
-            top = select_topn(sub, score, SLOW_BULL.top_n)
+            top = _slowbull_picks(sub, b, SLOW_BULL.top_n)
             if top.empty:
                 continue
             top["rk"] = (
