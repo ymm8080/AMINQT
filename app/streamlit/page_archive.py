@@ -372,21 +372,212 @@ def _render_module_perf() -> None:
     st.dataframe(out, use_container_width=True, hide_index=True)
 
 
+# ───────────────────────── 预测质量检查 ─────────────────────────
+def _fmt_quality_tbl(df: pd.DataFrame) -> pd.DataFrame:
+    """质量汇总表格式化 (百分比 / IC 列), 入参为英文列名."""
+    out = df.copy()
+    out["pred_mean"] = out["pred_mean"].map(_fmt_gain)
+    out["real_mean"] = out["real_mean"].map(_fmt_gain)
+    out["bias"] = out["bias"].map(_fmt_gain)
+    out["hit_rate"] = out["hit_rate"].map(_fmt_prob)
+    out["rank_ic"] = out["rank_ic"].map(lambda v: f"{v:+.3f}" if pd.notna(v) else "—")
+    return out
+
+
+def _render_forecast_quality() -> None:
+    """预测质量检查: 选模块 + 选日期 → 预测 vs 实际 质量图 (只读).
+
+    数据流: STOCK_LIST_DIR 交付清单 × V3 面板收盘 → 已实现收益,
+    对比预测涨幅/概率, 呈现命中率/偏差/RankIC/概率校准.
+    """
+    from app.pipeline1.model_meta import load_modules
+    from app.pipeline1.model_meta import module_id as current_module_id
+    from app.streamlit import module_perf as mp
+
+    picks = mp.load_module_picks()
+    if picks is None or picks.empty:
+        st.info("暂无预测清单数据 (STOCK_LIST_DIR 为空)")
+        return
+    panel = _load_close_panel()
+    if panel is None or panel.empty:
+        st.info("缺少 V3 面板收盘数据, 无法计算已实现收益")
+        return
+    realized = mp.compute_realized_returns(picks, panel)
+    if realized is None or realized.empty:
+        st.info("清单数据不可用")
+        return
+
+    c_scope, c_hz, c_topk = st.columns(3)
+    with c_scope:
+        scope = st.radio(
+            "范围", ["交付短名单", "全市场底稿", "全部"], horizontal=True, key="fq_scope"
+        )
+    with c_hz:
+        horizon = st.radio("持有视界", ["3d", "5d", "10d"], horizontal=True, key="fq_horizon")
+    with c_topk:
+        topk = st.selectbox(
+            "Top-N (每日模块内)", [5, 10, 20, "全部"], index=1, key="fq_topk"
+        )
+    n = None if topk == "全部" else int(topk)
+
+    delivered = mp.filter_scope(realized, scope)
+    sub = mp.top_k(delivered, n)
+    if sub is None or sub.empty:
+        st.info("所选范围无数据")
+        return
+    rcol = f"real_{horizon}"
+    matured_mods = set(sub.loc[sub[rcol].notna(), "module_id"])
+
+    # 系统对比 (legacy vs parallel 全模块聚合)
+    fam = mp.quality_by_family(sub, horizon)
+    if not fam.empty:
+        st.subheader("系统对比 (预测 vs 实际)")
+        disp = _fmt_quality_tbl(fam).rename(
+            columns={
+                "family": "系统",
+                "n": "样本",
+                "dates": "天数",
+                "pred_mean": "预测均值",
+                "real_mean": "实际均值",
+                "bias": "偏差",
+                "hit_rate": "命中率",
+                "rank_ic": "RankIC",
+            }
+        )
+        st.dataframe(disp, use_container_width=True, hide_index=True)
+        st.caption(
+            "偏差 = 实际均值 − 预测均值 (>0 低估 / <0 高估); "
+            "RankIC = 逐日横截面 Spearman(预测, 实际) 平均 (仅 ≥5 只/日的日期); "
+            "无预测列的系统 (slow_bull 风控池) 预测均值/偏差/RankIC 显示 —; "
+            f"面板截至 {panel['date'].max().date()}, 仅已成熟日期纳入."
+        )
+
+    if not matured_mods:
+        st.info(
+            f"所选范围/视界 {horizon} 暂无成熟预测 (选股日太近或面板未覆盖) — "
+            "等 T+h 收盘后自动可见"
+        )
+        return
+
+    # 模块选择: 下拉含 legacy/parallel/slow_bull 全族版本; 默认恒选全局最近模型
+    mods = load_modules()
+    cur_tag = current_module_id(mods) if mods else None
+    cur_ids = (
+        sorted(
+            delivered.loc[
+                delivered["module"].astype(str) == cur_tag, "module_id"
+            ].unique()
+        )
+        if cur_tag is not None
+        else []
+    )
+    options = mp.recent_module_ids_per_model(delivered, n=50)
+    for cid in cur_ids:
+        if cid not in options:
+            options.insert(0, cid)
+    if not options:
+        st.info("暂无可用模块")
+        return
+    recent = mp.recent_module_ids(delivered, n=1)
+    default_idx = options.index(recent[0]) if recent and recent[0] in options else 0
+    sel = st.selectbox(
+        "选择模块 (module_id = 系统·模型版本)",
+        options,
+        index=default_idx,
+        format_func=lambda mid: f"{mid} (当前)" if mid in cur_ids else mid,
+        key="fq_module",
+    )
+
+    msub = mp.top_k(delivered[delivered["module_id"] == sel], n)
+    matured = msub.dropna(subset=[rcol])
+    if matured is None or matured.empty:
+        st.info(f"模块 {sel} 尚无 {horizon} 成熟预测 (选股日太近或面板未覆盖)")
+        return
+    dates = sorted(matured["date"].unique())
+    sel_dates = st.multiselect(
+        "选股日期 (可多选, 仅列已成熟日期)",
+        dates,
+        default=dates,
+        key="fq_dates",
+    )
+    if not sel_dates:
+        st.info("未选择日期")
+        return
+    view = matured[matured["date"].isin(sel_dates)].copy()
+    daily = mp.module_daily_quality(view, horizon)
+
+    st.subheader(f"{sel} — {horizon} 预测质量 (共 {len(dates)} 成熟日, 已选 {len(sel_dates)})")
+    q = mp.quality_by_module(view, horizon)
+    if not q.empty:
+        row = q.iloc[0]
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("样本", f"{int(row['n'])}")
+        c2.metric("命中率", f"{row['hit_rate']:.1%}")
+        c3.metric("实际均值", f"{row['real_mean']:+.2%}")
+        c4.metric("预测均值", f"{row['pred_mean']:+.2%}" if pd.notna(row["pred_mean"]) else "—")
+        c5.metric("RankIC", f"{row['rank_ic']:+.3f}" if pd.notna(row["rank_ic"]) else "—")
+
+    if not daily.empty:
+        st.markdown("**每日预测 vs 实际 平均收益**")
+        chart_cols = (
+            ["pred_mean", "real_mean"]
+            if daily["pred_mean"].notna().any()
+            else ["real_mean"]
+        )
+        st.line_chart(daily.set_index("date")[chart_cols], height=260)
+        st.markdown("**每日命中率 (实际收益 > 0 占比)**")
+        st.line_chart(daily.set_index("date")[["hit_rate"]], height=200)
+
+    with st.expander("概率校准 (预测概率分桶 → 实际命中率)"):
+        cal = mp.calibration_table(view, horizon)
+        if cal.empty:
+            st.info("该模块无概率数据 (如 slow_bull 风控观察池无概率列)")
+        else:
+            cal_disp = cal.rename(
+                columns={
+                    "prob_bin": "概率区间",
+                    "n": "样本",
+                    "hit_rate": "实际命中率",
+                    "real_mean": "实际均值",
+                }
+            )
+            cal_disp["实际命中率"] = cal_disp["实际命中率"].map(_fmt_prob)
+            cal_disp["实际均值"] = cal_disp["实际均值"].map(_fmt_gain)
+            st.dataframe(cal_disp, use_container_width=True, hide_index=True)
+
+    with st.expander("逐日明细"):
+        d_disp = daily.rename(
+            columns={
+                "date": "日期",
+                "n": "样本",
+                "pred_mean": "预测均值",
+                "real_mean": "实际均值",
+                "hit_rate": "命中率",
+            }
+        )
+        d_disp["预测均值"] = d_disp["预测均值"].map(_fmt_gain)
+        d_disp["实际均值"] = d_disp["实际均值"].map(_fmt_gain)
+        d_disp["命中率"] = d_disp["命中率"].map(_fmt_prob)
+        st.dataframe(d_disp, use_container_width=True, hide_index=True)
+
+
 # ───────────────────────── 页面 ─────────────────────────
 def render() -> None:
     st.title("训练/预测档案 (只读)")
     st.caption(
         "从持久化存储读取历史训练/预测结果, 供存储与回看. "
-        "模块绩效按落盘清单+收盘价现算, 其余只读回看."
+        "模块绩效/预测质量按落盘清单+收盘价现算, 其余只读回看."
     )
     (
         tab_module_perf,
+        tab_quality,
         tab_bt,
         tab_query,
         tab_datelist,
     ) = st.tabs(
         [
             "模块绩效",
+            "预测质量检查",
             "回测历史",
             "个股预测查询",
             "日期清单",
@@ -394,6 +585,8 @@ def render() -> None:
     )
     with tab_module_perf:
         _render_module_perf()
+    with tab_quality:
+        _render_forecast_quality()
     with tab_bt:
         _render_backtests()
     with tab_query:

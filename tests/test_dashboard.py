@@ -547,3 +547,150 @@ class TestPageImports:
 
     def test_entry_importable(self):
         import app.streamlit_app  # noqa: F401
+
+
+class TestModulePerfQuality:
+    """预测质量检查纯函数: 命中率/偏差/RankIC/校准/逐日."""
+
+    @staticmethod
+    def _perf() -> pd.DataFrame:
+        """合成: legacy 4 行 + parallel 4 行 (同日, 有 gain/real/prob)."""
+        return pd.DataFrame(
+            {
+                "module_id": ["legacy·v1"] * 4 + ["parallel·v1"] * 4,
+                "family": ["legacy"] * 4 + ["parallel"] * 4,
+                "date": ["2026-08-01"] * 4 + ["2026-08-01"] * 4,
+                "gain_3d": [0.05, 0.04, 0.03, 0.02] + [0.06, 0.05, 0.04, 0.03],
+                "real_3d": [0.06, 0.04, -0.01, -0.02] + [0.07, 0.05, -0.01, 0.01],
+                "prob_3d": [0.6, 0.7, 0.8, 0.9] + [0.5, 0.6, 0.7, 0.8],
+            }
+        )
+
+    def test_quality_by_family_metrics(self):
+        from app.streamlit import module_perf as mp
+
+        df = mp.quality_by_family(self._perf(), "3d")
+        assert set(df["family"]) == {"legacy", "parallel"}
+        legacy = df[df["family"] == "legacy"].iloc[0]
+        # real=(0.06+0.04-0.01-0.02)/4=0.0175; pred=0.035; bias=-0.0175; hit=2/4
+        assert legacy["real_mean"] == pytest.approx(0.0175)
+        assert legacy["pred_mean"] == pytest.approx(0.035)
+        assert legacy["bias"] == pytest.approx(-0.0175)
+        assert legacy["hit_rate"] == pytest.approx(0.5)
+        parallel = df[df["family"] == "parallel"].iloc[0]
+        assert parallel["hit_rate"] == pytest.approx(0.75)
+        # 4 行/日 < min_n → rank_ic 缺失
+        assert pd.isna(legacy["rank_ic"])
+
+    def test_rank_ic_perfect_monotone(self):
+        from app.streamlit import module_perf as mp
+
+        df = pd.DataFrame(
+            {
+                "module_id": ["m"] * 6,
+                "family": ["legacy"] * 6,
+                "date": ["2026-08-01"] * 6,
+                "gain_3d": [0.01, 0.02, 0.03, 0.04, 0.05, 0.06],
+                "real_3d": [0.011, 0.022, 0.030, 0.043, 0.055, 0.062],
+                "prob_3d": [0.6] * 6,
+            }
+        )
+        out = mp.quality_by_family(df, "3d")
+        assert out.iloc[0]["rank_ic"] == pytest.approx(1.0)
+
+    def test_quality_by_module(self):
+        from app.streamlit import module_perf as mp
+
+        df = mp.quality_by_module(self._perf(), "3d")
+        assert set(df["module_id"]) == {"legacy·v1", "parallel·v1"}
+        assert set(df["family"]) == {"legacy", "parallel"}
+        # 按 real_mean 降序: parallel 0.03 > legacy 0.0175
+        assert df.iloc[0]["module_id"] == "parallel·v1"
+
+    def test_module_daily_quality_drops_unmatured(self):
+        from app.streamlit import module_perf as mp
+
+        p = self._perf()
+        one = p[p["module_id"] == "legacy·v1"].copy()
+        one = pd.concat(
+            [
+                one,
+                pd.DataFrame(
+                    [
+                        {
+                            "module_id": "legacy·v1",
+                            "family": "legacy",
+                            "date": "2026-08-02",
+                            "gain_3d": 0.05,
+                            "real_3d": np.nan,
+                            "prob_3d": 0.6,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+        d = mp.module_daily_quality(one, "3d")
+        assert d["date"].tolist() == ["2026-08-01"]  # 08-02 未成熟被剔除
+        row = d.iloc[0]
+        assert row["n"] == 4
+        assert row["pred_mean"] == pytest.approx(0.035)
+        assert row["real_mean"] == pytest.approx(0.0175)
+        assert row["hit_rate"] == pytest.approx(0.5)
+
+    def test_calibration_table(self):
+        from app.streamlit import module_perf as mp
+
+        cal = mp.calibration_table(self._perf(), "3d")
+        assert not cal.empty
+        assert set(cal.columns) == {"prob_bin", "n", "hit_rate", "real_mean"}
+        assert cal["n"].sum() == 8
+        # [0.5, 0.6): 仅 parallel prob=0.5, real=0.01>0 → 命中 1.0
+        low = cal[cal["prob_bin"].str.startswith("[0.5")]
+        assert len(low) == 1
+        assert low.iloc[0]["n"] == 1
+        assert low.iloc[0]["hit_rate"] == pytest.approx(1.0)
+
+    def test_empty_inputs(self):
+        from app.streamlit import module_perf as mp
+
+        empty = pd.DataFrame()
+        for fn in (
+            lambda: mp.quality_by_family(empty, "3d"),
+            lambda: mp.quality_by_module(empty, "3d"),
+            lambda: mp.module_daily_quality(empty, "3d"),
+            lambda: mp.calibration_table(empty, "3d"),
+        ):
+            out = fn()
+            assert out is not None and out.empty
+
+    def test_quality_no_gain_column_like_slowbull(self):
+        """slow_bull 无 gain/prob 列 → 只保留实际表现, 预测列 NaN."""
+        from app.streamlit import module_perf as mp
+
+        p = pd.DataFrame(
+            {
+                "module_id": ["slow_bull·v1"] * 3,
+                "family": ["slow_bull"] * 3,
+                "date": ["2026-08-01"] * 3,
+                "real_3d": [0.05, 0.02, -0.03],
+            }
+        )
+        fam = mp.quality_by_family(p, "3d")
+        assert len(fam) == 1
+        row = fam.iloc[0]
+        assert row["family"] == "slow_bull"
+        assert row["n"] == 3
+        assert row["real_mean"] == pytest.approx(0.04 / 3)
+        assert row["hit_rate"] == pytest.approx(2 / 3)
+        assert pd.isna(row["pred_mean"]) and pd.isna(row["bias"]) and pd.isna(row["rank_ic"])
+        mod = mp.quality_by_module(p, "3d")
+        assert len(mod) == 1 and pd.isna(mod.iloc[0]["pred_mean"])
+        d = mp.module_daily_quality(p, "3d")
+        assert len(d) == 1
+        assert d.iloc[0]["n"] == 3
+        assert d.iloc[0]["real_mean"] == pytest.approx(0.04 / 3)
+        assert d.iloc[0]["hit_rate"] == pytest.approx(2 / 3)
+        assert pd.isna(d.iloc[0]["pred_mean"])
+        cal = mp.calibration_table(p, "3d")
+        assert cal.empty  # 无 prob 列 → 无校准桶
