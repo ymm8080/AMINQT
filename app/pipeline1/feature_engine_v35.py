@@ -70,22 +70,24 @@ def _mem_floor(s: pd.Series, ratio: float) -> pd.Series:
     return pd.Series(np.sign(s) * np.maximum(s.abs(), floor), index=s.index)
 
 
-def _empty_like(series: pd.Series, nrows: int) -> pd.Series:
-    """Build an empty Series of nrows with the same dtype (float->NaN, int->0, ...)."""
-    idx = range(nrows)
+def _alloc_buffer(series: pd.Series, nrows: int) -> np.ndarray:
+    """预分配单列 numpy 缓冲.
+
+    int/uint 列用 float64 (可容纳后续分组写入的 NaN, numpy 整型数组存不了),
+    末尾再转回 int; 其余按 ref dtype 分配, 免去事后 astype 拷贝.
+    """
     k = series.dtype.kind
     if k == "f":
-        return pd.Series(np.full(nrows, np.nan), index=idx, dtype=series.dtype)
+        return np.empty(nrows, dtype=series.dtype)
     if k in "iu":
-        return pd.Series(np.zeros(nrows, dtype=series.dtype), index=idx)
+        return np.full(nrows, np.nan, dtype=np.float64)
     if k == "b":
-        return pd.Series(np.zeros(nrows, dtype=bool), index=idx)
+        return np.empty(nrows, dtype=bool)
     if k == "M":
-        unit = getattr(series.dtype, "unit", "ns")
-        return pd.Series(
-            np.full(nrows, np.datetime64("NaT", unit)), index=idx, dtype=series.dtype
-        )
-    return pd.Series([None] * nrows, index=idx, dtype=object)
+        return np.empty(nrows, dtype="datetime64[ns]")
+    if k == "m":
+        return np.empty(nrows, dtype="timedelta64[ns]")
+    return np.full(nrows, None, dtype=object)
 
 
 def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
@@ -93,48 +95,50 @@ def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
 
     用显式循环而非 groupby.apply: pandas 2.2+/3.x 对 apply 丢弃分组列的行为
     不一致, 显式循环跨版本稳定且保列.
-    内存优化: 按首个输出的列/类型预分配单块帧 (len(df) 行), 逐个 symbol 填入,
-    末尾裁剪 — 替代旧 `parts=[...]; pd.concat(parts)` 的 ~2× 峰值连续块
-    (本机宽表 block consolidation 会 OOM; 19 个 dim 调用点全受益).
+    内存安全 + 快速 (2026-08-09 回归修复): 按列预分配 numpy 缓冲 (len(df) 行),
+    逐 symbol 用 C 级 numpy 切片写入 — 内存 ~1× 输出 (无 pd.concat 的 2× 峰值,
+    无宽表 block consolidation); 比旧 `out.iloc[slice] = part` 行写入快 ~18×
+    (row-wise iloc setitem 是 pandas 慢路径, 曾是重训/推理数小时的根因).
     输出与旧语义逐字节一致 (行序/列序/索引/dtype/值). per_stock 必须保行.
     """
-    out = None
-    pos = 0
+    cols = None
     ref_dtypes = None
+    bufs = None
+    pos = 0
+    nrows = len(df)
     for _, g in df.groupby("symbol"):
         part = fn(g.copy())
         n = len(part)
-        if out is None:
+        if bufs is None:
+            cols = list(part.columns)
             ref_dtypes = part.dtypes.to_dict()
-            out = pd.DataFrame(index=range(len(df)), columns=part.columns)
-            for col in part.columns:
-                out[col] = _empty_like(part[col], len(df))
-        if pos + n > len(out):
+            bufs = {c: _alloc_buffer(part[c], nrows) for c in cols}
+        if pos + n > nrows:
             raise ValueError(
                 f"_apply_per_stock: per_stock 输出 {pos + n} 行 > 输入 "
-                f"{len(df)} 行 — 特征函数必须保行"
+                f"{nrows} 行 — 特征函数必须保行"
             )
-        out.iloc[pos : pos + n] = part.reset_index(drop=True)
+        for c in cols:
+            bufs[c][pos : pos + n] = part[c].to_numpy()
         pos += n
-    result = out.iloc[:pos].sort_values(["symbol", "date"]).reset_index(drop=True)
-    # Ensure dtypes match pd.concat semantics (cross-platform consistency):
-    # iloc assignment can alter dtypes on some pandas/platform combinations.
-    if ref_dtypes is not None:
-        for col, dtype in ref_dtypes.items():
-            if result[col].dtype == dtype:
+    if bufs is None:
+        return df.copy()
+    result = pd.DataFrame({c: bufs[c][:pos] for c in cols})
+    # 恢复 dtype: int 列缓冲为 float64 (可容 NaN), 全有限才转回 int; 其余对齐 ref.
+    for col, dtype in ref_dtypes.items():
+        cur = result[col].dtype
+        if cur == dtype:
+            continue
+        if np.issubdtype(dtype, np.integer):
+            try:
+                finite = bool(np.isfinite(result[col].astype(float)).all())
+            except (TypeError, ValueError):
+                finite = False
+            if not finite:
+                result[col] = result[col].astype(float)
                 continue
-            # iloc 混合填充后列可能含 NaN/inf (如无公告股票的缺失值); int 装不下
-            # 非有限值 → 保持 float 保留 NaN (LightGBM 原生处理, 非静默丢弃).
-            if np.issubdtype(dtype, np.integer):
-                try:
-                    finite = bool(np.isfinite(result[col].astype(float)).all())
-                except (TypeError, ValueError):
-                    finite = False
-                if not finite:
-                    result[col] = result[col].astype(float)
-                    continue
-            result[col] = result[col].astype(dtype)
-    return result
+        result[col] = result[col].astype(dtype)
+    return result.sort_values(["symbol", "date"]).reset_index(drop=True)
 
 
 def _safe_divide(numerator, denominator) -> pd.Series:

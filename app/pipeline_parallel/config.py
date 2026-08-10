@@ -30,8 +30,6 @@ OOS_WINDOWS: dict[str, int] = {
     "3m": 3 * 21,
     "10d": 15,
 }
-OOS_MONTHS = 6
-OOS_TRADING_DAYS = OOS_WINDOWS["6m"]
 
 # 板块拆分 (2026-08-04 用户: MAIN/DUAL 分开回测, 幅度阈值不同).
 # 代码前缀: 60xxxxx 沪主板 / 00xxxxx 深主板 → main; 30xxxxx 创业板 / 68xxxxx 科创 → dual.
@@ -39,7 +37,6 @@ BOARD_PREFIXES: dict[str, tuple[str, ...]] = {
     "main": ("60", "00"),
     "dual": ("30", "68"),
 }
-BOARD_LABELS: dict[str, str] = {"main": "主板", "dual": "创业板+科创板"}
 # 每板块双头阈值 (2026-08-04 用户: MAIN/DUAL 幅度阈值必须不同).
 # min_mag 锚定各板块无条件基准 T+2 幅度 (实测): main +2.96%, dual +4.25%
 # (dual 涨跌幅 20% 上限 > main 10% → 潜力更高, 阈值更高).
@@ -63,12 +60,8 @@ def board_of(symbol) -> str:
 # 非目标日收盘收益. 列名 label_mfe_{h}d_net, 由 backtest.add_mfe_labels 补算.
 # 两套系统统一测 T+3/T+5/T+10 三视界矩阵 (2026-08-09 删 2d 视界).
 HORIZONS: tuple[str, ...] = ("3d", "5d", "10d")
-MFE_LABELS: tuple[str, ...] = tuple(f"label_mfe_{h}_net" for h in HORIZONS)
 # 2026-08-07 用户: 并行全模块验收改 close-to-close (可兑现收益), 非 MFE 触摸天花板
 C2C_LABELS: tuple[str, ...] = tuple(f"label_pm_{h}_net" for h in HORIZONS)
-
-# ── 最终排名权重 (2026-08-04 用户: 上涨率35% + 概率45% + 第三项2%待确认) ──
-RANK_W = {"mag": 0.35, "prob": 0.45, "third": 0.02}
 
 # ── LEGACY 叠加权重 (2026-08-05 正交性实证, _diag_overlay_orthogonality) ──
 # OOS 6m: main 上纯 prob 单用最好 (池=prob 弱版, 0.5/0.5 叠加稀释) → 偏 prob;
@@ -81,9 +74,6 @@ OVERLAY_WEIGHTS: dict[str, dict[str, float]] = {
 # ── ADX 慢牛系统 (SLOW_BULL) 常量 (2026-08-05, ADX 设计文档 v1.0) ──
 # 持有 2-8 周 (10-40 交易日) → 长视界验收, 匹配文档目标 (累计 50%-150%).
 SLOW_BULL_HORIZONS: tuple[str, ...] = ("10d", "20d", "40d")
-SLOW_BULL_MFE_LABELS: tuple[str, ...] = tuple(
-    f"label_mfe_{h}_net" for h in SLOW_BULL_HORIZONS
-)
 # add_mfe_labels 用全系统视界并集 (sniper/fusion 3/5/10 + slow_bull 10/20/40)
 ALL_HORIZON_INTS: tuple[int, ...] = (3, 5, 10, 20, 40)
 # 慢牛模块版本戳 (清单文件名 module 后缀; 规则系统无训练模型 → 用设计文档版本号)
@@ -103,7 +93,6 @@ ADX_SPEC: dict = {
     "turnover_max": 15.0,  # 门槛四: 换手率上限 (15% 涨停附近过热排除)
     "dev5_max": 0.08,  # 不买: 偏离 ma5 > 8%
     "vol_spike_up_max": 0.05,  # 不买: 放量上涨 > 5%
-    "adx_overheat": 50.0,  # ADX 过热阈值 (>50 可能见顶)
     "adx_optimal_max": 40.0,  # 打分 adx_score 上限 (25-40 最佳, >40 过热不再加分)
     "big_drop_sell": 0.07,  # 卖出: 单日放量大跌 > 7%
     "tp_gain": 0.80,  # 卖出: 累计涨幅 > 80% 且 ADX 顶背离
@@ -233,7 +222,6 @@ SYSTEMS: dict[str, SystemSpec] = {s.name: s for s in (SNIPER, FUSION, SLOW_BULL)
 # dual -0.86%) → 默认下行不开仓 (no_open), 符合用户"预期收益不够高就不开仓".
 # 市场代理 = 面板每日全部股票 close_hfq 中位数 (PIT, 自洽无外部依赖).
 SLOW_BULL_REGIME: dict = {
-    "market_proxy": "median_close",  # 市场代理: 每日全股票 close_hfq 中位数
     "def": "A",  # A: 代理 > MA20 (经典短趋势) / B: > MA60 / C: 20日动量为正
     "ma_window": 20,  # 代理 MA 窗口 (交易日)
     "trail_pct": 0.08,  # 上升段退出: 收盘自峰值回落 8% 走 (trail8)

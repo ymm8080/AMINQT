@@ -103,12 +103,11 @@ class ListGenerator:
     """
 
     def __init__(self, entry_prob: float = 0.60, entry_ret_mult: float = 2.0):
-        self._base_rate_history: list[float] = []
+        self._base_rate_history: dict[str, list[float]] = {}
         self.entry_prob = entry_prob
         self.entry_ret_mult = entry_ret_mult
         self.entry_prob_bear = 0.65  # [E11] 准入线 bear 收紧
         self.entry_ret_mult_bear = 3.0
-        self._prob_pctile = 0.80  # 若绝对阈值不可达, 回退取 prob_up 前 20%
 
     # ---------------- 分布权重 ----------------
     @staticmethod
@@ -149,14 +148,25 @@ class ListGenerator:
             df["compound_prob"] = df["prob_up_10d"].fillna(df["prob_up"])
         else:
             df["compound_prob"] = df["prob_up"]
-        # B4: base_rate = 20 日滚动均值 (compound_prob 加权概率)
-        daily_mean = float(df["compound_prob"].mean())
-        self._base_rate_history.append(daily_mean)
-        recent = self._base_rate_history[-BASE_RATE_WINDOW:]
-        base_rate = float(pd.Series(recent).mean())
-        base_rate = base_rate if base_rate > 1e-6 else 1.0
-        df["base_rate"] = base_rate
-        prob_adjust = df["compound_prob"] / base_rate
+        # B4: base_rate = 20 日滚动均值 (compound_prob 加权概率), 按板块独立
+        # (2026-08-09 修复: 全市场单一 base_rate 被退化模型常数高概率污染混合基线,
+        #  主板 prob_up_10d 系统性偏低被 E7 整块误杀 → 各板块对自家基线比较)
+        if "board" in df.columns:
+            board_mean = df.groupby("board")["compound_prob"].mean()
+            br = {}
+            for b, m in board_mean.items():
+                key = str(b)
+                self._base_rate_history.setdefault(key, []).append(float(m))
+                br[key] = float(np.mean(self._base_rate_history[key][-BASE_RATE_WINDOW:]))
+            df["base_rate"] = df["board"].astype(str).map(br)
+        else:
+            daily_mean = float(df["compound_prob"].mean())
+            self._base_rate_history.setdefault("all", []).append(daily_mean)
+            df["base_rate"] = float(
+                np.mean(self._base_rate_history["all"][-BASE_RATE_WINDOW:])
+            )
+        df["base_rate"] = df["base_rate"].mask(df["base_rate"] <= 1e-6, 1.0)
+        prob_adjust = df["compound_prob"] / df["base_rate"]
         use_rank = False
         if "rank_score" in df.columns:
             rank_std = float(df["rank_score"].std())
@@ -349,6 +359,11 @@ class ListGenerator:
         # [E2] 痛苦预警: pain_prob > 0.5 直接剔除 (安全网 #16)
         if "pain_prob" in df.columns:
             ok &= df["pain_prob"].fillna(0) <= 0.5
+        # [安全网 #17] 公告事件窗禁买标记: announce_score == -1.0 直接剔除.
+        # (attach_scores 对事件窗口标的置 -1.0; 旧实现只在 compute_scores 里 ×0.7 惩罚,
+        #  标记票仍可进 top-N → 禁买不生效. 2026-08-09 改为硬剔除)
+        if "announce_score" in df.columns:
+            ok &= df["announce_score"].fillna(0) != -1.0
         passed = df[ok]
         if len(passed) == 0:
             logger.warning(
