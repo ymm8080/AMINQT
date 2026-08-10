@@ -139,9 +139,7 @@ def _run_prediction(
         st.error("面板未找到或指定股票不在面板中")
         return None
     panel_pred = (
-        panel[panel["date"] <= as_of_date].copy()
-        if as_of_date is not None
-        else panel
+        panel[panel["date"] <= as_of_date].copy() if as_of_date is not None else panel
     )
 
     st.info(
@@ -192,7 +190,9 @@ def _run_prediction(
                 )
         if "date" in latest.columns:
             pred["pred_date"] = (
-                latest.set_index("symbol").reindex(pred["symbol"])["date"].dt.date.values
+                latest.set_index("symbol")
+                .reindex(pred["symbol"])["date"]
+                .dt.date.values
             )
 
         all_preds.append(pred)
@@ -230,7 +230,9 @@ def _run_prediction(
     if as_of_date is not None:
         trade_date = as_of_date.strftime("%Y%m%d")
     else:
-        trade_date = datetime.now(_dt.timezone(_dt.timedelta(hours=8))).strftime("%Y%m%d")
+        trade_date = datetime.now(_dt.timezone(_dt.timedelta(hours=8))).strftime(
+            "%Y%m%d"
+        )
     report_path = predict_only._write_report(
         trade_date, ic_by_board, filtered, preds, bundles
     )
@@ -238,7 +240,9 @@ def _run_prediction(
     # 个股预测 vs 实际 (仅指定股票 + 历史基准日时回算质量)
     quality = None
     if symbols and as_of_date is not None and "pred_date" in preds.columns:
-        as_of_rows = preds[["symbol", "pred_date"]].rename(columns={"pred_date": "date"})
+        as_of_rows = preds[["symbol", "pred_date"]].rename(
+            columns={"pred_date": "date"}
+        )
         actual = _actual_forward_returns(panel, as_of_rows)
         q = preds.merge(actual, on="symbol", how="left")
         for k in (3, 5, 10):
@@ -758,10 +762,24 @@ def _render_prediction_tab(pred_result: dict | None) -> None:
                 else "—"
             )
         cols = [
-            "symbol", "名称", "board", "industry", "预测日", "close",
-            "pred_ret_3d", "actual_ret_3d", "gap_3d", "h3d",
-            "pred_ret_5d", "actual_ret_5d", "gap_5d", "h5d",
-            "pred_ret_10d", "actual_ret_10d", "gap_10d", "h10d",
+            "symbol",
+            "名称",
+            "board",
+            "industry",
+            "预测日",
+            "close",
+            "pred_ret_3d",
+            "actual_ret_3d",
+            "gap_3d",
+            "h3d",
+            "pred_ret_5d",
+            "actual_ret_5d",
+            "gap_5d",
+            "h5d",
+            "pred_ret_10d",
+            "actual_ret_10d",
+            "gap_10d",
+            "h10d",
         ]
         cols = [c for c in cols if c in q.columns]
         disp = q[cols].sort_values("symbol").reset_index(drop=True)
@@ -796,8 +814,7 @@ def _render_prediction_tab(pred_result: dict | None) -> None:
                 )
         if hit_rows:
             st.caption(
-                "方向命中率 = 预测涨跌方向与真实涨跌方向一致的比例 "
-                "(仅计已成熟样本)"
+                "方向命中率 = 预测涨跌方向与真实涨跌方向一致的比例 (仅计已成熟样本)"
             )
             st.dataframe(
                 pd.DataFrame(hit_rows), use_container_width=True, hide_index=True
@@ -808,8 +825,14 @@ def _render_prediction_tab(pred_result: dict | None) -> None:
             val_cols = [
                 c
                 for c in [
-                    "symbol", "close", "ATR_pct", "adv20", "turnover_rate",
-                    "amount", "prob_up", "pain_prob",
+                    "symbol",
+                    "close",
+                    "ATR_pct",
+                    "adv20",
+                    "turnover_rate",
+                    "amount",
+                    "prob_up",
+                    "pain_prob",
                 ]
                 if c in q.columns
             ]

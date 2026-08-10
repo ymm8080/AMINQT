@@ -683,7 +683,11 @@ class TestModulePerfQuality:
         assert row["n"] == 3
         assert row["real_mean"] == pytest.approx(0.04 / 3)
         assert row["hit_rate"] == pytest.approx(2 / 3)
-        assert pd.isna(row["pred_mean"]) and pd.isna(row["bias"]) and pd.isna(row["rank_ic"])
+        assert (
+            pd.isna(row["pred_mean"])
+            and pd.isna(row["bias"])
+            and pd.isna(row["rank_ic"])
+        )
         mod = mp.quality_by_module(p, "3d")
         assert len(mod) == 1 and pd.isna(mod.iloc[0]["pred_mean"])
         d = mp.module_daily_quality(p, "3d")

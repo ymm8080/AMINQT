@@ -15,8 +15,13 @@ def _panel(
     """构造合成面板: 每 symbol 连续交易日, close_hfq 递增."""
     if dates is None:
         dates = [
-            "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05",
-            "2024-01-08", "2024-01-09", "2024-01-10",
+            "2024-01-02",
+            "2024-01-03",
+            "2024-01-04",
+            "2024-01-05",
+            "2024-01-08",
+            "2024-01-09",
+            "2024-01-10",
         ]
     dts = pd.to_datetime(dates)
     rows = []
@@ -90,7 +95,9 @@ def test_load_panel_caps_as_of_date(monkeypatch, tmp_path):
     assert capped["date"].max().strftime("%Y-%m-%d") == "2024-01-03"
 
     # symbol + 日期双过滤
-    one = page_eval._load_panel(symbols=["600519"], as_of_date=pd.Timestamp("2024-01-04"))
+    one = page_eval._load_panel(
+        symbols=["600519"], as_of_date=pd.Timestamp("2024-01-04")
+    )
     assert set(one["symbol"]) == {"600519"}
     assert one["date"].nunique() == 3
 

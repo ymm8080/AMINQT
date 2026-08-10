@@ -410,10 +410,15 @@ def _render_forecast_quality() -> None:
     c_scope, c_hz, c_topk = st.columns(3)
     with c_scope:
         scope = st.radio(
-            "范围", ["交付短名单", "全市场底稿", "全部"], horizontal=True, key="fq_scope"
+            "范围",
+            ["交付短名单", "全市场底稿", "全部"],
+            horizontal=True,
+            key="fq_scope",
         )
     with c_hz:
-        horizon = st.radio("持有视界", ["3d", "5d", "10d"], horizontal=True, key="fq_horizon")
+        horizon = st.radio(
+            "持有视界", ["3d", "5d", "10d"], horizontal=True, key="fq_horizon"
+        )
     with c_topk:
         topk = st.selectbox(
             "Top-N (每日模块内)", [5, 10, 20, "全部"], index=1, key="fq_topk"
@@ -506,7 +511,9 @@ def _render_forecast_quality() -> None:
     view = matured[matured["date"].isin(sel_dates)].copy()
     daily = mp.module_daily_quality(view, horizon)
 
-    st.subheader(f"{sel} — {horizon} 预测质量 (共 {len(dates)} 成熟日, 已选 {len(sel_dates)})")
+    st.subheader(
+        f"{sel} — {horizon} 预测质量 (共 {len(dates)} 成熟日, 已选 {len(sel_dates)})"
+    )
     q = mp.quality_by_module(view, horizon)
     if not q.empty:
         row = q.iloc[0]
@@ -514,8 +521,13 @@ def _render_forecast_quality() -> None:
         c1.metric("样本", f"{int(row['n'])}")
         c2.metric("命中率", f"{row['hit_rate']:.1%}")
         c3.metric("实际均值", f"{row['real_mean']:+.2%}")
-        c4.metric("预测均值", f"{row['pred_mean']:+.2%}" if pd.notna(row["pred_mean"]) else "—")
-        c5.metric("RankIC", f"{row['rank_ic']:+.3f}" if pd.notna(row["rank_ic"]) else "—")
+        c4.metric(
+            "预测均值",
+            f"{row['pred_mean']:+.2%}" if pd.notna(row["pred_mean"]) else "—",
+        )
+        c5.metric(
+            "RankIC", f"{row['rank_ic']:+.3f}" if pd.notna(row["rank_ic"]) else "—"
+        )
 
     if not daily.empty:
         st.markdown("**每日预测 vs 实际 平均收益**")

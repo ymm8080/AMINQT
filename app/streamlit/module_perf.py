@@ -291,7 +291,11 @@ def quality_by_family(perf: pd.DataFrame, horizon: str) -> pd.DataFrame:
                 "rank_ic": _daily_rank_ic(g, gcol, rcol) if has_g else np.nan,
             }
         )
-    return pd.DataFrame(rows).sort_values("real_mean", ascending=False).reset_index(drop=True)
+    return (
+        pd.DataFrame(rows)
+        .sort_values("real_mean", ascending=False)
+        .reset_index(drop=True)
+    )
 
 
 def quality_by_module(perf: pd.DataFrame, horizon: str) -> pd.DataFrame:
@@ -321,7 +325,11 @@ def quality_by_module(perf: pd.DataFrame, horizon: str) -> pd.DataFrame:
                 "rank_ic": _daily_rank_ic(g, gcol, rcol) if has_g else np.nan,
             }
         )
-    return pd.DataFrame(rows).sort_values("real_mean", ascending=False).reset_index(drop=True)
+    return (
+        pd.DataFrame(rows)
+        .sort_values("real_mean", ascending=False)
+        .reset_index(drop=True)
+    )
 
 
 def module_daily_quality(perf: pd.DataFrame, horizon: str) -> pd.DataFrame:
