@@ -34,7 +34,7 @@ class TestRefreshCheckpoints:
         mod = _load_refresh_module(monkeypatch)
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
-        monkeypatch.setattr(mod.pd, "read_parquet", lambda path: _tiny_board("main"))
+        monkeypatch.setattr(mod, "load_panel_v3", lambda **kw: _tiny_board("main"))
         main_df = _tiny_board("main")
         dual_df = _tiny_board("dual")
         monkeypatch.setattr(
@@ -67,7 +67,7 @@ class TestRefreshCheckpoints:
         mod = _load_refresh_module(monkeypatch)
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
-        monkeypatch.setattr(mod.pd, "read_parquet", lambda path: _tiny_board("main"))
+        monkeypatch.setattr(mod, "load_panel_v3", lambda **kw: _tiny_board("main"))
         monkeypatch.setattr(
             mod.CleaningPipeline,
             "run_train",
@@ -191,7 +191,7 @@ class TestRefreshFingerprintSkip:
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
         monkeypatch.setattr(
-            mod.pd, "read_parquet", lambda path, **kw: _tiny_board("main")
+            mod, "load_panel_v3", lambda **kw: _tiny_board("main")
         )
         monkeypatch.setattr(
             mod.CleaningPipeline,

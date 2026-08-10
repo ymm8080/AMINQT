@@ -756,7 +756,7 @@ def ema_smooth(res: pd.DataFrame, sel_date: pd.Timestamp, module: str) -> pd.Dat
 
 def _sel_reason(r: pd.Series) -> str:
     p = "n/a" if pd.isna(r["pred_prob_3d"]) else f"{r['pred_prob_3d']:.0%}"
-    m3 = "n/a" if pd.isna(r["pred_mag_3d"]) else f"{r['pred_mag_3d']:+.1%}"
+    m3 = "n/a" if pd.isna(r["pred_ret_3d"]) else f"{r['pred_ret_3d']:+.1%}"
     return f"{r['symbol']}(T+3 {m3}/{p})"
 
 
@@ -766,12 +766,15 @@ def select_confident(res: pd.DataFrame, prob_min: float = 0.0) -> pd.DataFrame:
     2026-08-09 删 2d 视界: 原 T+2/T+3 联合门 (2026-08-07) 退化为纯 T+3 —
     2d 视界及其 pred_mag_2d 不再存在, 副门 (T+2 强看涨) 随之删除 (config
     SHORTLIST_SCORE.select_gate):
-      保留 ⇔ T+3 预期涨幅 > t3_min
+      保留 ⇔ T+3 可兑现净预期涨幅 (pred_ret_3d, close-to-close) > t3_min
+
+    2026-08-10: 门从 pred_mag_3d (MFE 最大浮盈, 虚高不可兑现) 改为 pred_ret_3d
+    (label_pm_3_net close-to-close 净预期, 成本已扣) — 与 legacy 收益闸一致.
 
     概率口径 (用户 2026-08-06): 概率=逐股自然概率 (P(该股达到固定绝对目标)), 每股唯一
     真值. 原 ">60%" 门槛 (基于 P(MFE>0)≈90% 旧口径) 不可达, 故默认不设概率门槛.
     保留 prob_min 参数以便后续收紧. 主视界 T+3 (2026-08-05 用户: 短持 3 天)."""
-    g3 = res["pred_mag_3d"]
+    g3 = res["pred_ret_3d"]
     sg = SHORTLIST_SCORE.get("select_gate", {})
     t3_min = sg.get("t3_min", 0.0)
     keep = g3 > t3_min

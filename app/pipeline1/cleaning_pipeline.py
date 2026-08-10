@@ -114,6 +114,28 @@ class CleaningConfig:
     delisted_virtual_ret: float = -0.5  # 退市股虚拟 T+1 收益 (安全网 #14)
 
 
+def load_panel_v3(path=None) -> pd.DataFrame:
+    """V3 面板读取 + 行级预过滤 (amount>=min_amount 且 非停牌), pyarrow 下推.
+
+    与 run_train step2(amount>=min_amount)+step3(剔停牌) 同口径: 只删 run_train
+    本就要删的行, 输出行集与整表读取后 run_train 完全一致, 但读取内存峰值少 ~20%
+    (全市场归档保留, 训练/重建检查点侧在读取时跳过不达标行).
+    列全读 — FeatureEngineV35 依赖全部面板列. 阈值取自 CleaningConfig 默认 (单一来源).
+    """
+    import pyarrow.parquet as pq
+
+    from config.settings import PANEL_V3_PATH
+
+    cfg = CleaningConfig()
+    return pq.read_table(
+        str(path or PANEL_V3_PATH),
+        filters=[
+            ("amount", ">=", cfg.min_amount),
+            ("is_suspended", "=", False),
+        ],
+    ).to_pandas()
+
+
 class CleaningPipeline:
     """清洗 0→4. 输入: 全市场日线面板 (多 symbol × 多 date, 含 data_supply 标准列)."""
 

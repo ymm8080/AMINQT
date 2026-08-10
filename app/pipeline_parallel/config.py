@@ -15,8 +15,9 @@ import os
 from dataclasses import dataclass, field
 
 # ── 双头验收阈值 ──
-MIN_WINRATE = 0.55  # 上涨概率下限 (默认/主板)
-MIN_MAG = 0.0  # 平均净收益下限 (默认/主板)
+# 验收绝对阈值 (默认/主板; 2026-08-10 重锚: 须 ≥ 随机且盈利)
+MIN_WINRATE = 0.50  # 上涨概率下限 (≥ 随机 50%)
+MIN_MAG = 0.01  # 平均净收益下限 (≥ 1%)
 
 # OOS 样本外窗口 (2026-08-04 用户: "BACKTESTING CONSISTS OF 6M, 3M, 10D").
 # 6m (≈126 交易日, 主验收) + 3m (≈63 交易日) 两个聚合回测;
@@ -37,13 +38,16 @@ BOARD_PREFIXES: dict[str, tuple[str, ...]] = {
     "main": ("60", "00"),
     "dual": ("30", "68"),
 }
-# 每板块双头阈值 (2026-08-04 用户: MAIN/DUAL 幅度阈值必须不同).
-# min_mag 锚定各板块无条件基准 T+2 幅度 (实测): main +2.96%, dual +4.25%
-# (dual 涨跌幅 20% 上限 > main 10% → 潜力更高, 阈值更高).
-# 验收 = 任一视界 胜率>=min_winrate 且 幅度>min_mag → 保留 (需跑赢自己板块的"闭眼全买"基准).
+# 每板块双头验收 (2026-08-10 重锚): 08-07 c2c 切换 (28a00bc4) 把验收标签从 MFE 换成
+# label_pm_{h}d_net, 但阈值仍是 MFE 时代绝对值 (MFE 全池基准胜率~90%/幅度+8%,
+# c2c 基准胜率~45%/幅度~0) → 旧 0.55/3-4% 绝对闸结构上不可达, 全部 6m OOS 误报"未过".
+# 重锚为交易者诚实基准: 胜率 ≥ 50% (至少赢过随机抛硬币/闭眼全买) 且 平均净收益 ≥ 1%.
+# 不换回 MFE — MFE 是窗口内最高价"触摸天花板", 实得卖不到, 用它会虚高过闸.
+# dual 幅度阈值仍高于 main (2026-08-04 用户: 20cm 潜力更高), 但都远低于旧 MFE 锚.
+# 验收 = 任一视界 胜率>=min_winrate 且 幅度>min_mag → 保留.
 BOARD_THRESHOLDS: dict[str, dict] = {
-    "main": {"min_winrate": 0.55, "min_mag": 0.03, "label": "主板"},
-    "dual": {"min_winrate": 0.55, "min_mag": 0.04, "label": "创业板+科创板"},
+    "main": {"min_winrate": 0.50, "min_mag": 0.01, "label": "主板"},
+    "dual": {"min_winrate": 0.50, "min_mag": 0.015, "label": "创业板+科创板"},
 }
 
 

@@ -236,9 +236,11 @@ SHORTLIST_SCORE = {
     "gain_w": 0.50,   # 预期涨幅权重
     "prob_w": 0.50,   # 达到概率(convincing rate)权重
     # 入选门 = 纯 T+3 门 (2026-08-09 删 2d 视界: 原 T+2/T+3 联合门退化)
-    # 保留 ⇔ T+3 预期涨幅 > t3_min
+    # 保留 ⇔ T+3 可兑现净预期涨幅 (pred_ret_3d, close-to-close, 成本已扣) > t3_min
+    # 2026-08-10: 门基准从 pred_mag_3d (MFE 最大浮盈, 虚高) 改为 pred_ret_3d (c2c 实得),
+    # 与 legacy 收益闸口径一致 — 只放行"值得买入、有可兑现预期收益"的个股.
     "select_gate": {
-        "t3_min": 0.00,   # T+3 预期涨幅下限 (原 select_confident 硬门)
+        "t3_min": 0.00,   # T+3 c2c 净预期涨幅下限 (原 select_confident 硬门)
     },
 }
 

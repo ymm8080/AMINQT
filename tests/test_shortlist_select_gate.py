@@ -1,8 +1,10 @@
 """Tests for scripts/_shortlist_t5_t10.select_confident — 纯 T+3 入选门 (2026-08-09).
 
 背景: 2026-08-09 删 2d 视界后, 原 T+2/T+3 联合门 (2026-08-07) 退化为纯 T+3 门:
-  保留 ⇔ pred_mag_3d > t3_min (config SHORTLIST_SCORE.select_gate.t3_min, 默认 0.0).
-  pred_mag_3d 为 0 或负 → 剔除 (严格大于).
+  保留 ⇔ pred_ret_3d > t3_min (config SHORTLIST_SCORE.select_gate.t3_min, 默认 0.0).
+  2026-08-10: 门基准从 pred_mag_3d (MFE 最大浮盈, 虚高) 改为 pred_ret_3d
+  (close-to-close 可兑现净预期, 成本已扣) — 与 legacy 收益闸口径一致.
+  pred_ret_3d 为 0 或负 → 剔除 (严格大于).
 """
 
 import importlib.util
@@ -20,12 +22,12 @@ _spec.loader.exec_module(S)
 
 
 def _cand(rows):
-    """rows: list of dict(symbol, mag3, prob3). prob3 默认 0.5."""
+    """rows: list of dict(symbol, ret3, prob3). prob3 默认 0.5. ret3 = c2c 净预期."""
     data = [
         {
             "symbol": str(r[0]),
             "board": "dual",
-            "pred_mag_3d": r[1],
+            "pred_ret_3d": r[1],
             "pred_prob_3d": r[2] if len(r) > 2 else 0.5,
         }
         for r in rows
