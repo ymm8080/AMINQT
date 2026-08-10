@@ -423,12 +423,12 @@ class TestDynamicEntry:
         gen = ListGenerator(entry_prob=0.60)
         scored = gen.compute_scores(cands)
         # 板块内 base_rate = 自家 prob 均值 (main 0.495 / GEM 0.60), 非全市场混合 0.5475
-        assert scored.loc[scored["symbol"] == "600001", "base_rate"].iloc[0] == pytest.approx(
-            0.495
-        )
-        assert scored.loc[scored["symbol"] == "300001", "base_rate"].iloc[0] == pytest.approx(
-            0.60
-        )
+        assert scored.loc[scored["symbol"] == "600001", "base_rate"].iloc[
+            0
+        ] == pytest.approx(0.495)
+        assert scored.loc[scored["symbol"] == "300001", "base_rate"].iloc[
+            0
+        ] == pytest.approx(0.60)
         passed = gen.entry_filter(scored, market_state="range")
         # 每板块各保留"高于自家基线"者: main 600001 / GEM 300001; 低于自家基线者剔
         assert sorted(passed["symbol"]) == ["300001", "600001"]

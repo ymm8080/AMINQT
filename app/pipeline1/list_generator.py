@@ -157,7 +157,9 @@ class ListGenerator:
             for b, m in board_mean.items():
                 key = str(b)
                 self._base_rate_history.setdefault(key, []).append(float(m))
-                br[key] = float(np.mean(self._base_rate_history[key][-BASE_RATE_WINDOW:]))
+                br[key] = float(
+                    np.mean(self._base_rate_history[key][-BASE_RATE_WINDOW:])
+                )
             df["base_rate"] = df["board"].astype(str).map(br)
         else:
             daily_mean = float(df["compound_prob"].mean())
