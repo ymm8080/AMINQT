@@ -29,6 +29,7 @@ from app.pipeline1.param_tuner import (
     ParamTuner,
 )
 from app.rules.config import TUNABLE_BOUNDS
+from config.settings import PANEL_V3_PATH
 
 from . import data_service as ds
 from .components import (
@@ -53,33 +54,105 @@ _MODE_LABELS = {
 # ══════════════════════════════════════════════════════════
 
 
-def _load_panel(symbols: list[str] | None = None) -> pd.DataFrame | None:
-    """加载 v3 面板, 可选按股票代码过滤."""
-    path = "data/panel_full_enriched_v3.parquet"
+def _load_panel(
+    symbols: list[str] | None = None,
+    as_of_date: pd.Timestamp | None = None,
+) -> pd.DataFrame | None:
+    """加载 v3 面板, 可选按股票代码过滤 / 按预测基准日截断 (只用该日及之前数据)."""
+    path = PANEL_V3_PATH
     if not os.path.exists(path):
         return None
     panel = pd.read_parquet(path)
+    panel["date"] = pd.to_datetime(panel["date"])
     if symbols:
         panel = panel[panel["symbol"].isin(symbols)]
+    if as_of_date is not None:
+        panel = panel[panel["date"] <= as_of_date]
     return panel
 
 
-def _run_prediction(symbols: list[str] | None = None) -> dict | None:
-    """运行预测管道, 返回结果 dict."""
+def _panel_date_bounds() -> tuple[date | None, date | None]:
+    """面板日期范围 (只读 date 列, 轻量); 文件缺失返回 (None, None)."""
+    if not os.path.exists(PANEL_V3_PATH):
+        return None, None
+    try:
+        import pyarrow.parquet as pq
+
+        t = pq.read_table(PANEL_V3_PATH, columns=["date"])
+        d = pd.to_datetime(t.to_pandas()["date"])
+        return d.min().date(), d.max().date()
+    except Exception:
+        return None, None
+
+
+def _actual_forward_returns(
+    panel: pd.DataFrame, as_of_rows: pd.DataFrame
+) -> pd.DataFrame:
+    """回算每只股票基准日之后 3/5/10 个交易日的真实涨幅 (面板回看, 非前瞻).
+
+    Args:
+        panel: 全历史面板 (至少含 date/symbol/close_hfq, 不截断).
+        as_of_rows: DataFrame(symbol, date) — 各股预测基准交易日.
+
+    Returns:
+        DataFrame: symbol, close_asof, actual_ret_3d/5d/10d (未来数据不足 → NaN).
+    """
+    p = panel[["date", "symbol", "close_hfq"]].dropna(subset=["close_hfq"]).copy()
+    p["date"] = pd.to_datetime(p["date"])
+    p = p.sort_values(["symbol", "date"]).reset_index(drop=True)
+    p["_dseq"] = p.groupby("symbol").cumcount()
+    as_of = as_of_rows.copy()
+    as_of["date"] = pd.to_datetime(as_of["date"])
+    as_of = as_of.merge(
+        p[["symbol", "date", "_dseq", "close_hfq"]],
+        on=["symbol", "date"],
+        how="left",
+    ).rename(columns={"_dseq": "_base_dseq", "close_hfq": "close_asof"})
+    for k in (3, 5, 10):
+        fut = p[["symbol", "_dseq", "close_hfq"]].rename(
+            columns={"_dseq": "_base_dseq", "close_hfq": f"_close_{k}d"}
+        )
+        fut["_base_dseq"] = fut["_base_dseq"] - k
+        as_of = as_of.merge(fut, on=["symbol", "_base_dseq"], how="left")
+        as_of[f"actual_ret_{k}d"] = as_of[f"_close_{k}d"] / as_of["close_asof"] - 1
+    keep = ["symbol", "close_asof"] + [f"actual_ret_{k}d" for k in (3, 5, 10)]
+    return as_of[keep]
+
+
+def _run_prediction(
+    symbols: list[str] | None = None,
+    as_of_date: pd.Timestamp | None = None,
+    use_latest: bool = True,
+) -> dict | None:
+    """运行预测管道, 返回结果 dict.
+
+    as_of_date: 预测基准日 (数据截止日). 提供时只用该日及之前的数据预测,
+    并回算实际涨幅做 预测 vs 实际 质量对比 (面板含未来历史, 非前瞻).
+    """
     from app.pipeline1.cleaning_pipeline import CleaningPipeline
     from app.pipeline1.feature_engine_v35 import FeatureEngineV35
     from app.pipeline1.predict_runner import resolve_current_bundles
     from app.pipeline1.predictor import V35Predictor
 
-    panel = _load_panel(symbols)
+    panel = _load_panel(symbols)  # 全量面板 (回测/实际涨幅用, 不截断)
     if panel is None or len(panel) == 0:
         st.error("面板未找到或指定股票不在面板中")
         return None
+    panel_pred = (
+        panel[panel["date"] <= as_of_date].copy() if as_of_date is not None else panel
+    )
 
-    st.info(f"面板: {panel['symbol'].nunique()} 只股票, {len(panel)} 行")
+    st.info(
+        f"面板: {panel['symbol'].nunique()} 只股票, 预测行 {len(panel_pred)}"
+        + (
+            f" | 基准日 {as_of_date.date()}"
+            if as_of_date is not None
+            else " | 最新数据"
+        )
+    )
 
     cleaner = CleaningPipeline()
-    main_df, dual_df, valve = cleaner.run_inference(panel)
+    main_df, dual_df, valve = cleaner.run_inference(panel_pred)
     st.info(f"清洗: main={len(main_df)} dual={len(dual_df)} valve={valve}")
     if valve == "empty":
         st.warning("流动性安全阀触发, 无候选")
@@ -115,6 +188,12 @@ def _run_prediction(symbols: list[str] | None = None) -> dict | None:
                 pred[col] = (
                     latest.set_index("symbol").reindex(pred["symbol"])[col].values
                 )
+        if "date" in latest.columns:
+            pred["pred_date"] = (
+                latest.set_index("symbol")
+                .reindex(pred["symbol"])["date"]
+                .dt.date.values
+            )
 
         all_preds.append(pred)
 
@@ -148,10 +227,32 @@ def _run_prediction(symbols: list[str] | None = None) -> dict | None:
 
     import predict_only
 
-    trade_date = datetime.now(_dt.timezone(_dt.timedelta(hours=8))).strftime("%Y%m%d")
+    if as_of_date is not None:
+        trade_date = as_of_date.strftime("%Y%m%d")
+    else:
+        trade_date = datetime.now(_dt.timezone(_dt.timedelta(hours=8))).strftime(
+            "%Y%m%d"
+        )
     report_path = predict_only._write_report(
         trade_date, ic_by_board, filtered, preds, bundles
     )
+
+    # 个股预测 vs 实际 (仅指定股票 + 历史基准日时回算质量)
+    quality = None
+    if symbols and as_of_date is not None and "pred_date" in preds.columns:
+        as_of_rows = preds[["symbol", "pred_date"]].rename(
+            columns={"pred_date": "date"}
+        )
+        actual = _actual_forward_returns(panel, as_of_rows)
+        q = preds.merge(actual, on="symbol", how="left")
+        for k in (3, 5, 10):
+            q[f"gap_{k}d"] = q[f"actual_ret_{k}d"] - q[f"pred_ret_{k}d"]
+            q[f"hit_{k}d"] = np.where(
+                q[f"actual_ret_{k}d"].notna() & (q[f"pred_ret_{k}d"] != 0),
+                np.sign(q[f"pred_ret_{k}d"]) == np.sign(q[f"actual_ret_{k}d"]),
+                np.nan,
+            )
+        quality = q
 
     return {
         "ic": ic_by_board,
@@ -159,6 +260,12 @@ def _run_prediction(symbols: list[str] | None = None) -> dict | None:
         "all_preds": preds,
         "report_path": report_path,
         "panel": panel,
+        "quality": quality,
+        "meta": {
+            "symbols": symbols,
+            "as_of_date": as_of_date,
+            "use_latest": use_latest,
+        },
     }
 
 
@@ -372,6 +479,29 @@ def render() -> None:
             if user_input:
                 symbols = [s.strip() for s in user_input.split(",") if s.strip()]
 
+        # 预测基准日 (数据截止日): 默认最新数据, 可切换历史基准日回看预测质量
+        min_date, max_date = _panel_date_bounds()
+        use_latest = st.checkbox(
+            "使用最新数据",
+            value=True,
+            key="pred_use_latest",
+            help="勾选 = 用面板最新数据预测. 取消 = 选历史基准日, "
+            "只用该日及之前的数据 (无未来信息), 并回算 预测 vs 实际 质量.",
+        )
+        as_of_date = None
+        if not use_latest and max_date is not None:
+            as_of_input = st.date_input(
+                "预测基准日 (数据截止日)",
+                value=max_date,
+                min_value=min_date,
+                max_value=max_date,
+                key="pred_as_of",
+            )
+            if as_of_input:
+                as_of_date = pd.Timestamp(as_of_input)
+        elif not use_latest:
+            st.warning("面板缺失, 无法选择历史基准日")
+
         st.divider()
         st.subheader("回测设置")
         engine_choice = st.selectbox(
@@ -379,15 +509,10 @@ def render() -> None:
             ["V3.5 (轻量)", "V5.2 (完整风控)"],
             help="V3.5: 基础退出规则; V5.2: ATR止损/仓位模式/日保险丝",
         )
-        # 回测日期段: 默认最近6个完整月
+        # 回测日期段移入「回测绩效」Tab 内选择; 此处仅从 session_state 读, 供 多模式对比/参数调优 共用
         default_start, default_end = _default_backtest_range()
-        col_d1, col_d2 = st.columns(2)
-        with col_d1:
-            bt_start = st.date_input("起始日期", value=default_start, key="bt_start")
-        with col_d2:
-            bt_end = st.date_input("终止日期", value=default_end, key="bt_end")
-        if bt_start >= bt_end:
-            st.warning("起始日期必须早于终止日期")
+        bt_start = st.session_state.get("bt_start", default_start)
+        bt_end = st.session_state.get("bt_end", default_end)
         use_v52 = "V5.2" in engine_choice
 
         top_n = st.number_input("Top N", 5, 20, 15)
@@ -416,7 +541,7 @@ def render() -> None:
     with col_run:
         if st.button("▶ 运行预测", type="primary", key="btn_run_pred"):
             with st.spinner("预测运行中 (加载面板 → 清洗 → 特征 → 推理)..."):
-                results = _run_prediction(symbols)
+                results = _run_prediction(symbols, as_of_date, use_latest)
             if results:
                 st.session_state["pred_result"] = results
                 st.success(
@@ -451,8 +576,6 @@ def render() -> None:
     with tab_bt:
         _render_backtest_tab(
             engine_choice,
-            bt_start,
-            bt_end,
             use_v52,
             pred_result,
             top_n,
@@ -604,6 +727,126 @@ def _render_prediction_tab(pred_result: dict | None) -> None:
 
     st.success(f"报告已保存: {pred_result['report_path']}")
 
+    # ---------- 个股预测 vs 实际 (回看质量) ----------
+    quality = pred_result.get("quality")
+    meta = pred_result.get("meta", {})
+    as_of = meta.get("as_of_date")
+    if quality is not None and len(quality):
+        st.divider()
+        st.subheader("个股预测 vs 实际 (回看质量)")
+        as_of_label = as_of.date() if as_of is not None else "最新"
+        st.caption(
+            f"预测基准日: {as_of_label} | 实际 = 基准日之后 3/5/10 个交易日的真实涨幅 "
+            "(面板回看, 非前瞻); gap = 实际 − 预测 (>0 低估 / <0 高估); "
+            "✓ 方向命中 / ✗ 方向未中 / — 未成熟"
+        )
+
+        # 指定了但未被预测的股票 (清洗/流动性/不在面板)
+        specified = meta.get("symbols") or []
+        if specified:
+            dropped = [s for s in specified if s not in set(quality["symbol"])]
+            if dropped:
+                st.warning(
+                    "以下代码未被预测 (可能未通过清洗/流动性/不在面板): "
+                    + ", ".join(dropped)
+                )
+
+        names = ds.stock_names()
+        q = quality.copy()
+        q["名称"] = q["symbol"].map(names)
+        q["预测日"] = q["pred_date"]
+        for k in (3, 5, 10):
+            q[f"h{k}d"] = (
+                q[f"hit_{k}d"].map({True: "✓", False: "✗"}).fillna("—")
+                if f"hit_{k}d" in q.columns
+                else "—"
+            )
+        cols = [
+            "symbol",
+            "名称",
+            "board",
+            "industry",
+            "预测日",
+            "close",
+            "pred_ret_3d",
+            "actual_ret_3d",
+            "gap_3d",
+            "h3d",
+            "pred_ret_5d",
+            "actual_ret_5d",
+            "gap_5d",
+            "h5d",
+            "pred_ret_10d",
+            "actual_ret_10d",
+            "gap_10d",
+            "h10d",
+        ]
+        cols = [c for c in cols if c in q.columns]
+        disp = q[cols].sort_values("symbol").reset_index(drop=True)
+        fmt = {
+            "close": "{:.2f}",
+        }
+        for k in (3, 5, 10):
+            for base in ("pred_ret", "actual_ret", "gap"):
+                col = f"{base}_{k}d"
+                if col in disp.columns:
+                    fmt[col] = "{:+.2%}"
+        st.dataframe(
+            disp.style.format(fmt, na_rep="—"),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        # 方向命中率汇总
+        hit_rows = []
+        for k in (3, 5, 10):
+            col = f"hit_{k}d"
+            if col not in q.columns:
+                continue
+            sub = q[col].dropna().astype(bool)
+            if len(sub):
+                hit_rows.append(
+                    {
+                        "视界": f"{k}d",
+                        "已成熟样本": len(sub),
+                        "方向命中率": f"{sub.sum() / len(sub):.0%}",
+                    }
+                )
+        if hit_rows:
+            st.caption(
+                "方向命中率 = 预测涨跌方向与真实涨跌方向一致的比例 (仅计已成熟样本)"
+            )
+            st.dataframe(
+                pd.DataFrame(hit_rows), use_container_width=True, hide_index=True
+            )
+
+        # 基准日值明细 (每只股票的当日特征值)
+        with st.expander("基准日特征值明细"):
+            val_cols = [
+                c
+                for c in [
+                    "symbol",
+                    "close",
+                    "ATR_pct",
+                    "adv20",
+                    "turnover_rate",
+                    "amount",
+                    "prob_up",
+                    "pain_prob",
+                ]
+                if c in q.columns
+            ]
+            if val_cols:
+                vdisp = q[val_cols].copy()
+                vdisp.insert(1, "名称", vdisp["symbol"].map(names))
+                st.dataframe(
+                    vdisp.style.format(
+                        {c: "{:.4f}" for c in val_cols if c != "symbol"}
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
 
 # ══════════════════════════════════════════════════════════
 # Tab 2: 回测绩效 (P&L)
@@ -612,8 +855,6 @@ def _render_prediction_tab(pred_result: dict | None) -> None:
 
 def _render_backtest_tab(
     engine_choice,
-    bt_start,
-    bt_end,
     use_v52,
     pred_result,
     top_n,
@@ -626,6 +867,23 @@ def _render_backtest_tab(
     horizon,
     benchmark_sel,
 ) -> None:
+    # 回测日期段在 Tab 内选择 (写 session_state, 供 多模式对比/参数调优 共用)
+    default_start, default_end = _default_backtest_range()
+    c_s, c_e = st.columns(2)
+    with c_s:
+        bt_start = st.date_input(
+            "回测起始日期",
+            value=st.session_state.get("bt_start", default_start),
+            key="bt_start",
+        )
+    with c_e:
+        bt_end = st.date_input(
+            "回测终止日期",
+            value=st.session_state.get("bt_end", default_end),
+            key="bt_end",
+        )
+    if bt_start >= bt_end:
+        st.warning("起始日期必须早于终止日期")
     engine_tag = "V5.2" if use_v52 else "V3.5"
     data_tag = "预测数据" if pred_result else "演示数据"
     st.info(f"引擎: {engine_tag} | 数据: {data_tag} | 日期: {bt_start} → {bt_end}")

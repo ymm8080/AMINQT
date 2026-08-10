@@ -241,3 +241,150 @@ def daily_mean_return(perf: pd.DataFrame, horizon: str) -> pd.DataFrame:
     )
     d.columns = ["module_id", "date", "mean_ret", "n"]
     return d.sort_values(["module_id", "date"]).reset_index(drop=True)
+
+
+# ───────────────────────── 预测质量检查 (预测 vs 实际) ─────────────────────────
+_QUALITY_COLS = ["n", "dates", "pred_mean", "real_mean", "bias", "hit_rate", "rank_ic"]
+
+
+def _daily_rank_ic(g: pd.DataFrame, gcol: str, rcol: str, min_n: int = 5) -> float:
+    """逐日横截面 Spearman(预测涨幅, 实际收益) 的平均; 单日样本 < min_n → 不计."""
+    ics = []
+    for _d, gg in g.groupby("date"):
+        pair = gg[[gcol, rcol]].dropna()
+        if len(pair) >= min_n:
+            v = pair.corr(method="spearman").iloc[0, 1]
+            if not np.isnan(v):
+                ics.append(v)
+    return float(np.nanmean(ics)) if ics else np.nan
+
+
+def quality_by_family(perf: pd.DataFrame, horizon: str) -> pd.DataFrame:
+    """系统 (family) 级预测质量汇总: 预测 vs 实际.
+
+    perf 由 compute_realized_returns 产出 (含 gain_{h}/real_{h}/date/family).
+    bias = 实际均值 − 预测均值 (>0 低估 / <0 高估); rank_ic = 逐日横截面 Spearman 平均.
+    无预测涨幅列的系统 (slow_bull 风控观察池) 仅实际表现可用 (n/hit_rate/real_mean),
+    预测相关列 (pred_mean/bias/rank_ic) 置 NaN.
+    """
+    gcol, rcol = f"gain_{horizon}", f"real_{horizon}"
+    cols = ["family"] + _QUALITY_COLS
+    if perf is None or perf.empty or rcol not in perf.columns:
+        return pd.DataFrame(columns=cols)
+    r = perf.dropna(subset=[rcol]).copy()
+    if r.empty:
+        return pd.DataFrame(columns=cols)
+    rows = []
+    for fam, g in r.groupby("family"):
+        has_g = gcol in g.columns and g[gcol].notna().any()
+        real_mean = g[rcol].mean()
+        pred_mean = g[gcol].mean() if has_g else np.nan
+        rows.append(
+            {
+                "family": fam,
+                "n": len(g),
+                "dates": g["date"].nunique(),
+                "pred_mean": pred_mean,
+                "real_mean": real_mean,
+                "bias": real_mean - pred_mean if has_g else np.nan,
+                "hit_rate": float((g[rcol] > 0).mean()),
+                "rank_ic": _daily_rank_ic(g, gcol, rcol) if has_g else np.nan,
+            }
+        )
+    return (
+        pd.DataFrame(rows)
+        .sort_values("real_mean", ascending=False)
+        .reset_index(drop=True)
+    )
+
+
+def quality_by_module(perf: pd.DataFrame, horizon: str) -> pd.DataFrame:
+    """模块级预测质量汇总 (module_id = family·version), 含 family 标签."""
+    gcol, rcol = f"gain_{horizon}", f"real_{horizon}"
+    cols = ["module_id", "family"] + _QUALITY_COLS
+    if perf is None or perf.empty or rcol not in perf.columns:
+        return pd.DataFrame(columns=cols)
+    r = perf.dropna(subset=[rcol]).copy()
+    if r.empty:
+        return pd.DataFrame(columns=cols)
+    rows = []
+    for mid, g in r.groupby("module_id"):
+        has_g = gcol in g.columns and g[gcol].notna().any()
+        real_mean = g[rcol].mean()
+        pred_mean = g[gcol].mean() if has_g else np.nan
+        rows.append(
+            {
+                "module_id": mid,
+                "family": g["family"].iloc[0] if "family" in g.columns else "",
+                "n": len(g),
+                "dates": g["date"].nunique(),
+                "pred_mean": pred_mean,
+                "real_mean": real_mean,
+                "bias": real_mean - pred_mean if has_g else np.nan,
+                "hit_rate": float((g[rcol] > 0).mean()),
+                "rank_ic": _daily_rank_ic(g, gcol, rcol) if has_g else np.nan,
+            }
+        )
+    return (
+        pd.DataFrame(rows)
+        .sort_values("real_mean", ascending=False)
+        .reset_index(drop=True)
+    )
+
+
+def module_daily_quality(perf: pd.DataFrame, horizon: str) -> pd.DataFrame:
+    """单模块逐日质量 (仅已成熟日期): n / 预测均值 / 实际均值 / 命中率.
+
+    perf 应为已按 module_id 过滤的行; 返回每个选股日一组, 供预测-vs-实际图.
+    无预测涨幅列 (slow_bull) → pred_mean 为 NaN.
+    """
+    gcol, rcol = f"gain_{horizon}", f"real_{horizon}"
+    cols = ["date", "n", "pred_mean", "real_mean", "hit_rate"]
+    if perf is None or perf.empty or rcol not in perf.columns:
+        return pd.DataFrame(columns=cols)
+    r = perf.dropna(subset=[rcol]).copy()
+    if r.empty:
+        return pd.DataFrame(columns=cols)
+    agg = {"n": (rcol, "size"), "real_mean": (rcol, "mean")}
+    if gcol in r.columns and r[gcol].notna().any():
+        agg["pred_mean"] = (gcol, "mean")
+    daily = r.groupby("date").agg(**agg).reset_index()
+    if "pred_mean" not in daily.columns:
+        daily["pred_mean"] = np.nan
+    up = (
+        r.assign(_up=(r[rcol] > 0).astype(float))
+        .groupby("date")["_up"]
+        .mean()
+        .reset_index()
+        .rename(columns={"_up": "hit_rate"})
+    )
+    daily = daily.merge(up, on="date", how="left")
+    return daily[cols].sort_values("date").reset_index(drop=True)
+
+
+def calibration_table(
+    perf: pd.DataFrame, horizon: str, bins: list[float] | None = None
+) -> pd.DataFrame:
+    """概率校准: 预测概率分桶 → 实际命中率/实际均值.
+
+    理想校准下桶内命中率 ≈ 桶概率; 显著偏低 → 概率高估.
+    """
+    pcol, rcol = f"prob_{horizon}", f"real_{horizon}"
+    cols = ["prob_bin", "n", "hit_rate", "real_mean"]
+    if perf is None or perf.empty or not {pcol, rcol}.issubset(perf.columns):
+        return pd.DataFrame(columns=cols)
+    r = perf.dropna(subset=[pcol, rcol]).copy()
+    if r.empty:
+        return pd.DataFrame(columns=cols)
+    edges = bins or [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0001]
+    r["_bin"] = pd.cut(r[pcol], edges, right=False)
+    g = r.groupby("_bin", observed=False)[rcol]
+    out = pd.DataFrame(
+        {
+            "prob_bin": [str(b) for b in g.groups],
+            "n": g.size().values,
+            "hit_rate": g.apply(lambda x: float((x > 0).mean())).values,
+            "real_mean": g.mean().values,
+        }
+    )
+    return out[out["n"] > 0].reset_index(drop=True)
