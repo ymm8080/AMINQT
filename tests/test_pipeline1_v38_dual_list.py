@@ -368,6 +368,17 @@ class TestModelParams:
         # 解耦: dual 板 cls 仍默认 31, pain 独立 15
         assert dtt.model_params("dual", "10d_cls").get("num_leaves") is None
 
+    def test_dual_cls_auc_early_stop_only(self):
+        """[2026-08-11] 双创概率头: logloss 早停塌缩 1-2 树 → prob_up 全股常数.
+        AUC 早停仅作用于 dual cls 三头; main cls / pain / reg 保持默认 logloss."""
+        import app.pipeline1.dual_track_trainer as dtt
+
+        for h in (3, 5, 10):
+            assert dtt.model_params("dual", f"{h}d_cls").get("metric") == "auc"
+            assert dtt.model_params("main", f"{h}d_cls").get("metric") is None
+        assert dtt.model_params("dual", "pain").get("metric") is None
+        assert dtt.model_params("dual", "3d_reg").get("metric") is None
+
     def test_returns_copy_not_module_const(self):
         import app.pipeline1.dual_track_trainer as dtt
 

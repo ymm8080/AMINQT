@@ -123,7 +123,32 @@ def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
         pos += n
     if bufs is None:
         return df.copy()
-    result = pd.DataFrame({c: bufs[c][:pos] for c in cols})
+    # 免 pandas 宽表 block consolidation OOM (2026-08-11): pd.DataFrame(dict) 默认
+    # 会把全部同 dtype 列合并成 1 个连续 float64 块 (dim16 时 282 列×98 万行 = 2.06GB
+    # + _merge_blocks 的 argsort 拷贝 ≈ 4GB 峰值), 本机 15.8GB 触发 _ArrayMemoryError.
+    # 改 copy=False 保持每列独立 block (不合并); 输入已 (symbol,date) 升序 (build 入口
+    # 已排序, groupby 保序) 则免重排免拷贝, 否则 numpy lexsort 重排. 输出与旧
+    # sort_values(["symbol","date"]) 逐字节一致, 峰值降为逐列小块, 无 >10MB 单块分配.
+    sym, date = bufs.get("symbol"), bufs.get("date")
+    if sym is not None and date is not None and pos > 1:
+        sym_keys, date_keys = sym[:pos], date[:pos]
+        already_sorted = bool(
+            ((sym_keys[:-1] != sym_keys[1:]) | (date_keys[:-1] <= date_keys[1:])).all()
+        )
+        if already_sorted:
+            result = pd.DataFrame({c: bufs[c][:pos] for c in cols}, copy=False)
+        else:
+            if sym_keys.dtype.kind in "iuf":
+                codes = sym_keys
+            else:
+                codes = np.unique(sym_keys, return_inverse=True)[1]
+            order = np.lexsort((date_keys, codes))
+            result = pd.DataFrame(
+                {c: bufs[c][:pos][order] for c in cols}, copy=False
+            )
+    else:
+        result = pd.DataFrame({c: bufs[c][:pos] for c in cols}, copy=False)
+    del bufs  # 缓冲已并入 result (视图或重排拷贝), 尽早归还 ~2GB
     # 恢复 dtype: int 列缓冲为 float64 (可容 NaN), 全有限才转回 int; 其余对齐 ref.
     for col, dtype in ref_dtypes.items():
         cur = result[col].dtype
@@ -138,7 +163,7 @@ def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
                 result[col] = result[col].astype(float)
                 continue
         result[col] = result[col].astype(dtype)
-    return result.sort_values(["symbol", "date"]).reset_index(drop=True)
+    return result.reset_index(drop=True)
 
 
 def _safe_divide(numerator, denominator) -> pd.Series:

@@ -185,19 +185,22 @@ class TestCompositeFeedIntegration:
 
 class TestDualTrackTrainer:
     def test_split_window_segments(self):
-        """750 窗口四段 [V3.8 §2.1]: 650/20/20/60, 段长从统计下限推导."""
+        """反锚定切分: train 止于 es 前, es/calib 共享验证窗, test 为最后 60 日."""
         from app.pipeline1.dual_track_trainer import DualTrackTrainer
 
         dates = pd.bdate_range("2023-01-02", periods=750)
         df = pd.DataFrame({"date": dates, "x": range(750)})
         segs = DualTrackTrainer.split_window(df)
         assert {k: len(v) for k, v in segs.items()} == {
-            "train": 650,
+            "train": 670,  # 750 - 80: 训练段吸收 es, 靠向最近端
             "es": 20,
             "calib": 20,
             "test": 60,
         }
-        assert set(segs["es"]["date"]) & set(segs["calib"]["date"]) == set()
+        # 反锚定: calib 与 es 共享最近验证窗 (校准+早停同窗, 物理隔离放宽)
+        assert set(segs["es"]["date"]) == set(segs["calib"]["date"])
+        # 训练段与 OOS 验收段无重叠
+        assert set(segs["train"]["date"]) & set(segs["test"]["date"]) == set()
 
     def test_split_window_transition_b11(self):
         """B11: 回填达标前 540 日过渡窗口, es/calib/test 保持统计下限, train 吸收余量."""
