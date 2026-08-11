@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -43,6 +45,22 @@ def _hermetic_block_trade_cache(tmp_path, monkeypatch):
         return real_sf(symbols, ref_date, **kwargs)
 
     monkeypatch.setattr(risk_overlays, "share_float_upcoming_scan", _scan_sf)
+
+
+def test_share_float_cache_path_resolves_to_repo_root():
+    """回归: 解禁缓存相对路径须解析到 repo 根下 data/, 不得落到 app/data/.
+
+    曾用 Path(__file__).parent.parent(本文件在 app/pipeline1/ 下) 当 repo 根,
+    多算一层 → SHARE_FLOAT_CACHE = <repo>/app/data/... 缓存读不到, 扫描静默 fail-open.
+    """
+    from app.pipeline1 import risk_overlays
+
+    cache = Path(risk_overlays.SHARE_FLOAT_CACHE).resolve()
+    repo_root = Path(__file__).resolve().parent.parent
+    assert cache.is_absolute()
+    assert cache.name == "share_float_full.parquet"
+    assert repo_root in cache.parents
+    assert "app" not in cache.parts  # 回归点: 不得解析到 app/data/...
 
 
 def make_panel(symbols=("600519", "601318"), days=760, seed=21) -> pd.DataFrame:

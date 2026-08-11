@@ -42,6 +42,7 @@ load_dotenv()
 
 from app.pipeline1 import cyq_ext  # noqa: E402
 from app.pipeline1.cleaning_pipeline import board_of  # noqa: E402
+from app.pipeline1.data_supply import SW_INDEX_CODES  # noqa: E402
 
 TRADE_DATE = sys.argv[1] if len(sys.argv) > 1 else datetime.now().strftime("%Y%m%d")
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
@@ -232,6 +233,13 @@ if "amount" in df.columns:
 schema = pq.read_schema(PANEL)
 panel_cols = schema.names
 
+# 关键源空数据护栏: cyq_perf (筹码分布) 整源为空时拒绝追加 — 否则尾部 9 个 CYQ 列
+# 全空仍会被静默写入 (2026-08-10 事故). cyq 数据比 OHLCV 晚发布; 幂等重跑可恢复.
+if not len(cyq) and {"cost_50pct", "weight_avg", "winner_rate"} & set(panel_cols):
+    print("FATAL: cyq_perf empty — 筹码数据未发布, 拒绝追加. "
+          f"数据发布后重跑 `python _daily_fetch.py {TRADE_DATE}` (幂等).")
+    sys.exit(1)
+
 # ── 3. Merge all sources ──
 print("\n[3] Merging sources...")
 merges = {
@@ -373,6 +381,38 @@ if "industry" in panel_cols and "industry" in last_meta.columns:
     df["industry"] = df["symbol"].map(smap).fillna("UNKNOWN")
 print(f"    meta carry: board={df['board'].nunique() if 'board' in df.columns else '-'} | "
       f"industry nunique={df['industry'].nunique() if 'industry' in df.columns else '-'}")
+
+# --- 申万行业指数: sw_ret_1d / sw_index_close / sw_index_vol (Tushare index_daily) ---
+# 面板 industry 用老申万名 (801730 记作 电气设备, SW_INDEX_CODES 用新名) → 补别名.
+# 单位换算 (实测校验): sw_ret_1d = pct_chg/100 (小数), sw_index_close = close,
+# sw_index_vol = vol/1e6 (面板单位=百万手, Tushare vol 单位=手).
+if "sw_ret_1d" in panel_cols and "industry" in df.columns:
+    _ind2code = {v: k for k, v in SW_INDEX_CODES.items()}
+    _ind2code["电气设备"] = "801730"
+    _present_inds = set(df["industry"].unique()) & set(_ind2code)
+    _sw_map = {}
+    for _ind in sorted(_present_inds):
+        _code = _ind2code[_ind]
+        try:
+            _idx = pro.index_daily(ts_code=_code + ".SI", start_date=TRADE_DATE, end_date=TRADE_DATE)
+        except Exception as e:
+            print(f"    sw {_code} ({_ind}) {TRADE_DATE}: FAILED ({e})")
+            continue
+        if _idx is not None and len(_idx):
+            _r = _idx.iloc[0]
+            _sw_map[_ind] = {
+                "sw_ret_1d": float(_r["pct_chg"]) / 100.0,
+                "sw_index_close": float(_r["close"]),
+                "sw_index_vol": round(float(_r["vol"]) / 1e6, 2),
+            }
+    if _sw_map:
+        _sw_df = pd.DataFrame(_sw_map).T
+        df["sw_ret_1d"] = df["industry"].map(_sw_df["sw_ret_1d"])
+        df["sw_index_close"] = df["industry"].map(_sw_df["sw_index_close"])
+        df["sw_index_vol"] = df["industry"].map(_sw_df["sw_index_vol"])
+        print(f"    sw sector index (Tushare index_daily): {len(_sw_map)}/{len(_present_inds)} industries for {TRADE_DATE}")
+    else:
+        print(f"    WARN: sw sector index fetch empty for {TRADE_DATE}")
 
 # --- 入库扫描: ST/*ST 股 或 上市 < INGEST_MIN_LIST_DAYS 交易日 不进入 V3 ---
 _stock_info = fetch_stock_basic_cached()

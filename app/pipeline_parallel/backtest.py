@@ -1240,7 +1240,11 @@ def _conclusion_recommendation(boards: dict) -> dict:
     elif kept5:
         rec = "仅 T-5 过验收 → 主用 TOP-5 小仓快进快出"
     else:
-        rec = "两档均未过验收 → 当前池 OOS 无确定性信号, 建议回池重选或调阈值"
+        rec = (
+            "两档均未过验收 (胜率<50%/幅度<1%) → 近期 6m OOS 无绝对超额: "
+            "行情偏弱时基准胜率本就 <50%, 阈值已按 c2c 诚实基准重锚 (2026-08-10), "
+            "勿再下调; 建议看 250d OOS 窗 (dual 有真实一年超额) 或回池重选"
+        )
     return {
         "text": rec,
         "sizing": "共现股 (fusion+sniper)=双系统一致, 大仓; 单系统股=小仓",

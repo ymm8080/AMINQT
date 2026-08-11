@@ -77,6 +77,142 @@ _COVERAGE_ORDER = [
 ]
 
 
+# 面板列名 → (数据源分类, 中文说明)
+COLUMN_CN: dict[str, tuple[str, str]] = {
+    # ── 基础行情 / 元数据 ──
+    "symbol": ("基础行情", "股票代码 (6位数字)"),
+    "date": ("基础行情", "交易日期"),
+    "open": ("基础行情", "开盘价 (不复权)"),
+    "high": ("基础行情", "最高价 (不复权)"),
+    "low": ("基础行情", "最低价 (不复权)"),
+    "close": ("基础行情", "收盘价 (不复权)"),
+    "open_hfq": ("基础行情", "开盘价 (后复权)"),
+    "high_hfq": ("基础行情", "最高价 (后复权)"),
+    "low_hfq": ("基础行情", "最低价 (后复权)"),
+    "close_hfq": ("基础行情", "收盘价 (后复权, 特征/收益计算用)"),
+    "volume": ("基础行情", "成交量 (股或手, 视股票惯例)"),
+    "amount": ("基础行情", "成交额 (元)"),
+    "pre_close": ("基础行情", "昨收价"),
+    "is_suspended": ("基础行情", "是否停牌"),
+    "board": ("基础行情", "交易板块 (main=主板, dual=双创)"),
+    "industry": ("基础行情", "所属行业"),
+    "sw_l1_name": ("申万行业", "申万一级行业"),
+    "sw_l2_name": ("申万行业", "申万二级行业"),
+    "sw_l3_name": ("申万行业", "申万三级行业"),
+    # ── 每日估值 daily_basic ──
+    "free_float_turnover_rate": ("每日估值", "自由流通股换手率 (%)"),
+    "turnover_rate": ("每日估值", "换手率 (%)"),
+    "pe_ttm": ("每日估值", "市盈率 TTM"),
+    "pb": ("每日估值", "市净率"),
+    "ps_ttm": ("每日估值", "市销率 TTM"),
+    "total_mv": ("每日估值", "总市值 (元)"),
+    "circ_mv": ("每日估值", "流通市值 (元)"),
+    "total_share": ("每日估值", "总股本 (股)"),
+    "float_share": ("每日估值", "流通股本 (股)"),
+    "free_share": ("每日估值", "自由流通股本 (股)"),
+    "volume_ratio": ("每日估值", "量比"),
+    "dv_ratio": ("每日估值", "股息率 (%)"),
+    "dv_ttm": ("每日估值", "股息率 TTM (%)"),
+    # ── 涨跌停价格 stk_limit ──
+    "up_limit_raw": ("涨跌停价格", "涨停价"),
+    "down_limit_raw": ("涨跌停价格", "跌停价"),
+    # ── 筹码分布 CYQ ──
+    "winner_ratio": ("筹码分布", "获利盘比例 (现价下方筹码占比)"),
+    "pct_90_high": ("筹码分布", "90%成本区间上沿"),
+    "pct_90_con": ("筹码分布", "90%筹码集中度"),
+    "weight_avg": ("筹码分布", "筹码加权平均成本"),
+    "cost_50pct": ("筹码分布", "50%筹码成本线 (中位成本)"),
+    "cost_95pct": ("筹码分布", "95%筹码成本线 (高位成本)"),
+    "peak_price": ("筹码分布", "筹码峰价位 (成本最集中价位)"),
+    "chip_entropy": ("筹码分布", "筹码分布熵 (分散程度)"),
+    "chip_skew_dist": ("筹码分布", "筹码分布偏度"),
+    "peak_roc_5d": ("筹码分布", "筹码峰5日变化率"),
+    "peak_roc_20d": ("筹码分布", "筹码峰20日变化率"),
+    "cost_bias": ("筹码分布", "现价偏离中位成本幅度"),
+    "conc_trend_20d": ("筹码分布", "筹码集中度20日趋势"),
+    "conc_90_industry_rank": ("筹码分布", "90%集中度行业排名"),
+    "chip_gini": ("筹码分布", "筹码基尼系数 (集中/均衡)"),
+    "resistance_dist": ("筹码分布", "距上方压力位距离 (按现价归一)"),
+    "support_dist": ("筹码分布", "距下方支撑位距离 (按现价归一)"),
+    # ── 技术特征 (价量动能) ──
+    "bias_5": ("技术特征", "5日乖离率 (收盘价偏离5日均线幅度)"),
+    "bias_10": ("技术特征", "10日乖离率"),
+    "bias_20": ("技术特征", "20日乖离率"),
+    "bias_60": ("技术特征", "60日乖离率"),
+    "bias_120": ("技术特征", "120日乖离率"),
+    "bias_250": ("技术特征", "250日乖离率"),
+    "bias_5_20_cross": ("技术特征", "5日/20日乖离率交叉信号 (金叉/死叉)"),
+    "bias_20_60_cross": ("技术特征", "20日/60日乖离率交叉信号"),
+    "ma_vol_ratio_5_20": ("技术特征", "量比 (5日均量/20日均量)"),
+    "amplitude_5d": ("技术特征", "5日平均振幅"),
+    "pctChg": ("技术特征", "涨跌幅 (%)"),
+    "intraday_range": ("技术特征", "日内振幅 ((最高-最低)/昨收)"),
+    "vol_surge": ("技术特征", "量能异动 ((当日量-20日均量)/20日标准差)"),
+    "amt_surge": ("技术特征", "成交额异动 ((当日额-20日均额)/20日标准差)"),
+    # ── 财务指标 fina_indicator ──
+    "announce_date": ("财务指标", "财报公告日 (PIT, 财务数据可用日)"),
+    "roe": ("财务指标", "净资产收益率 ROE"),
+    "roe_deducted": ("财务指标", "扣非后 ROE"),
+    "roa": ("财务指标", "总资产收益率 ROA"),
+    "gross_margin": ("财务指标", "毛利率"),
+    "rev_yoy": ("财务指标", "营业收入同比增速"),
+    "debt_ratio": ("财务指标", "资产负债率"),
+    "current_ratio": ("财务指标", "流动比率"),
+    "asset_turnover": ("财务指标", "总资产周转率"),
+    "ar_turnover": ("财务指标", "应收账款周转率"),
+    "inventory_turnover": ("财务指标", "存货周转率"),
+    "ocf_to_or": ("财务指标", "经营现金流/营业收入"),
+    "net_margin": ("财务指标", "净利率"),
+    "eps_yoy": ("财务指标", "每股收益同比增速"),
+    "profit_yoy": ("财务指标", "净利润同比增速"),
+    "ocfps": ("财务指标", "每股经营现金流"),
+    "revenue_ps": ("财务指标", "每股营业收入"),
+    "bps": ("财务指标", "每股净资产"),
+    "eps": ("财务指标", "每股收益"),
+    "dt_eps": ("财务指标", "稀释每股收益"),
+    "roe_yoy": ("财务指标", "ROE 同比变化"),
+    "q_roe": ("财务指标", "单季度 ROE"),
+    "q_ocf_to_sales": ("财务指标", "单季度经营现金流/营业收入"),
+    # ── 融资融券 margin ──
+    "margin_balance": ("融资融券", "融资余额"),
+    "short_balance": ("融资融券", "融券余额"),
+    "margin_buy_amt": ("融资融券", "融资买入额"),
+    "short_sell_vol": ("融资融券", "融券卖出量"),
+    # ── 龙虎榜 lhb ──
+    "lhb_net_buy": ("龙虎榜", "龙虎榜净买入额"),
+    "lhb_buy_amt": ("龙虎榜", "龙虎榜买入总额"),
+    "lhb_sell_amt": ("龙虎榜", "龙虎榜卖出总额"),
+    "lhb_inst_buy": ("龙虎榜席位", "机构席位买入额"),
+    "lhb_inst_sell": ("龙虎榜席位", "机构席位卖出额"),
+    "lhb_top_buy": ("龙虎榜席位", "顶级游资席位买入额"),
+    "lhb_top_sell": ("龙虎榜席位", "顶级游资席位卖出额"),
+    "lhb_quant_buy": ("龙虎榜席位", "量化席位买入额"),
+    "lhb_quant_sell": ("龙虎榜席位", "量化席位卖出额"),
+    "lhb_retail_buy": ("龙虎榜席位", "散户席位买入额"),
+    "lhb_retail_sell": ("龙虎榜席位", "散户席位卖出额"),
+    # ── 股东增减持 holdertrade ──
+    "sh_change_vol": ("股东增减持", "股东增减持变动股数"),
+    "sh_change_amt_total": ("股东增减持", "股东增减持变动金额"),
+    "sh_net_change_sign": ("股东增减持", "股东净增减持方向 (+增/-减)"),
+    "sh_net_sign": ("股东增减持", "股东增减持方向标记 (+1增/-1减/0无)"),
+    "sh_net_ratio": ("股东增减持", "股东净增减持比例"),
+    "sh_g_ratio": ("股东增减持", "高管增减持比例"),
+    "sh_p_ratio": ("股东增减持", "个人股东增减持比例"),
+    "sh_c_ratio": ("股东增减持", "公司/法人增减持比例"),
+    "sh_evt_start_date": ("股东增减持", "增减持事件开始日"),
+    "sh_evt_end_date": ("股东增减持", "增减持事件结束日"),
+    # ── 大宗交易 block_trade ──
+    "bt_count": ("大宗交易", "大宗交易笔数"),
+    "bt_disc_raw": ("大宗交易", "大宗交易折价率 (负向信号)"),
+    "bt_inst_absorb": ("大宗交易", "机构接盘吸收度"),
+    "bt_amt_ratio_float_mv": ("大宗交易", "大宗成交额/流通市值"),
+    # ── 申万行业指数 sector_index ──
+    "sw_index_close": ("申万行业", "申万行业指数收盘"),
+    "sw_index_vol": ("申万行业", "申万行业指数成交量"),
+    "sw_ret_1d": ("申万行业", "申万行业指数1日涨跌幅"),
+}
+
+
 def _check_v3_exists() -> bool:
     """检查 v3 面板是否存在."""
     return V3_PATH.exists()
@@ -410,20 +546,34 @@ def render() -> None:
             _render_coverage_detail(info)
 
         with st.expander("查看所有列名"):
-            cols_per_row = 4
-            for i in range(0, len(info["columns"]), cols_per_row):
-                cols = st.columns(cols_per_row)
-                for j, col_name in enumerate(info["columns"][i : i + cols_per_row]):
-                    with cols[j]:
-                        is_na_high = any(
-                            info["coverage"].get(src, {}).get("coverage_pct", 100) < 50
-                            for src in SOURCE_MARKERS
-                            if SOURCE_MARKERS[src] == col_name
-                        )
-                        if is_na_high:
-                            st.markdown(f"⚠️ `{col_name}`")
-                        else:
-                            st.markdown(f"`{col_name}`")
+            rows = []
+            for col_name in info["columns"]:
+                group, desc = COLUMN_CN.get(col_name, ("其他", "-"))
+                is_na_high = any(
+                    info["coverage"].get(src, {}).get("coverage_pct", 100) < 50
+                    for src in SOURCE_MARKERS
+                    if SOURCE_MARKERS[src] == col_name
+                )
+                rows.append(
+                    {
+                        "列名": f"⚠️ {col_name}" if is_na_high else col_name,
+                        "中文说明": desc,
+                        "数据源分类": group,
+                    }
+                )
+            st.dataframe(
+                pd.DataFrame(rows),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "列名": st.column_config.TextColumn("列名", width="medium"),
+                    "中文说明": st.column_config.TextColumn("中文说明", width="large"),
+                    "数据源分类": st.column_config.TextColumn(
+                        "数据源分类", width="small"
+                    ),
+                },
+            )
+            st.caption("⚠️ = 对应数据源覆盖率 < 50%，列数据可能缺失")
 
     # ---------- Tab 2: 数据获取 ----------
     with tab_fetch:

@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 import pandas as pd
 
-from app.pipeline1.cleaning_pipeline import CleaningPipeline
+from app.pipeline1.cleaning_pipeline import CleaningPipeline, load_panel_v3
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from config.settings import PANEL_V3_PATH
 from scripts._reclassify_all_features import (
@@ -43,11 +43,12 @@ from scripts._reclassify_all_features import (
 # 不进入检查点 → 不触发重建 (改了排名旧检查点依然有效, 新评分自动生效).
 _FINGERPRINT_FILES = [
     "app/pipeline1/feature_engine_v35.py",
-    "app/pipeline1/cleaning_pipeline.py",
+    "app/pipeline1/cleaning_pipeline.py",  # load_panel_v3 预过滤口径 (2026-08-10)
     "app/pipeline1/label_engine.py",
     "scripts/_reclassify_all_features.py",
     "scripts/_diag_column_feed.py",  # MASK_RECENT_DAYS 等构造常量
     "config/settings.py",  # fe.build 读 LHB_V2_SPEC (特征参数, 影响检查点内容)
+    "scripts/_refresh_parallel_checkpoints.py",  # load_panel 预过滤改变检查点行集 (2026-08-10)
 ]
 _FINGERPRINT_META = os.path.join("data", "_diag_stage_3y.fingerprint.json")
 
@@ -129,7 +130,7 @@ def main(force: bool = False) -> int:
 
     # 2. 读 V3 面板 → run_train 拆 main/dual → 重建两检查点
     print("读取 V3 面板 ...", flush=True)
-    panel = pd.read_parquet(PANEL_V3_PATH)
+    panel = load_panel_v3()
     fe = FeatureEngineV35()
     cleaner = CleaningPipeline()
     # 内存分期: dict 按板块 pop, 当前板块 build 时不再白占另一板块清洗切片.

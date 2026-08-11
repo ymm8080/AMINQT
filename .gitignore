@@ -55,6 +55,12 @@ pipeline1_result.txt
 data/cyq_fetch_log.txt
 data/hk_hold_fetch_log.txt
 
+# WORM 检查点备份 (refresh 把旧检查点改名 .stale_<ts>, 大文件不入库)
+*.stale_*
+
+# Runtime logs
+logs/
+
 # Worktree metadata
 .claude/worktrees/*
 

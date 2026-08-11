@@ -19,8 +19,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 import pandas as pd
 
+from app.pipeline1.cleaning_pipeline import load_panel_v3
 from app.pipeline1.train_runner import run_training
-from config.settings import PANEL_V3_PATH
 
 MODEL_DIR = "models/pipeline1"
 
@@ -28,7 +28,9 @@ MODEL_DIR = "models/pipeline1"
 def main() -> int:
     tag = sys.argv[1] if len(sys.argv) > 1 else time.strftime("%Y%m%d")
     t0 = time.time()
-    panel = pd.read_parquet(str(PANEL_V3_PATH))
+    # 读取时行级预过滤 (amount>=5000万 且 非停牌): 与 run_train 内部过滤同口径,
+    # 少读 ~20% 行, 输出与整表读取后 run_train 完全一致 (2026-08-10).
+    panel = load_panel_v3()
     print(
         f"[panel] {len(panel):,}r max={panel['date'].max():%Y-%m-%d} "
         f"({time.time() - t0:.0f}s)",

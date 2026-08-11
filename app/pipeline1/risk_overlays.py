@@ -55,11 +55,12 @@ SHARE_FLOAT_CACHE = _FS_CFG.get(
     "share_float_cache",
     "data/supply_cache/alt_data/share_float/share_float_full.parquet",
 )
-# 相对路径按 repo 根解析 (与 _daily_fetch.py 一致), 避免 CWD != repo root 时读不到缓存
+# 相对路径按 repo 根解析 (与 _daily_fetch.py 一致), 避免 CWD != repo root 时读不到缓存.
+# 本文件在 app/pipeline1/ 下, 到 repo 根需 3 层 parent (曾用 2 层 → 错解析到 app/data/...).
 SHARE_FLOAT_CACHE = (
     SHARE_FLOAT_CACHE
     if os.path.isabs(SHARE_FLOAT_CACHE)
-    else str(Path(__file__).resolve().parent.parent / SHARE_FLOAT_CACHE)
+    else str(Path(__file__).resolve().parent.parent.parent / SHARE_FLOAT_CACHE)
 )
 UNLOCK_WINDOW_DAYS = int(_FS_CFG.get("unlock_window_days", 30))
 UNLOCK_RATIO_THRESHOLD = float(_FS_CFG.get("unlock_ratio_threshold", 5.0))

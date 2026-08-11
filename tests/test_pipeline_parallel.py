@@ -147,13 +147,15 @@ def test_board_of_prefix_mapping():
 
 
 def test_board_thresholds_differ():
-    # 2026-08-04 用户: MAIN/DUAL 上涨幅度阈值必须不同 (dual 20% 上限 > main 10%)
+    # 2026-08-04 用户: MAIN/DUAL 上涨幅度阈值必须不同 (dual 20% 上限 > main 10%).
+    # 2026-08-10 重锚 (c2c 基准): 旧 0.55/3-4% 是 MFE 时代绝对值 (MFE 全池基准~90%/+8%,
+    # c2c 基准~45%/~0 → 结构上不可达), 降到"≥随机 50% + 盈利 1%"诚实基准; dual 仍高于 main.
     from app.pipeline_parallel.config import BOARD_THRESHOLDS
 
     assert (
         BOARD_THRESHOLDS["main"]["min_winrate"]
         == BOARD_THRESHOLDS["dual"]["min_winrate"]
-        == 0.55
+        == 0.50
     )
     assert (
         BOARD_THRESHOLDS["dual"]["min_mag"] > BOARD_THRESHOLDS["main"]["min_mag"] > 0.0
