@@ -160,20 +160,41 @@ def tradability_gate(
     return work.loc[keep], stats
 
 
+def _window_cutoff(ckpt: str, window_days: int) -> pd.Timestamp | None:
+    """末 N 交易日截断日期: 读检查点日期列, 取倒数第 window_days 个交易日.
+
+    与 _ablate_train_window_quality.load_window 同口径 (2026-08-10 消融验证):
+    窗口 ≥ 726 → None (不过滤); 否则 date >= cutoff 的行保留.
+    """
+    if window_days >= 726:
+        return None
+    dts = pd.read_parquet(ckpt, columns=["date"])["date"].unique()
+    return np.sort(pd.to_datetime(pd.Series(dts)))[-window_days]
+
+
 def load_panel() -> pd.DataFrame:
     """快速路径行集: 复用 main/dual 3y 检查点 + MFE 标签 + 可交易性门 + 板块列.
 
     与 _reclassify_all_features / _sniper_acceptance 完全一致的行集,
     额外加 MFE 净标签 (2026-08-04 用户: 目标是持有期内最大涨幅),
     再按 PIT 可交易性门剔除慢性停牌股, 并按代码前缀标 board 列.
+    读取时按 PANEL.window_days 只保留末 N 交易日 (pyarrow 下推, 省内存,
+    2026-08-10 消融: 242 日与全量验收判定 108/108 一致).
     """
     # 惰性导入: _reclassify_all_features 依赖链较重 (scripts._diag_column_feed 等),
     # 仅在生产 load_panel 路径需要, 避免 pytest 收集时触发 ImportError.
     from scripts._reclassify_all_features import _finalize_slice
 
+    cutoff = _window_cutoff(PANEL.main_checkpoint, PANEL.window_days)
+    if cutoff is not None:
+        logger.info(
+            f"读取窗口: 末 {PANEL.window_days} 交易日 (cutoff={pd.Timestamp(cutoff):%Y-%m-%d}, "
+            f"检查点文件保持 {PANEL.main_checkpoint} 全量不动)"
+        )
     slices = []
     for ckpt in (PANEL.main_checkpoint, PANEL.dual_checkpoint):
-        df = _finalize_slice(pd.read_parquet(ckpt))
+        kw = {"filters": [("date", ">=", cutoff)]} if cutoff is not None else {}
+        df = _finalize_slice(pd.read_parquet(ckpt, **kw))
         df = add_mfe_labels(df, horizons=ALL_HORIZON_INTS)
         df = add_c2c_labels(df, horizons=ALL_HORIZON_INTS)
         slices.append(df)

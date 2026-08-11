@@ -146,6 +146,26 @@ def test_board_of_prefix_mapping():
     assert board_of("900901") == "main"  # 未知前缀归 main
 
 
+def test_config_panel_window_default_1y():
+    # 2026-08-10 消融定案: 并行对历史长度无状态, 读取只留末 242 交易日 (1y≈242),
+    # 与全量 726 交易日验收判定 108/108 一致, 内存 3y→1y 省 58.5%. 726 = 恢复 3y.
+    assert PANEL.window_days == 242
+
+
+def test_window_cutoff_logic(tmp_path):
+    # _window_cutoff: 末 N 交易日截断 = 倒数第 N 个交易日的日期 (pyarrow date>=cutoff 下推);
+    # window_days >= 726 (全量) → None 不过滤.
+    from app.pipeline_parallel.backtest import _window_cutoff
+
+    days = pd.date_range("2026-01-05", periods=20, freq="B")  # 20 个交易日
+    ck = tmp_path / "ck.parquet"
+    pd.DataFrame({"date": days, "symbol": "X"}).to_parquet(ck)
+    cut = _window_cutoff(str(ck), 10)
+    assert cut == days[-10]  # 倒数第 10 个交易日
+    # 若改挂 3y 全量: window_days=726 → 不过滤
+    assert _window_cutoff(str(ck), 726) is None
+
+
 def test_board_thresholds_differ():
     # 2026-08-04 用户: MAIN/DUAL 上涨幅度阈值必须不同 (dual 20% 上限 > main 10%).
     # 2026-08-10 重锚 (c2c 基准): 旧 0.55/3-4% 是 MFE 时代绝对值 (MFE 全池基准~90%/+8%,
