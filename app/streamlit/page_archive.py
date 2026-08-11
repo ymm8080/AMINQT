@@ -167,6 +167,7 @@ def _render_stock_query() -> None:
     hist = pd.concat(frames, ignore_index=True)
     disp = pd.DataFrame()
     disp["代码"] = hist["symbol"]
+    disp["名称"] = hist["symbol"].map(ds.stock_names()).fillna("-")
     disp["日期"] = hist["date"]
     disp["模块"] = hist["family"] + "·" + hist["module"]
     disp["板块"] = hist["board"].fillna("")
@@ -235,6 +236,7 @@ def _render_date_list() -> None:
     disp = pd.DataFrame()
     disp["日期"] = df["date"]
     disp["代码"] = df["symbol"]
+    disp["名称"] = df["symbol"].map(ds.stock_names()).fillna("-")
     disp["模块"] = df["family"] + "·" + df["module"]
     disp["板块"] = df["board"].fillna("")
     disp["系统"] = df["system"].fillna("")

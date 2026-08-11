@@ -264,10 +264,18 @@ SLOW_BULL_RANK: dict = {
 
 @dataclass(frozen=True)
 class PanelSource:
-    """行集来源 (快速路径: 复用 3y 诊断检查点, 不重建面板)."""
+    """行集来源 (快速路径: 复用 3y 诊断检查点, 不重建面板).
+
+    window_days: 读取时只保留末 N 个交易日的行 (2026-08-10 消融定案).
+      并行规则系统对历史长度无状态 — 打分只看当日横截面 + 固定窗口滚动特征,
+      消融实测末 242 交易日与全量 726 交易日的验收判定 108/108 完全一致,
+      内存 3y=5.35GB → 1y=2.22GB (省 58.5%). 设 726 恢复 3y.
+      检查点文件本身保持 3y 不动 (诊断脚本共用), 仅在 load_panel 读取时 pyarrow 过滤.
+    """
 
     main_checkpoint: str = os.path.join("data", "_diag_stage_main_3y.parquet")
     dual_checkpoint: str = os.path.join("data", "_diag_stage_dual_3y.parquet")
+    window_days: int = 242  # 1y ≈ 242 交易日; 726 = 3y (消融已验证等价, 内存省 58.5%)
     # 与生产行集一致 (run_train → features.build → labels → mask), 由 _finalize_slice 补 10d 净标签
 
 
