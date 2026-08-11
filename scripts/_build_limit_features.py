@@ -13,10 +13,10 @@ Base features (per stock×date):
 
 Usage: python scripts/_build_limit_features.py [N_dates]
 """
+
 import os
 import sys
 import time
-from datetime import datetime
 
 sys.path.insert(0, ".")
 
@@ -35,7 +35,9 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 
 def _dates():
-    d = sorted(pd.to_datetime(pd.read_parquet(PANEL, columns=["date"])["date"].unique()))
+    d = sorted(
+        pd.to_datetime(pd.read_parquet(PANEL, columns=["date"])["date"].unique())
+    )
     return d[-N_DATES:]
 
 
@@ -59,7 +61,10 @@ def fetch_raw(dates, save_path=None, checkpoint_every=25):
             frames.append(df)
         if save_path and frames and (i + 1) % checkpoint_every == 0:
             pd.concat(frames, ignore_index=True).to_parquet(save_path)
-            print(f"    checkpoint {i+1}/{len(dates)} → {os.path.basename(save_path)}", flush=True)
+            print(
+                f"    checkpoint {i + 1}/{len(dates)} → {os.path.basename(save_path)}",
+                flush=True,
+            )
         if i % 50 == 0:
             print(f"    fetched {i}/{len(dates)} ({d.date()})", flush=True)
         time.sleep(0.12)
@@ -84,19 +89,44 @@ def build_features(raw):
         return np.nan
 
     raw["seal_mins"] = raw["first_time"].map(_seal_mins)
-    feat = raw[["ts_code", "trade_date", "is_limit_up", "is_limit_down", "is_zhaban",
-                "limit_times", "fd_amount_ratio", "open_times", "seal_mins"]].copy()
+    feat = raw[
+        [
+            "ts_code",
+            "trade_date",
+            "is_limit_up",
+            "is_limit_down",
+            "is_zhaban",
+            "limit_times",
+            "fd_amount_ratio",
+            "open_times",
+            "seal_mins",
+        ]
+    ].copy()
     feat["symbol"] = feat["ts_code"].str.replace(r"\.(SZ|SH|BJ)$", "", regex=True)
     feat["date"] = pd.to_datetime(feat["trade_date"], format="%Y%m%d")
-    return feat[["symbol", "date", "is_limit_up", "is_limit_down", "is_zhaban",
-                 "limit_times", "fd_amount_ratio", "open_times", "seal_mins"]]
+    return feat[
+        [
+            "symbol",
+            "date",
+            "is_limit_up",
+            "is_limit_down",
+            "is_zhaban",
+            "limit_times",
+            "fd_amount_ratio",
+            "open_times",
+            "seal_mins",
+        ]
+    ]
 
 
 def main():
     dates = _dates()
     end = dates[-1].strftime("%Y%m%d")
-    print(f"[1] Backfill limit_list_d: {len(dates)} dates "
-          f"({dates[0].date()} .. {dates[-1].date()})", flush=True)
+    print(
+        f"[1] Backfill limit_list_d: {len(dates)} dates "
+        f"({dates[0].date()} .. {dates[-1].date()})",
+        flush=True,
+    )
 
     raw_path = os.path.join(OUT_DIR, f"limit_list_d_raw_{end}.parquet")
     if os.path.exists(raw_path):
@@ -118,9 +148,12 @@ def main():
             print(f"    empty dates: {len(empty)} {empty[:5]}")
 
     feat = build_features(raw)
-    print(f"[2] feature rows: {len(feat)}, dates: {feat['date'].nunique()}, "
-          f"up: {(feat['is_limit_up']==1).sum()}, zhaban: {(feat['is_zhaban']==1).sum()}, "
-          f"down: {(feat['is_limit_down']==1).sum()}", flush=True)
+    print(
+        f"[2] feature rows: {len(feat)}, dates: {feat['date'].nunique()}, "
+        f"up: {(feat['is_limit_up'] == 1).sum()}, zhaban: {(feat['is_zhaban'] == 1).sum()}, "
+        f"down: {(feat['is_limit_down'] == 1).sum()}",
+        flush=True,
+    )
     out = os.path.join(OUT_DIR, f"limit_feat_{end}.parquet")
     feat.to_parquet(out)
     print(f"[3] saved: {out}")

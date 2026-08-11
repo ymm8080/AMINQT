@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 """验证诚实验收闸 (胜率≥0.50 且 幅度>1%/1.5%) 在历史 run 上的判定."""
+
 import glob
 import json
 import os
@@ -19,7 +19,8 @@ def find(p):
 for run in RUNS:
     p = find(run)
     if not p:
-        print(f"== {run}: NOT FOUND"); continue
+        print(f"== {run}: NOT FOUND")
+        continue
     d = json.load(open(p, encoding="utf-8"))
     print(f"\n===== {run} =====")
     for b, bd in d.get("boards", {}).items():

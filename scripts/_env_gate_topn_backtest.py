@@ -13,6 +13,7 @@
 
 验收: 只看 OOS (末 250 交易日, 另报 126d 6m). 随机种子无关 (确定性打分).
 """
+
 import gc
 import sys
 
@@ -106,8 +107,10 @@ def main():
     states = pit_env_states(work)
     print(
         "\n[0] 环境状态分布 (全窗 PIT): "
-        + ", ".join(f"{s}={sum(1 for v in states.values() if v['state']==s)}日"
-                    for s in ("ice", "range", "hot")),
+        + ", ".join(
+            f"{s}={sum(1 for v in states.values() if v['state'] == s)}日"
+            for s in ("ice", "range", "hot")
+        ),
         flush=True,
     )
     veto_days = [d for d, v in states.items() if v["veto"]]
@@ -115,7 +118,9 @@ def main():
 
     print("\n[1] 分类器前提 — 全截面实得前向收益 by 环境状态 (含所有股票, 非选股):")
     disc = day_discrimination(work, states)
-    dcols = [f"label_pm_{h}d_net" for h in (5, 10) if f"label_pm_{h}d_net" in work.columns]
+    dcols = [
+        f"label_pm_{h}d_net" for h in (5, 10) if f"label_pm_{h}d_net" in work.columns
+    ]
     hdr = f"{'状态':<6s} {'天数':>5s} {'行数':>8s} " + " ".join(
         f"{c}_均%({c}_涨率%)".ljust(20) for c in dcols
     )
@@ -125,7 +130,9 @@ def main():
         for h in (5, 10):
             c = f"label_pm_{h}d_net"
             if c + "_mean" in r:
-                cells.append(f"{r[c+'_mean']:+.3f}({r[c+'_winrate']:.1f}%)".ljust(20))
+                cells.append(
+                    f"{r[c + '_mean']:+.3f}({r[c + '_winrate']:.1f}%)".ljust(20)
+                )
         print("  " + " ".join(cells))
 
     print("\n[2] TOP-N 质量 A/B (同一打分 run_system, 唯一差别 = 选股日):")
@@ -140,7 +147,9 @@ def main():
             for oos_days in OOS_DAYS_LIST:
                 if oos_days >= len(dates) - 60:
                     continue
-                print(f"\n  -- {spec.name.upper()} TOP-{spec.top_n} | OOS {oos_days}d --")
+                print(
+                    f"\n  -- {spec.name.upper()} TOP-{spec.top_n} | OOS {oos_days}d --"
+                )
                 results = {}
                 for mode in ("baseline", "gate_veto", "gate_ice"):
                     m = _mask_by_date(sub, dates, oos_days, states, mode)
@@ -163,7 +172,7 @@ def main():
                             continue
                         v = ph[h]
                         cells.append(
-                            f"{mode:<9s} 涨率={v['winrate']*100:5.1f}% 均={v['mag']*100:+6.2f}% n={v['n']:>5d}"
+                            f"{mode:<9s} 涨率={v['winrate'] * 100:5.1f}% 均={v['mag'] * 100:+6.2f}% n={v['n']:>5d}"
                         )
                     print(f"    T+{h}: " + " | ".join(cells))
             gc.collect()

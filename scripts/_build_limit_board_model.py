@@ -11,6 +11,7 @@
 
 Usage: python scripts/_build_limit_board_model.py
 """
+
 import gc
 import glob
 import json
@@ -42,24 +43,38 @@ WAVE_FEATS = ["main_wave_start", "yizi_prev", "yizi_streak"]
 LHB_FEATS = ["lhb_net_buy", "lhb_net_ratio", "lhb_inst_net", "is_lhb"]
 
 # 面板额外要加载的原始列 (lhb_net_ratio/is_lhb/lhb_inst_net 在 add_lhb 里派生)
-PANEL_EXTRA = ["turnover_rate", "lhb_net_buy", "lhb_buy_amt", "lhb_inst_buy", "lhb_inst_sell"]
+PANEL_EXTRA = [
+    "turnover_rate",
+    "lhb_net_buy",
+    "lhb_buy_amt",
+    "lhb_inst_buy",
+    "lhb_inst_sell",
+]
 
 
 def add_buckets(df: pd.DataFrame) -> pd.DataFrame:
     """分桶编码 (文档方案A). 无前视: 只用当日值."""
     # 封单比例: 弱封<5% / 健康10-30% / 偏一字50-80% / 极端>80%
-    df["b_seal"] = pd.cut(df["fd_amount_ratio"], [-1, 0.05, 0.30, 0.80, 999],
-                          labels=["弱封", "健康", "偏一字", "极端"])
+    df["b_seal"] = pd.cut(
+        df["fd_amount_ratio"],
+        [-1, 0.05, 0.30, 0.80, 999],
+        labels=["弱封", "健康", "偏一字", "极端"],
+    )
     # 封时: 早盘<10点 / 午前 / 午后 / 尾盘
-    df["b_seal_mins"] = pd.cut(df["seal_mins"], [-1, 30, 120, 210, 999],
-                               labels=["早盘", "午前", "午后", "尾盘"])
+    df["b_seal_mins"] = pd.cut(
+        df["seal_mins"],
+        [-1, 30, 120, 210, 999],
+        labels=["早盘", "午前", "午后", "尾盘"],
+    )
     df["b_seal_mins"] = df["b_seal_mins"].cat.add_categories("未知").fillna("未知")
     # 开板次数
-    df["b_open"] = pd.cut(df["open_times"].fillna(0), [-1, 0, 1, 999],
-                          labels=["未开", "开1次", "开2次+"])
+    df["b_open"] = pd.cut(
+        df["open_times"].fillna(0), [-1, 0, 1, 999], labels=["未开", "开1次", "开2次+"]
+    )
     # 连板高度 (涨停行 limit_times>=1)
-    df["b_height"] = pd.cut(df["limit_times"], [0, 1, 2, 3, 999],
-                            labels=["首板", "2板", "3板", "高位"])
+    df["b_height"] = pd.cut(
+        df["limit_times"], [0, 1, 2, 3, 999], labels=["首板", "2板", "3板", "高位"]
+    )
     for c in BUCKET_COLS:
         df[c] = df[c].astype("category")
     return df
@@ -90,8 +105,12 @@ def add_yizi_wave(df: pd.DataFrame) -> pd.DataFrame:
     # fd_amount_ratio (Tushare) = 封单/流通市值, 中位 ~0.008 (0.8%), 健康换手 ~0.5%-5%
     # (设计文档"10-30%"是另一套量纲; 本文档量纲已按真实分布校准)
     health = df["fd_amount_ratio"].between(0.005, 0.05)
-    df["main_wave_start"] = ((df["is_limit_up"] == 1) & (df["is_yiziban"] == 0)
-                             & (df["yizi_prev"] == 1) & health).astype(float)
+    df["main_wave_start"] = (
+        (df["is_limit_up"] == 1)
+        & (df["is_yiziban"] == 0)
+        & (df["yizi_prev"] == 1)
+        & health
+    ).astype(float)
     return df
 
 
@@ -102,7 +121,9 @@ def add_lhb(df: pd.DataFrame) -> pd.DataFrame:
             df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
     df["is_lhb"] = (df.get("lhb_buy_amt", 0) > 0).astype(float)
     df["lhb_net_ratio"] = df["lhb_net_buy"] / df["amount"].replace(0, np.nan)
-    df["lhb_net_ratio"] = df["lhb_net_ratio"].replace([np.inf, -np.inf], np.nan).fillna(0)
+    df["lhb_net_ratio"] = (
+        df["lhb_net_ratio"].replace([np.inf, -np.inf], np.nan).fillna(0)
+    )
     df["lhb_inst_net"] = df["lhb_inst_buy"] - df["lhb_inst_sell"]
     return df
 
@@ -112,7 +133,9 @@ def _prep(sub, feats, num_feats, cat_cols):
     keep += [c for c in ("label_pm_3d", "label_pm_5d") if c in sub.columns]
     sub = sub[keep].copy()
     for c in num_feats:
-        sub[c] = pd.to_numeric(sub[c], errors="coerce").replace([np.inf, -np.inf], np.nan)
+        sub[c] = pd.to_numeric(sub[c], errors="coerce").replace(
+            [np.inf, -np.inf], np.nan
+        )
         sub[c] = sub[c].fillna(sub[c].median())
     for c in cat_cols:
         if c in sub.columns:
@@ -133,9 +156,17 @@ def _run(up, board, feats, num_feats, cat_cols, tag, out, kargs):
         print(f"    {tag:<18s} train/test 不足, 跳过")
         return
     m = lgb.LGBMClassifier(
-        n_estimators=300, max_depth=5, num_leaves=31, learning_rate=0.05,
-        subsample=0.8, colsample_bytree=0.8, random_state=42, n_jobs=-1,
-        class_weight="balanced", verbose=-1, **kargs,
+        n_estimators=300,
+        max_depth=5,
+        num_leaves=31,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42,
+        n_jobs=-1,
+        class_weight="balanced",
+        verbose=-1,
+        **kargs,
     )
     cat_used = [c for c in cat_cols if c in feats]
     m.fit(tr[feats], tr["fwd_up_1d"], categorical_feature=cat_used or None)
@@ -147,28 +178,52 @@ def _run(up, board, feats, num_feats, cat_cols, tag, out, kargs):
     cal["q"] = pd.qcut(pd.Series(p), 5, labels=False, duplicates="drop")
     cal_rows = []
     for qi, g in cal.groupby("q"):
-        cal_rows.append((int(qi), round(float(g["p"].mean()), 3), round(float(g["y"].mean()), 3), int(len(g))))
-    monotone = all(cal_rows[i][2] <= cal_rows[i + 1][2] for i in range(len(cal_rows) - 1))
+        cal_rows.append(
+            (
+                int(qi),
+                round(float(g["p"].mean()), 3),
+                round(float(g["y"].mean()), 3),
+                int(len(g)),
+            )
+        )
+    monotone = all(
+        cal_rows[i][2] <= cal_rows[i + 1][2] for i in range(len(cal_rows) - 1)
+    )
     # top20% 前视 3 日收益 (诚实: 概率高≠涨得多)
     r3 = te["label_pm_3d"] if "label_pm_3d" in te.columns else None
     te2 = te.copy()
     te2["prob"] = p
     top = te2.nlargest(int(len(te2) * 0.2), "prob")
-    top_ret = round(float(top["label_pm_3d"].mean()) * 100, 3) if r3 is not None else None
-    base_ret = round(float(te["label_pm_3d"].mean()) * 100, 3) if r3 is not None else None
-    imp = pd.DataFrame({"feature": feats,
-                        "gain": m.booster_.feature_importance(importance_type="gain")})
+    top_ret = (
+        round(float(top["label_pm_3d"].mean()) * 100, 3) if r3 is not None else None
+    )
+    base_ret = (
+        round(float(te["label_pm_3d"].mean()) * 100, 3) if r3 is not None else None
+    )
+    imp = pd.DataFrame(
+        {
+            "feature": feats,
+            "gain": m.booster_.feature_importance(importance_type="gain"),
+        }
+    )
     imp = imp.sort_values("gain", ascending=False)
     imp["gain_pct"] = (imp["gain"] / imp["gain"].sum() * 100).round(2)
 
-    print(f"    {tag:<18s} AUC={auc:.4f} 校准单调={monotone} "
-          f"top20%T+3={top_ret}% (基线{base_ret}%)  n_tr={len(tr)} n_te={len(te)}")
+    print(
+        f"    {tag:<18s} AUC={auc:.4f} 校准单调={monotone} "
+        f"top20%T+3={top_ret}% (基线{base_ret}%)  n_tr={len(tr)} n_te={len(te)}"
+    )
     out[f"{tag}"] = {
-        "auc": round(auc, 4), "n_train": len(tr), "n_test": len(te),
+        "auc": round(auc, 4),
+        "n_train": len(tr),
+        "n_test": len(te),
         "base_cont_rate": round(float(y.mean()), 4),
         "calibration_monotone": monotone,
-        "calibration": [{"q": qi, "pred": mp, "actual": ay, "n": nn} for qi, mp, ay, nn in cal_rows],
-        "top20_ret3_pct": top_ret, "base_ret3_pct": base_ret,
+        "calibration": [
+            {"q": qi, "pred": mp, "actual": ay, "n": nn} for qi, mp, ay, nn in cal_rows
+        ],
+        "top20_ret3_pct": top_ret,
+        "base_ret3_pct": base_ret,
         "importance": imp.to_dict("records"),
     }
     return m
@@ -183,20 +238,29 @@ def event_main_wave(up, board, out):
     if len(wv) < 10:
         print("    (样本不足)")
         return
+
     def _s(g):
         n = len(g)
-        return {"n": n, "明日涨停%": round(float(g["fwd_up_1d"].mean()) * 100, 2),
-                "3日涨停%": round(float(g["fwd_up_3d"].mean()) * 100, 2),
-                "T+3均值%": round(float(g["label_pm_3d"].mean()) * 100, 3),
-                "T+5均值%": round(float(g["label_pm_5d"].mean()) * 100, 3),
-                "T+5上涨率%": round(float((g["label_pm_5d"] > 0).mean()) * 100, 2)}
+        return {
+            "n": n,
+            "明日涨停%": round(float(g["fwd_up_1d"].mean()) * 100, 2),
+            "3日涨停%": round(float(g["fwd_up_3d"].mean()) * 100, 2),
+            "T+3均值%": round(float(g["label_pm_3d"].mean()) * 100, 3),
+            "T+5均值%": round(float(g["label_pm_5d"].mean()) * 100, 3),
+            "T+5上涨率%": round(float((g["label_pm_5d"] > 0).mean()) * 100, 2),
+        }
+
     rows.append(("全体涨停", _s(base)))
     rows.append(("主升浪起点(一字→开板换手)", _s(wv)))
     rows.append(("  + 昨日2字+", _s(wv[wv["yizi_prev_streak"] >= 2])))
-    print(f"    {'组':<28s} {'n':>6s} {'明日涨停%':>8s} {'3日涨停%':>8s} {'T+3%':>7s} {'T+5%':>7s} {'T+5涨率%':>8s}")
+    print(
+        f"    {'组':<28s} {'n':>6s} {'明日涨停%':>8s} {'3日涨停%':>8s} {'T+3%':>7s} {'T+5%':>7s} {'T+5涨率%':>8s}"
+    )
     for name, s in rows:
-        print(f"    {name:<28s} {s['n']:>6d} {s['明日涨停%']:>8.1f} {s['3日涨停%']:>8.1f} "
-              f"{s['T+3均值%']:>+7.2f} {s['T+5均值%']:>+7.2f} {s['T+5上涨率%']:>8.1f}")
+        print(
+            f"    {name:<28s} {s['n']:>6d} {s['明日涨停%']:>8.1f} {s['3日涨停%']:>8.1f} "
+            f"{s['T+3均值%']:>+7.2f} {s['T+5均值%']:>+7.2f} {s['T+5上涨率%']:>8.1f}"
+        )
     out[board]["main_wave_event"] = {name: s for name, s in rows}
 
 
@@ -219,7 +283,16 @@ def analyze(up, board, out):
     print(f"\n  === 涨停板接力模型 ({board.upper()}) 分层对比 (OOS AUC) ===")
     best = None
     for tag, feats in num_sets.items():
-        m = _run(up, board, feats, [c for c in feats if c not in cat_cols], cat_cols, tag, out[board], {})
+        m = _run(
+            up,
+            board,
+            feats,
+            [c for c in feats if c not in cat_cols],
+            cat_cols,
+            tag,
+            out[board],
+            {},
+        )
         if m is not None and (best is None or out[board][tag]["auc"] > best[1]):
             best = (m, out[board][tag]["auc"], tag, feats)
     return best
@@ -232,15 +305,37 @@ def main():
     dates = sorted(feat["date"].unique())
     print(f"[1] feature: {feat_path}")
 
-    panel = pd.read_parquet(PANEL, columns=[
-        "symbol", "date", "open", "high", "low", "close", "volume", "amount",
-        "pre_close", "close_hfq", "industry", "board", "circ_mv",
-        "is_suspended", *PANEL_EXTRA,
-    ])
+    panel = pd.read_parquet(
+        PANEL,
+        columns=[
+            "symbol",
+            "date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "amount",
+            "pre_close",
+            "close_hfq",
+            "industry",
+            "board",
+            "circ_mv",
+            "is_suspended",
+            *PANEL_EXTRA,
+        ],
+    )
     panel["date"] = pd.to_datetime(panel["date"])
     panel = panel[panel["date"].isin(dates)]
     panel = panel.merge(feat, on=["symbol", "date"], how="left")
-    for c in ["is_limit_up", "is_limit_down", "is_zhaban", "limit_times", "fd_amount_ratio", "open_times"]:
+    for c in [
+        "is_limit_up",
+        "is_limit_down",
+        "is_zhaban",
+        "limit_times",
+        "fd_amount_ratio",
+        "open_times",
+    ]:
         panel[c] = panel[c].fillna(0.0)
     del feat
     gc.collect()
@@ -291,8 +386,17 @@ def main():
         bp = os.path.join(OUT_DIR, f"limit_board_{board}_{TAG}.txt")
         info["booster"].booster_.save_model(bp)
         with open(bp.replace(".txt", "_feats.json"), "w", encoding="utf-8") as f:
-            json.dump({"board": board, "auc": info["auc"], "tag": info["tag"], "feats": info["feats"]},
-                      f, ensure_ascii=False, indent=1)
+            json.dump(
+                {
+                    "board": board,
+                    "auc": info["auc"],
+                    "tag": info["tag"],
+                    "feats": info["feats"],
+                },
+                f,
+                ensure_ascii=False,
+                indent=1,
+            )
         print(f"    booster {board}: {bp} (AUC {info['auc']:.4f})")
     print("DONE")
 
