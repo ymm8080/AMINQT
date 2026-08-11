@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """训练数据窗消融: 固定同一 OOS 日期区间, 把面板行裁剪到末 3y/2y/1y, 验证验收是否不变.
 
 动机 (2026-08-10): 用户问"3y→2y 是否伤最终预测质量, 1y 是否大幅省内存".
@@ -24,6 +23,7 @@ pv_corr_5/limit_dist_pct/rps_60/ADX 均 ≤60d), 无全历史 expanding 特征�
 用法: python scripts/_ablate_train_window_quality.py
 输出: data/_ablate_train_window_quality_<ts>.json (WORM) + 控制台对比表
 """
+
 import gc
 import json
 import os
@@ -35,6 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
+from app.pipeline_parallel import indicators, screener, signals
 from app.pipeline_parallel.backtest import (
     add_c2c_labels,
     add_mfe_labels,
@@ -42,7 +43,6 @@ from app.pipeline_parallel.backtest import (
     run_system,
     tradability_gate,
 )
-from app.pipeline_parallel import indicators, screener, signals
 from app.pipeline_parallel.config import (
     ALL_HORIZON_INTS,
     BOARD_PREFIXES,
@@ -183,7 +183,7 @@ def accept_board(work: pd.DataFrame, board: str, bcrit: tuple[float, float]) -> 
             continue
         entry: dict = {}
         picks: dict = {}
-        for lab, d in OOS_WINDOWS.items():
+        for lab, _d in OOS_WINDOWS.items():
             bm = sub["date"].values >= oos_cutoff[lab]
             for kind, tn in (("primary", spec.top_n), ("alt", spec.top_n_alt)):
                 r = run_system(sub, spec, tn, bm, crit=bcrit)
@@ -279,7 +279,7 @@ def main():
         print(
             f"  load_window({wname}): {len(work):,} 行 / {work['symbol'].nunique():,} 只 / "
             f"{work['date'].nunique()} 交易日 / 读取 {len(READ_COLS)} 列 / "
-            f"{time.time()-t0:.0f}s",
+            f"{time.time() - t0:.0f}s",
             flush=True,
         )
         out["windows"][wname] = {
@@ -326,24 +326,28 @@ def main():
                     ref3 = cells["ref3y_json"]
                     base = cells["3y"]
                     faithful = same_cell(cells["3y"], ref3)
-                    inv = all(
-                        same_cell(cells[wn], base) for wn in ("2y", "1y")
-                    )
+                    inv = all(same_cell(cells[wn], base) for wn in ("2y", "1y"))
                     tag = []
                     if faithful:
                         tag.append("SAME-JSON")
                     if inv:
                         tag.append("SAME-3Y")
                     print(
-                        f"  {name}/{h}: " + " | ".join(fmt)
+                        f"  {name}/{h}: "
+                        + " | ".join(fmt)
                         + (f"  [{'+'.join(tag)}]" if tag else "  [DIFF]")
                     )
-            print("  kept:", {
-                wn: {
-                    sname: out["boards"][b][wn][sname].get(lab + "/kept")
-                    for sname in SYSTEMS if SYSTEMS[sname].enabled
-                } for wn in ("ref3y_json", "3y", "2y", "1y")
-            })
+            print(
+                "  kept:",
+                {
+                    wn: {
+                        sname: out["boards"][b][wn][sname].get(lab + "/kept")
+                        for sname in SYSTEMS
+                        if SYSTEMS[sname].enabled
+                    }
+                    for wn in ("ref3y_json", "3y", "2y", "1y")
+                },
+            )
 
     # ── 不变性判定: faithfulness (3y-reduced vs JSON) + invariance (2y/1y vs 3y-reduced) ──
     # picks 对比 (决定性): 同日期选出同股票 → 预测本身不变 (量测差异=窗尾标签缺失).
@@ -374,7 +378,11 @@ def main():
     def dump_diff(d):
         b, name, lab, kind, h, wn = d
         return {
-            "board": b, "system": name, "oos": lab, "kind": kind, "horizon": h,
+            "board": b,
+            "system": name,
+            "oos": lab,
+            "kind": kind,
+            "horizon": h,
             "window": wn,
             "ref": {"ok": None, "n": None},
             "cur": {"ok": None, "n": None},
@@ -391,16 +399,21 @@ def main():
         "inv_diffs": [dump_diff(d) for d in inv_diffs[:50]],
         "picks_diffs": [
             {
-                "board": d[0], "system": d[1], "oos": d[2], "kind": d[3],
-                "window": d[4], "n_3y": d[5], "n_wn": d[6],
+                "board": d[0],
+                "system": d[1],
+                "oos": d[2],
+                "kind": d[3],
+                "window": d[4],
+                "n_3y": d[5],
+                "n_wn": d[6],
             }
             for d in picks_diffs[:50]
         ],
         "note": "faithful = 列子集读取 vs 生产 JSON 逐位一致 (方法学自验证). "
-                "picks_identical = 同日期选出同股票 → 预测本身对窗宽不变 (决定性). "
-                "measured_quality_invariant = 量测数值逐位一致; 若 False, 差异来自窗尾标签缺失 "
-                "(1y/2y 窗末尾 max_horizon+1 天无未来数据 → 标签 NaN → n 变小), 非质量变化. "
-                "真 1y 重建特征时 ≤60d 特征暖机充足仍等价; legacy LGBM 重训不适用本结论.",
+        "picks_identical = 同日期选出同股票 → 预测本身对窗宽不变 (决定性). "
+        "measured_quality_invariant = 量测数值逐位一致; 若 False, 差异来自窗尾标签缺失 "
+        "(1y/2y 窗末尾 max_horizon+1 天无未来数据 → 标签 NaN → n 变小), 非质量变化. "
+        "真 1y 重建特征时 ≤60d 特征暖机充足仍等价; legacy LGBM 重训不适用本结论.",
     }
     outp = os.path.join("data", f"_ablate_train_window_quality_{ts}.json")
     with open(outp, "w", encoding="utf-8") as fh:
@@ -416,8 +429,11 @@ def main():
                 for kind in ("primary", "alt"):
                     p3 = out["boards"][b]["3y"]["picks"][name][f"{lab}/{kind}"]
                     rows = [
-                        (wn, len(out["boards"][b][wn]["picks"][name][f"{lab}/{kind}"]),
-                         out["boards"][b][wn]["picks"][name][f"{lab}/{kind}"] == p3)
+                        (
+                            wn,
+                            len(out["boards"][b][wn]["picks"][name][f"{lab}/{kind}"]),
+                            out["boards"][b][wn]["picks"][name][f"{lab}/{kind}"] == p3,
+                        )
                         for wn in ("2y", "1y")
                     ]
                     tags = "  ".join(
@@ -430,16 +446,20 @@ def main():
     base3 = out["windows"]["3y"]["est_gb_full_schema"]
     for wn in ("3y", "2y", "1y"):
         gb = out["windows"][wn]["est_gb_full_schema"]
-        print(f"  {wn}: {out['windows'][wn]['rows']:>10,} 行 ≈ {gb:6.2f} GB "
-              f"({gb/base3*100:5.1f}% of 3y)")
+        print(
+            f"  {wn}: {out['windows'][wn]['rows']:>10,} 行 ≈ {gb:6.2f} GB "
+            f"({gb / base3 * 100:5.1f}% of 3y)"
+        )
 
     print(f"\nWORM 落盘: {outp}")
-    print(f"verdict: faithful={out['verdict']['faithful_3y_reduced_vs_json']} "
-          f"| picks_identical={out['verdict']['picks_identical']} "
-          f"| measured_quality_invariant={out['verdict']['measured_quality_invariant']} "
-          f"| n_faith_diffs={len(faith_diffs)} n_inv_diffs={len(inv_diffs)} "
-          f"n_picks_diffs={len(picks_diffs)}")
-    print(f"总耗时 {time.time()-t0:.0f}s")
+    print(
+        f"verdict: faithful={out['verdict']['faithful_3y_reduced_vs_json']} "
+        f"| picks_identical={out['verdict']['picks_identical']} "
+        f"| measured_quality_invariant={out['verdict']['measured_quality_invariant']} "
+        f"| n_faith_diffs={len(faith_diffs)} n_inv_diffs={len(inv_diffs)} "
+        f"n_picks_diffs={len(picks_diffs)}"
+    )
+    print(f"总耗时 {time.time() - t0:.0f}s")
 
 
 if __name__ == "__main__":
