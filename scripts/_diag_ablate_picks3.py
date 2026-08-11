@@ -1,22 +1,23 @@
-# -*- coding: utf-8 -*-
 """归因: 消融 picks 差异是否全部来自停牌缺口符号 (rolling 行计数跨缺口污染)."""
-import glob
+
 import gc
+import glob
 import json
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
-import numpy as np
 import pandas as pd
 
 JSON = glob.glob("data/_ablate_train_window_quality_*.json")[-1]
 print(f"分析 JSON: {JSON}")
 out = json.load(open(JSON, encoding="utf-8"))
-print(f"verdict: faithful={out['verdict']['faithful_3y_reduced_vs_json']} "
-      f"picks_identical={out['verdict']['picks_identical']} "
-      f"n_picks_diffs={out['verdict']['n_picks_diffs']}")
+print(
+    f"verdict: faithful={out['verdict']['faithful_3y_reduced_vs_json']} "
+    f"picks_identical={out['verdict']['picks_identical']} "
+    f"n_picks_diffs={out['verdict']['n_picks_diffs']}"
+)
 
 SYS_KEYS = ["sniper", "fusion", "slow_bull"]
 
@@ -37,7 +38,7 @@ for b in out["boards"]:
                 p2 = picks_of(b, "2y", sname, k)
                 total_pairs += len(p3 | p1 | p2)
                 for wn_picks in (p2, p1):
-                    diff_syms |= (p3 ^ wn_picks)
+                    diff_syms |= p3 ^ wn_picks
 
 # 收集所有 diff 的 (symbol) —— 需要日期来查缺口, 故重建 (date, symbol) 差异集
 diff_cells = []
@@ -79,9 +80,13 @@ for b, sname, k, wn, diffset in diff_cells:
             all_gap = False
             print(f"  非缺口差异: {b}/{sname}/{k}/{wn} sym={sym}")
 
-print(f"\n=== 归因汇总 ===")
+print("\n=== 归因汇总 ===")
 print(f"总对比 pick 对数: {total_pairs:,}")
-print(f"差异 pick 数: {n_total_diff_pick} ({n_total_diff_pick/total_pairs*100:.3f}%)")
-print(f"其中停牌缺口符号差异: {n_gap_pick} ({n_gap_pick/max(n_total_diff_pick,1)*100:.1f}%)")
+print(
+    f"差异 pick 数: {n_total_diff_pick} ({n_total_diff_pick / total_pairs * 100:.3f}%)"
+)
+print(
+    f"其中停牌缺口符号差异: {n_gap_pick} ({n_gap_pick / max(n_total_diff_pick, 1) * 100:.1f}%)"
+)
 print(f"全部差异均为停牌缺口符号: {all_gap}")
 print(f"差异去重符号数: {len(diff_syms)}")

@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 """诊断: 3y vs 1y 裁剪在 OOS 同日期上, 狙击池 score 为何不同 (消融 picks 非逐位一致根因)."""
+
 import gc
 import os
 import sys
@@ -10,17 +10,17 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 import numpy as np
 import pandas as pd
 
-from scripts._ablate_train_window_quality import load_window
-from app.pipeline_parallel.scoring import pool_score, select_topn
 from app.pipeline_parallel.config import SYSTEMS
+from app.pipeline_parallel.scoring import pool_score, select_topn
+from scripts._ablate_train_window_quality import load_window
 
 t0 = time.time()
 work3 = load_window(726)
 gc.collect()
-print(f"3y loaded {time.time()-t0:.0f}s", flush=True)
+print(f"3y loaded {time.time() - t0:.0f}s", flush=True)
 work1 = load_window(242)
 gc.collect()
-print(f"1y loaded {time.time()-t0:.0f}s", flush=True)
+print(f"1y loaded {time.time() - t0:.0f}s", flush=True)
 
 pool = SYSTEMS["sniper"].pool
 board = "main"
@@ -83,11 +83,18 @@ if first is not None:
 # 全局: score 列级最大偏差
 for c in pool:
     if c in s3.columns and c in s1.columns:
-        j = pd.merge(s3[["symbol", "date", c]], s1[["symbol", "date", c]],
-                     on=["symbol", "date"], suffixes=("_3y", "_1y"))
+        j = pd.merge(
+            s3[["symbol", "date", c]],
+            s1[["symbol", "date", c]],
+            on=["symbol", "date"],
+            suffixes=("_3y", "_1y"),
+        )
         d = (j[f"{c}_3y"] - j[f"{c}_1y"]).abs()
         if d.max() > 1e-12:
-            print(f"  列 {c}: 最大偏差 {d.max():.3e} at "
-                  f"{j.loc[d.idxmax(), 'symbol']} {j.loc[d.idxmax(), 'date']}", flush=True)
+            print(
+                f"  列 {c}: 最大偏差 {d.max():.3e} at "
+                f"{j.loc[d.idxmax(), 'symbol']} {j.loc[d.idxmax(), 'date']}",
+                flush=True,
+            )
 
-print(f"done {time.time()-t0:.0f}s", flush=True)
+print(f"done {time.time() - t0:.0f}s", flush=True)

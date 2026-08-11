@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 """探针4: 5 个"非缺口差异"符号 — 验证是否为 1y 截断冷启动 (窗口起点滚动特征 NaN) 而非真实质量差异."""
+
 import glob
 import json
 import os
@@ -25,7 +25,8 @@ work["date"] = pd.to_datetime(work["date"])
 for s in SYMS:
     sub = work[work["symbol"] == s].sort_values("date")
     if sub.empty:
-        print(f"{s}: 3y 帧无数据"); continue
+        print(f"{s}: 3y 帧无数据")
+        continue
     first, last = sub["date"].iloc[0], sub["date"].iloc[-1]
     n = len(sub)
     max_gap = sub["date"].diff().dt.days.max()
@@ -33,7 +34,9 @@ for s in SYMS:
     after_cut = sub[sub["date"] >= CUTOFF]
     n_before_cut = (sub["date"] < CUTOFF).sum()
     print(f"\n{s}: rows={n}  span={first.date()}→{last.date()}  max_gap={max_gap:.0f}d")
-    print(f"    截止日前行数={n_before_cut}  截止日后首行={after_cut['date'].iloc[0].date() if not after_cut.empty else 'N/A'}")
+    print(
+        f"    截止日前行数={n_before_cut}  截止日后首行={after_cut['date'].iloc[0].date() if not after_cut.empty else 'N/A'}"
+    )
     # 若 max_gap 大 → 停牌; 若 n_before_cut 多且连续 → 截断冷启动候选
     if after_cut.empty:
         print("    => 全部在截止日后 (次新/数据晚起)")
@@ -53,4 +56,6 @@ for b in out["boards"]:
                 continue
             dates = pd.to_datetime([x[1] for x in d])
             early1y = (dates <= CUTOFF + pd.Timedelta("21d")).sum()
-            print(f"{b}/{sname}/{k}: diff={len(d)}  其中1y起点后≤21交易日={early1y} ({early1y/len(d)*100:.0f}%)")
+            print(
+                f"{b}/{sname}/{k}: diff={len(d)}  其中1y起点后≤21交易日={early1y} ({early1y / len(d) * 100:.0f}%)"
+            )
