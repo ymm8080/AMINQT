@@ -10,6 +10,7 @@
 
 Usage: python scripts/_eval_limit_features.py [N_dates]
 """
+
 import gc
 import json
 import os
@@ -30,9 +31,9 @@ try:
 except Exception:
     pass
 
-from config import settings
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.label_engine import LabelEngine
+from config import settings
 
 N_DATES = int(sys.argv[1]) if len(sys.argv) > 1 else 250
 PANEL = settings.PANEL_V3_PATH
@@ -54,14 +55,16 @@ pro = ts.pro_api(settings.TUSHARE_TOKEN or ts.get_token())
 
 # ── 1. Fetch limit_list_d for the panel's recent N trading dates ──
 print(f"[1] Fetching limit_list_d for recent {N_DATES} trading dates...")
-dates = sorted(pd.to_datetime(pd.read_parquet(PANEL, columns=["date"])["date"].unique()))[-N_DATES:]
+dates = sorted(
+    pd.to_datetime(pd.read_parquet(PANEL, columns=["date"])["date"].unique())
+)[-N_DATES:]
 print(f"    window: {dates[0].date()} .. {dates[-1].date()} ({len(dates)} dates)")
 frames, empty = [], []
-for i, d in enumerate(dates):
+for _i, d in enumerate(dates):
     ds = d.strftime("%Y%m%d")
     try:
         df = pro.limit_list_d(trade_date=ds)
-    except Exception as e:
+    except Exception:
         empty.append(ds)
         continue
     if len(df):
@@ -101,7 +104,9 @@ print("[3] Loading panel window + merging...")
 panel = pd.read_parquet(PANEL)
 panel["date"] = pd.to_datetime(panel["date"])
 panel = panel[panel["date"].isin(dates)]
-print(f"    panel window: {len(panel)} rows, {panel.date.nunique()} dates, {panel.shape[1]} cols")
+print(
+    f"    panel window: {len(panel)} rows, {panel.date.nunique()} dates, {panel.shape[1]} cols"
+)
 panel = panel.merge(feat, on=["symbol", "date"], how="left")
 for c in LIMIT_FEATURES:
     if c != "seal_mins":
@@ -156,13 +161,41 @@ def _group_rows(df, lbl_col):
     up_df = df[up]
     if len(up_df) > 20:
         fd_med = up_df["fd_amount_ratio"].median()
-        rows.append(("涨停+强封单(>=中位)", _diff(df[up & (df["fd_amount_ratio"] >= fd_med)], lbl_col, base)))
-        rows.append(("涨停+弱封单(<中位)", _diff(df[up & (df["fd_amount_ratio"] < fd_med)], lbl_col, base)))
+        rows.append(
+            (
+                "涨停+强封单(>=中位)",
+                _diff(df[up & (df["fd_amount_ratio"] >= fd_med)], lbl_col, base),
+            )
+        )
+        rows.append(
+            (
+                "涨停+弱封单(<中位)",
+                _diff(df[up & (df["fd_amount_ratio"] < fd_med)], lbl_col, base),
+            )
+        )
         seal = up_df["seal_mins"].dropna()
         if len(seal) > 20:
             s_med = seal.median()
-            rows.append(("涨停+早封板(<=中位)", _diff(df[up & df["seal_mins"].notna() & (df["seal_mins"] <= s_med)], lbl_col, base)))
-            rows.append(("涨停+晚封板(>中位)", _diff(df[up & df["seal_mins"].notna() & (df["seal_mins"] > s_med)], lbl_col, base)))
+            rows.append(
+                (
+                    "涨停+早封板(<=中位)",
+                    _diff(
+                        df[up & df["seal_mins"].notna() & (df["seal_mins"] <= s_med)],
+                        lbl_col,
+                        base,
+                    ),
+                )
+            )
+            rows.append(
+                (
+                    "涨停+晚封板(>中位)",
+                    _diff(
+                        df[up & df["seal_mins"].notna() & (df["seal_mins"] > s_med)],
+                        lbl_col,
+                        base,
+                    ),
+                )
+            )
     return base, rows
 
 
@@ -176,11 +209,7 @@ def _daily_rank_ic(df, x_col, y_col):
     for _d, g in df.groupby("date"):
         sub = g[[x_col, y_col]].dropna()
         min_xu = _MIN_XU.get(x_col, 5)
-        if (
-            len(sub) < 20
-            or sub[x_col].nunique() < min_xu
-            or sub[y_col].nunique() < 2
-        ):
+        if len(sub) < 20 or sub[x_col].nunique() < min_xu or sub[y_col].nunique() < 2:
             continue
         r, _ = spearmanr(sub[x_col], sub[y_col])
         if not np.isnan(r):
@@ -221,8 +250,12 @@ def _analyze(board_df, board):
         if base is None:
             continue
         sfx = LABEL_SFX[lbl]
-        print(f"\n    === T+{sfx} (PM 执行口径) 基线 mean={base['mean']*100:+.2f}% 上涨率={base['hit']*100:.1f}% ===")
-        print(f"    {'组':24s} {'n':>6s} {'mean%':>8s} {'上涨率%':>8s} {'Δmeanpp':>8s} {'Δhitpp':>7s}")
+        print(
+            f"\n    === T+{sfx} (PM 执行口径) 基线 mean={base['mean'] * 100:+.2f}% 上涨率={base['hit'] * 100:.1f}% ==="
+        )
+        print(
+            f"    {'组':24s} {'n':>6s} {'mean%':>8s} {'上涨率%':>8s} {'Δmeanpp':>8s} {'Δhitpp':>7s}"
+        )
         print("    " + "-" * 64)
         details = {}
         for name, s in rows:
@@ -230,7 +263,7 @@ def _analyze(board_df, board):
                 print(f"    {name:24s}  (样本不足)")
                 continue
             print(
-                f"    {name:24s} {s['n']:>6d} {s['mean']*100:>+8.2f} {s['hit']*100:>8.1f} "
+                f"    {name:24s} {s['n']:>6d} {s['mean'] * 100:>+8.2f} {s['hit'] * 100:>8.1f} "
                 f"{s.get('delta_mean_pp', 0):>+8.3f} {s.get('delta_hit_pp', 0):>+7.2f}"
             )
             details[name] = s
@@ -241,7 +274,10 @@ def _analyze(board_df, board):
     if len(dts) >= 20:
         mid = dts[len(dts) // 2]
         out["stability"] = {}
-        for half_name, half_df in [("first_half", df[df["date"] < mid]), ("second_half", df[df["date"] >= mid])]:
+        for half_name, half_df in [
+            ("first_half", df[df["date"] < mid]),
+            ("second_half", df[df["date"] >= mid]),
+        ]:
             for lbl in LABELS:
                 if lbl not in half_df.columns:
                     continue
@@ -249,16 +285,20 @@ def _analyze(board_df, board):
                 up = _stats(half_df[half_df["is_limit_up"] == 1], lbl)
                 if b and up:
                     out["stability"].setdefault(LABEL_SFX[lbl], {})[half_name] = {
-                        "base_hit": b["hit"], "up_hit": up["hit"],
+                        "base_hit": b["hit"],
+                        "up_hit": up["hit"],
                         "delta_hit_pp": round((up["hit"] - b["hit"]) * 100, 2),
-                        "base_mean": b["mean"], "up_mean": up["mean"],
+                        "base_mean": b["mean"],
+                        "up_mean": up["mean"],
                         "delta_mean_pp": round((up["mean"] - b["mean"]) * 100, 3),
                         "n_up": up["n"],
                     }
         print("\n    === 半窗稳定性 (涨停封住 Δ 相对基线) ===")
         for sfx, halves in out["stability"].items():
             for hn, h in halves.items():
-                print(f"    {sfx} {hn:12s} Δmean={h['delta_mean_pp']:+.3f}pp Δhit={h['delta_hit_pp']:+.2f}pp (n_up={h['n_up']})")
+                print(
+                    f"    {sfx} {hn:12s} Δmean={h['delta_mean_pp']:+.3f}pp Δhit={h['delta_hit_pp']:+.2f}pp (n_up={h['n_up']})"
+                )
 
     # ── Rank IC: 全截面; 涨停子集只对连续/序数列 ──
     dts = sorted(df["date"].unique())
@@ -269,7 +309,9 @@ def _analyze(board_df, board):
             continue
         sfx = LABEL_SFX[lbl]
         print(f"\n    T+{sfx}:")
-        print(f"    {'feature':<16s} {'IC':>8s} {'ICIR':>7s} {'days':>5s} | {'涨停子集 IC':>12s} {'ICIR':>7s} {'days':>5s}")
+        print(
+            f"    {'feature':<16s} {'IC':>8s} {'ICIR':>7s} {'days':>5s} | {'涨停子集 IC':>12s} {'ICIR':>7s} {'days':>5s}"
+        )
         print("    " + "-" * 68)
         icg = {}
         for c in LIMIT_FEATURES:
@@ -288,7 +330,10 @@ def _analyze(board_df, board):
         mid = dts[len(dts) // 2]
         print("\n    === Rank IC 半窗稳定性 (ΔIC = 后半窗 - 前半窗) ===")
         out["ic_stability"] = {}
-        for hn, h_df in [("first", df[df["date"] < mid]), ("second", df[df["date"] >= mid])]:
+        for hn, h_df in [
+            ("first", df[df["date"] < mid]),
+            ("second", df[df["date"] >= mid]),
+        ]:
             for lbl in LABELS:
                 if lbl not in h_df.columns:
                     continue

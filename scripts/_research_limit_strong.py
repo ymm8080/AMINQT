@@ -16,42 +16,57 @@
 
 Usage: python scripts/_research_limit_strong.py
 """
+
 import gc
 import glob
 import json
 import os
 import sys
-import time
 from datetime import datetime
 
 sys.path.insert(0, ".")
 
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
-import lightgbm as lgb
 from scipy.stats import spearmanr
 
-from config import settings
 from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.label_engine import LabelEngine
+from config import settings
 
 PANEL = settings.PANEL_V3_PATH
 TAG = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUT_DIR = "data/factor_registry"
 
 MODEL_FEATS = [
-    "limit_times", "fd_amount_ratio", "open_times", "seal_mins",
-    "is_yiziban", "n_up_5d", "n_up_10d", "days_since_up",
-    "ret_since_prev_up", "mkt_zhaban_rate", "mkt_n_up", "sector_n_up",
+    "limit_times",
+    "fd_amount_ratio",
+    "open_times",
+    "seal_mins",
+    "is_yiziban",
+    "n_up_5d",
+    "n_up_10d",
+    "days_since_up",
+    "ret_since_prev_up",
+    "mkt_zhaban_rate",
+    "mkt_n_up",
+    "sector_n_up",
     "ln_circ_mv",
 ]
 PCT = {"label_pm_2d": "2d", "label_pm_3d": "3d", "label_pm_5d": "5d"}
 
 # 回调续涨模型特征 (非涨停日也能算, 全部 <= 当日)
 PULL_FEATS = [
-    "days_since_up", "ret_since_prev_up", "last_height",
-    "ret_1d", "ret_5d", "mkt_zhaban_rate", "mkt_n_up",
-    "sector_n_up", "ln_circ_mv",
+    "days_since_up",
+    "ret_since_prev_up",
+    "last_height",
+    "ret_1d",
+    "ret_5d",
+    "mkt_zhaban_rate",
+    "mkt_n_up",
+    "sector_n_up",
+    "ln_circ_mv",
 ]
 
 
@@ -76,7 +91,9 @@ def add_derived(df: pd.DataFrame) -> pd.DataFrame:
     pos = df.groupby(sym).cumcount()
     last_up_pos = pos.where(up == 1).groupby(sym).ffill()
     df["days_since_up"] = (pos - last_up_pos).fillna(999)
-    prev_up_close = df["close"].where(up == 1).groupby(sym).ffill().groupby(sym).shift(1)
+    prev_up_close = (
+        df["close"].where(up == 1).groupby(sym).ffill().groupby(sym).shift(1)
+    )
     df["ret_since_prev_up"] = df["close"] / prev_up_close - 1
 
     # 上次涨停的连板高度 (非涨停日 carry-forward) + 短中期动量
@@ -85,7 +102,11 @@ def add_derived(df: pd.DataFrame) -> pd.DataFrame:
     df["ret_5d"] = df["close"] / df.groupby(sym)["close"].shift(5) - 1
 
     # 一字板 (OHLC 全等)
-    ohlc_eq = (df["open"] == df["high"]) & (df["high"] == df["low"]) & (df["low"] == df["close"])
+    ohlc_eq = (
+        (df["open"] == df["high"])
+        & (df["high"] == df["low"])
+        & (df["low"] == df["close"])
+    )
     df["is_yiziban"] = (ohlc_eq & (up == 1)).astype(float)
 
     # 市场情绪 (日度) / 板块效应 (date×industry)
@@ -107,7 +128,9 @@ def add_fwd_labels(df: pd.DataFrame) -> pd.DataFrame:
     f1 = up.groupby(sym).shift(-1).fillna(0)
     f2 = up.groupby(sym).shift(-2).fillna(0)
     f3 = up.groupby(sym).shift(-3).fillna(0)
-    df["fwd_up_3d"] = (((f1 > 0) | (f2 > 0) | (f3 > 0)) & (df["is_limit_up"] == 1)).astype(float)
+    df["fwd_up_3d"] = (
+        ((f1 > 0) | (f2 > 0) | (f3 > 0)) & (df["is_limit_up"] == 1)
+    ).astype(float)
     return df
 
 
@@ -161,7 +184,9 @@ def _split_half(df):
 def hypothesis(df, board, out):
     up = df[df["is_limit_up"] == 1]
     ret_col = "label_pm_3d"
-    print(f"\n[+] {board.upper()} 涨停事件样本: {len(up)}  (日期 {up['date'].min().date()} .. {up['date'].max().date()})")
+    print(
+        f"\n[+] {board.upper()} 涨停事件样本: {len(up)}  (日期 {up['date'].min().date()} .. {up['date'].max().date()})"
+    )
 
     # H1 回调后再板
     print("\n  === H1 回调后再板 (二波启动) ===")
@@ -193,7 +218,8 @@ def hypothesis(df, board, out):
     # H3a 连板高度递增
     print("\n  === H3a 连板高度 → 延续率 ===")
     h3a = [
-        (f"{h}连板", _row(up[up["board_height"] == h], ret_col)) for h in [1, 2, 3, 4, 5]
+        (f"{h}连板", _row(up[up["board_height"] == h], ret_col))
+        for h in [1, 2, 3, 4, 5]
     ]
     h3a.append(("6连板+", _row(up[up["board_height"] >= 6], ret_col)))
     _print_rows(h3a, ret_col)
@@ -203,7 +229,7 @@ def hypothesis(df, board, out):
     print("\n  === H3b 涨停组内特征 → 明日延续率 (全体涨停) ===")
     if len(up) > 40:
         rows = []
-        base_cont = up["fwd_up_1d"].mean()
+        up["fwd_up_1d"].mean()
         rows.append(("基线 全体涨停", _row(up, ret_col)))
         if up["seal_mins"].notna().sum() > 20:
             med = up["seal_mins"].median()
@@ -211,8 +237,12 @@ def hypothesis(df, board, out):
             rows.append(("晚封板(>中位)", _row(up[up["seal_mins"] > med], ret_col)))
         if up["fd_amount_ratio"].notna().sum() > 20:
             med = up["fd_amount_ratio"].median()
-            rows.append(("强封单(>=中位)", _row(up[up["fd_amount_ratio"] >= med], ret_col)))
-            rows.append(("弱封单(<中位)", _row(up[up["fd_amount_ratio"] < med], ret_col)))
+            rows.append(
+                ("强封单(>=中位)", _row(up[up["fd_amount_ratio"] >= med], ret_col))
+            )
+            rows.append(
+                ("弱封单(<中位)", _row(up[up["fd_amount_ratio"] < med], ret_col))
+            )
         if (up["is_yiziban"] == 1).sum() > 20:
             rows.append(("一字板", _row(up[up["is_yiziban"] == 1], ret_col)))
             rows.append(("非一字板", _row(up[up["is_yiziban"] == 0], ret_col)))
@@ -220,8 +250,12 @@ def hypothesis(df, board, out):
             rows.append(("开板>=2次", _row(up[up["open_times"] >= 2], ret_col)))
             rows.append(("未开板", _row(up[up["open_times"] < 2], ret_col)))
         med_zr = up["mkt_zhaban_rate"].median()
-        rows.append(("市场炸板率高(>=中位)", _row(up[up["mkt_zhaban_rate"] >= med_zr], ret_col)))
-        rows.append(("市场炸板率低(<中位)", _row(up[up["mkt_zhaban_rate"] < med_zr], ret_col)))
+        rows.append(
+            ("市场炸板率高(>=中位)", _row(up[up["mkt_zhaban_rate"] >= med_zr], ret_col))
+        )
+        rows.append(
+            ("市场炸板率低(<中位)", _row(up[up["mkt_zhaban_rate"] < med_zr], ret_col))
+        )
         rows.append(("板块内>=2只涨停", _row(up[up["sector_n_up"] >= 2], ret_col)))
         rows.append(("板块内仅1只涨停", _row(up[up["sector_n_up"] < 2], ret_col)))
         _print_rows(rows, ret_col)
@@ -236,10 +270,20 @@ def hypothesis(df, board, out):
         ("涨停后未回调", df[up24 & (df["ret_since_prev_up"] > -0.02)]),
         ("涨停后回调(8~28日,<-2%)", df[pb]),
         ("  回调 8~14日", df[pb & (df["days_since_up"] < 15)]),
-        ("  回调 15~21日", df[pb & (df["days_since_up"] >= 15) & (df["days_since_up"] < 22)]),
+        (
+            "  回调 15~21日",
+            df[pb & (df["days_since_up"] >= 15) & (df["days_since_up"] < 22)],
+        ),
         ("  回调 22~28日", df[pb & (df["days_since_up"] >= 22)]),
         ("  回调 2~5%", df[pb & (df["ret_since_prev_up"] > -0.05)]),
-        ("  回调 5~10%", df[pb & (df["ret_since_prev_up"] <= -0.05) & (df["ret_since_prev_up"] > -0.10)]),
+        (
+            "  回调 5~10%",
+            df[
+                pb
+                & (df["ret_since_prev_up"] <= -0.05)
+                & (df["ret_since_prev_up"] > -0.10)
+            ],
+        ),
         ("  深回调 >10%", df[pb & (df["ret_since_prev_up"] <= -0.10)]),
         ("  前次3连板+", df[pb & (df["last_height"] >= 3)]),
     ]
@@ -259,7 +303,9 @@ def model_eval(up, board, out):
     ret_col = "label_pm_3d"
     sub = up[MODEL_FEATS + ["fwd_up_1d", ret_col, "date"]].copy()
     for c in MODEL_FEATS:
-        sub[c] = pd.to_numeric(sub[c], errors="coerce").replace([np.inf, -np.inf], np.nan)
+        sub[c] = pd.to_numeric(sub[c], errors="coerce").replace(
+            [np.inf, -np.inf], np.nan
+        )
         sub[c] = sub[c].fillna(sub[c].median())
     sub = sub.dropna(subset=["fwd_up_1d", ret_col])
     if len(sub) < 500 or sub["fwd_up_1d"].nunique() < 2:
@@ -274,22 +320,36 @@ def model_eval(up, board, out):
         return
 
     m = lgb.LGBMClassifier(
-        n_estimators=300, max_depth=5, num_leaves=31, learning_rate=0.05,
-        subsample=0.8, colsample_bytree=0.8, random_state=42, n_jobs=-1,
-        class_weight="balanced", verbose=-1,
+        n_estimators=300,
+        max_depth=5,
+        num_leaves=31,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42,
+        n_jobs=-1,
+        class_weight="balanced",
+        verbose=-1,
     )
     m.fit(tr[MODEL_FEATS], tr["fwd_up_1d"])
     p = m.predict_proba(te[MODEL_FEATS])[:, 1]
     y = te["fwd_up_1d"].values
     from sklearn.metrics import roc_auc_score
+
     auc = roc_auc_score(y, p)
     # 分位校准
     q = pd.qcut(pd.Series(p), 5, labels=False, duplicates="drop")
     cal = pd.DataFrame({"p": p, "y": y, "q": q})
     cal_rows = []
     for qi, g in cal.groupby("q"):
-        cal_rows.append((int(qi), round(float(g["p"].mean()), 4),
-                         round(float(g["y"].mean()), 4), int(len(g))))
+        cal_rows.append(
+            (
+                int(qi),
+                round(float(g["p"].mean()), 4),
+                round(float(g["y"].mean()), 4),
+                int(len(g)),
+            )
+        )
     # 强势股判别: 模型概率排名未来收益 (test 涨停子集)
     r_ic, _ = spearmanr(p, te[ret_col].values)
     te2 = te.copy()
@@ -299,35 +359,44 @@ def model_eval(up, board, out):
     base_hit = float((te[ret_col] > 0).mean())
     top_mean = float(top[ret_col].mean())
     top_hit = float((top[ret_col] > 0).mean())
-    imp = pd.DataFrame({
-        "feature": MODEL_FEATS,
-        "gain": m.booster_.feature_importance(importance_type="gain"),
-    }).sort_values("gain", ascending=False)
+    imp = pd.DataFrame(
+        {
+            "feature": MODEL_FEATS,
+            "gain": m.booster_.feature_importance(importance_type="gain"),
+        }
+    ).sort_values("gain", ascending=False)
     imp["gain_pct"] = (imp["gain"] / imp["gain"].sum() * 100).round(2)
 
     print(f"\n  === M/S 连板延续模型 ({board.upper()}) ===")
-    print(f"    train {len(tr)} (fwd_up率 {tr['fwd_up_1d'].mean()*100:.1f}%) | "
-          f"test {len(te)} ({te['fwd_up_1d'].mean()*100:.1f}%) | 基率 {te['fwd_up_1d'].mean()*100:.1f}%")
+    print(
+        f"    train {len(tr)} (fwd_up率 {tr['fwd_up_1d'].mean() * 100:.1f}%) | "
+        f"test {len(te)} ({te['fwd_up_1d'].mean() * 100:.1f}%) | 基率 {te['fwd_up_1d'].mean() * 100:.1f}%"
+    )
     print(f"    OOS AUC = {auc:.4f}  |  概率 RankIC vs label_pm_3d = {r_ic:+.4f}")
-    print(f"    top20% 概率组: 均值 {top_mean*100:+.2f}% (基线 {base_mean*100:+.2f}%) | "
-          f"上涨率 {top_hit*100:.1f}% (基线 {base_hit*100:.1f}%)")
+    print(
+        f"    top20% 概率组: 均值 {top_mean * 100:+.2f}% (基线 {base_mean * 100:+.2f}%) | "
+        f"上涨率 {top_hit * 100:.1f}% (基线 {base_hit * 100:.1f}%)"
+    )
     print("    --- 分位校准 (predicted → actual 明日涨停率) ---")
     for qi, mp, ay, nn in cal_rows:
-        print(f"      Q{qi+1}: pred={mp:.3f} actual={ay:.3f} n={nn}")
+        print(f"      Q{qi + 1}: pred={mp:.3f} actual={ay:.3f} n={nn}")
     print("    --- 特征重要度 (gain%) ---")
     for _, r in imp.iterrows():
         print(f"      {r['feature']:<16s} {r['gain_pct']:.1f}%")
 
     out[board]["model"] = {
         "auc": round(auc, 4),
-        "train_n": len(tr), "test_n": len(te),
+        "train_n": len(tr),
+        "test_n": len(te),
         "base_cont_rate": round(float(te["fwd_up_1d"].mean()), 4),
         "prob_rankic_vs_pm3d": round(float(r_ic), 4),
         "top20_mean_pct": round(top_mean * 100, 3),
         "base_mean_pct": round(base_mean * 100, 3),
         "top20_hit_pct": round(top_hit * 100, 2),
         "base_hit_pct": round(base_hit * 100, 2),
-        "calibration": [{"q": qi, "pred": mp, "actual": ay, "n": nn} for qi, mp, ay, nn in cal_rows],
+        "calibration": [
+            {"q": qi, "pred": mp, "actual": ay, "n": nn} for qi, mp, ay, nn in cal_rows
+        ],
         "importance": imp.to_dict("records"),
     }
 
@@ -339,10 +408,16 @@ def model_pullback(df, board, out):
     在回调窗口样本上回归 label_pm_5d, 看 test 集 RankIC + top20% 相对基线.
     """
     ret_col = "label_pm_5d"
-    sub = df[(df["days_since_up"] >= 8) & (df["days_since_up"] <= 28) & (df["ret_since_prev_up"] <= -0.02)]
+    sub = df[
+        (df["days_since_up"] >= 8)
+        & (df["days_since_up"] <= 28)
+        & (df["ret_since_prev_up"] <= -0.02)
+    ]
     sub = sub[PULL_FEATS + [ret_col, "date"]].copy()
     for c in PULL_FEATS:
-        sub[c] = pd.to_numeric(sub[c], errors="coerce").replace([np.inf, -np.inf], np.nan)
+        sub[c] = pd.to_numeric(sub[c], errors="coerce").replace(
+            [np.inf, -np.inf], np.nan
+        )
         sub[c] = sub[c].fillna(sub[c].median())
     sub = sub.dropna(subset=[ret_col])
     if len(sub) < 800:
@@ -357,8 +432,15 @@ def model_pullback(df, board, out):
         return
 
     m = lgb.LGBMRegressor(
-        n_estimators=400, max_depth=5, num_leaves=31, learning_rate=0.05,
-        subsample=0.8, colsample_bytree=0.8, random_state=42, n_jobs=-1, verbose=-1,
+        n_estimators=400,
+        max_depth=5,
+        num_leaves=31,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42,
+        n_jobs=-1,
+        verbose=-1,
     )
     m.fit(tr[PULL_FEATS], tr[ret_col])
     p = m.predict(te[PULL_FEATS])
@@ -371,23 +453,31 @@ def model_pullback(df, board, out):
     base_hit = float((y > 0).mean())
     top_mean = float(top[ret_col].mean())
     top_hit = float((top[ret_col] > 0).mean())
-    imp = pd.DataFrame({
-        "feature": PULL_FEATS,
-        "gain": m.booster_.feature_importance(importance_type="gain"),
-    }).sort_values("gain", ascending=False)
+    imp = pd.DataFrame(
+        {
+            "feature": PULL_FEATS,
+            "gain": m.booster_.feature_importance(importance_type="gain"),
+        }
+    ).sort_values("gain", ascending=False)
     imp["gain_pct"] = (imp["gain"] / imp["gain"].sum() * 100).round(2)
 
     print(f"\n  === P 回调续涨模型 ({board.upper()}) 样本={len(sub)} ===")
-    print(f"    train {len(tr)} / test {len(te)} (回调窗口 8~28日, ret_since_prev_up<=-2%)")
+    print(
+        f"    train {len(tr)} / test {len(te)} (回调窗口 8~28日, ret_since_prev_up<=-2%)"
+    )
     print(f"    预测 label_pm_5d RankIC = {r_ic:+.4f}")
-    print(f"    top20% 实际均值 {top_mean*100:+.2f}% (test 基线 {base_mean*100:+.2f}%) | "
-          f"上涨率 {top_hit*100:.1f}% (基线 {base_hit*100:.1f}%)")
+    print(
+        f"    top20% 实际均值 {top_mean * 100:+.2f}% (test 基线 {base_mean * 100:+.2f}%) | "
+        f"上涨率 {top_hit * 100:.1f}% (基线 {base_hit * 100:.1f}%)"
+    )
     print("    --- 特征重要度 (gain%) ---")
     for _, r in imp.iterrows():
         print(f"      {r['feature']:<16s} {r['gain_pct']:.1f}%")
 
     out[board]["pullback_model"] = {
-        "n": len(sub), "train_n": len(tr), "test_n": len(te),
+        "n": len(sub),
+        "train_n": len(tr),
+        "test_n": len(te),
         "rankic_vs_pm5d": round(float(r_ic), 4),
         "top20_mean_pct": round(top_mean * 100, 3),
         "base_mean_pct": round(base_mean * 100, 3),
@@ -405,7 +495,7 @@ def analyze(board_df, board, out):
     df = add_fwd_labels(df)
     n_all = int(len(df))
     out[board] = {"n_rows": n_all}
-    print(f"\n{'='*74}\n[{board.upper()}] rows={n_all}\n{'='*74}")
+    print(f"\n{'=' * 74}\n[{board.upper()}] rows={n_all}\n{'=' * 74}")
     up = hypothesis(df, board, out)
     # 半窗稳定性: 连板高度延续率 (board_height 1 vs 2+) 两半窗
     dts = sorted(df["date"].unique())
@@ -421,7 +511,9 @@ def analyze(board_df, board, out):
         if stab.get("first") and stab.get("second"):
             print("\n  === 半窗稳定性: X连板 → 明日延续率 ===")
             for hn in ["first", "second"]:
-                parts = [f"  {h}板={stab[hn].get(h, float('nan')):.3f}" for h in [1, 2, 3]]
+                parts = [
+                    f"  {h}板={stab[hn].get(h, float('nan')):.3f}" for h in [1, 2, 3]
+                ]
                 print(f"    {hn:8s}" + "".join(parts))
             out[board]["cont_stability"] = stab
     model_eval(up, board, out)
@@ -436,22 +528,45 @@ def main():
     feat_path = feat_files[-1]
     print(f"[1] feature file: {feat_path}")
     feat = pd.read_parquet(feat_path)
-    print(f"    feat rows: {len(feat)}, dates: {feat['date'].nunique()}, "
-          f"up: {(feat['is_limit_up']==1).sum()}, zhaban: {(feat['is_zhaban']==1).sum()}")
+    print(
+        f"    feat rows: {len(feat)}, dates: {feat['date'].nunique()}, "
+        f"up: {(feat['is_limit_up'] == 1).sum()}, zhaban: {(feat['is_zhaban'] == 1).sum()}"
+    )
     dates = sorted(feat["date"].unique())
 
     print("[2] loading panel window + merging...")
-    panel = pd.read_parquet(PANEL, columns=[
-        "symbol", "date", "open", "high", "low", "close", "volume", "amount",
-        "pre_close", "close_hfq", "industry", "board", "circ_mv",
-        "turnover_rate", "is_suspended",
-    ])
+    panel = pd.read_parquet(
+        PANEL,
+        columns=[
+            "symbol",
+            "date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "amount",
+            "pre_close",
+            "close_hfq",
+            "industry",
+            "board",
+            "circ_mv",
+            "turnover_rate",
+            "is_suspended",
+        ],
+    )
     panel["date"] = pd.to_datetime(panel["date"])
     panel = panel[panel["date"].isin(dates)]
     print(f"    panel window: {len(panel)} rows, {panel['date'].nunique()} dates")
     panel = panel.merge(feat, on=["symbol", "date"], how="left")
-    for c in ["is_limit_up", "is_limit_down", "is_zhaban", "limit_times",
-              "fd_amount_ratio", "open_times"]:
+    for c in [
+        "is_limit_up",
+        "is_limit_down",
+        "is_zhaban",
+        "limit_times",
+        "fd_amount_ratio",
+        "open_times",
+    ]:
         panel[c] = panel[c].fillna(0.0)
     del feat
     gc.collect()

@@ -16,6 +16,7 @@
 涨停近似口径: 主板 ±9.8%, 双创 ±19.8% (close vs pre_close). 与 data_supply.fetch_market_sentiment
 全局 9.8% 口径不同, 本模块按 board 分档更精确; 无 board 列时回退全局 9.8%.
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,11 +31,11 @@ _UP_MAIN, _DN_MAIN = 0.098, 0.098
 _UP_DUAL, _DN_DUAL = 0.198, 0.198
 
 # 分类参数 (基线为近 60 日均值, 此处是相对倍数, 非绝对常数)
-_ICE_UP_PCT = 0.5    # 涨停家数 < 常态 50% → 冰点
-_ICE_RATIO = 0.5     # 涨跌停比 < 0.5 → 冰点
-_HOT_UP_PCT = 1.5    # 涨停家数 > 常态 150%
-_HOT_RATIO = 3.0     # 涨跌停比 > 3.0 → 高潮
-_VETO_UP = 10        # 极端冰点: 涨停 < 10 且 跌停 ≥ 涨停
+_ICE_UP_PCT = 0.5  # 涨停家数 < 常态 50% → 冰点
+_ICE_RATIO = 0.5  # 涨跌停比 < 0.5 → 冰点
+_HOT_UP_PCT = 1.5  # 涨停家数 > 常态 150%
+_HOT_RATIO = 3.0  # 涨跌停比 > 3.0 → 高潮
+_VETO_UP = 10  # 极端冰点: 涨停 < 10 且 跌停 ≥ 涨停
 HIST_WINDOW = 60
 
 
@@ -52,9 +53,7 @@ def _limit_mask(panel: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     return up.fillna(False), dn.fillna(False)
 
 
-def sentiment_from_panel(
-    panel: pd.DataFrame, trade_date: str | None = None
-) -> dict:
+def sentiment_from_panel(panel: pd.DataFrame, trade_date: str | None = None) -> dict:
     """当日全市场情绪: 涨停/跌停家数 + 两市总成交额.
 
     trade_date 缺省 → 取面板最新交易日的全部行 (当日). 无当日行 → 空 dict.
@@ -82,7 +81,9 @@ def sentiment_from_panel(
     }
 
 
-def sentiment_history_from_panel(panel: pd.DataFrame, n: int = HIST_WINDOW) -> pd.DataFrame:
+def sentiment_history_from_panel(
+    panel: pd.DataFrame, n: int = HIST_WINDOW
+) -> pd.DataFrame:
     """近 n 个交易日逐日情绪序列 (涨停/跌停家数, 含当日)."""
     up, dn = _limit_mask(panel)
     if "amount" in panel.columns:
@@ -91,7 +92,11 @@ def sentiment_history_from_panel(panel: pd.DataFrame, n: int = HIST_WINDOW) -> p
         turn = pd.Series(0.0, index=panel.index)
     hist = (
         panel[["date"]]
-        .assign(count_limit_up=up.astype(int), count_limit_down=dn.astype(int), turnover=turn)
+        .assign(
+            count_limit_up=up.astype(int),
+            count_limit_down=dn.astype(int),
+            turnover=turn,
+        )
         .groupby("date", as_index=False)
         .agg(
             count_limit_up=("count_limit_up", "sum"),

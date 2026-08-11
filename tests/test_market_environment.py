@@ -39,7 +39,7 @@ def _panel(**overrides) -> pd.DataFrame:
         base.append(
             {
                 "symbol": "BASE",
-                "date": pd.Timestamp(f"2025-01-{i+1:02d}"),
+                "date": pd.Timestamp(f"2025-01-{i + 1:02d}"),
                 "close": 100.0,
                 "pre_close": 100.0,
                 "amount": 1e9,
@@ -102,27 +102,53 @@ def _panel(**overrides) -> pd.DataFrame:
 class TestClassify:
     def test_ice_when_up_far_below_baseline(self):
         hist = _history(up_mean=100.0)
-        assert classify_market_state({"count_limit_up": 20, "count_limit_down": 1}, hist) == "ice"
+        assert (
+            classify_market_state({"count_limit_up": 20, "count_limit_down": 1}, hist)
+            == "ice"
+        )
 
     def test_ice_when_limitdown_dominates(self):
         hist = _history(up_mean=60.0)
-        assert classify_market_state({"count_limit_up": 30, "count_limit_down": 100}, hist) == "ice"
+        assert (
+            classify_market_state({"count_limit_up": 30, "count_limit_down": 100}, hist)
+            == "ice"
+        )
 
     def test_hot_when_up_high_and_ratio_good(self):
         hist = _history(up_mean=50.0)
-        assert classify_market_state({"count_limit_up": 120, "count_limit_down": 5}, hist) == "hot"
+        assert (
+            classify_market_state({"count_limit_up": 120, "count_limit_down": 5}, hist)
+            == "hot"
+        )
 
     def test_range_when_normal(self):
         hist = _history(up_mean=60.0)
-        assert classify_market_state({"count_limit_up": 55, "count_limit_down": 10}, hist) == "range"
+        assert (
+            classify_market_state({"count_limit_up": 55, "count_limit_down": 10}, hist)
+            == "range"
+        )
 
     def test_no_history_fallback_by_ratio(self):
-        assert classify_market_state({"count_limit_up": 1, "count_limit_down": 10}) == "ice"
-        assert classify_market_state({"count_limit_up": 10, "count_limit_down": 1}) == "hot"
-        assert classify_market_state({"count_limit_up": 3, "count_limit_down": 3}) == "range"
+        assert (
+            classify_market_state({"count_limit_up": 1, "count_limit_down": 10})
+            == "ice"
+        )
+        assert (
+            classify_market_state({"count_limit_up": 10, "count_limit_down": 1})
+            == "hot"
+        )
+        assert (
+            classify_market_state({"count_limit_up": 3, "count_limit_down": 3})
+            == "range"
+        )
 
     def test_short_history_falls_back(self):
-        assert classify_market_state({"count_limit_up": 1, "count_limit_down": 10}, _history(n=5)) == "ice"
+        assert (
+            classify_market_state(
+                {"count_limit_up": 1, "count_limit_down": 10}, _history(n=5)
+            )
+            == "ice"
+        )
 
 
 class TestPolicy:
@@ -159,7 +185,9 @@ class TestPanelSentiment:
     def test_history_length(self):
         hist = sentiment_history_from_panel(_panel(), n=5)
         assert len(hist) == 5
-        assert {"count_limit_up", "count_limit_down", "market_turnover"} <= set(hist.columns)
+        assert {"count_limit_up", "count_limit_down", "market_turnover"} <= set(
+            hist.columns
+        )
 
     def test_empty_panel_safe(self):
         sent = sentiment_from_panel(pd.DataFrame())

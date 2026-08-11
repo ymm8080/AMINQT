@@ -190,9 +190,7 @@ class TestRefreshFingerprintSkip:
         mod = self._mod(monkeypatch, tmp_path)
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
-        monkeypatch.setattr(
-            mod, "load_panel_v3", lambda **kw: _tiny_board("main")
-        )
+        monkeypatch.setattr(mod, "load_panel_v3", lambda **kw: _tiny_board("main"))
         monkeypatch.setattr(
             mod.CleaningPipeline,
             "run_train",
