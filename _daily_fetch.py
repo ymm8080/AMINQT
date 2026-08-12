@@ -44,7 +44,9 @@ from app.pipeline1 import cyq_ext  # noqa: E402
 from app.pipeline1.cleaning_pipeline import board_of  # noqa: E402
 from app.pipeline1.data_supply import SW_INDEX_CODES  # noqa: E402
 
-TRADE_DATE = sys.argv[1] if len(sys.argv) > 1 else datetime.now().strftime("%Y%m%d")
+_POS_ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
+TRADE_DATE = _POS_ARGS[0] if _POS_ARGS else datetime.now().strftime("%Y%m%d")
+FORCE_NO_CYQ = "--force" in sys.argv
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
 
 _token = os.getenv("TUSHARE_TOKEN") or ts.get_token()
@@ -236,9 +238,12 @@ panel_cols = schema.names
 # 关键源空数据护栏: cyq_perf (筹码分布) 整源为空时拒绝追加 — 否则尾部 9 个 CYQ 列
 # 全空仍会被静默写入 (2026-08-10 事故). cyq 数据比 OHLCV 晚发布; 幂等重跑可恢复.
 if not len(cyq) and {"cost_50pct", "weight_avg", "winner_rate"} & set(panel_cols):
-    print("FATAL: cyq_perf empty — 筹码数据未发布, 拒绝追加. "
-          f"数据发布后重跑 `python _daily_fetch.py {TRADE_DATE}` (幂等).")
-    sys.exit(1)
+    if not FORCE_NO_CYQ:
+        print("FATAL: cyq_perf empty — 筹码数据未发布, 拒绝追加. "
+              f"数据发布后重跑 `python _daily_fetch.py {TRADE_DATE}` (幂等); "
+              "或 `--force` 强制追加 (cyq 列留空, 重跑回填).")
+        sys.exit(1)
+    print("WARN: cyq_perf empty — --force 强制追加 (cyq 列留空), 发布后重跑回填.")
 
 # ── 3. Merge all sources ──
 print("\n[3] Merging sources...")

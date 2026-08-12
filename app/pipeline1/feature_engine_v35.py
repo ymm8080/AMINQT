@@ -163,7 +163,12 @@ def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
                 result[col] = result[col].astype(float)
                 continue
         result[col] = result[col].astype(dtype)
-    return result.reset_index(drop=True)
+    # 免 reset_index 宽表合并 OOM (2026-08-11): result 由 numpy 缓冲直接构造,
+    # 索引本已是 RangeIndex(0..pos-1) (按 build 入口已排序, groupby 保序), reset_index
+    # 语义为 no-op 却强制深拷贝 + _consolidate_inplace 合并全部同 dtype 列为 1 个连续块
+    # (main 367列×140万行 = 3.84GB), 本机 15.8GB 触发 _ArrayMemoryError. 直接返回保持
+    # 每列独立 block (copy=False 设计), 输出与 reset_index 逐字节一致.
+    return result
 
 
 def _safe_divide(numerator, denominator) -> pd.Series:
@@ -2427,11 +2432,15 @@ class FeatureEngineV35:
                 "ind_margin_chg_5d"
             ].shift(10)
             ind_mb = ind_mb.reset_index(drop=True)
-            df = df.merge(
+            # 内存安全 (2026-08-12): 全宽帧 merge 触发 block consolidation (2.87GiB
+            # 连续块, 碎片化时 OOM). 改小帧 merge + 位置列赋值, 逐元素一致.
+            _sub = df[["date", "industry"]].merge(
                 ind_mb[["date", "industry", "ind_margin_chg_5d", "ind_margin_accel"]],
                 on=["date", "industry"],
                 how="left",
             )
+            df["ind_margin_chg_5d"] = _sub["ind_margin_chg_5d"].to_numpy()
+            df["ind_margin_accel"] = _sub["ind_margin_accel"].to_numpy()
             df = df.drop(columns=["_mb_chg_1d"], errors="ignore")
         else:
             df["ind_margin_chg_5d"] = np.nan
@@ -2452,11 +2461,11 @@ class FeatureEngineV35:
                 .reset_index(level=0, drop=True)
             )
             ind_hc = ind_hc.reset_index(drop=True)
-            df = df.merge(
+            df["ind_holder_trend_20d"] = df[["date", "industry"]].merge(
                 ind_hc[["date", "industry", "ind_holder_trend_20d"]],
                 on=["date", "industry"],
                 how="left",
-            )
+            )["ind_holder_trend_20d"].to_numpy()
         else:
             df["ind_holder_trend_20d"] = np.nan
 
@@ -2472,11 +2481,11 @@ class FeatureEngineV35:
                 "north_net_buy"
             ].diff(5)
             ind_nb = ind_nb.reset_index(drop=True)
-            df = df.merge(
+            df["ind_north_chg_5d"] = df[["date", "industry"]].merge(
                 ind_nb[["date", "industry", "ind_north_chg_5d"]],
                 on=["date", "industry"],
                 how="left",
-            )
+            )["ind_north_chg_5d"].to_numpy()
         else:
             df["ind_north_chg_5d"] = np.nan
 
@@ -2500,11 +2509,11 @@ class FeatureEngineV35:
                 .reset_index(level=0, drop=True)
             )
             ind_lhb = ind_lhb.reset_index(drop=True)
-            df = df.merge(
+            df["ind_lhb_net_flow_5d"] = df[["date", "industry"]].merge(
                 ind_lhb[["date", "industry", "ind_lhb_net_flow_5d"]],
                 on=["date", "industry"],
                 how="left",
-            )
+            )["ind_lhb_net_flow_5d"].to_numpy()
         else:
             df["ind_lhb_net_flow_5d"] = np.nan
 
@@ -2693,13 +2702,17 @@ class FeatureEngineV35:
                 if c in df.columns:
                     df = df.drop(columns=[c])
 
-            # Merge by (date, name)
-            df = df.merge(
+            # Merge by (date, name) — 内存安全 (2026-08-12): 全宽帧 merge 会 block
+            # consolidation OOM (见 dim27 同类注释). 小帧 merge + 位置列赋值, 逐元素一致.
+            _sub = df[["date", name_col]].merge(
                 sw_merge,
                 left_on=["date", name_col],
                 right_on=["date", "name"],
                 how="left",
             )
+            for _c in sw_merge.columns:
+                if _c not in ("date", "name") and _c in _sub.columns:
+                    df[_c] = _sub[_c].to_numpy()
             df = df.drop(columns=["name"], errors="ignore")
 
             log_col = f"{prefix}close"

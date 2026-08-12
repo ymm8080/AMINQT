@@ -144,7 +144,9 @@ def main(force: bool = False) -> int:
     )
 
     latest_date = None
-    for board, ckpt in (("main", MAIN_CHECKPOINT), ("dual", DUAL_CHECKPOINT)):
+    # 构建顺序: dual 先 → main 后. main 1.4M 行是内存大头, 后建时另一板块
+    # 清洗帧已弹出释放, 峰值从 ~12GB 降到 ~8GB (本机 15.8GB 物理, 防 block consolidate OOM).
+    for board, ckpt in (("dual", DUAL_CHECKPOINT), ("main", MAIN_CHECKPOINT)):
         bdf = board_dfs.pop(board)
         if bdf is None or len(bdf) == 0:
             print(f"[{board}] 空, 跳过", flush=True)

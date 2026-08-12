@@ -30,7 +30,7 @@ def _tiny_board(board: str) -> pd.DataFrame:
 
 
 class TestRefreshCheckpoints:
-    def test_builds_main_then_dual_in_order(self, monkeypatch, capsys):
+    def test_builds_dual_then_main_in_order(self, monkeypatch, capsys):
         mod = _load_refresh_module(monkeypatch)
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
@@ -56,10 +56,12 @@ class TestRefreshCheckpoints:
         rc = mod.main()
 
         assert rc == 0
-        assert [c[0] for c in calls] == ["main", "dual"]  # 逐板块, 有先有后
-        # main 板块用 MAIN_CHECKPOINT, dual 用 DUAL_CHECKPOINT, 不得串
-        assert calls[0][1] == mod.MAIN_CHECKPOINT and calls[0][2].equals(main_df)
-        assert calls[1][1] == mod.DUAL_CHECKPOINT and calls[1][2].equals(dual_df)
+        # 内存优化定案 2026-08-11: dual 先建 → main 后建 (main 1.4M 行是内存大头,
+        # 后建时另一板块清洗帧已弹出释放, 防 block consolidate OOM)
+        assert [c[0] for c in calls] == ["dual", "main"]  # 逐板块, 有先有后
+        # 板块检查点路径不得串: dual→DUAL_CHECKPOINT, main→MAIN_CHECKPOINT
+        assert calls[0][1] == mod.DUAL_CHECKPOINT and calls[0][2].equals(dual_df)
+        assert calls[1][1] == mod.MAIN_CHECKPOINT and calls[1][2].equals(main_df)
         out = capsys.readouterr().out
         assert "main rows=1" in out  # run_train 行数打印保留
 

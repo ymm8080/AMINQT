@@ -10,6 +10,7 @@ current_meta.json 同步更新.
 from __future__ import annotations
 
 import gc
+import logging
 import os
 import shutil
 import sys
@@ -26,7 +27,20 @@ MODEL_DIR = "models/pipeline1"
 
 
 def main() -> int:
+    # 子模块全部用 logging.getLogger(__name__) 传播到 root, 无 handler 时 info 被丢弃
+    # (Python last-resort handler 只放 WARNING+), 重训会"看似卡住". 这里挂一个 handler.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        stream=sys.stdout,
+    )
     tag = sys.argv[1] if len(sys.argv) > 1 else time.strftime("%Y%m%d")
+    # LEGACY_FORCE_FALLBACK=1 → 只对 main 跳过 FeatureSelector (bruteforce_dedup 选择
+    # 过大必 OOM, 直用 FeatureEngine 全量 316 特征), dual 仍走 gate_d (38). 两段式发布:
+    # 先落 cls 修复, 再单独验证 cap 选择过 OOS 门.
+    fallback_boards = (
+        {"main"} if os.environ.get("LEGACY_FORCE_FALLBACK", "0") == "1" else None
+    )
     t0 = time.time()
     # 读取时行级预过滤 (amount>=5000万 且 非停牌): 与 run_train 内部过滤同口径,
     # 少读 ~20% 行, 输出与整表读取后 run_train 完全一致 (2026-08-10).
@@ -45,14 +59,32 @@ def main() -> int:
         flush=True,
     )
 
-    results = run_training(panel, tag, model_dir=MODEL_DIR)
+    results = run_training(
+        panel,
+        tag,
+        model_dir=MODEL_DIR,
+        use_ic_screen=True,
+        fallback_boards=fallback_boards,
+    )
     del panel
     gc.collect()
 
     from app.pipeline1.model_meta import load_modules, save_modules
 
+    # LEGACY_FORCE_FALLBACK=1 (20260811c 安全发布): 双创 gate_d 本轮抽到 208 特征
+    # 过拟合抽签 (r3=38, 本轮=208, 输入完全一致 → LGBM n_jobs 线程非确定性), 不让
+    # 该抽签发布, 保留 proven 的 20260811b (38 特征). 主板 cls 修复照常发布.
+    skip_dual_switch = (
+        os.environ.get("LEGACY_FORCE_FALLBACK", "0") == "1"
+    )
     mods = load_modules()
     for board, res in results.items():
+        if skip_dual_switch and board == "dual" and res["switched"]:
+            print(
+                f"[dual] gate_d 非确定性漂移 (38→208 特征), 保留 20260811b, 跳过切换",
+                flush=True,
+            )
+            continue
         if res["switched"]:
             cur = os.path.join(MODEL_DIR, f"{board}_current.pkl")
             bak = os.path.join(MODEL_DIR, f"{board}_current_retrain_backup.pkl")

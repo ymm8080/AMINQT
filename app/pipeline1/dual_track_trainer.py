@@ -92,6 +92,10 @@ CALIB_DAYS = SEG_MIN_DAYS["calib"]
 TEST_DAYS = SEG_MIN_DAYS["test"]  # 仅归因, 严禁反向调参
 HALF_LIFE = 250  # 半衰期加权 (天)
 ES_PATIENCE = 100  # [V3.8 §2.1] patience=100
+# [2026-08-12] 反锚 es 窗对短视界 cls 头可能过平 → best_iteration=1 常数 prob
+# (main 3d_cls=1树, dual 5d_cls=3树). cls 头早停树数低于此值时重训固定轮数保底
+# (num_leaves=15 强正则 + OOS test 窗兜底, 不会无界过拟合). 只作用 cls, reg 不参与.
+CLS_MIN_TREES = 30
 OOS_IC_MIN = 0.01  # 新模型切换门槛 (signed mean IC, >0.01 即有效)
 
 LGB_PARAMS_REG = {
@@ -340,6 +344,23 @@ class DualTrackTrainer:
                 if use_es
                 else None,
             )
+            # [2026-08-12] cls 最小树保底: es 窗过平 → 早停 1 树 = 常数 prob.
+            # 以固定轮数重训 (无早停), 保证 prob 有真实截面区分度.
+            if kind.endswith("cls") and use_es:
+                bi = getattr(model, "best_iteration_", None)
+                if bi is not None and bi < CLS_MIN_TREES:
+                    logger.warning(
+                        "[%s/%s] 早停仅 %d 树 (< %d), 重训 %d 树保底",
+                        board,
+                        kind,
+                        bi,
+                        CLS_MIN_TREES,
+                        CLS_MIN_TREES,
+                    )
+                    p = model_params(board, kind)
+                    p["n_estimators"] = CLS_MIN_TREES
+                    model = lgb.LGBMClassifier(**p)
+                    model.fit(X, y, sample_weight=w)
         except Exception as exc:
             logger.error("模型训练失败 [%s/%s]: %s", kind, label, exc)
             raise

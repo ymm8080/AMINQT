@@ -7,7 +7,7 @@
   4. 并行 fusion   — 同上 (同一 runner, 内含 slow_bull 一并输出)
 
 步骤按依赖顺序子进程隔离执行 (每步独立进程释放内存, 避免 44GB commit 上限 OOM):
-  [refresh]  scripts/_refresh_parallel_checkpoints.py  并行行集 3y 检查点 (需 22:00 fetch 后)
+  [refresh]  scripts/_refresh_parallel_checkpoints.py  并行行集 3y 检查点 (需 19:15 fetch 后)
   [retrain]  scripts/_retrain_legacy_full.py <tag>     legacy 周频重训 (仅 RETRAIN_WEEKDAY)
   [parallel] python -m app.pipeline_parallel.runner     并行回测 + 短名单 (sniper/fusion/slow_bull)
   [legacy]   scripts/_gen_legacy_list.py <tag>          legacy 预测出清单 (用最新 current)
