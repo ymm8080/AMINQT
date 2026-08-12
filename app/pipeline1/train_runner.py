@@ -145,7 +145,9 @@ def select_features(
             keep_cols = []
             picks = []
             for fam in BRUTE_FAMILIES:
-                new = gen.generate_columns(df, fam, need, raw_cols=raw_cols, dtype="float32")
+                new = gen.generate_columns(
+                    df, fam, need, raw_cols=raw_cols, dtype="float32"
+                )
                 if new is None or not len(new.columns):
                     continue
                 keep_cols.extend(new.columns)

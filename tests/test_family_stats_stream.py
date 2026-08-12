@@ -93,5 +93,7 @@ class TestFamilyStatsStream:
         new = gen.generate_family(df, "rolling_max", raw_cols=raw_cols)
         assert any(c.endswith("_brute_max10") for c in new.columns)
         assert any(c.endswith("_brute_min10") for c in new.columns)
-        cols, _, _ = gen.family_stats(df, "rolling_max", df.index[:10], raw_cols=raw_cols)
+        cols, _, _ = gen.family_stats(
+            df, "rolling_max", df.index[:10], raw_cols=raw_cols
+        )
         assert set(cols) == set(new.columns)

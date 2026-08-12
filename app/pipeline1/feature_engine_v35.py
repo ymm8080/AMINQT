@@ -143,9 +143,7 @@ def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
             else:
                 codes = np.unique(sym_keys, return_inverse=True)[1]
             order = np.lexsort((date_keys, codes))
-            result = pd.DataFrame(
-                {c: bufs[c][:pos][order] for c in cols}, copy=False
-            )
+            result = pd.DataFrame({c: bufs[c][:pos][order] for c in cols}, copy=False)
     else:
         result = pd.DataFrame({c: bufs[c][:pos] for c in cols}, copy=False)
     del bufs  # 缓冲已并入 result (视图或重排拷贝), 尽早归还 ~2GB
@@ -2461,11 +2459,15 @@ class FeatureEngineV35:
                 .reset_index(level=0, drop=True)
             )
             ind_hc = ind_hc.reset_index(drop=True)
-            df["ind_holder_trend_20d"] = df[["date", "industry"]].merge(
-                ind_hc[["date", "industry", "ind_holder_trend_20d"]],
-                on=["date", "industry"],
-                how="left",
-            )["ind_holder_trend_20d"].to_numpy()
+            df["ind_holder_trend_20d"] = (
+                df[["date", "industry"]]
+                .merge(
+                    ind_hc[["date", "industry", "ind_holder_trend_20d"]],
+                    on=["date", "industry"],
+                    how="left",
+                )["ind_holder_trend_20d"]
+                .to_numpy()
+            )
         else:
             df["ind_holder_trend_20d"] = np.nan
 
@@ -2481,11 +2483,15 @@ class FeatureEngineV35:
                 "north_net_buy"
             ].diff(5)
             ind_nb = ind_nb.reset_index(drop=True)
-            df["ind_north_chg_5d"] = df[["date", "industry"]].merge(
-                ind_nb[["date", "industry", "ind_north_chg_5d"]],
-                on=["date", "industry"],
-                how="left",
-            )["ind_north_chg_5d"].to_numpy()
+            df["ind_north_chg_5d"] = (
+                df[["date", "industry"]]
+                .merge(
+                    ind_nb[["date", "industry", "ind_north_chg_5d"]],
+                    on=["date", "industry"],
+                    how="left",
+                )["ind_north_chg_5d"]
+                .to_numpy()
+            )
         else:
             df["ind_north_chg_5d"] = np.nan
 
@@ -2509,11 +2515,15 @@ class FeatureEngineV35:
                 .reset_index(level=0, drop=True)
             )
             ind_lhb = ind_lhb.reset_index(drop=True)
-            df["ind_lhb_net_flow_5d"] = df[["date", "industry"]].merge(
-                ind_lhb[["date", "industry", "ind_lhb_net_flow_5d"]],
-                on=["date", "industry"],
-                how="left",
-            )["ind_lhb_net_flow_5d"].to_numpy()
+            df["ind_lhb_net_flow_5d"] = (
+                df[["date", "industry"]]
+                .merge(
+                    ind_lhb[["date", "industry", "ind_lhb_net_flow_5d"]],
+                    on=["date", "industry"],
+                    how="left",
+                )["ind_lhb_net_flow_5d"]
+                .to_numpy()
+            )
         else:
             df["ind_lhb_net_flow_5d"] = np.nan
 

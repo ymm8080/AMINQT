@@ -6,6 +6,7 @@
 - 10d_reg 头: pred 截面 std (spread 恢复)
 用法: python scripts/_diag_cls_verify_new.py [tag]
 """
+
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -55,10 +56,17 @@ for BRD in ("main", "dual"):
         p = cal.predict_proba(raw) if cal else raw
         r = df.iloc[ix][lg].to_numpy()
         dt = df.iloc[ix]["date"].to_numpy()
-        ric = pd.DataFrame({"d": dt, "p": p, "r": r}).groupby("d").apply(
-            lambda g: spearmanr(g["p"], g["r"])[0], include_groups=False).mean()
-        print(f"  {K}d_cls: 校准std={p.std():.5f} 唯一值={len(np.unique(np.round(p,3)))} "
-              f"rankIC={ric:.4f}", flush=True)
+        ric = (
+            pd.DataFrame({"d": dt, "p": p, "r": r})
+            .groupby("d")
+            .apply(lambda g: spearmanr(g["p"], g["r"])[0], include_groups=False)
+            .mean()
+        )
+        print(
+            f"  {K}d_cls: 校准std={p.std():.5f} 唯一值={len(np.unique(np.round(p, 3)))} "
+            f"rankIC={ric:.4f}",
+            flush=True,
+        )
         del X
     for K in (3, 5, 10):
         lg = f"label_pm_{K}d_net"

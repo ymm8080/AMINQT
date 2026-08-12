@@ -1,21 +1,21 @@
-# -*- coding: utf-8 -*-
 """验证修法: 扫描 train_reg 关掉早停, 固定 N 棵树 → 3d/5d/10d 预测是否健康.
 
 正确不相交切分 (sweep 口径): train=dates[:-80], es=dates[-80:-60], test=dates[-60:].
 combo 2 (3e7, 0.2). 打印 trees / pred 每日常数性 / 测试 IC.
 """
+
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.path.insert(0, r"D:\AMINQT\AMINQT CODES")
 import gc
+
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
+from scripts._sweep_liquidity_filter import ES_DAYS, TEST_DAYS, apply_filter
 
-from scripts._sweep_liquidity_filter import TEST_DAYS, ES_DAYS, apply_filter
 from app.pipeline1.dual_track_trainer import (
-    ES_PATIENCE,
     LGB_PARAMS_REG,
     NUM_LEAVES_OVERRIDE,
     DualTrackTrainer,

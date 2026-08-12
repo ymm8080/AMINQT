@@ -64,8 +64,7 @@ def add_label_pm_10d_net(df: pd.DataFrame) -> pd.DataFrame:
     sym = df["symbol"].to_numpy()
     date = df["date"].to_numpy()
     lex_sorted = bool(
-        (len(sym) <= 1)
-        or ((sym[:-1] != sym[1:]) | (date[:-1] <= date[1:])).all()
+        (len(sym) <= 1) or ((sym[:-1] != sym[1:]) | (date[:-1] <= date[1:])).all()
     )
     if not (lex_sorted and df.index.equals(pd.RangeIndex(len(df)))):
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)

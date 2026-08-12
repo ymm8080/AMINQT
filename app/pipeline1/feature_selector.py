@@ -314,7 +314,7 @@ class BruteForceGenerator:
         columns = None
         nan_count = None
         sample_vals = None
-        for sym, g in df.groupby("symbol"):
+        for _sym, g in df.groupby("symbol"):
             g, feats = self._family_for_symbol(g, raw, family_name, windows, suffix)
             if columns is None:
                 columns = list(feats.keys())
@@ -1257,7 +1257,9 @@ class FeatureSelector:
             if need_ic:
                 # IC 排序 dedup 需全行逐日 cross-section Spearman → 无法逐 symbol 流式
                 # 累计, 只能物化宽帧 (dedup_key="ic" 默认关, 且已被 TopN 门否决, 不设防).
-                new = generator.generate_family(df, fam, raw_cols=raw_cols, dtype="float32")
+                new = generator.generate_family(
+                    df, fam, raw_cols=raw_cols, dtype="float32"
+                )
                 for c in new.columns:
                     if c in BruteForceGenerator.EXCLUDE_COLS or c.startswith("label_"):
                         continue

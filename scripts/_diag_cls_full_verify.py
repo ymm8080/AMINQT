@@ -4,14 +4,17 @@
 测末 60 日 OOS: 树数 / prob 截面 std / rank IC (对真实前向收益).
 对比部署版树数 (main 3d=51/5d=27/10d=17; dual 3d=1/5d=2/10d=1).
 """
+
 import sys
+
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.path.insert(0, r"D:\AMINQT\AMINQT CODES")
 import pickle
+
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
-import lightgbm as lgb
 from scipy.stats import spearmanr
 
 for BRD in ("main", "dual"):
@@ -35,7 +38,12 @@ for BRD in ("main", "dual"):
         m &= df[lbl_cls].notna().to_numpy() & df[lbl_reg].notna().to_numpy()
         ix = np.flatnonzero(m)
         X = np.nan_to_num(df.iloc[ix].loc[:, cols].to_numpy(np.float32), nan=0.0)
-        return X, df.iloc[ix][lbl_cls].to_numpy(), df.iloc[ix]["date"].to_numpy(), df.iloc[ix][lbl_reg].to_numpy()
+        return (
+            X,
+            df.iloc[ix][lbl_cls].to_numpy(),
+            df.iloc[ix]["date"].to_numpy(),
+            df.iloc[ix][lbl_reg].to_numpy(),
+        )
 
     print(f"=== {BRD} (n={n}) ===", flush=True)
     for K in (3, 5, 10):
@@ -47,20 +55,35 @@ for BRD in ("main", "dual"):
         dep_trees = dep[0].booster_.num_trees() if dep else "?"
         # AUC 早停 (pat=100), 反锚切分
         bst = lgb.train(
-            dict(objective="binary", learning_rate=0.05, num_leaves=31,
-                 seed=42, verbosity=-1, metric="auc"),
-            lgb.Dataset(Xtr, ytr), valid_sets=[lgb.Dataset(Xes, yes)],
+            dict(
+                objective="binary",
+                learning_rate=0.05,
+                num_leaves=31,
+                seed=42,
+                verbosity=-1,
+                metric="auc",
+            ),
+            lgb.Dataset(Xtr, ytr),
+            valid_sets=[lgb.Dataset(Xes, yes)],
             num_boost_round=1000,
             callbacks=[lgb.record_evaluation({}), lgb.early_stopping(100)],
         )
         p = bst.predict(Xte)
-        ric = pd.DataFrame({"d": dte, "p": p, "r": rte}).groupby("d").apply(
-            lambda g: spearmanr(g["p"], g["r"])[0], include_groups=False).mean()
+        ric = (
+            pd.DataFrame({"d": dte, "p": p, "r": rte})
+            .groupby("d")
+            .apply(lambda g: spearmanr(g["p"], g["r"])[0], include_groups=False)
+            .mean()
+        )
         # 校准后 spread (用 es 拟合 Platt, 避免 isotonic 桶化)
         from app.pipeline1.prob_calibrator import ProbCalibrator
+
         cal = ProbCalibrator(method="platt").fit(bst.predict(Xes), yes)
         pcal = cal.predict_proba(p)
-        print(f"  {K}d_cls: 部署trees={dep_trees} | 修复trees={bst.num_trees()} "
-              f"raw_std={p.std():.5f} cal_std={pcal.std():.5f} "
-              f"cal_unique={len(np.unique(np.round(pcal, 3)))} rankIC={ric:.4f}", flush=True)
+        print(
+            f"  {K}d_cls: 部署trees={dep_trees} | 修复trees={bst.num_trees()} "
+            f"raw_std={p.std():.5f} cal_std={pcal.std():.5f} "
+            f"cal_unique={len(np.unique(np.round(pcal, 3)))} rankIC={ric:.4f}",
+            flush=True,
+        )
         del Xtr, ytr, Xes, yes, Xte, yte, dte, rte

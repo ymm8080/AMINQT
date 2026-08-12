@@ -1,24 +1,25 @@
-# -*- coding: utf-8 -*-
 """诊断: sweep 里 main 3d/5d 模型为何 IC 恰为 0.0 (预测每日常数? 树太少?).
 
 复刻 combo 2 (3e7, 0.2) 的 train/es/test 切片与 train_reg, 训练 3d/5d/10d,
 打印 num_trees + 测试集预测统计 (每日常数 → IC NaN → 0.0).
 """
+
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.path.insert(0, r"D:\AMINQT\AMINQT CODES")
 import gc
+
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
-
 from scripts._sweep_liquidity_filter import (
     ES_DAYS,
     TEST_DAYS,
     apply_filter,
     train_reg,
 )
+
 from app.pipeline1.dual_track_trainer import DualTrackTrainer
 
 BOARD = "main"
@@ -38,7 +39,10 @@ dates = sorted(cache["date"].unique())
 test_dates = dates[-TEST_DAYS:]
 es_dates = dates[-TEST_DAYS - ES_DAYS : -TEST_DAYS]
 train_dates = dates[: -TEST_DAYS - ES_DAYS]
-print(f"train_dates={len(train_dates)} es_dates={len(es_dates)} test_dates={len(test_dates)}", flush=True)
+print(
+    f"train_dates={len(train_dates)} es_dates={len(es_dates)} test_dates={len(test_dates)}",
+    flush=True,
+)
 
 for kind in ("3d_reg", "5d_reg", "10d_reg"):
     h = kind.split("d")[0]

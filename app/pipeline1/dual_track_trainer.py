@@ -205,7 +205,7 @@ class DualTrackTrainer:
         n = len(dates)
         # B11: 窗口不足时用过渡窗口推导段长 (train 段吸收余量, 可超出实际数据)
         seg_lens = _derive_seg_min_days(max(n, WINDOW_TRANSITION))
-        es_d, calib_d, test_d = seg_lens["es"], seg_lens["calib"], seg_lens["test"]
+        es_d, _calib_d, test_d = seg_lens["es"], seg_lens["calib"], seg_lens["test"]
         if n > test_d + es_d + MIN_TRAIN_DAYS:
             seg_dates = {
                 "train": dates[: -test_d - es_d],

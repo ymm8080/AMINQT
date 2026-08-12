@@ -1,15 +1,16 @@
-# -*- coding: utf-8 -*-
 """检查生产 bundle (main_20260810) 的 3d/5d/10d reg 模型在 OOS 测试段是否也坍缩.
 
 若生产 3d/5d IC 正常 → sweep 训练路径有 bug; 若同为 ~0 → 系统性现象.
 不重训, 只 load bundle + 对生产过滤测试行 predict.
 """
+
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.path.insert(0, r"D:\AMINQT\AMINQT CODES")
 import gc
 import pickle
+
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq

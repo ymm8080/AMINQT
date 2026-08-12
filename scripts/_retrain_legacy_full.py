@@ -74,14 +74,12 @@ def main() -> int:
     # LEGACY_FORCE_FALLBACK=1 (20260811c 安全发布): 双创 gate_d 本轮抽到 208 特征
     # 过拟合抽签 (r3=38, 本轮=208, 输入完全一致 → LGBM n_jobs 线程非确定性), 不让
     # 该抽签发布, 保留 proven 的 20260811b (38 特征). 主板 cls 修复照常发布.
-    skip_dual_switch = (
-        os.environ.get("LEGACY_FORCE_FALLBACK", "0") == "1"
-    )
+    skip_dual_switch = os.environ.get("LEGACY_FORCE_FALLBACK", "0") == "1"
     mods = load_modules()
     for board, res in results.items():
         if skip_dual_switch and board == "dual" and res["switched"]:
             print(
-                f"[dual] gate_d 非确定性漂移 (38→208 特征), 保留 20260811b, 跳过切换",
+                "[dual] gate_d 非确定性漂移 (38→208 特征), 保留 20260811b, 跳过切换",
                 flush=True,
             )
             continue

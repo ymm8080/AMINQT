@@ -108,8 +108,12 @@ class CleaningConfig:
     stability_max: float = 0.5  # std/mean > 0.5 → 对倒嫌疑
     new_stock_days: int = 5  # 注册制新股 (<5日无涨跌幅限制)
     abs_amount_floor: float = 8e7  # 步骤4 绝对流动性安全阀 8000 万
-    bottom_amount_pct: float = 0.2  # 步骤5 [E6] 剔除成交额后 20% (dual/默认, 流动性黑洞预防)
-    bottom_amount_pct_main: float = 0.0  # main 板块 E6 覆盖: TOP10 扫参定案 2026-08-11 0% 最优
+    bottom_amount_pct: float = (
+        0.2  # 步骤5 [E6] 剔除成交额后 20% (dual/默认, 流动性黑洞预防)
+    )
+    bottom_amount_pct_main: float = (
+        0.0  # main 板块 E6 覆盖: TOP10 扫参定案 2026-08-11 0% 最优
+    )
     valve_full: int = 50  # 过滤后 >= 50: 正常
     valve_reduced: int = 15  # >= 15: 减仓输出; < 15: 强制空清单
     delisted_virtual_ret: float = -0.5  # 退市股虚拟 T+1 收益 (安全网 #14)
