@@ -3,8 +3,9 @@
     Register the AMINQT four-module daily automation scheduled task.
 
 .DESCRIPTION
-    Runs after the 22:00 fetch + 22:40 announcement pipelines so today's V3 panel
-    data is in place. Orchestrates (scripts/run_daily_automation.py):
+    Runs after the 19:15 fetch + 19:45 announcement pipelines so today's V3 panel
+    data is in place (2026-08-12 用户改档: 抓取 19:15 / 公告 19:45 / 自动化 20:15 北京).
+    Orchestrates (scripts/run_daily_automation.py):
       [refresh]  parallel 3y checkpoints rebuild
       [retrain]  legacy main+dual weekly full retrain (Fridays only, OOS gate)
       [parallel] sniper/fusion/slow_bull regenerate
@@ -20,7 +21,7 @@
 $ErrorActionPreference = "Stop"
 
 $projectRoot = "D:\AMINQT\AMINQT CODES"
-$python = "python"
+$python = "C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe"
 $timeZoneOffset = "+08:00"  # Asia/Shanghai
 $startDate = (Get-Date -Format "yyyy-MM-dd")
 
@@ -28,7 +29,7 @@ function New-AmqTaskXml {
     param(
         [string]$Description,
         [string]$ScriptPath,
-        [string]$TriggerTime = "22:00:00"
+        [string]$TriggerTime = "20:15:00"
     )
 
     $arguments = '"{0}"' -f $ScriptPath
@@ -79,7 +80,7 @@ function Register-AmqTask {
         [string]$Name,
         [string]$ScriptPath,
         [string]$Description,
-        [string]$TriggerTime = "22:00:00"
+        [string]$TriggerTime = "20:15:00"
     )
 
     Unregister-ScheduledTask -TaskName $Name -Confirm:$false -ErrorAction SilentlyContinue
@@ -97,12 +98,12 @@ function Register-AmqTask {
     }
 }
 
-# --- Four-module automation: 23:30 daily, after 22:00 fetch + 22:40 announcement ---
+# --- Four-module automation: 20:15 daily, after 19:15 fetch + 19:45 announcement ---
 Register-AmqTask `
     -Name "AMINQT-DailyAutomation-2330" `
     -ScriptPath "$projectRoot\scripts\run_daily_automation.py" `
-    -Description "AMINQT four-module daily automation at 23:30 Asia/Shanghai — legacy main/dual weekly retrain (Fri) + parallel sniper/fusion regenerate + legacy stock list generation and delivery. Requires 22:00 fetch and 22:40 announcement to have run." `
-    -TriggerTime "23:30:00"
+    -Description "AMINQT four-module daily automation at 20:15 Asia/Shanghai — legacy main/dual weekly retrain (Fri) + parallel sniper/fusion regenerate + legacy stock list generation and delivery. Requires 19:15 fetch and 19:45 announcement to have run." `
+    -TriggerTime "20:15:00"
 
 # --- Summary ---
 Write-Host ""

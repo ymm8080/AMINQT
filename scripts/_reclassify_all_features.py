@@ -57,7 +57,17 @@ def add_label_pm_10d_net(df: pd.DataFrame) -> pd.DataFrame:
       label_pm_10d_net = label_pm_10d - (COST + 2×分层滑点)
     再按生产 mask_suspension 逻辑遮蔽 [T,T+10] 含停牌的行.
     """
-    df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
+    # 快速路径 (2026-08-11): 输入已按 (symbol,date) 字典序且为 RangeIndex (检查点构建
+    # 路径 fe.build 输出已排序, 布尔切片保序, build_board_slice 已赋 RangeIndex) →
+    # 免 sort_values + reset_index 的宽表合并 OOM (main 523列×122万行 = 4.77GB).
+    # 未排序调用方 (diag 脚本) 走原逻辑, 输出逐字节一致.
+    sym = df["symbol"].to_numpy()
+    date = df["date"].to_numpy()
+    lex_sorted = bool(
+        (len(sym) <= 1) or ((sym[:-1] != sym[1:]) | (date[:-1] <= date[1:])).all()
+    )
+    if not (lex_sorted and df.index.equals(pd.RangeIndex(len(df)))):
+        df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
     g = df.groupby("symbol")["close_hfq"]
     exec_px = g.shift(-1)
     fut = g.shift(-11)
@@ -103,7 +113,12 @@ def build_board_slice(cleaner, fe, board_df, board, checkpoint) -> pd.DataFrame:
     d = LabelEngine.mask_recent_days(d, days=MASK_RECENT_DAYS)
     latest = d["date"].max()
     cutoff = latest - pd.DateOffset(years=3)
-    d3 = d[d["date"] >= cutoff].reset_index(drop=True)
+    # 免 reset_index 宽表合并 OOM (2026-08-11): 布尔切片已复制数据且保序,
+    # reset_index(drop=True) 会再深拷贝并 _consolidate_inplace 合并全部同 dtype 列成
+    # 1 个连续块 (main 523列×122万行 = 4.77GB), 本机 15.8GB 触发 _ArrayMemoryError.
+    # 改为直接赋 RangeIndex (不拷数据), 输出与 reset_index 逐字节一致.
+    d3 = d[d["date"] >= cutoff]
+    d3.index = np.arange(len(d3))
     del d
     gc.collect()
     print(

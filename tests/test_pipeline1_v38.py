@@ -240,6 +240,28 @@ class TestE6:
         for _d, g in out.groupby("date"):
             assert g["amount"].min() > 2e8
 
+    def test_step5_board_aware_main_kept_dual_bottom_removed(self):
+        # main 板块 bottom_amount_pct_main=0 → 全保留; dual 板块剔成交额后 20%
+        dates = pd.bdate_range("2025-01-01", periods=1)
+        rows = []
+        for b, prefix in (("main", "600"), ("GEM", "300")):
+            for i in range(10):
+                rows.append(
+                    {
+                        "symbol": f"{prefix}{i:03d}",
+                        "date": dates[0],
+                        "board": b,
+                        "amount": 1e8 * (i + 1),
+                    }
+                )
+        df = pd.DataFrame(rows)
+        out = CleaningPipeline().step5_amount_bottom(df)
+        main_out = out[out["board"] == "main"]
+        dual_out = out[out["board"] == "GEM"]
+        assert len(main_out) == 10  # main 全保留
+        assert len(dual_out) == 8  # dual 剔成交额最小 2 只
+        assert dual_out["amount"].min() > 2e8
+
     def test_liquidity_cap(self):
         assert liquidity_cap(1e6, 2e8) == pytest.approx(1.0)  # 2亿×1%=200万 > 100万
         assert liquidity_cap(3e6, 2e8) == pytest.approx(2e8 * 0.01 / 3e6)

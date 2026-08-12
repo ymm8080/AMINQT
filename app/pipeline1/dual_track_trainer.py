@@ -92,6 +92,10 @@ CALIB_DAYS = SEG_MIN_DAYS["calib"]
 TEST_DAYS = SEG_MIN_DAYS["test"]  # 仅归因, 严禁反向调参
 HALF_LIFE = 250  # 半衰期加权 (天)
 ES_PATIENCE = 100  # [V3.8 §2.1] patience=100
+# [2026-08-12] 反锚 es 窗对短视界 cls 头可能过平 → best_iteration=1 常数 prob
+# (main 3d_cls=1树, dual 5d_cls=3树). cls 头早停树数低于此值时重训固定轮数保底
+# (num_leaves=15 强正则 + OOS test 窗兜底, 不会无界过拟合). 只作用 cls, reg 不参与.
+CLS_MIN_TREES = 30
 OOS_IC_MIN = 0.01  # 新模型切换门槛 (signed mean IC, >0.01 即有效)
 
 LGB_PARAMS_REG = {
@@ -138,6 +142,12 @@ def model_params(board: str, kind: str) -> dict:
     nl = NUM_LEAVES_OVERRIDE.get((board, kind))
     if nl is not None:
         params["num_leaves"] = nl
+    # [2026-08-11] 双创概率头: logloss 在 es 段早停到 1-2 树 → prob_up 全股几乎常数.
+    # 改 AUC 早停 → ~20 树, prob 有真实截面区分度 (验证: dual 3d/5d/10d_cls
+    # rankIC 0.041/0.060/0.035, 唯一值 45/228/242). main cls 信号强, AUC 早停反而
+    # 塌缩 (51→2 树), 故只作用于 dual cls 三头.
+    if board == "dual" and kind.endswith("cls"):
+        params["metric"] = "auc"
     return params
 
 
@@ -183,32 +193,41 @@ class DualTrackTrainer:
     def split_window(
         df: pd.DataFrame, window_total: int = WINDOW_TOTAL
     ) -> dict[str, pd.DataFrame]:
-        """四段切分: train/es/calib/test 从统计下限 + 实际日期数自动推导.
+        """四段切分 (反锚定): 训练段吸收 es, 各段全部靠向最近端.
 
-        train 段吸收余量 (window_total - es - calib - test).
-        校准集与早停验证集物理隔离, 保证各段不低于 SEG_MIN_DAYS.
+        修复 2026-08-11: 原时序切分训练段取最老数据 (止于 ~5 个月前), 10d/双创头
+        早停塌陷至 1-3 棵树 → 预测近常数. 现改为反锚定: 训练段止于 es 前
+        (最近 ~80 交易日), es = 最近 20 日早停, calib = es (同窗口校准,
+        物理隔离约定放宽为"校准+早停共享验证窗"), test = 最后 60 日 OOS 验收不变.
+        窗口不足 (n <= test+es+MIN_TRAIN) 时回退原时序切分.
         """
         dates = sorted(df["date"].unique())[-window_total:]
         n = len(dates)
         # B11: 窗口不足时用过渡窗口推导段长 (train 段吸收余量, 可超出实际数据)
         seg_lens = _derive_seg_min_days(max(n, WINDOW_TRANSITION))
-        # train 段补齐: 保证各段之和 ≥ n (train 可与 calib 重叠, test 取最后一段)
-        seg_lens["train"] = max(seg_lens["train"], MIN_TRAIN_DAYS)
-        # 切片: train → es → calib → test (时序)
-        pos = 0
-        seg_dates = {}
-        for k in ("train", "es", "calib", "test"):
-            seg_dates[k] = dates[pos : pos + seg_lens[k]]
-            pos += seg_lens[k]
-        # test 取最后一段 (保证是最近期数据)
-        seg_dates["test"] = dates[-seg_lens["test"] :]
+        es_d, _calib_d, test_d = seg_lens["es"], seg_lens["calib"], seg_lens["test"]
+        if n > test_d + es_d + MIN_TRAIN_DAYS:
+            seg_dates = {
+                "train": dates[: -test_d - es_d],
+                "es": dates[-test_d - es_d : -test_d],
+                "calib": dates[-test_d - es_d : -test_d],  # = es, 共享验证窗校准
+                "test": dates[-test_d:],
+            }
+        else:
+            # 窗口过短: 原时序切分 (train 取前段, 保底长度)
+            seg_lens["train"] = max(seg_lens["train"], MIN_TRAIN_DAYS)
+            pos = 0
+            seg_dates = {}
+            for k in ("train", "es", "calib", "test"):
+                seg_dates[k] = dates[pos : pos + seg_lens[k]]
+                pos += seg_lens[k]
+            seg_dates["test"] = dates[-seg_lens["test"] :]
         logger.info(
-            "窗口切分: total=%d train=%d es=%d calib=%d test=%d",
+            "窗口切分(反锚): total=%d train=%d es=%d test=%d",
             n,
-            seg_lens["train"],
-            seg_lens["es"],
-            seg_lens["calib"],
-            seg_lens["test"],
+            len(seg_dates["train"]),
+            len(seg_dates["es"]),
+            len(seg_dates["test"]),
         )
         return {k: df[df["date"].isin(v)] for k, v in seg_dates.items()}
 
@@ -325,6 +344,23 @@ class DualTrackTrainer:
                 if use_es
                 else None,
             )
+            # [2026-08-12] cls 最小树保底: es 窗过平 → 早停 1 树 = 常数 prob.
+            # 以固定轮数重训 (无早停), 保证 prob 有真实截面区分度.
+            if kind.endswith("cls") and use_es:
+                bi = getattr(model, "best_iteration_", None)
+                if bi is not None and bi < CLS_MIN_TREES:
+                    logger.warning(
+                        "[%s/%s] 早停仅 %d 树 (< %d), 重训 %d 树保底",
+                        board,
+                        kind,
+                        bi,
+                        CLS_MIN_TREES,
+                        CLS_MIN_TREES,
+                    )
+                    p = model_params(board, kind)
+                    p["n_estimators"] = CLS_MIN_TREES
+                    model = lgb.LGBMClassifier(**p)
+                    model.fit(X, y, sample_weight=w)
         except Exception as exc:
             logger.error("模型训练失败 [%s/%s]: %s", kind, label, exc)
             raise

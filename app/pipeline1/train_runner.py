@@ -66,6 +66,7 @@ def select_features(
     tag: str,
     selector: FeatureSelector | None = None,
     registry=None,  # FeatureRegistry | None
+    fallback_boards: set[str] | None = None,
 ) -> tuple[list[str], pd.DataFrame]:
     """Layer2 特征精选 (FeatureSelector) → 训练特征列表 + 增强面板.
 
@@ -105,8 +106,15 @@ def select_features(
     candidates = valid_candidates
     # ----------------------------------------------------------------
 
-    if selector is None:
-        logger.info("[%s] 无 FeatureSelector, 使用全量 %d 特征", board, len(candidates))
+    if selector is None or (fallback_boards and board in fallback_boards):
+        # fallback_boards: 跳过该板块的 FeatureSelector (如 main 的 bruteforce_dedup
+        # 选择过大必 OOM 时), 直用全量过滤后特征; 只作用于指定板块, 其余板块照常精选.
+        logger.info(
+            "[%s] %s, 使用全量 %d 特征",
+            board,
+            "fallback_boards 命中" if fallback_boards else "无 FeatureSelector",
+            len(candidates),
+        )
         return candidates, df
 
     board_cfg = selector.config.get(board, selector.config.get("fallback", {}))
@@ -129,20 +137,28 @@ def select_features(
         if missing:
             gen = BruteForceGenerator()
             raw_cols = gen._eligible(df)
-            # 内存安全: 族批生成, 只注入缺失的选中列, 不物化全量 brute 列.
-            # 每次 join 都强制 pandas block consolidation (~2× 宽帧连续块);
-            # 收集全部选中列后单次 join → consolidation 从 N 次降到 1 次.
+            # 内存安全 (2026-08-11 OOM 修复): generate_family 物化全族
+            # (1223918, 2544)=11.6GB 单块 → _ArrayMemoryError → FeatureSelector
+            # 回退全量 → main 3d_cls 塌缩. 改用 generate_columns 逐 symbol 流式,
+            # 只驻留缺失选中列; 单次 join 避免多次 block consolidation.
+            need = set(missing)
             keep_cols = []
             picks = []
             for fam in BRUTE_FAMILIES:
-                new = gen.generate_family(df, fam, raw_cols=raw_cols, dtype="float32")
-                pick = [c for c in missing if c in new.columns]
-                if pick:
-                    keep_cols.extend(pick)
-                    picks.append(new[pick])
-                del new
+                new = gen.generate_columns(
+                    df, fam, need, raw_cols=raw_cols, dtype="float32"
+                )
+                if new is None or not len(new.columns):
+                    continue
+                keep_cols.extend(new.columns)
+                picks.append(new)
             if picks:
-                df = df.join(pd.concat(picks, axis=1))
+                # 内存安全 (2026-08-12): df.join 全宽帧 → block consolidation OOM.
+                # generate_columns 逐 symbol 保留 df 原索引 (0..n-1 已 sort reset),
+                # 位置赋值与 join 逐元素一致.
+                _brute = pd.concat(picks, axis=1)
+                for _c in _brute.columns:
+                    df[_c] = _brute[_c].to_numpy()
             if keep_cols:
                 logger.info(
                     "[%s] BruteForce 后注入 %d 个选中特征 (缺失 %d)",
@@ -184,6 +200,7 @@ def run_training(
     enable_adoption: bool = False,
     feature_list_path: str | None = None,
     selector_config: dict | None = None,
+    fallback_boards: set[str] | None = None,
 ) -> dict:
     """周频重训主入口: 面板 → 双板块模型包.
 
@@ -196,6 +213,7 @@ def run_training(
         enable_adoption: True → 启用自动采纳新面板列 (需 use_registry=True)
         feature_list_path: [已废弃] 忽略; FeatureSelector 直接运行, 不再从文件加载
         selector_config: FeatureSelector 配置覆盖 (None → 用默认 config)
+        fallback_boards: 跳过 FeatureSelector、直用全量特征的板块子集 (None → 全部精选)
 
     Returns:
         {board: {'path', 'oos': {...}, 'switched': bool, 'n_features': int}}
@@ -265,7 +283,12 @@ def run_training(
         del board_df
         gc.collect()
         cols, augmented_df = select_features(
-            df, board, tag, selector, registry=registry
+            df,
+            board,
+            tag,
+            selector,
+            registry=registry,
+            fallback_boards=fallback_boards,
         )
         # 释放中间特征帧 (仅保留增强帧用于训练)
         del df

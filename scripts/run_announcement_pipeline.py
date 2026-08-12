@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Pipeline 2: 每日 22:40 公告数据拉取 + V3 面板更新.
+"""Pipeline 2: 每日 19:45 公告数据拉取 + V3 面板更新.
 
-22:40 拉取当日及前日发布的公告类数据:
+19:45 拉取当日及前日发布的公告类数据:
   - 财务指标 PIT (pro.fina_indicator, 含 ann_date)
   - 股东增减持 (pro.stk_holdertrade) → 聚合后更新 V3 面板今日行
   - 股东户数 (pro.stk_holdernumber)
@@ -359,7 +359,7 @@ def write_log(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Pipeline 2: 22:40 announcement data + V3 panel update"
+        description="Pipeline 2: 19:45 announcement data + V3 panel update"
     )
     parser.add_argument("--date", help="Target date YYYYMMDD (default: today)")
     parser.add_argument("--refresh", action="store_true", help="Force refresh cache")

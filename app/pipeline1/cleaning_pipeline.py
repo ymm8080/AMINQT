@@ -108,7 +108,12 @@ class CleaningConfig:
     stability_max: float = 0.5  # std/mean > 0.5 → 对倒嫌疑
     new_stock_days: int = 5  # 注册制新股 (<5日无涨跌幅限制)
     abs_amount_floor: float = 8e7  # 步骤4 绝对流动性安全阀 8000 万
-    bottom_amount_pct: float = 0.2  # 步骤5 [E6] 剔除成交额全市场后 20% (流动性黑洞预防)
+    bottom_amount_pct: float = (
+        0.2  # 步骤5 [E6] 剔除成交额后 20% (dual/默认, 流动性黑洞预防)
+    )
+    bottom_amount_pct_main: float = (
+        0.0  # main 板块 E6 覆盖: TOP10 扫参定案 2026-08-11 0% 最优
+    )
     valve_full: int = 50  # 过滤后 >= 50: 正常
     valve_reduced: int = 15  # >= 15: 减仓输出; < 15: 强制空清单
     delisted_virtual_ret: float = -0.5  # 退市股虚拟 T+1 收益 (安全网 #14)
@@ -265,13 +270,38 @@ class CleaningPipeline:
             )
         return out, state
 
-    # ---------------- 步骤 5: 成交额后 20% 剔除 (E6, V3.8) ----------------
+    # ---------------- 步骤 5: 成交额后 X% 剔除 (E6, V3.8) ----------------
     def step5_amount_bottom(self, df: pd.DataFrame) -> pd.DataFrame:
-        """[E6] 剔除当日成交额全市场后 20% 的票 (按 date 横截面 rank_pct).
+        """[E6] 剔除当日成交额后 X% 的票 (按 date 横截面 rank_pct).
 
         流动性黑洞预防: 买错后卖不掉是最致命死法. 训练端与推理端同步执行.
+        main 板块用 bottom_amount_pct_main (扫参定案 0%), 其余板块用 bottom_amount_pct.
         """
-        pct = self.cfg.bottom_amount_pct
+        if "board" not in df.columns:
+            return self._drop_bottom(df, self.cfg.bottom_amount_pct)
+        boards = df["board"].unique()
+        if all(
+            (
+                self.cfg.bottom_amount_pct_main
+                if b == "main"
+                else self.cfg.bottom_amount_pct
+            )
+            <= 0
+            for b in boards
+        ):
+            return df
+        parts = []
+        for bval, sub in df.groupby("board"):
+            pct = (
+                self.cfg.bottom_amount_pct_main
+                if bval == "main"
+                else self.cfg.bottom_amount_pct
+            )
+            parts.append(self._drop_bottom(sub, pct))
+        return pd.concat(parts)
+
+    @staticmethod
+    def _drop_bottom(df: pd.DataFrame, pct: float) -> pd.DataFrame:
         if pct <= 0:
             return df
         rank = df.groupby("date")["amount"].rank(pct=True)

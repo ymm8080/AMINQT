@@ -1375,3 +1375,24 @@ def test_apply_per_stock_row_dropping_fn_trim():
     out = _apply_per_stock(df, per_stock)
     ref = _ref_apply_per_stock(df, per_stock)
     assert out.equals(ref)
+
+
+def test_apply_per_stock_unsorted_input_lexsort_reorder():
+    """输入乱序时 lexsort 重排输出与 sort_values 逐字节一致 (2026-08-11).
+
+    sort_values 对宽表做 copy + _merge_blocks 需 2×连续块, 本机 15.8GB OOM;
+    改用 numpy lexsort 重排缓冲. 必须保持 (symbol,date) 升序语义不变.
+    """
+    df = make_panel(symbols=("600519", "300750", "601318"), days=120)
+    df = df.sample(frac=1, random_state=0).reset_index(drop=True)  # 故意打乱
+
+    def per_stock(g):
+        g = g.sort_values("date")
+        g["ma5"] = g["close"].rolling(5, min_periods=1).mean()
+        return g
+
+    out = _apply_per_stock(df, per_stock)
+    ref = _ref_apply_per_stock(df, per_stock)
+    assert out.equals(ref)
+    assert out.index.equals(ref.index)
+    assert out["symbol"].tolist() == sorted(out["symbol"].tolist())

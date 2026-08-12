@@ -193,6 +193,77 @@ class BruteForceGenerator:
         )
         return new
 
+    def _family_for_symbol(self, g, raw, family_name, windows, suffix):
+        """单 symbol 的一族暴力特征 (与旧 generate_family 内层 for 逐字节一致).
+
+        抽成独立函数, 供 generate_family (物化宽帧) 与 family_stats (流式统计)
+        共用同一套特征数学, 避免两处实现漂移. 返回 (排序后的 g, feats dict).
+        """
+        g = g.sort_values("date")
+        feats = {}
+        for col in raw:
+            if col not in g.columns:
+                continue
+            s = g[col].astype(float).values
+            n = len(s)
+            if family_name == "pct_change":
+                for w in windows:
+                    o = np.full(n, np.nan, dtype=np.float32)
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        o[w:] = (s[w:] - s[:-w]) / np.abs(s[:-w]) * 100
+                    feats[f"{col}_brute_{suffix}{w}"] = o
+            elif family_name == "rolling_mean":
+                for w in windows:
+                    feats[f"{col}_brute_{suffix}{w}"] = (
+                        pd.Series(s)
+                        .rolling(w, min_periods=1)
+                        .mean()
+                        .values.astype(np.float32)
+                    )
+            elif family_name == "rolling_std":
+                for w in windows:
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        feats[f"{col}_brute_{suffix}{w}"] = (
+                            pd.Series(s)
+                            .rolling(w, min_periods=1)
+                            .std()
+                            .values.astype(np.float32)
+                        )
+            elif family_name in ("rolling_max", "rolling_min"):
+                for w in windows:
+                    feats[f"{col}_brute_max{w}"] = (
+                        pd.Series(s)
+                        .rolling(w, min_periods=1)
+                        .max()
+                        .values.astype(np.float32)
+                    )
+                    feats[f"{col}_brute_min{w}"] = (
+                        pd.Series(s)
+                        .rolling(w, min_periods=1)
+                        .min()
+                        .values.astype(np.float32)
+                    )
+            elif family_name == "diff":
+                for w in windows:
+                    o = np.full(n, np.nan, dtype=np.float32)
+                    o[w:] = s[w:] - s[:-w]
+                    feats[f"{col}_brute_{suffix}{w}"] = o.astype(np.float32)
+            elif family_name == "momentum":
+                for w in windows:
+                    o = np.full(n, np.nan, dtype=np.float32)
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        o[w:] = s[w:] / np.abs(s[:-w])
+                    feats[f"{col}_brute_{suffix}{w}"] = o.astype(np.float32)
+            elif family_name == "EMA":
+                for w in windows:
+                    feats[f"{col}_brute_{suffix}{w}"] = (
+                        pd.Series(s)
+                        .ewm(span=w, min_periods=1)
+                        .mean()
+                        .values.astype(np.float32)
+                    )
+        return g, feats
+
     def generate_family(self, df, family_name, raw_cols=None, dtype="float32"):
         """Generate brute-force features for ONE transform family.
 
@@ -209,69 +280,7 @@ class BruteForceGenerator:
         suffix = family_def.get("suffix", family_name)
         all_new = {}
         for sym, g in df.groupby("symbol"):
-            g = g.sort_values("date")
-            feats = {}
-            for col in raw:
-                if col not in g.columns:
-                    continue
-                s = g[col].astype(float).values
-                n = len(s)
-                if family_name == "pct_change":
-                    for w in windows:
-                        o = np.full(n, np.nan, dtype=np.float32)
-                        with np.errstate(divide="ignore", invalid="ignore"):
-                            o[w:] = (s[w:] - s[:-w]) / np.abs(s[:-w]) * 100
-                        feats[f"{col}_brute_{suffix}{w}"] = o
-                elif family_name == "rolling_mean":
-                    for w in windows:
-                        feats[f"{col}_brute_{suffix}{w}"] = (
-                            pd.Series(s)
-                            .rolling(w, min_periods=1)
-                            .mean()
-                            .values.astype(np.float32)
-                        )
-                elif family_name == "rolling_std":
-                    for w in windows:
-                        with np.errstate(divide="ignore", invalid="ignore"):
-                            feats[f"{col}_brute_{suffix}{w}"] = (
-                                pd.Series(s)
-                                .rolling(w, min_periods=1)
-                                .std()
-                                .values.astype(np.float32)
-                            )
-                elif family_name in ("rolling_max", "rolling_min"):
-                    for w in windows:
-                        feats[f"{col}_brute_max{w}"] = (
-                            pd.Series(s)
-                            .rolling(w, min_periods=1)
-                            .max()
-                            .values.astype(np.float32)
-                        )
-                        feats[f"{col}_brute_min{w}"] = (
-                            pd.Series(s)
-                            .rolling(w, min_periods=1)
-                            .min()
-                            .values.astype(np.float32)
-                        )
-                elif family_name == "diff":
-                    for w in windows:
-                        o = np.full(n, np.nan, dtype=np.float32)
-                        o[w:] = s[w:] - s[:-w]
-                        feats[f"{col}_brute_{suffix}{w}"] = o.astype(np.float32)
-                elif family_name == "momentum":
-                    for w in windows:
-                        o = np.full(n, np.nan, dtype=np.float32)
-                        with np.errstate(divide="ignore", invalid="ignore"):
-                            o[w:] = s[w:] / np.abs(s[:-w])
-                        feats[f"{col}_brute_{suffix}{w}"] = o.astype(np.float32)
-                elif family_name == "EMA":
-                    for w in windows:
-                        feats[f"{col}_brute_{suffix}{w}"] = (
-                            pd.Series(s)
-                            .ewm(span=w, min_periods=1)
-                            .mean()
-                            .values.astype(np.float32)
-                        )
+            g, feats = self._family_for_symbol(g, raw, family_name, windows, suffix)
             all_new[sym] = pd.DataFrame(feats, index=g.index).replace(
                 [np.inf, -np.inf], np.nan
             )
@@ -281,6 +290,93 @@ class BruteForceGenerator:
             family_name,
             len(new.columns),
             len(raw),
+            time.time() - t0,
+        )
+        return new
+
+    def family_stats(self, df, family_name, sample_pos, raw_cols=None, dtype="float32"):
+        """一族暴力特征的 每列 nan率 + 采样行值 — 免物化 (N×2544) 宽帧.
+
+        OOM 根因 (2026-08-11): generate_family 内 pd.concat(all_new.values()) 把
+        单家族 (pct_change) 的 (1223918, 2544) float32 拼成 11.6GB 连续块, 且
+        all_new 已常驻同量 → 15.8GB 机触发 _ArrayMemoryError. 唯一消费者
+        _run_bruteforce_dedup 只需要 每列 nan率 + 采样行值, 故按 symbol 逐列累计
+        这两样统计, 常驻 ~50MB. 输出与 generate_family → 逐列统计 完全一致.
+        """
+        t0 = time.time()
+        raw = raw_cols or self._eligible(df)
+        family_def = self.transforms.get(family_name)
+        if family_def is None:
+            raise ValueError(f"Unknown transform family: {family_name}")
+        windows = family_def.get("windows", ())
+        suffix = family_def.get("suffix", family_name)
+        pos_array = np.asarray(list(sample_pos))
+        columns = None
+        nan_count = None
+        sample_vals = None
+        for _sym, g in df.groupby("symbol"):
+            g, feats = self._family_for_symbol(g, raw, family_name, windows, suffix)
+            if columns is None:
+                columns = list(feats.keys())
+                nan_count = np.zeros(len(columns), dtype=np.int64)
+                sample_vals = {
+                    c: np.full(len(pos_array), np.nan, dtype=dtype) for c in columns
+                }
+            for i, c in enumerate(columns):
+                arr = np.where(np.isinf(feats[c]), np.nan, feats[c])
+                nan_count[i] += int(np.isnan(arr).sum())
+            hit = np.isin(g.index.to_numpy(), pos_array)
+            if hit.any():
+                hit_pos = np.nonzero(hit)[0]
+                sample_positions = sample_pos.get_indexer(g.index.to_numpy()[hit_pos])
+                for c in columns:
+                    sample_vals[c][sample_positions] = np.where(
+                        np.isinf(feats[c][hit_pos]), np.nan, feats[c][hit_pos]
+                    )
+        total = float(len(df))
+        nan_rate = {c: float(nan_count[i]) / total for i, c in enumerate(columns)}
+        logger.info(
+            "BruteForce[%s] stats: %d cols from %d raw (%.0fs, stream)",
+            family_name,
+            len(columns),
+            len(raw),
+            time.time() - t0,
+        )
+        return columns, nan_rate, sample_vals
+
+    def generate_columns(self, df, family_name, need, raw_cols=None, dtype="float32"):
+        """按需只生成 need 中属于本族的列 (免物化全族宽帧 OOM).
+
+        2026-08-11 后注入 OOM 根因: 逐族 generate_family 把 pct_change 族
+        (1223918, 2544) float32 物化成 11.6GB 单块 → _ArrayMemoryError →
+        FeatureSelector 回退全量 → main 3d_cls 塌缩. 本方法逐 symbol 复用
+        _family_for_symbol, 但只驻留 need 交集列 (常驻 ~#need 列而非全族),
+        列命名/数学与 generate_family 逐字节一致. 无命中列返回 None.
+        """
+        t0 = time.time()
+        raw = raw_cols or self._eligible(df)
+        family_def = self.transforms.get(family_name)
+        if family_def is None:
+            return None
+        windows = family_def.get("windows", ())
+        suffix = family_def.get("suffix", family_name)
+        all_new = {}
+        for sym, g in df.groupby("symbol"):
+            g, feats = self._family_for_symbol(g, raw, family_name, windows, suffix)
+            pick = {c: v for c, v in feats.items() if c in need}
+            if not pick:
+                continue
+            all_new[sym] = pd.DataFrame(pick, index=g.index).replace(
+                [np.inf, -np.inf], np.nan
+            )
+        if not all_new:
+            return None
+        new = pd.concat(all_new.values())
+        logger.info(
+            "BruteForce[%s] 后注入 %d 列 (%d syms, %.0fs)",
+            family_name,
+            len(new.columns),
+            len(all_new),
             time.time() - t0,
         )
         return new
@@ -454,6 +550,14 @@ def gate_d_ablation(
         subsample=0.8,
         colsample_bytree=0.8,
         random_state=random_state,
+        # 2026-08-12: gate_d 每周重训抽到不同结果 (r3=30 特征 vs 本轮=200, 输入完全一致),
+        # 根因是 n_jobs=-1 多线程下 LGBM 直方图构建非确定 → gain 排序漂移 → 消融 ICIR
+        # 曲线翻盘. deterministic+force_col_wise 固定直方图算法, 使消融结果可复现.
+        deterministic=True,
+        force_col_wise=True,
+        bagging_seed=random_state + 1,
+        feature_fraction_seed=random_state + 2,
+        drop_seed=random_state + 3,
         n_jobs=-1,
         verbose=-1,
     )
@@ -992,6 +1096,9 @@ class FeatureSelector:
             "pipeline": "bruteforce_dedup",
             "nan_threshold": 0.95,
             "dedup_threshold": 0.7,
+            # [2026-08-12] 选择过大 OOM 修复: 全量 dedup 每次选 ~3506 → 注入/训练
+            # OOM → 永远回退. 保底 FeatureEngine 基集, 剩余预算按方差补 brute.
+            "max_features": 350,
         },
         "dual": {
             "pipeline": "gate_d",
@@ -1147,20 +1254,54 @@ class FeatureSelector:
                 feature_mean_abs_ic(df.loc[pre_mask, base_numeric], ic_date, ic_lab)
             )
         for fam in BRUTE_FAMILIES:
-            new = generator.generate_family(df, fam, raw_cols=raw_cols, dtype="float32")
-            for c in new.columns:
-                if c in BruteForceGenerator.EXCLUDE_COLS or c.startswith("label_"):
-                    continue
-                cand_nan[c] = float(new[c].isna().mean())
-                sample_cols[c] = new.loc[sample_pos, c].to_numpy()
             if need_ic:
+                # IC 排序 dedup 需全行逐日 cross-section Spearman → 无法逐 symbol 流式
+                # 累计, 只能物化宽帧 (dedup_key="ic" 默认关, 且已被 TopN 门否决, 不设防).
+                new = generator.generate_family(
+                    df, fam, raw_cols=raw_cols, dtype="float32"
+                )
+                for c in new.columns:
+                    if c in BruteForceGenerator.EXCLUDE_COLS or c.startswith("label_"):
+                        continue
+                    cand_nan[c] = float(new[c].isna().mean())
+                    sample_cols[c] = new.loc[sample_pos, c].to_numpy()
                 ic_accum.update(feature_mean_abs_ic(new.loc[pre_mask], ic_date, ic_lab))
-            del new
+                del new
+            else:
+                # 免物化宽帧 (2026-08-11 OOM 修复): 逐 symbol 流式累计 nan率+采样行值.
+                columns, nan_rate, svals = generator.family_stats(
+                    df, fam, sample_pos, raw_cols=raw_cols, dtype="float32"
+                )
+                for c in columns:
+                    if c in BruteForceGenerator.EXCLUDE_COLS or c.startswith("label_"):
+                        continue
+                    cand_nan[c] = nan_rate[c]
+                    sample_cols[c] = svals[c]
 
         valid = [c for c, rate in cand_nan.items() if rate < threshold]
         sample_frame = pd.DataFrame(sample_cols, index=sample_pos)
         order = pd.Series({c: ic_accum.get(c, 0.0) for c in valid}) if need_ic else None
         selected = dedup_l2(valid, sample_frame, dedup_thr, order=order)
+        # [2026-08-12] 选择过大 OOM 修复 (main 每次 ~3506 → 注入/训练 OOM → 永远回退):
+        # 保底含 FeatureEngine 基集 (=fallback, 已知过 OOS 门), 剩余预算按方差补最强
+        # brute 变体 (保持 08-08 方差排序裁决, 非 IC 排序). OOS 门仍是最终验收.
+        n_dedup = len(selected)
+        max_feats = cfg.get("max_features", 350)
+        if n_dedup > max_feats:
+            from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+
+            base_feats = [c for c in FeatureEngineV35.feature_columns(df) if c in valid]
+            vars_ = sample_frame[selected].var().sort_values(ascending=False)
+            brute_only = [c for c in vars_.index if c not in set(base_feats)]
+            budget = max(max_feats - len(base_feats), 0)
+            selected = list(base_feats) + brute_only[:budget]
+            logger.info(
+                "DedupL2 选择过大 cap: %d -> %d (base=%d + brute=%d)",
+                n_dedup,
+                len(selected),
+                len(base_feats),
+                min(budget, len(brute_only)),
+            )
         return selected
 
     def _run_gate_d(self, df, board, cfg):
