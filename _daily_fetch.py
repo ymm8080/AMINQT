@@ -585,8 +585,10 @@ ffill_cols = [
     "ar_turnover",
     "sh_change_vol", "sh_change_amt_total",
     "sh_net_change_sign", "sh_net_sign",
-    "sh_evt_start_date", "sh_evt_end_date",
-    "sh_net_ratio", "sh_g_ratio", "sh_p_ratio", "sh_c_ratio",
+    # 事件时间戳/属性 (sh_evt_start_date/end_date + sh_net/p/g/c_ratio) 不入 ffill:
+    # ffill 会把每只股票"最后一个事件窗口"盖到今天行 → 伪造公告日 (sh_ann_decay 尖峰到 1.0)
+    # + 伪造执行期窗口 (sh_is_executing)。这些稀疏事件值只存在于真实公告行,
+    # 前向传播由 dim31_holdertrade 内部 .ffill() + decay 语义负责 (PIT 安全)。
     "sw_l1_name", "sw_l2_name", "sw_l3_name",
     "margin_balance", "short_balance", "margin_buy_amt", "short_sell_vol",
     "dt_eps", "q_ocf_to_sales",
