@@ -22,7 +22,9 @@ import numpy as np
 import pandas as pd
 
 PANEL_PATH = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
-HOLDERTRADE_GLOB = os.path.join("data", "supply_cache", "alt_data", "holdertrade", "all_*.parquet")
+HOLDERTRADE_GLOB = os.path.join(
+    "data", "supply_cache", "alt_data", "holdertrade", "all_*.parquet"
+)
 KIMI_RAW = os.path.join("data", "_holder_cmp_raw.parquet")
 
 CUTOFF = pd.Timestamp("2026-08-03")
@@ -70,7 +72,10 @@ def load_evt_agg() -> pd.DataFrame:
     raw = raw[raw["date"] >= CUTOFF]
     agg = (
         raw.groupby(["symbol", "date"], as_index=False)
-        .agg(sh_evt_start_date=("evt_start_date", "min"), sh_evt_end_date=("evt_end_date", "max"))
+        .agg(
+            sh_evt_start_date=("evt_start_date", "min"),
+            sh_evt_end_date=("evt_end_date", "max"),
+        )
         .dropna(subset=["sh_evt_start_date", "sh_evt_end_date"])
     )
     return agg
@@ -90,14 +95,11 @@ def load_ratio_agg() -> pd.DataFrame:
     k["sr_g"] = np.where(ht == "G", k["signed_ratio"], 0.0)
     k["sr_p"] = np.where(ht == "P", k["signed_ratio"], 0.0)
     k["sr_c"] = np.where(ht == "C", k["signed_ratio"], 0.0)
-    return (
-        k.groupby(["symbol", "date"], as_index=False)
-        .agg(
-            sh_net_ratio=("signed_ratio", "sum"),
-            sh_g_ratio=("sr_g", "sum"),
-            sh_p_ratio=("sr_p", "sum"),
-            sh_c_ratio=("sr_c", "sum"),
-        )
+    return k.groupby(["symbol", "date"], as_index=False).agg(
+        sh_net_ratio=("signed_ratio", "sum"),
+        sh_g_ratio=("sr_g", "sum"),
+        sh_p_ratio=("sr_p", "sum"),
+        sh_c_ratio=("sr_c", "sum"),
     )
 
 
@@ -154,8 +156,10 @@ def main():
 
     r = repair(panel)
     prog(f"08-03+ 行: {r['mask_rows']:,}")
-    prog(f"真实公告重放: evt {r['evt_rows']} 行/{r['evt_reapplied']} 股, "
-         f"ratio {r['ratio_rows']} 行/{r['ratio_reapplied']} 股")
+    prog(
+        f"真实公告重放: evt {r['evt_rows']} 行/{r['evt_reapplied']} 股, "
+        f"ratio {r['ratio_rows']} 行/{r['ratio_reapplied']} 股"
+    )
     for c in RESET_COLS:
         if c in r["before"]:
             prog(f"  {c:<22} 修复前非空 {r['before'][c]:,} → 修复后 {r['after'][c]:,}")
