@@ -39,8 +39,8 @@ from config.settings import BACKTEST_RESULT_DIR, data_others_path
 MODEL_DIR = "models/pipeline1"
 BUNDLES = ("dual_20260812.pkl", "dual_20260811b.pkl")
 WARMUP_DAYS = 330  # 特征回看窗口 (年线特征 ~252d) 暖机; 330=270 暖机 + 60 评估
-EVAL_DAYS = 60     # 共享 OOS 窗口
-N_SUB = 3          # 子窗口段数
+EVAL_DAYS = 60  # 共享 OOS 窗口
+N_SUB = 3  # 子窗口段数
 TOPN = (5, 10, 20)
 HORIZONS = (3, 5, 10)
 
@@ -56,11 +56,7 @@ def topn_metrics(test: pd.DataFrame, models: dict, cols: list[str]) -> dict:
         lab = f"label_pm_{h}d_net"
         sub = test.dropna(subset=[lab]).copy()
         for n in TOPN:
-            top = (
-                sub.sort_values("_pred_10d", ascending=False)
-                .groupby("date")
-                .head(n)
-            )
+            top = sub.sort_values("_pred_10d", ascending=False).groupby("date").head(n)
             out[f"{h}d_n{n}"] = {
                 "mean_ret": float(top[lab].mean()),
                 "hit": float((top[lab] > 0).mean()),
@@ -90,7 +86,9 @@ def main() -> int:
     # 与训练同款 registry 门控: 只构建活跃 dim, 列少不碎片 (否则全量 dim 380+ 列
     # 高度碎片化 → _consolidate_inplace OOM, 且与 328 特征训练时的特征空间不一致).
     registry = FeatureRegistry(
-        path=os.path.join(str(data_others_path("data/factor_registry")), "feature_registry.json")
+        path=os.path.join(
+            str(data_others_path("data/factor_registry")), "feature_registry.json"
+        )
     )
     df = prepare_board_frame(
         dual_df, features, cross_sectional_rank=True, registry=registry
@@ -112,7 +110,7 @@ def main() -> int:
 
     results: dict = {}
     for fname in BUNDLES:
-        tag = fname[len("dual_"): -len(".pkl")]
+        tag = fname[len("dual_") : -len(".pkl")]
         bundle = DualTrackTrainer.load(os.path.join(MODEL_DIR, fname))
         cols = bundle["feature_cols"]
         missing = [c for c in cols if c not in eval_df.columns]
@@ -123,7 +121,11 @@ def main() -> int:
             f"[{tag}] {len(cols)} 特征, {len(missing)} 缺失于帧, 帧列 {len(keep)}",
             flush=True,
         )
-        trained = {"segs": {"test": test}, "feature_cols": cols, "models": bundle["models"]}
+        trained = {
+            "segs": {"test": test},
+            "feature_cols": cols,
+            "models": bundle["models"],
+        }
         oos = DualTrackTrainer(model_dir=MODEL_DIR).validate_oos(trained)
 
         sub_dates = sorted(test["date"].unique())
@@ -132,8 +134,14 @@ def main() -> int:
         for i in range(N_SUB):
             s0, s1 = i * step, len(sub_dates) if i == N_SUB - 1 else (i + 1) * step
             sub_df = test[test["date"].isin(sub_dates[s0:s1])]
-            tsub = {"segs": {"test": sub_df}, "feature_cols": cols, "models": bundle["models"]}
-            sub_ics.append(DualTrackTrainer(model_dir=MODEL_DIR).validate_oos(tsub)["weighted_ic"])
+            tsub = {
+                "segs": {"test": sub_df},
+                "feature_cols": cols,
+                "models": bundle["models"],
+            }
+            sub_ics.append(
+                DualTrackTrainer(model_dir=MODEL_DIR).validate_oos(tsub)["weighted_ic"]
+            )
 
         results[tag] = {
             "n_features": len(cols),
@@ -168,7 +176,10 @@ def main() -> int:
     }
     results["_verdict"] = verdict
 
-    out_dir = Path(BACKTEST_RESULT_DIR) / f"dual_h2h_328_vs_38_{time.strftime('%Y%m%d_%H%M%S')}"
+    out_dir = (
+        Path(BACKTEST_RESULT_DIR)
+        / f"dual_h2h_328_vs_38_{time.strftime('%Y%m%d_%H%M%S')}"
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(out_dir / "result.json", "w", encoding="utf-8") as fh:
         json.dump(results, fh, ensure_ascii=False, indent=2, default=str)

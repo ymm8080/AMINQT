@@ -58,18 +58,18 @@ PARTIAL = os.path.join(CACHE_DIR, "sweep_partial.json")
 
 # 扫描组合 (min_amount, bottom_amount_pct); (5e7, 0.2) = 生产基线.
 COMBOS = [
-    (0.0, 0.0),   # 无过滤 (最大宇宙)
-    (3e7, 0.2),   # 绝对线更松
-    (5e7, 0.2),   # 生产基线
-    (1e8, 0.2),   # 绝对线更紧
-    (5e7, 0.0),   # 无 E6
-    (5e7, 0.1),   # E6 更松
-    (5e7, 0.3),   # E6 更紧
-    (0.0, 0.2),   # 只 E6
-    (1e8, 0.3),   # 双紧
+    (0.0, 0.0),  # 无过滤 (最大宇宙)
+    (3e7, 0.2),  # 绝对线更松
+    (5e7, 0.2),  # 生产基线
+    (1e8, 0.2),  # 绝对线更紧
+    (5e7, 0.0),  # 无 E6
+    (5e7, 0.1),  # E6 更松
+    (5e7, 0.3),  # E6 更紧
+    (0.0, 0.2),  # 只 E6
+    (1e8, 0.3),  # 双紧
 ]
-TEST_DAYS = 60   # 固定 OOS 测试段 (交易日)
-ES_DAYS = 20     # 早停验证段 (仅切分用; 2026-08-11 起扫描训练关早停)
+TEST_DAYS = 60  # 固定 OOS 测试段 (交易日)
+ES_DAYS = 20  # 早停验证段 (仅切分用; 2026-08-11 起扫描训练关早停)
 PROD_MIN_AMOUNT = 5e7
 # 扫描关早停, 固定树数: es 段 huber loss 平贴常数基线时早停不稳定 (5d 曾坍缩到
 # 3 棵树 → 预测每日常数 → RankIC=0), 扫描只需组合间公平, 不需要贴近生产早停.
@@ -224,9 +224,7 @@ def build_max_universe_cache(force: bool = False) -> None:
     panel = pq.read_table(
         str(PANEL_V3_PATH), filters=[("is_suspended", "=", False)]
     ).to_pandas()
-    cleaner = CleaningPipeline(
-        CleaningConfig(min_amount=0.0, bottom_amount_pct=0.0)
-    )
+    cleaner = CleaningPipeline(CleaningConfig(min_amount=0.0, bottom_amount_pct=0.0))
     fe = FeatureEngineV35()
     board_dfs = dict(zip(("main", "dual"), cleaner.run_train(panel)))
     del panel
@@ -330,7 +328,9 @@ def build_regime_cache() -> dict:
     state = pd.Series("range", index=daily.index, dtype=object)
     with_hist_ice = has_hist & ((up_pct < _ICE_UP_PCT) | (ratio < _ICE_RATIO))
     state[with_hist_ice] = "ice"
-    state[has_hist & ~with_hist_ice & (up_pct > _HOT_UP_PCT) & (ratio > _HOT_RATIO)] = "hot"
+    state[has_hist & ~with_hist_ice & (up_pct > _HOT_UP_PCT) & (ratio > _HOT_RATIO)] = (
+        "hot"
+    )
     no_hist_ice = ~has_hist & (ratio < _ICE_RATIO)
     state[no_hist_ice] = "ice"
     state[~has_hist & ~no_hist_ice & (ratio > _HOT_RATIO)] = "hot"
@@ -418,8 +418,8 @@ def train_reg(board: str, kind: str, train_df, es_df, cols) -> object:
     if nl is not None:
         params["num_leaves"] = nl
     params["n_estimators"] = SWEEP_N_TREES
-    params["force_row_wise"] = True   # 316 特征宽表行式直方图省内存 (列式开销大)
-    params["num_threads"] = 4          # 减直方图线程缓冲, 防提交压力
+    params["force_row_wise"] = True  # 316 特征宽表行式直方图省内存 (列式开销大)
+    params["num_threads"] = 4  # 减直方图线程缓冲, 防提交压力
     model = lgb.LGBMRegressor(**params)
     model.fit(X, y, sample_weight=w)
     return model
@@ -453,8 +453,7 @@ def evaluate_combo(test_rows: pd.DataFrame, models: dict, cols: list[str]) -> di
         ics[kind] = _rank_ic(sub, "_pred", label)
     total_w = sum(LABEL_WEIGHTS.values())
     weighted_ic = (
-        sum(LABEL_WEIGHTS[int(k.split("d")[0])] * ics[k] for k in REGRESSIONS)
-        / total_w
+        sum(LABEL_WEIGHTS[int(k.split("d")[0])] * ics[k] for k in REGRESSIONS) / total_w
     )
     # Top-10 (10d 诚实门口径): 每日期按 10d 预测取前 10, 量 label_pm_10d_net.
     sub10 = test.dropna(subset=["label_pm_10d_net"])
@@ -489,9 +488,10 @@ def evaluate_combo(test_rows: pd.DataFrame, models: dict, cols: list[str]) -> di
                 continue
             s["_pred"] = models[kind].predict(np.nan_to_num(s[cols].values, nan=0.0))
             seg_ics[kind] = _rank_ic(s, "_pred", label)
-        subwin[name] = sum(
-            LABEL_WEIGHTS[int(k.split("d")[0])] * seg_ics[k] for k in REGRESSIONS
-        ) / total_w
+        subwin[name] = (
+            sum(LABEL_WEIGHTS[int(k.split("d")[0])] * seg_ics[k] for k in REGRESSIONS)
+            / total_w
+        )
     return {
         "ics": {k: round(v, 4) for k, v in ics.items()},
         "weighted_ic": round(weighted_ic, 4),
@@ -553,7 +553,9 @@ def _combo_worker(board: str, key: str, ma, bp, rmap: dict | None) -> int:
     t0 = time.time()
     if rmap is None:
         # 固定组合: 训练行按 (date, amount>=ma) 过滤读入, 测试行 = 生产过滤行.
-        tr = apply_filter(_read_pq(board, need, test_dates), PROD_MIN_AMOUNT, PROD_BOTTOM_PCT)
+        tr = apply_filter(
+            _read_pq(board, need, test_dates), PROD_MIN_AMOUNT, PROD_BOTTOM_PCT
+        )
         train = _read_pq(board, need, train_dates, ma)
         if bp > 0:
             r = train.groupby("date")["amount"].rank(pct=True)
@@ -596,7 +598,7 @@ def _combo_worker(board: str, key: str, ma, bp, rmap: dict | None) -> int:
     print(
         f"[sweep][{board}] {key} n_train={len(train):,} "
         f"wIC={ev['weighted_ic']:.4f} top10wr={ev['top10']['winrate']:.1%} "
-        f"mag={ev['top10']['mag']:+.2%} [{time.time()-t0:.0f}s]",
+        f"mag={ev['top10']['mag']:+.2%} [{time.time() - t0:.0f}s]",
         flush=True,
     )
     return 0

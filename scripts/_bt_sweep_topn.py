@@ -71,7 +71,9 @@ def topn_metrics(test: pd.DataFrame, models: dict, cols: list[str]) -> dict:
     return out
 
 
-def eval_bundle(bundle: dict, cols: list[str], test: pd.DataFrame, n_sub: int = N_SUB) -> dict:
+def eval_bundle(
+    bundle: dict, cols: list[str], test: pd.DataFrame, n_sub: int = N_SUB
+) -> dict:
     trained = {"segs": {"test": test}, "feature_cols": cols, "models": bundle["models"]}
     oos = DualTrackTrainer(model_dir=MODEL_DIR).validate_oos(trained)
     sub_dates = sorted(test["date"].unique())
@@ -80,8 +82,14 @@ def eval_bundle(bundle: dict, cols: list[str], test: pd.DataFrame, n_sub: int = 
     for i in range(n_sub):
         s0, s1 = i * step, len(sub_dates) if i == n_sub - 1 else (i + 1) * step
         sub_df = test[test["date"].isin(sub_dates[s0:s1])]
-        tsub = {"segs": {"test": sub_df}, "feature_cols": cols, "models": bundle["models"]}
-        sub_ics.append(DualTrackTrainer(model_dir=MODEL_DIR).validate_oos(tsub)["weighted_ic"])
+        tsub = {
+            "segs": {"test": sub_df},
+            "feature_cols": cols,
+            "models": bundle["models"],
+        }
+        sub_ics.append(
+            DualTrackTrainer(model_dir=MODEL_DIR).validate_oos(tsub)["weighted_ic"]
+        )
     return {
         "weighted_ic": oos["weighted_ic"],
         "ics": oos["ics"],
@@ -107,20 +115,26 @@ def main() -> int:
     union_cols: list[str] = []
     bundle_cols: dict[str, list[str]] = {}
     for fname in BUNDLES:
-        tag = fname[len("dual_"): -len(".pkl")]
+        tag = fname[len("dual_") : -len(".pkl")]
         b = DualTrackTrainer.load(os.path.join(MODEL_DIR, fname))
         bundle_cols[tag] = list(b["feature_cols"])
         union_cols = list(dict.fromkeys(union_cols + bundle_cols[tag]))
         del b
         gc.collect()
-    print(f"[cols] union={len(union_cols)} (38={len(bundle_cols['20260811b'])}, "
-          f"328={len(bundle_cols['20260812'])})", flush=True)
+    print(
+        f"[cols] union={len(union_cols)} (38={len(bundle_cols['20260811b'])}, "
+        f"328={len(bundle_cols['20260812'])})",
+        flush=True,
+    )
 
     panel = load_panel_v3()
     dates = sorted(panel["date"].unique())
     panel = panel[panel["date"] >= dates[-warmup_days]]
-    print(f"[panel] sliced last {warmup_days} trading days (warmup=270+eval={_eval_days}) "
-          f"-> {len(panel):,}r", flush=True)
+    print(
+        f"[panel] sliced last {warmup_days} trading days (warmup=270+eval={_eval_days}) "
+        f"-> {len(panel):,}r",
+        flush=True,
+    )
 
     features = FeatureEngineV35()
     results: dict = {}
@@ -149,14 +163,20 @@ def main() -> int:
         eval_df = df[df["date"] >= eval_start].copy()
         del df
         gc.collect()
-        print(f"[N={N}] 特征帧 eval {eval_start:%Y-%m-%d}..{ddates[-1]:%Y-%m-%d} "
-              f"{len(eval_df):,}r", flush=True)
+        print(
+            f"[N={N}] 特征帧 eval {eval_start:%Y-%m-%d}..{ddates[-1]:%Y-%m-%d} "
+            f"{len(eval_df):,}r",
+            flush=True,
+        )
 
         results[N] = {}
         for tag, cols in bundle_cols.items():
             bundle = DualTrackTrainer.load(os.path.join(MODEL_DIR, f"dual_{tag}.pkl"))
             labels = sorted({lbl for _, (_, lbl) in bundle["models"].items()})
-            keep = [c for c in (cols + labels) if c in eval_df.columns] + ["date", "symbol"]
+            keep = [c for c in (cols + labels) if c in eval_df.columns] + [
+                "date",
+                "symbol",
+            ]
             missing = [c for c in cols if c not in eval_df.columns]
             if missing:
                 print(f"[FATAL] N={N} {tag} 缺失 {missing[:5]} → abort", flush=True)
@@ -165,8 +185,11 @@ def main() -> int:
             results[N][tag] = eval_bundle(bundle, cols, test, n_sub)
             r = results[N][tag]
             t10 = r["topn"]["10d_n10"]
-            print(f"  [{tag}] wIC={r['weighted_ic']:.4f} sub={[round(x,4) for x in r['sub_window_ic']]} "
-                  f"top10 10d={t10['mean_ret']:+.3f} hit={t10['hit']:.3f}", flush=True)
+            print(
+                f"  [{tag}] wIC={r['weighted_ic']:.4f} sub={[round(x, 4) for x in r['sub_window_ic']]} "
+                f"top10 10d={t10['mean_ret']:+.3f} hit={t10['hit']:.3f}",
+                flush=True,
+            )
             del bundle, test
             gc.collect()
         print(f"[N={N}] done ({time.time() - tN:.0f}s)", flush=True)
@@ -174,11 +197,14 @@ def main() -> int:
     # ---- 判定: 每 bundle 选 top-10 10d 实得最高 + 子窗稳定 ----
     verdict: dict = {}
     for tag in bundle_cols:
-        best = max(POOL_SIZES, key=lambda n: results[n][tag]["topn"]["10d_n10"]["mean_ret"])
+        best = max(
+            POOL_SIZES, key=lambda n: results[n][tag]["topn"]["10d_n10"]["mean_ret"]
+        )
         verdict[tag] = {
             "best_N_top10": best,
-            "top10_10d_by_N": {n: results[n][tag]["topn"]["10d_n10"]["mean_ret"]
-                               for n in POOL_SIZES},
+            "top10_10d_by_N": {
+                n: results[n][tag]["topn"]["10d_n10"]["mean_ret"] for n in POOL_SIZES
+            },
             "wic_by_N": {n: results[n][tag]["weighted_ic"] for n in POOL_SIZES},
         }
     results["_verdict"] = verdict

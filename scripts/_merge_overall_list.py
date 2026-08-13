@@ -45,7 +45,9 @@ def load_parallel(date: str) -> pd.DataFrame:
     if "cut" in sl.columns:
         sl = sl[sl["cut"] == "T-10"]
     sl = sl.drop_duplicates(subset=["board", "symbol"]).copy()
-    sl["module_parallel"] = sl.get("systems").fillna("") if "systems" in sl.columns else ""
+    sl["module_parallel"] = (
+        sl.get("systems").fillna("") if "systems" in sl.columns else ""
+    )
     return sl
 
 
@@ -131,8 +133,12 @@ def main() -> None:
     out["rank"] = range(1, len(out) + 1)
     # 慢牛 rk 从 slowbull 池带过来 (并行行置 NaN; 纯慢牛按池 rk)
     sb_rk = pd.concat(
-        [pd.read_csv(p, dtype={"symbol": str}) for p in
-         glob.glob(str(STOCK_LIST_DIR / f"slowbull_pool_*_{date}__slow_bull_*.csv"))],
+        [
+            pd.read_csv(p, dtype={"symbol": str})
+            for p in glob.glob(
+                str(STOCK_LIST_DIR / f"slowbull_pool_*_{date}__slow_bull_*.csv")
+            )
+        ],
         ignore_index=True,
     )[["board", "symbol", "rk"]]
     rk_map = dict(zip(zip(sb_rk["board"], sb_rk["symbol"]), sb_rk["rk"]))
@@ -140,20 +146,39 @@ def main() -> None:
         lambda r: rk_map.get((r["board"], r["symbol"]), np.nan), axis=1
     )
     cols = [
-        "date", "rank", "board", "symbol", "module", "both",
-        "score", "pred_mag_3d", "pred_prob_3d", "pred_mag_5d", "pred_prob_5d",
-        "pred_mag_10d", "pred_prob_10d", "slow_bull_rk", "parallel_rk", "gate",
+        "date",
+        "rank",
+        "board",
+        "symbol",
+        "module",
+        "both",
+        "score",
+        "pred_mag_3d",
+        "pred_prob_3d",
+        "pred_mag_5d",
+        "pred_prob_5d",
+        "pred_mag_10d",
+        "pred_prob_10d",
+        "slow_bull_rk",
+        "parallel_rk",
+        "gate",
     ]
     out = out[[c for c in cols if c in out.columns]]
     fp = STOCK_LIST_DIR / f"overall_shortlist_{date}__parallel+slow_bull.csv"
     out.to_csv(fp, index=False, encoding="utf-8-sig")
     n_both = int(out["both"].sum())
     print(f"[saved] {fp}")
-    print(f"[overall] 共 {len(out)} 只 = 并行 {len(sl)} + 慢牛 {len(sb)} | "
-          f"双模块共荐 {n_both} 只")
+    print(
+        f"[overall] 共 {len(out)} 只 = 并行 {len(sl)} + 慢牛 {len(sb)} | "
+        f"双模块共荐 {n_both} 只"
+    )
     if n_both:
-        print("[both]", ", ".join(
-            f"{r['board']}:{r['symbol']}" for _, r in out[out["both"]].iterrows()))
+        print(
+            "[both]",
+            ", ".join(
+                f"{r['board']}:{r['symbol']}" for _, r in out[out["both"]].iterrows()
+            ),
+        )
     return
 
 

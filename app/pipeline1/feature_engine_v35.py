@@ -845,7 +845,9 @@ class FeatureEngineV35:
         if not src_cols:
             return df
 
-        df = _ensure_sorted(df)  # 内存安全 (2026-08-12): 输入已排序免整帧 sort 触发 consolidation
+        df = _ensure_sorted(
+            df
+        )  # 内存安全 (2026-08-12): 输入已排序免整帧 sort 触发 consolidation
         WINDOWS = (1, 3, 5, 10, 20)
         for col in src_cols:
             grp = df.groupby("symbol")[col]
