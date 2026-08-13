@@ -21,7 +21,7 @@ from app.pipeline1.feature_engine_v35 import (
     _apply_per_stock,
 )
 from app.pipeline1.ic_screener import ICScreener
-from app.pipeline1.label_engine import LabelEngine
+from app.pipeline1.label_engine import LabelEngine, _ensure_sorted
 from app.pipeline1.list_generator import (
     SCHEMA_FIELDS,
     ListDeliveryGuard,
@@ -1396,3 +1396,42 @@ def test_apply_per_stock_unsorted_input_lexsort_reorder():
     assert out.equals(ref)
     assert out.index.equals(ref.index)
     assert out["symbol"].tolist() == sorted(out["symbol"].tolist())
+
+
+class TestEnsureSorted:
+    """_ensure_sorted 内存安全保序函数测试 (2026-08-12)."""
+
+    def test_already_sorted_no_copy(self):
+        """已排序帧直接返回, 不深拷贝."""
+        df = make_panel(symbols=("300750", "600519"), days=10)
+        out = _ensure_sorted(df)
+        assert out is df  # 同一对象, 无拷贝
+
+    def test_unsorted_returns_sorted(self):
+        """乱序帧排序后与 sort_values 一致."""
+        df = make_panel(symbols=("600519", "300750", "601318"), days=30)
+        df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+        out = _ensure_sorted(df)
+        ref = df.sort_values(["symbol", "date"]).reset_index(drop=True)
+        assert out["symbol"].tolist() == ref["symbol"].tolist()
+        assert out["date"].tolist() == ref["date"].tolist()
+
+    def test_single_row(self):
+        """单行帧直接返回."""
+        df = make_panel(symbols=("600519",), days=1)
+        out = _ensure_sorted(df)
+        assert out is df
+
+    def test_with_nat_date_falls_back_to_sort(self):
+        """含 NaT 日期时保守走真 sort."""
+        df = make_panel(symbols=("300750", "600519"), days=10)
+        df.loc[0, "date"] = pd.NaT
+        out = _ensure_sorted(df)
+        assert len(out) == len(df)
+
+    def test_reset_index_when_not_range(self):
+        """已排序但 index 非 RangeIndex 时重标号."""
+        df = make_panel(symbols=("300750",), days=10)
+        df.index = [f"idx_{i}" for i in range(len(df))]
+        out = _ensure_sorted(df)
+        assert out.index.equals(pd.RangeIndex(len(df)))

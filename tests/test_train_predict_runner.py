@@ -439,7 +439,7 @@ class TestRunTrainingSequentialBoards:
             events.append(("prepare", board_df["board"].iloc[0]))
             return board_df.copy()
 
-        def fake_select(df, board, tag, selector=None, registry=None):
+        def fake_select(df, board, tag, selector=None, registry=None, fallback_boards=None):
             events.append(("select", board))
             return ["f1", "f2"], df
 
