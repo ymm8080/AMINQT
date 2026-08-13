@@ -13,7 +13,6 @@ import gc
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
-from scripts._sweep_liquidity_filter import ES_DAYS, TEST_DAYS, apply_filter
 
 from app.pipeline1.dual_track_trainer import (
     LGB_PARAMS_REG,
@@ -22,6 +21,7 @@ from app.pipeline1.dual_track_trainer import (
     risk_filter,
 )
 from app.utils.daily_rank_ic import mean_rank_ic
+from scripts._sweep_liquidity_filter import ES_DAYS, TEST_DAYS, apply_filter
 
 CACHE = r"data/_sweep_uni/main.parquet"
 MA, BP = 3e7, 0.2

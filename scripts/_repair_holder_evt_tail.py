@@ -38,10 +38,10 @@ OHLCV_COLS = ["open", "high", "low", "close", "volume"]
 def _ohlcv_violations(panel: pd.DataFrame) -> int:
     """OHLCV 校验 (量化铁律): high>=low, high>=open/close, low<=open/close, volume>=0."""
     v = 0
-    o, h, l, c = (panel[k] for k in ["open", "high", "low", "close"])
-    v += int((h < l).sum())
+    o, h, lo, c = (panel[k] for k in ["open", "high", "low", "close"])
+    v += int((h < lo).sum())
     v += int((h < o).sum() | (h < c).sum())
-    v += int((l > o).sum() | (l > c).sum())
+    v += int((lo > o).sum() | (lo > c).sum())
     if "volume" in panel.columns:
         v += int((panel["volume"] < 0).sum())
     return v

@@ -14,6 +14,7 @@ import logging
 import numpy as np
 import pandas as pd
 
+from app.pipeline1.label_engine import _ensure_sorted
 from config.settings import LHB_V2_SPEC
 
 from .cleaning_pipeline import limit_pct_series
@@ -844,7 +845,7 @@ class FeatureEngineV35:
         if not src_cols:
             return df
 
-        df = df.sort_values(["symbol", "date"])
+        df = _ensure_sorted(df)  # 内存安全 (2026-08-12): 输入已排序免整帧 sort 触发 consolidation
         WINDOWS = (1, 3, 5, 10, 20)
         for col in src_cols:
             grp = df.groupby("symbol")[col]
@@ -1583,7 +1584,15 @@ class FeatureEngineV35:
             df["_is_limit_down"] = (abs(df["close"] - ld_price) < 0.01).astype(int)
             daily["market_limit_down"] = df.groupby("date")["_is_limit_down"].sum()
             df = df.drop(columns=["_is_limit_down"])
-        return df.merge(daily.reset_index(), on="date", how="left")
+        # 内存安全 (2026-08-12): df.merge(小帧, on="date") 会深拷贝宽左帧 →
+        # _consolidate_inplace 整帧合并同 dtype 列 (main 240列×140万行 ≈ 2.5GB 连续块,
+        # 碎片化时 OOM, dim27 同类). 改 per-column date map (仅加列, 不 consolidation),
+        # 对 left merge 逐元素一致 (同值/缺日期→NaN).
+        daily = daily.reset_index()
+        daily_map = daily.set_index("date")
+        for _col in daily_map.columns:
+            df[_col] = df["date"].map(daily_map[_col])
+        return df
 
     # ---------------- ⑮ Alpha101 + GTJA191 因子 (源自 aurumq-rl, pandas 复刻) ----------------
     def dim15_alpha_factors(self, df: pd.DataFrame) -> pd.DataFrame:

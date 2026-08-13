@@ -64,9 +64,18 @@ def add_label_pm_10d_net(df: pd.DataFrame) -> pd.DataFrame:
     sym = df["symbol"].to_numpy()
     date = df["date"].to_numpy()
     lex_sorted = bool(
-        (len(sym) <= 1) or ((sym[:-1] != sym[1:]) | (date[:-1] <= date[1:])).all()
+        (len(sym) <= 1)
+        or (
+            (sym[:-1] <= sym[1:]).all()
+            and not ((sym[:-1] == sym[1:]) & (date[:-1] > date[1:])).any()
+            and not pd.isna(date).any()
+            and not pd.isna(sym).any()
+        )
     )
-    if not (lex_sorted and df.index.equals(pd.RangeIndex(len(df)))):
+    if lex_sorted:
+        if not df.index.equals(pd.RangeIndex(len(df))):
+            df.index = pd.RangeIndex(len(df))  # O(1) 重标号, 免 reset_index 深拷贝
+    else:
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
     g = df.groupby("symbol")["close_hfq"]
     exec_px = g.shift(-1)
@@ -104,6 +113,13 @@ def build_board_slice(cleaner, fe, board_df, board, checkpoint) -> pd.DataFrame:
         df = pd.read_parquet(checkpoint)
         print(f"[{board}] 复用检查点 {checkpoint} rows={len(df):,}", flush=True)
         return _finalize_slice(df)
+    # 内存安全 (2026-08-12): 主板块 float64 宽帧 (480列×140万行 ≈ 5.6GB) +
+    # _apply_per_stock 全列缓冲 (同量级) → 峰值 ~12GB, 15.8GB 物理机碎片化时
+    # 硬杀无 traceback. 输入清洗切片窄 (仅 ~30 列) 时降 float64→float32, 峰值减半,
+    # 下游特征/标签/训练 (LGBM 原生 float32) 精度足够, 输出检查点 dtype 变化无影响.
+    f64 = board_df.select_dtypes(include=["float64"]).columns
+    if len(f64):
+        board_df[f64] = board_df[f64].astype("float32")
     d = fe.build(board_df, None, cross_sectional_rank=(board != "main"), registry=None)
     del board_df
     gc.collect()

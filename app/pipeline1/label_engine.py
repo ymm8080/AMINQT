@@ -87,6 +87,31 @@ def _future_window_min(vals: np.ndarray, start: int, window: int) -> np.ndarray:
     return out
 
 
+def _ensure_sorted(df: pd.DataFrame) -> pd.DataFrame:
+    """内存安全保序 (2026-08-12): 已按 [symbol,date] 排序的帧免 sort_values.
+
+    sort_values 深拷贝 → _consolidate_inplace 把同 dtype 列整帧合并成 1 个连续块
+    (main 483列×140万行 ≈ 5.4GB) → 15.8GB 物理机 _ArrayMemoryError. 输入来自
+    fe.build 输出 (已排序) 时这是纯浪费. 判定: 符号全局非降 且 同符号相邻对日期
+    非降 (跨符号日期重置属正常, 勿要求全局日期单调); 任一 NaT/NaN → 保守走真 sort.
+    输出与无条件 sort_values(["symbol","date"]).reset_index(drop=True) 逐字节一致.
+    """
+    if len(df) <= 1:
+        return df
+    sym = df["symbol"].to_numpy()
+    date = df["date"].to_numpy()
+    if (
+        not pd.isna(date).any()
+        and not pd.isna(sym).any()  # NaN 先判 (含 NaN 的 object 数组无法做 str 比较)
+        and (sym[:-1] <= sym[1:]).all()
+        and not ((sym[:-1] == sym[1:]) & (date[:-1] > date[1:])).any()
+    ):
+        if not df.index.equals(pd.RangeIndex(len(df))):
+            df.index = pd.RangeIndex(len(df))  # O(1) 重标号, 免 reset_index 深拷贝
+        return df
+    return df.sort_values(["symbol", "date"]).reset_index(drop=True)
+
+
 class LabelEngine:
     """标签定义. 铁律: 输入 df 必须已 sort_values(['symbol','date']) (安全网 #13)."""
 
@@ -104,7 +129,7 @@ class LabelEngine:
         [日K近似] 日线无 14:55 价, price_1455 列缺失时用 close(T+1) 代替
         (与 backtest_v35 日K近似口径一致).
         """
-        df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
+        df = _ensure_sorted(df)
         g = df.groupby("symbol")["close_hfq"]
         for k in LABEL_HORIZONS:
             future_close = g.transform(lambda s, kk=k: _label_reference(s, kk))
@@ -157,7 +182,7 @@ class LabelEngine:
         毛收益标签保留作研究对照; 训练/验收一律用 *_net 口径.
         """
         if "adv20" not in df.columns and "amount" in df.columns:
-            df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
+            df = _ensure_sorted(df)
             df["adv20"] = (
                 df.groupby("symbol")["amount"]
                 .rolling(20, min_periods=20)
@@ -201,7 +226,7 @@ class LabelEngine:
         实盘最伤人的不是期末小亏, 而是期间浮亏触发日内引擎被迫止损 ——
         止损后期末涨回来与你无关.
         """
-        df = df.sort_values(["symbol", "date"]).reset_index(drop=True)  # 安全网 #13
+        df = _ensure_sorted(df)  # 内存安全 (2026-08-12): 见 _ensure_sorted docstring
         low_col = "low_hfq" if "low_hfq" in df.columns else "low"
         g_low = df.groupby("symbol")[low_col]
         g_close = df.groupby("symbol")["close_hfq"]
