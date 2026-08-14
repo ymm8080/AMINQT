@@ -239,8 +239,13 @@ SHORTLIST_SCORE = {
     # 保留 ⇔ T+3 可兑现净预期涨幅 (pred_ret_3d, close-to-close, 成本已扣) > t3_min
     # 2026-08-10: 门基准从 pred_mag_3d (MFE 最大浮盈, 虚高) 改为 pred_ret_3d (c2c 实得),
     # 与 legacy 收益闸口径一致 — 只放行"值得买入、有可兑现预期收益"的个股.
+    # 2026-08-14: t3_min 扫描 (_diag_t3min_sweep_20260814, 250d OOS) 定案分板块阈值 —
+    #   dual 0.50% 真实赢 (命中10d 66→68%, 实得10d +7.08→+8.01%, ≥+10% 35→38%,
+    #   4 子窗全 ≥ 基线, 只砍弱市空仓日); main 无档赢基线 (0.25% +1pp命中/+0.16pp实得
+    #   但出股 -18% 不值, 更高档实得反降) → 保持 0.
     "select_gate": {
-        "t3_min": 0.00,   # T+3 c2c 净预期涨幅下限 (原 select_confident 硬门)
+        # T+3 c2c 净预期涨幅下限: 分板块 dict (main=0 / dual=0.5%), 或全局 float (向后兼容)
+        "t3_min": {"main": 0.0, "dual": 0.005},
     },
 }
 
