@@ -121,7 +121,9 @@ def main() -> int:
     result, test_pred = topn_metrics(test, reg10, cols)
     print("[pred] 10d_reg 预测完成", flush=True)
 
-    out_dir = Path(BACKTEST_RESULT_DIR) / f"main_353_topn_{time.strftime('%Y%m%d_%H%M%S')}"
+    out_dir = (
+        Path(BACKTEST_RESULT_DIR) / f"main_353_topn_{time.strftime('%Y%m%d_%H%M%S')}"
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(out_dir / "result.json", "w", encoding="utf-8") as fh:
         json.dump(result, fh, ensure_ascii=False, indent=2, default=str)
@@ -132,14 +134,14 @@ def main() -> int:
     for h in HORIZONS:
         r = result[f"{h}d"]
         print(
-            f"--- {h}d 池基线: mean {r['pool']['mean_ret']*100:+.2f}%  hit {r['pool']['hit']*100:.1f}% "
+            f"--- {h}d 池基线: mean {r['pool']['mean_ret'] * 100:+.2f}%  hit {r['pool']['hit'] * 100:.1f}% "
             f"(rows {r['pool']['rows']:,})",
             flush=True,
         )
         for n in TOPN:
             t = r["topn"][str(n)]
             print(
-                f"    top-{n:>3}: mean {t['mean_ret']*100:+.2f}%  hit {t['hit']*100:.1f}%  rows {t['rows']:,}",
+                f"    top-{n:>3}: mean {t['mean_ret'] * 100:+.2f}%  hit {t['hit'] * 100:.1f}%  rows {t['rows']:,}",
                 flush=True,
             )
     return 0

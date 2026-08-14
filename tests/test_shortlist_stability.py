@@ -195,7 +195,9 @@ def test_trailing_realized_takes_top_by_score_over_realized_days():
     assert val == pytest.approx(expected)
     # 未实现 (label NaN) 日跳过: 只统计有 label 的决策日
     frame.loc[frame["date"] == dates[-1], "label_pm_10d_net"] = np.nan
-    assert _trailing_realized(frame, "10d", top=10, window=10) == pytest.approx(expected)
+    assert _trailing_realized(frame, "10d", top=10, window=10) == pytest.approx(
+        expected
+    )
 
 
 def test_anchor_reported_shifts_mean_keeps_order_sync_mag10d():
@@ -257,7 +259,8 @@ def test_anchor_reported_shifts_mean_keeps_order_sync_mag10d():
     assert anchored.sort_values("score")["pred_ret_10d"].is_monotonic_increasing
     shift = float(anchored["pred_ret_10d"].iloc[0] - (0.04 + 0.01 * 10))
     assert (
-        anchored["pred_ret_10d"] - (0.04 + 0.01 * anchored["symbol"].str[1:].astype(int))
+        anchored["pred_ret_10d"]
+        - (0.04 + 0.01 * anchored["symbol"].str[1:].astype(int))
     ).abs().max() == pytest.approx(abs(shift))
 
 
@@ -283,6 +286,4 @@ def test_rank_and_truncate_keeps_only_top5_per_board():
         b = out[out["board"] == board]
         assert len(b) == 5
         # 保留 pred_mag_10d 最高的 5 只
-        assert set(b["symbol"]) == {
-            f"{pref[board]}{i:04d}" for i in range(n - 5, n)
-        }
+        assert set(b["symbol"]) == {f"{pref[board]}{i:04d}" for i in range(n - 5, n)}

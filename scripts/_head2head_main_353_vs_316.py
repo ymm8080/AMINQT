@@ -117,7 +117,10 @@ def main() -> int:
         present = [c for c in cols if c in eval_df.columns]
         missing = [c for c in cols if c not in eval_df.columns]
         labels = sorted({lbl for _, (_, lbl) in bundle["models"].items()})
-        keep = [c for c in (present + labels) if c in eval_df.columns] + ["date", "symbol"]
+        keep = [c for c in (present + labels) if c in eval_df.columns] + [
+            "date",
+            "symbol",
+        ]
         test = eval_df[keep].copy()
         # 推理端无法复现训练注入的 _brute_ 特征 → 补 0 (与 predictor.py 生产行为一致).
         # 否则这些列缺失 → validate_oos/topn 的 sub[cols] 直接 KeyError 崩溃;

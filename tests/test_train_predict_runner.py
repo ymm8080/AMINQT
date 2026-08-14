@@ -286,9 +286,7 @@ class TestRunTraining:
         with pytest.raises(ValueError):
             run_training(panel=None, panel_path=None)
         sig = inspect.signature(run_training)
-        assert (
-            sig.parameters["panel_path"].kind is inspect.Parameter.KEYWORD_ONLY
-        )
+        assert sig.parameters["panel_path"].kind is inspect.Parameter.KEYWORD_ONLY
 
 
 class TestSelectFeaturesBruteInjection:
@@ -455,7 +453,9 @@ class TestRunTrainingSequentialBoards:
             events.append(("prepare", board_df["board"].iloc[0]))
             return board_df.copy()
 
-        def fake_select(df, board, tag, selector=None, registry=None, fallback_boards=None):
+        def fake_select(
+            df, board, tag, selector=None, registry=None, fallback_boards=None
+        ):
             events.append(("select", board))
             return ["f1", "f2"], df
 
@@ -537,7 +537,9 @@ class TestRunTrainingSequentialBoards:
             events.append(("prepare", board_df["board"].iloc[0]))
             return board_df.copy()
 
-        def fake_select(df, board, tag, selector=None, registry=None, fallback_boards=None):
+        def fake_select(
+            df, board, tag, selector=None, registry=None, fallback_boards=None
+        ):
             events.append(("select", board))
             return ["f1"], df
 

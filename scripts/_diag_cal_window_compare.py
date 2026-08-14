@@ -9,10 +9,8 @@ WORM 输出 data/_diag_cal_window_<ts>.csv.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
-from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -46,7 +44,9 @@ def main() -> int:
     out_rows = []
     for board in ("main", "dual"):
         fp = DATA_DIR / f"_diag_stage_{board}_3y.parquet"
-        dates = pd.to_datetime(pq.read_table(str(fp), columns=["date"]).to_pandas()["date"])
+        dates = pd.to_datetime(
+            pq.read_table(str(fp), columns=["date"]).to_pandas()["date"]
+        )
         uniq = np.unique(dates.values)
         cutoff = uniq[-(N_TAIL + 20)]
         t = pq.read_table(
@@ -71,7 +71,11 @@ def main() -> int:
                 label_horizon=10,
             )
             m["date"] = pd.to_datetime(m["date"])
-            m = m.merge(work[["symbol", "date", "label_pm_10d_net"]], on=["symbol", "date"], how="inner")
+            m = m.merge(
+                work[["symbol", "date", "label_pm_10d_net"]],
+                on=["symbol", "date"],
+                how="inner",
+            )
             mags[lab] = m
 
         base = mags["n21"]
@@ -79,9 +83,7 @@ def main() -> int:
         if reals.empty:
             continue
         # 只用已实现可对比的日期 (两窗都必须有预测 + 有实得)
-        common_days = sorted(
-            set(mags["n21"]["date"]) & set(mags[f"n{WIN}"]["date"])
-        )
+        common_days = sorted(set(mags["n21"]["date"]) & set(mags[f"n{WIN}"]["date"]))
         real_days = set(reals["date"].unique())
         days = sorted(set(common_days) & real_days)
         # 取末 ~250 天可实得窗口 (更长 OOS, 降单段行情噪声)
@@ -110,13 +112,19 @@ def main() -> int:
             f"  top10   {joined['mag_21'].mean():+.4f} | {joined['label_pm_10d_net_21'].mean():+.4f}"
             f" | {joined[f'mag_{WIN}'].mean():+.4f} | {joined[f'label_pm_10d_net_{WIN}'].mean():+.4f}"
         )
-        print(f"  top10 bias  n21={joined['mag_21'].mean()-joined['label_pm_10d_net_21'].mean():+.4f}"
-              f"  n{WIN}={joined[f'mag_{WIN}'].mean()-joined[f'label_pm_10d_net_{WIN}'].mean():+.4f}")
+        print(
+            f"  top10 bias  n21={joined['mag_21'].mean() - joined['label_pm_10d_net_21'].mean():+.4f}"
+            f"  n{WIN}={joined[f'mag_{WIN}'].mean() - joined[f'label_pm_10d_net_{WIN}'].mean():+.4f}"
+        )
         print(f"  选股重叠 (Jaccard 日均): {overlap:.2%}")
-        print(f"  最近5日 n{WIN} top-10 预测: "
-              + ", ".join(f"{d.date()}={v:.4f}" for d, v in gW["mag"].tail(5).items()))
-        print(f"  最近5日 n21   top-10 预测: "
-              + ", ".join(f"{d.date()}={v:.4f}" for d, v in g21["mag"].tail(5).items()))
+        print(
+            f"  最近5日 n{WIN} top-10 预测: "
+            + ", ".join(f"{d.date()}={v:.4f}" for d, v in gW["mag"].tail(5).items())
+        )
+        print(
+            "  最近5日 n21   top-10 预测: "
+            + ", ".join(f"{d.date()}={v:.4f}" for d, v in g21["mag"].tail(5).items())
+        )
         out_rows.append(
             {
                 "board": board,
@@ -124,10 +132,21 @@ def main() -> int:
                 "overlap": round(overlap, 4),
                 "pred21": round(float(joined["mag_21"].mean()), 4),
                 "real21": round(float(joined["label_pm_10d_net_21"].mean()), 4),
-                "bias21": round(float(joined["mag_21"].mean() - joined["label_pm_10d_net_21"].mean()), 4),
+                "bias21": round(
+                    float(
+                        joined["mag_21"].mean() - joined["label_pm_10d_net_21"].mean()
+                    ),
+                    4,
+                ),
                 f"pred{WIN}": round(float(joined[f"mag_{WIN}"].mean()), 4),
                 f"real{WIN}": round(float(joined[f"label_pm_10d_net_{WIN}"].mean()), 4),
-                f"bias{WIN}": round(float(joined[f"mag_{WIN}"].mean() - joined[f"label_pm_10d_net_{WIN}"].mean()), 4),
+                f"bias{WIN}": round(
+                    float(
+                        joined[f"mag_{WIN}"].mean()
+                        - joined[f"label_pm_10d_net_{WIN}"].mean()
+                    ),
+                    4,
+                ),
             }
         )
     df = pd.DataFrame(out_rows)

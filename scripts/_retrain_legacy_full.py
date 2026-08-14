@@ -34,9 +34,13 @@ def main() -> int:
         stream=sys.stdout,
     )
     ap = argparse.ArgumentParser(description="legacy 周频重训 (V3 面板直读, 含当日)")
-    ap.add_argument("tag", nargs="?", default=None, help="模型包标签 (默认今天 YYYYMMDD)")
     ap.add_argument(
-        "--board", choices=("main", "dual"), default=None,
+        "tag", nargs="?", default=None, help="模型包标签 (默认今天 YYYYMMDD)"
+    )
+    ap.add_argument(
+        "--board",
+        choices=("main", "dual"),
+        default=None,
         help="只重训指定板块 (默认双板)",
     )
     args = ap.parse_args()

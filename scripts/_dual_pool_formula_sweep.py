@@ -42,7 +42,9 @@ from app.pipeline1.label_engine import MASK_RECENT_DAYS, LabelEngine
 from config.settings import BACKTEST_RESULT_DIR
 
 MODEL_DIR = "models/pipeline1"
-BUNDLES = ("dual_20260811b.pkl",)  # 生产固定版 (20260811c/20260812 gate_d 过拟合签已回退)
+BUNDLES = (
+    "dual_20260811b.pkl",
+)  # 生产固定版 (20260811c/20260812 gate_d 过拟合签已回退)
 POOL_N = 200  # 08-13 定案 dual 池大小
 FORMULAS = (
     "rank_5050",
@@ -77,9 +79,7 @@ def topn_metrics(test: pd.DataFrame, models: dict, cols: list[str]) -> dict:
     return out
 
 
-def eval_bundle(
-    bundle: dict, cols: list[str], test: pd.DataFrame, n_sub: int
-) -> dict:
+def eval_bundle(bundle: dict, cols: list[str], test: pd.DataFrame, n_sub: int) -> dict:
     present = [c for c in cols if c in test.columns]
     missing = [c for c in cols if c not in test.columns]
     labels = sorted({lbl for _, (_, lbl) in bundle["models"].items()})
@@ -169,7 +169,7 @@ def main() -> int:
     results: dict = {}
 
     for formula in FORMULAS:
-        tF = time.time()
+        time.time()
         cfg = CleaningConfig(
             score_mode=formula, liquidity_top_n=POOL_N, liquidity_top_n_main=POOL_N
         )

@@ -219,7 +219,9 @@ class CleaningPipeline:
             out["_zlog_amt"] = np.log(
                 pd.to_numeric(out["amount"], errors="coerce").clip(lower=1e-9)
             )
-            out["_zlog_ff"] = np.log(pd.to_numeric(ff, errors="coerce").clip(lower=1e-9))
+            out["_zlog_ff"] = np.log(
+                pd.to_numeric(ff, errors="coerce").clip(lower=1e-9)
+            )
             for c in ("_zlog_amt", "_zlog_ff"):
                 g = out.groupby(["date", "board"])[c]
                 out[c] = (out[c] - g.transform("mean")) / g.transform("std").replace(

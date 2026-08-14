@@ -19,11 +19,9 @@ import glob
 import json
 import os
 import sys
-from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 
@@ -76,9 +74,13 @@ def main() -> int:
         print("无 parallel_shortlist_*.csv")
         return 1
     pred = pd.concat(frames, ignore_index=True)
-    pred = pred.drop_duplicates(subset=["date", "board", "symbol"]).reset_index(drop=True)
+    pred = pred.drop_duplicates(subset=["date", "board", "symbol"]).reset_index(
+        drop=True
+    )
     pred["date"] = pd.to_datetime(pred["date"])
-    print(f"[pred] {len(pred)} 行, 日期 {pred['date'].min().date()} ~ {pred['date'].max().date()}")
+    print(
+        f"[pred] {len(pred)} 行, 日期 {pred['date'].min().date()} ~ {pred['date'].max().date()}"
+    )
 
     # 面板切片: 预测首日前 1 交易日起 (供 T+1 买入价) — 已实现列只取面板自身可测部分
     lo = pred["date"].min() - pd.Timedelta(days=5)
@@ -94,7 +96,7 @@ def main() -> int:
         t["date"] = pd.to_datetime(t["date"])
         panels[board] = t
     # 只算预测涉及 symbol 的行, 减少 MFE shift 开销
-    need_syms = set(pred["symbol"]) & set(pred["board"])
+    set(pred["symbol"]) & set(pred["board"])
     for board, t in panels.items():
         syms = set(pred.loc[pred["board"] == board, "symbol"])
         panels[board] = t[t["symbol"].isin(syms)]
@@ -106,8 +108,15 @@ def main() -> int:
     rows = []
     for h in HORIZONS:
         sub = merged[
-            ["date", "board", f"pred_mag_{h}", f"real_mfe_{h}",
-             f"pred_ret_{h}", f"real_c2c_{h}", f"pred_prob_{h}"]
+            [
+                "date",
+                "board",
+                f"pred_mag_{h}",
+                f"real_mfe_{h}",
+                f"pred_ret_{h}",
+                f"real_c2c_{h}",
+                f"pred_prob_{h}",
+            ]
         ].copy()
         sub = sub.dropna(subset=[f"real_mfe_{h}"])
         if sub.empty:
@@ -147,7 +156,9 @@ def main() -> int:
     out_csv = DATA_DIR / f"_diag_pred_bias_{ts}.csv"
     df.to_csv(out_csv, index=False)
     (DATA_DIR / f"_diag_pred_bias_{ts}.json").write_text(
-        json.dumps({"ts": ts, "rows": df.to_dict("records")}, indent=2, ensure_ascii=False),
+        json.dumps(
+            {"ts": ts, "rows": df.to_dict("records")}, indent=2, ensure_ascii=False
+        ),
         encoding="utf-8",
     )
     print(f"\n[saved] {out_csv}")

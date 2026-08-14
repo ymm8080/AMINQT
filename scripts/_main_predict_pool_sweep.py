@@ -71,9 +71,7 @@ def topn_metrics(test: pd.DataFrame, models: dict, cols: list[str]) -> dict:
     return out
 
 
-def eval_bundle(
-    bundle: dict, cols: list[str], test: pd.DataFrame, n_sub: int
-) -> dict:
+def eval_bundle(bundle: dict, cols: list[str], test: pd.DataFrame, n_sub: int) -> dict:
     present = [c for c in cols if c in test.columns]
     missing = [c for c in cols if c not in test.columns]
     labels = sorted({lbl for _, (_, lbl) in bundle["models"].items()})
@@ -145,7 +143,7 @@ def main() -> int:
     results: dict = {}
 
     for N in POOL_SIZES:
-        tN = time.time()
+        time.time()
         cap = 10**9 if N == FULL_SENTINEL else N
         cfg = CleaningConfig(liquidity_top_n=cap, liquidity_top_n_main=cap)
         cleaner = CleaningPipeline(cfg)
@@ -201,8 +199,7 @@ def main() -> int:
         verdict[tag] = {
             "best_N_top10": best,
             "top10_10d_by_N": {
-                n: results[n][tag]["topn"]["10d_n10"]["mean_ret"]
-                for n in POOL_SIZES
+                n: results[n][tag]["topn"]["10d_n10"]["mean_ret"] for n in POOL_SIZES
             },
             "wic_by_N": {n: results[n][tag]["weighted_ic"] for n in POOL_SIZES},
         }

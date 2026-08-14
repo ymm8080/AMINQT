@@ -26,9 +26,7 @@ from app.pipeline_parallel.config import FUSION, SNIPER
 from app.pipeline_parallel.scoring import pool_score
 from config.settings import DATA_DIR
 
-POOL_COLS = sorted(
-    {c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"}
-)
+POOL_COLS = sorted({c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"})
 N_TAIL = 320  # 决策日载入 (>= 250 已实现 + 校准窗 + 标签视界余量)
 EVAL_DAYS = 250  # 评估: 末 250 个已实现交易日
 TOPS = (1, 3, 5, 10)
@@ -38,7 +36,9 @@ def main() -> int:
     rows = []
     for board in ("main", "dual"):
         fp = DATA_DIR / f"_diag_stage_{board}_3y.parquet"
-        dates = pd.to_datetime(pq.read_table(str(fp), columns=["date"]).to_pandas()["date"])
+        dates = pd.to_datetime(
+            pq.read_table(str(fp), columns=["date"]).to_pandas()["date"]
+        )
         uniq = np.unique(dates.values)
         if len(uniq) < N_TAIL + 20:
             continue
@@ -55,9 +55,7 @@ def main() -> int:
         t["score"] = np.maximum(sn.values, fu.values)
         t = t.dropna(subset=["score"])
         work = t[["symbol", "date", "board", "score", "label_pm_10d_net"]].copy()
-        m = calibrate_mag10d(
-            work, target_col="label_pm_10d_net", label_horizon=10
-        )
+        m = calibrate_mag10d(work, target_col="label_pm_10d_net", label_horizon=10)
         if m.empty:
             continue
         mm = m.merge(
@@ -73,7 +71,9 @@ def main() -> int:
         rr = rr[rr["date"].isin(days)]
         rr = rr.sort_values(["date", "mag"], ascending=[True, False])
 
-        print(f"\n===== {board}  末 {len(days)} 已实现交易日 (T+10 close-to-close 净) =====")
+        print(
+            f"\n===== {board}  末 {len(days)} 已实现交易日 (T+10 close-to-close 净) ====="
+        )
         print(
             f"{'topN':>5} {'个股·日':>7} {'预测mag均值':>10} {'实得均值':>9} "
             f"{'命中(>0)':>8} {'≥+5%':>7} {'≥+10%':>8}"
@@ -107,7 +107,9 @@ def main() -> int:
     out = DATA_DIR / f"_diag_mag_frontier_{ts}.csv"
     df.to_csv(out, index=False)
     (DATA_DIR / f"_diag_mag_frontier_{ts}.json").write_text(
-        json.dumps({"ts": ts, "rows": df.to_dict("records")}, indent=2, ensure_ascii=False),
+        json.dumps(
+            {"ts": ts, "rows": df.to_dict("records")}, indent=2, ensure_ascii=False
+        ),
         encoding="utf-8",
     )
     print(f"\n[saved] {out}")

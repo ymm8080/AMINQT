@@ -23,13 +23,22 @@ def test_fixture_dates_hit_expected_weekdays():
 
 def test_plan_steps_weekday_full_chain():
     assert plan_steps(THU) == [
-        "refresh", "parallel", "legacy", "deliver", "deliver_parallel",
+        "refresh",
+        "parallel",
+        "legacy",
+        "deliver",
+        "deliver_parallel",
     ]
 
 
 def test_plan_steps_retrain_day_inserts_retrain():
     assert plan_steps(FRI) == [
-        "refresh", "retrain", "parallel", "legacy", "deliver", "deliver_parallel",
+        "refresh",
+        "retrain",
+        "parallel",
+        "legacy",
+        "deliver",
+        "deliver_parallel",
     ]
 
 
@@ -37,7 +46,10 @@ def test_plan_steps_skip_parallel_drops_deliver_parallel():
     """--skip-parallel 只跑 legacy 链 (refresh 仍刷新检查点); 并行交付同步丢弃."""
     assert plan_steps(THU, skip_parallel=True) == ["refresh", "legacy", "deliver"]
     assert plan_steps(FRI, skip_parallel=True) == [
-        "refresh", "retrain", "legacy", "deliver",
+        "refresh",
+        "retrain",
+        "legacy",
+        "deliver",
     ]
 
 

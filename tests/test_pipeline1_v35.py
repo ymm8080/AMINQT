@@ -169,8 +169,12 @@ class TestCleaning:
     def test_step2_main_unlimited_pool(self):
         """liquidity_top_n_main=0 → main 不截池 (保留全部), dual 仍截前 N."""
         symbols = (
-            "600519", "601318", "600000",  # main
-            "300750", "300059", "300124",  # GEM
+            "600519",
+            "601318",
+            "600000",  # main
+            "300750",
+            "300059",
+            "300124",  # GEM
         )
         df = make_panel(symbols=symbols, days=60)
         cfg = CleaningConfig(liquidity_top_n=1, liquidity_top_n_main=0)
@@ -194,9 +198,14 @@ class TestCleaning:
     def test_step2_score_modes(self, mode):
         """liquidity_score 各公式产出有限分 (无 NaN/inf), 可排序选池."""
         symbols = (
-            "600519", "601318", "600000",  # main
-            "300750", "300059", "300124",  # GEM
-            "688001", "688111",  # STAR
+            "600519",
+            "601318",
+            "600000",  # main
+            "300750",
+            "300059",
+            "300124",  # GEM
+            "688001",
+            "688111",  # STAR
         )
         df = make_panel(symbols=symbols, days=120)
         cfg = CleaningConfig(score_mode=mode, liquidity_top_n=3, liquidity_top_n_main=3)

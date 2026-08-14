@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -25,9 +24,7 @@ from app.pipeline_parallel.config import FUSION, SNIPER
 from app.pipeline_parallel.scoring import pool_score
 from config.settings import DATA_DIR
 
-POOL_COLS = sorted(
-    {c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"}
-)
+POOL_COLS = sorted({c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"})
 N_TAIL = 160  # 末 N 交易日
 
 
@@ -35,14 +32,18 @@ def main() -> int:
     rows = []
     for board in ("main", "dual"):
         fp = DATA_DIR / f"_diag_stage_{board}_3y.parquet"
-        dates = pd.to_datetime(pq.read_table(str(fp), columns=["date"]).to_pandas()["date"])
+        dates = pd.to_datetime(
+            pq.read_table(str(fp), columns=["date"]).to_pandas()["date"]
+        )
         uniq = np.unique(dates.values)
         if len(uniq) < N_TAIL + 20:
             continue
         cutoff = uniq[-(N_TAIL + 20)]
         t = pq.read_table(
             str(fp),
-            columns=["symbol", "date"] + POOL_COLS + ["label_pm_3d_net", "label_pm_5d_net", "label_pm_10d_net"],
+            columns=["symbol", "date"]
+            + POOL_COLS
+            + ["label_pm_3d_net", "label_pm_5d_net", "label_pm_10d_net"],
             filters=[("date", ">=", cutoff)],
         ).to_pandas()
         t["symbol"] = t["symbol"].astype(str)
@@ -70,9 +71,14 @@ def main() -> int:
             mm["date"] = pd.to_datetime(mm["date"])
             # 最近 5 个决策日的 TOP-10 预测 (未实得日也展示 — 看当前预测是否尖峰)
             latest5 = sorted(mm["date"].unique())[-5:]
-            last5 = mm[mm["date"].isin(latest5)].sort_values(
-                ["date", "mag"], ascending=[True, False]
-            ).groupby("date").head(10).groupby("date")["mag"].mean()
+            last5 = (
+                mm[mm["date"].isin(latest5)]
+                .sort_values(["date", "mag"], ascending=[True, False])
+                .groupby("date")
+                .head(10)
+                .groupby("date")["mag"]
+                .mean()
+            )
             print(
                 f"[{board} T+{h[:-1]}] 最近5决策日 TOP-10 预测 mag: "
                 + ", ".join(f"{d.date()}={v:.4f}" for d, v in last5.items())
@@ -82,11 +88,13 @@ def main() -> int:
             if rr.empty:
                 continue
             # 全池逐日
-            daily = rr.groupby("date").agg(
-                pred=("mag", "mean"), realized=(col, "mean")
-            )
+            daily = rr.groupby("date").agg(pred=("mag", "mean"), realized=(col, "mean"))
             # TOP-10 逐日 (按当日预测 mag 降序)
-            top = rr.sort_values(["date", "mag"], ascending=[True, False]).groupby("date").head(10)
+            top = (
+                rr.sort_values(["date", "mag"], ascending=[True, False])
+                .groupby("date")
+                .head(10)
+            )
             t10 = top.groupby("date").agg(
                 pred_top10=("mag", "mean"), realized_top10=(col, "mean")
             )
@@ -103,7 +111,9 @@ def main() -> int:
                     "bias_top10": bias,
                     "pred_pool_mean": float(joined["pred"].mean()),
                     "realized_pool_mean": float(joined["realized"].mean()),
-                    "bias_pool": float(joined["pred"].mean() - joined["realized"].mean()),
+                    "bias_pool": float(
+                        joined["pred"].mean() - joined["realized"].mean()
+                    ),
                 }
             )
             print(f"\n=== {board} T+{h[:-1]} TOP-10 (末 {len(joined)} 交易日) ===")
@@ -118,7 +128,9 @@ def main() -> int:
     out = DATA_DIR / f"_diag_mag10d_wf_{ts}.csv"
     df.to_csv(out, index=False)
     (DATA_DIR / f"_diag_mag10d_wf_{ts}.json").write_text(
-        json.dumps({"ts": ts, "rows": df.to_dict("records")}, indent=2, ensure_ascii=False),
+        json.dumps(
+            {"ts": ts, "rows": df.to_dict("records")}, indent=2, ensure_ascii=False
+        ),
         encoding="utf-8",
     )
     print(f"\n[saved] {out}")
