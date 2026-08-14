@@ -190,8 +190,8 @@ def select_features(
 
 
 def run_training(
-    panel: pd.DataFrame,
-    tag: str,
+    panel: pd.DataFrame | None = None,
+    tag: str | None = None,
     model_dir: str = "models/pipeline1",
     registry_path: str = str(data_others_path("data/factor_registry")),
     float_shares_map: dict | None = None,
@@ -201,8 +201,11 @@ def run_training(
     feature_list_path: str | None = None,
     selector_config: dict | None = None,
     fallback_boards: set[str] | None = None,
+    boards: tuple[str, ...] = ("main", "dual"),
+    *,
+    panel_path: str | None = None,
 ) -> dict:
-    """周频重训主入口: 面板 → 双板块模型包.
+    """周频重训主入口: 面板 → 板块模型包 (默认双板).
 
     Args:
         panel: enrich 后的全市场面板 (panel_builder.assemble_panel 输出)
@@ -214,6 +217,7 @@ def run_training(
         feature_list_path: [已废弃] 忽略; FeatureSelector 直接运行, 不再从文件加载
         selector_config: FeatureSelector 配置覆盖 (None → 用默认 config)
         fallback_boards: 跳过 FeatureSelector、直用全量特征的板块子集 (None → 全部精选)
+        boards: 只重训的板块子集 (默认双板; ('dual',) 只训双创, 省内存省时)
 
     Returns:
         {board: {'path', 'oos': {...}, 'switched': bool, 'n_features': int}}
@@ -222,6 +226,24 @@ def run_training(
 
     cleaner = CleaningPipeline()
     features = FeatureEngineV35()
+
+    # ── 内存 (2026-08-13 修复): 全量重训 build 阶段 OOM (dim17 峰值贴 commit 上限) ──
+    # 根因: 调用方 (scripts/_retrain_legacy_full.py) 在 run_training 全程持有 panel 引用,
+    # 函数内 `del panel` 只删局部名, 面板 (~2GB) 在特征 build 阶段仍驻留 → 峰值超标.
+    # panel_path 模式: run_training 自己持有 panel, cleaning 后 del panel 真正归还内存.
+    if panel is None and panel_path is not None:
+        from .cleaning_pipeline import load_panel_v3
+
+        panel = load_panel_v3(path=panel_path)
+        cut = panel["date"].max() - pd.DateOffset(years=3)
+        panel = panel[panel["date"] >= cut]
+        logger.info(
+            "[panel_path] V3 直读 + 3y 窗口: %d rows max=%s",
+            len(panel),
+            panel["date"].max().date(),
+        )
+    elif panel is None:
+        raise ValueError("run_training: panel 与 panel_path 必须提供其一")
 
     # ── FeatureSelector (Layer2) — 替代 ICScreener ──
     selector = None
@@ -261,12 +283,15 @@ def run_training(
 
     # 内存分期: 逐板块 prepare→select→train→释放, 任意时刻只持一份增强帧.
     # 两板块是独立模型 (独立特征/独立 OOS), 分期只降内存峰值, 不改模型内容.
-    board_dfs = dict(zip(("main", "dual"), cleaner.run_train(panel)))
+    # boards 单板时 board=run_train 只清洗该板 (另一板返回空帧, 省内存).
+    run_board = boards[0] if len(boards) == 1 else None
+    board_dfs = dict(zip(("main", "dual"), cleaner.run_train(panel, board=run_board)))
+    board_dfs = {b: board_dfs[b] for b in boards}
     del panel  # run_train 后 panel 不再需要 → 尽早归还内存
     gc.collect()
     trainer = DualTrackTrainer(model_dir=model_dir)
     results: dict = {}
-    for board in ("main", "dual"):
+    for board in boards:
         board_df = board_dfs.pop(board)
         if len(board_df) == 0:
             logger.warning("[%s] 清洗后无样本, 跳过该板块训练", board)

@@ -523,14 +523,22 @@ def gate_d_ablation(
     sat_pct=0.95,
     lgb_params=None,
     random_state=42,
+    metrics_out=None,
 ):
     """Importance forward ablation with saturation gate.
 
     1. Train full model on all feats, rank by gain importance
     2. Test ablation points (5,10,20,30,...,all,min_feats)
     3. Stop at 95% of best ICIR, clamped to min_feats
+
+    metrics_out (dict|None): 提供则就地记录选择指标 (best_ir/best_n/sat_n/
+    n_candidates/n_selected/ablation_log), 供调用方落盘快照. 返回类型不变 (list).
     """
+    if metrics_out is not None:
+        metrics_out.update(n_candidates=len(feats))
     if len(feats) <= min_feats:
+        if metrics_out is not None:
+            metrics_out.update(n_selected=len(feats), note="feats<=min_feats")
         return feats
 
     dates = sorted(df["date"].unique())
@@ -540,6 +548,8 @@ def gate_d_ablation(
 
     avail = [c for c in feats if c in df.columns]
     if len(avail) <= min_feats:
+        if metrics_out is not None:
+            metrics_out.update(n_selected=len(avail), note="avail<=min_feats")
         return avail
 
     base_params = dict(
@@ -626,6 +636,15 @@ def gate_d_ablation(
         best_n,
         sat_n,
     )
+    if metrics_out is not None:
+        metrics_out.update(
+            n_candidates=len(avail),
+            n_selected=len(selected),
+            best_ir=best_ir,
+            best_n=best_n,
+            sat_n=sat_n,
+            ablation_log=ablation_log,
+        )
     return selected
 
 
@@ -1130,10 +1149,13 @@ class FeatureSelector:
         board_cfg = self.config.get(board, self.config.get("fallback", {}))
         pipeline = board_cfg.get("pipeline", "ic_screener")
 
+        metrics: dict = {}
         if pipeline == "bruteforce_dedup":
-            result = self._run_bruteforce_dedup(df, board, board_cfg, generator)
+            result = self._run_bruteforce_dedup(
+                df, board, board_cfg, generator, metrics_out=metrics
+            )
         elif pipeline == "gate_d":
-            result = self._run_gate_d(df, board, board_cfg)
+            result = self._run_gate_d(df, board, board_cfg, metrics_out=metrics)
         else:
             from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 
@@ -1147,6 +1169,7 @@ class FeatureSelector:
                     "created": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
                     "selected_count": len(result),
                     "features": result,
+                    "metrics": metrics,
                 },
                 board,
                 activate=False,
@@ -1206,7 +1229,7 @@ class FeatureSelector:
         )
         return buckets
 
-    def _run_bruteforce_dedup(self, df, board, cfg, generator=None):
+    def _run_bruteforce_dedup(self, df, board, cfg, generator=None, metrics_out=None):
         if generator is None:
             generator = BruteForceGenerator()
         raw_cols = generator._eligible(df)
@@ -1302,9 +1325,20 @@ class FeatureSelector:
                 len(base_feats),
                 min(budget, len(brute_only)),
             )
+        if metrics_out is not None:
+            metrics_out.update(
+                n_dedup=n_dedup,
+                capped=n_dedup > max_feats,
+                max_features=max_feats,
+                dedup_threshold=dedup_thr,
+            )
+            if metrics_out["capped"]:
+                metrics_out.update(
+                    n_base=len(base_feats), n_brute=min(budget, len(brute_only))
+                )
         return selected
 
-    def _run_gate_d(self, df, board, cfg):
+    def _run_gate_d(self, df, board, cfg, metrics_out=None):
         from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 
         all_feats = FeatureEngineV35.feature_columns(df)
@@ -1319,6 +1353,7 @@ class FeatureSelector:
             label_col=label,
             min_feats=gcfg.get("min_features", 30),
             sat_pct=gcfg.get("saturation_pct", 0.95),
+            metrics_out=metrics_out,
         )
 
     # ── Versioning ──

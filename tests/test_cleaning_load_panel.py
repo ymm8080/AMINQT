@@ -11,9 +11,14 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import pyarrow.parquet as pq
 
-from app.pipeline1.cleaning_pipeline import CleaningConfig, load_panel_v3
+from app.pipeline1.cleaning_pipeline import (
+    CleaningConfig,
+    CleaningPipeline,
+    load_panel_v3,
+)
 from config.settings import PANEL_V3_PATH
 
 
@@ -82,3 +87,32 @@ def test_load_panel_accepts_custom_path(monkeypatch):
     load_panel_v3("D:/tmp/custom.parquet")
 
     assert str(captured["path"]) == "D:/tmp/custom.parquet"
+
+
+def test_step0_board_split_board_scoped():
+    """board 限定下 step0 只拷贝目标板块切片, 另一板块返回空 df.
+
+    2026-08-13 OOM 修复: dual-only 重训时 main 1.2M×109 的 ~1GB 块不再被
+    分配 (空帧省内存). board=None 保持双板原行为.
+    """
+    df = pd.DataFrame(
+        {
+            "symbol": ["600000", "300750", "688001"],
+            "date": ["2026-08-07"] * 3,
+            "close": [1.0, 2.0, 3.0],
+        }
+    )
+
+    main, dual = CleaningPipeline.step0_board_split(df, board="dual")
+    assert main.empty
+    assert not dual.empty
+    assert set(dual["board"]) == {"GEM", "STAR"}
+
+    main, dual = CleaningPipeline.step0_board_split(df, board="main")
+    assert not main.empty
+    assert dual.empty
+    assert set(main["board"]) == {"main"}
+
+    main, dual = CleaningPipeline.step0_board_split(df)
+    assert not main.empty and not dual.empty
+    assert len(main) + len(dual) == len(df)

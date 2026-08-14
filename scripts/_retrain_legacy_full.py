@@ -4,12 +4,13 @@
 网络装配), 对齐 3 年周频窗口. OOS IC 过闸才把 bundle 发布为 current (镜像 weekly 语义),
 current_meta.json 同步更新.
 
-用法: python scripts/_retrain_legacy_full.py [tag]
+用法: python scripts/_retrain_legacy_full.py [tag] [--board main|dual]
+      --board 只重训指定板块 (默认双板), 单板省内存省时.
 """
 
 from __future__ import annotations
 
-import gc
+import argparse
 import logging
 import os
 import shutil
@@ -18,10 +19,8 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-import pandas as pd
-
-from app.pipeline1.cleaning_pipeline import load_panel_v3
 from app.pipeline1.train_runner import run_training
+from config.settings import PANEL_V3_PATH
 
 MODEL_DIR = "models/pipeline1"
 
@@ -34,7 +33,15 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         stream=sys.stdout,
     )
-    tag = sys.argv[1] if len(sys.argv) > 1 else time.strftime("%Y%m%d")
+    ap = argparse.ArgumentParser(description="legacy 周频重训 (V3 面板直读, 含当日)")
+    ap.add_argument("tag", nargs="?", default=None, help="模型包标签 (默认今天 YYYYMMDD)")
+    ap.add_argument(
+        "--board", choices=("main", "dual"), default=None,
+        help="只重训指定板块 (默认双板)",
+    )
+    args = ap.parse_args()
+    tag = args.tag or time.strftime("%Y%m%d")
+    boards = (args.board,) if args.board else ("main", "dual")
     # LEGACY_FORCE_FALLBACK=1 → 只对 main 跳过 FeatureSelector (bruteforce_dedup 选择
     # 过大必 OOM, 直用 FeatureEngine 全量 316 特征), dual 仍走 gate_d (38). 两段式发布:
     # 先落 cls 修复, 再单独验证 cap 选择过 OOS 门.
@@ -42,32 +49,19 @@ def main() -> int:
         {"main"} if os.environ.get("LEGACY_FORCE_FALLBACK", "0") == "1" else None
     )
     t0 = time.time()
-    # 读取时行级预过滤 (amount>=5000万 且 非停牌): 与 run_train 内部过滤同口径,
-    # 少读 ~20% 行, 输出与整表读取后 run_train 完全一致 (2026-08-10).
-    panel = load_panel_v3()
-    print(
-        f"[panel] {len(panel):,}r max={panel['date'].max():%Y-%m-%d} "
-        f"({time.time() - t0:.0f}s)",
-        flush=True,
-    )
-    # 对齐周频 3y 训练窗口 (assemble_panel years=3 语义: 截止日前 3 个日历年)
-    cut = panel["date"].max() - pd.DateOffset(years=3)
-    panel = panel[panel["date"] >= cut]
-    print(
-        f"[slice] {cut.date()}.. {panel['date'].max():%Y-%m-%d} "
-        f"-> {len(panel):,}r ({time.time() - t0:.0f}s)",
-        flush=True,
-    )
-
+    # 面板由 run_training 内部直读并持有 (panel_path 模式): 若本脚本持有 panel 引用,
+    # run_training 内 `del panel` 失效 → 特征 build 阶段 (dim17) 峰值贴 commit 上限
+    # 偶发 OOM (2026-08-13 r2/r4 同一崩溃点). 直读预过滤 (amount>=5000万 且 非停牌)
+    # 同口径少读 ~20% 行, 输出与整表读取后 run_train 完全一致 (2026-08-10).
     results = run_training(
-        panel,
-        tag,
+        panel=None,
+        panel_path=PANEL_V3_PATH,
+        tag=tag,
         model_dir=MODEL_DIR,
         use_ic_screen=True,
         fallback_boards=fallback_boards,
+        boards=boards,
     )
-    del panel
-    gc.collect()
 
     from app.pipeline1.model_meta import load_modules, save_modules
 
