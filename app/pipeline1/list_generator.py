@@ -5,7 +5,8 @@ Pipeline-1 每日选股清单生成器 (DESIGN §14.5, §14.6, [E7] 动态准入
 [E11] Bear 模式: 连跌 3 日触发, 收紧准入 (prob_up≥0.65, ret≥3×COST), 半仓.
 [E10] 破净资产: SSE 破净比 > 12% → 全仓.
 [P25.1] list_mode = 'normal' / 'bear' / 'value' (E10, 破净价值)
-[E2] 痛苦预警: pain_prob > 0.5 → 剔除 (在 score 中自然惩罚, 不清除条目)
+[E2] 痛苦预警: pain_prob > 分板块上限 (LEGACY_ENTRY_GATE.pain_max, main 0.5 / dual 0.4)
+      → 剔除 (在 score 中自然惩罚, 不清除条目)
 [E1] 分位数: pred_q10..q90 + uncertainty_width 列传递至清单以供仓位决策
 """
 
@@ -19,6 +20,20 @@ import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+from config.settings import LEGACY_ENTRY_GATE  # noqa: E402  (分板块概率边际)
+
+# board 命名兼容生产 (main/GEM/STAR) 与内部 (main/dual)
+_PROB_MARGIN = {
+    b: m
+    for key, m in LEGACY_ENTRY_GATE["prob_margin"].items()
+    for b in ({"main": ("main",), "dual": ("dual", "GEM", "STAR")}[key])
+}
+_PAIN_MAX = {
+    b: m
+    for key, m in LEGACY_ENTRY_GATE["pain_max"].items()
+    for b in ({"main": ("main",), "dual": ("dual", "GEM", "STAR")}[key])
+}
 
 SCHEMA_VERSION = "1.4"
 TOP_N = 15
@@ -330,13 +345,20 @@ class ListGenerator:
         is_bear = market_state == "bear"
         ok = pd.Series(True, index=df.index)
         # 1. 加权概率 > base_rate (bear 按声明参数比率收紧, 无新常数)
+        #    2026-08-14 定案 (LEGACY_ENTRY_GATE.prob_margin): dual(GEM/STAR) 额外 +0.08
+        #    边际 → 250d OOS 命中 62.2→66.3% / 实得 +5.84→+6.66%; main 坍缩期无法评估 = 0.
         if self.entry_prob > 0:
             base = (
                 df["base_rate"] if "base_rate" in df.columns else df["prob_up"].mean()
             )
             ratio = self.entry_prob_bear / self.entry_prob if is_bear else 1.0
             cp = df["compound_prob"] if "compound_prob" in df.columns else df["prob_up"]
-            ok &= cp > base * ratio
+            margin = (
+                df["board"].astype(str).map(_PROB_MARGIN).fillna(0.0)
+                if "board" in df.columns
+                else 0.0
+            )
+            ok &= cp > base * ratio + margin
         # 2/3/4. 净预期为正 (compound_ret > 0; pred_q50 > 0; bear 额外 pred_ret_3d > 0)
         if self.entry_ret_mult > 0:
             if "compound_ret" in df.columns:
@@ -358,9 +380,17 @@ class ListGenerator:
                 ok &= df["pred_q50"].fillna(compound) > 0
             if is_bear:
                 ok &= df["pred_ret_3d"] > 0
-        # [E2] 痛苦预警: pain_prob > 0.5 直接剔除 (安全网 #16)
+        # [E2] 痛苦预警: pain_prob > 分板块上限 直接剔除 (安全网 #16)
+        #    2026-08-14 定案 (LEGACY_ENTRY_GATE.pain_max): dual 0.5→0.4 → 叠加边际后
+        #    250d OOS 命中 66.3→75.3% / 实得 +6.66→+7.39% (出票日 177→76, 宁缺毋滥);
+        #    main 坍缩期无法评估保持 0.5.
         if "pain_prob" in df.columns:
-            ok &= df["pain_prob"].fillna(0) <= 0.5
+            pain_max = (
+                df["board"].astype(str).map(_PAIN_MAX).fillna(0.5)
+                if "board" in df.columns
+                else 0.5
+            )
+            ok &= df["pain_prob"].fillna(0) <= pain_max
         # [安全网 #17] 公告事件窗禁买标记: announce_score == -1.0 直接剔除.
         # (attach_scores 对事件窗口标的置 -1.0; 旧实现只在 compute_scores 里 ×0.7 惩罚,
         #  标记票仍可进 top-N → 禁买不生效. 2026-08-09 改为硬剔除)
