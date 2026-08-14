@@ -10,6 +10,7 @@ LEGACY_ENTRY_GATE.prob_margin dual=0.08. 本脚本在 CSV 上补算组合:
 
 WORM: DATA_OTHERS/diag/legacy_combo_gates_<ts>.json
 """
+
 from __future__ import annotations
 
 import glob
@@ -28,9 +29,16 @@ WINDOWS = {"full": 10**9, "126d": 126, "63d": 63}
 
 def _stats(sub: pd.DataFrame) -> dict:
     if sub.empty:
-        return {"n_days": 0, "picks": 0, "avg_picks": 0.0, "hit": float("nan"),
-                "mean": float("nan"), "med": float("nan"),
-                "ge5": float("nan"), "ge10": float("nan")}
+        return {
+            "n_days": 0,
+            "picks": 0,
+            "avg_picks": 0.0,
+            "hit": float("nan"),
+            "mean": float("nan"),
+            "med": float("nan"),
+            "ge5": float("nan"),
+            "ge10": float("nan"),
+        }
     r = sub["realized_net"].dropna()
     return {
         "n_days": int(sub["date"].nunique()),
@@ -45,9 +53,13 @@ def _stats(sub: pd.DataFrame) -> dict:
 
 
 def main() -> int:
-    path = sys.argv[1] if len(sys.argv) > 1 else sorted(
-        glob.glob(str(data_others_path("diag") / "legacy_hitrate_topn_*.csv"))
-    )[-1]
+    path = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else sorted(
+            glob.glob(str(data_others_path("diag") / "legacy_hitrate_topn_*.csv"))
+        )[-1]
+    )
     df = pd.read_csv(path, dtype={"symbol": str})
     df["date"] = pd.to_datetime(df["date"])
     b = df[df["board"] == "dual"].copy()
@@ -62,24 +74,48 @@ def main() -> int:
     rows: list[dict] = []
     for gname, mask in gates.items():
         src = b[mask]
-        for rkname, rkcol, asc in (("ret10", "pred_ret_10d", False), ("prob", "prob", False)):
+        for rkname, rkcol, asc in (
+            ("ret10", "pred_ret_10d", False),
+            ("prob", "prob", False),
+        ):
             for depth in (5, 10):
                 for wname, wdays in WINDOWS.items():
-                    cutoff = dates_all[0] if wdays >= len(dates_all) else dates_all[-wdays]
+                    cutoff = (
+                        dates_all[0] if wdays >= len(dates_all) else dates_all[-wdays]
+                    )
                     w = src[src["date"].values >= cutoff]
-                    topn = (w.sort_values(["date", rkcol], ascending=[True, asc])
-                             .groupby("date", sort=False).head(depth))
+                    topn = (
+                        w.sort_values(["date", rkcol], ascending=[True, asc])
+                        .groupby("date", sort=False)
+                        .head(depth)
+                    )
                     s = _stats(topn)
-                    rows.append({"gate": gname, "rank": rkname, "depth": depth,
-                                 "window": wname, **s})
-                    print(f"[{gname}/{rkname}/top{depth}/{wname}] "
-                          f"日{s['n_days']} 票{s['picks']} 命中{s['hit']:.1%} 实得{s['mean']:+.2%}", flush=True)
+                    rows.append(
+                        {
+                            "gate": gname,
+                            "rank": rkname,
+                            "depth": depth,
+                            "window": wname,
+                            **s,
+                        }
+                    )
+                    print(
+                        f"[{gname}/{rkname}/top{depth}/{wname}] "
+                        f"日{s['n_days']} 票{s['picks']} 命中{s['hit']:.1%} 实得{s['mean']:+.2%}",
+                        flush=True,
+                    )
 
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     out_dir = data_others_path("diag")
     (out_dir / f"legacy_combo_gates_{ts}.json").write_text(
-        json.dumps({"ts": ts, "source": os.path.basename(path), "rows": rows},
-                   indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+        json.dumps(
+            {"ts": ts, "source": os.path.basename(path), "rows": rows},
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
     print(f"\n[saved] {out_dir}/legacy_combo_gates_{ts}.json", flush=True)
     return 0
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_bt_price_band_delivery_ab.py — 价格分层过滤的交付级 A/B 回放 (2026-08-14).
 
 _bt_price_band_ab (池级) 已证: dual 低<10 剔除 6/6 窗全赢, main 高>30 剔除均值全赢
@@ -32,15 +31,25 @@ import numpy as np
 import pandas as pd
 
 from app.pipeline_parallel import config as pc
-from app.pipeline_parallel.backtest import _window_cutoff, board_of, calibrate_mag10d, pool_score
-from config.settings import SHORTLIST_SCORE
-from config.settings import data_others_path
+from app.pipeline_parallel.backtest import (
+    _window_cutoff,
+    board_of,
+    calibrate_mag10d,
+    pool_score,
+)
+from config.settings import SHORTLIST_SCORE, data_others_path
 
 T3_MIN = SHORTLIST_SCORE["select_gate"]["t3_min"]  # {"main": 0.0, "dual": 0.005}
 WINDOWS = {"full": 10**9, "126d": 126, "63d": 63}
-LABELS = [("3d", "label_pm_3d_net"), ("5d", "label_pm_5d_net"), ("10d", "label_pm_10d_net")]
+LABELS = [
+    ("3d", "label_pm_3d_net"),
+    ("5d", "label_pm_5d_net"),
+    ("10d", "label_pm_10d_net"),
+]
 # 交付链所需列 (同 _panel_per_stock: 池特征缺 pv_corr_5 自动跳过; label 直读检查点)
-_POOL_COLS = sorted({c for c in set(pc.SNIPER.pool) | set(pc.FUSION.pool) if c != "pv_corr_5"})
+_POOL_COLS = sorted(
+    {c for c in set(pc.SNIPER.pool) | set(pc.FUSION.pool) if c != "pv_corr_5"}
+)
 
 
 def _load_work_delivery() -> pd.DataFrame:
@@ -68,14 +77,21 @@ def _load_work_delivery() -> pd.DataFrame:
     work["board"] = work["symbol"].map(board_of)
     print(
         f"[load] {len(work):,}r | {work['date'].nunique()} 决策日 "
-        f"(生产交付口径: 无 tradability_gate, label 直读)", flush=True,
+        f"(生产交付口径: 无 tradability_gate, label 直读)",
+        flush=True,
     )
     return work
 
 
-_READ_COLS = ["symbol", "date", "close_hfq"] + _POOL_COLS + [
-    "label_pm_3d_net", "label_pm_5d_net", "label_pm_10d_net",
-]
+_READ_COLS = (
+    ["symbol", "date", "close_hfq"]
+    + _POOL_COLS
+    + [
+        "label_pm_3d_net",
+        "label_pm_5d_net",
+        "label_pm_10d_net",
+    ]
+)
 
 
 def _cal_frame(work: pd.DataFrame, board: str) -> pd.DataFrame:
@@ -96,8 +112,11 @@ def _cal_frame(work: pd.DataFrame, board: str) -> pd.DataFrame:
         scored, score_col="score", target_col="label_pm_3d_net", label_horizon=3
     )
     m = scored.drop(columns=["board"]).merge(mag10, on=["symbol", "date"], how="inner")
-    m = m.merge(c2c3[["symbol", "date", "mag"]].rename(columns={"mag": "mag3"}),
-                on=["symbol", "date"], how="inner")
+    m = m.merge(
+        c2c3[["symbol", "date", "mag"]].rename(columns={"mag": "mag3"}),
+        on=["symbol", "date"],
+        how="inner",
+    )
     m["board"] = board
     return m
 
@@ -116,8 +135,11 @@ def main() -> int:
 
     m = pd.concat(frames.values(), ignore_index=True)
     m["band"] = pd.cut(
-        m["close_hfq"], bins=[0.0, 10.0, 30.0, float("inf")],
-        labels=["低<10", "中10-30", "高>30"], include_lowest=True, right=False,
+        m["close_hfq"],
+        bins=[0.0, 10.0, 30.0, float("inf")],
+        labels=["低<10", "中10-30", "高>30"],
+        include_lowest=True,
+        right=False,
     )
     dates = np.sort(m["date"].unique())
 
@@ -126,17 +148,25 @@ def main() -> int:
         ("A_基准", None),
         ("B_剔dual低价", (m["board"] == "dual") & (m["band"] == "低<10")),
         ("C_剔main高价", (m["board"] == "main") & (m["band"] == "高>30")),
-        ("D_B加C", ((m["board"] == "dual") & (m["band"] == "低<10"))
-                   | ((m["board"] == "main") & (m["band"] == "高>30"))),
+        (
+            "D_B加C",
+            ((m["board"] == "dual") & (m["band"] == "低<10"))
+            | ((m["board"] == "main") & (m["band"] == "高>30")),
+        ),
     ):
         v = m if vmask is None else m[~vmask]
         # t3 门 (生产 select_confident): 每板阈值, 弱市硬拦属正常
         gated = v[v["mag3"] > v["board"].map(T3_MIN)]
         # rank T-5 (生产 rank_and_truncate): 每日期×板按 mag10 降序
-        gated = gated.sort_values(["board", "date", "mag"], ascending=[True, True, False])
+        gated = gated.sort_values(
+            ["board", "date", "mag"], ascending=[True, True, False]
+        )
         gated["rk"] = gated.groupby(["board", "date"], sort=False).cumcount() + 1
         t5 = gated[gated["rk"] <= 5]
-        print(f"[{vname}] t3门后 {len(gated):,} → T-5 {len(t5):,} ({time.time() - t0:.0f}s)", flush=True)
+        print(
+            f"[{vname}] t3门后 {len(gated):,} → T-5 {len(t5):,} ({time.time() - t0:.0f}s)",
+            flush=True,
+        )
         for board in ("main", "dual"):
             tb = t5[t5["board"] == board]
             for wname, wdays in WINDOWS.items():
@@ -144,30 +174,49 @@ def main() -> int:
                 sub = tb[tb["date"].values >= cutoff]
                 for h, lab in LABELS:
                     r = sub[lab].dropna()
-                    rows.append({
-                        "variant": vname, "board": board, "window": wname, "horizon": h,
-                        "picks": int(len(sub)),
-                        "n_days": int(sub["date"].nunique()),
-                        "hit": float((r > 0).mean()) if len(r) else float("nan"),
-                        "mean": float(r.mean()) if len(r) else float("nan"),
-                        "med": float(r.median()) if len(r) else float("nan"),
-                        "max": float(r.max()) if len(r) else float("nan"),
-                    })
+                    rows.append(
+                        {
+                            "variant": vname,
+                            "board": board,
+                            "window": wname,
+                            "horizon": h,
+                            "picks": int(len(sub)),
+                            "n_days": int(sub["date"].nunique()),
+                            "hit": float((r > 0).mean()) if len(r) else float("nan"),
+                            "mean": float(r.mean()) if len(r) else float("nan"),
+                            "med": float(r.median()) if len(r) else float("nan"),
+                            "max": float(r.max()) if len(r) else float("nan"),
+                        }
+                    )
 
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     out_dir = data_others_path("diag")
     os.makedirs(str(out_dir), exist_ok=True)
     (out_dir / f"price_band_delivery_ab_{ts}.json").write_text(
-        json.dumps({"ts": ts, "rows": rows, "t3_min": T3_MIN}, indent=2, ensure_ascii=False, default=str),
+        json.dumps(
+            {"ts": ts, "rows": rows, "t3_min": T3_MIN},
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+        ),
         encoding="utf-8",
     )
     df = pd.DataFrame(rows)
-    print(f"\n{'变体':<12}{'板':<4}{'窗':<6}{'h':>3} | {'票':>5}{'日':>4}{'命中':>7}{'实得':>8}{'中位':>8}{'最大':>8}", flush=True)
+    print(
+        f"\n{'变体':<12}{'板':<4}{'窗':<6}{'h':>3} | {'票':>5}{'日':>4}{'命中':>7}{'实得':>8}{'中位':>8}{'最大':>8}",
+        flush=True,
+    )
     for _, r in df.iterrows():
-        print(f"{r['variant']:<12}{r['board']:<4}{r['window']:<6}{r['horizon']:>3} | "
-              f"{int(r['picks']):>5}{int(r['n_days']):>4}{r['hit']:>7.1%}{r['mean']:>+8.2%}"
-              f"{r['med']:>+8.2%}{r['max']:>+8.2%}", flush=True)
-    print(f"\n[saved] {out_dir}/price_band_delivery_ab_{ts}.json ({time.time() - t0:.0f}s)", flush=True)
+        print(
+            f"{r['variant']:<12}{r['board']:<4}{r['window']:<6}{r['horizon']:>3} | "
+            f"{int(r['picks']):>5}{int(r['n_days']):>4}{r['hit']:>7.1%}{r['mean']:>+8.2%}"
+            f"{r['med']:>+8.2%}{r['max']:>+8.2%}",
+            flush=True,
+        )
+    print(
+        f"\n[saved] {out_dir}/price_band_delivery_ab_{ts}.json ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     return 0
 
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_price_band_top10.py — 价格分层在现行 top-10 流程上的验证 (2026-08-14).
 
 背景: limit-pullback 研究唯一真超额 = 价格分层 (主板低价<10 Sharpe0.90 /
@@ -38,17 +37,29 @@ from app.pipeline_parallel.backtest import (
     build_merged_shortlist,
     tradability_gate,
 )
-from scripts._reclassify_all_features import _finalize_slice
 from config.settings import data_others_path
+from scripts._reclassify_all_features import _finalize_slice
 
 READ_COLS = [
-    "symbol", "date", "close_hfq", "adv20", "is_suspended",
-    "amihud_illiq", "small_mv_premium", "amihud_illiquidity",
-    "VAR51", "ret_reversal_5d", "limit_dist_pct",
+    "symbol",
+    "date",
+    "close_hfq",
+    "adv20",
+    "is_suspended",
+    "amihud_illiq",
+    "small_mv_premium",
+    "amihud_illiquidity",
+    "VAR51",
+    "ret_reversal_5d",
+    "limit_dist_pct",
 ]
 BANDS = [(0.0, 10.0, "低<10"), (10.0, 30.0, "中10-30"), (30.0, float("inf"), "高>30")]
 SUB_WINDOWS = {"full": 10**9, "126d": 126, "63d": 63}
-LABELS = [("3d", "label_pm_3d_net"), ("5d", "label_pm_5d_net"), ("10d", "label_pm_10d_net")]
+LABELS = [
+    ("3d", "label_pm_3d_net"),
+    ("5d", "label_pm_5d_net"),
+    ("10d", "label_pm_10d_net"),
+]
 
 
 def _load_work() -> pd.DataFrame:
@@ -78,7 +89,8 @@ def _load_work() -> pd.DataFrame:
     work["board"] = work["symbol"].map(board_of)
     print(
         f"[load] {len(work):,}r | 可交易性门剔除 {gate['removed_rows']:,} 行/"
-        f"{gate['removed_stocks']} 只", flush=True,
+        f"{gate['removed_stocks']} 只",
+        flush=True,
     )
     return work
 
@@ -88,9 +100,16 @@ def _band_stats(sub: pd.DataFrame) -> dict:
     for h, lab in LABELS:
         r = sub[lab].dropna()
         if len(r) == 0:
-            out[h] = {"n": 0, "hit": float("nan"), "mean": float("nan"),
-                      "med": float("nan"), "max": float("nan"),
-                      "p95": float("nan"), "ge5": float("nan"), "ge10": float("nan")}
+            out[h] = {
+                "n": 0,
+                "hit": float("nan"),
+                "mean": float("nan"),
+                "med": float("nan"),
+                "max": float("nan"),
+                "p95": float("nan"),
+                "ge5": float("nan"),
+                "ge10": float("nan"),
+            }
             continue
         out[h] = {
             "n": int(len(r)),
@@ -110,18 +129,28 @@ def main() -> int:
     work = _load_work()
     # 生产同口径合并 top-10 (rk = 每日期 mag_10d 排名 1..10)
     sl = build_merged_shortlist(work, 10)
-    print(f"[merged] {len(sl):,} 票 | {sl['date'].nunique()} 决策日 ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[merged] {len(sl):,} 票 | {sl['date'].nunique()} 决策日 ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     if sl.empty:
         print("合并短名单为空", flush=True)
         return 1
 
     # 逐票: 决策日 close_hfq 分层 + 实得标签
     px = work[["symbol", "date", "close_hfq"]].drop_duplicates(["symbol", "date"])
-    labs = work[["symbol", "date"] + [lab for _, lab in LABELS]].drop_duplicates(["symbol", "date"])
-    m = sl.merge(px, on=["symbol", "date"], how="inner").merge(labs, on=["symbol", "date"], how="inner")
+    labs = work[["symbol", "date"] + [lab for _, lab in LABELS]].drop_duplicates(
+        ["symbol", "date"]
+    )
+    m = sl.merge(px, on=["symbol", "date"], how="inner").merge(
+        labs, on=["symbol", "date"], how="inner"
+    )
     m["band"] = pd.cut(
-        m["close_hfq"], bins=[0.0, 10.0, 30.0, float("inf")],
-        labels=["低<10", "中10-30", "高>30"], include_lowest=True, right=False,
+        m["close_hfq"],
+        bins=[0.0, 10.0, 30.0, float("inf")],
+        labels=["低<10", "中10-30", "高>30"],
+        include_lowest=True,
+        right=False,
     )
     m["top"] = np.where(m["rk"] <= 5, "T-5", "T-10后5")
     dates = np.sort(m["date"].unique())
@@ -131,9 +160,12 @@ def main() -> int:
     gc.collect()
 
     summary: list[dict] = []
-    print(f"\n{'板块':<4}{'窗口':<6}{'分层':<10}{'切档':<10}{'票':>5} | "
-          f"{'10d命中':>7}{'10d均':>8}{'10d中':>8}{'10d最大':>8}{'10d≥5%':>8} | "
-          f"{'5d命中':>7}{'5d均':>8} | {'3d命中':>7}{'3d均':>8}", flush=True)
+    print(
+        f"\n{'板块':<4}{'窗口':<6}{'分层':<10}{'切档':<10}{'票':>5} | "
+        f"{'10d命中':>7}{'10d均':>8}{'10d中':>8}{'10d最大':>8}{'10d≥5%':>8} | "
+        f"{'5d命中':>7}{'5d均':>8} | {'3d命中':>7}{'3d均':>8}",
+        flush=True,
+    )
     for board in ("main", "dual"):
         mb = m[m["board"] == board]
         for wname, wdays in SUB_WINDOWS.items():
@@ -147,22 +179,39 @@ def main() -> int:
                         f"{s['10d']['hit']:>7.1%}{s['10d']['mean']:>+8.2%}{s['10d']['med']:>+8.2%}"
                         f"{s['10d']['max']:>+8.2%}{s['10d']['ge5']:>8.1%} | "
                         f"{s['5d']['hit']:>7.1%}{s['5d']['mean']:>+8.2%} | "
-                        f"{s['3d']['hit']:>7.1%}{s['3d']['mean']:>+8.2%}", flush=True,
+                        f"{s['3d']['hit']:>7.1%}{s['3d']['mean']:>+8.2%}",
+                        flush=True,
                     )
-                    summary.append({
-                        "board": board, "window": wname, "band": band, "cut": top,
-                        **{f"{h}_{k}": v for h, d in s.items() for k, v in d.items()},
-                    })
+                    summary.append(
+                        {
+                            "board": board,
+                            "window": wname,
+                            "band": band,
+                            "cut": top,
+                            **{
+                                f"{h}_{k}": v
+                                for h, d in s.items()
+                                for k, v in d.items()
+                            },
+                        }
+                    )
 
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     out_dir = data_others_path("diag")
     os.makedirs(str(out_dir), exist_ok=True)
     m.drop(columns=["_di"]).to_csv(out_dir / f"price_band_top10_{ts}.csv", index=False)
     (out_dir / f"price_band_top10_{ts}.json").write_text(
-        json.dumps({"ts": ts, "summary": summary, "n_picks": len(m)}, indent=2, ensure_ascii=False),
+        json.dumps(
+            {"ts": ts, "summary": summary, "n_picks": len(m)},
+            indent=2,
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
-    print(f"\n[saved] {out_dir}/price_band_top10_{ts}.csv/.json ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"\n[saved] {out_dir}/price_band_top10_{ts}.csv/.json ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     return 0
 
 
