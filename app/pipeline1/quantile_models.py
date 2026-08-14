@@ -24,6 +24,9 @@ logger = logging.getLogger(__name__)
 QUANTILES = (0.10, 0.25, 0.50, 0.75, 0.90)
 QUANTILE_COLS = ("pred_q10", "pred_q25", "pred_q50", "pred_q75", "pred_q90")
 PAIN_DEMOTE_THRESHOLD = 0.30  # E2: pain_prob>30% → 降仓50%或剔除 (季度优化窗口)
+# 分位头最小树保底 (2026-08-14): 与 dual_track_trainer.CLS_MIN_TREES 同机制 —
+# es 窗过平 → 早停第 1 树 → 常数分位 (M20260812 main 3d q50 nunique=1, 闸门 q50>0 拦掉 100% 票)
+QUANTILE_MIN_TREES = 30
 
 
 class QuantileModelSet:
@@ -67,6 +70,16 @@ class QuantileModelSet:
                 eval_set=[eval_set] if eval_set is not None else None,
                 callbacks=callbacks,
             )
+            if eval_set is not None:
+                bi = getattr(model, "best_iteration_", None)
+                if bi is not None and bi < QUANTILE_MIN_TREES:
+                    logger.warning(
+                        "E1 分位数 q=%.2f 早停仅 %d 树 (< %d), 重训 %d 树保底",
+                        q, bi, QUANTILE_MIN_TREES, QUANTILE_MIN_TREES,
+                    )
+                    params = {**params, "n_estimators": QUANTILE_MIN_TREES}
+                    model = lgb.LGBMRegressor(**params)
+                    model.fit(X, y, sample_weight=sample_weight)
             self.models[q] = model
             logger.info("E1 分位数模型 q=%.2f 训练完成, 样本 %d", q, len(X))
         return self
