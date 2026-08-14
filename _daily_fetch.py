@@ -115,6 +115,18 @@ limit = safe_fetch(pro.stk_limit, "stk_limit", trade_date=TRADE_DATE)
 susp  = safe_fetch(pro.suspend_d, "suspend", trade_date=TRADE_DATE)
 cyq   = safe_fetch(pro.cyq_perf, "cyq_perf", trade_date=TRADE_DATE)
 margin= safe_fetch(pro.margin_detail, "margin_detail", trade_date=TRADE_DATE)
+if not len(margin):
+    # Tushare margin_detail 自 2026-07-25 起 T+1 发布: 当日 22:00 后仍取不到当日行
+    # (实测 08-14 拉当日 0 行, 08-13 有 4429 行). 回退取最近已发布交易日真实值
+    # 作为今日行 (T+1 语义), 避免 merges 跳过 → ffill 链冻结 3 周 (2026-08-14 事故).
+    for _back in range(1, 8):
+        _d = (pd.Timestamp(TRADE_DATE) - pd.Timedelta(days=_back)).strftime("%Y%m%d")
+        margin = safe_fetch(pro.margin_detail, f"margin_detail_t1_fallback {_d}",
+                            trade_date=_d)
+        if len(margin):
+            print(f"    margin_detail 当日未发布 → 今日行取 {_d} 真实值 "
+                  f"({len(margin)} 行, T+1 语义)")
+            break
 lhb   = safe_fetch(pro.top_list, "LHB", trade_date=TRADE_DATE)
 bt    = safe_fetch(pro.block_trade, "block_trade", trade_date=TRADE_DATE)
 
