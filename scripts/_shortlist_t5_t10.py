@@ -910,6 +910,8 @@ def select_confident(res: pd.DataFrame, prob_min: float = 0.0) -> pd.DataFrame:
 
     2026-08-10: 门从 pred_mag_3d (MFE 最大浮盈, 虚高不可兑现) 改为 pred_ret_3d
     (label_pm_3_net close-to-close 净预期, 成本已扣) — 与 legacy 收益闸一致.
+    2026-08-14: t3_min 分板块 dict (main=0 / dual=0.5%, _diag_t3min_sweep 定案),
+    也可为全局 float (向后兼容).
 
     概率口径 (用户 2026-08-06): 概率=逐股自然概率 (P(该股达到固定绝对目标)), 每股唯一
     真值. 原 ">60%" 门槛 (基于 P(MFE>0)≈90% 旧口径) 不可达, 故默认不设概率门槛.
@@ -917,14 +919,25 @@ def select_confident(res: pd.DataFrame, prob_min: float = 0.0) -> pd.DataFrame:
     g3 = res["pred_ret_3d"]
     sg = SHORTLIST_SCORE.get("select_gate", {})
     t3_min = sg.get("t3_min", 0.0)
-    keep = g3 > t3_min
+    # 2026-08-14: t3_min 支持分板块 dict (main=0 / dual=0.5%), 或全局 float (向后兼容)
+    if isinstance(t3_min, dict):
+        thr = res["board"].map(t3_min).fillna(0.0)
+        keep = g3 > thr
+    else:
+        thr = t3_min
+        keep = g3 > t3_min
     if prob_min > 0:
         keep = keep & (res["pred_prob_3d"] > prob_min)
     dropped = res[~keep]
     if len(dropped):
         prob_txt = "" if prob_min <= 0 else f" 或 达到概率≤{prob_min:.0%}"
+        gate_txt = (
+            "、".join(f"{b}={v:.1%}" for b, v in t3_min.items())
+            if isinstance(t3_min, dict)
+            else f"{t3_min:.1%}"
+        )
         print(
-            f"[select] 剔除 {len(dropped)} 只 (T+3≤{t3_min:.1%}{prob_txt}): "
+            f"[select] 剔除 {len(dropped)} 只 (T+3≤{gate_txt}{prob_txt}): "
             f"{', '.join(dropped.apply(_sel_reason, axis=1))}",
             flush=True,
         )

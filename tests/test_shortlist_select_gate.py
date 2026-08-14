@@ -1,10 +1,12 @@
 """Tests for scripts/_shortlist_t5_t10.select_confident — 纯 T+3 入选门 (2026-08-09).
 
 背景: 2026-08-09 删 2d 视界后, 原 T+2/T+3 联合门 (2026-08-07) 退化为纯 T+3 门:
-  保留 ⇔ pred_ret_3d > t3_min (config SHORTLIST_SCORE.select_gate.t3_min, 默认 0.0).
+  保留 ⇔ pred_ret_3d > t3_min (config SHORTLIST_SCORE.select_gate.t3_min).
   2026-08-10: 门基准从 pred_mag_3d (MFE 最大浮盈, 虚高) 改为 pred_ret_3d
   (close-to-close 可兑现净预期, 成本已扣) — 与 legacy 收益闸口径一致.
   pred_ret_3d 为 0 或负 → 剔除 (严格大于).
+  2026-08-14: t3_min 分板块 dict (main=0 / dual=0.5%, _diag_t3min_sweep 定案),
+  也兼容全局 float.
 """
 
 import importlib.util
@@ -37,10 +39,39 @@ def _cand(rows):
 
 def test_select_gate_present_in_config():
     sg = S.SHORTLIST_SCORE["select_gate"]
-    assert sg["t3_min"] == 0.0
+    # 2026-08-14: t3_min 分板块 dict (main=0 / dual=0.5%)
+    assert sg["t3_min"] == {"main": 0.0, "dual": 0.005}
     # 2d 联合门已删, t2_min/t3_floor 不应再存在
     assert "t2_min" not in sg
     assert "t3_floor" not in sg
+
+
+def test_per_board_threshold():
+    # dual 门槛 0.5%: 0.3% 预期剔除; main 门槛 0: 0.3% 保留
+    df = pd.DataFrame(
+        [
+            {"symbol": "D001", "board": "dual", "pred_ret_3d": 0.003, "pred_prob_3d": 0.5},
+            {"symbol": "M001", "board": "main", "pred_ret_3d": 0.003, "pred_prob_3d": 0.5},
+        ]
+    )
+    out = S.select_confident(df)
+    assert set(out["symbol"]) == {"M001"}
+
+
+def test_global_float_threshold_backward_compat(monkeypatch):
+    # t3_min 为全局 float 时仍工作 (向后兼容路径)
+    df = pd.DataFrame(
+        [
+            {"symbol": "A", "board": "dual", "pred_ret_3d": 0.02, "pred_prob_3d": 0.5},
+            {"symbol": "B", "board": "dual", "pred_ret_3d": 0.005, "pred_prob_3d": 0.5},
+        ]
+    )
+    monkeypatch.setattr(
+        S, "SHORTLIST_SCORE", {**S.SHORTLIST_SCORE, "select_gate": {"t3_min": 0.01}}
+    )
+    out = S.select_confident(df)
+    # 全局门槛 1%: A(2%) 保留, B(0.5%) 剔除
+    assert set(out["symbol"]) == {"A"}
 
 
 def test_t3_positive_kept():
