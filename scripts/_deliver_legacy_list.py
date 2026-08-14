@@ -47,7 +47,41 @@ def resolve_module(df: pd.DataFrame, trade_date: str) -> str:
     return f"{trade_date}_na"
 
 
-def write_md(df: pd.DataFrame, path: str, module: str) -> None:
+def _board_reject_reasons(
+    cand: pd.DataFrame | None, final: pd.DataFrame
+) -> dict[str, str]:
+    """各板块被整体退回 (有候选但最终清单 0 只) 的原因 — 重放 E7 可计算闸.
+
+    cand: candidates_{date}.parquet (raw 预测, 含 board/pred_q50_3d/5d/pred_ret_10d).
+    final: 最终清单 (list_{date}.parquet). 只在最终清单缺席的板块上推导.
+    """
+    if cand is None or "board" not in cand.columns:
+        return {}
+    final_boards = set(final["board"]) if "board" in final.columns else set()
+    reasons: dict[str, str] = {}
+    for board, sub in cand.groupby("board"):
+        if board in final_boards:
+            continue
+        if {"pred_q50_3d", "pred_q50_5d"} <= set(sub.columns):
+            g3 = (sub["pred_q50_3d"] > 0) & (sub["pred_q50_5d"] > 0)
+            if not bool(g3.any()):
+                reasons[board] = "E7 闸3: 3d/5d 中位数预期均非正 (全灭)"
+                continue
+        if "pred_ret_10d" in sub.columns:
+            g2 = sub["pred_ret_10d"] > 0
+            if not bool(g2.any()):
+                reasons[board] = "E7 闸2: 10d 净预期非正 (全灭)"
+                continue
+        reasons[board] = "候选存在但未进最终清单 (排名/行业/风控过滤)"
+    return reasons
+
+
+def write_md(
+    df: pd.DataFrame,
+    path: str,
+    module: str,
+    rejected: dict[str, str] | None = None,
+) -> None:
     cols = [
         "symbol",
         "board",
@@ -77,6 +111,9 @@ def write_md(df: pd.DataFrame, path: str, module: str) -> None:
             f"交易日 {trade_date} · module {module} · E7 闸3 = 3d/5d 中位数均正 · "
             f"排序 = d3 目标 (50% d3涨幅 + 50% d3概率 归一化混合) · {len(sub)} 只\n\n"
         )
+        # 被整体退回的板块: 仍出清单, 醒目标注未接受原因 (不静默跳过)
+        for b, r in (rejected or {}).items():
+            fh.write(f"⚠ {b} 未接受 (被退回): {r} — 当日未出股\n\n")
         fh.write(sub.to_markdown(index=False))
         fh.write("\n")
 
@@ -92,6 +129,13 @@ def main():
     module = resolve_module(df, trade_date)
     os.makedirs(str(STOCK_LIST_DIR), exist_ok=True)
 
+    # 被整体退回的板块 (有候选但最终清单 0 只): 仍出该板清单, 醒目标注未接受原因
+    cand = None
+    cand_path = os.path.join(LIST_DIR, f"candidates_{trade_date}.parquet")
+    if os.path.exists(cand_path):
+        cand = pd.read_parquet(cand_path)
+    rejected = _board_reject_reasons(cand, df)
+
     csv_path = os.path.join(
         str(STOCK_LIST_DIR), f"legacy_stocklist_{trade_date}__{module}.csv"
     )
@@ -101,8 +145,20 @@ def main():
     md_path = os.path.join(
         str(STOCK_LIST_DIR), f"legacy_stocklist_{trade_date}__{module}.md"
     )
-    write_md(df, md_path, module)
+    write_md(df, md_path, module, rejected)
     print(f"[md] {md_path}")
+
+    for b, r in rejected.items():
+        npath = os.path.join(
+            str(STOCK_LIST_DIR),
+            f"legacy_stocklist_{b}_{trade_date}__{module}_REJECTED.txt",
+        )
+        with open(npath, "w", encoding="utf-8") as fh:
+            fh.write(
+                f"LEGACY {b} 清单 {trade_date} (module {module}): "
+                f"未接受 (被退回) — {r}\n"
+            )
+        print(f"[rejected] {b}: {r} → {os.path.basename(npath)}")
 
     docx_path = ""
     if HAVE_DOCX and len(df):
@@ -112,6 +168,10 @@ def main():
             f"交易日 {trade_date} · module {module} · "
             f"E7 闸3 = 3d/5d 中位数均正 · 排序 = d3 目标 (50% d3涨幅 + 50% d3概率) · {len(df)} 只"
         )
+        for b, r in rejected.items():
+            p = doc.add_paragraph()
+            run = p.add_run(f"⚠ {b} 未接受 (被退回): {r} — 当日未出股")
+            run.bold = True
         cols = [
             "symbol",
             "board",

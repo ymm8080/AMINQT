@@ -101,9 +101,15 @@ class CleaningConfig:
     min_list_days: int = 180  # 上市 >= 180 交易日 (适配200天训练面板, 原250)
     min_amount: float = 5e7  # T 日成交额 >= 5000 万
     liquidity_top_n: int = (
-        400  # 板块内流动性 Score 前 N (原200太保守, 3年数据可支撑更大池)
+        200  # 非 main (dual) serving 候选池; 08-13 dual 38特征池扫描: 100/200 最优
+    )
+    liquidity_top_n_main: int = (
+        0  # main serving 候选池: 0=不限池 (08-13 用户定案, 保留全部流动性达标主板股)
     )
     score_w_amount: float = 0.5  # Score = w*rank(成交额) + (1-w)*rank(自由流通换手)
+    # liquidity_score 公式: rank_5050=当前默认 / rank_amount / rank_turnover /
+    # zlog_5050 / zlog_product / rank_5050_churnpen (对倒嫌疑 score×0.5)
+    score_mode: str = "rank_5050"
     stability_window: int = 5  # D24 换手稳定性窗口
     stability_max: float = 0.5  # std/mean > 0.5 → 对倒嫌疑
     new_stock_days: int = 5  # 注册制新股 (<5日无涨跌幅限制)
@@ -149,18 +155,29 @@ class CleaningPipeline:
 
     # ---------------- 步骤 0: 板块分治 ----------------
     @staticmethod
-    def step0_board_split(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    def step0_board_split(
+        df: pd.DataFrame, board: str | None = None
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """主板 / 双创板 (GEM+STAR) 拆分 — 后续全流程独立.
 
         始终从 symbol 重新计算 board 字段，忽略输入中可能存在的旧 board 列
         (例如 V3 面板中的 'SZ'/'SH' 等错误分类)。直接筛选 + .copy() 避免
         复制全量面板（2.7 GB）导致的 OOM。
+
+        board: None → 两个板块都拆 (原行为).
+               'main'/'dual' → 只拆目标板块, 另一板块返回空 df. 单板训练时
+               step0 不再拷贝另一板块 ~1GB 块 (dual-only 的 main 1.2M×109 OOM).
         """
         board_s = df["symbol"].map(board_of)
-        main = df[board_s.eq("main")].copy()
-        main["board"] = "main"
-        dual = df[board_s.isin(["GEM", "STAR"])].copy()
-        dual["board"] = board_s[board_s.isin(["GEM", "STAR"])]
+        main = pd.DataFrame()
+        dual = pd.DataFrame()
+        if board in (None, "main"):
+            main = df[board_s.eq("main")].copy()
+            main["board"] = "main"
+        if board in (None, "dual"):
+            d_mask = board_s.isin(["GEM", "STAR"])
+            dual = df[d_mask].copy()
+            dual["board"] = board_s[d_mask]
         return main, dual
 
     # ---------------- 步骤 1: 基础状态 ----------------
@@ -195,10 +212,41 @@ class CleaningPipeline:
         )
         ff = out.get("free_float_turnover_rate", out["turnover_rate"])
         out["rank_ff_turnover"] = ff.groupby([out["date"], out["board"]]).rank(pct=True)
-        out["liquidity_score"] = (
-            cfg.score_w_amount * out["rank_amount"]
-            + (1 - cfg.score_w_amount) * out["rank_ff_turnover"]
-        )
+        mode = cfg.score_mode
+        if mode == "zlog_5050" or mode == "zlog_product":
+            # z-score of log: 仅对原始量级组合有意义 (rank 模式 log 是单调 no-op),
+            # 压制成交额/换手右偏, 保留量级间距 (量级化组合更偏向高流动性尾部).
+            out["_zlog_amt"] = np.log(
+                pd.to_numeric(out["amount"], errors="coerce").clip(lower=1e-9)
+            )
+            out["_zlog_ff"] = np.log(
+                pd.to_numeric(ff, errors="coerce").clip(lower=1e-9)
+            )
+            for c in ("_zlog_amt", "_zlog_ff"):
+                g = out.groupby(["date", "board"])[c]
+                out[c] = (out[c] - g.transform("mean")) / g.transform("std").replace(
+                    0, np.nan
+                )
+            out["_zlog_prod"] = out["_zlog_amt"] + out["_zlog_ff"]
+            g = out.groupby(["date", "board"])["_zlog_prod"]
+            out["_zlog_prod"] = (out["_zlog_prod"] - g.transform("mean")) / g.transform(
+                "std"
+            ).replace(0, np.nan)
+            out["liquidity_score"] = (
+                out["_zlog_prod"]
+                if mode == "zlog_product"
+                else 0.5 * out["_zlog_amt"] + 0.5 * out["_zlog_ff"]
+            )
+            out = out.drop(columns=["_zlog_amt", "_zlog_ff", "_zlog_prod"])
+        elif mode == "rank_amount":
+            out["liquidity_score"] = out["rank_amount"]
+        elif mode == "rank_turnover":
+            out["liquidity_score"] = out["rank_ff_turnover"]
+        else:  # rank_5050 (默认) / rank_5050_churnpen 用同基座
+            out["liquidity_score"] = (
+                cfg.score_w_amount * out["rank_amount"]
+                + (1 - cfg.score_w_amount) * out["rank_ff_turnover"]
+            )
 
         # D24 换手稳定性 (groupby symbol!)
         out = out.sort_values(["symbol", "date"]).reset_index(drop=True)
@@ -209,14 +257,33 @@ class CleaningPipeline:
         out["churn_suspect"] = (out["turnover_stability_5"] > cfg.stability_max).astype(
             int
         )
+        if mode == "rank_5050_churnpen":
+            # 对倒嫌疑股 score×0.5 → 排到池尾 (wash-trading 名对预测质量有害假设)
+            out["liquidity_score"] = out["liquidity_score"] * np.where(
+                out["churn_suspect"] == 1, 0.5, 1.0
+            )
 
         if not apply_top_n:
             return out
 
-        # 板块内每个 date 取 Score 前 N (仅推理端)
+        # 板块内每个 date 取 Score 前 N (仅推理端); main 用 liquidity_top_n_main
         out["score_rank"] = out.groupby(["date", "board"])["liquidity_score"].rank(
             ascending=False, method="first"
         )
+        if "board" in out.columns:
+            if cfg.liquidity_top_n_main <= 0:
+                # main 不限池 (0=无上限): 保留全部流动性达标主板股, dual 仍截前 N
+                keep = out["board"].eq("main") | (
+                    out["score_rank"] <= cfg.liquidity_top_n
+                )
+            else:
+                cap = np.where(
+                    out["board"].eq("main"),
+                    cfg.liquidity_top_n_main,
+                    cfg.liquidity_top_n,
+                )
+                keep = out["score_rank"] <= cap
+            return out[keep]
         return out[out["score_rank"] <= cfg.liquidity_top_n]
 
     # ---------------- 步骤 3: 极端数据 ----------------
@@ -355,7 +422,7 @@ class CleaningPipeline:
         """
         import gc
 
-        main, dual = self.step0_board_split(df)
+        main, dual = self.step0_board_split(df, board=board)
         del df
         gc.collect()
         skip_main = board == "dual"

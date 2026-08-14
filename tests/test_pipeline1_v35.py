@@ -143,11 +143,76 @@ class TestCleaning:
         """成交额下限 + Score 前N + D24 换手稳定性."""
         df = make_panel(days=60)
         df.loc[df["symbol"] == "601318", "amount"] = 1e6  # < 5000万
-        cfg = CleaningConfig(liquidity_top_n=1)
+        cfg = CleaningConfig(liquidity_top_n=1, liquidity_top_n_main=1)
         out = CleaningPipeline(cfg).step2_liquidity(df)
         assert "601318" not in set(out["symbol"])
         assert "turnover_stability_5" in out.columns
         assert out.groupby(["date", "board"])["symbol"].count().max() <= 1
+
+    def test_step2_board_specific_pool(self):
+        """serving 池按板块区分: main 用 liquidity_top_n_main, 其余用 liquidity_top_n."""
+        df = make_panel(days=60)  # 600519=main, 300750=GEM, 601318=main
+        cfg = CleaningConfig(liquidity_top_n=1, liquidity_top_n_main=2)
+        out = CleaningPipeline(cfg).step2_liquidity(df)
+        main_cnt = out[out["board"] == "main"].groupby("date")["symbol"].count().max()
+        dual_cnt = out[out["board"] != "main"].groupby("date")["symbol"].count().max()
+        assert main_cnt <= 2
+        assert dual_cnt <= 1
+        assert main_cnt > dual_cnt  # main 池更大
+
+    def test_serving_pool_defaults(self):
+        """serving 候选池默认: main=0 不限池 (08-13 用户定案), dual=200."""
+        cfg = CleaningConfig()
+        assert cfg.liquidity_top_n_main == 0  # 0 = 无上限 (保留全部主板达标股)
+        assert cfg.liquidity_top_n == 200
+
+    def test_step2_main_unlimited_pool(self):
+        """liquidity_top_n_main=0 → main 不截池 (保留全部), dual 仍截前 N."""
+        symbols = (
+            "600519",
+            "601318",
+            "600000",  # main
+            "300750",
+            "300059",
+            "300124",  # GEM
+        )
+        df = make_panel(symbols=symbols, days=60)
+        cfg = CleaningConfig(liquidity_top_n=1, liquidity_top_n_main=0)
+        out = CleaningPipeline(cfg).step2_liquidity(df)
+        main_cnt = out[out["board"] == "main"].groupby("date")["symbol"].count().max()
+        dual_cnt = out[out["board"] != "main"].groupby("date")["symbol"].count().max()
+        assert main_cnt == 3  # 主板全保留, 不限池
+        assert dual_cnt == 1  # dual 仍按 liquidity_top_n=1 截断
+
+    @pytest.mark.parametrize(
+        "mode",
+        [
+            "rank_5050",
+            "rank_amount",
+            "rank_turnover",
+            "zlog_5050",
+            "zlog_product",
+            "rank_5050_churnpen",
+        ],
+    )
+    def test_step2_score_modes(self, mode):
+        """liquidity_score 各公式产出有限分 (无 NaN/inf), 可排序选池."""
+        symbols = (
+            "600519",
+            "601318",
+            "600000",  # main
+            "300750",
+            "300059",
+            "300124",  # GEM
+            "688001",
+            "688111",  # STAR
+        )
+        df = make_panel(symbols=symbols, days=120)
+        cfg = CleaningConfig(score_mode=mode, liquidity_top_n=3, liquidity_top_n_main=3)
+        out = CleaningPipeline(cfg).step2_liquidity(df)
+        assert len(out) > 0
+        assert np.isfinite(out["liquidity_score"]).all(), f"{mode} 有 NaN/inf"
+        assert out.groupby(["date", "board"])["symbol"].count().max() <= 3
 
     def test_step3_resume_first_day(self):
         """安全网 #11: 复牌首日剔除, 复牌次日纳入."""

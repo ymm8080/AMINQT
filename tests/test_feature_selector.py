@@ -493,6 +493,21 @@ class TestFeatureSelectorConfig:
 class TestFeatureSelectorSelection:
     """Tests for the select() method with main/dual pipelines."""
 
+    @staticmethod
+    def _latest_snapshot(registry_dir, board):
+        """Return the most recent selected_{board}_*.json snapshot written by select()."""
+        snapshots = [
+            p
+            for p in os.listdir(registry_dir)
+            if p.startswith(f"selected_{board}_") and p.endswith(".json")
+        ]
+        assert snapshots, f"no snapshot found for {board}"
+        path = max(
+            (os.path.join(registry_dir, p) for p in snapshots), key=os.path.getmtime
+        )
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+
     def test_select_main_bruteforce_dedup(self):
         """MAIN board runs bruteforce + dedup pipeline."""
         df = _make_small_df(n_symbols=5, n_dates=40)
@@ -503,6 +518,12 @@ class TestFeatureSelectorSelection:
             # All should be valid column names
             for f in features:
                 assert isinstance(f, str)
+            # Snapshot must record selection metrics (dedup count / cap status)
+            snap = self._latest_snapshot(tmp, "main")
+            m = snap["metrics"]
+            assert m["n_dedup"] >= len(features)
+            assert "capped" in m and "max_features" in m
+            assert m["dedup_threshold"] > 0
 
     def test_select_dual_gate_d(self):
         """DUAL board runs gate_d pipeline (features built via FeatureEngineV35)."""
@@ -550,6 +571,12 @@ class TestFeatureSelectorSelection:
             sel = FeatureSelector(registry_dir=tmp)
             features = sel.select(df, "dual")
             assert len(features) > 0
+            # Snapshot must record gate_d selection metrics (ablation result)
+            snap = self._latest_snapshot(tmp, "dual")
+            m = snap["metrics"]
+            assert m["n_candidates"] > 0
+            assert m["n_selected"] == len(features)
+            assert "best_ir" in m and "best_n" in m and "sat_n" in m
 
     def test_select_fallback(self):
         """Unknown board uses fallback pipeline."""

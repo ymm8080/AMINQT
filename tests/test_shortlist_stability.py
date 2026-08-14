@@ -155,3 +155,135 @@ def test_c2c_latest_returns_per_symbol_mag():
     assert np.isfinite(mag).all()
     # 与 MFE 无关: 结果是 close-to-close 平均预期量级 (score 0.4~0.7 × slope ~0.08 → 2~6%)
     assert (mag.abs() < 0.15).all()
+
+
+def test_reject_reason_derivation(tmp_path):
+    """某板当日短名单为空的原因推导 (2026-08-13): 有 OOS 落盘 → 选股门原因;
+    连落盘都没有 → 无候选原因. 交付端据此在清单上标注 '未接受'."""
+    from scripts._shortlist_t5_t10 import _reject_reason
+
+    (tmp_path / "stocks_main_sniper_oos.csv").write_text("symbol\n000001\n")
+    assert "选股/排名门" in _reject_reason(tmp_path, "main")
+    assert _reject_reason(tmp_path, "dual") == (
+        "该板块当日无候选 (池为空/未参与并行选股)"
+    )
+    (tmp_path / "stocks_dual_fusion_oos.csv").write_text("symbol\n300001\n")
+    assert "选股/排名门" in _reject_reason(tmp_path, "dual")
+
+
+def test_trailing_realized_takes_top_by_score_over_realized_days():
+    """报告锚 (2026-08-14): _trailing_realized 取末 window 个已实现决策日内每日
+    score top-top 的 label 均值; 未实现 (label NaN) 日不计数."""
+    from scripts._shortlist_t5_t10 import _trailing_realized
+
+    dates = pd.bdate_range("2025-01-06", periods=30)
+    rows = []
+    for i in range(20):
+        sc = 0.2 + 0.04 * i  # score 随 i 单调 → top-10 by score == i 最大的 10 只
+        for d in dates:
+            rows.append(
+                {
+                    "symbol": f"S{i:02d}",
+                    "date": d,
+                    "score": sc,
+                    "label_pm_10d_net": 0.001 * i + 0.0005,
+                }
+            )
+    frame = pd.DataFrame(rows)
+    val = _trailing_realized(frame, "10d", top=10, window=10)
+    expected = float(np.mean([0.001 * i + 0.0005 for i in range(10, 20)]))
+    assert val == pytest.approx(expected)
+    # 未实现 (label NaN) 日跳过: 只统计有 label 的决策日
+    frame.loc[frame["date"] == dates[-1], "label_pm_10d_net"] = np.nan
+    assert _trailing_realized(frame, "10d", top=10, window=10) == pytest.approx(
+        expected
+    )
+
+
+def test_anchor_reported_shifts_mean_keeps_order_sync_mag10d():
+    """_anchor_reported (2026-08-14): 每板块每视界把报告 pred_ret_{h} 均值平移到近窗
+    (ANCHOR_WINDOW) top-ANCHOR_TOP 实得锚, 板块内排序 (单调) 不变, pred_mag_10d 同步
+    为锚定后的 pred_ret_10d."""
+    from scripts._shortlist_t5_t10 import (
+        ANCHOR_TOP,
+        ANCHOR_WINDOW,
+        _anchor_reported,
+        _trailing_realized,
+    )
+
+    dates = pd.bdate_range("2025-01-06", periods=40)
+    panel_rows = []
+    for i in range(15):
+        sc = 0.3 + 0.04 * i
+        for d in dates:
+            panel_rows.append(
+                {
+                    "symbol": f"S{i:02d}",
+                    "date": d,
+                    "score": sc,
+                    "label_pm_3d_net": 0.015 + 0.0005 * i,
+                    "label_pm_5d_net": 0.020 + 0.0005 * i,
+                    "label_pm_10d_net": 0.025 + 0.0005 * i,
+                }
+            )
+    panel = {("main", "both"): pd.DataFrame(panel_rows)}
+
+    # 入选档 = 每板块 TOP-5 (score 最高 5 只 S10-S14), 报告值虚高且随 score 单调
+    res = pd.concat(
+        [
+            pd.DataFrame(
+                {
+                    "date": [str(dates[-1].date())],
+                    "board": ["main"],
+                    "cut": ["T-5"],
+                    "symbol": [f"S{i:02d}"],
+                    "score": [0.3 + 0.04 * i],
+                    **{f"pred_mag_{h}": [0.04] for h in HORIZONS},
+                    **{f"pred_prob_{h}": [0.5] for h in HORIZONS},
+                    **{f"pred_ret_{h}": [0.04 + 0.01 * i] for h in HORIZONS},
+                }
+            )
+            for i in range(10, 15)
+        ],
+        ignore_index=True,
+    )
+    anchored = _anchor_reported(res, panel)
+    for h in HORIZONS:
+        t_real = _trailing_realized(
+            panel[("main", "both")], h, top=ANCHOR_TOP, window=ANCHOR_WINDOW
+        )
+        assert anchored[f"pred_ret_{h}"].mean() == pytest.approx(t_real, rel=1e-9)
+    # pred_mag_10d 同步到锚定后的 pred_ret_10d
+    assert (anchored["pred_mag_10d"] == anchored["pred_ret_10d"]).all()
+    # 平移是每板块每视界常数: 锚定后 pred_ret_10d 仍随 score 单调 (每股都减同一 shift)
+    assert anchored.sort_values("score")["pred_ret_10d"].is_monotonic_increasing
+    shift = float(anchored["pred_ret_10d"].iloc[0] - (0.04 + 0.01 * 10))
+    assert (
+        anchored["pred_ret_10d"]
+        - (0.04 + 0.01 * anchored["symbol"].str[1:].astype(int))
+    ).abs().max() == pytest.approx(abs(shift))
+
+
+def test_rank_and_truncate_keeps_only_top5_per_board():
+    """2026-08-14 收紧: rank_and_truncate 每板块只留 pred_mag_10d 前 5, cut 统一 T-5."""
+    from scripts._shortlist_t5_t10 import rank_and_truncate
+
+    pref = {"main": "ma", "dual": "du"}
+    rows = []
+    for board, n in (("main", 8), ("dual", 7)):
+        for i in range(n):
+            rows.append(
+                {
+                    "board": board,
+                    "symbol": f"{pref[board]}{i:04d}",
+                    "pred_mag_10d": 0.05 + 0.001 * i,  # i 越大 mag 越高
+                    "score": 0.5,
+                }
+            )
+    out = rank_and_truncate(pd.DataFrame(rows))
+    assert set(out["cut"]) == {"T-5"}
+    for board, n in (("main", 8), ("dual", 7)):
+        b = out[out["board"] == board]
+        assert len(b) == 5
+        # 保留 pred_mag_10d 最高的 5 只
+        assert set(b["symbol"]) == {f"{pref[board]}{i:04d}" for i in range(n - 5, n)}

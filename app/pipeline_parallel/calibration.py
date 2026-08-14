@@ -155,6 +155,11 @@ def calibrate_mag10d(
                 cs, ci = 0.0, (sy / n if n else 0.0)
             else:
                 cs = (n * sxy - sx * sy) / var
+                # 08-14 调查: 21 日窗 cs<0 是噪声假信号 (main 43% / dual 33% 日), 旧逻辑
+                # mag=cs·score+ci 反转排名去选最低分股, 250d 反序日实得大幅跑输 score-top5
+                # (main +0.59% vs +2.59%, dual +0.83% vs +4.13%). 铁律方向: 高分=高预期
+                # → 负 cs 只取幅度, mag 恒与 score 单调同序 (同序则 top-5 == 池分 top-5).
+                cs = abs(cs)
                 ci = (sy - cs * sx) / n
             cal_lo64 = np.datetime64(cal_lo)
             dt64 = np.datetime64(dt)

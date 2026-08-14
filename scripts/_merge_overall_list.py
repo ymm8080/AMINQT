@@ -41,9 +41,7 @@ def load_parallel(date: str) -> pd.DataFrame:
     if not pats:
         sys.exit(f"无 parallel_shortlist_{date}__*.csv")
     sl = pd.read_csv(pats[0], dtype={"symbol": str})
-    # 同一 symbol 有 cut=T-5 / T-10 两行 → 只留 T-10 (长视界) 行
-    if "cut" in sl.columns:
-        sl = sl[sl["cut"] == "T-10"]
+    # 2026-08-14 入选收紧至每板块 TOP-5 → 交付 CSV 仅 cut=T-5 行; 按 board+symbol 去重兜底
     sl = sl.drop_duplicates(subset=["board", "symbol"]).copy()
     sl["module_parallel"] = (
         sl.get("systems").fillna("") if "systems" in sl.columns else ""

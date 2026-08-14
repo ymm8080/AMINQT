@@ -54,7 +54,9 @@ from config.settings import BACKTEST_RESULT_DIR
 logger = logging.getLogger(__name__)
 
 
-def add_mfe_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
+def add_mfe_labels(
+    df: pd.DataFrame, horizons: tuple[int, ...], already_sorted: bool = False
+) -> pd.DataFrame:
     """补算 MFE 净标签 (2026-08-04 用户需求): 持有期内最大涨幅, 非目标日收盘.
 
     MFE = 持有窗口内**最高价**能兑现的最大收益 (潜在最优离场):
@@ -64,8 +66,14 @@ def add_mfe_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
     窗口从 T+2 起 (T+1 收盘已持有, 无法兑现 T+1 盘中最高), 含目标日 T+1+k。
     成本口径 = 生产 (COST + 2×分层滑点, adv20)。
     标签合法引用未来价 (非前瞻 bias — 仅供训练/验收, 不用于特征)。
+    already_sorted: 检查点已按 (symbol,date) 排序 → 跳过 sort (2026-08-13 宽帧
+    557 列 sort 触发整帧 block consolidation 2× 连续块, 本机 15.8GB 物理必 OOM;
+    跳过对结果逐字节一致, 仅省一次整帧拷贝).
     """
-    df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
+    if not already_sorted:
+        df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
+    else:
+        df = df.reset_index(drop=True)
     g = df.groupby("symbol")
     exec_px = g["close_hfq"].shift(-1)  # T+1 收盘买价
     max_off = max(horizons) + 1
@@ -85,7 +93,9 @@ def add_mfe_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
     return df
 
 
-def add_c2c_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
+def add_c2c_labels(
+    df: pd.DataFrame, horizons: tuple[int, ...], already_sorted: bool = False
+) -> pd.DataFrame:
     """补算 close-to-close 净标签 label_pm_{k}d_net (2026-08-07 用户: 并行全模块改 c2c).
 
     与生产 add_label_pm_10d_net 完全同口径 (检查点无 price_1455
@@ -94,8 +104,12 @@ def add_c2c_labels(df: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
     再按生产 mask_suspension 逻辑遮蔽 [T,T+k] 含停牌的行 (窗口 k+1).
     slow_bull 长视界 20/40d 超出 label_engine.LABEL_HORIZONS → 检查点不产, 在此补算;
     sniper/fusion 2/3/5/10 检查点已有, 重算保证全列齐全与口径一致.
+    already_sorted: 同 add_mfe_labels (2026-08-13 宽帧 sort OOM 规避).
     """
-    df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
+    if not already_sorted:
+        df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
+    else:
+        df = df.reset_index(drop=True)
     g = df.groupby("symbol")["close_hfq"]
     exec_px = g.shift(-1)
     slip = df["adv20"].map(slippage_tier) if "adv20" in df.columns else 0.0015
@@ -195,8 +209,10 @@ def load_panel() -> pd.DataFrame:
     for ckpt in (PANEL.main_checkpoint, PANEL.dual_checkpoint):
         kw = {"filters": [("date", ">=", cutoff)]} if cutoff is not None else {}
         df = _finalize_slice(pd.read_parquet(ckpt, **kw))
-        df = add_mfe_labels(df, horizons=ALL_HORIZON_INTS)
-        df = add_c2c_labels(df, horizons=ALL_HORIZON_INTS)
+        # 检查点按 (symbol,date) 排序写入, _finalize_slice 只加列/掩码不重排
+        # → already_sorted=True 跳过冗余 sort (省整帧 2× 拷贝, 2026-08-13 OOM 规避)
+        df = add_mfe_labels(df, horizons=ALL_HORIZON_INTS, already_sorted=True)
+        df = add_c2c_labels(df, horizons=ALL_HORIZON_INTS, already_sorted=True)
         slices.append(df)
         del df
         gc.collect()

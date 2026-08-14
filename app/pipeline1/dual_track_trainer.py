@@ -395,6 +395,10 @@ class DualTrackTrainer:
                 f"(需 ≥ {ES_DAYS + CALIB_DAYS + TEST_DAYS + MIN_TRAIN_DAYS})"
             )
         segs = self.split_window(df, window)
+        # 内存 (2026-08-13): split_window 已把数据拷贝进 segs, df (整块增强帧 ~3GB)
+        # 不再被引用 → 立即释放, 否则训练全程驻留导致 main OOM
+        del df
+        gc.collect()
 
         # ── 内存: 只保留训练/校准/OOS 需要的列, 释放 OHLCV 原始列 ──
         keep_cols = set(feature_cols) | {

@@ -274,6 +274,20 @@ class TestRunTraining:
         tail = df.groupby("symbol").tail(6)
         assert tail["label_1d"].isna().all()
 
+    def test_panel_path_guard_and_keyword_only(self):
+        """panel_path 模式让 run_training 自持有面板 (2026-08-13 内存修复,
+        修 dim17 build OOM: 调用方持有 panel 引用使 `del panel` 失效).
+
+        - 双 None → 拒绝 (避免后续空指针 AttributeError)
+        - panel_path 必须关键字传入 (保护既有按位传参的调用方)
+        """
+        import inspect
+
+        with pytest.raises(ValueError):
+            run_training(panel=None, panel_path=None)
+        sig = inspect.signature(run_training)
+        assert sig.parameters["panel_path"].kind is inspect.Parameter.KEYWORD_ONLY
+
 
 class TestSelectFeaturesBruteInjection:
     """select_features 的 BruteForce 后注入: 单次 join (而非逐族 N 次) 不改变列值与对齐."""
@@ -480,4 +494,80 @@ class TestRunTrainingSequentialBoards:
         assert events == expected, f"分期顺序错误: {events}"
         assert set(results) == {"main", "dual"}
         assert results["main"]["n_features"] == 2
+        assert results["dual"]["switched"] is True
+
+    def test_boards_scoped_to_dual_only(self, monkeypatch):
+        """boards=('dual',) → run_train 只清洗 dual, 只 prepare/select/train dual."""
+        import app.pipeline1.dual_track_trainer as dtt_mod
+        import app.pipeline1.train_runner as tr
+        from app.pipeline1 import cleaning_pipeline as cln
+
+        panel = pd.DataFrame(
+            {
+                "symbol": ["a", "b"],
+                "date": ["2026-08-07", "2026-08-07"],
+                "board": ["main", "dual"],
+            }
+        )
+        main_df = panel[panel["board"] == "main"].copy()
+        dual_df = panel[panel["board"] == "dual"].copy()
+
+        seen = {}
+
+        def fake_run_train(self, df, board=None):
+            seen["board"] = board
+            if board == "dual":
+                return pd.DataFrame(), dual_df
+            if board == "main":
+                return main_df, pd.DataFrame()
+            return main_df, dual_df
+
+        monkeypatch.setattr(cln.CleaningPipeline, "run_train", fake_run_train)
+        monkeypatch.setattr(tr, "FeatureEngineV35", lambda: object())
+
+        events = []
+
+        def fake_prepare(
+            board_df,
+            features,
+            float_shares_map=None,
+            cross_sectional_rank=False,
+            registry=None,
+        ):
+            events.append(("prepare", board_df["board"].iloc[0]))
+            return board_df.copy()
+
+        def fake_select(
+            df, board, tag, selector=None, registry=None, fallback_boards=None
+        ):
+            events.append(("select", board))
+            return ["f1"], df
+
+        def fake_weekly(self, panels, feature_cols_by_board, tag, resume=False):
+            events.append(("train", next(iter(panels))))
+            board = next(iter(panels))
+            return {
+                board: {
+                    "path": f"models/pipeline1/{board}_20260813.pkl",
+                    "oos": {"weighted_ic": 0.05, "pass": True},
+                    "switched": True,
+                }
+            }
+
+        monkeypatch.setattr(tr, "prepare_board_frame", fake_prepare)
+        monkeypatch.setattr(tr, "select_features", fake_select)
+        monkeypatch.setattr(dtt_mod.DualTrackTrainer, "weekly_retrain", fake_weekly)
+
+        results = run_training(
+            panel,
+            "20260813",
+            model_dir="models/pipeline1",
+            use_ic_screen=False,
+            use_registry=False,
+            boards=("dual",),
+        )
+
+        assert seen["board"] == "dual", "单板应传 board='dual' 给 run_train"
+        assert events == [("prepare", "dual"), ("select", "dual"), ("train", "dual")]
+        assert set(results) == {"dual"}, f"只应返回 dual: {set(results)}"
         assert results["dual"]["switched"] is True

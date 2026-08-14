@@ -244,3 +244,38 @@ def test_g_label_horizon_default_equals_10d():
     a = calibrate_mag10d(df, cal_n=42, target_col="label_pm_10d_net")
     b = calibrate_mag10d(df, cal_n=42, target_col="label_pm_10d_net", label_horizon=10)
     assert a["mag"].equals(b["mag"])
+
+
+def test_h_negative_cross_slope_does_not_invert_ranking():
+    """08-14 调查: 21 日窗 cs<0 时旧代码 mag=cs·score+ci 反转排名 → mag-top5=最低分股.
+
+    250d 实测 (main 43% / dual 33% 日子 cs<0): 反序日 mag-top5 实得 +0.59%/+0.83%,
+    同日 score-top5 实得 +2.59%/+4.13% → 负斜率是噪声假信号, 未延续. 铁律方向
+    (高分=高预期): 负 cs 只取幅度 → mag 恒与 score 单调同序.
+    """
+    rng = np.random.default_rng(11)
+    dates = pd.bdate_range("2025-01-06", periods=120)
+    rows = []
+    for i in range(12):
+        base = 0.5 + 0.04 * i
+        for d in dates:
+            sc = base + 0.02 * rng.normal()
+            y = -0.08 * sc + 0.02 + 0.001 * rng.normal()  # 全股负斜率 → 横截面 cs<0
+            rows.append(
+                {
+                    "symbol": f"S{i:02d}",
+                    "date": d,
+                    "board": "main",
+                    "score": sc,
+                    "label_pm_10d_net": y,
+                }
+            )
+    df = pd.DataFrame(rows)
+    out = calibrate_mag10d(df, cal_n=42)
+    d0 = out["date"].max()
+    day = out[out["date"] == d0].merge(
+        df[["symbol", "date", "score"]], on=["symbol", "date"]
+    )
+    day = day.sort_values("score")
+    # 同序: 分数越高 mag 越高 (永不反转); 旧代码 cs<0 → 严格反序 → 此处 fail
+    assert day["mag"].is_monotonic_increasing

@@ -12,6 +12,7 @@
   [parallel] python -m app.pipeline_parallel.runner     并行回测 + 短名单 (sniper/fusion/slow_bull)
   [legacy]   scripts/_gen_legacy_list.py <tag>          legacy 预测出清单 (用最新 current)
   [deliver]  scripts/_deliver_legacy_list.py <tag>      legacy 清单交付 STOCK_LIST_DIR
+  [deliver_parallel] scripts/_shortlist_t5_t10.py <tag> 并行短名单交付 STOCK_LIST_DIR
 
 "推送看板" = 各步落盘到看板只读目录, 看板渲染时自动展示:
   模型 → models/pipeline1/current_meta.json + *.pkl (档案页·模型档案)
@@ -19,7 +20,8 @@
   清单 → STOCK_LIST_DIR (档案页·落盘清单) + PredictionDB (每日预测)
 
 失败策略 (失败要大声): refresh 失败 → 跳过 parallel (无新鲜行集); retrain 失败 →
-继续当日清单 (沿用现有模型); 任一关键步骤 (legacy/deliver) 失败 → 非零退出.
+继续当日清单 (沿用现有模型); parallel 失败 → 跳过 deliver_parallel (否则交付旧 run_dir);
+任一关键步骤 (legacy/deliver/deliver_parallel) 失败 → 非零退出.
 每步 rc/耗时 + 全部子进程输出 → logs/daily_automation_<tag>.log (WORM, 不覆盖).
 
 用法:
@@ -52,11 +54,13 @@ _STEPS = {
     "parallel": ["-m", "app.pipeline_parallel.runner"],
     "legacy": ["scripts/_gen_legacy_list.py", "{tag}"],
     "deliver": ["scripts/_deliver_legacy_list.py", "{tag}"],
+    "deliver_parallel": ["scripts/_shortlist_t5_t10.py", "{tag}"],
 }
-# refresh 失败后应跳过的后续步骤 (parallel 需要新鲜检查点)
-_DEPENDS = {"parallel": "refresh"}
+# refresh 失败后应跳过的后续步骤 (parallel 需要新鲜检查点);
+# deliver_parallel 需要当日 fresh parallel run_dir (短名单), 否则会交付旧 run_dir 脏数据.
+_DEPENDS = {"parallel": "refresh", "deliver_parallel": "parallel"}
 # 关键步骤: 失败 → 整个任务非零退出 (看板当日清单缺失)
-_CRITICAL = {"legacy", "deliver"}
+_CRITICAL = {"legacy", "deliver", "deliver_parallel"}
 
 
 def plan_steps(
@@ -76,6 +80,8 @@ def plan_steps(
         steps.append("parallel")
     steps.append("legacy")
     steps.append("deliver")
+    if not skip_parallel:  # 并行清单交付依赖当日 fresh parallel 重生成, 跳过则同步丢弃
+        steps.append("deliver_parallel")
     return steps
 
 

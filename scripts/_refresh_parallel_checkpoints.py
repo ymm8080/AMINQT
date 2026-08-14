@@ -128,30 +128,28 @@ def main(force: bool = False) -> int:
             os.rename(ck, bak)
             print(f"[stale] {ck} -> {bak}", flush=True)
 
-    # 2. 读 V3 面板 → run_train 拆 main/dual → 重建两检查点
+    # 2. 读 V3 面板 → 逐板块 run_train(board=...) → 重建两检查点 (内存分期)
     print("读取 V3 面板 ...", flush=True)
-    panel = load_panel_v3()
     fe = FeatureEngineV35()
     cleaner = CleaningPipeline()
-    # 内存分期: dict 按板块 pop, 当前板块 build 时不再白占另一板块清洗切片.
-    board_dfs = dict(zip(("main", "dual"), cleaner.run_train(panel)))
-    del panel
-    gc.collect()
-    print(
-        f"run_train: main rows={len(board_dfs['main']):,} "
-        f"/ dual rows={len(board_dfs['dual']):,}",
-        flush=True,
-    )
-
     latest_date = None
-    # 构建顺序: dual 先 → main 后. main 1.4M 行是内存大头, 后建时另一板块
-    # 清洗帧已弹出释放, 峰值从 ~12GB 降到 ~8GB (本机 15.8GB 物理, 防 block consolidate OOM).
+    # 分板构建: run_train(board=board) 让另一板块返回空帧 → 峰值只含当前板块
+    # 清洗帧+特征构建. 旧实现一次 run_train 双板同时驻留 (dual 首建时 main
+    # 清洗帧仍占 ~1.5GB), 2026-08-13 dual 特征构建下 2.26MiB 分配失败 OOM →
+    # 改逐板重建 (本机 15.8GB 物理, 峰值 ~8GB 落在 main 单板).
     for board, ckpt in (("dual", DUAL_CHECKPOINT), ("main", MAIN_CHECKPOINT)):
-        bdf = board_dfs.pop(board)
+        panel = load_panel_v3()
+        main_df, dual_df = cleaner.run_train(panel, board=board)
+        del panel
+        gc.collect()
+        bdf = main_df if board == "main" else dual_df
+        del main_df, dual_df
+        gc.collect()
         if bdf is None or len(bdf) == 0:
             print(f"[{board}] 空, 跳过", flush=True)
             del bdf
             continue
+        print(f"run_train[{board}]: rows={len(bdf):,}", flush=True)
         d3 = build_board_slice(cleaner, fe, bdf, board, ckpt)
         latest_date = d3["date"].max()
         print(
@@ -161,7 +159,7 @@ def main(force: bool = False) -> int:
         )
         del bdf, d3
         gc.collect()
-    del board_dfs, fe, cleaner
+    del fe, cleaner
     gc.collect()
     if latest_date is not None:
         _write_fingerprint_meta(str(pd.Timestamp(latest_date).date()))
