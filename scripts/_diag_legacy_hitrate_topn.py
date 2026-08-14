@@ -83,17 +83,31 @@ def _realized_net(pivot: pd.DataFrame, cal: np.ndarray, i: int, symbol: str) -> 
     return ps / pb - 1.0 - COST
 
 
-def _gate_mask(scored: pd.DataFrame, prob_margin: float = 0.0, ret_thresh: float = 0.0,
-               pain_thresh: float = 0.5):
+def _gate_mask(
+    scored: pd.DataFrame,
+    prob_margin: float = 0.0,
+    ret_thresh: float = 0.0,
+    pain_thresh: float = 0.5,
+):
     """生产 entry_filter 非 bear 口径 + 变体 (margin 抬 prob 闸, thresh 抬 ret 闸,
     pain_thresh=None 关 pain 闸)."""
     ok = pd.Series(True, index=scored.index)
-    cp = scored["compound_prob"] if "compound_prob" in scored.columns else scored["prob_up"]
-    cr = scored["compound_ret"] if "compound_ret" in scored.columns else scored["pred_ret_10d"]
+    cp = (
+        scored["compound_prob"]
+        if "compound_prob" in scored.columns
+        else scored["prob_up"]
+    )
+    cr = (
+        scored["compound_ret"]
+        if "compound_ret" in scored.columns
+        else scored["pred_ret_10d"]
+    )
     ok &= cp > scored["base_rate"] + prob_margin
     ok &= cr > ret_thresh
     if all(c in scored.columns for c in ("pred_q50_3d", "pred_q50_5d")):
-        ok &= (scored["pred_q50_3d"].fillna(cr) > 0) & (scored["pred_q50_5d"].fillna(cr) > 0)
+        ok &= (scored["pred_q50_3d"].fillna(cr) > 0) & (
+            scored["pred_q50_5d"].fillna(cr) > 0
+        )
     if "pain_prob" in scored.columns and pain_thresh is not None:
         ok &= scored["pain_prob"].fillna(0) <= pain_thresh
     return ok
@@ -101,9 +115,16 @@ def _gate_mask(scored: pd.DataFrame, prob_margin: float = 0.0, ret_thresh: float
 
 def _stats(sub: pd.DataFrame) -> dict:
     if sub.empty:
-        return {"n_days": 0, "picks": 0, "avg_picks": 0.0, "hit": float("nan"),
-                "mean": float("nan"), "med": float("nan"),
-                "ge5": float("nan"), "ge10": float("nan")}
+        return {
+            "n_days": 0,
+            "picks": 0,
+            "avg_picks": 0.0,
+            "hit": float("nan"),
+            "mean": float("nan"),
+            "med": float("nan"),
+            "ge5": float("nan"),
+            "ge10": float("nan"),
+        }
     r = sub["realized_net"].dropna()
     return {
         "n_days": int(sub["date"].nunique()),
@@ -119,8 +140,12 @@ def _stats(sub: pd.DataFrame) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--slice", type=int, default=420, help="面板切片交易日数 (含前温 + 已实现余量)")
-    ap.add_argument("--eval", type=int, default=250, help="评估的已实现决策日数 (取末 N)")
+    ap.add_argument(
+        "--slice", type=int, default=420, help="面板切片交易日数 (含前温 + 已实现余量)"
+    )
+    ap.add_argument(
+        "--eval", type=int, default=250, help="评估的已实现决策日数 (取末 N)"
+    )
     args = ap.parse_args()
 
     t0 = time.time()
@@ -131,17 +156,29 @@ def main() -> int:
 
     print(f"[load] panel {PANEL_V3_PATH}", flush=True)
     panel = pd.read_parquet(str(PANEL_V3_PATH))
-    print(f"[load] {len(panel):,}r max={panel['date'].max()} ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[load] {len(panel):,}r max={panel['date'].max()} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     dates = sorted(pd.unique(pd.to_datetime(panel["date"])))
     cut = dates[-args.slice]
     panel = panel[pd.to_datetime(panel["date"]) >= cut].reset_index(drop=True)
-    print(f"[slice] {pd.Timestamp(cut).date()}.. {len(panel):,}r ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[slice] {pd.Timestamp(cut).date()}.. {len(panel):,}r ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     pivot, cal = _build_realized_pivot(panel)
-    print(f"[pivot] symbols={len(pivot)} days={len(cal)} ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[pivot] symbols={len(pivot)} days={len(cal)} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     main_df, dual_df, state = cleaner.run_inference(panel)
-    print(f"[clean] valve={state} main={len(main_df):,} dual={len(dual_df):,} ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[clean] valve={state} main={len(main_df):,} dual={len(dual_df):,} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     del panel
     gc.collect()
 
@@ -152,20 +189,25 @@ def main() -> int:
     detail: list[dict] = []
     for board, dfb, csr in (("main", main_df, False), ("dual", dual_df, True)):
         cols = predictor.bundles[board]["feature_cols"]
-        feat = features.build(
-            dfb, None, inference_cols=cols, cross_sectional_rank=csr
+        feat = features.build(dfb, None, inference_cols=cols, cross_sectional_rank=csr)
+        print(
+            f"[feat:{board}] {len(feat):,}r {len(feat.columns)}c ({time.time() - t0:.0f}s)",
+            flush=True,
         )
-        print(f"[feat:{board}] {len(feat):,}r {len(feat.columns)}c ({time.time() - t0:.0f}s)", flush=True)
         del dfb
         gc.collect()
 
         day_dates = sorted(pd.unique(pd.to_datetime(feat["date"])))
         # 只评估有已实现 T+10 的决策日 (i+sell_lag < len(cal)), 取末 args.eval 天
         eval_days = [
-            d for d in day_dates
+            d
+            for d in day_dates
             if d in i_of and i_of[d] + REALIZED_SELL_LAG < len(all_cal)
-        ][-args.eval:]
-        print(f"[{board}] eval days {len(eval_days)} ({pd.Timestamp(eval_days[0]).date()}..{pd.Timestamp(eval_days[-1]).date()})", flush=True)
+        ][-args.eval :]
+        print(
+            f"[{board}] eval days {len(eval_days)} ({pd.Timestamp(eval_days[0]).date()}..{pd.Timestamp(eval_days[-1]).date()})",
+            flush=True,
+        )
 
         # base_rate 预热: lister 内部滚动 20 日窗口须在首个 eval 日前吃满历史
         # (2026-08-14 冒烟结论: 不预热则首 ~20 天 base_rate 用部分窗口, 与生产每日链路不等价)
@@ -190,7 +232,9 @@ def main() -> int:
             try:
                 pred = predictor.predict(day_feat, board)
             except Exception as exc:
-                print(f"[{board}] {pd.Timestamp(d).date()} predict err: {exc}", flush=True)
+                print(
+                    f"[{board}] {pd.Timestamp(d).date()} predict err: {exc}", flush=True
+                )
                 continue
             if pred.empty:
                 continue
@@ -203,19 +247,30 @@ def main() -> int:
             record = scored[base_mask | pain_mask].copy()
             record["pain_excluded"] = ~base_mask[record.index]
             for _, row in record.iterrows():
-                detail.append({
-                    "date": str(pd.Timestamp(d).date()),
-                    "board": board,
-                    "symbol": row["symbol"],
-                    "pred_ret_10d": float(row.get("compound_ret", row.get("pred_ret_10d", np.nan))),
-                    "prob": float(row.get("compound_prob", row.get("prob_up", np.nan))),
-                    "base_rate": float(row.get("base_rate", np.nan)),
-                    "pain_prob": float(row.get("pain_prob", np.nan)) if "pain_prob" in row else np.nan,
-                    "pain_excluded": bool(row["pain_excluded"]),
-                    "realized_net": _realized_net(pivot, cal, di, row["symbol"]),
-                })
+                detail.append(
+                    {
+                        "date": str(pd.Timestamp(d).date()),
+                        "board": board,
+                        "symbol": row["symbol"],
+                        "pred_ret_10d": float(
+                            row.get("compound_ret", row.get("pred_ret_10d", np.nan))
+                        ),
+                        "prob": float(
+                            row.get("compound_prob", row.get("prob_up", np.nan))
+                        ),
+                        "base_rate": float(row.get("base_rate", np.nan)),
+                        "pain_prob": float(row.get("pain_prob", np.nan))
+                        if "pain_prob" in row
+                        else np.nan,
+                        "pain_excluded": bool(row["pain_excluded"]),
+                        "realized_net": _realized_net(pivot, cal, di, row["symbol"]),
+                    }
+                )
             if (k + 1) % 25 == 0 or k == len(eval_days) - 1:
-                print(f"[{board}] {k+1}/{len(eval_days)} ({time.time() - t0:.0f}s)", flush=True)
+                print(
+                    f"[{board}] {k + 1}/{len(eval_days)} ({time.time() - t0:.0f}s)",
+                    flush=True,
+                )
         del feat
         gc.collect()
 
@@ -234,7 +289,10 @@ def main() -> int:
         # 现有变体全部只作用于基准闸行 (pain_excluded 行仅 pain 变体使用)
         sub = df[(df["board"] == board) & (~df["pain_excluded"])]
         print(f"\n===== {board} | {sub['date'].nunique()} 已实现日 =====", flush=True)
-        print(f"  {'变体':<26}{'出票':>5}{'票/日':>6} {'命中':>7} {'实得':>8} {'中位':>8} {'≥5%':>7} {'≥10%':>7}", flush=True)
+        print(
+            f"  {'变体':<26}{'出票':>5}{'票/日':>6} {'命中':>7} {'实得':>8} {'中位':>8} {'≥5%':>7} {'≥10%':>7}",
+            flush=True,
+        )
         # 基准 top-N
         for n in TOP_DEPTHS:
             topn = (
@@ -243,8 +301,11 @@ def main() -> int:
                 .head(n)
             )
             s = _stats(topn)
-            print(f"  {'基准 top-'+str(n):<26}{s['picks']:>5}{s['avg_picks']:>6.1f} {s['hit']:>7.1%} "
-                  f"{s['mean']:>+8.2%} {s['med']:>+8.2%} {s['ge5']:>7.1%} {s['ge10']:>7.1%}", flush=True)
+            print(
+                f"  {'基准 top-' + str(n):<26}{s['picks']:>5}{s['avg_picks']:>6.1f} {s['hit']:>7.1%} "
+                f"{s['mean']:>+8.2%} {s['med']:>+8.2%} {s['ge5']:>7.1%} {s['ge10']:>7.1%}",
+                flush=True,
+            )
             summary.append({"board": board, "variant": f"base_top{n}", **s})
         # prob 边际
         for m in PROB_MARGINS:
@@ -256,9 +317,14 @@ def main() -> int:
                 .head(5)
             )
             s = _stats(topn)
-            print(f"  {'prob>base+'+f'{m:.2f}'+' top-5':<26}{s['picks']:>5}{s['avg_picks']:>6.1f} {s['hit']:>7.1%} "
-                  f"{s['mean']:>+8.2%} {s['med']:>+8.2%} {s['ge5']:>7.1%} {s['ge10']:>7.1%}", flush=True)
-            summary.append({"board": board, "variant": f"prob_margin_{m:.2f}_top5", **s})
+            print(
+                f"  {'prob>base+' + f'{m:.2f}' + ' top-5':<26}{s['picks']:>5}{s['avg_picks']:>6.1f} {s['hit']:>7.1%} "
+                f"{s['mean']:>+8.2%} {s['med']:>+8.2%} {s['ge5']:>7.1%} {s['ge10']:>7.1%}",
+                flush=True,
+            )
+            summary.append(
+                {"board": board, "variant": f"prob_margin_{m:.2f}_top5", **s}
+            )
         # ret 阈值
         for t in RET_THRESHOLDS:
             mask = sub["pred_ret_10d"] > t
@@ -269,8 +335,11 @@ def main() -> int:
                 .head(5)
             )
             s = _stats(topn)
-            print(f"  {'ret>'+f'{t:.1%}'+' top-5':<26}{s['picks']:>5}{s['avg_picks']:>6.1f} {s['hit']:>7.1%} "
-                  f"{s['mean']:>+8.2%} {s['med']:>+8.2%} {s['ge5']:>7.1%} {s['ge10']:>7.1%}", flush=True)
+            print(
+                f"  {'ret>' + f'{t:.1%}' + ' top-5':<26}{s['picks']:>5}{s['avg_picks']:>6.1f} {s['hit']:>7.1%} "
+                f"{s['mean']:>+8.2%} {s['med']:>+8.2%} {s['ge5']:>7.1%} {s['ge10']:>7.1%}",
+                flush=True,
+            )
             summary.append({"board": board, "variant": f"ret_thresh_{t:.3f}_top5", **s})
         # pain 闸变体 (08-14: 生产 0.5 无回测依据 → 更严档 + 关闸)
         bdf = df[df["board"] == board]
@@ -286,19 +355,33 @@ def main() -> int:
                 .head(5)
             )
             s = _stats(topn)
-            print(f"  {name+'-top5':<26}{s['picks']:>5}{s['avg_picks']:>6.1f} {s['hit']:>7.1%} "
-                  f"{s['mean']:>+8.2%} {s['med']:>+8.2%} {s['ge5']:>7.1%} {s['ge10']:>7.1%}", flush=True)
+            print(
+                f"  {name + '-top5':<26}{s['picks']:>5}{s['avg_picks']:>6.1f} {s['hit']:>7.1%} "
+                f"{s['mean']:>+8.2%} {s['med']:>+8.2%} {s['ge5']:>7.1%} {s['ge10']:>7.1%}",
+                flush=True,
+            )
             summary.append({"board": board, "variant": f"{name}_top5", **s})
 
     (out_dir / f"legacy_hitrate_topn_{ts}.json").write_text(
         json.dumps(
-            {"ts": ts, "slice": args.slice, "eval": args.eval, "cost": COST,
-             "summary": summary, "n_detail": len(df)},
-            indent=2, ensure_ascii=False, default=str,
+            {
+                "ts": ts,
+                "slice": args.slice,
+                "eval": args.eval,
+                "cost": COST,
+                "summary": summary,
+                "n_detail": len(df),
+            },
+            indent=2,
+            ensure_ascii=False,
+            default=str,
         ),
         encoding="utf-8",
     )
-    print(f"\n[saved] {out_dir}/legacy_hitrate_topn_{ts}.csv/.json ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"\n[saved] {out_dir}/legacy_hitrate_topn_{ts}.csv/.json ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     return 0
 
 

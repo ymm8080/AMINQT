@@ -36,9 +36,7 @@ from app.pipeline_parallel.config import FUSION, SNIPER
 from app.pipeline_parallel.scoring import pool_score
 from config.settings import DATA_DIR
 
-POOL_COLS = sorted(
-    {c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"}
-)
+POOL_COLS = sorted({c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"})
 EVAL_DAYS = 250  # 评估: 末 N 个已实现交易日 (可用 --eval-days 覆盖)
 N_TAIL_OFFSET = 80  # 决策日载入 = eval_days + 该余量 (校准窗 + 标签视界)
 TOPN = 5  # 2026-08-14 定案: 每板块 TOP-5
@@ -85,9 +83,7 @@ def _sub_window_metrics(top: pd.DataFrame, days: list, n_sub: int) -> list[dict]
                 "hit10": float((seg[LABEL["10d"]] > 0).mean())
                 if len(seg)
                 else float("nan"),
-                "mean10": float(seg[LABEL["10d"]].mean())
-                if len(seg)
-                else float("nan"),
+                "mean10": float(seg[LABEL["10d"]].mean()) if len(seg) else float("nan"),
             }
         )
     return out
@@ -116,7 +112,9 @@ def _eval_threshold(rr: pd.DataFrame, days: list, t3: float, n_sub: int) -> dict
         row[f"realized_{h}"] = float(top[col].mean()) if n else float("nan")
         row[f"hit_{h}"] = float((top[col] > 0).mean()) if n else float("nan")
     row["pct_ge5pct"] = float((top[LABEL["10d"]] >= 0.05).mean()) if n else float("nan")
-    row["pct_ge10pct"] = float((top[LABEL["10d"]] >= 0.10).mean()) if n else float("nan")
+    row["pct_ge10pct"] = (
+        float((top[LABEL["10d"]] >= 0.10).mean()) if n else float("nan")
+    )
     row["sub_windows"] = _sub_window_metrics(top, days, n_sub)
     return row
 
@@ -138,7 +136,9 @@ def main() -> int:
         p3 = calibrate_mag10d(work, target_col=LABEL["3d"], label_horizon=3)
         p10 = calibrate_mag10d(work, target_col=LABEL["10d"], label_horizon=10)
         mm = work.merge(
-            p3.rename(columns={"mag": "pred_ret_3d"}), on=["symbol", "date"], how="inner"
+            p3.rename(columns={"mag": "pred_ret_3d"}),
+            on=["symbol", "date"],
+            how="inner",
         )
         mm = mm.merge(
             p10.rename(columns={"mag": "pred_mag_10d"}),
@@ -191,7 +191,12 @@ def main() -> int:
     df.to_csv(out, index=False)
     (DATA_DIR / f"_diag_t3min_sweep_{_eval_days}d_{ts}.json").write_text(
         json.dumps(
-            {"ts": ts, "eval_days": _eval_days, "topn": TOPN, "rows": df.to_dict("records")},
+            {
+                "ts": ts,
+                "eval_days": _eval_days,
+                "topn": TOPN,
+                "rows": df.to_dict("records"),
+            },
             indent=2,
             ensure_ascii=False,
         ),

@@ -50,8 +50,18 @@ def test_per_board_threshold():
     # dual 门槛 0.5%: 0.3% 预期剔除; main 门槛 0: 0.3% 保留
     df = pd.DataFrame(
         [
-            {"symbol": "D001", "board": "dual", "pred_ret_3d": 0.003, "pred_prob_3d": 0.5},
-            {"symbol": "M001", "board": "main", "pred_ret_3d": 0.003, "pred_prob_3d": 0.5},
+            {
+                "symbol": "D001",
+                "board": "dual",
+                "pred_ret_3d": 0.003,
+                "pred_prob_3d": 0.5,
+            },
+            {
+                "symbol": "M001",
+                "board": "main",
+                "pred_ret_3d": 0.003,
+                "pred_prob_3d": 0.5,
+            },
         ]
     )
     out = S.select_confident(df)

@@ -147,9 +147,7 @@ class TestQuantileModels:
             "random_state": 42,
             "verbosity": -1,
         }
-        qset = QuantileModelSet(params).fit(
-            X, y, eval_set=(X_es, y_es), es_patience=5
-        )
+        qset = QuantileModelSet(params).fit(X, y, eval_set=(X_es, y_es), es_patience=5)
         preds = qset.predict(X[:50])["pred_q50"].values
         assert preds.std() > 0, "地板重训后 q50 不应为常数"
 
@@ -514,13 +512,43 @@ class TestDynamicEntry:
         cands = _cands(
             [
                 # main: base=(0.61+0.65+0.50)/3=0.5867; 0.61/0.65 过 prob, 0.50 剔 (填充)
-                {"symbol": "600001", "board": "main", "prob_up": 0.61, "pain_prob": 0.45},
-                {"symbol": "600002", "board": "main", "prob_up": 0.65, "pain_prob": 0.60},
-                {"symbol": "600003", "board": "main", "prob_up": 0.50, "pain_prob": 0.10},
+                {
+                    "symbol": "600001",
+                    "board": "main",
+                    "prob_up": 0.61,
+                    "pain_prob": 0.45,
+                },
+                {
+                    "symbol": "600002",
+                    "board": "main",
+                    "prob_up": 0.65,
+                    "pain_prob": 0.60,
+                },
+                {
+                    "symbol": "600003",
+                    "board": "main",
+                    "prob_up": 0.50,
+                    "pain_prob": 0.10,
+                },
                 # GEM: base=(0.90+0.90+0.60)/3=0.80, 门槛 0.88; 0.60 剔 (填充)
-                {"symbol": "300001", "board": "GEM", "prob_up": 0.90, "pain_prob": 0.35},
-                {"symbol": "300002", "board": "GEM", "prob_up": 0.90, "pain_prob": 0.45},
-                {"symbol": "300003", "board": "GEM", "prob_up": 0.60, "pain_prob": 0.10},
+                {
+                    "symbol": "300001",
+                    "board": "GEM",
+                    "prob_up": 0.90,
+                    "pain_prob": 0.35,
+                },
+                {
+                    "symbol": "300002",
+                    "board": "GEM",
+                    "prob_up": 0.90,
+                    "pain_prob": 0.45,
+                },
+                {
+                    "symbol": "300003",
+                    "board": "GEM",
+                    "prob_up": 0.60,
+                    "pain_prob": 0.10,
+                },
             ]
         )
         gen = ListGenerator(entry_prob=0.60)

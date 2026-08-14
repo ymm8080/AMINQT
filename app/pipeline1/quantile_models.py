@@ -75,7 +75,10 @@ class QuantileModelSet:
                 if bi is not None and bi < QUANTILE_MIN_TREES:
                     logger.warning(
                         "E1 分位数 q=%.2f 早停仅 %d 树 (< %d), 重训 %d 树保底",
-                        q, bi, QUANTILE_MIN_TREES, QUANTILE_MIN_TREES,
+                        q,
+                        bi,
+                        QUANTILE_MIN_TREES,
+                        QUANTILE_MIN_TREES,
                     )
                     params = {**params, "n_estimators": QUANTILE_MIN_TREES}
                     model = lgb.LGBMRegressor(**params)
