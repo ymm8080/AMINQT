@@ -33,16 +33,16 @@ for BRD in ("main", "dual"):
     d = df["date"].values
     train_d, es_d, test_d = dates[:-80], dates[-80:-60], dates[-60:]
 
-    def arr(seg_d, lbl_cls, lbl_reg):
-        m = np.isin(d, np.array(seg_d).astype("datetime64[ns]"))
-        m &= df[lbl_cls].notna().to_numpy() & df[lbl_reg].notna().to_numpy()
+    def arr(seg_d, lbl_cls, lbl_reg, _d=d, _df=df, _cols=cols):
+        m = np.isin(_d, np.array(seg_d).astype("datetime64[ns]"))
+        m &= _df[lbl_cls].notna().to_numpy() & _df[lbl_reg].notna().to_numpy()
         ix = np.flatnonzero(m)
-        X = np.nan_to_num(df.iloc[ix].loc[:, cols].to_numpy(np.float32), nan=0.0)
+        X = np.nan_to_num(_df.iloc[ix].loc[:, _cols].to_numpy(np.float32), nan=0.0)
         return (
             X,
-            df.iloc[ix][lbl_cls].to_numpy(),
-            df.iloc[ix]["date"].to_numpy(),
-            df.iloc[ix][lbl_reg].to_numpy(),
+            _df.iloc[ix][lbl_cls].to_numpy(),
+            _df.iloc[ix]["date"].to_numpy(),
+            _df.iloc[ix][lbl_reg].to_numpy(),
         )
 
     print(f"=== {BRD} (n={n}) ===", flush=True)

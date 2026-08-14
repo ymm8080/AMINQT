@@ -13,14 +13,14 @@ import gc
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
+
+from app.pipeline1.dual_track_trainer import DualTrackTrainer
 from scripts._sweep_liquidity_filter import (
     ES_DAYS,
     TEST_DAYS,
     apply_filter,
     train_reg,
 )
-
-from app.pipeline1.dual_track_trainer import DualTrackTrainer
 
 BOARD = "main"
 MA, BP = 3e7, 0.2
