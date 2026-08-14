@@ -63,7 +63,7 @@ class TestRefreshCheckpoints:
         assert calls[0][1] == mod.DUAL_CHECKPOINT and calls[0][2].equals(dual_df)
         assert calls[1][1] == mod.MAIN_CHECKPOINT and calls[1][2].equals(main_df)
         out = capsys.readouterr().out
-        assert "main rows=1" in out  # run_train 行数打印保留
+        assert "run_train[main]: rows=1" in out  # run_train 行数打印保留
 
     def test_empty_board_skipped(self, monkeypatch):
         mod = _load_refresh_module(monkeypatch)
