@@ -1,22 +1,21 @@
-# -*- coding: utf-8 -*-
 """Pull specific sources from panel calendar to alt_data. Idempotent, perdate resume.
 
 Example:
   python _pull_select_sources.py daily daily_basic adj_factor stk_limit suspend
 """
+
 import argparse
-import glob
 import json
 import os
 import sys
 import time
-from datetime import datetime
 
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import tushare as ts  # noqa: E402
+
 from config import settings  # noqa: E402
 
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
@@ -36,7 +35,8 @@ def _to_symbol(df: pd.DataFrame) -> pd.DataFrame:
         return df
     if "ts_code" in df.columns:
         df["symbol"] = (
-            df["ts_code"].str.replace(".SZ", "", regex=False)
+            df["ts_code"]
+            .str.replace(".SZ", "", regex=False)
             .str.replace(".SH", "", regex=False)
             .str.replace(".BJ", "", regex=False)
         )
@@ -84,9 +84,22 @@ def _save_alt(df: pd.DataFrame, fname: str, subdir: str):
 def pull_daily(pro, ds):
     d = _fetch(pro, pro.daily, f"daily {ds}", trade_date=ds)
     if not d.empty:
-        keep = [x for x in ["ts_code", "trade_date", "open", "high", "low",
-                            "close", "pre_close", "amount", "vol", "symbol"]
-                if x in d.columns]
+        keep = [
+            x
+            for x in [
+                "ts_code",
+                "trade_date",
+                "open",
+                "high",
+                "low",
+                "close",
+                "pre_close",
+                "amount",
+                "vol",
+                "symbol",
+            ]
+            if x in d.columns
+        ]
         _save_alt(d[keep], f"daily_{ds}.parquet", "daily")
         return True
     return False
@@ -95,11 +108,28 @@ def pull_daily(pro, ds):
 def pull_basic(pro, ds):
     d = _fetch(pro, pro.daily_basic, f"basic {ds}", trade_date=ds)
     if not d.empty:
-        keep = [x for x in ["ts_code", "trade_date", "turnover_rate",
-                            "turnover_rate_f", "volume_ratio", "pe_ttm", "pb",
-                            "ps_ttm", "total_share", "float_share", "free_share",
-                            "total_mv", "circ_mv", "dv_ratio", "dv_ttm", "symbol"]
-                if x in d.columns]
+        keep = [
+            x
+            for x in [
+                "ts_code",
+                "trade_date",
+                "turnover_rate",
+                "turnover_rate_f",
+                "volume_ratio",
+                "pe_ttm",
+                "pb",
+                "ps_ttm",
+                "total_share",
+                "float_share",
+                "free_share",
+                "total_mv",
+                "circ_mv",
+                "dv_ratio",
+                "dv_ttm",
+                "symbol",
+            ]
+            if x in d.columns
+        ]
         _save_alt(d[keep], f"daily_basic_{ds}.parquet", "daily_basic")
         return True
     return False
@@ -118,7 +148,8 @@ def pull_limit(pro, ds):
     l = _fetch(pro, pro.stk_limit, f"limit {ds}", trade_date=ds)
     if not l.empty:
         l2 = l[["symbol", "trade_date", "up_limit", "down_limit"]].rename(
-            columns={"up_limit": "up_limit_raw", "down_limit": "down_limit_raw"})
+            columns={"up_limit": "up_limit_raw", "down_limit": "down_limit_raw"}
+        )
         l2["date"] = pd.Timestamp(ds)
         _save_alt(l2, f"{ds}_all__.parquet", "stk_limit")
         return True
@@ -158,7 +189,9 @@ def main():
         prog = Progress(src)
         last_done = prog.get()
         todo = [d for d in cal if d.strftime("%Y%m%d") > last_done]
-        print(f"[{src}] todo={len(todo)} (resume after {last_done or 'none'})", flush=True)
+        print(
+            f"[{src}] todo={len(todo)} (resume after {last_done or 'none'})", flush=True
+        )
         t0 = time.time()
         for i, d in enumerate(todo):
             ds = d.strftime("%Y%m%d")
@@ -168,7 +201,7 @@ def main():
             time.sleep(CALL_SLEEP)
             if (i + 1) % FLUSH_EVERY == 0:
                 rate = (i + 1) / (time.time() - t0) * 3600
-                print(f"[{src}] {i+1}/{len(todo)} ({rate:.0f}/hr) @ {ds}", flush=True)
+                print(f"[{src}] {i + 1}/{len(todo)} ({rate:.0f}/hr) @ {ds}", flush=True)
         print(f"[{src}] DONE", flush=True)
     print("ALL DONE")
 

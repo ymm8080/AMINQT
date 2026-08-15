@@ -82,9 +82,7 @@ def _attach_labels(feat: pd.DataFrame, dfb: pd.DataFrame) -> pd.DataFrame:
 def main() -> int:
     force = "--force" in sys.argv[1:]
     panel = pd.read_parquet(str(PANEL_V3_PATH))
-    print(
-        f"[load] panel {len(panel):,}r max={panel['date'].max()}", flush=True
-    )
+    print(f"[load] panel {len(panel):,}r max={panel['date'].max()}", flush=True)
     main_df, dual_df = CleaningPipeline().run_train(panel)
     del panel
     gc.collect()

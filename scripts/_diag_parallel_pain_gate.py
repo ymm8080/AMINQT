@@ -66,7 +66,9 @@ def _load_board(board: str, n_tail: int) -> pd.DataFrame | None:
     fu = pool_score(t, FUSION.pool)
     t["score"] = np.maximum(sn.values, fu.values)
     t = t.dropna(subset=["score"])
-    return t[["symbol", "date", "board", "score"] + list(LABEL.values()) + ["label_pain"]].copy()
+    return t[
+        ["symbol", "date", "board", "score"] + list(LABEL.values()) + ["label_pain"]
+    ].copy()
 
 
 def _sub_window_metrics(top: pd.DataFrame, days: list, n_sub: int) -> list[dict]:
@@ -80,7 +82,9 @@ def _sub_window_metrics(top: pd.DataFrame, days: list, n_sub: int) -> list[dict]
             {
                 "win": f"{i + 1}/{n_sub}",
                 "rows": int(len(seg)),
-                "hit10": float((seg[LABEL["10d"]] > 0).mean()) if len(seg) else float("nan"),
+                "hit10": float((seg[LABEL["10d"]] > 0).mean())
+                if len(seg)
+                else float("nan"),
                 "mean10": float(seg[LABEL["10d"]].mean()) if len(seg) else float("nan"),
             }
         )
@@ -133,7 +137,9 @@ def main() -> int:
         if t is None:
             print(f"[{board}] 面板不足 -> skip", flush=True)
             continue
-        work = t[["symbol", "date", "board", "score"] + list(LABEL.values()) + ["label_pain"]].copy()
+        work = t[
+            ["symbol", "date", "board", "score"] + list(LABEL.values()) + ["label_pain"]
+        ].copy()
         p3 = calibrate_mag10d(work, target_col=LABEL["3d"], label_horizon=3)
         p10 = calibrate_mag10d(work, target_col=LABEL["10d"], label_horizon=10)
         pp = calibrate_mag10d(work, target_col="label_pain", label_horizon=3)

@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
 """Enrich panel_new_symbols with CYQ筹码分布 18 列.
 
 Read alt_data/cyq_tushare/cyq_b*.parquet, merge into panel
 by (symbol, trade_date). Output panel_cyq.parquet.
 """
+
 import glob
 import os
 import sys
@@ -15,6 +15,7 @@ ALT_DIR = "data/supply_cache/alt_data"
 PANEL_IN = "panel_new_symbols.parquet"
 PANEL_OUT = "panel_cyq.parquet"
 
+
 def main():
     # read panel keys
     panel = pd.read_parquet(os.path.join(OUT_DIR, PANEL_IN))
@@ -23,7 +24,9 @@ def main():
     print(f"panel keys: {len(keys)} symbol-date pairs")
 
     # read cyq batches
-    cyq_files = sorted(glob.glob(os.path.join(ALT_DIR, "cyq_tushare", "cyq_b*.parquet")))
+    cyq_files = sorted(
+        glob.glob(os.path.join(ALT_DIR, "cyq_tushare", "cyq_b*.parquet"))
+    )
     if not cyq_files:
         print("ERROR: no cyq_b*.parquet")
         return 1

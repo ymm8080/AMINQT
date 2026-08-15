@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """全市场宇宙修复 Step 4: 新股票 CYQ 筹码扩展 8 列 (2026-08-15).
 
 复用生产机器 cyq_ext.compute_cyq_panel (与面板既有 chip 列同算法同参数
@@ -11,6 +10,7 @@ turnover_rate NaN → 0 对齐 _daily_fetch.py 的 cyq 前置处理 (NaN 会毒�
 
 WORM: data/new_symbols_panel/base_new_cyq_<ts>.parquet (base + 8 列)
 """
+
 from __future__ import annotations
 
 import glob
@@ -31,12 +31,14 @@ OUT_PANEL_DIR = "data/new_symbols_panel"
 def main() -> None:
     f = sorted(glob.glob(os.path.join(OUT_PANEL_DIR, "base_new_*.parquet")))[-1]
     df = pd.read_parquet(f)
-    print(f"[cyq] input={f} rows={len(df):,} symbols={df['symbol'].nunique()}",
-          flush=True)
+    print(
+        f"[cyq] input={f} rows={len(df):,} symbols={df['symbol'].nunique()}", flush=True
+    )
     df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
 
-    cyq_in = df[["symbol", "date", "open", "high", "low", "close",
-                 "turnover_rate"]].copy()
+    cyq_in = df[
+        ["symbol", "date", "open", "high", "low", "close", "turnover_rate"]
+    ].copy()
     cyq_in["turnover_rate"] = cyq_in["turnover_rate"].fillna(0.0)
 
     t0 = time.time()

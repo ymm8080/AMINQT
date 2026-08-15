@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Build new symbols panel from daily/adj_factor/daily_basic/suspend/stk_limit.
 
 1) Read all daily/adj_factor/daily_basic/suspend/stk_limit files in data/new_symbols_raw.
@@ -11,10 +10,10 @@
    - Derive features: gap_up_5pct_cnt, vol_chg_20d, etc
 3) Output: data/new_symbols_raw/panel_new_symbols.parquet (symbol/date OHLCV-hfq/adj_ratio/valuation/limits/suspend/derived)
 """
+
 import glob
 import os
 import sys
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -37,6 +36,7 @@ def load_parquets(pattern: str) -> pd.DataFrame:
         except Exception as e:
             print(f"WARN: {f} bad parquet: {e}")
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
 
 def main():
     print("[daily]")
@@ -71,7 +71,9 @@ def main():
 
     # adj_factor: get latest adj_factor per (symbol, trade_date)
     # There may be multiple rows per symbol per day. Use last.
-    adj_latest = adj.groupby(["symbol", "trade_date"], as_index=False)["adj_factor"].last()
+    adj_latest = adj.groupby(["symbol", "trade_date"], as_index=False)[
+        "adj_factor"
+    ].last()
 
     # merge daily + adj_factor
     panel = pd.merge(daily, adj_latest, on=["symbol", "trade_date"], how="left")
@@ -86,7 +88,9 @@ def main():
     # volume/amount not adjusted
     # add adj_ratio = adj_factor / adj_factor.shift(1) for returns
     panel = panel.sort_values(["symbol", "trade_date"]).reset_index(drop=True)
-    panel["adj_ratio"] = panel.groupby("symbol")["adj_factor"].transform(lambda x: x / x.shift(1).fillna(1.0))
+    panel["adj_ratio"] = panel.groupby("symbol")["adj_factor"].transform(
+        lambda x: x / x.shift(1).fillna(1.0)
+    )
 
     # merge basic
     if not basic.empty:
@@ -96,9 +100,13 @@ def main():
     # merge limit
     if not limit.empty:
         # limit has down_limit_raw, up_limit_raw
-        limit_ = limit[["symbol", "trade_date", "up_limit_raw", "down_limit_raw"]].copy()
+        limit_ = limit[
+            ["symbol", "trade_date", "up_limit_raw", "down_limit_raw"]
+        ].copy()
         limit_["up_limit_raw"] = pd.to_numeric(limit_["up_limit_raw"], errors="coerce")
-        limit_["down_limit_raw"] = pd.to_numeric(limit_["down_limit_raw"], errors="coerce")
+        limit_["down_limit_raw"] = pd.to_numeric(
+            limit_["down_limit_raw"], errors="coerce"
+        )
         panel = pd.merge(panel, limit_, on=["symbol", "trade_date"], how="left")
     # merge suspend
     if not susp.empty:
@@ -120,19 +128,39 @@ def main():
     panel["vol_20d"] = panel.groupby("symbol")["vol"].transform(
         lambda x: x.rolling(20, min_periods=5).mean()
     )
-    panel["vol_chg_20d"] = np.where(panel["vol_20d"] > 0, panel["vol"] / panel["vol_20d"] - 1, 0)
+    panel["vol_chg_20d"] = np.where(
+        panel["vol_20d"] > 0, panel["vol"] / panel["vol_20d"] - 1, 0
+    )
 
     # add columns for safety
     for c in ["close", "open"]:
         panel[f"{c}_hfq"] = panel[f"{c}_hfq"].fillna(panel[c])
 
     # reorder
-    keep = ["symbol", "trade_date",
-            "open", "high", "low", "close", "pre_close",
-            "open_hfq", "high_hfq", "low_hfq", "close_hfq",
-            "vol", "amount", "adj_factor", "adj_ratio",
-            "up_limit_raw", "down_limit_raw", "is_suspend",
-            "gap_up_5pct", "gap_up_5pct_cnt", "vol_20d", "vol_chg_20d"]
+    keep = [
+        "symbol",
+        "trade_date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "pre_close",
+        "open_hfq",
+        "high_hfq",
+        "low_hfq",
+        "close_hfq",
+        "vol",
+        "amount",
+        "adj_factor",
+        "adj_ratio",
+        "up_limit_raw",
+        "down_limit_raw",
+        "is_suspend",
+        "gap_up_5pct",
+        "gap_up_5pct_cnt",
+        "vol_20d",
+        "vol_chg_20d",
+    ]
     # add all from merged basic
     for c in panel.columns:
         if c not in keep:

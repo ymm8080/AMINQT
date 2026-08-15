@@ -31,7 +31,9 @@ import pyarrow.parquet as pq
 
 from config.settings import DATA_DIR
 
-STOCK_LIST_DIR = os.path.join(os.path.dirname(DATA_DIR), "DAILY OPERATION", "STOCK LIST")
+STOCK_LIST_DIR = os.path.join(
+    os.path.dirname(DATA_DIR), "DAILY OPERATION", "STOCK LIST"
+)
 NAME_CACHE = DATA_DIR / "supply_cache" / "namechange"
 GAP_WINDOW = 60  # ret60/rps_60 等 60d 类特征的污染带 (5/20d 类为其子集)
 
@@ -101,8 +103,12 @@ def main() -> int:
         name = os.path.basename(f)
         if not any(
             k in name
-            for k in ("parallel_shortlist", "overall_shortlist", "slowbull_pool",
-                      "legacy_stocklist")
+            for k in (
+                "parallel_shortlist",
+                "overall_shortlist",
+                "slowbull_pool",
+                "legacy_stocklist",
+            )
         ):
             continue
         try:
@@ -113,8 +119,10 @@ def main() -> int:
             continue
         dd = pd.to_datetime(d["date"], errors="coerce")
         st_hits = [
-            str(sy).zfill(6) for sy, dt_ in zip(d["symbol"], dd)
-            if not pd.isna(dt_) and _hit_mask(
+            str(sy).zfill(6)
+            for sy, dt_ in zip(d["symbol"], dd)
+            if not pd.isna(dt_)
+            and _hit_mask(
                 pd.Series([str(sy).zfill(6)]),
                 pd.Series([dt_]),
                 periods,
@@ -124,9 +132,7 @@ def main() -> int:
             out["delivered"][name] = {"st_hits": st_hits}
     ts = out["ts"]
     fp_out = DATA_DIR / f"_diag_st_gap_exposure_{ts}.json"
-    fp_out.write_text(
-        json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    fp_out.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
     print(json.dumps(out, indent=2, ensure_ascii=False), flush=True)
     print(f"\n[saved] {fp_out}", flush=True)
     return 0

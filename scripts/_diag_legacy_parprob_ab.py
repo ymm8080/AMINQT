@@ -74,9 +74,7 @@ def _sub_windows(top: pd.DataFrame) -> list[dict]:
                 "hit": float((seg["realized_net"] > 0).mean())
                 if len(seg)
                 else float("nan"),
-                "mean": float(seg["realized_net"].mean())
-                if len(seg)
-                else float("nan"),
+                "mean": float(seg["realized_net"].mean()) if len(seg) else float("nan"),
             }
         )
     return subs
@@ -142,9 +140,7 @@ def main() -> int:
     eval_dates = set(uniq[-250:])
     bad = t["pred_prob"].notna() & ~t["date"].isin(eval_dates)
     assert not bad.any(), f"对齐错误: {bad.sum()} 行 pred 落在评估窗外"
-    assert (t["pred_prob"].dropna() >= 0).all() and (
-        t["pred_prob"].dropna() <= 1
-    ).all()
+    assert (t["pred_prob"].dropna() >= 0).all() and (t["pred_prob"].dropna() <= 1).all()
     print(
         f"[align] OK: pred 非 NaN {t['pred_prob'].notna().sum()} 行全部落在末 250 日窗内",
         flush=True,
@@ -169,15 +165,25 @@ def main() -> int:
     b["rank_mag"] = b["pred_ret_10d"]
     b["rank_blend"] = b["pred_ret_10d"] * b["pred_prob"]
     combos = [
-        ("cur", b[(b["pob"] > PROB_MARGIN) & (b["pain_prob"].fillna(0) <= PAIN_MAX)], "rank_mag"),
+        (
+            "cur",
+            b[(b["pob"] > PROB_MARGIN) & (b["pain_prob"].fillna(0) <= PAIN_MAX)],
+            "rank_mag",
+        ),
         (
             "par_gate",
-            b[(b["pred_prob"] > b["base_par"] + MARGIN) & (b["pain_prob"].fillna(0) <= PAIN_MAX)],
+            b[
+                (b["pred_prob"] > b["base_par"] + MARGIN)
+                & (b["pain_prob"].fillna(0) <= PAIN_MAX)
+            ],
             "rank_mag",
         ),
         (
             "par_blend",
-            b[(b["pred_prob"] > b["base_par"] + MARGIN) & (b["pain_prob"].fillna(0) <= PAIN_MAX)],
+            b[
+                (b["pred_prob"] > b["base_par"] + MARGIN)
+                & (b["pain_prob"].fillna(0) <= PAIN_MAX)
+            ],
             "rank_blend",
         ),
         (
@@ -189,7 +195,8 @@ def main() -> int:
     rows: list[dict] = []
     for gname, pool, rkcol in combos:
         print(
-            f"\n[{gname}] 池 {len(pool)} 票 / {pool['date'].nunique()} 出票日", flush=True
+            f"\n[{gname}] 池 {len(pool)} 票 / {pool['date'].nunique()} 出票日",
+            flush=True,
         )
         for depth in DEPTHS:
             for wname, wdays in WINDOWS.items():

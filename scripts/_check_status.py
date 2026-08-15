@@ -1,8 +1,9 @@
-# -*- coding: utf-8 -*-
 """检查 V3 宇宙扩建进度."""
+
 import glob
 import json
 import os
+
 import pandas as pd
 
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
@@ -45,10 +46,14 @@ for d in ["daily", "daily_basic", "suspend", "top_inst", "fina"]:
 # 计算缺口
 cal_set = set(c.strftime("%Y%m%d"))
 
-adj_present = {os.path.basename(f)[4:12] for f in
-               glob.glob(os.path.join(ALT_DIR, "adj_factor", "adj_*.parquet"))}
-lim_present = {os.path.basename(f)[:8] for f in
-              glob.glob(os.path.join(ALT_DIR, "stk_limit", "*_all__.parquet"))}
+adj_present = {
+    os.path.basename(f)[4:12]
+    for f in glob.glob(os.path.join(ALT_DIR, "adj_factor", "adj_*.parquet"))
+}
+lim_present = {
+    os.path.basename(f)[:8]
+    for f in glob.glob(os.path.join(ALT_DIR, "stk_limit", "*_all__.parquet"))
+}
 
 print(f"\nadj gap: {len(cal_set - adj_present)}")
 print(f"limit gap: {len(cal_set - lim_present)}")

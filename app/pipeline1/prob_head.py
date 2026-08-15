@@ -181,9 +181,9 @@ def _base_rate(tail: pd.DataFrame) -> float | None:
     """
     tail = _add_mfe_3d(tail)
     tail = tail[tail["mfe_3d"].notna()]
-    hit = (tail["mfe_3d"] >= LEGACY_PROB_GATE["abs_target"]).groupby(
-        tail["date"]
-    ).mean()
+    hit = (
+        (tail["mfe_3d"] >= LEGACY_PROB_GATE["abs_target"]).groupby(tail["date"]).mean()
+    )
     if len(hit) < LEGACY_PROB_GATE["base_rate_days"]:
         return None
     return float(hit.tail(LEGACY_PROB_GATE["base_rate_days"]).mean())

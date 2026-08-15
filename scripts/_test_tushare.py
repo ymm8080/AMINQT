@@ -1,9 +1,12 @@
-# -*- coding: utf-8 -*-
 """Test TUSHARE_TOKEN."""
+
 import sys
+
 sys.path.insert(0, "D:\\AMINQT\\AMINQT CODES")
 import tushare as ts
+
 from config import settings
+
 
 def main():
     if not settings.TUSHARE_TOKEN:
@@ -25,6 +28,7 @@ def main():
             print("EMPTY adj_factor")
     except Exception as e:
         print(f"FAIL: {e}")
+
 
 if __name__ == "__main__":
     main()

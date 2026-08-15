@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """诊断: 龙虎榜 (LHB) 出现过但 V3 面板 (3220 只) 里没有的股票, 逐只归类.
 
 归类口径与生产 ingest gate 完全一致 (app/pipeline1/ingest_scan.py):
@@ -13,6 +12,7 @@
 
 WORM: 输出 data/_diag_lhb_v3_gap_<ts>.parquet, 不覆盖旧文件.
 """
+
 from __future__ import annotations
 
 import glob
@@ -54,19 +54,24 @@ def main() -> None:
     panel["symbol"] = panel["symbol"].astype(str).str.strip()
     cal = pd.DatetimeIndex(sorted(panel["date"].unique()))
     panel_min, panel_max = cal.min(), cal.max()
-    print(f"[panel] rows={len(panel):,} symbols={panel['symbol'].nunique()} "
-          f"dates={panel_min.date()}..{panel_max.date()}")
+    print(
+        f"[panel] rows={len(panel):,} symbols={panel['symbol'].nunique()} "
+        f"dates={panel_min.date()}..{panel_max.date()}"
+    )
     sym_dates = panel.groupby("symbol")["date"].apply(sorted).to_dict()
 
     lhb = load_lhb_events()
     lhb = lhb[(lhb["date"] >= panel_min) & (lhb["date"] <= panel_max)]
-    print(f"[lhb] events in panel window={len(lhb):,} "
-          f"symbols={lhb['symbol'].nunique()}")
+    print(
+        f"[lhb] events in panel window={len(lhb):,} symbols={lhb['symbol'].nunique()}"
+    )
 
     panel_keys = set(zip(panel["symbol"], panel["date"]))
     missing = pd.DataFrame(
-        [{"symbol": s, "date": d}
-         for s, d in set(zip(lhb["symbol"], lhb["date"])) - panel_keys]
+        [
+            {"symbol": s, "date": d}
+            for s, d in set(zip(lhb["symbol"], lhb["date"])) - panel_keys
+        ]
     )
     print(f"[missing] {len(missing):,} 事件, {missing['symbol'].nunique()} 只")
 
@@ -105,8 +110,9 @@ def main() -> None:
     missing["list_days"] = np.where(ld.isna(), np.nan, right - left)
 
     first_evt = missing.groupby("symbol")["date"].min()
-    first_evt_pos = pd.Series(cal.searchsorted(pd.to_datetime(first_evt)),
-                              index=first_evt.index)
+    pd.Series(
+        cal.searchsorted(pd.to_datetime(first_evt)), index=first_evt.index
+    )
     first_ld = missing.drop_duplicates(subset="symbol").set_index("symbol")["list_days"]
     # 上市晚于面板起点: 口径精确, 首次事件日 list_days < 150 即真次新.
     # 上市早于面板起点: 非次新; 但首次事件落在面板前 170 日内 → 上市天数口径截断, 标记模糊.
@@ -156,7 +162,9 @@ def main() -> None:
             out.append((dd, prev_, nxt, gap))
         return len(out), out[0][3] if out else 0, out[-1][3] if out else 0
 
-    unk = missing[missing["reason"].isin(["未解释", "面板起始 170 日内 (口径模糊)"])].copy()
+    unk = missing[
+        missing["reason"].isin(["未解释", "面板起始 170 日内 (口径模糊)"])
+    ].copy()
     if len(unk):
         g = unk.groupby("symbol")["date"].apply(list)
         meta = {}
@@ -178,21 +186,35 @@ def main() -> None:
 
     recent = missing[missing["date"] >= panel_max - pd.Timedelta(days=90)]
     print("\n== 最近 90 天: 每只缺失股票 ==")
-    r2 = recent.groupby("symbol").agg(
-        first_date=("date", "min"),
-        n_events=("date", "size"),
-        name=("name", "first"),
-        list_days=("list_days", "first"),
-        reason=("reason", "first"),
-    ).sort_values(["first_date"], ascending=False)
+    r2 = (
+        recent.groupby("symbol")
+        .agg(
+            first_date=("date", "min"),
+            n_events=("date", "size"),
+            name=("name", "first"),
+            list_days=("list_days", "first"),
+            reason=("reason", "first"),
+        )
+        .sort_values(["first_date"], ascending=False)
+    )
     print(r2.to_string())
 
     if len(unk):
         print("\n== 未解释/口径模糊明细 (附面板缺口) ==")
-        cols = [c for c in
-                ["symbol", "name", "date", "list_days", "reason",
-                 "miss_events", "first_gap_days", "last_gap_days"]
-                if c in unk.columns]
+        cols = [
+            c
+            for c in [
+                "symbol",
+                "name",
+                "date",
+                "list_days",
+                "reason",
+                "miss_events",
+                "first_gap_days",
+                "last_gap_days",
+            ]
+            if c in unk.columns
+        ]
         print(unk[cols].sort_values("date", ascending=False).to_string(index=False))
 
 

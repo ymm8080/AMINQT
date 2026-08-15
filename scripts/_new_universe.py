@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """全市场宇宙修复 Step 1: 生成待补股票清单 (2026-08-15 用户拍板).
 
 目标口径 = "全市场剔 ST/次新" (与 ingest gate 一致):
@@ -11,6 +10,7 @@
 
 WORM: data/new_universe/new_symbols_<ts>.parquet (+ should_be_universe_<ts>.parquet)
 """
+
 from __future__ import annotations
 
 import os
@@ -34,16 +34,15 @@ MIN_LIST_DAYS = settings.INGEST_MIN_LIST_DAYS
 def main() -> None:
     pro = ts.pro_api(settings.TUSHARE_TOKEN)
     basic = pro.stock_basic(
-        exchange="", list_status="L",
+        exchange="",
+        list_status="L",
         fields="ts_code,symbol,name,list_date,market,industry",
     )
     basic = basic.drop_duplicates(subset="symbol").copy()
     basic["symbol"] = basic["symbol"].astype(str).str.strip()
 
     # 沪深 A 股: 60 沪主板 / 68 科创板 / 00 深主板 / 30 创业板
-    hs = basic[
-        basic["symbol"].str.match(r"^(60|68|00|30)\d{4}$", na=False)
-    ].copy()
+    hs = basic[basic["symbol"].str.match(r"^(60|68|00|30)\d{4}$", na=False)].copy()
     hs = hs[~hs["name"].map(name_is_st)]
     print(f"[stock_basic] 沪深A 剔ST: {len(hs)} 只")
 
@@ -68,23 +67,36 @@ def main() -> None:
         ignore_index=True,
     ).drop_duplicates(subset="symbol")
     out2 = os.path.join(OUT_DIR, f"should_be_universe_{ts_}.parquet")
-    should[["symbol", "name", "list_date", "market", "industry", "in_panel"]]\
-        .to_parquet(out2, index=False)
+    should[
+        ["symbol", "name", "list_date", "market", "industry", "in_panel"]
+    ].to_parquet(out2, index=False)
     print(f"[save] {out2}")
 
     print("\n== 待补清单按上市年份 ==")
     ld = pd.to_datetime(new["list_date"], format="%Y%m%d", errors="coerce")
     print(ld.dt.year.value_counts().sort_index().to_string())
     print("\n== 按板块 ==")
-    board = new["symbol"].str[:3].map(
-        lambda s: "沪主板" if s.startswith("60") else
-        "科创板" if s.startswith("68") else
-        "深主板" if s.startswith("00") else "创业板"
+    board = (
+        new["symbol"]
+        .str[:3]
+        .map(
+            lambda s: (
+                "沪主板"
+                if s.startswith("60")
+                else "科创板"
+                if s.startswith("68")
+                else "深主板"
+                if s.startswith("00")
+                else "创业板"
+            )
+        )
     )
     print(board.value_counts().to_string())
     # 上市 <150 交易日暂不入库的数量
-    print(f"\n上市未满 {MIN_LIST_DAYS} 交易日 (unfreeze 后自动进): "
-          f"{(ld >= '2025-11-20').sum()} 只 (按日历粗估)")
+    print(
+        f"\n上市未满 {MIN_LIST_DAYS} 交易日 (unfreeze 后自动进): "
+        f"{(ld >= '2025-11-20').sum()} 只 (按日历粗估)"
+    )
 
 
 if __name__ == "__main__":

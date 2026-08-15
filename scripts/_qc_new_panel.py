@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """全市场宇宙修复 Step 6: 新面板质检 (2026-08-15).
 
 铁律项 (违规必须报告, 不静默丢弃):
@@ -11,6 +10,7 @@
 
 WORM: data/new_symbols_panel/qc_report_<ts>.txt
 """
+
 from __future__ import annotations
 
 import glob
@@ -45,22 +45,33 @@ def main() -> None:
     f = files[-1]
     print(f"== QC input: {f} ==", flush=True)
     df = pd.read_parquet(f)
-    print(f"rows={len(df):,} symbols={df['symbol'].nunique()} "
-          f"dates={df['date'].min().date()}..{df['date'].max().date()}", flush=True)
+    print(
+        f"rows={len(df):,} symbols={df['symbol'].nunique()} "
+        f"dates={df['date'].min().date()}..{df['date'].max().date()}",
+        flush=True,
+    )
 
     # ── 1. OHLCV 校验 (铁律) ──
     print("\n[1] OHLCV 校验", flush=True)
     if {"high", "low", "open", "close"} <= set(df.columns):
         bad = (
             (df["high"] < df["low"])
-            | (df["high"] < df["open"]) | (df["high"] < df["close"])
-            | (df["low"] > df["open"]) | (df["low"] > df["close"])
+            | (df["high"] < df["open"])
+            | (df["high"] < df["close"])
+            | (df["low"] > df["open"])
+            | (df["low"] > df["close"])
         )
-        check("high>=low & high>=o/c & low<=o/c", bad.sum() == 0,
-              f"{bad.sum():,} 行违规" if bad.sum() else "0 行违规")
+        check(
+            "high>=low & high>=o/c & low<=o/c",
+            bad.sum() == 0,
+            f"{bad.sum():,} 行违规" if bad.sum() else "0 行违规",
+        )
         if bad.sum():
-            print(df.loc[bad, ["symbol", "date", "open", "high", "low", "close"]]
-                  .head(10).to_string())
+            print(
+                df.loc[bad, ["symbol", "date", "open", "high", "low", "close"]]
+                .head(10)
+                .to_string()
+            )
     else:
         check("OHLCV 列存在", False, "缺 open/high/low/close")
     if "volume" in df.columns:
@@ -70,13 +81,24 @@ def main() -> None:
         neg = (df["amount"] < 0).sum()
         check("amount >= 0", neg == 0, f"{neg:,} 行负值")
     if "close_hfq" in df.columns:
-        check("close_hfq > 0", (df["close_hfq"] <= 0).sum() == 0,
-              f"{(df['close_hfq'] <= 0).sum():,} 行非正")
+        check(
+            "close_hfq > 0",
+            (df["close_hfq"] <= 0).sum() == 0,
+            f"{(df['close_hfq'] <= 0).sum():,} 行非正",
+        )
 
     # ── 2. 派生特征合理性 + 抽查 ──
     print("\n[2] 派生特征", flush=True)
-    for c in ["bias_5", "bias_250", "ma_vol_ratio_5_20", "vol_surge",
-              "amt_surge", "pct_90_con", "winner_ratio", "intraday_range"]:
+    for c in [
+        "bias_5",
+        "bias_250",
+        "ma_vol_ratio_5_20",
+        "vol_surge",
+        "amt_surge",
+        "pct_90_con",
+        "winner_ratio",
+        "intraday_range",
+    ]:
         if c not in df.columns:
             continue
         s = df[c]
@@ -94,20 +116,36 @@ def main() -> None:
     # 120 天窗口检查 bias_250 覆盖 (新上市股应 NaN, 老股应有值)
     if "bias_250" in df.columns:
         cov = df["bias_250"].notna().mean()
-        print(f"    bias_250 覆盖率 {cov:.1%} (新股上市<250交易日应低, 老股应高)",
-              flush=True)
+        print(
+            f"    bias_250 覆盖率 {cov:.1%} (新股上市<250交易日应低, 老股应高)",
+            flush=True,
+        )
 
     # ── 3. 覆盖率对比 (同列, 生产面板 vs 新面板) ──
     print("\n[3] 覆盖率对比 (生产 vs 新)", flush=True)
     pcols = pd.read_parquet(PANEL).columns
     p = pd.read_parquet(PANEL, columns=["symbol"])
-    print(f"    生产 {p['symbol'].nunique()} 只 | 新 {df['symbol'].nunique()} 只",
-          flush=True)
-    sample_prod = pd.read_parquet(PANEL, columns=[
-        c for c in ["weight_avg", "winner_ratio", "lhb_net_buy", "margin_balance",
-                    "roe", "bt_count", "sw_ret_1d", "peak_price"]
-        if c in pcols
-    ])
+    print(
+        f"    生产 {p['symbol'].nunique()} 只 | 新 {df['symbol'].nunique()} 只",
+        flush=True,
+    )
+    sample_prod = pd.read_parquet(
+        PANEL,
+        columns=[
+            c
+            for c in [
+                "weight_avg",
+                "winner_ratio",
+                "lhb_net_buy",
+                "margin_balance",
+                "roe",
+                "bt_count",
+                "sw_ret_1d",
+                "peak_price",
+            ]
+            if c in pcols
+        ],
+    )
     for c in sample_prod.columns:
         if c not in df.columns:
             check(f"{c} 列存在", False, "新面板缺该列")
@@ -131,8 +169,13 @@ def main() -> None:
     cal = pd.DatetimeIndex(
         sorted(pd.read_parquet(PANEL, columns=["date"])["date"].unique())
     )
-    ld_map = dict(zip(universe["symbol"].astype(str).str.strip(),
-                      universe["list_date"], strict=False))
+    ld_map = dict(
+        zip(
+            universe["symbol"].astype(str).str.strip(),
+            universe["list_date"],
+            strict=False,
+        )
+    )
     first = df.groupby("symbol")["date"].min()
     ld = pd.to_datetime(
         pd.Series(first.index).map(ld_map), format="%Y%m%d", errors="coerce"
@@ -141,8 +184,11 @@ def main() -> None:
     right = cal.searchsorted(first, side="right")
     days = pd.Series(right - left, index=first.index)
     bad_n = int((days < INGEST_MIN_LIST_DAYS).sum())
-    check("首行 list_days >= 150", bad_n == 0,
-          f"{bad_n} 只首行不足 {INGEST_MIN_LIST_DAYS} 交易日")
+    check(
+        "首行 list_days >= 150",
+        bad_n == 0,
+        f"{bad_n} 只首行不足 {INGEST_MIN_LIST_DAYS} 交易日",
+    )
     if bad_n:
         print(days[days < INGEST_MIN_LIST_DAYS].to_string())
 
@@ -151,18 +197,26 @@ def main() -> None:
     prod_syms = set(p["symbol"].astype(str).str.strip())
     new_syms = set(df["symbol"].astype(str).str.strip())
     overlap = prod_syms & new_syms
-    check("新符号 ∩ 生产 = ∅", not overlap, f"{len(overlap)} 只重叠: {sorted(overlap)[:8]}")
+    check(
+        "新符号 ∩ 生产 = ∅",
+        not overlap,
+        f"{len(overlap)} 只重叠: {sorted(overlap)[:8]}",
+    )
 
     # ── 报告 ──
     ts_ = datetime.now().strftime("%Y%m%d_%H%M%S")
     out = os.path.join(OUT_PANEL_DIR, f"qc_report_{ts_}.txt")
-    lines = [f"QC {ts_} on {os.path.basename(f)}",
-             f"rows={len(df):,} symbols={df['symbol'].nunique()}",
-             f"FAILS={len(FAILS)}: {FAILS}"]
+    lines = [
+        f"QC {ts_} on {os.path.basename(f)}",
+        f"rows={len(df):,} symbols={df['symbol'].nunique()}",
+        f"FAILS={len(FAILS)}: {FAILS}",
+    ]
     with open(out, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines))
-    print(f"\n== QC {'通过' if not FAILS else f'失败 {len(FAILS)} 项'} — 报告 {out} ==",
-          flush=True)
+    print(
+        f"\n== QC {'通过' if not FAILS else f'失败 {len(FAILS)} 项'} — 报告 {out} ==",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
