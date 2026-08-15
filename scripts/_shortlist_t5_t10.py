@@ -54,6 +54,7 @@ import pyarrow.parquet as pq
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from app.pipeline1.label_engine import COST, slippage_tier
+from app.pipeline_parallel import prob_head
 from app.pipeline_parallel.calibration import calibrate_mag10d
 from app.pipeline_parallel.config import FUSION, HORIZONS, SNIPER
 from app.pipeline_parallel.scoring import pool_score
@@ -1360,6 +1361,10 @@ def main() -> int:
     raw_res = add_oos_pred(cands, records)
     _persist_raw_preds(raw_res, sel_date, module)
     res = select_confident(ema_smooth(raw_res, sel_date, module), prob_min=0.0)
+    # 真模型概率闸 (2026-08-15 定案): t3 门后、TOP-5 排名前 —
+    # 保留 ⇔ pred_prob > base_rate + margin; bundle 缺失/过旧 → fail-open 不杀清单
+    # (memory parallel-gbm-wf-verdict: dual 68→70%/+8.06→+8.82%, main 60→61%/+3.63→+4.08%)
+    res = prob_head.apply_prob_gate(res)
     # 制度门 (2026-08-09 用户: STOCK LIST 显示 ALL CANDIDATES — 不整组剔除; 仍按
     # 10d 门计算, 每行标注 过门=是/未过; 未过门个股不建议买入, 报告里写明)
     if REGIME_GATE.get("enable", True):
