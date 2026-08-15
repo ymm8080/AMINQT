@@ -736,8 +736,8 @@ if any(c in panel_cols for c in (
     "sh_net_ratio", "sh_g_ratio", "sh_p_ratio", "sh_c_ratio",
 )):
     try:
-        from app.pipeline1.data_supply import DataSupplyChain
         from app.pipeline1.holdertrade_agg import agg_holdertrade_daily
+        from app.pipeline1.data_supply import DataSupplyChain
 
         _ht_start = (pd.Timestamp(TRADE_DATE) - pd.Timedelta(days=10)).strftime("%Y%m%d")
         ht = pd.DataFrame()

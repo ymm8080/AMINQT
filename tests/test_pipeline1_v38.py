@@ -133,6 +133,24 @@ class TestQuantileModels:
         # 大致: q90 > q50 中位 (上行为正态噪声)
         assert dist["pred_q90"].median() > dist["pred_q10"].median()
 
+    def test_flat_es_refit_min_trees(self):
+        # es 窗过平 (常数 y) → 早停 1 树 = 常数分位 (2026-08-14 M20260812 main 3d q50 复发),
+        # 地板 (QUANTILE_MIN_TREES) 必须兜底重训 → q50 有真实截面区分度
+        rng = np.random.default_rng(11)
+        X = rng.normal(size=(300, 3))
+        y = X[:, 0] * 0.02 + rng.normal(0, 0.03, 300)
+        X_es = rng.normal(size=(80, 3))
+        y_es = np.zeros(80)
+        params = {
+            "n_estimators": 10,
+            "learning_rate": 0.1,
+            "random_state": 42,
+            "verbosity": -1,
+        }
+        qset = QuantileModelSet(params).fit(X, y, eval_set=(X_es, y_es), es_patience=5)
+        preds = qset.predict(X[:50])["pred_q50"].values
+        assert preds.std() > 0, "地板重训后 q50 不应为常数"
+
 
 class TestPainModel:
     def test_fit_predict(self):
@@ -433,26 +451,111 @@ class TestDynamicEntry:
         全市场单一 base_rate 会被双创退化模型的常数高概率 (1 树 LGBM → 常数 0.58/0.60)
         抬高混合基线, 主板 prob_up_10d 系统性偏低 → 整块被 E7 误杀 (08-07 起全 dual 清单根因).
         各板块对自家基线比较: main 0.50 vs 自家 0.495, 不被 dual 0.60 拖到混合 0.5475.
+        2026-08-14: dual(GEM/STAR) 概率闸另加 +0.08 边际 (LEGACY_ENTRY_GATE.prob_margin).
         """
         cands = _cands(
             [
                 {"symbol": "600001", "board": "main", "prob_up_10d": 0.50},
                 {"symbol": "600002", "board": "main", "prob_up_10d": 0.49},
-                {"symbol": "300001", "board": "GEM", "prob_up_10d": 0.61},
-                {"symbol": "300002", "board": "GEM", "prob_up_10d": 0.59},
+                {"symbol": "300001", "board": "GEM", "prob_up_10d": 0.78},
+                {"symbol": "300002", "board": "GEM", "prob_up_10d": 0.60},
             ]
         )
         gen = ListGenerator(entry_prob=0.60)
         scored = gen.compute_scores(cands)
-        # 板块内 base_rate = 自家 prob 均值 (main 0.495 / GEM 0.60), 非全市场混合 0.5475
+        # 板块内 base_rate = 自家 prob 均值 (main 0.495 / GEM 0.69), 非全市场混合 0.5925
         assert scored.loc[scored["symbol"] == "600001", "base_rate"].iloc[
             0
         ] == pytest.approx(0.495)
         assert scored.loc[scored["symbol"] == "300001", "base_rate"].iloc[
             0
-        ] == pytest.approx(0.60)
+        ] == pytest.approx(0.69)
         passed = gen.entry_filter(scored, market_state="range")
-        # 每板块各保留"高于自家基线"者: main 600001 / GEM 300001; 低于自家基线者剔
+        # 每板块各保留"高于自家基线(+边际)"者: main 600001 / GEM 300001 (0.78 > 0.69+0.08);
+        # main 600002 与 GEM 300002 低于门槛被剔
+        assert sorted(passed["symbol"]) == ["300001", "600001"]
+
+    def test_prob_margin_dual_only(self):
+        """分板块概率边际 (2026-08-14 全量 250d OOS 定案): dual(GEM/STAR) 概率闸再收紧
+        +0.08 → 命中 62.2→66.3% / 实得 +5.84→+6.66%; main 坍缩期无法评估保持 0.
+
+        dual 股须 prob > base_rate + 0.08 (基准率=20日滚动板块日均), main 只需 > base_rate.
+        GEM base = (0.70×4 + 0.78 + 0.82)/6 = 0.7333: 门槛 0.8133.
+        0.78 在无边际时过 (0.78 > 0.7333)、有边际时剔 — 判别性用例.
+        """
+        cands = _cands(
+            [
+                # main: base=0.555, 0.56 > 0.555 → 过; 0.55 → 剔 (无边际)
+                {"symbol": "600001", "board": "main", "prob_up": 0.56},
+                {"symbol": "600002", "board": "main", "prob_up": 0.55},
+                # GEM: 0.82 > 0.8133 → 过; 0.78 无边际才过; 0.70 剔
+                {"symbol": "300001", "board": "GEM", "prob_up": 0.82},
+                {"symbol": "300002", "board": "GEM", "prob_up": 0.78},
+                {"symbol": "300003", "board": "GEM", "prob_up": 0.70},
+                {"symbol": "300004", "board": "GEM", "prob_up": 0.70},
+                {"symbol": "300005", "board": "GEM", "prob_up": 0.70},
+                {"symbol": "300006", "board": "GEM", "prob_up": 0.70},
+            ]
+        )
+        gen = ListGenerator(entry_prob=0.60)
+        scored = gen.compute_scores(cands)
+        passed = gen.entry_filter(scored, market_state="range")
+        assert sorted(passed["symbol"]) == ["300001", "600001"]
+
+    def test_pain_max_dual_only(self):
+        """分板块疼痛闸 (2026-08-14 全量 250d OOS 定案, LEGACY_ENTRY_GATE.pain_max):
+        dual(GEM/STAR) pain≤0.4 / main pain≤0.5. 叠加边际后 命中 66.3→75.3% /
+        实得 +6.66→+7.39% (出票日 177→76 宁缺毋滥); 0.3 过严崩勿再收.
+
+        判别用例: dual pain 0.45 (0.4 下剔) vs main pain 0.45 (0.5 下过).
+        """
+        cands = _cands(
+            [
+                # main: base=(0.61+0.65+0.50)/3=0.5867; 0.61/0.65 过 prob, 0.50 剔 (填充)
+                {
+                    "symbol": "600001",
+                    "board": "main",
+                    "prob_up": 0.61,
+                    "pain_prob": 0.45,
+                },
+                {
+                    "symbol": "600002",
+                    "board": "main",
+                    "prob_up": 0.65,
+                    "pain_prob": 0.60,
+                },
+                {
+                    "symbol": "600003",
+                    "board": "main",
+                    "prob_up": 0.50,
+                    "pain_prob": 0.10,
+                },
+                # GEM: base=(0.90+0.90+0.60)/3=0.80, 门槛 0.88; 0.60 剔 (填充)
+                {
+                    "symbol": "300001",
+                    "board": "GEM",
+                    "prob_up": 0.90,
+                    "pain_prob": 0.35,
+                },
+                {
+                    "symbol": "300002",
+                    "board": "GEM",
+                    "prob_up": 0.90,
+                    "pain_prob": 0.45,
+                },
+                {
+                    "symbol": "300003",
+                    "board": "GEM",
+                    "prob_up": 0.60,
+                    "pain_prob": 0.10,
+                },
+            ]
+        )
+        gen = ListGenerator(entry_prob=0.60)
+        scored = gen.compute_scores(cands)
+        passed = gen.entry_filter(scored, market_state="range")
+        # 600001: pain 0.45 ≤ main 0.5 → 过; 600002: 0.6 > 0.5 → 剔
+        # 300001: pain 0.35 ≤ dual 0.4 → 过; 300002: 0.45 > 0.4 → 剔
         assert sorted(passed["symbol"]) == ["300001", "600001"]
 
     def test_announce_blacklist_hard_excludes(self):
