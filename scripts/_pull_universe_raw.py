@@ -46,7 +46,7 @@ FINA_FIELDS = (
     "current_ratio,assets_turn,ar_turn,inv_turn,ocf_to_or,"
     "dt_eps,roe_yoy,q_roe,q_ocf_to_sales"
 )
-CALL_SLEEP = 0.12
+CALL_SLEEP = 0.4
 FLUSH_EVERY = 100
 
 
