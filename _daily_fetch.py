@@ -13,6 +13,7 @@ Sources fetched:
   7. margin_detail — margin balance (per-stock)
   8. top_list — LHB (dragon-tiger board)
   9. stock_basic — name/list_date (ingest gate: ST/*ST 或 上市 <150 交易日不入库)
+ 10. stk_holdertrade — 股东增减持事件 (当日公告聚合, 10 列: GLM + evt + ratio)
 
 Derived (computed from panel history, reads only needed columns):
   - bias_5..250, bias_cross, ma_vol_ratio_5_20, amplitude_5d
@@ -24,7 +25,7 @@ Derived (computed from panel history, reads only needed columns):
 
 NOT fetched here (separate pipelines):
   - fina_indicator → run_announcement_pipeline.py (Pipeline 2, quarterly)
-  - holdertrade/holdernumber → removed from panel (no longer tracked)
+  - holdernumber → separate pipeline (no longer tracked)
 """
 import os
 import sys
@@ -720,6 +721,53 @@ try:
     print(f"    bt_v3 rolling snapshot: appended {_res['appended']} -> {_res['total']} total")
 except Exception as e:
     print(f"    bt_v3 rolling snapshot: FAILED ({e})")
+
+# ── 6.7 holdertrade 当日事件 → 10 列 (dim31/GLM 上游) ──
+# 语义同 panel_builder agg_map + _backfill_holder_ratio (见 holdertrade_agg.py, 单一权威).
+# 事件日 GLM 4 列以真实聚合值覆盖 ffill 陈旧值; evt/ratio 6 列仅事件日有值 (稀疏, 不 ffill,
+# dim31 内部自行 ffill + decay). 拉 10 天窗口: 迟发公告以 T+1 语义被当日行捕获;
+# 更早历史行缺口由一次性回填 (_backfill_holder_events.py) / 面板重建负责.
+if any(c in panel_cols for c in (
+    "sh_net_change_sign", "sh_change_amt_total", "sh_change_vol", "sh_net_sign",
+    "sh_evt_start_date", "sh_evt_end_date",
+    "sh_net_ratio", "sh_g_ratio", "sh_p_ratio", "sh_c_ratio",
+)):
+    try:
+        from app.pipeline1.holdertrade_agg import agg_holdertrade_daily
+        from app.pipeline1.data_supply import DataSupplyChain
+
+        _ht_start = (pd.Timestamp(TRADE_DATE) - pd.Timedelta(days=10)).strftime("%Y%m%d")
+        ht = pd.DataFrame()
+        for _attempt in range(3):  # fetch_holdertrade 内部已重试, 空/超时再兜一层
+            ht = DataSupplyChain().fetch_holdertrade(
+                start_date=_ht_start, end_date=TRADE_DATE, refresh=True
+            )
+            if len(ht):
+                break
+            print(f"    holdertrade fetch attempt {_attempt + 1}/3: 空数据, 重试")
+            if _attempt < 2:
+                time.sleep(5 * (_attempt + 1))
+        if len(ht):
+            _agg = agg_holdertrade_daily(ht)
+            _agg = _agg[_agg["date"] == pd.Timestamp(TRADE_DATE)]
+            if len(_agg):
+                smap = _agg.set_index("symbol")
+                for c in _agg.columns:
+                    if c in ("symbol", "date") or c not in panel_cols:
+                        continue
+                    mapped = df["symbol"].map(smap[c])
+                    if c in df.columns:
+                        df[c] = mapped.fillna(df[c])  # 事件符号覆盖, 其余保留 ffill
+                    else:
+                        df[c] = mapped
+                print(f"    holdertrade today: {len(_agg)} symbols, {len(ht)} raw records "
+                      f"(window {_ht_start}..{TRADE_DATE})")
+            else:
+                print(f"    holdertrade today: 今日无公告事件 ({len(ht)} 条窗口记录)")
+        else:
+            print("    holdertrade today: WARN 3 次重试后仍空 — 当日事件未写入 (列留稀疏)")
+    except Exception as e:
+        print(f"    holdertrade today: FAILED ({e})")
 
 # ── 7. Align to panel schema ──
 print("\n[7] Aligning to panel schema...")
