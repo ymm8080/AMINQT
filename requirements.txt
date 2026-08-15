@@ -29,6 +29,7 @@ plotly>=5.20
 pyyaml
 python-dotenv
 requests
+psutil>=5.9
 
 # ── MCP (Claude Code Sub-Agent) ───────────────────────────────
 mcp>=1.0.0

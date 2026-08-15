@@ -264,6 +264,30 @@ class BruteForceGenerator:
                     )
         return g, feats
 
+    def _family_candidate_names(self, family_name, raw):
+        """一族的静态候选列名全集 (不依赖 per-symbol 数据, 命名与
+        _family_for_symbol 逐字节一致, 含 rolling_max/min 产 max+min 双列
+        且列名不走 suffix 的特例).
+
+        任何 symbol 的实际产出 ⊆ 本静态集 (per-symbol 只做 col in g.columns
+        减法), 故用它做 need 交集短路是精确判定, 永不误杀.
+        """
+        family_def = self.transforms.get(family_name)
+        if family_def is None:
+            return None
+        windows = family_def.get("windows", ())
+        suffix = family_def.get("suffix", family_name)
+        names = set()
+        for col in raw:
+            if family_name in ("rolling_max", "rolling_min"):
+                for w in windows:
+                    names.add(f"{col}_brute_max{w}")
+                    names.add(f"{col}_brute_min{w}")
+            else:
+                for w in windows:
+                    names.add(f"{col}_brute_{suffix}{w}")
+        return names
+
     def generate_family(self, df, family_name, raw_cols=None, dtype="float32"):
         """Generate brute-force features for ONE transform family.
 
@@ -352,6 +376,11 @@ class BruteForceGenerator:
         FeatureSelector 回退全量 → main 3d_cls 塌缩. 本方法逐 symbol 复用
         _family_for_symbol, 但只驻留 need 交集列 (常驻 ~#need 列而非全族),
         列命名/数学与 generate_family 逐字节一致. 无命中列返回 None.
+
+        2026-08-15 族级预过滤: need 与本族静态候选列名零交集 → 任何 symbol
+        都不会产出 need 列 → 直接 None (免全 symbol 白算全族; 20260812 main
+        空族浪费 ~4h50m). 静态集是 per-symbol 产出的精确上界, 短路判定永不
+        误杀 (见 _family_candidate_names).
         """
         t0 = time.time()
         raw = raw_cols or self._eligible(df)
@@ -360,6 +389,16 @@ class BruteForceGenerator:
             return None
         windows = family_def.get("windows", ())
         suffix = family_def.get("suffix", family_name)
+        candidates = self._family_candidate_names(family_name, raw)
+        if candidates is not None and candidates.isdisjoint(need):
+            logger.debug(
+                "BruteForce[%s] 零交集短路 (%d need vs %d 候选, %.0fs)",
+                family_name,
+                len(need),
+                len(candidates),
+                time.time() - t0,
+            )
+            return None
         all_new = {}
         for sym, g in df.groupby("symbol"):
             g, feats = self._family_for_symbol(g, raw, family_name, windows, suffix)

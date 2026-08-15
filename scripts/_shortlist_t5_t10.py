@@ -54,6 +54,7 @@ import pyarrow.parquet as pq
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from app.pipeline1.label_engine import COST, slippage_tier
+from app.pipeline_parallel import prob_head
 from app.pipeline_parallel.calibration import calibrate_mag10d
 from app.pipeline_parallel.config import FUSION, HORIZONS, SNIPER
 from app.pipeline_parallel.scoring import pool_score
@@ -976,34 +977,54 @@ def rank_and_truncate(res: pd.DataFrame) -> pd.DataFrame:
 
     250d OOS 幅度前沿 (诊断 _diag_mag_frontier): top5 幅度/命中率/大涨率全优于 top10
     (双创实得 +6.34% vs +5.76%, 主板 +3.49% vs +3.22%), 只牺牲每日出股数 10→5.
-    按 CAND_RANK_KEY (pred_mag_10d) 每板块降序取前 5, cut 统一标 T-5.
+    排名键 (2026-08-15 A/B _diag_prob_rank_ab 定案): 概率闸已附 pred_prob 列时用
+    pred_mag_10d × pred_prob (250d OOS 双板 TOP-5/TOP-10 全窗实得全赢: 双创 +10.01%
+    vs +8.82%, 主板 +5.70% vs +3.87%; 纯 prob 排名弱市窗 -2.92% 已否); 无 pred_prob
+    (闸失效 fail-open) → 退回纯 CAND_RANK_KEY (pred_mag_10d).
+    板块级回退: 闸按板独立可用, 该板 pred_prob 全 NaN (该板闸失效) → 该板用纯 mag,
+    不能拿全 NaN 的 blend 排 (会出任意序). 个股级 NaN 仍排尾 (A/B 口径).
+    每板块降序取前 5, cut 统一标 T-5. 入选行 rank_blend 把 NaN 归一为 mag 值,
+    供 build_merged 跨板全局排名 (闸失效板不因缺概率而沉底).
     """
-    key = CAND_RANK_KEY
     if res.empty:
         return res
+    if "pred_prob" in res.columns:
+        res = res.copy()
+        res["rank_blend"] = res[CAND_RANK_KEY] * res["pred_prob"]
     out = []
     for board in ("main", "dual"):
-        b = res[res["board"] == board].sort_values(
-            key, ascending=False, na_position="last"
-        )
+        b = res[res["board"] == board]
         if b.empty:
             continue
+        key = (
+            "rank_blend"
+            if "rank_blend" in b.columns and b["pred_prob"].notna().any()
+            else CAND_RANK_KEY
+        )
+        b = b.sort_values(key, ascending=False, na_position="last")
         out.append(b.head(5).assign(cut="T-5"))
-    return pd.concat(out, ignore_index=True).reset_index(drop=True)
+    merged = pd.concat(out, ignore_index=True).reset_index(drop=True)
+    if "rank_blend" in merged.columns:
+        merged["rank_blend"] = merged["rank_blend"].where(
+            merged["pred_prob"].notna(), merged[CAND_RANK_KEY]
+        )
+    return merged
 
 
 def build_merged(res: pd.DataFrame) -> pd.DataFrame:
     """合并短名单: 每板块 TOP-5 (入选档); main+dual 全局排名.
 
     IRON RULE (用户): 先预测(涨幅+达到概率) → 再排名.
-    排名=pred_mag_3d 降序 (2026-08-07 定案: 纯幅度排名 > score_w 混合), 平局按 score_w→
-    达到概率; 负涨幅绝不在正涨幅之前 (已由 select 门保证). 共现仅作平局裁决参考.
+    排序 = rank_blend (2026-08-15 A/B 定案, 有 pred_prob 时) else CAND_RANK_KEY 降序,
+    平局按 score_w → 达到概率; 负涨幅绝不在正涨幅之前 (已由 select 门保证).
+    共现仅作平局裁决参考.
     """
     df = res[res["cut"] == "T-5"].copy()
     t5 = set(df["symbol"])
     df["in_t5"] = df["symbol"].isin(t5)
     df = add_score(df)
-    keys = [CAND_RANK_KEY, "score_w", "pred_prob_3d"]
+    lead = "rank_blend" if "rank_blend" in df.columns else CAND_RANK_KEY
+    keys = [lead, "score_w", "pred_prob_3d"]
     df = df.sort_values(keys, ascending=False, na_position="last").reset_index(
         drop=True
     )
@@ -1360,6 +1381,10 @@ def main() -> int:
     raw_res = add_oos_pred(cands, records)
     _persist_raw_preds(raw_res, sel_date, module)
     res = select_confident(ema_smooth(raw_res, sel_date, module), prob_min=0.0)
+    # 真模型概率闸 (2026-08-15 定案): t3 门后、TOP-5 排名前 —
+    # 保留 ⇔ pred_prob > base_rate + margin; bundle 缺失/过旧 → fail-open 不杀清单
+    # (memory parallel-gbm-wf-verdict: dual 68→70%/+8.06→+8.82%, main 60→61%/+3.63→+4.08%)
+    res = prob_head.apply_prob_gate(res)
     # 制度门 (2026-08-09 用户: STOCK LIST 显示 ALL CANDIDATES — 不整组剔除; 仍按
     # 10d 门计算, 每行标注 过门=是/未过; 未过门个股不建议买入, 报告里写明)
     if REGIME_GATE.get("enable", True):

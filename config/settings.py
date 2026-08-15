@@ -279,3 +279,28 @@ REGIME_GATE = {
     "horizons": ("3d", "5d", "10d"),  # 仅 SUMMARY 展示用 (判定只认 primary_horizon)
     "fallback": "none",         # 无优势 → 空仓观望, 不输出 (旧 "best" 兜底已废, 用户否决)
 }
+
+# ── 并行真模型概率闸 (2026-08-15 定案, _diag_parallel_gbm_signal/_wf 250d OOS) ──
+# 全局 LGBM 概率头 (mfe_3d>=abs_target 二分类) + 边际闸:
+#   保留 ⇔ pred_prob > base_rate + margin (legacy 配方, 扩窗训练).
+# base_rate = 最近 base_rate_days 个可观测日 mfe 达标率均值 (无前瞻: 当日可观测的
+# mfe 只到 latest-4, 故取可观测尾部; 与回测"近20可观测日"同语义).
+# 回测: dual 命中 68→70% / 实得 +8.06→+8.82%, main 60→61% / +3.63→+4.08%,
+#   双板 4/4 子窗实得赢 (扩窗训练; trailing 242d 数据饥饿勿用).
+# 闸在 t3 门后、pred_mag_10d TOP-5 排名前; bundle 缺失/过旧 → fail-open 不杀清单.
+PROB_GATE = {
+    "enable": True,            # False → 闸关闭 (概率头照常训练但不拦截)
+    "margin": 0.08,            # 边际 (legacy 配方, 平台中段, 勿扫)
+    "base_rate_days": 20,      # base_rate 观测窗 (交易日)
+    "abs_target": 0.03,        # 概率头目标: mfe_3d >= 3%
+    "refit_every_days": 21,    # 训练脚本: bundle 年龄 < 此值 → skip (交易日)
+    "max_stale_days": 42,      # 短名单侧: bundle 年龄 > 此值 → 大声警告 + 闸失效 (fail-open)
+    "model_dir": DATA_DIR / "prob_head",  # WORM bundle 目录 (<board>_prob_<ts>.joblib)
+}
+
+# ── 重训内存独占闸 (2026-08-15 用户定案, 代码强制"重训期间不跑其他重活") ──
+# 08-14 教训: 重训 + 250d 复验/扫描并发 → RAM 挤兑 → 训练 8.4h 零模型完成.
+# ram_guard.check_startup_gate: 启动时可用物理内存低于下限 → 拒绝启动 (exit 2);
+# ram_guard.start_monitor: 运行期每 poll_s 采样, 低于下限 → 每段挤兑一条 WARNING.
+RETRAIN_RAM_GUARD_MIN_FREE_GB = 2.0   # 启动闸下限 (可用物理内存, GB)
+RETRAIN_RAM_GUARD_POLL_S = 30         # 运行期警报采样间隔 (秒)

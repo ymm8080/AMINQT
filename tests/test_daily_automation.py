@@ -1,10 +1,11 @@
 """Tests for scripts/run_daily_automation 步骤编排 (2026-08-13).
 
 plan_steps 是纯函数, 决定当日四模块自动化的执行序列:
-  [refresh?] [retrain?] [parallel?] legacy deliver [deliver_parallel?]
+  [refresh?] [retrain?] [parallel? prob_head] legacy deliver [deliver_parallel?]
 关键不变式: deliver_parallel 依赖当日 fresh parallel 重生成 (run_dir), 故
   parallel 被跳过 (--skip-parallel) 时 deliver_parallel 必须同步丢弃,
-  否则会交付旧 run_dir 脏数据.
+  否则会交付旧 run_dir 脏数据; prob_head 读 parallel 检查点面板, 同样
+  只随 parallel 出现 (2026-08-15 概率头接线).
 """
 
 import datetime as _dt
@@ -25,6 +26,7 @@ def test_plan_steps_weekday_full_chain():
     assert plan_steps(THU) == [
         "refresh",
         "parallel",
+        "prob_head",
         "legacy",
         "deliver",
         "deliver_parallel",
@@ -36,6 +38,7 @@ def test_plan_steps_retrain_day_inserts_retrain():
         "refresh",
         "retrain",
         "parallel",
+        "prob_head",
         "legacy",
         "deliver",
         "deliver_parallel",
@@ -55,7 +58,7 @@ def test_plan_steps_skip_parallel_drops_deliver_parallel():
 
 def test_plan_steps_skip_checkpoints_and_retrain():
     steps = plan_steps(FRI, skip_checkpoints=True, skip_retrain=True)
-    assert steps == ["parallel", "legacy", "deliver", "deliver_parallel"]
+    assert steps == ["parallel", "prob_head", "legacy", "deliver", "deliver_parallel"]
     assert "refresh" not in steps and "retrain" not in steps
 
 

@@ -52,13 +52,19 @@ _STEPS = {
     "refresh": ["scripts/_refresh_parallel_checkpoints.py"],
     "retrain": ["scripts/_retrain_legacy_full.py", "{tag}"],
     "parallel": ["-m", "app.pipeline_parallel.runner"],
+    "prob_head": ["scripts/_train_parallel_prob_head.py"],
     "legacy": ["scripts/_gen_legacy_list.py", "{tag}"],
     "deliver": ["scripts/_deliver_legacy_list.py", "{tag}"],
     "deliver_parallel": ["scripts/_shortlist_t5_t10.py", "{tag}"],
 }
 # refresh 失败后应跳过的后续步骤 (parallel 需要新鲜检查点);
-# deliver_parallel 需要当日 fresh parallel run_dir (短名单), 否则会交付旧 run_dir 脏数据.
-_DEPENDS = {"parallel": "refresh", "deliver_parallel": "parallel"}
+# deliver_parallel 需要当日 fresh parallel run_dir (短名单), 否则会交付旧 run_dir 脏数据;
+# prob_head 读 parallel 检查点 (面板), 需当日 fresh 面板.
+_DEPENDS = {
+    "parallel": "refresh",
+    "prob_head": "parallel",
+    "deliver_parallel": "parallel",
+}
 # 关键步骤: 失败 → 整个任务非零退出 (看板当日清单缺失)
 _CRITICAL = {"legacy", "deliver", "deliver_parallel"}
 
@@ -78,6 +84,8 @@ def plan_steps(
         steps.append("retrain")
     if not skip_parallel:
         steps.append("parallel")
+        # 概率头训练自判断新鲜度 (21 交易日重训一次); 仅并行交付启用时才有消费者
+        steps.append("prob_head")
     steps.append("legacy")
     steps.append("deliver")
     if not skip_parallel:  # 并行清单交付依赖当日 fresh parallel 重生成, 跳过则同步丢弃
