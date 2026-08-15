@@ -46,11 +46,29 @@ TRAIN_DAYS = 242  # legacy load_panel window_days 同款
 REFIT_EVERY = 21  # 生产重训节奏代理 (~每月)
 MARGINS = (0.04, 0.06, 0.08, 0.10)  # legacy 配方 0.08
 META = {
-    "symbol", "date", "board", "is_suspended", "name", "code", "exec_px",
+    "symbol",
+    "date",
+    "board",
+    "is_suspended",
+    "name",
+    "code",
+    "exec_px",
 }
 RAW_COLS = {
-    "open", "high", "low", "close", "open_hfq", "high_hfq", "low_hfq", "close_hfq",
-    "volume", "amount", "pre_close", "turnover_rate", "total_mv", "adv20",
+    "open",
+    "high",
+    "low",
+    "close",
+    "open_hfq",
+    "high_hfq",
+    "low_hfq",
+    "close_hfq",
+    "volume",
+    "amount",
+    "pre_close",
+    "turnover_rate",
+    "total_mv",
+    "adv20",
 }
 LGB_PARAMS = dict(
     objective="binary",
@@ -85,9 +103,7 @@ def _load_board(board: str) -> pd.DataFrame | None:
     need = [
         c
         for c in schema
-        if not c.startswith("label_")
-        and c not in META
-        and not c.startswith("pred_")
+        if not c.startswith("label_") and c not in META and not c.startswith("pred_")
     ]
     need += ["symbol", "date", "label_pain", "label_pm_3d_net", "label_pm_10d_net"]
     t = pq.read_table(str(fp), columns=list(dict.fromkeys(need))).to_pandas()
@@ -109,8 +125,14 @@ def _feat_cols(t: pd.DataFrame) -> list[str]:
         for c in t.columns
         if c
         not in {
-            "symbol", "date", "board", "score", "mfe_3d", "label_pain",
-            "label_pm_3d_net", "label_pm_10d_net",
+            "symbol",
+            "date",
+            "board",
+            "score",
+            "mfe_3d",
+            "label_pain",
+            "label_pm_3d_net",
+            "label_pm_10d_net",
         }
         and c not in RAW_COLS
         and not c.startswith("label_")
@@ -138,7 +160,9 @@ def _eval_top5(
         "picks_per_day": n / len(days),
         "realized_10d": float(top["label_pm_10d_net"].mean()) if n else float("nan"),
         "hit_10d": float((top["label_pm_10d_net"] > 0).mean()) if n else float("nan"),
-        "pct_ge5pct": float((top["label_pm_10d_net"] >= 0.05).mean()) if n else float("nan"),
+        "pct_ge5pct": float((top["label_pm_10d_net"] >= 0.05).mean())
+        if n
+        else float("nan"),
         "pct_ge10pct": (
             float((top["label_pm_10d_net"] >= 0.10).mean()) if n else float("nan")
         ),
@@ -157,8 +181,12 @@ def _sub_windows(top: pd.DataFrame, days: list, n_sub: int) -> list[dict]:
             {
                 "win": f"{i + 1}/{n_sub}",
                 "rows": int(len(seg)),
-                "hit10": float((seg["label_pm_10d_net"] > 0).mean()) if len(seg) else float("nan"),
-                "mean10": float(seg["label_pm_10d_net"].mean()) if len(seg) else float("nan"),
+                "hit10": float((seg["label_pm_10d_net"] > 0).mean())
+                if len(seg)
+                else float("nan"),
+                "mean10": float(seg["label_pm_10d_net"].mean())
+                if len(seg)
+                else float("nan"),
             }
         )
     return subs
@@ -215,33 +243,41 @@ def main() -> int:
         )
 
         # ---- 生产同款闸评估 ----
-        work = t[["symbol", "date", "board", "score", "label_pm_3d_net",
-                  "label_pm_10d_net"]].copy()
+        work = t[
+            ["symbol", "date", "board", "score", "label_pm_3d_net", "label_pm_10d_net"]
+        ].copy()
         p3 = calibrate_mag10d(work, target_col="label_pm_3d_net", label_horizon=3)
         p10 = calibrate_mag10d(work, target_col="label_pm_10d_net", label_horizon=10)
         mm = work.merge(
             p3.drop(columns=["board"]).rename(columns={"mag": "pred_ret_3d"}),
-            on=["symbol", "date"], how="inner",
+            on=["symbol", "date"],
+            how="inner",
         ).merge(
             p10.drop(columns=["board"]).rename(columns={"mag": "pred_mag_10d"}),
-            on=["symbol", "date"], how="inner",
+            on=["symbol", "date"],
+            how="inner",
         )
         mm["date"] = pd.to_datetime(mm["date"])
         rr = mm.dropna(subset=["label_pm_10d_net"])
         days = sorted(rr["date"].unique())[-EVAL_DAYS:]
         rr = rr[rr["date"].isin(days)].reset_index(drop=True)
 
-        sub = t.loc[prob_ok & np.isin(t["date"].values, cal_test), ["symbol", "date"]].copy()
+        sub = t.loc[
+            prob_ok & np.isin(t["date"].values, cal_test), ["symbol", "date"]
+        ].copy()
         sub["pred_prob"] = pred[sub.index].to_numpy()
         rr = rr.merge(sub, on=["symbol", "date"], how="left")
 
         daily_rate = (
             t.assign(_hit=(t["mfe_3d"] >= ABS_TARGET).astype(float))
-            .groupby("date")["_hit"].mean()
+            .groupby("date")["_hit"]
+            .mean()
         )
         base = (
             daily_rate.rolling(BASE_RATE_DAYS, min_periods=BASE_RATE_DAYS)
-            .mean().shift(1).rename("base_rate")
+            .mean()
+            .shift(1)
+            .rename("base_rate")
         )
         rr = rr.merge(base, left_on="date", right_index=True, how="left")
 

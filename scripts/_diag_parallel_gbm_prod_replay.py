@@ -85,12 +85,8 @@ def _prod_base_series(t: pd.DataFrame, dates: np.ndarray) -> pd.Series:
     for k, d in enumerate(dates):
         if k < BASE_RATE_DAYS + 14:
             continue
-        rows = np.where(
-            (pos_all >= k - BASE_RATE_DAYS - 14) & (pos_all <= k)
-        )[0]
-        tail = t.iloc[rows][
-            ["symbol", "date", "close_hfq", "high_hfq", "adv20"]
-        ].copy()
+        rows = np.where((pos_all >= k - BASE_RATE_DAYS - 14) & (pos_all <= k))[0]
+        tail = t.iloc[rows][["symbol", "date", "close_hfq", "high_hfq", "adv20"]].copy()
         b = prob_head._base_rate(tail)
         if b is not None:
             base_map[pd.Timestamp(d)] = b
@@ -123,7 +119,9 @@ def _eval_top5(
         "picks_per_day": n / len(days),
         "realized_10d": float(top["label_pm_10d_net"].mean()) if n else float("nan"),
         "hit_10d": float((top["label_pm_10d_net"] > 0).mean()) if n else float("nan"),
-        "pct_ge5pct": float((top["label_pm_10d_net"] >= 0.05).mean()) if n else float("nan"),
+        "pct_ge5pct": float((top["label_pm_10d_net"] >= 0.05).mean())
+        if n
+        else float("nan"),
         "pct_ge10pct": (
             float((top["label_pm_10d_net"] >= 0.10).mean()) if n else float("nan")
         ),
@@ -142,8 +140,12 @@ def _sub_windows(top: pd.DataFrame, days: list, n_sub: int) -> list[dict]:
             {
                 "win": f"{i + 1}/{n_sub}",
                 "rows": int(len(seg)),
-                "hit10": float((seg["label_pm_10d_net"] > 0).mean()) if len(seg) else float("nan"),
-                "mean10": float(seg["label_pm_10d_net"].mean()) if len(seg) else float("nan"),
+                "hit10": float((seg["label_pm_10d_net"] > 0).mean())
+                if len(seg)
+                else float("nan"),
+                "mean10": float(seg["label_pm_10d_net"].mean())
+                if len(seg)
+                else float("nan"),
             }
         )
     return subs
@@ -211,16 +213,19 @@ def main() -> int:
             )
 
         # ---- 评估 (同阶段2: t3 门 + pred_mag_10d TOP-5, label_pm_10d_net 实得) ----
-        work = t[["symbol", "date", "board", "score", "label_pm_3d_net",
-                  "label_pm_10d_net"]].copy()
+        work = t[
+            ["symbol", "date", "board", "score", "label_pm_3d_net", "label_pm_10d_net"]
+        ].copy()
         p3 = calibrate_mag10d(work, target_col="label_pm_3d_net", label_horizon=3)
         p10 = calibrate_mag10d(work, target_col="label_pm_10d_net", label_horizon=10)
         mm = work.merge(
             p3.drop(columns=["board"]).rename(columns={"mag": "pred_ret_3d"}),
-            on=["symbol", "date"], how="inner",
+            on=["symbol", "date"],
+            how="inner",
         ).merge(
             p10.drop(columns=["board"]).rename(columns={"mag": "pred_mag_10d"}),
-            on=["symbol", "date"], how="inner",
+            on=["symbol", "date"],
+            how="inner",
         )
         mm["date"] = pd.to_datetime(mm["date"])
         rr = mm.dropna(subset=["label_pm_10d_net"])
@@ -235,11 +240,14 @@ def main() -> int:
         # 旧口径 (wf): 全面板日达标率 rolling20 shift1 (带 3 天 look-ahead, 复现定案数字)
         daily_rate = (
             t.assign(_hit=(t["mfe_3d"] >= ABS_TARGET).astype(float))
-            .groupby("date")["_hit"].mean()
+            .groupby("date")["_hit"]
+            .mean()
         )
         base_wf = (
             daily_rate.rolling(BASE_RATE_DAYS, min_periods=BASE_RATE_DAYS)
-            .mean().shift(1).rename("base_wf")
+            .mean()
+            .shift(1)
+            .rename("base_wf")
         )
         rr = rr.merge(base_wf, left_on="date", right_index=True, how="left")
         # 生产口径 (诚实): 每决策日尾 35 日切片 _base_rate (无前瞻)
@@ -250,11 +258,11 @@ def main() -> int:
         for m in MARGINS:
             rr[f"_wfb_{m}"] = rr["pred_prob_wf"] > rr["base_wf"] + m
             rr[f"_prb_{m}"] = rr["pred_prob"] > rr["base_prod"] + m
-        gates = [("基线(关)", None, False)] + [
-            (f"wfb+{m:.2f}", f"_wfb_{m}", False) for m in MARGINS
-        ] + [
-            (f"prb+{m:.2f}", f"_prb_{m}", True) for m in MARGINS
-        ]
+        gates = (
+            [("基线(关)", None, False)]
+            + [(f"wfb+{m:.2f}", f"_wfb_{m}", False) for m in MARGINS]
+            + [(f"prb+{m:.2f}", f"_prb_{m}", True) for m in MARGINS]
+        )
         print(
             f"\n===== {board}  末 250 已实现交易日 (t3 门 {T3_LANDED[board]:.2%}) =====",
             flush=True,

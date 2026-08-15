@@ -30,11 +30,29 @@ from app.pipeline1.label_engine import COST, slippage_tier
 from config.settings import DATA_DIR, PROB_GATE
 
 META = {
-    "symbol", "date", "board", "is_suspended", "name", "code", "exec_px",
+    "symbol",
+    "date",
+    "board",
+    "is_suspended",
+    "name",
+    "code",
+    "exec_px",
 }
 RAW_COLS = {
-    "open", "high", "low", "close", "open_hfq", "high_hfq", "low_hfq", "close_hfq",
-    "volume", "amount", "pre_close", "turnover_rate", "total_mv", "adv20",
+    "open",
+    "high",
+    "low",
+    "close",
+    "open_hfq",
+    "high_hfq",
+    "low_hfq",
+    "close_hfq",
+    "volume",
+    "amount",
+    "pre_close",
+    "turnover_rate",
+    "total_mv",
+    "adv20",
 }
 # 与回测 _diag_parallel_gbm_signal.py 完全一致 (阶段1/2 验证配方)
 LGB_PARAMS = dict(
@@ -70,8 +88,14 @@ def _add_mfe_3d(df: pd.DataFrame) -> pd.DataFrame:
 def feature_cols(t: pd.DataFrame) -> list[str]:
     """并行特征空间: 数值列, 剔 raw 价格量额/meta/label/pred/派生列 (同回测口径)."""
     excluded = {
-        "symbol", "date", "board", "score", "mfe_3d", "label_pain",
-        "label_pm_3d_net", "label_pm_10d_net",
+        "symbol",
+        "date",
+        "board",
+        "score",
+        "mfe_3d",
+        "label_pain",
+        "label_pm_3d_net",
+        "label_pm_10d_net",
     }
     return [
         c
@@ -122,7 +146,9 @@ def load_latest(board: str) -> dict | None:
     return joblib.load(cands[-1])
 
 
-def bundle_age_trading_days(panel_dates: np.ndarray, trained_through: str) -> int | None:
+def bundle_age_trading_days(
+    panel_dates: np.ndarray, trained_through: str
+) -> int | None:
     """bundle 年龄 = 面板最新日与 trained_through 之间的交易日数; 未对齐 → None."""
     tt = pd.Timestamp(trained_through)
     if tt.to_datetime64() not in panel_dates:
@@ -171,9 +197,7 @@ def gate_probabilities(board: str) -> tuple[pd.Series, float] | None:
         print(f"[prob_head] {board} 无概率头 bundle -> 闸不可用", flush=True)
         return None
     fp = DATA_DIR / f"_diag_stage_{board}_3y.parquet"
-    dates = pd.to_datetime(
-        pq.read_table(str(fp), columns=["date"]).to_pandas()["date"]
-    )
+    dates = pd.to_datetime(pq.read_table(str(fp), columns=["date"]).to_pandas()["date"])
     uniq = np.unique(dates.values)
     if len(uniq) < PROB_GATE["base_rate_days"] + 20:
         print(f"[prob_head] {board} 面板日期不足 -> 闸不可用", flush=True)

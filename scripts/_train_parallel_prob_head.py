@@ -59,10 +59,17 @@ def main() -> int:
         dates = np.unique(t["date"].values)
         latest = pd.Timestamp(dates[-1])
         b = prob_head.load_latest(board)
-        age = None if b is None else prob_head.bundle_age_trading_days(
-            dates, str(b["trained_through"])
+        age = (
+            None
+            if b is None
+            else prob_head.bundle_age_trading_days(dates, str(b["trained_through"]))
         )
-        if not force and b is not None and age is not None and age < PROB_GATE["refit_every_days"]:
+        if (
+            not force
+            and b is not None
+            and age is not None
+            and age < PROB_GATE["refit_every_days"]
+        ):
             print(
                 f"[{board}] skip: bundle 距今 {age} 交易日 < "
                 f"{PROB_GATE['refit_every_days']} (面板最新 {latest:%Y-%m-%d})",

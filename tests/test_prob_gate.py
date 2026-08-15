@@ -112,9 +112,7 @@ def test_train_load_predict_roundtrip(monkeypatch, tmp_path):
     monkeypatch.setitem(prob_head.LGB_PARAMS, "num_leaves", 7)
     rng = np.random.default_rng(42)
     n = 6000
-    t = pd.DataFrame(
-        rng.uniform(-1, 1, (n, 10)), columns=[f"f{i}" for i in range(10)]
-    )
+    t = pd.DataFrame(rng.uniform(-1, 1, (n, 10)), columns=[f"f{i}" for i in range(10)])
     t["mfe_3d"] = rng.uniform(-0.02, 0.08, n)
     t["label_pain"] = False
     t["symbol"] = "SZ000001"
@@ -135,9 +133,7 @@ def test_train_load_predict_roundtrip(monkeypatch, tmp_path):
 
 def test_apply_prob_gate_drop_and_failopen(monkeypatch):
     """t3 门后: pred_prob ≤ base+margin 剔除; 闸不可用 (None) → fail-open 全留."""
-    res = pd.DataFrame(
-        {"board": ["main", "main", "dual"], "symbol": ["A", "B", "C"]}
-    )
+    res = pd.DataFrame({"board": ["main", "main", "dual"], "symbol": ["A", "B", "C"]})
     prob = pd.Series({"A": 0.60, "B": 0.10})
 
     def fake(board):
