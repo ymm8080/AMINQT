@@ -286,3 +286,10 @@ PROB_GATE = {
     "max_stale_days": 42,      # 短名单侧: bundle 年龄 > 此值 → 大声警告 + 闸失效 (fail-open)
     "model_dir": DATA_DIR / "prob_head",  # WORM bundle 目录 (<board>_prob_<ts>.joblib)
 }
+
+# ── 重训内存独占闸 (2026-08-15 用户定案, 代码强制"重训期间不跑其他重活") ──
+# 08-14 教训: 重训 + 250d 复验/扫描并发 → RAM 挤兑 → 训练 8.4h 零模型完成.
+# ram_guard.check_startup_gate: 启动时可用物理内存低于下限 → 拒绝启动 (exit 2);
+# ram_guard.start_monitor: 运行期每 poll_s 采样, 低于下限 → 每段挤兑一条 WARNING.
+RETRAIN_RAM_GUARD_MIN_FREE_GB = 2.0   # 启动闸下限 (可用物理内存, GB)
+RETRAIN_RAM_GUARD_POLL_S = 30         # 运行期警报采样间隔 (秒)

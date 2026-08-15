@@ -19,8 +19,13 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
+from app.pipeline1.ram_guard import check_startup_gate, start_monitor
 from app.pipeline1.train_runner import run_training
-from config.settings import PANEL_V3_PATH
+from config.settings import (
+    PANEL_V3_PATH,
+    RETRAIN_RAM_GUARD_MIN_FREE_GB,
+    RETRAIN_RAM_GUARD_POLL_S,
+)
 
 MODEL_DIR = "models/pipeline1"
 
@@ -53,6 +58,10 @@ def main() -> int:
         {"main"} if os.environ.get("LEGACY_FORCE_FALLBACK", "0") == "1" else None
     )
     t0 = time.time()
+    # 内存独占闸 (2026-08-15 用户定案): 启动时可用内存不足 → 拒绝启动; 运行期
+    # 每 30s 采样, 被其他重活挤兑 → WARNING (不杀进程, 训练有 per-model 检查点).
+    check_startup_gate(RETRAIN_RAM_GUARD_MIN_FREE_GB * 1024**3)
+    start_monitor(RETRAIN_RAM_GUARD_MIN_FREE_GB * 1024**3, RETRAIN_RAM_GUARD_POLL_S)
     # 面板由 run_training 内部直读并持有 (panel_path 模式): 若本脚本持有 panel 引用,
     # run_training 内 `del panel` 失效 → 特征 build 阶段 (dim17) 峰值贴 commit 上限
     # 偶发 OOM (2026-08-13 r2/r4 同一崩溃点). 直读预过滤 (amount>=5000万 且 非停牌)
