@@ -1,6 +1,5 @@
-# -*- coding: utf-8 -*-
-"""Quality check for panel_alt against V3 production.
-"""
+"""Quality check for panel_alt against V3 production."""
+
 import os
 import sys
 
@@ -9,6 +8,7 @@ import pandas as pd
 OUT_DIR = "data/new_symbols_raw"
 PANEL_NEW = "panel_alt.parquet"
 PANEL_V3 = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
+
 
 def main():
     print("[loading]")
@@ -38,17 +38,21 @@ def main():
 
     # OHLCV consistency
     ok_price = (
-        (new["open"] <= new["high"]) &
-        (new["open"] >= new["low"]) &
-        (new["close"] <= new["high"]) &
-        (new["close"] >= new["low"]) &
-        (new["high"] >= new["low"])
+        (new["open"] <= new["high"])
+        & (new["open"] >= new["low"])
+        & (new["close"] <= new["high"])
+        & (new["close"] >= new["low"])
+        & (new["high"] >= new["low"])
     )
-    print(f"  OHLCV consistency: {ok_price.sum()} / {len(new)} ({(ok_price.sum()/len(new)*100):.2f}%)")
+    print(
+        f"  OHLCV consistency: {ok_price.sum()} / {len(new)} ({(ok_price.sum() / len(new) * 100):.2f}%)"
+    )
 
     # Amount/vol non-negative
     ok_amt = (new["amount"] >= 0) & (new["vol"] >= 0)
-    print(f"  non-negative amount/vol: {ok_amt.sum()} / {len(new)} ({(ok_amt.sum()/len(new)*100):.2f}%)")
+    print(
+        f"  non-negative amount/vol: {ok_amt.sum()} / {len(new)} ({(ok_amt.sum() / len(new) * 100):.2f}%)"
+    )
 
     # output
     with open(os.path.join(OUT_DIR, "panel_alt_qc.txt"), "w") as f:
@@ -56,8 +60,12 @@ def main():
         f.write(f"v3:  {len(v3)} rows, {v3['symbol'].nunique()} symbols\n")
         f.write(f"new symbols in v3: {len(s_new & s_v3)} / {len(s_new)}\n")
         f.write(f"coverage: min={cov.min()} max={cov.max()} mean={cov.mean():.1f}\n")
-        f.write(f"OHLCV consistency: {ok_price.sum()} / {len(new)} ({ok_price.sum()/len(new)*100:.2f}%)\n")
-        f.write(f"non-negative amount/vol: {ok_amt.sum()} / {len(new)} ({ok_amt.sum()/len(new)*100:.2f}%)\n")
+        f.write(
+            f"OHLCV consistency: {ok_price.sum()} / {len(new)} ({ok_price.sum() / len(new) * 100:.2f}%)\n"
+        )
+        f.write(
+            f"non-negative amount/vol: {ok_amt.sum()} / {len(new)} ({ok_amt.sum() / len(new) * 100:.2f}%)\n"
+        )
     print("[done] QC report written")
     return 0
 

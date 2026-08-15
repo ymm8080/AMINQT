@@ -1,6 +1,9 @@
-# -*- coding: utf-8 -*-
-import json, time, sys
+import json
+import time
+
 path = "data/new_symbols_raw/progress.json"
+
+
 def main():
     try:
         with open(path) as f:
@@ -9,6 +12,8 @@ def main():
             print(f"{k}={v}")
     except Exception as e:
         print(f"error: {e}")
+
+
 if __name__ == "__main__":
     main()
     print(f"--- {time.time()}")

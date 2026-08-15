@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Loop until V3 universe is complete."""
+
 import subprocess
-import sys
 import time
+
 
 def run(cmd, name):
     print(f"\n=== {name} ===")
@@ -13,6 +13,7 @@ def run(cmd, name):
         return False
     print(f"OK: {name}")
     return True
+
 
 def main():
     round = 0
@@ -46,6 +47,7 @@ def main():
 
         # 5) Check coverage (simple)
         import pandas as pd
+
         panel = pd.read_parquet("data/new_symbols_raw/panel_final.parquet")
         n_dates = panel["trade_date"].nunique()
         n_symbols = panel["symbol"].nunique()
@@ -54,11 +56,12 @@ def main():
             print("🎉 ALL DONE! Final panel ready.")
             break
         else:
-            print(f"Still missing: days={876-n_dates}, symbols={1780-n_symbols}")
+            print(f"Still missing: days={876 - n_dates}, symbols={1780 - n_symbols}")
             print("Continuing...")
             time.sleep(60)
 
     print("✅ Loop complete. V3 universe frozen.")
+
 
 if __name__ == "__main__":
     main()

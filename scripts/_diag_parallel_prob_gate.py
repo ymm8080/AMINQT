@@ -82,8 +82,10 @@ def _load_board(board: str, n_tail: int) -> pd.DataFrame | None:
     if len(uniq) < n_tail + 20:
         return None
     cutoff = uniq[-(n_tail + 20)]
-    need = ["symbol", "date", "close_hfq", "high_hfq", "adv20"] + POOL_COLS + list(
-        LABEL.values()
+    need = (
+        ["symbol", "date", "close_hfq", "high_hfq", "adv20"]
+        + POOL_COLS
+        + list(LABEL.values())
     )
     t = pq.read_table(
         str(fp), columns=need, filters=[("date", ">=", cutoff)]
@@ -110,7 +112,9 @@ def _sub_window_metrics(top: pd.DataFrame, days: list, n_sub: int) -> list[dict]
             {
                 "win": f"{i + 1}/{n_sub}",
                 "rows": int(len(seg)),
-                "hit10": float((seg[LABEL["10d"]] > 0).mean()) if len(seg) else float("nan"),
+                "hit10": float((seg[LABEL["10d"]] > 0).mean())
+                if len(seg)
+                else float("nan"),
                 "mean10": float(seg[LABEL["10d"]].mean()) if len(seg) else float("nan"),
             }
         )
@@ -169,11 +173,18 @@ def _walkforward_probs(t: pd.DataFrame, dates: np.ndarray, n_eval: int) -> pd.Da
         probs = clf.predict_proba(day[["score"]].to_numpy())[:, 1]
         out_rows.append(
             pd.DataFrame(
-                {"symbol": day["symbol"].values, "date": day["date"].values, "pred_prob_3d": probs}
+                {
+                    "symbol": day["symbol"].values,
+                    "date": day["date"].values,
+                    "pred_prob_3d": probs,
+                }
             )
         )
         if (i - (len(dates) - n_eval)) % 50 == 0:
-            print(f"    [prob] {i - (len(dates) - n_eval)}/{n_eval} 决策日已拟合", flush=True)
+            print(
+                f"    [prob] {i - (len(dates) - n_eval)}/{n_eval} 决策日已拟合",
+                flush=True,
+            )
     if not out_rows:
         return pd.DataFrame(columns=["symbol", "date", "pred_prob_3d"])
     return pd.concat(out_rows, ignore_index=True)

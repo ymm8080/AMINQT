@@ -72,9 +72,7 @@ def _sub_windows(top: pd.DataFrame) -> list[dict]:
                 "hit": float((seg["realized_net"] > 0).mean())
                 if len(seg)
                 else float("nan"),
-                "mean": float(seg["realized_net"].mean())
-                if len(seg)
-                else float("nan"),
+                "mean": float(seg["realized_net"].mean()) if len(seg) else float("nan"),
             }
         )
     return subs
@@ -131,9 +129,7 @@ def main() -> int:
                     .head(depth)
                 )
                 s = _stats(top)
-                rows.append(
-                    {"rank": rkname, "depth": depth, "window": wname, **s}
-                )
+                rows.append({"rank": rkname, "depth": depth, "window": wname, **s})
                 subs = _sub_windows(top)
                 sub_s = "  ".join(
                     f"{x['win']}:{x['hit']:.0%}/{x['mean']:+.2%}" for x in subs

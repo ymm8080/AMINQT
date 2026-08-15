@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """全市场宇宙修复 Step 2b: 拉取缺口检测 + 回填 (2026-08-15).
 
 _pull_universe_raw.py 的 _fetch_retry 4 次全败会永久跳过该日期该源
@@ -15,6 +14,7 @@ _pull_universe_raw.py 的 _fetch_retry 4 次全败会永久跳过该日期该源
 
 WORM: fill 批次 + cyq_full/margin_panel/all_/block_trade_full 新时间戳 canonical.
 """
+
 from __future__ import annotations
 
 import glob
@@ -45,7 +45,8 @@ def _calendar() -> list[str]:
 def _to_symbol(df: pd.DataFrame) -> pd.DataFrame:
     if "ts_code" in df.columns:
         df["symbol"] = (
-            df["ts_code"].str.replace(".SZ", "", regex=False)
+            df["ts_code"]
+            .str.replace(".SZ", "", regex=False)
             .str.replace(".SH", "", regex=False)
             .str.replace(".BJ", "", regex=False)
         )
@@ -90,16 +91,22 @@ def main() -> None:
     pro = ts.pro_api(settings.TUSHARE_TOKEN)
 
     # ── 检测缺口 ──
-    adj_present = {os.path.basename(f)[4:12] for f in
-                   glob.glob(os.path.join(ALT_DIR, "adj_factor", "adj_*.parquet"))}
-    lim_present = {os.path.basename(f)[:8] for f in
-                   glob.glob(os.path.join(ALT_DIR, "stk_limit", "*_all__.parquet"))}
+    adj_present = {
+        os.path.basename(f)[4:12]
+        for f in glob.glob(os.path.join(ALT_DIR, "adj_factor", "adj_*.parquet"))
+    }
+    lim_present = {
+        os.path.basename(f)[:8]
+        for f in glob.glob(os.path.join(ALT_DIR, "stk_limit", "*_all__.parquet"))
+    }
     cyq_files = glob.glob(os.path.join(ALT_DIR, "cyq_tushare", "cyq_*.parquet"))
     marg_files = glob.glob(os.path.join(ALT_DIR, "margin_*.parquet"))
     lhb_files = glob.glob(os.path.join(ALT_DIR, "lhb", "*.parquet"))
     bt_files = glob.glob(os.path.join(ALT_DIR, "block_trade", "*.parquet"))
     daily_files = glob.glob(os.path.join(OUT_DIR, "daily", "daily_*.parquet"))
-    basic_files = glob.glob(os.path.join(OUT_DIR, "daily_basic", "daily_basic_*.parquet"))
+    basic_files = glob.glob(
+        os.path.join(OUT_DIR, "daily_basic", "daily_basic_*.parquet")
+    )
     susp_files = glob.glob(os.path.join(OUT_DIR, "suspend", "suspend_*.parquet"))
 
     gaps = {
@@ -127,86 +134,134 @@ def main() -> None:
         a = _fetch(pro, pro.adj_factor, f"adj {ds}", trade_date=ds)
         if len(a):
             a[["ts_code", "trade_date", "adj_factor", "symbol"]].to_parquet(
-                os.path.join(ALT_DIR, "adj_factor", f"adj_{ds}.parquet"), index=False)
+                os.path.join(ALT_DIR, "adj_factor", f"adj_{ds}.parquet"), index=False
+            )
             done["adj"].append(ds)
     for ds in gaps["limit"]:
         l = _fetch(pro, pro.stk_limit, f"limit {ds}", trade_date=ds)
         if len(l):
             l2 = l[["symbol", "trade_date", "up_limit", "down_limit"]].rename(
-                columns={"up_limit": "up_limit_raw", "down_limit": "down_limit_raw"})
+                columns={"up_limit": "up_limit_raw", "down_limit": "down_limit_raw"}
+            )
             l2["date"] = pd.Timestamp(ds)
-            l2.to_parquet(os.path.join(ALT_DIR, "stk_limit", f"{ds}_all__.parquet"),
-                          index=False)
+            l2.to_parquet(
+                os.path.join(ALT_DIR, "stk_limit", f"{ds}_all__.parquet"), index=False
+            )
             done["limit"].append(ds)
 
     # ── 累计源 (cyq/margin/lhb/bt) ──
     acc_cyq, acc_marg, acc_lhb, acc_bt = [], [], [], []
-    for ds in sorted(set(gaps["cyq"]) | set(gaps["margin"])
-                     | set(gaps["lhb"]) | set(gaps["bt"])):
+    for ds in sorted(
+        set(gaps["cyq"]) | set(gaps["margin"]) | set(gaps["lhb"]) | set(gaps["bt"])
+    ):
         if ds in gaps["cyq"]:
             c = _fetch(pro, pro.cyq_perf, f"cyq {ds}", trade_date=ds)
             if len(c):
-                keep = [x for x in ["symbol", "trade_date", "his_low", "his_high",
-                                    "cost_5pct", "cost_15pct", "cost_50pct",
-                                    "cost_85pct", "cost_95pct", "weight_avg",
-                                    "winner_rate"] if x in c.columns]
+                keep = [
+                    x
+                    for x in [
+                        "symbol",
+                        "trade_date",
+                        "his_low",
+                        "his_high",
+                        "cost_5pct",
+                        "cost_15pct",
+                        "cost_50pct",
+                        "cost_85pct",
+                        "cost_95pct",
+                        "weight_avg",
+                        "winner_rate",
+                    ]
+                    if x in c.columns
+                ]
                 acc_cyq.append(c[keep])
                 done["cyq"].append(ds)
         if ds in gaps["margin"]:
             m = _fetch(pro, pro.margin_detail, f"margin {ds}", trade_date=ds)
             if len(m):
-                m2 = m[["symbol", "trade_date", "rzye", "rqye", "rzmre", "rqyl"]].rename(
-                    columns={"rzye": "margin_balance", "rqye": "short_balance",
-                             "rzmre": "margin_buy_amt", "rqyl": "short_sell_vol",
-                             "trade_date": "date"})
+                m2 = m[
+                    ["symbol", "trade_date", "rzye", "rqye", "rzmre", "rqyl"]
+                ].rename(
+                    columns={
+                        "rzye": "margin_balance",
+                        "rqye": "short_balance",
+                        "rzmre": "margin_buy_amt",
+                        "rqyl": "short_sell_vol",
+                        "trade_date": "date",
+                    }
+                )
                 m2["date"] = pd.Timestamp(ds)
                 acc_marg.append(m2)
                 done["margin"].append(ds)
         if ds in gaps["lhb"]:
             t = _fetch(pro, pro.top_list, f"lhb {ds}", trade_date=ds)
             if len(t):
-                g = t.groupby("symbol").agg(
-                    lhb_buy_amt=("l_buy", "sum"),
-                    lhb_sell_amt=("l_sell", "sum"),
-                    lhb_net_buy=("net_amount", "sum"),
-                ).reset_index()
+                g = (
+                    t.groupby("symbol")
+                    .agg(
+                        lhb_buy_amt=("l_buy", "sum"),
+                        lhb_sell_amt=("l_sell", "sum"),
+                        lhb_net_buy=("net_amount", "sum"),
+                    )
+                    .reset_index()
+                )
                 g["date"] = pd.Timestamp(ds)
                 acc_lhb.append(g)
                 done["lhb"].append(ds)
         if ds in gaps["bt"]:
             b = _fetch(pro, pro.block_trade, f"bt {ds}", trade_date=ds)
             if len(b):
-                keep = [x for x in ["symbol", "ts_code", "trade_date", "price",
-                                    "vol", "amount", "buyer", "seller"] if x in b.columns]
+                keep = [
+                    x
+                    for x in [
+                        "symbol",
+                        "ts_code",
+                        "trade_date",
+                        "price",
+                        "vol",
+                        "amount",
+                        "buyer",
+                        "seller",
+                    ]
+                    if x in b.columns
+                ]
                 b2 = b[keep].copy()
                 b2["date"] = pd.Timestamp(ds)
                 acc_bt.append(b2)
                 done["bt"].append(ds)
-        if (len(done["cyq"]) + len(done["margin"]) + len(done["lhb"])
-                + len(done["bt"])) % 25 == 0:
-            print(f"[fill] 累计源已补 {len(done['cyq'])}/{len(done['margin'])}/"
-                  f"{len(done['lhb'])}/{len(done['bt'])} 日期 "
-                  f"({(time.time()-t0)/60:.0f} min)", flush=True)
+        if (
+            len(done["cyq"]) + len(done["margin"]) + len(done["lhb"]) + len(done["bt"])
+        ) % 25 == 0:
+            print(
+                f"[fill] 累计源已补 {len(done['cyq'])}/{len(done['margin'])}/"
+                f"{len(done['lhb'])}/{len(done['bt'])} 日期 "
+                f"({(time.time() - t0) / 60:.0f} min)",
+                flush=True,
+            )
 
     ts_ = datetime.now().strftime("%Y%m%d_%H%M%S")
     if acc_cyq:
         d = os.path.join(ALT_DIR, "cyq_tushare")
         os.makedirs(d, exist_ok=True)
         pd.concat(acc_cyq, ignore_index=True).to_parquet(
-            os.path.join(d, f"cyq_fill_{ts_}.parquet"), index=False)
+            os.path.join(d, f"cyq_fill_{ts_}.parquet"), index=False
+        )
     if acc_marg:
         pd.concat(acc_marg, ignore_index=True).to_parquet(
-            os.path.join(ALT_DIR, f"margin_fill_{ts_}.parquet"), index=False)
+            os.path.join(ALT_DIR, f"margin_fill_{ts_}.parquet"), index=False
+        )
     if acc_lhb:
         d = os.path.join(ALT_DIR, "lhb")
         os.makedirs(d, exist_ok=True)
         pd.concat(acc_lhb, ignore_index=True).to_parquet(
-            os.path.join(d, f"lhb_fill_{ts_}.parquet"), index=False)
+            os.path.join(d, f"lhb_fill_{ts_}.parquet"), index=False
+        )
     if acc_bt:
         d = os.path.join(ALT_DIR, "block_trade")
         os.makedirs(d, exist_ok=True)
         pd.concat(acc_bt, ignore_index=True).to_parquet(
-            os.path.join(d, f"bt_fill_{ts_}.parquet"), index=False)
+            os.path.join(d, f"bt_fill_{ts_}.parquet"), index=False
+        )
 
     # ── 新符号 daily/basic/susp ──
     for name, key, src_fn in [
@@ -220,13 +275,43 @@ def main() -> None:
             if not len(d_):
                 continue
             if key == "daily":
-                keep = [x for x in ["symbol", "trade_date", "open", "high", "low",
-                                    "close", "pre_close", "amount", "vol"] if x in d_.columns]
+                keep = [
+                    x
+                    for x in [
+                        "symbol",
+                        "trade_date",
+                        "open",
+                        "high",
+                        "low",
+                        "close",
+                        "pre_close",
+                        "amount",
+                        "vol",
+                    ]
+                    if x in d_.columns
+                ]
             elif key == "daily_basic":
-                keep = [x for x in ["symbol", "trade_date", "turnover_rate",
-                                    "turnover_rate_f", "volume_ratio", "pe_ttm", "pb",
-                                    "ps_ttm", "total_share", "float_share", "free_share",
-                                    "total_mv", "circ_mv", "dv_ratio", "dv_ttm"] if x in d_.columns]
+                keep = [
+                    x
+                    for x in [
+                        "symbol",
+                        "trade_date",
+                        "turnover_rate",
+                        "turnover_rate_f",
+                        "volume_ratio",
+                        "pe_ttm",
+                        "pb",
+                        "ps_ttm",
+                        "total_share",
+                        "float_share",
+                        "free_share",
+                        "total_mv",
+                        "circ_mv",
+                        "dv_ratio",
+                        "dv_ttm",
+                    ]
+                    if x in d_.columns
+                ]
             else:
                 keep = ["symbol", "trade_date"]
             sub = d_[d_["symbol"].isin(newsyms)][keep].copy()
@@ -238,7 +323,8 @@ def main() -> None:
             d = os.path.join(OUT_DIR, key)
             os.makedirs(d, exist_ok=True)
             pd.concat(parts, ignore_index=True).to_parquet(
-                os.path.join(d, f"{key}_fill_{ts_}.parquet"), index=False)
+                os.path.join(d, f"{key}_fill_{ts_}.parquet"), index=False
+            )
 
     # ── 剩余缺口报告 ──
     print("\n[fill] 剩余缺口 (应为空):", flush=True)
