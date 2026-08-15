@@ -29,16 +29,19 @@ NOT fetched here (separate pipelines):
 """
 import os
 import sys
-import pandas as pd
+import time
+from datetime import datetime
+
 import numpy as np
+import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-from datetime import datetime
-import time
 import tushare as ts
 from dotenv import load_dotenv
-from config.settings import INGEST_MIN_LIST_DAYS
+
 from app.pipeline1.ingest_scan import apply_ingest_scan
+from config.settings import INGEST_MIN_LIST_DAYS
+
 load_dotenv()
 
 from app.pipeline1 import cyq_ext  # noqa: E402
@@ -275,7 +278,7 @@ merges = {
 if len(lhb):
     lhb = lhb.groupby("symbol").agg({"l_buy": "sum", "l_sell": "sum", "net_amount": "sum"}).reset_index()
 
-for src_name, (src_df, cols) in merges.items():
+for _src_name, (src_df, cols) in merges.items():
     if not len(src_df):
         continue
     available = [c for c in cols if c in src_df.columns]
@@ -700,7 +703,7 @@ if len(bt):
 # 全历史, 且不依赖面板本身 → 面板重建丢失 bt_ 列后直接 merge 回即可, 无需重拉 Tushare.
 try:
     from app.core.config_loader import load_config
-    from app.pipeline1.bt_snapshot import refresh_rolling_snapshot, SNAPSHOT_COLS
+    from app.pipeline1.bt_snapshot import SNAPSHOT_COLS, refresh_rolling_snapshot
     _snap = (
         load_config("data_pipeline_config")
         .get("final_stock_scan", {})
@@ -733,8 +736,8 @@ if any(c in panel_cols for c in (
     "sh_net_ratio", "sh_g_ratio", "sh_p_ratio", "sh_c_ratio",
 )):
     try:
-        from app.pipeline1.holdertrade_agg import agg_holdertrade_daily
         from app.pipeline1.data_supply import DataSupplyChain
+        from app.pipeline1.holdertrade_agg import agg_holdertrade_daily
 
         _ht_start = (pd.Timestamp(TRADE_DATE) - pd.Timedelta(days=10)).strftime("%Y%m%d")
         ht = pd.DataFrame()
