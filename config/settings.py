@@ -287,6 +287,21 @@ PROB_GATE = {
     "model_dir": DATA_DIR / "prob_head",  # WORM bundle 目录 (<board>_prob_<ts>.joblib)
 }
 
+# ── legacy 并行式概率闸 (2026-08-15 代码先行, 未训练未接线) ──
+# legacy cls 概率头太粗 (闸内 22 唯一值) → blend 排名键 A/B 证伪; 用户定案建并行式
+# 全局 LGBM 概率头 (mfe_3d>=abs_target 二分类), 配方镜像 PROB_GATE (扩窗训练, 250d OOS 定案).
+# 训练 = scripts/_train_legacy_prob_head.py (面板扩建完成后跑); list_generator 接线另开任务
+# (HOLDER 分支无 landed 闸代码, 避免冲突). 排名键保持纯 pred_ret_10d (blend 证伪).
+LEGACY_PROB_GATE = {
+    "enable": True,            # False → 闸关闭 (概率头照常训练但不拦截)
+    "margin": 0.08,            # 边际 (同并行定案 0.08; 接线后按季度闸重扫规则复核)
+    "base_rate_days": 20,      # base_rate 观测窗 (交易日)
+    "abs_target": 0.03,        # 概率头目标: mfe_3d >= 3%
+    "refit_every_days": 21,    # 训练脚本: bundle 年龄 < 此值 → skip (交易日)
+    "max_stale_days": 42,      # 短名单侧: bundle 年龄 > 此值 → 大声警告 + 闸失效 (fail-open)
+    "model_dir": DATA_DIR / "prob_head_legacy",  # WORM bundle 目录 (<board>_prob_<ts>.joblib)
+}
+
 # ── 重训内存独占闸 (2026-08-15 用户定案, 代码强制"重训期间不跑其他重活") ──
 # 08-14 教训: 重训 + 250d 复验/扫描并发 → RAM 挤兑 → 训练 8.4h 零模型完成.
 # ram_guard.check_startup_gate: 启动时可用物理内存低于下限 → 拒绝启动 (exit 2);
