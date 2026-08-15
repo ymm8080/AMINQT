@@ -297,9 +297,27 @@ def test_rank_and_truncate_blend_key_when_pred_prob_present():
     from scripts._shortlist_t5_t10 import rank_and_truncate
 
     rows = [
-        {"board": "main", "symbol": "A", "pred_mag_10d": 0.10, "pred_prob": 0.30, "score": 0.5},
-        {"board": "main", "symbol": "B", "pred_mag_10d": 0.08, "pred_prob": 0.90, "score": 0.5},
-        {"board": "main", "symbol": "C", "pred_mag_10d": 0.09, "pred_prob": 0.60, "score": 0.5},
+        {
+            "board": "main",
+            "symbol": "A",
+            "pred_mag_10d": 0.10,
+            "pred_prob": 0.30,
+            "score": 0.5,
+        },
+        {
+            "board": "main",
+            "symbol": "B",
+            "pred_mag_10d": 0.08,
+            "pred_prob": 0.90,
+            "score": 0.5,
+        },
+        {
+            "board": "main",
+            "symbol": "C",
+            "pred_mag_10d": 0.09,
+            "pred_prob": 0.60,
+            "score": 0.5,
+        },
     ]
     out = rank_and_truncate(pd.DataFrame(rows))
     # blend: B=0.072 > C=0.054 > A=0.030
@@ -312,8 +330,20 @@ def test_rank_and_truncate_blend_nan_prob_sorts_last():
     from scripts._shortlist_t5_t10 import rank_and_truncate
 
     rows = [
-        {"board": "main", "symbol": "A", "pred_mag_10d": 0.10, "pred_prob": float("nan"), "score": 0.5},
-        {"board": "main", "symbol": "B", "pred_mag_10d": 0.01, "pred_prob": 0.50, "score": 0.5},
+        {
+            "board": "main",
+            "symbol": "A",
+            "pred_mag_10d": 0.10,
+            "pred_prob": float("nan"),
+            "score": 0.5,
+        },
+        {
+            "board": "main",
+            "symbol": "B",
+            "pred_mag_10d": 0.01,
+            "pred_prob": 0.50,
+            "score": 0.5,
+        },
     ]
     out = rank_and_truncate(pd.DataFrame(rows))
     assert out["symbol"].tolist() == ["B", "A"]
@@ -325,10 +355,34 @@ def test_rank_and_truncate_board_gate_down_falls_back_to_mag():
     from scripts._shortlist_t5_t10 import rank_and_truncate
 
     rows = [
-        {"board": "main", "symbol": "mA", "pred_mag_10d": 0.10, "pred_prob": 0.30, "score": 0.5},
-        {"board": "main", "symbol": "mB", "pred_mag_10d": 0.08, "pred_prob": 0.90, "score": 0.5},
-        {"board": "dual", "symbol": "dA", "pred_mag_10d": 0.05, "pred_prob": float("nan"), "score": 0.5},
-        {"board": "dual", "symbol": "dB", "pred_mag_10d": 0.09, "pred_prob": float("nan"), "score": 0.5},
+        {
+            "board": "main",
+            "symbol": "mA",
+            "pred_mag_10d": 0.10,
+            "pred_prob": 0.30,
+            "score": 0.5,
+        },
+        {
+            "board": "main",
+            "symbol": "mB",
+            "pred_mag_10d": 0.08,
+            "pred_prob": 0.90,
+            "score": 0.5,
+        },
+        {
+            "board": "dual",
+            "symbol": "dA",
+            "pred_mag_10d": 0.05,
+            "pred_prob": float("nan"),
+            "score": 0.5,
+        },
+        {
+            "board": "dual",
+            "symbol": "dB",
+            "pred_mag_10d": 0.09,
+            "pred_prob": float("nan"),
+            "score": 0.5,
+        },
     ]
     out = rank_and_truncate(pd.DataFrame(rows))
     m = out[out["board"] == "main"]

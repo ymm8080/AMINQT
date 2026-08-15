@@ -68,16 +68,16 @@ def _prod_base_series(t: pd.DataFrame, dates: np.ndarray) -> pd.Series:
         if k < BASE_RATE_DAYS + 14:
             continue
         rows = np.where((pos_all >= k - BASE_RATE_DAYS - 14) & (pos_all <= k))[0]
-        tail = t.iloc[rows][
-            ["symbol", "date", "close_hfq", "high_hfq", "adv20"]
-        ].copy()
+        tail = t.iloc[rows][["symbol", "date", "close_hfq", "high_hfq", "adv20"]].copy()
         b = prob_head._base_rate(tail)
         if b is not None:
             base_map[pd.Timestamp(d)] = b
     return pd.Series(base_map, name="base_prod")
 
 
-def _eval_topn(g: pd.DataFrame, key: str, topn: int, days: list) -> tuple[dict, pd.DataFrame]:
+def _eval_topn(
+    g: pd.DataFrame, key: str, topn: int, days: list
+) -> tuple[dict, pd.DataFrame]:
     top = (
         g.sort_values(["date", key], ascending=[True, False])
         .groupby("date", sort=True)
@@ -90,7 +90,9 @@ def _eval_topn(g: pd.DataFrame, key: str, topn: int, days: list) -> tuple[dict, 
         "picks_per_day": n / len(days),
         "realized_10d": float(top["label_pm_10d_net"].mean()) if n else float("nan"),
         "hit_10d": float((top["label_pm_10d_net"] > 0).mean()) if n else float("nan"),
-        "pct_ge5pct": float((top["label_pm_10d_net"] >= 0.05).mean()) if n else float("nan"),
+        "pct_ge5pct": float((top["label_pm_10d_net"] >= 0.05).mean())
+        if n
+        else float("nan"),
         "pct_ge10pct": (
             float((top["label_pm_10d_net"] >= 0.10).mean()) if n else float("nan")
         ),
@@ -108,8 +110,12 @@ def _sub_windows(top: pd.DataFrame, days: list, n_sub: int) -> list[dict]:
             {
                 "win": f"{i + 1}/{n_sub}",
                 "rows": int(len(seg)),
-                "hit10": float((seg["label_pm_10d_net"] > 0).mean()) if len(seg) else float("nan"),
-                "mean10": float(seg["label_pm_10d_net"].mean()) if len(seg) else float("nan"),
+                "hit10": float((seg["label_pm_10d_net"] > 0).mean())
+                if len(seg)
+                else float("nan"),
+                "mean10": float(seg["label_pm_10d_net"].mean())
+                if len(seg)
+                else float("nan"),
             }
         )
     return subs
@@ -125,22 +131,27 @@ def main() -> int:
         # ---- 预测复用检查点 (250d 生产口径复验同源, 免重训) ----
         ckpt = DATA_DIR / f"_diag_replay_wf_pred_{board}.parquet"
         if not ckpt.exists():
-            print(f"[{board}] 无预测检查点 {ckpt.name} -> skip (先跑复验脚本)", flush=True)
+            print(
+                f"[{board}] 无预测检查点 {ckpt.name} -> skip (先跑复验脚本)", flush=True
+            )
             continue
         cp = pq.read_table(str(ckpt)).to_pandas()
         pred = pd.Series(cp["pred"].to_numpy(), index=t.index, dtype="float64")
 
         # ---- 评估框架 (同复验: t3 门 + label_pm_10d_net 实得) ----
-        work = t[["symbol", "date", "board", "score", "label_pm_3d_net",
-                  "label_pm_10d_net"]].copy()
+        work = t[
+            ["symbol", "date", "board", "score", "label_pm_3d_net", "label_pm_10d_net"]
+        ].copy()
         p3 = calibrate_mag10d(work, target_col="label_pm_3d_net", label_horizon=3)
         p10 = calibrate_mag10d(work, target_col="label_pm_10d_net", label_horizon=10)
         mm = work.merge(
             p3.drop(columns=["board"]).rename(columns={"mag": "pred_ret_3d"}),
-            on=["symbol", "date"], how="inner",
+            on=["symbol", "date"],
+            how="inner",
         ).merge(
             p10.drop(columns=["board"]).rename(columns={"mag": "pred_mag_10d"}),
-            on=["symbol", "date"], how="inner",
+            on=["symbol", "date"],
+            how="inner",
         )
         mm["date"] = pd.to_datetime(mm["date"])
         rr = mm.dropna(subset=["label_pm_10d_net"])
