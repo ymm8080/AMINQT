@@ -19,7 +19,7 @@ def main():
     round = 0
     while True:
         round += 1
-        print(f"\n🎯 Round {round}")
+        print(f"\n[LOOP] Round {round}")
 
         # 1) Fill gaps for all sources
         if not run("python scripts/_fill_gaps.py", "fill_gaps"):
