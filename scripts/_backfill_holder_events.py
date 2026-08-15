@@ -33,12 +33,12 @@ import pyarrow.parquet as pq
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from config.settings import PANEL_V3_PATH  # noqa: E402
+from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 from app.pipeline1.holdertrade_agg import (  # noqa: E402
     HOLDER_PANEL_COLS,
     agg_holdertrade_daily,
 )
-from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
+from config.settings import PANEL_V3_PATH  # noqa: E402
 
 FETCH_START = dt.date(2026, 7, 25)  # 拉取窗口起点 (迟发公告余量)
 FETCH_END = dt.date(2026, 8, 14)
@@ -92,7 +92,9 @@ def main() -> int:
     # ── 0. 并发写入防护: 面板 mtime 过新则中止 ──
     age = time.time() - os.path.getmtime(PANEL_V3_PATH)
     if age < MTIME_GRACE_S and os.environ.get("HOLDER_BF_SKIP_MTIME_GUARD") != "1":
-        print(f"FATAL: 面板 mtime 距今 {age:.0f}s (<{MTIME_GRACE_S}s), 疑似并发写入, 中止")
+        print(
+            f"FATAL: 面板 mtime 距今 {age:.0f}s (<{MTIME_GRACE_S}s), 疑似并发写入, 中止"
+        )
         return 1
 
     # ── 1. 拉取 + 聚合 ──
@@ -107,7 +109,10 @@ def main() -> int:
         f"事件 {len(raw)} 条 → 日聚合 {len(daily)} 行 (ann_date ≥ {WRITE_START}):\n"
         + daily.groupby(daily["date"].dt.date).size().to_string()
     )
-    print("holder_type 分布:", raw.get("sh_holder_type", "").astype(str).str.upper().value_counts().to_dict())
+    print(
+        "holder_type 分布:",
+        raw.get("sh_holder_type", "").astype(str).str.upper().value_counts().to_dict(),
+    )
 
     # ── 2. 面板目标日确认 ──
     panel_dates = pd.to_datetime(
@@ -128,7 +133,9 @@ def main() -> int:
     free = shutil.disk_usage(os.path.dirname(PANEL_V3_PATH)).free
     panel_bytes = os.path.getsize(PANEL_V3_PATH)
     if free < panel_bytes * 2 + 1e9:
-        print(f"FATAL: D: 剩余 {free / 1e9:.1f}GB < 面板 {panel_bytes / 1e9:.1f}GB * 2 + 1GB")
+        print(
+            f"FATAL: D: 剩余 {free / 1e9:.1f}GB < 面板 {panel_bytes / 1e9:.1f}GB * 2 + 1GB"
+        )
         return 1
     bak = PANEL_V3_PATH.with_name(
         f"panel_full_enriched_v3_pre_holder_evt_{pd.Timestamp.now():%Y%m%d_%H%M%S}.parquet"
@@ -150,9 +157,7 @@ def main() -> int:
     n_patched = 0
     for rg_idx in range(pf.metadata.num_row_groups):
         g = pf.read_row_group(rg_idx).to_pandas()
-        m = g[["symbol", "date"]].merge(
-            daily_agg, on=["symbol", "date"], how="left"
-        )
+        m = g[["symbol", "date"]].merge(daily_agg, on=["symbol", "date"], how="left")
         has_evt = m["sh_net_sign_agg"].notna().to_numpy()  # sum(sign) 恒非 NaN ↔ 事件行
         for c in HOLDER_PANEL_COLS:
             fresh = m[f"{c}_agg"].to_numpy()
@@ -170,7 +175,9 @@ def main() -> int:
     print(f"完成: 覆盖 {n_patched} 格 (10 列 × 事件日行)")
 
     # ── 6. 写后验证 ──
-    v = pq.read_table(str(PANEL_V3_PATH), columns=["symbol", "date"] + HOLDER_PANEL_COLS).to_pandas()
+    v = pq.read_table(
+        str(PANEL_V3_PATH), columns=["symbol", "date"] + HOLDER_PANEL_COLS
+    ).to_pandas()
     assert v.shape[0] == panel_dates.shape[0], (
         f"行数变化 {panel_dates.shape[0]} -> {v.shape[0]}"
     )
@@ -178,7 +185,9 @@ def main() -> int:
     assert not twins, f"出现 _x/_y 孪生列: {twins}"
     for c in HOLDER_PANEL_COLS:
         sub = v[v[c].notna()]
-        print(f"  {c}: 非空 {len(sub):>8}  最新 {sub['date'].max().date() if len(sub) else '-'}")
+        print(
+            f"  {c}: 非空 {len(sub):>8}  最新 {sub['date'].max().date() if len(sub) else '-'}"
+        )
     after_viol = _ohlcv_violations(
         pq.read_table(str(PANEL_V3_PATH), columns=OHLCV_COLS).to_pandas()
     )
@@ -186,7 +195,9 @@ def main() -> int:
     print(f"OHLCV 违例数不变: {after_viol} (写后)")
 
     # spot-check: 08-12..14 事件行抽样
-    spot = v[v["date"].dt.date >= dt.date(2026, 8, 12)].dropna(subset=["sh_evt_end_date"])
+    spot = v[v["date"].dt.date >= dt.date(2026, 8, 12)].dropna(
+        subset=["sh_evt_end_date"]
+    )
     print(f"\n08-12..14 事件行抽样 ({len(spot)} 行):")
     if len(spot):
         print(spot.head(15).to_string(index=False))
