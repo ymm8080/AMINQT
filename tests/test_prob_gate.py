@@ -145,6 +145,9 @@ def test_apply_prob_gate_drop_and_failopen(monkeypatch):
     assert thr == pytest.approx(0.28)  # 定案边际 0.08 被测试钉住
     # main: A(0.60) 留, B(0.10) 剔; dual: 闸不可用 fail-open 全留
     assert out["symbol"].tolist() == ["A", "C"]
+    # pred_prob 列附给排名键 blend (2026-08-15 A/B 定案): 可用板有值, fail-open 板 NaN
+    assert out["pred_prob"].iloc[0] == pytest.approx(0.60)
+    assert pd.isna(out["pred_prob"].iloc[1])
 
 
 def test_apply_prob_gate_missing_prob_keeps_symbol(monkeypatch):

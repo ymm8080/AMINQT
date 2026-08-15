@@ -241,6 +241,8 @@ def apply_prob_gate(res: pd.DataFrame) -> pd.DataFrame:
 
     保留 ⇔ pred_prob > base_rate + margin. bundle 缺失/过旧/当日不可用 →
     fail-open (保留) + 大声告警 (不杀清单); 个股 pred_prob 缺失 → fail-open 保留.
+    附带: pred_prob 列写入输出 (排名键 blend 用, 2026-08-15 A/B 定案 — 闸可用时
+    rank_and_truncate 按 pred_mag_10d × pred_prob 排名; 闸失效则列缺失, 退回纯 mag).
     """
     cfg = PROB_GATE
     if not cfg.get("enable", True):
@@ -257,6 +259,7 @@ def apply_prob_gate(res: pd.DataFrame) -> pd.DataFrame:
         prob, base = got
         thr = base + cfg["margin"]
         p = out.loc[mask, "symbol"].astype(str).map(prob)
+        out.loc[mask, "pred_prob"] = p.to_numpy()
         keep = (p > thr) | p.isna()
         n_drop = int((~keep).sum())
         if n_drop:
