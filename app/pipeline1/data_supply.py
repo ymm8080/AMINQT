@@ -2121,9 +2121,17 @@ class DataSupplyChain:
                         "offset": offset,
                         "fields": _FIELDS,
                     }
-                    raw = _with_timeout(
-                        lambda _kw=page_kwargs: pro.stk_holdertrade(**_kw)
-                    )
+                    raw = None
+                    for _attempt in range(3):  # api.waditu.com 常读超时, 重试再放弃
+                        try:
+                            raw = _with_timeout(
+                                lambda _kw=page_kwargs: pro.stk_holdertrade(**_kw)
+                            )
+                            break
+                        except Exception:
+                            if _attempt == 2:
+                                raise
+                            time.sleep(3 * (_attempt + 1))
                     if raw is None or len(raw) == 0:
                         break
                     all_pages.append(raw)
