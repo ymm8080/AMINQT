@@ -3,7 +3,7 @@
 deepseek:
   enabled: true
   base_url: "https://api.deepseek.com"
-  model: "deepseek-chat"              # 复杂推理用 deepseek-reasoner
+  model: "deepseek-v4-flash"          # 主 LLM 模块统一用 V4 Flash
   v4_flash_model: "deepseek-v4-flash" # Claude Code sub-agent 模式
   timeout_sec: 10
   daily_token_limit: 500000           # 日限额熔断

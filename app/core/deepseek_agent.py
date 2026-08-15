@@ -152,7 +152,7 @@ class DeepSeekAgent:
             return self._degraded("missing_api_key")
 
         base_url = self._cfg.get("base_url", "https://api.deepseek.com")
-        model = self._cfg.get("model", "deepseek-chat")
+        model = self._cfg.get("model", "deepseek-v4-flash")
         timeout = float(self._cfg.get("timeout_sec", _DEFAULT_TIMEOUT))
         user_prompt = (
             f"{payload['prompt']}\n\n"
