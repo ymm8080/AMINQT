@@ -145,9 +145,9 @@ def pull_adj(pro, ds):
 
 
 def pull_limit(pro, ds):
-    l = _fetch(pro, pro.stk_limit, f"limit {ds}", trade_date=ds)
-    if not l.empty:
-        l2 = l[["symbol", "trade_date", "up_limit", "down_limit"]].rename(
+    limit_data = _fetch(pro, pro.stk_limit, f"limit {ds}", trade_date=ds)
+    if not limit_data.empty:
+        l2 = limit_data[["symbol", "trade_date", "up_limit", "down_limit"]].rename(
             columns={"up_limit": "up_limit_raw", "down_limit": "down_limit_raw"}
         )
         l2["date"] = pd.Timestamp(ds)

@@ -138,9 +138,9 @@ def main() -> None:
             )
             done["adj"].append(ds)
     for ds in gaps["limit"]:
-        l = _fetch(pro, pro.stk_limit, f"limit {ds}", trade_date=ds)
-        if len(l):
-            l2 = l[["symbol", "trade_date", "up_limit", "down_limit"]].rename(
+        limit_data = _fetch(pro, pro.stk_limit, f"limit {ds}", trade_date=ds)
+        if len(limit_data):
+            l2 = limit_data[["symbol", "trade_date", "up_limit", "down_limit"]].rename(
                 columns={"up_limit": "up_limit_raw", "down_limit": "down_limit_raw"}
             )
             l2["date"] = pd.Timestamp(ds)

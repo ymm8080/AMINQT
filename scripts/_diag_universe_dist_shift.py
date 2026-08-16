@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*-
 """旧宇宙 vs 新增1780只 分布对比 — 评估参数是否受宇宙扩建影响 (2026-08-15)."""
 import glob
+
 import numpy as np
 import pandas as pd
 
@@ -135,6 +135,6 @@ new["traded_since"] = new["list_dt"].map(lambda d: len(cal) - cal.searchsorted(d
 new["below_150d"] = new["traded_since"] < 150
 print("\n=== 5. 次新 gate: 新增中 上市<150交易日 ===")
 print(new.groupby(["board", "below_150d"]).size().to_string())
-new2 = new[new["below_150d"] == False]
+new2 = new[~new["below_150d"]]
 print("\n=== 5.1 剔除<150d后, 新增按上市年份 ===")
 print(new2.groupby([new2["list_dt"].dt.year, "board"]).size().to_string())
