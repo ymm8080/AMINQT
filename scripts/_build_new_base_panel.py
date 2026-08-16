@@ -37,7 +37,9 @@ from app.pipeline1.cleaning_pipeline import board_of  # noqa: E402
 from config.settings import INGEST_MIN_LIST_DAYS  # noqa: E402
 
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
-OUT_DIR = "data/supply_cache/alt_data"  # data/new_symbols_raw 已删, supply 缓存含全量拉取
+OUT_DIR = (
+    "data/supply_cache/alt_data"  # data/new_symbols_raw 已删, supply 缓存含全量拉取
+)
 ALT_DIR = "data/supply_cache/alt_data"
 OUT_PANEL_DIR = "data/new_symbols_panel"
 
@@ -64,10 +66,33 @@ _SW2OLD = {
 }
 # 生产面板 28 老名集合 (煤炭/环保/石油石化/美容护理 无老名 → UNKNOWN)
 _OLD_NAMES = {
-    "农林牧渔", "化工", "钢铁", "有色金属", "电子", "家用电器", "食品饮料", "纺织服装",
-    "轻工制造", "医药生物", "公用事业", "交通运输", "房地产", "商业贸易", "休闲服务",
-    "综合", "建筑材料", "建筑装饰", "电气设备", "国防军工", "计算机", "传媒", "通信",
-    "银行", "非银金融", "汽车", "机械设备",
+    "农林牧渔",
+    "化工",
+    "钢铁",
+    "有色金属",
+    "电子",
+    "家用电器",
+    "食品饮料",
+    "纺织服装",
+    "轻工制造",
+    "医药生物",
+    "公用事业",
+    "交通运输",
+    "房地产",
+    "商业贸易",
+    "休闲服务",
+    "综合",
+    "建筑材料",
+    "建筑装饰",
+    "电气设备",
+    "国防军工",
+    "计算机",
+    "传媒",
+    "通信",
+    "银行",
+    "非银金融",
+    "汽车",
+    "机械设备",
 }
 
 
@@ -75,7 +100,9 @@ def _load_meta_industry() -> dict[str, str]:
     """sw 分类 CSV → 生产面板口径老申万名 (新名映射别名, 无老名 → UNKNOWN)."""
     sys.path.insert(
         0,
-        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"),
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"
+        ),
     )
     import fetch_sw_classification as fsc  # noqa: PLC0415
 

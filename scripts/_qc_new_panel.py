@@ -152,7 +152,11 @@ def main() -> None:
     for c in pcols:
         col = pf.read(columns=[c]).column(0)
         prod_cov[c] = 1.0 - col.null_count / max(len(col), 1)
-    new_cov = df.reindex(columns=pcols).notna().mean() if len(pcols) else pd.Series(dtype=float)
+    new_cov = (
+        df.reindex(columns=pcols).notna().mean()
+        if len(pcols)
+        else pd.Series(dtype=float)
+    )
     cov_fails: list[str] = []
     for c in pcols:
         pc, nc = prod_cov[c], float(new_cov.get(c, 0.0))
@@ -179,7 +183,10 @@ def main() -> None:
         "peak_price",
     ]:
         if c in pcols:
-            print(f"    {c}: 生产 {prod_cov[c]:.1%} | 新 {new_cov.get(c, 0.0):.1%}", flush=True)
+            print(
+                f"    {c}: 生产 {prod_cov[c]:.1%} | 新 {new_cov.get(c, 0.0):.1%}",
+                flush=True,
+            )
 
     # ── 5. gate 校验: 首行 list_days >= 150 ──
     print(f"\n[5] 次新 gate (>= {INGEST_MIN_LIST_DAYS} 交易日)", flush=True)

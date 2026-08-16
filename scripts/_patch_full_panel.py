@@ -38,7 +38,9 @@ RETRY = 3
 RETRY_SLEEP = 5.0
 
 
-def _pull_index(pro: ts.pro_api, code: str, start: str, end: str) -> pd.DataFrame | None:
+def _pull_index(
+    pro: ts.pro_api, code: str, start: str, end: str
+) -> pd.DataFrame | None:
     for _i in range(RETRY):
         try:
             idx = pro.index_daily(ts_code=f"{code}.SI", start_date=start, end_date=end)
@@ -130,7 +132,10 @@ def main() -> None:
     idx_parts = []
     for code in sorted(FAIL_SW):
         idx = _pull_index(
-            pro, code, df["date"].min().strftime("%Y%m%d"), df["date"].max().strftime("%Y%m%d")
+            pro,
+            code,
+            df["date"].min().strftime("%Y%m%d"),
+            df["date"].max().strftime("%Y%m%d"),
         )
         if idx is None or not len(idx):
             print(f"[sw] {code} {code2ind[code]}: 仍 FAILED", flush=True)
@@ -141,15 +146,17 @@ def main() -> None:
         idx["sw_index_close"] = idx["_close"]
         idx["sw_index_vol"] = idx["_vol"] / 1e6
         idx["industry"] = code2ind[code]
-        idx_parts.append(idx[["date", "industry", "sw_ret_1d", "sw_index_close", "sw_index_vol"]])
+        idx_parts.append(
+            idx[["date", "industry", "sw_ret_1d", "sw_index_close", "sw_index_vol"]]
+        )
         print(f"[sw] {code} {code2ind[code]}: {len(idx):,} 行", flush=True)
         time.sleep(CALL_SLEEP)
     if idx_parts:
         idx_all = pd.concat(idx_parts, ignore_index=True)
         sub = df.loc[mask_sw].copy()
-        merged = sub.drop(columns=["sw_ret_1d", "sw_index_close", "sw_index_vol"]).merge(
-            idx_all, on=["industry", "date"], how="left"
-        )
+        merged = sub.drop(
+            columns=["sw_ret_1d", "sw_index_close", "sw_index_vol"]
+        ).merge(idx_all, on=["industry", "date"], how="left")
         # merge 输出 RangeIndex, loc 赋值按索引对齐会错位 — 恢复 sub 索引
         merged = merged.set_axis(sub.index)
         df.loc[mask_sw] = merged
@@ -189,7 +196,10 @@ def main() -> None:
         # merge_asof 输出 RangeIndex, loc 赋值按索引对齐会错位 — 恢复 sub 索引
         merged = merged.set_axis(sub.index)
         df.loc[miss] = merged[df.columns]
-        print(f"[fina] 更新 {int(miss.sum()):,} 行, 覆盖 {df[fina_cols].notna().mean().round(3).to_dict()}", flush=True)
+        print(
+            f"[fina] 更新 {int(miss.sum()):,} 行, 覆盖 {df[fina_cols].notna().mean().round(3).to_dict()}",
+            flush=True,
+        )
 
     # ── 3. 列规整: announce_date_x → announce_date; drop _y + 中间列 ──
     if "announce_date_x" in df.columns:
@@ -203,9 +213,21 @@ def main() -> None:
     df.to_parquet(out, index=False)
     print(f"[save] {out}", flush=True)
     print(f"[stat] rows={len(df):,} cols={len(df.columns)}", flush=True)
-    cov = df[
-        ["industry", "net_margin", "eps_yoy", "profit_yoy", "sw_ret_1d", "announce_date"]
-    ].notna().mean().round(3)
+    cov = (
+        df[
+            [
+                "industry",
+                "net_margin",
+                "eps_yoy",
+                "profit_yoy",
+                "sw_ret_1d",
+                "announce_date",
+            ]
+        ]
+        .notna()
+        .mean()
+        .round(3)
+    )
     print("[coverage]")
     print(cov.to_string(), flush=True)
     print("PATCH DONE", flush=True)

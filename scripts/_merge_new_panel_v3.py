@@ -66,7 +66,9 @@ def main() -> None:
 
     # ── 2. 宇宙不重叠 (重叠 = 拒绝, 防重复符号混入) ──
     overlap = set(prod["symbol"].astype(str)) & set(new["symbol"].astype(str))
-    check("新符号 ∩ 生产 = 空", not overlap, f"{len(overlap)} 只: {sorted(overlap)[:8]}")
+    check(
+        "新符号 ∩ 生产 = 空", not overlap, f"{len(overlap)} 只: {sorted(overlap)[:8]}"
+    )
     if overlap:
         raise SystemExit("FATAL: 宇宙重叠, 拒绝合并")
 
@@ -133,12 +135,17 @@ def main() -> None:
         "sw_ret_1d",
     ]:
         if c in v.columns:
-            print(f"    新股票 {c}: 覆盖率 {new_cov.get(c, 0.0):.1%} (生产 {prod_cov.get(c, 0.0):.1%})", flush=True)
+            print(
+                f"    新股票 {c}: 覆盖率 {new_cov.get(c, 0.0):.1%} (生产 {prod_cov.get(c, 0.0):.1%})",
+                flush=True,
+            )
     # 全局无新增全 NA 列 (全面板)
     all_na = [c for c in v.columns if v[c].notna().sum() == 0]
     check("无全局全 NA 列", not all_na, f"{all_na[:8]}")
 
-    print(f"\n== MERGE {'通过' if not FAILS else f'失败 {len(FAILS)} 项'} ==", flush=True)
+    print(
+        f"\n== MERGE {'通过' if not FAILS else f'失败 {len(FAILS)} 项'} ==", flush=True
+    )
     if FAILS:
         # 08-16 修复: 终验失败自动回滚生产 (新文件移走, 备份恢复)
         os.rename(PANEL, f"{PANEL}.bad_{ts_}")

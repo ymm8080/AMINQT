@@ -48,17 +48,42 @@ _SW2OLD = {
     "电力设备": "电气设备",
 }
 _OLD_NAMES = {
-    "农林牧渔", "化工", "钢铁", "有色金属", "电子", "家用电器", "食品饮料", "纺织服装",
-    "轻工制造", "医药生物", "公用事业", "交通运输", "房地产", "商业贸易", "休闲服务",
-    "综合", "建筑材料", "建筑装饰", "电气设备", "国防军工", "计算机", "传媒", "通信",
-    "银行", "非银金融", "汽车", "机械设备",
+    "农林牧渔",
+    "化工",
+    "钢铁",
+    "有色金属",
+    "电子",
+    "家用电器",
+    "食品饮料",
+    "纺织服装",
+    "轻工制造",
+    "医药生物",
+    "公用事业",
+    "交通运输",
+    "房地产",
+    "商业贸易",
+    "休闲服务",
+    "综合",
+    "建筑材料",
+    "建筑装饰",
+    "电气设备",
+    "国防军工",
+    "计算机",
+    "传媒",
+    "通信",
+    "银行",
+    "非银金融",
+    "汽车",
+    "机械设备",
 }
 
 
 def _load_industry_map() -> dict[str, str]:
     sys.path.insert(
         0,
-        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"),
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"
+        ),
     )
     import fetch_sw_classification as fsc  # noqa: PLC0415
 
@@ -157,7 +182,10 @@ def main() -> None:
     before = (df["industry"] == "UNKNOWN").sum()
     df["industry"] = df["symbol"].map(ind_map).fillna("UNKNOWN")
     after = (df["industry"] == "UNKNOWN").sum()
-    print(f"[industry] UNKNOWN {before:,} → {after:,} ({len(ind_map)} syms mapped)", flush=True)
+    print(
+        f"[industry] UNKNOWN {before:,} → {after:,} ({len(ind_map)} syms mapped)",
+        flush=True,
+    )
     df["conc_90_industry_rank"] = (
         df.groupby(["date", "industry"], observed=True)["pct_90_con"]
         .rank(pct=True)
@@ -172,8 +200,9 @@ def main() -> None:
         df = df.sort_values("date").reset_index(drop=True)
         df = pd.merge_asof(
             df,
-            fina[["symbol", "announce_date", "net_margin", "eps_yoy", "profit_yoy"]]
-            .sort_values("announce_date"),
+            fina[
+                ["symbol", "announce_date", "net_margin", "eps_yoy", "profit_yoy"]
+            ].sort_values("announce_date"),
             left_on="date",
             right_on="announce_date",
             by="symbol",
@@ -246,9 +275,12 @@ def main() -> None:
     out = os.path.join(OUT_PANEL_DIR, f"base_new_full_{ts_}.parquet")
     df.to_parquet(out, index=False)
     print(f"[save] {out}", flush=True)
-    cov = df[
-        ["industry", "net_margin", "eps_yoy", "profit_yoy", "sw_ret_1d"]
-    ].notna().mean().round(3)
+    cov = (
+        df[["industry", "net_margin", "eps_yoy", "profit_yoy", "sw_ret_1d"]]
+        .notna()
+        .mean()
+        .round(3)
+    )
     print("[coverage]")
     print(cov.to_string(), flush=True)
     print("ALT FIX DONE", flush=True)

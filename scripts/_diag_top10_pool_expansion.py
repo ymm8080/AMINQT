@@ -1,4 +1,5 @@
 """扩建宇宙对 TOP10 影响的实证: 旧池 vs 扩建池, 代理信号+oracle 双口径 (2026-08-15)."""
+
 import glob
 
 import numpy as np
@@ -6,10 +7,13 @@ import pandas as pd
 
 ROOT = r"D:\AMINQT\AMINQT CODES\data"
 DAILY_DIR = rf"{ROOT}\supply_cache\alt_data\daily"
-BACKUP_PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet.backup_20260815_200014"
+BACKUP_PANEL = (
+    r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet.backup_20260815_200014"
+)
 NEW_UNIVERSE = rf"{ROOT}\new_universe\new_symbols_20260815_020959.parquet"
 WINDOW = 250
 MIN_AMT = 5e7  # 读取预过滤 5000万
+
 
 def board_of(s):
     s = str(s)
@@ -18,6 +22,7 @@ def board_of(s):
     if s.startswith(("30", "68")):
         return "dual"
     return "bse"
+
 
 new = pd.read_parquet(NEW_UNIVERSE)
 new_syms = set(new["symbol"])
@@ -28,8 +33,10 @@ new_syms = set(new["symbol"])  # 有效新增
 print(f"旧宇宙 {len(old_syms)} | 有效新增 {len(new_syms)} (剔45只2026次新)")
 
 files = sorted(glob.glob(rf"{DAILY_DIR}\daily_*.parquet"))[-WINDOW:]
-frames = [pd.read_parquet(f, columns=["symbol", "trade_date", "close", "pre_close", "amount"])
-          for f in files]
+frames = [
+    pd.read_parquet(f, columns=["symbol", "trade_date", "close", "pre_close", "amount"])
+    for f in files
+]
 df = pd.concat(frames, ignore_index=True)
 df["amount"] = df["amount"] * 1000.0
 df["date"] = pd.to_datetime(df["trade_date"], format="%Y%m%d")
@@ -41,6 +48,7 @@ df["board"] = df["symbol"].map(board_of)
 df = df.sort_values(["symbol", "date"])
 df["mom10"] = df.groupby("symbol")["close"].transform(lambda s: s / s.shift(10) - 1)
 df["t10"] = df.groupby("symbol")["close"].transform(lambda s: s.shift(-10) / s - 1)
+
 
 def run(board, pool_sel, label, top_n=10, filter_amt=True):
     """pool_sel: df 子集; 逐日 top-N by 代理分 → 真实 t10; 另算 oracle top-N."""
@@ -58,22 +66,32 @@ def run(board, pool_sel, label, top_n=10, filter_amt=True):
             continue
         prox = day.nlargest(top_n, "mom10")
         oracle = day.nlargest(top_n, "t10")
-        rows.append({
-            "date": d, "n": len(day),
-            "proxy_t10": prox["t10"].mean(), "proxy_pos": (prox["t10"] > 0).mean(),
-            "new_in_proxy": (prox["grp"] == "new").sum(),
-            "oracle_t10": oracle["t10"].mean(),
-        })
+        rows.append(
+            {
+                "date": d,
+                "n": len(day),
+                "proxy_t10": prox["t10"].mean(),
+                "proxy_pos": (prox["t10"] > 0).mean(),
+                "new_in_proxy": (prox["grp"] == "new").sum(),
+                "oracle_t10": oracle["t10"].mean(),
+            }
+        )
     r = pd.DataFrame(rows)
-    return pd.Series({
-        "label": label, "days": len(r),
-        "avg_pool_n": r["n"].mean(),
-        "proxy_t10_mean": r["proxy_t10"].mean(),
-        "proxy_pos": r["proxy_pos"].mean(),
-        "proxy_win_vs_baseline": (r["proxy_t10"] > r["oracle_t10"].mean() * 0 + 0).mean(),
-        "new_share_in_proxy": r["new_in_proxy"].mean(),
-        "oracle_t10_mean": r["oracle_t10"].mean(),
-    })
+    return pd.Series(
+        {
+            "label": label,
+            "days": len(r),
+            "avg_pool_n": r["n"].mean(),
+            "proxy_t10_mean": r["proxy_t10"].mean(),
+            "proxy_pos": r["proxy_pos"].mean(),
+            "proxy_win_vs_baseline": (
+                r["proxy_t10"] > r["oracle_t10"].mean() * 0 + 0
+            ).mean(),
+            "new_share_in_proxy": r["new_in_proxy"].mean(),
+            "oracle_t10_mean": r["oracle_t10"].mean(),
+        }
+    )
+
 
 results = []
 for b in ["main", "dual"]:
