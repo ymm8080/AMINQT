@@ -110,9 +110,7 @@ def main() -> None:
     missing["list_days"] = np.where(ld.isna(), np.nan, right - left)
 
     first_evt = missing.groupby("symbol")["date"].min()
-    pd.Series(
-        cal.searchsorted(pd.to_datetime(first_evt)), index=first_evt.index
-    )
+    pd.Series(cal.searchsorted(pd.to_datetime(first_evt)), index=first_evt.index)
     first_ld = missing.drop_duplicates(subset="symbol").set_index("symbol")["list_days"]
     # 上市晚于面板起点: 口径精确, 首次事件日 list_days < 150 即真次新.
     # 上市早于面板起点: 非次新; 但首次事件落在面板前 170 日内 → 上市天数口径截断, 标记模糊.
