@@ -288,7 +288,9 @@ def main() -> int:
             try:
                 pred = predictor.predict(day_feat, board)
             except Exception as exc:
-                print(f"[{board}] {pd.Timestamp(d).date()} predict err: {exc}", flush=True)
+                print(
+                    f"[{board}] {pd.Timestamp(d).date()} predict err: {exc}", flush=True
+                )
                 continue
             if pred.empty:
                 continue
@@ -316,7 +318,9 @@ def main() -> int:
                         if "pain_prob" in row
                         else np.nan,
                         "pain_excluded": bool(row["pain_excluded"]),
-                        "realized_net": _realized_net(pivot, cal, di, str(row["symbol"])),
+                        "realized_net": _realized_net(
+                            pivot, cal, di, str(row["symbol"])
+                        ),
                     }
                 )
             if (k + 1) % 25 == 0 or k == len(eval_days) - 1:
@@ -370,9 +374,7 @@ def main() -> int:
         ckpt = DATA_DIR / f"_diag_legacy_wf_pred_{board}_e{args.eval}.parquet"
         if ckpt.exists():
             cp = pd.read_parquet(str(ckpt))
-            print(
-                f"[{board}] walk-forward 从检查点恢复 ({len(cp):,} 行)", flush=True
-            )
+            print(f"[{board}] walk-forward 从检查点恢复 ({len(cp):,} 行)", flush=True)
         else:
             model = None
             wf_rows: list[pd.DataFrame] = []
@@ -388,9 +390,7 @@ def main() -> int:
                 if not te.any():
                     continue
                 p = model.predict_proba(x_all[te])[:, 1]
-                wf_rows.append(
-                    meta.loc[te].assign(pred=p).reset_index(drop=True)
-                )
+                wf_rows.append(meta.loc[te].assign(pred=p).reset_index(drop=True))
                 if (k + 1) % 25 == 0 or k == len(eval_days) - 1:
                     print(
                         f"[{board}] wf {k + 1}/{len(eval_days)} "
@@ -435,7 +435,12 @@ def main() -> int:
             flush=True,
         )
 
-        def _report(name: str, v: pd.DataFrame, rank_col: str = "pred_ret_10d", board_name: str = board) -> None:
+        def _report(
+            name: str,
+            v: pd.DataFrame,
+            rank_col: str = "pred_ret_10d",
+            board_name: str = board,
+        ) -> None:
             s = _stats(_top5(v, rank_col))
             summary.append({"board": board_name, "variant": name, **s})
             sub_s = "  ".join(
@@ -450,7 +455,11 @@ def main() -> int:
 
         _report("基准 top-5 (无新头)", sub, board_name=board)
         for m in OLD_MARGINS:
-            _report(f"旧头 prob>base+{m:.2f}", sub[sub["prob"] > sub["base_rate"] + m], board_name=board)
+            _report(
+                f"旧头 prob>base+{m:.2f}",
+                sub[sub["prob"] > sub["base_rate"] + m],
+                board_name=board,
+            )
         for m in NEW_MARGINS:
             keep = (
                 (sub["pred_prob_new"] > sub["base_prod"] + m)
@@ -459,7 +468,12 @@ def main() -> int:
             )
             _report(f"新头 prob>base+{m:.2f}", sub[keep], board_name=board)
         _report("旧头 blend (ret×prob_up)", sub, rank_col="blend_old", board_name=board)
-        _report("新头 blend (ret×pred_prob_new)", sub, rank_col="blend_new", board_name=board)
+        _report(
+            "新头 blend (ret×pred_prob_new)",
+            sub,
+            rank_col="blend_new",
+            board_name=board,
+        )
 
     df.to_csv(out_dir / f"legacy_prob_head_replay_{ts}.csv", index=False)
     (out_dir / f"legacy_prob_head_replay_{ts}.json").write_text(
