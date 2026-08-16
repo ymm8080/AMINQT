@@ -128,9 +128,7 @@ def _panel_dates(pairs):
 
 def test_build_universe_full_market_not_frozen():
     # 解冻核心: 面板最新日没有的新股 (600002) 也进宇宙 — 旧口径宇宙冻结会漏掉它.
-    panel = _panel_dates(
-        [("600001", "2026-08-14"), ("300001", "2026-08-14")] * 2
-    )
+    panel = _panel_dates([("600001", "2026-08-14"), ("300001", "2026-08-14")] * 2)
     universe, kept = build_universe(_BASIC, panel, "20260817")
     assert universe == {"600001", "600002", "300001"}
     assert kept == 0
@@ -167,9 +165,7 @@ def test_build_universe_replace_history_keeps_delisted():
 
 def test_build_universe_replace_history_kept_zero_when_all_listed():
     # 替换历史日且该日 symbol 全在 stock_basic → kept=0, 宇宙无额外并入.
-    panel = _panel_dates(
-        [("600001", "2026-07-30"), ("600001", "2026-08-14")]
-    )
+    panel = _panel_dates([("600001", "2026-07-30"), ("600001", "2026-08-14")])
     universe, kept = build_universe(_BASIC, panel, "20260730")
     assert universe == {"600001", "600002", "300001"}
     assert kept == 0

@@ -66,9 +66,9 @@ def make_candidates() -> pd.DataFrame:
 
 
 def _panel_dates(n=80) -> np.ndarray:
-    return pd.to_datetime(
-        pd.date_range("2026-06-01", periods=n, freq="B")
-    ).to_numpy("datetime64[ns]")
+    return pd.to_datetime(pd.date_range("2026-06-01", periods=n, freq="B")).to_numpy(
+        "datetime64[ns]"
+    )
 
 
 def _gate_inputs() -> dict:
