@@ -28,6 +28,10 @@ from config.settings import INGEST_MIN_LIST_DAYS  # noqa: E402
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
 OUT_PANEL_DIR = "data/new_symbols_panel"
 
+# 覆盖率两档规则 (2026-08-15 事故修复: 防全 NA 列混进生产)
+COV_MAIN_MIN = 0.5  # 生产主列 (覆盖率>=0.9) 要求新面板至少 50%
+COV_SPARSE_RATIO = 0.5  # 稀疏列允许 = 生产覆盖率 x 该比率 (防 100% NA)
+
 FAILS: list[str] = []
 
 
@@ -39,9 +43,10 @@ def check(name: str, ok: bool, detail: str = "") -> None:
 
 
 def main() -> None:
-    files = sorted(glob.glob(os.path.join(OUT_PANEL_DIR, "base_new_*.parquet")))
+    # 显式只匹配最终面板 (含 cyq/alt 列); base_new_* 会误匹配中间产物
+    files = sorted(glob.glob(os.path.join(OUT_PANEL_DIR, "base_new_full_*.parquet")))
     if not files:
-        raise SystemExit("FATAL: 无新面板文件, 先跑构建脚本")
+        raise SystemExit("FATAL: 无 base_new_full_*.parquet, 先跑 B 链 (base→cyq→alt)")
     f = files[-1]
     print(f"== QC input: {f} ==", flush=True)
     df = pd.read_parquet(f)
@@ -121,38 +126,46 @@ def main() -> None:
             flush=True,
         )
 
-    # ── 3. 覆盖率对比 (同列, 生产面板 vs 新面板) ──
-    print("\n[3] 覆盖率对比 (生产 vs 新)", flush=True)
+    # ── 3. 覆盖率对比 (同列, 生产面板 vs 新面板, 全列断言) ──
+    # 08-15 事故修复: 之前只抽 8 列且不断言, 100% NA 列混进生产未被抓
+    print("\n[3] 覆盖率对比 (生产 vs 新, 全列)", flush=True)
     pcols = pd.read_parquet(PANEL).columns
     p = pd.read_parquet(PANEL, columns=["symbol"])
     print(
         f"    生产 {p['symbol'].nunique()} 只 | 新 {df['symbol'].nunique()} 只",
         flush=True,
     )
-    sample_prod = pd.read_parquet(
-        PANEL,
-        columns=[
-            c
-            for c in [
-                "weight_avg",
-                "winner_ratio",
-                "lhb_net_buy",
-                "margin_balance",
-                "roe",
-                "bt_count",
-                "sw_ret_1d",
-                "peak_price",
-            ]
-            if c in pcols
-        ],
+    import pyarrow.parquet as pq
+
+    pf = pq.ParquetFile(PANEL)
+    prod_cov: dict[str, float] = {}
+    for c in pcols:
+        col = pf.read(columns=[c]).column(0)
+        prod_cov[c] = 1.0 - col.null_count / max(len(col), 1)
+    new_cov = df[pcols].notna().mean() if len(pcols) else pd.Series(dtype=float)
+    cov_fails: list[str] = []
+    for c in pcols:
+        pc, nc = prod_cov[c], float(new_cov.get(c, 0.0))
+        threshold = COV_MAIN_MIN if pc >= 0.9 else pc * COV_SPARSE_RATIO
+        if nc + 1e-9 < threshold:
+            cov_fails.append(f"{c} 生产 {pc:.1%} vs 新 {nc:.1%} (需 ≥{threshold:.1%})")
+    check(
+        "全列覆盖率达标",
+        not cov_fails,
+        f"{len(cov_fails)}/{len(pcols)} 列不达标: {cov_fails[:8]}",
     )
-    for c in sample_prod.columns:
-        if c not in df.columns:
-            check(f"{c} 列存在", False, "新面板缺该列")
-            continue
-        prod_cov = sample_prod[c].notna().mean()
-        new_cov = df[c].notna().mean()
-        print(f"    {c}: 生产 {prod_cov:.1%} | 新 {new_cov:.1%}", flush=True)
+    for c in [
+        "weight_avg",
+        "winner_ratio",
+        "lhb_net_buy",
+        "margin_balance",
+        "roe",
+        "bt_count",
+        "sw_ret_1d",
+        "peak_price",
+    ]:
+        if c in pcols:
+            print(f"    {c}: 生产 {prod_cov[c]:.1%} | 新 {new_cov.get(c, 0.0):.1%}", flush=True)
 
     # ── 4. Schema 对齐 ──
     print("\n[4] Schema 对齐 (生产 120 列)", flush=True)
@@ -202,6 +215,27 @@ def main() -> None:
         not overlap,
         f"{len(overlap)} 只重叠: {sorted(overlap)[:8]}",
     )
+
+    # ── 7. 清单完整性 (清单 vs 面板, 防拉取缺失) ──
+    # 08-15 事故修复: A 链曾因 daily 拉取未落地缺 96 只, 缺失必须被 gate 解释
+    print("\n[7] 清单完整性", flush=True)
+    want = set(universe["symbol"].astype(str).str.strip())
+    missing = sorted(want - new_syms)
+    if missing:
+        exempt: list[str] = []
+        unexcused: list[str] = []
+        for s in missing:
+            ld = pd.to_datetime(ld_map[s], format="%Y%m%d", errors="coerce")
+            # 上市日至今在面板窗口内的交易日数 (不足 150 → 整只被 gate 剔, 正常)
+            n = len(cal) - cal.searchsorted(ld) if pd.notna(ld) else 0
+            (exempt if n < INGEST_MIN_LIST_DAYS else unexcused).append(s)
+        check(
+            "清单缺失全被 gate 豁免",
+            not unexcused,
+            f"{len(unexcused)} 只数据缺失: {unexcused[:8]} | gate 豁免 {len(exempt)} 只",
+        )
+    else:
+        check(f"清单 {len(want)} 只全部入面板", True)
 
     # ── 报告 ──
     ts_ = datetime.now().strftime("%Y%m%d_%H%M%S")

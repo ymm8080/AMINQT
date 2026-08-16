@@ -54,7 +54,7 @@ def _save(df, subdir, fname):
 
 def pull_top_inst():
     """Extract LHB dates from lhb/*.parquet and pull top_inst for each date."""
-    lhb_files = glob.glob(os.path.join(ALT_DIR, "lhb", "lhb_*.parquet"))
+    lhb_files = glob.glob(os.path.join(ALT_DIR, "lhb", "*.parquet"))
     if not lhb_files:
         print("[top_inst] no lhb files")
         return

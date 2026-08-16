@@ -37,7 +37,7 @@ from app.pipeline1.cleaning_pipeline import board_of  # noqa: E402
 from config.settings import INGEST_MIN_LIST_DAYS  # noqa: E402
 
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
-OUT_DIR = "data/new_symbols_raw"
+OUT_DIR = "data/supply_cache/alt_data"  # data/new_symbols_raw 已删, supply 缓存含全量拉取
 ALT_DIR = "data/supply_cache/alt_data"
 OUT_PANEL_DIR = "data/new_symbols_panel"
 
@@ -101,6 +101,8 @@ def main() -> None:
     lhb = lhb[lhb["symbol"].isin(newsyms)].copy()
 
     for d in (daily, basic, susp, adj, limit, cyq, margin, lhb):
+        if "trade_date" in d.columns and "date" not in d.columns:
+            d["date"] = pd.to_datetime(d["trade_date"])
         if "date" in d.columns:
             d["date"] = pd.to_datetime(d["date"])
         if "trade_date" in d.columns:
