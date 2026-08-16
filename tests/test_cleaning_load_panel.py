@@ -66,7 +66,8 @@ def test_load_panel_prefilters_by_cleaning_rules(monkeypatch):
     assert filts["amount"][2] == CleaningConfig().min_amount
     assert "is_suspended" in filts
     assert filts["is_suspended"][1] == "="
-    assert filts["is_suspended"][2] is False
+    # 合并新面板后 is_suspended 可能被写成 int64 (bool 无相等内核), 0 兼容 bool/int
+    assert filts["is_suspended"][2] == 0
 
 
 def test_load_panel_defaults_to_v3_path(monkeypatch):

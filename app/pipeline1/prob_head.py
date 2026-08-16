@@ -56,6 +56,9 @@ RAW_COLS = {
     "total_mv",
     "adv20",
 }
+# 生产 board 命名兼容: list_generator 双创=GEM/STAR, 内部=dual (同 model_meta.BOARD_TO_TRACK)
+_BOARD_GROUP = {"main": "main", "dual": "dual", "GEM": "dual", "STAR": "dual"}
+
 # 与并行概率头完全一致 (阶段1/2 验证配方, 无早停 → 免疫 legacy 1 树常数坍缩)
 LGB_PARAMS = dict(
     objective="binary",
@@ -241,6 +244,7 @@ def apply_prob_gate(
     保留 ⇔ pred_prob > base_rate + margin. bundle 缺失/过旧/当日不可用 →
     fail-open (保留) + 大声告警 (不杀清单); 个股 pred_prob 缺失 → fail-open 保留.
     feats = {board: 当日截面 V35 特征帧}; 缺板块 → fail-open.
+    res board 兼容生产命名 (main/GEM/STAR) 与内部 (main/dual) — GEM/STAR 并入 dual 组.
     附带: pred_prob 列写入输出 (仅诊断用 — legacy 排名键保持纯 pred_ret_10d,
     blend 已证伪, memory legacy-blend-rank-verdict, 勿再提).
     """
@@ -249,7 +253,7 @@ def apply_prob_gate(
         return res
     out = res.copy()
     for board in ("main", "dual"):
-        mask = out["board"] == board
+        mask = out["board"].astype(str).map(_BOARD_GROUP).eq(board)
         if not mask.any():
             continue
         feat_day = feats.get(board)

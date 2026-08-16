@@ -28,9 +28,9 @@ import numpy as np
 import pandas as pd
 
 from app.pipeline1 import prob_head
-from app.pipeline1.cleaning_pipeline import CleaningPipeline
+from app.pipeline1.cleaning_pipeline import CleaningPipeline, load_panel_v3
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from app.pipeline1.label_engine import LabelEngine
+from app.pipeline1.label_engine import LabelEngine, _ensure_sorted
 from app.pipeline1.predictor import V35Predictor
 from config.settings import LEGACY_PROB_GATE, PANEL_V3_PATH
 
@@ -49,7 +49,17 @@ def _attach_labels(feat: pd.DataFrame, dfb: pd.DataFrame) -> pd.DataFrame:
     镜像 label_engine.mask_suspension 的 mdd_3d 分支 ([T+1,T+5] 含停牌 → NaN).
     """
     missing = [c for c in NEED_RAW if c not in dfb.columns]
-    if missing:
+    if missing == ["adv20"] and "amount" in dfb.columns:
+        # adv20 是特征引擎内部中间量 (E5 滑点分层输入), 清洗帧无此列 —
+        # 按 label_engine.add_net_labels 同口径从 amount 现算 (rolling 20, min_periods=20)
+        dfb = _ensure_sorted(dfb)
+        dfb["adv20"] = (
+            dfb.groupby("symbol")["amount"]
+            .rolling(20, min_periods=20)
+            .mean()
+            .reset_index(level=0, drop=True)
+        )
+    elif missing:
         raise ValueError(f"清洗帧缺 raw 列 (无法打 mfe/pain 标签): {missing}")
     raw = dfb[NEED_RAW].copy()
     raw["symbol"] = raw["symbol"].astype(str)
@@ -81,7 +91,9 @@ def _attach_labels(feat: pd.DataFrame, dfb: pd.DataFrame) -> pd.DataFrame:
 
 def main() -> int:
     force = "--force" in sys.argv[1:]
-    panel = pd.read_parquet(str(PANEL_V3_PATH))
+    # 2026-08-16: 直读全量面板在重训窗口并发时 OOM (step2 sort 深拷贝 1.5GB 分配失败);
+    # 统一走 load_panel_v3 预过滤口径 (amount>=min_amount + 非停牌, 与重训/parallel 检查点同标准)
+    panel = load_panel_v3(path=PANEL_V3_PATH)
     print(f"[load] panel {len(panel):,}r max={panel['date'].max()}", flush=True)
     main_df, dual_df = CleaningPipeline().run_train(panel)
     del panel

@@ -54,24 +54,45 @@ def _safe_div(a: pd.Series, b: pd.Series) -> pd.Series:
     return np.where((b.notna() & (b != 0)), a / b, np.nan)
 
 
+# sw_l1 新名 → 生产面板老申万名 (与 SW_INDEX_CODES 同口径)
+_SW2OLD = {
+    "基础化工": "化工",
+    "商贸零售": "商业贸易",
+    "社会服务": "休闲服务",
+    "纺织服饰": "纺织服装",
+    "电力设备": "电气设备",
+}
+# 生产面板 28 老名集合 (煤炭/环保/石油石化/美容护理 无老名 → UNKNOWN)
+_OLD_NAMES = {
+    "农林牧渔", "化工", "钢铁", "有色金属", "电子", "家用电器", "食品饮料", "纺织服装",
+    "轻工制造", "医药生物", "公用事业", "交通运输", "房地产", "商业贸易", "休闲服务",
+    "综合", "建筑材料", "建筑装饰", "电气设备", "国防军工", "计算机", "传媒", "通信",
+    "银行", "非银金融", "汽车", "机械设备",
+}
+
+
 def _load_meta_industry() -> dict[str, str]:
-    """东财行业 map (生产语义, 缺省 UNKNOWN). 用当日缓存, 失败则尝试拉取."""
-    from app.pipeline1.panel_builder import load_or_fetch_meta
+    """sw 分类 CSV → 生产面板口径老申万名 (新名映射别名, 无老名 → UNKNOWN)."""
+    sys.path.insert(
+        0,
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"),
+    )
+    import fetch_sw_classification as fsc  # noqa: PLC0415
 
-    try:
-        ind_map, _ = load_or_fetch_meta()
-        if ind_map:
-            return ind_map
-    except Exception as exc:  # noqa: BLE001
-        print(f"[industry] meta 拉取失败: {exc}", flush=True)
-    # 回退: 已缓存的任意一日 stock_meta
-    metas = sorted(glob.glob(r"D:\AMINQT\DATA OTHERS\data\processed\stock_meta_*.json"))
-    if metas:
-        import json
-
-        with open(metas[-1], encoding="utf-8") as fh:
-            return json.load(fh).get("industry_map", {})
-    return {}
+    universe = pd.read_parquet(
+        sorted(glob.glob("data/new_universe/new_symbols_*.parquet"))[-1]
+    )
+    fsc.incremental_update(universe["ts_code"].dropna().astype(str).tolist())
+    cls = pd.read_csv(str(fsc.OUTPUT_PATH), encoding="utf-8-sig", dtype=str)
+    cls = cls.drop_duplicates(subset="symbol", keep="first")
+    cls["symbol"] = cls["symbol"].astype(str).str.strip()
+    ind_map: dict[str, str] = {}
+    for _, r in cls.iterrows():
+        name = str(r["sw_l1_name"])
+        old = _SW2OLD.get(name, name if name in _OLD_NAMES else "")
+        ind_map[r["symbol"]] = old or "UNKNOWN"
+    print(f"[industry] sw CSV 映射 {len(ind_map)} 只", flush=True)
+    return ind_map
 
 
 def main() -> None:

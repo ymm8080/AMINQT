@@ -31,6 +31,9 @@ OUT_PANEL_DIR = "data/new_symbols_panel"
 # 覆盖率两档规则 (2026-08-15 事故修复: 防全 NA 列混进生产)
 COV_MAIN_MIN = 0.5  # 生产主列 (覆盖率>=0.9) 要求新面板至少 50%
 COV_SPARSE_RATIO = 0.5  # 稀疏列允许 = 生产覆盖率 x 该比率 (防 100% NA)
+# 事件类列: 覆盖率随上市时长线性增长 (新股上市晚, 事件池窗口短),
+# 用比率判定会结构性误报 — 只要求非空行存在 (防全 NA 事故)
+EVENT_COLS = ("bt_", "lhb_", "sh_evt_")
 
 FAILS: list[str] = []
 
@@ -126,10 +129,17 @@ def main() -> None:
             flush=True,
         )
 
+    # ── 4. Schema 对齐 (先于覆盖率, 缺列时 df[pcols] 会 KeyError) ──
+    print("\n[4] Schema 对齐 (生产 120 列)", flush=True)
+    pcols = pd.read_parquet(PANEL).columns
+    missing = [c for c in pcols if c not in df.columns]
+    extra = [c for c in df.columns if c not in pcols]
+    check("无缺列", not missing, f"缺 {len(missing)}: {missing[:8]}")
+    check("无多列", not extra, f"多 {len(extra)}: {extra[:8]}")
+
     # ── 3. 覆盖率对比 (同列, 生产面板 vs 新面板, 全列断言) ──
     # 08-15 事故修复: 之前只抽 8 列且不断言, 100% NA 列混进生产未被抓
     print("\n[3] 覆盖率对比 (生产 vs 新, 全列)", flush=True)
-    pcols = pd.read_parquet(PANEL).columns
     p = pd.read_parquet(PANEL, columns=["symbol"])
     print(
         f"    生产 {p['symbol'].nunique()} 只 | 新 {df['symbol'].nunique()} 只",
@@ -142,10 +152,14 @@ def main() -> None:
     for c in pcols:
         col = pf.read(columns=[c]).column(0)
         prod_cov[c] = 1.0 - col.null_count / max(len(col), 1)
-    new_cov = df[pcols].notna().mean() if len(pcols) else pd.Series(dtype=float)
+    new_cov = df.reindex(columns=pcols).notna().mean() if len(pcols) else pd.Series(dtype=float)
     cov_fails: list[str] = []
     for c in pcols:
         pc, nc = prod_cov[c], float(new_cov.get(c, 0.0))
+        if c.startswith(EVENT_COLS) and pc < 0.9:
+            if nc <= 0:
+                cov_fails.append(f"{c} 全 NA (事件列, 生产 {pc:.1%})")
+            continue
         threshold = COV_MAIN_MIN if pc >= 0.9 else pc * COV_SPARSE_RATIO
         if nc + 1e-9 < threshold:
             cov_fails.append(f"{c} 生产 {pc:.1%} vs 新 {nc:.1%} (需 ≥{threshold:.1%})")
@@ -166,13 +180,6 @@ def main() -> None:
     ]:
         if c in pcols:
             print(f"    {c}: 生产 {prod_cov[c]:.1%} | 新 {new_cov.get(c, 0.0):.1%}", flush=True)
-
-    # ── 4. Schema 对齐 ──
-    print("\n[4] Schema 对齐 (生产 120 列)", flush=True)
-    missing = [c for c in pcols if c not in df.columns]
-    extra = [c for c in df.columns if c not in pcols]
-    check("无缺列", not missing, f"缺 {len(missing)}: {missing[:8]}")
-    check("无多列", not extra, f"多 {len(extra)}: {extra[:8]}")
 
     # ── 5. gate 校验: 首行 list_days >= 150 ──
     print(f"\n[5] 次新 gate (>= {INGEST_MIN_LIST_DAYS} 交易日)", flush=True)
@@ -211,7 +218,7 @@ def main() -> None:
     new_syms = set(df["symbol"].astype(str).str.strip())
     overlap = prod_syms & new_syms
     check(
-        "新符号 ∩ 生产 = ∅",
+        "新符号 ∩ 生产 = 空",
         not overlap,
         f"{len(overlap)} 只重叠: {sorted(overlap)[:8]}",
     )

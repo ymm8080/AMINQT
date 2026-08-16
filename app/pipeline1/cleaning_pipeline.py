@@ -142,7 +142,8 @@ def load_panel_v3(path=None) -> pd.DataFrame:
         str(path or PANEL_V3_PATH),
         filters=[
             ("amount", ">=", cfg.min_amount),
-            ("is_suspended", "=", False),
+            # 合并新面板后 is_suspended 可能被写成 int64 (bool 无相等内核); 用 0 兼容 bool/int
+            ("is_suspended", "=", 0),
         ],
     ).to_pandas()
 

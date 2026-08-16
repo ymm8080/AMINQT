@@ -17,9 +17,10 @@ import logging
 import os
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 
-from config.settings import PANEL_V3_PATH, data_others_path
+from config.settings import LEGACY_PROB_GATE, PANEL_V3_PATH, data_others_path
 
 from .cleaning_pipeline import CleaningPipeline
 from .data_supply import DataSupplyChain, DataSupplyError
@@ -131,6 +132,7 @@ class DailySelectionPipeline:
 
         # 推理 + 校准
         frames = []
+        gate_feats: dict[str, pd.DataFrame] = {}
         for board, feat, survivors in (
             ("main", feat_main, main_df),
             ("dual", feat_dual, dual_df),
@@ -141,8 +143,12 @@ class DailySelectionPipeline:
                 "symbol"
             ]
             today_feat = feat[feat["symbol"].isin(set(latest_symbols))]
+            # LEGACY_PROB_GATE 概率头用当日截面 (仅最新交易日一行, 防全历史重复行)
+            if "date" in feat.columns:
+                today_feat = today_feat[today_feat["date"] == today_feat["date"].max()]
             if len(today_feat) == 0:
                 continue
+            gate_feats[board] = today_feat
             frames.append(self.predictor.predict(today_feat, board))
         if not frames:
             return self.guard.on_failure()
@@ -172,8 +178,22 @@ class DailySelectionPipeline:
         except Exception:
             logger.warning("预测平滑失败 (非阻塞)", exc_info=True)
 
+        # [LEGACY_PROB_GATE] 概率闸输入组装 (2026-08-15 定案接线): legacy 无 stage
+        # 特征检查点 → 由本处传特征当日截面/清洗帧面板尾/面板全局交易日; 组装失败 →
+        # None (闸跳过, fail-open 不杀清单).
+        prob_gate = None
+        if LEGACY_PROB_GATE.get("enable", True):
+            try:
+                prob_gate = self._prob_gate_inputs(panel, main_df, dual_df, gate_feats)
+            except Exception as exc:
+                logger.error(
+                    "LEGACY_PROB_GATE 输入组装失败 -> 闸跳过 (fail-open): %s", exc
+                )
+
         # 清单生成 (含 D18 空仓触发)
-        result = self.lister.emit(candidates, env=env, market_state=market_state)
+        result = self.lister.emit(
+            candidates, env=env, market_state=market_state, prob_gate=prob_gate
+        )
         result["valve_state"] = valve_state
 
         # 持久化 + 守卫 + DB入库
@@ -290,6 +310,59 @@ class DailySelectionPipeline:
         )
         prev = [d for d in dates if d < trade_date]
         return self.load_list(prev[-1]) if prev else None
+
+    # ---------------- LEGACY_PROB_GATE 输入组装 ----------------
+    @staticmethod
+    def _prob_gate_inputs(
+        panel: pd.DataFrame,
+        main_df: pd.DataFrame,
+        dual_df: pd.DataFrame,
+        feats_by_board: dict[str, pd.DataFrame],
+    ) -> dict:
+        """组装 legacy 并行式概率闸输入 (prob_head.apply_prob_gate 签名, 2026-08-16).
+
+        legacy 无 stage 特征检查点 → 数据流与训练脚本 _train_legacy_prob_head 同构:
+        - feats: 各板当日截面 V35 特征帧 (run() 已构建, bundle feat_cols ⊆ 模型
+          inference_cols — 概率头与模型同 inference_cols 训练)
+        - tail: 清洗帧面板尾 (symbol/date/close_hfq/high_hfq/adv20, 近 base_rate_days+14
+          交易日); adv20 由 amount 20 日均值现算 (清洗帧无 adv20, 同 label_engine 口径,
+          仅用历史 → 无前瞻)
+        - panel_dates: 面板全局交易日 (bundle staleness 判定)
+        清洗帧缺所需 raw 列 → raise (由 run() 捕获 → 闸跳过 fail-open).
+        """
+        from .label_engine import _ensure_sorted
+
+        n = LEGACY_PROB_GATE["base_rate_days"] + 14
+        tail_frames = []
+        for df in (main_df, dual_df):
+            if df is None or len(df) == 0:
+                continue
+            need = ["symbol", "date", "close_hfq", "high_hfq", "amount"]
+            missing = [c for c in need if c not in df.columns]
+            if missing:
+                raise ValueError(f"清洗帧缺 {missing} 列, 无法组装概率闸 tail")
+            # 清洗帧无 adv20 (特征引擎内部中间量), 按 label_engine 同口径从 amount 现算
+            s = _ensure_sorted(df)
+            adv20 = (
+                s.groupby("symbol")["amount"]
+                .rolling(20, min_periods=20)
+                .mean()
+                .reset_index(level=0, drop=True)
+            )
+            dates = pd.to_datetime(s["date"])
+            uni = np.unique(dates.to_numpy())
+            cut = uni[-n] if len(uni) >= n else uni[0]
+            mask = dates.to_numpy() >= cut
+            tail = s.loc[mask, ["symbol", "date", "close_hfq", "high_hfq"]].copy()
+            tail["date"] = pd.to_datetime(tail["date"])
+            tail["symbol"] = tail["symbol"].astype(str)
+            tail["adv20"] = adv20[mask].to_numpy()
+            tail_frames.append(tail)
+        return {
+            "feats": dict(feats_by_board),
+            "tail": pd.concat(tail_frames, ignore_index=True),
+            "panel_dates": np.unique(pd.to_datetime(panel["date"]).to_numpy()),
+        }
 
     # ---------------- 持仓卖出信号 (预测驱动 + 价格硬止损) ----------------
     def predict_held(

@@ -142,14 +142,19 @@ def main() -> None:
             )
         ]
         if len(fina) and fin_cols:
+            # pandas 2.3.3 merge_asof 要求 left/right 的 on 列全局升序 (by 组内匹配由内部处理)
+            df = df.sort_values("date").reset_index(drop=True)
             df = pd.merge_asof(
                 df,
-                fina[["symbol", "announce_date"] + fin_cols],
+                fina[["symbol", "announce_date"] + fin_cols].sort_values(
+                    "announce_date"
+                ),
                 left_on="date",
                 right_on="announce_date",
                 by="symbol",
                 direction="backward",
             )
+            df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
             print(f"[fina] merged {len(fina):,} rows, {len(fin_cols)} cols", flush=True)
             # 恢复被删的 fina 缓存 (build_full_panel 回退路径读它)
             cache_d = os.path.join(ALT_DIR, "fina_indicator")

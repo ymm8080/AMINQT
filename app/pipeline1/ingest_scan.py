@@ -10,6 +10,37 @@ import pandas as pd
 from app.core.universe_manager import name_is_st
 
 
+def build_universe(stock_basic, panel_dates, trade_date):
+    """宇宙 = stock_basic 全市场 ∪ (替换历史日时) 该日已存在的 panel symbol.
+
+    2026-08-16 解冻修复: 旧口径宇宙 = 面板最新日 symbol 集合 → 宇宙自指冻结,
+    新股永不进入 (ingest gate 只能减不能加). 新口径以 stock_basic L 全市场为准,
+    次新/ST 仍由 apply_ingest_scan 逐行剔除. stock_basic 为空 → 返回空集
+    (调用方应 FATAL, 防止静默全弃).
+
+    Args:
+        stock_basic: DataFrame, index=symbol (stock_basic L 清单).
+        panel_dates: DataFrame, 含 ``symbol``/``date`` 列.
+        trade_date: 本日交易日 ("YYYYMMDD" 字符串或 Timestamp).
+
+    Returns:
+        (universe, kept) — kept = 仅因替换历史日并入、不在 stock_basic 中的
+        symbol 数 (退市/暂停上市行保护).
+    """
+    universe = set(stock_basic.index)
+    max_date = panel_dates["date"].max()
+    kept = 0
+    if pd.Timestamp(trade_date) <= max_date:
+        existing = set(
+            panel_dates.loc[
+                panel_dates["date"] == pd.Timestamp(trade_date), "symbol"
+            ].unique()
+        )
+        kept = len(existing - universe)
+        universe |= existing
+    return universe, kept
+
+
 def apply_ingest_scan(df, stock_info, trade_date, min_list_days, trade_cal):
     """剔 ST/*ST 股 和 上市 < min_list_days 个交易日的新股.
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from app.pipeline1.ingest_scan import apply_ingest_scan
+from app.pipeline1.ingest_scan import apply_ingest_scan, build_universe
 
 TRADE_DATE = "20260803"
 _BASE = pd.Timestamp(TRADE_DATE)
@@ -107,3 +107,78 @@ def test_missing_trade_cal_raises():
         assert "trade_cal" in str(e)
     else:
         raise AssertionError("expected ValueError when trade_cal missing")
+
+
+# ── build_universe (2026-08-16 宇宙解冻) ──
+
+_BASIC = pd.DataFrame(
+    {"symbol": ["600001", "600002", "300001"]}, index=["600001", "600002", "300001"]
+)
+
+
+def _panel_dates(pairs):
+    """[(symbol, date_str)] → 面板 symbol×date 子集."""
+    return pd.DataFrame(
+        {
+            "symbol": [s for s, _ in pairs],
+            "date": [pd.Timestamp(d) for _, d in pairs],
+        }
+    )
+
+
+def test_build_universe_full_market_not_frozen():
+    # 解冻核心: 面板最新日没有的新股 (600002) 也进宇宙 — 旧口径宇宙冻结会漏掉它.
+    panel = _panel_dates(
+        [("600001", "2026-08-14"), ("300001", "2026-08-14")] * 2
+    )
+    universe, kept = build_universe(_BASIC, panel, "20260817")
+    assert universe == {"600001", "600002", "300001"}
+    assert kept == 0
+
+
+def test_build_universe_new_day_excludes_delisted():
+    # 新交易日 (trade_date > 面板最新日): 宇宙 = stock_basic L 全量,
+    # 面板历史里已退市/暂停上市的 symbol 不并入 (当日无其新数据, 并入无意义).
+    panel = _panel_dates(
+        [
+            ("600001", "2026-08-14"),
+            ("000999", "2026-08-14"),  # 不在 stock_basic L (已退市)
+        ]
+    )
+    universe, kept = build_universe(_BASIC, panel, "20260817")
+    assert universe == {"600001", "600002", "300001"}
+    assert kept == 0
+
+
+def test_build_universe_replace_history_keeps_delisted():
+    # 替换历史日 (trade_date <= 面板最新日): 该日已存在但不在 stock_basic 的
+    # symbol (退市/暂停上市) 必须并入, 防止其历史行被整行丢弃.
+    panel = _panel_dates(
+        [
+            ("600001", "2026-07-30"),
+            ("000999", "2026-07-30"),
+            ("600001", "2026-08-14"),
+        ]
+    )
+    universe, kept = build_universe(_BASIC, panel, "20260730")
+    assert universe == {"600001", "600002", "300001", "000999"}
+    assert kept == 1
+
+
+def test_build_universe_replace_history_kept_zero_when_all_listed():
+    # 替换历史日且该日 symbol 全在 stock_basic → kept=0, 宇宙无额外并入.
+    panel = _panel_dates(
+        [("600001", "2026-07-30"), ("600001", "2026-08-14")]
+    )
+    universe, kept = build_universe(_BASIC, panel, "20260730")
+    assert universe == {"600001", "600002", "300001"}
+    assert kept == 0
+
+
+def test_build_universe_empty_stock_basic_returns_empty():
+    # stock_basic 拉取失败 (空) → 宇宙空集, 调用方 (_daily_fetch) 应 FATAL,
+    # 防止宇宙为空时当日行被全部静默丢弃 (面板再冻结).
+    panel = _panel_dates([("600001", "2026-08-14")])
+    universe, kept = build_universe(pd.DataFrame(), panel, "20260817")
+    assert universe == set()
+    assert kept == 0
