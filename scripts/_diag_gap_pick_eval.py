@@ -158,7 +158,9 @@ def _eval_group(top: pd.DataFrame, name: str, days: list, n_sub: int) -> dict:
             {
                 "win": f"{i + 1}/{n_sub}",
                 "rows": int(len(seg)),
-                "hit10": float((seg[LABEL["10d"]] > 0).mean()) if len(seg) else float("nan"),
+                "hit10": float((seg[LABEL["10d"]] > 0).mean())
+                if len(seg)
+                else float("nan"),
                 "mean10": float(seg[LABEL["10d"]].mean()) if len(seg) else float("nan"),
             }
         )
@@ -230,7 +232,8 @@ def main() -> int:
             r = _eval_group(seg, name, days, n_sub)
             all_rows.append(r)
             subs = "  ".join(
-                f"{s['win']}:{s['hit10']:.0%}/{s['mean10']:+.2%}" for s in r["sub_windows"]
+                f"{s['win']}:{s['hit10']:.0%}/{s['mean10']:+.2%}"
+                for s in r["sub_windows"]
             )
             print(
                 f"{name:>14} {r['picks_per_day']:>7.2f} 票/日  "

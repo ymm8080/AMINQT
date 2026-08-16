@@ -23,6 +23,7 @@ WORM: data/_diag_parallel_gbm_prod_replay_<ts>.csv/.json
 
 from __future__ import annotations
 
+import gc
 import json
 import os
 import sys
@@ -165,6 +166,34 @@ def main() -> int:
         prob_ok = y_prob.notna() & t["label_pain"].notna()
         idx = np.searchsorted(dates, t["date"].values)
 
+        # ---- 内存裁剪 (2026-08-16): 面板扩建后 main 1.63M 行宽表在末次扩窗重训时
+        # 因 int64 块拷贝 201MiB 分配失败 (_ArrayMemoryError) 崩溃.
+        # 只留训练/评估所需列; 特征列统一 float32 (与循环内 to_numpy(dtype="float32")
+        # 位级一致, 不改变任何数值); 价格列供 _prod_base_series/_base_rate 使用.
+        keep = [
+            "symbol",
+            "date",
+            "board",
+            "score",
+            "close_hfq",
+            "high_hfq",
+            "adv20",
+            "mfe_3d",
+            "label_pain",
+            "label_pm_3d_net",
+            "label_pm_10d_net",
+        ] + feat_cols
+        # 不 copy: t[keep].copy() 触发 pandas block consolidation, 257 列 x 161万行
+        # float64 需 3.08GiB 连续块 (2026-08-16 第三次 _ArrayMemoryError 在此);
+        # 列选择共享原块引用, 后续 astype 只替换 feat_cols 列块.
+        t = t[keep]
+        t[feat_cols] = t[feat_cols].astype("float32")
+        # 特征矩阵一次性转 numpy (t 全程不变): 循环内 t.loc[tr, feat_cols] 每次
+        # 分配 int64 块拷贝 (22列×160万×8B≈283MiB), 碎片化时 OOM (2026-08-16 两次
+        # _ArrayMemoryError 均在此). numpy 布尔索引无 int64 taker, 峰值减半.
+        feat_arr = t[feat_cols].to_numpy(dtype="float32")
+        gc.collect()
+
         # ---- walk-forward 扩窗重训 (生产配方, 每 21 交易日) ----
         # pred   = 全截面预测 (生产 gate_probabilities 语义, 任何行都给概率)
         # pred_wf = 仅 prob_ok 行 (阶段2 wf 语义, 其余 NaN → 旧闸剔除)
@@ -188,8 +217,8 @@ def main() -> int:
             for k, d in enumerate(cal_test):
                 pos = len(dates) - EVAL_DAYS + k
                 if model is None or pos % REFIT_EVERY == 0:
-                    tr = (idx < pos) & prob_ok
-                    x = t.loc[tr, feat_cols].to_numpy(dtype="float32")
+                    tr = ((idx < pos) & prob_ok).to_numpy()
+                    x = feat_arr[tr]
                     y = y_prob.loc[tr].to_numpy()
                     model = LGBMClassifier(**prob_head.LGB_PARAMS)
                     model.fit(x, y)
@@ -197,7 +226,7 @@ def main() -> int:
                 te = t["date"].values == d
                 if not te.any():
                     continue
-                xd = t.loc[te, feat_cols].to_numpy(dtype="float32")
+                xd = feat_arr[te]
                 if len(xd) == 0:
                     continue
                 p = model.predict_proba(xd)[:, 1]

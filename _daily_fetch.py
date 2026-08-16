@@ -39,7 +39,7 @@ import pyarrow.parquet as pq
 import tushare as ts
 from dotenv import load_dotenv
 
-from app.pipeline1.ingest_scan import apply_ingest_scan
+from app.pipeline1.ingest_scan import apply_ingest_scan, build_universe
 from config.settings import INGEST_MIN_LIST_DAYS
 
 load_dotenv()
@@ -58,25 +58,6 @@ if not _token:
     print("FATAL: No Tushare token found. Set TUSHARE_TOKEN or run `tushare.set_token('your_token')`")
     sys.exit(1)
 pro = ts.pro_api(_token)
-
-# ── 0. Get valid stock universe from panel ──
-print("[0] Getting stock universe...")
-yesterday = pq.read_table(PANEL, columns=["symbol", "date"]).to_pandas()
-max_date = yesterday["date"].max()
-valid_universe = set(yesterday[yesterday["date"] == max_date]["symbol"].unique())
-print(f"    Universe: {len(valid_universe)} stocks, max date: {max_date.date()}")
-
-if pd.Timestamp(TRADE_DATE) <= max_date:
-    # 替换历史日: 合并当日已存在的 symbol, 防止刚停牌股票 (不在最新日 universe,
-    # 如 07-30 停牌的 300333) 在替换该日行时被整行丢弃.
-    existing_today = set(yesterday[yesterday["date"] == pd.Timestamp(TRADE_DATE)]["symbol"].unique())
-    kept = existing_today - valid_universe
-    valid_universe = valid_universe | existing_today
-    print(f"    {TRADE_DATE} already in panel (max={max_date.date()}), will replace today's rows. "
-          f"Kept {len(kept)} symbols present on {TRADE_DATE} but not on max date.")
-
-# ── 1. Fetch all Tushare sources ──
-print(f"\n[1] Fetching Tushare data for {TRADE_DATE}...")
 
 def to_symbol(df):
     if "ts_code" in df.columns:
@@ -111,6 +92,22 @@ def fetch_stock_basic_cached() -> pd.DataFrame:
         if len(_stock_basic_cache):
             _stock_basic_cache = _stock_basic_cache.set_index("symbol")
     return _stock_basic_cache
+
+# ── 0. Get valid stock universe (stock_basic 全市场重建, 不再冻结面板快照) ──
+print("[0] Getting stock universe...")
+yesterday = pq.read_table(PANEL, columns=["symbol", "date"]).to_pandas()
+max_date = yesterday["date"].max()
+valid_universe, kept = build_universe(fetch_stock_basic_cached(), yesterday, TRADE_DATE)
+if not valid_universe:
+    print("FATAL: stock_basic returned empty universe")
+    sys.exit(1)
+if pd.Timestamp(TRADE_DATE) <= max_date:
+    print(f"    {TRADE_DATE} already in panel (max={max_date.date()}), will replace today's rows. "
+          f"Kept {kept} symbols present on {TRADE_DATE} but not in stock_basic(L).")
+print(f"    Universe: {len(valid_universe)} stocks (stock_basic L), panel max date: {max_date.date()}")
+
+# ── 1. Fetch all Tushare sources ──
+print(f"\n[1] Fetching Tushare data for {TRADE_DATE}...")
 
 ohlcv = safe_fetch(pro.daily, "OHLCV", trade_date=TRADE_DATE)
 adj   = safe_fetch(pro.adj_factor, "adj_factor", trade_date=TRADE_DATE)

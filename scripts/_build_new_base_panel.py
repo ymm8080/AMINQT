@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """全市场宇宙修复 Step 3: 新股票基础面板构建 (2026-08-15).
 
 把 _pull_universe_raw.py 拉回的数据组装成与生产面板同语义的 base 面板
@@ -21,6 +20,7 @@
 
 WORM: data/new_symbols_panel/base_new_<ts>.parquet
 """
+
 from __future__ import annotations
 
 import glob
@@ -37,7 +37,9 @@ from app.pipeline1.cleaning_pipeline import board_of  # noqa: E402
 from config.settings import INGEST_MIN_LIST_DAYS  # noqa: E402
 
 PANEL = r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet"
-OUT_DIR = "data/new_symbols_raw"
+OUT_DIR = (
+    "data/supply_cache/alt_data"  # data/new_symbols_raw 已删, supply 缓存含全量拉取
+)
 ALT_DIR = "data/supply_cache/alt_data"
 OUT_PANEL_DIR = "data/new_symbols_panel"
 
@@ -54,24 +56,70 @@ def _safe_div(a: pd.Series, b: pd.Series) -> pd.Series:
     return np.where((b.notna() & (b != 0)), a / b, np.nan)
 
 
+# sw_l1 新名 → 生产面板老申万名 (与 SW_INDEX_CODES 同口径)
+_SW2OLD = {
+    "基础化工": "化工",
+    "商贸零售": "商业贸易",
+    "社会服务": "休闲服务",
+    "纺织服饰": "纺织服装",
+    "电力设备": "电气设备",
+}
+# 生产面板 28 老名集合 (煤炭/环保/石油石化/美容护理 无老名 → UNKNOWN)
+_OLD_NAMES = {
+    "农林牧渔",
+    "化工",
+    "钢铁",
+    "有色金属",
+    "电子",
+    "家用电器",
+    "食品饮料",
+    "纺织服装",
+    "轻工制造",
+    "医药生物",
+    "公用事业",
+    "交通运输",
+    "房地产",
+    "商业贸易",
+    "休闲服务",
+    "综合",
+    "建筑材料",
+    "建筑装饰",
+    "电气设备",
+    "国防军工",
+    "计算机",
+    "传媒",
+    "通信",
+    "银行",
+    "非银金融",
+    "汽车",
+    "机械设备",
+}
+
+
 def _load_meta_industry() -> dict[str, str]:
-    """东财行业 map (生产语义, 缺省 UNKNOWN). 用当日缓存, 失败则尝试拉取."""
-    from app.pipeline1.panel_builder import load_or_fetch_meta
+    """sw 分类 CSV → 生产面板口径老申万名 (新名映射别名, 无老名 → UNKNOWN)."""
+    sys.path.insert(
+        0,
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"
+        ),
+    )
+    import fetch_sw_classification as fsc  # noqa: PLC0415
 
-    try:
-        ind_map, _ = load_or_fetch_meta()
-        if ind_map:
-            return ind_map
-    except Exception as exc:  # noqa: BLE001
-        print(f"[industry] meta 拉取失败: {exc}", flush=True)
-    # 回退: 已缓存的任意一日 stock_meta
-    metas = sorted(glob.glob(r"D:\AMINQT\DATA OTHERS\data\processed\stock_meta_*.json"))
-    if metas:
-        import json
-
-        with open(metas[-1], encoding="utf-8") as fh:
-            return json.load(fh).get("industry_map", {})
-    return {}
+    universe = pd.read_parquet(
+        sorted(glob.glob("data/new_universe/new_symbols_*.parquet"))[-1]
+    )
+    fsc.incremental_update(universe["ts_code"].dropna().astype(str).tolist())
+    cls = pd.read_csv(str(fsc.OUTPUT_PATH), encoding="utf-8-sig", dtype=str)
+    cls = cls.drop_duplicates(subset="symbol", keep="first")
+    cls["symbol"] = cls["symbol"].astype(str).str.strip()
+    ind_map: dict[str, str] = {}
+    for _, r in cls.iterrows():
+        name = str(r["sw_l1_name"])
+        old = _SW2OLD.get(name, name if name in _OLD_NAMES else "")
+        ind_map[r["symbol"]] = old or "UNKNOWN"
+    print(f"[industry] sw CSV 映射 {len(ind_map)} 只", flush=True)
+    return ind_map
 
 
 def main() -> None:
@@ -101,6 +149,8 @@ def main() -> None:
     lhb = lhb[lhb["symbol"].isin(newsyms)].copy()
 
     for d in (daily, basic, susp, adj, limit, cyq, margin, lhb):
+        if "trade_date" in d.columns and "date" not in d.columns:
+            d["date"] = pd.to_datetime(d["trade_date"])
         if "date" in d.columns:
             d["date"] = pd.to_datetime(d["date"])
         if "trade_date" in d.columns:
@@ -113,18 +163,23 @@ def main() -> None:
     cyq = cyq.drop_duplicates(subset=["symbol", "trade_date"])
     margin = margin.drop_duplicates(subset=["symbol", "date"])
     lhb = lhb.drop_duplicates(subset=["symbol", "date"])
-    print(f"[base] daily={len(daily):,} basic={len(basic):,} susp={len(susp):,} "
-          f"adj={len(adj):,} limit={len(limit):,} cyq={len(cyq):,} "
-          f"margin={len(margin):,} lhb={len(lhb):,}", flush=True)
+    print(
+        f"[base] daily={len(daily):,} basic={len(basic):,} susp={len(susp):,} "
+        f"adj={len(adj):,} limit={len(limit):,} cyq={len(cyq):,} "
+        f"margin={len(margin):,} lhb={len(lhb):,}",
+        flush=True,
+    )
     if not len(daily):
         raise SystemExit("FATAL: daily 空 — 拉取未完成, 先跑 _pull_universe_raw.py")
 
     # ── 2. 主表: daily + adj_factor → hfq ──
-    df = daily[["symbol", "date", "open", "high", "low", "close",
-                "pre_close", "amount", "vol"]].copy()
+    df = daily[
+        ["symbol", "date", "open", "high", "low", "close", "pre_close", "amount", "vol"]
+    ].copy()
     df["amount"] = pd.to_numeric(df["amount"], errors="coerce") * 1000.0  # 千元→元
     adj_m = adj[["symbol", "trade_date", "adj_factor"]].rename(
-        columns={"trade_date": "date"})
+        columns={"trade_date": "date"}
+    )
     adj_m["date"] = pd.to_datetime(adj_m["date"], format="%Y%m%d", errors="coerce")
     df = df.merge(adj_m, on=["symbol", "date"], how="left")
     factor = pd.to_numeric(df["adj_factor"], errors="coerce")
@@ -138,10 +193,25 @@ def main() -> None:
     df.loc[valid, "volume"] = df.loc[valid, "amount"] / df.loc[valid, "close"]
 
     # ── 3. daily_basic ──
-    b_cols = [c for c in ["volume_ratio", "pe_ttm", "pb", "ps_ttm", "total_share",
-                          "float_share", "free_share", "total_mv", "circ_mv",
-                          "dv_ratio", "dv_ttm", "turnover_rate",
-                          "turnover_rate_f"] if c in basic.columns]
+    b_cols = [
+        c
+        for c in [
+            "volume_ratio",
+            "pe_ttm",
+            "pb",
+            "ps_ttm",
+            "total_share",
+            "float_share",
+            "free_share",
+            "total_mv",
+            "circ_mv",
+            "dv_ratio",
+            "dv_ttm",
+            "turnover_rate",
+            "turnover_rate_f",
+        ]
+        if c in basic.columns
+    ]
     basic_m = basic[["symbol", "date"] + b_cols].copy()
     df = df.merge(basic_m, on=["symbol", "date"], how="left")
     if "turnover_rate_f" in df.columns:
@@ -151,8 +221,11 @@ def main() -> None:
 
     # ── 4. stk_limit / suspend / board / industry ──
     if len(limit):
-        df = df.merge(limit[["symbol", "date", "up_limit_raw", "down_limit_raw"]],
-                      on=["symbol", "date"], how="left")
+        df = df.merge(
+            limit[["symbol", "date", "up_limit_raw", "down_limit_raw"]],
+            on=["symbol", "date"],
+            how="left",
+        )
     else:
         df["up_limit_raw"] = np.nan
         df["down_limit_raw"] = np.nan
@@ -166,15 +239,21 @@ def main() -> None:
 
     # ── 5. cyq base + 派生 ──
     if len(cyq):
-        cyq_m = cyq[["symbol", "trade_date", "cost_50pct", "cost_95pct",
-                     "weight_avg", "winner_rate", "cost_5pct"]].rename(
-            columns={"trade_date": "date"})
-        cyq_m["date"] = pd.to_datetime(cyq_m["date"], format="%Y%m%d",
-                                       errors="coerce")
+        cyq_m = cyq[
+            [
+                "symbol",
+                "trade_date",
+                "cost_50pct",
+                "cost_95pct",
+                "weight_avg",
+                "winner_rate",
+                "cost_5pct",
+            ]
+        ].rename(columns={"trade_date": "date"})
+        cyq_m["date"] = pd.to_datetime(cyq_m["date"], format="%Y%m%d", errors="coerce")
         df = df.merge(cyq_m, on=["symbol", "date"], how="left")
     else:
-        for c in ["cost_50pct", "cost_95pct", "weight_avg", "winner_rate",
-                  "cost_5pct"]:
+        for c in ["cost_50pct", "cost_95pct", "weight_avg", "winner_rate", "cost_5pct"]:
             df[c] = np.nan
     df["winner_ratio"] = pd.to_numeric(df["winner_rate"], errors="coerce") / 100.0
     df["avg_cost"] = df["cost_50pct"]
@@ -189,14 +268,17 @@ def main() -> None:
 
     # ── 6. margin / lhb (恢复缓存, 已是面板口径) ──
     for src, cols in [
-        (margin, ["margin_balance", "short_balance", "margin_buy_amt",
-                  "short_sell_vol"]),
+        (
+            margin,
+            ["margin_balance", "short_balance", "margin_buy_amt", "short_sell_vol"],
+        ),
         (lhb, ["lhb_net_buy", "lhb_buy_amt", "lhb_sell_amt"]),
     ]:
         if len(src):
             avail = [c for c in cols if c in src.columns]
-            df = df.merge(src[["symbol", "date"] + avail],
-                          on=["symbol", "date"], how="left")
+            df = df.merge(
+                src[["symbol", "date"] + avail], on=["symbol", "date"], how="left"
+            )
         for c in cols:
             if c not in df.columns:
                 df[c] = np.nan
@@ -205,16 +287,23 @@ def main() -> None:
     cal = pd.DatetimeIndex(
         sorted(pd.read_parquet(PANEL, columns=["date"])["date"].unique())
     )
-    ld_map = dict(zip(universe["symbol"].astype(str).str.strip(),
-                      universe["list_date"], strict=False))
+    ld_map = dict(
+        zip(
+            universe["symbol"].astype(str).str.strip(),
+            universe["list_date"],
+            strict=False,
+        )
+    )
     ld = pd.to_datetime(df["symbol"].map(ld_map), format="%Y%m%d", errors="coerce")
     left = cal.searchsorted(ld, side="left")
     right = cal.searchsorted(df["date"], side="right")
     list_days = right - left
     before = len(df)
     df = df[list_days >= INGEST_MIN_LIST_DAYS].copy()
-    print(f"[gate] 剔次新 {before - len(df):,} 行 (list_days < {INGEST_MIN_LIST_DAYS})",
-          flush=True)
+    print(
+        f"[gate] 剔次新 {before - len(df):,} 行 (list_days < {INGEST_MIN_LIST_DAYS})",
+        flush=True,
+    )
 
     # ── 8. 派生特征 (向量化 groupby) ──
     df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
@@ -258,7 +347,8 @@ def main() -> None:
     df["conc_trend_20d"] = _safe_div(df["pct_90_con"], p90)
     df["conc_90_industry_rank"] = (
         df.groupby(["date", "industry"], observed=True)["pct_90_con"]
-        .rank(pct=True).fillna(0.5)
+        .rank(pct=True)
+        .fillna(0.5)
     )
 
     # ── 9. 保存 (WORM) ──
@@ -267,12 +357,32 @@ def main() -> None:
     out = os.path.join(OUT_PANEL_DIR, f"base_new_{ts_}.parquet")
     df.to_parquet(out, index=False)
     print(f"[save] {out}", flush=True)
-    print(f"[stat] rows={len(df):,} symbols={df['symbol'].nunique()} "
-          f"dates={df['date'].min().date()}..{df['date'].max().date()} "
-          f"cols={len(df.columns)}", flush=True)
-    cov = df[["close", "close_hfq", "volume", "turnover_rate", "pe_ttm",
-              "up_limit_raw", "weight_avg", "winner_ratio", "margin_balance",
-              "lhb_net_buy", "industry"]].notna().mean().round(3)
+    print(
+        f"[stat] rows={len(df):,} symbols={df['symbol'].nunique()} "
+        f"dates={df['date'].min().date()}..{df['date'].max().date()} "
+        f"cols={len(df.columns)}",
+        flush=True,
+    )
+    cov = (
+        df[
+            [
+                "close",
+                "close_hfq",
+                "volume",
+                "turnover_rate",
+                "pe_ttm",
+                "up_limit_raw",
+                "weight_avg",
+                "winner_ratio",
+                "margin_balance",
+                "lhb_net_buy",
+                "industry",
+            ]
+        ]
+        .notna()
+        .mean()
+        .round(3)
+    )
     print("[coverage]")
     print(cov.to_string(), flush=True)
     print("BASE BUILD DONE", flush=True)

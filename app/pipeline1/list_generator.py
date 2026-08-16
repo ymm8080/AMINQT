@@ -434,6 +434,7 @@ class ListGenerator:
         env=None,
         market_state: str = "range",
         ref_date: str | None = None,
+        prob_gate: dict | None = None,
     ) -> dict:
         """输出最终清单.
 
@@ -443,6 +444,8 @@ class ListGenerator:
             market_state: 'range' / 'bear'
             ref_date: 名单生成日 (T 日), 用于 FINAL STOCK SCAN 窗口锚定;
                 缺省从 candidates['date'] 推导, 再无则用今日.
+            prob_gate: LEGACY_PROB_GATE 输入 {feats, tail, panel_dates} (生产
+                daily_pipeline 组装); None (非生产调用方) → 闸跳过.
 
         Returns:
             {'mode': 'normal'|'bear'|'value'|'empty',
@@ -481,6 +484,34 @@ class ListGenerator:
                 "empty": True,
                 "schema_version": SCHEMA_VERSION,
             }
+        # [LEGACY_PROB_GATE] 并行式概率闸 (2026-08-15 定案): t3 门后、pred_ret_10d
+        # 排名前 — 保留 ⇔ pred_prob > base_rate + margin (prob 只作闸, 排名键保持纯
+        # pred_ret_10d, blend 已证伪). 闸不可用/未传输入 → fail-open 不杀清单;
+        # 概率头异常 (特征缺列 = schema 漂移) → 大声告警后 fail-open.
+        if prob_gate is not None and len(passed):
+            try:
+                from . import prob_head
+
+                passed = prob_head.apply_prob_gate(
+                    passed,
+                    prob_gate["feats"],
+                    prob_gate["tail"],
+                    prob_gate["panel_dates"],
+                )
+            except Exception as exc:
+                logger.error(
+                    "LEGACY_PROB_GATE 异常 (schema 漂移/输入缺失) -> 闸失效 (fail-open): %s",
+                    exc,
+                )
+            if len(passed) == 0:
+                logger.warning("LEGACY_PROB_GATE 剔除全部候选 -> 今日空清单")
+                return {
+                    "mode": "empty",
+                    "list": pd.DataFrame(columns=SCHEMA_FIELDS),
+                    "cap_position": 0.0,
+                    "empty": True,
+                    "schema_version": SCHEMA_VERSION,
+                }
         # 按预测幅度排序取 TOP_N (2026-08-07: 纯 pred_ret_3d 幅度, 回测赢 d3 混合; 行业分散在清单层面)
         passed = self._rank_by_magnitude(passed)
         # 行业集中度限制: 同一行业 <= MAX_PER_INDUSTRY 只

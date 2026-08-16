@@ -69,7 +69,9 @@ def _load_board(board: str) -> pd.DataFrame:
     return t
 
 
-def _train_hit10d_head(t: pd.DataFrame, cutoff: pd.Timestamp) -> tuple[list[str], object]:
+def _train_hit10d_head(
+    t: pd.DataFrame, cutoff: pd.Timestamp
+) -> tuple[list[str], object]:
     """10d 命中概率头 (阶段1 单次切分): 训练 = date < cutoff 且标签可观测的行.
 
     目标 = (label_pm_10d_net > 0), 行掩码同 prob_head (label_pain 非 NaN = 可交易行).
@@ -157,9 +159,9 @@ def main() -> int:
         cutoff = pd.Timestamp(cal_test[0])
         cols10, model10 = _train_hit10d_head(t, cutoff)
         tt_mask = np.isin(t["date"].values, cal_test)
-        p10 = model10.predict_proba(
-            t.loc[tt_mask, cols10].to_numpy(dtype="float32")
-        )[:, 1]
+        p10 = model10.predict_proba(t.loc[tt_mask, cols10].to_numpy(dtype="float32"))[
+            :, 1
+        ]
         print(
             f"[{board}] 10d 命中头: 训练样本截至 {t.loc[t['date'] < cutoff, 'date'].max()}, "
             f"特征 {len(cols10)} 列, 测试 {len(p10)} 行, "

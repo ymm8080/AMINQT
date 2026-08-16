@@ -28,7 +28,7 @@ def make_config(**overrides):
         "deepseek": {
             "enabled": True,
             "base_url": "https://api.deepseek.test",
-            "model": "deepseek-chat",
+            "model": "deepseek-v4-flash",
             "timeout_sec": 1,
             "daily_token_limit": 500000,
             "features": {f: True for f in ALL_FEATURES},
@@ -232,6 +232,6 @@ class TestAllTwelveMethods:
         assert len(seen) == 12
         for url, body, timeout in seen:
             assert url.startswith("https://api.deepseek.test")
-            assert body["model"] == "deepseek-chat"
+            assert body["model"] == "deepseek-v4-flash"
             assert body["messages"][0]["role"] == "system"
             assert timeout == 1
