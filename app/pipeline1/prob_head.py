@@ -1,6 +1,9 @@
 """app/pipeline1/prob_head.py — legacy 并行式概率头 + 边际闸 (2026-08-15 代码先行).
 
-状态: 代码先行 — 未训练 (V3 面板扩建中), 未接线 (list_generator 接线另开任务).
+状态: 已落地 (2026-08-17) — bundle 已训练 (data/prob_head_legacy/, 首训 2026-08-16),
+list_generator.emit + daily_pipeline._prob_gate_inputs 已接线, 自动化步骤
+"legacy_prob_head" (run_daily_automation) 每 refit_every_days 交易日自判断重训;
+端到端验证见 scripts/_diag_legacy_prob_gate_verify.py.
 背景: legacy cls 概率头太粗 (闸内 22 唯一值 → blend 排名键 A/B 证伪, memory
 legacy-blend-rank-verdict); 用户定案 legacy 建并行式全局 LGBM 概率头.
 配方镜像 app/pipeline_parallel/prob_head.py (250d OOS 定案: 扩窗训练, mfe_3d >=

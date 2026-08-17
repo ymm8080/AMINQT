@@ -213,3 +213,60 @@ def test_apply_prob_gate_disabled_returns_unchanged(monkeypatch):
     res = pd.DataFrame({"board": ["main"], "symbol": ["A"]})
     out = prob_head.apply_prob_gate(res, {}, pd.DataFrame(), np.array([]))
     assert out["symbol"].tolist() == ["A"]
+
+
+# ---------------- 端到端集成: 真实 bundle 全链路 (2026-08-17 接线后补) ----------------
+
+
+def _train_allneg_bundle(tmp_path, monkeypatch):
+    """训练全负样本真实 bundle (模型输出 ≈ 0) → 集成测试底座."""
+    monkeypatch.setitem(prob_head.LEGACY_PROB_GATE, "model_dir", str(tmp_path))
+    monkeypatch.setitem(prob_head.LGB_PARAMS, "n_estimators", 20)
+    monkeypatch.setitem(prob_head.LGB_PARAMS, "num_leaves", 7)
+    rng = np.random.default_rng(7)
+    n = 6000
+    t = pd.DataFrame(rng.uniform(-1, 1, (n, 10)), columns=[f"f{i}" for i in range(10)])
+    t["mfe_3d"] = -0.01  # 全部 < abs_target → 无正样本, pred_prob ≈ 0
+    t["label_pain"] = False
+    t["symbol"] = "SZ000001"
+    t["date"] = pd.date_range("2024-01-01", periods=n, freq="B")
+    return prob_head.train_bundle("dual", t, "2026-08-14")
+
+
+def _gate_fixture():
+    """res(dual A/B) + 特征截面 + 0.5 达标率尾 (base_rate=0.5 → thr=0.58) + 面板日历."""
+    res = pd.DataFrame({"board": ["dual", "dual"], "symbol": ["A", "B"]})
+    feats = {
+        "dual": pd.DataFrame(
+            {f"f{i}": [0.0, 0.0] for i in range(10)}, index=pd.RangeIndex(2)
+        ).assign(symbol=["A", "B"])
+    }
+    n = 30
+    tail = pd.DataFrame(
+        {
+            "symbol": ["A"] * n,
+            "date": pd.date_range("2026-06-01", periods=n, freq="B"),
+            "close_hfq": [12.0 if i % 2 == 0 else 10.0 for i in range(n)],
+            "high_hfq": [12.0] * n,
+            "adv20": [6e8] * n,
+        }
+    )
+    panel_dates = pd.to_datetime(pd.bdate_range("2026-05-01", "2026-08-17")).to_numpy()
+    return res, feats, tail, panel_dates
+
+
+def test_apply_prob_gate_integration_real_bundle_drops_all(tmp_path, monkeypatch):
+    """全链路: 真实 bundle 存在且当日 pred_prob 全低于 base_rate+margin → 全剔 (空清单)."""
+    _train_allneg_bundle(tmp_path, monkeypatch)
+    res, feats, tail, panel_dates = _gate_fixture()
+    out = prob_head.apply_prob_gate(res, feats, tail, panel_dates)
+    assert out.empty  # 全剔 → list_generator 走空清单告警路径
+
+
+def test_apply_prob_gate_integration_bundle_missing_failopen(tmp_path, monkeypatch):
+    """全链路: bundle 缺失 → 不抛异常, 全保留 (fail-open, 不杀清单)."""
+    monkeypatch.setattr(prob_head, "load_latest", lambda board: None)
+    res, feats, tail, panel_dates = _gate_fixture()
+    out = prob_head.apply_prob_gate(res, feats, tail, panel_dates)
+    assert out["symbol"].tolist() == ["A", "B"]
+    assert "pred_prob" not in out.columns  # 无任何板过闸 → 列从不创建 (全 fail-open)

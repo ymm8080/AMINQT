@@ -10,9 +10,11 @@
   [refresh]  scripts/_refresh_parallel_checkpoints.py  并行行集 3y 检查点 (需 19:15 fetch 后)
   [retrain]  scripts/_retrain_legacy_full.py <tag>     legacy 周频重训 (仅 RETRAIN_WEEKDAY)
   [parallel] python -m app.pipeline_parallel.runner     并行回测 + 短名单 (sniper/fusion/slow_bull)
+  [legacy_prob_head] scripts/_train_legacy_prob_head.py legacy 并行式概率头 (21 交易日自判断重训)
   [legacy]   scripts/_gen_legacy_list.py <tag>          legacy 预测出清单 (用最新 current)
   [deliver]  scripts/_deliver_legacy_list.py <tag>      legacy 清单交付 STOCK_LIST_DIR
   [deliver_parallel] scripts/_shortlist_t5_t10.py <tag> 并行短名单交付 STOCK_LIST_DIR
+  [drift]    scripts/_monitor_legacy_drift.py           幅度漂移监控 (全池 pred vs 实现偏差)
 
 "推送看板" = 各步落盘到看板只读目录, 看板渲染时自动展示:
   模型 → models/pipeline1/current_meta.json + *.pkl (档案页·模型档案)
@@ -53,9 +55,11 @@ _STEPS = {
     "retrain": ["scripts/_retrain_legacy_full.py", "{tag}"],
     "parallel": ["-m", "app.pipeline_parallel.runner"],
     "prob_head": ["scripts/_train_parallel_prob_head.py"],
+    "legacy_prob_head": ["scripts/_train_legacy_prob_head.py"],
     "legacy": ["scripts/_gen_legacy_list.py", "{tag}"],
     "deliver": ["scripts/_deliver_legacy_list.py", "{tag}"],
     "deliver_parallel": ["scripts/_shortlist_t5_t10.py", "{tag}"],
+    "drift": ["scripts/_monitor_legacy_drift.py"],
 }
 # refresh 失败后应跳过的后续步骤 (parallel 需要新鲜检查点);
 # deliver_parallel 需要当日 fresh parallel run_dir (短名单), 否则会交付旧 run_dir 脏数据;
@@ -86,10 +90,14 @@ def plan_steps(
         steps.append("parallel")
         # 概率头训练自判断新鲜度 (21 交易日重训一次); 仅并行交付启用时才有消费者
         steps.append("prob_head")
+    # legacy 并行式概率头: 读面板+特征现场构建 (不依赖 parallel 检查点, 无前置依赖);
+    # 自判断新鲜度 (21 交易日重训一次), 未到期开销小 — 放 legacy 预测前 (概率闸依赖 bundle)
+    steps.append("legacy_prob_head")
     steps.append("legacy")
     steps.append("deliver")
     if not skip_parallel:  # 并行清单交付依赖当日 fresh parallel 重生成, 跳过则同步丢弃
         steps.append("deliver_parallel")
+    steps.append("drift")  # 幅度漂移监控 (读历史 candidates, 非关键步骤)
     return steps
 
 

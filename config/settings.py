@@ -298,11 +298,12 @@ PROB_GATE = {
     "model_dir": DATA_DIR / "prob_head",  # WORM bundle 目录 (<board>_prob_<ts>.joblib)
 }
 
-# ── legacy 并行式概率闸 (2026-08-15 代码先行, 未训练未接线) ──
+# ── legacy 并行式概率闸 (2026-08-15 定案, 2026-08-16 已接线) ──
 # legacy cls 概率头太粗 (闸内 22 唯一值) → blend 排名键 A/B 证伪; 用户定案建并行式
 # 全局 LGBM 概率头 (mfe_3d>=abs_target 二分类), 配方镜像 PROB_GATE (扩窗训练, 250d OOS 定案).
-# 训练 = scripts/_train_legacy_prob_head.py (面板扩建完成后跑); list_generator 接线另开任务
-# (HOLDER 分支无 landed 闸代码, 避免冲突). 排名键保持纯 pred_ret_10d (blend 证伪).
+# 训练 = scripts/_train_legacy_prob_head.py (2026-08-16 首训完成, bundle 在 model_dir);
+# 接线 = daily_pipeline._prob_gate_inputs 组装输入 + list_generator.emit 调用 (已 landed).
+# 排名键保持纯 pred_ret_10d (blend 证伪).
 LEGACY_PROB_GATE = {
     "enable": True,            # False → 闸关闭 (概率头照常训练但不拦截)
     "margin": 0.08,            # 边际 (同并行定案 0.08; 接线后按季度闸重扫规则复核)
@@ -311,6 +312,21 @@ LEGACY_PROB_GATE = {
     "refit_every_days": 21,    # 训练脚本: bundle 年龄 < 此值 → skip (交易日)
     "max_stale_days": 42,      # 短名单侧: bundle 年龄 > 此值 → 大声警告 + 闸失效 (fail-open)
     "model_dir": DATA_DIR / "prob_head_legacy",  # WORM bundle 目录 (<board>_prob_<ts>.joblib)
+}
+
+# ── legacy 幅度漂移监控 (2026-08-17 用户定案) ──
+# 08-17 诊断: pred_ret_10d 系统高估 (main 均值 +4.03% vs 实现 +1.10%, dual +6.59% vs
+# +1.32%), 偏差随时间扩大 → 生产 "pred>0" 闸 100% 空转. 修漂移 = 重训 (周频已做),
+# 监控 = 每日全池 pred 均值 vs T+10 净实现均值偏差 (scripts/_monitor_legacy_drift.py),
+# 滚动窗均值超阈值 → WORM 报告 + 日志告警 (提醒提前重训).
+# 阈值初值取自 08-17 诊断尾段水平; 生产数据积累后 (季度闸重扫规则) 复核.
+DRIFT_MONITOR = {
+    "window_days": 42,          # 滚动偏差窗 (交易日)
+    "min_matured_days": 20,     # 成熟日少于该值 → 不出告警 (积累期)
+    "bias_threshold": {"main": 0.04, "dual": 0.07},  # 初始值, 勿当定案
+    "cost": 0.0020,             # 往返成本 (与诊断回放一致)
+    "buy_lag": 1,               # 决策日后第 1 个交易日收盘买入
+    "sell_lag": 11,             # = buy_lag + label_horizon(10)
 }
 
 # ── 重训内存独占闸 (2026-08-15 用户定案, 代码强制"重训期间不跑其他重活") ──

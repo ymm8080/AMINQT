@@ -360,6 +360,20 @@ class TestModelParams:
         assert dtt.model_params("dual", "1d_reg").get("num_leaves") is None
         assert dtt.model_params("dual", "2d_reg").get("num_leaves") is None
 
+    def test_dual_10d_reg_generalization_params_20260817(self):
+        """[2026-08-17 补扫定案] dual 10d_reg = ms50_λ1 (top10 超额 +2.48→+3.41%,
+        IC 0.029→0.035, 3/3 子窗, 扰动不翻); 只落这一个头, 勿扩散."""
+        import app.pipeline1.dual_track_trainer as dtt
+
+        p = dtt.model_params("dual", "10d_reg")
+        assert p["min_child_samples"] == 50
+        assert p["reg_lambda"] == 1.0
+        # 其他头不受泛化覆盖表影响 (仍家族默认)
+        assert dtt.model_params("dual", "3d_reg").get("min_child_samples") is None
+        assert dtt.model_params("dual", "5d_reg").get("reg_lambda") is None
+        assert dtt.model_params("main", "10d_reg").get("min_child_samples") is None
+        assert dtt.model_params("dual", "10d_cls").get("reg_lambda") is None
+
     def test_pain_leaves_15_both_boards_decoupled_from_cls(self):
         import app.pipeline1.dual_track_trainer as dtt
 
@@ -403,3 +417,43 @@ class TestModelParams:
             assert dtt.model_params("dual", "10d_cls")["n_estimators"] == 7
         finally:
             dtt.LGB_PARAMS_CLS["n_estimators"] = orig
+
+
+# ============================================================
+# REG_MIN_TREES 保底 (任务 #14, 2026-08-17)
+#   dual 3d/5d_reg es 早停 2 树 = 常数列 (candidates 实测 std=0.0000),
+#   main 3d/5d 也退化 (8/16 树) → 地板重训镜像 CLS_MIN_TREES=30
+# ============================================================
+class TestRegMinTrees:
+    def test_reg_flat_es_refit_min_trees(self):
+        """es 窗过平 → 3d_reg 早停塌缩; REG_MIN_TREES 地板必须兜底重训,
+        pred_ret 有真实截面区分度 (镜像 cls/quantile 地板测试)."""
+        import app.pipeline1.dual_track_trainer as dtt
+
+        rng = np.random.default_rng(13)
+        n, nf = 400, 3
+        dates = pd.date_range("2025-01-01", periods=n)
+        X = rng.normal(size=(n, nf))
+        y = X[:, 0] * 0.02 + rng.normal(0, 0.03, n)
+        df = pd.DataFrame(X, columns=[f"f{i}" for i in range(nf)])
+        df["date"] = dates
+        # _resolve_label 链路: label_pm_3d → label_pm_3d_net (两级都在才解析到净标签)
+        df["label_pm_3d"] = y
+        df["label_pm_3d_net"] = y
+        # es 段 y 全常数 → es 损失无下降 → 早停 < REG_MIN_TREES → 地板重训.
+        # 先切分拿真实 es 日期 (split_window(400) → train=320/es=20/calib=20/test=60,
+        # es = dates[320:340]), 再扁平化, 后重新切分 (split 只看 date, 标签不影响).
+        segs = dtt.DualTrackTrainer.split_window(df, window_total=n)
+        es_dates = segs["es"]["date"]
+        df.loc[df["date"].isin(es_dates), ["label_pm_3d", "label_pm_3d_net"]] = 0.0
+
+        segs = dtt.DualTrackTrainer.split_window(df, window_total=n)
+        model, label = dtt.DualTrackTrainer()._train_one(
+            "3d_reg", segs, [f"f{i}" for i in range(nf)], "dual"
+        )
+        assert label == "label_pm_3d_net"
+        assert model.n_estimators == dtt.REG_MIN_TREES, (
+            f"es 早停塌缩必须重训到地板 {dtt.REG_MIN_TREES} 棵树"
+        )
+        preds = model.predict(rng.normal(size=(50, nf)))
+        assert preds.std() > 0, "地板重训后 pred_ret_3d 不应为常数"
