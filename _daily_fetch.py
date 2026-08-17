@@ -46,7 +46,7 @@ load_dotenv()
 
 from app.pipeline1 import cyq_ext  # noqa: E402
 from app.pipeline1.cleaning_pipeline import board_of  # noqa: E402
-from app.pipeline1.data_supply import SW_INDEX_CODES  # noqa: E402
+from app.pipeline1.data_supply import SW_INDEX_CODES, merge_margin_renamed  # noqa: E402
 
 _POS_ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
 TRADE_DATE = _POS_ARGS[0] if _POS_ARGS else datetime.now().strftime("%Y%m%d")
@@ -268,8 +268,8 @@ merges = {
     # V3 (2026-08-02): 只直连 KEEP 基础列 (同名字段).
     # winner_rate→winner_ratio / avg_cost=cost_50pct 由显式块处理;
     # pct_90_high/pct_90_con 由下方从 cost_5pct/cost_95pct 推导; 删除列不落盘.
+    # margin 4 列面板已重命名 → 走 merge_margin_renamed 直映射 (通用路径会跳过).
     "cyq_perf": (cyq, ["cost_50pct", "cost_95pct", "weight_avg"]),
-    "margin_detail": (margin, ["rzye", "rqye", "rzmre", "rqyl"]),
 }
 # Aggregate LHB by symbol
 if len(lhb):
@@ -287,6 +287,10 @@ for _src_name, (src_df, cols) in merges.items():
         if tgt in panel_cols and tgt not in df.columns:
             df[tgt] = df["symbol"].map(smap[c])
 
+# margin 面板列已重命名 (rzye→margin_balance 等), 通用路径按源名守卫会跳过
+# (2026-08-17 事故: 面板 margin 4 列自 07-31 起全靠 ffill, T+1 回退真实值被丢弃).
+merge_margin_renamed(df, margin, panel_cols)
+
 # Direct mapping: Tushare source cols -> panel target cols (names differ)
 if len(cyq) and "winner_rate" in cyq.columns and "winner_rate" not in df.columns:
     wmap = cyq.set_index("symbol")["winner_rate"]
@@ -303,15 +307,6 @@ if len(limit):
     for src_col, tgt_col in [("up_limit", "up_limit_raw"), ("down_limit", "down_limit_raw")]:
         if src_col in lmap.columns and tgt_col in panel_cols and tgt_col not in df.columns:
             df[tgt_col] = df["symbol"].map(lmap[src_col])
-
-# Rename mappings
-rename_map = {
-    "rzye": "margin_balance", "rqye": "short_balance",
-    "rzmre": "margin_buy_amt", "rqyl": "short_sell_vol",
-}
-for old, new in rename_map.items():
-    if old in df.columns:
-        df[new] = df[old]
 
 # LHB merge
 if len(lhb):
@@ -733,8 +728,8 @@ if any(c in panel_cols for c in (
     "sh_net_ratio", "sh_g_ratio", "sh_p_ratio", "sh_c_ratio",
 )):
     try:
-        from app.pipeline1.holdertrade_agg import agg_holdertrade_daily
         from app.pipeline1.data_supply import DataSupplyChain
+        from app.pipeline1.holdertrade_agg import agg_holdertrade_daily
 
         _ht_start = (pd.Timestamp(TRADE_DATE) - pd.Timedelta(days=10)).strftime("%Y%m%d")
         ht = pd.DataFrame()
