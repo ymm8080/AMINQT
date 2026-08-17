@@ -67,6 +67,7 @@ logs/
 # Trained models
 *.pth
 *.pkl
+*.joblib
 !app/models/trained/.gitkeep
 
 # Secrets / env
