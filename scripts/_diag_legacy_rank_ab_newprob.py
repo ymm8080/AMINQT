@@ -119,7 +119,11 @@ def _prob_diagnostics(pool: pd.DataFrame) -> dict:
     spears = []
     for _, day in pool.groupby("date"):
         sub = day[["prob", "pred_prob_new"]].dropna()
-        if len(sub) >= 5 and sub["prob"].nunique() > 1 and sub["pred_prob_new"].nunique() > 1:
+        if (
+            len(sub) >= 5
+            and sub["prob"].nunique() > 1
+            and sub["pred_prob_new"].nunique() > 1
+        ):
             spears.append(sub.corr(method="spearman").iloc[0, 1])
     out["spearman_daily_mean"] = float(np.mean(spears)) if spears else float("nan")
     out["spearman_daily_n"] = len(spears)
@@ -152,9 +156,7 @@ def main() -> int:
         p1 = b[~b["pain_excluded"].fillna(False)].copy()
         p1["blend_old"] = p1["pred_ret_10d"] * p1["prob"]
         p1["blend_new"] = p1["pred_ret_10d"] * p1["pred_prob_new"]
-        p1["blend_ex"] = p1["pred_ret_10d"] * (
-            p1["pred_prob_new"] - p1["base_prod"]
-        )
+        p1["blend_ex"] = p1["pred_ret_10d"] * (p1["pred_prob_new"] - p1["base_prod"])
         keep_new = (
             (p1["pred_prob_new"] > p1["base_prod"] + PROB_MARGIN)
             | p1["pred_prob_new"].isna()
@@ -202,8 +204,14 @@ def main() -> int:
                         )
                         s = _stats(top)
                         rows.append(
-                            {"board": board, "pool": pool_name, "rank": rkname,
-                             "depth": depth, "window": wname, **s}
+                            {
+                                "board": board,
+                                "pool": pool_name,
+                                "rank": rkname,
+                                "depth": depth,
+                                "window": wname,
+                                **s,
+                            }
                         )
                         sub_s = "  ".join(
                             f"{x['win']}:{x['hit']:.0%}/{x['mean']:+.2%}"

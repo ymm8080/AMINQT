@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """宇宙扩张后 legacy 概率闸 margin 重扫 (生产概率头 + top-N 重点, 2026-08-17).
 
 背景: LEGACY_PROB_GATE margin=0.08 定案于 3000 只宇宙 (并行 walk-forward);
@@ -19,6 +18,7 @@ dual keep 34% vs 生产 90%) 的差异:
 
 WORM: data/diag/legacy_prob_gate_margin_sweep_<ts>.json/.csv
 """
+
 import argparse
 import gc
 import os
@@ -26,7 +26,6 @@ import sys
 import time
 from pathlib import Path
 
-import joblib
 import numpy as np
 import pandas as pd
 
@@ -40,7 +39,6 @@ from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.list_generator import ListGenerator
 from app.pipeline1.predictor import V35Predictor
 from config.settings import (
-    DATA_DIR,
     LEGACY_PROB_GATE,
     PANEL_V3_PATH,
     data_others_path,
@@ -154,9 +152,15 @@ def _stats3(sub: pd.DataFrame) -> dict:
     """3 子窗稳定性 (参数扫描铁律). 每窗 win/hit10/mean10."""
     if sub.empty:
         return {
-            "n_days": 0, "picks": 0, "avg_picks": 0.0,
-            "hit": float("nan"), "mean": float("nan"), "med": float("nan"),
-            "ge5": float("nan"), "ge10": float("nan"), "sub_windows": [],
+            "n_days": 0,
+            "picks": 0,
+            "avg_picks": 0.0,
+            "hit": float("nan"),
+            "mean": float("nan"),
+            "med": float("nan"),
+            "ge5": float("nan"),
+            "ge10": float("nan"),
+            "sub_windows": [],
         }
     r = sub["realized_net"].dropna()
     days = sorted(sub["date"].unique())
@@ -297,7 +301,9 @@ def main() -> int:
             try:
                 pred = predictor.predict(day_feat, board)
             except Exception as exc:
-                print(f"[{board}] {pd.Timestamp(d).date()} predict err: {exc}", flush=True)
+                print(
+                    f"[{board}] {pd.Timestamp(d).date()} predict err: {exc}", flush=True
+                )
                 continue
             if pred.empty:
                 continue
@@ -335,7 +341,9 @@ def main() -> int:
                         "pred_prob": float(row.get("pred_prob", np.nan)),
                         "base_prod": float(base) if np.isfinite(base) else np.nan,
                         "pain_excluded": bool(row["pain_excluded"]),
-                        "realized_net": _realized_net(pivot, cal, di, str(row["symbol"])),
+                        "realized_net": _realized_net(
+                            pivot, cal, di, str(row["symbol"])
+                        ),
                     }
                 )
             if (k + 1) % 25 == 0 or k == len(eval_days) - 1:

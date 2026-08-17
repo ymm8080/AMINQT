@@ -47,10 +47,16 @@ def compute_realized(
         i = int(np.searchsorted(cal, d, side="right")) - 1
         if i < 0 or i + sell_lag >= len(cal):
             continue
-        buy_dt, sell_dt = pd.Timestamp(cal[i + buy_lag]), pd.Timestamp(cal[i + sell_lag])
+        buy_dt, sell_dt = (
+            pd.Timestamp(cal[i + buy_lag]),
+            pd.Timestamp(cal[i + sell_lag]),
+        )
         pb, ps = pivot[buy_dt], pivot[sell_dt]
         sub = (
-            (ps / pb - 1.0 - cost).where(pb > 0).rename("realized_net").reset_index()
+            (ps / pb - 1.0 - cost)
+            .where(pb > 0)
+            .rename("realized_net")
+            .reset_index()
             .dropna(subset=["realized_net"])
         )
         if len(sub):
@@ -69,7 +75,9 @@ def daily_bias(preds: pd.DataFrame, realized: pd.DataFrame) -> pd.DataFrame:
     m = preds.merge(realized, on=["date", "symbol"], how="inner")
     m = m.dropna(subset=["pred_ret_10d", "realized_net"])
     if m.empty:
-        return pd.DataFrame(columns=["date", "board", "n", "pred_mean", "real_mean", "bias"])
+        return pd.DataFrame(
+            columns=["date", "board", "n", "pred_mean", "real_mean", "bias"]
+        )
     g = m.groupby(["date", "board"])
     out = g.agg(
         pred_mean=("pred_ret_10d", "mean"),

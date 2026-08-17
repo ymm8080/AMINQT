@@ -376,7 +376,9 @@ class DualTrackTrainer:
                     p = model_params(board, kind)
                     p["n_estimators"] = floor
                     make = (
-                        lgb.LGBMClassifier if kind.endswith("cls") else lgb.LGBMRegressor
+                        lgb.LGBMClassifier
+                        if kind.endswith("cls")
+                        else lgb.LGBMRegressor
                     )
                     model = make(**p)
                     model.fit(X, y, sample_weight=w)

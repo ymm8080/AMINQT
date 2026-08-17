@@ -52,7 +52,9 @@ MAX_DROP_RATE = 0.95
 
 def _gate_stats(cands: pd.DataFrame, out: pd.DataFrame, board_group: str) -> dict:
     """闸前候选 vs 闸后输出 → 该 board 组 (main/GEM/STAR→dual) 剔除率 + pred_prob 统计."""
-    n_in = int(cands["board"].astype(str).map(prob_head._BOARD_GROUP).eq(board_group).sum())
+    n_in = int(
+        cands["board"].astype(str).map(prob_head._BOARD_GROUP).eq(board_group).sum()
+    )
     s = out["board"].astype(str).map(prob_head._BOARD_GROUP).eq(board_group)
     n_out = int(s.sum())
     p = out.loc[s, "pred_prob"].dropna()
@@ -126,7 +128,9 @@ def main() -> int:
             flush=True,
         )
 
-    prob_gate = DailySelectionPipeline._prob_gate_inputs(panel, main_df, dual_df, gate_feats)
+    prob_gate = DailySelectionPipeline._prob_gate_inputs(
+        panel, main_df, dual_df, gate_feats
+    )
     del panel, main_df, dual_df
     gc.collect()
     print(
@@ -139,14 +143,19 @@ def main() -> int:
     bundles = {}
     for board in ("main", "dual"):
         b = prob_head.load_latest(board)
-        age = None if b is None else prob_head.bundle_age_trading_days(
-            panel_dates, str(b["trained_through"])
+        age = (
+            None
+            if b is None
+            else prob_head.bundle_age_trading_days(
+                panel_dates, str(b["trained_through"])
+            )
         )
         bundles[board] = {
             "bundle": None if b is None else str(b["trained_through"]),
             "age_trading_days": age,
             "n_feats": None if b is None else len(b["feat_cols"]),
-            "usable": b is not None and age is not None
+            "usable": b is not None
+            and age is not None
             and age <= LEGACY_PROB_GATE["max_stale_days"],
         }
         print(
@@ -155,7 +164,9 @@ def main() -> int:
         )
 
     # ---- 5a) 直接闸 (候选文件全量) ----
-    out = prob_head.apply_prob_gate(cands.copy(), prob_gate["feats"], prob_gate["tail"], panel_dates)
+    out = prob_head.apply_prob_gate(
+        cands.copy(), prob_gate["feats"], prob_gate["tail"], panel_dates
+    )
     gate = {board: _gate_stats(cands, out, board) for board in ("main", "dual")}
     for board, g in gate.items():
         print(
@@ -192,7 +203,9 @@ def main() -> int:
     for board in ("main", "dual"):
         b_ok = bundles[board]["usable"]
         g = gate[board]
-        disc = g["pred_prob"]["n_unique"] > MIN_UNIQUE and g["pred_prob"]["std"] > MIN_STD
+        disc = (
+            g["pred_prob"]["n_unique"] > MIN_UNIQUE and g["pred_prob"]["std"] > MIN_STD
+        )
         engaged = g["drop_rate"] > 0
         not_wipe = g["drop_rate"] < MAX_DROP_RATE
         checks[board] = {

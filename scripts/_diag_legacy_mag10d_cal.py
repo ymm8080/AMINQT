@@ -79,7 +79,9 @@ def _sub_windows(top: pd.DataFrame, n_sub: int) -> list[dict]:
             {
                 "win": f"{i + 1}/{n_sub}",
                 "rows": int(len(seg)),
-                "hit": float((seg["realized_net"] > 0).mean()) if len(seg) else float("nan"),
+                "hit": float((seg["realized_net"] > 0).mean())
+                if len(seg)
+                else float("nan"),
                 "mean": float(seg["realized_net"].mean()) if len(seg) else float("nan"),
             }
         )
@@ -100,8 +102,7 @@ def _eval(pool: pd.DataFrame, dates_all: np.ndarray) -> list[dict]:
                 )
                 s = _stats(top)
                 rows.append(
-                    {"pool": None, "rank": rkname, "depth": depth,
-                     "window": wname, **s}
+                    {"pool": None, "rank": rkname, "depth": depth, "window": wname, **s}
                 )
                 sub_s = "  ".join(
                     f"{x['win']}:{x['hit']:.0%}/{x['mean']:+.2%}"
@@ -206,10 +207,18 @@ def main() -> int:
             "rows_cut_by_gate": int(cuts.sum()),
             "cut_share": float(cuts.sum() / max(1, active.sum())),
             "tau_mean": float(tau_arr.mean()) if len(tau_arr) else float("nan"),
-            "tau_q25": float(np.quantile(tau_arr, 0.25)) if len(tau_arr) else float("nan"),
-            "tau_q50": float(np.quantile(tau_arr, 0.50)) if len(tau_arr) else float("nan"),
-            "tau_q75": float(np.quantile(tau_arr, 0.75)) if len(tau_arr) else float("nan"),
-            "cs_mean": float(np.mean(list(cs_map.values()))) if cs_map else float("nan"),
+            "tau_q25": float(np.quantile(tau_arr, 0.25))
+            if len(tau_arr)
+            else float("nan"),
+            "tau_q50": float(np.quantile(tau_arr, 0.50))
+            if len(tau_arr)
+            else float("nan"),
+            "tau_q75": float(np.quantile(tau_arr, 0.75))
+            if len(tau_arr)
+            else float("nan"),
+            "cs_mean": float(np.mean(list(cs_map.values())))
+            if cs_map
+            else float("nan"),
         }
         print(
             f"[闸] 活跃 {gate_diag[board]['days_gate_active']}/{gate_diag[board]['days_fitted']} 日 | "
@@ -223,7 +232,10 @@ def main() -> int:
             ("E7池(现闸=无操作)", e7df[e7df["pred_ret_10d"] > 0]),
             ("校准闸池(mag>0)", e7df[e7df["mag"] > 0]),
         ):
-            print(f"\n[{board} / {pool_name}] {len(pool):,} 票/{pool['date'].nunique()} 日", flush=True)
+            print(
+                f"\n[{board} / {pool_name}] {len(pool):,} 票/{pool['date'].nunique()} 日",
+                flush=True,
+            )
             for r in _eval(pool, dates):
                 r["board"] = board
                 r["pool"] = pool_name

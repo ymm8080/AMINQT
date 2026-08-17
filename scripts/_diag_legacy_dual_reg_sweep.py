@@ -46,18 +46,18 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
-import lightgbm as lgb
 
 from app.pipeline1.cleaning_pipeline import CleaningPipeline, load_panel_v3
 from app.pipeline1.drift_monitor import compute_realized
 from app.pipeline1.dual_track_trainer import (
-    DualTrackTrainer,
     ES_PATIENCE,
     HALF_LIFE,
     LGB_PARAMS_REG,
     WINDOW_TOTAL,
+    DualTrackTrainer,
     risk_filter,
 )
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
@@ -259,7 +259,12 @@ def fit_and_eval(
         if ev and "valid_0" in ev and ev["valid_0"]:
             mname = list(ev["valid_0"])[0]
             scores = ev["valid_0"][mname]
-            curve = "[" + ",".join(f"{s:.4f}" for s in scores[:5]) + (",..." if len(scores) > 5 else "") + "]"
+            curve = (
+                "["
+                + ",".join(f"{s:.4f}" for s in scores[:5])
+                + (",..." if len(scores) > 5 else "")
+                + "]"
+            )
         print(
             f"    [!] {combo_key(ms, lam)} seed={seed} 早停仅 {n_trees} 树 "
             f"(es 窗可能过平) eval_curve{curve}",
@@ -280,7 +285,11 @@ def fit_and_eval(
     del oos
     gc.collect()
     return {
-        "params": {"min_child_samples": ms, "reg_lambda": lam, "num_leaves": NUM_LEAVES},
+        "params": {
+            "min_child_samples": ms,
+            "reg_lambda": lam,
+            "num_leaves": NUM_LEAVES,
+        },
         "seed": seed,
         "n_trees": n_trees,
         "n_train_rows": int(len(train)),
@@ -327,7 +336,9 @@ def main() -> int:
         flush=True,
     )
     if len(dual_df) == 0:
-        raise RuntimeError("dual 清洗后无样本 — 面板扩建未完成或数据缺失, 请检查 PANEL_V3_PATH")
+        raise RuntimeError(
+            "dual 清洗后无样本 — 面板扩建未完成或数据缺失, 请检查 PANEL_V3_PATH"
+        )
 
     # ── 3) 特征 + 标签 (生产同构: FeatureEngineV35 全量 + LabelEngine) ──
     wait_for_ram("build")
@@ -421,9 +432,7 @@ def main() -> int:
     results: dict[str, dict] = {}
     for i, (ms, lam) in enumerate(combos):
         key = combo_key(ms, lam)
-        print(
-            f"[{i + 1}/{len(combos)}] {key} seed={RANDOM_STATE} ...", flush=True
-        )
+        print(f"[{i + 1}/{len(combos)}] {key} seed={RANDOM_STATE} ...", flush=True)
         rec, n_trees = fit_and_eval(
             train, es, test, feature_cols, w, realized, ms, lam, RANDOM_STATE
         )
@@ -453,9 +462,7 @@ def main() -> int:
             ),
         )
         perturb_keys = list(dict.fromkeys([ref_key] + ranked[:2]))
-        print(
-            f"\n[perturb] seed={PERTURB_SEED} combos={perturb_keys}", flush=True
-        )
+        print(f"\n[perturb] seed={PERTURB_SEED} combos={perturb_keys}", flush=True)
         for k in perturb_keys:
             ms, lam = _parse_key(k)
             rec, _nt = fit_and_eval(
@@ -589,11 +596,7 @@ def _verdict(
         if k == ref_key:
             continue
         w = _subwin_wins(rec)
-        if (
-            rec["top10"]["excess"] > ref_exc
-            and rec["mean_ic"] > ref_ic
-            and w >= 2
-        ):
+        if rec["top10"]["excess"] > ref_exc and rec["mean_ic"] > ref_ic and w >= 2:
             cands.append((k, rec, w))
     cands.sort(key=lambda t: (-t[1]["top10"]["excess"], -t[1]["mean_ic"]))
 

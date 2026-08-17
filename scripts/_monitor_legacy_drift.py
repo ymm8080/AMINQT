@@ -36,7 +36,9 @@ from app.pipeline1.drift_monitor import (
 )
 from config.settings import DRIFT_MONITOR, PANEL_V3_PATH, data_others_path
 
-LISTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "lists")
+LISTS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "lists"
+)
 
 
 def _load_preds() -> pd.DataFrame:
@@ -71,7 +73,11 @@ def _replay_reference(window_days: int) -> dict:
         g = r[r["board"] == board].dropna(subset=["pred_ret_10d", "realized_net"])
         if not len(g):
             continue
-        g = g.assign(bias=g["pred_ret_10d"] - g["realized_net"]).groupby("date")["bias"].mean()
+        g = (
+            g.assign(bias=g["pred_ret_10d"] - g["realized_net"])
+            .groupby("date")["bias"]
+            .mean()
+        )
         tail = g.tail(window_days)
         if len(tail):
             out[board] = {
@@ -89,7 +95,10 @@ def main() -> int:
     thresholds = cfg["bias_threshold"]
 
     preds = _load_preds()
-    print(f"[preds] {len(preds):,} 票 / {preds['date'].nunique() if len(preds) else 0} 日", flush=True)
+    print(
+        f"[preds] {len(preds):,} 票 / {preds['date'].nunique() if len(preds) else 0} 日",
+        flush=True,
+    )
     if not len(preds):
         print("[warn] 无 candidates_*.parquet (每日全池预测未落盘), 退出", flush=True)
         return 0
@@ -122,7 +131,10 @@ def main() -> int:
     alerts = check_drift(rolling, thresholds)
     ref = _replay_reference(window_days)
 
-    print(f"===== legacy 幅度漂移 (滚动窗 {window_days} 交易日, 成熟≥{min_matured} 日) =====", flush=True)
+    print(
+        f"===== legacy 幅度漂移 (滚动窗 {window_days} 交易日, 成熟≥{min_matured} 日) =====",
+        flush=True,
+    )
     for _, r in rolling.iterrows():
         th = thresholds.get(r["board"])
         line = (
@@ -136,7 +148,10 @@ def main() -> int:
             line += "  [DRIFT-ALERT] 考虑提前重训"
         print(line, flush=True)
     if not len(rolling):
-        print("[info] 无成熟日 — 积累期 (首个成熟日约在首个候选日后 11 交易日)", flush=True)
+        print(
+            "[info] 无成熟日 — 积累期 (首个成熟日约在首个候选日后 11 交易日)",
+            flush=True,
+        )
     for board in ("main", "dual"):
         rr = ref.get(board)
         if rr:

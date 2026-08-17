@@ -154,7 +154,9 @@ def _sub_windows(top: pd.DataFrame, n_sub: int) -> list[dict]:
             {
                 "win": f"{i + 1}/{n_sub}",
                 "rows": int(len(seg)),
-                "hit": float((seg["realized_net"] > 0).mean()) if len(seg) else float("nan"),
+                "hit": float((seg["realized_net"] > 0).mean())
+                if len(seg)
+                else float("nan"),
                 "mean": float(seg["realized_net"].mean()) if len(seg) else float("nan"),
             }
         )
@@ -216,7 +218,10 @@ def main() -> int:
         cp = pq.read_table(str(ckpt)).to_pandas()
         pred = cp["pred"].to_numpy()
         pred_wf = cp["pred_wf"].to_numpy()
-        print(f"[ckpt] pred notna {np.isfinite(pred).sum():,} / pred_wf notna {np.isfinite(pred_wf).sum():,}", flush=True)
+        print(
+            f"[ckpt] pred notna {np.isfinite(pred).sum():,} / pred_wf notna {np.isfinite(pred_wf).sum():,}",
+            flush=True,
+        )
         del cp
         gc.collect()
 
@@ -226,12 +231,17 @@ def main() -> int:
 
         # ---- A. 并行全板 walk-forward AUC ----
         m = in_cal & ok & np.isfinite(pred_wf)
-        auc_full = float(roc_auc_score(y[m], pred_wf[m])) if m.sum() > 0 else float("nan")
+        auc_full = (
+            float(roc_auc_score(y[m], pred_wf[m])) if m.sum() > 0 else float("nan")
+        )
 
         # ---- 并行 base_rate (评估窗每日, 供 blend_pp_ex) ----
         want = {pd.Timestamp(d) for d in cal_test}
         pbase = _prod_base_series(t, dates, want)
-        print(f"[base] 并行 base_rate 覆盖 {len(pbase)}/{len(cal_test)} 日 (均值 {pbase.mean():.4f})", flush=True)
+        print(
+            f"[base] 并行 base_rate 覆盖 {len(pbase)}/{len(cal_test)} 日 (均值 {pbase.mean():.4f})",
+            flush=True,
+        )
 
         # ---- 并行 top10 (生产口径: t3 门 + pred_mag_10d) 供重叠 ----
         work = t[
@@ -275,21 +285,49 @@ def main() -> int:
         leg_b = leg_b.merge(pp, on=["symbol", "date"], how="left")
         leg_b = leg_b.merge(pbase, left_on="date", right_index=True, how="left")
         cov = leg_b["pprob_all"].notna().mean()
-        print(f"[merge] legacy {board} 行 {len(leg_b):,} | 并行 prob 覆盖率 {cov:.1%}", flush=True)
+        print(
+            f"[merge] legacy {board} 行 {len(leg_b):,} | 并行 prob 覆盖率 {cov:.1%}",
+            flush=True,
+        )
 
         # ---- B. 采用场景: 并行概率在 legacy E7 行上的 AUC (与 legacy 新头同池同标签) ----
         e7 = leg_b[~leg_b["pain_excluded"].fillna(False)].copy()
         j = e7.dropna(subset=["pprob"]).copy()
         m2 = j["mfe_3d"].notna() & j["label_pain"].notna() & j["pred_prob_new"].notna()
-        auc_par_on_legacy = float(roc_auc_score((j.loc[m2, "mfe_3d"] >= ABS_TARGET).astype(int), j.loc[m2, "pprob"])) if m2.sum() > 0 else float("nan")
-        auc_leg_on_legacy = float(roc_auc_score((j.loc[m2, "mfe_3d"] >= ABS_TARGET).astype(int), j.loc[m2, "pred_prob_new"])) if m2.sum() > 0 else float("nan")
-        base_rate = float((j.loc[m2, "mfe_3d"] >= ABS_TARGET).mean()) if m2.sum() > 0 else float("nan")
+        auc_par_on_legacy = (
+            float(
+                roc_auc_score(
+                    (j.loc[m2, "mfe_3d"] >= ABS_TARGET).astype(int), j.loc[m2, "pprob"]
+                )
+            )
+            if m2.sum() > 0
+            else float("nan")
+        )
+        auc_leg_on_legacy = (
+            float(
+                roc_auc_score(
+                    (j.loc[m2, "mfe_3d"] >= ABS_TARGET).astype(int),
+                    j.loc[m2, "pred_prob_new"],
+                )
+            )
+            if m2.sum() > 0
+            else float("nan")
+        )
+        base_rate = (
+            float((j.loc[m2, "mfe_3d"] >= ABS_TARGET).mean())
+            if m2.sum() > 0
+            else float("nan")
+        )
 
         # 逐日 Spearman: 并行 prob vs legacy 新头 (独立信息检验)
         spears = []
         for _, day in j.groupby("date"):
             sub = day[["pred_prob_new", "pprob"]].dropna()
-            if len(sub) >= 5 and sub["pred_prob_new"].nunique() > 1 and sub["pprob"].nunique() > 1:
+            if (
+                len(sub) >= 5
+                and sub["pred_prob_new"].nunique() > 1
+                and sub["pprob"].nunique() > 1
+            ):
                 spears.append(sub.corr(method="spearman").iloc[0, 1])
         daily_spear = float(np.mean(spears)) if spears else float("nan")
 
@@ -353,8 +391,14 @@ def main() -> int:
                         )
                         s = _stats(top)
                         rows.append(
-                            {"board": board, "pool": pool_name, "rank": rkname,
-                             "depth": depth, "window": wname, **s}
+                            {
+                                "board": board,
+                                "pool": pool_name,
+                                "rank": rkname,
+                                "depth": depth,
+                                "window": wname,
+                                **s,
+                            }
                         )
                         sub_s = "  ".join(
                             f"{x['win']}:{x['hit']:.0%}/{x['mean']:+.2%}"
@@ -387,7 +431,10 @@ def main() -> int:
                 "jaccard_top10_mean": jac_mean,
             }
         )
-        print(f"[重叠] 并行 TOP-10 vs legacy mag TOP-10 逐日 Jaccard 均值 {jac_mean:.3f} ({len(jac)} 日)", flush=True)
+        print(
+            f"[重叠] 并行 TOP-10 vs legacy mag TOP-10 逐日 Jaccard 均值 {jac_mean:.3f} ({len(jac)} 日)",
+            flush=True,
+        )
 
         del t, pp, leg_b, e7, p2, j
         gc.collect()
