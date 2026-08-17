@@ -189,7 +189,11 @@ def merge_margin_renamed(df: pd.DataFrame, margin: pd.DataFrame, panel_cols) -> 
         return
     m_map = margin.set_index("symbol")
     for src_col, tgt_col in _MARGIN_RENAME:
-        if src_col in m_map.columns and tgt_col in panel_cols and tgt_col not in df.columns:
+        if (
+            src_col in m_map.columns
+            and tgt_col in panel_cols
+            and tgt_col not in df.columns
+        ):
             df[tgt_col] = df["symbol"].map(m_map[src_col])
 
 

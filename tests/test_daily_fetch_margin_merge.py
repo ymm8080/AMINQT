@@ -12,27 +12,40 @@ import pandas as pd
 from app.pipeline1.data_supply import merge_margin_renamed
 
 PANEL_COLS = [
-    "symbol", "date", "open", "close",
-    "margin_balance", "short_balance", "margin_buy_amt", "short_sell_vol",
+    "symbol",
+    "date",
+    "open",
+    "close",
+    "margin_balance",
+    "short_balance",
+    "margin_buy_amt",
+    "short_sell_vol",
 ]
 
 
 def _today_frame(symbols, with_margin=False):
     df = pd.DataFrame({"symbol": symbols, "date": pd.Timestamp("2026-08-17")})
     if with_margin:
-        for c in ["margin_balance", "short_balance", "margin_buy_amt", "short_sell_vol"]:
+        for c in [
+            "margin_balance",
+            "short_balance",
+            "margin_buy_amt",
+            "short_sell_vol",
+        ]:
             df[c] = 999.0
     return df
 
 
 def _margin_frame(symbols, values=None):
-    raw = pd.DataFrame({
-        "symbol": [s + ".SZ" for s in symbols],
-        "rzye": values or [100.0 + i for i in range(len(symbols))],
-        "rqye": [200.0 + i for i in range(len(symbols))],
-        "rzmre": [300.0 + i for i in range(len(symbols))],
-        "rqyl": [400.0 + i for i in range(len(symbols))],
-    })
+    raw = pd.DataFrame(
+        {
+            "symbol": [s + ".SZ" for s in symbols],
+            "rzye": values or [100.0 + i for i in range(len(symbols))],
+            "rqye": [200.0 + i for i in range(len(symbols))],
+            "rzmre": [300.0 + i for i in range(len(symbols))],
+            "rqyl": [400.0 + i for i in range(len(symbols))],
+        }
+    )
     raw["symbol"] = raw["symbol"].str.replace(".SZ", "")
     return raw
 
