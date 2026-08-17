@@ -96,6 +96,10 @@ ES_PATIENCE = 100  # [V3.8 §2.1] patience=100
 # (main 3d_cls=1树, dual 5d_cls=3树). cls 头早停树数低于此值时重训固定轮数保底
 # (num_leaves=15 强正则 + OOS test 窗兜底, 不会无界过拟合). 只作用 cls, reg 不参与.
 CLS_MIN_TREES = 30
+# [2026-08-17] reg 头同地板 (任务 #14): dual 3d/5d_reg es 早停 2 树 = 常数列
+# (candidates_20260816 实测 pred_ret_3d std=0.0000/唯一值1), main 3d/5d 也退化
+# (8/16 树, 唯一值 79/51 per 1835 只); 10d 头天然健康 (802+ 树) 不会触发.
+REG_MIN_TREES = 30
 OOS_IC_MIN = 0.01  # 新模型切换门槛 (signed mean IC, >0.01 即有效)
 
 LGB_PARAMS_REG = {
@@ -130,6 +134,14 @@ NUM_LEAVES_OVERRIDE: dict[tuple[str, str], int] = {
     ("dual", "pain"): 15,
 }
 
+# 泛化超参覆盖表 (2026-08-17 补扫定案, WORM: legacy_dual_reg_sweep_20260817_034900):
+#   dual 10d_reg = ms50_λ1: OOS 末60日 top10 超额 +2.48%→+3.41%, Rank IC 0.029→0.035,
+#   3/3 子窗赢, 扰动 seed=43 不翻转. 起因 = dual 10d 排名信号弱 (日截面 corr 0.015),
+#   reg 出厂默认 ms20/λ0 过拟合双创高波动噪声. 只落 dual 10d_reg 一个头, 勿扩散.
+PARAMS_OVERRIDE: dict[tuple[str, str], dict] = {
+    ("dual", "10d_reg"): {"min_child_samples": 50, "reg_lambda": 1.0},
+}
+
 
 def model_params(board: str, kind: str) -> dict:
     """按 (board, kind) 解析 LGBM 超参: 命中覆盖表则覆盖 num_leaves, 否则家族默认.
@@ -142,6 +154,7 @@ def model_params(board: str, kind: str) -> dict:
     nl = NUM_LEAVES_OVERRIDE.get((board, kind))
     if nl is not None:
         params["num_leaves"] = nl
+    params.update(PARAMS_OVERRIDE.get((board, kind), {}))
     # [2026-08-11] 双创概率头: logloss 在 es 段早停到 1-2 树 → prob_up 全股几乎常数.
     # 改 AUC 早停 → ~20 树, prob 有真实截面区分度 (验证: dual 3d/5d/10d_cls
     # rankIC 0.041/0.060/0.035, 唯一值 45/228/242). main cls 信号强, AUC 早停反而
@@ -345,21 +358,29 @@ class DualTrackTrainer:
                 else None,
             )
             # [2026-08-12] cls 最小树保底: es 窗过平 → 早停 1 树 = 常数 prob.
-            # 以固定轮数重训 (无早停), 保证 prob 有真实截面区分度.
-            if kind.endswith("cls") and use_es:
+            # [2026-08-17] reg 同地板 (REG_MIN_TREES): dual 3d/5d_reg 早停 2 树 =
+            # 常数列 (std=0.0000), main 3d/5d 也退化 (8/16 树). 以固定轮数重训
+            # (无早停), 保证预测有真实截面区分度.
+            if use_es:
+                floor = CLS_MIN_TREES if kind.endswith("cls") else REG_MIN_TREES
                 bi = getattr(model, "best_iteration_", None)
-                if bi is not None and bi < CLS_MIN_TREES:
+                if bi is not None and bi < floor:
                     logger.warning(
                         "[%s/%s] 早停仅 %d 树 (< %d), 重训 %d 树保底",
                         board,
                         kind,
                         bi,
-                        CLS_MIN_TREES,
-                        CLS_MIN_TREES,
+                        floor,
+                        floor,
                     )
                     p = model_params(board, kind)
-                    p["n_estimators"] = CLS_MIN_TREES
-                    model = lgb.LGBMClassifier(**p)
+                    p["n_estimators"] = floor
+                    make = (
+                        lgb.LGBMClassifier
+                        if kind.endswith("cls")
+                        else lgb.LGBMRegressor
+                    )
+                    model = make(**p)
                     model.fit(X, y, sample_weight=w)
         except Exception as exc:
             logger.error("模型训练失败 [%s/%s]: %s", kind, label, exc)

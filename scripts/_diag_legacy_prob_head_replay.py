@@ -338,9 +338,11 @@ def main() -> int:
         for d in eval_days:
             pos = int(np.searchsorted(board_dates_arr, np.datetime64(d)))
             lo = max(0, pos - BASE_TAIL_DAYS + 1)
+            # 审计修复 (2026-08-16): mid-panel 无面板末尾的 mfe_3d NaN 保护 —
+            # 尾部必须显式止于 pos-4 (mfe_3d 需 +4 交易日未来价), 否则 4 天前瞻.
             tail = raw[
                 (raw["date"] >= pd.Timestamp(board_dates_arr[lo]))
-                & (raw["date"] <= pd.Timestamp(d))
+                & (raw["date"] <= pd.Timestamp(board_dates_arr[pos - 4]))
             ]
             b = prob_head._base_rate(tail)
             base_map[pd.Timestamp(d)] = b if b is not None else np.nan
@@ -382,7 +384,10 @@ def main() -> int:
             for k, d in enumerate(eval_days):
                 pos = int(np.searchsorted(board_dates_arr, np.datetime64(d)))
                 if model is None or k % REFIT_EVERY == 0:
-                    tr = (idx < pos) & ok_arr
+                    # 审计修复 (2026-08-16): 训练掩码止于 pos-4 — pos-4..pos-1 行的
+                    # mfe_3d 用到评估日及之后价格 (生产训练在 cutoff 处这些标签为
+                    # NaN 被排除), 否则虚增新头质量, 偏向 blend_new.
+                    tr = (idx < pos - 4) & ok_arr
                     model = LGBMClassifier(**prob_head.LGB_PARAMS)
                     model.fit(x_all[tr], y.loc[tr].to_numpy())
                     n_refits += 1
@@ -474,6 +479,22 @@ def main() -> int:
             rank_col="blend_new",
             board_name=board,
         )
+
+    # 富化 WORM CSV: pred_prob_new + base_prod (rank A/B 复用, 免重跑重训)
+    df["pred_prob_new"] = np.nan
+    for board in ("main", "dual"):
+        ckpt = DATA_DIR / f"_diag_legacy_wf_pred_{board}_e{args.eval}.parquet"
+        if not ckpt.exists():
+            continue
+        w = pd.read_parquet(str(ckpt))
+        w["date"] = pd.to_datetime(w["date"])
+        m = df["board"] == board
+        merged = df.loc[m].merge(w, on=["symbol", "date"], how="left")
+        df.loc[m, "pred_prob_new"] = merged["pred"].to_numpy()
+    df["base_prod"] = np.nan
+    for board, bm in base_maps.items():
+        m = df["board"] == board
+        df.loc[m, "base_prod"] = df.loc[m]["date"].map(bm).to_numpy()
 
     df.to_csv(out_dir / f"legacy_prob_head_replay_{ts}.csv", index=False)
     (out_dir / f"legacy_prob_head_replay_{ts}.json").write_text(

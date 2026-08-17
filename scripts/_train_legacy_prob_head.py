@@ -107,15 +107,9 @@ def main() -> int:
             ok = False
             continue
         cols = predictor.bundles[board]["feature_cols"]
-        print(
-            f"[{board}] 清洗 {len(dfb):,}r -> 构建特征 (inference_cols={len(cols)})",
-            flush=True,
-        )
-        feat = features.build(dfb, None, inference_cols=cols, cross_sectional_rank=csr)
-        t = _attach_labels(feat, dfb)
-        del feat, dfb
-        gc.collect()
-        dates = np.unique(pd.to_datetime(t["date"]).values)
+        # 2026-08-17: 新鲜度检查提前到特征构建前 — 否则 skip 也要白跑全史特征构建
+        # (~25 分钟/板, 自动化每工作日都付这笔账). 检查只用清洗帧日期 + bundle, 开销秒级.
+        dates = np.unique(pd.to_datetime(dfb["date"]).values)
         latest = pd.Timestamp(dates[-1])
         b = prob_head.load_latest(board)
         age = (
@@ -134,9 +128,17 @@ def main() -> int:
                 f"{LEGACY_PROB_GATE['refit_every_days']} (面板最新 {latest:%Y-%m-%d})",
                 flush=True,
             )
-            del t
+            del dfb
             gc.collect()
             continue
+        print(
+            f"[{board}] 清洗 {len(dfb):,}r -> 构建特征 (inference_cols={len(cols)})",
+            flush=True,
+        )
+        feat = features.build(dfb, None, inference_cols=cols, cross_sectional_rank=csr)
+        t = _attach_labels(feat, dfb)
+        del feat, dfb
+        gc.collect()
         path = prob_head.train_bundle(board, t, str(latest.date()))
         n_pos = int((t["mfe_3d"] >= LEGACY_PROB_GATE["abs_target"]).sum())
         print(
