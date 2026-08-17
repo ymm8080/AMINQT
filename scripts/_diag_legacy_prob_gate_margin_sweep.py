@@ -375,9 +375,9 @@ def main() -> int:
             flush=True,
         )
 
-        def _report(name: str, v: pd.DataFrame, n: int) -> None:
+        def _report(name: str, v: pd.DataFrame, n: int, current_board: str = board) -> None:
             s = _stats3(_topn(v, n))
-            summary.append({"board": board, "variant": name, "topn": n, **s})
+            summary.append({"board": current_board, "variant": name, "topn": n, **s})
             sub_s = "  ".join(
                 f"{w['win']}:{w['hit10']:.0%}/{w['mean10']:+.2%}"
                 for w in s["sub_windows"]

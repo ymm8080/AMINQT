@@ -124,8 +124,8 @@ def per_day_rank_ic(df: pd.DataFrame, pred_col: str, label_col: str) -> dict:
         # 逐日掩码 NaN (label 缺未来数据/停牌 → 每日截面都有 NaN 行, 08-17 教训:
         # 不掩码 np.corrcoef 恒 NaN → n_ic_days=0 假结果)
         p = sub["pred"].values
-        l = sub["lab"].values
-        m = np.isfinite(p) & np.isfinite(l)
+        labels = sub["lab"].values
+        m = np.isfinite(p) & np.isfinite(labels)
         if m.sum() < 5:
             continue
         cc = np.corrcoef(p[m], l[m])[0, 1]
