@@ -170,6 +170,33 @@ def _fina_convert(raw: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+_MARGIN_RENAME = [
+    ("rzye", "margin_balance"),
+    ("rqye", "short_balance"),
+    ("rzmre", "margin_buy_amt"),
+    ("rqyl", "short_sell_vol"),
+]
+
+
+def merge_margin_renamed(df: pd.DataFrame, margin: pd.DataFrame, panel_cols) -> None:
+    """按面板重命名列直接映射 margin 真实值到今日行 (in-place).
+
+    merges 通用路径按"源列名 in panel_cols"守卫, 但 V3 面板重建后 margin 列已重命名
+    (rzye→margin_balance 等) → 通用路径永远跳过, margin 全靠 ffill 冻结, T+1 回退
+    拉到的真实值被丢弃 (2026-08-17 事故). 本函数与 stk_limit 直映射同模式.
+    """
+    if not len(margin):
+        return
+    m_map = margin.set_index("symbol")
+    for src_col, tgt_col in _MARGIN_RENAME:
+        if (
+            src_col in m_map.columns
+            and tgt_col in panel_cols
+            and tgt_col not in df.columns
+        ):
+            df[tgt_col] = df["symbol"].map(m_map[src_col])
+
+
 def _ak_call(
     fn,
     *args,
