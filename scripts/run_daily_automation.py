@@ -116,7 +116,9 @@ def plan_steps(
     if not skip_parallel:  # 并行清单交付依赖当日 fresh parallel 重生成, 跳过则同步丢弃
         steps.append("deliver_parallel")
     steps.append("drift")  # 幅度漂移监控 (读历史 candidates, 非关键步骤)
-    steps.append("drift_parallel")  # parallel dual 漂移监控 (读历史短名单+检查点, 非关键步骤)
+    steps.append(
+        "drift_parallel"
+    )  # parallel dual 漂移监控 (读历史短名单+检查点, 非关键步骤)
     return steps
 
 

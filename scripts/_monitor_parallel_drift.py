@@ -61,7 +61,9 @@ def main() -> int:
         flush=True,
     )
     if not len(preds):
-        print("[warn] 无 last_*_days_picks_dual.csv (并行短名单未落盘), 退出", flush=True)
+        print(
+            "[warn] 无 last_*_days_picks_dual.csv (并行短名单未落盘), 退出", flush=True
+        )
         return 0
 
     ckpt = pd.read_parquet(

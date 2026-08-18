@@ -115,7 +115,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="gate_d 多窗口消融扫描 (Phase 1)")
     ap.add_argument("--window-days", type=int, default=300, help="扫描覆盖末 N 交易日")
     ap.add_argument("--window-step", type=int, default=10, help="窗端点间隔交易日")
-    ap.add_argument("--min-window-days", type=int, default=120, help="窗内最少交易日, 不足跳过")
+    ap.add_argument(
+        "--min-window-days", type=int, default=120, help="窗内最少交易日, 不足跳过"
+    )
     ap.add_argument(
         "--pin",
         default=None,
@@ -131,7 +133,9 @@ def main() -> int:
     panel = load_panel_v3(path=PANEL_V3_PATH)
     cut = panel["date"].max() - pd.DateOffset(years=3)
     panel = panel[panel["date"] >= cut]
-    print(f"[load] 3y 窗: {len(panel)} rows max={panel['date'].max().date()}", flush=True)
+    print(
+        f"[load] 3y 窗: {len(panel)} rows max={panel['date'].max().date()}", flush=True
+    )
     board_df = CleaningPipeline().run_train(panel, board="dual")[1]
     del panel
     gc.collect()
@@ -166,11 +170,11 @@ def main() -> int:
     )
 
     # ── pin ──
-    pin_path = args.pin or str(
-        data_others_path("data/factor_registry") / PIN_DEFAULT
-    )
+    pin_path = args.pin or str(data_others_path("data/factor_registry") / PIN_DEFAULT)
     if not os.path.exists(pin_path):
-        raise SystemExit(f"pin 文件不存在: {pin_path} (Phase 1 的对照基准缺失, 拒绝扫描)")
+        raise SystemExit(
+            f"pin 文件不存在: {pin_path} (Phase 1 的对照基准缺失, 拒绝扫描)"
+        )
     with open(pin_path, encoding="utf-8") as fh:
         pin_feats = [f for f in json.load(fh).get("features", []) if f in feats]
     print(f"[pin] {os.path.basename(pin_path)}: {len(pin_feats)}/50 在池内", flush=True)
@@ -185,7 +189,9 @@ def main() -> int:
         if n_dates - 1 - k * args.window_step >= 0
     ]
     if len(endpoints) < 2:
-        raise SystemExit("窗端点 < 2, 无法聚合 (调大 --window-days 或调小 --window-step)")
+        raise SystemExit(
+            "窗端点 < 2, 无法聚合 (调大 --window-days 或调小 --window-step)"
+        )
     print(
         f"[windows] {len(endpoints)} 端点: {endpoints[-1].date()} .. {endpoints[0].date()}",
         flush=True,
@@ -198,7 +204,10 @@ def main() -> int:
         n_dates = int(df_w["date"].nunique())
         if n_dates < args.min_window_days:
             logger.warning(
-                "跳过窗 %s (%d 交易日 < %d)", w_end.date(), n_dates, args.min_window_days
+                "跳过窗 %s (%d 交易日 < %d)",
+                w_end.date(),
+                n_dates,
+                args.min_window_days,
             )
             continue
         metrics: dict = {}
@@ -239,12 +248,8 @@ def main() -> int:
             if len(pin_feats) >= 10:
                 w_dates = np.sort(df_w["date"].unique())
                 split = int(len(w_dates) * 0.8)
-                tr = df_w[df_w["date"].isin(w_dates[:split])].dropna(
-                    subset=[label_col]
-                )
-                te = df_w[df_w["date"].isin(w_dates[split:])].dropna(
-                    subset=[label_col]
-                )
+                tr = df_w[df_w["date"].isin(w_dates[:split])].dropna(subset=[label_col])
+                te = df_w[df_w["date"].isin(w_dates[split:])].dropna(subset=[label_col])
                 m = lgb.LGBMRegressor(**_lgbm_params(200))
                 m.fit(tr[pin_feats], tr[label_col])
                 rec["pin_icir"] = _eval_icir(te, m.predict(te[pin_feats]), label_col)
@@ -297,12 +302,7 @@ def main() -> int:
     curve_mean = {
         n: float(
             np.mean(
-                [
-                    e["icir"]
-                    for r in results
-                    for e in r["ablation_log"]
-                    if e["n"] == n
-                ]
+                [e["icir"] for r in results for e in r["ablation_log"] if e["n"] == n]
             )
         )
         for n in n_grid
@@ -326,7 +326,9 @@ def main() -> int:
         for f in r["selected"]:
             freq[f] = freq.get(f, 0) + 1
     freq = {f: v / n_w for f, v in freq.items()}
-    cand_b = sorted(freq, key=lambda f: (-freq[f], mean_rank.get(f, 1e9)))[:CAND_B_TOP_N]
+    cand_b = sorted(freq, key=lambda f: (-freq[f], mean_rank.get(f, 1e9)))[
+        :CAND_B_TOP_N
+    ]
 
     # pin 对照
     pairs = [
@@ -394,7 +396,9 @@ def main() -> int:
     }
     with open(out_dir / f"gate_d_multiwindow_{ts}.json", "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2, ensure_ascii=False)
-    with open(out_dir / f"gate_d_multiwindow_{ts}_freq.csv", "w", encoding="utf-8") as fh:
+    with open(
+        out_dir / f"gate_d_multiwindow_{ts}_freq.csv", "w", encoding="utf-8"
+    ) as fh:
         fh.write("feature,freq,mean_rank\n")
         for f in sorted(freq, key=lambda f: (-freq[f], mean_rank.get(f, 1e9))):
             fh.write(f"{f},{freq[f]:.4f},{mean_rank.get(f, 0.0):.1f}\n")

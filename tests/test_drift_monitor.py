@@ -226,7 +226,7 @@ def _write_picks(run_root, run_ts: str, rows: list[tuple]) -> None:
     lines = [PICKS_HEADER]
     for i, (date, symbol, mfe10) in enumerate(rows):
         lines.append(
-            f"{date},sniper,{i+1},{symbol},{mfe10:.4f},{mfe10:.4f},{mfe10:.4f},{mfe10:.4f}"
+            f"{date},sniper,{i + 1},{symbol},{mfe10:.4f},{mfe10:.4f},{mfe10:.4f},{mfe10:.4f}"
         )
     (d / "last_15_days_picks_dual.csv").write_text(
         "\n".join(lines) + "\n", encoding="utf-8"
