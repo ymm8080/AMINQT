@@ -375,7 +375,9 @@ def main() -> int:
             flush=True,
         )
 
-        def _report(name: str, v: pd.DataFrame, n: int, current_board: str = board) -> None:
+        def _report(
+            name: str, v: pd.DataFrame, n: int, current_board: str = board
+        ) -> None:
             s = _stats3(_topn(v, n))
             summary.append({"board": current_board, "variant": name, "topn": n, **s})
             sub_s = "  ".join(

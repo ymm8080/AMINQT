@@ -171,7 +171,9 @@ class TestQuantileModels:
         for q, model in qset.models.items():
             bi = getattr(model, "best_iteration_", None)
             n = bi if bi is not None else model.n_estimators
-            assert n <= QUANTILE_MAX_TREES, f"q={q} 树数 {n} 超上限 {QUANTILE_MAX_TREES}"
+            assert n <= QUANTILE_MAX_TREES, (
+                f"q={q} 树数 {n} 超上限 {QUANTILE_MAX_TREES}"
+            )
 
 
 class TestPainModel:

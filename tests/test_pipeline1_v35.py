@@ -1465,9 +1465,11 @@ def test_apply_per_stock_unsorted_input_lexsort_reorder():
 
 def _sorted_panel(symbols, days):
     """make_panel 默认按符号列表序非 (symbol,date) 升序; 快速路径要求已排序输入."""
-    return make_panel(symbols=symbols, days=days).sort_values(
-        ["symbol", "date"]
-    ).reset_index(drop=True)
+    return (
+        make_panel(symbols=symbols, days=days)
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
 
 
 def test_apply_per_stock_fast_path_taken_sorted_input(monkeypatch):

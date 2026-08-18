@@ -151,7 +151,11 @@ def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
     语义=旧实现). 回退输出与旧语义逐字节一致.
     """
     nrows = len(df)
-    if nrows and df.index.equals(pd.RangeIndex(nrows)) and _is_sorted_by_symbol_date(df):
+    if (
+        nrows
+        and df.index.equals(pd.RangeIndex(nrows))
+        and _is_sorted_by_symbol_date(df)
+    ):
         try:
             g0 = next(iter(df.groupby("symbol")))[1]
         except StopIteration:
