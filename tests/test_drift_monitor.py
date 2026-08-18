@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 
 from app.pipeline1.drift_monitor import (
+    accumulate_parallel_picks,
     board_of,
     check_drift,
     compute_realized,
@@ -213,6 +214,62 @@ def test_check_drift_thresholds():
     assert [a["board"] for a in alerts] == ["main"]  # dual 0.06 < 0.07, other 无阈值
     assert alerts[0]["bias"] == pytest.approx(0.05)
     assert alerts[0]["threshold"] == pytest.approx(0.04)
+
+
+PICKS_HEADER = "date,system,rk,symbol,score,mfe_3d,mfe_5d,mfe_10d"
+
+
+def _write_picks(run_root, run_ts: str, rows: list[tuple]) -> None:
+    """rows = (date, symbol, mfe_10d) → run_root/<run_ts>/last_15_days_picks_dual.csv"""
+    d = run_root / run_ts
+    d.mkdir(parents=True)
+    lines = [PICKS_HEADER]
+    for i, (date, symbol, mfe10) in enumerate(rows):
+        lines.append(
+            f"{date},sniper,{i+1},{symbol},{mfe10:.4f},{mfe10:.4f},{mfe10:.4f},{mfe10:.4f}"
+        )
+    (d / "last_15_days_picks_dual.csv").write_text(
+        "\n".join(lines) + "\n", encoding="utf-8"
+    )
+
+
+def test_accumulate_parallel_picks_dedup_keep_first(tmp_path):
+    """同一 (date,symbol) 出现在多个 run 里 → 保留 ts 最早那份 (决策日当天生成)."""
+    _write_picks(
+        tmp_path,
+        "20260817T010000",
+        [("2026-08-17", "000001", 0.05), ("2026-08-16", "000002", 0.04)],
+    )
+    _write_picks(
+        tmp_path,
+        "20260818T010000",
+        [("2026-08-17", "000001", 0.09), ("2026-08-18", "000003", 0.03)],
+    )
+    out = accumulate_parallel_picks(tmp_path)
+    assert len(out) == 3  # 2026-08-17/000001 只出现一次
+    assert set(out["symbol"]) == {"000001", "000002", "000003"}
+    assert out["date"].tolist() == ["2026-08-17", "2026-08-16", "2026-08-18"]
+    a = out[out["symbol"] == "000001"].iloc[0]
+    assert a["pred_ret_10d"] == pytest.approx(0.05)  # 保留最早 run 的值
+    assert a["board"] == "dual"
+    assert out["symbol"].dtype == object  # 前导零不被吃掉
+
+
+def test_accumulate_parallel_picks_empty(tmp_path):
+    out = accumulate_parallel_picks(tmp_path)
+    assert out.empty
+    assert list(out.columns) == ["date", "symbol", "board", "pred_ret_10d"]
+
+
+def test_accumulate_parallel_picks_ignores_main_file(tmp_path):
+    """只收 *_dual.csv, main 短名单不混入."""
+    d = tmp_path / "20260817T010000"
+    d.mkdir(parents=True)
+    (d / "last_15_days_picks.csv").write_text(
+        f"{PICKS_HEADER}\n2026-08-17,sniper,1,000001,0.05,0.05,0.05,0.05\n",
+        encoding="utf-8",
+    )
+    assert accumulate_parallel_picks(tmp_path).empty
 
 
 def test_check_drift_none_bias_no_alert():

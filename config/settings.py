@@ -329,6 +329,19 @@ DRIFT_MONITOR = {
     "sell_lag": 11,             # = buy_lag + label_horizon(10)
 }
 
+# ── parallel dual 幅度漂移监控 (2026-08-18) ──
+# 与 legacy 同构: 每日短名单 pick 的 mfe_10d (校准预期幅度) vs label_pm_10d_net 实现
+# 偏差, 滚动窗超阈值 → 告警 (特征冻结后更依赖此监控, 季度重选前唯一漂移信号).
+# 数据源: BACKTEST_RESULT_DIR/*/last_*_days_picks_dual.csv (WORM, as-predicted 去重)
+# realized: 刷新后的 dual 检查点 label_pm_10d_net (与校准目标同口径, 无 lag/cost 歧义).
+PARALLEL_DRIFT_MONITOR = {
+    "window_days": 42,          # 滚动偏差窗 (交易日)
+    "min_matured_days": 20,     # 成熟日少于该值 → 不出告警 (积累期)
+    "bias_threshold": {"dual": 0.07},  # 初始值 (沿用 legacy dual), 勿当定案
+    "run_root": "BACKTESTING RESULT",  # 相对 DATA_OTHERS_DIR 的 run_dir 根
+    "checkpoint_dual": "_diag_stage_dual_3y.parquet",  # 相对 DATA_DIR, refresh 步骤更新
+}
+
 # ── 重训内存独占闸 (2026-08-15 用户定案, 代码强制"重训期间不跑其他重活") ──
 # 08-14 教训: 重训 + 250d 复验/扫描并发 → RAM 挤兑 → 训练 8.4h 零模型完成.
 # ram_guard.check_startup_gate: 启动时可用物理内存低于下限 → 拒绝启动 (exit 2);

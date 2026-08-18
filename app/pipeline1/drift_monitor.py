@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -65,6 +67,31 @@ def compute_realized(
     if not out:
         return pd.DataFrame(columns=["date", "symbol", "realized_net"])
     return pd.concat(out, ignore_index=True)
+
+
+def accumulate_parallel_picks(run_root: Path) -> pd.DataFrame:
+    """扫描 BACKTEST_RESULT_DIR 下 last_*_days_picks_dual.csv → (date,symbol,board,pred_ret_10d).
+
+    每个 run 目录含近 15 交易日的滚窗快照 (每日重生成, WORM), 同一决策日会出现在多个
+    run 中; 按 run ts 升序拼接后 (date,symbol) keep-first = 决策日当天生成的那份
+    (as-predicted 语义, 与回测口径一致). pred_ret_10d 取 mfe_10d (校准预期幅度).
+    """
+    parts = []
+    for f in sorted(Path(run_root).glob("*/last_*_days_picks_dual.csv")):
+        parts.append(pd.read_csv(f, dtype={"symbol": str}))
+    if not parts:
+        return pd.DataFrame(columns=["date", "symbol", "board", "pred_ret_10d"])
+    df = pd.concat(parts, ignore_index=True).drop_duplicates(
+        subset=["date", "symbol"], keep="first"
+    )
+    return pd.DataFrame(
+        {
+            "date": df["date"],
+            "symbol": df["symbol"],
+            "board": "dual",
+            "pred_ret_10d": df["mfe_10d"],
+        }
+    )
 
 
 def daily_bias(preds: pd.DataFrame, realized: pd.DataFrame) -> pd.DataFrame:
