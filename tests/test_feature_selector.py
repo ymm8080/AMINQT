@@ -646,6 +646,7 @@ class TestFeatureSelectorSelection:
             assert m["n_returned"] == len(pin_feats)
             # 诊断消融仍在跑 (metrics 有消融记录), 但结果不进训练
             assert m["n_candidates"] > 0 and "ablation_log" in m
+            assert len(m["gain_rank"]) == m["n_candidates"]
 
     def test_select_dual_gate_d_frozen_missing_pin_raises(self):
         """冻结配置指向的 pin 文件缺失 → 大声失败, 不静默回退抽签."""

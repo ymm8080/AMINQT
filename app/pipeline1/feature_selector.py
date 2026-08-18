@@ -683,6 +683,8 @@ def gate_d_ablation(
             best_n=best_n,
             sat_n=sat_n,
             ablation_log=ablation_log,
+            # 全特征 gain 排名 (诊断用: 多窗口扫描跨窗平均排名选候选集)
+            gain_rank=imp["feature"].tolist(),
         )
     return selected
 
