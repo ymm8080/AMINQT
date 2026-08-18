@@ -137,15 +137,25 @@ def load_panel_v3(path=None) -> pd.DataFrame:
 
     from config.settings import PANEL_V3_PATH
 
-    cfg = CleaningConfig()
     return pq.read_table(
-        str(path or PANEL_V3_PATH),
-        filters=[
-            ("amount", ">=", cfg.min_amount),
-            # 合并新面板后 is_suspended 可能被写成 int64 (bool 无相等内核); 用 0 兼容 bool/int
-            ("is_suspended", "=", 0),
-        ],
+        str(path or PANEL_V3_PATH), filters=_load_panel_v3_filters()
     ).to_pandas()
+
+
+def _load_panel_v3_filters():
+    """预过滤表达式: amount>=min_amount 且 非停牌.
+
+    合并新面板后 is_suspended 的 dtype 会在 bool/int64 之间漂移; 元组过滤器
+    ("is_suspended","=",0) 遇 bool 列无相等内核 → ArrowNotImplementedError (08-17
+    run1 refresh 失败, 后续 legacy 7h 卡死). cast 表达式两种 dtype 通吃.
+    """
+    import pyarrow as pa
+    import pyarrow.compute as pc
+
+    cfg = CleaningConfig()
+    return (pc.field("amount") >= cfg.min_amount) & (
+        pc.field("is_suspended").cast(pa.int64()) == 0
+    )
 
 
 class CleaningPipeline:

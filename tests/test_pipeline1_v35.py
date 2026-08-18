@@ -1463,6 +1463,117 @@ def test_apply_per_stock_unsorted_input_lexsort_reorder():
     assert out["symbol"].tolist() == sorted(out["symbol"].tolist())
 
 
+def _sorted_panel(symbols, days):
+    """make_panel 默认按符号列表序非 (symbol,date) 升序; 快速路径要求已排序输入."""
+    return (
+        make_panel(symbols=symbols, days=days)
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
+
+
+def test_apply_per_stock_fast_path_taken_sorted_input(monkeypatch):
+    """已排序输入 → 快速路径真实生效 (慢路径被禁也能跑完, 2026-08-17)."""
+    import app.pipeline1.feature_engine_v35 as fe
+
+    def _boom(df, fn):
+        raise AssertionError("快速路径未生效 — 走了全量缓冲路径")
+
+    monkeypatch.setattr(fe, "_apply_per_stock_slow", _boom)
+    df = _sorted_panel(("600519", "300750"), 30)
+
+    def per_stock(g):
+        g = g.sort_values("date")
+        g["ma5"] = g["close"].rolling(5, min_periods=1).mean()
+        return g
+
+    out = _apply_per_stock(df, per_stock)
+    assert len(out) == len(df)
+    assert "ma5" in out.columns
+    assert out.equals(_ref_apply_per_stock(df, per_stock))
+
+
+def test_apply_per_stock_fast_path_identity_many_cols():
+    """快速路径 (只缓冲新列) 与旧语义逐字节一致 — 多新列真实形状 (2026-08-17)."""
+    df = _sorted_panel(("600519", "300750", "601318"), 120)
+
+    def per_stock(g):
+        g = g.sort_values("date")
+        for w in (3, 5, 10):
+            g[f"ma{w}"] = g["close"].rolling(w, min_periods=1).mean()
+            g[f"mom{w}"] = g["close"] / g["close"].shift(1) - 1
+        g["vol_ratio"] = g["volume"] / g["volume"].rolling(20, min_periods=1).mean()
+        return g
+
+    out = _apply_per_stock(df, per_stock)
+    ref = _ref_apply_per_stock(df, per_stock)
+    assert out.equals(ref)
+    assert list(out.columns) == list(ref.columns)
+    assert out.dtypes.to_dict() == ref.dtypes.to_dict()
+    assert out.index.equals(ref.index)
+
+
+def test_apply_per_stock_col_dropping_fn_falls_back():
+    """fn 丢列 (dim13 holiday 形态) → 回退全量缓冲, 与旧语义一致."""
+    df = _sorted_panel(("600519", "300750"), 60)
+
+    def per_stock(g):
+        g = g.sort_values("date")
+        g["ma5"] = g["close"].rolling(5, min_periods=1).mean()
+        return g.drop(columns=["board"])  # 丢旧列 → 快速路径必须回退
+
+    out = _apply_per_stock(df, per_stock)
+    ref = _ref_apply_per_stock(df, per_stock)
+    assert out.equals(ref)
+    assert "board" not in out.columns
+
+
+def test_apply_per_stock_later_group_row_drop_falls_back():
+    """非首 group 丢行 → 快速路径对齐失效回退, 尾部裁剪语义与旧实现一致."""
+    df = _sorted_panel(("600519", "300750"), 20)
+
+    def per_stock(g):
+        if g["symbol"].iloc[0] == "300750":
+            return g.iloc[:10]  # 仅第 2 只丢行 (首 group 不丢 → 快速路径先启动)
+        return g
+
+    out = _apply_per_stock(df, per_stock)
+    ref = _ref_apply_per_stock(df, per_stock)
+    assert out.equals(ref)
+
+
+def test_apply_per_stock_modifies_existing_col_falls_back():
+    """fn 改动旧列值 → 首 group 值校验不过 → 回退全量缓冲 (改动生效)."""
+    df = _sorted_panel(("600519", "300750"), 60)
+
+    def per_stock(g):
+        g = g.sort_values("date")
+        g["close"] = g["close"] * 2  # 覆盖已有列
+        g["ma5"] = g["close"].rolling(5, min_periods=1).mean()
+        return g
+
+    out = _apply_per_stock(df, per_stock)
+    ref = _ref_apply_per_stock(df, per_stock)
+    assert out.equals(ref)
+    assert out["close"].iloc[0] == df["close"].iloc[0] * 2
+
+
+def test_apply_per_stock_non_range_index_falls_back():
+    """输入已排序但 index 非 RangeIndex → 回退 (旧语义返回 RangeIndex)."""
+    df = _sorted_panel(("600519", "300750"), 30)
+    df.index = pd.RangeIndex(100, 100 + len(df))
+
+    def per_stock(g):
+        g = g.sort_values("date")
+        g["ma5"] = g["close"].rolling(5, min_periods=1).mean()
+        return g
+
+    out = _apply_per_stock(df, per_stock)
+    ref = _ref_apply_per_stock(df, per_stock)
+    assert out.equals(ref)
+    assert out.index.equals(ref.index)
+
+
 class TestEnsureSorted:
     """_ensure_sorted 内存安全保序函数测试 (2026-08-12)."""
 

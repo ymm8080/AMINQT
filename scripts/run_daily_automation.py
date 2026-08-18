@@ -49,6 +49,21 @@ LOG_DIR = os.path.join(ROOT, "logs")
 # 0=Mon .. 6=Sun. 周频重训落在周五晚 (周末分析用周五收盘后最新模型).
 RETRAIN_WEEKDAY = 4
 
+# 每步超时兜底 (2026-08-17): 08-17 run1 legacy 预测卡死 7h (与手动重训并发页交换),
+# 无超时则僵尸进程占内存影响后续所有步骤. 取值=正常耗时的 4-6 倍 (refresh 08-17 实测
+# 70min / legacy 18-30min / retrain 5-7h), 只兜底卡死不误杀慢跑. 超时按步骤记为 rc=124.
+_STEP_TIMEOUT_S = {
+    "refresh": 3 * 3600,
+    "retrain": 12 * 3600,
+    "parallel": 4 * 3600,
+    "prob_head": 1 * 3600,
+    "legacy_prob_head": 1 * 3600,
+    "legacy": 3 * 3600,
+    "deliver": 30 * 60,
+    "deliver_parallel": 30 * 60,
+    "drift": 30 * 60,
+}
+
 # (步骤名, argv) — argv 不含解释器, run_step 负责拼 [PY, "-u", ...]
 _STEPS = {
     "refresh": ["scripts/_refresh_parallel_checkpoints.py"],
@@ -185,9 +200,24 @@ def main() -> int:
             t0 = time.time()
             # 统一子进程 stdout 为 UTF-8: 有的脚本 reconfigure 有的不, 混合编码会污染日志文件.
             env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
-            rc = subprocess.call(
-                argv, cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT, env=env
-            )
+            try:
+                cp = subprocess.run(
+                    argv,
+                    cwd=ROOT,
+                    stdout=fh,
+                    stderr=subprocess.STDOUT,
+                    env=env,
+                    timeout=_STEP_TIMEOUT_S[step],
+                )
+                rc = cp.returncode
+            except subprocess.TimeoutExpired:
+                msg = (
+                    f"[{_dt.datetime.now():%H:%M:%S} TIMEOUT] {step} 超过 "
+                    f"{_STEP_TIMEOUT_S[step]}s 未完成, 已终止 (疑似卡死, 见上日志)"
+                )
+                print(msg, flush=True)
+                print(msg, file=fh, flush=True)
+                rc = 124
             dt = time.time() - t0
             ok = rc == 0
             status = "ok" if ok else "FAIL"

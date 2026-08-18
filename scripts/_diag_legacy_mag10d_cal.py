@@ -181,7 +181,7 @@ def main() -> int:
         # no-op 自检: mag 键 top-10 与 pred 键同日同集 (单调仿射 → 应完全一致)
         e7df = b[e7].copy()
         same = True
-        for d, g in e7df.groupby("date"):
+        for _d, g in e7df.groupby("date"):
             if len(g) < 2 or g["mag"].isna().any():
                 continue
             a = set(g.nlargest(10, "pred_ret_10d")["symbol"])

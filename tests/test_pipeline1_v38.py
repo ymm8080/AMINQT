@@ -151,6 +151,30 @@ class TestQuantileModels:
         preds = qset.predict(X[:50])["pred_q50"].values
         assert preds.std() > 0, "地板重训后 q50 不应为常数"
 
+    def test_es_caps_n_estimators_at_max(self):
+        # 上限 (QUANTILE_MAX_TREES): q0.75/q0.90 pinball 不早停会跑到 1000 树
+        # (08-17 实测 100-350 树 / 1.4M 行), 上限只兜底异常尾部, 正常区间不变
+        from app.pipeline1.quantile_models import QUANTILE_MAX_TREES
+
+        rng = np.random.default_rng(5)
+        X = rng.normal(size=(500, 3))
+        y = X[:, 0] * 0.05 + rng.normal(0, 0.02, 500)
+        X_es = rng.normal(size=(100, 3))
+        y_es = X_es[:, 0] * 0.05 + rng.normal(0, 0.02, 100)
+        params = {
+            "n_estimators": 1000,
+            "learning_rate": 0.05,
+            "random_state": 42,
+            "verbosity": -1,
+        }
+        qset = QuantileModelSet(params).fit(X, y, eval_set=(X_es, y_es), es_patience=5)
+        for q, model in qset.models.items():
+            bi = getattr(model, "best_iteration_", None)
+            n = bi if bi is not None else model.n_estimators
+            assert n <= QUANTILE_MAX_TREES, (
+                f"q={q} 树数 {n} 超上限 {QUANTILE_MAX_TREES}"
+            )
+
 
 class TestPainModel:
     def test_fit_predict(self):
