@@ -91,6 +91,47 @@ def _alloc_buffer(series: pd.Series, nrows: int) -> np.ndarray:
     return np.full(nrows, None, dtype=object)
 
 
+def _is_sorted_by_symbol_date(df: pd.DataFrame) -> bool:
+    """输入是否已按 (symbol, date) 升序 — 向量化一次检查.
+
+    严格语义: symbol 不降 且 同 symbol 内 date 不降. 旧实现 (lenient: 跨 symbol
+    边界任意) 对乱序 symbol 会误判已排序 → 快速路径位置错位; NaT/不可比 → False.
+    """
+    try:
+        sym = df["symbol"].to_numpy()
+        date = df["date"].to_numpy()
+    except KeyError:
+        return False
+    if len(sym) < 2:
+        return True
+    try:
+        same_sym = sym[:-1] == sym[1:]
+        date_asc = date[:-1] <= date[1:]
+        sym_asc = sym[:-1] < sym[1:]
+        # 每对: 符号升序 (跨边界任意) 或 同符号内日期升序
+        return bool((sym_asc | (same_sym & date_asc)).all())
+    except TypeError:
+        # object dtype 日期/符号含 NaT 等不可比元素 → 保守回退全量路径
+        return False
+
+
+def _restore_dtypes(result: pd.DataFrame, ref_dtypes: dict) -> None:
+    """恢复 dtype: int 列缓冲为 float64 (可容 NaN), 全有限才转回 int; 其余对齐 ref."""
+    for col, dtype in ref_dtypes.items():
+        cur = result[col].dtype
+        if cur == dtype:
+            continue
+        if np.issubdtype(dtype, np.integer):
+            try:
+                finite = bool(np.isfinite(result[col].astype(float)).all())
+            except (TypeError, ValueError):
+                finite = False
+            if not finite:
+                result[col] = result[col].astype(float)
+                continue
+        result[col] = result[col].astype(dtype)
+
+
 def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
     """逐股应用特征函数 — groupby(symbol) 强制 (安全网 #5).
 
@@ -101,7 +142,71 @@ def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
     无宽表 block consolidation); 比旧 `out.iloc[slice] = part` 行写入快 ~18×
     (row-wise iloc setitem 是 pandas 慢路径, 曾是重训/推理数小时的根因).
     输出与旧语义逐字节一致 (行序/列序/索引/dtype/值). per_stock 必须保行.
+    快速路径 (2026-08-17, 重训/推理耗时解剖): 28 处 per_stock fn 审计全部只新增
+    列 (dim13 holiday 丢列除外) — 满足前提时只缓冲新列, 旧列 df.copy() 去碎片后
+    原样保留, 免每 group 全 ~450 列 numpy boxing (占构建 ~48% 采样) 且 g.copy()
+    从 ~450 block 降到 ~2 block (去碎片一次性). 前提任一不满足 → 回退全量缓冲:
+    a) 输入未按 (symbol,date) 升序或 index 非 RangeIndex b) 首 group 丢行/丢列/
+    列序错位/改动旧列值/dtype c) 无新列 d) 后续 group 丢行 (pos!=nrows, 尾部裁剪
+    语义=旧实现). 回退输出与旧语义逐字节一致.
     """
+    nrows = len(df)
+    if nrows and df.index.equals(pd.RangeIndex(nrows)) and _is_sorted_by_symbol_date(df):
+        try:
+            g0 = next(iter(df.groupby("symbol")))[1]
+        except StopIteration:
+            return df.copy()
+        part0 = fn(g0.copy())
+        n0 = len(part0)
+        new_cols = (
+            list(part0.columns[len(df.columns) :])
+            if len(part0.columns) > len(df.columns)
+            and list(part0.columns[: len(df.columns)]) == list(df.columns)
+            else []
+        )
+        if (
+            n0 == len(g0)
+            and new_cols
+            and part0.iloc[:n0][df.columns].equals(df.iloc[:n0][df.columns])
+            and part0[df.columns].dtypes.equals(df[df.columns].dtypes)
+        ):
+            return _apply_per_stock_fast(df, fn, part0, new_cols)
+    return _apply_per_stock_slow(df, fn)
+
+
+def _apply_per_stock_fast(
+    df: pd.DataFrame, fn, part0: pd.DataFrame, new_cols: list
+) -> pd.DataFrame:
+    """快速路径: 只缓冲新列, 旧列 df.copy() 去碎片原样保留 (前提已由入口验证)."""
+    nrows = len(df)
+    ref_dtypes = {c: part0[c].dtype for c in new_cols}
+    consolidated = df.copy()
+    bufs = {c: _alloc_buffer(part0[c], nrows) for c in new_cols}
+    pos = 0
+    for _, g in consolidated.groupby("symbol"):
+        part = fn(g.copy())
+        n = len(part)
+        if pos + n > nrows:
+            raise ValueError(
+                f"_apply_per_stock: per_stock 输出 {pos + n} 行 > 输入 "
+                f"{nrows} 行 — 特征函数必须保行"
+            )
+        for c in new_cols:
+            bufs[c][pos : pos + n] = part[c].to_numpy()
+        pos += n
+    if pos != nrows:
+        # 后续 group 丢行 → 快速路径对齐失效, 回退全量 (与旧实现尾部裁剪语义一致)
+        return _apply_per_stock_slow(df, fn)
+    result = consolidated
+    for c in new_cols:
+        result[c] = bufs[c][:pos]
+    del bufs
+    _restore_dtypes(result, ref_dtypes)
+    return result
+
+
+def _apply_per_stock_slow(df: pd.DataFrame, fn) -> pd.DataFrame:
+    """全量缓冲路径 (逐字节旧语义): 每 group 全列 numpy 切片写入 + lexsort 保序."""
     cols = None
     ref_dtypes = None
     bufs = None
@@ -148,20 +253,7 @@ def _apply_per_stock(df: pd.DataFrame, fn) -> pd.DataFrame:
     else:
         result = pd.DataFrame({c: bufs[c][:pos] for c in cols}, copy=False)
     del bufs  # 缓冲已并入 result (视图或重排拷贝), 尽早归还 ~2GB
-    # 恢复 dtype: int 列缓冲为 float64 (可容 NaN), 全有限才转回 int; 其余对齐 ref.
-    for col, dtype in ref_dtypes.items():
-        cur = result[col].dtype
-        if cur == dtype:
-            continue
-        if np.issubdtype(dtype, np.integer):
-            try:
-                finite = bool(np.isfinite(result[col].astype(float)).all())
-            except (TypeError, ValueError):
-                finite = False
-            if not finite:
-                result[col] = result[col].astype(float)
-                continue
-        result[col] = result[col].astype(dtype)
+    _restore_dtypes(result, ref_dtypes)
     # 免 reset_index 宽表合并 OOM (2026-08-11): result 由 numpy 缓冲直接构造,
     # 索引本已是 RangeIndex(0..pos-1) (按 build 入口已排序, groupby 保序), reset_index
     # 语义为 no-op 却强制深拷贝 + _consolidate_inplace 合并全部同 dtype 列为 1 个连续块

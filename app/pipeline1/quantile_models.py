@@ -27,6 +27,10 @@ PAIN_DEMOTE_THRESHOLD = 0.30  # E2: pain_prob>30% → 降仓50%或剔除 (季度
 # 分位头最小树保底 (2026-08-14): 与 dual_track_trainer.CLS_MIN_TREES 同机制 —
 # es 窗过平 → 早停第 1 树 → 常数分位 (M20260812 main 3d q50 nunique=1, 闸门 q50>0 拦掉 100% 票)
 QUANTILE_MIN_TREES = 30
+# 分位头最大树上限 (2026-08-17): q0.75/q0.90 pinball loss 持续缓慢改善不早停,
+# 实测 100-350 树 (main q0.75=248 树 7.5min / 1.4M 行); 上限只兜底异常尾部
+# (350→300 树), 正常区间 (≤248) 行为不变. 分位头只供仓位阻尼, 尾树增量可忽略.
+QUANTILE_MAX_TREES = 300
 
 
 class QuantileModelSet:
@@ -57,6 +61,10 @@ class QuantileModelSet:
                 "alpha": q,
             }
             params.pop("importance_type", None)
+            if eval_set is not None:
+                params["n_estimators"] = min(
+                    params.get("n_estimators", 1000), QUANTILE_MAX_TREES
+                )
             model = lgb.LGBMRegressor(**params)
             callbacks = (
                 [lgb.early_stopping(es_patience, verbose=False)]

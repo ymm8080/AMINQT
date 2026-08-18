@@ -53,21 +53,52 @@ def test_load_panel_reads_full_columns(monkeypatch):
 
 
 def test_load_panel_prefilters_by_cleaning_rules(monkeypatch):
-    """预过滤条件 = amount>=CleaningConfig.min_amount 且 非停牌 (与 run_train 同口径)."""
+    """预过滤条件 = amount>=CleaningConfig.min_amount 且 非停牌 (与 run_train 同口径).
+
+    2026-08-17 起为单条 pyarrow 表达式 (cast 兼容 bool/int64 两种 is_suspended
+    dtype) — 元组过滤器遇 bool 列无相等内核 → ArrowNotImplementedError (08-17 事故).
+    """
+
     captured = {}
     _patch_read_table(monkeypatch, captured)
 
     load_panel_v3()
 
-    assert captured["filters"] is not None
-    filts = {f[0]: f for f in captured["filters"]}
-    assert "amount" in filts
-    assert filts["amount"][1] == ">="
-    assert filts["amount"][2] == CleaningConfig().min_amount
-    assert "is_suspended" in filts
-    assert filts["is_suspended"][1] == "="
-    # 合并新面板后 is_suspended 可能被写成 int64 (bool 无相等内核), 0 兼容 bool/int
-    assert filts["is_suspended"][2] == 0
+    expr = captured["filters"]
+    assert expr is not None
+    s = str(expr)
+    assert "amount" in s and str(int(CleaningConfig().min_amount)) in s
+    assert "is_suspended" in s
+    # 关键: 用 cast 而非直接相等 (bool/int64 通吃, 元组过滤器的坑)
+    assert "cast" in s
+
+
+def test_load_panel_filter_binds_bool_and_int64(tmp_path):
+    """预过滤表达式对 bool/int64 两种 is_suspended dtype 都能真实下推 (08-17 事故回归).
+
+    事故: 合并新面板后 is_suspended 被写成 int64, 元组过滤器 ("is_suspended","=",0)
+    在旧面板 (bool 列) 上 ArrowNotImplementedError: equal(int64, bool) → refresh 失败
+    → legacy 步骤 7h 卡死. cast 表达式必须两种 dtype 都绑定成功.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from app.pipeline1.cleaning_pipeline import _load_panel_v3_filters
+
+    for dtype in (pa.bool_(), pa.int64()):
+        tbl = pa.Table.from_pydict(
+            {
+                "symbol": ["600519", "300750", "601318"],
+                "date": pa.array(["2026-08-14"] * 3, type=pa.string()),
+                "amount": pa.array([1e9, 3e7, 8e8], type=pa.float64()),
+                "is_suspended": pa.array([False, True, False] if dtype == pa.bool_() else [0, 1, 0], type=dtype),
+            }
+        )
+        path = tmp_path / f"panel_{dtype}.parquet"
+        pq.write_table(tbl, path)
+        out = pq.read_table(path, filters=_load_panel_v3_filters())
+        assert out.num_rows == 2, f"dtype={dtype} 过滤行数错误"
+        assert set(out["symbol"].to_pylist()) == {"600519", "601318"}
 
 
 def test_load_panel_defaults_to_v3_path(monkeypatch):
