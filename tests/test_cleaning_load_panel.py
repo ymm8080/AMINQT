@@ -91,7 +91,10 @@ def test_load_panel_filter_binds_bool_and_int64(tmp_path):
                 "symbol": ["600519", "300750", "601318"],
                 "date": pa.array(["2026-08-14"] * 3, type=pa.string()),
                 "amount": pa.array([1e9, 3e7, 8e8], type=pa.float64()),
-                "is_suspended": pa.array([False, True, False] if dtype == pa.bool_() else [0, 1, 0], type=dtype),
+                "is_suspended": pa.array(
+                    [False, True, False] if dtype == pa.bool_() else [0, 1, 0],
+                    type=dtype,
+                ),
             }
         )
         path = tmp_path / f"panel_{dtype}.parquet"
