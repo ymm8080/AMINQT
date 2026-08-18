@@ -1165,6 +1165,13 @@ class FeatureSelector:
                 "min_features": 30,
                 "saturation_pct": 0.95,
                 "label": "label_pm_1d_net",
+                # [2026-08-18] dual 特征集冻结: gate_d 消融曲线是平坦噪声 (n=50 在
+                # 08-16 是峰 0.3382、08-17 是谷 0.2048, 面板仅差 1-3 天), 单窗口每周
+                # 重选 = 抽签 (记录 30/200/325/50/50/200, 大签 ~50% 需人工回退).
+                # 冻结后每周重训只用 pin 特征集, 消融降级为纯诊断; 更新 pin = 显式
+                # 动作 (新特征家族落地 / 季度重选 2026-11-14 前), 人工核对+250d
+                # replay 通过才写新 pin. 空字符串 = 不冻结 (回退旧行为).
+                "pinned": "selected_dual_pinned.json",
             },
         },
         "fallback": {"pipeline": "ic_screener"},
@@ -1386,7 +1393,29 @@ class FeatureSelector:
         label = gcfg.get("label", "label_pm_1d_net")
         if label not in df.columns:
             label = "label_1d_net"
-        return gate_d_ablation(
+
+        pinned = (gcfg.get("pinned") or "").strip()
+        if not pinned:
+            return gate_d_ablation(
+                valid,
+                df,
+                label_col=label,
+                min_feats=gcfg.get("min_features", 30),
+                sat_pct=gcfg.get("saturation_pct", 0.95),
+                metrics_out=metrics_out,
+            )
+
+        # 冻结模式: 先验 pin (fail fast, 缺文件不浪费消融时间), 消融照跑 (纯诊断,
+        # 曲线进 snapshot 供季度重选参考), 但返回 pin 特征集
+        pin_path = os.path.join(self.registry_dir, pinned)
+        if not os.path.exists(pin_path):
+            raise RuntimeError(
+                f"[{board}] 冻结配置指向不存在的 pin 文件: {pin_path} "
+                f"(更新 pin = 重跑选择后把新快照复制为 {pinned})"
+            )
+        with open(pin_path, encoding="utf-8") as fh:
+            pin_feats = json.load(fh).get("features", [])
+        gate_d_ablation(
             valid,
             df,
             label_col=label,
@@ -1394,6 +1423,24 @@ class FeatureSelector:
             sat_pct=gcfg.get("saturation_pct", 0.95),
             metrics_out=metrics_out,
         )
+        avail = [f for f in pin_feats if f in valid]
+        missing = [f for f in pin_feats if f not in avail]
+        if missing:
+            logger.warning(
+                "[%s] pin 特征 %d/%d 不在候选集, 已剔除 (前10): %s",
+                board,
+                len(missing),
+                len(pin_feats),
+                missing[:10],
+            )
+        if metrics_out is not None:
+            metrics_out.update(pinned=True, n_returned=len(avail))
+        logger.info(
+            "[%s] 特征集冻结: 返回 pin %d 特征 (诊断消融结果仅记录, 不进训练)",
+            board,
+            len(avail),
+        )
+        return avail
 
     # ── Versioning ──
 
