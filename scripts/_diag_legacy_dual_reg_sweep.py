@@ -128,7 +128,7 @@ def per_day_rank_ic(df: pd.DataFrame, pred_col: str, label_col: str) -> dict:
         m = np.isfinite(p) & np.isfinite(labels)
         if m.sum() < 5:
             continue
-        cc = np.corrcoef(p[m], l[m])[0, 1]
+        cc = np.corrcoef(p[m], labels[m])[0, 1]
         if np.isfinite(cc):
             vals.append(cc)
     daily = np.asarray(vals, dtype=float)
