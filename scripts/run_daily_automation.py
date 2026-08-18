@@ -15,6 +15,7 @@
   [deliver]  scripts/_deliver_legacy_list.py <tag>      legacy 清单交付 STOCK_LIST_DIR
   [deliver_parallel] scripts/_shortlist_t5_t10.py <tag> 并行短名单交付 STOCK_LIST_DIR
   [drift]    scripts/_monitor_legacy_drift.py           幅度漂移监控 (全池 pred vs 实现偏差)
+  [drift_parallel] scripts/_monitor_parallel_drift.py   parallel dual 漂移监控 (短名单 vs 检查点标签)
 
 "推送看板" = 各步落盘到看板只读目录, 看板渲染时自动展示:
   模型 → models/pipeline1/current_meta.json + *.pkl (档案页·模型档案)
@@ -62,6 +63,7 @@ _STEP_TIMEOUT_S = {
     "deliver": 30 * 60,
     "deliver_parallel": 30 * 60,
     "drift": 30 * 60,
+    "drift_parallel": 30 * 60,
 }
 
 # (步骤名, argv) — argv 不含解释器, run_step 负责拼 [PY, "-u", ...]
@@ -75,6 +77,7 @@ _STEPS = {
     "deliver": ["scripts/_deliver_legacy_list.py", "{tag}"],
     "deliver_parallel": ["scripts/_shortlist_t5_t10.py", "{tag}"],
     "drift": ["scripts/_monitor_legacy_drift.py"],
+    "drift_parallel": ["scripts/_monitor_parallel_drift.py"],
 }
 # refresh 失败后应跳过的后续步骤 (parallel 需要新鲜检查点);
 # deliver_parallel 需要当日 fresh parallel run_dir (短名单), 否则会交付旧 run_dir 脏数据;
@@ -113,6 +116,9 @@ def plan_steps(
     if not skip_parallel:  # 并行清单交付依赖当日 fresh parallel 重生成, 跳过则同步丢弃
         steps.append("deliver_parallel")
     steps.append("drift")  # 幅度漂移监控 (读历史 candidates, 非关键步骤)
+    steps.append(
+        "drift_parallel"
+    )  # parallel dual 漂移监控 (读历史短名单+检查点, 非关键步骤)
     return steps
 
 

@@ -49,6 +49,7 @@ def test_plan_steps_weekday_full_chain():
         "deliver",
         "deliver_parallel",
         "drift",
+        "drift_parallel",
     ]
 
 
@@ -63,6 +64,7 @@ def test_plan_steps_retrain_day_inserts_retrain():
         "deliver",
         "deliver_parallel",
         "drift",
+        "drift_parallel",
     ]
 
 
@@ -74,6 +76,7 @@ def test_plan_steps_skip_parallel_drops_deliver_parallel():
         "legacy",
         "deliver",
         "drift",
+        "drift_parallel",
     ]
     assert plan_steps(FRI, skip_parallel=True) == [
         "refresh",
@@ -82,6 +85,7 @@ def test_plan_steps_skip_parallel_drops_deliver_parallel():
         "legacy",
         "deliver",
         "drift",
+        "drift_parallel",
     ]
 
 
@@ -95,6 +99,7 @@ def test_plan_steps_skip_checkpoints_and_retrain():
         "deliver",
         "deliver_parallel",
         "drift",
+        "drift_parallel",
     ]
     assert "refresh" not in steps and "retrain" not in steps
 
@@ -102,4 +107,4 @@ def test_plan_steps_skip_checkpoints_and_retrain():
 def test_plan_steps_all_skip_keeps_legacy_chain():
     assert plan_steps(
         THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True
-    ) == ["legacy_prob_head", "legacy", "deliver", "drift"]
+    ) == ["legacy_prob_head", "legacy", "deliver", "drift", "drift_parallel"]

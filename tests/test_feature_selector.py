@@ -567,8 +567,16 @@ class TestFeatureSelectorSelection:
         fe = FeatureEngineV35()
         df = fe.build(df)
 
+        # 默认 config 已冻结 dual 特征集 (pinned), 此测试走未冻结路径需显式 config
+        unpinned_cfg = {
+            "dual": {
+                "pipeline": "gate_d",
+                "nan_threshold": 0.95,
+                "gate_d": {"min_features": 2, "saturation_pct": 0.95},
+            }
+        }
         with tempfile.TemporaryDirectory() as tmp:
-            sel = FeatureSelector(registry_dir=tmp)
+            sel = FeatureSelector(config=unpinned_cfg, registry_dir=tmp)
             features = sel.select(df, "dual")
             assert len(features) > 0
             # Snapshot must record gate_d selection metrics (ablation result)
@@ -577,6 +585,77 @@ class TestFeatureSelectorSelection:
             assert m["n_candidates"] > 0
             assert m["n_selected"] == len(features)
             assert "best_ir" in m and "best_n" in m and "sat_n" in m
+
+    def test_select_dual_gate_d_frozen(self):
+        """DUAL 冻结路径: 消融仅诊断, 返回 pin 特征集 (默认 config 生产口径)."""
+        np.random.seed(42)
+        n = 150
+        symbols = ["300001", "300002", "688001"]
+        dates = pd.bdate_range("2025-01-01", periods=n // 3)
+        rows = []
+        for sym in symbols:
+            base = 10 + hash(sym) % 30
+            for i, d in enumerate(dates):
+                close = base + np.cumsum(np.random.randn(len(dates)) * 0.2)[i]
+                rows.append(
+                    {
+                        "symbol": sym,
+                        "date": d,
+                        "open": close * 0.99,
+                        "high": close * 1.02,
+                        "low": close * 0.98,
+                        "close": close,
+                        "open_hfq": close * 0.99,
+                        "high_hfq": close * 1.02,
+                        "low_hfq": close * 0.98,
+                        "close_hfq": close,
+                        "volume": 1e6,
+                        "amount": 1e7,
+                        "turnover_rate": 2.0,
+                        "pre_close": close * 0.995,
+                        "board": "GEM",
+                        "industry": "科技",
+                        "is_suspended": 0,
+                        "label_pm_1d_net": np.random.randn(),
+                        "label_1d_net": np.random.randn(),
+                    }
+                )
+        df = pd.DataFrame(rows)
+        from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+
+        fe = FeatureEngineV35()
+        df = fe.build(df)
+
+        # pin 特征从引擎产物采样 (须过 nan_filter, 否则交集会缩水)
+        from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+
+        all_feats = FeatureEngineV35.feature_columns(df)
+        pin_feats = nan_filter(all_feats, df, 0.95)[:3]
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(
+                os.path.join(tmp, "selected_dual_pinned.json"), "w", encoding="utf-8"
+            ) as fh:
+                json.dump({"features": pin_feats}, fh)
+            sel = FeatureSelector(registry_dir=tmp)
+            features = sel.select(df, "dual")
+            # 返回 = pin 特征 (且都存在于面板), 不是消融结果
+            assert set(features) == set(pin_feats)
+            snap = self._latest_snapshot(tmp, "dual")
+            m = snap["metrics"]
+            assert m["pinned"] is True
+            assert m["n_returned"] == len(pin_feats)
+            # 诊断消融仍在跑 (metrics 有消融记录), 但结果不进训练
+            assert m["n_candidates"] > 0 and "ablation_log" in m
+            assert len(m["gain_rank"]) == m["n_candidates"]
+
+    def test_select_dual_gate_d_frozen_missing_pin_raises(self):
+        """冻结配置指向的 pin 文件缺失 → 大声失败, 不静默回退抽签."""
+        np.random.seed(42)
+        df = _make_small_df(n_symbols=3, n_dates=30)
+        with tempfile.TemporaryDirectory() as tmp:
+            sel = FeatureSelector(registry_dir=tmp)
+            with pytest.raises(RuntimeError, match="pin"):
+                sel.select(df, "dual")
 
     def test_select_fallback(self):
         """Unknown board uses fallback pipeline."""
