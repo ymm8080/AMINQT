@@ -1,7 +1,7 @@
 """PIPELINE1 V3.8 (E1-E11) 单元测试.
 
 覆盖: E1 分位数五模型+单调性 / E2 mdd标签+痛苦预警+排序惩罚 / E3 GT-Score /
-E4 三色灯+L1 / E5 分层滑点(标签+回测) / E6 amihud+成交额后20%+liquidity_cap /
+E4 三色灯+L1 / E5 分层滑点(标签+回测) / E6 amihud+成交额后10%+liquidity_cap /
 E7 动态准入 / E8 簇阻断 / E9 波动率熔断 / E11 熊市协议 / Isotonic 校准 / schema V1.2.
 """
 
@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 from app.pipeline1.bear_protocol import BearProtocol
-from app.pipeline1.cleaning_pipeline import CleaningPipeline
+from app.pipeline1.cleaning_pipeline import CleaningConfig, CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.gt_score import gt_score
 from app.pipeline1.label_engine import LabelEngine, slippage_tier
@@ -267,7 +267,8 @@ class TestE6:
         assert out["adv20"].iloc[-1] == pytest.approx(1e9)
         assert out["amihud_illiquidity"].iloc[-1] > 0
 
-    def test_step5_bottom_20pct_removed(self):
+    def test_step5_bottom_removed_when_pct_set(self):
+        # E6 机制保留: 显式 bottom_amount_pct>0 时仍剔成交额后 pct% 尾部
         dates = pd.bdate_range("2025-01-01", periods=2)
         rows = []
         for d in dates:
@@ -276,14 +277,17 @@ class TestE6:
                     {"symbol": f"6000{i:02d}", "date": d, "amount": 1e8 * (i + 1)}
                 )
         df = pd.DataFrame(rows)
-        out = CleaningPipeline().step5_amount_bottom(df)
-        # 每日期剔除成交额最小 2 只 (rank_pct 0.1/0.2 不 > 0.2)
-        assert len(out) == 16
+        out = CleaningPipeline(CleaningConfig(bottom_amount_pct=0.1)).step5_amount_bottom(
+            df
+        )
+        # 每日期剔除成交额最小 1 只 (rank_pct 0.1 不 > 0.1)
+        assert len(out) == 18
         for _d, g in out.groupby("date"):
-            assert g["amount"].min() > 2e8
+            assert g["amount"].min() > 1e8
 
-    def test_step5_board_aware_main_kept_dual_bottom_removed(self):
-        # main 板块 bottom_amount_pct_main=0 → 全保留; dual 板块剔成交额后 20%
+    def test_step5_default_noop_both_boards(self):
+        # 08-20 N=800 重扫定案: dual E6 0.1→0.0 (250d OOS top5 +2.04pp / top10 +0.57pp /
+        # hit +1.2pp / wIC 0.2187 最高, 3/4 子窗) → 默认配置下 E6 两板块全保留
         dates = pd.bdate_range("2025-01-01", periods=1)
         rows = []
         for b, prefix in (("main", "600"), ("GEM", "300")):
@@ -301,8 +305,7 @@ class TestE6:
         main_out = out[out["board"] == "main"]
         dual_out = out[out["board"] == "GEM"]
         assert len(main_out) == 10  # main 全保留
-        assert len(dual_out) == 8  # dual 剔成交额最小 2 只
-        assert dual_out["amount"].min() > 2e8
+        assert len(dual_out) == 10  # dual E6=0 → 全保留
 
     def test_liquidity_cap(self):
         assert liquidity_cap(1e6, 2e8) == pytest.approx(1.0)  # 2亿×1%=200万 > 100万

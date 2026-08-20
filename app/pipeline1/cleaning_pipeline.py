@@ -101,7 +101,7 @@ class CleaningConfig:
     min_list_days: int = 180  # 上市 >= 180 交易日 (适配200天训练面板, 原250)
     min_amount: float = 5e7  # T 日成交额 >= 5000 万
     liquidity_top_n: int = (
-        200  # 非 main (dual) serving 候选池; 08-13 dual 38特征池扫描: 100/200 最优
+        800  # 非 main (dual) serving 候选池; 08-20 250d 重扫 neg200 模型: 800 最优
     )
     liquidity_top_n_main: int = (
         0  # main serving 候选池: 0=不限池 (08-13 用户定案, 保留全部流动性达标主板股)
@@ -115,7 +115,7 @@ class CleaningConfig:
     new_stock_days: int = 5  # 注册制新股 (<5日无涨跌幅限制)
     abs_amount_floor: float = 8e7  # 步骤4 绝对流动性安全阀 8000 万
     bottom_amount_pct: float = (
-        0.2  # 步骤5 [E6] 剔除成交额后 20% (dual/默认, 流动性黑洞预防)
+        0.0  # 步骤5 [E6] 剔除成交额后 X% (dual/默认; 08-20 N=800 重扫定案: 0% 最优 top5 +32.6%/top10 +26.1%)
     )
     bottom_amount_pct_main: float = (
         0.0  # main 板块 E6 覆盖: TOP10 扫参定案 2026-08-11 0% 最优
@@ -473,6 +473,6 @@ class CleaningPipeline:
         )
         both = pd.concat([main, dual], ignore_index=True)
         both, state = self.step4_tradability(both, inference_only=True)
-        both = self.step5_amount_bottom(both)  # [E6] 成交额后 20% 剔除
+        both = self.step5_amount_bottom(both)  # [E6] 成交额后 bottom_amount_pct 剔除 (08-20 N=800 定案 0%)
         m, d = self.step0_board_split(both)
         return m, d, state
