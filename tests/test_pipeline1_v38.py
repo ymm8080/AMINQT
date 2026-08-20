@@ -314,6 +314,126 @@ class TestE6:
         assert liquidity_cap(1e6, np.nan) == 0.0  # ADV 未知 → 禁买
 
 
+class TestPoolBlend:
+    """08-20 定案: dual 入池键 = w*池分 + (1-w)*rank_pct(pred_ret_10d), per (date,board)
+    top-N (pool_blend_cut). 250d 板级回放 top10 +27.7% vs 纯流动性 +26.1% (3/4 子窗).
+    排名键保持纯 pred_ret_10d (blend 排名已证伪, 勿改).
+    """
+
+    @staticmethod
+    def _blend_frame():
+        dates = pd.bdate_range("2025-01-01", periods=2)
+        rows = []
+        for d in dates:
+            for i in range(12):
+                rows.append(
+                    {
+                        "symbol": f"3000{i:02d}",
+                        "date": d,
+                        "board": "GEM",
+                        "liquidity_score": 0.9 - 0.02 * i,
+                        "pred_ret_10d": -0.005 * i,
+                    }
+                )
+            # 300911 型: 池分垫底 (纯流动性池被切), 预测涨幅最高 → blend 入池
+            rows.append(
+                {
+                    "symbol": "309911",
+                    "date": d,
+                    "board": "GEM",
+                    "liquidity_score": 0.01,
+                    "pred_ret_10d": 0.20,
+                }
+            )
+            for i in range(4):  # STAR 板独立切池
+                rows.append(
+                    {
+                        "symbol": f"6880{i:02d}",
+                        "date": d,
+                        "board": "STAR",
+                        "liquidity_score": 0.5 - 0.05 * i,
+                        "pred_ret_10d": 0.0,
+                    }
+                )
+            rows.append(  # main 不限池直通
+                {
+                    "symbol": "600001",
+                    "date": d,
+                    "board": "main",
+                    "liquidity_score": 0.0,
+                    "pred_ret_10d": 0.0,
+                }
+            )
+        return pd.DataFrame(rows)
+
+    def test_blend_cut_admits_high_pred_low_liq(self):
+        """高预测股进入 blend 池; 纯流动性 top-N 会切掉它 (池分垫底)."""
+        df = self._blend_frame()
+        cfg = CleaningConfig(pool_blend_w=0.5, liquidity_top_n=10)
+        out = CleaningPipeline(cfg).pool_blend_cut(df, pred_col="pred_ret_10d")
+        assert (out["symbol"].eq("600001") & out["board"].eq("main")).sum() == 2  # main 直通
+        for _d, g in out.groupby("date"):
+            gem = g[g["board"] == "GEM"]
+            assert "309911" in gem["symbol"].values  # blend 入池
+            assert len(gem) <= 10
+            star = g[g["board"] == "STAR"]
+            assert len(star) <= 10
+            assert len(g[g["board"] == "main"]) == 1
+        # 纯流动性 top-10 (池分) 对照: 309911 池分垫底 → 被切
+        pure = (
+            df.groupby(["date", "board"])["liquidity_score"]
+            .rank(ascending=False, method="first")
+        )
+        liq_pool = df[pure <= 10]
+        assert "309911" not in liq_pool[liq_pool["board"] == "GEM"]["symbol"].values
+
+    def test_blend_cut_passthrough_missing_pred(self):
+        """缺 pred 列 → fail-open 原样返回."""
+        df = self._blend_frame().drop(columns="pred_ret_10d")
+        out = CleaningPipeline().pool_blend_cut(df, pred_col="pred_ret_10d")
+        assert len(out) == len(df)
+
+    def test_run_inference_pool_blend_dual_uncut(self):
+        """run_inference(pool_blend=True) → dual 全谱 (不切池); False → 前 N."""
+        dates = pd.bdate_range("2025-01-01", periods=2)
+        rows = []
+        for d in dates:
+            for sym, board in (
+                ("600001", "main"),
+                ("600002", "main"),
+                ("300001", "GEM"),
+                ("300002", "GEM"),
+                ("300003", "GEM"),
+                ("688001", "STAR"),
+            ):
+                rows.append(
+                    {
+                        "symbol": sym,
+                        "date": d,
+                        "board": board,
+                        "open": 10.0,
+                        "high": 10.5,
+                        "low": 9.5,
+                        "close": 10.0,
+                        "close_hfq": 10.0,
+                        "pre_close": 10.0,
+                        "amount": 1e8,
+                        "volume": 1e6,
+                        "turnover_rate": 2.0,
+                        "free_float_turnover_rate": 2.0,
+                        "is_suspended": False,
+                    }
+                )
+        panel = pd.DataFrame(rows)
+        cfg = CleaningConfig(liquidity_top_n=1)
+        _, dual_blend, _ = CleaningPipeline(cfg).run_inference(panel, pool_blend=True)
+        _, dual_liq, _ = CleaningPipeline(cfg).run_inference(panel, pool_blend=False)
+        per_day = dual_blend.groupby("date")["symbol"].count()
+        assert (per_day == 4).all()  # 全谱双创 (2 GEM + 2 STAR)
+        per_day2 = dual_liq.groupby("date")["symbol"].count()
+        assert (per_day2 == 2).all()  # 纯流动性前 1/板块 (GEM 1 + STAR 1)
+
+
 # ============================================================
 # E7 动态准入 + E2 排序惩罚 + E1 分布权重 (清单)
 # ============================================================

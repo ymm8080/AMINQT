@@ -300,8 +300,11 @@ def stubbed_pipe(tmp_path, monkeypatch):
     panel = pd.concat([main_df, dual_df], ignore_index=True)
 
     class StubCleaner:
-        def run_inference(self, panel):
+        def run_inference(self, panel, pool_blend=None):
             return main_df, dual_df, "open"
+
+        def pool_blend_cut(self, df, pred_col="pred_ret_10d", w=None):
+            return df  # 桩: 不切池 (池内成员在测试数据中全保留)
 
     class StubFeatures:
         def build(self, df, float_shares_map=None, **kwargs):
