@@ -1,3 +1,8 @@
 {
-  "max_context_window": 1000000
+  "max_context_window": 1000000,
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "sk-c1ef0efb02894cff9298a45d4ca09472"
+  },
+  "model": "deepseek-v4-flash"
 }
