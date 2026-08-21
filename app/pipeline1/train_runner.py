@@ -319,7 +319,7 @@ def run_training(
         del df
         gc.collect()
         board_results = trainer.weekly_retrain(
-            {board: augmented_df}, {board: cols}, tag
+            {board: augmented_df}, {board: cols}, tag, resume=True
         )
         n_features = len(cols)
         del augmented_df, cols

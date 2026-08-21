@@ -1,13 +1,15 @@
 """Tests for scripts/run_daily_automation 步骤编排 (2026-08-13).
 
 plan_steps 是纯函数, 决定当日四模块自动化的执行序列:
-  [refresh?] [retrain?] [parallel? prob_head] legacy_prob_head legacy deliver
-  [deliver_parallel?] drift
+  [refresh?] [retrain?] legacy_prob_head legacy deliver
+  [parallel? prob_head deliver_parallel] drift
 关键不变式: deliver_parallel 依赖当日 fresh parallel 重生成 (run_dir), 故
   parallel 被跳过 (--skip-parallel) 时 deliver_parallel 必须同步丢弃,
   否则会交付旧 run_dir 脏数据; prob_head 读 parallel 检查点面板, 同样
   只随 parallel 出现 (2026-08-15 概率头接线). legacy_prob_head 读面板+
   特征现场构建, 无前置依赖, 恒在 legacy 预测前 (概率闸依赖 bundle) (2026-08-17).
+  (2026-08-20) legacy 链优先: legacy 与 parallel 链互不依赖, legacy 短名单
+  先落盘, 不再被 parallel+prob_head 挡住 (~4 分/重训日).
 """
 
 import datetime as _dt
@@ -42,11 +44,12 @@ def test_every_step_has_timeout():
 def test_plan_steps_weekday_full_chain():
     assert plan_steps(THU) == [
         "refresh",
-        "parallel",
-        "prob_head",
+        "cyq",
         "legacy_prob_head",
         "legacy",
         "deliver",
+        "parallel",
+        "prob_head",
         "deliver_parallel",
         "drift",
         "drift_parallel",
@@ -56,12 +59,30 @@ def test_plan_steps_weekday_full_chain():
 def test_plan_steps_retrain_day_inserts_retrain():
     assert plan_steps(FRI) == [
         "refresh",
+        "cyq",
         "retrain",
-        "parallel",
-        "prob_head",
         "legacy_prob_head",
         "legacy",
         "deliver",
+        "parallel",
+        "prob_head",
+        "deliver_parallel",
+        "drift",
+        "drift_parallel",
+    ]
+
+
+def test_plan_steps_force_retrain_inserts_retrain_on_non_retrain_day():
+    """--force-retrain 在非周五也强制插入 retrain 步骤."""
+    assert plan_steps(THU, force_retrain=True) == [
+        "refresh",
+        "cyq",
+        "retrain",
+        "legacy_prob_head",
+        "legacy",
+        "deliver",
+        "parallel",
+        "prob_head",
         "deliver_parallel",
         "drift",
         "drift_parallel",
@@ -72,6 +93,7 @@ def test_plan_steps_skip_parallel_drops_deliver_parallel():
     """--skip-parallel 只跑 legacy 链 (refresh 仍刷新检查点); 并行交付同步丢弃."""
     assert plan_steps(THU, skip_parallel=True) == [
         "refresh",
+        "cyq",
         "legacy_prob_head",
         "legacy",
         "deliver",
@@ -80,6 +102,7 @@ def test_plan_steps_skip_parallel_drops_deliver_parallel():
     ]
     assert plan_steps(FRI, skip_parallel=True) == [
         "refresh",
+        "cyq",
         "retrain",
         "legacy_prob_head",
         "legacy",
@@ -92,11 +115,11 @@ def test_plan_steps_skip_parallel_drops_deliver_parallel():
 def test_plan_steps_skip_checkpoints_and_retrain():
     steps = plan_steps(FRI, skip_checkpoints=True, skip_retrain=True)
     assert steps == [
-        "parallel",
-        "prob_head",
         "legacy_prob_head",
         "legacy",
         "deliver",
+        "parallel",
+        "prob_head",
         "deliver_parallel",
         "drift",
         "drift_parallel",

@@ -21,6 +21,30 @@ BUNDLES = {
 }
 
 
+def _timed(name, fn):
+    """按阶段计时打印 (只影响本诊断脚本, 不改生产代码)."""
+
+    def wrapper(*args, **kwargs):
+        ts = time.time()
+        out = fn(*args, **kwargs)
+        detail = ""
+        df = args[0] if args else kwargs.get("df")
+        if isinstance(df, pd.DataFrame) and len(df) and "board" in df:
+            detail = f" board={df['board'].iloc[0]}"
+        print(f"[{name}{detail}] {time.time() - ts:.0f}s", flush=True)
+        return out
+
+    return wrapper
+
+
+def _instrument(pipe):
+    """清洗/特征(按板)/预测/闸+落盘 各段计时 — 为板并行构建决策提供实测拆分."""
+    pipe.cleaner.run_inference = _timed("clean", pipe.cleaner.run_inference)
+    pipe.features.build = _timed("feat", pipe.features.build)
+    pipe.predictor.predict = _timed("predict", pipe.predictor.predict)
+    pipe.lister.emit = _timed("emit", pipe.lister.emit)
+
+
 def main():
     trade_date = sys.argv[1] if len(sys.argv) > 1 else "20260804"
     t0 = time.time()
@@ -41,6 +65,7 @@ def main():
         flush=True,
     )
     pipe = DailySelectionPipeline(supply=DataSupplyChain(), bundle_paths=BUNDLES)
+    _instrument(pipe)
     res = pipe.run(trade_date, panel=panel)
     lst = res.get("list")
     print(
