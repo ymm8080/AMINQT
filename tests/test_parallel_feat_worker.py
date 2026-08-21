@@ -78,8 +78,15 @@ def test_worker_equivalent_to_direct_build(tmp_path):
     df.to_parquet(inp, index=False)
     cp = subprocess.run(
         [
-            PY, "-u", "-m", "app.pipeline1.parallel_feat_worker",
-            str(inp), str(out), json.dumps([]), "1", json.dumps({}),
+            PY,
+            "-u",
+            "-m",
+            "app.pipeline1.parallel_feat_worker",
+            str(inp),
+            str(out),
+            json.dumps([]),
+            "1",
+            json.dumps({}),
         ],
         cwd=ROOT,
         capture_output=True,
@@ -116,7 +123,9 @@ def test_serial_helper_equivalence():
     pipe.float_shares_map = None
     feat_m, feat_d = pipe._build_features_serial(main_df, dual_df, None, None)
     assert not feat_m.empty and not feat_d.empty
-    assert_feat_superset(feat_m, FeatureEngineV35().build(main_df, None, cross_sectional_rank=False))
+    assert_feat_superset(
+        feat_m, FeatureEngineV35().build(main_df, None, cross_sectional_rank=False)
+    )
 
 
 def assert_feat_superset(got: pd.DataFrame, expect: pd.DataFrame):

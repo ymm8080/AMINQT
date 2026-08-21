@@ -264,7 +264,9 @@ class DailySelectionPipeline:
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """串行双板特征构建 (原 run() 内联逻辑抽出, 并行失败回退路径与主路径同源)."""
         feat_main = (
-            self.features.build(main_df, self.float_shares_map, inference_cols=main_cols)
+            self.features.build(
+                main_df, self.float_shares_map, inference_cols=main_cols
+            )
             if len(main_df)
             else pd.DataFrame()
         )
@@ -298,7 +300,9 @@ class DailySelectionPipeline:
         import subprocess
         import tempfile
 
-        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
         tmp = tempfile.mkdtemp(prefix="legacy_feat_")
         boards = [
             ("main", main_df, main_cols, False),
