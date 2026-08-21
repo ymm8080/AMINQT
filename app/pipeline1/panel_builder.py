@@ -173,27 +173,41 @@ def enrich_cyq(
     """
     import os
 
-    from .cyq_calculator import compute_cyq_panel
+    from .cyq_calculator import RANGE_DAYS, compute_cyq_panel
 
     if not refresh and os.path.exists(cyq_cache):
         cyq = pd.read_parquet(cyq_cache)
-        # 检查是否覆盖当前 panel 的 symbol+date 范围
+        cyq["date"] = pd.to_datetime(cyq["date"])
         cyq_symbols = set(cyq["symbol"].unique())
         panel_symbols = set(panel["symbol"].unique())
-        if cyq_symbols >= panel_symbols:
-            missing = panel_symbols - cyq_symbols
-            if not missing:
-                return panel.merge(
-                    _keep_cyq_base_cols(cyq), on=["symbol", "date"], how="left"
-                )
-            # 部分缺失: 只计算缺失的股票
-            need = [s for s in panel["symbol"].unique() if s in missing]
-            new_cyq = compute_cyq_panel(panel[panel["symbol"].isin(need)])
-            cyq = pd.concat([cyq, new_cyq], ignore_index=True)
-            cyq.to_parquet(cyq_cache, index=False)
+        missing_symbols = panel_symbols - cyq_symbols
+        cyq_max_date = cyq["date"].max()
+        panel_max_date = pd.to_datetime(panel["date"]).max()
+        if not missing_symbols and cyq_max_date >= panel_max_date:
             return panel.merge(
                 _keep_cyq_base_cols(cyq), on=["symbol", "date"], how="left"
             )
+        # 日期落后或新 symbol: 增量补算, 尾部带 RANGE_DAYS+10 交易日历史前缀
+        # 保证窗口完整 (cache 已有日期不会被覆盖, 只追加新日期)
+        dates = pd.Index(sorted(pd.to_datetime(panel["date"].unique())))
+        covered = dates[dates <= cyq_max_date]
+        start_pos = max(0, dates.get_loc(covered[-1]) - (RANGE_DAYS + 10)) if len(covered) else 0
+        tail = panel[
+            (pd.to_datetime(panel["date"]) >= dates[start_pos])
+            & (~panel["symbol"].isin(missing_symbols))
+        ]
+        new_cyq = compute_cyq_panel(tail)
+        add = new_cyq[pd.to_datetime(new_cyq["date"]) > cyq_max_date]
+        if missing_symbols:
+            full = compute_cyq_panel(panel[panel["symbol"].isin(missing_symbols)])
+            add = pd.concat([add, full], ignore_index=True)
+        cyq = pd.concat([cyq, add], ignore_index=True).drop_duplicates(
+            ["symbol", "date"], keep="last"
+        )
+        cyq.to_parquet(cyq_cache, index=False)
+        return panel.merge(
+            _keep_cyq_base_cols(cyq), on=["symbol", "date"], how="left"
+        )
 
     # 全量计算 + 缓存
     cyq = compute_cyq_panel(panel)

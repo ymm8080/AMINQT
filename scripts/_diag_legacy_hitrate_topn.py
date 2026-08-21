@@ -37,7 +37,7 @@ import gc
 import numpy as np
 import pandas as pd
 
-from app.pipeline1.cleaning_pipeline import CleaningPipeline
+from app.pipeline1.cleaning_pipeline import CleaningConfig, CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.list_generator import ListGenerator
 from app.pipeline1.predictor import V35Predictor
@@ -146,11 +146,45 @@ def main() -> int:
     ap.add_argument(
         "--eval", type=int, default=250, help="评估的已实现决策日数 (取末 N)"
     )
+    ap.add_argument(
+        "--bundle",
+        default=None,
+        help="自定义 dual bundle pkl 路径 (Phase 2 候选模型; 默认 production current)",
+    )
+    ap.add_argument(
+        "--cand",
+        default=None,
+        help="候选标识, 用于 WORM 输出文件名 (如 candA/candB/pin50/neg200)",
+    )
+    ap.add_argument(
+        "--topn",
+        type=int,
+        default=None,
+        help="覆盖 dual serving 池大小 (CleaningConfig.liquidity_top_n; 默认生产 200, 5000≈不限池)",
+    )
+    ap.add_argument(
+        "--bottom-pct",
+        type=float,
+        default=None,
+        help="覆盖 dual 的 E6 底部分位 (CleaningConfig.bottom_amount_pct; 默认生产 0.1)",
+    )
     args = ap.parse_args()
 
+    bundles = {"dual": args.bundle} if args.bundle else BUNDLES
+    cfg_overrides = {}
+    if args.topn is not None:
+        cfg_overrides["liquidity_top_n"] = args.topn
+    if args.bottom_pct is not None:
+        cfg_overrides["bottom_amount_pct"] = args.bottom_pct
+    cleaner = (
+        CleaningPipeline(CleaningConfig(**cfg_overrides))
+        if cfg_overrides
+        else CleaningPipeline()
+    )
+    tag = f"_{args.cand}" if args.cand else ""
+
     t0 = time.time()
-    predictor = V35Predictor(BUNDLES)
-    cleaner = CleaningPipeline()
+    predictor = V35Predictor(bundles)
     features = FeatureEngineV35()
     lister = ListGenerator()
 
@@ -187,7 +221,13 @@ def main() -> int:
     i_of = {d: i for i, d in enumerate(all_cal)}
 
     detail: list[dict] = []
-    for board, dfb, csr in (("main", main_df, False), ("dual", dual_df, True)):
+    board_iter = (("main", main_df, False), ("dual", dual_df, True))
+    for board, dfb, csr in board_iter:
+        if board not in predictor.bundles:
+            print(f"[skip] board={board} 不在 bundles (Phase 2 自定义单板)", flush=True)
+            del dfb
+            gc.collect()
+            continue
         cols = predictor.bundles[board]["feature_cols"]
         feat = features.build(dfb, None, inference_cols=cols, cross_sectional_rank=csr)
         print(
@@ -282,7 +322,7 @@ def main() -> int:
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     out_dir = data_others_path("diag")
     os.makedirs(str(out_dir), exist_ok=True)
-    df.to_csv(out_dir / f"legacy_hitrate_topn_{ts}.csv", index=False)
+    df.to_csv(out_dir / f"legacy_hitrate_topn{tag}_{ts}.csv", index=False)
 
     summary: list[dict] = []
     for board in ("main", "dual"):
@@ -362,10 +402,12 @@ def main() -> int:
             )
             summary.append({"board": board, "variant": f"{name}_top5", **s})
 
-    (out_dir / f"legacy_hitrate_topn_{ts}.json").write_text(
+    (out_dir / f"legacy_hitrate_topn{tag}_{ts}.json").write_text(
         json.dumps(
             {
                 "ts": ts,
+                "cand": args.cand,
+                "bundle": args.bundle,
                 "slice": args.slice,
                 "eval": args.eval,
                 "cost": COST,
@@ -379,7 +421,7 @@ def main() -> int:
         encoding="utf-8",
     )
     print(
-        f"\n[saved] {out_dir}/legacy_hitrate_topn_{ts}.csv/.json ({time.time() - t0:.0f}s)",
+        f"\n[saved] {out_dir}/legacy_hitrate_topn{tag}_{ts}.csv/.json ({time.time() - t0:.0f}s)",
         flush=True,
     )
     return 0
