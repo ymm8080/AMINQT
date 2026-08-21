@@ -15,12 +15,18 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
 
-from config.settings import LEGACY_PROB_GATE, PANEL_V3_PATH, data_others_path
+from config.settings import (
+    LEGACY_PARALLEL_FEATURES,
+    LEGACY_PROB_GATE,
+    PANEL_V3_PATH,
+    data_others_path,
+)
 
 from .cleaning_pipeline import CleaningPipeline
 from .data_supply import DataSupplyChain, DataSupplyError
@@ -115,23 +121,17 @@ class DailySelectionPipeline:
             if "dual" in self.predictor.bundles
             else None
         )
-        feat_main = (
-            self.features.build(
-                main_df, self.float_shares_map, inference_cols=main_cols
+        # [2026-08-21] 双板特征构建子进程并行 (config LEGACY_PARALLEL_FEATURES):
+        # main/dual 帧股票集不相交 + build 无状态 → 拆板并行结果与串行逐字节一致
+        # (tests/test_parallel_feat_worker.py). 串行=main+dual 相加, 并行≈max(main,dual).
+        if LEGACY_PARALLEL_FEATURES and len(main_df) and len(dual_df):
+            feat_main, feat_dual = self._build_features_parallel(
+                main_df, dual_df, main_cols, dual_cols
             )
-            if len(main_df)
-            else pd.DataFrame()
-        )
-        feat_dual = (
-            self.features.build(
-                dual_df,
-                self.float_shares_map,
-                inference_cols=dual_cols,
-                cross_sectional_rank=True,
+        else:
+            feat_main, feat_dual = self._build_features_serial(
+                main_df, dual_df, main_cols, dual_cols
             )
-            if len(dual_df)
-            else pd.DataFrame()
-        )
 
         # 推理 + 校准
         frames = []
@@ -254,6 +254,92 @@ class DailySelectionPipeline:
         else:
             result["mode"] = "empty"
         return result
+
+    def _build_features_serial(
+        self,
+        main_df: pd.DataFrame,
+        dual_df: pd.DataFrame,
+        main_cols: list[str] | None,
+        dual_cols: list[str] | None,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """串行双板特征构建 (原 run() 内联逻辑抽出, 并行失败回退路径与主路径同源)."""
+        feat_main = (
+            self.features.build(main_df, self.float_shares_map, inference_cols=main_cols)
+            if len(main_df)
+            else pd.DataFrame()
+        )
+        feat_dual = (
+            self.features.build(
+                dual_df,
+                self.float_shares_map,
+                inference_cols=dual_cols,
+                cross_sectional_rank=True,
+            )
+            if len(dual_df)
+            else pd.DataFrame()
+        )
+        return feat_main, feat_dual
+
+    def _build_features_parallel(
+        self,
+        main_df: pd.DataFrame,
+        dual_df: pd.DataFrame,
+        main_cols: list[str] | None,
+        dual_cols: list[str] | None,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """双板特征构建子进程并行 (2026-08-21, config LEGACY_PARALLEL_FEATURES).
+
+        父进程保留 panel/main/dual 帧 (概率闸 tail 仍需), 双 worker 各读自己板块
+        parquet 构建, 特征帧落盘回读. worker 失败/超时 → 日志后回退串行重建,
+        清单不丢 (fail-open 与生产其他非关键步骤同语义).
+        """
+        import json
+        import shutil
+        import subprocess
+        import tempfile
+
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        tmp = tempfile.mkdtemp(prefix="legacy_feat_")
+        boards = [
+            ("main", main_df, main_cols, False),
+            ("dual", dual_df, dual_cols, True),
+        ]
+        try:
+            jobs = []
+            for board, df, cols, cs_rank in boards:
+                in_path = os.path.join(tmp, f"{board}_in.parquet")
+                out_path = os.path.join(tmp, f"{board}_out.parquet")
+                df.to_parquet(in_path, index=False)
+                argv = [
+                    sys.executable,
+                    "-u",
+                    "-m",
+                    "app.pipeline1.parallel_feat_worker",
+                    in_path,
+                    out_path,
+                    json.dumps(cols or []),
+                    "1" if cs_rank else "0",
+                    json.dumps(self.float_shares_map or {}),
+                ]
+                jobs.append((board, subprocess.Popen(argv, cwd=root), out_path))
+            outs: dict[str, pd.DataFrame] = {}
+            for board, proc, out_path in jobs:
+                try:
+                    rc = proc.wait(timeout=2 * 3600)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    rc = 124
+                if rc != 0 or not os.path.exists(out_path):
+                    logger.error(
+                        "[feat_parallel] %s worker rc=%s → 回退串行构建", board, rc
+                    )
+                    return self._build_features_serial(
+                        main_df, dual_df, main_cols, dual_cols
+                    )
+                outs[board] = pd.read_parquet(out_path)
+            return outs.get("main", pd.DataFrame()), outs.get("dual", pd.DataFrame())
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     def _assemble_panel(self, trade_date: str) -> pd.DataFrame:
         """生产路径: 加载历史面板 + 追加当日数据.
