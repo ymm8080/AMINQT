@@ -34,7 +34,6 @@ def main() -> int:
     print(f"[panel] max={pd.Timestamp(today).date()} rows={len(panel):,}")
 
     main_df, dual_df, state = cleaner.run_inference(panel)
-    del panel
     print(f"[clean] valve={state} dual_rows={len(dual_df):,}")
 
     # ---- 池内位置: E6 切人后 300911 是否幸存 ----
@@ -54,6 +53,7 @@ def main() -> int:
     print(f"[E6] {SYMBOL} 幸存, amount={s.iloc[0]['amount']:.2e}")
     pool_rank = day_dual["amount"].rank(pct=True)
     print(f"     amount rank_pct={pool_rank[s.index[0]]:.3f} (E6=10% 切 <0.10)")
+    del panel  # 大面板已用完 (s.empty 分支在 return 前使用), 释放供特征构建
 
     # ---- 过闸 + 排名 ----
     feat = features.build(
