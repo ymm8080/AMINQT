@@ -36,8 +36,12 @@ def main() -> int:
     g = panel.groupby("symbol", group_keys=False)
     panel["ret_1d"] = g["close_hfq"].pct_change()
     panel["body"] = (panel["close_hfq"] - panel["open_hfq"]).abs()
-    panel["upper_shadow"] = panel["high_hfq"] - panel[["open_hfq", "close_hfq"]].max(axis=1)
-    panel["lower_shadow"] = panel[["open_hfq", "close_hfq"]].min(axis=1) - panel["low_hfq"]
+    panel["upper_shadow"] = panel["high_hfq"] - panel[["open_hfq", "close_hfq"]].max(
+        axis=1
+    )
+    panel["lower_shadow"] = (
+        panel[["open_hfq", "close_hfq"]].min(axis=1) - panel["low_hfq"]
+    )
     # 长上影: 上影 > 2×实体 (实体非零) 或上影 > 3×实体 (超长)
     body_pos = panel["body"] > 0
     panel["long_shadow_2x"] = body_pos & (panel["upper_shadow"] > 2 * panel["body"])
@@ -47,7 +51,9 @@ def main() -> int:
     panel["prev_neg"] = panel["prev_ret"] < 0
 
     # T+10 净收益: 买入 T+1 close, 卖出 T+11 close
-    close_pivot = panel.pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last")
+    close_pivot = panel.pivot_table(
+        index="symbol", columns="dt", values="close_hfq", aggfunc="last"
+    )
     close_pivot = close_pivot.reindex(columns=pd.to_datetime(dates)).ffill(axis=1)
     i_of = {d: i for i, d in enumerate(close_pivot.columns)}
 
@@ -61,7 +67,9 @@ def main() -> int:
             return float("nan")
         return ps / pb - 1.0 - COST
 
-    mask_ok = panel["dt"].isin(close_pivot.columns) & (panel["dt"].map(i_of) + 11 < len(close_pivot.columns))
+    mask_ok = panel["dt"].isin(close_pivot.columns) & (
+        panel["dt"].map(i_of) + 11 < len(close_pivot.columns)
+    )
     for name, mask in [
         ("全部 长上影(>2x实体)", mask_ok & panel["long_shadow_2x"]),
         ("长上影 + 昨日跌", mask_ok & panel["long_shadow_2x"] & panel["prev_neg"]),
@@ -85,7 +93,16 @@ def main() -> int:
 
     # 300911 自身最近形态
     s = panel[panel["symbol"] == "300911"].tail(5)[
-        ["dt", "open_hfq", "high_hfq", "low_hfq", "close_hfq", "ret_1d", "long_shadow_2x", "prev_neg"]
+        [
+            "dt",
+            "open_hfq",
+            "high_hfq",
+            "low_hfq",
+            "close_hfq",
+            "ret_1d",
+            "long_shadow_2x",
+            "prev_neg",
+        ]
     ]
     print("\n300911 最近 5 日:")
     print(s.to_string(index=False))

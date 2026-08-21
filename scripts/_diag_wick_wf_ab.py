@@ -23,7 +23,6 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-import numpy as np
 import pandas as pd
 
 from config.settings import DATA_DIR, data_others_path
@@ -45,7 +44,7 @@ def _stats(sub: pd.DataFrame) -> dict:
         seg = r[sub["date"].isin(days[s0:s1])]
         subs.append(
             {
-                "win": f"{i+1}/{n_sub}",
+                "win": f"{i + 1}/{n_sub}",
                 "hit10": float((seg > 0).mean()) if len(seg) else float("nan"),
                 "mean10": float(seg.mean()) if len(seg) else float("nan"),
             }
@@ -68,7 +67,9 @@ def main() -> int:
     df = pd.read_csv(REPLAY_CSV)
     df = df[(df["board"] == "dual") & (~df["pain_excluded"])].copy()
     df["date"] = pd.to_datetime(df["date"])
-    print(f"[replay] dual 过闸候选 {len(df):,} 行 {df['date'].nunique()} 日", flush=True)
+    print(
+        f"[replay] dual 过闸候选 {len(df):,} 行 {df['date'].nunique()} 日", flush=True
+    )
 
     base = pd.read_parquet(str(BASE_WF))
     wick = pd.read_parquet(str(WICK_WF))
@@ -109,8 +110,11 @@ def main() -> int:
         return s
 
     print("\n===== dual | 250d 同候选池 A/B (top-5/日, T+10 c2c 净) =====", flush=True)
-    print(f"  {'变体':<22}{'出票':>5}{'票/日':>6} {'命中':>7} {'实得':>8} "
-          f"{'≥5%':>7} {'≥10%':>7}  子窗 hit/实得", flush=True)
+    print(
+        f"  {'变体':<22}{'出票':>5}{'票/日':>6} {'命中':>7} {'实得':>8} "
+        f"{'≥5%':>7} {'≥10%':>7}  子窗 hit/实得",
+        flush=True,
+    )
     ok_rows = df.dropna(subset=["pred_prob_base", "pred_prob_wick"])
     a = report("baseline (208 特征)", ok_rows, "blend_base")
     b = report("+wick_probe (209 特征)", ok_rows, "blend_wick")
@@ -119,15 +123,21 @@ def main() -> int:
     wins = 0
     subs = []
     for wa, wb in zip(a["sub_windows"], b["sub_windows"]):
-        w = wb["mean10"] > wa["mean10"] or (wb["mean10"] == wa["mean10"] and wb["hit10"] > wa["hit10"])
+        w = wb["mean10"] > wa["mean10"] or (
+            wb["mean10"] == wa["mean10"] and wb["hit10"] > wa["hit10"]
+        )
         wins += int(w)
         subs.append({"win": wa["win"], "base": wa, "wick": wb, "wick_wins": bool(w)})
     gate = (b["hit"] >= 0.50) and (b["mean"] >= 0.015)
-    verdict = "通过 → 可落地" if (b["mean"] > a["mean"] and wins >= 3 and gate) else (
-        "不通过" if not (b["mean"] > a["mean"] and wins >= 3) else "通过但不过闸"
+    verdict = (
+        "通过 → 可落地"
+        if (b["mean"] > a["mean"] and wins >= 3 and gate)
+        else ("不通过" if not (b["mean"] > a["mean"] and wins >= 3) else "通过但不过闸")
     )
-    print(f"\n[判定] 实得 base {a['mean']:+.2%} vs wick {b['mean']:+.2%} | "
-          f"子窗 wick 赢 {wins}/4 | 过闸(命中≥50%, 实得≥1.5%): {gate}")
+    print(
+        f"\n[判定] 实得 base {a['mean']:+.2%} vs wick {b['mean']:+.2%} | "
+        f"子窗 wick 赢 {wins}/4 | 过闸(命中≥50%, 实得≥1.5%): {gate}"
+    )
     print(f"[判定] {verdict}")
 
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
@@ -144,7 +154,7 @@ def main() -> int:
     out_path = os.path.join(data_others_path("diag"), f"wick_wf_ab_{ts}.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
-    print(f"\n报告: {out_path} ({time.time()-t0:.0f}s)")
+    print(f"\n报告: {out_path} ({time.time() - t0:.0f}s)")
     return 0
 
 

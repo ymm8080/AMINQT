@@ -27,7 +27,16 @@ import pandas as pd
 
 from config.settings import PANEL_V3_PATH, data_others_path
 
-COLS = ["symbol", "date", "open_hfq", "high_hfq", "low_hfq", "close_hfq", "volume", "chip_entropy"]
+COLS = [
+    "symbol",
+    "date",
+    "open_hfq",
+    "high_hfq",
+    "low_hfq",
+    "close_hfq",
+    "volume",
+    "chip_entropy",
+]
 SLICE = 879
 TARGET = 0.07
 COST = 0.004  # 双边 0.2%×2
@@ -52,7 +61,11 @@ def main() -> int:
     # T+1 开盘买入; S+1..S+3 逐日 high 触 7% 止盈, 否则 S+3 收盘走
     p["buy"] = g["open_hfq"].shift(-1)
     p["tp"] = p["buy"] * (1 + TARGET)
-    h1, h2, h3 = g["high_hfq"].shift(-1), g["high_hfq"].shift(-2), g["high_hfq"].shift(-3)
+    h1, h2, h3 = (
+        g["high_hfq"].shift(-1),
+        g["high_hfq"].shift(-2),
+        g["high_hfq"].shift(-3),
+    )
     c3 = g["close_hfq"].shift(-3)
     hit1 = h1 >= p["tp"]
     hit2 = (~hit1) & (h2 >= p["tp"])
@@ -93,9 +106,7 @@ def main() -> int:
     print("\n300911 试盘日明细 (8/13 为试盘日):")
     pd.set_option("display.width", 200)
     print(
-        s911[["dt", "vr", "ret_1d", "buy", "trade_ret"]]
-        .tail(6)
-        .to_string(index=False)
+        s911[["dt", "vr", "ret_1d", "buy", "trade_ret"]].tail(6).to_string(index=False)
     )
 
     out = {
@@ -104,7 +115,9 @@ def main() -> int:
         "rule": "T+1 open buy, 3d high>=+7% take-profit else S+3 close, cost 0.4%",
         "base_mean": round(float(p.loc[ok, "trade_ret"].mean()), 4),
         "probe_mean": round(float(p.loc[probe, "trade_ret"].mean()), 4),
-        "probe_collect_mean": round(float(p.loc[probe & collect, "trade_ret"].mean()), 4),
+        "probe_collect_mean": round(
+            float(p.loc[probe & collect, "trade_ret"].mean()), 4
+        ),
     }
     out_path = os.path.join(data_others_path("diag"), "probe_trade_20260819.json")
     with open(out_path, "w", encoding="utf-8") as f:

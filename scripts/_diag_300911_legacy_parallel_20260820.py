@@ -37,8 +37,8 @@ import pandas as pd
 import pyarrow.dataset as ds
 
 from app.pipeline_parallel import prob_head
-from app.pipeline_parallel.scoring import pool_score
 from app.pipeline_parallel.config import FUSION, SNIPER
+from app.pipeline_parallel.scoring import pool_score
 from config.settings import BACKTEST_RESULT_DIR, DATA_DIR, PROB_GATE
 
 TARGET = "300911"
@@ -80,7 +80,9 @@ def load_prob_bundle_live_on(model_dir: Path, board: str, as_of: pd.Timestamp):
         if tt is None:
             continue
         if pd.Timestamp(tt) <= as_of:
-            if picked is None or pd.Timestamp(tt) > pd.Timestamp(picked[1]["trained_through"]):
+            if picked is None or pd.Timestamp(tt) > pd.Timestamp(
+                picked[1]["trained_through"]
+            ):
                 picked = (p, b)
         del b
     return picked
@@ -99,7 +101,9 @@ def main() -> int:
         columns=traj_cols,
     ).to_pandas()
     traj["date"] = pd.to_datetime(traj["date"])
-    log(f"[A] 300911 轨迹行 {len(traj)} ({traj['date'].min():%m-%d}..{traj['date'].max():%m-%d})")
+    log(
+        f"[A] 300911 轨迹行 {len(traj)} ({traj['date'].min():%m-%d}..{traj['date'].max():%m-%d})"
+    )
     if len(traj) == None:  # noqa: E711  (防御: 完全无行)
         log("[A][FATAL] 检查点无 300911 行!")
         return 3
@@ -145,7 +149,9 @@ def main() -> int:
     log("\n" + traj_df.to_string(index=False))
     log("[B] 当日 cutoffs:")
     for k, v in cutoffs.items():
-        log(f"    {k}: sniper_top5={v['sniper_top5_cut']:.4f} fusion_top10={v['fusion_top10_cut']:.4f}")
+        log(
+            f"    {k}: sniper_top5={v['sniper_top5_cut']:.4f} fusion_top10={v['fusion_top10_cut']:.4f}"
+        )
     report["parallel_score_traj"] = traj_df.to_dict("records")
     report["parallel_cutoffs"] = cutoffs
     del xs
@@ -158,7 +164,11 @@ def main() -> int:
         columns=["date", "symbol", "close_hfq", "high_hfq", "adv20"],
     ).to_pandas()
     tail["date"] = pd.to_datetime(tail["date"])
-    tail = tail[tail["date"] <= T_DATE].sort_values(["symbol", "date"]).reset_index(drop=True)
+    tail = (
+        tail[tail["date"] <= T_DATE]
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
     base_rate = prob_head._base_rate(tail)
     log(f"[C] base_rate (mfe_3d>=3%, 近20可观测日, 截至8/18) = {base_rate}")
     report["base_rate_818"] = base_rate
@@ -183,8 +193,14 @@ def main() -> int:
         f"{len(pb_leg[1]['feat_cols'])} 特征)"
     )
     report["prob_bundles"] = {
-        "parallel": {"file": pb_par[0].name, "trained_through": pb_par[1]["trained_through"]},
-        "legacy": {"file": pb_leg[0].name, "trained_through": pb_leg[1]["trained_through"]},
+        "parallel": {
+            "file": pb_par[0].name,
+            "trained_through": pb_par[1]["trained_through"],
+        },
+        "legacy": {
+            "file": pb_leg[0].name,
+            "trained_through": pb_leg[1]["trained_through"],
+        },
     }
 
     import joblib
@@ -192,7 +208,9 @@ def main() -> int:
     leg_bundle = None
     if ram_gb() > 2.5:
         leg_bundle = joblib.load(LEGACY_BUNDLE)
-        log(f"[D] legacy bundle {LEGACY_BUNDLE}: {len(leg_bundle['feature_cols'])} 特征")
+        log(
+            f"[D] legacy bundle {LEGACY_BUNDLE}: {len(leg_bundle['feature_cols'])} 特征"
+        )
     else:
         log("[D][WARN] RAM < 2.5GB → 跳过 legacy bundle (只跑概率头)")
 
@@ -268,7 +286,13 @@ def main() -> int:
             x = p.iloc[0]
             med = pred.select_dtypes("number").median(numeric_only=True)
             log("[F] legacy dual_20260818 对 300911 (8/18, 全谱池近似口径):")
-            key_cols = ["pred_ret_3d", "pred_ret_5d", "pred_ret_10d", "prob_up", "pain_prob"]
+            key_cols = [
+                "pred_ret_3d",
+                "pred_ret_5d",
+                "pred_ret_10d",
+                "prob_up",
+                "pain_prob",
+            ]
             for c in key_cols:
                 if c in pred.columns:
                     pct = float((pred[c] < x[c]).mean())
@@ -280,17 +304,13 @@ def main() -> int:
                 c: (float(x[c]) if c in pred.columns else None) for c in key_cols
             }
             report["legacy_pred_pct"] = {
-                c: float((pred[c] < x[c]).mean())
-                for c in key_cols
-                if c in pred.columns
+                c: float((pred[c] < x[c]).mean()) for c in key_cols if c in pred.columns
             }
             # 8/18 已交付清单对照 (neg200 版): pred_ret_10d 最低 ~0.078 / pain<0.4
             # ---------- G. SHAP: 10d_reg (排名键) ----------
             models = leg_bundle["models"]
             cols = leg_bundle["feature_cols"]
-            X911 = np.nan_to_num(
-                r911[cols].to_numpy(dtype="float64"), nan=0.0
-            )
+            X911 = np.nan_to_num(r911[cols].to_numpy(dtype="float64"), nan=0.0)
             for mkey in ("10d_reg", "3d_reg"):
                 if mkey not in models:
                     continue
@@ -301,7 +321,9 @@ def main() -> int:
                     log(f"[G] 300911 {mkey} SHAP top±12:")
                     for k, v in top.items():
                         log(f"    {k}: {v:+.5f}")
-                    report[f"legacy_{mkey}_shap"] = {k: float(v) for k, v in top.items()}
+                    report[f"legacy_{mkey}_shap"] = {
+                        k: float(v) for k, v in top.items()
+                    }
                 except Exception as e:
                     log(f"[G] {mkey} SHAP 失败: {e}")
         del pred
@@ -311,7 +333,11 @@ def main() -> int:
     log("[H] 300911 8/18 筹码/影线/洗盘/K线/价格位置特征值 + 截面分位:")
     all_cols = list(x818.columns)
     groups = {
-        "筹码": [c for c in all_cols if "chip" in c.lower() or "获利" in c or c.startswith("A04")],
+        "筹码": [
+            c
+            for c in all_cols
+            if "chip" in c.lower() or "获利" in c or c.startswith("A04")
+        ],
         "影线": [c for c in all_cols if "shadow" in c.lower()],
         "洗盘/吸筹/拉高/出货": [
             c
@@ -321,12 +347,31 @@ def main() -> int:
         "K线形态": [
             c
             for c in all_cols
-            if any(k in c for k in ("hammer", "engulfing", "star", "intensity", "big_white", "big_black"))
+            if any(
+                k in c
+                for k in (
+                    "hammer",
+                    "engulfing",
+                    "star",
+                    "intensity",
+                    "big_white",
+                    "big_black",
+                )
+            )
         ],
         "价格位置": [
             c
             for c in all_cols
-            if any(k in c for k in ("close_position", "MA250", "close_vs_low", "position", "drawdown"))
+            if any(
+                k in c
+                for k in (
+                    "close_position",
+                    "MA250",
+                    "close_vs_low",
+                    "position",
+                    "drawdown",
+                )
+            )
         ],
     }
     see = {}

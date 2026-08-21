@@ -58,8 +58,8 @@ def _add_wick_probe(feat: pd.DataFrame) -> pd.DataFrame:
     )
     vr = feat["volume"] / vma
     ret = feat.groupby("symbol")["close_hfq"].pct_change()
-    signal = (vr > 1.5) & (ret > 0) & (
-        (upper >= 0.03) | ((upper >= 0.02) & (lower >= 0.02))
+    signal = (
+        (vr > 1.5) & (ret > 0) & ((upper >= 0.03) | ((upper >= 0.02) & (lower >= 0.02)))
     )
     feat["wick_probe"] = signal.astype(float)
     return feat
@@ -100,8 +100,11 @@ def main() -> int:
     t0 = time.time()
     replay = pd.read_csv(REPLAY_CSV)
     eval_days = sorted(pd.unique(pd.to_datetime(replay["date"])))
-    print(f"[eval] {len(eval_days)} 日 {pd.Timestamp(eval_days[0]).date()}.."
-          f"{pd.Timestamp(eval_days[-1]).date()}", flush=True)
+    print(
+        f"[eval] {len(eval_days)} 日 {pd.Timestamp(eval_days[0]).date()}.."
+        f"{pd.Timestamp(eval_days[-1]).date()}",
+        flush=True,
+    )
 
     predictor = V35Predictor(BUNDLES)
     cleaner = CleaningPipeline()
@@ -120,7 +123,10 @@ def main() -> int:
     cols = predictor.bundles["dual"]["feature_cols"]
     feat = features.build(dual_df, None, inference_cols=cols, cross_sectional_rank=True)
     feat = _add_wick_probe(feat)
-    print(f"[feat] {len(feat):,}r {len(feat.columns)}c (+wick_probe, {time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[feat] {len(feat):,}r {len(feat.columns)}c (+wick_probe, {time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     raw = _build_raw_labels(dual_df)
     del dual_df
@@ -139,12 +145,14 @@ def main() -> int:
     y = (feat["mfe_3d"] >= ABS_TARGET).astype(float)
     ok = y.notna() & feat["label_pain"].notna()
     x_all = feat[feat_cols].to_numpy(dtype="float32")
-    board_dates_arr = np.array(pd.to_datetime(np.unique(pd.to_datetime(feat["date"]).values)))
+    board_dates_arr = np.array(
+        pd.to_datetime(np.unique(pd.to_datetime(feat["date"]).values))
+    )
     idx = np.searchsorted(board_dates_arr, feat["date"].values)
     ok_arr = ok.to_numpy()
     del feat
     gc.collect()
-    print(f"[wf] 特征 {len(feat_cols)} 列 ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[wf] 特征 {len(feat_cols)} 列 ({time.time() - t0:.0f}s)", flush=True)
 
     if CKPT.exists():
         cp = pd.read_parquet(str(CKPT))
@@ -167,10 +175,16 @@ def main() -> int:
         pr = model.predict_proba(x_all[te])[:, 1]
         wf_rows.append(meta.loc[te].assign(pred=pr).reset_index(drop=True))
         if (k + 1) % 25 == 0 or k == len(eval_days) - 1:
-            print(f"[wf] {k+1}/{len(eval_days)} (refits={n_refits}, {time.time()-t0:.0f}s)", flush=True)
+            print(
+                f"[wf] {k + 1}/{len(eval_days)} (refits={n_refits}, {time.time() - t0:.0f}s)",
+                flush=True,
+            )
 
     pd.concat(wf_rows, ignore_index=True).to_parquet(CKPT)
-    print(f"[wf] 完成 {n_refits} 次重训 → {CKPT.name} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[wf] 完成 {n_refits} 次重训 → {CKPT.name} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     return 0
 
 

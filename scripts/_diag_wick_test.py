@@ -22,13 +22,22 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 import numpy as np
 import pandas as pd
-
-from config.settings import PANEL_V3_PATH, data_others_path
 from scipy.stats import spearmanr
 
+from config.settings import PANEL_V3_PATH, data_others_path
+
 COLS = [
-    "symbol", "date", "open", "high", "low", "close",
-    "open_hfq", "high_hfq", "low_hfq", "close_hfq", "volume",
+    "symbol",
+    "date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "open_hfq",
+    "high_hfq",
+    "low_hfq",
+    "close_hfq",
+    "volume",
 ]
 SLICE = 879
 LIMIT = 0.195
@@ -55,7 +64,9 @@ def main() -> int:
     p["label"] = g["ret_1d"].shift(-1) >= LIMIT
 
     # 未来 10 天突破率 (联动试盘检验)
-    piv_c = p.pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last")
+    piv_c = p.pivot_table(
+        index="symbol", columns="dt", values="close_hfq", aggfunc="last"
+    )
     cp = piv_c.reindex(columns=pd.to_datetime(dates)).ffill(axis=1)
     ret_piv = cp.pct_change(axis=1)
     fut10 = ret_piv.iloc[:, ::-1].rolling(10, min_periods=1, axis=1).max().iloc[:, ::-1]
@@ -94,27 +105,41 @@ def main() -> int:
             print(f"  {label:<28} n={len(sub):>6} (样本过少)")
             return
         print(
-            f"  {label:<28} n={len(sub):>6} 10天突破≥7%={float((sub['fut10'] >= .07).mean()):>6.2%} "
-            f"涨停≥19.5%={float((sub['fut10'] >= .195).mean()):>6.2%}"
+            f"  {label:<28} n={len(sub):>6} 10天突破≥7%={float((sub['fut10'] >= 0.07).mean()):>6.2%} "
+            f"涨停≥19.5%={float((sub['fut10'] >= 0.195).mean()):>6.2%}"
         )
 
     stats(base, "全池基准")
     stats(base[base["vr"] > 1.5], "放量 alone (vr>1.5)")
     stats(base[(base["upper_wick"] >= 0.03) & (base["vr"] > 1.5)], "长上影≥3%+放量")
-    stats(base[(base["upper_wick"] >= 0.03) & (base["vr"] > 1.5) & (base["ret_1d"] > 0)], "长上影+放量+收涨")
     stats(
-        base[(base["upper_wick"] >= 0.02) & (base["lower_wick"] >= 0.02) & (base["vr"] > 1.5)],
+        base[(base["upper_wick"] >= 0.03) & (base["vr"] > 1.5) & (base["ret_1d"] > 0)],
+        "长上影+放量+收涨",
+    )
+    stats(
+        base[
+            (base["upper_wick"] >= 0.02)
+            & (base["lower_wick"] >= 0.02)
+            & (base["vr"] > 1.5)
+        ],
         "双影≥2%+放量",
     )
     stats(
-        base[(base["upper_wick"] >= 0.02) & (base["lower_wick"] >= 0.02) & (base["vr"] > 1.5) & (base["ret_1d"] > 0)],
+        base[
+            (base["upper_wick"] >= 0.02)
+            & (base["lower_wick"] >= 0.02)
+            & (base["vr"] > 1.5)
+            & (base["ret_1d"] > 0)
+        ],
         "双影+放量+收涨",
     )
 
     print("\n子窗口 (长上影+放量+收涨):")
     seg = pd.cut(p["dt"], bins=4, labels=["Q1", "Q2", "Q3", "Q4"])
     sig = (
-        (p["upper_wick"] >= 0.03) & (p["vr"] > 1.5) & (p["ret_1d"] > 0)
+        (p["upper_wick"] >= 0.03)
+        & (p["vr"] > 1.5)
+        & (p["ret_1d"] > 0)
         & p["fut10"].notna()
     )
     for q in ["Q1", "Q2", "Q3", "Q4"]:

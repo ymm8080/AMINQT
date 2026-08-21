@@ -22,7 +22,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-import numpy as np
 import pandas as pd
 
 from config.settings import STALL_MARKER, data_others_path
@@ -69,7 +68,9 @@ def main() -> int:
     )
     df = df.merge(day_base, on="date", how="left")
     low = df["day_base"] < BASE_MAX
-    print(f"  低基线日 (base<{BASE_MAX}): {low.sum():,} 行 / 高基线日: {(~low).sum():,} 行")
+    print(
+        f"  低基线日 (base<{BASE_MAX}): {low.sum():,} 行 / 高基线日: {(~low).sum():,} 行"
+    )
 
     df["selected"] = df["pred_prob_new"] > df["base_prod"].fillna(-1)
     top5 = (
@@ -95,8 +96,18 @@ def main() -> int:
     seg = pd.cut(df["date"], bins=4, labels=["Q1", "Q2", "Q3", "Q4"])
     for q in ["Q1", "Q2", "Q3", "Q4"]:
         rows.append(_stats(t[seg.loc[t.index] == q], f"  Top5 Q{q} 全"))
-        rows.append(_stats(t[(seg.loc[t.index] == q) & (t["day_base"] < BASE_MAX)], f"  Top5 Q{q} 低基线"))
-        rows.append(_stats(t[(seg.loc[t.index] == q) & (t["day_base"] >= BASE_MAX)], f"  Top5 Q{q} 高基线"))
+        rows.append(
+            _stats(
+                t[(seg.loc[t.index] == q) & (t["day_base"] < BASE_MAX)],
+                f"  Top5 Q{q} 低基线",
+            )
+        )
+        rows.append(
+            _stats(
+                t[(seg.loc[t.index] == q) & (t["day_base"] >= BASE_MAX)],
+                f"  Top5 Q{q} 高基线",
+            )
+        )
 
     out = {
         "as_of": "2026-08-19",

@@ -277,9 +277,9 @@ class TestE6:
                     {"symbol": f"6000{i:02d}", "date": d, "amount": 1e8 * (i + 1)}
                 )
         df = pd.DataFrame(rows)
-        out = CleaningPipeline(CleaningConfig(bottom_amount_pct=0.1)).step5_amount_bottom(
-            df
-        )
+        out = CleaningPipeline(
+            CleaningConfig(bottom_amount_pct=0.1)
+        ).step5_amount_bottom(df)
         # 每日期剔除成交额最小 1 只 (rank_pct 0.1 不 > 0.1)
         assert len(out) == 18
         for _d, g in out.groupby("date"):
@@ -371,7 +371,9 @@ class TestPoolBlend:
         df = self._blend_frame()
         cfg = CleaningConfig(pool_blend_w=0.5, liquidity_top_n=10)
         out = CleaningPipeline(cfg).pool_blend_cut(df, pred_col="pred_ret_10d")
-        assert (out["symbol"].eq("600001") & out["board"].eq("main")).sum() == 2  # main 直通
+        assert (
+            out["symbol"].eq("600001") & out["board"].eq("main")
+        ).sum() == 2  # main 直通
         for _d, g in out.groupby("date"):
             gem = g[g["board"] == "GEM"]
             assert "309911" in gem["symbol"].values  # blend 入池
@@ -380,9 +382,8 @@ class TestPoolBlend:
             assert len(star) <= 10
             assert len(g[g["board"] == "main"]) == 1
         # 纯流动性 top-10 (池分) 对照: 309911 池分垫底 → 被切
-        pure = (
-            df.groupby(["date", "board"])["liquidity_score"]
-            .rank(ascending=False, method="first")
+        pure = df.groupby(["date", "board"])["liquidity_score"].rank(
+            ascending=False, method="first"
         )
         liq_pool = df[pure <= 10]
         assert "309911" not in liq_pool[liq_pool["board"] == "GEM"]["symbol"].values

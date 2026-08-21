@@ -191,7 +191,11 @@ def enrich_cyq(
         # 保证窗口完整 (cache 已有日期不会被覆盖, 只追加新日期)
         dates = pd.Index(sorted(pd.to_datetime(panel["date"].unique())))
         covered = dates[dates <= cyq_max_date]
-        start_pos = max(0, dates.get_loc(covered[-1]) - (RANGE_DAYS + 10)) if len(covered) else 0
+        start_pos = (
+            max(0, dates.get_loc(covered[-1]) - (RANGE_DAYS + 10))
+            if len(covered)
+            else 0
+        )
         tail = panel[
             (pd.to_datetime(panel["date"]) >= dates[start_pos])
             & (~panel["symbol"].isin(missing_symbols))
@@ -205,9 +209,7 @@ def enrich_cyq(
             ["symbol", "date"], keep="last"
         )
         cyq.to_parquet(cyq_cache, index=False)
-        return panel.merge(
-            _keep_cyq_base_cols(cyq), on=["symbol", "date"], how="left"
-        )
+        return panel.merge(_keep_cyq_base_cols(cyq), on=["symbol", "date"], how="left")
 
     # 全量计算 + 缓存
     cyq = compute_cyq_panel(panel)

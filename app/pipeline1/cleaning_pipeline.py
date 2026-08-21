@@ -114,9 +114,7 @@ class CleaningConfig:
     stability_max: float = 0.5  # std/mean > 0.5 → 对倒嫌疑
     new_stock_days: int = 5  # 注册制新股 (<5日无涨跌幅限制)
     abs_amount_floor: float = 8e7  # 步骤4 绝对流动性安全阀 8000 万
-    bottom_amount_pct: float = (
-        0.0  # 步骤5 [E6] 剔除成交额后 X% (dual/默认; 08-20 N=800 重扫定案: 0% 最优 top5 +32.6%/top10 +26.1%)
-    )
+    bottom_amount_pct: float = 0.0  # 步骤5 [E6] 剔除成交额后 X% (dual/默认; 08-20 N=800 重扫定案: 0% 最优 top5 +32.6%/top10 +26.1%)
     bottom_amount_pct_main: float = (
         0.0  # main 板块 E6 覆盖: TOP10 扫参定案 2026-08-11 0% 最优
     )
@@ -129,7 +127,9 @@ class CleaningConfig:
     # vs +26.1% / hit 86.7% vs 85.9% / wIC 0.2276 vs 0.2187, 3/4 子窗赢.
     # 注意: 短名单排名键仍保持纯 pred_ret_10d (blend 排名已证伪, 勿改).
     pool_blend_enable: bool = True  # 推理端 dual 入池用 blend (主链 daily_pipeline)
-    pool_blend_w: float = 0.5  # w=池分权重 (0.5/0.7 差异 <0.1pp, 5050 与 score_w_amount 同风格)
+    pool_blend_w: float = (
+        0.5  # w=池分权重 (0.5/0.7 差异 <0.1pp, 5050 与 score_w_amount 同风格)
+    )
 
 
 def load_panel_v3(path=None) -> pd.DataFrame:
@@ -485,11 +485,15 @@ class CleaningPipeline:
             self.step2_liquidity(self.step1_base_state(main), apply_top_n=True)
         )
         dual = self.step3_extreme(
-            self.step2_liquidity(self.step1_base_state(dual), apply_top_n=not pool_blend)
+            self.step2_liquidity(
+                self.step1_base_state(dual), apply_top_n=not pool_blend
+            )
         )
         both = pd.concat([main, dual], ignore_index=True)
         both, state = self.step4_tradability(both, inference_only=True)
-        both = self.step5_amount_bottom(both)  # [E6] 成交额后 bottom_amount_pct 剔除 (08-20 N=800 定案 0%)
+        both = self.step5_amount_bottom(
+            both
+        )  # [E6] 成交额后 bottom_amount_pct 剔除 (08-20 N=800 定案 0%)
         m, d = self.step0_board_split(both)
         return m, d, state
 

@@ -35,12 +35,16 @@ def main() -> int:
 
     panel["ret_1d"] = panel.groupby("symbol")["close_hfq"].pct_change()
     body = (panel["close_hfq"] - panel["open_hfq"]).abs()
-    panel["upper_shadow"] = panel["high_hfq"] - panel[["open_hfq", "close_hfq"]].max(axis=1)
+    panel["upper_shadow"] = panel["high_hfq"] - panel[["open_hfq", "close_hfq"]].max(
+        axis=1
+    )
     panel["long_shadow_2x"] = (body > 0) & (panel["upper_shadow"] > 2 * body)
     panel["prev_neg"] = panel.groupby("symbol")["ret_1d"].shift(1) < 0
     panel["sig"] = panel["long_shadow_2x"] & panel["prev_neg"]
 
-    pivot = panel.pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last")
+    pivot = panel.pivot_table(
+        index="symbol", columns="dt", values="close_hfq", aggfunc="last"
+    )
     max250 = pivot.rolling(250, min_periods=60, axis=1).max()
     panel = panel.merge(
         (pivot / max250 - 1.0).stack().rename("dd_250").reset_index(),
@@ -50,7 +54,9 @@ def main() -> int:
 
     # 筹码: cost_bias = 现价偏离成本50分位. cost_50pct 是未复权成本 → 必须用真实 close 而非 close_hfq
     # (生产 feature_engine_v35.py:2010 用 close_hfq 是口径 bug, 除权股虚高; 2026-08-19 确认)
-    panel["cost_bias"] = (panel["close"] - panel["cost_50pct"]) / panel["cost_50pct"].replace(0, np.nan)
+    panel["cost_bias"] = (panel["close"] - panel["cost_50pct"]) / panel[
+        "cost_50pct"
+    ].replace(0, np.nan)
 
     # T+10 净收益
     close_pivot = pivot.reindex(columns=pd.to_datetime(dates)).ffill(axis=1)
@@ -74,7 +80,7 @@ def main() -> int:
         r = sub.apply(lambda r: _t10(r["symbol"], r["dt"]), axis=1).dropna()
         return (
             f"n={len(r):>6} 命中={float((r > 0).mean()):>6.1%} 均值={r.mean():+7.2%} "
-            f"中位={r.median():+7.2%} ≥10%={float((r >= .10).mean()):>6.1%} ≤-10%={float((r <= -.10).mean()):>6.1%}"
+            f"中位={r.median():+7.2%} ≥10%={float((r >= 0.10).mean()):>6.1%} ≤-10%={float((r <= -0.10).mean()):>6.1%}"
         )
 
     # ---- 层 1: 股价位置 (低位) × 筹码位置 (cost_bias) ----
@@ -101,8 +107,13 @@ def main() -> int:
     # ---- 层 2: 低位 + 筹码集中度 (chip_gini 截面高位 = 集中) ----
     print("\n== 低位 (dd<-40%) + 获利盘 (cost_bias>0.5) 内, 按筹码集中度分层 ==")
     gini_hi = panel.groupby("dt")["chip_gini"].rank(pct=True) > 0.7
-    for use_gini, name in [(True, "筹码集中 (gini pct>70%)"), (False, "筹码分散 (gini pct<=70%)")]:
-        low_profit = panel["mask_ok"] & (panel["dd_250"] < -0.40) & (panel["cost_bias"] > 0.5)
+    for use_gini, name in [
+        (True, "筹码集中 (gini pct>70%)"),
+        (False, "筹码分散 (gini pct<=70%)"),
+    ]:
+        low_profit = (
+            panel["mask_ok"] & (panel["dd_250"] < -0.40) & (panel["cost_bias"] > 0.5)
+        )
         chip = low_profit & (gini_hi if use_gini else ~gini_hi)
         sig = chip & panel["sig"]
         base = chip & ~panel["sig"]
@@ -112,7 +123,9 @@ def main() -> int:
 
     # ---- 层 3: 高位股价 × 筹码也高位 (双高位, 用户说的危险区) ----
     print("\n== 双高位 (dd_250>-0.15 且 cost_bias>0.5) ==")
-    both_high = panel["mask_ok"] & (panel["dd_250"] > -0.15) & (panel["cost_bias"] > 0.5)
+    both_high = (
+        panel["mask_ok"] & (panel["dd_250"] > -0.15) & (panel["cost_bias"] > 0.5)
+    )
     sig = both_high & panel["sig"]
     base = both_high & ~panel["sig"]
     print(f"  形态: {_stats(panel[sig])}")

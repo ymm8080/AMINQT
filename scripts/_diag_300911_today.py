@@ -45,7 +45,9 @@ def main() -> int:
         # 区分: 被 E6 切 vs 未进 top-200 池 — 查 E6 前池内 amount rank
         pre = _pool_before_e6(panel, today)
         if SYMBOL in pre.index:
-            print(f"[E6] {SYMBOL} 被 E6=10% 切掉: E6 前池内 amount rank_pct={pre.loc[SYMBOL]:.3f} (<0.10)")
+            print(
+                f"[E6] {SYMBOL} 被 E6=10% 切掉: E6 前池内 amount rank_pct={pre.loc[SYMBOL]:.3f} (<0.10)"
+            )
         else:
             print(f"[E6] {SYMBOL} 未进 top-200 池 (E6 前已无此票)")
         return 0
@@ -54,7 +56,12 @@ def main() -> int:
     print(f"     amount rank_pct={pool_rank[s.index[0]]:.3f} (E6=10% 切 <0.10)")
 
     # ---- 过闸 + 排名 ----
-    feat = features.build(day_dual, None, inference_cols=predictor.bundles["dual"]["feature_cols"], cross_sectional_rank=True)
+    feat = features.build(
+        day_dual,
+        None,
+        inference_cols=predictor.bundles["dual"]["feature_cols"],
+        cross_sectional_rank=True,
+    )
     pred = predictor.predict(feat, "dual")
     if pred.empty:
         print("[pred] empty")
@@ -75,10 +82,14 @@ def main() -> int:
     if SYMBOL in rows["symbol"].values:
         rk = rows.index[rows["symbol"] == SYMBOL][0] + 1
         r = rows.iloc[rk - 1]
-        print(f"   {SYMBOL} rank {rk}/{len(rows)}  pred_ret_10d={r['pred_ret_10d']:+.3f} prob={r.get('prob_up', r.get('compound_prob', float('nan'))):.3f}")
+        print(
+            f"   {SYMBOL} rank {rk}/{len(rows)}  pred_ret_10d={r['pred_ret_10d']:+.3f} prob={r.get('prob_up', r.get('compound_prob', float('nan'))):.3f}"
+        )
         print("   top10:")
         for i, row in rows.head(10).iterrows():
-            print(f"    {i+1:>2} {row['symbol']}  pred_ret_10d={row['pred_ret_10d']:+.3f}")
+            print(
+                f"    {i + 1:>2} {row['symbol']}  pred_ret_10d={row['pred_ret_10d']:+.3f}"
+            )
     else:
         print(f"   {SYMBOL} 未过闸 (被 entry_filter 拦下)")
     return 0

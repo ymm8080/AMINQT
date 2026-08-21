@@ -68,19 +68,28 @@ def main() -> int:
             "subwin_top10": [_subwin_top10(sub, k) for k in range(4)],
         }
 
-    print(f"\n{'cand':<14}{'top10_hit':>10}{'top10_mean':>11}{'top10_med':>10}"
-          f"{'ge5':>7}{'ge10':>7}  subwin_means(4q)")
+    print(
+        f"\n{'cand':<14}{'top10_hit':>10}{'top10_mean':>11}{'top10_med':>10}"
+        f"{'ge5':>7}{'ge10':>7}  subwin_means(4q)"
+    )
     for name, r in results.items():
         t = r["top10"]
         sw = r["subwin_top10"]
         swm = " ".join(f"{s['win_mean']:+.1%}" for s in sw)
-        print(f"{name:<14}{t['hit']:>9.1%}{t['mean']:>+10.2%}{t['med']:>+9.2%}"
-              f"{t['ge5']:>6.1%}{t['ge10']:>6.1%}  {swm}")
+        print(
+            f"{name:<14}{t['hit']:>9.1%}{t['mean']:>+10.2%}{t['med']:>+9.2%}"
+            f"{t['ge5']:>6.1%}{t['ge10']:>6.1%}  {swm}"
+        )
 
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     out = data_others_path("diag") / f"dual_feature_count_compare_{ts}.json"
     out.write_text(
-        json.dumps({"ts": ts, "cands": cands, "results": results}, indent=2, ensure_ascii=False, default=str),
+        json.dumps(
+            {"ts": ts, "cands": cands, "results": results},
+            indent=2,
+            ensure_ascii=False,
+            default=str,
+        ),
         encoding="utf-8",
     )
     print(f"\n[saved] {out}")

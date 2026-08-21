@@ -39,9 +39,7 @@ def main() -> int:
     print(f"[replay] dual 候选 {len(df):,} 行 {df['date'].nunique()} 日")
 
     # 近 10/20 日涨幅 (T 日收盘可得, PIT)
-    p = pd.read_parquet(
-        str(PANEL_V3_PATH), columns=["symbol", "date", "close_hfq"]
-    )
+    p = pd.read_parquet(str(PANEL_V3_PATH), columns=["symbol", "date", "close_hfq"])
     p["symbol"] = p["symbol"].astype(str)
     p["date"] = pd.to_datetime(p["date"]).dt.normalize()
     g = p.groupby("symbol")
@@ -49,7 +47,8 @@ def main() -> int:
     p["ret_20d"] = p["close_hfq"] / g["close_hfq"].shift(20) - 1.0
     df = df.merge(
         p[["symbol", "date", "ret_10d", "ret_20d"]],
-        on=["symbol", "date"], how="left",
+        on=["symbol", "date"],
+        how="left",
     )
     print(f"[merge] ret_10d 覆盖 {df['ret_10d'].notna().mean():.1%}")
 
@@ -75,10 +74,10 @@ def main() -> int:
             return
         print(
             f"{label:<34} n={len(r):>6} 命中={float((r > 0).mean()):>5.1%} "
-            f"均值={r.mean():+6.2%} 中位={r.median():+6.2%} ≥10%={float((r >= .10).mean()):>5.1%}"
+            f"均值={r.mean():+6.2%} 中位={r.median():+6.2%} ≥10%={float((r >= 0.10).mean()):>5.1%}"
         )
 
-    print(f"\n== 入选 TOP + 滞涨洗盘 → T+10 表现 (250d dual, 候选口径) ==")
+    print("\n== 入选 TOP + 滞涨洗盘 → T+10 表现 (250d dual, 候选口径) ==")
     stats(d, "全候选基准")
     stats(d[d["selected"]], "入选 (prob>base_prod)")
     stats(d[d["top20"]], "截面 top-20")
@@ -86,17 +85,37 @@ def main() -> int:
     stats(d[d["selected"] & (d["ret_10d"] < 0.02)], "入选 + 近10日滞涨(<2%)")
     stats(d[d["selected"] & (d["ret_10d"] < 0.05)], "入选 + 近10日滞涨(<5%)")
     stats(d[d["selected"] & (d["ret_20d"] < 0.05)], "入选 + 近20日滞涨(<5%)")
-    stats(d[d["selected"] & (d["ret_10d"] < 0.02) & (d["ret_20d"] < 0.05)], "入选 + 10日&20日双滞涨")
+    stats(
+        d[d["selected"] & (d["ret_10d"] < 0.02) & (d["ret_20d"] < 0.05)],
+        "入选 + 10日&20日双滞涨",
+    )
     print()
     stats(d[d["selected"] & (d["ret_10d"] >= 0.02)], "入选 + 已涨(≥2%) [对照]")
     stats(d[d["top20"] & (d["ret_10d"] < 0.02)], "top20 + 滞涨(<2%)")
     stats(d[d["top20"] & (d["ret_10d"] < 0.05)], "top20 + 滞涨(<5%)")
     print()
-    stats(d[d["selected"] & (d["ret_10d"] < 0.02) & (d["ret_20d"] < 0.05) & (d["ret_10d"] > -0.15)], "双滞涨+非暴跌")
+    stats(
+        d[
+            d["selected"]
+            & (d["ret_10d"] < 0.02)
+            & (d["ret_20d"] < 0.05)
+            & (d["ret_10d"] > -0.15)
+        ],
+        "双滞涨+非暴跌",
+    )
     print()
-    stats(d[d["selected"] & (d["ret_10d"] < 0.02) & (d["sel_20d"] >= 2)], "入选+滞涨+近20日入选≥2次")
-    stats(d[d["selected"] & (d["ret_10d"] < 0.02) & (d["sel_20d"] >= 3)], "入选+滞涨+近20日入选≥3次")
-    stats(d[d["selected"] & (d["ret_10d"] < 0.02) & (d["sel_20d"] >= 4)], "入选+滞涨+近20日入选≥4次")
+    stats(
+        d[d["selected"] & (d["ret_10d"] < 0.02) & (d["sel_20d"] >= 2)],
+        "入选+滞涨+近20日入选≥2次",
+    )
+    stats(
+        d[d["selected"] & (d["ret_10d"] < 0.02) & (d["sel_20d"] >= 3)],
+        "入选+滞涨+近20日入选≥3次",
+    )
+    stats(
+        d[d["selected"] & (d["ret_10d"] < 0.02) & (d["sel_20d"] >= 4)],
+        "入选+滞涨+近20日入选≥4次",
+    )
 
     print("\n子窗口 (入选+近10日滞涨<2%):")
     seg = pd.cut(d["date"], bins=4, labels=["Q1", "Q2", "Q3", "Q4"])

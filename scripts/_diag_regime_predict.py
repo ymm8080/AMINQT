@@ -32,7 +32,15 @@ SLICE = 420
 def main() -> int:
     p = pd.read_parquet(
         str(PANEL_V3_PATH),
-        columns=["symbol", "date", "close_hfq", "open_hfq", "high_hfq", "low_hfq", "volume"],
+        columns=[
+            "symbol",
+            "date",
+            "close_hfq",
+            "open_hfq",
+            "high_hfq",
+            "low_hfq",
+            "volume",
+        ],
     )
     p = p.sort_values(["symbol", "date"]).reset_index(drop=True)
     p["dt"] = pd.to_datetime(p["date"]).dt.normalize()
@@ -51,11 +59,14 @@ def main() -> int:
     brk = (p["volume"] > 0) & (p["vr"] > 1.5)
     p["acc"] = shrink5 & brk
 
-    piv = p.pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last")
+    piv = p.pivot_table(
+        index="symbol", columns="dt", values="close_hfq", aggfunc="last"
+    )
     max250 = piv.rolling(250, min_periods=60, axis=1).max()
     p = p.merge(
         (piv / max250 - 1.0).stack().rename("dd250").reset_index(),
-        on=["symbol", "dt"], how="left",
+        on=["symbol", "dt"],
+        how="left",
     )
 
     daily = pd.DataFrame({"dt": dates}).set_index("dt")
@@ -76,7 +87,7 @@ def main() -> int:
     for h in (1, 5, 10):
         fut[f"mkt_fut{h}"] = mkt_ret.shift(-h).rolling(h).sum()
     # 低位组未来 10 日 vs 高位组 (风格超额)
-    low_piv = piv[p["symbol"][p["dd250"] < -0.40].unique()] if False else None
+    piv[p["symbol"][p["dd250"] < -0.40].unique()] if False else None
     # 简化: 用每日高低位组收益的滚动未来
     fut["low_fut10"] = daily["low_ret"].shift(-10).rolling(10).sum()
     fut["high_fut10"] = daily["high_ret"].shift(-10).rolling(10).sum()

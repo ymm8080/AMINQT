@@ -19,14 +19,20 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-import numpy as np
 import pandas as pd
 
 from config.settings import PANEL_V3_PATH, data_others_path
 
 COLS = [
-    "symbol", "date", "close_hfq", "open_hfq", "high_hfq", "low_hfq",
-    "volume", "chip_entropy", "chip_gini",
+    "symbol",
+    "date",
+    "close_hfq",
+    "open_hfq",
+    "high_hfq",
+    "low_hfq",
+    "volume",
+    "chip_entropy",
+    "chip_gini",
 ]
 SLICE = 879  # dual 池全史
 
@@ -45,25 +51,38 @@ def main() -> int:
     # ---- 前 40-60 日演化特征 (T 日收盘可得, PIT) ----
     p["pos60"] = p["close_hfq"] / p.groupby("symbol")["close_hfq"].shift(60) - 1.0
     p["pos40"] = p["close_hfq"] / p.groupby("symbol")["close_hfq"].shift(40) - 1.0
-    p["ent_chg60"] = p["chip_entropy"] / p.groupby("symbol")["chip_entropy"].shift(60) - 1.0
+    p["ent_chg60"] = (
+        p["chip_entropy"] / p.groupby("symbol")["chip_entropy"].shift(60) - 1.0
+    )
     p["gini_chg60"] = p["chip_gini"] / p.groupby("symbol")["chip_gini"].shift(60) - 1.0
-    p["ent_chg40"] = p["chip_entropy"] / p.groupby("symbol")["chip_entropy"].shift(40) - 1.0
+    p["ent_chg40"] = (
+        p["chip_entropy"] / p.groupby("symbol")["chip_entropy"].shift(40) - 1.0
+    )
 
     p["vol_ma20"] = p.groupby("symbol")["volume"].transform(
         lambda v: v.where(v > 0).rolling(20, min_periods=10).mean()
     )
     p["vr"] = p["volume"] / p["vol_ma20"]
     p["shrink20"] = p["vr"].shift(1).rolling(20, min_periods=10).mean() < 0.8
-    p["vol60"] = p.groupby("symbol")["ret_1d"].transform(
-        lambda v: v.rolling(60, min_periods=40).std()
-    ).shift(1)
+    p["vol60"] = (
+        p.groupby("symbol")["ret_1d"]
+        .transform(lambda v: v.rolling(60, min_periods=40).std())
+        .shift(1)
+    )
     p["vol60_xr"] = p.groupby("dt")["vol60"].rank(pct=True)
     p["low_vol"] = p["vol60_xr"] < 0.3
 
-    piv = p.pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last")
+    piv = p.pivot_table(
+        index="symbol", columns="dt", values="close_hfq", aggfunc="last"
+    )
     cp = piv.reindex(columns=pd.to_datetime(dates)).ffill(axis=1)
     max250 = piv.rolling(250, min_periods=60, axis=1).max()
-    dd250 = (cp / max250.reindex(columns=cp.columns) - 1.0).stack().rename("dd250").reset_index()
+    dd250 = (
+        (cp / max250.reindex(columns=cp.columns) - 1.0)
+        .stack()
+        .rename("dd250")
+        .reset_index()
+    )
     dd250.columns = ["symbol", "dt", "dd250"]
     p = p.merge(dd250, on=["symbol", "dt"], how="left")
 
@@ -87,7 +106,9 @@ def main() -> int:
             return
         print(f"{label:<36} n={len(r):>6} 5日涨停率={rate(r):>6.2%}")
 
-    print(f"== 预测 20cm 涨停事件: 前 40-60 日演化 (879d dual 池, 截至 {pd.Timestamp(dates[-1]).date()}) ==")
+    print(
+        f"== 预测 20cm 涨停事件: 前 40-60 日演化 (879d dual 池, 截至 {pd.Timestamp(dates[-1]).date()}) =="
+    )
     print("   [5日涨停率] = T+1..T+5 内出现 ret>=19.5% 的概率\n")
     base = rate(p[ok])
     report(p[ok], "全池基准")
@@ -101,13 +122,29 @@ def main() -> int:
     report(p[ok & (p["dd250"] < -0.30)], "低位(dd250<-30%)")
     print()
     report(p[ok & (p["pos60"] < -0.20) & (p["ent_chg60"] < -0.10)], "回落+筹码集中")
-    report(p[ok & (p["pos60"] < -0.20) & (p["ent_chg60"] < -0.10) & p["shrink20"]], "回落+筹码集中+缩量")
     report(
-        p[ok & (p["pos60"] < -0.20) & (p["ent_chg60"] < -0.10) & p["shrink20"] & p["low_vol"]],
+        p[ok & (p["pos60"] < -0.20) & (p["ent_chg60"] < -0.10) & p["shrink20"]],
+        "回落+筹码集中+缩量",
+    )
+    report(
+        p[
+            ok
+            & (p["pos60"] < -0.20)
+            & (p["ent_chg60"] < -0.10)
+            & p["shrink20"]
+            & p["low_vol"]
+        ],
         "回落+筹码集中+缩量+波动压缩",
     )
     report(
-        p[ok & (p["pos60"] < -0.20) & (p["ent_chg60"] < -0.10) & p["shrink20"] & p["low_vol"] & (p["dd250"] < -0.30)],
+        p[
+            ok
+            & (p["pos60"] < -0.20)
+            & (p["ent_chg60"] < -0.10)
+            & p["shrink20"]
+            & p["low_vol"]
+            & (p["dd250"] < -0.30)
+        ],
         "全组合+低位",
     )
 
@@ -120,7 +157,17 @@ def main() -> int:
             report(p[m & (seg == q)], f"  {q}")
 
     s = p[p["symbol"] == "300911"].tail(6)[
-        ["dt", "close_hfq", "ret_1d", "pos60", "ent_chg60", "shrink20", "low_vol", "dd250", "hit5"]
+        [
+            "dt",
+            "close_hfq",
+            "ret_1d",
+            "pos60",
+            "ent_chg60",
+            "shrink20",
+            "low_vol",
+            "dd250",
+            "hit5",
+        ]
     ]
     print("\n300911 最近 6 日 (8/18 为预测日):")
     print(s.round(3).to_string(index=False))

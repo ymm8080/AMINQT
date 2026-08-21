@@ -122,7 +122,7 @@ def predict_10d(eval_df: pd.DataFrame, models: dict, cols: list[str]) -> pd.Data
 def blend_score(liq: pd.Series, pred: pd.Series, w: float, mode: str) -> pd.Series:
     """混合分: sum = w*rank(池分)+(1-w)*rank(预期涨幅); prod = 几何加权."""
     if mode == "prod":
-        return liq ** w * pred ** (1 - w)
+        return liq**w * pred ** (1 - w)
     return w * liq + (1 - w) * pred
 
 
@@ -185,9 +185,7 @@ def variant_metrics(
     return out
 
 
-def case_report(
-    pool_df: pd.DataFrame, blend_col: str | None = None
-) -> dict:
+def case_report(pool_df: pd.DataFrame, blend_col: str | None = None) -> dict:
     """CASE_SYMBOL (300911) 在某变体最终池内 8/18+8/19 的状态: 入池? pred/blend 排名?"""
     out = {}
     for dt in CASE_DTS:
@@ -243,9 +241,7 @@ def trace_300911(
             pct = liq_set["amount"].rank(pct=True).get(r911.name)
             rec["e6_amount_pct_in_liq800"] = None if pct is None else float(pct)
             rec["e6_cut_liq800"] = bool(
-                rec["in_liquidity_top800"]
-                and pct is not None
-                and float(pct) <= e6
+                rec["in_liquidity_top800"] and pct is not None and float(pct) <= e6
             )
         for w in weights:
             bkey = f"_blend{w}"
@@ -255,7 +251,9 @@ def trace_300911(
             bset = d[d[bkey].rank(ascending=False, method="first") <= n_pool]
             if len(bset):
                 pct = bset["amount"].rank(pct=True).get(r911.name)
-                rec[f"e6_amount_pct_in_blend{w}800"] = None if pct is None else float(pct)
+                rec[f"e6_amount_pct_in_blend{w}800"] = (
+                    None if pct is None else float(pct)
+                )
                 rec[f"e6_cut_blend{w}800"] = bool(
                     brank <= n_pool and pct is not None and float(pct) <= e6
                 )
@@ -303,9 +301,15 @@ def main() -> int:
     e6 = cfg.bottom_amount_pct
     # 去重取唯一交易日! 若不去重, iloc[-warmup_days] 取的是倒数第 N 行 (同一交易日内的行) → 面板只剩 1 天
     all_dates = pd.Series(
-        sorted(pd.to_datetime(pq.read_table(str(PANEL_V3_PATH), columns=["date"])["date"]).unique())
+        sorted(
+            pd.to_datetime(
+                pq.read_table(str(PANEL_V3_PATH), columns=["date"])["date"]
+            ).unique()
+        )
     )
-    assert len(all_dates) > warmup_days, f"panel 只有 {len(all_dates)} 个交易日, 不够 warmup {warmup_days}"
+    assert len(all_dates) > warmup_days, (
+        f"panel 只有 {len(all_dates)} 个交易日, 不够 warmup {warmup_days}"
+    )
     cutoff = all_dates.iloc[-warmup_days]
     print(
         f"[panel] cutoff {pd.Timestamp(cutoff).date()} (last {warmup_days} trading days, "
@@ -368,7 +372,9 @@ def main() -> int:
     # (c) 池内重排: 同 (a) 的池, 短名单改用 blend 排名 (成员不变 → 特征/预测逐位相同)
     r_pred_a = eval_a.groupby("date")["_pred_10d"].rank(pct=True)
     for w in _weights:
-        ev = eval_a.assign(_blend=blend_score(eval_a["liquidity_score"], r_pred_a, w, _blend_mode))
+        ev = eval_a.assign(
+            _blend=blend_score(eval_a["liquidity_score"], r_pred_a, w, _blend_mode)
+        )
         results[f"c_rerank_w{w}"] = variant_metrics(ev, models, cols, n_sub, "_blend")
         results[f"c_rerank_w{w}"]["case_300911"] = case_report(ev, "_blend")
         # no-op 证据: 最终排名回 pred_ret_10d (生产口径) → 与 (a) 逐位相同
@@ -394,13 +400,17 @@ def main() -> int:
     del panel
     gc.collect()
     dual_full = dual_full.sort_values(["symbol", "date"]).reset_index(drop=True)
-    dual_full = cleaner.step2_liquidity(dual_full, apply_top_n=False)  # 不截断: 全谱宇宙
+    dual_full = cleaner.step2_liquidity(
+        dual_full, apply_top_n=False
+    )  # 不截断: 全谱宇宙
     dual_full = cleaner.step3_extreme(dual_full)
     dual_full, state = cleaner.step4_tradability(dual_full, inference_only=True)
     if state == "empty":
         print("[FATAL] (full) valve empty → abort", flush=True)
         return 3
-    df_full = features.build(dual_full, None, inference_cols=cols, cross_sectional_rank=True)
+    df_full = features.build(
+        dual_full, None, inference_cols=cols, cross_sectional_rank=True
+    )
     del dual_full
     gc.collect()
     df_full = build_labels(df_full)
@@ -436,11 +446,11 @@ def main() -> int:
     r_pred_full = eval_full.groupby(["date", "board"])["_pred_10d"].rank(pct=True)
     for w in _weights:
         ef = eval_full.assign(
-            _blend=blend_score(eval_full["liquidity_score"], r_pred_full, w, _blend_mode)
+            _blend=blend_score(
+                eval_full["liquidity_score"], r_pred_full, w, _blend_mode
+            )
         )
-        pool_b = e6_cut(
-            cut_top_n(ef, "_blend", n_pool, ["date", "board"]), e6
-        )
+        pool_b = e6_cut(cut_top_n(ef, "_blend", n_pool, ["date", "board"]), e6)
         results[f"b_blend_w{w}"] = variant_metrics(pool_b, models, cols, n_sub)
         results[f"b_blend_w{w}"]["case_300911"] = case_report(pool_b, "_blend")
         r_b = results[f"b_blend_w{w}"]

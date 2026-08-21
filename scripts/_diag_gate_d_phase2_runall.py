@@ -28,7 +28,14 @@ def main() -> int:
             flush=True,
         )
         rc = subprocess.call(
-            [sys.executable, "scripts/_diag_gate_d_phase2_train.py", "--pin", pin, "--cand", cand]
+            [
+                sys.executable,
+                "scripts/_diag_gate_d_phase2_train.py",
+                "--pin",
+                pin,
+                "--cand",
+                cand,
+            ]
         )
         print(
             f"===== [{cand}] rc={rc} 耗时 {(time.time() - t0) / 60:.0f}min "

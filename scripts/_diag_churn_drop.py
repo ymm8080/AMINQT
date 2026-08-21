@@ -54,8 +54,13 @@ def _stats(r: pd.Series, label: str) -> dict:
 
 def main() -> int:
     cols = [
-        "symbol", "date", "amount", "board", "free_float_turnover_rate",
-        "turnover_rate", "close_hfq",
+        "symbol",
+        "date",
+        "amount",
+        "board",
+        "free_float_turnover_rate",
+        "turnover_rate",
+        "close_hfq",
     ]
     p = pd.read_parquet(str(PANEL_V3_PATH), columns=cols)
     p["symbol"] = p["symbol"].astype(str)
@@ -65,16 +70,18 @@ def main() -> int:
     p = p[(p["date"] >= start) & (p["board"].isin(("GEM", "STAR")))].copy()
 
     g = p.groupby("symbol")
-    p["stab"] = (g["turnover_rate"].rolling(5, min_periods=1).std()
-                 / g["turnover_rate"].rolling(5, min_periods=1).mean()).reset_index(
-        level=0, drop=True
-    )
+    p["stab"] = (
+        g["turnover_rate"].rolling(5, min_periods=1).std()
+        / g["turnover_rate"].rolling(5, min_periods=1).mean()
+    ).reset_index(level=0, drop=True)
     p["t10_ret"] = (
-        p.groupby("symbol")["close_hfq"].shift(-10) / p["close_hfq"].shift(-1) - 1.0 - COST
+        p.groupby("symbol")["close_hfq"].shift(-10) / p["close_hfq"].shift(-1)
+        - 1.0
+        - COST
     )
 
     rows = []
-    for dt, d in p[p["amount"] >= MIN_AMOUNT].groupby("date"):
+    for _dt, d in p[p["amount"] >= MIN_AMOUNT].groupby("date"):
         if len(d) < 300:
             continue
         d = d.copy()
@@ -83,16 +90,31 @@ def main() -> int:
         d["score_raw"] = 0.5 * rk_a + 0.5 * rk_ff
         churn = (d["stab"] > 0.5).astype(int)
         d["score_pen"] = d["score_raw"] * np.where(churn == 1, 0.5, 1.0)
-        d["rk_raw"] = d.groupby("board")["score_raw"].rank(ascending=False, method="first")
-        d["rk_pen"] = d.groupby("board")["score_pen"].rank(ascending=False, method="first")
+        d["rk_raw"] = d.groupby("board")["score_raw"].rank(
+            ascending=False, method="first"
+        )
+        d["rk_pen"] = d.groupby("board")["score_pen"].rank(
+            ascending=False, method="first"
+        )
         d["in_raw"] = d["rk_raw"] <= TOP_N
         d["in_pen"] = d["rk_pen"] <= TOP_N
         d["dropped"] = d["in_raw"] & ~d["in_pen"]  # 罚分挤出池
         d["pen_kept"] = d["in_pen"] & (d["stab"] > 0.5)  # 罚了但仍留池
         rows.append(
             d[
-                ["date", "symbol", "dropped", "pen_kept", "stab", "rk_raw",
-                 "rk_pen", "t10_ret", "board", "in_raw", "in_pen"]
+                [
+                    "date",
+                    "symbol",
+                    "dropped",
+                    "pen_kept",
+                    "stab",
+                    "rk_raw",
+                    "rk_pen",
+                    "t10_ret",
+                    "board",
+                    "in_raw",
+                    "in_pen",
+                ]
             ]
         )
     all_d = pd.concat(rows)
@@ -104,9 +126,16 @@ def main() -> int:
     groups = []
     groups.append(_stats(all_d["t10_ret"], "全池基准 (amount≥5000万)"))
     groups.append(_stats(all_d.loc[all_d["in_raw"], "t10_ret"], "池内 (罚分前 top200)"))
-    groups.append(_stats(all_d.loc[all_d["dropped"], "t10_ret"], "挤出池 (罚分前在/罚分后出)"))
+    groups.append(
+        _stats(all_d.loc[all_d["dropped"], "t10_ret"], "挤出池 (罚分前在/罚分后出)")
+    )
     groups.append(_stats(all_d.loc[all_d["pen_kept"], "t10_ret"], "罚分后仍留池"))
-    groups.append(_stats(all_d.loc[all_d["dropped"] & (all_d["stab"] > 0.8), "t10_ret"], "挤出池 (stab>0.8 重罚)"))
+    groups.append(
+        _stats(
+            all_d.loc[all_d["dropped"] & (all_d["stab"] > 0.8), "t10_ret"],
+            "挤出池 (stab>0.8 重罚)",
+        )
+    )
 
     # 分年
     all_d["year"] = all_d["date"].dt.year

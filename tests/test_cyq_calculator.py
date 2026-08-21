@@ -259,6 +259,7 @@ def test_dim21_cost_bias_uses_unadjusted_close():
 
 # ---- enrich_cyq date 覆盖 (2026-08-19 修复) ----
 
+
 def _kdata_with_symbol(sym: str, n: int = 140, seed: int = 3) -> pd.DataFrame:
     k = _synthetic_kdata(n, seed=seed)
     k["symbol"] = sym
@@ -295,9 +296,9 @@ def test_enrich_cyq_extends_stale_cache(tmp_path):
         on=["symbol", "date"],
         suffixes=("", "_orig"),
     ).dropna(subset=["winner_ratio_orig"])  # 预热期前 60 帧本来就 NaN
-    assert (
-        merged["winner_ratio"] - merged["winner_ratio_orig"]
-    ).abs().max() < 1e-12, "增量重算改动历史值"
+    assert (merged["winner_ratio"] - merged["winner_ratio_orig"]).abs().max() < 1e-12, (
+        "增量重算改动历史值"
+    )
 
 
 def test_enrich_cyq_computes_new_symbols(tmp_path):

@@ -32,7 +32,15 @@ SLICE = 420  # 历史窗 (交易日)
 def main() -> int:
     p = pd.read_parquet(
         str(PANEL_V3_PATH),
-        columns=["symbol", "date", "close_hfq", "open_hfq", "high_hfq", "low_hfq", "volume"],
+        columns=[
+            "symbol",
+            "date",
+            "close_hfq",
+            "open_hfq",
+            "high_hfq",
+            "low_hfq",
+            "volume",
+        ],
     )
     p = p.sort_values(["symbol", "date"]).reset_index(drop=True)
     p["dt"] = pd.to_datetime(p["date"]).dt.normalize()
@@ -53,36 +61,29 @@ def main() -> int:
     p["acc"] = shrink5 & brk  # 蓄势突破 (300911 8/13 形态)
 
     # 位置 dd_250
-    piv = p.pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last")
+    piv = p.pivot_table(
+        index="symbol", columns="dt", values="close_hfq", aggfunc="last"
+    )
     max250 = piv.rolling(250, min_periods=60, axis=1).max()
     p = p.merge(
         (piv / max250 - 1.0).stack().rename("dd250").reset_index(),
-        on=["symbol", "dt"], how="left",
+        on=["symbol", "dt"],
+        how="left",
     )
 
     # 剔除 8/19 不完整日 (最新日 ret_1d 用 8/18 起算仍可用, 但涨停判定含当日, 保留)
     # 逐日指标
     daily = pd.DataFrame({"dt": dates}).set_index("dt")
-    daily["up_ratio"] = (
-        p.groupby("dt")["ret_1d"].apply(lambda s: (s > 0).mean())
-    )
-    daily["limit_ratio"] = (
-        p.groupby("dt")["ret_1d"].apply(
-            lambda s: (s >= np.where(p.loc[s.index, "is_dual"], 0.195, 0.098)).mean()
-        )
+    daily["up_ratio"] = p.groupby("dt")["ret_1d"].apply(lambda s: (s > 0).mean())
+    daily["limit_ratio"] = p.groupby("dt")["ret_1d"].apply(
+        lambda s: (s >= np.where(p.loc[s.index, "is_dual"], 0.195, 0.098)).mean()
     )
     low = p["dd250"] < -0.40
     high = p["dd250"] > -0.15
-    daily["low_ret"] = (
-        p.loc[low].groupby("dt")["ret_1d"].mean()
-    )
-    daily["high_ret"] = (
-        p.loc[high].groupby("dt")["ret_1d"].mean()
-    )
+    daily["low_ret"] = p.loc[low].groupby("dt")["ret_1d"].mean()
+    daily["high_ret"] = p.loc[high].groupby("dt")["ret_1d"].mean()
     daily["low_high_spread"] = daily["low_ret"] - daily["high_ret"]
-    daily["acc_ratio"] = (
-        p.groupby("dt")["acc"].apply(lambda s: s.mean())
-    )
+    daily["acc_ratio"] = p.groupby("dt")["acc"].apply(lambda s: s.mean())
 
     # 最近 60 天均线 vs 历史分位
     def _vs_hist(col: str, recent: int = 60) -> dict:
@@ -125,7 +126,9 @@ def main() -> int:
         "acc_ratio": "蓄势突破形态占比",
     }
     print(f"== 市场 regime 快照 (截至 {out['as_of']}, 历史 {SLICE} 交易日) ==")
-    print(f"{'指标':<14}{'近60日均值':>10}{'历史中位':>10}{'p25':>8}{'p75':>8}{'当前分位':>10} 解读")
+    print(
+        f"{'指标':<14}{'近60日均值':>10}{'历史中位':>10}{'p25':>8}{'p75':>8}{'当前分位':>10} 解读"
+    )
     for k, v in out.items():
         if k in ("as_of", "window_days"):
             continue

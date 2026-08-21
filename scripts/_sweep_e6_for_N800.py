@@ -183,7 +183,9 @@ def main() -> int:
             ]
             missing = [c for c in cols if c not in eval_df.columns]
             if missing:
-                print(f"[FATAL] E6={pct:.0%} {tag} 缺失 {missing[:5]} → abort", flush=True)
+                print(
+                    f"[FATAL] E6={pct:.0%} {tag} 缺失 {missing[:5]} → abort", flush=True
+                )
                 return 3
             test = eval_df[keep].sort_values(["date", "symbol"]).reset_index(drop=True)
             results[pct][tag] = eval_bundle(bundle, cols, test, n_sub)
@@ -201,9 +203,7 @@ def main() -> int:
     # ---- 判定: 每 bundle 选 top-10 10d 实得最高 + 子窗稳定 ----
     verdict: dict = {}
     for tag in bundle_cols:
-        best = max(
-            _pcts, key=lambda p: results[p][tag]["topn"]["10d_n10"]["mean_ret"]
-        )
+        best = max(_pcts, key=lambda p: results[p][tag]["topn"]["10d_n10"]["mean_ret"])
         verdict[tag] = {
             "best_E6_top10": best,
             "top10_10d_by_E6": {

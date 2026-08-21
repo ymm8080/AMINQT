@@ -35,12 +35,14 @@ BUNDLE = r"models/pipeline1/dual_20260818.pkl"
 
 
 def main() -> int:
-    p = pd.read_parquet(
-        str(PANEL_V3_PATH), filters=[("board", "in", ["GEM", "STAR"])]
-    )
+    p = pd.read_parquet(str(PANEL_V3_PATH), filters=[("board", "in", ["GEM", "STAR"])])
     p["symbol"] = p["symbol"].astype(str)
     p["date"] = pd.to_datetime(p["date"]).dt.normalize()
-    p = p[p["date"] <= TRADE_DATE].sort_values(["symbol", "date"]).reset_index(drop=True)
+    p = (
+        p[p["date"] <= TRADE_DATE]
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
     print(f"[panel] {len(p):,} 行 dual 历史 (截至 8/18)", flush=True)
 
     cleaner = CleaningPipeline()
@@ -61,7 +63,9 @@ def main() -> int:
         p911["churn_suspect"] = (p911["turnover_stability_5"] > 0.5).astype(int)
     dual = pd.concat([dual, p911], ignore_index=True)
     dual = dual.drop_duplicates(["symbol", "date"], keep="last")
-    print(f"[replay] 300911 全行强制加回 (8/18 当日 {TARGET in set(dual.loc[dual['date'] == TRADE_DATE, 'symbol'])})")
+    print(
+        f"[replay] 300911 全行强制加回 (8/18 当日 {TARGET in set(dual.loc[dual['date'] == TRADE_DATE, 'symbol'])})"
+    )
 
     bundle = DualTrackTrainer.load(BUNDLE)
     feat = FeatureEngineV35().build(
@@ -75,7 +79,7 @@ def main() -> int:
     pred = V35Predictor({"dual": BUNDLE}).predict(feat, "dual")
     # predict 输出每 symbol 最新一行 (无 date 列); 300911 最新行日期应=8/18 (强制加回)
     r = pred[pred["symbol"] == TARGET]
-    print(f"\n== 8/18 生产模型 (dual_20260818) 对 300911 的预测 ==")
+    print("\n== 8/18 生产模型 (dual_20260818) 对 300911 的预测 ==")
     if len(r):
         x = r.iloc[0]
         last_date = feat.loc[feat["symbol"] == TARGET, "date"].max()

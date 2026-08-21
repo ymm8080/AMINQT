@@ -55,11 +55,15 @@ def main() -> int:
     print(f"[0] cache: {len(cache)} 行 {len(cache_syms)} 只, 截至 {cache_max.date()}")
 
     # 计算 cutoff: cache_max 前 PREFIX_DAYS 个交易日
-    dates = pd.to_datetime(pd.read_parquet(str(PANEL_V3_PATH), columns=["date"])["date"])
+    dates = pd.to_datetime(
+        pd.read_parquet(str(PANEL_V3_PATH), columns=["date"])["date"]
+    )
     dates = dates.drop_duplicates().sort_values().reset_index(drop=True)
     i = dates.searchsorted(cache_max)
     start_date = dates[max(0, i - PREFIX_DAYS)]
-    print(f"[1] 重算起点 {start_date.date()} (前缀 {i - dates.searchsorted(start_date)} 个交易日)")
+    print(
+        f"[1] 重算起点 {start_date.date()} (前缀 {i - dates.searchsorted(start_date)} 个交易日)"
+    )
 
     panel = pd.read_parquet(
         str(PANEL_V3_PATH), columns=NEEDED, filters=[("date", ">=", start_date)]

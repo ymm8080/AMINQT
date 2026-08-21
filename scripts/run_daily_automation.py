@@ -70,7 +70,11 @@ _STEP_TIMEOUT_S = {
 # (步骤名, argv) — argv 不含解释器, run_step 负责拼 [PY, "-u", ...]
 _STEPS = {
     "refresh": ["scripts/_refresh_parallel_checkpoints.py"],
-    "cyq": ["scripts/_backfill_cyq_panel.py", "--workers", "6"],  # cyq_panel 增量 (2026-08-19)
+    "cyq": [
+        "scripts/_backfill_cyq_panel.py",
+        "--workers",
+        "6",
+    ],  # cyq_panel 增量 (2026-08-19)
     "retrain": ["scripts/_retrain_legacy_full.py", "{tag}"],
     "parallel": ["-m", "app.pipeline_parallel.runner"],
     "prob_head": ["scripts/_train_parallel_prob_head.py"],
@@ -121,7 +125,9 @@ def plan_steps(
         steps.append("parallel")
         # 概率头训练自判断新鲜度 (21 交易日重训一次); 仅并行交付启用时才有消费者
         steps.append("prob_head")
-        steps.append("deliver_parallel")  # 并行清单交付依赖当日 fresh parallel 重生成, 跳过则同步丢弃
+        steps.append(
+            "deliver_parallel"
+        )  # 并行清单交付依赖当日 fresh parallel 重生成, 跳过则同步丢弃
     steps.append("drift")  # 幅度漂移监控 (读历史 candidates, 非关键步骤)
     steps.append(
         "drift_parallel"

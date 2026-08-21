@@ -80,7 +80,9 @@ DEFAULT_T10_TARGETS = (0.05, 0.08, 0.10)
 
 MARGIN = float(LEGACY_PROB_GATE["margin"])
 BASE_RATE_DAYS = int(LEGACY_PROB_GATE["base_rate_days"])
-BASE_RATE_WINDOW = BASE_RATE_DAYS + 14  # 生产 _prob_gate_inputs: 尾部 base_rate_days+14 交易日
+BASE_RATE_WINDOW = (
+    BASE_RATE_DAYS + 14
+)  # 生产 _prob_gate_inputs: 尾部 base_rate_days+14 交易日
 
 
 def _add_mfe(df: pd.DataFrame, window: int) -> pd.DataFrame:
@@ -246,7 +248,10 @@ def main() -> int:
     cutoff_date = pd.Timestamp(_all_dates.iloc[-warmup_days])
     del _all_dates
     gc.collect()
-    print(f"[panel] cutoff {cutoff_date.date()} (last {warmup_days} trading days)", flush=True)
+    print(
+        f"[panel] cutoff {cutoff_date.date()} (last {warmup_days} trading days)",
+        flush=True,
+    )
     panel = pq.read_table(
         str(PANEL_V3_PATH),
         filters=[
@@ -416,9 +421,7 @@ def main() -> int:
                         ),
                         "threshold": _f(thrs[vn]),
                         "passed": bool(keep[vn][i]),
-                        "in_top10_after": bool(
-                            keep[vn][i] and rank_all[i] < 10
-                        ),
+                        "in_top10_after": bool(keep[vn][i] and rank_all[i] < 10),
                     }
                 cn = f"combo_v3_{combo_10}"
                 rec["gates"][cn] = {
@@ -437,10 +440,13 @@ def main() -> int:
                     f"[warn] {CASE_SYMBOL} 不在 {d.date()} 池 (n={n_day})", flush=True
                 )
         if n_days % 50 == 0:
-            print(f"[replay] {n_days}/{_eval_days} days done ({time.time()-t0:.0f}s)", flush=True)
+            print(
+                f"[replay] {n_days}/{_eval_days} days done ({time.time() - t0:.0f}s)",
+                flush=True,
+            )
     del ev, models, reg10
     gc.collect()
-    print(f"[replay] done {n_days} days ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[replay] done {n_days} days ({time.time() - t0:.0f}s)", flush=True)
 
     # ---- 7. 汇总指标 ----
     metrics: dict = {}
@@ -449,7 +455,9 @@ def main() -> int:
             "gate_stats": _gate_stats(gate_days[gname]) if gname != "none" else None,
         }
         for n in TOPN:
-            gm[f"top{n}"] = _topn_stats(picked[gname][n], eval_dates, n_sub, with_ref=(n == 10))
+            gm[f"top{n}"] = _topn_stats(
+                picked[gname][n], eval_dates, n_sub, with_ref=(n == 10)
+            )
         metrics[gname] = gm
         t10 = gm["top10"]
         print(
@@ -470,7 +478,9 @@ def main() -> int:
     for g in gates:
         subs = metrics[g]["top10"].get("sub10d_mean") or []
         verdict["top10_sub_win_vs_none"][g] = sum(
-            1 for a, b in zip(subs, base_sub) if a is not None and b is not None and a > b
+            1
+            for a, b in zip(subs, base_sub)
+            if a is not None and b is not None and a > b
         )
 
     # ---- 8. WORM JSON ----
@@ -492,7 +502,10 @@ def main() -> int:
             "combo_gate": f"v3 OR {combo_10}",
             "eval_days": _eval_days,
             "eval_window": [str(eval_dates[0]), str(eval_dates[-1])],
-            "train_window": [str(pd.Timestamp(dates_arr[0])), str(pd.Timestamp(train_end))],
+            "train_window": [
+                str(pd.Timestamp(dates_arr[0])),
+                str(pd.Timestamp(train_end)),
+            ],
             "note_frozen_train": (
                 "生产为 21 日滚动重训 + 全史 3y; 本回放为冻结单次训练 (eval_start-12d 以前), "
                 "4 变体共享同一数据流, 相对比较可比, 绝对水平勿与生产闸对齐"
@@ -511,10 +524,13 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(out_dir / "result.json", "w", encoding="utf-8") as fh:
         json.dump(results, fh, ensure_ascii=False, indent=2, default=str)
-    print(f"\n[done] WORM -> {out_dir} ({time.time()-t0:.0f}s)", flush=True)
+    print(f"\n[done] WORM -> {out_dir} ({time.time() - t0:.0f}s)", flush=True)
     for g in gates:
         t10 = metrics[g]["top10"]
-        print(f"[summary {g}] top10 10d={t10.get('mean_10d'):+.3f} hit={t10.get('hit_10d'):.3f}", flush=True)
+        print(
+            f"[summary {g}] top10 10d={t10.get('mean_10d'):+.3f} hit={t10.get('hit_10d'):.3f}",
+            flush=True,
+        )
     if case:
         for dt, rec in case.items():
             v3 = rec["gates"]["v3"]

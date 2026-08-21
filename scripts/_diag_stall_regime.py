@@ -133,7 +133,9 @@ def main() -> int:
 
     # 300911 案例: 试盘→横盘→突破全轨迹 + 当时市场状态
     s = d[d["symbol"] == "300911"].sort_values("date")
-    p911 = p[(p["symbol"] == "300911") & (p["date"] >= "2026-04-01")].sort_values("date")
+    p911 = p[(p["symbol"] == "300911") & (p["date"] >= "2026-04-01")].sort_values(
+        "date"
+    )
     print("\n== 300911 个股案例 (2026-04.. 价格轨迹 + 入选 + 市场) ==")
     day_idx = day.set_index("date")
     for _, r in p911.iterrows():
@@ -144,7 +146,11 @@ def main() -> int:
             sel = "入选" if x["selected"] else ""
             if x["selected"] and x["ret_10d"] < STALL_RET:
                 sel = "入选+滞涨"
-        mkt = day_idx.loc[r["date"], "mkt_realized"] if r["date"] in day_idx.index else np.nan
+        mkt = (
+            day_idx.loc[r["date"], "mkt_realized"]
+            if r["date"] in day_idx.index
+            else np.nan
+        )
         ret = r["ret_10d"] if not pd.isna(r["ret_10d"]) else np.nan
         print(
             f"  {r['date'].date()} close={r['close_hfq']:8.2f} "

@@ -137,9 +137,7 @@ def main() -> int:
             cut = df.groupby("date", sort=False).head(topn)
             for wname, wdates in windows.items():
                 s = _stats(cut[cut["date"].isin(wdates)])
-                rows.append(
-                    {"cand": cand, "topn": topn, "window": wname, **s}
-                )
+                rows.append({"cand": cand, "topn": topn, "window": wname, **s})
 
     out = pd.DataFrame(rows)
     ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -170,13 +168,10 @@ def main() -> int:
     )
     print(f"\n===== 决策表 top-{PRIMARY_TOPN} (实得 mean) =====", flush=True)
     print(
-        t10["mean"]
-        .reindex(CANDS)
-        .round(4)
-        .to_string(),
+        t10["mean"].reindex(CANDS).round(4).to_string(),
         flush=True,
     )
-    print(f"\n===== 命中率 (hit>0) =====", flush=True)
+    print("\n===== 命中率 (hit>0) =====", flush=True)
     print(t10["hit"].reindex(CANDS).round(4).to_string(), flush=True)
 
     base = t10["mean"].loc[base_cand, "full"]

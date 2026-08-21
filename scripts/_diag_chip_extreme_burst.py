@@ -21,14 +21,20 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-import numpy as np
 import pandas as pd
 
 from config.settings import PANEL_V3_PATH
 
 COLS = [
-    "symbol", "date", "close_hfq", "open_hfq", "high_hfq", "low_hfq",
-    "volume", "chip_entropy", "chip_gini",
+    "symbol",
+    "date",
+    "close_hfq",
+    "open_hfq",
+    "high_hfq",
+    "low_hfq",
+    "volume",
+    "chip_entropy",
+    "chip_gini",
 ]
 
 
@@ -64,9 +70,13 @@ def main() -> int:
     shrink5 = prev_traded5 & (p["vr"].shift(1).rolling(5, min_periods=4).max() < 1.0)
 
     # 爆发: T+1 收盘买入, T+1..T+11 内 close_hfq 最大涨幅
-    piv = p.pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last")
+    piv = p.pivot_table(
+        index="symbol", columns="dt", values="close_hfq", aggfunc="last"
+    )
     cp = piv.reindex(columns=pd.to_datetime(dates)).ffill(axis=1)
-    fwd_max = cp.iloc[:, ::-1].rolling(11, min_periods=1, axis=1).max().iloc[:, ::-1]  # 未来 11 天 max (含当日)
+    fwd_max = (
+        cp.iloc[:, ::-1].rolling(11, min_periods=1, axis=1).max().iloc[:, ::-1]
+    )  # 未来 11 天 max (含当日)
     buy = cp.shift(-1, axis=1)  # T+1 买入价
     burst = (fwd_max / buy - 1.0).stack().rename("max_gain").reset_index()
     burst.columns = ["symbol", "dt", "max_gain"]
@@ -80,24 +90,44 @@ def main() -> int:
             return
         print(
             f"{label:<28} n={len(r):>6} 命中>0={float((r > 0).mean()):>5.1%} "
-            f"爆发≥10%={float((r >= .10).mean()):>5.1%} ≥15%={float((r >= .15).mean()):>5.1%} "
-            f"≥20%={float((r >= .20).mean()):>5.1%} 中位={r.median():+5.2%}"
+            f"爆发≥10%={float((r >= 0.10).mean()):>5.1%} ≥15%={float((r >= 0.15).mean()):>5.1%} "
+            f"≥20%={float((r >= 0.20).mean()):>5.1%} 中位={r.median():+5.2%}"
         )
 
-    print(f"== 筹码极值 × 爆发率 (全史 {slice_days}d, 截至 {pd.Timestamp(dates[-1]).date()}) ==")
+    print(
+        f"== 筹码极值 × 爆发率 (全史 {slice_days}d, 截至 {pd.Timestamp(dates[-1]).date()}) =="
+    )
     stats(p[ok], "全池基准")
     piv250 = piv.rolling(250, min_periods=60, axis=1).max()
-    dd250 = (cp / piv250.reindex(columns=cp.columns) - 1.0)
+    dd250 = cp / piv250.reindex(columns=cp.columns) - 1.0
     dd250 = dd250.stack().rename("dd250").reset_index()
     dd250.columns = ["symbol", "dt", "dd250"]
     p = p.merge(dd250, on=["symbol", "dt"], how="left")
-    stats(p[ok & (p["ent_rank"] < 0.10) & (p["gini_rank"] > 0.90)], "ent低分位+gini高分位")
+    stats(
+        p[ok & (p["ent_rank"] < 0.10) & (p["gini_rank"] > 0.90)], "ent低分位+gini高分位"
+    )
     stats(p[ok & (p["ent_rank"] < 0.05) & (p["gini_rank"] > 0.95)], "更严: 5%/95%分位")
-    stats(p[ok & (p["ent_rank"] < 0.10) & (p["gini_rank"] > 0.90) & shrink5], "+ 缩量5日")
-    stats(p[ok & (p["ent_rank"] < 0.10) & (p["gini_rank"] > 0.90) & (p["vol60_xr"] < 0.3)], "+ 波动压缩")
-    stats(p[ok & (p["ent_rank"] < 0.10) & (p["gini_rank"] > 0.90) & (p["ret_1d"] < 0)], "+ 当日下跌")
+    stats(
+        p[ok & (p["ent_rank"] < 0.10) & (p["gini_rank"] > 0.90) & shrink5], "+ 缩量5日"
+    )
+    stats(
+        p[
+            ok
+            & (p["ent_rank"] < 0.10)
+            & (p["gini_rank"] > 0.90)
+            & (p["vol60_xr"] < 0.3)
+        ],
+        "+ 波动压缩",
+    )
+    stats(
+        p[ok & (p["ent_rank"] < 0.10) & (p["gini_rank"] > 0.90) & (p["ret_1d"] < 0)],
+        "+ 当日下跌",
+    )
     stats(p[ok & (p["dd250"] < -0.30)], "低位 alone")
-    stats(p[ok & (p["ent_rank"] < 0.10) & (p["gini_rank"] > 0.90) & (p["dd250"] < -0.30)], "+ 低位<250日高点70%")
+    stats(
+        p[ok & (p["ent_rank"] < 0.10) & (p["gini_rank"] > 0.90) & (p["dd250"] < -0.30)],
+        "+ 低位<250日高点70%",
+    )
 
     print()
     seg = pd.cut(p["dt"], bins=4, labels=["Q1", "Q2", "Q3", "Q4"])

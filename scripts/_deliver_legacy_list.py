@@ -176,7 +176,9 @@ def main():
             f"交易日 {trade_date} · module {module} · "
             f"E7 闸3 = 3d/5d 中位数均正 · 排序 = d3 目标 (50% d3涨幅 + 50% d3概率) · {len(df)} 只"
         )
-        n_stall = int((df["stall_flag"] != "").sum()) if "stall_flag" in df.columns else 0
+        n_stall = (
+            int((df["stall_flag"] != "").sum()) if "stall_flag" in df.columns else 0
+        )
         if n_stall:
             doc.add_paragraph(
                 f"⚠ 洗盘待爆发 {n_stall} 只 (入选+近10日滞涨<2%+近20日入选≥3, 见 stall_flag 列)",

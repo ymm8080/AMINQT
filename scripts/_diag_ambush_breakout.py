@@ -47,8 +47,12 @@ def main() -> int:
     )
     p["vr"] = p["volume"] / p["vol_ma20"]
 
-    piv_c = p.pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last")
-    piv_l = p.pivot_table(index="symbol", columns="dt", values="low_hfq", aggfunc="last")
+    piv_c = p.pivot_table(
+        index="symbol", columns="dt", values="close_hfq", aggfunc="last"
+    )
+    piv_l = p.pivot_table(
+        index="symbol", columns="dt", values="low_hfq", aggfunc="last"
+    )
     cp = piv_c.reindex(columns=pd.to_datetime(dates)).ffill(axis=1)
     lp = piv_l.reindex(columns=pd.to_datetime(dates)).ffill(axis=1)
     ret_piv = cp.pct_change(axis=1)
@@ -57,8 +61,8 @@ def main() -> int:
         return fn(df.iloc[:, ::-1].rolling(win, min_periods=1, axis=1)).iloc[:, ::-1]
 
     fut10_max_ret = fwd_rolling(ret_piv, 10, lambda r: r.max())  # S+1..S+10 max ret
-    fut3_max_ret = fwd_rolling(ret_piv, 3, lambda r: r.max())    # S+1..S+3 max ret
-    fut3_min_low = fwd_rolling(lp, 3, lambda r: r.min())         # S+1..S+3 min low
+    fut3_max_ret = fwd_rolling(ret_piv, 3, lambda r: r.max())  # S+1..S+3 max ret
+    fut3_min_low = fwd_rolling(lp, 3, lambda r: r.min())  # S+1..S+3 min low
 
     def join(name: str, df: pd.DataFrame) -> pd.DataFrame:
         out = df.stack().rename(name).reset_index()
@@ -78,11 +82,13 @@ def main() -> int:
             print(f"{label:<34} n={len(sub):>6} (样本过少)")
             return
         print(
-            f"{label:<34} n={len(sub):>6} 10天突破≥7%={float((sub['fut10_max_ret'] >= .07).mean()):>6.2%} "
-            f"涨停≥19.5%={float((sub['fut10_max_ret'] >= .195).mean()):>6.2%}"
+            f"{label:<34} n={len(sub):>6} 10天突破≥7%={float((sub['fut10_max_ret'] >= 0.07).mean()):>6.2%} "
+            f"涨停≥19.5%={float((sub['fut10_max_ret'] >= 0.195).mean()):>6.2%}"
         )
 
-    print(f"== 试盘→洗盘→突破 两阶段模式 (879d dual 池, 截至 {pd.Timestamp(dates[-1]).date()}) ==")
+    print(
+        f"== 试盘→洗盘→突破 两阶段模式 (879d dual 池, 截至 {pd.Timestamp(dates[-1]).date()}) =="
+    )
     print("   洗盘 = S+1..S+3 无突破级上涨 (<7%) 且不破 S 日低点\n")
     stats(p[ok], "全池基准")
     stats(p[probe], "试盘日 alone")
@@ -110,7 +116,9 @@ def main() -> int:
         "target": "S+1..S+10 max ret>=7%",
         "base_rate": round(float((p[ok]["fut10_max_ret"] >= 0.07).mean()), 4),
         "probe_rate": round(float((p[probe]["fut10_max_ret"] >= 0.07).mean()), 4),
-        "probe_wash_rate": round(float((p[probe & p["wash"]]["fut10_max_ret"] >= 0.07).mean()), 4),
+        "probe_wash_rate": round(
+            float((p[probe & p["wash"]]["fut10_max_ret"] >= 0.07).mean()), 4
+        ),
     }
     out_path = os.path.join(data_others_path("diag"), "ambush_breakout_20260819.json")
     with open(out_path, "w", encoding="utf-8") as f:

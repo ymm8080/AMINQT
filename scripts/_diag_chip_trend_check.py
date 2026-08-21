@@ -24,7 +24,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-import numpy as np
 import pandas as pd
 
 from config.settings import PANEL_V3_PATH
@@ -33,9 +32,23 @@ COST = 0.0020
 SLICE = 420
 
 COLS = [
-    "symbol", "date", "close", "open", "high", "low", "volume", "amount",
-    "close_hfq", "open_hfq", "high_hfq", "low_hfq",
-    "chip_entropy", "chip_gini", "chip_skew_dist", "cost_50pct", "winner_ratio",
+    "symbol",
+    "date",
+    "close",
+    "open",
+    "high",
+    "low",
+    "volume",
+    "amount",
+    "close_hfq",
+    "open_hfq",
+    "high_hfq",
+    "low_hfq",
+    "chip_entropy",
+    "chip_gini",
+    "chip_skew_dist",
+    "cost_50pct",
+    "winner_ratio",
 ]
 
 
@@ -67,19 +80,21 @@ def main() -> int:
     prev_traded5 = (
         panel["volume"].shift(1).rolling(5, min_periods=5).min() > 0
     )  # 前 5 日全部有交易
-    panel["vol_shrink5_calc"] = (
-        prev_traded5
-        & (panel["vol_ratio_calc"].shift(1).rolling(5, min_periods=4).max() < 1.0)
+    panel["vol_shrink5_calc"] = prev_traded5 & (
+        panel["vol_ratio_calc"].shift(1).rolling(5, min_periods=4).max() < 1.0
     )  # 前 5 日全部缩量
     panel["vol_break_calc"] = traded & (panel["vol_ratio_calc"] > 1.5)  # 当日放量
     panel["accumulate"] = panel["vol_shrink5_calc"] & panel["vol_break_calc"]
 
     # --- 位置 dd_250 ---
-    pivot = panel.pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last")
+    pivot = panel.pivot_table(
+        index="symbol", columns="dt", values="close_hfq", aggfunc="last"
+    )
     max250 = pivot.rolling(250, min_periods=60, axis=1).max()
     panel = panel.merge(
         (pivot / max250 - 1.0).stack().rename("dd_250").reset_index(),
-        on=["symbol", "dt"], how="left",
+        on=["symbol", "dt"],
+        how="left",
     )
 
     # --- T+10 净收益 (向量化: buy T+1 / sell T+11) ---
@@ -94,7 +109,7 @@ def main() -> int:
         r = sub["t10_ret"].dropna()
         return (
             f"n={len(r):>6} 命中={float((r > 0).mean()):>6.1%} 均值={r.mean():+7.2%} "
-            f"中位={r.median():+7.2%} ≥10%={float((r >= .10).mean()):>6.1%} ≤-10%={float((r <= -.10).mean()):>6.1%}"
+            f"中位={r.median():+7.2%} ≥10%={float((r >= 0.10).mean()):>6.1%} ≤-10%={float((r <= -0.10).mean()):>6.1%}"
         )
 
     base_mask = panel["t10_ret"].notna()
@@ -146,19 +161,37 @@ def main() -> int:
     # --- D: 蓄势组合 ---
     print()
     print(f"缩量5日+当日放量: {_stats(panel[base_mask & panel['accumulate']])}")
-    print(f"缩量5日(不含放量): {_stats(panel[base_mask & panel['vol_shrink5_calc'] & ~panel['vol_break_calc']])}")
+    print(
+        f"缩量5日(不含放量): {_stats(panel[base_mask & panel['vol_shrink5_calc'] & ~panel['vol_break_calc']])}"
+    )
 
     # --- E: 低位×筹码集中 (300911 形态: dd<-40% + entropy 快速下降) ---
     print()
     low = base_mask & (panel["dd_250"] < -0.40)
     print(f"低位(dd<-40%)基准:        {_stats(panel[low])}")
-    print(f"低位+entropy快速下降:     {_stats(panel[low & (panel['entropy_20d_chg'] < -0.08)])}")
-    print(f"低位+entropy快降+蓄势:    {_stats(panel[low & (panel['entropy_20d_chg'] < -0.08) & panel['accumulate']])}")
-    print(f"低位+entropy快降+蓄势+昨跌: {_stats(panel[low & (panel['entropy_20d_chg'] < -0.08) & panel['accumulate'] & panel['prev_neg']])}")
+    print(
+        f"低位+entropy快速下降:     {_stats(panel[low & (panel['entropy_20d_chg'] < -0.08)])}"
+    )
+    print(
+        f"低位+entropy快降+蓄势:    {_stats(panel[low & (panel['entropy_20d_chg'] < -0.08) & panel['accumulate']])}"
+    )
+    print(
+        f"低位+entropy快降+蓄势+昨跌: {_stats(panel[low & (panel['entropy_20d_chg'] < -0.08) & panel['accumulate'] & panel['prev_neg']])}"
+    )
 
     # 300911 自身轨迹
     s = panel[panel["symbol"] == "300911"].tail(12)[
-        ["dt", "close", "chip_entropy", "entropy_20d_chg", "chip_gini", "gini_20d_chg", "vol_ratio_calc", "vol_shrink5_calc", "vol_break_calc"]
+        [
+            "dt",
+            "close",
+            "chip_entropy",
+            "entropy_20d_chg",
+            "chip_gini",
+            "gini_20d_chg",
+            "vol_ratio_calc",
+            "vol_shrink5_calc",
+            "vol_break_calc",
+        ]
     ]
     print("\n300911 最近 12 日 (决策日形态):")
     print(s.to_string(index=False))

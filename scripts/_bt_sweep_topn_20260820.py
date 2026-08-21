@@ -28,7 +28,6 @@ import pandas as pd
 from app.pipeline1.cleaning_pipeline import (
     CleaningConfig,
     CleaningPipeline,
-    load_panel_v3,
 )
 from app.pipeline1.dual_track_trainer import DualTrackTrainer
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
@@ -134,7 +133,10 @@ def main() -> int:
     cutoff_date = pd.Timestamp(_all_dates.iloc[-warmup_days])
     del _all_dates
     gc.collect()
-    print(f"[panel] cutoff {cutoff_date.date()} (last {warmup_days} trading days)", flush=True)
+    print(
+        f"[panel] cutoff {cutoff_date.date()} (last {warmup_days} trading days)",
+        flush=True,
+    )
     panel = pq.read_table(
         str(PANEL_V3_PATH),
         filters=[
@@ -209,9 +211,7 @@ def main() -> int:
     # ---- 判定: 每 bundle 选 top-10 10d 实得最高 + 子窗稳定 ----
     verdict: dict = {}
     for tag in bundle_cols:
-        best = max(
-            _sizes, key=lambda n: results[n][tag]["topn"]["10d_n10"]["mean_ret"]
-        )
+        best = max(_sizes, key=lambda n: results[n][tag]["topn"]["10d_n10"]["mean_ret"])
         verdict[tag] = {
             "best_N_top10": best,
             "top10_10d_by_N": {

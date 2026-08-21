@@ -42,7 +42,9 @@ def main() -> int:
     )
     ap = argparse.ArgumentParser(description="Phase 2 候选特征集 dual 训练 (不发布)")
     ap.add_argument("--pin", required=True, help="registry 下 pin 文件名 (候选特征集)")
-    ap.add_argument("--cand", required=True, help="候选标识 (bundle 名): candA/candB/pin50/neg200")
+    ap.add_argument(
+        "--cand", required=True, help="候选标识 (bundle 名): candA/candB/pin50/neg200"
+    )
     args = ap.parse_args()
 
     registry = str(data_others_path("data/factor_registry"))
@@ -53,7 +55,10 @@ def main() -> int:
         pin_feats = json.load(fh).get("features", [])
     if not pin_feats:
         raise SystemExit(f"pin 文件无 features: {pin_path}")
-    print(f"[phase2] cand={args.cand} pin={args.pin} n_features={len(pin_feats)}", flush=True)
+    print(
+        f"[phase2] cand={args.cand} pin={args.pin} n_features={len(pin_feats)}",
+        flush=True,
+    )
 
     check_startup_gate(RETRAIN_RAM_GUARD_MIN_FREE_GB * 1024**3)
     start_monitor(RETRAIN_RAM_GUARD_MIN_FREE_GB * 1024**3, RETRAIN_RAM_GUARD_POLL_S)

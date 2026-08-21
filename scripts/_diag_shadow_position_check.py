@@ -35,12 +35,16 @@ def main() -> int:
     # 复权价 + 形态
     panel["ret_1d"] = panel.groupby("symbol")["close_hfq"].pct_change()
     body = (panel["close_hfq"] - panel["open_hfq"]).abs()
-    panel["upper_shadow"] = panel["high_hfq"] - panel[["open_hfq", "close_hfq"]].max(axis=1)
+    panel["upper_shadow"] = panel["high_hfq"] - panel[["open_hfq", "close_hfq"]].max(
+        axis=1
+    )
     panel["long_shadow_2x"] = (body > 0) & (panel["upper_shadow"] > 2 * body)
     panel["prev_neg"] = panel.groupby("symbol")["ret_1d"].shift(1) < 0
 
     # 距 250d 高点回撤 (pivot 对齐交易日历, 避免停牌行数污染 rolling)
-    pivot = panel.pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last")
+    pivot = panel.pivot_table(
+        index="symbol", columns="dt", values="close_hfq", aggfunc="last"
+    )
     max250 = pivot.rolling(250, min_periods=60, axis=1).max()
     drawdown = pivot / max250 - 1.0
     dd_long = drawdown.stack().rename("dd_250").reset_index()
@@ -68,7 +72,7 @@ def main() -> int:
         r = sub.apply(lambda r: _t10(r["symbol"], r["dt"]), axis=1).dropna()
         return (
             f"n={len(r):>6} 命中={float((r > 0).mean()):>6.1%} 均值={r.mean():+7.2%} "
-            f"中位={r.median():+7.2%} ≥10%={float((r >= .10).mean()):>6.1%} ≤-10%={float((r <= -.10).mean()):>6.1%}"
+            f"中位={r.median():+7.2%} ≥10%={float((r >= 0.10).mean()):>6.1%} ≤-10%={float((r <= -0.10).mean()):>6.1%}"
         )
 
     print(f"{'位置层':<12} {'形态':<22} 统计")

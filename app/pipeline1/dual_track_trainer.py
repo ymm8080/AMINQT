@@ -555,7 +555,9 @@ class DualTrackTrainer:
             )
             if q_label is None:
                 continue
-            ranker_label = q_label  # 记录最后解析到的标签 (循环末=5d), 供循环后单训 ranker
+            ranker_label = (
+                q_label  # 记录最后解析到的标签 (循环末=5d), 供循环后单训 ranker
+            )
             qkey = f"quantile_models_{horizon}d"
             if qkey not in done_extras:
                 try:

@@ -19,8 +19,15 @@ import pandas as pd
 from config.settings import PANEL_V3_PATH
 
 COLS = [
-    "symbol", "date", "close", "high", "low", "volume",
-    "close_hfq", "chip_entropy", "chip_gini",
+    "symbol",
+    "date",
+    "close",
+    "high",
+    "low",
+    "volume",
+    "close_hfq",
+    "chip_entropy",
+    "chip_gini",
 ]
 
 
@@ -49,16 +56,22 @@ def main() -> int:
     brk = (p["volume"] > 0) & (p["vr"] > 1.5)
     acc = shrink5 & brk
 
-    piv = p.pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last")
+    piv = p.pivot_table(
+        index="symbol", columns="dt", values="close_hfq", aggfunc="last"
+    )
     max250 = piv.rolling(250, min_periods=60, axis=1).max()
     p = p.merge(
         (piv / max250 - 1.0).stack().rename("dd250").reset_index(),
-        on=["symbol", "dt"], how="left",
+        on=["symbol", "dt"],
+        how="left",
     )
     cp = piv.reindex(columns=pd.to_datetime(dates)).ffill(axis=1)
-    t10 = (cp.shift(-11, axis=1) / cp.shift(-1, axis=1) - 1.0 - 0.002).stack().rename(
-        "t10"
-    ).reset_index()
+    t10 = (
+        (cp.shift(-11, axis=1) / cp.shift(-1, axis=1) - 1.0 - 0.002)
+        .stack()
+        .rename("t10")
+        .reset_index()
+    )
     t10.columns = ["symbol", "dt", "t10"]
     p = p.merge(t10, on=["symbol", "dt"], how="left")
     ok = p["t10"].notna()
@@ -72,9 +85,17 @@ def main() -> int:
 
     print("全池基准:      ", st(p[ok]))
     print("横盘(vol60低30%)+放量:", st(p[ok & (p["vol60_xr"] < 0.3) & brk]))
-    print("横盘+放量+昨跌:    ", st(p[ok & (p["vol60_xr"] < 0.3) & brk & p["prev_neg"]]))
-    print("横盘+放量+低位:    ", st(p[ok & (p["vol60_xr"] < 0.3) & brk & (p["dd250"] < -0.4)]))
-    print("横盘+缩量+放量+低位:", st(p[ok & (p["vol60_xr"] < 0.3) & acc & (p["dd250"] < -0.4)]))
+    print(
+        "横盘+放量+昨跌:    ", st(p[ok & (p["vol60_xr"] < 0.3) & brk & p["prev_neg"]])
+    )
+    print(
+        "横盘+放量+低位:    ",
+        st(p[ok & (p["vol60_xr"] < 0.3) & brk & (p["dd250"] < -0.4)]),
+    )
+    print(
+        "横盘+缩量+放量+低位:",
+        st(p[ok & (p["vol60_xr"] < 0.3) & acc & (p["dd250"] < -0.4)]),
+    )
 
     seg = pd.cut(p["dt"], bins=4, labels=["Q1", "Q2", "Q3", "Q4"])
     print()

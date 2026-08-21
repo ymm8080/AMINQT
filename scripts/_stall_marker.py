@@ -104,14 +104,17 @@ def stall_marker(
     panel_path = PANEL_V3_PATH if panel_path is None else panel_path
     if panel_path is not None and os.path.exists(str(panel_path)):
         p = pd.read_parquet(
-            str(panel_path), columns=["symbol", "date", "close_hfq", "high_hfq", "amount", "board"]
+            str(panel_path),
+            columns=["symbol", "date", "close_hfq", "high_hfq", "amount", "board"],
         )
         base_rate = _day_base_rate(p)  # 需完整面板窗口, 过滤前算
         p["symbol"] = p["symbol"].astype(str)
         p["date"] = pd.to_datetime(p["date"]).dt.strftime("%Y-%m-%d")
         g = p.groupby("symbol")
         p["ret_10d"] = p["close_hfq"] / g["close_hfq"].shift(10) - 1.0
-        p["ret_1d"] = p["close_hfq"] / g["close_hfq"].shift(1) - 1.0  # 昨日涨幅 (T-1, PIT)
+        p["ret_1d"] = (
+            p["close_hfq"] / g["close_hfq"].shift(1) - 1.0
+        )  # 昨日涨幅 (T-1, PIT)
         p = p[p["date"] == pd.Timestamp(trade_date).strftime("%Y-%m-%d")]
         out = out.merge(
             p[["symbol", "ret_10d", "ret_1d", "board"]],
@@ -129,7 +132,9 @@ def stall_marker(
     if base_rate is None:
         out["advice"] = ""
     elif base_rate < cfg["base_rate_max"]:
-        out["advice"] = f"市场条件偏强 (base_rate={base_rate:.3f}): 模型近期胜率高, 正常参与"
+        out["advice"] = (
+            f"市场条件偏强 (base_rate={base_rate:.3f}): 模型近期胜率高, 正常参与"
+        )
     else:
         out["advice"] = (
             f"市场条件偏弱 (base_rate={base_rate:.3f}): 模型近期整体负期望, 建议降低参与度/轻仓"
@@ -138,11 +143,7 @@ def stall_marker(
     counts = _history_counts(hist_dir, trade_date, hist_prefix, cfg["window_days"])
     out["sel_20d"] = out["symbol"].astype(str).map(counts).fillna(0)
     cold = base_rate is not None and base_rate < cfg["base_rate_max"]
-    sig = (
-        (out["ret_10d"] < cfg["ret_10d"])
-        & (out["sel_20d"] >= cfg["min_sel"])
-        & cold
-    )
+    sig = (out["ret_10d"] < cfg["ret_10d"]) & (out["sel_20d"] >= cfg["min_sel"]) & cold
     out.loc[sig, "stall_flag"] = "洗盘待爆发"
     # 涨停次日不追纪律 (2026-08-19 第六轮): T 日涨停 T+1 买 T+11 卖 890d 全池
     # 均值 -0.82% (中位 -4.82%, 命中 37%) → 清单中昨日涨停股打标. 不改选股.
@@ -151,7 +152,11 @@ def stall_marker(
         # 清单 board 值小写 (main/gem/star); 阈值表键大写 → 统一转大写再 map,
         # 否则全 miss 落入 fillna 9.5% (dual 涨停 19.5% 被误当主板阈值)
         lim = (
-            out["board"].astype(str).str.upper().map(cfg["limit_ret_by_board"]).fillna(0.095)
+            out["board"]
+            .astype(str)
+            .str.upper()
+            .map(cfg["limit_ret_by_board"])
+            .fillna(0.095)
         )
         out.loc[out["ret_1d"] >= lim, "limit_flag"] = "涨停次日不追"
     return out
