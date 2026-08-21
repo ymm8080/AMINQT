@@ -170,13 +170,16 @@ class V35Predictor:
             latest["day_change"] = (
                 safe_divide(latest["close"], latest["pre_close"].replace(0, np.nan)) - 1
             )
-        # [E1] 分布版仓位权重输入; [E6] liquidity_cap 输入
+        # [E1] 分布版仓位权重输入; [E6] liquidity_cap 输入; [08-21] liquidity_score/date
+        # 透传 — pool_blend_cut 切池依赖 (keep 丢列曾致切池静默失效)
         for opt in (
             "ATR_pct",
             "adv20",
             "is_limit_up_close",
             "is_one_word_limit",
             "day_change",
+            "liquidity_score",
+            "date",
         ):
             if opt in latest.columns:
                 keep.append(opt)
