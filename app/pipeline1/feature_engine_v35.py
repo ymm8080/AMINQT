@@ -978,8 +978,10 @@ class FeatureEngineV35:
         if "board" not in df.columns:
             df["board"] = df["symbol"].map(board_of)
 
-        # Only process columns in the whitelist that exist in the panel
-        whitelist_in_panel = cls._XRANK_WHITELIST & set(df.columns)
+        # Only process columns in the whitelist that exist in the panel.
+        # sorted() 保证跨进程确定性: set 交集迭代顺序随进程 hash 种子随机, 并行
+        # 特征构建 (子进程) 与串行调用会产出不同列序 (2026-08-21).
+        whitelist_in_panel = sorted(cls._XRANK_WHITELIST & set(df.columns))
         src_cols = [
             c
             for c in whitelist_in_panel

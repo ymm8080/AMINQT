@@ -1,8 +1,0 @@
-{
-  "tests/test_pipeline1_v35.py::TestCleaning::test_step1_st_and_list_days": true,
-  "tests/test_legacy_overlay.py::TestPickProbCol::test_priority": true,
-  "tests/test_forecast_accuracy.py::TestScoreForecast::test_immature_when_no_5d_actuals": true,
-  "tests/test_refresh_checkpoints.py::TestRefreshCheckpoints::test_builds_main_then_dual_in_order": true,
-  "tests/test_legacy_prob_gate_wiring.py::test_emit_gate_runs_after_entry_filter": true,
-  "tests/test_daily_pipeline.py::TestDailyPipeline::test_supply_failure_triggers_guard": true
-}

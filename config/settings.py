@@ -49,6 +49,12 @@ LEGACY_SMOOTH_ENABLED = True
 LEGACY_SMOOTH_ALPHA = 0.35
 LEGACY_SMOOTH_K = 12
 
+# ── legacy 双板特征构建子进程并行 (2026-08-21) ──
+# 语义: main/dual 帧股票集不相交 + build 无状态纯函数 → 拆板并行结果与串行逐字节一致
+# (tests/test_parallel_feat_worker.py 验证). 省 ≈ 整个 dual 构建时间 (串行=main+dual,
+# 并行=max(main,dual)). 默认关: 待 08-21 自动化插桩计时确认特征占比>50% 后拍板开启.
+LEGACY_PARALLEL_FEATURES = False
+
 # ── V3 Panel (single source of truth) ────────────────────────
 # Override via PANEL_PATH env var; defaults to D:/AMINQT/PARQUET/ directory.
 # _daily_fetch.py writes here → all read paths must resolve to the same file.
