@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_replay_deliver_legacy_818_20260820.py — 8/18 cutoff × 20260820 模块 legacy 清单交付 (2026-08-20).
 
 用户请求: 注意到 legacy raw 文件 (legacy_preds_raw_*__20260820.csv) 存在,
@@ -31,7 +30,6 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-import numpy as np
 import pandas as pd
 import pyarrow.dataset as ds
 
@@ -39,8 +37,8 @@ from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.list_generator import ListGenerator
 from app.pipeline1.predictor import V35Predictor
-from scripts._stall_marker import stall_marker
 from config.settings import BACKTEST_RESULT_DIR, PANEL_V3_PATH, STOCK_LIST_DIR
+from scripts._stall_marker import stall_marker
 
 TARGET = "300911"
 TRADE_DATE = pd.Timestamp("2026-08-18")
@@ -94,9 +92,21 @@ def board_reject_reasons(cand: pd.DataFrame, final: pd.DataFrame) -> dict[str, s
 
 def write_md(df: pd.DataFrame, path: str, rejected: dict[str, str]) -> None:
     cols = [
-        "symbol", "board", "score", "weight", "compound_ret", "prob_up",
-        "prob_up_3d", "pred_ret_3d", "pred_ret_5d", "pred_q50_3d", "pred_q50_5d",
-        "pain_prob", "stall_flag", "limit_flag", "model_version",
+        "symbol",
+        "board",
+        "score",
+        "weight",
+        "compound_ret",
+        "prob_up",
+        "prob_up_3d",
+        "pred_ret_3d",
+        "pred_ret_5d",
+        "pred_q50_3d",
+        "pred_q50_5d",
+        "pain_prob",
+        "stall_flag",
+        "limit_flag",
+        "model_version",
     ]
     cols = [c for c in cols if c in df.columns]
     sub = df[cols].copy()
@@ -105,7 +115,9 @@ def write_md(df: pd.DataFrame, path: str, rejected: dict[str, str]) -> None:
             sub[c] = sub[c].map(lambda v: f"{v:.4f}")
     sub.insert(0, "rk", range(1, len(sub) + 1))
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write(f"# LEGACY 股票清单 {TRADE_STR} (module {MODULE}) — 重放 (诊断口径)\n\n")
+        fh.write(
+            f"# LEGACY 股票清单 {TRADE_STR} (module {MODULE}) — 重放 (诊断口径)\n\n"
+        )
         fh.write(
             f"交易日 {TRADE_STR} · module {MODULE} (08-20 重训, 训练含 8/19 标签非 PIT) · "
             f"E7 闸3 = 3d/5d 中位数均正 · 排序 = pred_ret_10d 降序 "
@@ -125,7 +137,9 @@ def write_docx(df: pd.DataFrame, path: str, rejected: dict[str, str]) -> bool:
     except Exception:
         return False
     doc = Document()
-    doc.add_heading(f"LEGACY 股票清单 {TRADE_STR} (module {MODULE}) — 重放 (诊断口径)", level=0)
+    doc.add_heading(
+        f"LEGACY 股票清单 {TRADE_STR} (module {MODULE}) — 重放 (诊断口径)", level=0
+    )
     doc.add_paragraph(
         f"交易日 {TRADE_STR} · module {MODULE} (08-20 重训, 训练含 8/19 标签非 PIT) · "
         f"E7 闸3 = 3d/5d 中位数均正 · 排序 = pred_ret_10d 降序 · {len(df)} 只"
@@ -140,9 +154,20 @@ def write_docx(df: pd.DataFrame, path: str, rejected: dict[str, str]) -> bool:
         run = p.add_run(f"⚠ {b} 未接受 (被退回): {r} — 当日未出股")
         run.bold = True
     cols = [
-        "symbol", "board", "score", "weight", "compound_ret", "prob_up",
-        "prob_up_3d", "pred_ret_3d", "pred_ret_5d", "pred_q50_3d", "pred_q50_5d",
-        "pain_prob", "stall_flag", "model_version",
+        "symbol",
+        "board",
+        "score",
+        "weight",
+        "compound_ret",
+        "prob_up",
+        "prob_up_3d",
+        "pred_ret_3d",
+        "pred_ret_5d",
+        "pred_q50_3d",
+        "pred_q50_5d",
+        "pain_prob",
+        "stall_flag",
+        "model_version",
     ]
     cols = [c for c in cols if c in df.columns]
     tbl = doc.add_table(rows=1, cols=len(cols))
@@ -193,7 +218,9 @@ def main() -> int:
     frames = []
     for board, d in (("main", main_df), ("dual", dual_df)):
         feat = FeatureEngineV35().build(
-            d, None, inference_cols=predictor.bundles[board]["feature_cols"],
+            d,
+            None,
+            inference_cols=predictor.bundles[board]["feature_cols"],
             cross_sectional_rank=True,
         )
         log(f"[3] {board} 特征帧 {len(feat):,} 行 × {len(feat.columns)} 列")
@@ -209,7 +236,9 @@ def main() -> int:
 
     # ---------- 4. pool_blend_cut (生产链原样调用; 08-20 实证 fail-open) ----------
     has_ls = "liquidity_score" in candidates.columns
-    log(f"[4] candidates 含 liquidity_score: {has_ls} → blend 切池 {'生效' if has_ls else 'FAIL-OPEN 不切'}")
+    log(
+        f"[4] candidates 含 liquidity_score: {has_ls} → blend 切池 {'生效' if has_ls else 'FAIL-OPEN 不切'}"
+    )
     report["blend_cut_active"] = bool(has_ls)
     candidates = cleaner.pool_blend_cut(candidates)
     report["n_after_blend_cut"] = int(len(candidates))
@@ -220,8 +249,10 @@ def main() -> int:
     passed = lister.entry_filter(scored, market_state="range")
     ranked = lister._rank_by_magnitude(passed)
     final = lister.apply_industry_limit(ranked).reset_index(drop=True).head(TOP_N)
-    log(f"[5] E7 过闸 {len(passed)} 只 (main={int((passed['board']=='main').sum())} / "
-        f"dual={int((passed['board']!='main').sum())}); 行业限制+TOP15 后 {len(final)} 只")
+    log(
+        f"[5] E7 过闸 {len(passed)} 只 (main={int((passed['board'] == 'main').sum())} / "
+        f"dual={int((passed['board'] != 'main').sum())}); 行业限制+TOP15 后 {len(final)} 只"
+    )
     report["n_passed"] = int(len(passed))
     report["passed_by_board"] = passed["board"].value_counts().to_dict()
     report["n_final"] = int(len(final))
@@ -233,19 +264,42 @@ def main() -> int:
         base = x["base_rate"]
         checks = {
             "闸1 compound_prob > base_rate+0.08": (
-                float(x["compound_prob"]), float(base + MARGIN_DUAL),
-                bool(x["compound_prob"] > base + MARGIN_DUAL)),
-            "闸2 pred_ret_10d > 0": (float(x["pred_ret_10d"]), 0.0, bool(x["pred_ret_10d"] > 0)),
-            "闸3a pred_q50_3d > 0": (float(x["pred_q50_3d"]), 0.0, bool(x["pred_q50_3d"] > 0)),
-            "闸3b pred_q50_5d > 0": (float(x["pred_q50_5d"]), 0.0, bool(x["pred_q50_5d"] > 0)),
-            "E2  pain_prob <= 0.4": (float(x["pain_prob"]), PAIN_MAX_DUAL, bool(x["pain_prob"] <= PAIN_MAX_DUAL)),
+                float(x["compound_prob"]),
+                float(base + MARGIN_DUAL),
+                bool(x["compound_prob"] > base + MARGIN_DUAL),
+            ),
+            "闸2 pred_ret_10d > 0": (
+                float(x["pred_ret_10d"]),
+                0.0,
+                bool(x["pred_ret_10d"] > 0),
+            ),
+            "闸3a pred_q50_3d > 0": (
+                float(x["pred_q50_3d"]),
+                0.0,
+                bool(x["pred_q50_3d"] > 0),
+            ),
+            "闸3b pred_q50_5d > 0": (
+                float(x["pred_q50_5d"]),
+                0.0,
+                bool(x["pred_q50_5d"] > 0),
+            ),
+            "E2  pain_prob <= 0.4": (
+                float(x["pain_prob"]),
+                PAIN_MAX_DUAL,
+                bool(x["pain_prob"] <= PAIN_MAX_DUAL),
+            ),
         }
-        log(f"\n== 300911 8/18 (20260820 模块) 闸门逐项 ==")
+        log("\n== 300911 8/18 (20260820 模块) 闸门逐项 ==")
         for k, (v, th, ok) in checks.items():
             log(f"  {k}: {v:+.4f} vs {th:+.4f} → {'PASS' if ok else 'FAIL'}")
-        report["gates"] = {k: {"value": v, "threshold": th, "pass": ok} for k, (v, th, ok) in checks.items()}
+        report["gates"] = {
+            k: {"value": v, "threshold": th, "pass": ok}
+            for k, (v, th, ok) in checks.items()
+        }
         in_list = TARGET in set(final["symbol"])
-        log(f"\n  → 300911 最终{'入选' if in_list else '未入选'} 8/18 清单 (20260820 模块)")
+        log(
+            f"\n  → 300911 最终{'入选' if in_list else '未入选'} 8/18 清单 (20260820 模块)"
+        )
         report["in_list"] = bool(in_list)
     else:
         log(f"[6] {TARGET} 不在预测输出 (被清洗层剔除)")
@@ -268,8 +322,10 @@ def main() -> int:
     tmp_pq.unlink(missing_ok=True)
     n_stall = int((marked["stall_flag"] != "").sum())
     n_lim = int((marked["limit_flag"] != "").sum())
-    log(f"[7] stall_marker: stall={n_stall} 只, limit={n_lim} 只, "
-        f"market_base_rate={marked['market_base_rate'].iloc[0] if len(marked) else None}")
+    log(
+        f"[7] stall_marker: stall={n_stall} 只, limit={n_lim} 只, "
+        f"market_base_rate={marked['market_base_rate'].iloc[0] if len(marked) else None}"
+    )
     report["n_stall"] = n_stall
     report["n_limit"] = n_lim
     report["market_base_rate"] = (
@@ -291,13 +347,19 @@ def main() -> int:
     if write_docx(marked, docx_path, rejected):
         log(f"[8] [docx] {docx_path}")
     for b, r in rejected.items():
-        npath = str(STOCK_LIST_DIR / f"legacy_stocklist_{b}_{TRADE_STR}__{mod}_REJECTED.txt")
+        npath = str(
+            STOCK_LIST_DIR / f"legacy_stocklist_{b}_{TRADE_STR}__{mod}_REJECTED.txt"
+        )
         with open(npath, "w", encoding="utf-8") as fh:
-            fh.write(f"LEGACY {b} 清单 {TRADE_STR} (module {mod}): 未接受 (被退回) — {r}\n")
+            fh.write(
+                f"LEGACY {b} 清单 {TRADE_STR} (module {mod}): 未接受 (被退回) — {r}\n"
+            )
         log(f"[8] [rejected] {b}: {r}")
 
     # ---------- 落盘 ----------
-    out_dir = Path(BACKTEST_RESULT_DIR) / ("_replay_818_20260820_" + time.strftime("%Y%m%d_%H%M%S"))
+    out_dir = Path(BACKTEST_RESULT_DIR) / (
+        "_replay_818_20260820_" + time.strftime("%Y%m%d_%H%M%S")
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(out_dir / "report.json", "w", encoding="utf-8") as fh:
         json.dump(report, fh, ensure_ascii=False, indent=2, default=str)
