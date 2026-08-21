@@ -9,7 +9,7 @@
 
     TRAPS AVOIDED:
     - Uses ANTHROPIC_API_KEY (not ANTHROPIC_AUTH_TOKEN) for Zhipu
-    - Updates BOTH settings files
+    - Updates BOTH settings files (user env 块 + project settings.local.json modelOverrides)
     - All models set to glm-5.3
     - Removes stale ANTHROPIC_AUTH_TOKEN to prevent auth conflict
 #>
@@ -23,7 +23,8 @@ $MODEL            = "glm-5.3"
 # ── Paths ──────────────────────────────────────────────────────
 $UserSettings     = Join-Path $env:USERPROFILE ".claude\settings.json"
 $ProjectRoot      = "d:\AMINQT\AMINQT CODES"
-$ProjectSettings  = Join-Path $ProjectRoot ".claude\settings.json"
+# 项目级写 settings.local.json (gitignored 实际生效文件), 勿写 settings.json (共享/已提交)
+$ProjectSettings  = Join-Path $ProjectRoot ".claude\settings.local.json"
 
 # ── 密钥从项目 .env 读取 (CLAUDE.md 约定) — 勿硬编码密钥进脚本 ──
 #    (GitHub push protection 会拦截含密钥的提交)
@@ -36,10 +37,35 @@ if ([string]::IsNullOrEmpty($GLM_API_KEY)) {
     exit 1
 }
 
+# ── PS 5.1 兼容: 5.1 无 ConvertFrom-Json -AsHashtable, 深转 PSCustomObject → Hashtable ──
+function ConvertTo-HashtableDeep {
+    param($InputObject)
+    if ($InputObject -is [System.Management.Automation.PSCustomObject]) {
+        $result = @{}
+        $InputObject.PSObject.Properties | ForEach-Object { $result[$_.Name] = ConvertTo-HashtableDeep $_.Value }
+        return $result
+    } elseif ($InputObject -is [System.Collections.IEnumerable] -and $InputObject -isnot [string]) {
+        return @($InputObject | ForEach-Object { ConvertTo-HashtableDeep $_ })
+    } else {
+        return $InputObject
+    }
+}
+
+function Read-SettingsJson {
+    param([string]$Path)
+    if (!(Test-Path $Path)) { return @{} }
+    $raw = Get-Content $Path -Raw
+    if ($PSVersionTable.PSVersion.Major -ge 7) {
+        return ($raw | ConvertFrom-Json -AsHashtable)
+    }
+    return (ConvertTo-HashtableDeep ($raw | ConvertFrom-Json))
+}
+
 function Set-Settings {
     param(
         [string]$Path,
-        [string]$Label
+        [string]$Label,
+        [switch]$ApplyOverrides
     )
 
     $dir = Split-Path $Path -Parent
@@ -47,11 +73,7 @@ function Set-Settings {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
 
-    $json = if (Test-Path $Path) {
-        Get-Content $Path -Raw | ConvertFrom-Json -AsHashtable
-    } else {
-        @{}
-    }
+    $json = Read-SettingsJson -Path $Path
 
     if (!$json.ContainsKey("env")) {
         $json["env"] = @{}
@@ -90,13 +112,23 @@ function Set-Settings {
         $json["model"] = $MODEL
     }
 
+    # ── modelOverrides: claude-* 显式模型引用档位 (记忆: 切档改两处勿漏) ──
+    if ($ApplyOverrides) {
+        if (!$json.ContainsKey("modelOverrides")) {
+            $json["modelOverrides"] = @{}
+        }
+        $json["modelOverrides"]["claude-opus-4-8"]           = $MODEL
+        $json["modelOverrides"]["claude-sonnet-4-6"]         = $MODEL
+        $json["modelOverrides"]["claude-haiku-4-5-20251001"] = $MODEL
+    }
+
     $json | ConvertTo-Json -Depth 10 | Set-Content -Path $Path -Encoding UTF8
     Write-Host "[OK] $Label -> $Path" -ForegroundColor Green
 }
 
 # ── Execute ────────────────────────────────────────────────────
 Set-Settings -Path $UserSettings -Label "User-level "
-Set-Settings -Path $ProjectSettings -Label "Project-level"
+Set-Settings -Path $ProjectSettings -Label "Project-level" -ApplyOverrides
 
 Write-Host ""
 Write-Host "Done. Restart Claude Code to apply." -ForegroundColor Cyan

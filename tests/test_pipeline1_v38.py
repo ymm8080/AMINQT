@@ -394,6 +394,22 @@ class TestPoolBlend:
         out = CleaningPipeline().pool_blend_cut(df, pred_col="pred_ret_10d")
         assert len(out) == len(df)
 
+    def test_blend_cut_raises_dual_nonempty_missing_liquidity(self):
+        """[08-21 fail-open 修复] dual 非空但缺 liquidity_score → ValueError.
+
+        旧守卫静默原样返回 → 生产 candidates ~3100 只从不切池, N=800+blend
+        定案 (回放 top10 +27.7%) 从未生效. 缺列只可能是上游丢列 bug, 必须大声."""
+        df = self._blend_frame().drop(columns="liquidity_score")
+        with pytest.raises(ValueError, match="liquidity_score"):
+            CleaningPipeline().pool_blend_cut(df, pred_col="pred_ret_10d")
+
+    def test_blend_cut_dual_empty_silent_passthrough(self):
+        """dual 当日无候选 (全空) → 合法场景原样返回, 不报错."""
+        df = self._blend_frame()
+        df = df[df["board"].eq("main")]
+        out = CleaningPipeline().pool_blend_cut(df, pred_col="pred_ret_10d")
+        assert len(out) == len(df)
+
     def test_run_inference_pool_blend_dual_uncut(self):
         """run_inference(pool_blend=True) → dual 全谱 (不切池); False → 前 N."""
         dates = pd.bdate_range("2025-01-01", periods=2)
@@ -1107,3 +1123,18 @@ class TestPredictor10d:
         assert "pred_ret_10d" in out.columns and "prob_up_10d" in out.columns
         assert out["pred_ret_10d"].isna().all()
         assert out["prob_up_10d"].isna().all()
+
+    def test_predict_keeps_pool_blend_passthrough_columns(self, tmp_path):
+        """[08-21 fail-open 修复] liquidity_score/date 必须透传到输出.
+
+        pool_blend_cut 按 (date, board) 分组、用 liquidity_score 池分切池;
+        keep 白名单曾丢这两列 → 生产切池静默失效."""
+        from app.pipeline1.predictor import V35Predictor
+
+        feats = _10d_feats()
+        feats["liquidity_score"] = 0.5
+        path = _save_10d_bundle(tmp_path, with_10d=True)
+        out = V35Predictor({"main": path}).predict(feats, "main")
+        assert "liquidity_score" in out.columns
+        assert np.allclose(out["liquidity_score"], 0.5)
+        assert "date" in out.columns

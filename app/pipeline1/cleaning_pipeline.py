@@ -502,16 +502,26 @@ class CleaningPipeline:
     ) -> pd.DataFrame:
         """推理端 dual 池切分 (blend 入池键, 08-20 定案): 每 (date, board≠main) 按
         blend = w*liquidity_score + (1-w)*rank_pct(pred_col) 降序取前 liquidity_top_n.
-        main 板不限池直通. 缺 pred_col/board/liquidity_score 列 → 原样返回 (fail-open).
-        与回放 blend_score 同口径: 池分用原始值 (0-1), 预期涨幅用组内分位排名.
+        main 板不限池直通. 缺 pred_col/board 列或 dual 全空 → 原样返回;
+        dual 非空缺 date/liquidity_score → ValueError (08-21 修复静默 fail-open,
+        曾致 N=800 定案生产从未生效). 与回放 blend_score 同口径: 池分用原始值 (0-1),
+        预期涨幅用组内分位排名.
         """
         if w is None:
             w = self.cfg.pool_blend_w
         if pred_col not in df.columns or "board" not in df.columns:
             return df
         dual = df[df["board"].ne("main")].copy()
-        if dual.empty or "liquidity_score" not in dual.columns:
+        if dual.empty:
             return df
+        # [08-21] dual 非空但缺切池依赖列 → 大声报错: 旧 fail-open 静默原样返回,
+        # predictor keep 白名单曾丢列 → 生产 ~3100 只全谱直通, 切池定案从未生效
+        missing = [c for c in ("date", "liquidity_score") if c not in dual.columns]
+        if missing:
+            raise ValueError(
+                f"pool_blend_cut: dual 非空但缺列 {missing} — predictor.predict 须透传, "
+                "静默跳过切池会使 N=800 入池定案失效"
+            )
         grp = ["date", "board"]
         rp = dual.groupby(grp)[pred_col].rank(pct=True)
         dual["_blend"] = w * dual["liquidity_score"] + (1 - w) * rp
