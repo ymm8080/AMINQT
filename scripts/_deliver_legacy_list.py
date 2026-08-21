@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import pandas as pd
 
 from config.settings import STOCK_LIST_DIR
+from scripts._stall_marker import stall_marker
 
 try:
     from docx import Document
@@ -95,6 +96,8 @@ def write_md(
         "pred_q50_3d",
         "pred_q50_5d",
         "pain_prob",
+        "stall_flag",
+        "limit_flag",
         "model_version",
     ]
     cols = [c for c in cols if c in df.columns]
@@ -111,6 +114,9 @@ def write_md(
             f"交易日 {trade_date} · module {module} · E7 闸3 = 3d/5d 中位数均正 · "
             f"排序 = d3 目标 (50% d3涨幅 + 50% d3概率 归一化混合) · {len(sub)} 只\n\n"
         )
+        # 参与度提示 (2026-08-19): 高基线日模型整体负期望 → 建议降参与
+        if "advice" in df.columns and df["advice"].iloc[0]:
+            fh.write(df["advice"].iloc[0] + "\n\n")
         # 被整体退回的板块: 仍出清单, 醒目标注未接受原因 (不静默跳过)
         for b, r in (rejected or {}).items():
             fh.write(f"⚠ {b} 未接受 (被退回): {r} — 当日未出股\n\n")
@@ -126,6 +132,8 @@ def main():
     df = pd.read_parquet(src)
     if "symbol" in df.columns:
         df["symbol"] = df["symbol"].astype(str)
+    # 滞涨标记 (2026-08-19 用户方案): 入选 + 近10日滞涨<2% + 近20日入选≥3 → 洗盘待爆发
+    df = stall_marker(df, trade_date, "legacy_stocklist_")
     module = resolve_module(df, trade_date)
     os.makedirs(str(STOCK_LIST_DIR), exist_ok=True)
 
@@ -168,6 +176,11 @@ def main():
             f"交易日 {trade_date} · module {module} · "
             f"E7 闸3 = 3d/5d 中位数均正 · 排序 = d3 目标 (50% d3涨幅 + 50% d3概率) · {len(df)} 只"
         )
+        n_stall = int((df["stall_flag"] != "").sum()) if "stall_flag" in df.columns else 0
+        if n_stall:
+            doc.add_paragraph(
+                f"⚠ 洗盘待爆发 {n_stall} 只 (入选+近10日滞涨<2%+近20日入选≥3, 见 stall_flag 列)",
+            )
         for b, r in rejected.items():
             p = doc.add_paragraph()
             run = p.add_run(f"⚠ {b} 未接受 (被退回): {r} — 当日未出股")
@@ -185,6 +198,7 @@ def main():
             "pred_q50_3d",
             "pred_q50_5d",
             "pain_prob",
+            "stall_flag",
             "model_version",
         ]
         cols = [c for c in cols if c in df.columns]
