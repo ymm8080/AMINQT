@@ -93,8 +93,11 @@ class DailySelectionPipeline:
             logger.error("数据供应链失败: %s → 降级", exc)
             return self.guard.on_failure()
 
-        # 清洗 0→4 (推理端含安全阀)
-        main_df, dual_df, valve_state = self.cleaner.run_inference(panel)
+        # 清洗 0→4 (推理端含安全阀). pool_blend=True (08-20 定案): dual 不在此切池,
+        # 返回全谱双创, 待预测后按 blend(池分, pred_ret_10d) 切池 (pool_blend_cut)
+        main_df, dual_df, valve_state = self.cleaner.run_inference(
+            panel, pool_blend=True
+        )
         if valve_state == "empty":
             logger.error("流动性安全阀强制空清单")
             return {"mode": "valve_empty", "list": pd.DataFrame(), "empty": True}
@@ -153,6 +156,9 @@ class DailySelectionPipeline:
         if not frames:
             return self.guard.on_failure()
         candidates = pd.concat(frames, ignore_index=True)
+        # [08-20 定案] dual blend 入池: per (date, board) w*池分+(1-w)*预测涨幅 前 N.
+        # 全谱预测后切池 → 高预期涨幅股可入池; main 不限池直通. 排名键仍纯 pred_ret_10d.
+        candidates = self.cleaner.pool_blend_cut(candidates)
 
         # Holding Bonus 回填 (昨日清单)
         yesterday = self._load_yesterday(trade_date)

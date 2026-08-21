@@ -213,3 +213,121 @@ def test_dim21_chip_tushare_keep_columns():
     ]
     for c in deleted:
         assert c not in out.columns, f"不应产出已删列 {c}"
+
+
+def test_dim21_cost_bias_uses_unadjusted_close():
+    """2026-08-19 修复: cost_bias 必须用未复权 close, 禁用 close_hfq.
+
+    cost_50pct 是 Tushare 未复权真实成本; 若用 close_hfq 相除, 除权股
+    (如 300911, 因子 1.83) cost_bias 虚高近 2 倍 → 横截面语义错乱.
+    """
+    from app.pipeline1.feature_engine_v35 import FeatureEngineV35
+
+    dates = pd.bdate_range("2025-01-01", periods=30)
+    rows = []
+    for i, d in enumerate(dates):
+        rows.append(
+            {
+                "symbol": "300911",
+                "date": d,
+                "industry": "bank",
+                "close": 22.0 + 0.01 * i,  # 真实价 ~22
+                "close_hfq": 40.0 + 0.01 * i,  # 前复权价 ~40 (除权因子 ~1.83)
+                "winner_ratio": 0.5,
+                "avg_cost": 22.0,
+                "pct_70_low": 15.0,
+                "pct_70_high": 30.0,
+                "pct_70_con": 0.3,
+                "pct_90_low": 12.0,
+                "pct_90_high": 34.0,
+                "pct_90_con": 0.4,
+                "cost_5pct": 12.0,
+                "cost_15pct": 15.0,
+                "cost_50pct": 22.0,  # 未复权成本
+                "cost_85pct": 30.0,
+                "cost_95pct": 34.0,
+                "weight_avg": 22.0,
+            }
+        )
+    df = pd.DataFrame(rows)
+    out = FeatureEngineV35.dim21_chip_tushare(df.copy())
+    last = out.sort_values("date").tail(1).iloc[0]
+    # close=22.29, cost_50pct=22.0 → cost_bias ≈ +0.013 (不是用 close_hfq=40.29 的 +0.83)
+    assert abs(last["cost_bias"] - (22.0 + 0.01 * 29 - 22.0) / 22.0) < 1e-6
+    assert last["cost_bias"] < 0.02, "cost_bias 误用 close_hfq (除权股虚高)"
+
+
+# ---- enrich_cyq date 覆盖 (2026-08-19 修复) ----
+
+
+def _kdata_with_symbol(sym: str, n: int = 140, seed: int = 3) -> pd.DataFrame:
+    k = _synthetic_kdata(n, seed=seed)
+    k["symbol"] = sym
+    return k[["symbol", "date", "open", "close", "high", "low", "turnover_rate"]]
+
+
+def test_enrich_cyq_extends_stale_cache(tmp_path):
+    """2026-08-19 修复: cache 只查 symbol 覆盖不查 date → 新日期全 NaN.
+
+    cache 覆盖前 100 交易日, panel 140 交易日 → enrich 后尾部必须有值,
+    且已有日期不被增量重算覆盖 (窗口截断不应改动历史值).
+    """
+    from app.pipeline1.panel_builder import enrich_cyq
+
+    panel = pd.concat(
+        [_kdata_with_symbol("000001", seed=1), _kdata_with_symbol("000002", seed=2)]
+    )
+    cache_path = tmp_path / "cyq_panel.parquet"
+    cutoff = panel["date"].max() - pd.Timedelta(days=30)
+    old = compute_cyq_panel(panel[panel["date"] < cutoff])
+    old.to_parquet(cache_path, index=False)
+
+    out = enrich_cyq(panel, cyq_cache=str(cache_path))
+    assert "winner_ratio" in out.columns
+    tail = out[out["date"] >= cutoff]
+    assert tail["winner_ratio"].notna().all(), "新增日期 cyq 为 NaN (bug 复发)"
+
+    cache = pd.read_parquet(cache_path)
+    assert cache["date"].max() == panel["date"].max(), "cache 未扩展"
+
+    keep = out[out["date"] < cutoff]
+    merged = keep.merge(
+        old[["symbol", "date", "winner_ratio"]],
+        on=["symbol", "date"],
+        suffixes=("", "_orig"),
+    ).dropna(subset=["winner_ratio_orig"])  # 预热期前 60 帧本来就 NaN
+    assert (merged["winner_ratio"] - merged["winner_ratio_orig"]).abs().max() < 1e-12, (
+        "增量重算改动历史值"
+    )
+
+
+def test_enrich_cyq_computes_new_symbols(tmp_path):
+    from app.pipeline1.panel_builder import enrich_cyq
+
+    a = _kdata_with_symbol("000001", seed=1)
+    b = _kdata_with_symbol("000002", seed=2)
+    c = _kdata_with_symbol("000003", seed=3)
+    cache_path = tmp_path / "cyq_panel.parquet"
+    compute_cyq_panel(pd.concat([a, b])).to_parquet(cache_path, index=False)
+
+    out = enrich_cyq(pd.concat([a, b, c]), cyq_cache=str(cache_path))
+    c_out = out[out["symbol"] == "000003"]
+    assert c_out["winner_ratio"].notna().sum() > 30, "新 symbol 无值"
+
+    cache = pd.read_parquet(cache_path)
+    assert "000003" in set(cache["symbol"].unique()), "新 symbol 未入 cache"
+
+
+def test_enrich_cyq_fresh_cache_not_rewritten(tmp_path):
+    """完全覆盖 (symbol+date) 时走快速 merge, 不触发重算."""
+    from app.pipeline1.panel_builder import enrich_cyq
+
+    panel = _kdata_with_symbol("000001", seed=1)
+    cache_path = tmp_path / "cyq_panel.parquet"
+    cyq = compute_cyq_panel(panel)
+    cyq.to_parquet(cache_path, index=False)
+
+    out = enrich_cyq(panel, cyq_cache=str(cache_path))
+    assert out["winner_ratio"].notna().sum() == len(panel) - 60  # 预热期后全有值
+    cache2 = pd.read_parquet(cache_path)
+    assert len(cache2) == len(cyq), "fresh cache 被重写"

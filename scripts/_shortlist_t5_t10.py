@@ -65,6 +65,7 @@ from config.settings import (
     SHORTLIST_SCORE,
     STOCK_LIST_DIR,
 )
+from scripts._stall_marker import stall_marker
 
 try:
     from docx import Document
@@ -1157,6 +1158,7 @@ def write_docx(
             "score_w",
             "in_t5",
             "过门",
+            "stall_flag",
         ] + [f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")]
         t = doc.add_table(rows=1, cols=len(mcols))
         for j, c in enumerate(mcols):
@@ -1171,7 +1173,8 @@ def write_docx(
             cells[5].text = f"{float(r['score_w']):.4f}"
             cells[6].text = "Y" if bool(r["in_t5"]) else ""
             cells[7].text = str(r["过门"])
-            j = 8
+            cells[8].text = str(r.get("stall_flag", ""))
+            j = 9
             for h in HORIZON_ORDER:
                 cells[j].text = (
                     "n/a"
@@ -1203,6 +1206,7 @@ def write_docx(
         "score",
         "score_w",
         "过门",
+        "stall_flag",
     ] + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
     for board in ("main", "dual"):
         b = res[res["board"] == board]
@@ -1229,13 +1233,14 @@ def write_docx(
                 cells[4].text = f"{float(r['score']):.4f}"
                 cells[5].text = f"{float(r['score_w']):.4f}"
                 cells[6].text = str(r["过门"])
+                cells[7].text = str(r.get("stall_flag", ""))
                 for j, h in enumerate(HORIZONS):
-                    cells[7 + 2 * j].text = (
+                    cells[8 + 2 * j].text = (
                         "n/a"
                         if pd.isna(r[f"pred_mag_{h}"])
                         else f"{float(r[f'pred_mag_{h}']):+.1%}"
                     )
-                    cells[8 + 2 * j].text = (
+                    cells[9 + 2 * j].text = (
                         "n/a"
                         if pd.isna(r[f"pred_prob_{h}"])
                         else f"{float(r[f'pred_prob_{h}']):.0%}"
@@ -1296,6 +1301,7 @@ def write_xlsx(
         "co_occur",
         "score",
         "过门",
+        "stall_flag",
     ] + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
     pct_cols = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
     if merged is not None and not merged.empty:
@@ -1308,8 +1314,13 @@ def write_xlsx(
             "score_w",
             "in_t5",
             "过门",
+            "stall_flag",
         ] + [f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")]
         m = merged.copy().rename(columns={"systems": "module"})
+        # [2026-08-20] merged 帧无滞涨标记 (stall_marker 只作用于 res) → 补空列,
+        # 与 docx 侧 r.get("stall_flag", "") 同容错语义, 防 KeyError 断掉 xlsx 落盘
+        if "stall_flag" not in m.columns:
+            m["stall_flag"] = ""
         _sheet(
             wb.create_sheet("合并排名"),
             m[mcols],
@@ -1431,6 +1442,25 @@ def main() -> int:
 
     suffix = _module_suffix(module)
     stamp = str(sel_date.date()).replace("-", "")
+    # 滞涨标记 (2026-08-19 用户方案): 入选 + 近10日滞涨<2% + 近20日入选≥3 → 洗盘待爆发
+    res = stall_marker(res, stamp, "parallel_shortlist_")
+    n_stall = int((res["stall_flag"] != "").sum())
+    if n_stall:
+        print(
+            f"[stall] 洗盘待爆发 {n_stall} 只: "
+            f"{', '.join(res.loc[res['stall_flag'] != '', 'symbol'].astype(str))}",
+            flush=True,
+        )
+    # 参与度提示 (2026-08-19): 高基线日模型整体负期望 → 建议降参与
+    if not res.empty and "advice" in res.columns and res["advice"].iloc[0]:
+        summary = summary[:1] + [res["advice"].iloc[0]] + summary[1:]
+    n_lim = int((res["limit_flag"] != "").sum()) if "limit_flag" in res.columns else 0
+    if n_lim:
+        print(
+            f"[limit] 涨停次日不追 {n_lim} 只: "
+            f"{', '.join(res.loc[res['limit_flag'] != '', 'symbol'].astype(str))}",
+            flush=True,
+        )
     csv_path = STOCK_LIST_DIR / f"parallel_shortlist_{stamp}{suffix}.csv"
     res.to_csv(csv_path, index=False)
     print(f"[saved] {csv_path}", flush=True)

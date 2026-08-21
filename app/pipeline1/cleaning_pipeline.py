@@ -101,7 +101,7 @@ class CleaningConfig:
     min_list_days: int = 180  # 上市 >= 180 交易日 (适配200天训练面板, 原250)
     min_amount: float = 5e7  # T 日成交额 >= 5000 万
     liquidity_top_n: int = (
-        200  # 非 main (dual) serving 候选池; 08-13 dual 38特征池扫描: 100/200 最优
+        800  # 非 main (dual) serving 候选池; 08-20 250d 重扫 neg200 模型: 800 最优
     )
     liquidity_top_n_main: int = (
         0  # main serving 候选池: 0=不限池 (08-13 用户定案, 保留全部流动性达标主板股)
@@ -114,15 +114,22 @@ class CleaningConfig:
     stability_max: float = 0.5  # std/mean > 0.5 → 对倒嫌疑
     new_stock_days: int = 5  # 注册制新股 (<5日无涨跌幅限制)
     abs_amount_floor: float = 8e7  # 步骤4 绝对流动性安全阀 8000 万
-    bottom_amount_pct: float = (
-        0.2  # 步骤5 [E6] 剔除成交额后 20% (dual/默认, 流动性黑洞预防)
-    )
+    bottom_amount_pct: float = 0.0  # 步骤5 [E6] 剔除成交额后 X% (dual/默认; 08-20 N=800 重扫定案: 0% 最优 top5 +32.6%/top10 +26.1%)
     bottom_amount_pct_main: float = (
         0.0  # main 板块 E6 覆盖: TOP10 扫参定案 2026-08-11 0% 最优
     )
     valve_full: int = 50  # 过滤后 >= 50: 正常
     valve_reduced: int = 15  # >= 15: 减仓输出; < 15: 强制空清单
     delisted_virtual_ret: float = -0.5  # 退市股虚拟 T+1 收益 (安全网 #14)
+    # 08-20 板级 250d 回放定案 (pool_rank_mix_board_20260820_250d_20260820_150031):
+    # 入池键 纯流动性 → blend = w*liquidity_score + (1-w)*rank_pct(pred_ret_10d),
+    # per (date, board) 各取前 liquidity_top_n. top5 +34.8% vs +32.6% / top10 +27.7%
+    # vs +26.1% / hit 86.7% vs 85.9% / wIC 0.2276 vs 0.2187, 3/4 子窗赢.
+    # 注意: 短名单排名键仍保持纯 pred_ret_10d (blend 排名已证伪, 勿改).
+    pool_blend_enable: bool = True  # 推理端 dual 入池用 blend (主链 daily_pipeline)
+    pool_blend_w: float = (
+        0.5  # w=池分权重 (0.5/0.7 差异 <0.1pp, 5050 与 score_w_amount 同风格)
+    )
 
 
 def load_panel_v3(path=None) -> pd.DataFrame:
@@ -458,21 +465,56 @@ class CleaningPipeline:
             dual = pd.DataFrame()
         return main, dual
 
-    def run_inference(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    def run_inference(
+        self, df: pd.DataFrame, pool_blend: bool | None = None
+    ) -> tuple[pd.DataFrame, pd.DataFrame, str]:
         """推理端清洗 (步骤 0→4 + 步骤5[E6]). 返回 (主板, 双创, 阀门状态).
 
         推理端 step2 截取 top-N: 候选清单需要收敛 (训练端不截断, 推理端截断).
+        pool_blend: None→取 config.pool_blend_enable (08-20 定案 True). True 时
+        step2 对 dual 不截断 (返回全谱双创), 由调用方在预测 pred_ret_10d 后调
+        pool_blend_cut() 按 blend 入池键切前 N — 先预测后切池才能让高预期涨幅股
+        入池. 注意 E6 (step5) 作用在全谱帧上 (当前 0% 无操作; 若未来 >0, 顺序
+        为 E6 先于 blend 切池, 与回放 (blend 先于 E6) 有差异, 改阈值时须复核).
         """
+        if pool_blend is None:
+            pool_blend = self.cfg.pool_blend_enable
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
         main, dual = self.step0_board_split(df)
         main = self.step3_extreme(
             self.step2_liquidity(self.step1_base_state(main), apply_top_n=True)
         )
         dual = self.step3_extreme(
-            self.step2_liquidity(self.step1_base_state(dual), apply_top_n=True)
+            self.step2_liquidity(
+                self.step1_base_state(dual), apply_top_n=not pool_blend
+            )
         )
         both = pd.concat([main, dual], ignore_index=True)
         both, state = self.step4_tradability(both, inference_only=True)
-        both = self.step5_amount_bottom(both)  # [E6] 成交额后 20% 剔除
+        both = self.step5_amount_bottom(
+            both
+        )  # [E6] 成交额后 bottom_amount_pct 剔除 (08-20 N=800 定案 0%)
         m, d = self.step0_board_split(both)
         return m, d, state
+
+    def pool_blend_cut(
+        self, df: pd.DataFrame, pred_col: str = "pred_ret_10d", w: float | None = None
+    ) -> pd.DataFrame:
+        """推理端 dual 池切分 (blend 入池键, 08-20 定案): 每 (date, board≠main) 按
+        blend = w*liquidity_score + (1-w)*rank_pct(pred_col) 降序取前 liquidity_top_n.
+        main 板不限池直通. 缺 pred_col/board/liquidity_score 列 → 原样返回 (fail-open).
+        与回放 blend_score 同口径: 池分用原始值 (0-1), 预期涨幅用组内分位排名.
+        """
+        if w is None:
+            w = self.cfg.pool_blend_w
+        if pred_col not in df.columns or "board" not in df.columns:
+            return df
+        dual = df[df["board"].ne("main")].copy()
+        if dual.empty or "liquidity_score" not in dual.columns:
+            return df
+        grp = ["date", "board"]
+        rp = dual.groupby(grp)[pred_col].rank(pct=True)
+        dual["_blend"] = w * dual["liquidity_score"] + (1 - w) * rp
+        rk = dual.groupby(grp)["_blend"].rank(ascending=False, method="first")
+        dual = dual[rk <= self.cfg.liquidity_top_n].drop(columns="_blend")
+        return pd.concat([df[df["board"].eq("main")], dual], ignore_index=True)

@@ -92,3 +92,4 @@ web/node_modules/
 # Prediction DB
 data/predictions.db
 data/**/*.joblib
+.claude/settings.json

@@ -30,6 +30,8 @@ pyyaml
 python-dotenv
 requests
 psutil>=5.9
+# 短名单交付 .docx 输出 (2026-08-21: CI 测试 test_shortlist_deliver_stall 暴露未声明依赖)
+python-docx
 
 # ── MCP (Claude Code Sub-Agent) ───────────────────────────────
 mcp>=1.0.0

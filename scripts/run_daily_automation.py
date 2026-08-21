@@ -55,6 +55,7 @@ RETRAIN_WEEKDAY = 4
 # 70min / legacy 18-30min / retrain 5-7h), 只兜底卡死不误杀慢跑. 超时按步骤记为 rc=124.
 _STEP_TIMEOUT_S = {
     "refresh": 3 * 3600,
+    "cyq": 40 * 60,
     "retrain": 12 * 3600,
     "parallel": 4 * 3600,
     "prob_head": 1 * 3600,
@@ -69,6 +70,11 @@ _STEP_TIMEOUT_S = {
 # (步骤名, argv) — argv 不含解释器, run_step 负责拼 [PY, "-u", ...]
 _STEPS = {
     "refresh": ["scripts/_refresh_parallel_checkpoints.py"],
+    "cyq": [
+        "scripts/_backfill_cyq_panel.py",
+        "--workers",
+        "6",
+    ],  # cyq_panel 增量 (2026-08-19)
     "retrain": ["scripts/_retrain_legacy_full.py", "{tag}"],
     "parallel": ["-m", "app.pipeline_parallel.runner"],
     "prob_head": ["scripts/_train_parallel_prob_head.py"],
@@ -97,24 +103,31 @@ def plan_steps(
     skip_checkpoints: bool = False,
     skip_retrain: bool = False,
     skip_parallel: bool = False,
+    force_retrain: bool = False,
 ) -> list[str]:
     """按星期 + skip 标志选出当日步骤序列 (纯函数, 可单测)."""
     steps: list[str] = []
     if not skip_checkpoints:
         steps.append("refresh")
-    if not skip_retrain and today.weekday() == RETRAIN_WEEKDAY:
+        # cyq_panel 增量回填 (2026-08-19): 读 V3 面板补 cache 缺失日期, 非关键步骤 —
+        # 失败只损失当日 pct_70_con (慢牛 0.05 权重列跳过), 清单不受影响
+        steps.append("cyq")
+    if not skip_retrain and (force_retrain or today.weekday() == RETRAIN_WEEKDAY):
         steps.append("retrain")
-    if not skip_parallel:
-        steps.append("parallel")
-        # 概率头训练自判断新鲜度 (21 交易日重训一次); 仅并行交付启用时才有消费者
-        steps.append("prob_head")
+    # [2026-08-20] legacy 链优先: legacy_prob_head/legacy/deliver 与 parallel 链互不依赖,
+    # 提前执行让 legacy 短名单早落盘 (重训日 legacy 是耗时大头, 不再被 parallel+prob_head 挡住)
     # legacy 并行式概率头: 读面板+特征现场构建 (不依赖 parallel 检查点, 无前置依赖);
     # 自判断新鲜度 (21 交易日重训一次), 未到期开销小 — 放 legacy 预测前 (概率闸依赖 bundle)
     steps.append("legacy_prob_head")
     steps.append("legacy")
     steps.append("deliver")
-    if not skip_parallel:  # 并行清单交付依赖当日 fresh parallel 重生成, 跳过则同步丢弃
-        steps.append("deliver_parallel")
+    if not skip_parallel:
+        steps.append("parallel")
+        # 概率头训练自判断新鲜度 (21 交易日重训一次); 仅并行交付启用时才有消费者
+        steps.append("prob_head")
+        steps.append(
+            "deliver_parallel"
+        )  # 并行清单交付依赖当日 fresh parallel 重生成, 跳过则同步丢弃
     steps.append("drift")  # 幅度漂移监控 (读历史 candidates, 非关键步骤)
     steps.append(
         "drift_parallel"
@@ -136,6 +149,9 @@ def main() -> int:
         "--skip-checkpoints", action="store_true", help="跳过并行检查点刷新"
     )
     ap.add_argument("--skip-retrain", action="store_true", help="跳过 legacy 周频重训")
+    ap.add_argument(
+        "--force-retrain", action="store_true", help="强制 legacy 周频重训 (不限于周五)"
+    )
     ap.add_argument("--skip-parallel", action="store_true", help="跳过并行系统重生成")
     ap.add_argument("--tag", default=None, help="清单交易日 YYYYMMDD (默认今天)")
     args = ap.parse_args()
@@ -165,6 +181,7 @@ def main() -> int:
         skip_checkpoints=args.skip_checkpoints,
         skip_retrain=args.skip_retrain,
         skip_parallel=args.skip_parallel,
+        force_retrain=args.force_retrain,
     )
     print(
         f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S}] 四模块自动化 tag={tag} "

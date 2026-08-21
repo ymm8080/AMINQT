@@ -46,16 +46,72 @@ class TestLambdaRank:
         for k in (2, 3, 5, 10):
             df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
         trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
-        trained = trainer.train_window(df, "main", ["f1"])
+        calls: list[str] = []
+        real_train_ranker = dtt.DualTrackTrainer._train_ranker
+
+        def counting_ranker(self, out, label):
+            calls.append(label)
+            return real_train_ranker(self, out, label)
+
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr(dtt.DualTrackTrainer, "_train_ranker", counting_ranker)
+        try:
+            trained = trainer.train_window(df, "main", ["f1"])
+        finally:
+            monkeypatch.undo()
         assert "rank_model" in trained
         model, label = trained["rank_model"]
-        # ranker 使用循环最后视界的 label (5d), 非 1d
+        # [2026-08-20] ranker 只训一次 (3d 版曾白训并被 5d 版覆盖), 用 5d 标签
+        assert calls == ["label_5d"]
         assert label == "label_5d"
         path = trainer.save(trained, "t")
         bundle = dtt.DualTrackTrainer.load(path)
         assert "rank_model" in bundle
         preds = bundle["rank_model"][0].predict(df[["f1"]].tail(8))
         assert len(preds) == 8
+
+    def test_quantile_fit_uses_reduced_es_patience(self, tmp_path, monkeypatch):
+        """[2026-08-20] 分位头早停 patience 减半 (100→50): LightGBM 返回 best_iteration
+        树, patience 只控搜索停止点 — fit 必须收到 QUANTILE_ES_PATIENCE."""
+        import app.pipeline1.dual_track_trainer as dtt
+        from app.pipeline1 import quantile_models as qm
+
+        dtt.LGB_PARAMS_REG["n_estimators"] = 10
+        dtt.LGB_PARAMS_CLS["n_estimators"] = 10
+        seen: list[int] = []
+
+        class FakeQuantileSet:
+            def __init__(self, *a, **k):
+                pass
+
+            def fit(self, *a, **k):
+                seen.append(k["es_patience"])
+                return self
+
+        monkeypatch.setattr(qm, "QuantileModelSet", FakeQuantileSet)
+        rng = np.random.default_rng(7)
+        dates = pd.bdate_range("2023-01-02", periods=300)
+        frames = []
+        for s in range(6):
+            f = rng.normal(size=300)
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "symbol": f"60000{s}",
+                        "date": dates,
+                        "f1": f,
+                        "label_3d": rng.normal(0, 0.02, 300),
+                        "label_5d": rng.normal(0, 0.03, 300),
+                    }
+                )
+            )
+        df = pd.concat(frames, ignore_index=True)
+        trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
+        trainer.train_window(df, "main", ["f1"])
+        assert len(seen) == 2  # 3d + 5d 两视界
+        assert all(v == dtt.QUANTILE_ES_PATIENCE for v in seen)
+        # 生产 ES_PATIENCE=100 → 减半 (本文件他处测试会全局改 ES_PATIENCE, 用字面量断言)
+        assert dtt.QUANTILE_ES_PATIENCE == 50
 
     def test_predictor_outputs_rank_score(self, tmp_path):
         import app.pipeline1.dual_track_trainer as dtt

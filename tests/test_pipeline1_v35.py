@@ -161,10 +161,10 @@ class TestCleaning:
         assert main_cnt > dual_cnt  # main 池更大
 
     def test_serving_pool_defaults(self):
-        """serving 候选池默认: main=0 不限池 (08-13 用户定案), dual=200."""
+        """serving 候选池默认: main=0 不限池 (08-13 用户定案), dual=800 (08-20 重扫定案)."""
         cfg = CleaningConfig()
         assert cfg.liquidity_top_n_main == 0  # 0 = 无上限 (保留全部主板达标股)
-        assert cfg.liquidity_top_n == 200
+        assert cfg.liquidity_top_n == 800
 
     def test_step2_main_unlimited_pool(self):
         """liquidity_top_n_main=0 → main 不截池 (保留全部), dual 仍截前 N."""

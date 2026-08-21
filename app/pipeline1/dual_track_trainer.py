@@ -92,6 +92,12 @@ CALIB_DAYS = SEG_MIN_DAYS["calib"]
 TEST_DAYS = SEG_MIN_DAYS["test"]  # 仅归因, 严禁反向调参
 HALF_LIFE = 250  # 半衰期加权 (天)
 ES_PATIENCE = 100  # [V3.8 §2.1] patience=100
+# [2026-08-20] 分位头早停 patience 减半 (100→50): LightGBM 返回 best_iteration
+# 树, patience 只控搜索停止点, 平坦尾段多搜的 50 轮纯浪费 (q10/25/50 实测早停
+# 于 ~17-100 树 → 实际多训 100 轮无改进尾部; q75/q90 跑满 QUANTILE_MAX_TREES).
+# 只作用 E1 分位数 (dual 板后段实测 13.7 分 → ~10 分, main 35.6 → ~27 分);
+# 核心/rank/pain 头保持 ES_PATIENCE=100 (生产主头保守).
+QUANTILE_ES_PATIENCE = 50
 # [2026-08-12] 反锚 es 窗对短视界 cls 头可能过平 → best_iteration=1 常数 prob
 # (main 3d_cls=1树, dual 5d_cls=3树). cls 头早停树数低于此值时重训固定轮数保底
 # (num_leaves=15 强正则 + OOS test 窗兜底, 不会无界过拟合). 只作用 cls, reg 不参与.
@@ -549,6 +555,9 @@ class DualTrackTrainer:
             )
             if q_label is None:
                 continue
+            ranker_label = (
+                q_label  # 记录最后解析到的标签 (循环末=5d), 供循环后单训 ranker
+            )
             qkey = f"quantile_models_{horizon}d"
             if qkey not in done_extras:
                 try:
@@ -563,7 +572,7 @@ class DualTrackTrainer:
                         y,
                         sample_weight=self.time_weights(train),
                         eval_set=(X_es, y_es) if len(y_es) else None,
-                        es_patience=ES_PATIENCE,
+                        es_patience=QUANTILE_ES_PATIENCE,
                     )
                     qset.label_ = q_label
                     out[qkey] = qset
@@ -591,17 +600,20 @@ class DualTrackTrainer:
                     horizon,
                 )
 
-            # 阶段四: LambdaRank (标签=净收益截面分位 gain 0-4, group=date)
-            if "rank_model" not in done_extras:
-                try:
-                    out["rank_model"] = self._train_ranker(out, q_label)
-                    logger.info("[%s] LambdaRank 排序模型训练完成", out["board"])
-                except Exception as e:
-                    logger.warning("[%s] LambdaRank 训练失败: %s", out["board"], e)
-                if checkpoint is not None:
-                    self._save_checkpoint(out, checkpoint)
-            else:
-                logger.info("[%s] LambdaRank — checkpoint 已完成, 跳过", out["board"])
+        # 阶段四: LambdaRank (标签=净收益截面分位 gain 0-4, group=date)
+        # [2026-08-20] 只训一次 (原在 horizon 循环内训两次: 3d 版被 5d 版覆盖, 纯浪费
+        # main ~3 分/dual ~0.7 分每次重训). 标签 = 最后解析到的 q_label (生产=5d),
+        # 与现状最终落盘 bundle 完全一致. done_extras 快照取自循环前, 判一次即可.
+        if ranker_label is not None and "rank_model" not in done_extras:
+            try:
+                out["rank_model"] = self._train_ranker(out, ranker_label)
+                logger.info("[%s] LambdaRank 排序模型训练完成", out["board"])
+            except Exception as e:
+                logger.warning("[%s] LambdaRank 训练失败: %s", out["board"], e)
+            if checkpoint is not None:
+                self._save_checkpoint(out, checkpoint)
+        else:
+            logger.info("[%s] LambdaRank — checkpoint 已完成, 跳过", out["board"])
 
         # E2 痛苦预警
         if "label_pain" in segs["train"].columns:

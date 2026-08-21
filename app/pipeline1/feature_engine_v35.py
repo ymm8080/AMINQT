@@ -2007,7 +2007,9 @@ class FeatureEngineV35:
 
         def per_stock_cyq(g: pd.DataFrame) -> pd.DataFrame:
             g = g.sort_values("date")
-            c = g.get("close_hfq", g["close"])
+            # cost_50pct 是未复权真实成本 → 必须用未复权 close, 禁用 close_hfq
+            # (2026-08-19 修复: 原 close_hfq 除权股 cost_bias 虚高, 300911 实错 85% vs 真实 1%)
+            c = g["close"]
             c50 = g["cost_50pct"]
             bp = g["winner_ratio"]
             conc90 = g["pct_90_con"]
