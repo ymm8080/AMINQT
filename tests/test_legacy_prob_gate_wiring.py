@@ -85,9 +85,10 @@ def _gate_inputs() -> dict:
 def test_emit_prob_gate_drops_and_keeps_pure_mag_ranking(monkeypatch):
     """闸剔低概率股; 排名保持纯 pred_ret_10d (高 prob 不得插队); board 原样保留.
 
-    thr = base_rate + margin = 0.20 + 0.08 = 0.28 (定案边际被钉住):
+    thr = base_rate + margin = 0.20 + 0.22 = 0.42 (定案边际被钉住):
     main 600002 (prob 0.10) 剔; 600003 prob 0.90 > 600001 prob 0.60, 但排名仍按
     mag (0.030 > 0.010) — prob 只作闸不改排名 (blend 已证伪).
+    dual (GEM/STAR) 不在 gated_boards → 不过闸.
     """
     seen: dict[str, list[str]] = {}
 
@@ -108,8 +109,8 @@ def test_emit_prob_gate_drops_and_keeps_pure_mag_ranking(monkeypatch):
     assert lst["symbol"].tolist() == ["600001", "600003", "300001", "688001"]
     # 生产 board 命名原样保留 (GEM/STAR 不被改写为 dual)
     assert lst["board"].tolist() == ["main", "main", "GEM", "STAR"]
-    # 概率闸按 main/dual 分组调用 (GEM/STAR 并入 dual)
-    assert set(seen) == {"main", "dual"}
+    # 08-22 定案: 仅 main 过闸 (dual 撤闸, GEM/STAR 不过闸)
+    assert set(seen) == {"main"}
 
 
 def test_emit_gate_unavailable_failopen(monkeypatch):
@@ -189,7 +190,7 @@ def test_emit_gate_runs_before_topn_truncation(monkeypatch):
 
     def fake_gate(board, feat_day, tail, panel_dates):
         prob = pd.Series({s: 0.60 for s in cands["symbol"]})
-        prob[top] = 0.10  # 最高 mag 被闸剔 (0.10 ≤ 0.28)
+        prob[top] = 0.10  # 最高 mag 被闸剔 (0.10 ≤ 0.42)
         return (prob, 0.20)
 
     monkeypatch.setattr(prob_head, "gate_probabilities", fake_gate)
@@ -202,7 +203,10 @@ def test_emit_gate_runs_before_topn_truncation(monkeypatch):
 
 
 def test_apply_prob_gate_groups_gem_star_as_dual(monkeypatch):
-    """生产 board 命名 (main/GEM/STAR): GEM/STAR 并入 dual 组过闸, 输出 board 原样."""
+    """显式放开 dual (gated_boards 含 dual): GEM/STAR 并入 dual 组过闸, 输出 board 原样."""
+    monkeypatch.setitem(
+        prob_head.LEGACY_PROB_GATE, "gated_boards", ["main", "dual"]
+    )
     res = pd.DataFrame(
         {"board": ["main", "GEM", "STAR"], "symbol": ["600001", "300001", "688001"]}
     )
@@ -218,9 +222,31 @@ def test_apply_prob_gate_groups_gem_star_as_dual(monkeypatch):
     feats = {"main": pd.DataFrame(), "dual": pd.DataFrame()}
     out = prob_head.apply_prob_gate(res, feats, pd.DataFrame(), _panel_dates())
     assert calls == ["main", "dual"]
-    # 300001 (0.10 ≤ 0.28) 剔; 688001 留; board 值不被改写
+    # 300001 (0.10 ≤ 0.42) 剔; 688001 留; board 值不被改写
     assert out[["board", "symbol"]].values.tolist() == [
         ["main", "600001"],
+        ["STAR", "688001"],
+    ]
+
+
+def test_apply_prob_gate_default_gates_main_only(monkeypatch):
+    """08-22 定案默认: gated_boards=['main'] → dual/GEM/STAR 不过闸 (撤闸)."""
+    res = pd.DataFrame(
+        {"board": ["main", "GEM", "STAR"], "symbol": ["600001", "300001", "688001"]}
+    )
+    calls: list[str] = []
+
+    def fake_gate(board, feat_day, tail, panel_dates):
+        calls.append(board)
+        return (pd.Series({"600001": 0.10}), 0.20)  # main 最低 prob → 剔
+
+    monkeypatch.setattr(prob_head, "gate_probabilities", fake_gate)
+    feats = {"main": pd.DataFrame(), "dual": pd.DataFrame()}
+    out = prob_head.apply_prob_gate(res, feats, pd.DataFrame(), _panel_dates())
+    assert calls == ["main"]  # 仅 main 过闸
+    # main 600001 被剔; GEM/STAR 不过闸 → 原样保留
+    assert out[["board", "symbol"]].values.tolist() == [
+        ["GEM", "300001"],
         ["STAR", "688001"],
     ]
 

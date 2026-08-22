@@ -63,6 +63,7 @@ function New-AmqTaskXml {
   <Settings>
     <Enabled>true</Enabled>
     <AllowStartOnDemand>true</AllowStartOnDemand>
+    <ExecutionTimeLimit>PT16H</ExecutionTimeLimit>
   </Settings>
   <Actions Context="Author">
     <Exec>

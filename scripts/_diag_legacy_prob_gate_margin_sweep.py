@@ -53,7 +53,9 @@ REALIZED_BUY_LAG = 1
 REALIZED_SELL_LAG = 11
 COST = 0.003  # 分层滑点, 同回放
 BASE_TAIL_DAYS = LEGACY_PROB_GATE["base_rate_days"] + 14
-MARGINS = [0.00, 0.04, 0.06, 0.08, 0.10, 0.12, 0.14, 0.16]
+# 08-22 定案网格 (用户拍板): 125d 窗口探主板上沿 0.12/0.16/0.18/0.20,
+# 另含 0.08 生产基线 (同窗对照) — margin 数不影响耗时 (均从同一 detail 行重算).
+MARGINS = [0.08, 0.12, 0.16, 0.18, 0.20]
 TOPN = [5, 10, 15]
 
 
@@ -194,6 +196,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--slice", type=int, default=420, help="面板切片交易日数")
     ap.add_argument("--eval", type=int, default=250, help="评估的已实现决策日数")
+    ap.add_argument(
+        "--board",
+        default="both",
+        choices=("main", "dual", "both"),
+        help="只扫指定板块 (08-22: dual 撤闸后仅 main)",
+    )
     args = ap.parse_args()
 
     t0 = time.time()
@@ -234,7 +242,16 @@ def main() -> int:
     i_of = {d: i for i, d in enumerate(all_cal)}
 
     detail: list[dict] = []
-    for board, dfb, csr in (("main", main_df, False), ("dual", dual_df, True)):
+    _boards = {
+        "main": (main_df, False),
+        "dual": (dual_df, True),
+        "both": None,
+    }
+    if args.board == "both":
+        board_iter = (("main", main_df, False), ("dual", dual_df, True))
+    else:
+        board_iter = ((args.board,) + _boards[args.board],)
+    for board, dfb, csr in board_iter:
         b = prob_bundles[board]
         if b is None:
             print(f"[{board}] 概率头 bundle 缺失 -> skip", flush=True)

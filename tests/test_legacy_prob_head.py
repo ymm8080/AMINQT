@@ -159,9 +159,9 @@ def test_apply_prob_gate_drop_and_failopen(monkeypatch):
         pd.date_range("2026-06-01", periods=80, freq="B")
     ).to_numpy("datetime64[ns]")
     out = prob_head.apply_prob_gate(res, feats, pd.DataFrame(), panel_dates)
-    thr = 0.20 + prob_head.LEGACY_PROB_GATE["margin"]  # 0.28
-    assert thr == pytest.approx(0.28)  # 定案边际 0.08 被测试钉住
-    # main: A(0.60) 留, B(0.10) 剔; dual: 闸不可用 fail-open 全留
+    thr = 0.20 + prob_head.LEGACY_PROB_GATE["margin"]  # 0.42
+    assert thr == pytest.approx(0.42)  # 定案边际 0.22 被测试钉住
+    # main: A(0.60) 留, B(0.10) 剔; dual 不在 gated_boards → 不过闸保留
     assert out["symbol"].tolist() == ["A", "C"]
     # pred_prob 列附给诊断 (legacy 排名键保持纯 pred_ret_10d, blend 已证伪):
     # 可用板有值, fail-open 板 NaN
@@ -230,14 +230,14 @@ def _train_allneg_bundle(tmp_path, monkeypatch):
     t["label_pain"] = False
     t["symbol"] = "SZ000001"
     t["date"] = pd.date_range("2024-01-01", periods=n, freq="B")
-    return prob_head.train_bundle("dual", t, "2026-08-14")
+    return prob_head.train_bundle("main", t, "2026-08-14")
 
 
 def _gate_fixture():
-    """res(dual A/B) + 特征截面 + 0.5 达标率尾 (base_rate=0.5 → thr=0.58) + 面板日历."""
-    res = pd.DataFrame({"board": ["dual", "dual"], "symbol": ["A", "B"]})
+    """res(main A/B) + 特征截面 + 0.5 达标率尾 (base_rate=0.5 → thr=0.72) + 面板日历."""
+    res = pd.DataFrame({"board": ["main", "main"], "symbol": ["A", "B"]})
     feats = {
-        "dual": pd.DataFrame(
+        "main": pd.DataFrame(
             {f"f{i}": [0.0, 0.0] for i in range(10)}, index=pd.RangeIndex(2)
         ).assign(symbol=["A", "B"])
     }

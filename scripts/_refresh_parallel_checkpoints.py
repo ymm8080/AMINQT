@@ -21,6 +21,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
@@ -138,10 +139,17 @@ def main(force: bool = False) -> int:
     # 清洗帧仍占 ~1.5GB), 2026-08-13 dual 特征构建下 2.26MiB 分配失败 OOM →
     # 改逐板重建 (本机 15.8GB 物理, 峰值 ~8GB 落在 main 单板).
     for board, ckpt in (("dual", DUAL_CHECKPOINT), ("main", MAIN_CHECKPOINT)):
+        t_panel = time.time()
         panel = load_panel_v3()
+        t_clean = time.time()
         main_df, dual_df = cleaner.run_train(panel, board=board)
         del panel
         gc.collect()
+        print(
+            f"[timing][{board}] panel load: {t_clean - t_panel:.1f}s | "
+            f"run_train: {time.time() - t_clean:.1f}s",
+            flush=True,
+        )
         bdf = main_df if board == "main" else dual_df
         del main_df, dual_df
         gc.collect()
@@ -150,7 +158,9 @@ def main(force: bool = False) -> int:
             del bdf
             continue
         print(f"run_train[{board}]: rows={len(bdf):,}", flush=True)
+        t_build = time.time()
         d3 = build_board_slice(cleaner, fe, bdf, board, ckpt)
+        print(f"[timing][{board}] build_board_slice: {time.time() - t_build:.1f}s", flush=True)
         latest_date = d3["date"].max()
         print(
             f"[{board}] 检查点已写 {ckpt} | latest={latest_date:%Y-%m-%d} "

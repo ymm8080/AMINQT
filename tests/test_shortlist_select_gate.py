@@ -7,6 +7,8 @@
   pred_ret_3d 为 0 或负 → 剔除 (严格大于).
   2026-08-14: t3_min 分板块 dict (main=0 / dual=0.5%, _diag_t3min_sweep 定案),
   也兼容全局 float.
+  2026-08-21: V3 扩建后重扫 (_diag_t3min_sweep_250d_20260821) — dual 0.5% 已输基线,
+  0.25% 未过 ≥3/4 子窗纪律 → dual 回 0 (双板均 0 门槛).
 """
 
 import importlib.util
@@ -39,15 +41,16 @@ def _cand(rows):
 
 def test_select_gate_present_in_config():
     sg = S.SHORTLIST_SCORE["select_gate"]
-    # 2026-08-14: t3_min 分板块 dict (main=0 / dual=0.5%)
-    assert sg["t3_min"] == {"main": 0.0, "dual": 0.005}
+    # 2026-08-14: dual=0.5%; 08-21 扩建后重扫 dual 回 0
+    assert sg["t3_min"] == {"main": 0.0, "dual": 0.0}
     # 2d 联合门已删, t2_min/t3_floor 不应再存在
     assert "t2_min" not in sg
     assert "t3_floor" not in sg
 
 
 def test_per_board_threshold():
-    # dual 门槛 0.5%: 0.3% 预期剔除; main 门槛 0: 0.3% 保留
+    # 08-21 重扫: dual t3_min 改回 0 (扩建后 0.5% 输基线) → 双板均 0 门槛:
+    # 正预期保留, 0/负剔除
     df = pd.DataFrame(
         [
             {
@@ -62,10 +65,16 @@ def test_per_board_threshold():
                 "pred_ret_3d": 0.003,
                 "pred_prob_3d": 0.5,
             },
+            {
+                "symbol": "D002",
+                "board": "dual",
+                "pred_ret_3d": -0.003,
+                "pred_prob_3d": 0.5,
+            },
         ]
     )
     out = S.select_confident(df)
-    assert set(out["symbol"]) == {"M001"}
+    assert set(out["symbol"]) == {"D001", "M001"}
 
 
 def test_global_float_threshold_backward_compat(monkeypatch):
