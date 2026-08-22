@@ -13,11 +13,16 @@ plan_steps 是纯函数, 决定当日四模块自动化的执行序列:
 """
 
 import datetime as _dt
+import json
 
+import scripts.run_daily_automation as ma
 from scripts.run_daily_automation import (
     _STEP_TIMEOUT_S,
     _STEPS,
     RETRAIN_WEEKDAY,
+    _exit_status,
+    _is_interrupt_rc,
+    _write_state,
     plan_steps,
 )
 
@@ -131,3 +136,47 @@ def test_plan_steps_all_skip_keeps_legacy_chain():
     assert plan_steps(
         THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True
     ) == ["legacy_prob_head", "legacy", "deliver", "drift", "drift_parallel"]
+
+
+# ── 中断中止 + 终态 state 文件 (08-21 事故: cyq 被 Ctrl+C 杀后仍启动 retrain,
+#    且无终态标记 → 监督方无限等待一直耗 token) ──────────────────────────────
+
+
+def test_interrupt_rc_is_status_control_c_exit():
+    # 0xC000013A STATUS_CONTROL_C_EXIT — 08-21 事故 cyq 的真实返回码
+    assert ma._INTERRUPT_RC == 3221225786
+
+
+def test_is_interrupt_rc_identifies_control_c_exit():
+    assert _is_interrupt_rc(3221225786) is True
+    for rc in (0, 1, 2, 124):
+        assert _is_interrupt_rc(rc) is False
+
+
+def test_exit_status_maps_failures():
+    assert _exit_status([]) == "ok"
+    assert _exit_status(["legacy"]) == "failed"
+    assert _exit_status(["cyq", "legacy"]) == "failed"
+
+
+def test_write_state_writes_terminal_json(tmp_path, monkeypatch):
+    monkeypatch.setattr(ma, "LOG_DIR", str(tmp_path))
+    _write_state("20260821", "interrupted", step="cyq", rc=3221225786)
+    state = json.loads(
+        (tmp_path / "daily_automation_20260821.state.json").read_text("utf-8")
+    )
+    assert state["status"] == "interrupted"
+    assert state["tag"] == "20260821"
+    assert state["step"] == "cyq"
+    assert state["rc"] == 3221225786
+
+
+def test_write_state_missing_dir_creates_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(ma, "LOG_DIR", str(tmp_path / "sub" / "logs"))
+    _write_state("20260821", "ok")
+    state = json.loads(
+        (tmp_path / "sub" / "logs" / "daily_automation_20260821.state.json").read_text(
+            "utf-8"
+        )
+    )
+    assert state["status"] == "ok"

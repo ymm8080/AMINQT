@@ -255,7 +255,7 @@ def apply_prob_gate(
     if not cfg.get("enable", True):
         return res
     out = res.copy()
-    for board in ("main", "dual"):
+    for board in cfg.get("gated_boards", ("main", "dual")):
         mask = out["board"].astype(str).map(_BOARD_GROUP).eq(board)
         if not mask.any():
             continue

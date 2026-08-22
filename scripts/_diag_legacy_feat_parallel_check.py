@@ -39,7 +39,9 @@ def main() -> int:
     dates = sorted(panel["date"].unique())
     cut = dates[-300]
     panel = panel[panel["date"] >= cut]
-    print(f"[panel] {len(panel):,}r {cut.date()}.. ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[panel] {len(panel):,}r {cut.date()}.. ({time.time() - t0:.0f}s)", flush=True
+    )
 
     pipe = DailySelectionPipeline(supply=DataSupplyChain(), bundle_paths=BUNDLES)
     main_df, dual_df, _ = pipe.cleaner.run_inference(panel, pool_blend=True)
@@ -58,13 +60,17 @@ def main() -> int:
     try:
         # ---- 串行 (参照) ----
         ts = time.time()
-        feat_m, feat_d = pipe._build_features_serial(main_df, dual_df, main_cols, dual_cols)
+        feat_m, feat_d = pipe._build_features_serial(
+            main_df, dual_df, main_cols, dual_cols
+        )
         t_serial = time.time() - ts
         feat_m.to_parquet(os.path.join(tmp, "serial_main.parquet"), index=False)
         feat_d.to_parquet(os.path.join(tmp, "serial_dual.parquet"), index=False)
         del feat_m, feat_d
         gc.collect()
-        print(f"[serial] main+dual {t_serial:.0f}s ({time.time() - t0:.0f}s)", flush=True)
+        print(
+            f"[serial] main+dual {t_serial:.0f}s ({time.time() - t0:.0f}s)", flush=True
+        )
 
         # ---- 并行 ----
         ts = time.time()
@@ -79,7 +85,10 @@ def main() -> int:
         for board, got, ref in (("main", p_m, ref_m), ("dual", p_d, ref_d)):
             try:
                 pd.testing.assert_frame_equal(got, ref, check_exact=True)
-                print(f"[compare] {board}: 逐字节一致 ({len(got):,}r x {len(got.columns)}c)", flush=True)
+                print(
+                    f"[compare] {board}: 逐字节一致 ({len(got):,}r x {len(got.columns)}c)",
+                    flush=True,
+                )
             except AssertionError as exc:
                 ok = False
                 print(f"[compare] {board}: 不一致! {exc}", flush=True)

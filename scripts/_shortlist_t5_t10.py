@@ -914,6 +914,8 @@ def select_confident(res: pd.DataFrame, prob_min: float = 0.0) -> pd.DataFrame:
     (label_pm_3_net close-to-close 净预期, 成本已扣) — 与 legacy 收益闸一致.
     2026-08-14: t3_min 分板块 dict (main=0 / dual=0.5%, _diag_t3min_sweep 定案),
     也可为全局 float (向后兼容).
+    2026-08-21: V3 扩建后重扫 — dual 0.5% 输基线, 0.25% 未过子窗纪律 → dual 回 0
+    (当前双板均 0, 见 _diag_t3min_sweep_250d_20260821).
 
     概率口径 (用户 2026-08-06): 概率=逐股自然概率 (P(该股达到固定绝对目标)), 每股唯一
     真值. 原 ">60%" 门槛 (基于 P(MFE>0)≈90% 旧口径) 不可达, 故默认不设概率门槛.
@@ -921,7 +923,7 @@ def select_confident(res: pd.DataFrame, prob_min: float = 0.0) -> pd.DataFrame:
     g3 = res["pred_ret_3d"]
     sg = SHORTLIST_SCORE.get("select_gate", {})
     t3_min = sg.get("t3_min", 0.0)
-    # 2026-08-14: t3_min 支持分板块 dict (main=0 / dual=0.5%), 或全局 float (向后兼容)
+    # t3_min 支持分板块 dict (main=0 / dual=0, 08-21 扩建后重扫回 0), 或全局 float (向后兼容)
     if isinstance(t3_min, dict):
         thr = res["board"].map(t3_min).fillna(0.0)
         keep = g3 > thr

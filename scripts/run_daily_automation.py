@@ -25,6 +25,10 @@
 失败策略 (失败要大声): refresh 失败 → 跳过 parallel (无新鲜行集); retrain 失败 →
 继续当日清单 (沿用现有模型); parallel 失败 → 跳过 deliver_parallel (否则交付旧 run_dir);
 任一关键步骤 (legacy/deliver/deliver_parallel) 失败 → 非零退出.
+中断策略 (08-21 事故): 任何步骤返回 0xC013A (STATUS_CONTROL_C_EXIT, 控制台
+Ctrl+C/进程组被杀) → 立即终止整条链, 不启动后续重活步骤; 收到 SIGINT 同理.
+终态判据: logs/daily_automation_<tag>.state.json (running → ok/failed/interrupted),
+监督方 (scripts/_babysit_daily_automation.py) 见终态即退出, 不再无限等待耗 token.
 每步 rc/耗时 + 全部子进程输出 → logs/daily_automation_<tag>.log (WORM, 不覆盖).
 
 用法:
@@ -38,7 +42,9 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -142,6 +148,38 @@ def _log_fh(tag: str):
     )
 
 
+# 0xC000013A STATUS_CONTROL_C_EXIT — 控制台 Ctrl+C / 进程组被杀. 此类中断 ≠ 普通
+# 步骤失败: 必须立即终止整条链, 不得继续启动下一个重活步骤 (08-21 事故: cyq 被
+# Ctrl+C 杀后仍启动 6h retrain; 监督方也靠终态 state 文件判定停止, 否则永远等待).
+_INTERRUPT_RC = 3221225786
+
+
+def _state_path(tag: str) -> str:
+    return os.path.join(LOG_DIR, f"daily_automation_{tag}.state.json")
+
+
+def _write_state(tag: str, status: str, **extra) -> None:
+    """写运行状态文件 — 监督方 (babysitter) 的终态判据.
+
+    status: running → 启动; ok/failed/interrupted → 终态 (监督方见此即退出,
+    不再无限等待耗 token). 同一 tag 重跑时覆盖 (该 tag 当前运行的真实状态).
+    """
+    os.makedirs(LOG_DIR, exist_ok=True)
+    payload = {"tag": tag, "status": status, "ts": time.time(), **extra}
+    with open(_state_path(tag), "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False)
+
+
+def _is_interrupt_rc(rc: int) -> bool:
+    """0xC013A STATUS_CONTROL_C_EXIT — 控制台中断/进程组被杀, 须终止整条链."""
+    return rc == _INTERRUPT_RC
+
+
+def _exit_status(failures: list[str]) -> str:
+    """失败步骤列表 → 终态 status."""
+    return "ok" if not failures else "failed"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="四模块每日自动化")
     ap.add_argument("--dry-run", action="store_true", help="只打印计划不执行")
@@ -159,6 +197,18 @@ def main() -> int:
     today = _dt.date.today()
     tag = args.tag or today.strftime("%Y%m%d")
 
+    # 运行状态文件 (监督方终态判据): 启动先写 running, 结束/中断覆盖为终态.
+    _write_state(tag, "running")
+    current_step: str | None = None
+
+    # Ctrl+C/控制台关闭 → 立即写 interrupted 终态并退出, 不留"无标记裸退出"
+    # (那会让监督方永远等不到终态而一直耗 token).
+    def _on_sigint(_signum, _frame):
+        _write_state(tag, "interrupted", step=current_step)
+        raise SystemExit(130)
+
+    signal.signal(signal.SIGINT, _on_sigint)
+
     # 数据新鲜度护栏: V3 面板超过 3 个自然日未更新 → 拒绝空跑数小时重活 (边界校验).
     try:
         import pandas as pd  # 惰性导入, 保持 --dry-run 轻量
@@ -174,6 +224,7 @@ def main() -> int:
             f"终止, 不跑重活. (先跑 _daily_fetch.py)",
             flush=True,
         )
+        _write_state(tag, "failed", reason="panel_stale")
         return 2
 
     steps = plan_steps(
@@ -194,6 +245,7 @@ def main() -> int:
                 f"  [dry] {s}: python {' '.join(_STEPS[s])}".replace("{tag}", tag),
                 flush=True,
             )
+        _write_state(tag, "ok", reason="dry_run")
         return 0
 
     failures: list[str] = []
@@ -210,6 +262,7 @@ def main() -> int:
                 print(f"[skip] {step} (前置 {dep} 失败, 无新鲜输入)", flush=True)
                 print(f"[skip] {step} (前置 {dep} 失败)", file=fh, flush=True)
                 continue
+            current_step = step
             argv = [PY, "-u"] + [a.replace("{tag}", tag) for a in _STEPS[step]]
             print(
                 f"[{_dt.datetime.now():%H:%M:%S} start] {step}: {' '.join(argv)}",
@@ -242,6 +295,15 @@ def main() -> int:
                 print(msg, file=fh, flush=True)
                 rc = 124
             dt = time.time() - t0
+            if _is_interrupt_rc(rc):
+                msg = (
+                    f"[{_dt.datetime.now():%H:%M:%S} interrupt] {step} 被控制台中断 "
+                    f"(rc={rc}=0xC013A), 终止整条链, 不启动后续重活步骤"
+                )
+                print(msg, flush=True)
+                print(msg, file=fh, flush=True)
+                _write_state(tag, "interrupted", step=step, rc=rc)
+                return 130
             ok = rc == 0
             status = "ok" if ok else "FAIL"
             print(
@@ -273,6 +335,8 @@ def main() -> int:
                 f"重跑可用 --skip-* 跳过已成功步骤",
                 flush=True,
             )
+        # 终态 state 文件 — 监督方 (babysitter) 见 ok/failed 即退出
+        _write_state(tag, _exit_status(failures), failed_steps=failures)
     return 1 if failures else 0
 
 

@@ -249,9 +249,13 @@ SHORTLIST_SCORE = {
     #   dual 0.50% 真实赢 (命中10d 66→68%, 实得10d +7.08→+8.01%, ≥+10% 35→38%,
     #   4 子窗全 ≥ 基线, 只砍弱市空仓日); main 无档赢基线 (0.25% +1pp命中/+0.16pp实得
     #   但出股 -18% 不值, 更高档实得反降) → 保持 0.
+    # 2026-08-21: V3 扩建(4960只)后重扫 (_diag_t3min_sweep_250d_20260821) — 甜点下移:
+    #   dual 0.5% 已输基线 (实得10d +3.68% vs +3.90%, 命中 56% vs 57%); 0.25% 仅
+    #   +0.17pp/+1pp 且 2/4 子窗反输+砍13%出股 → 未过 ≥3/4 子窗纪律 → dual 回 0;
+    #   main 仍无档赢基线保持 0. 用户 08-21 拍板: dual 改回 0.
     "select_gate": {
-        # T+3 c2c 净预期涨幅下限: 分板块 dict (main=0 / dual=0.5%), 或全局 float (向后兼容)
-        "t3_min": {"main": 0.0, "dual": 0.005},
+        # T+3 c2c 净预期涨幅下限: 分板块 dict (main=0 / dual=0), 或全局 float (向后兼容)
+        "t3_min": {"main": 0.0, "dual": 0.0},
     },
 }
 
@@ -312,7 +316,8 @@ PROB_GATE = {
 # 排名键保持纯 pred_ret_10d (blend 证伪).
 LEGACY_PROB_GATE = {
     "enable": True,            # False → 闸关闭 (概率头照常训练但不拦截)
-    "margin": 0.08,            # 边际 (同并行定案 0.08; 接线后按季度闸重扫规则复核)
+    "gated_boards": ["main"],  # 08-22 定案: dual 全档有害→撤闸, 仅 main 过闸
+    "margin": 0.22,            # 08-22 125d 重扫: main 0.22 (top-10 +5.08%, 3/3 子窗; 0.5 不可达)
     "base_rate_days": 20,      # base_rate 观测窗 (交易日)
     "abs_target": 0.03,        # 概率头目标: mfe_3d >= 3%
     "refit_every_days": 21,    # 训练脚本: bundle 年龄 < 此值 → skip (交易日)
