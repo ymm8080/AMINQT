@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 from datetime import datetime
 
 import numpy as np
@@ -92,21 +93,25 @@ class DailySelectionPipeline:
         Returns:
             {'mode', 'list', 'cap_position', 'empty', 'schema_version', 'valve_state'}
         """
+        t0 = time.time()
         try:
             if panel is None:
                 panel = self._assemble_panel(trade_date)
         except DataSupplyError as exc:
             logger.error("数据供应链失败: %s → 降级", exc)
             return self.guard.on_failure()
+        logger.info("[timing] panel assemble: %.1fs", time.time() - t0)
 
         # 清洗 0→4 (推理端含安全阀). pool_blend=True (08-20 定案): dual 不在此切池,
         # 返回全谱双创, 待预测后按 blend(池分, pred_ret_10d) 切池 (pool_blend_cut)
+        t_clean = time.time()
         main_df, dual_df, valve_state = self.cleaner.run_inference(
             panel, pool_blend=True
         )
         if valve_state == "empty":
             logger.error("流动性安全阀强制空清单")
             return {"mode": "valve_empty", "list": pd.DataFrame(), "empty": True}
+        logger.info("[timing] cleaning (run_inference): %.1fs", time.time() - t_clean)
 
         # 特征 (在清洗输出上构建: 清洗附加列如 turnover_stability_5 是模型特征,
         # 用原始面板切片会导致训练/推理特征列不一致)
@@ -124,6 +129,7 @@ class DailySelectionPipeline:
         # [2026-08-21] 双板特征构建子进程并行 (config LEGACY_PARALLEL_FEATURES):
         # main/dual 帧股票集不相交 + build 无状态 → 拆板并行结果与串行逐字节一致
         # (tests/test_parallel_feat_worker.py). 串行=main+dual 相加, 并行≈max(main,dual).
+        t_feat = time.time()
         if LEGACY_PARALLEL_FEATURES and len(main_df) and len(dual_df):
             feat_main, feat_dual = self._build_features_parallel(
                 main_df, dual_df, main_cols, dual_cols
@@ -132,8 +138,10 @@ class DailySelectionPipeline:
             feat_main, feat_dual = self._build_features_serial(
                 main_df, dual_df, main_cols, dual_cols
             )
+        logger.info("[timing] feature build: %.1fs", time.time() - t_feat)
 
         # 推理 + 校准
+        t_pred = time.time()
         frames = []
         gate_feats: dict[str, pd.DataFrame] = {}
         for board, feat, survivors in (
@@ -155,6 +163,7 @@ class DailySelectionPipeline:
             frames.append(self.predictor.predict(today_feat, board))
         if not frames:
             return self.guard.on_failure()
+        logger.info("[timing] inference (predict): %.1fs", time.time() - t_pred)
         candidates = pd.concat(frames, ignore_index=True)
         # [08-20 定案] dual blend 入池: per (date, board) w*池分+(1-w)*预测涨幅 前 N.
         # 全谱预测后切池 → 高预期涨幅股可入池; main 不限池直通. 排名键仍纯 pred_ret_10d.
@@ -253,6 +262,7 @@ class DailySelectionPipeline:
                 logger.warning("priority.json 同步失败 (非阻塞)", exc_info=True)
         else:
             result["mode"] = "empty"
+        logger.info("[timing] run() total: %.1fs", time.time() - t0)
         return result
 
     def _build_features_serial(

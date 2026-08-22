@@ -13,6 +13,7 @@ from __future__ import annotations
 import gc
 import logging
 import os
+import time
 
 import pandas as pd
 
@@ -226,6 +227,7 @@ def run_training(
 
     cleaner = CleaningPipeline()
     features = FeatureEngineV35()
+    t_start = time.time()
 
     # ── 内存 (2026-08-13 修复): 全量重训 build 阶段 OOM (dim17 峰值贴 commit 上限) ──
     # 根因: 调用方 (scripts/_retrain_legacy_full.py) 在 run_training 全程持有 panel 引用,
@@ -244,6 +246,7 @@ def run_training(
         )
     elif panel is None:
         raise ValueError("run_training: panel 与 panel_path 必须提供其一")
+    logger.info("[timing] panel load: %.1fs", time.time() - t_start)
 
     # ── FeatureSelector (Layer2) — 替代 ICScreener ──
     selector = None
@@ -285,10 +288,12 @@ def run_training(
     # 两板块是独立模型 (独立特征/独立 OOS), 分期只降内存峰值, 不改模型内容.
     # boards 单板时 board=run_train 只清洗该板 (另一板返回空帧, 省内存).
     run_board = boards[0] if len(boards) == 1 else None
+    t_clean = time.time()
     board_dfs = dict(zip(("main", "dual"), cleaner.run_train(panel, board=run_board)))
     board_dfs = {b: board_dfs[b] for b in boards}
     del panel  # run_train 后 panel 不再需要 → 尽早归还内存
     gc.collect()
+    logger.info("[timing] cleaning (run_train): %.1fs", time.time() - t_clean)
     trainer = DualTrackTrainer(model_dir=model_dir)
     results: dict = {}
     for board in boards:
@@ -297,6 +302,7 @@ def run_training(
             logger.warning("[%s] 清洗后无样本, 跳过该板块训练", board)
             continue
         use_xrank = board != "main"  # 仅双创加截面排名 (主板大票定价有效, 截面负贡献)
+        t_feat = time.time()
         df = prepare_board_frame(
             board_df,
             features,
@@ -307,6 +313,8 @@ def run_training(
         # 释放清洗切片: FeatureSelector 峰值期不白占 ~2GB 中间帧
         del board_df
         gc.collect()
+        logger.info("[timing][%s] feature build: %.1fs", board, time.time() - t_feat)
+        t_sel = time.time()
         cols, augmented_df = select_features(
             df,
             board,
@@ -318,9 +326,12 @@ def run_training(
         # 释放中间特征帧 (仅保留增强帧用于训练)
         del df
         gc.collect()
+        logger.info("[timing][%s] feature selection: %.1fs", board, time.time() - t_sel)
+        t_train = time.time()
         board_results = trainer.weekly_retrain(
             {board: augmented_df}, {board: cols}, tag, resume=True
         )
+        logger.info("[timing][%s] model training: %.1fs", board, time.time() - t_train)
         n_features = len(cols)
         del augmented_df, cols
         gc.collect()
