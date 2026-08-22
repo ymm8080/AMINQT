@@ -17,7 +17,6 @@ import argparse
 import datetime as _dt
 import json
 import os
-import sys
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

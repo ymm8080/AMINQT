@@ -16,7 +16,6 @@ import datetime as _dt
 import json
 
 import scripts.run_daily_automation as ma
-
 from scripts.run_daily_automation import (
     _STEP_TIMEOUT_S,
     _STEPS,

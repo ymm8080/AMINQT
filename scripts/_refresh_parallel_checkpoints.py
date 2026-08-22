@@ -160,7 +160,10 @@ def main(force: bool = False) -> int:
         print(f"run_train[{board}]: rows={len(bdf):,}", flush=True)
         t_build = time.time()
         d3 = build_board_slice(cleaner, fe, bdf, board, ckpt)
-        print(f"[timing][{board}] build_board_slice: {time.time() - t_build:.1f}s", flush=True)
+        print(
+            f"[timing][{board}] build_board_slice: {time.time() - t_build:.1f}s",
+            flush=True,
+        )
         latest_date = d3["date"].max()
         print(
             f"[{board}] 检查点已写 {ckpt} | latest={latest_date:%Y-%m-%d} "

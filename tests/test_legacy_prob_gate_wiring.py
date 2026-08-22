@@ -204,9 +204,7 @@ def test_emit_gate_runs_before_topn_truncation(monkeypatch):
 
 def test_apply_prob_gate_groups_gem_star_as_dual(monkeypatch):
     """显式放开 dual (gated_boards 含 dual): GEM/STAR 并入 dual 组过闸, 输出 board 原样."""
-    monkeypatch.setitem(
-        prob_head.LEGACY_PROB_GATE, "gated_boards", ["main", "dual"]
-    )
+    monkeypatch.setitem(prob_head.LEGACY_PROB_GATE, "gated_boards", ["main", "dual"])
     res = pd.DataFrame(
         {"board": ["main", "GEM", "STAR"], "symbol": ["600001", "300001", "688001"]}
     )

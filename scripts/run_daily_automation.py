@@ -200,6 +200,7 @@ def main() -> int:
     # 运行状态文件 (监督方终态判据): 启动先写 running, 结束/中断覆盖为终态.
     _write_state(tag, "running")
     current_step: str | None = None
+
     # Ctrl+C/控制台关闭 → 立即写 interrupted 终态并退出, 不留"无标记裸退出"
     # (那会让监督方永远等不到终态而一直耗 token).
     def _on_sigint(_signum, _frame):
