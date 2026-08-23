@@ -14,15 +14,25 @@
   - _prb_* = 生产口径 + 生产 fail-open 语义 (全截面预测, NaN → 保留) → 诚实结论
 训练/评估与阶段2 完全一致: 扩窗 (每 21 交易日重训, 全史), 特征=prob_head.feature_cols,
 闸加在 t3 门后 pred_mag_10d TOP-5 前, 指标=label_pm_10d_net 实得/命中/≥5%/≥10% + 4 子窗。
+2026-08-22 并行 5 杠杆逐跑 (用户定案, 结案): ① c2c 标签 / ③ ES / ④ 地板 全 REJECT —
+并行概率头回退基线 lr0.05/n200 无 ES (L0 最优); 评估深度仍 TOP-5 (TOP-10 判定走
+_diag_prob_rank_ab.py)。本脚本保留 --lgb/--label/--tag 复跑能力:
+  --lgb k:v,k:v    LGB 参数覆盖 (如 learning_rate:0.05,n_estimators:200 回基线)
+  --label c2c      训练标签改 label_pm_3d_net>=3% (杠杆 ①); 默认 mfe
+  --tag NAME       检查点后缀 (WORM: 各杠杆独立落盘, 互不覆盖)
+每杠杆末尾打印概率质量判词: 全板 walk-forward AUC (mfe 标签 + c2c 标签双口径) +
+IQR 分散度 + ECE 校准 (与 legacy lab 同源判据, 只看概率质量不看 blend)。
 
-用法: python scripts/_diag_parallel_gbm_prod_replay.py
+用法: python scripts/_diag_parallel_gbm_prod_replay.py [--lgb ... --no-es ... --label ... --tag ...]
 注意: 与 daily automation 错峰运行 (双任务并发必 OOM)。
-检查点: data/_diag_replay_wf_pred_<board>.parquet (walk-forward 预测落盘, 崩溃后重跑免重训).
+检查点: data/_diag_replay_wf_pred_<board>[_<tag>].parquet (walk-forward 预测落盘,
+崩溃后重跑免重训; 带 --tag 各杠杆独立). 无 tag 时写固定路径供 rank_ab/quality_ab 读取.
 WORM: data/_diag_parallel_gbm_prod_replay_<ts>.csv/.json
 """
 
 from __future__ import annotations
 
+import argparse
 import gc
 import json
 import os
@@ -34,12 +44,14 @@ import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 from lightgbm import LGBMClassifier
+from sklearn.metrics import roc_auc_score
 
+from app.pipeline1.label_engine import COST, slippage_tier
 from app.pipeline_parallel import prob_head
 from app.pipeline_parallel.calibration import calibrate_mag10d
 from app.pipeline_parallel.config import FUSION, SNIPER
 from app.pipeline_parallel.scoring import pool_score
-from config.settings import DATA_DIR
+from config.settings import DATA_DIR, PROB_GATE
 
 EVAL_DAYS = 250
 TOPN = 5
@@ -50,8 +62,26 @@ REFIT_EVERY = 21
 MARGINS = (0.04, 0.06, 0.08, 0.10)
 
 
-def _load_board(board: str) -> pd.DataFrame | None:
-    """同阶段2 wf: 全特征 + score + mfe_3d + 标签 (行按日期排序)."""
+def _add_mfe_h(df: pd.DataFrame, h: int) -> pd.DataFrame:
+    """生产口径 mfe_h = 窗口(T+2..T+h+1)最高价 / T+1 买入价 - 1 - cost.
+
+    h=3 与 prob_head._add_mfe_3d 逐位一致 (列名同为 mfe_3d), 供 prob5/prob10 头复用.
+    """
+    g = df.groupby("symbol", sort=False)
+    exec_px = g["close_hfq"].shift(-1)
+    shifts = pd.concat(
+        [g["high_hfq"].shift(-off) for off in range(2, h + 2)],
+        axis=1,
+        keys=range(2, h + 2),
+    )
+    slip = df["adv20"].map(slippage_tier)
+    cost_total = COST + 2 * slip
+    df[f"mfe_{h}d"] = shifts.max(axis=1, skipna=False) / exec_px - 1 - cost_total
+    return df
+
+
+def _load_board(board: str, h: int = 3) -> pd.DataFrame | None:
+    """同阶段2 wf: 全特征 + score + mfe_h + 标签 (行按日期排序)."""
     fp = DATA_DIR / f"_diag_stage_{board}_3y.parquet"
     schema = pq.read_schema(str(fp)).names
     need = [
@@ -61,7 +91,14 @@ def _load_board(board: str) -> pd.DataFrame | None:
         and c not in prob_head.META
         and not c.startswith("pred_")
     ]
-    need += ["symbol", "date", "label_pain", "label_pm_3d_net", "label_pm_10d_net"]
+    # h 视界 + 3d(闸) + 10d(实得) 参考标签; 5d 列面板已有 (label_pm_5d_net)
+    need += [
+        "symbol",
+        "date",
+        "label_pain",
+        "label_pm_3d_net",
+        "label_pm_10d_net",
+    ] + ([f"label_pm_{h}d_net"] if h not in (3, 10) else [])
     t = pq.read_table(str(fp), columns=list(dict.fromkeys(need))).to_pandas()
     t["symbol"] = t["symbol"].astype(str)
     t["date"] = pd.to_datetime(t["date"])
@@ -71,7 +108,7 @@ def _load_board(board: str) -> pd.DataFrame | None:
     fu = pool_score(t, FUSION.pool)
     t["score"] = np.maximum(sn.values, fu.values)
     t = t.dropna(subset=["score"])
-    t = prob_head._add_mfe_3d(t)
+    t = _add_mfe_h(t, h)
     return t
 
 
@@ -152,17 +189,106 @@ def _sub_windows(top: pd.DataFrame, days: list, n_sub: int) -> list[dict]:
     return subs
 
 
+def _parse_lgb(s: str) -> dict:
+    """--lgb "learning_rate:0.05,n_estimators:200" → 参数 dict (int/float 按值自动)."""
+    out: dict = {}
+    for kv in s.split(","):
+        kv = kv.strip()
+        if not kv:
+            continue
+        k, _, v = kv.partition(":")
+        if not k or not v:
+            raise SystemExit(f"[error] 无法解析 --lgb 项: {kv!r}")
+        try:
+            out[k.strip()] = int(v)
+        except ValueError:
+            try:
+                out[k.strip()] = float(v)
+            except ValueError:
+                out[k.strip()] = v.strip()
+    return out
+
+
+def _ece(pred: np.ndarray, y: np.ndarray, n_bins: int = 10) -> float:
+    """期望校准误差 (10 等频置信桶 |conf-acc| 加权均值)."""
+    if len(pred) < 50:
+        return float("nan")
+    q = np.unique(
+        np.quantile(pred, np.linspace(0.0, 1.0, n_bins + 1))
+    )
+    idx = np.clip(np.searchsorted(q, pred, side="right") - 1, 0, len(q) - 2)
+    ece = 0.0
+    for b in range(len(q) - 1):
+        m = idx == b
+        if m.sum() == 0:
+            continue
+        conf = pred[m].mean()
+        acc = y[m].mean()
+        ece += (m.sum() / len(pred)) * abs(conf - acc)
+    return float(ece)
+
+
+def _prob_quality_verdict(board, t, dates, prob_ok, pred_wf, h: int = 3) -> dict:
+    """并行 5 杠杆判词 (只看概率质量, 不看 blend): 全板 walk-forward AUC
+    (固定参考标签: mfe_{h}d>=3% 与 label_pm_{h}d_net>=3% 双口径 — 与训练标签无关)
+    + 分散度 IQR + 校准 ECE (评估窗内 prob_ok 行). h=3 复现原判词."""
+    cal = np.isin(t["date"].values, dates[-EVAL_DAYS:])
+    y_mfe = (t[f"mfe_{h}d"] >= ABS_TARGET).astype(float)
+    y_c2c = (t[f"label_pm_{h}d_net"] >= ABS_TARGET).astype(float)
+    p_all = pred_wf.to_numpy()
+    verdict: dict = {}
+    for tag, yv in (("mfe", y_mfe), ("c2c", y_c2c)):
+        ok = cal & prob_ok & np.isfinite(p_all) & yv.notna().to_numpy()
+        if ok.sum() < 100:
+            verdict[tag] = {"n": int(ok.sum()), "auc": float("nan")}
+            continue
+        p = p_all[ok]
+        yy = yv.to_numpy()[ok]
+        verdict[tag] = {
+            "n": int(ok.sum()),
+            "auc": float(roc_auc_score(yy, p)),
+            "iqr": float(np.percentile(p, 75) - np.percentile(p, 25)),
+            "ece": _ece(p, yy),
+        }
+    return verdict
+
+
 def main() -> int:
+    ap = argparse.ArgumentParser(description="并行概率头生产口径复验 + 5 杠杆逐跑")
+    ap.add_argument("--lgb", default="", help="k:v,k:v 覆盖 LGB 参数")
+    ap.add_argument("--label", choices=("mfe", "c2c"), default="mfe",
+                    help="训练标签 (杠杆①)")
+    ap.add_argument("--tag", default="", help="检查点后缀 (WORM 各杠杆独立)")
+    ap.add_argument("--horizon", type=int, choices=(3, 5, 10), default=3,
+                    help="mfe 峰值标签视界 (h=5/10 供 blend 矩阵 prob5/prob10 头)")
+    ap.add_argument("--quality-only", action="store_true",
+                    help="只算概率质量判词 (AUC/IQR/ECE), 跳过下游 TOP-5 闸评估 (5 杠杆专用)")
+    args = ap.parse_args()
+    h = args.horizon
+    lgb_params = dict(prob_head.LGB_PARAMS)
+    lgb_params.update(_parse_lgb(args.lgb))
+    print(
+        f"[cfg] label={args.label} horizon={h}d "
+        f"lgb={ {k: lgb_params[k] for k in ('learning_rate', 'n_estimators')} }",
+        flush=True,
+    )
     rows_out: list[dict] = []
+    quality_out: dict = {}
     for board in ("main", "dual"):
-        t = _load_board(board)
+        t = _load_board(board, h)
         if t is None:
             print(f"[{board}] 面板不足 -> skip", flush=True)
             continue
         dates = np.unique(t["date"].values)
         cal_test = dates[-EVAL_DAYS:]
-        feat_cols = prob_head.feature_cols(t)
-        y_prob = (t["mfe_3d"] >= ABS_TARGET).astype(float)
+        # feature_cols 只排除 mfe_3d; h=5/10 新加的 mfe_{h}d 是未来价标签, 必须剔除
+        # (否则 ① look-ahead 泄漏 ② keep 重复列 → t[col] 返回 2D → verdict 广播崩溃)
+        feat_cols = [
+            c for c in prob_head.feature_cols(t) if not c.startswith("mfe_")
+        ]
+        y_prob = (t[f"mfe_{h}d"] >= ABS_TARGET).astype(float)
+        if args.label == "c2c":
+            y_prob = (t["label_pm_3d_net"] >= ABS_TARGET).astype(float)
         prob_ok = y_prob.notna() & t["label_pain"].notna()
         idx = np.searchsorted(dates, t["date"].values)
 
@@ -178,11 +304,11 @@ def main() -> int:
             "close_hfq",
             "high_hfq",
             "adv20",
-            "mfe_3d",
+            f"mfe_{h}d",
             "label_pain",
             "label_pm_3d_net",
             "label_pm_10d_net",
-        ] + feat_cols
+        ] + ([f"label_pm_{h}d_net"] if h not in (3, 10) else []) + feat_cols
         # 不 copy: t[keep].copy() 触发 pandas block consolidation, 257 列 x 161万行
         # float64 需 3.08GiB 连续块 (2026-08-16 第三次 _ArrayMemoryError 在此);
         # 列选择共享原块引用, 后续 astype 只替换 feat_cols 列块.
@@ -197,7 +323,8 @@ def main() -> int:
         # ---- walk-forward 扩窗重训 (生产配方, 每 21 交易日) ----
         # pred   = 全截面预测 (生产 gate_probabilities 语义, 任何行都给概率)
         # pred_wf = 仅 prob_ok 行 (阶段2 wf 语义, 其余 NaN → 旧闸剔除)
-        ckpt = DATA_DIR / f"_diag_replay_wf_pred_{board}.parquet"
+        suffix = f"_{args.tag}" if args.tag else ""
+        ckpt = DATA_DIR / f"_diag_replay_wf_pred_{board}{suffix}.parquet"
         if ckpt.exists():
             cp = pq.read_table(str(ckpt)).to_pandas()
             pred = pd.Series(cp["pred"].to_numpy(), index=t.index, dtype="float64")
@@ -220,7 +347,9 @@ def main() -> int:
                     tr = ((idx < pos) & prob_ok).to_numpy()
                     x = feat_arr[tr]
                     y = y_prob.loc[tr].to_numpy()
-                    model = LGBMClassifier(**prob_head.LGB_PARAMS)
+                    model = LGBMClassifier(**lgb_params)
+                    # 生产配方 = prob_head 基线 (lr0.05/n200 无 ES; 5 杠杆 ③④ REJECT
+                    # 后已回退, _fit_with_es 不存在). 直连 fit, 与 train_bundle 一致.
                     model.fit(x, y)
                     n_refits += 1
                 te = t["date"].values == d
@@ -240,6 +369,20 @@ def main() -> int:
                 f"测试 {len(cal_test)} 日, 特征 {len(feat_cols)}",
                 flush=True,
             )
+
+        # ---- 概率质量判词 (并行 5 杠杆: 只看 AUC+IQR+ECE, 不看 blend) ----
+        verdict = _prob_quality_verdict(board, t, dates, prob_ok, pred_wf, h)
+        quality_out[board] = verdict
+        for tag, v in verdict.items():
+            print(
+                f"[质量][{board}][{tag}] n={v['n']} AUC={v['auc']:.3f} "
+                f"IQR={v['iqr']:.3f} ECE={v['ece']:.3f}",
+                flush=True,
+            )
+
+        if args.quality_only:
+            print(f"[{board}] --quality-only: 跳过下游 TOP-5 闸评估", flush=True)
+            continue
 
         # ---- 评估 (同阶段2: t3 门 + pred_mag_10d TOP-5, label_pm_10d_net 实得) ----
         work = t[
@@ -320,31 +463,36 @@ def main() -> int:
             )
             print(f"    sub: {sub_s}", flush=True)
 
-    if not rows_out:
+    if not rows_out and not quality_out:
         print("[error] 无任何板块可评估", flush=True)
         return 1
-    df = pd.DataFrame(rows_out)
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-    out = DATA_DIR / f"_diag_parallel_gbm_prod_replay_{ts}.csv"
-    df.to_csv(out, index=False)
-    (DATA_DIR / f"_diag_parallel_gbm_prod_replay_{ts}.json").write_text(
-        json.dumps(
-            {
-                "ts": ts,
-                "eval_days": EVAL_DAYS,
-                "topn": TOPN,
-                "refit_every": REFIT_EVERY,
-                "margins": list(MARGINS),
-                "note": "wfb=阶段2旧口径(rolling20 shift1, 3天look-ahead, NaN剔除); "
-                "prb=生产诚实口径(_base_rate, 只观测≤D-4, NaN保留)",
-                "rows": df.to_dict("records"),
-            },
-            indent=2,
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-    print(f"\n[saved] {out}", flush=True)
+    out = DATA_DIR / f"_diag_parallel_gbm_prod_replay_{ts}.json"
+    df = pd.DataFrame(rows_out) if rows_out else None
+    payload = {
+        "ts": ts,
+        "eval_days": EVAL_DAYS,
+        "topn": TOPN,
+        "refit_every": REFIT_EVERY,
+        "margins": list(MARGINS),
+        "cfg": {
+            "label": args.label,
+            "lgb_overrides": args.lgb,
+            "tag": args.tag,
+            "quality_only": args.quality_only,
+        },
+        "prob_quality": quality_out,
+        "note": "wfb=阶段2旧口径(rolling20 shift1, 3天look-ahead, NaN剔除); "
+        "prb=生产诚实口径(_base_rate, 只观测≤D-4, NaN保留); "
+        "prob_quality=全板walk-forward概率质量判词 (AUC mfe/c2c双标签 + IQR + ECE)",
+    }
+    if df is not None:
+        csv_out = DATA_DIR / f"_diag_parallel_gbm_prod_replay_{ts}.csv"
+        df.to_csv(csv_out, index=False)
+        payload["rows"] = df.to_dict("records")
+        print(f"\n[saved] {csv_out}", flush=True)
+    out.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"[saved] {out}", flush=True)
     return 0
 
 
