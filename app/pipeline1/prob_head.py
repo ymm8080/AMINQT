@@ -29,7 +29,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-from lightgbm import LGBMClassifier
+from lightgbm import LGBMClassifier, callback
 
 from app.pipeline1.label_engine import COST, slippage_tier
 from config.settings import LEGACY_PROB_GATE
@@ -62,12 +62,13 @@ RAW_COLS = {
 # 生产 board 命名兼容: list_generator 双创=GEM/STAR, 内部=dual (同 model_meta.BOARD_TO_TRACK)
 _BOARD_GROUP = {"main": "main", "dual": "dual", "GEM": "dual", "STAR": "dual"}
 
-# 与并行概率头完全一致 (阶段1/2 验证配方, 无早停 → 免疫 legacy 1 树常数坍缩)
+# ③+④ (2026-08-22 定案, WORM 153820): lr 0.03 + n800 + early stop + 地板 50
+# (与并行概率头完全一致; ES 见 _fit_with_es, 地板防 dual 短验证窗塌缩)
 LGB_PARAMS = dict(
     objective="binary",
     num_leaves=31,
-    learning_rate=0.05,
-    n_estimators=200,
+    learning_rate=0.03,
+    n_estimators=800,
     min_child_samples=50,
     subsample=0.8,
     colsample_bytree=0.8,
@@ -116,6 +117,54 @@ def feature_cols(t: pd.DataFrame) -> list[str]:
     ]
 
 
+def _fit_with_es(
+    board: str,
+    model: LGBMClassifier,
+    x: np.ndarray,
+    y: np.ndarray,
+    row_dates: np.ndarray,
+) -> LGBMClassifier:
+    """③+④ early stop + 地板 (08-22 定案, WORM 153820, 镜像 lab _es_fit).
+
+    验证集 = 训练行尾部 val_days 个交易日 (无前瞻); val 样本 < 50 → 无早停普通拟合.
+    早停树数 < es_floor → 固定 es_floor 树重训 (无早停), 防短验证窗早停塌缩成常数.
+    """
+    cfg = LEGACY_PROB_GATE
+    if not cfg.get("es", False):
+        model.fit(x, y)
+        return model
+    dates = np.unique(row_dates)
+    val_days = min(int(cfg["val_days"]), len(dates) - 1)
+    val_mask = np.isin(row_dates, dates[-val_days:])
+    if val_mask.sum() < 50:
+        model.fit(x, y)
+        return model
+    tr_mask = ~val_mask
+    model.fit(
+        x[tr_mask],
+        y[tr_mask],
+        eval_X=x[val_mask],
+        eval_y=y[val_mask],
+        callbacks=[
+            callback.early_stopping(int(cfg["es_patience"])),
+            callback.log_evaluation(0),
+        ],
+    )
+    floor = int(cfg.get("es_floor", 0))
+    if floor > 0:
+        bi = getattr(model, "best_iteration_", None)
+        if bi is not None and bi < floor:
+            print(
+                f"[prob_head] {board} 早停 {bi} 树 < 地板 {floor} → 固定 {floor} 树重训",
+                flush=True,
+            )
+            fresh = model.__class__(**model.get_params())
+            fresh.set_params(n_estimators=floor)
+            fresh.fit(x, y)
+            return fresh
+    return model
+
+
 def train_bundle(board: str, t: pd.DataFrame, trained_through: str) -> Path:
     """全史扩窗训练概率头 → WORM bundle. t 需含全部特征 + mfe_3d + label_pain.
 
@@ -129,7 +178,9 @@ def train_bundle(board: str, t: pd.DataFrame, trained_through: str) -> Path:
     if len(x) < 5000:
         raise ValueError(f"[{board}] 训练样本不足 ({len(x)})")
     model = LGBMClassifier(**LGB_PARAMS)
-    model.fit(x, y.loc[ok].to_numpy())
+    model = _fit_with_es(
+        board, model, x, y.loc[ok].to_numpy(), t.loc[ok, "date"].to_numpy()
+    )
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     path = bundle_dir() / f"{board}_prob_{ts}.joblib"
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -131,6 +131,45 @@ def test_train_load_predict_roundtrip(monkeypatch, tmp_path):
         prob_head.predict(b, t.drop(columns=["f3"]))
 
 
+def _multi_symbol_frame(rng, n_symbols=5, n_days=2000):
+    """多股训练帧: 尾 30 交易日 × 5 股 = 150 val 行 ≥ 50 → 走 ES 路径 (非 plain fit)."""
+    n = n_symbols * n_days
+    t = pd.DataFrame(rng.uniform(-1, 1, (n, 10)), columns=[f"f{i}" for i in range(10)])
+    t["mfe_3d"] = rng.uniform(-0.02, 0.08, n)
+    t["label_pain"] = False
+    t["symbol"] = np.repeat([f"SZ{i:06d}" for i in range(n_symbols)], n_days)
+    t["date"] = np.tile(
+        pd.date_range("2024-01-01", periods=n_days, freq="B").values, n_symbols
+    )
+    return t
+
+
+def test_train_bundle_es_floor_retrains(monkeypatch, tmp_path):
+    """③+④ 地板: 早停树数 < es_floor → 固定地板树重训 (防 dual 短验证窗塌缩)."""
+    monkeypatch.setitem(prob_head.LEGACY_PROB_GATE, "model_dir", str(tmp_path))
+    monkeypatch.setitem(prob_head.LGB_PARAMS, "n_estimators", 5)  # 早停 ≤ 5 树 < 地板
+    monkeypatch.setitem(prob_head.LGB_PARAMS, "num_leaves", 7)
+    prob_head.train_bundle(
+        "main", _multi_symbol_frame(np.random.default_rng(11)), "2024-12-31"
+    )
+    b = prob_head.load_latest("main")
+    assert b["model"].n_estimators == prob_head.LEGACY_PROB_GATE["es_floor"]
+
+
+def test_train_bundle_es_keeps_above_floor(monkeypatch, tmp_path):
+    """③+④ 早停正常 (树数 ≥ 地板) → 保留早停模型不重训, best_iteration_ 已设置."""
+    monkeypatch.setitem(prob_head.LEGACY_PROB_GATE, "model_dir", str(tmp_path))
+    monkeypatch.setitem(prob_head.LGB_PARAMS, "n_estimators", 20)
+    monkeypatch.setitem(prob_head.LGB_PARAMS, "num_leaves", 7)
+    monkeypatch.setitem(prob_head.LEGACY_PROB_GATE, "es_floor", 1)
+    prob_head.train_bundle(
+        "main", _multi_symbol_frame(np.random.default_rng(12)), "2024-12-31"
+    )
+    b = prob_head.load_latest("main")
+    assert b["model"].n_estimators == 20
+    assert getattr(b["model"], "best_iteration_", None) is not None
+
+
 def test_gate_probabilities_stale_bundle_failopen(monkeypatch):
     """bundle 过旧 (> max_stale_days) → None, 不调用 predict."""
     monkeypatch.setitem(prob_head.LEGACY_PROB_GATE, "model_dir", "unused")

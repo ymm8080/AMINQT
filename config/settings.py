@@ -323,6 +323,11 @@ LEGACY_PROB_GATE = {
     "refit_every_days": 21,    # 训练脚本: bundle 年龄 < 此值 → skip (交易日)
     "max_stale_days": 42,      # 短名单侧: bundle 年龄 > 此值 → 大声警告 + 闸失效 (fail-open)
     "model_dir": DATA_DIR / "prob_head_legacy",  # WORM bundle 目录 (<board>_prob_<ts>.joblib)
+    # ③+④ (08-22 定案): lr 0.03 + n800 + early stop + 地板 50 (WORM 153820)
+    "es": True,                # 训练时早停 (训练窗尾隔离 val_days 交易日做验证集)
+    "es_patience": 50,         # early_stopping 耐心
+    "val_days": 30,            # 验证集 = 训练尾 30 个交易日
+    "es_floor": 50,            # 早停树数 < 此地板 → 固定 floor 树重训 (防 dual 塌缩)
 }
 
 # ── 滞涨标记 (2026-08-19 用户定案: legacy+parallel 双交付) ──
