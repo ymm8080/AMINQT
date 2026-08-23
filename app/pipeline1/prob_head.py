@@ -178,7 +178,9 @@ def train_bundle(board: str, t: pd.DataFrame, trained_through: str) -> Path:
     if len(x) < 5000:
         raise ValueError(f"[{board}] 训练样本不足 ({len(x)})")
     model = LGBMClassifier(**LGB_PARAMS)
-    model = _fit_with_es(board, model, x, y.loc[ok].to_numpy(), t.loc[ok, "date"].to_numpy())
+    model = _fit_with_es(
+        board, model, x, y.loc[ok].to_numpy(), t.loc[ok, "date"].to_numpy()
+    )
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     path = bundle_dir() / f"{board}_prob_{ts}.joblib"
     path.parent.mkdir(parents=True, exist_ok=True)

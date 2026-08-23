@@ -166,9 +166,7 @@ def _build_raw_labels(dfb: pd.DataFrame) -> pd.DataFrame:
     label_pm_{h}d_net = close(T+h+1)/close(T+1) - (COST+2×分层滑点)
     (不整调 build_labels 免 ~40 列瞬时帧的内存 churn).
     """
-    raw = dfb[
-        ["symbol", "date", "close_hfq", "high_hfq", "low_hfq", "amount"]
-    ].copy()
+    raw = dfb[["symbol", "date", "close_hfq", "high_hfq", "low_hfq", "amount"]].copy()
     raw["symbol"] = raw["symbol"].astype(str)
     for h in HORIZONS:
         _add_mfe_h(raw, h)
@@ -176,9 +174,7 @@ def _build_raw_labels(dfb: pd.DataFrame) -> pd.DataFrame:
         exec_px = g["close_hfq"].shift(-1)
         future_close = g["close_hfq"].shift(-(h + 1))
         slip = raw["adv20"].map(slippage_tier)
-        raw[f"label_pm_{h}d_net"] = (
-            future_close / exec_px - 1 - (LABEL_COST + 2 * slip)
-        )
+        raw[f"label_pm_{h}d_net"] = future_close / exec_px - 1 - (LABEL_COST + 2 * slip)
     pain = LabelEngine.build_path_labels(raw)["label_pain"]
     if "is_suspended" in dfb.columns:
         rs = (
@@ -341,8 +337,18 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--slice", type=int, default=420, help="面板切片交易日数")
     ap.add_argument("--eval", type=int, default=125, help="评估的已实现决策日数")
-    ap.add_argument("--tag", type=str, default="c2c_v1", help="本次 prob 配置标签 (区分 walk-forward 检查点)")
-    ap.add_argument("--cache-dir", type=str, default=None, help="特征缓存目录 (默认 <DATA_DIR>/_diag_prob_lab_cache)")
+    ap.add_argument(
+        "--tag",
+        type=str,
+        default="c2c_v1",
+        help="本次 prob 配置标签 (区分 walk-forward 检查点)",
+    )
+    ap.add_argument(
+        "--cache-dir",
+        type=str,
+        default=None,
+        help="特征缓存目录 (默认 <DATA_DIR>/_diag_prob_lab_cache)",
+    )
     ap.add_argument("--rebuild", action="store_true", help="忽略特征缓存强制重建")
     ap.add_argument(
         "--quick",
@@ -374,7 +380,7 @@ def main() -> int:
         type=str,
         default=None,
         help="LGBM 参数覆盖 k:v,k:v 逗号分隔 (无空格/引号, 防 shell 转义), "
-        '如 learning_rate:0.03,n_estimators:800 (默认 prob_head.LGB_PARAMS; 仅改列出的键)',
+        "如 learning_rate:0.03,n_estimators:800 (默认 prob_head.LGB_PARAMS; 仅改列出的键)",
     )
     ap.add_argument(
         "--early-stop",
@@ -397,7 +403,9 @@ def main() -> int:
     )
     args = ap.parse_args()
     wf_params = {**prob_head.LGB_PARAMS, **_parse_lgb_override(args.lgb)}
-    cache_dir = Path(args.cache_dir) if args.cache_dir else DATA_DIR / "_diag_prob_lab_cache"
+    cache_dir = (
+        Path(args.cache_dir) if args.cache_dir else DATA_DIR / "_diag_prob_lab_cache"
+    )
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     t0 = time.time()
@@ -497,7 +505,10 @@ def main() -> int:
                 try:
                     pred = predictor.predict(day_feat, board)
                 except Exception as exc:
-                    print(f"[{board}] {pd.Timestamp(d).date()} predict err: {exc}", flush=True)
+                    print(
+                        f"[{board}] {pd.Timestamp(d).date()} predict err: {exc}",
+                        flush=True,
+                    )
                     continue
                 if pred.empty:
                     continue
@@ -531,7 +542,10 @@ def main() -> int:
                         flush=True,
                     )
         else:
-            print(f"[{board}] quick 模式: 跳过候选池/排名 A/B (只算 prob 质量判词)", flush=True)
+            print(
+                f"[{board}] quick 模式: 跳过候选池/排名 A/B (只算 prob 质量判词)",
+                flush=True,
+            )
 
         # ---- 2) 双标签: 仅特征新建路径 (缓存帧已带标签, 跨杠杆复用) ----
         if not use_cache:
@@ -583,8 +597,12 @@ def main() -> int:
         del feat
         gc.collect()
 
-        ckpt_tag = args.tag if not args.calib else f"{args.tag}_calib{args.calib_method}"
-        ckpt = DATA_DIR / f"_diag_legacy_prob_lab_{board}_{ckpt_tag}_e{args.eval}.parquet"
+        ckpt_tag = (
+            args.tag if not args.calib else f"{args.tag}_calib{args.calib_method}"
+        )
+        ckpt = (
+            DATA_DIR / f"_diag_legacy_prob_lab_{board}_{ckpt_tag}_e{args.eval}.parquet"
+        )
         if ckpt.exists():
             wf = pd.read_parquet(str(ckpt))
             print(f"[{board}] walk-forward 从检查点恢复 ({len(wf):,} 行)", flush=True)
@@ -606,18 +624,34 @@ def main() -> int:
                         tr_m = (idx < pos - (h + 1)) & ok_mfe_arr[h]
                         model = LGBMClassifier(**wf_params)
                         if args.early_stop:
-                            model = _fit_early_stop(model, x_all, y_mfe[h], idx,
-                                                    board_dates_arr, pos, tr_m,
-                                                    args.val_days, args.es_floor)
+                            model = _fit_early_stop(
+                                model,
+                                x_all,
+                                y_mfe[h],
+                                idx,
+                                board_dates_arr,
+                                pos,
+                                tr_m,
+                                args.val_days,
+                                args.es_floor,
+                            )
                         else:
                             model.fit(x_all[tr_m], y_mfe[h].loc[tr_m].to_numpy())
                         models_mfe[h] = model
                     tr_c = (idx < pos - 4) & ok_c2c_arr
                     model_c2c = LGBMClassifier(**wf_params)
                     if args.early_stop:
-                        model_c2c = _fit_early_stop(model_c2c, x_all, y_c2c, idx,
-                                                    board_dates_arr, pos, tr_c,
-                                                    args.val_days, args.es_floor)
+                        model_c2c = _fit_early_stop(
+                            model_c2c,
+                            x_all,
+                            y_c2c,
+                            idx,
+                            board_dates_arr,
+                            pos,
+                            tr_c,
+                            args.val_days,
+                            args.es_floor,
+                        )
                     else:
                         model_c2c.fit(x_all[tr_c], y_c2c.loc[tr_c].to_numpy())
                     n_refits += 1
@@ -650,8 +684,7 @@ def main() -> int:
                 if not te.any():
                     continue
                 p_mfe = {
-                    h: models_mfe[h].predict_proba(x_all[te])[:, 1]
-                    for h in HORIZONS
+                    h: models_mfe[h].predict_proba(x_all[te])[:, 1] for h in HORIZONS
                 }
                 p_c2c = model_c2c.predict_proba(x_all[te])[:, 1]
                 if args.calib:
@@ -664,9 +697,7 @@ def main() -> int:
                 row = {"pred_c2c": p_c2c}
                 for h in HORIZONS:
                     row[f"pred_mfe_{h}d"] = p_mfe[h]
-                wf_rows.append(
-                    meta.loc[te].assign(**row).reset_index(drop=True)
-                )
+                wf_rows.append(meta.loc[te].assign(**row).reset_index(drop=True))
                 if (k + 1) % 25 == 0 or k == len(eval_days) - 1:
                     print(
                         f"[{board}] wf {k + 1}/{len(eval_days)} "
@@ -675,7 +706,10 @@ def main() -> int:
                     )
             wf = pd.concat(wf_rows, ignore_index=True)
             wf.to_parquet(ckpt)
-            print(f"[{board}] walk-forward 完成: {n_refits} 次重训 → {ckpt.name}", flush=True)
+            print(
+                f"[{board}] walk-forward 完成: {n_refits} 次重训 → {ckpt.name}",
+                flush=True,
+            )
 
         # ---- 3) AUC + 分散度 (评估日全截面行, 非仅池内) ----
         wf["date"] = pd.to_datetime(wf["date"])
@@ -697,17 +731,31 @@ def main() -> int:
         for h in HORIZONS:
             # 决策键: mfe_h 头对同视界 c2c 可兑现达标的 AUC (才是排名键要的)
             auc_rows += [
-                {"model": f"mfe{h}", "target": f"c2c{h}", "auc": _auc(wl[f"pred_mfe_{h}d"], y_c2c_out[h])},
-                {"model": f"mfe{h}", "target": f"mfe{h}", "auc": _auc(wl[f"pred_mfe_{h}d"], y_mfe_out[h])},
+                {
+                    "model": f"mfe{h}",
+                    "target": f"c2c{h}",
+                    "auc": _auc(wl[f"pred_mfe_{h}d"], y_c2c_out[h]),
+                },
+                {
+                    "model": f"mfe{h}",
+                    "target": f"mfe{h}",
+                    "auc": _auc(wl[f"pred_mfe_{h}d"], y_mfe_out[h]),
+                },
             ]
         auc_rows += [
-            {"model": "c2c", "target": "c2c3", "auc": _auc(wl["pred_c2c"], y_c2c_out[3])},
-            {"model": "c2c", "target": "mfe3", "auc": _auc(wl["pred_c2c"], y_mfe_out[3])},
+            {
+                "model": "c2c",
+                "target": "c2c3",
+                "auc": _auc(wl["pred_c2c"], y_c2c_out[3]),
+            },
+            {
+                "model": "c2c",
+                "target": "mfe3",
+                "auc": _auc(wl["pred_c2c"], y_mfe_out[3]),
+            },
         ]
         board_auc[board] = auc_rows
-        print(
-            f"\n===== {board} | AUC (pred vs 真实标签) =====", flush=True
-        )
+        print(f"\n===== {board} | AUC (pred vs 真实标签) =====", flush=True)
         print(
             f"  {'model':<7}{'target':<8}{'AUC':>8}",
             flush=True,
@@ -716,8 +764,7 @@ def main() -> int:
             print(f"  {a['model']:<7}{a['target']:<8}{a['auc']:>8.4f}", flush=True)
 
         disp_rows = [
-            {"model": f"mfe{h}", **_dispersion(wl[f"pred_mfe_{h}d"])}
-            for h in HORIZONS
+            {"model": f"mfe{h}", **_dispersion(wl[f"pred_mfe_{h}d"])} for h in HORIZONS
         ] + [{"model": "c2c", **_dispersion(wl["pred_c2c"])}]
         board_disp[board] = disp_rows
         print(f"===== {board} | 分散度 =====", flush=True)
@@ -771,11 +818,7 @@ def main() -> int:
         if not args.quick:
             # ---- 4) 排名键头对头 (交付池 = 非 pain 排除行) ----
             sub = pd.DataFrame(
-                [
-                    r
-                    for r in detail
-                    if r["board"] == board and not r["pain_excluded"]
-                ]
+                [r for r in detail if r["board"] == board and not r["pain_excluded"]]
             )
             sub["date"] = pd.to_datetime(sub["date"])
             sub = sub.merge(wf, on=["symbol", "date"], how="left")
@@ -804,8 +847,14 @@ def main() -> int:
             rank_keys["mag_x_c2c"] = "rank_mag_x_c2c"
             rank_rows = _rank_ab(sub, rank_keys)
             board_rank[board] = rank_rows
-            print(f"===== {board} | 排名键 TOP-{DEPTHS[0]} 已实现 T+10 c2c 净收益 =====", flush=True)
-            print(f"  {'key':<14}{'depth':>5}{'命中':>7} {'实得':>8}  子窗实得", flush=True)
+            print(
+                f"===== {board} | 排名键 TOP-{DEPTHS[0]} 已实现 T+10 c2c 净收益 =====",
+                flush=True,
+            )
+            print(
+                f"  {'key':<14}{'depth':>5}{'命中':>7} {'实得':>8}  子窗实得",
+                flush=True,
+            )
             for r_ in rank_rows:
                 subs = "  ".join(
                     f"{w['win']}:{w['mean']:+.2%}" for w in r_["sub_windows"]

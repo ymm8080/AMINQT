@@ -89,8 +89,14 @@ REGISTRY_PATH = str(data_others_path("data/factor_registry/feature_registry.json
 # 生产 train_runner 在 select_features 里后注入 brute 族列, prepare_board_frame 不含 →
 # 检查点必须存注入后的完整帧, 否则重跑仍缺列.
 BUILT_FRAME_CP = data_others_path("diag/legacy_bagging_built_frame_main.feather")
-CP_COLS = ["symbol", "date", "is_suspended", "close_hfq",
-           "label_pm_10d_net", "label_pm_3d_cls_net"]
+CP_COLS = [
+    "symbol",
+    "date",
+    "is_suspended",
+    "close_hfq",
+    "label_pm_10d_net",
+    "label_pm_3d_cls_net",
+]
 
 
 def wait_for_ram(tag: str) -> None:
@@ -216,9 +222,7 @@ def window_topn_excess(
 
 
 # ── 评估 (3d_cls: AUC + prob 唯一值 + 子窗 AUC) ──
-def cls_eval(
-    df: pd.DataFrame, prob_col: str, label_col: str, k: int = 3
-) -> dict:
+def cls_eval(df: pd.DataFrame, prob_col: str, label_col: str, k: int = 3) -> dict:
     """OOS test 段: AUC + prob 唯一值数 + 子窗 AUC."""
     sub = df[df[label_col].notna()].copy()
     if len(sub) < 20 or sub[label_col].nunique() < 2:
@@ -604,9 +608,7 @@ def run_head(
             f"[{head}] OOS test 段不足: rows={len(test)} days={test['date'].nunique()}"
         )
     w = DualTrackTrainer.time_weights(train, HALF_LIFE)
-    total_days = (
-        train["date"].nunique() + es["date"].nunique() + test["date"].nunique()
-    )
+    total_days = train["date"].nunique() + es["date"].nunique() + test["date"].nunique()
     print(
         f"[{head}] split train={train['date'].nunique()}d es={es['date'].nunique()}d "
         f"test={test['date'].nunique()}d total={total_days} label={label} "
@@ -631,7 +633,16 @@ def run_head(
         tag = f"{head}/{key}"
         print(f"[{i + 1}/{len(combos)}] {tag} seed={RANDOM_STATE} ...", flush=True)
         rec, n_trees = fit_and_eval(
-            head, train, es, test, feature_cols, w, realized, label, frac, freq,
+            head,
+            train,
+            es,
+            test,
+            feature_cols,
+            w,
+            realized,
+            label,
+            frac,
+            freq,
             RANDOM_STATE,
         )
         results[key] = rec
@@ -658,14 +669,26 @@ def run_head(
         )
     if not skip_perturb:
         perturb_keys = list(dict.fromkeys([ref_key] + ranked[:2]))
-        print(f"\n[{head}] [perturb] seed={PERTURB_SEED} combos={perturb_keys}", flush=True)
+        print(
+            f"\n[{head}] [perturb] seed={PERTURB_SEED} combos={perturb_keys}",
+            flush=True,
+        )
         for k in perturb_keys:
             if k == ref_key:
                 frac, freq = None, None
             else:
                 frac, freq = _parse_key(k)
             rec, _nt = fit_and_eval(
-                head, train, es, test, feature_cols, w, realized, label, frac, freq,
+                head,
+                train,
+                es,
+                test,
+                feature_cols,
+                w,
+                realized,
+                label,
+                frac,
+                freq,
                 PERTURB_SEED,
             )
             perturbation[k] = rec
@@ -685,11 +708,13 @@ def _parse_key(key: str) -> tuple[float, int]:
     return float(fs), int(qs[1:])
 
 
-def _print_rec(head: str, rec: dict, key: str, n_trees: int, t0: float,
-               suffix: str = "") -> None:
+def _print_rec(
+    head: str, rec: dict, key: str, n_trees: int, t0: float, suffix: str = ""
+) -> None:
     if head.endswith("cls"):
-        subw = ",".join(f"{s:+.4f}" if np.isfinite(s) else "-"
-                       for s in rec.get("subwindow_auc", []))
+        subw = ",".join(
+            f"{s:+.4f}" if np.isfinite(s) else "-" for s in rec.get("subwindow_auc", [])
+        )
         print(
             f"    -> {key} auc={rec['auc']:.4f} nuniq={rec['prob_nunique']} "
             f"trees={n_trees} sub_auc=[{subw}] {suffix} ({time.time() - t0:.0f}s)",
@@ -735,19 +760,25 @@ def _inject_brute_cols(frame: pd.DataFrame, missing: list[str]) -> pd.DataFrame:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--max-n", type=int, default=0, help=">0 时每头只跑前 N 组合 (冒烟)")
+    ap.add_argument(
+        "--max-n", type=int, default=0, help=">0 时每头只跑前 N 组合 (冒烟)"
+    )
     ap.add_argument("--skip-perturb", action="store_true")
     ap.add_argument("--heads", default=",".join(HEADS), help="逗号分隔头列表")
     ap.add_argument(
-        "--test-window", type=int, default=60,
+        "--test-window",
+        type=int,
+        default=60,
         help="OOS test 段日数 (60=生产; 125 干净段确认; 仅本脚本评估, 不动生产 split_window)",
     )
     ap.add_argument(
-        "--combos", default=None,
+        "--combos",
+        default=None,
         help="只跑指定组合, 逗号分隔 (如 ref,f0.9_q2,f0.7_q5); 默认全网格",
     )
     ap.add_argument(
-        "--use-built-frame", default=None,
+        "--use-built-frame",
+        default=None,
         help="载入已构建特征帧 (feather, 含 brute 注入), 跳过 ~55min 面板构建",
     )
     args = ap.parse_args()
@@ -826,9 +857,7 @@ def main() -> int:
         gc.collect()
         miss = [c for c in feature_cols if c not in frame.columns]
         if miss:
-            raise RuntimeError(
-                f"注入后仍缺 {len(miss)} 列: {miss[:10]}"
-            )
+            raise RuntimeError(f"注入后仍缺 {len(miss)} 列: {miss[:10]}")
     print(f"[feats] {len(feature_cols)} 列 = {MAIN_BUNDLE}", flush=True)
 
     # ── 5) 实得 (10d 排名键口径, 仅 10d_reg 用) ──
@@ -871,8 +900,13 @@ def main() -> int:
             else [c.strip() for c in args.combos.split(",") if c.strip()]
         )
         results, perturb, verdict, combos, meta = run_head(
-            head, frame, feature_cols, realized, t0,
-            max_n=args.max_n, skip_perturb=args.skip_perturb,
+            head,
+            frame,
+            feature_cols,
+            realized,
+            t0,
+            max_n=args.max_n,
+            skip_perturb=args.skip_perturb,
             test_window=args.test_window,
             combos_filter=combos_filter,
         )
@@ -896,7 +930,9 @@ def main() -> int:
                 "bagging_freq": list(GRID_FREQ),
                 "seed": RANDOM_STATE,
                 "perturb_seed": PERTURB_SEED,
-                "num_leaves": {h: NUM_LEAVES_OVERRIDE.get(("main", h), 31) for h in heads},
+                "num_leaves": {
+                    h: NUM_LEAVES_OVERRIDE.get(("main", h), 31) for h in heads
+                },
             },
             "ref": "无 bagging (生产现状)",
             "oos_days": None,

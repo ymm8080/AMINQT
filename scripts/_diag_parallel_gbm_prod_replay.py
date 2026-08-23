@@ -51,7 +51,7 @@ from app.pipeline_parallel import prob_head
 from app.pipeline_parallel.calibration import calibrate_mag10d
 from app.pipeline_parallel.config import FUSION, SNIPER
 from app.pipeline_parallel.scoring import pool_score
-from config.settings import DATA_DIR, PROB_GATE
+from config.settings import DATA_DIR
 
 EVAL_DAYS = 250
 TOPN = 5
@@ -213,9 +213,7 @@ def _ece(pred: np.ndarray, y: np.ndarray, n_bins: int = 10) -> float:
     """期望校准误差 (10 等频置信桶 |conf-acc| 加权均值)."""
     if len(pred) < 50:
         return float("nan")
-    q = np.unique(
-        np.quantile(pred, np.linspace(0.0, 1.0, n_bins + 1))
-    )
+    q = np.unique(np.quantile(pred, np.linspace(0.0, 1.0, n_bins + 1)))
     idx = np.clip(np.searchsorted(q, pred, side="right") - 1, 0, len(q) - 2)
     ece = 0.0
     for b in range(len(q) - 1):
@@ -256,13 +254,22 @@ def _prob_quality_verdict(board, t, dates, prob_ok, pred_wf, h: int = 3) -> dict
 def main() -> int:
     ap = argparse.ArgumentParser(description="并行概率头生产口径复验 + 5 杠杆逐跑")
     ap.add_argument("--lgb", default="", help="k:v,k:v 覆盖 LGB 参数")
-    ap.add_argument("--label", choices=("mfe", "c2c"), default="mfe",
-                    help="训练标签 (杠杆①)")
+    ap.add_argument(
+        "--label", choices=("mfe", "c2c"), default="mfe", help="训练标签 (杠杆①)"
+    )
     ap.add_argument("--tag", default="", help="检查点后缀 (WORM 各杠杆独立)")
-    ap.add_argument("--horizon", type=int, choices=(3, 5, 10), default=3,
-                    help="mfe 峰值标签视界 (h=5/10 供 blend 矩阵 prob5/prob10 头)")
-    ap.add_argument("--quality-only", action="store_true",
-                    help="只算概率质量判词 (AUC/IQR/ECE), 跳过下游 TOP-5 闸评估 (5 杠杆专用)")
+    ap.add_argument(
+        "--horizon",
+        type=int,
+        choices=(3, 5, 10),
+        default=3,
+        help="mfe 峰值标签视界 (h=5/10 供 blend 矩阵 prob5/prob10 头)",
+    )
+    ap.add_argument(
+        "--quality-only",
+        action="store_true",
+        help="只算概率质量判词 (AUC/IQR/ECE), 跳过下游 TOP-5 闸评估 (5 杠杆专用)",
+    )
     args = ap.parse_args()
     h = args.horizon
     lgb_params = dict(prob_head.LGB_PARAMS)
@@ -283,9 +290,7 @@ def main() -> int:
         cal_test = dates[-EVAL_DAYS:]
         # feature_cols 只排除 mfe_3d; h=5/10 新加的 mfe_{h}d 是未来价标签, 必须剔除
         # (否则 ① look-ahead 泄漏 ② keep 重复列 → t[col] 返回 2D → verdict 广播崩溃)
-        feat_cols = [
-            c for c in prob_head.feature_cols(t) if not c.startswith("mfe_")
-        ]
+        feat_cols = [c for c in prob_head.feature_cols(t) if not c.startswith("mfe_")]
         y_prob = (t[f"mfe_{h}d"] >= ABS_TARGET).astype(float)
         if args.label == "c2c":
             y_prob = (t["label_pm_3d_net"] >= ABS_TARGET).astype(float)
@@ -296,19 +301,23 @@ def main() -> int:
         # 因 int64 块拷贝 201MiB 分配失败 (_ArrayMemoryError) 崩溃.
         # 只留训练/评估所需列; 特征列统一 float32 (与循环内 to_numpy(dtype="float32")
         # 位级一致, 不改变任何数值); 价格列供 _prod_base_series/_base_rate 使用.
-        keep = [
-            "symbol",
-            "date",
-            "board",
-            "score",
-            "close_hfq",
-            "high_hfq",
-            "adv20",
-            f"mfe_{h}d",
-            "label_pain",
-            "label_pm_3d_net",
-            "label_pm_10d_net",
-        ] + ([f"label_pm_{h}d_net"] if h not in (3, 10) else []) + feat_cols
+        keep = (
+            [
+                "symbol",
+                "date",
+                "board",
+                "score",
+                "close_hfq",
+                "high_hfq",
+                "adv20",
+                f"mfe_{h}d",
+                "label_pain",
+                "label_pm_3d_net",
+                "label_pm_10d_net",
+            ]
+            + ([f"label_pm_{h}d_net"] if h not in (3, 10) else [])
+            + feat_cols
+        )
         # 不 copy: t[keep].copy() 触发 pandas block consolidation, 257 列 x 161万行
         # float64 需 3.08GiB 连续块 (2026-08-16 第三次 _ArrayMemoryError 在此);
         # 列选择共享原块引用, 后续 astype 只替换 feat_cols 列块.

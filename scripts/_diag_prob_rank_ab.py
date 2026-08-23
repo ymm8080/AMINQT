@@ -133,7 +133,9 @@ def _sub_windows(top: pd.DataFrame, days: list, n_sub: int) -> list[dict]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="并行排名键 A/B (blend vs mag, 3/5/10 深度)")
+    ap = argparse.ArgumentParser(
+        description="并行排名键 A/B (blend vs mag, 3/5/10 深度)"
+    )
     ap.add_argument("--prob3-tag", default="l0", help="prob3 检查点后缀 (生产 3d 头)")
     ap.add_argument("--prob5-tag", default="h5", help="prob5 检查点后缀 (5d 头)")
     ap.add_argument("--prob10-tag", default="h10", help="prob10 检查点后缀 (10d 头)")
@@ -166,7 +168,9 @@ def main() -> int:
             suffix = f"_{ptag}" if ptag else ""
             ckpt = DATA_DIR / f"_diag_replay_wf_pred_{board}{suffix}.parquet"
             if not ckpt.exists():
-                print(f"[{board}] 无 {colname} 检查点 {ckpt.name} -> 跳过该列", flush=True)
+                print(
+                    f"[{board}] 无 {colname} 检查点 {ckpt.name} -> 跳过该列", flush=True
+                )
                 continue
             cp = pq.read_table(str(ckpt)).to_pandas()
             prob_cols[colname] = pd.Series(
@@ -256,7 +260,11 @@ def main() -> int:
             f"闸 +{MARGIN:.2f}) =====",
             flush=True,
         )
-        for topn in (3, 5, 10):  # 08-22 用户定案: rank A/B 看 blend vs mag 在 3/5/10 深度
+        for topn in (
+            3,
+            5,
+            10,
+        ):  # 08-22 用户定案: rank A/B 看 blend vs mag 在 3/5/10 深度
             print(f"--- TOP-{topn} ---", flush=True)
             for gname, g, key in combos:
                 r, top = _eval_topn(g, key, topn, days)
