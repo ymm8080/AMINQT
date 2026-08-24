@@ -5,7 +5,7 @@ Pipeline-1 每日选股清单生成器 (DESIGN §14.5, §14.6, [E7] 动态准入
 [E11] Bear 模式: 连跌 3 日触发, 收紧准入 (prob_up≥0.65, ret≥3×COST), 半仓.
 [E10] 破净资产: SSE 破净比 > 12% → 全仓.
 [P25.1] list_mode = 'normal' / 'bear' / 'value' (E10, 破净价值)
-[E2] 痛苦预警: pain_prob > 分板块上限 (LEGACY_ENTRY_GATE.pain_max, main 0.5 / dual 0.4)
+[E2] 痛苦预警: pain_prob > 分板块上限 (LEGACY_ENTRY_GATE.pain_max, main 撤闸=1.0 / dual 0.4)
       → 剔除 (在 score 中自然惩罚, 不清除条目)
 [E1] 分位数: pred_q10..q90 + uncertainty_width 列传递至清单以供仓位决策
 """

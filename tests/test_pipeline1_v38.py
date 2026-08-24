@@ -667,11 +667,12 @@ class TestDynamicEntry:
         assert sorted(passed["symbol"]) == ["300001", "600001"]
 
     def test_pain_max_dual_only(self):
-        """分板块疼痛闸 (2026-08-14 全量 250d OOS 定案, LEGACY_ENTRY_GATE.pain_max):
-        dual(GEM/STAR) pain≤0.4 / main pain≤0.5. 叠加边际后 命中 66.3→75.3% /
-        实得 +6.66→+7.39% (出票日 177→76 宁缺毋滥); 0.3 过严崩勿再收.
+        """分板块疼痛闸 (2026-08-14 定案 + 2026-08-24 125d 回放重定):
+        dual(GEM/STAR) pain≤0.4; main 撤闸 (0.5→1.0 等效关, pain_off top5 命中
+        50.3→52.2% / 实得 +3.53→+5.03% / ≥10% 23.5→27.4%). 叠加边际后 命中
+        66.3→75.3% / 实得 +6.66→+7.39% (出票日 177→76 宁缺毋滥); 0.3 过严崩勿再收.
 
-        判别用例: dual pain 0.45 (0.4 下剔) vs main pain 0.45 (0.5 下过).
+        判别用例: dual pain 0.45 (0.4 下剔) vs main pain 0.60 (撤闸下过).
         """
         cands = _cands(
             [
@@ -718,9 +719,9 @@ class TestDynamicEntry:
         gen = ListGenerator(entry_prob=0.60)
         scored = gen.compute_scores(cands)
         passed = gen.entry_filter(scored, market_state="range")
-        # 600001: pain 0.45 ≤ main 0.5 → 过; 600002: 0.6 > 0.5 → 剔
+        # 600001: pain 0.45 → 过 (main 撤闸); 600002: 0.60 → 过 (main 撤闸, 等效 1.0)
         # 300001: pain 0.35 ≤ dual 0.4 → 过; 300002: 0.45 > 0.4 → 剔
-        assert sorted(passed["symbol"]) == ["300001", "600001"]
+        assert sorted(passed["symbol"]) == ["300001", "600001", "600002"]
 
     def test_announce_blacklist_hard_excludes(self):
         """announce_score == -1.0 (公告事件窗禁买标记) → 硬剔除, 非仅 ×0.7 惩罚.
