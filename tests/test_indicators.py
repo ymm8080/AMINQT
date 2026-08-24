@@ -265,7 +265,7 @@ class TestDualTrackTrainer:
         assert "3d_reg" in oos["ics"]
 
     def test_calibrators_multihorizon(self):
-        """fit_calibrator 产出 {3,5} 校准器字典 (1d/2d 已删) + 3d 别名."""
+        """fit_calibrator 产出 {3,5} 校准器字典 (1d/2d 已删) + 3d 别名 + reg 残差 CDF."""
         import app.pipeline1.dual_track_trainer as dtt
 
         dtt.LGB_PARAMS_REG["n_estimators"] = 10
@@ -273,18 +273,24 @@ class TestDualTrackTrainer:
         dtt.ES_PATIENCE = 3
         rng = np.random.default_rng(3)
         dates = pd.bdate_range("2023-01-02", periods=500)
-        f = rng.normal(size=500)
-        df = pd.DataFrame(
-            {
-                "date": dates,
-                "symbol": "600519",
-                "f1": f,
-                "label_1d": f * 0.01 + rng.normal(0, 0.01, 500),
-                "label_2d": rng.normal(0, 0.015, 500),
-                "label_3d": rng.normal(0, 0.02, 500),
-                "label_5d": rng.normal(0, 0.03, 500),
-            }
-        )
+        # 3 只股票: calib 段 (20 日×3) = 60 行, 达到 reg 残差 30 行下限
+        frames = []
+        for sym in ("600519", "000001", "300750"):
+            f = rng.normal(size=500)
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "date": dates,
+                        "symbol": sym,
+                        "f1": f,
+                        "label_1d": f * 0.01 + rng.normal(0, 0.01, 500),
+                        "label_2d": rng.normal(0, 0.015, 500),
+                        "label_3d": rng.normal(0, 0.02, 500),
+                        "label_5d": rng.normal(0, 0.03, 500),
+                    }
+                )
+            )
+        df = pd.concat(frames, ignore_index=True)
         df["label_cls"] = (df["label_1d"] > 0.005).astype(float)
         for k in (2, 3, 5):
             df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > 0.005).astype(float)
@@ -295,3 +301,9 @@ class TestDualTrackTrainer:
         assert set(trained["calibrators"]) == {3, 5}
         assert trained["calibrator"] is trained["calibrators"][3]
         assert cal is trained["calibrator"]
+        # [08-24] reg 残差 CDF 已存 (calib 段 >30 行), 升序 + 有限
+        for k in (3, 5):
+            resid = trained[f"reg_resid_{k}d"]
+            assert len(resid) >= 30
+            assert np.isfinite(resid).all()
+            assert (np.diff(resid) >= 0).all()

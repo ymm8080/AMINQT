@@ -725,6 +725,26 @@ class DualTrackTrainer:
                 continue
             raw = model.predict_proba(np.nan_to_num(calib[cols].values, nan=0.0))[:, 1]
             calibrators[k] = ProbCalibrator(method="platt").fit(raw, calib[label].values)
+        # [08-24] 回归残差派生概率 (prob_up 生产化): 每视界存 calib 段回归残差,
+        # 推理端 prob_up_kd = P(ret>CLS_THRESHOLD|pred) = 1 - F_e(TH - pred_ret).
+        # 与 cls 校准器同物理隔离/模型一致 (08-24 原型: cls 头 test 段 IC≈0/负,
+        # reg 残差概率继承回归信号, main 10d +0.105 vs cls -0.136). 旧 bundle 无
+        # reg_resid_* → 推理端回退 Platt cls.
+        for k in LABEL_HORIZONS:
+            kind_reg = f"{k}d_reg"
+            if kind_reg not in trained["models"]:
+                continue  # 该视界未训练回归头 → 无残差
+            reg_model, reg_label = trained["models"][kind_reg]
+            calib = trained["segs"]["calib"].dropna(subset=[reg_label])
+            if len(calib) < 30:
+                continue
+            r = reg_model.predict(
+                np.nan_to_num(calib[trained["feature_cols"]].values, nan=0.0)
+            )
+            e = (calib[reg_label].values - r).astype(np.float64)
+            e = e[np.isfinite(e)]
+            if len(e) >= 30:
+                trained[f"reg_resid_{k}d"] = np.sort(e)
         trained["calibrators"] = calibrators
         trained["calibrator"] = calibrators.get(3)  # 3d 别名 (主概率, 1d 已删)
         return trained["calibrator"]
@@ -786,6 +806,11 @@ class DualTrackTrainer:
         ):
             if extra in trained:
                 bundle[extra] = trained[extra]
+        # [08-24] 回归残差派生概率: 逐视界 calib 段残差 CDF 必须落盘 (推理端
+        # prob_up 依赖; 不落盘 → 回退 Platt cls, 与 reg 信号脱钩, 08-24 单测捕获)
+        for key, val in trained.items():
+            if key.startswith("reg_resid_") and key.endswith("d"):
+                bundle[key] = val
         try:
             with open(path, "wb") as fh:
                 pickle.dump(bundle, fh)
