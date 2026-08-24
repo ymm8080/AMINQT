@@ -22,7 +22,7 @@ import pandas as pd
 from app.core.factor_engine import safe_divide
 
 from .dual_track_trainer import DualTrackTrainer
-from .label_engine import LABEL_WEIGHTS
+from .label_engine import CLS_THRESHOLD, LABEL_WEIGHTS
 
 logger = logging.getLogger(__name__)
 
@@ -87,21 +87,48 @@ class V35Predictor:
         latest["pred_ret_10d"] = (
             models["10d_reg"][0].predict(X) if "10d_reg" in models else np.nan
         )
-        raw_prob = models["3d_cls"][0].predict_proba(X)[:, 1]
-        # 校准 (校准器缺失时回退原始 predict_proba); prob_up = 3d 主概率 (1d 已删)
-        cal = bundle.get("calibrator")
-        latest["prob_up"] = cal.predict_proba(raw_prob) if cal is not None else raw_prob
-        # [多视界] 3/5/10d 分类概率 (各视界校准器; 缺失时回退 raw / 缺 kind 跳过)
+        # [08-24] prob_up 系列改回归残差派生概率: prob_up_kd = P(ret>CLS_THRESHOLD|pred_ret_kd)
+        #         = 1 - F_e(CLS_THRESHOLD - pred_ret_kd), e = calib 段回归残差 (训练器已存
+        #         bundle["reg_resid_{k}d"]). 继承 reg 头判别力 (08-24 原型: main 10d p_reg
+        #         IC_ret +0.105 vs p_cls -0.136; cls 头 test 段 IC≈0/负, 不排序).
+        #         事件口径 = 净收益>0.5% (reg 主标签), 较旧 Platt cls (毛收益>0.5%) 低 ~0.2pp.
+        #         旧 bundle 无 reg_resid_* → 回退 Platt cls (原逻辑).
         calibrators = bundle.get("calibrators", {})
+
+        def _platt_cls_prob(k: int, kind: str) -> np.ndarray:
+            raw = models[kind][0].predict_proba(X)[:, 1]
+            cal_k = calibrators.get(k) if calibrators else None
+            return cal_k.predict_proba(raw) if cal_k is not None else raw
+
+        def _reg_resid_prob(k: int) -> np.ndarray | None:
+            resid = bundle.get(f"reg_resid_{k}d")
+            if resid is None or len(resid) < 30:
+                return None
+            pred = latest[f"pred_ret_{k}d"].to_numpy(dtype=float)
+            p = 1.0 - np.searchsorted(
+                np.asarray(resid, dtype=float), CLS_THRESHOLD - pred
+            ) / len(resid)
+            return np.clip(p, 1e-6, 1.0 - 1e-6)
+
         for k in (3, 5, 10):
             kind = f"{k}d_cls"
             if kind not in models:
                 continue
-            raw = models[kind][0].predict_proba(X)[:, 1]
-            cal_k = calibrators.get(k) if calibrators else None
+            p_cls = _platt_cls_prob(k, kind)
+            p_reg = _reg_resid_prob(k)
+            # 单个 pred 异常 (NaN) 时按列回退 p_cls, 不整列报废
             latest[f"prob_up_{k}d"] = (
-                cal_k.predict_proba(raw) if cal_k is not None else raw
+                np.where(
+                    np.isfinite(latest[f"pred_ret_{k}d"].to_numpy(dtype=float)),
+                    p_reg,
+                    p_cls,
+                )
+                if p_reg is not None
+                else p_cls
             )
+        # 3d 主概率别名 (旧 bundle 无 reg_resid_* 时 prob_up_3d 已是 Platt cls)
+        if "prob_up_3d" in latest.columns:
+            latest["prob_up"] = latest["prob_up_3d"]
         # 综合排序分: LABEL_WEIGHTS 加权 (修改字典即全局生效; 旧 bundle 缺 pred_ret_10d 时
         # 只对已预测的视界加权并按各自权重和归一, 保证新旧 bundle 得分口径一致)
         present_w = {

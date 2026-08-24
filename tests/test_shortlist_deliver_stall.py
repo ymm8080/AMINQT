@@ -24,7 +24,7 @@ def _res_df(stall: str = "") -> pd.DataFrame:
             {
                 "date": "2026-02-05",
                 "board": "main",
-                "cut": "T-5",
+                "cut": "T-10",
                 "rank": 1,
                 "symbol": "600001",
                 "systems": "M2026",
@@ -113,7 +113,7 @@ def test_xlsx_res_stall_flag_writes_real_value(tmp_path):
     write_xlsx(_res_df(stall="洗盘待爆发"), [], SEL_DATE, out, None, "test")
     from openpyxl import load_workbook
 
-    ws = load_workbook(out)["短名单 T-5"]
+    ws = load_workbook(out)["短名单 T-10"]
     hdr = [c.value for c in ws[1]]
     assert (
         hdr

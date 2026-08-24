@@ -1052,10 +1052,11 @@ class _FakeConstCal:
         return np.clip(np.asarray(raw, dtype=float), 0.05, 0.95)
 
 
-def _save_10d_bundle(tmp_path, with_10d: bool) -> str:
+def _save_10d_bundle(tmp_path, with_10d: bool, with_resid: bool = False) -> str:
     """落盘 fake bundle (feature_cols=['f1'], 全视界 reg/cls + 校准器).
 
     with_10d=False → 模拟旧 bundle (无 10d_reg/10d_cls), 触发级联 NaN 回退.
+    with_resid=True → 存 reg_resid_* (已训练视界), 触发回归残差派生 prob_up.
     """
     import app.pipeline1.dual_track_trainer as dtt
 
@@ -1070,10 +1071,12 @@ def _save_10d_bundle(tmp_path, with_10d: bool) -> str:
         "5d_cls": (_FakeConstModel(0.76), "label_5d_cls"),
     }
     calibrators = {k: _FakeConstCal() for k in (2, 3, 5)}
+    horizons = [3, 5]
     if with_10d:
         models["10d_reg"] = (_FakeConstModel(0.08), "label_10d")
         models["10d_cls"] = (_FakeConstModel(0.78), "label_10d_cls")
         calibrators[10] = _FakeConstCal()
+        horizons.append(10)
     trained = {
         "board": "main",
         "feature_cols": ["f1"],
@@ -1081,6 +1084,10 @@ def _save_10d_bundle(tmp_path, with_10d: bool) -> str:
         "calibrator": _FakeConstCal(),
         "calibrators": calibrators,
     }
+    if with_resid:
+        # 确定性残差 CDF (升序): 测试内可精确重算 p = 1 - F_e(TH - pred)
+        for k in horizons:
+            trained[f"reg_resid_{k}d"] = np.linspace(-0.04, 0.04, 60)
     trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
     return trainer.save(trained, "t")
 
@@ -1114,6 +1121,30 @@ class TestPredictor10d:
         assert np.allclose(out["pred_ret_10d"], 0.08)
         assert out["prob_up_10d"].between(0, 1).all()
         assert np.allclose(out["prob_up_10d"], 0.78)
+
+    def test_reg_resid_derives_prob_up(self, tmp_path):
+        """[08-24] bundle 含 reg_resid_* → prob_up_kd = 1 - F_e(TH - pred_ret)."""
+        from app.pipeline1.label_engine import CLS_THRESHOLD
+        from app.pipeline1.predictor import V35Predictor
+
+        path = _save_10d_bundle(tmp_path, with_10d=True, with_resid=True)
+        out = V35Predictor({"main": path}).predict(_10d_feats(), "main")
+        resid = np.linspace(-0.04, 0.04, 60)
+        for k, const in ((3, 0.03), (5, 0.05), (10, 0.08)):
+            exp = 1.0 - np.searchsorted(resid, CLS_THRESHOLD - const) / 60
+            assert np.allclose(out[f"prob_up_{k}d"], exp), f"{k}d"
+        # 3d 主概率别名 = reg 派生 3d
+        assert np.allclose(out["prob_up"], out["prob_up_3d"])
+
+    def test_no_resid_falls_back_platt_cls(self, tmp_path):
+        """[08-24] 旧 bundle 无 reg_resid_* → prob_up 回退 Platt cls (原逻辑)."""
+        from app.pipeline1.predictor import V35Predictor
+
+        path = _save_10d_bundle(tmp_path, with_10d=True, with_resid=False)
+        out = V35Predictor({"main": path}).predict(_10d_feats(), "main")
+        assert np.allclose(out["prob_up_10d"], 0.78)
+        assert np.allclose(out["prob_up_3d"], 0.74)
+        assert np.allclose(out["prob_up"], out["prob_up_3d"])
 
     def test_bundle_without_10d_nan_fallback(self, tmp_path):
         from app.pipeline1.predictor import V35Predictor

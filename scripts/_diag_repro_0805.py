@@ -37,8 +37,9 @@ print(f"[fullrun] {FULLRUN}", flush=True)
 def main() -> None:
     records = S.load_oos_records()
     gate = S.regime_gate(records)
-    active = [f"{b}/{s}" for (b, s), g in gate.items() if g["active"]]
-    print(f"[regime] 保留组合: {', '.join(active) if active else '无'}", flush=True)
+    # 2026-08-23 制度门改板块级: gate key=(board,), 显示板块名
+    active = [S.BOARD_LABEL.get(b, b) for (b,), g in gate.items() if g["active"]]
+    print(f"[regime] 保留板块: {', '.join(active) if active else '无'}", flush=True)
 
     frames = []
     for board in ("main", "dual"):

@@ -696,10 +696,11 @@ class DualTrackTrainer:
     def fit_calibrator(trained: dict):
         """用校准集 (与早停物理隔离) 拟合校准器 (安全网: 严禁原始 predict_proba).
 
-        [E1/V3.8] Isotonic → Platt Scaling (小样本更稳定), 月度滚动重校.
+        [E1/V3.8] 恒用 Platt Scaling (08-06 定案: isotonic 阶跃会把生产概率带
+        压成单平台 → prob_up 常数化, 见 _recalibrate_legacy_cls.py; 旧条件分支
+        校准集 ≥20 日回退 isotonic 已在 08-17..08-23 每日清单复现平台坍缩).
         [多视界] 每个 cls 视界 (3/5/10d; 1d/2d 2026-08-09 删除) 一个 ProbCalibrator, 存
         trained["calibrators"] = {k: cal}; 向后兼容: trained["calibrator"] = 3d 别名.
-        校准集 < 30 交易日时强制 Platt (Isotonic 小样本退化为阶跃函数).
         """
         from .label_engine import LABEL_HORIZONS
         from .prob_calibrator import ProbCalibrator
@@ -723,18 +724,29 @@ class DualTrackTrainer:
                 calibrators[k] = None
                 continue
             raw = model.predict_proba(np.nan_to_num(calib[cols].values, nan=0.0))[:, 1]
-            n_calib_dates = (
-                calib["date"].nunique() if "date" in calib.columns else len(calib)
+            calibrators[k] = ProbCalibrator(method="platt").fit(
+                raw, calib[label].values
             )
-            method = "platt" if n_calib_dates < MIN_ES_DATES else "isotonic"
-            if n_calib_dates < MIN_ES_DATES:
-                logger.warning(
-                    "[%s] 校准集仅 %d 交易日 (kind=%s), 使用 Platt",
-                    trained["board"],
-                    n_calib_dates,
-                    kind,
-                )
-            calibrators[k] = ProbCalibrator(method=method).fit(raw, calib[label].values)
+        # [08-24] 回归残差派生概率 (prob_up 生产化): 每视界存 calib 段回归残差,
+        # 推理端 prob_up_kd = P(ret>CLS_THRESHOLD|pred) = 1 - F_e(TH - pred_ret).
+        # 与 cls 校准器同物理隔离/模型一致 (08-24 原型: cls 头 test 段 IC≈0/负,
+        # reg 残差概率继承回归信号, main 10d +0.105 vs cls -0.136). 旧 bundle 无
+        # reg_resid_* → 推理端回退 Platt cls.
+        for k in LABEL_HORIZONS:
+            kind_reg = f"{k}d_reg"
+            if kind_reg not in trained["models"]:
+                continue  # 该视界未训练回归头 → 无残差
+            reg_model, reg_label = trained["models"][kind_reg]
+            calib = trained["segs"]["calib"].dropna(subset=[reg_label])
+            if len(calib) < 30:
+                continue
+            r = reg_model.predict(
+                np.nan_to_num(calib[trained["feature_cols"]].values, nan=0.0)
+            )
+            e = (calib[reg_label].values - r).astype(np.float64)
+            e = e[np.isfinite(e)]
+            if len(e) >= 30:
+                trained[f"reg_resid_{k}d"] = np.sort(e)
         trained["calibrators"] = calibrators
         trained["calibrator"] = calibrators.get(3)  # 3d 别名 (主概率, 1d 已删)
         return trained["calibrator"]
@@ -796,6 +808,11 @@ class DualTrackTrainer:
         ):
             if extra in trained:
                 bundle[extra] = trained[extra]
+        # [08-24] 回归残差派生概率: 逐视界 calib 段残差 CDF 必须落盘 (推理端
+        # prob_up 依赖; 不落盘 → 回退 Platt cls, 与 reg 信号脱钩, 08-24 单测捕获)
+        for key, val in trained.items():
+            if key.startswith("reg_resid_") and key.endswith("d"):
+                bundle[key] = val
         try:
             with open(path, "wb") as fh:
                 pickle.dump(bundle, fh)

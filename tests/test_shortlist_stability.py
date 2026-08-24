@@ -264,13 +264,13 @@ def test_anchor_reported_shifts_mean_keeps_order_sync_mag10d():
     ).abs().max() == pytest.approx(abs(shift))
 
 
-def test_rank_and_truncate_keeps_only_top5_per_board():
-    """2026-08-14 收紧: rank_and_truncate 每板块只留 pred_mag_10d 前 5, cut 统一 T-5."""
+def test_rank_and_truncate_keeps_only_top10_per_board():
+    """2026-08-23 (用户 top-10 档): rank_and_truncate 每板块只留 pred_mag_10d 前 10, cut 统一 T-10."""
     from scripts._shortlist_t5_t10 import rank_and_truncate
 
     pref = {"main": "ma", "dual": "du"}
     rows = []
-    for board, n in (("main", 8), ("dual", 7)):
+    for board, n in (("main", 14), ("dual", 12)):
         for i in range(n):
             rows.append(
                 {
@@ -281,12 +281,12 @@ def test_rank_and_truncate_keeps_only_top5_per_board():
                 }
             )
     out = rank_and_truncate(pd.DataFrame(rows))
-    assert set(out["cut"]) == {"T-5"}
-    for board, n in (("main", 8), ("dual", 7)):
+    assert set(out["cut"]) == {"T-10"}
+    for board, n in (("main", 14), ("dual", 12)):
         b = out[out["board"] == board]
-        assert len(b) == 5
-        # 保留 pred_mag_10d 最高的 5 只
-        assert set(b["symbol"]) == {f"{pref[board]}{i:04d}" for i in range(n - 5, n)}
+        assert len(b) == 10
+        # 保留 pred_mag_10d 最高的 10 只
+        assert set(b["symbol"]) == {f"{pref[board]}{i:04d}" for i in range(n - 10, n)}
 
 
 def test_rank_and_truncate_blend_key_when_pred_prob_present():
@@ -322,7 +322,7 @@ def test_rank_and_truncate_blend_key_when_pred_prob_present():
     out = rank_and_truncate(pd.DataFrame(rows))
     # blend: B=0.072 > C=0.054 > A=0.030
     assert out["symbol"].tolist() == ["B", "C", "A"]
-    assert set(out["cut"]) == {"T-5"}
+    assert set(out["cut"]) == {"T-10"}
 
 
 def test_rank_and_truncate_blend_nan_prob_sorts_last():
