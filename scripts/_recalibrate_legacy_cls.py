@@ -32,6 +32,7 @@ from app.pipeline1.cleaning_pipeline import CleaningPipeline
 from app.pipeline1.dual_track_trainer import DualTrackTrainer
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.feature_registry import FeatureRegistry
+from app.pipeline1.feature_selector import BRUTE_FAMILIES, BruteForceGenerator
 from app.pipeline1.train_runner import prepare_board_frame
 from config.settings import PANEL_V3_PATH, data_others_path
 
@@ -102,6 +103,34 @@ def main() -> int:
             registry=registry,
         )
         del board_df
+        gc.collect()
+        # 训练时 FeatureSelector 精选后 train_runner 会注入 BruteForce 特征
+        # (_brute_* 列, 见 train_runner.select_features). 重校脚本不重跑精选,
+        # 需按 bundle feature_cols 复现这些列, 否则 schema 校验报缺失.
+        missing = [c for c in bundle["feature_cols"] if c not in df.columns]
+        brute_missing = [c for c in missing if "_brute_" in c]
+        if brute_missing:
+            gen = BruteForceGenerator()
+            raw_cols = gen._eligible(df)
+            need = set(brute_missing)
+            picks = []
+            for fam in BRUTE_FAMILIES:
+                new = gen.generate_columns(
+                    df, fam, need, raw_cols=raw_cols, dtype="float32"
+                )
+                if new is None or not len(new.columns):
+                    continue
+                picks.append(new)
+            if picks:
+                _brute = pd.concat(picks, axis=1)
+                for _c in _brute.columns:
+                    df[_c] = _brute[_c].to_numpy()
+                print(
+                    f"[{board}] BruteForce 复现注入 {len(_brute.columns)} 列 "
+                    f"(缺 {len(brute_missing)})",
+                    flush=True,
+                )
+        del missing, brute_missing
         gc.collect()
         segs = trainer.split_window(df)
         missing = [c for c in bundle["feature_cols"] if c not in df.columns]

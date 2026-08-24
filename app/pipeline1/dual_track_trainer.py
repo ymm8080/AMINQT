@@ -696,10 +696,11 @@ class DualTrackTrainer:
     def fit_calibrator(trained: dict):
         """用校准集 (与早停物理隔离) 拟合校准器 (安全网: 严禁原始 predict_proba).
 
-        [E1/V3.8] Isotonic → Platt Scaling (小样本更稳定), 月度滚动重校.
+        [E1/V3.8] 恒用 Platt Scaling (08-06 定案: isotonic 阶跃会把生产概率带
+        压成单平台 → prob_up 常数化, 见 _recalibrate_legacy_cls.py; 旧条件分支
+        校准集 ≥20 日回退 isotonic 已在 08-17..08-23 每日清单复现平台坍缩).
         [多视界] 每个 cls 视界 (3/5/10d; 1d/2d 2026-08-09 删除) 一个 ProbCalibrator, 存
         trained["calibrators"] = {k: cal}; 向后兼容: trained["calibrator"] = 3d 别名.
-        校准集 < 30 交易日时强制 Platt (Isotonic 小样本退化为阶跃函数).
         """
         from .label_engine import LABEL_HORIZONS
         from .prob_calibrator import ProbCalibrator
@@ -723,18 +724,7 @@ class DualTrackTrainer:
                 calibrators[k] = None
                 continue
             raw = model.predict_proba(np.nan_to_num(calib[cols].values, nan=0.0))[:, 1]
-            n_calib_dates = (
-                calib["date"].nunique() if "date" in calib.columns else len(calib)
-            )
-            method = "platt" if n_calib_dates < MIN_ES_DATES else "isotonic"
-            if n_calib_dates < MIN_ES_DATES:
-                logger.warning(
-                    "[%s] 校准集仅 %d 交易日 (kind=%s), 使用 Platt",
-                    trained["board"],
-                    n_calib_dates,
-                    kind,
-                )
-            calibrators[k] = ProbCalibrator(method=method).fit(raw, calib[label].values)
+            calibrators[k] = ProbCalibrator(method="platt").fit(raw, calib[label].values)
         trained["calibrators"] = calibrators
         trained["calibrator"] = calibrators.get(3)  # 3d 别名 (主概率, 1d 已删)
         return trained["calibrator"]
