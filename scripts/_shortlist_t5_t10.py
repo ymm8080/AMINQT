@@ -347,8 +347,7 @@ def fmt_regime(gate: dict) -> list[str]:
         )
     else:
         lines.append(
-            f"  今日过门板块: {note} — 清单全量输出全部候选, "
-            f"未过门个股已标注 过门=未过"
+            f"  今日过门板块: {note} — 清单全量输出全部候选, 未过门个股已标注 过门=未过"
         )
         fail = [(b,) for (b,), g in gate.items() if g and g["per"] and not g["active"]]
         if fail:

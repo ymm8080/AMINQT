@@ -724,7 +724,9 @@ class DualTrackTrainer:
                 calibrators[k] = None
                 continue
             raw = model.predict_proba(np.nan_to_num(calib[cols].values, nan=0.0))[:, 1]
-            calibrators[k] = ProbCalibrator(method="platt").fit(raw, calib[label].values)
+            calibrators[k] = ProbCalibrator(method="platt").fit(
+                raw, calib[label].values
+            )
         # [08-24] 回归残差派生概率 (prob_up 生产化): 每视界存 calib 段回归残差,
         # 推理端 prob_up_kd = P(ret>CLS_THRESHOLD|pred) = 1 - F_e(TH - pred_ret).
         # 与 cls 校准器同物理隔离/模型一致 (08-24 原型: cls 头 test 段 IC≈0/负,

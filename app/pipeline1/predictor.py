@@ -95,12 +95,10 @@ class V35Predictor:
         #         旧 bundle 无 reg_resid_* → 回退 Platt cls (原逻辑).
         calibrators = bundle.get("calibrators", {})
 
-
         def _platt_cls_prob(k: int, kind: str) -> np.ndarray:
             raw = models[kind][0].predict_proba(X)[:, 1]
             cal_k = calibrators.get(k) if calibrators else None
             return cal_k.predict_proba(raw) if cal_k is not None else raw
-
 
         def _reg_resid_prob(k: int) -> np.ndarray | None:
             resid = bundle.get(f"reg_resid_{k}d")
@@ -119,9 +117,15 @@ class V35Predictor:
             p_cls = _platt_cls_prob(k, kind)
             p_reg = _reg_resid_prob(k)
             # 单个 pred 异常 (NaN) 时按列回退 p_cls, 不整列报废
-            latest[f"prob_up_{k}d"] = np.where(
-                np.isfinite(latest[f"pred_ret_{k}d"].to_numpy(dtype=float)), p_reg, p_cls
-            ) if p_reg is not None else p_cls
+            latest[f"prob_up_{k}d"] = (
+                np.where(
+                    np.isfinite(latest[f"pred_ret_{k}d"].to_numpy(dtype=float)),
+                    p_reg,
+                    p_cls,
+                )
+                if p_reg is not None
+                else p_cls
+            )
         # 3d 主概率别名 (旧 bundle 无 reg_resid_* 时 prob_up_3d 已是 Platt cls)
         if "prob_up_3d" in latest.columns:
             latest["prob_up"] = latest["prob_up_3d"]

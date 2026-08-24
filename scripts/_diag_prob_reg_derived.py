@@ -153,9 +153,7 @@ def compare_horizon(board: str, trained: dict, k: int) -> dict | None:
 
     sd = float(np.nanstd(e))
     if sd > 0:
-        p_reg_gauss = np.clip(
-            norm.cdf((r_test - TH) / sd), 1e-6, 1.0 - 1e-6
-        )
+        p_reg_gauss = np.clip(norm.cdf((r_test - TH) / sd), 1e-6, 1.0 - 1e-6)
     else:
         p_reg_gauss = p_reg
 
@@ -213,7 +211,9 @@ def main() -> int:
 
     cleaner = CleaningPipeline()
     features = FeatureEngineV35()
-    registry = FeatureRegistry(path=os.path.join(REGISTRY_PATH, "feature_registry.json"))
+    registry = FeatureRegistry(
+        path=os.path.join(REGISTRY_PATH, "feature_registry.json")
+    )
     main_df, dual_df = cleaner.run_train(panel)
     del panel
     gc.collect()
