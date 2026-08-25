@@ -151,7 +151,9 @@ def main() -> int:
                 if _s["board"] == board and _s["depth"] == 10 and _s["window"] == "full"
             ]
         )
-        pos_count = {m: int((subd[subd["margin"] == m]["mean"] > 0).sum()) for m in margins}
+        pos_count = {
+            m: int((subd[subd["margin"] == m]["mean"] > 0).sum()) for m in margins
+        }
         full10 = full10.assign(positive_sub=full10["margin"].map(pos_count))
         best = full10.sort_values(
             ["positive_sub", "mean"], ascending=[False, False]
