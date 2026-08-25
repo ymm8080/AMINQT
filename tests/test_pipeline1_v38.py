@@ -475,10 +475,13 @@ def _cands(rows: list[dict]) -> pd.DataFrame:
 
 class TestDynamicEntry:
     def test_gate_filters_low_quality(self):
-        """计算闸: prob 需超当日基准率 (均值), 净预期 compound 需 > 0."""
+        """计算闸: prob 需超当日基准率 (均值) + main margin 0.08, 净预期 compound 需 > 0."""
         cands = _cands(
             [
-                {"symbol": "600001"},  # prob 0.70 > 基准 0.65, compound .028 > 0 → 过
+                {
+                    "symbol": "600001",
+                    "prob_up": 0.80,
+                },  # prob 0.80 > 基准 0.6833+0.08, compound .028 > 0 → 过
                 {"symbol": "600002", "prob_up": 0.55},  # prob < 基准 → 剔
                 {  # 净预期为负 → 剔 (含 10d, 避免继承 base 的 +0.07 使 10d 主导翻转)
                     "symbol": "600003",
@@ -501,13 +504,13 @@ class TestDynamicEntry:
         """bear: prob 门槛按 entry_prob_bear/entry_prob 比率收紧 [E11]."""
         cands = _cands(
             [
-                {"symbol": "600001", "prob_up": 0.70},  # 基准=(.70+.60)/2=.65
+                {"symbol": "600001", "prob_up": 0.80},  # 基准=(.80+.60)/2=.70
                 {"symbol": "600002", "prob_up": 0.60},  # 两种状态都过不了 prob 闸
             ]
         )
-        # range: 0.70 > 0.65 → 过
+        # range: 0.80 > 0.70+0.08 → 过
         assert len(ListGenerator().emit(cands, market_state="range")["list"]) == 1
-        # bear: 0.70 < 0.65×(0.65/0.60)≈0.704 → 不过
+        # bear: 0.80 < 0.70×(0.65/0.60)+0.08≈0.838 → 不过
         assert ListGenerator().emit(cands, market_state="bear")["empty"]
 
     def test_bear_requires_positive_3d(self):
@@ -614,47 +617,47 @@ class TestDynamicEntry:
 
         全市场单一 base_rate 会被双创退化模型的常数高概率 (1 树 LGBM → 常数 0.58/0.60)
         抬高混合基线, 主板 prob_up_10d 系统性偏低 → 整块被 E7 误杀 (08-07 起全 dual 清单根因).
-        各板块对自家基线比较: main 0.50 vs 自家 0.495, 不被 dual 0.60 拖到混合 0.5475.
-        2026-08-14: dual(GEM/STAR) 概率闸另加 +0.08 边际 (LEGACY_ENTRY_GATE.prob_margin).
+        各板块对自家基线比较: main 0.575 vs 自家 0.575, 不被 dual 0.69 拖到混合 0.6325.
+        2026-08-24: prob_margin 按板块 main +0.08 / dual +0.10 (LEGACY_ENTRY_GATE.prob_margin).
         """
         cands = _cands(
             [
-                {"symbol": "600001", "board": "main", "prob_up_10d": 0.50},
+                {"symbol": "600001", "board": "main", "prob_up_10d": 0.66},
                 {"symbol": "600002", "board": "main", "prob_up_10d": 0.49},
-                {"symbol": "300001", "board": "GEM", "prob_up_10d": 0.78},
-                {"symbol": "300002", "board": "GEM", "prob_up_10d": 0.60},
+                {"symbol": "300001", "board": "GEM", "prob_up_10d": 0.80},
+                {"symbol": "300002", "board": "GEM", "prob_up_10d": 0.58},
             ]
         )
         gen = ListGenerator(entry_prob=0.60)
         scored = gen.compute_scores(cands)
-        # 板块内 base_rate = 自家 prob 均值 (main 0.495 / GEM 0.69), 非全市场混合 0.5925
+        # 板块内 base_rate = 自家 prob 均值 (main 0.575 / GEM 0.69), 非全市场混合 0.6325
         assert scored.loc[scored["symbol"] == "600001", "base_rate"].iloc[
             0
-        ] == pytest.approx(0.495)
+        ] == pytest.approx(0.575)
         assert scored.loc[scored["symbol"] == "300001", "base_rate"].iloc[
             0
         ] == pytest.approx(0.69)
         passed = gen.entry_filter(scored, market_state="range")
-        # 每板块各保留"高于自家基线(+边际)"者: main 600001 / GEM 300001 (0.78 > 0.69+0.08);
-        # main 600002 与 GEM 300002 低于门槛被剔
+        # 每板块各保留"高于自家基线+边际"者: main 600001 (0.66>0.575+0.08) /
+        # GEM 300001 (0.80>0.69+0.10); main 600002 与 GEM 300002 低于门槛被剔
         assert sorted(passed["symbol"]) == ["300001", "600001"]
 
     def test_prob_margin_dual_only(self):
-        """分板块概率边际 (2026-08-14 全量 250d OOS 定案): dual(GEM/STAR) 概率闸再收紧
-        +0.08 → 命中 62.2→66.3% / 实得 +5.84→+6.66%; main 坍缩期无法评估保持 0.
+        """分板块概率边际 (2026-08-24 final p_reg 重扫定案): main +0.08 / dual(GEM/STAR)
+        +0.10 → main top-10 +3.53→+3.81% / dual +8.63→+9.20% (4 子窗稳定).
 
-        dual 股须 prob > base_rate + 0.08 (基准率=20日滚动板块日均), main 只需 > base_rate.
-        GEM base = (0.70×4 + 0.78 + 0.82)/6 = 0.7333: 门槛 0.8133.
-        0.78 在无边际时过 (0.78 > 0.7333)、有边际时剔 — 判别性用例.
+        dual 股须 prob > base_rate + 0.10 (基准率=20日滚动板块日均), main 须 > base_rate + 0.08.
+        GEM base = (0.70×4 + 0.80 + 0.92)/6 = 0.7533: 门槛 0.8533.
+        300002 (0.80) 无边际时过 (0.80 > 0.7533)、有边际时剔 (0.80 < 0.8533) — 判别性用例.
         """
         cands = _cands(
             [
-                # main: base=0.555, 0.56 > 0.555 → 过; 0.55 → 剔 (无边际)
-                {"symbol": "600001", "board": "main", "prob_up": 0.56},
+                # main: base=0.675, 门槛 0.755; 0.80 → 过; 0.55 → 剔
+                {"symbol": "600001", "board": "main", "prob_up": 0.80},
                 {"symbol": "600002", "board": "main", "prob_up": 0.55},
-                # GEM: 0.82 > 0.8133 → 过; 0.78 无边际才过; 0.70 剔
-                {"symbol": "300001", "board": "GEM", "prob_up": 0.82},
-                {"symbol": "300002", "board": "GEM", "prob_up": 0.78},
+                # GEM: 0.92 > 0.8533 → 过; 0.80 无边际才过; 0.70 剔
+                {"symbol": "300001", "board": "GEM", "prob_up": 0.92},
+                {"symbol": "300002", "board": "GEM", "prob_up": 0.80},
                 {"symbol": "300003", "board": "GEM", "prob_up": 0.70},
                 {"symbol": "300004", "board": "GEM", "prob_up": 0.70},
                 {"symbol": "300005", "board": "GEM", "prob_up": 0.70},
@@ -676,17 +679,17 @@ class TestDynamicEntry:
         """
         cands = _cands(
             [
-                # main: base=(0.61+0.65+0.50)/3=0.5867; 0.61/0.65 过 prob, 0.50 剔 (填充)
+                # main: base=(0.81+0.87+0.50)/3=0.7267, 门槛 0.8067; 0.81/0.87 过 prob, 0.50 剔 (填充)
                 {
                     "symbol": "600001",
                     "board": "main",
-                    "prob_up": 0.61,
+                    "prob_up": 0.81,
                     "pain_prob": 0.45,
                 },
                 {
                     "symbol": "600002",
                     "board": "main",
-                    "prob_up": 0.65,
+                    "prob_up": 0.87,
                     "pain_prob": 0.60,
                 },
                 {
@@ -695,17 +698,17 @@ class TestDynamicEntry:
                     "prob_up": 0.50,
                     "pain_prob": 0.10,
                 },
-                # GEM: base=(0.90+0.90+0.60)/3=0.80, 门槛 0.88; 0.60 剔 (填充)
+                # GEM: base=(0.92+0.92+0.60)/3=0.8133, 门槛 0.9133; 0.60 剔 (填充)
                 {
                     "symbol": "300001",
                     "board": "GEM",
-                    "prob_up": 0.90,
+                    "prob_up": 0.92,
                     "pain_prob": 0.35,
                 },
                 {
                     "symbol": "300002",
                     "board": "GEM",
-                    "prob_up": 0.90,
+                    "prob_up": 0.92,
                     "pain_prob": 0.45,
                 },
                 {

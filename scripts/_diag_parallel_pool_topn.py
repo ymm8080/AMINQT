@@ -232,7 +232,7 @@ def main() -> None:
         rec = cal_pool[["score", lab]].rename(columns={lab: "mfe"}).dropna()
         if len(rec) < 50:
             continue
-        cals[h] = build_calibration(rec, h, ABS_TARGET[h])
+        cals[h] = build_calibration(rec, h, ABS_TARGET[h])[0]
 
     # 给全池+短名单 apply pred_mag/pred_prob (每行用该行 score)
     def apply_cal(df: pd.DataFrame) -> pd.DataFrame:
