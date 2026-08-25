@@ -1,7 +1,10 @@
-"""_monitor_legacy_drift.py — legacy 幅度漂移监控 (2026-08-17).
+"""_monitor_legacy_drift.py — legacy 幅度/校准漂移监控 (2026-08-17 / 08-24 加 ECE).
 
 用户定案 (08-17): 幅度模型漂移 (pred_ret_10d 系统高估, 偏差随时间扩大) 修法 = 重训,
 监控 = 每日全池预测均值 vs T+10 净实现均值偏差, 滚动窗超阈值 → 告警 (提醒提前重训).
+08-24: 加 p_reg 校准检查 — prob_up_10d 建模事件 = gross_10d > 0.5% (label_engine
+CLS_THRESHOLD), ECE 事件 = gross_cc > 0.5% ⟺ realized_net > 0.5% − cost (与幅度同
+realized, 防 cost 偏差假触发); 全池分位桶滚动窗 ECE 超阈值 → 校准漂移告警.
 
 数据源 (全部 WORM, 无新落盘):
   preds   = data/lists/candidates_<YYYYMMDD>.parquet (每日全池原始预测, daily_pipeline)
@@ -28,11 +31,14 @@ import numpy as np
 import pandas as pd
 
 from app.pipeline1.drift_monitor import (
+    bin_calibration,
     board_of,
+    check_calibration,
     check_drift,
     compute_realized,
     daily_bias,
     rolling_bias,
+    rolling_calibration,
 )
 from config.settings import DRIFT_MONITOR, PANEL_V3_PATH, data_others_path
 
@@ -44,14 +50,17 @@ LISTS_DIR = os.path.join(
 def _load_preds() -> pd.DataFrame:
     files = sorted(glob.glob(os.path.join(LISTS_DIR, "candidates_*.parquet")))
     if not files:
-        return pd.DataFrame(columns=["date", "symbol", "board", "pred_ret_10d"])
+        return pd.DataFrame(
+            columns=["date", "symbol", "board", "pred_ret_10d", "prob_up_10d"]
+        )
     frames = []
     for f in files:
         df = pd.read_parquet(f)
         if "pred_ret_10d" not in df.columns:  # 08-06 早期文件无 10d 模型列
             continue
         d = pd.Timestamp(os.path.basename(f)[11:19])
-        df = df[["symbol", "board", "pred_ret_10d"]]
+        df["prob_up_10d"] = df["prob_up_10d"] if "prob_up_10d" in df.columns else np.nan
+        df = df[["symbol", "board", "pred_ret_10d", "prob_up_10d"]]
         df["symbol"] = df["symbol"].astype(str)
         df["board"] = df["board"].map(board_of)
         df["date"] = d
@@ -85,6 +94,41 @@ def _replay_reference(window_days: int) -> dict:
                 "bias": float(tail.mean()),
                 "source": os.path.basename(files[-1]),
             }
+    return out
+
+
+def _replay_calibration_reference(thr: float, n_bins: int, cost: float) -> dict:
+    """诊断回放 CSV 的校准参照 (当前 bundle 基线, 仅参照非告警).
+
+    事件口径与 live 一致: gross_cc = realized_net + cost > thr. 回放明细只含
+    通过旧生产闸的 picks (子集), 与 live 全池绝对 ECE 不可直接比 → 只作方向参照.
+    """
+    files = sorted(
+        glob.glob(str(data_others_path("diag") / "legacy_prob_head_replay_*.csv"))
+    )
+    if not files:
+        return {}
+    r = pd.read_csv(files[-1], dtype={"symbol": str})
+    out = {}
+    for board in ("main", "dual"):
+        g = r[r["board"] == board].dropna(subset=["prob", "realized_net"])
+        if not len(g):
+            continue
+        tab, ece = bin_calibration(
+            g["prob"], (g["realized_net"] + cost > thr).astype("int8"), n_bins
+        )
+        if tab.empty:
+            continue
+        out[board] = {
+            "ece": ece,
+            "n_rows": int(len(g)),
+            "source": os.path.basename(files[-1]),
+            "bins": (
+                tab.reset_index()[["bin", "n", "mean_prob", "realized", "gap"]]
+                .assign(bin=lambda t: t["bin"].astype(str))
+                .to_dict("records")
+            ),
+        }
     return out
 
 
@@ -131,16 +175,35 @@ def main() -> int:
     alerts = check_drift(rolling, thresholds)
     ref = _replay_reference(window_days)
 
+    cal_cfg = cfg.get("calibration", {})
+    cal_thr = float(cal_cfg.get("cls_threshold", 0.005))
+    cal_bins = int(cal_cfg.get("n_bins", 5))
+    cal = rolling_calibration(
+        preds,
+        realized,
+        cost=float(cfg["cost"]),
+        thr=cal_thr,
+        n_bins=cal_bins,
+        window_days=window_days,
+        min_matured_days=min_matured,
+    )
+    cal_alerts = check_calibration(cal, cal_cfg.get("ece_threshold", {}))
+    cal_ref = _replay_calibration_reference(cal_thr, cal_bins, float(cfg["cost"]))
+
     print(
         f"===== legacy 幅度漂移 (滚动窗 {window_days} 交易日, 成熟≥{min_matured} 日) =====",
         flush=True,
     )
     for _, r in rolling.iterrows():
         th = thresholds.get(r["board"])
-        line = (
-            f"[{r['board']:>4}] 成熟 {r['n_days']:>3} 日 | 最新日 "
-            f"{pd.Timestamp(r['latest_date']).date()} 偏差 {r['latest_bias']:+.2%} | "
-            f"滚动偏差 {r['bias']:+.2%}"
+        line = f"[{r['board']:>4}] 成熟 {r['n_days']:>3} 日"
+        if r["latest_bias"] is not None:
+            line += (
+                f" | 最新日 {pd.Timestamp(r['latest_date']).date()} "
+                f"偏差 {r['latest_bias']:+.2%}"
+            )
+        line += (
+            f" | 滚动偏差 {r['bias']:+.2%}" if r["bias"] is not None else " | 积累期"
         )
         if th is not None:
             line += f" vs 阈值 {th:+.2%}"
@@ -160,6 +223,40 @@ def main() -> int:
             if th is not None:
                 base += f" — 当前 bundle 诊断基线, 超阈值 {th:+.2%} 则强烈提示重训"
             print(base, flush=True)
+
+    print(
+        f"\n===== p_reg 校准 (滚动窗 {window_days} 交易日, 事件 = gross > {cal_thr:.1%}) =====",
+        flush=True,
+    )
+    for _, r in cal.iterrows():
+        th = cal_cfg.get("ece_threshold", {}).get(r["board"])
+        line = (
+            f"[{r['board']:>4}] 成熟 {r['n_days']:>3} 日 / {r['n_rows']:>6,} 票 | "
+            f"滚动 ECE {r['ece']:+.2%}" if r["ece"] is not None
+            else f"[{r['board']:>4}] 成熟 {r['n_days']:>3} 日 (积累期, 无 ECE)"
+        )
+        if th is not None and r["ece"] is not None:
+            line += f" vs 阈值 {th:+.2%}"
+        if any(a["board"] == r["board"] for a in cal_alerts):
+            line += "  [CALIB-ALERT] 概率校准漂移, 考虑提前重训"
+        print(line, flush=True)
+        if r["ece"] is not None:
+            for b in r["bins"]:
+                print(
+                    f"      {b['bin']:>14}: n={b['n']:>4}  pred {b['mean_prob']:.2f} "
+                    f"real {b['realized']:.2f} gap {b['gap']:+.2f}",
+                    flush=True,
+                )
+    for board in ("main", "dual"):
+        cr = cal_ref.get(board)
+        if cr:
+            print(
+                f"     参照[{board}](回放 {cr['source']}): ECE {cr['ece']:+.2%} "
+                f"({cr['n_rows']:,} 票, 仅 picks 子集)",
+                flush=True,
+            )
+    if not cal_alerts:
+        print("[ok] 无板块校准 ECE 超阈值", flush=True)
     if not alerts:
         print("[ok] 无板块滚动偏差超阈值", flush=True)
 
@@ -175,6 +272,11 @@ def main() -> int:
         "rolling": rolling.to_dict("records"),
         "alerts": alerts,
         "replay_reference": ref,
+        "calibration": {
+            "rolling": cal.to_dict("records"),
+            "alerts": cal_alerts,
+            "replay_reference": cal_ref,
+        },
     }
     (out_dir / f"legacy_drift_{ts}.json").write_text(
         json.dumps(report, indent=2, ensure_ascii=False, default=str),
