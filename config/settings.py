@@ -357,12 +357,16 @@ STALL_MARKER = {
     },
 }
 
-# ── legacy 幅度漂移监控 (2026-08-17 用户定案) ──
+# ── legacy 幅度/校准漂移监控 (2026-08-17 幅度, 2026-08-24 加 ECE 校准) ──
 # 08-17 诊断: pred_ret_10d 系统高估 (main 均值 +4.03% vs 实现 +1.10%, dual +6.59% vs
 # +1.32%), 偏差随时间扩大 → 生产 "pred>0" 闸 100% 空转. 修漂移 = 重训 (周频已做),
 # 监控 = 每日全池 pred 均值 vs T+10 净实现均值偏差 (scripts/_monitor_legacy_drift.py),
 # 滚动窗均值超阈值 → WORM 报告 + 日志告警 (提醒提前重训).
-# 阈值初值取自 08-17 诊断尾段水平; 生产数据积累后 (季度闸重扫规则) 复核.
+# 08-24 加 p_reg 校准检查: prob_up_10d = P(gross_10d > 0.5%) (label_engine
+# CLS_THRESHOLD, GROSS 研究口径). ECE 用全池分位桶 (prob 集中 [0.25,0.55],
+# 等宽桶失真), 事件 = gross_cc > 0.5% ⟺ realized_net > 0.5% - cost (防 cost 偏差
+# 假触发; 与回放参照同口径). 滚动窗 ECE 超阈值 → 提示重训. 阈值见下方 calibration,
+# 勿当定案.
 DRIFT_MONITOR = {
     "window_days": 42,          # 滚动偏差窗 (交易日)
     "min_matured_days": 20,     # 成熟日少于该值 → 不出告警 (积累期)
@@ -370,6 +374,14 @@ DRIFT_MONITOR = {
     "cost": 0.0020,             # 往返成本 (与诊断回放一致)
     "buy_lag": 1,               # 决策日后第 1 个交易日收盘买入
     "sell_lag": 11,             # = buy_lag + label_horizon(10)
+    "calibration": {
+        "cls_threshold": 0.005,  # label_engine CLS_THRESHOLD (gross +0.5%)
+        "n_bins": 5,             # 校准分位桶数 (保证每桶有样本)
+        # 初始阈值锚定当前 bundle 诊断基线 (legacy_prob_head_replay_20260816 回放
+        # picks 子集 ECE: main 17.4% / dual 23.0%, 含 open基 label vs close基
+        # realized 隔夜缺口常数偏移) + 小余量 → 只对真实新漂移告警. 成熟日积累后复核.
+        "ece_threshold": {"main": 0.20, "dual": 0.25},
+    },
 }
 
 # ── parallel dual 幅度漂移监控 (2026-08-18) ──

@@ -12,11 +12,14 @@ import pytest
 
 from app.pipeline1.drift_monitor import (
     accumulate_parallel_picks,
+    bin_calibration,
     board_of,
+    check_calibration,
     check_drift,
     compute_realized,
     daily_bias,
     rolling_bias,
+    rolling_calibration,
 )
 
 # 8 个交易日, 周末跳过 (2026-08-10 周一 .. 08-19 周三)
@@ -283,3 +286,115 @@ def test_check_drift_none_bias_no_alert():
         }
     )
     assert check_drift(rolling, {"main": 0.04}) == []
+
+
+# ── p_reg 校准 (ECE) ──
+
+WELL_PROBS = [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75]
+WELL_EVENTS = [0, 0, 0, 0, 1, 0, 1, 1, 1, 1]  # 低 prob 少涨, 高 prob 多涨 → 校准好
+ANTI_EVENTS = [1, 1, 1, 1, 0, 1, 0, 0, 0, 0]  # 反向 → 校准差
+
+
+def test_bin_calibration_anti_worse_than_well():
+    well_tab, well_ece = bin_calibration(
+        pd.Series(WELL_PROBS), pd.Series(WELL_EVENTS), n_bins=5
+    )
+    anti_tab, anti_ece = bin_calibration(
+        pd.Series(WELL_PROBS), pd.Series(ANTI_EVENTS), n_bins=5
+    )
+    assert len(well_tab) == 5 and len(anti_tab) == 5
+    assert 0.0 <= well_ece <= 1.0 and 0.0 <= anti_ece <= 1.0
+    assert anti_ece > well_ece
+
+
+def test_bin_calibration_overconfident_high_ece():
+    """全高 prob 但几乎不涨 → 每桶 realized≈0, mean_prob≈0.7 → ECE 大."""
+    probs = [0.60, 0.62, 0.64, 0.66, 0.68, 0.70, 0.72, 0.74, 0.76, 0.78]
+    events = [0, 0, 0, 0, 0, 1, 0, 0, 0, 0]
+    _, ece = bin_calibration(pd.Series(probs), pd.Series(events), n_bins=5)
+    assert ece > 0.4
+
+
+def test_bin_calibration_insufficient_samples():
+    tab, ece = bin_calibration(
+        pd.Series([0.3, 0.4, 0.5]), pd.Series([0, 1, 0]), n_bins=5
+    )
+    assert tab.empty and np.isnan(ece)
+    # 事件单值 (全不涨) → 无法校准
+    tab, ece = bin_calibration(pd.Series(WELL_PROBS * 2), pd.Series([0] * 20), n_bins=5)
+    assert tab.empty and np.isnan(ece)
+
+
+def test_rolling_calibration_event_threshold():
+    """事件 = gross_cc = realized_net + cost > thr; 边界 0.005-0.002=0.003."""
+    preds = pd.DataFrame(
+        {
+            "date": [pd.Timestamp("2026-08-10"), pd.Timestamp("2026-08-11")],
+            "symbol": ["A", "A"],
+            "board": ["main", "main"],
+            "prob_up_10d": [0.3, 0.7],
+        }
+    )
+    realized = pd.DataFrame(
+        {
+            "date": [pd.Timestamp("2026-08-10"), pd.Timestamp("2026-08-11")],
+            "symbol": ["A", "A"],
+            "realized_net": [0.0031, 0.0029],  # gross 0.0051 → 事件; 0.0049 → 不事件
+        }
+    )
+    cal = rolling_calibration(
+        preds,
+        realized,
+        cost=0.002,
+        thr=0.005,
+        n_bins=1,
+        window_days=2,
+        min_matured_days=2,
+    )
+    assert len(cal) == 1
+    assert cal["n_days"].iloc[0] == 2 and cal["n_rows"].iloc[0] == 2
+    # 两桶合一: mean_prob 0.5, realized 0.5 → ECE 0 (事件映射正确)
+    assert cal["ece"].iloc[0] == pytest.approx(0.0)
+
+
+def test_rolling_calibration_min_matured_accumulation():
+    preds = pd.DataFrame(
+        {
+            "date": [pd.Timestamp("2026-08-10"), pd.Timestamp("2026-08-11")],
+            "symbol": ["A", "A"],
+            "board": ["main", "main"],
+            "prob_up_10d": [0.3, 0.7],
+        }
+    )
+    realized = pd.DataFrame(
+        {
+            "date": [pd.Timestamp("2026-08-10"), pd.Timestamp("2026-08-11")],
+            "symbol": ["A", "A"],
+            "realized_net": [0.01, -0.01],
+        }
+    )
+    cal = rolling_calibration(
+        preds,
+        realized,
+        cost=0.002,
+        thr=0.005,
+        n_bins=1,
+        window_days=2,
+        min_matured_days=3,  # > 成熟日 → 积累期
+    )
+    assert len(cal) == 1
+    assert cal["ece"].iloc[0] is None and cal["n_rows"].iloc[0] == 0
+
+
+def test_check_calibration_thresholds():
+    rolling = pd.DataFrame(
+        {
+            "board": ["main", "dual", "other"],
+            "n_days": [30, 30, 30],
+            "ece": [0.05, 0.12, None],
+            "bins": [[], [], []],
+        }
+    )
+    alerts = check_calibration(rolling, {"main": 0.10, "dual": 0.10})
+    assert [a["board"] for a in alerts] == ["dual"]  # main 0.05 < 0.10, other 无阈值
+    assert alerts[0]["ece"] == pytest.approx(0.12)

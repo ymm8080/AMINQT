@@ -153,3 +153,98 @@ def check_drift(rolling: pd.DataFrame, thresholds: dict) -> list[dict]:
                 }
             )
     return alerts
+
+
+def bin_calibration(
+    prob: pd.Series, event: pd.Series, n_bins: int = 5
+) -> tuple[pd.DataFrame, float]:
+    """(prob, event) → 分位桶校准表 + ECE (expected calibration error).
+
+    p_reg 集中 [0.25, 0.55] → 等宽桶失真, 用 qcut 分位桶保证每桶有样本.
+    ECE = Σ bin权重 × |realized_rate − mean_prob|. 样本 < 2×n_bins 或事件单值
+    → 返回空表 + nan (积累期/信号退化, 上层当 None 处理).
+    """
+    df = pd.DataFrame({"prob": prob, "event": event}).dropna()
+    if len(df) < 2 * n_bins or df["event"].nunique() < 2:
+        return pd.DataFrame(), np.nan
+    df["bin"] = pd.qcut(df["prob"], q=n_bins, duplicates="drop")
+    g = (
+        df.groupby("bin", observed=True)
+        .agg(
+            n=("event", "size"), mean_prob=("prob", "mean"), realized=("event", "mean")
+        )
+        .query("n > 0")
+    )
+    if g.empty:
+        return pd.DataFrame(), np.nan
+    g["gap"] = (g["realized"] - g["mean_prob"]).abs()
+    ece = float((g["gap"] * g["n"]).sum() / g["n"].sum())
+    return g, ece
+
+
+def rolling_calibration(
+    preds: pd.DataFrame,
+    realized: pd.DataFrame,
+    cost: float = 0.0020,
+    thr: float = 0.005,
+    n_bins: int = 5,
+    window_days: int = 42,
+    min_matured_days: int = 20,
+) -> pd.DataFrame:
+    """逐板块滚动窗校准: 尾 window_days 成熟日全池 (prob_up_10d, gross>thr 事件) 池化 → ECE.
+
+    prob 建模事件是 gross (label_10d = close[T+11]/open[T+1]−1 > 0.5%), 不是 net;
+    用同一 realized_net (=gross_cc−cost) 还原 gross 事件: gross_cc = realized_net + cost
+    > thr. close 基 vs open 基的隔夜缺口是常数偏移, 由回放参照吸收, 监控看的是变化.
+    preds: (date, symbol, board, prob_up_10d); realized: (date, symbol, realized_net).
+    """
+    m = preds.merge(realized, on=["date", "symbol"], how="inner")
+    m = m.dropna(subset=["prob_up_10d", "realized_net"])
+    cols = ["board", "n_days", "n_rows", "ece", "bins"]
+    if m.empty:
+        return pd.DataFrame(columns=cols)
+    m["event"] = (m["realized_net"] + cost > thr).astype("int8")
+    rows: list[dict] = []
+    for board, g in m.groupby("board"):
+        dates = np.sort(pd.to_datetime(g["date"].unique()))
+        base = {
+            "board": board,
+            "n_days": int(len(dates)),
+            "n_rows": 0,
+            "ece": None,
+            "bins": [],
+        }
+        if len(dates) < min_matured_days:
+            rows.append(base)
+            continue
+        tail = g[g["date"].isin(pd.to_datetime(dates[-window_days:]))]
+        gtab, ece = bin_calibration(tail["prob_up_10d"], tail["event"], n_bins)
+        if gtab.empty:
+            rows.append(base)
+            continue
+        bins = (
+            gtab.reset_index()[["bin", "n", "mean_prob", "realized", "gap"]]
+            .assign(bin=lambda t: t["bin"].astype(str))
+            .to_dict("records")
+        )
+        rows.append({**base, "n_rows": int(len(tail)), "ece": ece, "bins": bins})
+    return pd.DataFrame(rows)
+
+
+def check_calibration(rolling: pd.DataFrame, thresholds: dict) -> list[dict]:
+    """滚动窗 ECE > 阈值 → 告警条目 (仅对已知板块)."""
+    alerts = []
+    for _, r in rolling.iterrows():
+        th = thresholds.get(r["board"])
+        if th is None or r["ece"] is None:
+            continue
+        if r["ece"] > th:
+            alerts.append(
+                {
+                    "board": r["board"],
+                    "ece": r["ece"],
+                    "threshold": th,
+                    "n_days": r["n_days"],
+                }
+            )
+    return alerts
