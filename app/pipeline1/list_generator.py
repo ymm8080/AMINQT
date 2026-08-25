@@ -345,8 +345,8 @@ class ListGenerator:
         is_bear = market_state == "bear"
         ok = pd.Series(True, index=df.index)
         # 1. 加权概率 > base_rate (bear 按声明参数比率收紧, 无新常数)
-        #    2026-08-14 定案 (LEGACY_ENTRY_GATE.prob_margin): dual(GEM/STAR) 额外 +0.08
-        #    边际 → 250d OOS 命中 62.2→66.3% / 实得 +5.84→+6.66%; main 坍缩期无法评估 = 0.
+        #    2026-08-24 final p_reg 重扫 (LEGACY_ENTRY_GATE.prob_margin): main +0.08 /
+        #    dual(GEM/STAR) +0.10 → main top-10 +3.53→+3.81% / dual +8.63→+9.20% (4 子窗稳定).
         if self.entry_prob > 0:
             base = (
                 df["base_rate"] if "base_rate" in df.columns else df["prob_up"].mean()
