@@ -33,9 +33,7 @@ from scipy.stats import spearmanr
 
 from config.settings import data_others_path
 
-DEFAULT_CSV = (
-    r"D:\AMINQT\DATA OTHERS\diag\legacy_hitrate_topn_20260824_113908.csv"
-)
+DEFAULT_CSV = r"D:\AMINQT\DATA OTHERS\diag\legacy_hitrate_topn_20260824_113908.csv"
 KEYS = ["mag", "blend", "prob"]
 COL = {"mag": "pred_ret_10d", "blend": "blend", "prob": "prob"}
 DEPTHS = [5, 10, 15]
@@ -170,12 +168,14 @@ def main() -> int:
 
         # 判词: 全窗 top-10 每键均值 → 胜者 + 子窗符号稳定性
         full10 = pd.DataFrame(
-            [_s for _s in rows if _s["board"] == board and _s["depth"] == 10 and _s["window"] == "full"]
+            [
+                _s
+                for _s in rows
+                if _s["board"] == board and _s["depth"] == 10 and _s["window"] == "full"
+            ]
         ).set_index("key")
         best = full10["mean"].idxmax()
-        sub_mean = (
-            subd.groupby("key")["mean"].apply(lambda x: (x > 0).sum())
-        )
+        sub_mean = subd.groupby("key")["mean"].apply(lambda x: (x > 0).sum())
         verdict.append(
             {
                 "board": board,
@@ -183,7 +183,9 @@ def main() -> int:
                 "mag_top10": float(full10.loc["mag", "mean"]),
                 "blend_top10": float(full10.loc["blend", "mean"]),
                 "prob_top10": float(full10.loc["prob", "mean"]),
-                "delta_blend_vs_mag": float(full10.loc["blend", "mean"] - full10.loc["mag", "mean"]),
+                "delta_blend_vs_mag": float(
+                    full10.loc["blend", "mean"] - full10.loc["mag", "mean"]
+                ),
                 "subwin_positive_count": {k: int(v) for k, v in sub_mean.items()},
             }
         )

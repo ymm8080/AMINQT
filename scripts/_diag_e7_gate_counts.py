@@ -11,7 +11,6 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import numpy as np
 import pandas as pd
 
 from app.pipeline1.daily_pipeline import DailySelectionPipeline
@@ -57,7 +56,10 @@ def main():
     trade_date = sys.argv[1] if len(sys.argv) > 1 else "20260804"
     t0 = time.time()
     panel = pd.read_parquet(str(PANEL_V3_PATH))
-    print(f"[panel] {len(panel):,}r max={panel['date'].max():%Y-%m-%d} ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[panel] {len(panel):,}r max={panel['date'].max():%Y-%m-%d} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     dates = sorted(panel["date"].unique())
     cut = dates[-300]
     panel = panel[panel["date"] >= cut]
@@ -66,7 +68,9 @@ def main():
     _instrument(pipe)
     res = pipe.run(trade_date, panel=panel)
     lst = res.get("list")
-    print(f"[done] mode={res.get('mode')} n={0 if lst is None else len(lst)}", flush=True)
+    print(
+        f"[done] mode={res.get('mode')} n={0 if lst is None else len(lst)}", flush=True
+    )
     if lst is not None and len(lst):
         print("[list board counts]", lst["board"].value_counts().to_dict(), flush=True)
         print(lst.to_string(index=False), flush=True)

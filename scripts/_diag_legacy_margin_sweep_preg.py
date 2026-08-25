@@ -30,9 +30,7 @@ import pandas as pd
 
 from config.settings import data_others_path
 
-DEFAULT_CSV = (
-    r"D:\AMINQT\DATA OTHERS\diag\legacy_hitrate_topn_20260824_113908.csv"
-)
+DEFAULT_CSV = r"D:\AMINQT\DATA OTHERS\diag\legacy_hitrate_topn_20260824_113908.csv"
 PROD_MARGIN = {"main": 0.0, "dual": 0.08}
 MARGINS_MAIN = [0.00, 0.02, 0.04, 0.06, 0.08, 0.10, 0.12, 0.15, 0.20]
 MARGINS_DUAL = [0.08, 0.10, 0.12, 0.15, 0.20, 0.25, 0.30]
@@ -97,9 +95,7 @@ def main() -> int:
             }
         print(
             "  [pool] "
-            + "  ".join(
-                f"{m:.2f}→{pool_sizes[m]['avg_day']:.1f}/日" for m in margins
-            ),
+            + "  ".join(f"{m:.2f}→{pool_sizes[m]['avg_day']:.1f}/日" for m in margins),
             flush=True,
         )
 
@@ -110,7 +106,9 @@ def main() -> int:
                     dd = dates[-w:] if w else dates
                     sub = v[v["date"].isin(dd)]
                     topn = (
-                        sub.sort_values(["date", "pred_ret_10d"], ascending=[True, False])
+                        sub.sort_values(
+                            ["date", "pred_ret_10d"], ascending=[True, False]
+                        )
                         .groupby("date", sort=False)
                         .head(depth)
                     )
@@ -153,11 +151,11 @@ def main() -> int:
                 if _s["board"] == board and _s["depth"] == 10 and _s["window"] == "full"
             ]
         )
-        full10 = full10.assign(positive_sub=full10["margin"].map(
-            lambda m: int(
-                (subd[(subd["margin"] == m)]["mean"] > 0).sum()
+        full10 = full10.assign(
+            positive_sub=full10["margin"].map(
+                lambda m: int((subd[(subd["margin"] == m)]["mean"] > 0).sum())
             )
-        ))
+        )
         best = full10.sort_values(
             ["positive_sub", "mean"], ascending=[False, False]
         ).iloc[0]
@@ -173,7 +171,8 @@ def main() -> int:
                 "prod_top10_mean": float(
                     full10.loc[full10["margin"] == PROD_MARGIN[board], "mean"].iloc[0]
                 ),
-                "delta": float(best["mean"]) - float(
+                "delta": float(best["mean"])
+                - float(
                     full10.loc[full10["margin"] == PROD_MARGIN[board], "mean"].iloc[0]
                 ),
             }
@@ -182,8 +181,11 @@ def main() -> int:
     out = pd.DataFrame(rows)
     out.to_csv(out_dir / f"legacy_margin_sweep_preg_{ts}.csv", index=False)
     (out_dir / f"legacy_margin_sweep_preg_{ts}.json").write_text(
-        json.dumps({"ts": ts, "source_csv": DEFAULT_CSV, "verdict": verdict},
-                   ensure_ascii=False, indent=2)
+        json.dumps(
+            {"ts": ts, "source_csv": DEFAULT_CSV, "verdict": verdict},
+            ensure_ascii=False,
+            indent=2,
+        )
     )
     print(f"\n[saved] {out_dir}/legacy_margin_sweep_preg_{ts}.csv/.json", flush=True)
     print(f"[done] ({time.time() - t0:.0f}s)", flush=True)

@@ -30,9 +30,7 @@ import pandas as pd
 
 from config.settings import data_others_path
 
-DEFAULT_CSV = (
-    r"D:\AMINQT\DATA OTHERS\diag\legacy_hitrate_topn_20260824_113908.csv"
-)
+DEFAULT_CSV = r"D:\AMINQT\DATA OTHERS\diag\legacy_hitrate_topn_20260824_113908.csv"
 CUR_MARGIN = {"main": 0.08, "dual": 0.10}  # 2026-08-24 落地生产
 ABS_FLOORS = [0.00, 0.50, 0.52, 0.55, 0.58, 0.60, 0.63, 0.65]
 SUBWINDOWS = 4
@@ -45,9 +43,7 @@ def _stats(topn: pd.DataFrame) -> dict:
         "n_days": n_days,
         "picks": int(len(topn)),
         "avg_picks": float(len(topn) / max(n_days, 1)),
-        "n_days_lt10": int(
-            topn.groupby("date").size().lt(10).sum()
-        ),
+        "n_days_lt10": int(topn.groupby("date").size().lt(10).sum()),
         "hit": float((r > 0).mean()) if len(r) else np.nan,
         "mean": float(r.mean()) if len(r) else np.nan,
         "med": float(r.median()) if len(r) else np.nan,
@@ -82,9 +78,13 @@ def main() -> int:
             f"({time.time() - t0:.0f}s)",
             flush=True,
         )
-        print(f"  prob 分位: " + " ".join(
-            f"{q:.2f}" for q in gated["prob"].quantile([0.1, 0.25, 0.5, 0.75, 0.9])
-        ), flush=True)
+        print(
+            "  prob 分位: "
+            + " ".join(
+                f"{q:.2f}" for q in gated["prob"].quantile([0.1, 0.25, 0.5, 0.75, 0.9])
+            ),
+            flush=True,
+        )
         print(
             f"  {'地板':<6}{'票/日':>7}{'<10票日':>8}{'命中':>7}{'实得':>8}"
             f"{'中位':>8}{'≥5%':>7}{'≥10%':>7}",
@@ -125,9 +125,7 @@ def main() -> int:
         )
 
         # 判词: 全窗 top-10 实得最高地板, 以子窗正数数优先; 容量破坏 (<10票) 否决
-        full10 = pd.DataFrame(
-            [_s for _s in rows if _s["board"] == board]
-        ).assign(
+        full10 = pd.DataFrame([_s for _s in rows if _s["board"] == board]).assign(
             positive_sub=full10_positive(subd, board),
         )
         cand = full10[full10["n_days_lt10"] <= full10["n_days_lt10"].iloc[0]]
@@ -144,18 +142,22 @@ def main() -> int:
                 "best_avg_picks": float(best["avg_picks"]),
                 "best_n_days_lt10": int(best["n_days_lt10"]),
                 "best_positive_sub": int(best["positive_sub"]),
-                "base_mean_top10": float(full10.loc[full10["floor"] == 0.0, "mean"].iloc[0]),
-                "delta": float(best["mean"]) - float(
+                "base_mean_top10": float(
                     full10.loc[full10["floor"] == 0.0, "mean"].iloc[0]
                 ),
+                "delta": float(best["mean"])
+                - float(full10.loc[full10["floor"] == 0.0, "mean"].iloc[0]),
             }
         )
 
     out = pd.DataFrame(rows)
     out.to_csv(out_dir / f"legacy_absfloor_sweep_{ts}.csv", index=False)
     (out_dir / f"legacy_absfloor_sweep_{ts}.json").write_text(
-        json.dumps({"ts": ts, "source_csv": DEFAULT_CSV, "verdict": verdict},
-                   ensure_ascii=False, indent=2)
+        json.dumps(
+            {"ts": ts, "source_csv": DEFAULT_CSV, "verdict": verdict},
+            ensure_ascii=False,
+            indent=2,
+        )
     )
     print(f"\n[saved] {out_dir}/legacy_absfloor_sweep_{ts}.csv/.json", flush=True)
     print(f"[done] ({time.time() - t0:.0f}s)", flush=True)
