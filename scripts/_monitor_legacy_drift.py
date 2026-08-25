@@ -232,7 +232,8 @@ def main() -> int:
         th = cal_cfg.get("ece_threshold", {}).get(r["board"])
         line = (
             f"[{r['board']:>4}] 成熟 {r['n_days']:>3} 日 / {r['n_rows']:>6,} 票 | "
-            f"滚动 ECE {r['ece']:+.2%}" if r["ece"] is not None
+            f"滚动 ECE {r['ece']:+.2%}"
+            if r["ece"] is not None
             else f"[{r['board']:>4}] 成熟 {r['n_days']:>3} 日 (积累期, 无 ECE)"
         )
         if th is not None and r["ece"] is not None:

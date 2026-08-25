@@ -170,7 +170,9 @@ def bin_calibration(
     df["bin"] = pd.qcut(df["prob"], q=n_bins, duplicates="drop")
     g = (
         df.groupby("bin", observed=True)
-        .agg(n=("event", "size"), mean_prob=("prob", "mean"), realized=("event", "mean"))
+        .agg(
+            n=("event", "size"), mean_prob=("prob", "mean"), realized=("event", "mean")
+        )
         .query("n > 0")
     )
     if g.empty:

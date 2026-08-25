@@ -291,8 +291,8 @@ def test_check_drift_none_bias_no_alert():
 # ── p_reg 校准 (ECE) ──
 
 WELL_PROBS = [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75]
-WELL_EVENTS = [0, 0, 0, 0, 1, 0, 1, 1, 1, 1]   # 低 prob 少涨, 高 prob 多涨 → 校准好
-ANTI_EVENTS = [1, 1, 1, 1, 0, 1, 0, 0, 0, 0]   # 反向 → 校准差
+WELL_EVENTS = [0, 0, 0, 0, 1, 0, 1, 1, 1, 1]  # 低 prob 少涨, 高 prob 多涨 → 校准好
+ANTI_EVENTS = [1, 1, 1, 1, 0, 1, 0, 0, 0, 0]  # 反向 → 校准差
 
 
 def test_bin_calibration_anti_worse_than_well():
@@ -316,12 +316,12 @@ def test_bin_calibration_overconfident_high_ece():
 
 
 def test_bin_calibration_insufficient_samples():
-    tab, ece = bin_calibration(pd.Series([0.3, 0.4, 0.5]), pd.Series([0, 1, 0]), n_bins=5)
+    tab, ece = bin_calibration(
+        pd.Series([0.3, 0.4, 0.5]), pd.Series([0, 1, 0]), n_bins=5
+    )
     assert tab.empty and np.isnan(ece)
     # 事件单值 (全不涨) → 无法校准
-    tab, ece = bin_calibration(
-        pd.Series(WELL_PROBS * 2), pd.Series([0] * 20), n_bins=5
-    )
+    tab, ece = bin_calibration(pd.Series(WELL_PROBS * 2), pd.Series([0] * 20), n_bins=5)
     assert tab.empty and np.isnan(ece)
 
 
@@ -343,8 +343,13 @@ def test_rolling_calibration_event_threshold():
         }
     )
     cal = rolling_calibration(
-        preds, realized, cost=0.002, thr=0.005, n_bins=1,
-        window_days=2, min_matured_days=2,
+        preds,
+        realized,
+        cost=0.002,
+        thr=0.005,
+        n_bins=1,
+        window_days=2,
+        min_matured_days=2,
     )
     assert len(cal) == 1
     assert cal["n_days"].iloc[0] == 2 and cal["n_rows"].iloc[0] == 2
@@ -369,8 +374,13 @@ def test_rolling_calibration_min_matured_accumulation():
         }
     )
     cal = rolling_calibration(
-        preds, realized, cost=0.002, thr=0.005, n_bins=1,
-        window_days=2, min_matured_days=3,  # > 成熟日 → 积累期
+        preds,
+        realized,
+        cost=0.002,
+        thr=0.005,
+        n_bins=1,
+        window_days=2,
+        min_matured_days=3,  # > 成熟日 → 积累期
     )
     assert len(cal) == 1
     assert cal["ece"].iloc[0] is None and cal["n_rows"].iloc[0] == 0
