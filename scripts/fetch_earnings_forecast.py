@@ -5,11 +5,15 @@
 按年写 data/supply_cache/alt_data/forecast/all_<start>_<end>.parquet,
 已存在的年文件跳过 (断点续拉). 事件语义: 每条 = (ts_code, ann_date, end_date)
 一次披露, 修正公告保留 (update_flag 区分), 去重仅限完全重复行.
+
+回填模式: python scripts/fetch_earnings_forecast.py --backfill-to 20230103
+从现存最早年窗起点往回切年窗补到目标日 (窗口无缝衔接不重叠).
 """
 import os
+import re
 import sys
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 import tushare as ts
@@ -75,11 +79,33 @@ def fetch_window(pro, s: date, e: date) -> pd.DataFrame:
     return out
 
 
+def backfill_windows(target: date) -> list[tuple[date, date]]:
+    """从现存最早年窗起点往回切年窗, 直到盖住 target."""
+    starts = []
+    for f in os.listdir(OUT_DIR):
+        m = re.match(r"^all_(\d{8})_(\d{8})\.parquet$", f)
+        if m:
+            starts.append(datetime.strptime(m.group(1), "%Y%m%d").date())
+    if not starts:
+        print("[warn] 无现存年文件, 回填模式需先跑默认模式建基线", flush=True)
+        return []
+    anchor = min(starts)
+    wins = []
+    while anchor > target:
+        s = anchor - timedelta(days=365)
+        wins.append((s, anchor - timedelta(days=1)))
+        anchor = s
+    return wins
+
+
 def main() -> int:
     os.makedirs(OUT_DIR, exist_ok=True)
     pro = ts.pro_api(TUSHARE_TOKEN)
-    end = date.today()
-    for s, e in year_windows(end, YEARS):
+    if len(sys.argv) >= 3 and sys.argv[1] == "--backfill-to":
+        wins = backfill_windows(datetime.strptime(sys.argv[2], "%Y%m%d").date())
+    else:
+        wins = year_windows(date.today(), YEARS)
+    for s, e in wins:
         tag = f"all_{s:%Y%m%d}_{e:%Y%m%d}"
         path = os.path.join(OUT_DIR, f"{tag}.parquet")
         if os.path.exists(path):
