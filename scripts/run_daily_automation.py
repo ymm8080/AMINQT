@@ -16,6 +16,7 @@
   [deliver_parallel] scripts/_shortlist_t5_t10.py <tag> 并行短名单交付 STOCK_LIST_DIR
   [drift]    scripts/_monitor_legacy_drift.py           幅度漂移监控 (全池 pred vs 实现偏差)
   [drift_parallel] scripts/_monitor_parallel_drift.py   parallel dual 漂移监控 (短名单 vs 检查点标签)
+  [shadow_xmodule] scripts/_shadow_xmodule_blend.py     跨模块影子排名 (legacy×parallel 合池混排, 只记录不交付)
 
 "推送看板" = 各步落盘到看板只读目录, 看板渲染时自动展示:
   模型 → models/pipeline1/current_meta.json + *.pkl (档案页·模型档案)
@@ -71,6 +72,7 @@ _STEP_TIMEOUT_S = {
     "deliver_parallel": 30 * 60,
     "drift": 30 * 60,
     "drift_parallel": 30 * 60,
+    "shadow_xmodule": 15 * 60,
 }
 
 # (步骤名, argv) — argv 不含解释器, run_step 负责拼 [PY, "-u", ...]
@@ -90,6 +92,7 @@ _STEPS = {
     "deliver_parallel": ["scripts/_shortlist_t5_t10.py", "{tag}"],
     "drift": ["scripts/_monitor_legacy_drift.py"],
     "drift_parallel": ["scripts/_monitor_parallel_drift.py"],
+    "shadow_xmodule": ["scripts/_shadow_xmodule_blend.py"],
 }
 # refresh 失败后应跳过的后续步骤 (parallel 需要新鲜检查点);
 # deliver_parallel 需要当日 fresh parallel run_dir (短名单), 否则会交付旧 run_dir 脏数据;
@@ -138,6 +141,9 @@ def plan_steps(
     steps.append(
         "drift_parallel"
     )  # parallel dual 漂移监控 (读历史短名单+检查点, 非关键步骤)
+    steps.append(
+        "shadow_xmodule"
+    )  # 跨模块影子排名 (读两侧已交付清单纯记录, 非关键步骤, 2026-08-26)
     return steps
 
 

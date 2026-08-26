@@ -367,6 +367,18 @@ SHORTLIST_HYSTERESIS = {
     "max_keep": 3,        # 每板块最多滞留数 (防爆清单)
 }
 
+# ── 跨模块影子排名 (2026-08-26 用户批准, 纯记录零交付风险) ──
+# legacy 与 parallel 交付清单按板块并池, 各模块在自己板内名次百分位归一后加权混排,
+# 影子 TOP-N 只落盘不交付. 交集≈0 时 blend≈0.5×自有分 → 实质=两榜按各自强度交错.
+# 数据源 (全部 WORM 已有文件): data/lists/list_<D>*.parquet (legacy, 键=prob_up) +
+# STOCK LIST parallel_shortlist_<D>__*.csv (键=rank_blend, 多版本 keep-last).
+XMODULE_SHADOW = {
+    "enable": True,
+    "weights": {"legacy": 0.5, "parallel": 0.5},
+    "top_n": 10,
+    "out_root": "shadow",  # 相对 DATA_OTHERS_DIR, 影子清单不进 STOCK LIST 交付目录
+}
+
 # ── legacy 幅度/校准漂移监控 (2026-08-17 幅度, 2026-08-24 加 ECE 校准) ──
 # 08-17 诊断: pred_ret_10d 系统高估 (main 均值 +4.03% vs 实现 +1.10%, dual +6.59% vs
 # +1.32%), 偏差随时间扩大 → 生产 "pred>0" 闸 100% 空转. 修漂移 = 重训 (周频已做),
