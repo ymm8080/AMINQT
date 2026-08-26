@@ -50,15 +50,19 @@ def _synth_df(n_dates=40, n_symbols=4, seed=7):
 
 
 def _count_wrapper(gen):
-    """包一层 _family_for_symbol 计数, 验证短路后 per-symbol 计算零触发."""
+    """包一层 _family_columns_vec 计数, 验证短路族不进向量化内核 (零计算).
+
+    2026-08-25 起族计算走 _family_columns_vec (向量化, 免逐 symbol 循环),
+    计数锚点从 _family_for_symbol (每 symbol 1 次) 换到内核 (每族至多 1 次).
+    """
     calls = {"n": 0}
-    orig = gen._family_for_symbol
+    orig = gen._family_columns_vec
 
-    def counted(g, raw, family_name, windows, suffix):
+    def counted(*args, **kwargs):
         calls["n"] += 1
-        return orig(g, raw, family_name, windows, suffix)
+        return orig(*args, **kwargs)
 
-    gen._family_for_symbol = counted
+    gen._family_columns_vec = counted
     return calls
 
 
@@ -77,7 +81,7 @@ class TestGenerateColumnsPrefilter:
             )
 
     def test_zero_intersection_family_skips_per_symbol_work(self):
-        """need 只含 pct 族列 → 其余 6 族返回 None 且零 per-symbol 计算."""
+        """need 只含 pct 族列 → 其余 6 族返回 None 且零内核计算."""
         df = _synth_df()
         gen = BruteForceGenerator()
         raw_cols = gen._eligible(df)
@@ -90,8 +94,8 @@ class TestGenerateColumnsPrefilter:
                 assert set(new.columns) == need, "只应驻留 need 交集列"
             else:
                 assert new is None, f"{fam}: 零交集应短路返回 None"
-        # 全 symbol 白算路径: 7 族 × 4 symbol = 28 次; 短路后只 pct_change 4 次
-        assert calls["n"] == 4, f"per-symbol 计算应只发生 4 次, 实际 {calls['n']}"
+        # 白算路径: 7 族各进 1 次内核; 短路后只 pct_change 进 1 次
+        assert calls["n"] == 1, f"内核计算应只发生 1 次, 实际 {calls['n']}"
 
     def test_overlap_family_output_byte_identical_to_materialized(self):
         """有交集族: 输出 = generate_family 物化宽帧的 need 子集 (逐字节一致)."""
