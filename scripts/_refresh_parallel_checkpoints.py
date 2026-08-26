@@ -26,10 +26,11 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 import pandas as pd
+import psutil
 
 from app.pipeline1.cleaning_pipeline import CleaningPipeline, load_panel_v3
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from config.settings import PANEL_V3_PATH
+from config.settings import LHB_V2_SPEC, PANEL_V3_PATH
 from scripts._reclassify_all_features import (
     DUAL_CHECKPOINT,
     MAIN_CHECKPOINT,
@@ -39,7 +40,10 @@ from scripts._reclassify_all_features import (
 # 决定检查点内容的源文件 → 任一变化指纹必变 → 全量重建 (绝不静默跳过).
 # 检查点内容 = 特征 + 标签 (fe.build + LabelEngine 计算). 指纹覆盖:
 #   - 特征/清洗/标签/构建代码 (FeatureEngineV35 / CleaningPipeline / LabelEngine / build_board_slice)
-#   - 特征配置: fe.build 从 config/settings.py 读 LHB_V2_SPEC → settings 变化会改特征 → 必须算.
+#   - settings 键: fe.build 只 import LHB_V2_SPEC, load_panel_v3/_reclassify 只 import
+#     PANEL_V3_PATH → 这两个键的值直接入指纹 (2026-08-25 起不再整文件 hash settings.py,
+#     否则只改 serving 闸 LEGACY_ENTRY_GATE/LEGACY_PROB_GATE/REGIME_GATE 等不进检查点的
+#     配置也会误触发 ~1-1.5h 全量重建).
 # 排名/评分配置 (SHORTLIST_SCORE / parallel HORIZONS / select_gate) 在预测期运行时应用,
 # 不进入检查点 → 不触发重建 (改了排名旧检查点依然有效, 新评分自动生效).
 _FINGERPRINT_FILES = [
@@ -48,10 +52,13 @@ _FINGERPRINT_FILES = [
     "app/pipeline1/label_engine.py",
     "scripts/_reclassify_all_features.py",
     "scripts/_diag_column_feed.py",  # MASK_RECENT_DAYS 等构造常量
-    "config/settings.py",  # fe.build 读 LHB_V2_SPEC (特征参数, 影响检查点内容)
     "scripts/_refresh_parallel_checkpoints.py",  # load_panel 预过滤改变检查点行集 (2026-08-10)
 ]
 _FINGERPRINT_META = os.path.join("data", "_diag_stage_3y.fingerprint.json")
+
+# 并发锁 (2026-08-25): 08-24 自动化 refresh 与手动 refresh 并发双建 → 16GB OOM →
+# 整链被杀当天清单未交付. 锁内容 = 持锁进程 PID, 存活即互斥.
+_LOCK_FILE = os.path.join("data", "_refresh_parallel.lock")
 
 
 def _repo_root() -> str:
@@ -64,7 +71,46 @@ def compute_fingerprint() -> str:
     for rel in _FINGERPRINT_FILES:
         with open(os.path.join(root, rel), "rb") as fh:
             h.update(fh.read())
+    # 检查点真正依赖的 settings 键精确入指纹 (见 _FINGERPRINT_FILES 上方注释)
+    h.update(json.dumps(LHB_V2_SPEC, sort_keys=True).encode("utf-8"))
+    h.update(str(PANEL_V3_PATH).encode("utf-8"))
     return h.hexdigest()
+
+
+def _acquire_refresh_lock() -> bool:
+    """原子获取并发锁. True=拿到; False=已有存活实例在跑 (调用方直接退出)."""
+    for _attempt in range(2):
+        try:
+            fd = os.open(_LOCK_FILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            pid = -1
+            try:
+                with open(_LOCK_FILE, encoding="utf-8") as fh:
+                    pid = int(fh.read().strip())
+            except (OSError, ValueError):
+                pass
+            if pid > 0 and psutil.pid_exists(pid):
+                print(f"[lock] refresh already running (PID {pid}), exit", flush=True)
+                return False
+            try:  # 陈旧锁 (持锁进程已死/内容损坏) → 回收后重试一次
+                os.remove(_LOCK_FILE)
+                print(f"[lock] reclaimed stale lock (PID {pid})", flush=True)
+            except OSError:
+                pass
+            continue
+        else:
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            return True
+    print("[lock] lock contention, exit", flush=True)
+    return False
+
+
+def _release_refresh_lock() -> None:
+    try:
+        os.remove(_LOCK_FILE)
+    except OSError:
+        pass
 
 
 def _read_fingerprint_meta() -> dict | None:
@@ -117,6 +163,15 @@ def main(force: bool = False) -> int:
     except Exception:
         pass
 
+    if not _acquire_refresh_lock():
+        return 0
+    try:
+        return _main_locked(force)
+    finally:
+        _release_refresh_lock()
+
+
+def _main_locked(force: bool) -> int:
     if _skip_if_unchanged(force):
         return 0
 
