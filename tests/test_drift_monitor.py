@@ -17,9 +17,11 @@ from app.pipeline1.drift_monitor import (
     check_calibration,
     check_drift,
     compute_realized,
+    compute_realized_mfe,
     daily_bias,
     rolling_bias,
     rolling_calibration,
+    rolling_calibration_mfe,
 )
 
 # 8 个交易日, 周末跳过 (2026-08-10 周一 .. 08-19 周三)
@@ -398,3 +400,109 @@ def test_check_calibration_thresholds():
     alerts = check_calibration(rolling, {"main": 0.10, "dual": 0.10})
     assert [a["board"] for a in alerts] == ["dual"]  # main 0.05 < 0.10, other 无阈值
     assert alerts[0]["ece"] == pytest.approx(0.12)
+
+
+# ── parallel MFE 校准 (2026-08-26, compute_realized_mfe + rolling_calibration_mfe) ──
+
+
+def _panel_mfe() -> pd.DataFrame:
+    """两股面板含 high_hfq: A 全勤; B 08-12 停牌 (close NaN → ffill, high 缺口不 ffill)."""
+    rows = []
+    for d in CAL:
+        i = CAL.index(d)
+        rows.append(
+            {
+                "symbol": "A",
+                "date": pd.Timestamp(d),
+                "high_hfq": 10.5 + i * 0.5,   # 恒为 close+0.5
+                "close_hfq": 10.0 + i * 0.5,
+            }
+        )
+        if d != "2026-08-12":
+            rows.append(
+                {
+                    "symbol": "B",
+                    "date": pd.Timestamp(d),
+                    "high_hfq": 21.0 + i * 1.0,
+                    "close_hfq": 20.0 + i * 1.0,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def test_compute_realized_mfe_matches_formula():
+    """决策日=cal[0], horizon=3: T+1 收盘买, 峰=max(high[cal[2]..cal[4]])."""
+    panel = _panel_mfe()
+    # 决策日 = cal[0], horizon=10 → 需 cal[12] 不存在 → 不成熟
+    assert compute_realized_mfe(panel, pd.Series([pd.Timestamp(CAL[0])])).empty
+
+    realized = compute_realized_mfe(
+        panel, pd.Series([pd.Timestamp(CAL[0])]), horizon=3, cost=0.003
+    )
+    assert len(realized) == 2
+    a = realized[realized["symbol"] == "A"].iloc[0]
+    # A: buy=cal[1]=10.5, 峰=max(11.5,12.0,12.5)=12.5 → 12.5/10.5-1-0.003
+    assert a["realized_mfe"] == pytest.approx(12.5 / 10.5 - 1.0 - 0.003)
+    # B: buy=cal[1]=21.0, 峰=max(23.0,24.0,25.0)=25.0 → 25/21-1-0.003
+    b = realized[realized["symbol"] == "B"].iloc[0]
+    assert b["realized_mfe"] == pytest.approx(25.0 / 21.0 - 1.0 - 0.003)
+
+
+def test_compute_realized_mfe_suspension_ffill():
+    """决策日=cal[1] (08-11), horizon=1: T+1=cal[2]=08-12 停牌 → B close ffill 到 21.0."""
+    panel = _panel_mfe()
+    realized = compute_realized_mfe(
+        panel, pd.Series([pd.Timestamp(CAL[1])]), horizon=1, cost=0.0
+    )
+    b = realized[realized["symbol"] == "B"].iloc[0]
+    # B: buy=ffill(21.0), 峰=high[cal[3]]=24.0 (停牌日 high 缺失不参与 max)
+    assert b["realized_mfe"] == pytest.approx(24.0 / 21.0 - 1.0)
+
+
+def test_rolling_calibration_mfe_event_and_ece():
+    """事件 = net MFE > thr (无 cost 还原); 过高估 prob → ECE = 高估幅度."""
+    preds = pd.DataFrame(
+        {
+            "date": [pd.Timestamp("2026-08-10"), pd.Timestamp("2026-08-11")],
+            "symbol": ["A", "A"],
+            "board": ["dual", "dual"],
+            "pred_prob_10d": [0.8, 0.6],
+        }
+    )
+    realized = pd.DataFrame(
+        {
+            "date": [pd.Timestamp("2026-08-10"), pd.Timestamp("2026-08-11")],
+            "symbol": ["A", "A"],
+            "realized_mfe": [0.061, 0.059],  # >0.06 事件; <0.06 不事件
+        }
+    )
+    cal = rolling_calibration_mfe(
+        preds, realized, thr=0.06, n_bins=1, window_days=2, min_matured_days=2
+    )
+    assert len(cal) == 1
+    assert cal["n_rows"].iloc[0] == 2
+    # 单桶: mean_prob 0.7, realized 0.5 → ECE 0.2 (过信)
+    assert cal["ece"].iloc[0] == pytest.approx(0.2)
+
+
+def test_rolling_calibration_mfe_accumulation():
+    preds = pd.DataFrame(
+        {
+            "date": [pd.Timestamp("2026-08-10")],
+            "symbol": ["A"],
+            "board": ["dual", ],
+            "pred_prob_10d": [0.5],
+        }
+    )
+    realized = pd.DataFrame(
+        {
+            "date": [pd.Timestamp("2026-08-10")],
+            "symbol": ["A"],
+            "realized_mfe": [0.07],
+        }
+    )
+    cal = rolling_calibration_mfe(
+        preds, realized, thr=0.06, min_matured_days=3
+    )
+    assert len(cal) == 1
+    assert cal["ece"].iloc[0] is None and cal["n_rows"].iloc[0] == 0

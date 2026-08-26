@@ -11,11 +11,14 @@
 
 输出: 成熟日数/最新偏差/滚动偏差 vs 阈值 + 告警; WORM 报告
   DATA OTHERS/diag/parallel_drift_<ts>.json (含逐日明细). 退出码恒 0 (告警不进自动化失败).
+08-26 增补 ECE 校准节: STOCK LIST 短名单 pred_prob_10d vs 盘中 MFE 实现事件
+  (net MFE > mfe_threshold, 口径同 backtest.add_mfe_labels), 滚动 ECE 超阈值告警.
 用法: python scripts/_monitor_parallel_drift.py
 """
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import sys
@@ -26,15 +29,42 @@ import pandas as pd
 
 from app.pipeline1.drift_monitor import (
     accumulate_parallel_picks,
+    check_calibration,
     check_drift,
+    compute_realized_mfe,
     daily_bias,
     rolling_bias,
+    rolling_calibration_mfe,
 )
 from config.settings import (
     DATA_DIR,
+    PANEL_V3_PATH,
     PARALLEL_DRIFT_MONITOR,
+    STOCK_LIST_DIR,
     data_others_path,
 )
+
+
+def _load_shortlist_probs() -> pd.DataFrame:
+    """STOCK LIST 的 parallel_shortlist_*.csv → (date, board, symbol, pred_prob_10d).
+
+    文件名含交付日+生成戳 (r/r2/r3 修订版), 按文件名排序拼接后 (date,symbol)
+    keep-last = 每个交付日的最新一代. 清单是 top10 板内子集 (非全池), ECE 度量
+    的是"交付给用户的概率数字"的校准.
+    """
+    cols = ["date", "board", "symbol", "pred_prob_10d"]
+    parts = []
+    for f in sorted(glob.glob(str(STOCK_LIST_DIR / "parallel_shortlist_*.csv"))):
+        df = pd.read_csv(f, dtype={"symbol": str})
+        if not set(cols).issubset(df.columns):
+            continue
+        parts.append(df[cols])
+    parts = [p for p in parts if len(p)]  # 0 行文件 (历史空转) 避开 concat FutureWarning
+    if not parts:
+        return pd.DataFrame(columns=cols)
+    df = pd.concat(parts, ignore_index=True)
+    df["symbol"] = df["symbol"].str.zfill(6)
+    return df.drop_duplicates(subset=["date", "symbol"], keep="last")
 
 
 def _fmt_pct(v) -> str:
@@ -108,6 +138,72 @@ def main() -> int:
     if not alerts:
         print("[ok] 无板块滚动偏差超阈值", flush=True)
 
+    cal_cfg = cfg.get("calibration", {})
+    cal, cal_alerts, cal_panel_last = [], [], None
+    if cal_cfg.get("enable"):
+        prob = _load_shortlist_probs()
+        prob["date"] = pd.to_datetime(prob["date"])
+        print(
+            f"\n[calib-preds] 短名单概率 {len(prob):,} 票 / "
+            f"{prob['date'].nunique() if len(prob) else 0} 日 (top10 子集)",
+            flush=True,
+        )
+        if len(prob):
+            lo = prob["date"].min() - pd.Timedelta(days=15)
+            cal_panel = pd.read_parquet(
+                str(PANEL_V3_PATH),
+                columns=["symbol", "date", "high_hfq", "close_hfq"],
+                filters=[("date", ">=", lo)],
+            )
+            cal_panel["symbol"] = cal_panel["symbol"].astype(str)
+            cal_panel_last = str(pd.Timestamp(cal_panel["date"].max()).date())
+            realized_mfe = compute_realized_mfe(
+                cal_panel,
+                prob["date"],
+                horizon=int(cal_cfg.get("horizon", 10)),
+                cost=float(cal_cfg.get("cost", 0.0030)),
+            )
+            print(f"[calib-realized] 成熟 {len(realized_mfe):,} 票", flush=True)
+            cal = rolling_calibration_mfe(
+                prob,
+                realized_mfe,
+                thr=float(cal_cfg.get("mfe_threshold", 0.06)),
+                n_bins=int(cal_cfg.get("n_bins", 5)),
+                window_days=window_days,
+                min_matured_days=min_matured,
+            )
+            cal_alerts = check_calibration(cal, cal_cfg.get("ece_threshold", {}))
+
+            print(
+                f"===== pred_prob_10d 校准 (滚动窗 {window_days} 交易日, "
+                f"事件 = net MFE(盘中) > {float(cal_cfg.get('mfe_threshold', 0.06)):.0%}) =====",
+                flush=True,
+            )
+            for _, r in cal.iterrows():
+                th = cal_cfg.get("ece_threshold", {}).get(r["board"])
+                if r["ece"] is None:
+                    line = f"[{r['board']:>4}] 成熟 {r['n_days']:>3} 日 (积累期, 无 ECE)"
+                else:
+                    line = (
+                        f"[{r['board']:>4}] 成熟 {r['n_days']:>3} 日 / "
+                        f"{r['n_rows']:>6,} 票 | 滚动 ECE {r['ece']:+.2%}"
+                    )
+                    if th is not None:
+                        line += f" vs 阈值 {th:+.2%}"
+                    if any(a["board"] == r["board"] for a in cal_alerts):
+                        line += "  [CALIB-ALERT] 概率校准漂移"
+                print(line, flush=True)
+                for b in r["bins"]:
+                    print(
+                        f"      {b['bin']:>14}: n={b['n']:>4}  pred {b['mean_prob']:.2f} "
+                        f"real {b['realized']:.2f} gap {b['gap']:+.2f}",
+                        flush=True,
+                    )
+            if not cal_alerts:
+                print("[ok] 无板块校准 ECE 超阈值", flush=True)
+        else:
+            print("[warn] 无 parallel_shortlist_*.csv (短名单未落盘), 跳过校准", flush=True)
+
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     out_dir = data_others_path("diag")
     report = {
@@ -119,6 +215,11 @@ def main() -> int:
         "daily": daily.to_dict("records"),
         "rolling": rolling.to_dict("records"),
         "alerts": alerts,
+        "calibration": {
+            "panel_last": cal_panel_last,
+            "rolling": cal.to_dict("records"),
+            "alerts": cal_alerts,
+        },
     }
     (out_dir / f"parallel_drift_{ts}.json").write_text(
         json.dumps(report, indent=2, ensure_ascii=False, default=str),

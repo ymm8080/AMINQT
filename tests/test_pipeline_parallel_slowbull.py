@@ -869,3 +869,50 @@ def test_simulate_slowbull_realized_structure():
     assert w["cur"]["n"] > 0  # 有足够历史可平仓
     assert w["op_rule"]["n"] <= w["n_picks"]  # 上升段才开仓
     assert 0 <= w["op_rule"]["n"]
+
+
+# ── 模块暂停交付 (2026-08-26, SLOW_BULL_PAUSE + runner.write_slowbull_pool) ──
+
+
+def test_slowbull_pause_writes_note_not_pool(tmp_path, monkeypatch):
+    """paused → 写说明文件 (含 symbol 空列), 不算池子不选股."""
+    from app.pipeline_parallel import runner as runner_mod
+
+    monkeypatch.setattr(runner_mod, "STOCK_LIST_DIR", tmp_path)
+    monkeypatch.setattr(
+        runner_mod,
+        "SLOW_BULL_PAUSE",
+        {"paused": True, "reason": "测试暂停"},
+    )
+
+    def _no_pool(*a, **k):  # 暂停时不得触发池子计算
+        raise AssertionError("paused 时不应计算 slowbull 池")
+
+    monkeypatch.setattr(runner_mod.signals, "daily_slowbull_pool", _no_pool)
+    fn = runner_mod.write_slowbull_pool(pd.DataFrame(), board="main", date="2026-08-26")
+    assert fn == "slowbull_pool_main_20260826__slow_bull_v1_0.csv"
+    df = pd.read_csv(tmp_path / fn)
+    assert list(df.columns) == ["board", "symbol", "date", "note"]
+    assert df["symbol"].isna().all() or (df["symbol"] == "").all()
+    assert df["note"].iloc[0] == "测试暂停"
+    # merge 列协议: board+symbol 两列可取且空 symbol 不产候选键
+    keys = set(zip(df["board"], df["symbol"].fillna("")))
+    assert ("main", "") in keys
+
+
+def test_slowbull_unpaused_empty_pool_no_file(tmp_path, monkeypatch):
+    """未暂停 + 空池 → 原行为: 不落盘返回 ''."""
+    from app.pipeline_parallel import runner as runner_mod
+
+    monkeypatch.setattr(runner_mod, "STOCK_LIST_DIR", tmp_path)
+    monkeypatch.setattr(
+        runner_mod,
+        "SLOW_BULL_PAUSE",
+        {"paused": False, "reason": ""},
+    )
+    monkeypatch.setattr(
+        runner_mod.signals, "daily_slowbull_pool", lambda *a, **k: pd.DataFrame()
+    )
+    fn = runner_mod.write_slowbull_pool(pd.DataFrame(), board="dual", date="2026-08-26")
+    assert fn == ""
+    assert not (tmp_path / "slowbull_pool_dual_20260826__slow_bull_v1_0.csv").exists()

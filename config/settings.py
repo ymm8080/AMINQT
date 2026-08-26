@@ -357,6 +357,16 @@ STALL_MARKER = {
     },
 }
 
+# ── 短名单迟滞滞留 (2026-08-26 用户定案 "清单加迟滞降换手") ──
+# 昨日上榜股今日跌出 TOP-10 但仍在板内前 band_factor×10 名 → 滞留 (keep_flag="滞留",
+# 排序沉底). 只降清单换手 (预测小幅回落即被换出 → 名单天天变), 不改新选股.
+# TOP-10 新选不变 (2026-08-23 定案), 滞留是额外标注行.
+SHORTLIST_HYSTERESIS = {
+    "enable": True,
+    "band_factor": 2.0,   # 滞留带 = 板内排名 ≤ 10 × 此值
+    "max_keep": 3,        # 每板块最多滞留数 (防爆清单)
+}
+
 # ── legacy 幅度/校准漂移监控 (2026-08-17 幅度, 2026-08-24 加 ECE 校准) ──
 # 08-17 诊断: pred_ret_10d 系统高估 (main 均值 +4.03% vs 实现 +1.10%, dual +6.59% vs
 # +1.32%), 偏差随时间扩大 → 生产 "pred>0" 闸 100% 空转. 修漂移 = 重训 (周频已做),
@@ -395,6 +405,15 @@ PARALLEL_DRIFT_MONITOR = {
     "bias_threshold": {"dual": 0.07},  # 初始值 (沿用 legacy dual), 勿当定案
     "run_root": "BACKTESTING RESULT",  # 相对 DATA_OTHERS_DIR 的 run_dir 根
     "checkpoint_dual": "_diag_stage_dual_3y.parquet",  # 相对 DATA_DIR, refresh 步骤更新
+    # 08-26 ECE 校准节: pred_prob_10d 事件 = net MFE(盘中) > mfe_threshold
+    "calibration": {
+        "enable": True,
+        "mfe_threshold": 0.06,   # = _shortlist_t5_t10.ABS_TARGET["10d"]
+        "n_bins": 5,
+        "cost": 0.0030,          # COST 0.0013 + 2×滑点中档 (adv20 分层取代表值)
+        "horizon": 10,           # 成熟需 T+1+10 交易日
+        "ece_threshold": {"main": 0.20, "dual": 0.25},  # 沿用 legacy 初始值
+    },
 }
 
 # ── 重训内存独占闸 (2026-08-15 用户定案, 代码强制"重训期间不跑其他重活") ──
