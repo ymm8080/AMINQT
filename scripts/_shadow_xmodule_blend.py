@@ -40,8 +40,16 @@ from config.settings import (
 LEGACY_BOARD = {"main": "main", "GEM": "dual", "STAR": "dual"}
 
 SHADOW_COLS = [
-    "date", "board", "symbol", "in_legacy", "in_parallel",
-    "legacy_pct", "parallel_pct", "blend", "shadow_rank", "source",
+    "date",
+    "board",
+    "symbol",
+    "in_legacy",
+    "in_parallel",
+    "legacy_pct",
+    "parallel_pct",
+    "blend",
+    "shadow_rank",
+    "source",
 ]
 
 
@@ -51,9 +59,9 @@ def load_legacy(date: str) -> pd.DataFrame | None:
     if not fps:
         return None
     parts = [
-        pd.read_parquet(
-            fp, columns=["symbol", "board", "prob_up"]
-        ).assign(symbol=lambda d: d["symbol"].astype(str).str.zfill(6))
+        pd.read_parquet(fp, columns=["symbol", "board", "prob_up"]).assign(
+            symbol=lambda d: d["symbol"].astype(str).str.zfill(6)
+        )
         for fp in fps
     ]
     d = pd.concat(parts, ignore_index=True).dropna(subset=["prob_up"])
@@ -80,9 +88,7 @@ def load_parallel(date: str) -> pd.DataFrame | None:
         return None
     d = pd.concat(parts, ignore_index=True)
     d["symbol"] = d["symbol"].str.zfill(6)
-    d = d.dropna(subset=["rank_blend"]).drop_duplicates(
-        subset=["symbol"], keep="last"
-    )
+    d = d.dropna(subset=["rank_blend"]).drop_duplicates(subset=["symbol"], keep="last")
     if d.empty:
         return None
     return d[["symbol", "board", "rank_blend"]].rename(
@@ -103,8 +109,12 @@ def build_shadow(
     """
     frames = []
     member = {
-        "legacy": set(legacy["symbol"]) if legacy is not None and len(legacy) else set(),
-        "parallel": set(parallel["symbol"]) if parallel is not None and len(parallel) else set(),
+        "legacy": set(legacy["symbol"])
+        if legacy is not None and len(legacy)
+        else set(),
+        "parallel": set(parallel["symbol"])
+        if parallel is not None and len(parallel)
+        else set(),
     }
     for name, src in (("legacy", legacy), ("parallel", parallel)):
         if src is None or src.empty:
@@ -132,7 +142,8 @@ def build_shadow(
     wide["in_legacy"] = wide["symbol"].isin(member["legacy"])
     wide["in_parallel"] = wide["symbol"].isin(member["parallel"])
     wide["source"] = np.where(
-        wide["in_legacy"] & wide["in_parallel"], "both",
+        wide["in_legacy"] & wide["in_parallel"],
+        "both",
         np.where(wide["in_legacy"], "legacy", "parallel"),
     )
     out = []
@@ -189,20 +200,25 @@ def main() -> int:
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     if args.backfill:
         leg_days = {
-            os.path.basename(p)[len("list_"):][:8]
+            os.path.basename(p)[len("list_") :][:8]
             for p in glob.glob(str(DATA_DIR / "lists" / "list_*.parquet"))
-            if os.path.basename(p)[len("list_"):][:8].isdigit()
+            if os.path.basename(p)[len("list_") :][:8].isdigit()
         }
         par_days = {
-            os.path.basename(p).split("__")[0][len("parallel_shortlist_"):]
+            os.path.basename(p).split("__")[0][len("parallel_shortlist_") :]
             for p in glob.glob(str(STOCK_LIST_DIR / "parallel_shortlist_*.csv"))
         }
         done = {
-            os.path.basename(p).split("__")[0][len("xmodule_blend_"):]
-            for p in glob.glob(str(data_others_path(cfg["out_root"]) / "xmodule_blend_*.csv"))
+            os.path.basename(p).split("__")[0][len("xmodule_blend_") :]
+            for p in glob.glob(
+                str(data_others_path(cfg["out_root"]) / "xmodule_blend_*.csv")
+            )
         }
         days = sorted((leg_days & par_days) - done)
-        print(f"[shadow] 回填 {len(days)} 日: {days[0] if days else '—'}..{days[-1] if days else '—'}", flush=True)
+        print(
+            f"[shadow] 回填 {len(days)} 日: {days[0] if days else '—'}..{days[-1] if days else '—'}",
+            flush=True,
+        )
         for d in days:
             run_date(d, f"bf{ts}", cfg)
         return 0

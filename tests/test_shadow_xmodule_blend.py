@@ -17,14 +17,14 @@ W = {"legacy": 0.5, "parallel": 0.5}
 
 def _legacy(rows):
     # rows = (symbol, board, prob_up)
-    return pd.DataFrame(
-        rows, columns=["symbol", "board_group", "key"]
-    )
+    return pd.DataFrame(rows, columns=["symbol", "board_group", "key"])
 
 
 def test_pct_normalization_top1_and_last():
     """3 票: 第1名 pct=1.0, 第2名 0.5, 第3名 0.0."""
-    legacy = _legacy([("600001", "main", 0.9), ("600002", "main", 0.6), ("600003", "main", 0.3)])
+    legacy = _legacy(
+        [("600001", "main", 0.9), ("600002", "main", 0.6), ("600003", "main", 0.3)]
+    )
     res = build_shadow(legacy, None, W, 10)
     by = res.set_index("symbol")["legacy_pct"]
     assert by["600001"] == 1.0 and by["600002"] == 0.5 and by["600003"] == 0.0
@@ -52,7 +52,9 @@ def test_pct_is_within_board_not_global():
 
 def test_missing_module_pct_zero_both_sides_outrank_single():
     """双源票 blend=1.0 > 单源中位票; 缺席侧 pct=0 且 source 如实标模块."""
-    legacy = _legacy([("600001", "main", 0.9), ("600002", "main", 0.8), ("600004", "main", 0.7)])
+    legacy = _legacy(
+        [("600001", "main", 0.9), ("600002", "main", 0.8), ("600004", "main", 0.7)]
+    )
     parallel = _legacy([("600001", "main", 0.95), ("600003", "main", 0.7)])
     res = build_shadow(legacy, parallel, W, 10).set_index("symbol")
     assert res.loc["600001", "blend"] == 1.0
@@ -77,8 +79,8 @@ def test_top_n_cut_per_board():
         + [("300001", "dual", 0.5)]
     )
     res = build_shadow(legacy, None, W, 3)
-    assert (res[res["board"] == "main"].shape[0] == 3)
-    assert (res[res["board"] == "dual"].shape[0] == 1)
+    assert res[res["board"] == "main"].shape[0] == 3
+    assert res[res["board"] == "dual"].shape[0] == 1
     # 截掉的必是低分票
     assert "600004" not in set(res["symbol"])
 

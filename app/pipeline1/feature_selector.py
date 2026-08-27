@@ -360,20 +360,28 @@ class BruteForceGenerator:
             res = {}
             for w in windows:
                 if family_name == "rolling_mean":
-                    want = [c for c in chunk if need is None or f"{c}_brute_ma{w}" in need]
+                    want = [
+                        c for c in chunk if need is None or f"{c}_brute_ma{w}" in need
+                    ]
                     if want:
                         out = g.rolling(w, min_periods=1).mean()
                         for c in want:
                             res[(c, w, "v")] = cast32(out[c].to_numpy())
                 elif family_name == "rolling_std":
-                    want = [c for c in chunk if need is None or f"{c}_brute_std{w}" in need]
+                    want = [
+                        c for c in chunk if need is None or f"{c}_brute_std{w}" in need
+                    ]
                     if want:
                         out = g.rolling(w, min_periods=1).std()
                         for c in want:
                             res[(c, w, "v")] = cast32(out[c].to_numpy())
                 elif family_name in ("rolling_max", "rolling_min"):
-                    want_max = [c for c in chunk if need is None or f"{c}_brute_max{w}" in need]
-                    want_min = [c for c in chunk if need is None or f"{c}_brute_min{w}" in need]
+                    want_max = [
+                        c for c in chunk if need is None or f"{c}_brute_max{w}" in need
+                    ]
+                    want_min = [
+                        c for c in chunk if need is None or f"{c}_brute_min{w}" in need
+                    ]
                     if want_max or want_min:
                         rolled = g.rolling(w, min_periods=1)
                         if want_max:
@@ -385,7 +393,9 @@ class BruteForceGenerator:
                             for c in want_min:
                                 res[(c, w, "n")] = cast32(out_n[c].to_numpy())
                 elif family_name == "EMA":
-                    want = [c for c in chunk if need is None or f"{c}_brute_ema{w}" in need]
+                    want = [
+                        c for c in chunk if need is None or f"{c}_brute_ema{w}" in need
+                    ]
                     if want:
                         out = g.ewm(span=w, min_periods=1).mean()
                         for c in want:

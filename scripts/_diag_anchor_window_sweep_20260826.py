@@ -28,10 +28,10 @@ from config.settings import data_others_path
 from scripts import _shortlist_t5_t10 as sl
 
 WINDOWS = [60, 90, 120, 180, 250]  # 250 = 现状
-EVAL_DAYS = 250                    # 主评估 = 尾 250 已实现日 (~1 年)
+EVAL_DAYS = 250  # 主评估 = 尾 250 已实现日 (~1 年)
 N_CHUNKS = 3
-TOPS = [9, 10, 11]                 # 10 = 现状, 9/11 = 扰动
-FRAME_WINDOW = 700                 # 加宽面板 (~712 交易日, 3y 全量)
+TOPS = [9, 10, 11]  # 10 = 现状, 9/11 = 扰动
+FRAME_WINDOW = 700  # 加宽面板 (~712 交易日, 3y 全量)
 
 
 def daily_top_mean(fr: pd.DataFrame, h: str, top: int) -> pd.Series:
@@ -95,7 +95,7 @@ def main() -> int:
                 if e_eval.empty:
                     continue
                 chunks = chunk_bias(e_eval, N_CHUNKS)
-                p10 = lambda v: (f"{v:+.2%}" if np.isfinite(v) else "—")  # noqa: E731
+                p10 = lambda v: f"{v:+.2%}" if np.isfinite(v) else "—"  # noqa: E731
                 print(
                     f"  {w:>4} | {p10(e_eval.mean())} {p10(e_eval.abs().mean()):>7} | "
                     f"{' '.join(p10(c) for c in chunks)} | "

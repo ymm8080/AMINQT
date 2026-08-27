@@ -1094,7 +1094,11 @@ def hysteresis_keep(
         bf = full[full["board"] == board]
         if bf.empty:
             continue
-        prob = bf["pred_prob"] if "pred_prob" in bf.columns else pd.Series(np.nan, index=bf.index)
+        prob = (
+            bf["pred_prob"]
+            if "pred_prob" in bf.columns
+            else pd.Series(np.nan, index=bf.index)
+        )
         k = bf[CAND_RANK_KEY] * prob  # NaN prob → NaN → 排尾 (rank_and_truncate 同口径)
         order = pd.DataFrame({"_i": bf.index, "_k": k}).sort_values(
             "_k", ascending=False, na_position="last"
@@ -1113,7 +1117,11 @@ def hysteresis_keep(
         rows = full.loc[keep_idx].copy()
         rows["cut"] = "T-10"
         rows["keep_flag"] = "滞留"
-        prob = rows["pred_prob"] if "pred_prob" in rows.columns else pd.Series(np.nan, index=rows.index)
+        prob = (
+            rows["pred_prob"]
+            if "pred_prob" in rows.columns
+            else pd.Series(np.nan, index=rows.index)
+        )
         rows["rank_blend"] = (rows[CAND_RANK_KEY] * prob).fillna(rows[CAND_RANK_KEY])
         out = pd.concat([out, rows], ignore_index=True)
         print(

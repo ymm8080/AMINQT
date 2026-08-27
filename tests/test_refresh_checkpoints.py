@@ -26,7 +26,9 @@ def refresh_mod(monkeypatch, tmp_path):
     # _write_fingerprint_meta 的旧测试曾把假 latest_date (08-07) 写进真实 meta,
     # 导致下次 refresh 误判数据落后而白白全量重建 (2026-08-25 事故).
     monkeypatch.setattr(mod, "_LOCK_FILE", str(tmp_path / "_refresh_parallel.lock"))
-    monkeypatch.setattr(mod, "_FINGERPRINT_META", str(tmp_path / "_diag_stage_3y.fingerprint.json"))
+    monkeypatch.setattr(
+        mod, "_FINGERPRINT_META", str(tmp_path / "_diag_stage_3y.fingerprint.json")
+    )
     return mod
 
 
@@ -109,7 +111,9 @@ class TestRefreshFingerprintSkip:
         monkeypatch.setattr(mod, "compute_fingerprint", lambda: "fp1")
         return mod
 
-    def test_skip_when_no_new_data_and_fp_match(self, monkeypatch, refresh_mod, tmp_path, capsys):
+    def test_skip_when_no_new_data_and_fp_match(
+        self, monkeypatch, refresh_mod, tmp_path, capsys
+    ):
         mod = self._mod(refresh_mod, monkeypatch, tmp_path)
         monkeypatch.setattr(
             mod,
@@ -164,7 +168,9 @@ class TestRefreshFingerprintSkip:
         )
         assert mod._skip_if_unchanged(False) is False
 
-    def test_main_skips_without_stale_or_rebuild(self, monkeypatch, refresh_mod, tmp_path):
+    def test_main_skips_without_stale_or_rebuild(
+        self, monkeypatch, refresh_mod, tmp_path
+    ):
         mod = self._mod(refresh_mod, monkeypatch, tmp_path)
         monkeypatch.setattr(
             mod,
@@ -188,7 +194,9 @@ class TestRefreshFingerprintSkip:
         assert mod.main() == 0
         assert called == []  # 未改名、未重建
 
-    def test_fingerprint_covers_lhb_spec_not_whole_settings(self, monkeypatch, refresh_mod):
+    def test_fingerprint_covers_lhb_spec_not_whole_settings(
+        self, monkeypatch, refresh_mod
+    ):
         # fe.build 从 config/settings.py 只读 LHB_V2_SPEC → 该键必须参与指纹
         # (LHB 特征参数改了却静默跳过重建 = 质量风险). settings.py 整文件不再入指纹
         # (2026-08-25): serving 闸 (LEGACY_ENTRY_GATE 等) 不进检查点, 只改闸不应触发
@@ -207,7 +215,9 @@ class TestRefreshFingerprintSkip:
         monkeypatch.setattr(mod, "PANEL_V3_PATH", "D:/nowhere/other_panel.parquet")
         assert mod.compute_fingerprint() != base
 
-    def test_rebuild_writes_fingerprint_meta(self, monkeypatch, refresh_mod, tmp_path, capsys):
+    def test_rebuild_writes_fingerprint_meta(
+        self, monkeypatch, refresh_mod, tmp_path, capsys
+    ):
         mod = self._mod(refresh_mod, monkeypatch, tmp_path)
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
@@ -269,7 +279,9 @@ class TestRefreshConcurrencyLock:
         assert lock.exists()  # 别人的锁不得动
         assert "already running" in capsys.readouterr().out
 
-    def test_stale_lock_reclaimed_and_released(self, monkeypatch, refresh_mod, tmp_path):
+    def test_stale_lock_reclaimed_and_released(
+        self, monkeypatch, refresh_mod, tmp_path
+    ):
         mod = refresh_mod
         lock = tmp_path / "_refresh_parallel.lock"
         lock.write_text("999999999", encoding="utf-8")  # 死 PID

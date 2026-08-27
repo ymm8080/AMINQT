@@ -61,7 +61,9 @@ def write_slowbull_pool(work: pd.DataFrame, board: str, date=None) -> str:
         note = pd.DataFrame(
             {
                 "board": [board],
-                "symbol": [""],  # _merge_overall_list.load_slowbull 取 board+symbol 两列
+                "symbol": [
+                    ""
+                ],  # _merge_overall_list.load_slowbull 取 board+symbol 两列
                 "date": [str(pd.Timestamp(latest).date())],
                 "note": [SLOW_BULL_PAUSE["reason"]],
             }

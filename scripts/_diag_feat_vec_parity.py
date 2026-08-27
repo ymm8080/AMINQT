@@ -55,7 +55,9 @@ def main() -> int:
     dates = sorted(panel["date"].unique())
     cut = dates[-N_DAYS]
     panel = panel[panel["date"] >= cut]
-    print(f"[panel] {len(panel):,}r {cut.date()}.. ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[panel] {len(panel):,}r {cut.date()}.. ({time.time() - t0:.0f}s)", flush=True
+    )
 
     cleaner = CleaningPipeline()
     features = FeatureEngineV35()

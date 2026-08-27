@@ -42,7 +42,9 @@ def test_keep_yesterday_pick_within_band(tmp_path):
     assert list(kept["symbol"]) == ["000012"]
     assert len(out) == 11
     assert (out[out["keep_flag"] == ""]["keep_flag"] == "").all()
-    assert set(out[out["keep_flag"] == ""]["symbol"]) == {f"{i:06d}" for i in range(1, 11)}
+    assert set(out[out["keep_flag"] == ""]["symbol"]) == {
+        f"{i:06d}" for i in range(1, 11)
+    }
 
 
 def test_drop_yesterday_pick_beyond_band(tmp_path):
@@ -72,7 +74,11 @@ def test_no_history_file_noop(tmp_path):
 def test_disabled_noop(tmp_path, monkeypatch):
     """开关关 → 不滞留 (即使带内有昨日股)."""
     _yesterday_file(tmp_path, ["000012"])
-    monkeypatch.setattr(mod, "SHORTLIST_HYSTERESIS", {"enable": False, "band_factor": 2.0, "max_keep": 3})
+    monkeypatch.setattr(
+        mod,
+        "SHORTLIST_HYSTERESIS",
+        {"enable": False, "band_factor": 2.0, "max_keep": 3},
+    )
     out = _run(tmp_path, _cands())
     assert len(out) == 10
     assert (out["keep_flag"] == "").all()

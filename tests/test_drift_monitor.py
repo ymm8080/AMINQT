@@ -414,7 +414,7 @@ def _panel_mfe() -> pd.DataFrame:
             {
                 "symbol": "A",
                 "date": pd.Timestamp(d),
-                "high_hfq": 10.5 + i * 0.5,   # 恒为 close+0.5
+                "high_hfq": 10.5 + i * 0.5,  # 恒为 close+0.5
                 "close_hfq": 10.0 + i * 0.5,
             }
         )
@@ -490,7 +490,9 @@ def test_rolling_calibration_mfe_accumulation():
         {
             "date": [pd.Timestamp("2026-08-10")],
             "symbol": ["A"],
-            "board": ["dual", ],
+            "board": [
+                "dual",
+            ],
             "pred_prob_10d": [0.5],
         }
     )
@@ -501,8 +503,6 @@ def test_rolling_calibration_mfe_accumulation():
             "realized_mfe": [0.07],
         }
     )
-    cal = rolling_calibration_mfe(
-        preds, realized, thr=0.06, min_matured_days=3
-    )
+    cal = rolling_calibration_mfe(preds, realized, thr=0.06, min_matured_days=3)
     assert len(cal) == 1
     assert cal["ece"].iloc[0] is None and cal["n_rows"].iloc[0] == 0

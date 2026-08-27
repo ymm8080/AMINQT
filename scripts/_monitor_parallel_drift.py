@@ -59,7 +59,9 @@ def _load_shortlist_probs() -> pd.DataFrame:
         if not set(cols).issubset(df.columns):
             continue
         parts.append(df[cols])
-    parts = [p for p in parts if len(p)]  # 0 行文件 (历史空转) 避开 concat FutureWarning
+    parts = [
+        p for p in parts if len(p)
+    ]  # 0 行文件 (历史空转) 避开 concat FutureWarning
     if not parts:
         return pd.DataFrame(columns=cols)
     df = pd.concat(parts, ignore_index=True)
@@ -182,7 +184,9 @@ def main() -> int:
             for _, r in cal.iterrows():
                 th = cal_cfg.get("ece_threshold", {}).get(r["board"])
                 if r["ece"] is None:
-                    line = f"[{r['board']:>4}] 成熟 {r['n_days']:>3} 日 (积累期, 无 ECE)"
+                    line = (
+                        f"[{r['board']:>4}] 成熟 {r['n_days']:>3} 日 (积累期, 无 ECE)"
+                    )
                 else:
                     line = (
                         f"[{r['board']:>4}] 成熟 {r['n_days']:>3} 日 / "
@@ -202,7 +206,10 @@ def main() -> int:
             if not cal_alerts:
                 print("[ok] 无板块校准 ECE 超阈值", flush=True)
         else:
-            print("[warn] 无 parallel_shortlist_*.csv (短名单未落盘), 跳过校准", flush=True)
+            print(
+                "[warn] 无 parallel_shortlist_*.csv (短名单未落盘), 跳过校准",
+                flush=True,
+            )
 
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     out_dir = data_others_path("diag")

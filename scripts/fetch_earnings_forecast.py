@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """业绩预告 (Tushare forecast) 回填 — ann_date 单日循环, 按年 WORM 落盘.
 
 窗口默认: 今天往前整 3 年; 拉取顺序 = 最近一年优先 (新数据先落地).
@@ -9,6 +8,7 @@
 回填模式: python scripts/fetch_earnings_forecast.py --backfill-to 20230103
 从现存最早年窗起点往回切年窗补到目标日 (窗口无缝衔接不重叠).
 """
+
 import os
 import re
 import sys
