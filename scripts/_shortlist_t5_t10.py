@@ -55,6 +55,7 @@ import pyarrow.parquet as pq
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from app.pipeline1.label_engine import COST, slippage_tier
+from app.pipeline1.risk_overlays import share_float_upcoming_scan
 from app.pipeline_parallel import prob_head
 from app.pipeline_parallel.calibration import calibrate_mag10d
 from app.pipeline_parallel.config import FUSION, HORIZONS, SNIPER
@@ -979,6 +980,36 @@ def add_score(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def unlock_hard_filter(res: pd.DataFrame, ref_date) -> pd.DataFrame:
+    """解禁硬过滤 (2026-08-26 用户定案): 未来 30 天解禁累计 >5% 总股本的候选,
+    在 TOP-10 排名前从池内剔除 → 第 11 名递补, 清单保持满 10 只
+    (legacy 链是截断后剔除、清单可短; parallel 按用户 Top10 满额档递补).
+
+    复用 risk_overlays.share_float_upcoming_scan (PIT ann_date<=ref, 缓存缺失/
+    过期内置 fail-open); 此处再包一层 fail-open — 扫描异常放行全部候选.
+    """
+    if res.empty:
+        return res
+    sym = res["symbol"].astype(str).str.zfill(6)
+    try:
+        excluded = share_float_upcoming_scan(
+            sym.unique().tolist(), pd.Timestamp(ref_date)
+        )
+    except Exception as exc:
+        print(f"[unlock] 解禁扫描异常, 放行全部候选 (fail-open): {exc}", flush=True)
+        return res
+    if not excluded:
+        return res
+    mask = sym.isin(excluded)
+    if mask.any():
+        print(
+            f"[unlock] 剔除 {int(mask.sum())} 只未来30天解禁累计>5%: "
+            f"{','.join(sorted(sym[mask].unique()))}",
+            flush=True,
+        )
+    return res.loc[~mask].reset_index(drop=True)
+
+
 def rank_and_truncate(res: pd.DataFrame) -> pd.DataFrame:
     """2026-08-23 定案 (用户 top-10 档, feedback-need-top10): 入选 = 每板块 TOP-10.
 
@@ -1494,6 +1525,8 @@ def main() -> int:
                 flush=True,
             )
     res = add_score(res)
+    # 解禁硬过滤 (2026-08-26): 池内剔除 → TOP-10 递补满额; 滞留候选同走此池
+    res = unlock_hard_filter(res, sel_date)
     full_res = res
     res = rank_and_truncate(res)
     # 迟滞滞留 (2026-08-26): 昨日上榜仍在带内 → 滞留行 (降换手, 不改新选)
