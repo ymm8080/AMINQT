@@ -11,15 +11,24 @@ import importlib.util
 import os
 
 import pandas as pd
+import pytest
 
 _REPO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 _SCRIPT = os.path.join(_REPO, "scripts", "_refresh_parallel_checkpoints.py")
 
 
-def _load_refresh_module(monkeypatch):
+@pytest.fixture
+def refresh_mod(monkeypatch, tmp_path):
     spec = importlib.util.spec_from_file_location("refresh_ckpt_test", _SCRIPT)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    # 锁/指纹 meta 一律重定向到 tmp: 测试绝不触碰真实 data/ 下文件. 未 mock
+    # _write_fingerprint_meta 的旧测试曾把假 latest_date (08-07) 写进真实 meta,
+    # 导致下次 refresh 误判数据落后而白白全量重建 (2026-08-25 事故).
+    monkeypatch.setattr(mod, "_LOCK_FILE", str(tmp_path / "_refresh_parallel.lock"))
+    monkeypatch.setattr(
+        mod, "_FINGERPRINT_META", str(tmp_path / "_diag_stage_3y.fingerprint.json")
+    )
     return mod
 
 
@@ -30,8 +39,8 @@ def _tiny_board(board: str) -> pd.DataFrame:
 
 
 class TestRefreshCheckpoints:
-    def test_builds_dual_then_main_in_order(self, monkeypatch, capsys):
-        mod = _load_refresh_module(monkeypatch)
+    def test_builds_dual_then_main_in_order(self, monkeypatch, refresh_mod, capsys):
+        mod = refresh_mod
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
         monkeypatch.setattr(mod, "load_panel_v3", lambda **kw: _tiny_board("main"))
@@ -65,8 +74,8 @@ class TestRefreshCheckpoints:
         out = capsys.readouterr().out
         assert "run_train[main]: rows=1" in out  # run_train 行数打印保留
 
-    def test_empty_board_skipped(self, monkeypatch):
-        mod = _load_refresh_module(monkeypatch)
+    def test_empty_board_skipped(self, monkeypatch, refresh_mod):
+        mod = refresh_mod
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
         monkeypatch.setattr(mod, "load_panel_v3", lambda **kw: _tiny_board("main"))
@@ -92,8 +101,7 @@ class TestRefreshCheckpoints:
 class TestRefreshFingerprintSkip:
     """指纹 + 无新增交易日 → 跳过重建 (参数/代码变了指纹必变 → 必重建)."""
 
-    def _mod(self, monkeypatch, tmp_path):
-        mod = _load_refresh_module(monkeypatch)
+    def _mod(self, mod, monkeypatch, tmp_path):
         main_ck = tmp_path / "main.parquet"
         dual_ck = tmp_path / "dual.parquet"
         main_ck.write_bytes(b"x")
@@ -103,8 +111,10 @@ class TestRefreshFingerprintSkip:
         monkeypatch.setattr(mod, "compute_fingerprint", lambda: "fp1")
         return mod
 
-    def test_skip_when_no_new_data_and_fp_match(self, monkeypatch, tmp_path, capsys):
-        mod = self._mod(monkeypatch, tmp_path)
+    def test_skip_when_no_new_data_and_fp_match(
+        self, monkeypatch, refresh_mod, tmp_path, capsys
+    ):
+        mod = self._mod(refresh_mod, monkeypatch, tmp_path)
         monkeypatch.setattr(
             mod,
             "_read_fingerprint_meta",
@@ -118,13 +128,13 @@ class TestRefreshFingerprintSkip:
         assert mod._skip_if_unchanged(False) is True
         assert "[skip]" in capsys.readouterr().out
 
-    def test_force_always_rebuilds(self, monkeypatch, tmp_path):
-        mod = self._mod(monkeypatch, tmp_path)
+    def test_force_always_rebuilds(self, monkeypatch, refresh_mod, tmp_path):
+        mod = self._mod(refresh_mod, monkeypatch, tmp_path)
         monkeypatch.setattr(mod, "_read_fingerprint_meta", lambda: None)
         assert mod._skip_if_unchanged(True) is False
 
-    def test_fp_mismatch_rebuilds(self, monkeypatch, tmp_path):
-        mod = self._mod(monkeypatch, tmp_path)
+    def test_fp_mismatch_rebuilds(self, monkeypatch, refresh_mod, tmp_path):
+        mod = self._mod(refresh_mod, monkeypatch, tmp_path)
         monkeypatch.setattr(
             mod,
             "_read_fingerprint_meta",
@@ -132,8 +142,8 @@ class TestRefreshFingerprintSkip:
         )
         assert mod._skip_if_unchanged(False) is False
 
-    def test_new_data_rebuilds(self, monkeypatch, tmp_path):
-        mod = self._mod(monkeypatch, tmp_path)
+    def test_new_data_rebuilds(self, monkeypatch, refresh_mod, tmp_path):
+        mod = self._mod(refresh_mod, monkeypatch, tmp_path)
         monkeypatch.setattr(
             mod,
             "_read_fingerprint_meta",
@@ -146,8 +156,8 @@ class TestRefreshFingerprintSkip:
         )
         assert mod._skip_if_unchanged(False) is False
 
-    def test_missing_checkpoint_rebuilds(self, monkeypatch, tmp_path):
-        mod = _load_refresh_module(monkeypatch)
+    def test_missing_checkpoint_rebuilds(self, monkeypatch, refresh_mod, tmp_path):
+        mod = refresh_mod
         monkeypatch.setattr(mod, "MAIN_CHECKPOINT", str(tmp_path / "no_main.parquet"))
         monkeypatch.setattr(mod, "DUAL_CHECKPOINT", str(tmp_path / "no_dual.parquet"))
         monkeypatch.setattr(mod, "compute_fingerprint", lambda: "fp1")
@@ -158,8 +168,10 @@ class TestRefreshFingerprintSkip:
         )
         assert mod._skip_if_unchanged(False) is False
 
-    def test_main_skips_without_stale_or_rebuild(self, monkeypatch, tmp_path):
-        mod = self._mod(monkeypatch, tmp_path)
+    def test_main_skips_without_stale_or_rebuild(
+        self, monkeypatch, refresh_mod, tmp_path
+    ):
+        mod = self._mod(refresh_mod, monkeypatch, tmp_path)
         monkeypatch.setattr(
             mod,
             "_read_fingerprint_meta",
@@ -182,14 +194,31 @@ class TestRefreshFingerprintSkip:
         assert mod.main() == 0
         assert called == []  # 未改名、未重建
 
-    def test_fingerprint_covers_feature_config(self, monkeypatch, tmp_path):
-        # fe.build 从 config/settings.py 读 LHB_V2_SPEC → settings 变化必须触发重建,
-        # 否则 LHB 特征改了却静默跳过检查点重建 (质量风险). 该文件必须留在指纹列表.
-        mod = _load_refresh_module(monkeypatch)
-        assert "config/settings.py" in mod._FINGERPRINT_FILES
+    def test_fingerprint_covers_lhb_spec_not_whole_settings(
+        self, monkeypatch, refresh_mod
+    ):
+        # fe.build 从 config/settings.py 只读 LHB_V2_SPEC → 该键必须参与指纹
+        # (LHB 特征参数改了却静默跳过重建 = 质量风险). settings.py 整文件不再入指纹
+        # (2026-08-25): serving 闸 (LEGACY_ENTRY_GATE 等) 不进检查点, 只改闸不应触发
+        # ~1-1.5h 全量重建.
+        mod = refresh_mod
+        assert "config/settings.py" not in mod._FINGERPRINT_FILES
+        base = mod.compute_fingerprint()
+        monkeypatch.setattr(mod, "LHB_V2_SPEC", {"h_inst": 999})
+        assert mod.compute_fingerprint() != base
 
-    def test_rebuild_writes_fingerprint_meta(self, monkeypatch, tmp_path, capsys):
-        mod = self._mod(monkeypatch, tmp_path)
+    def test_fingerprint_covers_panel_path(self, monkeypatch, refresh_mod):
+        # load_panel_v3/_reclassify 从 settings 只读 PANEL_V3_PATH → 面板源路径变化
+        # (如 env 换 PANEL_PATH) 必须触发重建.
+        mod = refresh_mod
+        base = mod.compute_fingerprint()
+        monkeypatch.setattr(mod, "PANEL_V3_PATH", "D:/nowhere/other_panel.parquet")
+        assert mod.compute_fingerprint() != base
+
+    def test_rebuild_writes_fingerprint_meta(
+        self, monkeypatch, refresh_mod, tmp_path, capsys
+    ):
+        mod = self._mod(refresh_mod, monkeypatch, tmp_path)
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
         monkeypatch.setattr(mod, "load_panel_v3", lambda **kw: _tiny_board("main"))
@@ -212,3 +241,63 @@ class TestRefreshFingerprintSkip:
         )
         assert mod.main() == 0
         assert written.get("latest") == "2026-08-07"  # 重建后写指纹 (日期=最新交易日)
+
+
+class TestRefreshConcurrencyLock:
+    """并发双建是 08-24 OOM 事故根因 (自动化+手动 refresh 撞车 → 16GB 双份构建).
+    锁存在且持锁进程存活 → 第二实例必须零副作用退出; 跑完/跳过必须释放锁."""
+
+    def _mock_rebuild(self, monkeypatch, mod):
+        monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
+        monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
+        monkeypatch.setattr(mod, "load_panel_v3", lambda **kw: _tiny_board("main"))
+        monkeypatch.setattr(
+            mod.CleaningPipeline,
+            "run_train",
+            lambda self, df, board=None: (_tiny_board("main"), _tiny_board("dual")),
+        )
+        monkeypatch.setattr(mod, "FeatureEngineV35", lambda: object())
+        monkeypatch.setattr(
+            mod,
+            "build_board_slice",
+            lambda cleaner, fe, bdf, board, ckpt: _tiny_board(board),
+        )
+        monkeypatch.setattr(mod, "_write_fingerprint_meta", lambda latest: None)
+
+    def test_second_instance_blocked_zero_side_effects(
+        self, monkeypatch, refresh_mod, tmp_path, capsys
+    ):
+        mod = refresh_mod
+        lock = tmp_path / "_refresh_parallel.lock"
+        lock.write_text(str(os.getpid()), encoding="utf-8")  # 本测试进程 = 存活 PID
+        touched = []
+        monkeypatch.setattr(
+            mod, "_skip_if_unchanged", lambda force: touched.append("skip") or False
+        )
+        assert mod.main() == 0
+        assert touched == []  # 未进入任何重建路径
+        assert lock.exists()  # 别人的锁不得动
+        assert "already running" in capsys.readouterr().out
+
+    def test_stale_lock_reclaimed_and_released(
+        self, monkeypatch, refresh_mod, tmp_path
+    ):
+        mod = refresh_mod
+        lock = tmp_path / "_refresh_parallel.lock"
+        lock.write_text("999999999", encoding="utf-8")  # 死 PID
+        monkeypatch.setattr(mod.psutil, "pid_exists", lambda pid: False)
+        self._mock_rebuild(monkeypatch, mod)
+        assert mod.main() == 0
+        assert not lock.exists()  # 陈旧锁被回收, 跑完正常释放
+
+    def test_lock_released_after_normal_run(self, monkeypatch, refresh_mod, tmp_path):
+        mod = refresh_mod
+        self._mock_rebuild(monkeypatch, mod)
+        assert mod.main() == 0
+        assert not (tmp_path / "_refresh_parallel.lock").exists()  # try/finally 释放
+
+    def test_lock_released_on_skip_path(self, monkeypatch, refresh_mod, tmp_path):
+        mod = refresh_mod
+        monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: True)
+        assert mod.main() == 0
+        assert not (tmp_path / "_refresh_parallel.lock").exists()  # 跳过路径也释放

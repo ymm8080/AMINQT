@@ -288,6 +288,128 @@ class BruteForceGenerator:
                     names.add(f"{col}_brute_{suffix}{w}")
         return names
 
+    def _family_columns_vec(self, df, family_name, raw, windows, suffix, need=None):
+        """一族暴力特征的向量化内核: 逐列产出 (列名, float32 ndarray 对齐 df 行序).
+
+        与 _family_for_symbol (逐 symbol 参考实现) 逐字节一致: float64 计算 →
+        float32 收尾 (溢出→inf 保留, 调用方负责 replace→nan); 列名/列序 =
+        raw×windows 静态序 (与参考实现首 symbol 的 dict 插入序一致, 含
+        rolling_max 族 max+min 双列特例). need 给定时只产出交集列.
+
+        实现: np.lexsort 取 (symbol,date) 行排列 → 逐列 gather 后整列
+        shift / groupby.rolling / groupby.ewm (C 级内核) → scatter 回原行序.
+        禁逐 symbol Python 循环 (项目铁律): 3y 面板 ~9500 列变换实测
+        3h38m (20260825 重训) → 分钟级; 输出经 test_family_stats_stream /
+        test_generate_columns_prefilter / 真面板对照逐字节验证.
+        """
+        raw = [c for c in raw if c in df.columns]
+        n = len(df)
+        if n == 0 or not raw:
+            return
+        perm = np.lexsort((df["date"].to_numpy(), df["symbol"].to_numpy()))
+        sym_s = df["symbol"].to_numpy()[perm]
+        starts_s = np.flatnonzero(np.r_[True, sym_s[1:] != sym_s[:-1]])
+        start_of_row_s = np.repeat(starts_s, np.diff(np.r_[starts_s, n]))
+        rows = np.arange(n)
+        sym_index = pd.Index(sym_s, name="symbol")
+
+        def shift_expr(s_s, w, fn):
+            prev = rows - w
+            ok = prev >= start_of_row_s
+            o = np.full(n, np.nan)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                o[ok] = fn(s_s[ok], s_s[prev[ok]])
+            return o
+
+        def cast32(e):
+            with np.errstate(over="ignore"):
+                return e.astype(np.float32)
+
+        def scatter(vals_s):
+            out = np.empty(n, dtype=np.float32)
+            out[perm] = vals_s
+            return out
+
+        if family_name in ("pct_change", "diff", "momentum"):
+            # shift 族: 逐列 numpy 向量化差分/比值 (无 pandas 调用开销)
+            expr = {
+                "pct_change": lambda a, b: (a - b) / np.abs(b) * 100,
+                "diff": lambda a, b: a - b,
+                "momentum": lambda a, b: a / np.abs(b),
+            }[family_name]
+            for col in raw:
+                s_s = df[col].to_numpy(dtype=np.float64)[perm]
+                for w in windows:
+                    name = f"{col}_brute_{suffix}{w}"
+                    if need is None or name in need:
+                        yield name, scatter(cast32(shift_expr(s_s, w, expr)))
+            return
+
+        # rolling/EMA 族: 列分块 DataFrame groupby 调用 — 每次 rolling/ewm 的
+        # 固定开销 (~0.15s) 摊到整块列 (真面板 12d 冒烟: 分块 5.5-11.8x,
+        # per-Series 版仅 3.9x). 键已按 symbol 升序 → sort=False 不重排.
+        # 块内先算完全部窗口再按 col→w 静态序 yield, 保持全族列序不变.
+        chunk_cols = 20
+        for i0 in range(0, len(raw), chunk_cols):
+            chunk = raw[i0 : i0 + chunk_cols]
+            sub = pd.DataFrame(
+                {c: df[c].to_numpy(dtype=np.float64)[perm] for c in chunk},
+                index=sym_index,
+            )
+            g = sub.groupby(level=0, sort=False)
+            res = {}
+            for w in windows:
+                if family_name == "rolling_mean":
+                    want = [
+                        c for c in chunk if need is None or f"{c}_brute_ma{w}" in need
+                    ]
+                    if want:
+                        out = g.rolling(w, min_periods=1).mean()
+                        for c in want:
+                            res[(c, w, "v")] = cast32(out[c].to_numpy())
+                elif family_name == "rolling_std":
+                    want = [
+                        c for c in chunk if need is None or f"{c}_brute_std{w}" in need
+                    ]
+                    if want:
+                        out = g.rolling(w, min_periods=1).std()
+                        for c in want:
+                            res[(c, w, "v")] = cast32(out[c].to_numpy())
+                elif family_name in ("rolling_max", "rolling_min"):
+                    want_max = [
+                        c for c in chunk if need is None or f"{c}_brute_max{w}" in need
+                    ]
+                    want_min = [
+                        c for c in chunk if need is None or f"{c}_brute_min{w}" in need
+                    ]
+                    if want_max or want_min:
+                        rolled = g.rolling(w, min_periods=1)
+                        if want_max:
+                            out_x = rolled.max()
+                            for c in want_max:
+                                res[(c, w, "x")] = cast32(out_x[c].to_numpy())
+                        if want_min:
+                            out_n = rolled.min()
+                            for c in want_min:
+                                res[(c, w, "n")] = cast32(out_n[c].to_numpy())
+                elif family_name == "EMA":
+                    want = [
+                        c for c in chunk if need is None or f"{c}_brute_ema{w}" in need
+                    ]
+                    if want:
+                        out = g.ewm(span=w, min_periods=1).mean()
+                        for c in want:
+                            res[(c, w, "v")] = cast32(out[c].to_numpy())
+            for c in chunk:
+                for w in windows:
+                    if family_name in ("rolling_max", "rolling_min"):
+                        if (c, w, "x") in res:
+                            yield f"{c}_brute_max{w}", scatter(res[(c, w, "x")])
+                        if (c, w, "n") in res:
+                            yield f"{c}_brute_min{w}", scatter(res[(c, w, "n")])
+                    elif (c, w, "v") in res:
+                        yield f"{c}_brute_{suffix}{w}", scatter(res[(c, w, "v")])
+
     def generate_family(self, df, family_name, raw_cols=None, dtype="float32"):
         """Generate brute-force features for ONE transform family.
 
@@ -302,13 +424,10 @@ class BruteForceGenerator:
             raise ValueError(f"Unknown transform family: {family_name}")
         windows = family_def.get("windows", ())
         suffix = family_def.get("suffix", family_name)
-        all_new = {}
-        for sym, g in df.groupby("symbol"):
-            g, feats = self._family_for_symbol(g, raw, family_name, windows, suffix)
-            all_new[sym] = pd.DataFrame(feats, index=g.index).replace(
-                [np.inf, -np.inf], np.nan
-            )
-        new = pd.concat(all_new.values())
+        data = dict(self._family_columns_vec(df, family_name, raw, windows, suffix))
+        if not data:
+            raise ValueError(f"Empty brute family output: {family_name}")
+        new = pd.DataFrame(data, index=df.index).replace([np.inf, -np.inf], np.nan)
         logger.info(
             "BruteForce[%s]: %d cols from %d raw (%.0fs, float32)",
             family_name,
@@ -324,8 +443,9 @@ class BruteForceGenerator:
         OOM 根因 (2026-08-11): generate_family 内 pd.concat(all_new.values()) 把
         单家族 (pct_change) 的 (1223918, 2544) float32 拼成 11.6GB 连续块, 且
         all_new 已常驻同量 → 15.8GB 机触发 _ArrayMemoryError. 唯一消费者
-        _run_bruteforce_dedup 只需要 每列 nan率 + 采样行值, 故按 symbol 逐列累计
-        这两样统计, 常驻 ~50MB. 输出与 generate_family → 逐列统计 完全一致.
+        _run_bruteforce_dedup 只需要 每列 nan率 + 采样行值, 故逐列累计这两样
+        统计, 常驻 ~50MB (2026-08-25 起经 _family_columns_vec 向量化, 免逐
+        symbol Python 循环). 输出与 generate_family → 逐列统计 完全一致.
         """
         t0 = time.time()
         raw = raw_cols or self._eligible(df)
@@ -334,31 +454,18 @@ class BruteForceGenerator:
             raise ValueError(f"Unknown transform family: {family_name}")
         windows = family_def.get("windows", ())
         suffix = family_def.get("suffix", family_name)
-        pos_array = np.asarray(list(sample_pos))
-        columns = None
-        nan_count = None
-        sample_vals = None
-        for _sym, g in df.groupby("symbol"):
-            g, feats = self._family_for_symbol(g, raw, family_name, windows, suffix)
-            if columns is None:
-                columns = list(feats.keys())
-                nan_count = np.zeros(len(columns), dtype=np.int64)
-                sample_vals = {
-                    c: np.full(len(pos_array), np.nan, dtype=dtype) for c in columns
-                }
-            for i, c in enumerate(columns):
-                arr = np.where(np.isinf(feats[c]), np.nan, feats[c])
-                nan_count[i] += int(np.isnan(arr).sum())
-            hit = np.isin(g.index.to_numpy(), pos_array)
-            if hit.any():
-                hit_pos = np.nonzero(hit)[0]
-                sample_positions = sample_pos.get_indexer(g.index.to_numpy()[hit_pos])
-                for c in columns:
-                    sample_vals[c][sample_positions] = np.where(
-                        np.isinf(feats[c][hit_pos]), np.nan, feats[c][hit_pos]
-                    )
-        total = float(len(df))
-        nan_rate = {c: float(nan_count[i]) / total for i, c in enumerate(columns)}
+        sample_rows = df.index.get_indexer(sample_pos)
+        nan_by_nan = np.float32("nan")
+        columns = []
+        nan_rate = {}
+        sample_vals = {}
+        for c, vals in self._family_columns_vec(df, family_name, raw, windows, suffix):
+            columns.append(c)
+            arr = np.where(np.isinf(vals), nan_by_nan, vals)
+            nan_rate[c] = float(np.isnan(arr).sum()) / float(len(df))
+            sample_vals[c] = np.where(
+                np.isinf(vals[sample_rows]), nan_by_nan, vals[sample_rows]
+            ).astype(dtype, copy=False)
         logger.info(
             "BruteForce[%s] stats: %d cols from %d raw (%.0fs, stream)",
             family_name,
@@ -399,23 +506,17 @@ class BruteForceGenerator:
                 time.time() - t0,
             )
             return None
-        all_new = {}
-        for sym, g in df.groupby("symbol"):
-            g, feats = self._family_for_symbol(g, raw, family_name, windows, suffix)
-            pick = {c: v for c, v in feats.items() if c in need}
-            if not pick:
-                continue
-            all_new[sym] = pd.DataFrame(pick, index=g.index).replace(
-                [np.inf, -np.inf], np.nan
-            )
-        if not all_new:
+        data = dict(
+            self._family_columns_vec(df, family_name, raw, windows, suffix, need=need)
+        )
+        if not data:
             return None
-        new = pd.concat(all_new.values())
+        new = pd.DataFrame(data, index=df.index).replace([np.inf, -np.inf], np.nan)
         logger.info(
             "BruteForce[%s] 后注入 %d 列 (%d syms, %.0fs)",
             family_name,
             len(new.columns),
-            len(all_new),
+            df["symbol"].nunique(),
             time.time() - t0,
         )
         return new
@@ -1339,7 +1440,8 @@ class FeatureSelector:
                 ic_accum.update(feature_mean_abs_ic(new.loc[pre_mask], ic_date, ic_lab))
                 del new
             else:
-                # 免物化宽帧 (2026-08-11 OOM 修复): 逐 symbol 流式累计 nan率+采样行值.
+                # 免物化宽帧 (2026-08-11 OOM 修复): 逐列向量化累计 nan率+采样行值
+                # (2026-08-25 起走 _family_columns_vec, 免逐 symbol Python 循环).
                 columns, nan_rate, svals = generator.family_stats(
                     df, fam, sample_pos, raw_cols=raw_cols, dtype="float32"
                 )

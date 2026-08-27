@@ -69,6 +69,53 @@ def compute_realized(
     return pd.concat(out, ignore_index=True)
 
 
+def compute_realized_mfe(
+    panel: pd.DataFrame,
+    decision_dates: pd.Series,
+    horizon: int = 10,
+    cost: float = 0.0030,
+) -> pd.DataFrame:
+    """panel(symbol,date,high_hfq,close_hfq) → (date,symbol,realized_mfe), 仅已成熟行.
+
+    口径同 backtest.add_mfe_labels: T+1 收盘买, max(high_hfq[T+2..T+1+horizon])
+    / close_hfq[T+1] - 1 - cost. 决策日锚定/停牌 ffill 规则与 compute_realized 一致.
+    """
+    cal = np.sort(pd.to_datetime(panel["date"]).dt.normalize().unique().to_numpy())
+    dt = panel.assign(dt=pd.to_datetime(panel["date"]).dt.normalize())
+    close_p = (
+        dt.pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last")
+        .sort_index()
+        .reindex(columns=pd.to_datetime(cal))
+        .ffill(axis=1)
+    )
+    high_p = (
+        dt.pivot_table(index="symbol", columns="dt", values="high_hfq", aggfunc="last")
+        .sort_index()
+        .reindex(columns=pd.to_datetime(cal))
+    )
+    out: list[pd.DataFrame] = []
+    for d in pd.DatetimeIndex(pd.to_datetime(decision_dates)).normalize().unique():
+        d = np.datetime64(d)
+        i = int(np.searchsorted(cal, d, side="right")) - 1
+        if i < 0 or i + horizon + 1 >= len(cal):
+            continue
+        pb = close_p[pd.Timestamp(cal[i + 1])]
+        peak = high_p[pd.to_datetime(cal[i + 2 : i + horizon + 2])].max(axis=1)
+        sub = (
+            (peak / pb - 1.0 - cost)
+            .where(pb > 0)
+            .rename("realized_mfe")
+            .reset_index()
+            .dropna(subset=["realized_mfe"])
+        )
+        if len(sub):
+            sub["date"] = pd.Timestamp(d)
+            out.append(sub[["date", "symbol", "realized_mfe"]])
+    if not out:
+        return pd.DataFrame(columns=["date", "symbol", "realized_mfe"])
+    return pd.concat(out, ignore_index=True)
+
+
 def accumulate_parallel_picks(run_root: Path) -> pd.DataFrame:
     """扫描 BACKTEST_RESULT_DIR 下 last_*_days_picks_dual.csv → (date,symbol,board,pred_ret_10d).
 
@@ -219,6 +266,53 @@ def rolling_calibration(
             continue
         tail = g[g["date"].isin(pd.to_datetime(dates[-window_days:]))]
         gtab, ece = bin_calibration(tail["prob_up_10d"], tail["event"], n_bins)
+        if gtab.empty:
+            rows.append(base)
+            continue
+        bins = (
+            gtab.reset_index()[["bin", "n", "mean_prob", "realized", "gap"]]
+            .assign(bin=lambda t: t["bin"].astype(str))
+            .to_dict("records")
+        )
+        rows.append({**base, "n_rows": int(len(tail)), "ece": ece, "bins": bins})
+    return pd.DataFrame(rows)
+
+
+def rolling_calibration_mfe(
+    preds: pd.DataFrame,
+    realized: pd.DataFrame,
+    thr: float = 0.06,
+    n_bins: int = 5,
+    window_days: int = 42,
+    min_matured_days: int = 20,
+) -> pd.DataFrame:
+    """parallel 版滚动校准: 尾 window_days 成熟日 (pred_prob_10d, MFE>thr 事件) 池化 → ECE.
+
+    pred_prob_10d 建模事件 = net MFE > ABS_TARGET["10d"] (=0.06), realized 为
+    compute_realized_mfe 的 net 值 → event = realized_mfe > thr, 无 cost 还原步.
+    preds: (date, symbol, board, pred_prob_10d); realized: (date, symbol, realized_mfe).
+    """
+    m = preds.merge(realized, on=["date", "symbol"], how="inner")
+    m = m.dropna(subset=["pred_prob_10d", "realized_mfe"])
+    cols = ["board", "n_days", "n_rows", "ece", "bins"]
+    if m.empty:
+        return pd.DataFrame(columns=cols)
+    m["event"] = (m["realized_mfe"] > thr).astype("int8")
+    rows: list[dict] = []
+    for board, g in m.groupby("board"):
+        dates = np.sort(pd.to_datetime(g["date"].unique()))
+        base = {
+            "board": board,
+            "n_days": int(len(dates)),
+            "n_rows": 0,
+            "ece": None,
+            "bins": [],
+        }
+        if len(dates) < min_matured_days:
+            rows.append(base)
+            continue
+        tail = g[g["date"].isin(pd.to_datetime(dates[-window_days:]))]
+        gtab, ece = bin_calibration(tail["pred_prob_10d"], tail["event"], n_bins)
         if gtab.empty:
             rows.append(base)
             continue

@@ -49,11 +49,11 @@ LEGACY_SMOOTH_ENABLED = True
 LEGACY_SMOOTH_ALPHA = 0.35
 LEGACY_SMOOTH_K = 12
 
-# ── legacy 双板特征构建子进程并行 (2026-08-21) ──
+# ── legacy 双板特征构建子进程并行 (2026-08-21, 08-25 开启) ──
 # 语义: main/dual 帧股票集不相交 + build 无状态纯函数 → 拆板并行结果与串行逐字节一致
 # (tests/test_parallel_feat_worker.py 验证). 省 ≈ 整个 dual 构建时间 (串行=main+dual,
-# 并行=max(main,dual)). 默认关: 待 08-21 自动化插桩计时确认特征占比>50% 后拍板开启.
-LEGACY_PARALLEL_FEATURES = False
+# 并行=max(main,dual)). 2026-08-25 真面板 300d 对照: 逐字节一致, 2109s→1472s (1.43x).
+LEGACY_PARALLEL_FEATURES = True
 
 # ── V3 Panel (single source of truth) ────────────────────────
 # Override via PANEL_PATH env var; defaults to D:/AMINQT/PARQUET/ directory.
@@ -357,6 +357,28 @@ STALL_MARKER = {
     },
 }
 
+# ── 短名单迟滞滞留 (2026-08-26 用户定案 "清单加迟滞降换手") ──
+# 昨日上榜股今日跌出 TOP-10 但仍在板内前 band_factor×10 名 → 滞留 (keep_flag="滞留",
+# 排序沉底). 只降清单换手 (预测小幅回落即被换出 → 名单天天变), 不改新选股.
+# TOP-10 新选不变 (2026-08-23 定案), 滞留是额外标注行.
+SHORTLIST_HYSTERESIS = {
+    "enable": True,
+    "band_factor": 2.0,   # 滞留带 = 板内排名 ≤ 10 × 此值
+    "max_keep": 3,        # 每板块最多滞留数 (防爆清单)
+}
+
+# ── 跨模块影子排名 (2026-08-26 用户批准, 纯记录零交付风险) ──
+# legacy 与 parallel 交付清单按板块并池, 各模块在自己板内名次百分位归一后加权混排,
+# 影子 TOP-N 只落盘不交付. 交集≈0 时 blend≈0.5×自有分 → 实质=两榜按各自强度交错.
+# 数据源 (全部 WORM 已有文件): data/lists/list_<D>*.parquet (legacy, 键=prob_up) +
+# STOCK LIST parallel_shortlist_<D>__*.csv (键=rank_blend, 多版本 keep-last).
+XMODULE_SHADOW = {
+    "enable": True,
+    "weights": {"legacy": 0.5, "parallel": 0.5},
+    "top_n": 10,
+    "out_root": "shadow",  # 相对 DATA_OTHERS_DIR, 影子清单不进 STOCK LIST 交付目录
+}
+
 # ── legacy 幅度/校准漂移监控 (2026-08-17 幅度, 2026-08-24 加 ECE 校准) ──
 # 08-17 诊断: pred_ret_10d 系统高估 (main 均值 +4.03% vs 实现 +1.10%, dual +6.59% vs
 # +1.32%), 偏差随时间扩大 → 生产 "pred>0" 闸 100% 空转. 修漂移 = 重训 (周频已做),
@@ -395,6 +417,15 @@ PARALLEL_DRIFT_MONITOR = {
     "bias_threshold": {"dual": 0.07},  # 初始值 (沿用 legacy dual), 勿当定案
     "run_root": "BACKTESTING RESULT",  # 相对 DATA_OTHERS_DIR 的 run_dir 根
     "checkpoint_dual": "_diag_stage_dual_3y.parquet",  # 相对 DATA_DIR, refresh 步骤更新
+    # 08-26 ECE 校准节: pred_prob_10d 事件 = net MFE(盘中) > mfe_threshold
+    "calibration": {
+        "enable": True,
+        "mfe_threshold": 0.06,   # = _shortlist_t5_t10.ABS_TARGET["10d"]
+        "n_bins": 5,
+        "cost": 0.0030,          # COST 0.0013 + 2×滑点中档 (adv20 分层取代表值)
+        "horizon": 10,           # 成熟需 T+1+10 交易日
+        "ece_threshold": {"main": 0.20, "dual": 0.25},  # 沿用 legacy 初始值
+    },
 }
 
 # ── 重训内存独占闸 (2026-08-15 用户定案, 代码强制"重训期间不跑其他重活") ──

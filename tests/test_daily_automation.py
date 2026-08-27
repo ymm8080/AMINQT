@@ -58,6 +58,7 @@ def test_plan_steps_weekday_full_chain():
         "deliver_parallel",
         "drift",
         "drift_parallel",
+        "shadow_xmodule",
     ]
 
 
@@ -74,6 +75,7 @@ def test_plan_steps_retrain_day_inserts_retrain():
         "deliver_parallel",
         "drift",
         "drift_parallel",
+        "shadow_xmodule",
     ]
 
 
@@ -91,11 +93,15 @@ def test_plan_steps_force_retrain_inserts_retrain_on_non_retrain_day():
         "deliver_parallel",
         "drift",
         "drift_parallel",
+        "shadow_xmodule",
     ]
 
 
 def test_plan_steps_skip_parallel_drops_deliver_parallel():
-    """--skip-parallel 只跑 legacy 链 (refresh 仍刷新检查点); 并行交付同步丢弃."""
+    """--skip-parallel 只跑 legacy 链 (refresh 仍刷新检查点); 并行交付同步丢弃.
+
+    shadow_xmodule 仍跑: 它读磁盘上已交付清单 (任意一侧缺也容忍), 非交付步骤.
+    """
     assert plan_steps(THU, skip_parallel=True) == [
         "refresh",
         "cyq",
@@ -104,6 +110,7 @@ def test_plan_steps_skip_parallel_drops_deliver_parallel():
         "deliver",
         "drift",
         "drift_parallel",
+        "shadow_xmodule",
     ]
     assert plan_steps(FRI, skip_parallel=True) == [
         "refresh",
@@ -114,6 +121,7 @@ def test_plan_steps_skip_parallel_drops_deliver_parallel():
         "deliver",
         "drift",
         "drift_parallel",
+        "shadow_xmodule",
     ]
 
 
@@ -128,6 +136,7 @@ def test_plan_steps_skip_checkpoints_and_retrain():
         "deliver_parallel",
         "drift",
         "drift_parallel",
+        "shadow_xmodule",
     ]
     assert "refresh" not in steps and "retrain" not in steps
 
@@ -135,7 +144,14 @@ def test_plan_steps_skip_checkpoints_and_retrain():
 def test_plan_steps_all_skip_keeps_legacy_chain():
     assert plan_steps(
         THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True
-    ) == ["legacy_prob_head", "legacy", "deliver", "drift", "drift_parallel"]
+    ) == [
+        "legacy_prob_head",
+        "legacy",
+        "deliver",
+        "drift",
+        "drift_parallel",
+        "shadow_xmodule",
+    ]
 
 
 # ── 中断中止 + 终态 state 文件 (08-21 事故: cyq 被 Ctrl+C 杀后仍启动 retrain,

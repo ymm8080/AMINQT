@@ -55,6 +55,7 @@ import pyarrow.parquet as pq
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from app.pipeline1.label_engine import COST, slippage_tier
+from app.pipeline1.risk_overlays import share_float_upcoming_scan
 from app.pipeline_parallel import prob_head
 from app.pipeline_parallel.calibration import calibrate_mag10d
 from app.pipeline_parallel.config import FUSION, HORIZONS, SNIPER
@@ -63,6 +64,7 @@ from config.settings import (
     DATA_DIR,
     DATA_OTHERS_DIR,
     REGIME_GATE,
+    SHORTLIST_HYSTERESIS,
     SHORTLIST_SCORE,
     STOCK_LIST_DIR,
 )
@@ -164,7 +166,13 @@ CAND_RANK_KEY = "pred_mag_10d"  # 排名键 = 每股 mag_10d 预期幅度 (2026-
 # 恰踩双创弱行情段低估 (top-10 +3.37% vs 250d +5.76%). 250d 与项目验收
 # 口径一致 (oos-only-acceptance), 报真实长期能力而非当下弱市; 热日尖峰已由锚的"平移至
 # 实得"机制消除, 不会回到 12-13%.
-ANCHOR_WINDOW = 250
+# [2026-08-26] 窗长 250→60 (用户 "锚定扫" 定案): 无 look-ahead 重放 (锚只见 ≤D-成熟滞后
+# 已实现日, scripts/_diag_anchor_window_sweep_20260826.py, 尾 250 已实现日评估) 证明
+# 偏差随窗长单调放大 — w=250 全板块全视界过报 +1.8~+4.0pp (250d 含大量前期好行情,
+# 顺周期); w=60 双板 10d bias 贴零 (main -0.03% / dual +0.49%) 且 MAE 最小, 30~50 转
+# 低估、w±10/top±1 扰动平坦 (稳定非刀尖). 08-14 的 120d 低估教训 = 单窗恰踩弱段, 60d
+# 快速跟市况正是对症; 排名不受影响 (锚只整体平移).
+ANCHOR_WINDOW = 60
 ANCHOR_TOP = 10  # 锚定深度 = 入选深度 (每板块 TOP-10)
 
 
@@ -972,6 +980,36 @@ def add_score(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def unlock_hard_filter(res: pd.DataFrame, ref_date) -> pd.DataFrame:
+    """解禁硬过滤 (2026-08-26 用户定案): 未来 30 天解禁累计 >5% 总股本的候选,
+    在 TOP-10 排名前从池内剔除 → 第 11 名递补, 清单保持满 10 只
+    (legacy 链是截断后剔除、清单可短; parallel 按用户 Top10 满额档递补).
+
+    复用 risk_overlays.share_float_upcoming_scan (PIT ann_date<=ref, 缓存缺失/
+    过期内置 fail-open); 此处再包一层 fail-open — 扫描异常放行全部候选.
+    """
+    if res.empty:
+        return res
+    sym = res["symbol"].astype(str).str.zfill(6)
+    try:
+        excluded = share_float_upcoming_scan(
+            sym.unique().tolist(), pd.Timestamp(ref_date)
+        )
+    except Exception as exc:
+        print(f"[unlock] 解禁扫描异常, 放行全部候选 (fail-open): {exc}", flush=True)
+        return res
+    if not excluded:
+        return res
+    mask = sym.isin(excluded)
+    if mask.any():
+        print(
+            f"[unlock] 剔除 {int(mask.sum())} 只未来30天解禁累计>5%: "
+            f"{','.join(sorted(sym[mask].unique()))}",
+            flush=True,
+        )
+    return res.loc[~mask].reset_index(drop=True)
+
+
 def rank_and_truncate(res: pd.DataFrame) -> pd.DataFrame:
     """2026-08-23 定案 (用户 top-10 档, feedback-need-top10): 入选 = 每板块 TOP-10.
 
@@ -1007,6 +1045,91 @@ def rank_and_truncate(res: pd.DataFrame) -> pd.DataFrame:
             merged["pred_prob"].notna(), merged[CAND_RANK_KEY]
         )
     return merged
+
+
+def _prev_list_pairs(hist_dir: str, trade_date: str, prefix: str) -> set:
+    """最近一个早于 trade_date 的交付清单 (symbol, board) 对集合 (stall_marker 同款文件协议)."""
+    files = []
+    for name in os.listdir(hist_dir):
+        m = re.match(rf"{re.escape(prefix)}(\d{{8}})(?:__.*)?\.csv$", name)
+        if m and m.group(1) < trade_date:
+            files.append((m.group(1), name))
+    if not files:
+        return set()
+    try:
+        d = pd.read_csv(
+            os.path.join(hist_dir, sorted(files)[-1][1]),
+            usecols=["symbol", "board"],
+            dtype={"symbol": str},
+        )
+    except Exception:
+        return set()
+    return set(zip(d["symbol"].str.zfill(6), d["board"].astype(str)))
+
+
+def hysteresis_keep(
+    truncated: pd.DataFrame,
+    full: pd.DataFrame,
+    trade_date: str,
+    hist_dir: str | None = None,
+) -> pd.DataFrame:
+    """迟滞滞留 (2026-08-26 用户定案): 昨日上榜股今日跌出 TOP-10 但仍在板内
+    前 band_factor×10 名 → 滞留 (keep_flag="滞留"), 每板块最多 max_keep 只.
+
+    排序口径与 rank_and_truncate 一致 (rank_blend, NaN prob 排尾); 滞留行
+    rank_blend 按 NaN→mag 归一 (与入选行输出约定同). 不改新选股/排序, 纯降换手.
+    开关关/无昨日文件/候选空 → 原样返回 (keep_flag 全空列).
+    """
+    cfg = SHORTLIST_HYSTERESIS
+    out = truncated.copy()
+    out["keep_flag"] = ""
+    if not cfg.get("enable") or out.empty or full is None or full.empty:
+        return out
+    hist_dir = str(STOCK_LIST_DIR) if hist_dir is None else str(hist_dir)
+    prev = _prev_list_pairs(hist_dir, trade_date, "parallel_shortlist_")
+    if not prev:
+        return out
+    top_n, keep_idx = 10, []
+    for board in ("main", "dual"):
+        bf = full[full["board"] == board]
+        if bf.empty:
+            continue
+        prob = (
+            bf["pred_prob"]
+            if "pred_prob" in bf.columns
+            else pd.Series(np.nan, index=bf.index)
+        )
+        k = bf[CAND_RANK_KEY] * prob  # NaN prob → NaN → 排尾 (rank_and_truncate 同口径)
+        order = pd.DataFrame({"_i": bf.index, "_k": k}).sort_values(
+            "_k", ascending=False, na_position="last"
+        )
+        cur = set(out.loc[out["board"] == board, "symbol"])
+        band = top_n * cfg["band_factor"]
+        n_kept = 0
+        for pos, i in enumerate(order["_i"], start=1):
+            if pos > band or n_kept >= cfg["max_keep"]:
+                break
+            sym = full.at[i, "symbol"]
+            if (sym, board) in prev and sym not in cur:
+                keep_idx.append(i)
+                n_kept += 1
+    if keep_idx:
+        rows = full.loc[keep_idx].copy()
+        rows["cut"] = "T-10"
+        rows["keep_flag"] = "滞留"
+        prob = (
+            rows["pred_prob"]
+            if "pred_prob" in rows.columns
+            else pd.Series(np.nan, index=rows.index)
+        )
+        rows["rank_blend"] = (rows[CAND_RANK_KEY] * prob).fillna(rows[CAND_RANK_KEY])
+        out = pd.concat([out, rows], ignore_index=True)
+        print(
+            f"[hysteresis] 滞留 {len(rows)} 只 (昨日上榜仍在前{int(top_n * cfg['band_factor'])}名): "
+            f"{', '.join(rows['symbol'].astype(str))}",
+            flush=True,
+        )
+    return out
 
 
 def build_merged(res: pd.DataFrame) -> pd.DataFrame:
@@ -1074,6 +1197,8 @@ def build_summary(res: pd.DataFrame, stats: dict, sel_date: pd.Timestamp) -> lis
     """SUMMARY: 系统级逐视界胜率/期望 → 两系统共识 → 建议顺序."""
     lines = [
         f"── SUMMARY ── 选股日(数据) {sel_date:%Y-%m-%d}",
+        "口径注: 概率=窗口内盘中触及目标涨幅的概率(非期末上涨概率); 幅度=盘中最高毛口径(未扣费)",
+        "        与 legacy(期末净收益口径)数字不可直接比大小",
         "系统级 OOS 逐视界 期望涨幅(MFE)/达到概率 (同系统个股共享, 非个股值; 真实口径):",
     ]
     for board in ("main", "dual"):
@@ -1408,7 +1533,12 @@ def main() -> int:
                 flush=True,
             )
     res = add_score(res)
+    # 解禁硬过滤 (2026-08-26): 池内剔除 → TOP-10 递补满额; 滞留候选同走此池
+    res = unlock_hard_filter(res, sel_date)
+    full_res = res
     res = rank_and_truncate(res)
+    # 迟滞滞留 (2026-08-26): 昨日上榜仍在带内 → 滞留行 (降换手, 不改新选)
+    res = hysteresis_keep(res, full_res, str(sel_date.date()).replace("-", ""))
     # 报告幅度锚定 (2026-08-14): 排名键 cal_n=21 保留, 报告 pred_ret_{h}/pred_mag_10d
     # 平移至模型近 ANCHOR_WINDOW 决策日 top-ANCHOR_TOP 已实现均值 — 每板块每视界常数, 排序不变
     res = _anchor_reported(res)

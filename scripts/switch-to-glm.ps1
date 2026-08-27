@@ -126,9 +126,48 @@ function Set-Settings {
     Write-Host "[OK] $Label -> $Path" -ForegroundColor Green
 }
 
+# ── Sync Windows User-Registry Env (priority > settings.json) ──
+function Set-UserEnvRegistry {
+    $registryVars = [ordered]@{
+        "ANTHROPIC_BASE_URL"              = $BASE_URL
+        "ANTHROPIC_API_KEY"               = $GLM_API_KEY
+        "ANTHROPIC_MODEL"                 = $MODEL
+        "ANTHROPIC_DEFAULT_OPUS_MODEL"    = $MODEL
+        "ANTHROPIC_DEFAULT_SONNET_MODEL"  = $MODEL
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL"   = $MODEL
+        "CLAUDE_CODE_SUBAGENT_MODEL"      = $MODEL
+        "CLAUDE_CODE_EFFORT_LEVEL"        = "max"
+        "CLAUDE_CODE_AUTO_COMPACT_WINDOW" = "1000000"
+    }
+
+    foreach ($kv in $registryVars.GetEnumerator()) {
+        $existing = [Environment]::GetEnvironmentVariable($kv.Key, "User")
+        if ($existing -ne $kv.Value) {
+            [Environment]::SetEnvironmentVariable($kv.Key, $kv.Value, "User")
+            Write-Host "[REG] $($kv.Key) = $($kv.Value.Substring(0,8))..." -ForegroundColor DarkYellow
+        }
+    }
+
+    # Remove conflicting legacy keys from registry
+    $legacyKeys = @(
+        "ANTHROPIC_AUTH_TOKEN",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "OPENAI_MODEL"
+    )
+    foreach ($legacyKey in $legacyKeys) {
+        $existing = [Environment]::GetEnvironmentVariable($legacyKey, "User")
+        if ($existing) {
+            [Environment]::SetEnvironmentVariable($legacyKey, $null, "User")
+            Write-Host "[DEL-REG] $legacyKey (removed stale DeepSeek/GLM conflict)" -ForegroundColor DarkGray
+        }
+    }
+}
+
 # ── Execute ────────────────────────────────────────────────────
 Set-Settings -Path $UserSettings -Label "User-level "
 Set-Settings -Path $ProjectSettings -Label "Project-level" -ApplyOverrides
+Set-UserEnvRegistry
 
 Write-Host ""
 Write-Host "Done. Restart Claude Code to apply." -ForegroundColor Cyan

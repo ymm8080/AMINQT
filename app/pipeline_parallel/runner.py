@@ -29,7 +29,12 @@ from app.pipeline_parallel.backtest import (
     write_last_days_csv,
     write_worm,
 )
-from app.pipeline_parallel.config import SLOW_BULL, SLOW_BULL_REGIME, SLOW_BULL_VERSION
+from app.pipeline_parallel.config import (
+    SLOW_BULL,
+    SLOW_BULL_PAUSE,
+    SLOW_BULL_REGIME,
+    SLOW_BULL_VERSION,
+)
 from config.settings import STOCK_LIST_DIR
 
 logger = logging.getLogger(__name__)
@@ -41,19 +46,34 @@ def write_slowbull_pool(work: pd.DataFrame, board: str, date=None) -> str:
     date: 显式指定选股日 (默认该板块最新交易日). 空池 → 不落盘 (返回 "").
     文件名 = slowbull_pool_<board>_<YYYYMMDD>__slow_bull_<ver>.csv
     (交易日期 + 模块名 + 版本, 对齐 parallel_shortlist_<date>__<module> 约定).
+    SLOW_BULL_PAUSE["paused"] → 写暂停说明文件 (symbol 空列保 merge 列协议), 不出候选.
     """
     if date is None:
         latest = work.loc[work["board"] == board, "date"].max()
     else:
         latest = pd.Timestamp(date)
-    pool = signals.daily_slowbull_pool(work, latest, board, SLOW_BULL, SLOW_BULL.top_n)
-    if pool.empty:
-        return ""
     stamp = str(pd.Timestamp(latest).date()).replace("-", "")
     os.makedirs(str(STOCK_LIST_DIR), exist_ok=True)
     fp = STOCK_LIST_DIR / (
         f"slowbull_pool_{board}_{stamp}__slow_bull_{SLOW_BULL_VERSION}.csv"
     )
+    if SLOW_BULL_PAUSE["paused"]:
+        note = pd.DataFrame(
+            {
+                "board": [board],
+                "symbol": [
+                    ""
+                ],  # _merge_overall_list.load_slowbull 取 board+symbol 两列
+                "date": [str(pd.Timestamp(latest).date())],
+                "note": [SLOW_BULL_PAUSE["reason"]],
+            }
+        )
+        note.to_csv(fp, index=False)
+        logger.warning("[slow_bull] %s", SLOW_BULL_PAUSE["reason"])
+        return fp.name
+    pool = signals.daily_slowbull_pool(work, latest, board, SLOW_BULL, SLOW_BULL.top_n)
+    if pool.empty:
+        return ""
     # 市场状态条件退出 (2026-08-06): 上升段 trail8 正常出候选; 下行段 + no_open → 不开仓
     up = (
         bool(pool["slow_bull_regime"].iloc[0])

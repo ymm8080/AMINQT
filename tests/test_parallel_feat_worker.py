@@ -65,9 +65,9 @@ def _mk_board(symbols, days=120, seed=7) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def test_config_flag_exists_and_default_off():
-    """开关默认关 — 待计时数据拍板后才开 (勿在无证据时改默认)."""
-    assert LEGACY_PARALLEL_FEATURES is False
+def test_config_flag_exists_and_default_on():
+    """开关默认开 — 2026-08-25 真面板 300d 对照已过 (逐字节一致 + 1.43x), 勿无证据改回."""
+    assert LEGACY_PARALLEL_FEATURES is True
 
 
 def test_worker_equivalent_to_direct_build(tmp_path):
