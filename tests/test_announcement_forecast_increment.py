@@ -40,9 +40,7 @@ def test_gap_from_year_file_fetches_and_writes_inc(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(rap, "fetch_window", fake_fetch_window)
-    df = rap._fetch_forecast_increment(
-        _FakeSupply(), "20260827", out_dir=str(tmp_path)
-    )
+    df = rap._fetch_forecast_increment(_FakeSupply(), "20260827", out_dir=str(tmp_path))
     assert calls == [(dt.date(2026, 8, 26), dt.date(2026, 8, 27))]
     assert len(df) == 1
     inc = tmp_path / "inc_20260826_20260827.parquet"
@@ -65,18 +63,14 @@ def test_inc_file_counts_as_watermark(tmp_path, monkeypatch):
 def test_zero_rows_still_writes_watermark(tmp_path, monkeypatch):
     _seed(tmp_path, "all_20250826_20260825.parquet")
     monkeypatch.setattr(rap, "fetch_window", lambda pro, s, e: pd.DataFrame())
-    df = rap._fetch_forecast_increment(
-        _FakeSupply(), "20260826", out_dir=str(tmp_path)
-    )
+    df = rap._fetch_forecast_increment(_FakeSupply(), "20260826", out_dir=str(tmp_path))
     assert df.empty
     assert (tmp_path / "inc_20260826_20260826.parquet").exists()
 
 
 def test_no_baseline_cache_raises(tmp_path):
     with pytest.raises(RuntimeError, match="基线"):
-        rap._fetch_forecast_increment(
-            _FakeSupply(), "20260827", out_dir=str(tmp_path)
-        )
+        rap._fetch_forecast_increment(_FakeSupply(), "20260827", out_dir=str(tmp_path))
 
 
 def test_up_to_date_skips_fetch(tmp_path, monkeypatch):
@@ -86,8 +80,6 @@ def test_up_to_date_skips_fetch(tmp_path, monkeypatch):
         raise AssertionError("up-to-date 不应触发网络拉取")
 
     monkeypatch.setattr(rap, "fetch_window", boom)
-    df = rap._fetch_forecast_increment(
-        _FakeSupply(), "20260827", out_dir=str(tmp_path)
-    )
+    df = rap._fetch_forecast_increment(_FakeSupply(), "20260827", out_dir=str(tmp_path))
     assert df.empty
     assert not (tmp_path / "inc_20260827_20260827.parquet").exists()

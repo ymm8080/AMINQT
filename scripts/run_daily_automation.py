@@ -79,6 +79,7 @@ _STEP_TIMEOUT_S = {
     "shadow_xmodule": 15 * 60,
 }
 
+
 def _kill_tree(pid: int) -> None:
     """taskkill /T /F 整树强杀 — 含步骤脚本派生的 worker 孙进程 (它们继承 stdout 管道,
     只杀直接子进程会漏)."""
@@ -99,7 +100,9 @@ def _run_step_with_watchdog(
     超时始终未触发 (日志无 TIMEOUT 记录, 机器全程未休眠), 内部计时器不可信;
     看门狗线程 sleep 到点后 poll + 整树强杀, 与主线程等待互为冗余.
     """
-    proc = subprocess.Popen(argv, cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT, env=env)
+    proc = subprocess.Popen(
+        argv, cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT, env=env
+    )
     state = {"timed_out": False}
 
     def _watch() -> None:

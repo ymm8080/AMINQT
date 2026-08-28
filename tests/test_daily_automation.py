@@ -104,9 +104,10 @@ def test_plan_steps_skip_checkpoints_and_retrain():
 
 
 def test_plan_steps_all_skip_keeps_legacy_chain():
-    assert plan_steps(
-        THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True
-    ) == _LEGACY_CHAIN + _TAIL
+    assert (
+        plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True)
+        == _LEGACY_CHAIN + _TAIL
+    )
 
 
 # ── 中断中止 + 终态 state 文件 (08-21 事故: cyq 被 Ctrl+C 杀后仍启动 retrain,

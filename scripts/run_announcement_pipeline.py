@@ -103,7 +103,9 @@ def _fetch_forecast_increment(
     target = datetime.strptime(target_date, "%Y%m%d").date()
     watermark = _forecast_fetched_through(out_dir)
     if watermark is None:
-        raise RuntimeError("forecast 无基线缓存, 先跑 scripts/fetch_earnings_forecast.py 默认模式")
+        raise RuntimeError(
+            "forecast 无基线缓存, 先跑 scripts/fetch_earnings_forecast.py 默认模式"
+        )
     s = watermark + timedelta(days=1)
     if s > target:
         logger.info("  forecast: 缓存已到 %s, 无缺口", target)
