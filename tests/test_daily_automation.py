@@ -1,19 +1,24 @@
 """Tests for scripts/run_daily_automation 步骤编排 (2026-08-13).
 
 plan_steps 是纯函数, 决定当日四模块自动化的执行序列:
-  [refresh?] [retrain?] legacy_prob_head legacy deliver
-  [parallel? prob_head deliver_parallel] drift
-关键不变式: deliver_parallel 依赖当日 fresh parallel 重生成 (run_dir), 故
-  parallel 被跳过 (--skip-parallel) 时 deliver_parallel 必须同步丢弃,
-  否则会交付旧 run_dir 脏数据; prob_head 读 parallel 检查点面板, 同样
-  只随 parallel 出现 (2026-08-15 概率头接线). legacy_prob_head 读面板+
-  特征现场构建, 无前置依赖, 恒在 legacy 预测前 (概率闸依赖 bundle) (2026-08-17).
-  (2026-08-20) legacy 链优先: legacy 与 parallel 链互不依赖, legacy 短名单
-  先落盘, 不再被 parallel+prob_head 挡住 (~4 分/重训日).
+  [cyq legacy_prob_head legacy deliver] [refresh?] [retrain?]
+  [parallel? prob_head deliver_parallel] drift drift_parallel shadow_xmodule
+关键不变式:
+  1. 交付保底优先 (2026-08-27): legacy 预测链 (cyq→lph→legacy→deliver) 恒在一切
+     重活 (refresh/retrain/parallel) 之前 — 重活卡死/超时被杀不影响当日清单落盘
+     (08-27 事故: refresh 卡 9h 全链无清单). legacy_prob_head 恒在 legacy 预测前
+     (概率闸依赖 bundle).
+  2. deliver_parallel 依赖当日 fresh parallel 重生成 (run_dir), 故 parallel 被跳过
+     (--skip-parallel) 时 deliver_parallel 必须同步丢弃, 否则会交付旧 run_dir 脏数据;
+     prob_head 读 parallel 检查点面板, 同样只随 parallel 出现 (2026-08-15).
+看门狗 (2026-08-27): 超时强杀走外部线程 taskkill 整树, 不再信 subprocess.run 内部
+计时器 (08-27 它没触发).
 """
 
 import datetime as _dt
 import json
+import subprocess
+import sys
 
 import scripts.run_daily_automation as ma
 from scripts.run_daily_automation import (
@@ -22,12 +27,17 @@ from scripts.run_daily_automation import (
     RETRAIN_WEEKDAY,
     _exit_status,
     _is_interrupt_rc,
+    _run_step_with_watchdog,
     _write_state,
     plan_steps,
 )
 
 # 2026-08-13 = Thursday (weekday 3, 非重训日), 2026-08-14 = Friday (weekday 4, 重训日).
 THU, FRI = _dt.date(2026, 8, 13), _dt.date(2026, 8, 14)
+
+_LEGACY_CHAIN = ["cyq", "legacy_prob_head", "legacy", "deliver"]
+_TAIL = ["drift", "drift_parallel", "shadow_xmodule"]
+_PARALLEL_CHAIN = ["parallel", "prob_head", "deliver_parallel"]
 
 
 def test_fixture_dates_hit_expected_weekdays():
@@ -47,111 +57,56 @@ def test_every_step_has_timeout():
 
 
 def test_plan_steps_weekday_full_chain():
-    assert plan_steps(THU) == [
-        "refresh",
-        "cyq",
-        "legacy_prob_head",
-        "legacy",
-        "deliver",
-        "parallel",
-        "prob_head",
-        "deliver_parallel",
-        "drift",
-        "drift_parallel",
-        "shadow_xmodule",
-    ]
+    assert plan_steps(THU) == _LEGACY_CHAIN + ["refresh"] + _PARALLEL_CHAIN + _TAIL
 
 
 def test_plan_steps_retrain_day_inserts_retrain():
-    assert plan_steps(FRI) == [
-        "refresh",
-        "cyq",
-        "retrain",
-        "legacy_prob_head",
-        "legacy",
-        "deliver",
-        "parallel",
-        "prob_head",
-        "deliver_parallel",
-        "drift",
-        "drift_parallel",
-        "shadow_xmodule",
-    ]
+    assert plan_steps(FRI) == (
+        _LEGACY_CHAIN + ["refresh", "retrain"] + _PARALLEL_CHAIN + _TAIL
+    )
 
 
 def test_plan_steps_force_retrain_inserts_retrain_on_non_retrain_day():
     """--force-retrain 在非周五也强制插入 retrain 步骤."""
-    assert plan_steps(THU, force_retrain=True) == [
-        "refresh",
-        "cyq",
-        "retrain",
-        "legacy_prob_head",
-        "legacy",
-        "deliver",
-        "parallel",
-        "prob_head",
-        "deliver_parallel",
-        "drift",
-        "drift_parallel",
-        "shadow_xmodule",
-    ]
+    assert plan_steps(THU, force_retrain=True) == (
+        _LEGACY_CHAIN + ["refresh", "retrain"] + _PARALLEL_CHAIN + _TAIL
+    )
+
+
+def test_plan_steps_delivery_chain_precedes_all_heavy_steps():
+    """交付保底 (2026-08-27): legacy 交付链恒在 refresh/retrain/parallel 之前."""
+    for steps in (
+        plan_steps(THU),
+        plan_steps(FRI),
+        plan_steps(THU, force_retrain=True),
+    ):
+        assert steps[:4] == _LEGACY_CHAIN
+        for heavy in ("refresh", "retrain", "parallel"):
+            if heavy in steps:
+                assert steps.index(heavy) > 3, f"{heavy} 不得排在 legacy 交付链前"
 
 
 def test_plan_steps_skip_parallel_drops_deliver_parallel():
-    """--skip-parallel 只跑 legacy 链 (refresh 仍刷新检查点); 并行交付同步丢弃.
+    """--skip-parallel 只跳并行链 (refresh 仍刷新检查点); 并行交付同步丢弃.
 
     shadow_xmodule 仍跑: 它读磁盘上已交付清单 (任意一侧缺也容忍), 非交付步骤.
     """
-    assert plan_steps(THU, skip_parallel=True) == [
-        "refresh",
-        "cyq",
-        "legacy_prob_head",
-        "legacy",
-        "deliver",
-        "drift",
-        "drift_parallel",
-        "shadow_xmodule",
-    ]
-    assert plan_steps(FRI, skip_parallel=True) == [
-        "refresh",
-        "cyq",
-        "retrain",
-        "legacy_prob_head",
-        "legacy",
-        "deliver",
-        "drift",
-        "drift_parallel",
-        "shadow_xmodule",
-    ]
+    assert plan_steps(THU, skip_parallel=True) == _LEGACY_CHAIN + ["refresh"] + _TAIL
+    assert plan_steps(FRI, skip_parallel=True) == (
+        _LEGACY_CHAIN + ["refresh", "retrain"] + _TAIL
+    )
 
 
 def test_plan_steps_skip_checkpoints_and_retrain():
     steps = plan_steps(FRI, skip_checkpoints=True, skip_retrain=True)
-    assert steps == [
-        "legacy_prob_head",
-        "legacy",
-        "deliver",
-        "parallel",
-        "prob_head",
-        "deliver_parallel",
-        "drift",
-        "drift_parallel",
-        "shadow_xmodule",
-    ]
+    assert steps == _LEGACY_CHAIN + _PARALLEL_CHAIN + _TAIL
     assert "refresh" not in steps and "retrain" not in steps
 
 
 def test_plan_steps_all_skip_keeps_legacy_chain():
     assert plan_steps(
         THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True
-    ) == [
-        "legacy_prob_head",
-        "legacy",
-        "deliver",
-        "drift",
-        "drift_parallel",
-        "shadow_xmodule",
-    ]
+    ) == _LEGACY_CHAIN + _TAIL
 
 
 # ── 中断中止 + 终态 state 文件 (08-21 事故: cyq 被 Ctrl+C 杀后仍启动 retrain,
@@ -196,3 +151,31 @@ def test_write_state_missing_dir_creates_it(tmp_path, monkeypatch):
         )
     )
     assert state["status"] == "ok"
+
+
+# ── 外部看门狗超时强杀 (2026-08-27: subprocess.run 内部 timeout 未触发,
+#    refresh 爬行 8h+; 改 Popen + 看门狗线程 taskkill 整树) ────────────────────
+
+
+def test_watchdog_fast_child_not_killed():
+    """快跑完的子进程不受看门狗影响, 返回真实 rc."""
+    rc, timed_out = _run_step_with_watchdog(
+        [sys.executable, "-c", "print('ok')"],
+        subprocess.DEVNULL,
+        env=None,
+        timeout_s=60,
+    )
+    assert rc == 0
+    assert timed_out is False
+
+
+def test_watchdog_hung_child_tree_killed():
+    """卡死子进程到点被整树强杀, timed_out=True (调用方映射 rc=124)."""
+    rc, timed_out = _run_step_with_watchdog(
+        [sys.executable, "-c", "import time; time.sleep(120)"],
+        subprocess.DEVNULL,
+        env=None,
+        timeout_s=2,
+    )
+    assert timed_out is True
+    assert rc != 0
