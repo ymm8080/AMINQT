@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 """forecast 接口第二次探针: ann_date 口径."""
+
 import sys
 
 import tushare as ts
@@ -14,7 +14,10 @@ FIELDS = "ts_code,ann_date,end_date,type,p_change_min,p_change_max,net_profit_mi
 
 for label, kw in [
     ("single_day_0715", dict(ann_date="20260715", fields=FIELDS)),
-    ("range_july", dict(ann_date="", start_date="20260701", end_date="20260731", fields=FIELDS)),
+    (
+        "range_july",
+        dict(ann_date="", start_date="20260701", end_date="20260731", fields=FIELDS),
+    ),
     ("single_2024_day", dict(ann_date="20240715", fields=FIELDS)),
 ]:
     try:
