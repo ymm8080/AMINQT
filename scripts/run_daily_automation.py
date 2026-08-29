@@ -79,6 +79,7 @@ _STEP_TIMEOUT_S = {
     "shadow_xmodule": 15 * 60,
 }
 
+
 def _kill_tree(pid: int) -> None:
     """整树强杀 — 含步骤脚本派生的 worker 孙进程 (它们继承 stdout 管道,
     只杀直接子进程会漏).
