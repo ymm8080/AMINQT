@@ -79,16 +79,30 @@ _STEP_TIMEOUT_S = {
     "shadow_xmodule": 15 * 60,
 }
 
-
 def _kill_tree(pid: int) -> None:
-    """taskkill /T /F 整树强杀 — 含步骤脚本派生的 worker 孙进程 (它们继承 stdout 管道,
-    只杀直接子进程会漏)."""
-    try:
-        subprocess.run(
-            ["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=30
-        )
-    except Exception:  # noqa: BLE001 — 看门狗杀不掉只能放弃, 不影响主流程
-        pass
+    """整树强杀 — 含步骤脚本派生的 worker 孙进程 (它们继承 stdout 管道,
+    只杀直接子进程会漏).
+    Windows: taskkill /T /F; POSIX: kill -9 -- -pgid (杀进程组).
+    """
+    if sys.platform == "win32":
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                capture_output=True,
+                timeout=30,
+            )
+        except Exception:  # noqa: BLE001 — 看门狗杀不掉只能放弃, 不影响主流程
+            pass
+    else:
+        try:
+            pgid = os.getpgid(pid)
+            os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            # 进程已退出或无权限; 降级杀单进程
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, OSError):
+                pass
 
 
 def _run_step_with_watchdog(
@@ -100,8 +114,15 @@ def _run_step_with_watchdog(
     超时始终未触发 (日志无 TIMEOUT 记录, 机器全程未休眠), 内部计时器不可信;
     看门狗线程 sleep 到点后 poll + 整树强杀, 与主线程等待互为冗余.
     """
+    # Windows: CREATE_NEW_PROCESS_GROUP 使其成为进程组头, taskkill /T 可杀整树.
+    # POSIX: start_new_session=True 跑在新会话/进程组, os.killpg 整树强杀不影响父进程.
+    popen_kwargs: dict = {}
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_kwargs["start_new_session"] = True
     proc = subprocess.Popen(
-        argv, cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT, env=env
+        argv, cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT, env=env, **popen_kwargs
     )
     state = {"timed_out": False}
 
