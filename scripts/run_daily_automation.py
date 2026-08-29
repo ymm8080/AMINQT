@@ -6,13 +6,16 @@
   3. 并行 sniper   — 每日重生成 (app.pipeline_parallel.runner 回测 + 短名单)
   4. 并行 fusion   — 同上 (同一 runner, 内含 slow_bull 一并输出)
 
-步骤按依赖顺序子进程隔离执行 (每步独立进程释放内存, 避免 44GB commit 上限 OOM):
-  [refresh]  scripts/_refresh_parallel_checkpoints.py  并行行集 3y 检查点 (需 19:15 fetch 后)
-  [retrain]  scripts/_retrain_legacy_full.py <tag>     legacy 周频重训 (仅 RETRAIN_WEEKDAY)
-  [parallel] python -m app.pipeline_parallel.runner     并行回测 + 短名单 (sniper/fusion/slow_bull)
+步骤按"交付保底优先"编排 (2026-08-27 重排: 当日 refresh 卡死 9h 全链无清单, 故
+legacy 预测链 ~35min 前置到一切重活之前, 重活卡死/超时被杀都不影响当日清单落盘;
+每步独立子进程隔离执行释放内存, 避免 44GB commit 上限 OOM):
+  [cyq]      scripts/_backfill_cyq_panel.py            cyq_panel 增量回填 (legacy 慢牛列)
   [legacy_prob_head] scripts/_train_legacy_prob_head.py legacy 并行式概率头 (21 交易日自判断重训)
   [legacy]   scripts/_gen_legacy_list.py <tag>          legacy 预测出清单 (用最新 current)
   [deliver]  scripts/_deliver_legacy_list.py <tag>      legacy 清单交付 STOCK_LIST_DIR
+  [refresh]  scripts/_refresh_parallel_checkpoints.py  并行行集 3y 检查点 (需 19:15 fetch 后)
+  [retrain]  scripts/_retrain_legacy_full.py <tag>     legacy 周频重训 (仅 RETRAIN_WEEKDAY; 重排后当日清单先用现有模型, 新模型自次一清单生效)
+  [parallel] python -m app.pipeline_parallel.runner     并行回测 + 短名单 (sniper/fusion/slow_bull)
   [deliver_parallel] scripts/_shortlist_t5_t10.py <tag> 并行短名单交付 STOCK_LIST_DIR
   [drift]    scripts/_monitor_legacy_drift.py           幅度漂移监控 (全池 pred vs 实现偏差)
   [drift_parallel] scripts/_monitor_parallel_drift.py   parallel dual 漂移监控 (短名单 vs 检查点标签)
@@ -48,6 +51,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -74,6 +78,78 @@ _STEP_TIMEOUT_S = {
     "drift_parallel": 30 * 60,
     "shadow_xmodule": 15 * 60,
 }
+
+
+def _kill_tree(pid: int) -> None:
+    """整树强杀 — 含步骤脚本派生的 worker 孙进程 (它们继承 stdout 管道,
+    只杀直接子进程会漏).
+    Windows: taskkill /T /F; POSIX: kill -9 -- -pgid (杀进程组).
+    """
+    if sys.platform == "win32":
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                capture_output=True,
+                timeout=30,
+            )
+        except Exception:  # noqa: BLE001 — 看门狗杀不掉只能放弃, 不影响主流程
+            pass
+    else:
+        try:
+            pgid = os.getpgid(pid)
+            os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            # 进程已退出或无权限; 降级杀单进程
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, OSError):
+                pass
+
+
+def _run_step_with_watchdog(
+    argv: list[str], fh, env: dict, timeout_s: int
+) -> tuple[int, bool]:
+    """Popen + 外部看门狗线程, 超时 taskkill 整树强杀. 返回 (rc, timed_out).
+
+    不再用 subprocess.run(timeout=): 08-27 事故中 refresh 爬行 8h+, 其 3h 内部
+    超时始终未触发 (日志无 TIMEOUT 记录, 机器全程未休眠), 内部计时器不可信;
+    看门狗线程 sleep 到点后 poll + 整树强杀, 与主线程等待互为冗余.
+    """
+    # Windows: CREATE_NEW_PROCESS_GROUP 使其成为进程组头, taskkill /T 可杀整树.
+    # POSIX: start_new_session=True 跑在新会话/进程组, os.killpg 整树强杀不影响父进程.
+    popen_kwargs: dict = {}
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_kwargs["start_new_session"] = True
+    proc = subprocess.Popen(
+        argv, cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT, env=env, **popen_kwargs
+    )
+    state = {"timed_out": False}
+
+    def _watch() -> None:
+        time.sleep(timeout_s)
+        if proc.poll() is None:
+            state["timed_out"] = True
+            _kill_tree(proc.pid)
+
+    threading.Thread(target=_watch, daemon=True, name="step-watchdog").start()
+    rc = proc.wait()
+    return rc, state["timed_out"]
+
+
+def _prevent_sleep() -> None:
+    """链运行期间请求系统不睡眠 (08-27: 12:52 电池睡眠恰好落在链运行中)."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            ctypes.windll.kernel32.SetThreadExecutionState(
+                0x80000000 | 0x00000001  # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+            )
+        except Exception:  # noqa: BLE001 — 拿不到也不拦链启动
+            pass
+
 
 # (步骤名, argv) — argv 不含解释器, run_step 负责拼 [PY, "-u", ...]
 _STEPS = {
@@ -116,20 +192,21 @@ def plan_steps(
 ) -> list[str]:
     """按星期 + skip 标志选出当日步骤序列 (纯函数, 可单测)."""
     steps: list[str] = []
-    if not skip_checkpoints:
-        steps.append("refresh")
-        # cyq_panel 增量回填 (2026-08-19): 读 V3 面板补 cache 缺失日期, 非关键步骤 —
-        # 失败只损失当日 pct_70_con (慢牛 0.05 权重列跳过), 清单不受影响
-        steps.append("cyq")
-    if not skip_retrain and (force_retrain or today.weekday() == RETRAIN_WEEKDAY):
-        steps.append("retrain")
-    # [2026-08-20] legacy 链优先: legacy_prob_head/legacy/deliver 与 parallel 链互不依赖,
-    # 提前执行让 legacy 短名单早落盘 (重训日 legacy 是耗时大头, 不再被 parallel+prob_head 挡住)
+    # [2026-08-27] 交付保底优先: legacy 预测链 (cyq→lph→legacy→deliver, ~35min) 前置到
+    # 一切重活 (refresh/retrain) 之前 — 08-27 事故 refresh 卡死 9h, 全链一条清单都没出.
+    # 代价: 重训日当日清单先用现有模型, 新模型自次一清单生效.
+    # cyq_panel 增量回填 (2026-08-19): 读 V3 面板补 cache 缺失日期, 非关键步骤 —
+    # 失败只损失当日 pct_70_con (慢牛 0.05 权重列跳过), 清单不受影响; 恒前置 (轻量)
+    steps.append("cyq")
     # legacy 并行式概率头: 读面板+特征现场构建 (不依赖 parallel 检查点, 无前置依赖);
     # 自判断新鲜度 (21 交易日重训一次), 未到期开销小 — 放 legacy 预测前 (概率闸依赖 bundle)
     steps.append("legacy_prob_head")
     steps.append("legacy")
     steps.append("deliver")
+    if not skip_checkpoints:
+        steps.append("refresh")
+    if not skip_retrain and (force_retrain or today.weekday() == RETRAIN_WEEKDAY):
+        steps.append("retrain")
     if not skip_parallel:
         steps.append("parallel")
         # 概率头训练自判断新鲜度 (21 交易日重训一次); 仅并行交付启用时才有消费者
@@ -205,6 +282,7 @@ def main() -> int:
 
     # 运行状态文件 (监督方终态判据): 启动先写 running, 结束/中断覆盖为终态.
     _write_state(tag, "running")
+    _prevent_sleep()
     current_step: str | None = None
 
     # Ctrl+C/控制台关闭 → 立即写 interrupted 终态并退出, 不留"无标记裸退出"
@@ -282,17 +360,10 @@ def main() -> int:
             t0 = time.time()
             # 统一子进程 stdout 为 UTF-8: 有的脚本 reconfigure 有的不, 混合编码会污染日志文件.
             env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
-            try:
-                cp = subprocess.run(
-                    argv,
-                    cwd=ROOT,
-                    stdout=fh,
-                    stderr=subprocess.STDOUT,
-                    env=env,
-                    timeout=_STEP_TIMEOUT_S[step],
-                )
-                rc = cp.returncode
-            except subprocess.TimeoutExpired:
+            rc, timed_out = _run_step_with_watchdog(
+                argv, fh, env, _STEP_TIMEOUT_S[step]
+            )
+            if timed_out:
                 msg = (
                     f"[{_dt.datetime.now():%H:%M:%S} TIMEOUT] {step} 超过 "
                     f"{_STEP_TIMEOUT_S[step]}s 未完成, 已终止 (疑似卡死, 见上日志)"

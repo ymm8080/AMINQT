@@ -6,6 +6,8 @@
   - 股东增减持 (pro.stk_holdertrade) → 聚合后更新 V3 面板今日行
   - 股东户数 (pro.stk_holdernumber)
   - 个股公告 (pro.anns_d, 需 5000+ 积分; 降级: AKShare)
+  - 业绩预告 (pro.forecast) 增量: 补 fetch_earnings_forecast 年窗缓存的水位缺口
+    (缓存备查, 不入生产特征 — 2026-08-26 事件池终审 FAIL)
 
 各源独立失败不阻断, 结果写入 data/supply_cache/ (parquet, WORM).
 holdertrade 额外更新 V3 面板 (panel_full_enriched_v3.parquet) 的今日行.
@@ -42,6 +44,8 @@ load_dotenv()
 
 from app.pipeline1.data_supply import DataSupplyChain  # noqa: E402
 from config.settings import data_others_path  # noqa: E402
+from scripts.fetch_earnings_forecast import OUT_DIR as FORECAST_DIR  # noqa: E402
+from scripts.fetch_earnings_forecast import fetch_window  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,6 +60,7 @@ ANNOUNCEMENT_SOURCES = [
     "stk_holdertrade",
     "stk_holdernumber",
     "anns_d",
+    "forecast",
 ]
 
 SOURCE_LABELS = {
@@ -63,7 +68,56 @@ SOURCE_LABELS = {
     "stk_holdertrade": "股东增减持",
     "stk_holdernumber": "股东户数",
     "anns_d": "个股公告 (需 5000+ 积分)",
+    "forecast": "业绩预告 (增量缓存, 备查)",
 }
+
+
+def _forecast_fetched_through(out_dir: str):
+    """水位线 = forecast 缓存文件名 (all_/inc_) 中的最大结束日 (内容不读)."""
+    import re as _re
+
+    best = None
+    try:
+        names = os.listdir(out_dir)
+    except OSError:
+        return None
+    for name in names:
+        m = _re.match(r"^(?:all|inc)_(\d{8})_(\d{8})\.parquet$", name)
+        if not m:
+            continue
+        end = datetime.strptime(m.group(2), "%Y%m%d").date()
+        if best is None or end > best:
+            best = end
+    return best
+
+
+def _fetch_forecast_increment(
+    supply: DataSupplyChain, target_date: str, out_dir: str | None = None
+) -> pd.DataFrame:
+    """业绩预告增量: 拉 [水位+1, target] 缺口, WORM 写 inc_<s>_<e>.parquet.
+
+    0 行也落盘 (文件名即水位标记, 防止无公告日次日重复扫); 无基线年文件时抛错
+    (需先跑 scripts/fetch_earnings_forecast.py 默认模式).
+    """
+    out_dir = out_dir or FORECAST_DIR
+    target = datetime.strptime(target_date, "%Y%m%d").date()
+    watermark = _forecast_fetched_through(out_dir)
+    if watermark is None:
+        raise RuntimeError(
+            "forecast 无基线缓存, 先跑 scripts/fetch_earnings_forecast.py 默认模式"
+        )
+    s = watermark + timedelta(days=1)
+    if s > target:
+        logger.info("  forecast: 缓存已到 %s, 无缺口", target)
+        return pd.DataFrame()
+    pro = supply._tushare_pro()
+    df = fetch_window(pro, s, target)
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"inc_{s:%Y%m%d}_{target:%Y%m%d}.parquet")
+    if not os.path.exists(path):  # WORM: 同名不覆写
+        df.to_parquet(path, index=False)
+        logger.info("  forecast inc: %s → %s (%d 行)", s, target, len(df))
+    return df
 
 
 def fetch_announcement_data(
@@ -103,6 +157,8 @@ def fetch_announcement_data(
                 )
             elif src == "anns_d":
                 df = _fetch_anns_d(supply, target_date, refresh)
+            elif src == "forecast":
+                df = _fetch_forecast_increment(supply, target_date)
             else:
                 continue
 
