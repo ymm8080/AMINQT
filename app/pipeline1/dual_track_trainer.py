@@ -200,6 +200,20 @@ def risk_filter(df: pd.DataFrame) -> pd.DataFrame:
     return df[mask]
 
 
+def top10_verdict(delta: pd.Series, tol_half: float) -> dict:
+    """TOP10 第二票判据: 新−旧 日均净差 全窗 ≥ 0 且前后半 ≥ tol_half (非劣容差)."""
+    half = len(delta) // 2
+    full = float(delta.mean())
+    h1 = float(delta.iloc[:half].mean())
+    h2 = float(delta.iloc[half:].mean())
+    return {
+        "delta_full": full,
+        "delta_h1": h1,
+        "delta_h2": h2,
+        "pass": bool(full >= 0 and h1 >= tol_half and h2 >= tol_half),
+    }
+
+
 class DualTrackTrainer:
     """双轨训练 — 每个板块独立训练 6 个模型 (3 视界 × reg/cls)."""
 
@@ -752,6 +766,100 @@ class DualTrackTrainer:
         return trained["calibrator"]
 
     # ---------------- OOS 验证 + 切换 ----------------
+    def top10_second_vote(self, trained: dict) -> dict:
+        """[08-29] TOP10 第二票: 新包 vs current 生产包同窗每日 top10 头对头.
+
+        交付口径非劣闸 — 2026-08-29 超额标签案证明全截面 IC 会错杀头部改进:
+        判据 = 新−旧 日均净 (label_pm_10d_net) 全窗 ≥ 0 且前后半 ≥ tol_half
+        (非劣容差, 不要求严格更优). 无 current / 可比日不足 / 配置关 → 空过.
+        """
+        from config.settings import LEGACY_TOP10_SECOND_VOTE
+
+        cfg = LEGACY_TOP10_SECOND_VOTE
+        if not cfg.get("enable"):
+            return {"skipped": True, "pass": True}
+        cur_path = os.path.join(self.model_dir, f"{trained['board']}_current.pkl")
+        if not os.path.exists(cur_path):
+            logger.info("[%s] TOP10 第二票: 无生产包可比, 空过", trained["board"])
+            return {"skipped": True, "pass": True, "reason": "no_current"}
+        cur = self.load(cur_path)
+        if "10d_reg" not in cur.get("models", {}):
+            logger.warning("[%s] TOP10 第二票: 生产包无 10d_reg, 空过", trained["board"])
+            return {"skipped": True, "pass": True, "reason": "no_10d_reg"}
+
+        test = trained["segs"]["test"].copy()
+        need = set(trained["feature_cols"]) | set(cur.get("feature_cols") or [])
+        missing = [c for c in sorted(need) if c not in test.columns]
+        if missing:
+            from .feature_selector import BRUTE_FAMILIES, BruteForceGenerator
+
+            gen = BruteForceGenerator()
+            raw_cols = gen._eligible(test)
+            picks = []
+            for fam in BRUTE_FAMILIES:
+                new = gen.generate_columns(test, fam, set(missing), raw_cols=raw_cols)
+                if new is not None and len(new.columns):
+                    picks.append(new)
+            if picks:
+                block = pd.concat(picks, axis=1)
+                for c in block.columns:
+                    test[c] = block[c].to_numpy()
+            still = [c for c in missing if c not in test.columns]
+            if still:
+                # 推理端同款兜底: 补 0 + 告警 (预测器 V35Predictor 同行为)
+                for c in still:
+                    test[c] = 0.0
+                logger.warning(
+                    "[%s] TOP10 第二票: %d 列 brute 注入不齐补 0: %s",
+                    trained["board"], len(still), still[:5],
+                )
+
+        daily: dict[str, pd.DataFrame] = {}
+        split: dict[str, dict[str, float]] = {}
+        top_n = int(cfg.get("top_n", 10))
+        for name, bundle in (("new", trained), ("cur", cur)):
+            cols = bundle["feature_cols"]
+            model, _label = bundle["models"]["10d_reg"]
+            t = test[["symbol", "date", "label_pm_10d_net"]].copy()
+            t["pred"] = model.predict(
+                np.nan_to_num(test[cols].to_numpy(dtype=float), nan=0.0)
+            )
+            t = t.sort_values(["date", "pred"], ascending=[True, False])
+            t["rk"] = t.groupby("date").cumcount() + 1
+            p = t[t["rk"] <= top_n].dropna(subset=["label_pm_10d_net"])
+            daily[name] = p.groupby("date")["label_pm_10d_net"].mean()
+            p = p.copy()
+            p["bucket"] = np.where(p["rk"] <= 5, "top5", "b6_10")
+            split[name] = (
+                p.groupby("bucket")["label_pm_10d_net"].mean().to_dict()
+            )
+
+        common = daily["new"].index.intersection(daily["cur"].index)
+        if len(common) < 10:
+            logger.warning(
+                "[%s] TOP10 第二票: 可比日仅 %d (<10), 空过", trained["board"], len(common)
+            )
+            return {"skipped": True, "pass": True, "reason": f"common_days={len(common)}"}
+        v = top10_verdict(
+            daily["new"].loc[common] - daily["cur"].loc[common],
+            tol_half=float(cfg.get("tol_half", -0.002)),
+        )
+        out = {
+            **v,
+            "days": int(len(common)),
+            "new_net": float(daily["new"].loc[common].mean()),
+            "cur_net": float(daily["cur"].loc[common].mean()),
+            "top5_split": {k: {b: float(x) for b, x in d.items()} for k, d in split.items()},
+        }
+        logger.info(
+            "[%s] TOP10 第二票: %d 日 | 新 %+.4f vs 旧 %+.4f/日 | 差 全窗 %+.4f "
+            "前半 %+.4f 后半 %+.4f | %s",
+            trained["board"], out["days"], out["new_net"], out["cur_net"],
+            v["delta_full"], v["delta_h1"], v["delta_h2"],
+            "PASS" if v["pass"] else "FAIL",
+        )
+        return out
+
     def validate_oos(self, trained: dict, ic_min: float = OOS_IC_MIN) -> dict:
         """测试段 Rank IC (仅月度归因段). IC >= 0.03 才允许切换新模型.
 
@@ -813,6 +921,12 @@ class DualTrackTrainer:
         for key, val in trained.items():
             if key.startswith("reg_resid_") and key.endswith("d"):
                 bundle[key] = val
+        # [08-29] 超额标签: 标记 + 市场均值常数 (推理端 pred_ret_{k}d 加回复原绝对口径)
+        for key in ("label_excess",) + tuple(
+            f"mkt_expected_{k}d" for k in (3, 5, 10)
+        ):
+            if key in trained:
+                bundle[key] = trained[key]
         try:
             with open(path, "wb") as fh:
                 pickle.dump(bundle, fh)
@@ -851,6 +965,7 @@ class DualTrackTrainer:
         feature_cols_by_board: dict[str, list[str]],
         tag: str,
         resume: bool = False,
+        extras: dict | None = None,
     ) -> dict:
         """每周一次全局重训 (用户 2026-07-22 裁决: 周频全局训练).
 
@@ -859,6 +974,7 @@ class DualTrackTrainer:
 
         resume=True: 从 checkpoint 断点续训, 跳过已完成的模型种类.
         训练完成后自动清理 checkpoint 文件.
+        extras: 追加进 bundle 的键值 (如超额标签 label_excess + mkt_expected_*).
 
         Returns:
             {board: {'path', 'oos': {...}, 'switched': bool}}
@@ -882,17 +998,28 @@ class DualTrackTrainer:
             trained = self.train_window(
                 df, board, feature_cols_by_board[board], checkpoint=ck
             )
+            if extras:
+                trained.update(extras)
             oos = self.validate_oos(trained)
+            # [08-29] TOP10 第二票: 交付口径非劣闸 (用户裁决: 切换按 TOP10 质量判,
+            # IC 只是代理量). oos["pass"] 保持纯 IC 语义 (recalibrate 链独读).
+            oos["top10"] = self.top10_second_vote(trained)
             path = self.save(trained, tag)
 
-            # 切换决策: OOS 合格才切换, 否则保留旧模型 + 告警
-            results[board] = {"path": path, "oos": oos, "switched": oos["pass"]}
-            if not oos["pass"]:
+            # 切换决策: IC 闸 + TOP10 闸都过才切换, 否则保留旧模型 + 告警
+            results[board] = {
+                "path": path,
+                "oos": oos,
+                "switched": oos["pass"] and oos["top10"]["pass"],
+            }
+            if not results[board]["switched"]:
                 logger.warning(
-                    "[%s] 新模型 OOS weighted_IC=%.4f < %.2f, 保留旧模型",
+                    "[%s] 保留旧模型: IC闸=%s (weighted_IC=%.4f, 阈值 %.2f) | TOP10闸=%s",
                     board,
+                    oos["pass"],
                     oos.get("weighted_ic", 0.0),
                     OOS_IC_MIN,
+                    oos["top10"]["pass"],
                 )
 
             # 训练成功 → 清理 checkpoint (原子归档完成)

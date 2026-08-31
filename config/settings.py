@@ -55,6 +55,27 @@ LEGACY_SMOOTH_K = 12
 # 并行=max(main,dual)). 2026-08-25 真面板 300d 对照: 逐字节一致, 2109s→1472s (1.43x).
 LEGACY_PARALLEL_FEATURES = True
 
+# ── legacy 超额标签 (2026-08-29 行情重审后 dual 采纳, main 维持关闭) ──
+# 训练目标 label_pm_{3,5,10}d_net 板内按日去均值 (学"跑赢同板市场"); 重训时近
+# LEGACY_MKT_EXPECT_WINDOW 个已实现决策日的板内等权日均值作为常数存进 bundle,
+# 推理端 pred_ret_{k}d 加回常数复原绝对口径 → 闸/清单/概率语义不变, 只有日内
+# 排名变化. dual 采纳依据 (08-29 行情重审): 125d 全窗 +1.37pp/日双半窗正 + 4 段
+# 跌市全正 (+1.47)/涨市中性; main 拒收: 跌市桶合计 -1.82pp 单一事件伪影.
+# 切换由 TOP10 第二票闸在纯 OOS 60d 头对头裁决, 劣化包不进生产.
+LEGACY_EXCESS_LABEL_BOARDS: tuple = ("dual",)
+LEGACY_MKT_EXPECT_WINDOW = 60
+
+# ── legacy TOP10 第二票 (2026-08-29 用户批准: 切换闸 = IC 闸 + TOP10 非劣闸) ──
+# 周五重训时新包 vs current 生产包在测试段 (末 60 交易日) 各跑每日板内 top10
+# (10d_reg 预测降序), 已实现 label_pm_10d_net 日均净差: 全窗 ≥ 0 且前后半 ≥
+# tol_half 才放行切换 (非劣, 不要求严格更优 — 否则噪声所迫永不切换).
+# 起因: 超额标签案全截面 IC 判 REJECT 而 TOP10 口径 +4.36pp/日, IC 只是代理量.
+LEGACY_TOP10_SECOND_VOTE = {
+    "enable": True,
+    "tol_half": -0.002,  # 前后半非劣容差 (/日)
+    "top_n": 10,
+}
+
 # ── V3 Panel (single source of truth) ────────────────────────
 # Override via PANEL_PATH env var; defaults to D:/AMINQT/PARQUET/ directory.
 # _daily_fetch.py writes here → all read paths must resolve to the same file.
@@ -365,6 +386,18 @@ SHORTLIST_HYSTERESIS = {
     "enable": True,
     "band_factor": 2.0,   # 滞留带 = 板内排名 ≤ 10 × 此值
     "max_keep": 3,        # 每板块最多滞留数 (防爆清单)
+}
+
+# ── parallel 概率展示层再校准 (2026-08-29 用户批准) ──
+# 08-29 实测交付概率高估 (pred_prob_10d 均值 55.8% vs MFE>6% 实得 27.5%, +28pp;
+# tmp_t/_rebase_diag_0829.py). 展示层每板块每视界乘一个收敛因子 = 实得命中率/预测
+# 均值, 按成熟日数收缩 (N<min_matured 时按比例靠近 1) — 板内常数乘法, 不改排序
+# (排名键/闸/EMA 均在再校准之前, raw 历史 WORM 文件保持原值).
+PARALLEL_PROB_RECAL = {
+    "enable": True,
+    "min_matured": 20,    # 成熟日达到该值后因子全额生效
+    "window_days": 42,    # 只用近 window_days 个自然日的历史清单
+    "factor_bounds": [0.2, 1.5],  # 因子安全夹
 }
 
 # ── 跨模块影子排名 (2026-08-26 用户批准, 纯记录零交付风险) ──

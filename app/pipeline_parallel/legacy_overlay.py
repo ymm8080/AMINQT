@@ -173,9 +173,10 @@ def rerank(
 def legacy_predict(
     df: pd.DataFrame, board: str, predictor, symbols: set[str]
 ) -> pd.DataFrame:
-    """对当日截面中 symbols 推理 (predictor 取每 symbol 最新行).
+    """对决策日 symbols 推理 (predictor 取每 symbol 最新行 = 决策日).
 
-    df: 该日全截面 (含 feature_cols + industry). symbols 为空 → 空表.
+    df: 含历史的窗口帧 (predictor 内部 tail(1) 取决策日; 多日历史使
+    brute 推理补齐可算滚动窗). symbols 为空 → 空表.
     """
     day = df[df["symbol"].isin(symbols)]
     if day.empty:
@@ -295,7 +296,7 @@ def main() -> int:
         if sl.empty:
             logger.info(f"[{board}] 合并短名单为空")
             continue
-        leg = legacy_predict(df[df["date"] == day], board, predictor, set(sl["symbol"]))
+        leg = legacy_predict(df, board, predictor, set(sl["symbol"]))
         w_pool, w_prob = overlay_weights(board)
         if args.w_pool is not None:
             w_pool = args.w_pool

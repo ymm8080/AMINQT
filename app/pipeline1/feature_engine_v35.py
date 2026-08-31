@@ -18,6 +18,7 @@ from app.pipeline1.label_engine import _ensure_sorted
 from config.settings import LHB_V2_SPEC
 
 from .cleaning_pipeline import limit_pct_series
+from .feature_selector import brute_bases, inject_missing_brute
 
 logger = logging.getLogger(__name__)
 
@@ -358,6 +359,14 @@ class FeatureEngineV35:
         """
         df = df.sort_values(["symbol", "date"]).reset_index(drop=True)  # 安全网 #13
 
+        # [2026-08-31] 推理模式补 brute 基列: bundle 含训练期后注入的 _brute_ 列,
+        # 各 dim 不产 → 末尾 inject_missing_brute 定向补齐; 基列 (A04 等派生列)
+        # 不在 feature_cols 时先行补入, 否则注入无基可算.
+        if inference_cols is not None:
+            inference_cols = list(inference_cols) + [
+                b for b in brute_bases(inference_cols) if b not in set(inference_cols)
+            ]
+
         # ── Dim gating: skip dims with zero active features ──
         def _ok(dim_key):
             return registry is None or self._dim_active(
@@ -501,6 +510,17 @@ class FeatureEngineV35:
                         "  Pruned [%s]: %d features — %s", dg, len(names), names[:5]
                     )
                 df = df.drop(columns=drop_cols)
+
+        # [2026-08-31] 推理模式 brute 补齐 (须在 registry prune 之后, 防注入列被剪).
+        # 训练路径 (inference_cols=None) 不受影响, 后注入仍归 train_runner.
+        if inference_cols is not None:
+            still = inject_missing_brute(df, inference_cols)
+            if still:
+                logger.warning(
+                    "推理 build 后仍缺 %d 个 _brute_ 列 (基列不在场): %s",
+                    len(still),
+                    still[:8],
+                )
 
         return df
 
