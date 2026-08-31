@@ -14,11 +14,15 @@
     - Removes stale ANTHROPIC_AUTH_TOKEN to prevent auth conflict
 #>
 
+param(
+    # 模型 ID 可传参覆盖 (如 -MODEL glm-5.3 切满血), 默认 glm-5.3-flash (effort 恒为 max)
+    [string]$MODEL = "glm-5.3-flash"
+)
+
 $ErrorActionPreference = "Stop"
 
 # ── Configuration ──────────────────────────────────────────────
 $BASE_URL         = "https://open.bigmodel.cn/api/anthropic"
-$MODEL            = "glm-5.3"
 
 # ── Paths ──────────────────────────────────────────────────────
 $UserSettings     = Join-Path $env:USERPROFILE ".claude\settings.json"
@@ -144,7 +148,8 @@ function Set-UserEnvRegistry {
         $existing = [Environment]::GetEnvironmentVariable($kv.Key, "User")
         if ($existing -ne $kv.Value) {
             [Environment]::SetEnvironmentVariable($kv.Key, $kv.Value, "User")
-            Write-Host "[REG] $($kv.Key) = $($kv.Value.Substring(0,8))..." -ForegroundColor DarkYellow
+            $short = if ($kv.Value.Length -gt 8) { $kv.Value.Substring(0, 8) } else { $kv.Value }
+            Write-Host "[REG] $($kv.Key) = $short..." -ForegroundColor DarkYellow
         }
     }
 

@@ -63,6 +63,7 @@ from app.pipeline_parallel.scoring import pool_score
 from config.settings import (
     DATA_DIR,
     DATA_OTHERS_DIR,
+    PARALLEL_PROB_RECAL,
     REGIME_GATE,
     SHORTLIST_HYSTERESIS,
     SHORTLIST_SCORE,
@@ -697,6 +698,20 @@ def _trailing_realized(
     return float(top_rows[lab].mean())
 
 
+def _mkt_expected(frame: pd.DataFrame, h: str, window: int = ANCHOR_WINDOW) -> float:
+    """市场基准 (2026-08-29 用户 "牛熊同幅不同义"): 近 window 个已实现决策日的
+    板内全池等权 label_pm_{h}_net 日均值再取均值 — 与 _trailing_realized 同窗同
+    滞后 (label 未实现即 NaN 自动排除), 无 look-ahead. 供 pred_excess_{h} 列.
+    """
+    lab = f"label_pm_{h}_net"
+    df = frame.dropna(subset=[lab])
+    if df.empty:
+        return float("nan")
+    days = sorted(df["date"].unique())[-window:]
+    daily = df[df["date"].isin(days)].groupby("date")[lab].mean()
+    return float(daily.mean())
+
+
 def _anchor_reported(res: pd.DataFrame, panel: dict | None = None) -> pd.DataFrame:
     """报告幅度锚定 (2026-08-14 用户: 并行预测高于实际, 主板+双创都要).
 
@@ -708,11 +723,15 @@ def _anchor_reported(res: pd.DataFrame, panel: dict | None = None) -> pd.DataFra
     已实现均值做水平锚 — 每板块每视界整体平移, 保持日内横截面差异与排序不变, 只把整体
     水平拉回诚实位置 (2026-08-14: 250d 双创 top-5 实得 ~+6.3%, 主板 ~+3.5%; 用户"3% 低估"
     成立, 120d 短窗恰踩双创弱行情). pred_mag_10d 同步 (docx/合并表展示键).
+    2026-08-29 加 pred_excess_{h} = 平移后 pred_ret_{h} − _mkt_expected (板内全池
+    等权近窗已实现日均值, 同窗同滞后) — 同一涨幅数字在牛熊含义不同, 超额口径跨日可比.
 
     panel 为测试注入面 (dict[(board,"both")]→DataFrame); 生产不传, 走 _anchor_frame
     独立加宽读取 (预测面板仅 142 交易日, 装不下 250d 锚).
     """
     out = res.copy()
+    for h in HORIZONS:
+        out[f"pred_excess_{h}"] = float("nan")
     for board in ("main", "dual"):
         if panel is not None:
             fr = panel.get((board, "both"))
@@ -737,9 +756,13 @@ def _anchor_reported(res: pd.DataFrame, panel: dict | None = None) -> pd.DataFra
             shift = t_pred - t_real
             mask = (out["board"] == board) & out[col].notna()
             out.loc[mask, col] = out.loc[mask, col] - shift
+            mkt_exp = _mkt_expected(fr, h, window=ANCHOR_WINDOW)
+            if np.isfinite(mkt_exp):
+                out.loc[mask, f"pred_excess_{h}"] = out.loc[mask, col] - mkt_exp
             print(
                 f"[anchor] {board} T+{h[:-1]} 报告均值 {t_pred:+.1%} → "
-                f"实得锚 {t_real:+.1%} (平移 {shift:+.1%})",
+                f"实得锚 {t_real:+.1%} (平移 {shift:+.1%}); "
+                f"市场基准 {mkt_exp:+.1%}",
                 flush=True,
             )
     # 排名键与 docx 头条同步: pred_mag_10d == pred_ret_10d (同源 score→label_pm_10d_net)
@@ -898,6 +921,95 @@ def ema_smooth(res: pd.DataFrame, sel_date: pd.Timestamp, module: str) -> pd.Dat
                 ww = np.array([p[0] for p in pairs])
                 ww /= ww.sum()
                 out.loc[mask, col] = float(np.dot([p[1] for p in pairs], ww))
+    return out
+
+
+def _recal_factor(
+    pred_mean: float, hit_mean: float, n_days: int, min_matured: int, bounds: tuple
+) -> float:
+    """概率收敛因子 = 1 + (实得命中率/预测均值 − 1) × min(1, N/min_matured).
+
+    N < min_matured 时按比例向 1 收缩 (积累期不动真格); 结果夹在 bounds 内.
+    板内常数乘法 → 板内排序不变 (排名键/闸在展示层之前, 不受影响).
+    """
+    if not np.isfinite(pred_mean) or pred_mean <= 1e-9 or n_days <= 0:
+        return 1.0
+    raw = hit_mean / pred_mean if np.isfinite(hit_mean) else 1.0
+    factor = 1.0 + (raw - 1.0) * min(1.0, n_days / max(min_matured, 1))
+    return float(np.clip(factor, bounds[0], bounds[1]))
+
+
+def _mfe_lookup() -> pd.DataFrame:
+    """历史清单票的已实现 MFE 查表: (symbol, date, board) + mfe_{h}.
+
+    复用 _panel_per_stock 面板 (每股日频, mfe 列未实现即 NaN → 天然成熟度过滤);
+    三系统帧同股同日 mfe 相同 → 每板块取一帧去重.
+    """
+    frames, seen = [], set()
+    for (board, _sys), fr in _panel_per_stock().items():
+        if board in seen:
+            continue
+        seen.add(board)
+        cols = ["symbol", "date"] + [f"mfe_{h}" for h in HORIZONS]
+        d = fr[cols].copy()
+        d["symbol"] = d["symbol"].astype(str).str.zfill(6)
+        d["board"] = board
+        frames.append(d)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def _recal_probs(res: pd.DataFrame, sel_date: pd.Timestamp, module: str) -> pd.DataFrame:
+    """概率展示层再校准 (2026-08-29): 交付 pred_prob_{h} ×= 板内收敛因子.
+
+    偏差口径 = 历史 raw 预测 (parallel_preds_raw_*.csv, WORM 原值) 均值 vs 同批
+    已实现 MFE>ABS_TARGET[h] 命中率, 近 PARALLEL_PROB_RECAL.window_days 自然日.
+    只改交付数字 (板内常数乘法, 排序不变); raw 历史/EMA/闸/排名键均不受影响.
+    """
+    if not PARALLEL_PROB_RECAL.get("enable"):
+        return res
+    hist = _load_raw_history(sel_date, module)
+    lk = _mfe_lookup()
+    if hist.empty or lk.empty:
+        return res
+    cfg = PARALLEL_PROB_RECAL
+    bounds = tuple(cfg.get("factor_bounds", (0.2, 1.5)))
+    minm, win = int(cfg["min_matured"]), int(cfg["window_days"])
+    hist = hist.copy()
+    hist["symbol"] = hist["symbol"].astype(str).str.zfill(6)
+    hist["date"] = pd.to_datetime(hist["hist_date"], format="%Y%m%d")
+    hist = hist[hist["date"] >= sel_date - pd.Timedelta(days=win)]
+    out = res.copy()
+    for board in ("main", "dual"):
+        lk_b = lk[lk["board"] == board]
+        if lk_b.empty:
+            continue
+        mm_all = hist.merge(lk_b, on=["symbol", "date"], how="inner")
+        for h in HORIZONS:
+            pcol, mcol = f"pred_prob_{h}", f"mfe_{h}"
+            if pcol not in mm_all.columns or mcol not in mm_all.columns:
+                continue
+            mm = mm_all.dropna(subset=[pcol, mcol])
+            if mm.empty:
+                continue
+            factor = _recal_factor(
+                float(mm[pcol].mean()),
+                float((mm[mcol] > ABS_TARGET[h]).mean()),
+                int(mm["date"].nunique()),
+                minm,
+                bounds,
+            )
+            if factor == 1.0 or pcol not in out.columns:
+                continue
+            mask = (out["board"] == board) & out[pcol].notna()
+            if not mask.any():
+                continue
+            out.loc[mask, pcol] = (out.loc[mask, pcol] * factor).clip(0.01, 0.99)
+            print(
+                f"[recal] {board} T+{h[:-1]} 概率 ×{factor:.2f} "
+                f"(成熟 {int(mm['date'].nunique())} 日, 预测 {float(mm[pcol].mean()):.0%} "
+                f"vs 实得 {float((mm[mcol] > ABS_TARGET[h]).mean()):.0%})",
+                flush=True,
+            )
     return out
 
 
@@ -1329,7 +1441,9 @@ def write_docx(
         "score_w",
         "过门",
         "stall_flag",
-    ] + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
+    ] + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")] + [
+        "pred_excess_10d"
+    ]
     for board in ("main", "dual"):
         b = res[res["board"] == board]
         if b.empty:
@@ -1367,6 +1481,10 @@ def write_docx(
                         if pd.isna(r[f"pred_prob_{h}"])
                         else f"{float(r[f'pred_prob_{h}']):.0%}"
                     )
+                ex = r.get("pred_excess_10d")
+                cells[8 + 2 * len(HORIZONS)].text = (
+                    "n/a" if ex is None or pd.isna(ex) else f"{float(ex):+.1%}"
+                )
     doc.save(str(path))
 
 
@@ -1588,6 +1706,11 @@ def main() -> int:
             f"{', '.join(res.loc[res['limit_flag'] != '', 'symbol'].astype(str))}",
             flush=True,
         )
+    # 概率展示层再校准 (2026-08-29): 板内常数乘法压回实得命中率, 排序/闸不动 (fail-open)
+    try:
+        res = _recal_probs(res, sel_date, module)
+    except Exception:
+        print("[recal] 概率再校准失败 → 保持原值 (fail-open)", flush=True)
     csv_path = STOCK_LIST_DIR / f"parallel_shortlist_{stamp}{suffix}.csv"
     res.to_csv(csv_path, index=False)
     print(f"[saved] {csv_path}", flush=True)

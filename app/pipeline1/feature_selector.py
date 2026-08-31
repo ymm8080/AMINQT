@@ -537,6 +537,41 @@ BRUTE_FAMILIES = [
 ]
 
 
+def brute_bases(feature_cols):
+    """feature_cols 中 _brute_ 列的基列名去重排序 (推理 build 需要基列在场才能后注入)."""
+    return sorted({c.split("_brute_")[0] for c in feature_cols or [] if "_brute_" in c})
+
+
+def inject_missing_brute(df, feature_cols):
+    """推理端 brute 后注入: feature_cols 需要但 df 缺失的 _brute_ 列, 就地生成.
+
+    训练端 train_runner 后注入只发生在训练 df (选择器局部帧); 推理 build(
+    inference_cols=...) 不产 brute 列 → predictor 此前对缺失列补 0 (main
+    bundle 85/353=24% 特征恒为 0). 本函数复用 generate_columns 同一数学
+    定向补齐, 须在切当日截面前的全历史帧上调用 (滚动窗需要 per-symbol 历史深度).
+    raw_cols 显式传基列: 推理帧多为 float32, _eligible 的 float64 过滤会漏.
+    返回仍无法生成的列名列表 (基列不在场等), 空列表 = 全部补齐.
+    """
+    need = {c for c in feature_cols or [] if "_brute_" in c and c not in df.columns}
+    if not need:
+        return []
+    gen = BruteForceGenerator()
+    bases = brute_bases(need)
+    picks = []
+    for fam in BRUTE_FAMILIES:
+        new = gen.generate_columns(df, fam, need, raw_cols=bases, dtype="float32")
+        if new is not None and len(new.columns):
+            picks.append(new)
+    if not picks:
+        return sorted(need)
+    # generate_columns 保留 df 原索引/行序 (内部 index=df.index), 位置赋值与
+    # join 逐元素一致 (同 train_runner 后注入, 免宽帧 join OOM).
+    brute = pd.concat(picks, axis=1)
+    for c in brute.columns:
+        df[c] = brute[c].to_numpy()
+    return sorted(need - set(brute.columns))
+
+
 # ──────────────────────────────────────────────────────────
 # Dedup L2 (Layer2, MAIN)
 # ──────────────────────────────────────────────────────────

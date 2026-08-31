@@ -17,7 +17,11 @@ import time
 
 import pandas as pd
 
-from config.settings import data_others_path
+from config.settings import (
+    LEGACY_EXCESS_LABEL_BOARDS,
+    LEGACY_MKT_EXPECT_WINDOW,
+    data_others_path,
+)
 
 from .cleaning_pipeline import CleaningPipeline
 from .dual_track_trainer import DualTrackTrainer
@@ -33,16 +37,54 @@ from .label_engine import MASK_RECENT_DAYS, LabelEngine
 logger = logging.getLogger(__name__)
 
 
+EXCESS_HORIZONS = (3, 5, 10)
+
+
+def demean_excess_labels(
+    df: pd.DataFrame, horizons: tuple = EXCESS_HORIZONS
+) -> pd.DataFrame:
+    """label_pm_{k}d_net 板内按日去均值 (超额标签, 2026-08-29 main 采纳).
+
+    同日减同一常数 → 当日截面排名/形状不变, 跨日水平中性化; 按日 rank IC 不变,
+    validate_oos 的 OOS 判据对新旧标签直接可比.
+    """
+    for k in horizons:
+        c = f"label_pm_{k}d_net"
+        if c in df.columns:
+            df[c] = df[c] - df.groupby("date")[c].transform("mean")
+    return df
+
+
+def compute_mkt_expected(df: pd.DataFrame, window: int) -> dict[str, float]:
+    """bundle 市场均值常数: 近 window 个已实现决策日的板内等权日均值 (按视界).
+
+    与展示层 _mkt_expected 同窗同滞后 (label 未实现即 NaN 剔除), 无 look-ahead;
+    推理端加回它复原绝对口径 (闸/概率阈值语义).
+    """
+    out: dict[str, float] = {}
+    for k in EXCESS_HORIZONS:
+        c = f"label_pm_{k}d_net"
+        if c not in df.columns:
+            continue
+        real = df.dropna(subset=[c])
+        days = sorted(real["date"].unique())[-window:]
+        daily = real[real["date"].isin(days)].groupby("date")[c].mean()
+        out[f"mkt_expected_{k}d"] = float(daily.mean()) if len(daily) else 0.0
+    return out
+
+
 def prepare_board_frame(
     board_df: pd.DataFrame,
     features: FeatureEngineV35,
     float_shares_map: dict | None = None,
     cross_sectional_rank: bool = False,
     registry=None,  # FeatureRegistry | None
+    label_excess: bool = False,
 ) -> pd.DataFrame:
     """单板块: 特征 → 路径标签 → 主标签 → 停牌/近端掩码 (训练准备标准序列).
 
     cross_sectional_rank: 仅双创开启截面排名 (主板大票定价效率高, 截面因子负贡献).
+    label_excess: True → 回归头净标签板内按日去均值 (超额标签; cls/prob 标签不动).
     """
     df = features.build(
         board_df,
@@ -52,8 +94,14 @@ def prepare_board_frame(
     )
     df = LabelEngine.build_path_labels(df)  # [E2] label_mdd_* + label_pain
     df = LabelEngine.build_labels(df)  # 主标签 label_*d + label_pm_*d + *_net
+    # mask 先于去均值: 停牌假标签不得进入日均基准
     df = LabelEngine.mask_suspension(df)
     df = LabelEngine.mask_recent_days(df, days=MASK_RECENT_DAYS)
+    if label_excess:
+        # 常数须在去均值前计算 (去均值后日均按构造≈0); 最后挂 attrs 免中间拷贝丢失
+        mkt = compute_mkt_expected(df, LEGACY_MKT_EXPECT_WINDOW)
+        df = demean_excess_labels(df)
+        df.attrs["mkt_expected"] = mkt
     return df
 
 
@@ -302,6 +350,8 @@ def run_training(
             logger.warning("[%s] 清洗后无样本, 跳过该板块训练", board)
             continue
         use_xrank = board != "main"  # 仅双创加截面排名 (主板大票定价有效, 截面负贡献)
+        label_excess = board in LEGACY_EXCESS_LABEL_BOARDS
+        extras = None
         t_feat = time.time()
         df = prepare_board_frame(
             board_df,
@@ -309,7 +359,19 @@ def run_training(
             float_shares_map,
             cross_sectional_rank=use_xrank,
             registry=registry,
+            label_excess=label_excess,
         )
+        if label_excess:
+            # 常数已在 prepare_board_frame (去均值前) 算好挂 attrs, 须在 select_features 释放 df 前取出
+            extras = {
+                "label_excess": True,
+                **df.attrs.get("mkt_expected", {}),
+            }
+            logger.info(
+                "[%s] 超额标签: 市场均值常数 %s",
+                board,
+                {k: f"{v:+.4f}" for k, v in extras.items() if k != "label_excess"},
+            )
         # 释放清洗切片: FeatureSelector 峰值期不白占 ~2GB 中间帧
         del board_df
         gc.collect()
@@ -329,7 +391,7 @@ def run_training(
         logger.info("[timing][%s] feature selection: %.1fs", board, time.time() - t_sel)
         t_train = time.time()
         board_results = trainer.weekly_retrain(
-            {board: augmented_df}, {board: cols}, tag, resume=True
+            {board: augmented_df}, {board: cols}, tag, resume=True, extras=extras
         )
         logger.info("[timing][%s] model training: %.1fs", board, time.time() - t_train)
         n_features = len(cols)

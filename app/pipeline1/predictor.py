@@ -22,6 +22,7 @@ import pandas as pd
 from app.core.factor_engine import safe_divide
 
 from .dual_track_trainer import DualTrackTrainer
+from .feature_selector import inject_missing_brute
 from .label_engine import CLS_THRESHOLD, LABEL_WEIGHTS
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,11 @@ class V35Predictor:
         if bundle is None:
             raise RuntimeError(f"板块 {board} 模型包未加载")
         cols = bundle["feature_cols"]
+        # [2026-08-31] brute 补齐第二层: 调用方经非 inference 模式 build (自动全量)
+        # 的帧缺 _brute_ 列 — 带多日历史时在此定向补齐; 单日截面无法算滚动窗,
+        # 跳过 (下游补 0 语义不变). build(inference_cols) 已补齐时此处零交集 no-op.
+        if features["date"].nunique() > 1:
+            inject_missing_brute(features, cols)
         latest = features.sort_values("date").groupby("symbol").tail(1).copy()
         # 推理端无法复现的特征 (训练注入 _brute_ / 面板缺列) 补 0 + 告警, 防 KeyError
         missing = [c for c in cols if c not in latest.columns]
@@ -87,6 +93,15 @@ class V35Predictor:
         latest["pred_ret_10d"] = (
             models["10d_reg"][0].predict(X) if "10d_reg" in models else np.nan
         )
+        # [08-29] 超额标签 bundle: 回归头输出 = 板内超额口径, 加回训练时存的市场
+        # 均值常数复原绝对口径 — 下游概率派生/闸/清单语义不变, 只有日内排名变化.
+        # 必须在 _reg_resid_prob (读 pred_ret) 之前.
+        if bundle.get("label_excess"):
+            for k in (3, 5, 10):
+                m = bundle.get(f"mkt_expected_{k}d")
+                col = f"pred_ret_{k}d"
+                if m is not None and col in latest.columns:
+                    latest[col] = latest[col].to_numpy(dtype=float) + float(m)
         # [08-24] prob_up 系列改回归残差派生概率: prob_up_kd = P(ret>CLS_THRESHOLD|pred_ret_kd)
         #         = 1 - F_e(CLS_THRESHOLD - pred_ret_kd), e = calib 段回归残差 (训练器已存
         #         bundle["reg_resid_{k}d"]). 继承 reg 头判别力 (08-24 原型: main 10d p_reg

@@ -145,6 +145,13 @@ def e6_cut(df: pd.DataFrame, pct: float) -> pd.DataFrame:
     return df[rk > pct].copy()
 
 
+def daily_top10(eval_df: pd.DataFrame, key: str = "_pred_10d") -> pd.Series:
+    """每日 top10 (key 降序) label_pm_10d_net 均值 — 行情分桶重审 (2026-08-29) 用."""
+    sub = eval_df.dropna(subset=["label_pm_10d_net"])
+    top = sub.sort_values(key, ascending=False).groupby("date").head(10)
+    return top.groupby("date")["label_pm_10d_net"].mean()
+
+
 def variant_metrics(
     eval_df: pd.DataFrame,
     models: dict,
@@ -338,6 +345,7 @@ def main() -> int:
     features = FeatureEngineV35()
     cleaner = CleaningPipeline(cfg)
     results: dict = {}
+    daily_out: dict[str, pd.Series] = {}
 
     # ================= (a) 生产池帧 + (c) 池内重排 =================
     ta = time.time()
@@ -359,6 +367,7 @@ def main() -> int:
         return 3
     eval_a = predict_10d(eval_a, models, cols)
     results["a_liq800"] = variant_metrics(eval_a, models, cols, n_sub)
+    daily_out["a_liq800"] = daily_top10(eval_a)
     results["a_liq800"]["case_300911"] = case_report(eval_a)
     r_a = results["a_liq800"]
     print(
@@ -432,6 +441,7 @@ def main() -> int:
         cut_top_n(eval_full, "liquidity_score", n_pool, ["date", "board"]), e6
     )
     results["d_fullfeat_liq800"] = variant_metrics(pool_d, models, cols, n_sub)
+    daily_out["d_fullfeat_liq800"] = daily_top10(pool_d)
     results["d_fullfeat_liq800"]["case_300911"] = case_report(pool_d)
     r_d = results["d_fullfeat_liq800"]
     print(
@@ -452,6 +462,7 @@ def main() -> int:
         )
         pool_b = e6_cut(cut_top_n(ef, "_blend", n_pool, ["date", "board"]), e6)
         results[f"b_blend_w{w}"] = variant_metrics(pool_b, models, cols, n_sub)
+        daily_out[f"b_blend_w{w}"] = daily_top10(pool_b)
         results[f"b_blend_w{w}"]["case_300911"] = case_report(pool_b, "_blend")
         r_b = results[f"b_blend_w{w}"]
         print(
@@ -494,6 +505,9 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(out_dir / "result.json", "w", encoding="utf-8") as fh:
         json.dump(results, fh, ensure_ascii=False, indent=2, default=str)
+    daily_df = pd.DataFrame(daily_out)
+    daily_df.index.name = "date"
+    daily_df.to_csv(out_dir / "daily_top10.csv")
     print(f"\n[done] 结果 WORM -> {out_dir} ({time.time() - t0:.0f}s)", flush=True)
     return 0
 
