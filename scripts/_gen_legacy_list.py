@@ -46,6 +46,25 @@ def _instrument(pipe):
 
 
 def main():
+    # 并发守卫 (2026-09-01): 已有重训/预测进程在跑 → 退出, 防页交换卡死/OOM
+    # (08-17/08-24 事故). 哨兵不含 run_daily_automation.py: 链作为父进程存活是
+    # 合法场景, 否则链调起本脚本时会被自己的父进程误杀.
+    from scripts._run_guard import find_conflicts
+
+    others = find_conflicts()
+    if others:
+        for c in others:
+            print(
+                f"[guard] 冲突进程: {c['sentinel']} (PID {c['pid']}) {c['cmdline']}",
+                flush=True,
+            )
+        print(
+            f"[guard] 已有 {len(others)} 个重训/预测进程在跑, 本实例退出 (rc=3). "
+            f"等其结束后再启动.",
+            flush=True,
+        )
+        return 3
+
     trade_date = sys.argv[1] if len(sys.argv) > 1 else "20260804"
     t0 = time.time()
     panel = pd.read_parquet(str(PANEL_V3_PATH))
@@ -83,4 +102,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

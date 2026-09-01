@@ -31,9 +31,14 @@ legacy 预测链 ~35min 前置到一切重活之前, 重活卡死/超时被杀�
 任一关键步骤 (legacy/deliver/deliver_parallel) 失败 → 非零退出.
 中断策略 (08-21 事故): 任何步骤返回 0xC013A (STATUS_CONTROL_C_EXIT, 控制台
 Ctrl+C/进程组被杀) → 立即终止整条链, 不启动后续重活步骤; 收到 SIGINT 同理.
-终态判据: logs/daily_automation_<tag>.state.json (running → ok/failed/interrupted),
-监督方 (scripts/_babysit_daily_automation.py) 见终态即退出, 不再无限等待耗 token.
-每步 rc/耗时 + 全部子进程输出 → logs/daily_automation_<tag>.log (WORM, 不覆盖).
+终态判据: logs/daily_automation_<tag>.state.json (running → ok/failed/interrupted/
+skipped), 监督方 (scripts/_babysit_daily_automation.py) 见终态即退出, 不再无限等待
+耗 token. 每步 rc/耗时 + 全部子进程输出 → logs/daily_automation_<tag>.log (WORM, 不覆盖).
+
+启动守卫 (2026-09-01): 手动重训/预测与链并发 → 页交换卡死 (08-17) / OOM 整链被杀
+(08-24). 三闸任一命中不启动: ①活的重训/预测进程 (含另一条链) → 2h 守候循环,
+冲突清空且当日清单仍缺才启动; ②今日链 state=ok; ③今日 legacy 清单已交付.
+--force 绕过. 守卫逻辑见 scripts/_run_guard.py, 日志与步骤日志同文件.
 
 用法:
   python scripts/run_daily_automation.py                      # 完整跑 (推荐: 定时任务)
@@ -46,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import glob
 import json
 import os
 import signal
@@ -57,6 +63,16 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = sys.executable
 LOG_DIR = os.path.join(ROOT, "logs")
+
+# 脚本直跑时 sys.path[0]=scripts/, 补 ROOT 使 scripts.* 包导入在两种模式下都成立
+sys.path.insert(0, ROOT)
+
+from config.settings import STOCK_LIST_DIR  # noqa: E402
+from scripts._run_guard import (  # noqa: E402
+    CHAIN_SENTINELS,
+    find_conflicts,
+    skip_reason,
+)
 
 # 0=Mon .. 6=Sun. 周频重训落在周五晚 (周末分析用周五收盘后最新模型).
 RETRAIN_WEEKDAY = 4
@@ -78,6 +94,12 @@ _STEP_TIMEOUT_S = {
     "drift_parallel": 30 * 60,
     "shadow_xmodule": 15 * 60,
 }
+
+# 启动守卫守候循环 (2026-09-01): 活进程冲突时每 2h 复查一次, 最多 3 轮 (6h).
+# 上限的硬约束是计划任务 ExecutionTimeLimit=PT16H — 周五最坏 20:15+6h 守候+7h 重训
+# 仍留有余量; 更长的守候会让链跑不完被任务限时强杀.
+_GUARD_TICK_S = 2 * 3600
+_GUARD_MAX_TICKS = 3
 
 
 def _kill_tree(pid: int) -> None:
@@ -263,6 +285,99 @@ def _exit_status(failures: list[str]) -> str:
     return "ok" if not failures else "failed"
 
 
+# ── 启动守卫 (2026-09-01): 手动重训/预测与晚上链并发 → 页交换卡死 (08-17) /
+#    OOM 整链被杀 (08-24). 三闸 + 活进程冲突守候循环, 判定逻辑见 scripts/_run_guard.py ──
+
+
+def _read_state(tag: str) -> dict | None:
+    try:
+        with open(_state_path(tag), encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _today_list_delivered(tag: str) -> bool:
+    """今日 legacy 清单是否已交付 (任一板块) — 守卫"预测已实现"闸."""
+    return bool(
+        glob.glob(os.path.join(str(STOCK_LIST_DIR), f"legacy_stocklist_{tag}__*.csv"))
+    )
+
+
+def _guard_log(tag: str, msg: str) -> None:
+    """守卫日志同时进 stdout 与当日链日志 — 计划任务的 stdout 无人看见, 文件才是真相."""
+    print(msg, flush=True)
+    os.makedirs(LOG_DIR, exist_ok=True)
+    with open(
+        os.path.join(LOG_DIR, f"daily_automation_{tag}.log"), "a", encoding="utf-8"
+    ) as fh:
+        print(msg, file=fh, flush=True)
+
+
+def _startup_guard_conflicts() -> list[dict]:
+    return find_conflicts(CHAIN_SENTINELS)
+
+
+def _run_startup_guard(tag: str) -> str:
+    """启动三闸. 返回 "go" 放行 / "skip" 放弃 / "wait" 进入守候循环."""
+    conflicts = _startup_guard_conflicts()
+    verdict = skip_reason(
+        conflicts,
+        today_state=_read_state(tag),
+        deliverable_exists=_today_list_delivered(tag),
+    )
+    if verdict is None:
+        return "go"
+    code, detail = verdict
+    ts = f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S} guard]"
+    if code == "live_process":
+        for c in conflicts:  # 全量列出留证, 便于排查是谁挡的
+            _guard_log(
+                tag, f"{ts} 冲突进程: {c['sentinel']} (PID {c['pid']}) {c['cmdline']}"
+            )
+        _guard_log(tag, f"{ts} 守卫拦截 ({code}): {detail} → 进入守候循环, 每 2h 复查")
+        return "wait"
+    _guard_log(tag, f"{ts} 守卫跳过 ({code}): {detail}")
+    return "skip"
+
+
+def _wait_for_clearance(
+    tag: str,
+    *,
+    tick_s: int = _GUARD_TICK_S,
+    max_ticks: int = _GUARD_MAX_TICKS,
+) -> bool:
+    """守候循环 (活进程冲突专属): 每 2h 复查 — 今日清单已出 → 不必启动 (False);
+    冲突清空且清单仍缺 → 启动 (True); 超过 max_ticks 轮仍冲突 → 放弃 (False).
+    """
+    for i in range(1, max_ticks + 1):
+        try:
+            time.sleep(tick_s)
+        except KeyboardInterrupt:
+            _guard_log(tag, "[guard] 守候中被 Ctrl+C 中断, 放弃")
+            return False
+        ts = f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S} guard]"
+        if _today_list_delivered(tag):
+            _guard_log(tag, f"{ts} 第{i}次复查: 今日清单已出, 守候结束不启动")
+            return False
+        conflicts = _startup_guard_conflicts()
+        if not conflicts:
+            _guard_log(tag, f"{ts} 第{i}次复查: 冲突清空且当日清单仍缺 → 启动链")
+            return True
+        c0 = conflicts[0]
+        more = f" 等 {len(conflicts)} 个" if len(conflicts) > 1 else ""
+        _guard_log(
+            tag,
+            f"{ts} 第{i}次复查: 仍冲突 ({c0['sentinel']} PID {c0['pid']}{more}) → 继续守候",
+        )
+    _guard_log(
+        tag,
+        f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S} guard] 守候 {max_ticks} 轮仍冲突 → "
+        f"放弃, 今日不启动 (冲突清空后可手动触发或用 --force)",
+    )
+    return False
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="四模块每日自动化")
     ap.add_argument("--dry-run", action="store_true", help="只打印计划不执行")
@@ -275,14 +390,34 @@ def main() -> int:
     )
     ap.add_argument("--skip-parallel", action="store_true", help="跳过并行系统重生成")
     ap.add_argument("--tag", default=None, help="清单交易日 YYYYMMDD (默认今天)")
+    ap.add_argument(
+        "--force",
+        action="store_true",
+        help="绕过启动守卫 (并发进程/今日链已 ok/今日清单已交付三闸)",
+    )
     args = ap.parse_args()
 
     today = _dt.date.today()
     tag = args.tag or today.strftime("%Y%m%d")
 
+    # 守候/链运行期间机器不睡眠 (08-27 事故), 守卫守候循环同样要覆盖
+    _prevent_sleep()
+
+    # 启动守卫 (2026-09-01) — dry-run 只看计划不执行, 不受守卫约束
+    if not args.dry_run and not args.force:
+        verdict = _run_startup_guard(tag)
+        if verdict == "skip":
+            _write_state(tag, "skipped", reason="guard")
+            return 0
+        if verdict == "wait":
+            # 立刻写 skipped 终态: babysitter 见此即退出, 不陪守候循环空等
+            _write_state(tag, "skipped", reason="guard_live_process_waiting")
+            if not _wait_for_clearance(tag):
+                return 0
+            # 复查通过 → 走正常链, state 下方覆盖为 running
+
     # 运行状态文件 (监督方终态判据): 启动先写 running, 结束/中断覆盖为终态.
     _write_state(tag, "running")
-    _prevent_sleep()
     current_step: str | None = None
 
     # Ctrl+C/控制台关闭 → 立即写 interrupted 终态并退出, 不留"无标记裸退出"
