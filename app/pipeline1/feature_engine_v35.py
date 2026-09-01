@@ -2880,16 +2880,22 @@ class FeatureEngineV35:
                 (由 panel_builder enrich_alt_data 从 Tushare stk_holdertrade /
                 AKShare 股东增减持 聚合而来)
 
-        数据特点: 不定期公告, 非日频 — 用 ffill + rolling 处理稀疏性.
+        数据特点: 不定期公告, 非日频. 面板 GLM 4 列 (sh_net_change_sign /
+        sh_change_amt_total / sh_change_vol / sh_net_sign) 为 _daily_fetch ffill
+        续写值 — 非公告日每日复制最近公告行, 直到被新公告行覆盖. 因此
+        [2026-08-31 冻结修复] 事件日 = 任一 GLM 列台阶变化 (ffill 序列的跳变即
+        新公告行落地), 事件日之外一律视为 0 (无事件) — ffill 旧值不参与特征.
+        此前实现把 ffill 常数 rolling sum, 导致最后一次事件永不衰减 (002881:
+        2023-08 减持冻结成 7.8 亿/20d 看空信号长达 2 年).
 
         产出:
-          1. sh_net_sign_20d      — 近 20 日净增减持方向累计 (正=净增持)
-          2. sh_net_sign_60d      — 近 60 日净增减持方向累计
-          3. sh_change_amt_20d    — 近 20 日增减持金额合计 (取最近公告值前向填充后 rolling sum)
-          4. sh_change_amt_60d    — 近 60 日增减持金额合计
+          1. sh_net_sign_20d      — 近 20 日真实公告净方向累计 (事件出窗即归零)
+          2. sh_net_sign_60d      — 近 60 日同上
+          3. sh_change_amt_20d    — 近 20 日真实公告金额合计
+          4. sh_change_amt_60d    — 近 60 日同上
           5. sh_insider_signal    — 内部人信号: 20 日内净增持=+1, 净减持=-1, 无=0
-          6. sh_change_frequency  — 近 60 日公告次数 (活跃度指标)
-          7. sh_amt_vs_amount     — 增减持金额/日成交额 (影响规模)
+          6. sh_change_frequency  — 近 60 日公告次数 (台阶检测口径, amt=0 公告也计)
+          7. sh_amt_vs_amount     — 近 20 日公告金额合计/日成交额 (影响规模, 随窗衰减)
           8. sh_ann_decay         — 公告恐慌衰减 1/(1+max(0,T−A)), 公告日=1 随距公告天数递减
           9. sh_end_decay         — 结束日反弹效应 0(T<E) else 1/(1+T−E), 结束日=1 随后递减
           10. sh_is_executing     — 是否处于增减持执行期 (S≤T<E 为 1, 结束日视为已结束为 0)
@@ -2925,28 +2931,46 @@ class FeatureEngineV35:
         def per_stock(g: pd.DataFrame) -> pd.DataFrame:
             g = g.sort_values("date")
 
-            # 净方向: ffill 填补公告间隙, 未公告期视为 0 (无变动)
-            sign = g.get("sh_net_change_sign", pd.Series(0.0, index=g.index)).fillna(0)
-            g["sh_net_sign_20d"] = sign.rolling(20, min_periods=1).sum()
-            g["sh_net_sign_60d"] = sign.rolling(60, min_periods=1).sum()
+            # [2026-08-31 冻结修复] 事件日重建: 面板 GLM 4 列为 ffill 续写值,
+            # 任一列台阶变化 = 新公告行覆盖 (非公告日逐日复制, 值不变).
+            # 全 NaN 股票 (无任何公告) 不触发 (notna/fillna(0)!=0 双重防护).
+            # 首行携带的 ffill 旧值按一次幽灵事件计 (训练窗起点), 20/60 日内自然衰减.
+            sign_raw = g.get("sh_net_change_sign", pd.Series(0.0, index=g.index))
+            amt_raw = g.get("sh_change_amt_total", pd.Series(np.nan, index=g.index))
+            vol_raw = g.get("sh_change_vol", pd.Series(np.nan, index=g.index))
+            s0 = sign_raw.fillna(0)
+            a0 = amt_raw.fillna(0).astype(float)
+            v0 = vol_raw.fillna(0).astype(float)
+            event_mask = (
+                (s0.ne(s0.shift(1)) & (s0 != 0))
+                | (a0.ne(a0.shift(1)) & (a0 != 0))
+                | (v0.ne(v0.shift(1)) & (v0 != 0))
+            )
+            # 事件日取面板值, 其余日 = 0 (无事件) — ffill 旧值不再参与
+            day_sign = s0.where(event_mask, 0.0)
+            day_amt = a0.where(event_mask, 0.0)
+
+            # 净方向: 真实公告日滚动累计, 事件出窗即归零
+            g["sh_net_sign_20d"] = day_sign.rolling(20, min_periods=1).sum()
+            g["sh_net_sign_60d"] = day_sign.rolling(60, min_periods=1).sum()
 
             # 内部人信号: 20 日净方向符号
             g["sh_insider_signal"] = np.sign(g["sh_net_sign_20d"])
 
-            # 金额: ffill 最近公告值, rolling sum 累计净变动
-            amt = g.get("sh_change_amt_total", pd.Series(np.nan, index=g.index))
-            amt_ffill = amt.replace(0, np.nan).ffill()
-            g["sh_change_amt_20d"] = amt_ffill.rolling(20, min_periods=1).sum()
-            g["sh_change_amt_60d"] = amt_ffill.rolling(60, min_periods=1).sum()
+            # 金额: 真实公告金额滚动合计 (此前 ffill×窗口 永不衰减, 已修)
+            g["sh_change_amt_20d"] = day_amt.rolling(20, min_periods=1).sum()
+            g["sh_change_amt_60d"] = day_amt.rolling(60, min_periods=1).sum()
 
-            # 活跃度: 近 60 日有公告的天数
-            has_event = (amt.notna() & (amt != 0)).astype(int)
-            g["sh_change_frequency"] = has_event.rolling(60, min_periods=1).sum()
+            # 活跃度: 近 60 日公告天数 (台阶口径, amt=0 的公告行也计入)
+            g["sh_change_frequency"] = event_mask.astype(int).rolling(
+                60, min_periods=1
+            ).sum()
 
-            # 影响规模: 增减持金额 / 日成交额 (取对数避免极端值)
+            # 影响规模: 近 20 日公告金额合计 / 日成交额
             if "amount" in g.columns:
                 g["sh_amt_vs_amount"] = (
-                    amt_ffill.abs() / g["amount"].replace(0, np.nan)
+                    day_amt.abs().rolling(20, min_periods=1).sum()
+                    / g["amount"].replace(0, np.nan)
                 ).replace([np.inf, -np.inf], np.nan)
             else:
                 g["sh_amt_vs_amount"] = np.nan
