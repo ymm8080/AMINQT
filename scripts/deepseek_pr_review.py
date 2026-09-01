@@ -10,7 +10,7 @@ Environment variables (set by the workflow):
     GITHUB_REPOSITORY: owner/repo (e.g. "user/aminqt")
     PR_NUMBER: Pull request number
     LLM_MODEL: Model name (e.g. "glm-4.6" or "deepseek-chat")
-    LLM_BASE_URL: API base URL (e.g. "https://open.bigmodel.cn/api/paas/v4")
+    LLM_BASE_URL: API base URL (e.g. "https://open.bigmodel.cn/api/coding/paas/v4")
     LLM_PROVIDER: Provider name ("glm" or "deepseek"), controls param format
 
 Legacy fallback: if LLM_* vars are absent, reads DEEPSEEK_* vars for

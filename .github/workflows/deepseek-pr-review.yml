@@ -66,7 +66,8 @@ jobs:
           # GLM (Zhipu/BigModel) — primary provider
           LLM_API_KEY: ${{ secrets.GLM_API_KEY }}
           LLM_MODEL: glm-4.6
-          LLM_BASE_URL: https://open.bigmodel.cn/api/paas/v4
+          # coding endpoint — Coding Plan quota only routes here; paas/v4 bills cash balance
+          LLM_BASE_URL: https://open.bigmodel.cn/api/coding/paas/v4
           LLM_PROVIDER: glm
           # Legacy fallback (used only if GLM_API_KEY is empty)
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
