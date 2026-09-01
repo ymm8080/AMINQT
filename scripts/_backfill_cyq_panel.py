@@ -43,6 +43,45 @@ PREFIX_DAYS = 130  # > RANGE_DAYS=120, 保证补算日窗口完整
 NEEDED = ["symbol", "date", "open", "high", "low", "close", "turnover_rate"]
 
 
+def _compute_chunks_resilient(chunk_frames: list) -> list:
+    """并行算各 chunk; worker 被硬杀 (BrokenProcessPool) 时降级重试.
+
+    2026-08-31 08:30 事故: worker 集体被外部中断整池崩掉 → 链上 cyq FAIL.
+    策略: 全池跑一遍; 崩了的 chunk 用单 worker 独立池逐个重试 (互不牵连,
+    且能定位肇事 chunk); 仍崩则大声抛错.
+    """
+    from concurrent.futures.process import BrokenProcessPool
+
+    parts: list = [None] * len(chunk_frames)
+    try:
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=len(chunk_frames)
+        ) as ex:
+            futs = {ex.submit(compute_cyq_panel, cf): i for i, cf in enumerate(chunk_frames)}
+            for fut in concurrent.futures.as_completed(futs):
+                parts[futs[fut]] = fut.result()
+    except BrokenProcessPool as e:
+        print(f"[!] 并行池崩溃 (BrokenProcessPool: {e}), 逐 chunk 单 worker 重试")
+
+    for i, part in enumerate(parts):
+        if part is not None:
+            continue
+        t1 = time.time()
+        try:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=1) as ex:
+                parts[i] = ex.submit(compute_cyq_panel, chunk_frames[i]).result()
+            print(
+                f"[!] chunk {i + 1}/{len(chunk_frames)} 单 worker 重试通过 "
+                f"({time.time() - t1:.0f}s)"
+            )
+        except BrokenProcessPool as e:
+            n_syms = chunk_frames[i]["symbol"].nunique()
+            raise RuntimeError(
+                f"chunk {i + 1}/{len(chunk_frames)} ({n_syms} 只) 单 worker 重试仍崩: {e}"
+            ) from e
+    return parts
+
+
 def main() -> int:
     workers = 6
     if "--workers" in sys.argv:
@@ -80,8 +119,7 @@ def main() -> int:
     chunks = [syms[i::workers] for i in range(workers)]
     chunk_frames = [tail[tail["symbol"].isin(s)].copy() for s in chunks if len(s)]
     t0 = time.time()
-    with concurrent.futures.ProcessPoolExecutor(max_workers=len(chunk_frames)) as ex:
-        parts = list(ex.map(compute_cyq_panel, chunk_frames))
+    parts = _compute_chunks_resilient(chunk_frames)
     new_cyq = pd.concat(parts, ignore_index=True)
     new_cyq = new_cyq[new_cyq["date"] > cache_max]
     print(f"[4] 增量计算完成 ({time.time() - t0:.0f}s, {len(new_cyq)} 行)")
