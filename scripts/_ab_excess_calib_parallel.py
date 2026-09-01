@@ -12,6 +12,7 @@ calibrate_mag10d 内部已按已实现边界过滤.
 判定 (预登记): OOS 评估窗前后两半段, excess 臂的日均超额收益差均 > 0,
 且全窗绝对净收益差不恶化 → 过闸建议采纳.
 """
+
 import gc
 import json
 import sys
@@ -35,11 +36,10 @@ TARGETS = {"baseline": "label_pm_10d_net", "excess": "label_excess_10d_net"}
 def top10_daily(picks: pd.DataFrame) -> pd.DataFrame:
     """每日每板 top10 → (net, exc) 日均值, 只保留标签已实现的行."""
     p = picks.dropna(subset=["label_pm_10d_net"])
-    return (
-        p.groupby(["board", "date"])
-        .agg(net=("label_pm_10d_net", "mean"),
-             exc=("label_excess_10d_net", "mean"),
-             n=("symbol", "size"))
+    return p.groupby(["board", "date"]).agg(
+        net=("label_pm_10d_net", "mean"),
+        exc=("label_excess_10d_net", "mean"),
+        n=("symbol", "size"),
     )
 
 
@@ -56,7 +56,7 @@ def arm_stats(daily: pd.DataFrame) -> dict:
 def main() -> int:
     t0 = time.time()
     work = load_panel()
-    print(f"[ab] 面板加载完成 {len(work):,} 行 ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[ab] 面板加载完成 {len(work):,} 行 ({time.time() - t0:.0f}s)", flush=True)
 
     # 超额标签: 板×日 全池已实现等权均值去均值 (与交付 pred_excess 同口径)
     mkt = work.groupby(["board", "date"])["label_pm_10d_net"].transform("mean")
@@ -64,8 +64,9 @@ def main() -> int:
     del mkt
     gc.collect()
 
-    sub = work[["symbol", "date", "board",
-                "label_pm_10d_net", "label_excess_10d_net"]].copy()
+    sub = work[
+        ["symbol", "date", "board", "label_pm_10d_net", "label_excess_10d_net"]
+    ].copy()
     score_s = pool_score(work, SNIPER.pool)
     score_f = pool_score(work, FUSION.pool)
     sub["score"] = np.maximum(score_s.values, score_f.values)
@@ -78,7 +79,8 @@ def main() -> int:
     for arm, tgt in TARGETS.items():
         mag = calibrate_mag10d(
             sub[["symbol", "date", "board", "score", tgt]],
-            score_col="score", target_col=tgt,
+            score_col="score",
+            target_col=tgt,
         )
         if mag.empty:
             print(f"[ab] FAIL {arm} 臂校准为空", flush=True)
@@ -87,13 +89,19 @@ def main() -> int:
         res = res.sort_values(["board", "date", "mag"], ascending=[True, True, False])
         res["rk"] = res.groupby(["board", "date"]).cumcount() + 1
         picks[arm] = res[res["rk"] <= TOP_N].reset_index(drop=True)
-        print(f"[ab] {arm} 臂: {picks[arm]['date'].nunique()} 决策日 "
-              f"× {len(picks[arm]):,} 票 ({time.time()-t0:.0f}s)", flush=True)
+        print(
+            f"[ab] {arm} 臂: {picks[arm]['date'].nunique()} 决策日 "
+            f"× {len(picks[arm]):,} 票 ({time.time() - t0:.0f}s)",
+            flush=True,
+        )
         del mag, res
         gc.collect()
 
-    report: dict = {"ts": datetime.now().isoformat(timespec="seconds"),
-                    "top_n": TOP_N, "boards": {}}
+    report: dict = {
+        "ts": datetime.now().isoformat(timespec="seconds"),
+        "top_n": TOP_N,
+        "boards": {},
+    }
     for board in ("main", "dual"):
         pk = {a: p[p["board"] == board] for a, p in picks.items()}
         dl = {a: top10_daily(p) for a, p in pk.items()}
@@ -140,7 +148,7 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     fp = out_dir / f"_ab_excess_calib_{datetime.now():%Y%m%d_%H%M%S}.json"
     fp.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n[ab] 结果 WORM 落盘 {fp} ({time.time()-t0:.0f}s)", flush=True)
+    print(f"\n[ab] 结果 WORM 落盘 {fp} ({time.time() - t0:.0f}s)", flush=True)
     print("=== DONE ===", flush=True)
     return 0
 

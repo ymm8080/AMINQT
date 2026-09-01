@@ -25,13 +25,19 @@ class TestVerdictRule:
         assert v["delta_full"] == pytest.approx(0.003)
 
     def test_half_below_tolerance_fail(self):
-        assert top10_verdict(self._delta(-0.003, 0.005), tol_half=-0.002)["pass"] is False
+        assert (
+            top10_verdict(self._delta(-0.003, 0.005), tol_half=-0.002)["pass"] is False
+        )
 
     def test_within_tolerance_pass(self):
-        assert top10_verdict(self._delta(-0.001, 0.001), tol_half=-0.002)["pass"] is True
+        assert (
+            top10_verdict(self._delta(-0.001, 0.001), tol_half=-0.002)["pass"] is True
+        )
 
     def test_full_negative_fail(self):
-        assert top10_verdict(self._delta(-0.001, -0.001), tol_half=-0.002)["pass"] is False
+        assert (
+            top10_verdict(self._delta(-0.001, -0.001), tol_half=-0.002)["pass"] is False
+        )
 
 
 class _RankModel:

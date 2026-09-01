@@ -958,7 +958,9 @@ def _mfe_lookup() -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
-def _recal_probs(res: pd.DataFrame, sel_date: pd.Timestamp, module: str) -> pd.DataFrame:
+def _recal_probs(
+    res: pd.DataFrame, sel_date: pd.Timestamp, module: str
+) -> pd.DataFrame:
     """概率展示层再校准 (2026-08-29): 交付 pred_prob_{h} ×= 板内收敛因子.
 
     偏差口径 = 历史 raw 预测 (parallel_preds_raw_*.csv, WORM 原值) 均值 vs 同批
@@ -1432,18 +1434,20 @@ def write_docx(
         run = p.add_run(f"⚠ 未接受 (被退回): {reason} — 当日短名单为空, 未出股")
         run.font.size = Pt(10)
         run.bold = True
-    cols = [
-        "rank",
-        "symbol",
-        "module",
-        "co_occur",
-        "score",
-        "score_w",
-        "过门",
-        "stall_flag",
-    ] + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")] + [
-        "pred_excess_10d"
-    ]
+    cols = (
+        [
+            "rank",
+            "symbol",
+            "module",
+            "co_occur",
+            "score",
+            "score_w",
+            "过门",
+            "stall_flag",
+        ]
+        + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
+        + ["pred_excess_10d"]
+    )
     for board in ("main", "dual"):
         b = res[res["board"] == board]
         if b.empty:

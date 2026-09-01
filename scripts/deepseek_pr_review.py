@@ -456,9 +456,7 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
         lines.append(marker)
         lines.append("")
         lines.append("---")
-        lines.append(
-            f"*Automated review by {display_name} ({display_model})*"
-        )
+        lines.append(f"*Automated review by {display_name} ({display_model})*")
 
         body = "\n".join(lines)
 
@@ -486,21 +484,17 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
 def main():
     # ── LLM_* vars (new standard) with DEEPSEEK_* fallback (legacy) ──
     api_key = _sanitize_header(
-        os.environ.get("LLM_API_KEY", "")
-        or os.environ.get("DEEPSEEK_API_KEY", "")
+        os.environ.get("LLM_API_KEY", "") or os.environ.get("DEEPSEEK_API_KEY", "")
     )
     token = _sanitize_header(os.environ.get("GITHUB_TOKEN", ""))
     repo = _sanitize_header(os.environ.get("GITHUB_REPOSITORY", ""))
     pr_number = _sanitize_header(os.environ.get("PR_NUMBER", ""))
     model = _sanitize_header(
-        os.environ.get("LLM_MODEL", "")
-        or os.environ.get("DEEPSEEK_MODEL", "glm-4.6")
+        os.environ.get("LLM_MODEL", "") or os.environ.get("DEEPSEEK_MODEL", "glm-4.6")
     )
     base_url = _sanitize_header(
         os.environ.get("LLM_BASE_URL", "")
-        or os.environ.get(
-            "DEEPSEEK_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"
-        )
+        or os.environ.get("DEEPSEEK_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
     )
     provider = _sanitize_header(
         os.environ.get("LLM_PROVIDER", "")

@@ -49,22 +49,37 @@ BUNDLES = {
 }
 COST = 0.0020  # 与 hitrate 回放一致: 佣金+印花税+滑点 ≈ 0.2% 往返
 KEEP_PRED = [
-    "symbol", "pred_ret_10d", "pred_ret_3d", "prob_up", "prob_up_10d",
-    "base_rate", "pain_prob", "pred_q50_3d", "pred_q50_5d",
-    "pred_q75_3d", "pred_q90_3d",
+    "symbol",
+    "pred_ret_10d",
+    "pred_ret_3d",
+    "prob_up",
+    "prob_up_10d",
+    "base_rate",
+    "pain_prob",
+    "pred_q50_3d",
+    "pred_q50_5d",
+    "pred_q75_3d",
+    "pred_q90_3d",
 ]
 
 
 def _pivots(panel: pd.DataFrame):
     """symbol×date 宽表: close_hfq (ffill) + amount, 返回 (px, amt, cal)."""
-    cal = np.sort(np.unique(pd.to_datetime(panel["date"].to_numpy()).normalize().to_numpy()))
+    cal = np.sort(
+        np.unique(pd.to_datetime(panel["date"].to_numpy()).normalize().to_numpy())
+    )
     dt = pd.to_datetime(panel["date"]).dt.normalize()
     px = (
-        panel.assign(dt=dt).pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last").sort_index()
-        .reindex(columns=pd.to_datetime(cal)).ffill(axis=1)
+        panel.assign(dt=dt)
+        .pivot_table(index="symbol", columns="dt", values="close_hfq", aggfunc="last")
+        .sort_index()
+        .reindex(columns=pd.to_datetime(cal))
+        .ffill(axis=1)
     )
     amt = (
-        panel.assign(dt=dt).pivot_table(index="symbol", columns="dt", values="amount", aggfunc="last").sort_index()
+        panel.assign(dt=dt)
+        .pivot_table(index="symbol", columns="dt", values="amount", aggfunc="last")
+        .sort_index()
         .reindex(columns=pd.to_datetime(cal))
     )
     return px, amt, cal
@@ -92,20 +107,32 @@ def main() -> int:
 
     print(f"[load] panel {PANEL_V3_PATH}", flush=True)
     panel = pd.read_parquet(str(PANEL_V3_PATH))
-    print(f"[load] {len(panel):,}r max={panel['date'].max()} ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[load] {len(panel):,}r max={panel['date'].max()} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     dates = sorted(pd.unique(pd.to_datetime(panel["date"])))
     cut = dates[-args.slice]
     panel = panel[pd.to_datetime(panel["date"]) >= cut].reset_index(drop=True)
-    print(f"[slice] {pd.Timestamp(cut).date()}.. {len(panel):,}r ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[slice] {pd.Timestamp(cut).date()}.. {len(panel):,}r ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     px, amt, cal = _pivots(panel)
-    print(f"[pivot] symbols={len(px)} days={len(cal)} ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[pivot] symbols={len(px)} days={len(cal)} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     all_cal = pd.to_datetime(cal)
     i_of = {d: i for i, d in enumerate(all_cal)}
     max_lag = 11  # 10d 实得需 i+11; 3d 只需 i+4
 
     main_df, dual_df, state = CleaningPipeline(CleaningConfig()).run_inference(panel)
-    print(f"[clean] valve={state} main={len(main_df):,} dual={len(dual_df):,} ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[clean] valve={state} main={len(main_df):,} dual={len(dual_df):,} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     del panel
     gc.collect()
 
@@ -113,12 +140,17 @@ def main() -> int:
     for board, dfb, csr in (("main", main_df, False), ("dual", dual_df, True)):
         cols = predictor.bundles[board]["feature_cols"]
         feat = features.build(dfb, None, inference_cols=cols, cross_sectional_rank=csr)
-        print(f"[feat:{board}] {len(feat):,}r {len(feat.columns)}c ({time.time() - t0:.0f}s)", flush=True)
+        print(
+            f"[feat:{board}] {len(feat):,}r {len(feat.columns)}c ({time.time() - t0:.0f}s)",
+            flush=True,
+        )
         del dfb
         gc.collect()
 
         day_dates = sorted(pd.unique(pd.to_datetime(feat["date"])))
-        eval_days = [d for d in day_dates if d in i_of and i_of[d] + max_lag < len(all_cal)][-args.eval:]
+        eval_days = [
+            d for d in day_dates if d in i_of and i_of[d] + max_lag < len(all_cal)
+        ][-args.eval :]
         for d in day_dates:
             if d >= eval_days[0]:
                 break
@@ -131,7 +163,10 @@ def main() -> int:
                     lister.compute_scores(pred)
             except Exception:
                 pass
-        print(f"[{board}] eval {len(eval_days)}d | {pd.Timestamp(eval_days[0]).date()}..{pd.Timestamp(eval_days[-1]).date()}", flush=True)
+        print(
+            f"[{board}] eval {len(eval_days)}d | {pd.Timestamp(eval_days[0]).date()}..{pd.Timestamp(eval_days[-1]).date()}",
+            flush=True,
+        )
 
         for k, d in enumerate(eval_days):
             di = i_of[d]
@@ -141,7 +176,9 @@ def main() -> int:
             try:
                 pred = predictor.predict(day_feat, board)
             except Exception as exc:
-                print(f"[{board}] {pd.Timestamp(d).date()} predict err: {exc}", flush=True)
+                print(
+                    f"[{board}] {pd.Timestamp(d).date()} predict err: {exc}", flush=True
+                )
                 continue
             if pred.empty:
                 continue
@@ -164,7 +201,10 @@ def main() -> int:
             sub["board"] = board
             rows.extend(sub.to_dict("records"))
             if (k + 1) % 25 == 0 or k == len(eval_days) - 1:
-                print(f"[{board}] {k + 1}/{len(eval_days)} rows={len(rows):,} ({time.time() - t0:.0f}s)", flush=True)
+                print(
+                    f"[{board}] {k + 1}/{len(eval_days)} rows={len(rows):,} ({time.time() - t0:.0f}s)",
+                    flush=True,
+                )
         del feat
         gc.collect()
 
@@ -175,12 +215,20 @@ def main() -> int:
     pq_path = out_dir / f"q90_slot_replay_{ts}.parquet"
     df.to_parquet(pq_path, index=False)
     (out_dir / f"q90_slot_replay_{ts}.json").write_text(
-        json.dumps({
-            "ts": ts, "slice": args.slice, "eval": args.eval, "cost": COST,
-            "bundles": BUNDLES, "rows": int(len(df)),
-            "days": int(df["date"].nunique()),
-            "range": [str(df["date"].min()), str(df["date"].max())],
-        }, indent=2, ensure_ascii=False),
+        json.dumps(
+            {
+                "ts": ts,
+                "slice": args.slice,
+                "eval": args.eval,
+                "cost": COST,
+                "bundles": BUNDLES,
+                "rows": int(len(df)),
+                "days": int(df["date"].nunique()),
+                "range": [str(df["date"].min()), str(df["date"].max())],
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
     print(f"[saved] {pq_path} rows={len(df):,} ({time.time() - t0:.0f}s)", flush=True)

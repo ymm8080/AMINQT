@@ -281,4 +281,3 @@ class TestHoldertradeStalenessFix:
         assert (r["sh_insider_signal"] == 0.0).all()
         assert (r["sh_change_amt_20d"] == 0.0).all()
         assert (r["sh_change_frequency"] == 0.0).all()
-

@@ -793,7 +793,9 @@ class DualTrackTrainer:
             return {"skipped": True, "pass": True, "reason": "no_current"}
         cur = self.load(cur_path)
         if "10d_reg" not in cur.get("models", {}):
-            logger.warning("[%s] TOP10 第二票: 生产包无 10d_reg, 空过", trained["board"])
+            logger.warning(
+                "[%s] TOP10 第二票: 生产包无 10d_reg, 空过", trained["board"]
+            )
             return {"skipped": True, "pass": True, "reason": "no_10d_reg"}
 
         test = trained["segs"]["test"].copy()
@@ -820,7 +822,9 @@ class DualTrackTrainer:
                     test[c] = 0.0
                 logger.warning(
                     "[%s] TOP10 第二票: %d 列 brute 注入不齐补 0: %s",
-                    trained["board"], len(still), still[:5],
+                    trained["board"],
+                    len(still),
+                    still[:5],
                 )
 
         daily: dict[str, pd.DataFrame] = {}
@@ -839,16 +843,20 @@ class DualTrackTrainer:
             daily[name] = p.groupby("date")["label_pm_10d_net"].mean()
             p = p.copy()
             p["bucket"] = np.where(p["rk"] <= 5, "top5", "b6_10")
-            split[name] = (
-                p.groupby("bucket")["label_pm_10d_net"].mean().to_dict()
-            )
+            split[name] = p.groupby("bucket")["label_pm_10d_net"].mean().to_dict()
 
         common = daily["new"].index.intersection(daily["cur"].index)
         if len(common) < 10:
             logger.warning(
-                "[%s] TOP10 第二票: 可比日仅 %d (<10), 空过", trained["board"], len(common)
+                "[%s] TOP10 第二票: 可比日仅 %d (<10), 空过",
+                trained["board"],
+                len(common),
             )
-            return {"skipped": True, "pass": True, "reason": f"common_days={len(common)}"}
+            return {
+                "skipped": True,
+                "pass": True,
+                "reason": f"common_days={len(common)}",
+            }
         v = top10_verdict(
             daily["new"].loc[common] - daily["cur"].loc[common],
             tol_half=float(cfg.get("tol_half", -0.002)),
@@ -858,13 +866,20 @@ class DualTrackTrainer:
             "days": int(len(common)),
             "new_net": float(daily["new"].loc[common].mean()),
             "cur_net": float(daily["cur"].loc[common].mean()),
-            "top5_split": {k: {b: float(x) for b, x in d.items()} for k, d in split.items()},
+            "top5_split": {
+                k: {b: float(x) for b, x in d.items()} for k, d in split.items()
+            },
         }
         logger.info(
             "[%s] TOP10 第二票: %d 日 | 新 %+.4f vs 旧 %+.4f/日 | 差 全窗 %+.4f "
             "前半 %+.4f 后半 %+.4f | %s",
-            trained["board"], out["days"], out["new_net"], out["cur_net"],
-            v["delta_full"], v["delta_h1"], v["delta_h2"],
+            trained["board"],
+            out["days"],
+            out["new_net"],
+            out["cur_net"],
+            v["delta_full"],
+            v["delta_h1"],
+            v["delta_h2"],
             "PASS" if v["pass"] else "FAIL",
         )
         return out
@@ -931,9 +946,7 @@ class DualTrackTrainer:
             if key.startswith("reg_resid_") and key.endswith("d"):
                 bundle[key] = val
         # [08-29] 超额标签: 标记 + 市场均值常数 (推理端 pred_ret_{k}d 加回复原绝对口径)
-        for key in ("label_excess",) + tuple(
-            f"mkt_expected_{k}d" for k in (3, 5, 10)
-        ):
+        for key in ("label_excess",) + tuple(f"mkt_expected_{k}d" for k in (3, 5, 10)):
             if key in trained:
                 bundle[key] = trained[key]
         try:

@@ -2962,9 +2962,9 @@ class FeatureEngineV35:
             g["sh_change_amt_60d"] = day_amt.rolling(60, min_periods=1).sum()
 
             # 活跃度: 近 60 日公告天数 (台阶口径, amt=0 的公告行也计入)
-            g["sh_change_frequency"] = event_mask.astype(int).rolling(
-                60, min_periods=1
-            ).sum()
+            g["sh_change_frequency"] = (
+                event_mask.astype(int).rolling(60, min_periods=1).sum()
+            )
 
             # 影响规模: 近 20 日公告金额合计 / 日成交额
             if "amount" in g.columns:
