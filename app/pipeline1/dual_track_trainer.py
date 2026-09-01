@@ -161,6 +161,15 @@ def model_params(board: str, kind: str) -> dict:
     if nl is not None:
         params["num_leaves"] = nl
     params.update(PARAMS_OVERRIDE.get((board, kind), {}))
+    # [2026-08-31] 10d_reg 是 TOP10 第二票唯一评估头 — 多线程直方图浮点累加顺序
+    # 非确定, 同配置重训 TOP10 日均可差 ±0.04 (08-30 +0.0571 vs 08-31 +0.0092,
+    # 特征/标签/超参/seed 全同, 窗仅差 1 日), 方差与闸信号同量级 → 闸近似抛硬币.
+    # deterministic=True 强制确定性归约 (LGBM 会退单线程, 10d_reg 训练 +~15min/板,
+    # 可接受); 其余 5 头只进全截面 IC 闸, 对小方差稳健, 保持多线程速度.
+    if kind == "10d_reg":
+        params["deterministic"] = True
+        params["force_row_wise"] = True
+        params["num_threads"] = 1
     # [2026-08-11] 双创概率头: logloss 在 es 段早停到 1-2 树 → prob_up 全股几乎常数.
     # 改 AUC 早停 → ~20 树, prob 有真实截面区分度 (验证: dual 3d/5d/10d_cls
     # rankIC 0.041/0.060/0.035, 唯一值 45/228/242). main cls 信号强, AUC 早停反而
