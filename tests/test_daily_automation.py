@@ -158,6 +158,101 @@ def test_write_state_missing_dir_creates_it(tmp_path, monkeypatch):
 #    refresh 爬行 8h+; 改 Popen + 看门狗线程 taskkill 整树) ────────────────────
 
 
+# ── 启动守卫 (2026-09-01): 手动重训/预测与链并发 → 页交换卡死/OOM, 不启动 ──────
+
+
+def test_read_state(tmp_path, monkeypatch):
+    monkeypatch.setattr(ma, "LOG_DIR", str(tmp_path))
+    assert ma._read_state("20260901") is None
+    ma._write_state("20260901", "ok", reason="dry_run")
+    state = ma._read_state("20260901")
+    assert state["status"] == "ok"
+    assert state["reason"] == "dry_run"
+
+
+def test_today_list_delivered_matches_tag_glob(tmp_path, monkeypatch):
+    monkeypatch.setattr(ma, "STOCK_LIST_DIR", tmp_path)
+    assert ma._today_list_delivered("20260901") is False
+    (tmp_path / "legacy_stocklist_20260901__main.csv").write_text(
+        "x\n", encoding="utf-8"
+    )
+    assert ma._today_list_delivered("20260901") is True
+    # 其它日期不受影响
+    assert ma._today_list_delivered("20260902") is False
+
+
+def test_startup_guard_verdicts(monkeypatch):
+    monkeypatch.setattr(ma, "_guard_log", lambda tag, msg: None)
+    monkeypatch.setattr(ma, "_read_state", lambda tag: None)
+    monkeypatch.setattr(ma, "_today_list_delivered", lambda tag: False)
+
+    monkeypatch.setattr(
+        ma,
+        "_startup_guard_conflicts",
+        lambda: [{"pid": 1, "sentinel": "s", "cmdline": "x"}],
+    )
+    # 活进程冲突 → wait (守候循环, 不直接放弃)
+    assert ma._run_startup_guard("20260901") == "wait"
+
+    monkeypatch.setattr(ma, "_startup_guard_conflicts", lambda: [])
+    # 无冲突无交付 → 放行
+    assert ma._run_startup_guard("20260901") == "go"
+    # 今日链已 ok → skip
+    monkeypatch.setattr(ma, "_read_state", lambda tag: {"status": "ok"})
+    assert ma._run_startup_guard("20260901") == "skip"
+    # 今日 ok 但来自 dry-run → 放行 (否则中午试跑会拦掉当晚真实链)
+    monkeypatch.setattr(
+        ma, "_read_state", lambda tag: {"status": "ok", "reason": "dry_run"}
+    )
+    assert ma._run_startup_guard("20260901") == "go"
+    # 今日手动取消 → skip
+    monkeypatch.setattr(
+        ma, "_read_state", lambda tag: {"status": "cancelled", "reason": "manual_cancel"}
+    )
+    assert ma._run_startup_guard("20260901") == "skip"
+    # 今日清单已交付 → skip
+    monkeypatch.setattr(ma, "_read_state", lambda tag: None)
+    monkeypatch.setattr(ma, "_today_list_delivered", lambda tag: True)
+    assert ma._run_startup_guard("20260901") == "skip"
+
+
+def test_wait_for_clearance_starts_when_conflicts_clear(monkeypatch):
+    monkeypatch.setattr(ma, "_guard_log", lambda tag, msg: None)
+    monkeypatch.setattr(ma, "_today_list_delivered", lambda tag: False)
+    monkeypatch.setattr(ma, "_startup_guard_conflicts", lambda: [])
+    monkeypatch.setattr(ma.time, "sleep", lambda s: None)
+    assert ma._wait_for_clearance("20260901", tick_s=0, max_ticks=3) is True
+
+
+def test_wait_for_clearance_aborts_when_deliverable_lands(monkeypatch):
+    """守候期间今日清单已出 (手动链/手动预测交付) → 不必再启动."""
+    monkeypatch.setattr(ma, "_guard_log", lambda tag, msg: None)
+    monkeypatch.setattr(ma, "_today_list_delivered", lambda tag: True)
+    monkeypatch.setattr(ma.time, "sleep", lambda s: None)
+    assert ma._wait_for_clearance("20260901", tick_s=0, max_ticks=3) is False
+
+
+def test_wait_for_clearance_gives_up_after_max_ticks(monkeypatch):
+    monkeypatch.setattr(ma, "_guard_log", lambda tag, msg: None)
+    monkeypatch.setattr(ma, "_today_list_delivered", lambda tag: False)
+    monkeypatch.setattr(
+        ma,
+        "_startup_guard_conflicts",
+        lambda: [{"pid": 9, "sentinel": "_retrain_legacy_full.py", "cmdline": "x"}],
+    )
+    monkeypatch.setattr(ma.time, "sleep", lambda s: None)
+    assert ma._wait_for_clearance("20260901", tick_s=0, max_ticks=3) is False
+
+
+def test_guard_skipped_state_is_terminal_for_babysitter():
+    """main() 在 skip/wait 路径写 state="skipped" — babysitter 必须视为终态."""
+    # _exit_status 只映射步骤失败; skipped 由守卫路径直接写, 这里锁住约定
+    assert ma._exit_status([]) == "ok"
+    import scripts._babysit_daily_automation as ba
+
+    assert ba._exit_code_for("skipped") == 0
+
+
 def test_watchdog_fast_child_not_killed():
     """快跑完的子进程不受看门狗影响, 返回真实 rc."""
     rc, timed_out = _run_step_with_watchdog(

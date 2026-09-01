@@ -14,6 +14,10 @@ def test_exit_code_for_maps_terminal_statuses():
     assert ba._exit_code_for("ok") == 0
     assert ba._exit_code_for("failed") == 1
     assert ba._exit_code_for("interrupted") == 130
+    # 守卫跳过 = 有意不跑 (并发冲突/今日已完成), 非崩溃 (2026-09-01)
+    assert ba._exit_code_for("skipped") == 0
+    # 手动取消当日 = 有意不跑, 非崩溃
+    assert ba._exit_code_for("cancelled") == 0
     # 未知/未终态 → crash 码, 绝不当成功
     assert ba._exit_code_for("running") == 3
     assert ba._exit_code_for("nonsense") == 3
