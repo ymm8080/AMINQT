@@ -1,10 +1,11 @@
 # =============================================================================
-# AMINQT DeepSeek PR Review — AI-powered code review on every pull request
-# Model: deepseek-v4-flash (thinking disabled in-script for predictable JSON output)
-# API key: stored as repo secret DEEPSEEK_API_KEY
+# AMINQT AI PR Review — powered by GLM (Zhipu/BigModel)
+# Model: glm-4.6 (Zhipu ChatGLM, OpenAI-compatible API)
+# API key: stored as repo secret GLM_API_KEY
 # Trigger: PR opened / synchronize / reopened + manual dispatch
+# Legacy: also supports DEEPSEEK_API_KEY if GLM_API_KEY is absent
 # =============================================================================
-name: DeepSeek PR Review
+name: AI PR Review
 
 on:
   pull_request:
@@ -28,7 +29,7 @@ concurrency:
 
 jobs:
   review:
-    name: DeepSeek v4-flash Review
+    name: GLM-4.6 Review
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -60,12 +61,17 @@ jobs:
             echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run DeepSeek PR Review
+      - name: Run AI PR Review
         env:
+          # GLM (Zhipu/BigModel) — primary provider
+          LLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+          LLM_MODEL: glm-4.6
+          LLM_BASE_URL: https://open.bigmodel.cn/api/paas/v4
+          LLM_PROVIDER: glm
+          # Legacy fallback (used only if GLM_API_KEY is empty)
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          # GitHub token for posting review comments
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
-          DEEPSEEK_MODEL: deepseek-v4-flash
-          DEEPSEEK_BASE_URL: https://api.deepseek.com
         run: python scripts/deepseek_pr_review.py

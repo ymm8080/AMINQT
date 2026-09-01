@@ -1,15 +1,20 @@
-"""DeepSeek PR Review — AI-powered code review for AMINQT.
+"""AI-powered PR Review for AMINQT.
 
 Called by .github/workflows/deepseek-pr-review.yml.
-Reviews the PR diff using DeepSeek API and posts a comment with findings.
+Reviews the PR diff using an LLM API (DeepSeek or GLM/Zhipu) and posts a
+comment with findings.
 
 Environment variables (set by the workflow):
-    DEEPSEEK_API_KEY: API key for DeepSeek
+    LLM_API_KEY: API key for the LLM provider (DeepSeek or GLM)
     GITHUB_TOKEN: GitHub token for posting comments
     GITHUB_REPOSITORY: owner/repo (e.g. "user/aminqt")
     PR_NUMBER: Pull request number
-    DEEPSEEK_MODEL: Model name (e.g. "deepseek-v4-flash")
-    DEEPSEEK_BASE_URL: API base URL (e.g. "https://api.deepseek.com")
+    LLM_MODEL: Model name (e.g. "glm-4.6" or "deepseek-chat")
+    LLM_BASE_URL: API base URL (e.g. "https://open.bigmodel.cn/api/paas/v4")
+    LLM_PROVIDER: Provider name ("glm" or "deepseek"), controls param format
+
+Legacy fallback: if LLM_* vars are absent, reads DEEPSEEK_* vars for
+backward compatibility.
 """
 
 import json
@@ -168,12 +173,26 @@ def _extract_json(text: str) -> dict | None:
     return None
 
 
-def review_with_deepseek(diff: str, api_key: str, model: str, base_url: str) -> dict:
-    """Send diff to DeepSeek for review. Returns parsed response.
+def review_with_deepseek(
+    diff: str,
+    api_key: str,
+    model: str,
+    base_url: str,
+    provider: str = "deepseek",
+) -> dict:
+    """Send diff to LLM for review. Returns parsed response.
 
     The ``error`` key is set when the review itself failed (API error,
     parse failure, etc.) so callers can distinguish genuine "no issues"
     from a broken review that looks blank.
+
+    Args:
+        diff: PR diff text.
+        api_key: LLM API key.
+        model: Model name (e.g. "glm-4.6" or "deepseek-chat").
+        base_url: API base URL (without ``/chat/completions`` suffix).
+        provider: "deepseek" or "glm" — controls param format (thinking
+            mode, response_format support).
     """
     if not diff.strip():
         return {"issues": [], "summary": "No diff to review.", "error": True}
@@ -247,8 +266,11 @@ Keep messages concise (one sentence per issue). Only report real violations.
             "temperature": 0.1,
             "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
-            "thinking": {"type": "disabled"},
         }
+        # DeepSeek-specific: disable thinking mode for predictable token
+        # usage. GLM (Zhipu) does not support this param.
+        if provider == "deepseek":
+            payload["thinking"] = {"type": "disabled"}
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
@@ -340,14 +362,14 @@ Keep messages concise (one sentence per issue). Only report real violations.
                 body = e.read().decode("utf-8", errors="replace")[:500]
             except Exception:
                 pass
-            logger.error("DeepSeek API HTTP %s: %s", e.code, body)
+            logger.error("LLM API HTTP %s: %s", e.code, body)
             return {
                 "issues": [],
                 "summary": f"Review failed: HTTP {e.code} — {body}",
                 "error": True,
             }
         except Exception as e:
-            logger.error(f"DeepSeek API error: {e}")
+            logger.error(f"LLM API error: {e}")
             return {
                 "issues": [],
                 "summary": f"Review failed: {e}",
@@ -373,31 +395,37 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
     summary = review.get("summary", "Review complete.")
     is_error = review.get("error", False)
 
+    # Display name for the review comment header
+    display_name = os.environ.get("LLM_PROVIDER", "deepseek").upper()
+    display_model = os.environ.get("LLM_MODEL", "") or os.environ.get(
+        "DEEPSEEK_MODEL", "unknown"
+    )
+
     if is_error:
         # Review itself failed — show a visible error banner, NOT "no issues"
-        body = f"""## DeepSeek PR Review
+        body = f"""## {display_name} PR Review
 
 **Status:** Review failed
 
 {summary}
 
 ---
-*Automated review by DeepSeek ({os.environ.get("DEEPSEEK_MODEL", "unknown")})*"""
+*Automated review by {display_name} ({display_model})*"""
     elif not issues:
-        body = f"""## DeepSeek PR Review
+        body = f"""## {display_name} PR Review
 
 **Status:** No issues found.
 
 {summary}
 
 ---
-*Automated review by DeepSeek ({os.environ.get("DEEPSEEK_MODEL", "unknown")})*"""
+*Automated review by {display_name} ({display_model})*"""
     else:
         critical = [i for i in issues if i.get("severity") == "critical"]
         warnings = [i for i in issues if i.get("severity") == "warning"]
         info = [i for i in issues if i.get("severity") == "info"]
 
-        lines = ["## DeepSeek PR Review", ""]
+        lines = [f"## {display_name} PR Review", ""]
         lines.append(
             f"**Critical:** {len(critical)} | **Warnings:** {len(warnings)} "
             f"| **Info:** {len(info)}"
@@ -429,8 +457,7 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
         lines.append("")
         lines.append("---")
         lines.append(
-            f"*Automated review by DeepSeek "
-            f"({os.environ.get('DEEPSEEK_MODEL', 'unknown')})*"
+            f"*Automated review by {display_name} ({display_model})*"
         )
 
         body = "\n".join(lines)
@@ -457,25 +484,39 @@ def post_comment(pr_number: str, repo: str, token: str, review: dict) -> bool:
 
 
 def main():
-    api_key = _sanitize_header(os.environ.get("DEEPSEEK_API_KEY", ""))
+    # ── LLM_* vars (new standard) with DEEPSEEK_* fallback (legacy) ──
+    api_key = _sanitize_header(
+        os.environ.get("LLM_API_KEY", "")
+        or os.environ.get("DEEPSEEK_API_KEY", "")
+    )
     token = _sanitize_header(os.environ.get("GITHUB_TOKEN", ""))
     repo = _sanitize_header(os.environ.get("GITHUB_REPOSITORY", ""))
     pr_number = _sanitize_header(os.environ.get("PR_NUMBER", ""))
-    model = _sanitize_header(os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"))
-    base_url = _sanitize_header(
-        os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+    model = _sanitize_header(
+        os.environ.get("LLM_MODEL", "")
+        or os.environ.get("DEEPSEEK_MODEL", "glm-4.6")
     )
+    base_url = _sanitize_header(
+        os.environ.get("LLM_BASE_URL", "")
+        or os.environ.get(
+            "DEEPSEEK_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"
+        )
+    )
+    provider = _sanitize_header(
+        os.environ.get("LLM_PROVIDER", "")
+        or ("deepseek" if os.environ.get("DEEPSEEK_API_KEY") else "glm")
+    ).lower()
 
     if not all([api_key, token, repo, pr_number]):
         logger.error("Missing required environment variables")
         sys.exit(1)
 
-    logger.info(f"Reviewing PR #{pr_number} in {repo} using {model}")
+    logger.info(f"Reviewing PR #{pr_number} in {repo} using {model} ({provider})")
 
     diff = get_pr_diff(pr_number, repo, token)
     logger.info(f"Diff length: {len(diff)} chars")
 
-    review = review_with_deepseek(diff, api_key, model, base_url)
+    review = review_with_deepseek(diff, api_key, model, base_url, provider)
     logger.info(f"Review result: {review.get('summary', 'N/A')}")
 
     post_comment(pr_number, repo, token, review)
