@@ -16,6 +16,7 @@ _ab_excess_calib_20260829). legacy 的幅度来自 LGBM 回归头本体 (200 特
 判定 (预登记): 双板 weighted_IC 均不低于基线, 且无单视界 IC 崩塌 (<基线-0.02)
 → 进 Tier-2 (OOS top10 实测); 否则 REJECT 归档.
 """
+
 import json
 import logging
 import sys
@@ -53,13 +54,18 @@ def main() -> int:
         return df
 
     LabelEngine.build_labels = staticmethod(build_labels_demeaned)
-    log.info("[ab] LabelEngine.build_labels 已包裹: label_pm_{3,5,10}d_net 板内按日去均值")
+    log.info(
+        "[ab] LabelEngine.build_labels 已包裹: label_pm_{3,5,10}d_net 板内按日去均值"
+    )
 
     results = run_training(panel_path=PANEL_V3_PATH, tag=TAG, boards=("main", "dual"))
     LabelEngine.build_labels = staticmethod(orig_build)
 
-    report = {"ts": datetime.now().isoformat(timespec="seconds"), "tag": TAG,
-              "boards": {}}
+    report = {
+        "ts": datetime.now().isoformat(timespec="seconds"),
+        "tag": TAG,
+        "boards": {},
+    }
     for board, r in results.items():
         report["boards"][board] = {
             "path": str(r.get("path")),
@@ -70,8 +76,9 @@ def main() -> int:
 
     out = Path(f"data/others/_ab_excess_legacy_{datetime.now():%Y%m%d_%H%M%S}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str),
-                   encoding="utf-8")
+    out.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+    )
     log.info("[ab] 结果 WORM 落盘 %s (%.0fs)", out, time.time() - t0)
     print("=== DONE ===", flush=True)
     return 0

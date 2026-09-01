@@ -5,6 +5,7 @@
 - _recal_factor: 完美校准→1, 高估→<1, 成熟不足收缩, 边界夹逼, 退化输入恒等
 - _recal_probs: 板内常数乘法 (排序不变), 无面板板块不动, 开关关闭恒等
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -42,7 +43,9 @@ def test_mkt_expected_daily_mean_then_window_mean():
 
 
 def test_mkt_expected_empty_is_nan():
-    fr = pd.DataFrame({"date": pd.to_datetime(["2025-01-06"]), "label_pm_3d_net": [np.nan]})
+    fr = pd.DataFrame(
+        {"date": pd.to_datetime(["2025-01-06"]), "label_pm_3d_net": [np.nan]}
+    )
     assert np.isnan(_mkt_expected(fr, "3d"))
 
 
@@ -99,7 +102,9 @@ def test_anchor_reported_pred_excess_equals_pred_minus_mkt():
         )
         # 锚定不变量 (回归保护): 均值 = 实得锚
         t_real = _trailing_realized(fr, h, top=ANCHOR_TOP, window=ANCHOR_WINDOW)
-        assert anchored.loc[m, f"pred_ret_{h}"].mean() == pytest.approx(t_real, rel=1e-9)
+        assert anchored.loc[m, f"pred_ret_{h}"].mean() == pytest.approx(
+            t_real, rel=1e-9
+        )
 
 
 def test_anchor_reported_excess_nan_without_panel():
@@ -171,9 +176,14 @@ def _recal_fixture():
 def test_recal_probs_board_constant_keeps_order(monkeypatch):
     hist, lk, res = _recal_fixture()
     monkeypatch.setattr(
-        mod, "PARALLEL_PROB_RECAL",
-        {"enable": True, "min_matured": 20, "window_days": 42,
-         "factor_bounds": (0.2, 1.5)},
+        mod,
+        "PARALLEL_PROB_RECAL",
+        {
+            "enable": True,
+            "min_matured": 20,
+            "window_days": 42,
+            "factor_bounds": (0.2, 1.5),
+        },
     )
     monkeypatch.setattr(mod, "_load_raw_history", lambda sel, m: hist)
     monkeypatch.setattr(mod, "_mfe_lookup", lambda: lk)
@@ -196,9 +206,14 @@ def test_recal_probs_board_constant_keeps_order(monkeypatch):
 def test_recal_probs_disabled_and_empty_hist(monkeypatch):
     hist, lk, res = _recal_fixture()
     monkeypatch.setattr(
-        mod, "PARALLEL_PROB_RECAL",
-        {"enable": False, "min_matured": 20, "window_days": 42,
-         "factor_bounds": (0.2, 1.5)},
+        mod,
+        "PARALLEL_PROB_RECAL",
+        {
+            "enable": False,
+            "min_matured": 20,
+            "window_days": 42,
+            "factor_bounds": (0.2, 1.5),
+        },
     )
     monkeypatch.setattr(mod, "_load_raw_history", lambda sel, m: hist)
     monkeypatch.setattr(mod, "_mfe_lookup", lambda: lk)
@@ -206,9 +221,14 @@ def test_recal_probs_disabled_and_empty_hist(monkeypatch):
     assert out.equals(res)
     # enable 但历史为空 → 恒等
     monkeypatch.setattr(
-        mod, "PARALLEL_PROB_RECAL",
-        {"enable": True, "min_matured": 20, "window_days": 42,
-         "factor_bounds": (0.2, 1.5)},
+        mod,
+        "PARALLEL_PROB_RECAL",
+        {
+            "enable": True,
+            "min_matured": 20,
+            "window_days": 42,
+            "factor_bounds": (0.2, 1.5),
+        },
     )
     monkeypatch.setattr(mod, "_load_raw_history", lambda sel, m: pd.DataFrame())
     out2 = _recal_probs(res.copy(), pd.Timestamp("2026-08-29"), "fusion")

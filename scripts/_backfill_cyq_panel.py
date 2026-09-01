@@ -57,7 +57,9 @@ def _compute_chunks_resilient(chunk_frames: list) -> list:
         with concurrent.futures.ProcessPoolExecutor(
             max_workers=len(chunk_frames)
         ) as ex:
-            futs = {ex.submit(compute_cyq_panel, cf): i for i, cf in enumerate(chunk_frames)}
+            futs = {
+                ex.submit(compute_cyq_panel, cf): i for i, cf in enumerate(chunk_frames)
+            }
             for fut in concurrent.futures.as_completed(futs):
                 parts[futs[fut]] = fut.result()
     except BrokenProcessPool as e:

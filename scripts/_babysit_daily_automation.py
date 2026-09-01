@@ -1,9 +1,9 @@
-"""fail-fast 监督 daily_automation — 终态 (ok/failed/interrupted) 一到立刻退出.
+"""fail-fast 监督 daily_automation — 终态 (ok/failed/interrupted/skipped) 一到立刻退出.
 
 替代 _watch_daily_automation.py 的无限 tail 循环. 那种循环在自动化崩溃后永不
 退出, 挂着的监督进程会一直耗 token (08-21 事故). 本脚本以
 logs/daily_automation_<tag>.state.json 为唯一终态判据 (run_daily_automation.py
-在每个退出路径都写终态: 成功/失败/Ctrl+C/0xC013A), 状态文件出现即退出;
+在每个退出路径都写终态: 成功/失败/Ctrl+C/0xC013A/守卫跳过), 状态文件出现即退出;
 可选 --timeout 兜底. 不重启自动化 (崩溃就是结束, RestartCount=0).
 
 用法:
@@ -45,6 +45,9 @@ def _exit_code_for(status: str) -> int:
     """终态 status → 退出码 (未知/未终态 → crash 码, 绝不当成功)."""
     return {
         "ok": _EXIT_OK,
+        # 守卫跳过/手动取消 = 有意不跑 (并发冲突/今日已完成/用户取消), 非崩溃
+        "skipped": _EXIT_OK,
+        "cancelled": _EXIT_OK,
         "failed": _EXIT_FAILED,
         "interrupted": _EXIT_INTERRUPTED,
     }.get(status, _EXIT_CRASHED)

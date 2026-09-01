@@ -31,6 +31,25 @@ MODEL_DIR = "models/pipeline1"
 
 
 def main() -> int:
+    # 并发守卫 (2026-09-01): 已有重训/预测进程在跑 → 退出, 防页交换卡死/OOM
+    # (08-17/08-24 事故). 哨兵不含 run_daily_automation.py: 链作为父进程存活是
+    # 合法场景, 否则链调起本脚本时会被自己的父进程误杀.
+    from scripts._run_guard import find_conflicts
+
+    others = find_conflicts()
+    if others:
+        for c in others:
+            print(
+                f"[guard] 冲突进程: {c['sentinel']} (PID {c['pid']}) {c['cmdline']}",
+                flush=True,
+            )
+        print(
+            f"[guard] 已有 {len(others)} 个重训/预测进程在跑, 本实例退出 (rc=3). "
+            f"等其结束后再启动.",
+            flush=True,
+        )
+        return 3
+
     # 子模块全部用 logging.getLogger(__name__) 传播到 root, 无 handler 时 info 被丢弃
     # (Python last-resort handler 只放 WARNING+), 重训会"看似卡住". 这里挂一个 handler.
     logging.basicConfig(

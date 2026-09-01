@@ -14,6 +14,7 @@ test = 末 60 交易日, 与 IC 同窗) 上, 用两套模型包对同一特征�
 判定 (预登记, TOP10 口径): 同日头对头, excess 臂 top10 日均净收益 (10d) 前后两半
 均 > 0 且全窗 ≥ 0 → 翻案采纳候选 (还需用户批); 否则维持 REJECT.
 """
+
 import gc
 import json
 import logging
@@ -70,11 +71,10 @@ def daily_top10(t: pd.DataFrame) -> pd.DataFrame:
     t = t.sort_values(["date", "pred"], ascending=[True, False])
     t["rk"] = t.groupby("date").cumcount() + 1
     p = t[t["rk"] <= TOP_N].dropna(subset=["label_pm_10d_net"])
-    return (
-        p.groupby("date")
-        .agg(net10=("label_pm_10d_net", "mean"),
-             net3=("label_pm_3d_net", "mean"),
-             n=("symbol", "size"))
+    return p.groupby("date").agg(
+        net10=("label_pm_10d_net", "mean"),
+        net3=("label_pm_3d_net", "mean"),
+        n=("symbol", "size"),
     )
 
 
@@ -88,8 +88,9 @@ def main() -> int:
     del panel
     gc.collect()
     registry = FeatureRegistry(
-        path=os.path.join(str(data_others_path("data/factor_registry")),
-                          "feature_registry.json")
+        path=os.path.join(
+            str(data_others_path("data/factor_registry")), "feature_registry.json"
+        )
     )
     features = FeatureEngineV35()
     trainer = DualTrackTrainer()
@@ -101,16 +102,18 @@ def main() -> int:
             log.warning("[%s] 清洗后空, 跳过", board)
             continue
         df = prepare_board_frame(
-            board_df, features, None,
-            cross_sectional_rank=(board != "main"), registry=registry,
+            board_df,
+            features,
+            None,
+            cross_sectional_rank=(board != "main"),
+            registry=registry,
         )
         del board_df
         gc.collect()
         log.info("[%s] 特征帧 %d 行 (%.0fs)", board, len(df), time.time() - t0)
 
         bundles = {
-            arm: DualTrackTrainer.load(p.format(board=board))
-            for arm, p in PKLS.items()
+            arm: DualTrackTrainer.load(p.format(board=board)) for arm, p in PKLS.items()
         }
         need = set()
         for b in bundles.values():
@@ -131,8 +134,7 @@ def main() -> int:
         arms = {}
         for arm, b in bundles.items():
             model, _label = b["models"]["10d_reg"]
-            t = test[["symbol", "date", "label_pm_3d_net",
-                      "label_pm_10d_net"]].copy()
+            t = test[["symbol", "date", "label_pm_3d_net", "label_pm_10d_net"]].copy()
             t["pred"] = model.predict(
                 np.nan_to_num(test[b["feature_cols"]].values, nan=0.0)
             )
@@ -175,7 +177,7 @@ def main() -> int:
     out = Path("data/others") / f"_ab_excess_top10_{datetime.now():%Y%m%d_%H%M%S}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n[tier2] 结果落盘 {out} ({time.time()-t0:.0f}s)", flush=True)
+    print(f"\n[tier2] 结果落盘 {out} ({time.time() - t0:.0f}s)", flush=True)
     print("=== DONE ===", flush=True)
     return 0
 

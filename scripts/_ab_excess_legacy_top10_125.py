@@ -8,6 +8,7 @@
 判定: delta10 (excess 臂 − baseline 臂, 板内 pred 降序 top10, 10d 净) 全窗 ≥ 0
 且前半 > 0 且后半 > 0 → 通过, main 超额标签建入 legacy 管线; 否则留档不动。
 """
+
 import gc
 import json
 import logging
@@ -67,11 +68,10 @@ def daily_top10(t: pd.DataFrame) -> pd.DataFrame:
     t = t.sort_values(["date", "pred"], ascending=[True, False])
     t["rk"] = t.groupby("date").cumcount() + 1
     p = t[t["rk"] <= TOP_N].dropna(subset=["label_pm_10d_net"])
-    return (
-        p.groupby("date")
-        .agg(net10=("label_pm_10d_net", "mean"),
-             net3=("label_pm_3d_net", "mean"),
-             n=("symbol", "size"))
+    return p.groupby("date").agg(
+        net10=("label_pm_10d_net", "mean"),
+        net3=("label_pm_3d_net", "mean"),
+        n=("symbol", "size"),
     )
 
 
@@ -85,15 +85,19 @@ def main() -> int:
     del panel
     gc.collect()
     registry = FeatureRegistry(
-        path=os.path.join(str(data_others_path("data/factor_registry")),
-                          "feature_registry.json")
+        path=os.path.join(
+            str(data_others_path("data/factor_registry")), "feature_registry.json"
+        )
     )
     board_df = board_dfs[BOARD]
     del board_dfs
     gc.collect()
     df = prepare_board_frame(
-        board_df, FeatureEngineV35(), None,
-        cross_sectional_rank=(BOARD != "main"), registry=registry,
+        board_df,
+        FeatureEngineV35(),
+        None,
+        cross_sectional_rank=(BOARD != "main"),
+        registry=registry,
     )
     del board_df
     gc.collect()
@@ -115,8 +119,11 @@ def main() -> int:
     dates = np.array(sorted(df["date"].unique()))
     test = df[df["date"].isin(dates[-EVAL_DAYS:])].copy()
     oos_cut = dates[-OOS_DAYS]
-    log.info("[125d] 评估段 %d 日 (OOS 段自 %s)", test["date"].nunique(),
-             pd.Timestamp(oos_cut).date())
+    log.info(
+        "[125d] 评估段 %d 日 (OOS 段自 %s)",
+        test["date"].nunique(),
+        pd.Timestamp(oos_cut).date(),
+    )
 
     arms = {}
     keep_cols = ["symbol", "date", "label_pm_3d_net", "label_pm_10d_net"]
@@ -175,7 +182,10 @@ def main() -> int:
         flush=True,
     )
 
-    out = Path("data/others") / f"_ab_excess_top10_125d_{BOARD}_{datetime.now():%Y%m%d_%H%M%S}.json"
+    out = (
+        Path("data/others")
+        / f"_ab_excess_top10_125d_{BOARD}_{datetime.now():%Y%m%d_%H%M%S}.json"
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(rep, ensure_ascii=False, indent=2), encoding="utf-8")
     # 逐行预测 + 逐日净: regime 分桶/名次分析离线重算用 (WORM)
@@ -188,7 +198,7 @@ def main() -> int:
     dc = Path("data/others") / f"_ab_excess_125d_daily_{BOARD}_{stamp}.csv"
     daily.to_csv(dc, index=True, index_label="date")
     print(f"[125d] 明细落盘 {pr.name} / {dc.name}", flush=True)
-    print(f"\n[125d] 结果落盘 {out} ({time.time()-t0:.0f}s)", flush=True)
+    print(f"\n[125d] 结果落盘 {out} ({time.time() - t0:.0f}s)", flush=True)
     print("=== DONE ===", flush=True)
     return 0
 

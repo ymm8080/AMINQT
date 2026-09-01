@@ -111,9 +111,7 @@ class TestPrepareBoardFrameWiring:
             "mask_recent_days",
             staticmethod(lambda df, days: df),
         )
-        on = prepare_board_frame(
-            _label_frame(), _IdentityFeatures(), label_excess=True
-        )
+        on = prepare_board_frame(_label_frame(), _IdentityFeatures(), label_excess=True)
         mkt = on.attrs["mkt_expected"]
         # 3d: 已实现日均值 08-27=0.03, 08-28=0.01 → 常数 0.02 (而非 ≈0)
         assert mkt["mkt_expected_3d"] == pytest.approx(0.02)
@@ -184,7 +182,9 @@ class TestPredictorRebase:
         assert np.allclose(out["pred_ret_10d"], 0.035)
 
     def test_plain_bundle_preds_unchanged(self):
-        out = self._predictor(self._bundle(excess=False)).predict(_features_df(), "main")
+        out = self._predictor(self._bundle(excess=False)).predict(
+            _features_df(), "main"
+        )
         assert np.allclose(out["pred_ret_3d"], 0.010)
         assert np.allclose(out["pred_ret_10d"], 0.030)
 
