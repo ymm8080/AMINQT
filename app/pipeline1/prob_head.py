@@ -24,6 +24,8 @@ base_rate = 最近 base_rate_days 个可观测日 mfe 达标率均值 (无前瞻
 
 from __future__ import annotations
 
+import datetime
+import json
 from pathlib import Path
 
 import joblib
@@ -287,25 +289,171 @@ def gate_probabilities(
     return pd.Series(pred.to_numpy(), index=cs["symbol"]), base
 
 
+def _gate_margin_dir() -> Path:
+    return Path(LEGACY_PROB_GATE["gate_margin_dir"])
+
+
+def _history_dates(board: str, today: str, limit: int) -> list[str]:
+    """spread 历史日期 (严格 < today, 降序, 最多 limit 个) — no-lookahead 边界."""
+    d = _gate_margin_dir()
+    dates = []
+    for fp in d.glob(f"spreads_{board}_*.csv"):
+        date = fp.stem.removeprefix(f"spreads_{board}_")
+        if date.isdigit() and date < today:
+            dates.append(date)
+    return sorted(dates, reverse=True)[:limit]
+
+
+def _breaker_tripped(board: str, today: str) -> bool:
+    """连续 3 个决策日 (n_total>0) 全部 0 保留 → True (闸退化成板禁时强制放开)."""
+    d = _gate_margin_dir()
+    dates = []
+    for fp in d.glob(f"margin_{board}_*.json"):
+        date = fp.stem.removeprefix(f"margin_{board}_")
+        if date.isdigit() and date < today:
+            dates.append(date)
+    n_checked = 0
+    for date in sorted(dates, reverse=True):
+        try:
+            with open(d / f"margin_{board}_{date}.json", encoding="utf-8") as fh:
+                dec = json.load(fh)
+        except Exception:
+            continue
+        if int(dec.get("n_total", 0)) <= 0:
+            continue  # 无参与者的日子不算决策日
+        n_checked += 1
+        if int(dec.get("n_kept", 0)) > 0:
+            return False
+        if n_checked >= 3:
+            return True
+    return False
+
+
+def compute_adaptive_margin(
+    board: str, today_spreads: pd.Series | None, today: str
+) -> tuple[float, str]:
+    """自适应 margin: 滚动分位数 / 熔断 / bootstrap / 静态回退.
+
+    Returns:
+        (margin, mode): mode ∈ fixed | breaker | rolling_q | bootstrap | fixed_fallback
+    """
+    cfg = LEGACY_PROB_GATE
+    if cfg.get("margin_mode", "fixed") == "fixed":
+        return float(cfg["margin"]), "fixed"
+    q = float(cfg["margin_q"])
+    lo = float(cfg["margin_min"])
+    hi = float(cfg["margin_max"])
+    if _breaker_tripped(board, today):
+        print(
+            f"[prob_gate] {board} 熔断: 连续 3 决策日 100% 剔除 → margin 放开至地板 "
+            f"{lo} (检查概率头/分布漂移!)",
+            flush=True,
+        )
+        return lo, "breaker"
+    vals: list[np.ndarray] = []
+    for date in _history_dates(board, today, int(cfg["spread_lookback_days"])):
+        try:
+            df = pd.read_csv(_gate_margin_dir() / f"spreads_{board}_{date}.csv")
+            v = pd.to_numeric(df["spread"], errors="coerce").dropna().to_numpy(float)
+        except Exception:
+            continue
+        if len(v):
+            vals.append(v[np.isfinite(v)])
+    if vals:
+        pooled = np.concatenate(vals)
+        return float(np.clip(np.quantile(pooled, q), lo, hi)), "rolling_q"
+    if today_spreads is not None:
+        s = pd.Series(today_spreads).dropna()
+        s = s[np.isfinite(s.astype(float))].astype(float)
+        if len(s):
+            return float(np.clip(np.quantile(s.to_numpy(), q), lo, hi)), "bootstrap"
+    print(
+        f"[prob_gate] {board} 无 spread 历史/当日截面 → 回退静态 margin "
+        f"{cfg['margin']} (fail-open 保守)",
+        flush=True,
+    )
+    return float(cfg["margin"]), "fixed_fallback"
+
+
+def _persist_gate_state(
+    board: str,
+    today: str,
+    symbols: pd.Index,
+    p: pd.Series,
+    base: float,
+    margin: float,
+    mode: str,
+    thr: float,
+    keep: pd.Series,
+) -> None:
+    """当日 spread 逐股 + margin 决策落盘 (WORM 逐日文件; 当日重跑覆盖当日文件)."""
+    d = _gate_margin_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    hist_dates = _history_dates(
+        board, today, int(LEGACY_PROB_GATE["spread_lookback_days"])
+    )
+    try:
+        sp = pd.DataFrame(
+            {
+                "symbol": p.index.astype(str).tolist(),
+                "pred_prob": p.to_numpy(float),
+                "spread": (p - base).to_numpy(float),
+            }
+        )
+        sp.to_csv(d / f"spreads_{board}_{today}.csv", index=False)
+        n_total = int(len(symbols))
+        n_kept = int(keep.sum())
+        with open(d / f"margin_{board}_{today}.json", "w", encoding="utf-8") as fh:
+            json.dump(
+                {
+                    "date": today,
+                    "board": board,
+                    "mode": mode,
+                    "margin": margin,
+                    "thr": thr,
+                    "base_rate": base,
+                    "q": LEGACY_PROB_GATE["margin_q"],
+                    "n_total": n_total,
+                    "n_kept": n_kept,
+                    "n_history_days": len(hist_dates),
+                },
+                fh,
+                ensure_ascii=False,
+                indent=1,
+            )
+    except Exception as exc:  # 状态落盘失败不影响闸 (非阻塞)
+        print(f"[prob_gate] {board} 状态落盘失败 (非阻塞): {exc}", flush=True)
+
+
 def apply_prob_gate(
     res: pd.DataFrame,
     feats: dict[str, pd.DataFrame],
     tail: pd.DataFrame,
     panel_dates: np.ndarray,
+    audit_sink: list | None = None,
 ) -> pd.DataFrame:
     """legacy 并行式概率闸 (接线后启用): t3 门后、pred_ret_10d 排名前.
 
-    保留 ⇔ pred_prob > base_rate + margin. bundle 缺失/过旧/当日不可用 →
+    保留 ⇔ pred_prob > base_rate + margin. margin 自适应 (margin_mode=rolling_q):
+    滚动分位数重锚到近 N 日实际可达 spread 分布 (静态 0.22 漂移后不可达 → main 板
+    每日全灭的根因修复); "fixed" → 静态档 (一键回退). bundle 缺失/过旧/当日不可用 →
     fail-open (保留) + 大声告警 (不杀清单); 个股 pred_prob 缺失 → fail-open 保留.
     feats = {board: 当日截面 V35 特征帧}; 缺板块 → fail-open.
     res board 兼容生产命名 (main/GEM/STAR) 与内部 (main/dual) — GEM/STAR 并入 dual 组.
     附带: pred_prob 列写入输出 (仅诊断用 — legacy 排名键保持纯 pred_ret_10d,
     blend 已证伪, memory legacy-blend-rank-verdict, 勿再提).
+    audit_sink: 传入 list 时逐股追加被剔记录 (symbol/board/pred_prob/spread/thr) —
+    emit 汇总写入 gate_audit → 交付"仅供参考"节 (2026-08-31).
+    当日 spreads/decision WORM 落盘 {gate_margin_dir}/ (次日自适应输入).
     """
     cfg = LEGACY_PROB_GATE
     if not cfg.get("enable", True):
         return res
     out = res.copy()
+    if "date" in out.columns and out["date"].notna().any():
+        today = pd.Timestamp(out["date"].max()).strftime("%Y%m%d")
+    else:
+        today = datetime.date.today().strftime("%Y%m%d")
     for board in cfg.get("gated_boards", ("main", "dual")):
         mask = out["board"].astype(str).map(_BOARD_GROUP).eq(board)
         if not mask.any():
@@ -321,16 +469,41 @@ def apply_prob_gate(
             print(f"[prob_gate] {board} 概率头不可用 -> 闸失效 (fail-open)", flush=True)
             continue
         prob, base = got
-        thr = base + cfg["margin"]
-        p = out.loc[mask, "symbol"].astype(str).map(prob)
+        symbols = out.loc[mask, "symbol"].astype(str)
+        p = symbols.map(prob)
+        spreads = (p - base).dropna()
+        margin, mode = compute_adaptive_margin(board, spreads, today)
+        thr = base + margin
         out.loc[mask, "pred_prob"] = p.to_numpy()
         keep = (p > thr) | p.isna()
+        _persist_gate_state(
+            board, today, symbols.index, p, base, margin, mode, thr, keep
+        )
         n_drop = int((~keep).sum())
+        if audit_sink is not None and n_drop:
+            for idx in out.index[mask & ~keep]:
+                pv = p.get(idx)
+                audit_sink.append(
+                    {
+                        "symbol": str(out.at[idx, "symbol"]),
+                        "board": out.at[idx, "board"],
+                        "stage": "prob_gate",
+                        "reason": "prob_gate",
+                        "pred_prob": float(pv) if pd.notna(pv) else np.nan,
+                        "spread": float(pv - base) if pd.notna(pv) else np.nan,
+                        "thr": float(thr),
+                        "pain_prob": np.nan,
+                        "pred_ret_10d": out.at[idx, "pred_ret_10d"]
+                        if "pred_ret_10d" in out.columns
+                        else np.nan,
+                    }
+                )
         if n_drop:
             dropped = out.loc[mask & ~keep, "symbol"].astype(str).tolist()
             print(
-                f"[prob_gate] {board} 剔除 {n_drop} 只 (pred_prob≤{thr:.1%}, "
-                f"base_rate {base:.1%}): {', '.join(dropped)}",
+                f"[prob_gate] {board} 剔除 {n_drop} 只 (margin={margin:.3f}/{mode}, "
+                f"pred_prob≤{thr:.1%}, base_rate {base:.1%}): "
+                f"{', '.join(dropped[:20])}{' ...' if len(dropped) > 20 else ''}",
                 flush=True,
             )
         else:
