@@ -211,6 +211,17 @@ class DailySelectionPipeline:
         )
         result["valve_state"] = valve_state
 
+        # 闸审计落盘 (2026-08-31): E7 软区 pain / prob_gate 被剔逐股 → 交付"仅供参考"节
+        gate_audit = result.get("gate_audit")
+        if gate_audit is not None and len(gate_audit):
+            try:
+                audit_path = os.path.join(
+                    self.list_dir, f"gate_audit_{trade_date}.parquet"
+                )
+                gate_audit.to_parquet(audit_path, index=False)
+            except Exception:
+                logger.warning("gate_audit 落盘失败 (非阻塞)", exc_info=True)
+
         # 持久化 + 守卫 + DB入库
         if not result["empty"] and len(result["list"]):
             # 模块版本戳: 每行记录产生该预测的 bundle 版本 (回归测试按 module 分组评估)

@@ -23,17 +23,19 @@ logger = logging.getLogger(__name__)
 
 from config.settings import LEGACY_ENTRY_GATE  # noqa: E402  (分板块概率边际)
 
+
 # board 命名兼容生产 (main/GEM/STAR) 与内部 (main/dual)
-_PROB_MARGIN = {
-    b: m
-    for key, m in LEGACY_ENTRY_GATE["prob_margin"].items()
-    for b in ({"main": ("main",), "dual": ("dual", "GEM", "STAR")}[key])
-}
-_PAIN_MAX = {
-    b: m
-    for key, m in LEGACY_ENTRY_GATE["pain_max"].items()
-    for b in ({"main": ("main",), "dual": ("dual", "GEM", "STAR")}[key])
-}
+def _board_map(key: str) -> dict[str, float]:
+    return {
+        b: m
+        for k, m in LEGACY_ENTRY_GATE[key].items()
+        for b in ({"main": ("main",), "dual": ("dual", "GEM", "STAR")}[k])
+    }
+
+
+_PROB_MARGIN = _board_map("prob_margin")
+_PAIN_MAX = _board_map("pain_max")
+_PAIN_SOFT_MAX = _board_map("pain_soft_max")
 
 SCHEMA_VERSION = "1.4"
 TOP_N = 15
@@ -347,6 +349,7 @@ class ListGenerator:
         # 1. 加权概率 > base_rate (bear 按声明参数比率收紧, 无新常数)
         #    2026-08-24 final p_reg 重扫 (LEGACY_ENTRY_GATE.prob_margin): main +0.08 /
         #    dual(GEM/STAR) +0.10 → main top-10 +3.53→+3.81% / dual +8.63→+9.20% (4 子窗稳定).
+        prob_ok = pd.Series(True, index=df.index)
         if self.entry_prob > 0:
             base = (
                 df["base_rate"] if "base_rate" in df.columns else df["prob_up"].mean()
@@ -358,8 +361,12 @@ class ListGenerator:
                 if "board" in df.columns
                 else 0.0
             )
-            ok &= cp > base * ratio + margin
+            prob_ok = cp > base * ratio + margin
+            ok &= prob_ok
+        df["_e7_prob_ok"] = prob_ok
         # 2/3/4. 净预期为正 (compound_ret > 0; pred_q50 > 0; bear 额外 pred_ret_3d > 0)
+        ret_ok = pd.Series(True, index=df.index)
+        q50_ok = pd.Series(True, index=df.index)
         if self.entry_ret_mult > 0:
             if "compound_ret" in df.columns:
                 compound = df["compound_ret"]
@@ -370,27 +377,36 @@ class ListGenerator:
                     if "pred_ret_10d" in df.columns
                     else pd.Series(0.0, index=df.index)
                 )
-            ok &= compound > 0
+            ret_ok = compound > 0
+            ok &= ret_ok
             # 闸3 (2026-08-05 定案 2d/3d/5d, 2026-08-09 去 2d): 3d/5d 中位数均须为正; 回退 1d pred_q50 (旧 bundle)
             if all(c in df.columns for c in ("pred_q50_3d", "pred_q50_5d")):
-                ok &= (df["pred_q50_3d"].fillna(compound) > 0) & (
+                q50_ok = (df["pred_q50_3d"].fillna(compound) > 0) & (
                     df["pred_q50_5d"].fillna(compound) > 0
                 )
+                ok &= q50_ok
             elif "pred_q50" in df.columns and df["pred_q50"].notna().any():
-                ok &= df["pred_q50"].fillna(compound) > 0
+                q50_ok = df["pred_q50"].fillna(compound) > 0
+                ok &= q50_ok
             if is_bear:
+                ret_ok &= df["pred_ret_3d"] > 0
                 ok &= df["pred_ret_3d"] > 0
+        df["_e7_ret_ok"] = ret_ok
+        df["_e7_q50_ok"] = q50_ok
         # [E2] 痛苦预警: pain_prob > 分板块上限 直接剔除 (安全网 #16)
         #    2026-08-14 定案 (LEGACY_ENTRY_GATE.pain_max): dual 0.5→0.4 → 叠加边际后
         #    250d OOS 命中 66.3→75.3% / 实得 +6.66→+7.39% (出票日 177→76, 宁缺毋滥);
         #    main 坍缩期无法评估保持 0.5.
+        pain_ok = pd.Series(True, index=df.index)
         if "pain_prob" in df.columns:
             pain_max = (
                 df["board"].astype(str).map(_PAIN_MAX).fillna(0.5)
                 if "board" in df.columns
                 else 0.5
             )
-            ok &= df["pain_prob"].fillna(0) <= pain_max
+            pain_ok = df["pain_prob"].fillna(0) <= pain_max
+            ok &= pain_ok
+        df["_e7_pain_ok"] = pain_ok
         # [安全网 #17] 公告事件窗禁买标记: announce_score == -1.0 直接剔除.
         # (attach_scores 对事件窗口标的置 -1.0; 旧实现只在 compute_scores 里 ×0.7 惩罚,
         #  标记票仍可进 top-N → 禁买不生效. 2026-08-09 改为硬剔除)
@@ -462,6 +478,7 @@ class ListGenerator:
                 "cap_position": 0.0 if empty else cap,
                 "empty": True,
                 "schema_version": SCHEMA_VERSION,
+                "gate_audit": pd.DataFrame(),
             }
         if len(candidates) == 0:
             return {
@@ -470,11 +487,52 @@ class ListGenerator:
                 "cap_position": 0.0,
                 "empty": True,
                 "schema_version": SCHEMA_VERSION,
+                "gate_audit": pd.DataFrame(),
             }
         # 计算排序分
         scored = self.compute_scores(candidates)
         # 准入过滤
         passed = self.entry_filter(scored, market_state=market_state)
+        # 闸审计 (2026-08-31): E7 被剔逐股 (pain 软区优先) + prob_gate 被剔逐股 →
+        # result["gate_audit"] → daily_pipeline 落盘 gate_audit_{date}.parquet →
+        # 交付"仅供参考"节 (信息不丢, 不改生产清单语义).
+        audit_rows: list[dict] = []
+        dropped_e7 = scored.loc[~scored.index.isin(passed.index)]
+        soft_max = (
+            dropped_e7["board"].astype(str).map(_PAIN_SOFT_MAX).fillna(0.5)
+            if len(dropped_e7) and "board" in dropped_e7.columns
+            else pd.Series(dtype=float)
+        )
+        for idx, r in dropped_e7.iterrows():
+            reason = "E7"
+            if not r.get("_e7_pain_ok", True):
+                pv = r.get("pain_prob")
+                sm = soft_max.get(idx, 0.5) if len(soft_max) else 0.5
+                reason = (
+                    "pain_soft"
+                    if pd.notna(pv) and float(pv) <= float(sm)
+                    else "pain_hard"
+                )
+            elif not r.get("_e7_q50_ok", True):
+                reason = "q50_neg"
+            elif not r.get("_e7_ret_ok", True):
+                reason = "ret_neg"
+            elif not r.get("_e7_prob_ok", True):
+                reason = "prob_margin"
+            audit_rows.append(
+                {
+                    "symbol": str(r["symbol"]),
+                    "board": r.get("board"),
+                    "stage": "E7",
+                    "reason": reason,
+                    "pain_prob": r.get("pain_prob"),
+                    "pred_prob": np.nan,
+                    "spread": np.nan,
+                    "thr": np.nan,
+                    "pred_ret_10d": r.get("pred_ret_10d"),
+                    "prob_up_10d": r.get("prob_up_10d"),
+                }
+            )
         if len(passed) == 0:
             logger.warning("E7 准入过滤后无候选, 输出空清单")
             return {
@@ -483,6 +541,7 @@ class ListGenerator:
                 "cap_position": 0.0,
                 "empty": True,
                 "schema_version": SCHEMA_VERSION,
+                "gate_audit": pd.DataFrame(audit_rows),
             }
         # [LEGACY_PROB_GATE] 并行式概率闸 (2026-08-15 定案): t3 门后、pred_ret_10d
         # 排名前 — 保留 ⇔ pred_prob > base_rate + margin (prob 只作闸, 排名键保持纯
@@ -497,6 +556,7 @@ class ListGenerator:
                     prob_gate["feats"],
                     prob_gate["tail"],
                     prob_gate["panel_dates"],
+                    audit_sink=audit_rows,
                 )
             except Exception as exc:
                 logger.error(
@@ -511,6 +571,7 @@ class ListGenerator:
                     "cap_position": 0.0,
                     "empty": True,
                     "schema_version": SCHEMA_VERSION,
+                    "gate_audit": pd.DataFrame(audit_rows),
                 }
         # 按预测幅度排序取 TOP_N (2026-08-07: 纯 pred_ret_3d 幅度, 回测赢 d3 混合; 行业分散在清单层面)
         passed = self._rank_by_magnitude(passed)
@@ -613,6 +674,7 @@ class ListGenerator:
             "cap_position": cap_position,
             "empty": False,
             "schema_version": SCHEMA_VERSION,
+            "gate_audit": pd.DataFrame(audit_rows),
         }
 
 

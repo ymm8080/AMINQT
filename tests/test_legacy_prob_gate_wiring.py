@@ -21,6 +21,18 @@ GATE_OFF = {"entry_prob": 0.0, "entry_ret_mult": 0.0}
 
 
 @pytest.fixture(autouse=True)
+def _hermetic_gate_state(tmp_path, monkeypatch):
+    """闸状态/模式隔离: 本模块断言 08-22 静态 margin 语义 (thr=0.42 被钉住);
+    gate 状态目录指 tmp 防写脏生产 data/gate_margin (自适应见 test_prob_gate_adaptive)."""
+    from config.settings import LEGACY_PROB_GATE
+
+    gdir = tmp_path / "gate_margin"
+    gdir.mkdir()
+    monkeypatch.setitem(LEGACY_PROB_GATE, "gate_margin_dir", str(gdir))
+    monkeypatch.setitem(LEGACY_PROB_GATE, "margin_mode", "fixed")
+
+
+@pytest.fixture(autouse=True)
 def _hermetic_risk_scans(tmp_path, monkeypatch):
     """FINAL STOCK SCAN 隔离: 空缓存 → 永不剔除 (不依赖外部缓存文件状态)."""
     from app.pipeline1 import risk_overlays

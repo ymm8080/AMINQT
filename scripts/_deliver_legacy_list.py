@@ -31,6 +31,47 @@ except Exception:  # pragma: no cover
 LIST_DIR = "data/lists"
 
 
+def _load_gate_audit(trade_date: str) -> pd.DataFrame | None:
+    """闸审计 (2026-08-31): E7 软区 pain / prob_gate 被剔逐股 — 交付"仅供参考"节."""
+    path = os.path.join(LIST_DIR, f"gate_audit_{trade_date}.parquet")
+    if not os.path.exists(path):
+        return None
+    try:
+        return pd.read_parquet(path)
+    except Exception:
+        return None
+
+
+def _gate_info_sections(audit: pd.DataFrame | None) -> list[tuple[str, pd.DataFrame]]:
+    """ "仅供参考"节: [(标题, 前10只)] — pain 软区 (差一点被剔) + prob_gate 近落选."""
+    if audit is None or not len(audit):
+        return []
+    out: list[tuple[str, pd.DataFrame]] = []
+    soft = audit[(audit["stage"] == "E7") & (audit["reason"] == "pain_soft")].copy()
+    if len(soft):
+        sort_col = "pred_ret_10d" if "pred_ret_10d" in soft.columns else "symbol"
+        soft = soft.sort_values(sort_col, ascending=False).head(10)
+        out.append(("pain 软区 (超 pain_max 但 ≤0.5, 仍不建议买)", soft))
+    gate = audit[audit["stage"] == "prob_gate"].copy()
+    if len(gate):
+        gate = gate.sort_values("spread", ascending=False).head(10)
+        out.append(("prob_gate 近落选 (spread 最高前10, 差一点过自适应阈)", gate))
+    return out
+
+
+def _write_gate_info_csv(
+    sections: list[tuple[str, pd.DataFrame]], path: str, module: str, trade_date: str
+) -> None:
+    rows = []
+    for title, sub in sections:
+        d = sub.copy()
+        d.insert(0, "info_group", title.split(" (")[0])
+        rows.append(d)
+    if not rows:
+        return
+    pd.concat(rows, ignore_index=True).to_csv(path, index=False)
+
+
 def resolve_module(df: pd.DataFrame, trade_date: str) -> str:
     """模块标识: 优先 current_meta.json; 无则从清单 model_version 列推导."""
     from app.pipeline1.model_meta import load_modules, module_id
@@ -82,6 +123,7 @@ def write_md(
     path: str,
     module: str,
     rejected: dict[str, str] | None = None,
+    gate_sections: list[tuple[str, pd.DataFrame]] | None = None,
 ) -> None:
     cols = [
         "symbol",
@@ -120,6 +162,27 @@ def write_md(
         # 被整体退回的板块: 仍出清单, 醒目标注未接受原因 (不静默跳过)
         for b, r in (rejected or {}).items():
             fh.write(f"⚠ {b} 未接受 (被退回): {r} — 当日未出股\n\n")
+        # 闸审计"仅供参考"节 (2026-08-31): 被闸拦下但信息量大的票 — 不建议买
+        for title, sec in gate_sections or []:
+            fh.write(f"### 仅供参考 — {title}\n\n")
+            cols = [
+                c
+                for c in (
+                    "symbol",
+                    "board",
+                    "pred_ret_10d",
+                    "pain_prob",
+                    "pred_prob",
+                    "spread",
+                    "thr",
+                )
+                if c in sec.columns
+            ]
+            for c in cols:
+                if sec[c].dtype == "float64":
+                    sec[c] = sec[c].map(lambda v: f"{v:.4f}" if pd.notna(v) else "")
+            fh.write(sec[cols].to_markdown(index=False))
+            fh.write("\n\n")
         fh.write(sub.to_markdown(index=False))
         fh.write("\n")
 
@@ -144,6 +207,16 @@ def main():
         cand = pd.read_parquet(cand_path)
     rejected = _board_reject_reasons(cand, df)
 
+    # 闸审计"仅供参考"节 (2026-08-31): pain 软区 / prob_gate 近落选 — 信息不丢
+    gate_audit = _load_gate_audit(trade_date)
+    gate_sections = _gate_info_sections(gate_audit)
+    if gate_sections:
+        info_path = os.path.join(
+            str(STOCK_LIST_DIR), f"legacy_gateinfo_{trade_date}__{module}.csv"
+        )
+        _write_gate_info_csv(gate_sections, info_path, module, trade_date)
+        print(f"[gateinfo] {info_path}")
+
     csv_path = os.path.join(
         str(STOCK_LIST_DIR), f"legacy_stocklist_{trade_date}__{module}.csv"
     )
@@ -153,7 +226,7 @@ def main():
     md_path = os.path.join(
         str(STOCK_LIST_DIR), f"legacy_stocklist_{trade_date}__{module}.md"
     )
-    write_md(df, md_path, module, rejected)
+    write_md(df, md_path, module, rejected, gate_sections)
     print(f"[md] {md_path}")
 
     for b, r in rejected.items():
@@ -187,6 +260,24 @@ def main():
             p = doc.add_paragraph()
             run = p.add_run(f"⚠ {b} 未接受 (被退回): {r} — 当日未出股")
             run.bold = True
+        for title, sec in gate_sections:
+            doc.add_paragraph(
+                f"⚠ 仅供参考 — {title} ({len(sec)} 只, 不建议买)"
+            ).bold = True
+            cols = [
+                c
+                for c in ("symbol", "board", "pred_ret_10d", "pain_prob", "spread")
+                if c in sec.columns
+            ]
+            tbl = doc.add_table(rows=1, cols=len(cols))
+            tbl.style = "Light Grid Accent 1"
+            for i, h in enumerate(cols):
+                tbl.rows[0].cells[i].text = h
+            for _, rr in sec.iterrows():
+                c = tbl.add_row().cells
+                for i, col in enumerate(cols):
+                    v = rr[col]
+                    c[i].text = f"{v:.4f}" if isinstance(v, float) else str(v)
         cols = [
             "symbol",
             "board",

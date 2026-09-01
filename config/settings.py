@@ -295,6 +295,9 @@ SHORTLIST_SCORE = {
 LEGACY_ENTRY_GATE = {
     "prob_margin": {"main": 0.08, "dual": 0.10},
     "pain_max": {"main": 1.0, "dual": 0.4},
+    # pain 软区上限 (2026-08-31): pain 在 (pain_max, pain_soft_max] 仍硬剔, 但记入
+    # gate_audit → 交付"仅供参考"节 (信息不丢, 闸不松动; 0.4 为 08-14 实证档不动)
+    "pain_soft_max": {"main": 1.0, "dual": 0.5},
 }
 
 # ── 板块 制度自适应门 (2026-08-05 用户: 砍板块不能写死, 按最新市场数据动态决定) ──
@@ -347,6 +350,17 @@ LEGACY_PROB_GATE = {
     "enable": True,            # False → 闸关闭 (概率头照常训练但不拦截)
     "gated_boards": ["main"],  # 08-22 定案: dual 全档有害→撤闸, 仅 main 过闸
     "margin": 0.22,            # 08-22 125d 重扫: main 0.22 (top-10 +5.08%, 3/3 子窗; 0.5 不可达)
+    # 自适应 margin (2026-08-31): 静态 0.22 在模型/市场分布漂移后不可达 → main 板
+    # 08-22 起每日全灭 (08-30 剔 70/70, 08-31 剔 109/109, 08-20 后 main 再未出票).
+    # rolling_q: margin_t = clip(Q_q(近 N 日参与闸逐股 spread=pred_prob-base_rate), min, max)
+    #   无历史 → 当日截面 bootstrap (top-q% 语义, 无未来数据); 均无 → 回退 margin (fail-open)
+    #   连续 3 决策日 100% 剔除 → 熔断放开至 margin_min; "fixed" → 回退静态档 (一键还原)
+    "margin_mode": "rolling_q",
+    "margin_q": 0.90,          # 目标保留参与池前 ~10%
+    "margin_min": 0.05,        # 地板: 差日子不许放低于 base+5% 的票
+    "margin_max": 0.25,        # 顶: 不超旧静态档上限
+    "spread_lookback_days": 20,  # spread 池化窗 (交易日, 严格 < 当日)
+    "gate_margin_dir": DATA_DIR / "gate_margin",  # spreads/decision WORM 状态 (逐日文件)
     "base_rate_days": 20,      # base_rate 观测窗 (交易日)
     "abs_target": 0.03,        # 概率头目标: mfe_3d >= 3%
     "refit_every_days": 21,    # 训练脚本: bundle 年龄 < 此值 → skip (交易日)
