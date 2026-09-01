@@ -3,16 +3,33 @@
 新包 vs current 生产包同窗 (split_window test 段) 每日板内 top10 头对头,
 已实现 label_pm_10d_net 日均净差: 全窗 ≥ 0 且前后半 ≥ tol_half (非劣容差) 才放行。
 oos["pass"] 保持纯 IC 语义 (recalibrate 链独读)。
+
+[09-01] 多 seed 集成判词: LGBM run-to-run 方差 ±0.04/日 ≈ 闸信号量级
+(08-30 PASS vs 08-31 FAIL 近同配置翻面) → 新包 10d_reg 头按 seeds 重训多次,
+各 seed 对 current 求差后按 median 聚合再判; 旧包恒单模型。
 """
 
 from __future__ import annotations
 
+import json
 import pickle
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from app.pipeline1.dual_track_trainer import DualTrackTrainer, top10_verdict
+import config.settings as st
+from app.pipeline1.dual_track_trainer import (
+    DualTrackTrainer,
+    _persist_second_vote_diag,
+    top10_verdict,
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_diag_dir(tmp_path, monkeypatch):
+    """判词明细落盘隔离到 tmp — 测试绝不写真实 DATA OTHERS."""
+    monkeypatch.setattr(st, "DATA_OTHERS_DIR", str(tmp_path / "DATA OTHERS"))
 
 
 class TestVerdictRule:
@@ -90,6 +107,18 @@ def _make_trainer(tmp_path) -> DualTrackTrainer:
     return tr
 
 
+def _stub_train_one(tr, sign: float) -> list:
+    """顶替 _train_one: 任意 seed 都返回固定方向模型 (免真实 LGBM), 记录 seed 调用."""
+    calls: list = []
+
+    def _fake(kind, segs, cols, board, seed=None):
+        calls.append(seed)
+        return _RankModel(sign), "label_pm_10d_net"
+
+    tr._train_one = _fake
+    return calls
+
+
 class TestSecondVote:
     def test_no_current_vacuous_pass(self, tmp_path):
         v = _make_trainer(tmp_path).top10_second_vote(_trained(sign=1.0))
@@ -98,6 +127,7 @@ class TestSecondVote:
 
     def test_new_better_passes(self, tmp_path):
         tr = _make_trainer(tmp_path)
+        _stub_train_one(tr, 1.0)
         with open(tmp_path / "main_current.pkl", "wb") as fh:
             pickle.dump(_cur_bundle(sign=-1.0), fh)  # 旧包选低位票 → 输
         v = tr.top10_second_vote(_trained(sign=1.0))
@@ -107,14 +137,13 @@ class TestSecondVote:
 
     def test_new_worse_fails(self, tmp_path):
         tr = _make_trainer(tmp_path)
+        _stub_train_one(tr, -1.0)
         with open(tmp_path / "main_current.pkl", "wb") as fh:
             pickle.dump(_cur_bundle(sign=1.0), fh)  # 旧包选高位票 → 赢
         v = tr.top10_second_vote(_trained(sign=-1.0))
         assert v["pass"] is False
 
     def test_disabled_config_skips(self, tmp_path, monkeypatch):
-        import config.settings as st
-
         monkeypatch.setattr(
             st, "LEGACY_TOP10_SECOND_VOTE", {"enable": False, "tol_half": -0.002}
         )
@@ -123,6 +152,7 @@ class TestSecondVote:
 
     def test_missing_cols_zero_filled(self, tmp_path):
         tr = _make_trainer(tmp_path)
+        _stub_train_one(tr, 1.0)
         with open(tmp_path / "main_current.pkl", "wb") as fh:
             pickle.dump(_cur_bundle(sign=-1.0, feature_cols=("f1", "f_nonbrute")), fh)
         v = tr.top10_second_vote(_trained(sign=1.0))
@@ -131,8 +161,94 @@ class TestSecondVote:
 
     def test_top5_split_reported(self, tmp_path):
         tr = _make_trainer(tmp_path)
+        _stub_train_one(tr, 1.0)
         with open(tmp_path / "main_current.pkl", "wb") as fh:
             pickle.dump(_cur_bundle(sign=-1.0), fh)
         v = tr.top10_second_vote(_trained(sign=1.0))
         for arm in ("new", "cur"):
             assert set(v["top5_split"][arm]) == {"top5", "b6_10"}
+
+
+class TestMultiSeedVerdict:
+    """多 seed 集成判词 (09-01): 各 seed 判词按 median 聚合, 明细 WORM 落盘."""
+
+    def _setup(self, tmp_path, signs: dict, cur_sign: float = -1.0):
+        tr = _make_trainer(tmp_path)
+        calls: list = []
+
+        def _fake(kind, segs, cols, board, seed=None):
+            calls.append(seed)
+            return _RankModel(signs[seed]), "label_pm_10d_net"
+
+        tr._train_one = _fake
+        with open(tmp_path / "main_current.pkl", "wb") as fh:
+            pickle.dump(_cur_bundle(sign=cur_sign), fh)  # 赢家 vs cur → delta ±0.002/日
+        return tr, calls
+
+    def test_median_selects_middle_seed(self, tmp_path):
+        tr, calls = self._setup(tmp_path, {42: 1.0, 43: -1.0, 44: 1.0})
+        v = tr.top10_second_vote(_trained(sign=1.0))
+        assert calls == [42, 43, 44]
+        assert v["pass"] is True  # 中位 = 赢家 seed (平局 seed 拉不动中位)
+        assert v["delta_full"] == pytest.approx(0.002)  # 非 mean (mean=0.00133)
+        assert v["per_seed"]["43"]["delta_full"] == pytest.approx(
+            0.0
+        )  # 与旧包同款 → 平
+        assert v["seeds"] == [42, 43, 44]
+
+    def test_median_two_losers_fail(self, tmp_path):
+        tr, _ = self._setup(
+            tmp_path, {42: 1.0, 43: -1.0, 44: -1.0}, cur_sign=1.0
+        )  # 旧包=赢家; seed42 平 (0), seed43/44 真输 (-0.002)
+        v = tr.top10_second_vote(_trained(sign=1.0))
+        assert v["pass"] is False  # 中位 = 输家 seed → 单 lucky draw 不再单独放行
+        assert v["delta_full"] == pytest.approx(-0.002)
+
+    def test_enabled_run_persists_worm_diag(self, tmp_path):
+        tr, _ = self._setup(tmp_path, {42: 1.0, 43: -1.0, 44: 1.0})
+        tr.top10_second_vote(_trained(sign=1.0))
+        files = list(
+            Path(st.DATA_OTHERS_DIR, "diag").glob("top10_second_vote_main_*.json")
+        )
+        assert len(files) == 1
+        payload = json.loads(files[0].read_text(encoding="utf-8"))
+        assert payload["median_verdict"]["pass"] is True
+        assert payload["agg"] == "median"
+        assert set(payload["per_seed"]) == {"42", "43", "44"}
+        for s in payload["per_seed"].values():
+            assert len(s["delta_daily"]) == 12  # per-seed per-day deltas
+
+    def test_disabled_multi_seed_behaves_legacy(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            st,
+            "LEGACY_TOP10_SECOND_VOTE",
+            {
+                "enable": True,
+                "tol_half": -0.002,
+                "top_n": 10,
+                "multi_seed_enable": False,
+            },
+        )
+        tr, calls = self._setup(tmp_path, {None: 1.0})
+        v = tr.top10_second_vote(_trained(sign=1.0))
+        assert calls == []  # 不重训
+        assert v["pass"] is True
+        assert "seeds" not in v and "per_seed" not in v
+        assert not Path(st.DATA_OTHERS_DIR, "diag").exists()  # 不落盘
+
+    def test_config_defaults_multi_seed_on(self):
+        cfg = st.LEGACY_TOP10_SECOND_VOTE
+        assert cfg["multi_seed_enable"] is True
+        assert cfg["multi_seed_seeds"] == [42, 43, 44]
+        assert cfg["multi_seed_agg"] == "median"
+
+
+class TestWormDiagFile:
+    def test_never_overwrites_existing(self, tmp_path):
+        p1 = _persist_second_vote_diag("main", {"a": 1}, ts="20260901_120000")
+        first = Path(p1).read_text(encoding="utf-8")
+        p2 = _persist_second_vote_diag("main", {"a": 2}, ts="20260901_120000")
+        assert p2 != p1
+        assert "20260901_120000" in Path(p2).name
+        assert Path(p1).read_text(encoding="utf-8") == first  # 首文件字节不动
+        assert json.loads(Path(p2).read_text(encoding="utf-8"))["a"] == 2

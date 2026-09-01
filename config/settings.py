@@ -74,6 +74,13 @@ LEGACY_TOP10_SECOND_VOTE = {
     "enable": True,
     "tol_half": -0.002,  # 前后半非劣容差 (/日)
     "top_n": 10,
+    # [09-01] 多 seed 集成判词: LGBM run-to-run 方差 ±0.04/日 ≈ 闸信号量级
+    # (08-30 PASS vs 08-31 FAIL 近同配置翻面) → 新包 10d_reg 头按 seeds 重训
+    # 多次, 各 seed 对 current 的 TOP10 日均差按 agg 聚合后再判; 旧包恒单模型
+    # 不重训. 关闭 (multi_seed_enable=False) 则回退单次训练行为.
+    "multi_seed_enable": True,
+    "multi_seed_seeds": [42, 43, 44],
+    "multi_seed_agg": "median",  # median | mean
 }
 
 # ── V3 Panel (single source of truth) ────────────────────────
