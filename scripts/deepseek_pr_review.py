@@ -283,7 +283,8 @@ Keep messages concise (one sentence per issue). Only report real violations.
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            # glm-4.6 reasoning on a large diff routinely exceeds 60s
+            with urllib.request.urlopen(req, timeout=300) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
                 msg = result["choices"][0]["message"]
                 content = msg.get("content") or ""
