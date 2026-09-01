@@ -223,6 +223,25 @@ def top10_verdict(delta: pd.Series, tol_half: float) -> dict:
     }
 
 
+def _persist_second_vote_diag(board: str, payload: dict, ts: str | None = None) -> str:
+    """第二票判词明细 WORM 落盘 (DATA OTHERS/diag, 时间戳后缀, 已存在则递增序号)."""
+    import json
+
+    from config.settings import DATA_OTHERS_DIR
+
+    diag_dir = os.path.join(str(DATA_OTHERS_DIR), "diag")
+    os.makedirs(diag_dir, exist_ok=True)
+    stamp = ts or pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(diag_dir, f"top10_second_vote_{board}_{stamp}.json")
+    n = 1
+    while os.path.exists(path):
+        path = os.path.join(diag_dir, f"top10_second_vote_{board}_{stamp}_{n}.json")
+        n += 1
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+    return path
+
+
 class DualTrackTrainer:
     """双轨训练 — 每个板块独立训练 6 个模型 (3 视界 × reg/cls)."""
 
@@ -326,6 +345,7 @@ class DualTrackTrainer:
         segs: dict[str, pd.DataFrame],
         feature_cols: list[str],
         board: str,
+        seed: int | None = None,
     ):
         import gc
 
@@ -359,10 +379,14 @@ class DualTrackTrainer:
         del train, es
         gc.collect()
 
+        params = model_params(board, kind)
+        if seed is not None:
+            # [09-01] 第二票多 seed 集成: 只换 random_state, 其余超参与生产头一致
+            params["random_state"] = int(seed)
         if kind.endswith("cls"):
-            model = lgb.LGBMClassifier(**model_params(board, kind))
+            model = lgb.LGBMClassifier(**params)
         else:
-            model = lgb.LGBMRegressor(**model_params(board, kind))
+            model = lgb.LGBMRegressor(**params)
         # es_dates 从 segs 取 (train/es DataFrame 已释放, segs 仍持有 es 引用)
         es_dates = (
             segs["es"]["date"].nunique() if "date" in segs["es"].columns else len(y_es)
@@ -402,7 +426,7 @@ class DualTrackTrainer:
                         floor,
                         floor,
                     )
-                    p = model_params(board, kind)
+                    p = dict(params)
                     p["n_estimators"] = floor
                     make = (
                         lgb.LGBMClassifier
@@ -781,6 +805,9 @@ class DualTrackTrainer:
         交付口径非劣闸 — 2026-08-29 超额标签案证明全截面 IC 会错杀头部改进:
         判据 = 新−旧 日均净 (label_pm_10d_net) 全窗 ≥ 0 且前后半 ≥ tol_half
         (非劣容差, 不要求严格更优). 无 current / 可比日不足 / 配置关 → 空过.
+        [09-01] 多 seed 集成: 新包 10d_reg 头按 multi_seed_seeds 重训多次,
+        各 seed 判词按 multi_seed_agg (默认 median) 聚合后裁决, 消除单次训练
+        run-to-run 方差 (±0.04/日 ≈ 闸信号); 明细 WORM 落盘 DATA OTHERS/diag.
         """
         from config.settings import LEGACY_TOP10_SECOND_VOTE
 
@@ -827,12 +854,11 @@ class DualTrackTrainer:
                     still[:5],
                 )
 
-        daily: dict[str, pd.DataFrame] = {}
-        split: dict[str, dict[str, float]] = {}
         top_n = int(cfg.get("top_n", 10))
-        for name, bundle in (("new", trained), ("cur", cur)):
+        tol_half = float(cfg.get("tol_half", -0.002))
+
+        def _daily(bundle: dict, model) -> tuple[pd.Series, dict[str, float]]:
             cols = bundle["feature_cols"]
-            model, _label = bundle["models"]["10d_reg"]
             t = test[["symbol", "date", "label_pm_10d_net"]].copy()
             t["pred"] = model.predict(
                 np.nan_to_num(test[cols].to_numpy(dtype=float), nan=0.0)
@@ -840,36 +866,133 @@ class DualTrackTrainer:
             t = t.sort_values(["date", "pred"], ascending=[True, False])
             t["rk"] = t.groupby("date").cumcount() + 1
             p = t[t["rk"] <= top_n].dropna(subset=["label_pm_10d_net"])
-            daily[name] = p.groupby("date")["label_pm_10d_net"].mean()
+            daily_mean = p.groupby("date")["label_pm_10d_net"].mean()
             p = p.copy()
             p["bucket"] = np.where(p["rk"] <= 5, "top5", "b6_10")
-            split[name] = p.groupby("bucket")["label_pm_10d_net"].mean().to_dict()
+            return daily_mean, p.groupby("bucket")["label_pm_10d_net"].mean().to_dict()
 
-        common = daily["new"].index.intersection(daily["cur"].index)
+        # [09-01] 多 seed 集成: 单次训练 run-to-run 方差 ±0.04/日 ≈ 闸信号 →
+        # 新包 10d_reg 头按 seeds 重训取判词中位; 旧包/关闭时恒单模型.
+        seeds = (
+            [int(s) for s in cfg.get("multi_seed_seeds", ())]
+            if cfg.get("multi_seed_enable")
+            else []
+        )
+        agg_fn = None
+        agg_name = ""
+        if seeds:
+            agg_name = str(cfg.get("multi_seed_agg", "median"))
+            agg_fn = {"median": np.median, "mean": np.mean}.get(agg_name)
+            if agg_fn is None:
+                raise ValueError(
+                    f"LEGACY_TOP10_SECOND_VOTE.multi_seed_agg 不支持: {agg_name} "
+                    "(可选 median/mean)"
+                )
+
+        daily_cur, split_cur = _daily(cur, cur["models"]["10d_reg"][0])
+        per_seed: dict = {}
+        if seeds:
+            for seed in seeds:
+                model, _label = self._train_one(
+                    "10d_reg",
+                    trained["segs"],
+                    trained["feature_cols"],
+                    trained["board"],
+                    seed=seed,
+                )
+                d, sp = _daily(trained, model)
+                per_seed[seed] = {"daily": d, "split": sp}
+        else:
+            d, sp = _daily(trained, trained["models"]["10d_reg"][0])
+            per_seed[None] = {"daily": d, "split": sp}
+
+        common = daily_cur.index
+        for r in per_seed.values():
+            common = common.intersection(r["daily"].index)
         if len(common) < 10:
             logger.warning(
                 "[%s] TOP10 第二票: 可比日仅 %d (<10), 空过",
                 trained["board"],
                 len(common),
             )
-            return {
-                "skipped": True,
-                "pass": True,
-                "reason": f"common_days={len(common)}",
+            return {"skipped": True, "pass": True, "reason": f"common_days={len(common)}"}
+
+        verdicts: dict = {}
+        for seed, r in per_seed.items():
+            verdicts[seed] = top10_verdict(
+                r["daily"].loc[common] - daily_cur.loc[common], tol_half
+            )
+        if len(verdicts) == 1:
+            v = dict(next(iter(verdicts.values())))
+        else:
+            v = {
+                "delta_full": float(agg_fn([t["delta_full"] for t in verdicts.values()])),
+                "delta_h1": float(agg_fn([t["delta_h1"] for t in verdicts.values()])),
+                "delta_h2": float(agg_fn([t["delta_h2"] for t in verdicts.values()])),
             }
-        v = top10_verdict(
-            daily["new"].loc[common] - daily["cur"].loc[common],
-            tol_half=float(cfg.get("tol_half", -0.002)),
-        )
+            v["pass"] = bool(
+                v["delta_full"] >= 0
+                and v["delta_h1"] >= tol_half
+                and v["delta_h2"] >= tol_half
+            )
+
+        if seeds:
+            new_net = float(
+                agg_fn([float(r["daily"].loc[common].mean()) for r in per_seed.values()])
+            )
+            buckets = sorted({b for r in per_seed.values() for b in r["split"]})
+            split_new = {
+                b: float(agg_fn([float(r["split"][b]) for r in per_seed.values()]))
+                for b in buckets
+            }
+        else:
+            r = per_seed[None]
+            new_net = float(r["daily"].loc[common].mean())
+            split_new = {b: float(x) for b, x in r["split"].items()}
+
         out = {
             **v,
             "days": int(len(common)),
-            "new_net": float(daily["new"].loc[common].mean()),
-            "cur_net": float(daily["cur"].loc[common].mean()),
+            "new_net": new_net,
+            "cur_net": float(daily_cur.loc[common].mean()),
             "top5_split": {
-                k: {b: float(x) for b, x in d.items()} for k, d in split.items()
+                "new": split_new,
+                "cur": {b: float(x) for b, x in split_cur.items()},
             },
         }
+        if seeds:
+            out["seeds"] = seeds
+            out["agg"] = agg_name
+            out["per_seed"] = {str(s): verdicts[s] for s in seeds}
+            payload = {
+                "board": trained["board"],
+                "generated_at": pd.Timestamp.now().isoformat(),
+                "seeds": seeds,
+                "agg": agg_name,
+                "days": int(len(common)),
+                "tol_half": tol_half,
+                "median_verdict": v,
+                "cur_net": out["cur_net"],
+                "per_seed": {
+                    str(seed): {
+                        "verdict": verdicts[seed],
+                        "new_net": float(r["daily"].loc[common].mean()),
+                        "delta_daily": {
+                            day.strftime("%Y-%m-%d"): float(x)
+                            for day, x in (
+                                r["daily"].loc[common] - daily_cur.loc[common]
+                            ).items()
+                        },
+                        "top5_split": {b: float(x) for b, x in r["split"].items()},
+                    }
+                    for seed, r in per_seed.items()
+                },
+            }
+            diag_path = _persist_second_vote_diag(trained["board"], payload)
+            logger.info(
+                "[%s] TOP10 第二票明细 (seed×%d %s): %s",
+                trained["board"], len(seeds), agg_name, diag_path,
+            )
         logger.info(
             "[%s] TOP10 第二票: %d 日 | 新 %+.4f vs 旧 %+.4f/日 | 差 全窗 %+.4f "
             "前半 %+.4f 后半 %+.4f | %s",
