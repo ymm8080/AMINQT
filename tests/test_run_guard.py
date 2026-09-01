@@ -24,7 +24,14 @@ def _proc(pid, name, *cmdline):
 
 def test_find_conflicts_matches_sentinel_cmdline():
     procs = [
-        _proc(100, "python.exe", "python", "-u", "scripts/_retrain_legacy_full.py", "20260901")
+        _proc(
+            100,
+            "python.exe",
+            "python",
+            "-u",
+            "scripts/_retrain_legacy_full.py",
+            "20260901",
+        )
     ]
     hits = find_conflicts(procs=procs)
     assert len(hits) == 1
@@ -34,12 +41,16 @@ def test_find_conflicts_matches_sentinel_cmdline():
 
 def test_find_conflicts_ignores_non_python_cmdline_matches():
     """编辑器/终端 cmdline 恰含脚本路径 (打开的文件标签) 不得误判为冲突."""
-    procs = [_proc(200, "Code.exe", "Code", "--file", "scripts/_retrain_legacy_full.py")]
+    procs = [
+        _proc(200, "Code.exe", "Code", "--file", "scripts/_retrain_legacy_full.py")
+    ]
     assert find_conflicts(procs=procs) == []
 
 
 def test_find_conflicts_matches_module_runner_invocation():
-    procs = [_proc(101, "python.exe", "python", "-u", "-m", "app.pipeline_parallel.runner")]
+    procs = [
+        _proc(101, "python.exe", "python", "-u", "-m", "app.pipeline_parallel.runner")
+    ]
     hits = find_conflicts(procs=procs)
     assert len(hits) == 1
     assert hits[0]["sentinel"] == "app.pipeline_parallel.runner"
@@ -47,7 +58,9 @@ def test_find_conflicts_matches_module_runner_invocation():
 
 def test_find_conflicts_excludes_own_pid():
     """哨兵子串总出现在自己的 argv 里 — 自身 PID 必须排除, 否则永远自拦."""
-    procs = [_proc(os.getpid(), "python.exe", "python", "-c", "x  # _gen_legacy_list.py")]
+    procs = [
+        _proc(os.getpid(), "python.exe", "python", "-c", "x  # _gen_legacy_list.py")
+    ]
     assert find_conflicts(procs=procs) == []
 
 
@@ -82,9 +95,7 @@ def test_skip_reason_live_process_has_top_priority():
 
 def test_skip_reason_live_process_lists_count():
     conflicts = [{"pid": 1, "sentinel": "a"}, {"pid": 2, "sentinel": "b"}]
-    code, detail = skip_reason(
-        conflicts, today_state=None, deliverable_exists=False
-    )
+    code, detail = skip_reason(conflicts, today_state=None, deliverable_exists=False)
     assert code == "live_process"
     assert "PID 1" in detail and "2 个" in detail
 
@@ -125,4 +136,7 @@ def test_skip_reason_passes_when_clear():
 def test_skip_reason_non_ok_states_do_not_block():
     """failed/interrupted 允许重试; running 且无活进程 = 上条链死了, 应继续跑."""
     for st in ("failed", "interrupted", "running"):
-        assert skip_reason([], today_state={"status": st}, deliverable_exists=False) is None
+        assert (
+            skip_reason([], today_state={"status": st}, deliverable_exists=False)
+            is None
+        )

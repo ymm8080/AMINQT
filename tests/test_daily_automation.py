@@ -207,7 +207,9 @@ def test_startup_guard_verdicts(monkeypatch):
     assert ma._run_startup_guard("20260901") == "go"
     # 今日手动取消 → skip
     monkeypatch.setattr(
-        ma, "_read_state", lambda tag: {"status": "cancelled", "reason": "manual_cancel"}
+        ma,
+        "_read_state",
+        lambda tag: {"status": "cancelled", "reason": "manual_cancel"},
     )
     assert ma._run_startup_guard("20260901") == "skip"
     # 今日清单已交付 → skip
