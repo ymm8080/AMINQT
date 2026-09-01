@@ -68,3 +68,18 @@ def agg_holdertrade_daily(raw: pd.DataFrame) -> pd.DataFrame:
         )
         .sort_values("date")
     )
+
+
+def select_unwritten_agg(agg: pd.DataFrame, prev_trade_date, trade_date) -> pd.DataFrame:
+    """保留上一交易日之后的公告聚合 (非交易日公告落到下一交易日行).
+
+    _daily_fetch 每日只写今日行, 旧过滤 date == TRADE_DATE 把非交易日 ann_date
+    的聚合整条丢失 (002881 2025-11-15 周六增持实证). 改为 date > 上一交易日:
+    周末事件随下一交易日行写入一次, 跨日重跑不重复计数. 空面板 (prev=NaT)
+    退回仅当日. 迟发公告 (ann_date ≤ 上一交易日但今日才可见) 不在此修复范围,
+    走一次性回填 (_backfill_holder_events.py).
+    """
+    prev = pd.Timestamp(prev_trade_date)
+    if pd.isna(prev):
+        prev = pd.Timestamp(trade_date) - pd.Timedelta(days=1)
+    return agg[agg["date"] > prev]

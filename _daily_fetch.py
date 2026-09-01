@@ -720,7 +720,8 @@ except Exception as e:
 # ── 6.7 holdertrade 当日事件 → 10 列 (dim31/GLM 上游) ──
 # 语义同 panel_builder agg_map + _backfill_holder_ratio (见 holdertrade_agg.py, 单一权威).
 # 事件日 GLM 4 列以真实聚合值覆盖 ffill 陈旧值; evt/ratio 6 列仅事件日有值 (稀疏, 不 ffill,
-# dim31 内部自行 ffill + decay). 拉 10 天窗口: 迟发公告以 T+1 语义被当日行捕获;
+# dim31 内部自行 ffill + decay). 拉 10 天窗口: 非交易日公告按 >上一交易日
+# 过滤落今日行 (select_unwritten_agg, 周六公告不再丢);
 # 更早历史行缺口由一次性回填 (_backfill_holder_events.py) / 面板重建负责.
 if any(c in panel_cols for c in (
     "sh_net_change_sign", "sh_change_amt_total", "sh_change_vol", "sh_net_sign",
@@ -729,7 +730,10 @@ if any(c in panel_cols for c in (
 )):
     try:
         from app.pipeline1.data_supply import DataSupplyChain
-        from app.pipeline1.holdertrade_agg import agg_holdertrade_daily
+        from app.pipeline1.holdertrade_agg import (
+            agg_holdertrade_daily,
+            select_unwritten_agg,
+        )
 
         _ht_start = (pd.Timestamp(TRADE_DATE) - pd.Timedelta(days=10)).strftime("%Y%m%d")
         ht = pd.DataFrame()
@@ -744,7 +748,13 @@ if any(c in panel_cols for c in (
                 time.sleep(5 * (_attempt + 1))
         if len(ht):
             _agg = agg_holdertrade_daily(ht)
-            _agg = _agg[_agg["date"] == pd.Timestamp(TRADE_DATE)]
+            _agg = select_unwritten_agg(
+                _agg,
+                yesterday.loc[
+                    yesterday["date"] < pd.Timestamp(TRADE_DATE), "date"
+                ].max(),
+                TRADE_DATE,
+            )
             if len(_agg):
                 smap = _agg.set_index("symbol")
                 for c in _agg.columns:
