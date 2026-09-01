@@ -509,10 +509,20 @@ class TestFeatureSelectorSelection:
             return json.load(f)
 
     def test_select_main_bruteforce_dedup(self):
-        """MAIN board runs bruteforce + dedup pipeline."""
+        """MAIN board runs bruteforce + dedup pipeline (production now pins main;
+        this test exercises the unpinned path via explicit empty-pin config)."""
         df = _make_small_df(n_symbols=5, n_dates=40)
+        unpinned_cfg = {
+            "main": {
+                "pipeline": "bruteforce_dedup",
+                "nan_threshold": 0.95,
+                "dedup_threshold": 0.7,
+                "max_features": 350,
+                "pinned": "",
+            }
+        }
         with tempfile.TemporaryDirectory() as tmp:
-            sel = FeatureSelector(registry_dir=tmp)
+            sel = FeatureSelector(config=unpinned_cfg, registry_dir=tmp)
             features = sel.select(df, "main")
             assert len(features) > 10
             # All should be valid column names
@@ -524,6 +534,30 @@ class TestFeatureSelectorSelection:
             assert m["n_dedup"] >= len(features)
             assert "capped" in m and "max_features" in m
             assert m["dedup_threshold"] > 0
+
+    def test_select_main_pinned(self):
+        """MAIN 冻结路径: pin 命中即返回 pin 特征集 (生产口径, 同 dual gate_d)."""
+        import json as _json
+        import os as _os
+
+        df = _make_small_df(n_symbols=5, n_dates=40)
+        with tempfile.TemporaryDirectory() as tmp:
+            pin = {
+                "board": "main",
+                "pipeline": "bruteforce_dedup",
+                "created": "2026-08-31T20:05:00",
+                "selected_count": 3,
+                "features": ["close", "volume", "amount"],
+            }
+            pin_path = _os.path.join(tmp, "selected_main_pinned.json")
+            with open(pin_path, "w", encoding="utf-8") as fh:
+                _json.dump(pin, fh)
+            sel = FeatureSelector(registry_dir=tmp)
+            features = sel.select(df, "main")
+            assert features == ["close", "volume", "amount"]
+            snap = self._latest_snapshot(tmp, "main")
+            assert snap["metrics"]["pinned"] is True
+            assert snap["metrics"]["n_returned"] == 3
 
     def test_select_dual_gate_d(self):
         """DUAL board runs gate_d pipeline (features built via FeatureEngineV35)."""

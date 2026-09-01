@@ -1295,6 +1295,9 @@ class FeatureSelector:
             # [2026-08-12] 选择过大 OOM 修复: 全量 dedup 每次选 ~3506 → 注入/训练
             # OOM → 永远回退. 保底 FeatureEngine 基集, 剩余预算按方差补 brute.
             "max_features": 350,
+            # [2026-08-31] 特征集冻结 (用户批准): 每周重选换血 32/353 列 → 第二票方差.
+            # 填快照名 = 冻结 (同 dual gate_d 语义); 更新 pin = 显式动作.
+            "pinned": "selected_main_pinned.json",
         },
         "dual": {
             "pipeline": "gate_d",
@@ -1414,6 +1417,43 @@ class FeatureSelector:
         return buckets
 
     def _run_bruteforce_dedup(self, df, board, cfg, generator=None, metrics_out=None):
+        # [2026-08-31] 特征集冻结 (镜像 gate_d pin 语义): 每周重选换血 32/353 列
+        # (08-31 实测) 是 main TOP10 第二票的第二大方差源. pin 指向既有快照,
+        # 命中即返回 (缺文件 fail fast), 选择计算整体短路 (诊断指标无需保留).
+        # 更新 pin = 重跑选择后把新快照复制为 pinned 文件 (人工核对 + 250d replay).
+        pinned = (cfg.get("pinned") or "").strip()
+        if pinned:
+            pin_path = os.path.join(self.registry_dir, pinned)
+            if not os.path.exists(pin_path):
+                raise RuntimeError(
+                    f"[{board}] 冻结配置指向不存在的 pin 文件: {pin_path} "
+                    f"(更新 pin = 重跑选择后把新快照复制为 {pinned})"
+                )
+            with open(pin_path, encoding="utf-8") as fh:
+                pin_feats = json.load(fh).get("features", [])
+            nan_thr = cfg.get("nan_threshold", 0.95)
+            avail = [
+                f
+                for f in pin_feats
+                if f in df.columns and float(df[f].isna().mean()) < nan_thr
+            ]
+            missing = [f for f in pin_feats if f not in avail]
+            if missing:
+                logger.warning(
+                    "[%s] pin 特征 %d/%d 不在候选集或 nan 超阈, 已剔除 (前10): %s",
+                    board,
+                    len(missing),
+                    len(pin_feats),
+                    missing[:10],
+                )
+            if metrics_out is not None:
+                metrics_out.update(pinned=True, n_returned=len(avail))
+            logger.info(
+                "[%s] 特征集冻结: 返回 pin %d 特征 (选择计算短路)",
+                board,
+                len(avail),
+            )
+            return avail
         if generator is None:
             generator = BruteForceGenerator()
         raw_cols = generator._eligible(df)
