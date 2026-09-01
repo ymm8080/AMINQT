@@ -7,6 +7,7 @@
 - 非 _brute_ 缺失列不归本函数管 (predictor 补 0 语义不变)
 - 索引/行序保持, 无关列不动
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -34,7 +35,9 @@ def _frame(dtype: str = "float64") -> pd.DataFrame:
 
 
 def test_brute_bases_dedup_sorted():
-    assert brute_bases(["A04_brute_pct1", "VAR5_brute_mom40", "A04_brute_pct5", "plain"]) == [
+    assert brute_bases(
+        ["A04_brute_pct1", "VAR5_brute_mom40", "A04_brute_pct5", "plain"]
+    ) == [
         "A04",
         "VAR5",
     ]
@@ -57,8 +60,12 @@ def test_pct_mom_values_match_training_math():
     expect_pct[5:] = (s[5:] - s[:-5]) / np.abs(s[:-5]) * 100
     expect_mom = np.full(n, np.nan)
     expect_mom[40:] = s[40:] / np.abs(s[:-40])
-    np.testing.assert_allclose(g["A04_brute_pct5"].to_numpy(dtype=float), expect_pct, equal_nan=True)
-    np.testing.assert_allclose(g["A04_brute_mom40"].to_numpy(dtype=float), expect_mom, equal_nan=True)
+    np.testing.assert_allclose(
+        g["A04_brute_pct5"].to_numpy(dtype=float), expect_pct, equal_nan=True
+    )
+    np.testing.assert_allclose(
+        g["A04_brute_mom40"].to_numpy(dtype=float), expect_mom, equal_nan=True
+    )
     # 无关列不动
     assert df["keep"].equals(before["keep"])
     assert df["A04"].equals(before["A04"])
@@ -100,7 +107,9 @@ def test_custom_index_row_alignment():
     g = df[df["symbol"] == "600000"].sort_values("date")
     s = g["A04"].to_numpy(dtype=float)
     expect = (s[5:] - s[:-5]) / np.abs(s[:-5]) * 100
-    np.testing.assert_allclose(g["A04_brute_pct5"].to_numpy(dtype=float)[5:], expect, equal_nan=True)
+    np.testing.assert_allclose(
+        g["A04_brute_pct5"].to_numpy(dtype=float)[5:], expect, equal_nan=True
+    )
 
 
 if __name__ == "__main__":
