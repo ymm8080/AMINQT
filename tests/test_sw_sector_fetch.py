@@ -119,14 +119,22 @@ def test_sw_daily_adapter_renames_pct_change():
     assert got["pct_chg"].iloc[0] == -2.01
     assert "pct_change" not in got.columns
 
-    empty = sw_daily_adapter(_FakePro(pd.DataFrame()))("801010.SI", "20260902", "20260902")
+    empty = sw_daily_adapter(_FakePro(pd.DataFrame()))(
+        "801010.SI", "20260902", "20260902"
+    )
     assert len(empty) == 0
 
 
 def test_sw_daily_adapter_end_to_end_with_fetch_sw_sector_map():
     """adapter 输出可直接喂 fetch_sw_sector_map: 单位换算链路无回归."""
-    frame = pd.DataFrame({"pct_change": [1.23], "close": [4567.89], "vol": [2_345_678.0]})
+    frame = pd.DataFrame(
+        {"pct_change": [1.23], "close": [4567.89], "vol": [2_345_678.0]}
+    )
     m = fetch_sw_sector_map(
         sw_daily_adapter(_FakePro(frame)), {"A": "801010"}, {"A"}, "20260902", delay=0
     )
-    assert m["A"] == {"sw_ret_1d": 0.0123, "sw_index_close": 4567.89, "sw_index_vol": 2.35}
+    assert m["A"] == {
+        "sw_ret_1d": 0.0123,
+        "sw_index_close": 4567.89,
+        "sw_index_vol": 2.35,
+    }

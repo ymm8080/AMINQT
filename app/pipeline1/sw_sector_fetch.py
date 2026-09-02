@@ -84,9 +84,11 @@ def sw_daily_adapter(pro):
     涨跌幅列名为 pct_change (index_daily 叫 pct_chg) → 重命名保持
     fetch_sw_sector_map 取数口径不变; 单位口径两路线一致 (pct 为 %, vol 为 手).
     """
+
     def _fetch(ts_code, start_date, end_date):
         df = pro.sw_daily(ts_code=ts_code, start_date=start_date, end_date=end_date)
         if df is not None and len(df):
             df = df.rename(columns={"pct_change": "pct_chg"})
         return df
+
     return _fetch
