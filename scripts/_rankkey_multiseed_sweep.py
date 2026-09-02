@@ -56,6 +56,7 @@ from __future__ import annotations
 import argparse
 import gc
 import json
+import logging
 import os
 import sys
 import time
@@ -120,6 +121,11 @@ KEY_LABELS = {
     "key:blend_new": "blend_new=mag_wf×prob_wf",
     "key:blend_ex": "blend_ex=mag_wf×(prob_wf−base_prod)",
 }
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+    logger.setLevel(logging.INFO)
 
 
 # ── 纯函数 (单测见 tests/test_rankkey_multiseed.py) ─────────────────────────
@@ -338,7 +344,7 @@ def _wf_prob_board(
     for seed in SEEDS:
         ckpt = DATA_DIR / f"_diag_rankkey_wf_prob_{board}_s{seed}_e{eval_n}.parquet"
         if ckpt.exists():
-            print(f"[wf-prob:{board}] seed={seed} 从检查点恢复 {ckpt.name}", flush=True)
+            logger.info("[wf-prob:%s] seed=%s 从检查点恢复 %s", board, seed, ckpt.name)
             continue
         phase = PHASE_STEP_DAYS * SEEDS.index(seed)
         t0 = time.time()
@@ -352,20 +358,27 @@ def _wf_prob_board(
                 model = LGBMClassifier(
                     **{**prob_head.LGB_PARAMS, "random_state": int(seed)}
                 )
-                model.fit(x_all[tr], y.loc[tr].to_numpy())
+                model.fit(np.nan_to_num(x_all[tr]), y.loc[tr].to_numpy())
                 n_refits += 1
             te = idx == pos
             if not te.any():
                 continue
-            p = model.predict_proba(x_all[te])[:, 1]
+            p = model.predict_proba(np.nan_to_num(x_all[te]))[:, 1]
             rows.append(
                 feat.loc[te, ["symbol", "date"]].assign(pred=p).reset_index(drop=True)
             )
-        pd.concat(rows, ignore_index=True).to_parquet(str(ckpt))
-        print(
-            f"[wf-prob:{board}] seed={seed} 完成: {n_refits} 次重训 "
-            f"→ {ckpt.name} ({time.time() - t0:.0f}s)",
-            flush=True,
+        try:
+            pd.concat(rows, ignore_index=True).to_parquet(str(ckpt))
+        except Exception as exc:
+            logger.error("[wf-prob:%s] seed=%s 检查点写入失败: %s", board, seed, exc)
+            raise
+        logger.info(
+            "[wf-prob:%s] seed=%s 完成: %s 次重训 → %s (%.0fs)",
+            board,
+            seed,
+            n_refits,
+            ckpt.name,
+            time.time() - t0,
         )
     del x_all
     gc.collect()
@@ -385,7 +398,7 @@ def _wf_reg_board(
     for seed in SEEDS:
         ckpt = DATA_DIR / f"_diag_rankkey_wf_reg_{board}_s{seed}_e{eval_n}.parquet"
         if ckpt.exists():
-            print(f"[wf-reg:{board}] seed={seed} 从检查点恢复 {ckpt.name}", flush=True)
+            logger.info("[wf-reg:%s] seed=%s 从检查点恢复 %s", board, seed, ckpt.name)
             continue
         phase = PHASE_STEP_DAYS * SEEDS.index(seed)
         t0 = time.time()
@@ -408,22 +421,34 @@ def _wf_reg_board(
                 continue
             X_te = np.nan_to_num(feat.loc[te, feat_cols_reg].to_numpy(), nan=0.0)
             pred = model.predict(X_te)
+            # 注: 训练侧的 nan_to_num 在 trainer._train_one 内部已处理
             rows.append(
                 feat.loc[te, ["symbol", "date"]]
                 .assign(pred=pred)
                 .reset_index(drop=True)
             )
             if (k + 1) % 25 == 0 or k == len(eval_days) - 1:
-                print(
-                    f"[wf-reg:{board}] seed={seed} {k + 1}/{len(eval_days)} "
-                    f"(refits={n_refits}, {time.time() - t0:.0f}s)",
-                    flush=True,
+                logger.info(
+                    "[wf-reg:%s] seed=%s %s/%s (refits=%s, %.0fs)",
+                    board,
+                    seed,
+                    k + 1,
+                    len(eval_days),
+                    n_refits,
+                    time.time() - t0,
                 )
-        pd.concat(rows, ignore_index=True).to_parquet(str(ckpt))
-        print(
-            f"[wf-reg:{board}] seed={seed} 完成: {n_refits} 次重训 → {ckpt.name} "
-            f"({time.time() - t0:.0f}s)",
-            flush=True,
+        try:
+            pd.concat(rows, ignore_index=True).to_parquet(str(ckpt))
+        except Exception as exc:
+            logger.error("[wf-reg:%s] seed=%s 检查点写入失败: %s", board, seed, exc)
+            raise
+        logger.info(
+            "[wf-reg:%s] seed=%s 完成: %s 次重训 → %s (%.0fs)",
+            board,
+            seed,
+            n_refits,
+            ckpt.name,
+            time.time() - t0,
         )
 
 
@@ -443,26 +468,34 @@ def main() -> int:
 
     hits = find_conflicts()
     if hits:
-        print(f"[guard] 存活重活进程冲突, 退出: {hits}", flush=True)
+        logger.error("[guard] 存活重活进程冲突, 退出: %s", hits)
         return 2
 
     _unpin_deterministic()
 
     t0 = time.time()
-    print(
-        f"[cfg] slice={args.slice} eval={args.eval} seeds={SEEDS} "
-        f"(refit 相位错位 {PHASE_STEP_DAYS}d/seed) refit_every={REFIT_EVERY} "
-        f"embargo(prob/reg)={PROB_EMBARGO}/{REG_EMBARGO} "
-        f"depths={DEPTHS} n_sub={N_SUB} q50_sign_gate={Q50_SIGN_GATE}",
-        flush=True,
+    logger.info(
+        "[cfg] slice=%s eval=%s seeds=%s (refit 相位错位 %sd/seed) refit_every=%s "
+        "embargo(prob/reg)=%s/%s depths=%s n_sub=%s q50_sign_gate=%s",
+        args.slice,
+        args.eval,
+        SEEDS,
+        PHASE_STEP_DAYS,
+        REFIT_EVERY,
+        PROB_EMBARGO,
+        REG_EMBARGO,
+        DEPTHS,
+        N_SUB,
+        Q50_SIGN_GATE,
     )
 
     if args.pool_from_ckpt:
         ckpt_pool, ckpt_base = _load_pool_from_ckpt(args.eval)
-        print(
-            f"[ckpt] 池重建 {len(ckpt_pool):,} 行 "
-            f"(q50_sign_gate={Q50_SIGN_GATE}, {time.time() - t0:.0f}s)",
-            flush=True,
+        logger.info(
+            "[ckpt] 池重建 %s 行 (q50_sign_gate=%s, %.0fs)",
+            f"{len(ckpt_pool):,}",
+            Q50_SIGN_GATE,
+            time.time() - t0,
         )
         return _analyze(ckpt_pool, ckpt_base, args.eval, t0)
 
@@ -471,31 +504,39 @@ def main() -> int:
     features = FeatureEngineV35()
     lister = ListGenerator()
 
-    print(f"[load] panel {PANEL_V3_PATH}", flush=True)
+    logger.info("[load] panel %s", PANEL_V3_PATH)
     panel = load_panel_v3(path=PANEL_V3_PATH)
-    print(
-        f"[load] {len(panel):,}r max={panel['date'].max()} ({time.time() - t0:.0f}s)",
-        flush=True,
+    logger.info(
+        "[load] %sr max=%s (%.0fs)",
+        f"{len(panel):,}",
+        panel["date"].max(),
+        time.time() - t0,
     )
     dates_all = sorted(pd.unique(pd.to_datetime(panel["date"])))
     cut = dates_all[-args.slice]
     panel = panel[pd.to_datetime(panel["date"]) >= cut].reset_index(drop=True)
-    print(
-        f"[slice] {pd.Timestamp(cut).date()}.. {len(panel):,}r ({time.time() - t0:.0f}s)",
-        flush=True,
+    logger.info(
+        "[slice] %s.. %sr (%.0fs)",
+        pd.Timestamp(cut).date(),
+        f"{len(panel):,}",
+        time.time() - t0,
     )
 
     pivot, cal = _build_realized_pivot(panel)
-    print(
-        f"[pivot] symbols={len(pivot)} days={len(cal)} ({time.time() - t0:.0f}s)",
-        flush=True,
+    logger.info(
+        "[pivot] symbols=%s days=%s (%.0fs)",
+        len(pivot),
+        len(cal),
+        time.time() - t0,
     )
 
     main_df, dual_df, state = cleaner.run_inference(panel)
-    print(
-        f"[clean] valve={state} main={len(main_df):,} dual={len(dual_df):,} "
-        f"({time.time() - t0:.0f}s)",
-        flush=True,
+    logger.info(
+        "[clean] valve=%s main=%sr dual=%sr (%.0fs)",
+        state,
+        f"{len(main_df):,}",
+        f"{len(dual_df):,}",
+        time.time() - t0,
     )
     del panel
     gc.collect()
@@ -514,10 +555,12 @@ def main() -> int:
         feat = feat.reset_index(drop=True)
         feat["symbol"] = feat["symbol"].astype(str)
         feat["date"] = pd.to_datetime(feat["date"])
-        print(
-            f"[feat:{board}] {len(feat):,}r {len(feat.columns)}c "
-            f"({time.time() - t0:.0f}s)",
-            flush=True,
+        logger.info(
+            "[feat:%s] %sr %sc (%.0fs)",
+            board,
+            f"{len(feat):,}",
+            len(feat.columns),
+            time.time() - t0,
         )
 
         day_dates = sorted(pd.unique(feat["date"]))
@@ -526,10 +569,12 @@ def main() -> int:
             for d in day_dates
             if d in i_of and i_of[d] + REALIZED_SELL_LAG < len(all_cal)
         ][-args.eval :]
-        print(
-            f"[{board}] eval days {len(eval_days)} "
-            f"({pd.Timestamp(eval_days[0]).date()}..{pd.Timestamp(eval_days[-1]).date()})",
-            flush=True,
+        logger.info(
+            "[%s] eval days %s (%s..%s)",
+            board,
+            len(eval_days),
+            pd.Timestamp(eval_days[0]).date(),
+            pd.Timestamp(eval_days[-1]).date(),
         )
 
         # -- 1) 候选池: 基准闸行 + 仅被 pain 拦下的行 (replay 同款) --
@@ -544,7 +589,7 @@ def main() -> int:
                     lister.compute_scores(pred)
             except Exception:
                 pass
-        print(f"[{board}] base_rate 预热 {len(warm_days)} 天", flush=True)
+        logger.info("[%s] base_rate 预热 %s 天", board, len(warm_days))
 
         for k, d in enumerate(eval_days):
             di = i_of[d]
@@ -554,9 +599,8 @@ def main() -> int:
             try:
                 pred = predictor.predict(day_feat, board)
             except Exception as exc:
-                print(
-                    f"[{board}] {pd.Timestamp(d).date()} predict err: {exc}",
-                    flush=True,
+                logger.error(
+                    "[%s] %s predict err: %s", board, pd.Timestamp(d).date(), exc
                 )
                 continue
             if pred.empty:
@@ -625,10 +669,12 @@ def main() -> int:
                     }
                 )
             if (k + 1) % 25 == 0 or k == len(eval_days) - 1:
-                print(
-                    f"[{board}] detail {k + 1}/{len(eval_days)} "
-                    f"({time.time() - t0:.0f}s)",
-                    flush=True,
+                logger.info(
+                    "[%s] detail %s/%s (%.0fs)",
+                    board,
+                    k + 1,
+                    len(eval_days),
+                    time.time() - t0,
                 )
 
         # -- 2) 标签 + base_prod 逐日序列 (生产 _base_rate, 尾切片止于 pos-4) --
@@ -648,10 +694,12 @@ def main() -> int:
             base_map[pd.Timestamp(d)] = b if b is not None else np.nan
         base_maps[board] = base_map
         n_ok = sum(1 for v in base_map.values() if np.isfinite(v))
-        print(
-            f"[{board}] base_prod {n_ok}/{len(eval_days)} 日可用 "
-            f"({time.time() - t0:.0f}s)",
-            flush=True,
+        logger.info(
+            "[%s] base_prod %s/%s 日可用 (%.0fs)",
+            board,
+            n_ok,
+            len(eval_days),
+            time.time() - t0,
         )
 
         # -- 2.5) scored 池检查点: 未来闸/池口径再变 → --pool-from-ckpt 分钟级重分析 --
@@ -659,8 +707,14 @@ def main() -> int:
             sf = pd.concat(scored_frames[board], ignore_index=True)
             sf["base_prod"] = sf["date"].map(base_map)
             ckpt = DATA_DIR / f"_diag_rankkey_scored_{board}_e{args.eval}.parquet"
-            sf.to_parquet(str(ckpt))
-            print(f"[{board}] scored 检查点 {len(sf):,} 行 → {ckpt.name}", flush=True)
+            try:
+                sf.to_parquet(str(ckpt))
+            except Exception as exc:
+                logger.error("[%s] scored 检查点写入失败: %s", board, exc)
+                raise
+            logger.info(
+                "[%s] scored 检查点 %s 行 → %s", board, f"{len(sf):,}", ckpt.name
+            )
 
         # -- 3) 标签并入特征帧 + reg 净标签 (pivot 向量化, 无逐股循环) --
         feat = feat.merge(
@@ -674,15 +728,17 @@ def main() -> int:
         sym_rows = pivot.index.get_indexer(feat["symbol"].to_numpy())
         j_cols = np.searchsorted(cal, feat["date"].to_numpy())
         if not np.all(cal[j_cols] == feat["date"].to_numpy()):
-            print(f"[{board}] FAIL 特征帧日期不在 pivot 日历中", flush=True)
+            logger.error("[%s] FAIL 特征帧日期不在 pivot 日历中", board)
             return 2
         feat["label_10d_net"] = _reg_labels_from_matrix(
             price, sym_rows, j_cols, COST, horizon=REG_HORIZON
         )
-        print(
-            f"[{board}] reg 净标签 {feat['label_10d_net'].notna().sum():,}/"
-            f"{len(feat):,} 行可用 ({time.time() - t0:.0f}s)",
-            flush=True,
+        logger.info(
+            "[%s] reg 净标签 %s/%s 行可用 (%.0fs)",
+            board,
+            f"{feat['label_10d_net'].notna().sum():,}",
+            f"{len(feat):,}",
+            time.time() - t0,
         )
 
         idx = np.searchsorted(board_dates_arr, feat["date"].values)
@@ -700,7 +756,7 @@ def main() -> int:
         gc.collect()
 
     if not detail:
-        print("无任何过闸候选", flush=True)
+        logger.error("无任何过闸候选")
         return 1
 
     pool_df = pd.DataFrame(detail)
@@ -719,7 +775,11 @@ def _load_pool_from_ckpt(eval_n: int) -> tuple[pd.DataFrame, dict]:
     base_maps: dict[str, dict] = {}
     for board in ("main", "dual"):
         ck = DATA_DIR / f"_diag_rankkey_scored_{board}_e{eval_n}.parquet"
-        fr = pd.read_parquet(str(ck))
+        try:
+            fr = pd.read_parquet(str(ck))
+        except Exception as exc:
+            logger.error("[ckpt] 读取失败 %s: %s", ck.name, exc)
+            raise
         fr["date"] = pd.to_datetime(fr["date"])
         ok = (fr["prob"] > fr["base_rate"]) & (fr["pred_ret_10d"] > 0)
         if Q50_SIGN_GATE and {"pred_q50_3d", "pred_q50_5d"}.issubset(fr.columns):
@@ -755,19 +815,31 @@ def _analyze(pool_df: pd.DataFrame, base_maps: dict, eval_n: int, t0: float) -> 
             per_seed_frames: dict = {}
             for seed in SEEDS:
                 s = e7.copy()
-                wfp = pd.read_parquet(
-                    str(
-                        DATA_DIR
-                        / f"_diag_rankkey_wf_prob_{board}_s{seed}_e{eval_n}.parquet"
+                try:
+                    wfp = pd.read_parquet(
+                        str(
+                            DATA_DIR
+                            / f"_diag_rankkey_wf_prob_{board}_s{seed}_e{eval_n}.parquet"
+                        )
                     )
-                )
+                except Exception as exc:
+                    logger.error(
+                        "[ckpt] 读取 wf_prob 失败 %s: %s", f"{board}_s{seed}", exc
+                    )
+                    raise
                 wfp["date"] = pd.to_datetime(wfp["date"])
-                wfr = pd.read_parquet(
-                    str(
-                        DATA_DIR
-                        / f"_diag_rankkey_wf_reg_{board}_s{seed}_e{eval_n}.parquet"
+                try:
+                    wfr = pd.read_parquet(
+                        str(
+                            DATA_DIR
+                            / f"_diag_rankkey_wf_reg_{board}_s{seed}_e{eval_n}.parquet"
+                        )
                     )
-                )
+                except Exception as exc:
+                    logger.error(
+                        "[ckpt] 读取 wf_reg 失败 %s: %s", f"{board}_s{seed}", exc
+                    )
+                    raise
                 wfr["date"] = pd.to_datetime(wfr["date"])
                 s = s.merge(wfp, on=["symbol", "date"], how="left").rename(
                     columns={"pred": "prob_wf"}
@@ -812,15 +884,21 @@ def _analyze(pool_df: pd.DataFrame, base_maps: dict, eval_n: int, t0: float) -> 
                             }
                         )
 
-            print(
-                f"\n===== {board} / {pool_name} (depth={DEPTH_VERDICT}, "
-                f"{len(eval_days)} 评估日, {len(SEEDS)} seed 中位) =====",
-                flush=True,
+            logger.info(
+                "\n===== %s / %s (depth=%s, %s 评估日, %s seed 中位) =====",
+                board,
+                pool_name,
+                DEPTH_VERDICT,
+                len(eval_days),
+                len(SEEDS),
             )
-            print(
-                f"  {'键':<28}{'日均净':>9}{'逐seed':>26}{'delta中位':>10}"
-                f"{'seed正':>7}{'子窗正':>7}  判定",
-                flush=True,
+            logger.info(
+                "  %s%s%s%s%s  判定",
+                f"{'键':<28}",
+                f"{'日均净':>9}",
+                f"{'逐seed':>26}",
+                f"{'delta中位':>10}",
+                f"{'seed正':>7}{'子窗正':>7}",
             )
             verdicts.setdefault(board, {})[pool_name] = {}
             for key in KEYS:
@@ -830,11 +908,11 @@ def _analyze(pool_df: pd.DataFrame, base_maps: dict, eval_n: int, t0: float) -> 
                 full = float(med_series.mean())
                 per_seed_means = [float(ks[s].mean()) for s in SEEDS]
                 if key == KEY_BASELINE:
-                    print(
-                        f"  {KEY_LABELS[key]:<28}{full:>+9.2%}"
-                        f"{' '.join(f'{m:>+8.2%}' for m in per_seed_means):>26}"
-                        f"{'—':>10}{'—':>7}{'—':>7}  基线",
-                        flush=True,
+                    logger.info(
+                        "  %s%s%s  基线",
+                        f"{KEY_LABELS[key]:<28}",
+                        f"{full:>+9.2%}",
+                        f"{' '.join(f'{m:>+8.2%}' for m in per_seed_means):>26}",
                     )
                     continue
                 delta_by_seed = {
@@ -851,14 +929,18 @@ def _analyze(pool_df: pd.DataFrame, base_maps: dict, eval_n: int, t0: float) -> 
                     "delta_by_seed": delta_by_seed,
                 }
                 sub_s = "/".join(f"{x:+.2%}" for x in sub_d)
-                print(
-                    f"  {KEY_LABELS[key]:<28}{full:>+9.2%}"
-                    f"{' '.join(f'{m:>+8.2%}' for m in per_seed_means):>26}"
-                    f"{v['delta_median']:>+10.2%}"
-                    f"{v['seeds_pos']}/{v['n_seeds']:>3}"
-                    f"{v['subs_pos']}/{v['n_subs_valid']:>3}  "
-                    f"{'通过' if v['pass'] else '不通过'} [子窗delta {sub_s}]",
-                    flush=True,
+                logger.info(
+                    "  %s%s%s%s%s/%s%s/%s  %s [子窗delta %s]",
+                    f"{KEY_LABELS[key]:<28}",
+                    f"{full:>+9.2%}",
+                    f"{' '.join(f'{m:>+8.2%}' for m in per_seed_means):>26}",
+                    f"{v['delta_median']:>+10.2%}",
+                    v["seeds_pos"],
+                    v["n_seeds"],
+                    v["subs_pos"],
+                    v["n_subs_valid"],
+                    "通过" if v["pass"] else "不通过",
+                    sub_s,
                 )
                 daily = pd.DataFrame(
                     {
@@ -874,43 +956,59 @@ def _analyze(pool_df: pd.DataFrame, base_maps: dict, eval_n: int, t0: float) -> 
                 daily_out.append(daily)
 
     # ── WORM 落盘 ──
-    pd.DataFrame(rows_out).to_csv(out_dir / f"rankkey_multiseed_{ts}.csv", index=False)
-    (out_dir / f"rankkey_multiseed_{ts}.json").write_text(
-        json.dumps(
-            {
-                "ts": ts,
-                "slice": None,
-                "eval": eval_n,
-                "q50_sign_gate": Q50_SIGN_GATE,
-                "seeds": list(SEEDS),
-                "refit_every": REFIT_EVERY,
-                "embargo": {"prob": PROB_EMBARGO, "reg": REG_EMBARGO},
-                "cost": COST,
-                "abs_target": ABS_TARGET,
-                "keys": KEY_LABELS,
-                "verdict_rule": (
-                    "seed中位delta>0 且 ≥2/3 seed delta>0 且 ≥3/4 子窗 delta>0 "
-                    "(depth=10, E7池 为主口径)"
-                ),
-                "verdicts": verdicts,
-                "n_detail": len(pool_df),
-                "runtime_s": round(time.time() - t0, 0),
-            },
-            indent=2,
-            ensure_ascii=False,
-            default=str,
-        ),
-        encoding="utf-8",
+    try:
+        pd.DataFrame(rows_out).to_csv(
+            out_dir / f"rankkey_multiseed_{ts}.csv", index=False
+        )
+    except Exception as exc:
+        logger.error("WORM CSV 写入失败: %s", exc)
+        raise
+    try:
+        (out_dir / f"rankkey_multiseed_{ts}.json").write_text(
+            json.dumps(
+                {
+                    "ts": ts,
+                    "slice": None,
+                    "eval": eval_n,
+                    "q50_sign_gate": Q50_SIGN_GATE,
+                    "seeds": list(SEEDS),
+                    "refit_every": REFIT_EVERY,
+                    "embargo": {"prob": PROB_EMBARGO, "reg": REG_EMBARGO},
+                    "cost": COST,
+                    "abs_target": ABS_TARGET,
+                    "keys": KEY_LABELS,
+                    "verdict_rule": (
+                        "seed中位delta>0 且 ≥2/3 seed delta>0 且 ≥3/4 子窗 delta>0 "
+                        "(depth=10, E7池 为主口径)"
+                    ),
+                    "verdicts": verdicts,
+                    "n_detail": len(pool_df),
+                    "runtime_s": round(time.time() - t0, 0),
+                },
+                indent=2,
+                ensure_ascii=False,
+                default=str,
+            ),
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        logger.error("WORM JSON 写入失败: %s", exc)
+        raise
+    try:
+        pd.concat(daily_out, ignore_index=True).to_csv(
+            out_dir / f"rankkey_multiseed_daily_{ts}.csv", index=False
+        )
+    except Exception as exc:
+        logger.error("WORM daily CSV 写入失败: %s", exc)
+        raise
+    logger.info(
+        "\n[saved] %s/rankkey_multiseed_%s.csv/.json + *_daily_%s.csv (%.0fs)",
+        out_dir,
+        ts,
+        ts,
+        time.time() - t0,
     )
-    pd.concat(daily_out, ignore_index=True).to_csv(
-        out_dir / f"rankkey_multiseed_daily_{ts}.csv", index=False
-    )
-    print(
-        f"\n[saved] {out_dir}/rankkey_multiseed_{ts}.csv/.json + *_daily_{ts}.csv "
-        f"({time.time() - t0:.0f}s)",
-        flush=True,
-    )
-    print("=== DONE ===", flush=True)
+    logger.info("=== DONE ===")
     return 0
 
 

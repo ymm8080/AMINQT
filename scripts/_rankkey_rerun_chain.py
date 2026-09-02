@@ -12,6 +12,7 @@ rc=2 守卫撞车退避 10 min ×3; 12h 硬超时.
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import sys
@@ -24,6 +25,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import psutil
 
 from scripts._run_guard import CHAIN_SENTINELS, find_conflicts
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+    logger.setLevel(logging.INFO)
 
 REPO = Path(__file__).resolve().parent.parent
 LOGS = REPO / "logs"
@@ -38,7 +44,7 @@ CAP_S = 12 * 3600
 
 
 def log(msg: str) -> None:
-    print(f"[{datetime.now():%m-%d %H:%M:%S}] {msg}", flush=True)
+    logger.info("[%s] %s", f"{datetime.now():%m-%d %H:%M:%S}", msg)
 
 
 def main() -> int:
@@ -66,14 +72,23 @@ def main() -> int:
             log(f"有链/重活冲突 (尝试 {attempt}/{LAUNCH_RETRY}), 5 min 后再查: {hits}")
             time.sleep(CHAIN_POLL_S)
             continue
-        with open(RERUN_LOG, "a", encoding="utf-8") as fh:
+        try:
+            fh = open(RERUN_LOG, "a", encoding="utf-8")
+        except OSError as exc:
+            log(f"打开日志失败: {RERUN_LOG.name}: {exc}")
+            return 3
+        with fh:
             log(f"发射重跑 (q50_sign_gate=False 口径) → {RERUN_LOG.name}")
-            rc = subprocess.call(
-                [sys.executable, "-u", str(SWEEP)],
-                stdout=fh,
-                stderr=subprocess.STDOUT,
-                cwd=str(REPO),
-            )
+            try:
+                rc = subprocess.call(
+                    [sys.executable, "-u", str(SWEEP)],
+                    stdout=fh,
+                    stderr=subprocess.STDOUT,
+                    cwd=str(REPO),
+                )
+            except Exception as exc:
+                log(f"重跑子进程异常 (尝试 {attempt}/{LAUNCH_RETRY}): {exc}")
+                return 3
         if rc == 0:
             log("重跑 rc=0 完成")
             return 0

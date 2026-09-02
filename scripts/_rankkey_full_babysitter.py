@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import subprocess
 import sys
@@ -28,6 +29,11 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from scripts._run_guard import CHAIN_SENTINELS, HEAVY_SENTINELS, find_conflicts
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+    logger.setLevel(logging.INFO)
 
 REPO = Path(__file__).resolve().parent.parent
 LOGS = REPO / "logs"
@@ -43,7 +49,7 @@ TERMINAL = {"ok", "failed", "interrupted", "cancelled", "skipped"}
 
 
 def log(msg: str) -> None:
-    print(f"[{datetime.now():%m-%d %H:%M:%S}] {msg}", flush=True)
+    logger.info("[%s] %s", f"{datetime.now():%m-%d %H:%M:%S}", msg)
 
 
 def _state_fresh_terminal(tonight: datetime) -> str | None:
@@ -148,14 +154,23 @@ def main() -> int:
             log(f"发射前守卫命中 (尝试 {attempt}/{LAUNCH_RETRY}), 退避重试: {hits}")
             time.sleep(RETRY_BACKOFF_S)
             continue
-        with open(SWEEP_LOG, "a", encoding="utf-8") as fh:
+        try:
+            fh = open(SWEEP_LOG, "a", encoding="utf-8")
+        except OSError as exc:
+            log(f"打开日志失败: {SWEEP_LOG.name}: {exc}")
+            return 3
+        with fh:
             log(f"启动 sweep (尝试 {attempt}): {SWEEP} → {SWEEP_LOG.name}")
-            rc = subprocess.call(
-                [sys.executable, "-u", str(SWEEP)],
-                stdout=fh,
-                stderr=subprocess.STDOUT,
-                cwd=str(REPO),
-            )
+            try:
+                rc = subprocess.call(
+                    [sys.executable, "-u", str(SWEEP)],
+                    stdout=fh,
+                    stderr=subprocess.STDOUT,
+                    cwd=str(REPO),
+                )
+            except Exception as exc:
+                log(f"sweep 子进程异常 (尝试 {attempt}/{LAUNCH_RETRY}): {exc}")
+                return 3
         if rc == 0:
             log("sweep rc=0 完成")
             return 0
