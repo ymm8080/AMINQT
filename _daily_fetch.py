@@ -52,6 +52,7 @@ from app.pipeline1.fina_cache_merge import (  # noqa: E402
 )
 from app.pipeline1.fina_cache_merge import (
     load_fina_cache,
+    overwrite_today_announce_date,
     overwrite_today_from_cache,
 )
 from app.pipeline1.sw_sector_fetch import (  # noqa: E402
@@ -627,8 +628,9 @@ needed_ffill = ffill_cols
 # 仅 15 只 roe 变化, 因为公告管线 (run_announcement_pipeline.py) 每日写入
 # data/supply_cache/alt_data/fina_indicator/ 快照却没人接进面板. 缓存是更新的
 # 真相 → 今日行直接覆盖 (非 fillna); 缓存没有的股票/列留 NaN, 由下方 ffill 兜底.
-# 覆盖列 = FINA_CACHE_COLS 白名单 ∩ ffill_cols ∩ 缓存实际列 — announce_date /
-# sh_* / margin 等保护条目绝不从财务缓存覆盖 (硬闸在 fina_cache_merge 内).
+# 覆盖列 = FINA_CACHE_COLS 白名单 ∩ ffill_cols ∩ 缓存实际列 — sh_* / margin 等
+# 保护条目绝不从财务缓存覆盖 (硬闸在 fina_cache_merge 内); announce_date 是
+# datetime64, 走专用车道 overwrite_today_announce_date (2026-09-02 冻结修复).
 try:
     _fina_cache = load_fina_cache(FINA_CACHE_DIR)
     _fina_applied = overwrite_today_from_cache(df, _fina_cache, fina_cols=needed_ffill)
@@ -638,6 +640,9 @@ try:
               f"({', '.join(_fina_applied)})")
     else:
         print("    fina cache overwrite: no usable fina cols in cache — 今日行走纯 ffill")
+    if "announce_date" in df.columns:
+        _ann_n = overwrite_today_announce_date(df, _fina_cache)
+        print(f"    announce_date cache overwrite: {_ann_n} rows (缓存外股票由下方 ffill 兜底)")
 except Exception as e:
     # 缓存加载失败不致命: ffill 仍提供面板历史值 (Q1), 只是回到事故前的旧状态
     print(f"    fina cache overwrite: FAILED ({e}) — 今日行回退纯 ffill")

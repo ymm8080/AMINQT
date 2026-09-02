@@ -12,7 +12,9 @@ import pytest
 from app.pipeline1.fina_cache_merge import (
     FINA_CACHE_COLS,
     load_fina_cache,
+    overwrite_today_announce_date,
     overwrite_today_from_cache,
+    replay_announce_date,
     replay_fina_asof,
     select_latest_fina,
 )
@@ -244,3 +246,85 @@ def test_replay_single_row_smoke(sym, ann, period):
     )
     out = replay_fina_asof(rows, cache, fina_cols=["roe"])
     assert out.loc[0, "roe"] == 7.0
+
+
+# ── announce_date 车道: PIT 回放 + 今日覆盖 (2026-09-02 冻结修复) ─────────────
+
+
+def test_replay_announce_date_pit_by_each_stock():
+    """每行 = 截至该日已知最新一期报告的公告日 (merge_asof backward); 公告前
+    → NaT (调用方保留面板原值). 一律覆盖每股最新公告日会让 08-25 公告的股票
+    08-01 行就带新日期 (look-ahead)."""
+    cache = _cache_frame(
+        [
+            _cache_row("000001", "2026-04-30", "2026-03-31"),
+            _cache_row("000002", "2026-07-10", "2026-03-31"),
+            _cache_row("000002", "2026-08-25", "2026-06-30"),
+        ]
+    )
+    rows = pd.DataFrame(
+        {
+            "symbol": ["000001", "000001", "000002", "000002", "000099"],
+            "date": pd.to_datetime(
+                ["2026-04-01", "2026-05-01", "2026-08-01", "2026-08-26", "2026-08-26"]
+            ),
+        }
+    )
+    out = replay_announce_date(rows, cache)
+    assert out.dtype == "datetime64[ns]"
+    assert pd.isna(out.loc[0])  # 000001 公告前
+    assert out.loc[1] == pd.Timestamp("2026-04-30")
+    assert out.loc[2] == pd.Timestamp("2026-07-10")  # 当时已知 Q1 公告日
+    assert out.loc[3] == pd.Timestamp("2026-08-25")  # Q2 公告后推进
+    assert pd.isna(out.loc[4])  # 缓存外股票
+
+
+def test_replay_announce_date_preserves_row_order_and_index():
+    cache = _cache_frame([_cache_row("000001", "2026-08-20", "2026-06-30")])
+    rows = pd.DataFrame(
+        {
+            "symbol": ["000001", "000001", "000001"],
+            "date": pd.to_datetime(["2026-08-26", "2026-08-15", "2026-08-21"]),
+        }
+    )
+    out = replay_announce_date(rows, cache)
+    assert list(out.index) == list(rows.index)
+    assert out.loc[0] == pd.Timestamp("2026-08-20")
+    assert pd.isna(out.loc[1])
+    assert out.loc[2] == pd.Timestamp("2026-08-20")
+
+
+def test_replay_announce_date_empty_cache_all_nat():
+    rows = pd.DataFrame({"symbol": ["000001"], "date": pd.to_datetime(["2026-08-20"])})
+    out = replay_announce_date(rows, pd.DataFrame())
+    assert len(out) == 1 and out.isna().all()
+
+
+def test_overwrite_today_announce_date_uses_latest_known_record():
+    """今日行 = 每股缓存最新记录的公告日 (PIT 安全: 缓存只含已公告记录);
+    report_period 缺失的脏行不得入选; 缓存外股票 → NaT 留给 ffill 兜底."""
+    cache = _cache_frame(
+        [
+            _cache_row("000001", "2026-04-30", "2026-03-31"),
+            _cache_row("000001", "2026-08-28", "2026-06-30"),
+            _cache_row("000002", "2026-08-20", "2026-06-30"),
+            _cache_row("000002", "2026-08-27", pd.NaT),  # 脏行: 无报告期
+        ]
+    )
+    df = pd.DataFrame(
+        {
+            "symbol": ["000001", "000002", "000003"],
+            "announce_date": pd.to_datetime([pd.NaT, pd.NaT, pd.NaT]),
+        }
+    )
+    n = overwrite_today_announce_date(df, cache)
+    assert n == 2
+    assert df.loc[0, "announce_date"] == pd.Timestamp("2026-08-28")
+    assert df.loc[1, "announce_date"] == pd.Timestamp("2026-08-20")
+    assert pd.isna(df.loc[2, "announce_date"])
+
+
+def test_overwrite_today_announce_date_noop_on_empty_cache():
+    df = pd.DataFrame({"symbol": ["000001"], "announce_date": [pd.NaT]})
+    assert overwrite_today_announce_date(df, pd.DataFrame()) == 0
+    assert pd.isna(df.loc[0, "announce_date"])
