@@ -81,6 +81,18 @@ def test_chain_sentinels_include_orchestrator_script_level_not():
     assert CHAIN_SENTINELS[: len(HEAVY_SENTINELS)] == HEAVY_SENTINELS
 
 
+def test_heavy_sentinels_cover_known_heavy_scripts():
+    """新重活脚本必须注册哨兵 (2026-09-01 部署原则), 漏注册会撞自动化链."""
+    for s in (
+        "_retrain_legacy_full.py",
+        "_gen_legacy_list.py",
+        "_refresh_parallel_checkpoints.py",
+        "_diag_q90_slot_replay.py",
+        "_diag_parallel_fullpool_replay.py",
+    ):
+        assert s in HEAVY_SENTINELS, f"HEAVY_SENTINELS 缺 {s}"
+
+
 # ── skip_reason: 三闸判定 ───────────────────────────────────────────────────
 
 
