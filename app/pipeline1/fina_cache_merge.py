@@ -226,9 +226,7 @@ def replay_announce_date(panel_rows, cache_df):
     out = pd.Series(pd.NaT, index=panel_rows.index, dtype="datetime64[ns]")
     if n == 0 or not len(cache_df) or "announce_date" not in cache_df.columns:
         return out
-    right = cache_df.loc[
-        cache_df["announce_date"].notna(), ["symbol", "announce_date"]
-    ]
+    right = cache_df.loc[cache_df["announce_date"].notna(), ["symbol", "announce_date"]]
     if not len(right):
         return out
     right = right.copy()

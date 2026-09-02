@@ -295,9 +295,7 @@ def test_replay_announce_date_preserves_row_order_and_index():
 
 
 def test_replay_announce_date_empty_cache_all_nat():
-    rows = pd.DataFrame(
-        {"symbol": ["000001"], "date": pd.to_datetime(["2026-08-20"])}
-    )
+    rows = pd.DataFrame({"symbol": ["000001"], "date": pd.to_datetime(["2026-08-20"])})
     out = replay_announce_date(rows, pd.DataFrame())
     assert len(out) == 1 and out.isna().all()
 

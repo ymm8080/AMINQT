@@ -109,7 +109,7 @@ def _platt_probs(work: pd.DataFrame) -> pd.Series:
 
     dates = np.sort(work["date"].unique())
     out = pd.Series(np.nan, index=work.index)
-    d_i = {d: i for i, d in enumerate(dates)}
+    {d: i for i, d in enumerate(dates)}
     dv = work["date"].to_numpy()
     is_fit_col = work["label_mfe_10d_net"].notna().to_numpy()
     x_all = work["score"].to_numpy(dtype=float).reshape(-1, 1)
@@ -137,8 +137,7 @@ def process_board(board: str, cutoff, eval_n: int, t0: float, px, cal) -> pd.Dat
     df = add_mfe_labels(df, horizons=(10,), already_sorted=True)
     df, gate = tradability_gate(df)
     print(
-        f"[{board}] gate -{gate['removed_rows']:,}r "
-        f"({time.time() - t0:.0f}s)",
+        f"[{board}] gate -{gate['removed_rows']:,}r ({time.time() - t0:.0f}s)",
         flush=True,
     )
     df["board"] = board
@@ -147,8 +146,14 @@ def process_board(board: str, cutoff, eval_n: int, t0: float, px, cal) -> pd.Dat
     score_s = pool_score(df, SNIPER.pool)
     score_f = pool_score(df, FUSION.pool)
     scored = df[
-        ["symbol", "date", "board", "close_hfq", "label_pm_10d_net",
-         "label_mfe_10d_net"]
+        [
+            "symbol",
+            "date",
+            "board",
+            "close_hfq",
+            "label_pm_10d_net",
+            "label_mfe_10d_net",
+        ]
     ].copy()
     scored["score"] = np.maximum(score_s.values, score_f.values)
     del score_s, score_f
@@ -195,8 +200,19 @@ def process_board(board: str, cutoff, eval_n: int, t0: float, px, cal) -> pd.Dat
         sub["net_10d"] = _net_vec(px, sub["symbol"], b1, s10)
         sub["date"] = str(pd.Timestamp(d).date())
         out_frames.append(
-            sub[["symbol", "date", "board", "score", "mag", "prob", "rank_blend",
-                 "net_3d", "net_10d"]]
+            sub[
+                [
+                    "symbol",
+                    "date",
+                    "board",
+                    "score",
+                    "mag",
+                    "prob",
+                    "rank_blend",
+                    "net_3d",
+                    "net_10d",
+                ]
+            ]
         )
         if (k + 1) % 25 == 0 or k == len(eval_days) - 1:
             n = sum(len(f) for f in out_frames)
@@ -253,7 +269,10 @@ def main() -> int:
                 "cost": COST,
                 "prob_target": PROB_TARGET,
                 "prob_refit_every": PROB_REFIT_EVERY,
-                "checkpoints": {"main": PANEL.main_checkpoint, "dual": PANEL.dual_checkpoint},
+                "checkpoints": {
+                    "main": PANEL.main_checkpoint,
+                    "dual": PANEL.dual_checkpoint,
+                },
                 "rows": int(len(res)),
                 "days": int(res["date"].nunique()),
                 "range": [str(res["date"].min()), str(res["date"].max())],
