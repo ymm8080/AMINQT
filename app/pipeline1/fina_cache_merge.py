@@ -24,7 +24,8 @@ import pandas as pd
 
 # 面板 fina 列中允许从财务缓存覆盖的列 (ffill_cols 的 fina 子集).
 # 绝不含 announce_date / sh_* / margin / sw_l*_name — 这些各有语义
-# (announce_date 沿用面板口径, sh_* 刚修过, margin 有 T+1 语义, dim31 用户暂缓),
+# (sh_* 刚修过, margin 有 T+1 语义, dim31 用户暂缓; announce_date 是
+# datetime64, 走 overwrite_today_announce_date 专用车道不混入本 float64 清单),
 # 实际取用 = 本清单 ∩ ffill_cols ∩ 缓存实际有的列.
 FINA_CACHE_COLS = [
     "roe",
@@ -179,4 +180,75 @@ def replay_fina_asof(panel_rows, cache_df, fina_cols=None):
         direction="backward",
     )
     out.iloc[perm] = merged[cols].to_numpy(dtype="float64")
+    return out
+
+
+def overwrite_today_announce_date(df, cache_df):
+    """今日行 announce_date 用缓存每股最新记录的公告日覆盖 (in-place).
+
+    独立车道不走 FINA_CACHE_COLS (float64 财报数值白名单): announce_date 是
+    datetime64 语义列, 但与 fina 车道同 PIT 语义 — 缓存快照只含已公告记录,
+    今日行取"已知最新公告日"无前瞻. report_period 缺失的脏行不入选; 缓存外
+    股票 → NaT, 由调用方其后保留的 ffill 兜底, 因此必须在 ffill 之前调用.
+    返回覆盖后今日行非空的行数 (缓存空/无 announce_date 列 → 0).
+    """
+    if not len(cache_df) or not len(df) or "announce_date" not in cache_df.columns:
+        return 0
+    right = cache_df[cache_df["announce_date"].notna()]
+    if not len(right):
+        return 0
+    if "report_period" in right.columns:
+        right = right[right["report_period"].notna()]
+        if not len(right):
+            return 0
+        sort_keys = ["symbol", "report_period", "announce_date"]
+    else:
+        sort_keys = ["symbol", "announce_date"]
+    latest = right.sort_values(sort_keys, kind="stable").drop_duplicates(
+        "symbol", keep="last"
+    )
+    smap = latest.set_index("symbol")["announce_date"]
+    df["announce_date"] = df["symbol"].map(smap)
+    return int(df["announce_date"].notna().sum())
+
+
+def replay_announce_date(panel_rows, cache_df):
+    """PIT 回放 announce_date: 每行 = 截至该日已知最新一期报告的公告日.
+
+    面板 announce_date 存量修复用, 同 replay_fina_asof 的 merge_asof backward
+    模式: 每股只有自身公告日之后的行才拿到新公告日, 公告前 → NaT (调用方保留
+    面板原值). 同股多期记录值=键 (公告日本身), 公告日更晚者自然胜出.
+
+    Returns:
+        Series datetime64[ns], 与 panel_rows 同行序同 index; 无记录 → NaT.
+    """
+    n = len(panel_rows)
+    out = pd.Series(pd.NaT, index=panel_rows.index, dtype="datetime64[ns]")
+    if n == 0 or not len(cache_df) or "announce_date" not in cache_df.columns:
+        return out
+    right = cache_df.loc[
+        cache_df["announce_date"].notna(), ["symbol", "announce_date"]
+    ]
+    if not len(right):
+        return out
+    right = right.copy()
+    right["symbol"] = right["symbol"].astype(str)
+    right = right.drop_duplicates().sort_values("announce_date", kind="stable")
+    dates = pd.to_datetime(panel_rows["date"])
+    perm = np.argsort(dates.to_numpy(), kind="stable")
+    left = pd.DataFrame(
+        {
+            "symbol": panel_rows["symbol"].astype(str).to_numpy()[perm],
+            "date": dates.to_numpy()[perm],
+        }
+    )
+    merged = pd.merge_asof(
+        left,
+        right,
+        by="symbol",
+        left_on="date",
+        right_on="announce_date",
+        direction="backward",
+    )
+    out.iloc[perm] = merged["announce_date"].to_numpy()
     return out
