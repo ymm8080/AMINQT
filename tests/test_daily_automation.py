@@ -36,7 +36,8 @@ from scripts.run_daily_automation import (
 THU, FRI = _dt.date(2026, 8, 13), _dt.date(2026, 8, 14)
 
 _LEGACY_CHAIN = ["cyq", "legacy_prob_head", "legacy", "deliver"]
-_TAIL = ["drift", "drift_parallel", "shadow_xmodule"]
+# ths_push 在 tail 首位: parallel 块之外恒执行 (parallel 跳过时自动回退 legacy 清单)
+_TAIL = ["ths_push", "drift", "drift_parallel", "shadow_xmodule"]
 _PARALLEL_CHAIN = ["parallel", "prob_head", "deliver_parallel"]
 
 
@@ -108,6 +109,18 @@ def test_plan_steps_all_skip_keeps_legacy_chain():
         plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True)
         == _LEGACY_CHAIN + _TAIL
     )
+
+
+def test_plan_steps_ths_push_always_runs():
+    """同花顺推送恒执行 (非关键): 任何 skip 组合下都在, 且不早于 legacy 交付."""
+    for steps in (
+        plan_steps(THU),
+        plan_steps(FRI),
+        plan_steps(THU, skip_parallel=True),
+        plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True),
+    ):
+        assert "ths_push" in steps
+        assert steps.index("ths_push") > steps.index("deliver")
 
 
 # ── 中断中止 + 终态 state 文件 (08-21 事故: cyq 被 Ctrl+C 杀后仍启动 retrain,
