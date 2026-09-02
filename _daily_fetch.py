@@ -57,6 +57,7 @@ from app.pipeline1.fina_cache_merge import (
 from app.pipeline1.sw_sector_fetch import (  # noqa: E402
     fetch_sw_sector_map,
     missing_industries,
+    sw_daily_adapter,
 )
 
 _POS_ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
@@ -406,10 +407,12 @@ if "industry" in panel_cols and "industry" in last_meta.columns:
 print(f"    meta carry: board={df['board'].nunique() if 'board' in df.columns else '-'} | "
       f"industry nunique={df['industry'].nunique() if 'industry' in df.columns else '-'}")
 
-# --- 申万行业指数: sw_ret_1d / sw_index_close / sw_index_vol (Tushare index_daily) ---
+# --- 申万行业指数: sw_ret_1d / sw_index_close / sw_index_vol (Tushare sw_daily) ---
 # 面板 industry 用老申万名 (801730 记作 电气设备, SW_INDEX_CODES 用新名) → 补别名.
 # 单位换算 (实测校验): sw_ret_1d = pct_chg/100 (小数), sw_index_close = close,
 # sw_index_vol = vol/1e6 (面板单位=百万手, Tushare vol 单位=手).
+# 2026-09-02 路线切换: index_daily 对申万指数自 2026-08-27 起不再出数 (08-27/09-01
+# 两天静默 NaN 与当日 fetch FATAL 同一根因), sw_daily 才是活路线 → sw_daily_adapter.
 if "sw_ret_1d" in panel_cols and "industry" in df.columns:
     _ind2code = {v: k for k, v in SW_INDEX_CODES.items()}
     _ind2code["电气设备"] = "801730"
@@ -420,7 +423,7 @@ if "sw_ret_1d" in panel_cols and "industry" in df.columns:
     # exit 即放弃当日整次 fetch — 有意取舍: 宁可不追加 (次日重跑补齐), 也不写
     # sw 列半空的半拉子面板 (下游是行业动量类特征, 整列 NaN 会污染特征).
     _sw_map = fetch_sw_sector_map(
-        lambda _code, _s, _e: pro.index_daily(ts_code=_code, start_date=_s, end_date=_e),
+        sw_daily_adapter(pro),
         _ind2code, _present_inds, TRADE_DATE,
     )
     _missing_inds = missing_industries(_present_inds, _sw_map)
@@ -435,7 +438,7 @@ if "sw_ret_1d" in panel_cols and "industry" in df.columns:
         df["sw_ret_1d"] = df["industry"].map(_sw_df["sw_ret_1d"])
         df["sw_index_close"] = df["industry"].map(_sw_df["sw_index_close"])
         df["sw_index_vol"] = df["industry"].map(_sw_df["sw_index_vol"])
-        print(f"    sw sector index (Tushare index_daily): {len(_sw_map)}/{len(_present_inds)} industries for {TRADE_DATE}")
+        print(f"    sw sector index (Tushare sw_daily): {len(_sw_map)}/{len(_present_inds)} industries for {TRADE_DATE}")
     else:
         print(f"    WARN: sw sector index fetch empty for {TRADE_DATE}")
 
