@@ -3,6 +3,7 @@
 Secrets (iFinD credentials) are loaded from environment / .env — never
 hardcoded. Date handling uses datetime objects, not string comparison.
 """
+
 import os
 from datetime import date
 from enum import Enum
@@ -15,7 +16,7 @@ load_dotenv()
 # ── Paths ─────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-PARQUET_DIR = PROJECT_ROOT.parent / "PARQUET"   # 主数据目录 (V3 面板所在)
+PARQUET_DIR = PROJECT_ROOT.parent / "PARQUET"  # 主数据目录 (V3 面板所在)
 RAW_DIR = DATA_DIR / "raw"
 INTRADAY_DIR = DATA_DIR / "intraday"
 PROCESSED_DIR = DATA_DIR / "processed"
@@ -37,8 +38,15 @@ DAILY_OPERATION_DIR = Path(
 )
 STOCK_LIST_DIR = DAILY_OPERATION_DIR / "STOCK LIST"
 
-for _d in (RAW_DIR, INTRADAY_DIR, PROCESSED_DIR, MODEL_DIR, DATA_OTHERS_DIR,
-           BACKTEST_RESULT_DIR, STOCK_LIST_DIR):
+for _d in (
+    RAW_DIR,
+    INTRADAY_DIR,
+    PROCESSED_DIR,
+    MODEL_DIR,
+    DATA_OTHERS_DIR,
+    BACKTEST_RESULT_DIR,
+    STOCK_LIST_DIR,
+):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ── 预测稳定性: 输出级时间平滑 (2026-08-06, 对齐 parallel _shortlist_t5_t10) ──
@@ -81,6 +89,26 @@ LEGACY_TOP10_SECOND_VOTE = {
     "multi_seed_enable": True,
     "multi_seed_seeds": [42, 43, 44],
     "multi_seed_agg": "median",  # median | mean
+}
+
+# ── legacy E1 q50 分位头多 seed 中位集成 (2026-09-02 A/B 判词: 默认关闭) ─────
+# E7 闸3 读 pred_q50_3d/5d (>0); retrain_20260903_ms 实测 q50 早停 1 树, 地板重训
+# 后贴零摆动随机翻闸 (002295 q50_3d=-0.07%). 尝试与 LEGACY_TOP10_SECOND_VOTE
+# multi_seed 同机制: q50 按 seeds 独立重训 (各成员含 es+地板), 推理取中位.
+# A/B 实证 (生产同配方重建, test 段 54 日; WORM q50_ensemble_ab_20260901_192538
+# main / q50_ensemble_ab_20260901_210132 dual): 成员符号分歧真实 (main
+# 8.5-10.7% / dual 3.9-7.9%), 翻闸 99%+ 落贴零带 (<0.5pp) — 机制确实只仲裁
+# 掷硬币区, 但仲裁方向不稳定:
+#   main 全窗 3d +1.13pp 纯前半驱动: 前半 +1.83pp / 后半 -3.15pp (5d +2.76/-3.98)
+#   dual 全窗 3d -2.26pp / 5d -1.25pp, 两半一致负 (-2.45/-1.38; -1.16/-1.33)
+# 判词: 中位投票只提供"稳定"不提供"信号"; 贴零带 q50 本身无可靠方向, seed 集成
+# 救不了 (与 10d_reg multi_seed 不同: 那里判词来自 ±0.04/日 噪声包裹的真信号,
+# 这里贴零带信号量≈0). 代码路径+单测保留 (models[q]/ensemble_members 双向兼容
+# 已验证), 重开 enable 须带子窗稳定证据. 成本提醒: 开启 ≈ +4-5 分钟/全量重训.
+QUANTILE_ENSEMBLE = {
+    "enable": False,
+    "quantiles": [0.50],
+    "seeds": [42, 43, 44],
 }
 
 # ── V3 Panel (single source of truth) ────────────────────────
@@ -141,6 +169,7 @@ def data_path(path: str | Path) -> Path:
         parts = parts[1:]
     return DATA_DIR.joinpath(*parts)
 
+
 # ── Data source: "ifind" | "akshare" (akshare = fallback/dev) ──
 DATA_SOURCE = os.getenv("AMINQT_DATA_SOURCE", "akshare")
 
@@ -167,7 +196,8 @@ DOWNLOAD_SLEEP_SEC = 0.5
 
 class ExecutionMode(str, Enum):
     """M3 execution modes."""
-    AUTO = "auto"      # granted: orders sent to broker directly
+
+    AUTO = "auto"  # granted: orders sent to broker directly
     MANUAL = "manual"  # pop-up recommendation only, user confirms
 
 
@@ -176,8 +206,8 @@ EXECUTION_MODE = ExecutionMode(os.getenv("AMINQT_EXEC_MODE", "manual"))
 EXECUTION_BROKER = os.getenv("AMINQT_BROKER", "sim")  # "sim" | "xt"
 
 # ── Risk filter hard constraints (Phase 4) ────────────────────
-MIN_AMOUNT = 50_000_000         # 成交额 >= 5000万
-PRICE_LIMIT_PCT = 9.5           # |涨跌幅| <= 9.5%
+MIN_AMOUNT = 50_000_000  # 成交额 >= 5000万
+PRICE_LIMIT_PCT = 9.5  # |涨跌幅| <= 9.5%
 MAX_ACCOUNT_DRAWDOWN_PCT = 3.0  # 账户回撤 > 3% → 返回空列表
 
 # ── V3 入库扫描 (ingest gate, 2026-08-03) ─────────────────────
@@ -189,35 +219,35 @@ INGEST_MIN_LIST_DAYS = 150
 # ── KIMI LHB v2.0 spec 参数 (龙虎榜稀疏特征: 半衰期/情境权重/记忆下限) ──
 # 见 REFERENCE/.../FEATURE/kimi LHB_v2.0_设计文档.md §3.1/§3.3/§4
 LHB_V2_SPEC = {
-    "h_inst": 8,          # 机构半衰期 (spec 建议 7-10)
-    "h_top": 6,           # 顶级游资半衰期 (5-7)
-    "h_quant": 4,         # 量化席位半衰期 (3-5)
-    "h_retail": 4,        # 散户/混合半衰期 (3-5)
-    "h_sell": 5,          # 抛压记忆半衰期
-    "h_sellbuy": 5,       # 买卖比半衰期
-    "h_conboard": 3,      # 连板衰减记忆半衰期 (§4.3)
-    "w_limit_up": 1.5,    # 涨停日卖出情境权重 (§2.5)
+    "h_inst": 8,  # 机构半衰期 (spec 建议 7-10)
+    "h_top": 6,  # 顶级游资半衰期 (5-7)
+    "h_quant": 4,  # 量化席位半衰期 (3-5)
+    "h_retail": 4,  # 散户/混合半衰期 (3-5)
+    "h_sell": 5,  # 抛压记忆半衰期
+    "h_sellbuy": 5,  # 买卖比半衰期
+    "h_conboard": 3,  # 连板衰减记忆半衰期 (§4.3)
+    "w_limit_up": 1.5,  # 涨停日卖出情境权重 (§2.5)
     "w_limit_down": 1.2,  # 跌停日卖出情境权重
-    "w_up5": 1.3,         # 大涨日(>5%)卖出权重
-    "w_down5": 1.1,       # 大跌日(<-5%)卖出权重
-    "w_flat": 1.0,        # 平盘日卖出权重
-    "f_min_ratio": 0.1,   # 最小记忆值 = max(0, 历史均值×比例) (§3.3)
-    "lock_thresh": 0.3,   # 机构锁仓信号阈值 F_inst > 0.3 (§4.5)
+    "w_up5": 1.3,  # 大涨日(>5%)卖出权重
+    "w_down5": 1.1,  # 大跌日(<-5%)卖出权重
+    "w_flat": 1.0,  # 平盘日卖出权重
+    "f_min_ratio": 0.1,  # 最小记忆值 = max(0, 历史均值×比例) (§3.3)
+    "lock_thresh": 0.3,  # 机构锁仓信号阈值 F_inst > 0.3 (§4.5)
     "overheat_penalty": 0.7,  # 过热惩罚因子 (C5d≥阈值时正向资金流×0.7) (§5.2)
-    "limit_up_tol": 0.001,   # 判定涨停: close >= up_limit_raw×(1−tol)
-    "limit_down_tol": 0.001, # 判定跌停: close <= down_limit_raw×(1+tol)
-    "eps": 1e-6,          # 除零保护
+    "limit_up_tol": 0.001,  # 判定涨停: close >= up_limit_raw×(1−tol)
+    "limit_down_tol": 0.001,  # 判定跌停: close <= down_limit_raw×(1+tol)
+    "eps": 1e-6,  # 除零保护
     "circ_mv_unit": 1e4,  # 面板 circ_mv 单位 万元 → 元
 }
 
 # ── LHB v2.0 训练/评估配置 (spec §5.3 选择性偏差: 仅上榜股票池) ──
 # 见 REFERENCE/.../FEATURE/kimi LHB_v2.0_设计文档.md §5.3/§6.1
 LHB_V2_EVAL = {
-    "horizons": [1, 3, 5],   # 标签: t+1 开盘买入 → t+1/t+3/t+5 收盘 (T+1 模拟)
-    "split_ratio": 0.8,      # 时间切分: 前 80% 上榜日训练, 后 20% 评估
-    "quantile": 0.2,         # 多空分位 (预测 top/bottom 20%)
-    "min_ic_obs": 20,        # 单特征 IC 至少需要的日期数
-    "min_ic_n": 10,          # 单日 spearman 至少需要的股票数
+    "horizons": [1, 3, 5],  # 标签: t+1 开盘买入 → t+1/t+3/t+5 收盘 (T+1 模拟)
+    "split_ratio": 0.8,  # 时间切分: 前 80% 上榜日训练, 后 20% 评估
+    "quantile": 0.2,  # 多空分位 (预测 top/bottom 20%)
+    "min_ic_obs": 20,  # 单特征 IC 至少需要的日期数
+    "min_ic_n": 10,  # 单日 spearman 至少需要的股票数
     "lgb": {
         "n_estimators": 300,
         "max_depth": 6,
@@ -234,11 +264,11 @@ LHB_V2_EVAL = {
 # 用户要求: dim33 4 个稳定负向 EWMA 特征须在"相关数据集"(大宗事件池)上训练/评估,
 # 不在全市场面板上评估 (全市场 98.8% 行零值, 稀释稀疏事件信号). 协议同 LHB v2 §5.3.
 BT_V3_EVAL = {
-    "horizons": [1, 3, 5],   # 标签: t+1 开盘买入 → t+1/t+3/t+5 收盘 (T+1 模拟, hfq)
-    "split_ratio": 0.8,      # 时间切分: 前 80% 事件日训练, 后 20% 评估 (仅事件池内)
-    "quantile": 0.2,         # 多空分位 (预测 top/bottom 20%)
-    "min_ic_obs": 20,        # 单特征 IC 至少需要的日期数
-    "min_ic_n": 10,          # 单日 spearman 至少需要的股票数
+    "horizons": [1, 3, 5],  # 标签: t+1 开盘买入 → t+1/t+3/t+5 收盘 (T+1 模拟, hfq)
+    "split_ratio": 0.8,  # 时间切分: 前 80% 事件日训练, 后 20% 评估 (仅事件池内)
+    "quantile": 0.2,  # 多空分位 (预测 top/bottom 20%)
+    "min_ic_obs": 20,  # 单特征 IC 至少需要的日期数
+    "min_ic_n": 10,  # 单日 spearman 至少需要的股票数
     "lgb": {
         "n_estimators": 300,
         "max_depth": 6,
@@ -253,11 +283,11 @@ BT_V3_EVAL = {
 
 # ── LHB v2.0 TOP10 周频选股评估 (用户目标: 每周输出 10 只买入标的) ──
 LHB_V2_TOP10 = {
-    "top_n": 10,                  # 每期入选股票数
-    "cost_commission": 0.00025,   # 佣金 万2.5 (单边)
-    "cost_stamp": 0.0005,         # 印花税 0.05% (仅卖出)
-    "cost_slippage": 0.0010,      # 滑点 0.10% (单边)
-    "exclude_st": True,           # 剔除 ST (基座 is_st 待修, 当前可能不触发)
+    "top_n": 10,  # 每期入选股票数
+    "cost_commission": 0.00025,  # 佣金 万2.5 (单边)
+    "cost_stamp": 0.0005,  # 印花税 0.05% (仅卖出)
+    "cost_slippage": 0.0010,  # 滑点 0.10% (单边)
+    "exclude_st": True,  # 剔除 ST (基座 is_st 待修, 当前可能不触发)
 }
 
 # ── 每日短名单评分权重 (2026-08-05 用户: 先给每股预测(涨幅+达到概率), 再按权重打分, 再排名) ──
@@ -267,8 +297,8 @@ LHB_V2_TOP10 = {
 # 达到概率 = P(已实现 MFE ≥ 该预期涨幅) — 真实口径 (2026-08-05 用户定案, 见 _shortlist_t5_t10.py).
 SHORTLIST_SCORE = {
     "horizon_w": {"3d": 0.40, "5d": 0.25, "10d": 0.10},  # 主视界 T+3 (短持)
-    "gain_w": 0.50,   # 预期涨幅权重
-    "prob_w": 0.50,   # 达到概率(convincing rate)权重
+    "gain_w": 0.50,  # 预期涨幅权重
+    "prob_w": 0.50,  # 达到概率(convincing rate)权重
     # 入选门 = 纯 T+3 门 (2026-08-09 删 2d 视界: 原 T+2/T+3 联合门退化)
     # 保留 ⇔ T+3 可兑现净预期涨幅 (pred_ret_3d, close-to-close, 成本已扣) > t3_min
     # 2026-08-10: 门基准从 pred_mag_3d (MFE 最大浮盈, 虚高) 改为 pred_ret_3d (c2c 实得),
@@ -305,6 +335,12 @@ LEGACY_ENTRY_GATE = {
     # pain 软区上限 (2026-08-31): pain 在 (pain_max, pain_soft_max] 仍硬剔, 但记入
     # gate_audit → 交付"仅供参考"节 (信息不丢, 闸不松动; 0.4 为 08-14 实证档不动)
     "pain_soft_max": {"main": 1.0, "dual": 0.5},
+    # 闸3 q50 符号闸 (2026-09-02 三臂回放判死, gate3_arms_20260902_012918):
+    #   条件在基线池 (prob边际+compound>0+pain) 上 top-5/top-10 实得两板块 4/4 子窗
+    #   全负 (main sign +10.47% vs 撤闸 +27.07%, dual +4.30% vs +20.79%), 且池级
+    #   误杀真赢家 main 56.3% / dual 92.5%; 分位闸 (τ=0.5/0.6/0.7) main 2/4 不过窗.
+    #   → 默认撤闸 (q50 列仍透传清单供参考); 重开须带子窗稳定证据.
+    "q50_sign_gate": False,
 }
 
 # ── 板块 制度自适应门 (2026-08-05 用户: 砍板块不能写死, 按最新市场数据动态决定) ──
@@ -322,11 +358,11 @@ LEGACY_ENTRY_GATE = {
 # 但制度门仍按 10d 主视界计算, 每行标注 过门=是/未过; 未过门板块在报告里明确注明
 # "不建议今日买入 <板块>股票".
 REGIME_GATE = {
-    "enable": True,   # 2026-08-09 用户: 计算 10d 门但不整组剔除 — 清单显示 ALL 候选, 未过门个股标注 过门=未过
-    "margin": 0.01,             # 至少跑赢当日市场全池基线 1pp (净收益) 才算"有优势"
-    "primary_horizon": "10d",   # 2026-08-09 用户: 制度门用 10d 主视界 (与 10d 排名键一致)
+    "enable": True,  # 2026-08-09 用户: 计算 10d 门但不整组剔除 — 清单显示 ALL 候选, 未过门个股标注 过门=未过
+    "margin": 0.01,  # 至少跑赢当日市场全池基线 1pp (净收益) 才算"有优势"
+    "primary_horizon": "10d",  # 2026-08-09 用户: 制度门用 10d 主视界 (与 10d 排名键一致)
     "horizons": ("3d", "5d", "10d"),  # 仅 SUMMARY 展示用 (判定只认 primary_horizon)
-    "fallback": "none",         # 无优势 → 空仓观望, 不输出 (旧 "best" 兜底已废, 用户否决)
+    "fallback": "none",  # 无优势 → 空仓观望, 不输出 (旧 "best" 兜底已废, 用户否决)
 }
 
 # ── 并行真模型概率闸 (2026-08-15 定案, _diag_parallel_gbm_signal/_wf 250d OOS) ──
@@ -338,12 +374,12 @@ REGIME_GATE = {
 #   双板 4/4 子窗实得赢 (扩窗训练; trailing 242d 数据饥饿勿用).
 # 闸在 t3 门后、pred_mag_10d TOP-5 排名前; bundle 缺失/过旧 → fail-open 不杀清单.
 PROB_GATE = {
-    "enable": True,            # False → 闸关闭 (概率头照常训练但不拦截)
-    "margin": 0.08,            # 边际 (legacy 配方, 平台中段, 勿扫)
-    "base_rate_days": 20,      # base_rate 观测窗 (交易日)
-    "abs_target": 0.03,        # 概率头目标: mfe_3d >= 3%
-    "refit_every_days": 21,    # 训练脚本: bundle 年龄 < 此值 → skip (交易日)
-    "max_stale_days": 42,      # 短名单侧: bundle 年龄 > 此值 → 大声警告 + 闸失效 (fail-open)
+    "enable": True,  # False → 闸关闭 (概率头照常训练但不拦截)
+    "margin": 0.08,  # 边际 (legacy 配方, 平台中段, 勿扫)
+    "base_rate_days": 20,  # base_rate 观测窗 (交易日)
+    "abs_target": 0.03,  # 概率头目标: mfe_3d >= 3%
+    "refit_every_days": 21,  # 训练脚本: bundle 年龄 < 此值 → skip (交易日)
+    "max_stale_days": 42,  # 短名单侧: bundle 年龄 > 此值 → 大声警告 + 闸失效 (fail-open)
     "model_dir": DATA_DIR / "prob_head",  # WORM bundle 目录 (<board>_prob_<ts>.joblib)
 }
 
@@ -354,30 +390,32 @@ PROB_GATE = {
 # 接线 = daily_pipeline._prob_gate_inputs 组装输入 + list_generator.emit 调用 (已 landed).
 # 排名键保持纯 pred_ret_10d (blend 证伪).
 LEGACY_PROB_GATE = {
-    "enable": True,            # False → 闸关闭 (概率头照常训练但不拦截)
+    "enable": True,  # False → 闸关闭 (概率头照常训练但不拦截)
     "gated_boards": ["main"],  # 08-22 定案: dual 全档有害→撤闸, 仅 main 过闸
-    "margin": 0.22,            # 08-22 125d 重扫: main 0.22 (top-10 +5.08%, 3/3 子窗; 0.5 不可达)
+    "margin": 0.22,  # 08-22 125d 重扫: main 0.22 (top-10 +5.08%, 3/3 子窗; 0.5 不可达)
     # 自适应 margin (2026-08-31): 静态 0.22 在模型/市场分布漂移后不可达 → main 板
     # 08-22 起每日全灭 (08-30 剔 70/70, 08-31 剔 109/109, 08-20 后 main 再未出票).
     # rolling_q: margin_t = clip(Q_q(近 N 日参与闸逐股 spread=pred_prob-base_rate), min, max)
     #   无历史 → 当日截面 bootstrap (top-q% 语义, 无未来数据); 均无 → 回退 margin (fail-open)
     #   连续 3 决策日 100% 剔除 → 熔断放开至 margin_min; "fixed" → 回退静态档 (一键还原)
     "margin_mode": "rolling_q",
-    "margin_q": 0.90,          # 目标保留参与池前 ~10%
-    "margin_min": 0.05,        # 地板: 差日子不许放低于 base+5% 的票
-    "margin_max": 0.25,        # 顶: 不超旧静态档上限
+    "margin_q": 0.90,  # 目标保留参与池前 ~10%
+    "margin_min": 0.05,  # 地板: 差日子不许放低于 base+5% 的票
+    "margin_max": 0.25,  # 顶: 不超旧静态档上限
     "spread_lookback_days": 20,  # spread 池化窗 (交易日, 严格 < 当日)
-    "gate_margin_dir": DATA_DIR / "gate_margin",  # spreads/decision WORM 状态 (逐日文件)
-    "base_rate_days": 20,      # base_rate 观测窗 (交易日)
-    "abs_target": 0.03,        # 概率头目标: mfe_3d >= 3%
-    "refit_every_days": 21,    # 训练脚本: bundle 年龄 < 此值 → skip (交易日)
-    "max_stale_days": 42,      # 短名单侧: bundle 年龄 > 此值 → 大声警告 + 闸失效 (fail-open)
-    "model_dir": DATA_DIR / "prob_head_legacy",  # WORM bundle 目录 (<board>_prob_<ts>.joblib)
+    "gate_margin_dir": DATA_DIR
+    / "gate_margin",  # spreads/decision WORM 状态 (逐日文件)
+    "base_rate_days": 20,  # base_rate 观测窗 (交易日)
+    "abs_target": 0.03,  # 概率头目标: mfe_3d >= 3%
+    "refit_every_days": 21,  # 训练脚本: bundle 年龄 < 此值 → skip (交易日)
+    "max_stale_days": 42,  # 短名单侧: bundle 年龄 > 此值 → 大声警告 + 闸失效 (fail-open)
+    "model_dir": DATA_DIR
+    / "prob_head_legacy",  # WORM bundle 目录 (<board>_prob_<ts>.joblib)
     # ③+④ (08-22 定案): lr 0.03 + n800 + early stop + 地板 50 (WORM 153820)
-    "es": True,                # 训练时早停 (训练窗尾隔离 val_days 交易日做验证集)
-    "es_patience": 50,         # early_stopping 耐心
-    "val_days": 30,            # 验证集 = 训练尾 30 个交易日
-    "es_floor": 50,            # 早停树数 < 此地板 → 固定 floor 树重训 (防 dual 塌缩)
+    "es": True,  # 训练时早停 (训练窗尾隔离 val_days 交易日做验证集)
+    "es_patience": 50,  # early_stopping 耐心
+    "val_days": 30,  # 验证集 = 训练尾 30 个交易日
+    "es_floor": 50,  # 早停树数 < 此地板 → 固定 floor 树重训 (防 dual 塌缩)
 }
 
 # ── 滞涨标记 (2026-08-19 用户定案: legacy+parallel 双交付) ──
@@ -387,13 +425,13 @@ LEGACY_PROB_GATE = {
 # (base_prod<中位 0.732) 82.9%/+13.28% vs 高基线日 -4.40%. 2025 vs 2026 差异 = 市场状态
 # 分布差异 (2025 弱市日 64% vs 2026 强市日 64%), 非组合本身. → 交付层打标仅限低基线日.
 STALL_MARKER = {
-    "ret_10d": 0.02,         # 近 10 日涨幅 < 2% = 滞涨
-    "window_days": 20,       # 统计近 N 个交付交易日
-    "min_sel": 3,            # 期间入选 ≥ 3 次
+    "ret_10d": 0.02,  # 近 10 日涨幅 < 2% = 滞涨
+    "window_days": 20,  # 统计近 N 个交付交易日
+    "min_sel": 3,  # 期间入选 ≥ 3 次
     "base_rate_max": 0.732,  # 当日 base_rate (dual 池 mfe_3d≥3% 达标率) < 此值 = 低基线日
-                             # 才标记 (250d replay base_prod 中位数, PIT 历史常数)
+    # 才标记 (250d replay base_prod 中位数, PIT 历史常数)
     "limit_ret_by_board": {  # 涨停判定: T-1 涨幅 ≥ 此值 = 涨停 (2026-08-19 第六轮
-        "MAIN": 0.095,       # 追涨停 890d 均值 -0.82% 中位 -4.82% → 清单打标不追)
+        "MAIN": 0.095,  # 追涨停 890d 均值 -0.82% 中位 -4.82% → 清单打标不追)
         "GEM": 0.195,
         "STAR": 0.195,
     },
@@ -405,8 +443,8 @@ STALL_MARKER = {
 # TOP-10 新选不变 (2026-08-23 定案), 滞留是额外标注行.
 SHORTLIST_HYSTERESIS = {
     "enable": True,
-    "band_factor": 2.0,   # 滞留带 = 板内排名 ≤ 10 × 此值
-    "max_keep": 3,        # 每板块最多滞留数 (防爆清单)
+    "band_factor": 2.0,  # 滞留带 = 板内排名 ≤ 10 × 此值
+    "max_keep": 3,  # 每板块最多滞留数 (防爆清单)
 }
 
 # ── parallel 概率展示层再校准 (2026-08-29 用户批准) ──
@@ -416,8 +454,8 @@ SHORTLIST_HYSTERESIS = {
 # (排名键/闸/EMA 均在再校准之前, raw 历史 WORM 文件保持原值).
 PARALLEL_PROB_RECAL = {
     "enable": True,
-    "min_matured": 20,    # 成熟日达到该值后因子全额生效
-    "window_days": 42,    # 只用近 window_days 个自然日的历史清单
+    "min_matured": 20,  # 成熟日达到该值后因子全额生效
+    "window_days": 42,  # 只用近 window_days 个自然日的历史清单
     "factor_bounds": [0.2, 1.5],  # 因子安全夹
 }
 
@@ -444,15 +482,15 @@ XMODULE_SHADOW = {
 # 假触发; 与回放参照同口径). 滚动窗 ECE 超阈值 → 提示重训. 阈值见下方 calibration,
 # 勿当定案.
 DRIFT_MONITOR = {
-    "window_days": 42,          # 滚动偏差窗 (交易日)
-    "min_matured_days": 20,     # 成熟日少于该值 → 不出告警 (积累期)
+    "window_days": 42,  # 滚动偏差窗 (交易日)
+    "min_matured_days": 20,  # 成熟日少于该值 → 不出告警 (积累期)
     "bias_threshold": {"main": 0.04, "dual": 0.07},  # 初始值, 勿当定案
-    "cost": 0.0020,             # 往返成本 (与诊断回放一致)
-    "buy_lag": 1,               # 决策日后第 1 个交易日收盘买入
-    "sell_lag": 11,             # = buy_lag + label_horizon(10)
+    "cost": 0.0020,  # 往返成本 (与诊断回放一致)
+    "buy_lag": 1,  # 决策日后第 1 个交易日收盘买入
+    "sell_lag": 11,  # = buy_lag + label_horizon(10)
     "calibration": {
         "cls_threshold": 0.005,  # label_engine CLS_THRESHOLD (gross +0.5%)
-        "n_bins": 5,             # 校准分位桶数 (保证每桶有样本)
+        "n_bins": 5,  # 校准分位桶数 (保证每桶有样本)
         # 初始阈值锚定当前 bundle 诊断基线 (legacy_prob_head_replay_20260816 回放
         # picks 子集 ECE: main 17.4% / dual 23.0%, 含 open基 label vs close基
         # realized 隔夜缺口常数偏移) + 小余量 → 只对真实新漂移告警. 成熟日积累后复核.
@@ -466,18 +504,18 @@ DRIFT_MONITOR = {
 # 数据源: BACKTEST_RESULT_DIR/*/last_*_days_picks_dual.csv (WORM, as-predicted 去重)
 # realized: 刷新后的 dual 检查点 label_pm_10d_net (与校准目标同口径, 无 lag/cost 歧义).
 PARALLEL_DRIFT_MONITOR = {
-    "window_days": 42,          # 滚动偏差窗 (交易日)
-    "min_matured_days": 20,     # 成熟日少于该值 → 不出告警 (积累期)
+    "window_days": 42,  # 滚动偏差窗 (交易日)
+    "min_matured_days": 20,  # 成熟日少于该值 → 不出告警 (积累期)
     "bias_threshold": {"dual": 0.07},  # 初始值 (沿用 legacy dual), 勿当定案
     "run_root": "BACKTESTING RESULT",  # 相对 DATA_OTHERS_DIR 的 run_dir 根
     "checkpoint_dual": "_diag_stage_dual_3y.parquet",  # 相对 DATA_DIR, refresh 步骤更新
     # 08-26 ECE 校准节: pred_prob_10d 事件 = net MFE(盘中) > mfe_threshold
     "calibration": {
         "enable": True,
-        "mfe_threshold": 0.06,   # = _shortlist_t5_t10.ABS_TARGET["10d"]
+        "mfe_threshold": 0.06,  # = _shortlist_t5_t10.ABS_TARGET["10d"]
         "n_bins": 5,
-        "cost": 0.0030,          # COST 0.0013 + 2×滑点中档 (adv20 分层取代表值)
-        "horizon": 10,           # 成熟需 T+1+10 交易日
+        "cost": 0.0030,  # COST 0.0013 + 2×滑点中档 (adv20 分层取代表值)
+        "horizon": 10,  # 成熟需 T+1+10 交易日
         "ece_threshold": {"main": 0.20, "dual": 0.25},  # 沿用 legacy 初始值
     },
 }
@@ -486,5 +524,5 @@ PARALLEL_DRIFT_MONITOR = {
 # 08-14 教训: 重训 + 250d 复验/扫描并发 → RAM 挤兑 → 训练 8.4h 零模型完成.
 # ram_guard.check_startup_gate: 启动时可用物理内存低于下限 → 拒绝启动 (exit 2);
 # ram_guard.start_monitor: 运行期每 poll_s 采样, 低于下限 → 每段挤兑一条 WARNING.
-RETRAIN_RAM_GUARD_MIN_FREE_GB = 2.0   # 启动闸下限 (可用物理内存, GB)
-RETRAIN_RAM_GUARD_POLL_S = 30         # 运行期警报采样间隔 (秒)
+RETRAIN_RAM_GUARD_MIN_FREE_GB = 2.0  # 启动闸下限 (可用物理内存, GB)
+RETRAIN_RAM_GUARD_POLL_S = 30  # 运行期警报采样间隔 (秒)

@@ -36,6 +36,7 @@ def _board_map(key: str) -> dict[str, float]:
 _PROB_MARGIN = _board_map("prob_margin")
 _PAIN_MAX = _board_map("pain_max")
 _PAIN_SOFT_MAX = _board_map("pain_soft_max")
+_Q50_SIGN_GATE = LEGACY_ENTRY_GATE.get("q50_sign_gate", False)
 
 SCHEMA_VERSION = "1.4"
 TOP_N = 15
@@ -328,8 +329,9 @@ class ListGenerator:
              entry_prob 参数比率收紧, 不引入新常数)
           2. compound_ret = pred_ret_10d > 0 — 净预期为正, 成本已在训练标签口径内扣除
              (2026-08-09 弃 COMPOUND_W 加权, 排名/闸统一用 10d)
-          3. pred_q50_3d/5d > 0 (E1 3d/5d 可执行视界中位数均为正;
-             2026-08-05 定案 2d/3d/5d, 2026-08-09 去 2d; 旧 bundle 无 3d/5d 列时回退 1d pred_q50)
+          3. pred_q50_3d/5d > 0 — 2026-09-02 判死默认撤闸 (LEGACY_ENTRY_GATE.
+             q50_sign_gate=False): 符号闸 top-N 实得两板块 4/4 子窗全负 + 池级误杀
+             赢家 main 56%/dual 92% (gate3_arms_20260902_012918); 开关可回退
           4. bear 额外要求 pred_ret_3d > 0 (最近端净预期为正) [E11]
         符合票可能为 0 — 这是特性不是故障.
         escape hatch (测试/研究): entry_prob<=0 跳过 prob 闸, entry_ret_mult<=0 跳过边际闸.
@@ -380,14 +382,17 @@ class ListGenerator:
             ret_ok = compound > 0
             ok &= ret_ok
             # 闸3 (2026-08-05 定案 2d/3d/5d, 2026-08-09 去 2d): 3d/5d 中位数均须为正; 回退 1d pred_q50 (旧 bundle)
-            if all(c in df.columns for c in ("pred_q50_3d", "pred_q50_5d")):
-                q50_ok = (df["pred_q50_3d"].fillna(compound) > 0) & (
-                    df["pred_q50_5d"].fillna(compound) > 0
-                )
-                ok &= q50_ok
-            elif "pred_q50" in df.columns and df["pred_q50"].notna().any():
-                q50_ok = df["pred_q50"].fillna(compound) > 0
-                ok &= q50_ok
+            # 2026-09-02 三臂 250d 回放判死 (gate3_arms_20260902_012918): 符号闸在基线池上
+            # top-N 实得两板块 4/4 子窗全负 + 池级误杀赢家 main 56%/dual 92% → 默认撤闸
+            if _Q50_SIGN_GATE:
+                if all(c in df.columns for c in ("pred_q50_3d", "pred_q50_5d")):
+                    q50_ok = (df["pred_q50_3d"].fillna(compound) > 0) & (
+                        df["pred_q50_5d"].fillna(compound) > 0
+                    )
+                    ok &= q50_ok
+                elif "pred_q50" in df.columns and df["pred_q50"].notna().any():
+                    q50_ok = df["pred_q50"].fillna(compound) > 0
+                    ok &= q50_ok
             if is_bear:
                 ret_ok &= df["pred_ret_3d"] > 0
                 ok &= df["pred_ret_3d"] > 0

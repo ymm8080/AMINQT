@@ -176,6 +176,80 @@ class TestQuantileModels:
             )
 
 
+class TestQuantileEnsemble:
+    """q50 多 seed 中位集成 (09-02): E7 闸3 读 pred_q50_3d/5d, 当前包实测 q50
+    早停 1 树 → 地板重训后仍贴零摆动随机翻闸 (002295 q50_3d=-0.07%). 与
+    LEGACY_TOP10_SECOND_VOTE multi_seed 同机制: q50 按 seeds 独立重训 (各成员
+    含 es+地板), 推理取中位. models[q] 恒存主 seed 单模型 → 旧 bundle/旧代码
+    双向兼容; 成员多样性来自重训级浮点非确定 (同 10d_reg deterministic 注记)."""
+
+    def _params(self):
+        return {
+            "n_estimators": 10,
+            "learning_rate": 0.1,
+            "random_state": 42,
+            "verbosity": -1,
+        }
+
+    def _data(self, n=300, seed=7):
+        rng = np.random.default_rng(seed)
+        X = rng.normal(size=(n, 3))
+        y = X[:, 0] * 0.02 + rng.normal(0, 0.03, n)
+        return X, y
+
+    def test_ensemble_q50_median_of_members(self):
+        X, y = self._data()
+        ens = {"enable": True, "quantiles": [0.50], "seeds": [42, 43]}
+        qset = QuantileModelSet(self._params(), ensemble=ens).fit(X, y)
+        assert len(qset.ensemble_members[0.50]) == 2
+        assert 0.10 not in qset.ensemble_members, "非集成分位不应进 ensemble_members"
+        assert not isinstance(qset.models[0.50], list), "models[q] 恒为主 seed 单模型"
+        Xs = X[:50]
+        members = [m.predict(Xs) for m in qset.ensemble_members[0.50]]
+        expect = np.median(np.column_stack(members), axis=1)
+        dist = qset.predict(Xs)
+        assert np.allclose(dist["pred_q50"].values, expect), "q50 应为成员中位"
+        assert np.allclose(dist["pred_q10"].values, qset.models[0.10].predict(Xs)), (
+            "非集成分位应保持单模型预测"
+        )
+
+    def test_ensemble_off_is_legacy_single(self):
+        X, y = self._data(200)
+        qset = QuantileModelSet(self._params(), ensemble={"enable": False}).fit(X, y)
+        assert not getattr(qset, "ensemble_members", None)
+        dist = qset.predict(X[:30])
+        assert np.allclose(dist["pred_q50"].values, qset.models[0.50].predict(X[:30]))
+
+    def test_old_bundle_without_members_attr(self):
+        X, y = self._data(200)
+        ens = {"enable": True, "quantiles": [0.50], "seeds": [42, 43, 44]}
+        qset = QuantileModelSet(self._params(), ensemble=ens).fit(X, y)
+        del qset.ensemble_members  # 模拟旧代码加载新 bundle / 属性缺失
+        dist = qset.predict(X[:30])
+        assert np.allclose(dist["pred_q50"].values, qset.models[0.50].predict(X[:30]))
+
+    def test_ensemble_members_each_get_es_floor(self):
+        rng = np.random.default_rng(11)
+        X = rng.normal(size=(300, 3))
+        y = X[:, 0] * 0.02 + rng.normal(0, 0.03, 300)
+        X_es = rng.normal(size=(80, 3))
+        y_es = np.zeros(80)  # 平坦 es 窗 → 1 树塌缩
+        ens = {"enable": True, "quantiles": [0.50], "seeds": [42, 43]}
+        qset = QuantileModelSet(self._params(), ensemble=ens).fit(
+            X, y, eval_set=(X_es, y_es), es_patience=5
+        )
+        preds = qset.predict(X[:50])["pred_q50"].values
+        assert preds.std() > 0, "地板兜底对每个集成都生效, q50 不应为常数"
+
+    def test_config_default_off_verdict_20260902(self):
+        """[09-02 A/B 判词] 多 seed 中位只稳定投票不产生信号: main 全窗 +1.13pp
+        纯前半驱动 (前 +1.83/后 -3.15), dual 两半一致负 → 生产默认关闭;
+        重开须带子窗稳定证据 (判据见 config QUANTILE_ENSEMBLE 注释)."""
+        from config.settings import QUANTILE_ENSEMBLE
+
+        assert QUANTILE_ENSEMBLE["enable"] is False
+
+
 class TestPainModel:
     def test_fit_predict(self):
         rng = np.random.default_rng(3)
@@ -534,47 +608,63 @@ class TestDynamicEntry:
         # bear: pred_3d < 0 → 剔
         assert ListGenerator().emit(cands, market_state="bear")["empty"]
 
-    def test_gate_q50_uses_3d5d_medians_not_1d(self):
-        """闸3 (2026-08-09): 有 3d/5d 中位数列时用它们 (均须为正), 不再用 1d pred_q50.
+    def test_gate_q50_sign_gate_disabled_by_default(self):
+        """闸3 q50 符号闸 2026-09-02 三臂 250d 回放判死 → 默认撤闸.
 
-        1d 中位数可为负 (T+1 不可执行, 旧闸误杀), 3d/5d 均为正即过闸;
-        2d 视界 2026-08-09 删除, 2d 中位数列不再参与.
+        gate3_arms_20260902_012918: 符号闸在基线池 (prob边际+compound>0+pain) 上
+        top-5/top-10 实得两板块 4/4 子窗全负 (main +10.47% vs 撤闸 +27.07% /
+        dual +4.30% vs +20.79%), 池级误杀真赢家 main 56.3% / dual 92.5%;
+        分位闸 main 2/4 不过窗. → q50 负中位数不再杀票, 列仍透传清单供参考.
         """
+        from config.settings import LEGACY_ENTRY_GATE
+
+        assert LEGACY_ENTRY_GATE["q50_sign_gate"] is False
         gen = ListGenerator(entry_prob=0.0)  # 跳过 prob 闸, 单独验闸3
         cands = _cands(
             [
                 {
                     "symbol": "600001",
-                    "pred_q50": -0.003,  # 1d 中位数负 (旧闸会误杀, 现在不影响)
-                    "pred_q50_3d": 0.012,  # 3d 中位数正
-                    "pred_q50_5d": 0.020,  # 5d 中位数正
-                },
-                {  # 3d 中位数为负 → 剔
-                    "symbol": "600002",
-                    "pred_q50_3d": -0.005,
+                    "pred_q50": -0.003,  # 1d 中位数负 (撤闸后不影响)
+                    "pred_q50_3d": -0.005,  # 3d 中位数负 (旧闸会剔, 撤闸后过)
                     "pred_q50_5d": 0.020,
                 },
-                {  # 5d 中位数为负 → 剔
-                    "symbol": "600003",
-                    "pred_q50_3d": 0.012,
+                {  # 3d/5d 中位数全负 → 撤闸后仍过 (compound_ret 0.07 > 0)
+                    "symbol": "600002",
+                    "pred_q50_3d": -0.005,
                     "pred_q50_5d": -0.001,
                 },
             ]
         )
         out = gen.emit(cands)
-        assert list(out["list"]["symbol"]) == ["600001"]
+        assert sorted(out["list"]["symbol"]) == ["600001", "600002"]
 
-    def test_gate_q50_falls_back_to_1d_when_no_3d5d(self):
-        """旧 bundle (无 3d/5d 中位数列) 回退 1d pred_q50 闸."""
-        gen = ListGenerator(entry_prob=0.0)
+    def test_gate_q50_sign_gate_reenable_restores_kill(self, monkeypatch):
+        """开关重开 (q50_sign_gate=True) → 旧符号闸行为恢复 (3d/5d 任一负即剔)."""
+        import app.pipeline1.list_generator as lg
+
+        monkeypatch.setattr(lg, "_Q50_SIGN_GATE", True)
+        gen = lg.ListGenerator(entry_prob=0.0)
         cands = _cands(
             [
-                {"symbol": "600001", "pred_q50": -0.003},  # 1d 中位数负 → 剔
-                {"symbol": "600002"},  # 无 pred_q50 → fillna(compound) 正 → 过
+                {
+                    "symbol": "600001",
+                    "pred_q50_3d": 0.012,  # 3d 正
+                    "pred_q50_5d": 0.020,  # 5d 正
+                },
+                {
+                    "symbol": "600002",
+                    "pred_q50_3d": -0.005,  # 3d 负 → 剔
+                    "pred_q50_5d": 0.020,
+                },
+                {
+                    "symbol": "600003",
+                    "pred_q50_3d": 0.012,
+                    "pred_q50_5d": -0.001,  # 5d 负 → 剔
+                },
             ]
         )
         out = gen.emit(cands)
-        assert list(out["list"]["symbol"]) == ["600002"]
+        assert list(out["list"]["symbol"]) == ["600001"]
 
     def test_emit_ranks_by_magnitude(self):
         """排序 (2026-08-07 定案): 纯 pred_ret_10d 幅度降序 (close-to-close 实得口径赢 3d/组合,
