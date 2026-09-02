@@ -465,7 +465,10 @@ PARALLEL_PROB_RECAL = {
 # 数据源 (全部 WORM 已有文件): data/lists/list_<D>*.parquet (legacy, 键=prob_up) +
 # STOCK LIST parallel_shortlist_<D>__*.csv (键=rank_blend, 多版本 keep-last).
 XMODULE_SHADOW = {
-    "enable": True,
+    # 2026-09-02 积累样本终审判死 (21 日影子, T+3 c2c, _shadow_xmodule_eval_*.json):
+    # main shadow 输 parallel -0.18pp/日 (win 0.12), dual 输 -1.14pp/日 (win 0.38);
+    # 两模块交集≈0 (dual=0.00/日) → 混排=对半分席稀释强臂, 非集成. 勿再翻回.
+    "enable": False,
     "weights": {"legacy": 0.5, "parallel": 0.5},
     "top_n": 10,
     "out_root": "shadow",  # 相对 DATA_OTHERS_DIR, 影子清单不进 STOCK LIST 交付目录
