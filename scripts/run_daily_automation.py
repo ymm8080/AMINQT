@@ -92,7 +92,8 @@ _STEP_TIMEOUT_S = {
     "legacy": 3 * 3600,
     "deliver": 30 * 60,
     "deliver_parallel": 30 * 60,
-    "ths_push": 15 * 60,  # 客户端已开 ~20s; 冷启动拉起+登录最长 ~2.5min, 下限 15min 只兜卡死
+    "ths_push": 15
+    * 60,  # 客户端已开 ~20s; 冷启动拉起+登录最长 ~2.5min, 下限 15min 只兜卡死
     "drift": 30 * 60,
     "drift_parallel": 30 * 60,
     "shadow_xmodule": 15 * 60,

@@ -33,26 +33,32 @@ def test_collect_codes_shortlist_top10_by_rank(tmp_path):
 
 def test_collect_codes_union_both_modules_parallel_first(tmp_path):
     """双源并集 (2026-09-02): parallel 前 legacy 后, 重复码只留先出现的 parallel 侧."""
-    _write_shortlist(tmp_path / "parallel_shortlist_20260901__M1.csv",
-                     ["600001", "600002", "600003"])
-    _write_legacy(tmp_path / "legacy_stocklist_20260901__M1.csv",
-                  ["600003", "603829", "002968"])
+    _write_shortlist(
+        tmp_path / "parallel_shortlist_20260901__M1.csv", ["600001", "600002", "600003"]
+    )
+    _write_legacy(
+        tmp_path / "legacy_stocklist_20260901__M1.csv", ["600003", "603829", "002968"]
+    )
     module, codes = mod.collect_codes("20260901", tmp_path)
     assert module == "M1"
     assert codes == ["600001", "600002", "600003", "603829", "002968"]
 
 
 def test_collect_codes_fallback_legacy_top10(tmp_path):
-    _write_legacy(tmp_path / "legacy_stocklist_20260901__M1.csv",
-                  ["002968", "603829", "603326", "600706", "001217"])
+    _write_legacy(
+        tmp_path / "legacy_stocklist_20260901__M1.csv",
+        ["002968", "603829", "603326", "600706", "001217"],
+    )
     module, codes = mod.collect_codes("20260901", tmp_path)
     assert module == "M1"
     assert codes == ["002968", "603829", "603326", "600706", "001217"]
 
 
 def test_collect_codes_filters_bad_codes_and_dedups(tmp_path):
-    _write_shortlist(tmp_path / "parallel_shortlist_20260901__M1.csv",
-                     ["002968", "nan", "2968", "600abc", "603829.0", "002968", "603829"])
+    _write_shortlist(
+        tmp_path / "parallel_shortlist_20260901__M1.csv",
+        ["002968", "nan", "2968", "600abc", "603829.0", "002968", "603829"],
+    )
     _, codes = mod.collect_codes("20260901", tmp_path)
     assert codes == ["002968", "603829"]
 

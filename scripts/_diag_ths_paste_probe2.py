@@ -1,4 +1,5 @@
 """实测2: 点进自选股表格 → Ctrl+V → End 到底部 → 截图验证."""
+
 import os
 import sys
 import time
@@ -8,7 +9,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import uiautomation as auto
 
 TXT = max(
-    __import__("glob").glob(r"D:\AMINQT\DAILY OPERATION\STOCK LIST\ths_watchlist_*.txt"),
+    __import__("glob").glob(
+        r"D:\AMINQT\DAILY OPERATION\STOCK LIST\ths_watchlist_*.txt"
+    ),
     key=os.path.getmtime,
 )
 codes = [c for c in open(TXT, encoding="utf-8").read().split() if c]

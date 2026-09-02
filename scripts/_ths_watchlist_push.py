@@ -51,7 +51,9 @@ def _valid_codes(symbols) -> list[str]:
     return out
 
 
-def collect_codes(date: str, list_dir=STOCK_LIST_DIR, top_n: int = 10) -> tuple[str, list[str]]:
+def collect_codes(
+    date: str, list_dir=STOCK_LIST_DIR, top_n: int = 10
+) -> tuple[str, list[str]]:
     """当日双源 TOP10 并集 → (module, 代码). parallel 前 legacy 后, 逐码去重保序."""
     import pandas as pd
 
@@ -208,7 +210,9 @@ def main() -> int:
         newest = _newest("legacy_stocklist_*__*.csv", STOCK_LIST_DIR)
         if newest is None:
             raise SystemExit("STOCK LIST 目录无任何 legacy 清单")
-        date = re.search(r"legacy_stocklist_(\d{8})__", os.path.basename(newest)).group(1)
+        date = re.search(r"legacy_stocklist_(\d{8})__", os.path.basename(newest)).group(
+            1
+        )
 
     module, codes = collect_codes(date)
     if not codes:

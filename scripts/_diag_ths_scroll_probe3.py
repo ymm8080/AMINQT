@@ -1,4 +1,5 @@
 """实测3: 滚轮滚到自选股底部 → 截图."""
+
 import os
 import sys
 import time

@@ -1,4 +1,5 @@
 """实测4: 右键自选股表格 → 截图看上下文菜单 → ESC 关闭."""
+
 import os
 import sys
 import time

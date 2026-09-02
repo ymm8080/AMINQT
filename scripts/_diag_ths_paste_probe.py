@@ -1,4 +1,5 @@
 """实测: 自选股页 Ctrl+V 批量粘贴 — 观察弹窗行为 (一次性探查脚本)."""
+
 import os
 import sys
 import time
@@ -8,7 +9,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import uiautomation as auto
 
 TXT = max(
-    __import__("glob").glob(r"D:\AMINQT\DAILY OPERATION\STOCK LIST\ths_watchlist_*.txt"),
+    __import__("glob").glob(
+        r"D:\AMINQT\DAILY OPERATION\STOCK LIST\ths_watchlist_*.txt"
+    ),
     key=os.path.getmtime,
 )
 codes = [c for c in open(TXT, encoding="utf-8").read().split() if c]
@@ -67,7 +70,11 @@ snap("after+2s")
 # 若出现对话框, 深挖一层看结构
 for c in auto.GetRootControl().GetChildren():
     try:
-        if c.ProcessId not in pids or c.ClassName in ("#32770",) or "自选股" not in (c.Name or ""):
+        if (
+            c.ProcessId not in pids
+            or c.ClassName in ("#32770",)
+            or "自选股" not in (c.Name or "")
+        ):
             if c.ProcessId in pids and c.Name and "同花顺(9" not in c.Name:
                 print(f"=== 对话框候选: {c.ControlTypeName} {c.Name!r} {c.ClassName!r}")
                 for ch in c.GetChildren():

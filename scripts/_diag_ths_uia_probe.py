@@ -22,8 +22,10 @@ def main() -> int:
             pass
     print(f"hexin 顶层窗口 {len(tops)} 个")
     for w in tops:
-        print(f"\n=== top: type={w.ControlTypeName} name={w.Name!r} "
-              f"class={w.ClassName!r} pid={w.ProcessId} rect={w.BoundingRectangle}")
+        print(
+            f"\n=== top: type={w.ControlTypeName} name={w.Name!r} "
+            f"class={w.ClassName!r} pid={w.ProcessId} rect={w.BoundingRectangle}"
+        )
         _walk(w, 1, max_depth)
     return 0
 
@@ -31,8 +33,11 @@ def main() -> int:
 def _hexin_pid_set() -> set[int]:
     import psutil
 
-    return {p.info["pid"] for p in psutil.process_iter(["name", "pid"])
-            if p.info["name"] and p.info["name"].lower().startswith("hexin")}
+    return {
+        p.info["pid"]
+        for p in psutil.process_iter(["name", "pid"])
+        if p.info["name"] and p.info["name"].lower().startswith("hexin")
+    }
 
 
 def _walk(ctrl, depth: int, max_depth: int) -> None:
@@ -44,9 +49,12 @@ def _walk(ctrl, depth: int, max_depth: int) -> None:
         return
     for ch in children:
         try:
-            print("  " * depth +
-                  f"{ch.ControlTypeName} name={ch.Name!r} class={ch.ClassName!r} "
-                  f"auto_id={ch.AutomationId!r}")
+            print(
+                "  "
+                * depth
+                + f"{ch.ControlTypeName} name={ch.Name!r} class={ch.ClassName!r} "
+                f"auto_id={ch.AutomationId!r}"
+            )
         except Exception:
             continue
         _walk(ch, depth + 1, max_depth)
