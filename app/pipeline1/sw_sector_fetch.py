@@ -74,3 +74,19 @@ def fetch_sw_sector_map(
 def missing_industries(present_inds, sw_map):
     """完整性判定: 返回缺失行业名 sorted 列表 (非空 → 调用方应 [FATAL] exit)."""
     return sorted(set(present_inds) - set(sw_map))
+
+
+def sw_daily_adapter(pro):
+    """生产接线: 返回 fetch_sw_sector_map 可注入的拉取函数 (Tushare sw_daily 路线).
+
+    2026-09-02 定案: index_daily 对申万指数自 2026-08-27 起不再出数 (08-27/09-01
+    两天静默 NaN 与当日 fetch FATAL 同一根因), sw_daily 才是活路线. sw_daily 的
+    涨跌幅列名为 pct_change (index_daily 叫 pct_chg) → 重命名保持
+    fetch_sw_sector_map 取数口径不变; 单位口径两路线一致 (pct 为 %, vol 为 手).
+    """
+    def _fetch(ts_code, start_date, end_date):
+        df = pro.sw_daily(ts_code=ts_code, start_date=start_date, end_date=end_date)
+        if df is not None and len(df):
+            df = df.rename(columns={"pct_change": "pct_chg"})
+        return df
+    return _fetch

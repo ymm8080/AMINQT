@@ -7,7 +7,11 @@ WARN — 2026-08-27 与 09-01 两天全市场 sw_ret_1d/sw_index_close/sw_index_
 
 import pandas as pd
 
-from app.pipeline1.sw_sector_fetch import fetch_sw_sector_map, missing_industries
+from app.pipeline1.sw_sector_fetch import (
+    fetch_sw_sector_map,
+    missing_industries,
+    sw_daily_adapter,
+)
 
 IND2CODE = {"石油石化": "801010", "电气设备": "801730"}
 
@@ -89,3 +93,40 @@ def test_partial_failure_reports_only_missing():
 
 def test_missing_industries_empty_when_complete():
     assert missing_industries({"电气设备"}, {"电气设备": {}}) == []
+
+
+class _FakePro:
+    """伪 Tushare 客户端: sw_daily 返回 sw_daily 真实 schema (pct_change 列名)."""
+
+    def __init__(self, frame):
+        self._frame = frame
+        self.calls = []
+
+    def sw_daily(self, ts_code, start_date, end_date):
+        self.calls.append((ts_code, start_date, end_date))
+        return self._frame
+
+
+def test_sw_daily_adapter_renames_pct_change():
+    """sw_daily 路线接线 (2026-09-02): index_daily 对申万指数 08-27 起死路线;
+    adapter 必须把 sw_daily 的 pct_change 重命名为 pct_chg 保持下游口径不变,
+    透传 ts_code/start/end, 空结果原样返回 (供重试逻辑按失败处理)."""
+    frame = pd.DataFrame({"pct_change": [-2.01], "close": [2605.47], "vol": [467920.0]})
+    fake = _FakePro(frame)
+    fetch_one = sw_daily_adapter(fake)
+    got = fetch_one("801010.SI", "20260902", "20260902")
+    assert fake.calls == [("801010.SI", "20260902", "20260902")]
+    assert got["pct_chg"].iloc[0] == -2.01
+    assert "pct_change" not in got.columns
+
+    empty = sw_daily_adapter(_FakePro(pd.DataFrame()))("801010.SI", "20260902", "20260902")
+    assert len(empty) == 0
+
+
+def test_sw_daily_adapter_end_to_end_with_fetch_sw_sector_map():
+    """adapter 输出可直接喂 fetch_sw_sector_map: 单位换算链路无回归."""
+    frame = pd.DataFrame({"pct_change": [1.23], "close": [4567.89], "vol": [2_345_678.0]})
+    m = fetch_sw_sector_map(
+        sw_daily_adapter(_FakePro(frame)), {"A": "801010"}, {"A"}, "20260902", delay=0
+    )
+    assert m["A"] == {"sw_ret_1d": 0.0123, "sw_index_close": 4567.89, "sw_index_vol": 2.35}
