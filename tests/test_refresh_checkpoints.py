@@ -38,9 +38,27 @@ def _tiny_board(board: str) -> pd.DataFrame:
     )
 
 
+def _redirect_fresh_artifacts(mod, monkeypatch, tmp_path, date: str = "2026-08-07"):
+    """重建成功路径现在带检查点新鲜度后置断言 (2026-09-02): 两检查点落盘且
+    max(date)==面板 max. 走重建路径的 mock 测试把两检查点与面板都指到 tmp 迷你
+    parquet (同日), 保持原测试目的 (编排/锁/指纹) 不变, 也绝不读真实多 GB 文件."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    df = pd.DataFrame({"date": [pd.Timestamp(date)]})
+    for name in ("main", "dual", "panel"):
+        pq.write_table(
+            pa.Table.from_pandas(df, preserve_index=False), str(tmp_path / f"{name}.parquet")
+        )
+    monkeypatch.setattr(mod, "MAIN_CHECKPOINT", str(tmp_path / "main.parquet"))
+    monkeypatch.setattr(mod, "DUAL_CHECKPOINT", str(tmp_path / "dual.parquet"))
+    monkeypatch.setattr(mod, "PANEL_V3_PATH", str(tmp_path / "panel.parquet"))
+
+
 class TestRefreshCheckpoints:
-    def test_builds_dual_then_main_in_order(self, monkeypatch, refresh_mod, capsys):
+    def test_builds_dual_then_main_in_order(self, monkeypatch, refresh_mod, tmp_path, capsys):
         mod = refresh_mod
+        _redirect_fresh_artifacts(mod, monkeypatch, tmp_path)
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
         monkeypatch.setattr(mod, "load_panel_v3", lambda **kw: _tiny_board("main"))
@@ -74,8 +92,9 @@ class TestRefreshCheckpoints:
         out = capsys.readouterr().out
         assert "run_train[main]: rows=1" in out  # run_train 行数打印保留
 
-    def test_empty_board_skipped(self, monkeypatch, refresh_mod):
+    def test_empty_board_skipped(self, monkeypatch, refresh_mod, tmp_path):
         mod = refresh_mod
+        _redirect_fresh_artifacts(mod, monkeypatch, tmp_path)
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
         monkeypatch.setattr(mod, "load_panel_v3", lambda **kw: _tiny_board("main"))
@@ -219,6 +238,7 @@ class TestRefreshFingerprintSkip:
         self, monkeypatch, refresh_mod, tmp_path, capsys
     ):
         mod = self._mod(refresh_mod, monkeypatch, tmp_path)
+        _redirect_fresh_artifacts(mod, monkeypatch, tmp_path)
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
         monkeypatch.setattr(mod, "load_panel_v3", lambda **kw: _tiny_board("main"))
@@ -247,7 +267,9 @@ class TestRefreshConcurrencyLock:
     """并发双建是 08-24 OOM 事故根因 (自动化+手动 refresh 撞车 → 16GB 双份构建).
     锁存在且持锁进程存活 → 第二实例必须零副作用退出; 跑完/跳过必须释放锁."""
 
-    def _mock_rebuild(self, monkeypatch, mod):
+    def _mock_rebuild(self, monkeypatch, mod, tmp_path=None):
+        if tmp_path is not None:
+            _redirect_fresh_artifacts(mod, monkeypatch, tmp_path)
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
         monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
         monkeypatch.setattr(mod, "load_panel_v3", lambda **kw: _tiny_board("main"))
@@ -286,13 +308,13 @@ class TestRefreshConcurrencyLock:
         lock = tmp_path / "_refresh_parallel.lock"
         lock.write_text("999999999", encoding="utf-8")  # 死 PID
         monkeypatch.setattr(mod.psutil, "pid_exists", lambda pid: False)
-        self._mock_rebuild(monkeypatch, mod)
+        self._mock_rebuild(monkeypatch, mod, tmp_path)
         assert mod.main() == 0
         assert not lock.exists()  # 陈旧锁被回收, 跑完正常释放
 
     def test_lock_released_after_normal_run(self, monkeypatch, refresh_mod, tmp_path):
         mod = refresh_mod
-        self._mock_rebuild(monkeypatch, mod)
+        self._mock_rebuild(monkeypatch, mod, tmp_path)
         assert mod.main() == 0
         assert not (tmp_path / "_refresh_parallel.lock").exists()  # try/finally 释放
 
@@ -301,3 +323,77 @@ class TestRefreshConcurrencyLock:
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: True)
         assert mod.main() == 0
         assert not (tmp_path / "_refresh_parallel.lock").exists()  # 跳过路径也释放
+
+
+class TestCheckpointFreshnessAssert:
+    """检查点新鲜度后置断言 (2026-09-02): refresh 是 parallel/deliver_parallel 的
+    前置, 检查点落后 = 下游短名单/回测缺最新交易日 (全脏) → 重建"成功"也必须
+    大声 exit 1, 且不静默放行."""
+
+    def _mock_rebuild_only(self, monkeypatch, mod):
+        """只 mock 重组件, 不 redirect 断言工件 — 断言读的就是测试预置的检查点."""
+        monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
+        monkeypatch.setattr(mod.os, "rename", lambda a, b: None)
+        monkeypatch.setattr(mod, "load_panel_v3", lambda **kw: _tiny_board("main"))
+        monkeypatch.setattr(
+            mod.CleaningPipeline,
+            "run_train",
+            lambda self, df, board=None: (_tiny_board("main"), _tiny_board("dual")),
+        )
+        monkeypatch.setattr(mod, "FeatureEngineV35", lambda: object())
+        monkeypatch.setattr(
+            mod,
+            "build_board_slice",
+            lambda cleaner, fe, bdf, board, ckpt: _tiny_board(board),
+        )
+        monkeypatch.setattr(mod, "_write_fingerprint_meta", lambda latest: None)
+
+    def _panel(self, monkeypatch, mod, tmp_path, date: str) -> str:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        p = str(tmp_path / "panel.parquet")
+        df = pd.DataFrame({"date": [pd.Timestamp(date)]})
+        pq.write_table(pa.Table.from_pandas(df, preserve_index=False), p)
+        monkeypatch.setattr(mod, "PANEL_V3_PATH", p)
+        return p
+
+    def _ckpt(self, tmp_path, date: str) -> str:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        p = str(tmp_path / "ck.parquet")
+        df = pd.DataFrame({"date": [pd.Timestamp(date)]})
+        pq.write_table(pa.Table.from_pandas(df, preserve_index=False), p)
+        return p
+
+    def test_stale_checkpoint_fails_loud(self, monkeypatch, refresh_mod, tmp_path, capsys):
+        """重建出的检查点 (08-07) 落后面板 (08-08) → rc=1, 大声报错."""
+        mod = refresh_mod
+        self._mock_rebuild_only(monkeypatch, mod)
+        monkeypatch.setattr(mod, "MAIN_CHECKPOINT", self._ckpt(tmp_path, "2026-08-07"))
+        monkeypatch.setattr(mod, "DUAL_CHECKPOINT", self._ckpt(tmp_path, "2026-08-07"))
+        self._panel(monkeypatch, mod, tmp_path, "2026-08-08")
+        assert mod.main() == 1
+        assert "ASSERT-FAIL" in capsys.readouterr().out
+
+    def test_missing_checkpoint_fails_loud(self, monkeypatch, refresh_mod, tmp_path):
+        """检查点文件缺失 (板块重建为空却静默交差) → rc=1, 不静默放行."""
+        mod = refresh_mod
+        self._mock_rebuild_only(monkeypatch, mod)
+        monkeypatch.setattr(mod, "MAIN_CHECKPOINT", str(tmp_path / "no_main.parquet"))
+        monkeypatch.setattr(mod, "DUAL_CHECKPOINT", str(tmp_path / "no_dual.parquet"))
+        self._panel(monkeypatch, mod, tmp_path, "2026-08-07")
+        assert mod.main() == 1
+
+    def test_fresh_checkpoints_pass_assert(
+        self, monkeypatch, refresh_mod, tmp_path, capsys
+    ):
+        """两检查点与面板同日 → rc=0, 打印 [assert] ok (happy path 锁定)."""
+        mod = refresh_mod
+        self._mock_rebuild_only(monkeypatch, mod)
+        monkeypatch.setattr(mod, "MAIN_CHECKPOINT", self._ckpt(tmp_path, "2026-08-07"))
+        monkeypatch.setattr(mod, "DUAL_CHECKPOINT", self._ckpt(tmp_path, "2026-08-07"))
+        self._panel(monkeypatch, mod, tmp_path, "2026-08-07")
+        assert mod.main() == 0
+        assert "[assert]" in capsys.readouterr().out

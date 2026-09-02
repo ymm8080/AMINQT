@@ -171,6 +171,38 @@ def main(force: bool = False) -> int:
         _release_refresh_lock()
 
 
+def _assert_checkpoints_fresh(panel_max) -> bool:
+    """重建成功路径后置断言 (2026-09-02): 两检查点 max(date) 必须等于面板 max(date).
+
+    refresh 是 parallel/deliver_parallel 的前置 (_DEPENDS), 检查点落后 = 下游短名单/
+    回测缺最新交易日 (全脏). 不等 → 大声报错 exit 1 (链会跳过 parallel, 当日清单仍由
+    legacy 链保底). mask_recent_days 只掩码标签列不删行, 正常重建的检查点含面板最新日;
+    指纹跳过路径不走这里 (跳过=无新增交易日, 本就一致).
+    """
+    bad: list[str] = []
+    want = pd.Timestamp(panel_max).normalize()
+    for ck in (MAIN_CHECKPOINT, DUAL_CHECKPOINT):
+        if not os.path.exists(ck):
+            bad.append(f"{ck} 不存在 (板块重建为空? 不得静默交差)")
+            continue
+        ckmax = pd.Timestamp(pd.read_parquet(ck, columns=["date"])["date"].max())
+        if ckmax.normalize() != want:
+            bad.append(
+                f"{os.path.basename(ck)} max={ckmax.date()} != 面板 max={want.date()}"
+            )
+    if bad:
+        for b in bad:
+            print(f"[ASSERT-FAIL] 检查点新鲜度断言不过: {b}", flush=True)
+        print(
+            "[ASSERT-FAIL] refresh 声称成功但检查点落后面板 → exit 1 "
+            "(链将跳过 parallel; 先查清洗/标签是否把最新日整日删了)",
+            flush=True,
+        )
+        return False
+    print(f"[assert] 检查点新鲜度 ok: main/dual max == 面板 max {want.date()}", flush=True)
+    return True
+
+
 def _main_locked(force: bool) -> int:
     if _skip_if_unchanged(force):
         return 0
@@ -229,6 +261,11 @@ def _main_locked(force: bool) -> int:
         gc.collect()
     del fe, cleaner
     gc.collect()
+    # 后置断言 (2026-09-02): 重建成功路径完成后, 检查点 max(date) == 面板 max(date)
+    # (两个检查点都要过; 不过 = 重建实际失败, 不写指纹元数据, 下次重跑重建)
+    panel_max = pd.read_parquet(str(PANEL_V3_PATH), columns=["date"])["date"].max()
+    if not _assert_checkpoints_fresh(panel_max):
+        return 1
     if latest_date is not None:
         _write_fingerprint_meta(str(pd.Timestamp(latest_date).date()))
     print("完成", flush=True)
