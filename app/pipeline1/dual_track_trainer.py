@@ -915,7 +915,11 @@ class DualTrackTrainer:
                 trained["board"],
                 len(common),
             )
-            return {"skipped": True, "pass": True, "reason": f"common_days={len(common)}"}
+            return {
+                "skipped": True,
+                "pass": True,
+                "reason": f"common_days={len(common)}",
+            }
 
         verdicts: dict = {}
         for seed, r in per_seed.items():
@@ -926,7 +930,9 @@ class DualTrackTrainer:
             v = dict(next(iter(verdicts.values())))
         else:
             v = {
-                "delta_full": float(agg_fn([t["delta_full"] for t in verdicts.values()])),
+                "delta_full": float(
+                    agg_fn([t["delta_full"] for t in verdicts.values()])
+                ),
                 "delta_h1": float(agg_fn([t["delta_h1"] for t in verdicts.values()])),
                 "delta_h2": float(agg_fn([t["delta_h2"] for t in verdicts.values()])),
             }
@@ -938,7 +944,9 @@ class DualTrackTrainer:
 
         if seeds:
             new_net = float(
-                agg_fn([float(r["daily"].loc[common].mean()) for r in per_seed.values()])
+                agg_fn(
+                    [float(r["daily"].loc[common].mean()) for r in per_seed.values()]
+                )
             )
             buckets = sorted({b for r in per_seed.values() for b in r["split"]})
             split_new = {
@@ -991,7 +999,10 @@ class DualTrackTrainer:
             diag_path = _persist_second_vote_diag(trained["board"], payload)
             logger.info(
                 "[%s] TOP10 第二票明细 (seed×%d %s): %s",
-                trained["board"], len(seeds), agg_name, diag_path,
+                trained["board"],
+                len(seeds),
+                agg_name,
+                diag_path,
             )
         logger.info(
             "[%s] TOP10 第二票: %d 日 | 新 %+.4f vs 旧 %+.4f/日 | 差 全窗 %+.4f "

@@ -48,7 +48,9 @@ def test_no_double_count_on_following_day():
 
 def test_empty_panel_falls_back_to_today_only():
     # 空面板 (prev=NaT): 退回旧语义, 仅保留当日
-    out = select_unwritten_agg(_agg(WEEKEND_SPAN), prev_trade_date=pd.NaT, trade_date=MON)
+    out = select_unwritten_agg(
+        _agg(WEEKEND_SPAN), prev_trade_date=pd.NaT, trade_date=MON
+    )
     assert _days(out) == [MON]
 
 

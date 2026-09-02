@@ -70,7 +70,9 @@ def agg_holdertrade_daily(raw: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def select_unwritten_agg(agg: pd.DataFrame, prev_trade_date, trade_date) -> pd.DataFrame:
+def select_unwritten_agg(
+    agg: pd.DataFrame, prev_trade_date, trade_date
+) -> pd.DataFrame:
     """保留上一交易日之后的公告聚合 (非交易日公告落到下一交易日行).
 
     _daily_fetch 每日只写今日行, 旧过滤 date == TRADE_DATE 把非交易日 ann_date

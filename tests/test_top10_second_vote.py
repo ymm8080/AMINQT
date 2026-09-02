@@ -191,7 +191,9 @@ class TestMultiSeedVerdict:
         assert calls == [42, 43, 44]
         assert v["pass"] is True  # 中位 = 赢家 seed (平局 seed 拉不动中位)
         assert v["delta_full"] == pytest.approx(0.002)  # 非 mean (mean=0.00133)
-        assert v["per_seed"]["43"]["delta_full"] == pytest.approx(0.0)  # 与旧包同款 → 平
+        assert v["per_seed"]["43"]["delta_full"] == pytest.approx(
+            0.0
+        )  # 与旧包同款 → 平
         assert v["seeds"] == [42, 43, 44]
 
     def test_median_two_losers_fail(self, tmp_path):
@@ -205,7 +207,9 @@ class TestMultiSeedVerdict:
     def test_enabled_run_persists_worm_diag(self, tmp_path):
         tr, _ = self._setup(tmp_path, {42: 1.0, 43: -1.0, 44: 1.0})
         tr.top10_second_vote(_trained(sign=1.0))
-        files = list(Path(st.DATA_OTHERS_DIR, "diag").glob("top10_second_vote_main_*.json"))
+        files = list(
+            Path(st.DATA_OTHERS_DIR, "diag").glob("top10_second_vote_main_*.json")
+        )
         assert len(files) == 1
         payload = json.loads(files[0].read_text(encoding="utf-8"))
         assert payload["median_verdict"]["pass"] is True
