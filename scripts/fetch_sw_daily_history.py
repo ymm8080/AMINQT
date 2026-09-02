@@ -121,9 +121,7 @@ def main():
             args.start = max_date
             # 无缺口早退 (2026-09-02): 自动化链每日都会跑到本步, 周末/节假日/当日
             # 重复运行时现有数据已是最新, 不早退会走 "No data fetched!" exit 1 误报
-            if not incremental_needs_fetch(
-                max_date, date.today().strftime("%Y%m%d")
-            ):
+            if not incremental_needs_fetch(max_date, date.today().strftime("%Y%m%d")):
                 logger.info(
                     "Incremental: no gap (existing max %s >= today), nothing to fetch",
                     max_date,

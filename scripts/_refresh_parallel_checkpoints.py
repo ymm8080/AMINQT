@@ -199,7 +199,9 @@ def _assert_checkpoints_fresh(panel_max) -> bool:
             flush=True,
         )
         return False
-    print(f"[assert] 检查点新鲜度 ok: main/dual max == 面板 max {want.date()}", flush=True)
+    print(
+        f"[assert] 检查点新鲜度 ok: main/dual max == 面板 max {want.date()}", flush=True
+    )
     return True
 
 

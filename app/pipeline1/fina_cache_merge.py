@@ -15,6 +15,7 @@ Q2 财报季 (2026-08-14→09-01) 4950 只股票只有 15 只 roe 值变化.
 
 另有 new_symbols_*.parquet 前缀文件 (建仓快照), glob "all__*" 天然排除.
 """
+
 import glob
 import os
 
@@ -26,12 +27,28 @@ import pandas as pd
 # (announce_date 沿用面板口径, sh_* 刚修过, margin 有 T+1 语义, dim31 用户暂缓),
 # 实际取用 = 本清单 ∩ ffill_cols ∩ 缓存实际有的列.
 FINA_CACHE_COLS = [
-    "roe", "roa", "gross_margin", "net_margin", "eps_yoy", "rev_yoy", "profit_yoy",
-    "debt_ratio", "current_ratio", "asset_turnover", "inventory_turnover",
-    "ocf_to_or", "eps", "bps", "ocfps", "revenue_ps",
-    "roe_deducted", "roe_yoy", "q_roe",
+    "roe",
+    "roa",
+    "gross_margin",
+    "net_margin",
+    "eps_yoy",
+    "rev_yoy",
+    "profit_yoy",
+    "debt_ratio",
+    "current_ratio",
+    "asset_turnover",
+    "inventory_turnover",
+    "ocf_to_or",
+    "eps",
+    "bps",
+    "ocfps",
+    "revenue_ps",
+    "roe_deducted",
+    "roe_yoy",
+    "q_roe",
     "ar_turnover",
-    "dt_eps", "q_ocf_to_sales",
+    "dt_eps",
+    "q_ocf_to_sales",
 ]
 
 # 缓存目录默认值 — 权威定义在 DataSupplyChain (cache_dir="data/supply_cache"
@@ -65,9 +82,7 @@ def _allowed_fina_cols(cache_df, fina_cols=None):
     ∩ 缓存实际有的列 — 白名单是硬闸, 即使调用方显式传参也挡住 announce_date /
     sh_* / margin 等保护条目."""
     requested = FINA_CACHE_COLS if fina_cols is None else fina_cols
-    return [
-        c for c in requested if c in FINA_CACHE_COLS and c in cache_df.columns
-    ]
+    return [c for c in requested if c in FINA_CACHE_COLS and c in cache_df.columns]
 
 
 def select_latest_fina(cache_df, fina_cols=None):
@@ -93,7 +108,9 @@ def select_latest_fina(cache_df, fina_cols=None):
     latest = df.sort_values(
         ["symbol", "report_period", "announce_date"], kind="stable"
     ).drop_duplicates("symbol", keep="last")
-    return latest[["symbol", "announce_date", "report_period"] + cols].reset_index(drop=True)
+    return latest[["symbol", "announce_date", "report_period"] + cols].reset_index(
+        drop=True
+    )
 
 
 def overwrite_today_from_cache(df, cache_df, fina_cols=None):
@@ -137,7 +154,9 @@ def replay_fina_asof(panel_rows, cache_df, fina_cols=None):
     out = pd.DataFrame(np.nan, index=np.arange(n), columns=cols, dtype="float64")
     if n == 0 or not cols:
         return out
-    right = cache_df[cache_df["announce_date"].notna() & cache_df["report_period"].notna()]
+    right = cache_df[
+        cache_df["announce_date"].notna() & cache_df["report_period"].notna()
+    ]
     if not len(right):
         return out
     # 同股同公告日多条 (跨文件快照重叠) → 保留 report_period 最新一条 (更正公告为准)
@@ -152,7 +171,11 @@ def replay_fina_asof(panel_rows, cache_df, fina_cols=None):
     perm = np.argsort(dates, kind="stable")
     left = panel_rows.iloc[perm][["symbol", "date"]].reset_index(drop=True)
     merged = pd.merge_asof(
-        left, right, by="symbol", left_on="date", right_on="announce_date",
+        left,
+        right,
+        by="symbol",
+        left_on="date",
+        right_on="announce_date",
         direction="backward",
     )
     out.iloc[perm] = merged[cols].to_numpy(dtype="float64")

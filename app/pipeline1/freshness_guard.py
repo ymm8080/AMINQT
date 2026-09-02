@@ -34,13 +34,22 @@ import yaml
 
 # 相对路径锚定仓库根 (app/pipeline1/ 上 2 层), 与 CWD 无关
 # (risk_overlays.py 教训: 曾按 CWD 解析 → CWD != repo root 时读不到).
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_REPO_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 
 _KINDS = ("file", "panel_columns", "dir_watermark")
 # 各 kind 必备键 (缺一即注册表写错, 启动时报大声而非跑起来静默漏检)
 _REQUIRED_KEYS = {
     "file": ("name", "kind", "path", "date_col", "max_lag_days"),
-    "panel_columns": ("name", "kind", "path", "columns", "lookback_days", "min_nonnull"),
+    "panel_columns": (
+        "name",
+        "kind",
+        "path",
+        "columns",
+        "lookback_days",
+        "min_nonnull",
+    ),
     "dir_watermark": ("name", "kind", "path", "pattern", "max_lag_days"),
 }
 
@@ -147,7 +156,12 @@ def check_file_entry(entry: dict, observed_max, expected, cal) -> dict | None:
     threshold = int(entry["max_lag_days"])
     if observed_max is None:
         return _violation(
-            entry, None, expected, None, threshold, "read_failed (读失败/空列, 绝不静默放行)"
+            entry,
+            None,
+            expected,
+            None,
+            threshold,
+            "read_failed (读失败/空列, 绝不静默放行)",
         )
     obs = _as_date(observed_max)
     exp = _as_date(expected)
@@ -156,7 +170,11 @@ def check_file_entry(entry: dict, observed_max, expected, cal) -> dict | None:
         lag = (exp - obs).days
         if lag > threshold + 2:
             return _violation(
-                entry, obs, exp, lag, threshold,
+                entry,
+                obs,
+                exp,
+                lag,
+                threshold,
                 f"自然日落后 {lag} 天 (交易日历不可用, 阈值 {threshold}+2 周末缓冲)",
             )
         return None
@@ -194,7 +212,11 @@ def check_columns_entry(entry: dict, daily_nonnull, expected, cal) -> dict | Non
         return None
     best_count = max((counts.get(d, 0) for d in window), default=0)
     return _violation(
-        entry, best_day, expected, None, threshold,
+        entry,
+        best_day,
+        expected,
+        None,
+        threshold,
         f"回看 {len(window)} 个观察日 ({window[0]}..{window[-1]}) 内族内各列非空数"
         f"最小值最高仅 {best_count}, 阈值 {threshold} (行在列死/全 NaN 形态)",
     )
@@ -205,7 +227,11 @@ def check_watermark_entry(entry: dict, watermark_date, expected, cal) -> dict | 
     threshold = int(entry["max_lag_days"])
     if watermark_date is None:
         return _violation(
-            entry, None, expected, None, threshold,
+            entry,
+            None,
+            expected,
+            None,
+            threshold,
             "read_failed (目录缺失/无匹配文件, 绝不静默放行)",
         )
     return check_file_entry(entry, watermark_date, expected, cal)
@@ -285,7 +311,7 @@ def panel_column_daily_nonnull(path, columns, cal, tail_days, date_col: str = "d
             cal_idx = pd.DatetimeIndex(cal)
             past = cal_idx[cal_idx <= pd.Timestamp(dmax)]
             if len(past) > 0:  # 交易日跨度 ≤ 自然日跨度 → 用更晚的窗口起点少读行
-                w_start = past[-int(tail_days):]
+                w_start = past[-int(tail_days) :]
                 start = pd.Timestamp(w_start[0])
         tbl = pq.read_table(
             str(path),
@@ -377,7 +403,9 @@ def _resolve_path(p: str) -> str:
     return p if os.path.isabs(str(p)) else os.path.join(_REPO_ROOT, str(p))
 
 
-def run_checks(registry, expected, cal, *, io_impl: FreshnessIO | None = None) -> CheckResult:
+def run_checks(
+    registry, expected, cal, *, io_impl: FreshnessIO | None = None
+) -> CheckResult:
     """编排全部条目. enabled=false 跳过并记入 skipped; 其余逐条判定.
 
     io_impl 可注入伪 IO (单测不碰真数据); None 用真实 IO.

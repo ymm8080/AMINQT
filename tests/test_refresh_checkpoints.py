@@ -48,7 +48,8 @@ def _redirect_fresh_artifacts(mod, monkeypatch, tmp_path, date: str = "2026-08-0
     df = pd.DataFrame({"date": [pd.Timestamp(date)]})
     for name in ("main", "dual", "panel"):
         pq.write_table(
-            pa.Table.from_pandas(df, preserve_index=False), str(tmp_path / f"{name}.parquet")
+            pa.Table.from_pandas(df, preserve_index=False),
+            str(tmp_path / f"{name}.parquet"),
         )
     monkeypatch.setattr(mod, "MAIN_CHECKPOINT", str(tmp_path / "main.parquet"))
     monkeypatch.setattr(mod, "DUAL_CHECKPOINT", str(tmp_path / "dual.parquet"))
@@ -56,7 +57,9 @@ def _redirect_fresh_artifacts(mod, monkeypatch, tmp_path, date: str = "2026-08-0
 
 
 class TestRefreshCheckpoints:
-    def test_builds_dual_then_main_in_order(self, monkeypatch, refresh_mod, tmp_path, capsys):
+    def test_builds_dual_then_main_in_order(
+        self, monkeypatch, refresh_mod, tmp_path, capsys
+    ):
         mod = refresh_mod
         _redirect_fresh_artifacts(mod, monkeypatch, tmp_path)
         monkeypatch.setattr(mod, "_skip_if_unchanged", lambda force: False)
@@ -367,7 +370,9 @@ class TestCheckpointFreshnessAssert:
         pq.write_table(pa.Table.from_pandas(df, preserve_index=False), p)
         return p
 
-    def test_stale_checkpoint_fails_loud(self, monkeypatch, refresh_mod, tmp_path, capsys):
+    def test_stale_checkpoint_fails_loud(
+        self, monkeypatch, refresh_mod, tmp_path, capsys
+    ):
         """重建出的检查点 (08-07) 落后面板 (08-08) → rc=1, 大声报错."""
         mod = refresh_mod
         self._mock_rebuild_only(monkeypatch, mod)

@@ -47,7 +47,9 @@ def _print_line(prefix: str, name: str, obs: dict) -> None:
     """逐条打印: 健康显示观测值, 违规显示 lag/阈值 + 细节."""
     crit = "[CRITICAL] " if obs.get("critical") else ""
     if prefix == "[ok]":
-        print(f"  {prefix} {name} (max={obs.get('observed')}, threshold={obs.get('threshold')})")
+        print(
+            f"  {prefix} {name} (max={obs.get('observed')}, threshold={obs.get('threshold')})"
+        )
     else:
         lag = obs.get("lag")
         lag_s = f"lag={lag}" if lag is not None else "lag=?"

@@ -8,6 +8,7 @@ sw_index_vol 整列 NaN/0, 无任何拦截 (下游是行业动量类特征).
 missing_industries() 结果大声失败 (sys.exit(1), 在面板追加写之前 → 宁可放弃
 当日整次 fetch 也不写 sw 列半空的半拉子面板).
 """
+
 import time
 
 
@@ -37,20 +38,26 @@ def fetch_sw_sector_map(
             try:
                 idx = fetch_one(code + ".SI", trade_date, trade_date)
             except Exception as e:
-                print(f"    sw {code} ({ind}) {trade_date}: attempt "
-                      f"{attempt}/{attempts} FAILED ({e})")
+                print(
+                    f"    sw {code} ({ind}) {trade_date}: attempt "
+                    f"{attempt}/{attempts} FAILED ({e})"
+                )
                 idx = None
             if idx is not None and len(idx):
                 break
             if idx is not None and not len(idx):
-                print(f"    sw {code} ({ind}) {trade_date}: attempt "
-                      f"{attempt}/{attempts} empty")
+                print(
+                    f"    sw {code} ({ind}) {trade_date}: attempt "
+                    f"{attempt}/{attempts} empty"
+                )
                 idx = None
             if attempt < attempts:
                 time.sleep(delay)
         if idx is None:
-            print(f"    sw {code} ({ind}) {trade_date}: giving up after "
-                  f"{attempts} attempts")
+            print(
+                f"    sw {code} ({ind}) {trade_date}: giving up after "
+                f"{attempts} attempts"
+            )
             continue
         # 单位换算 (实测校验, 与 _daily_fetch 原逻辑一致):
         # sw_ret_1d = pct_chg/100 (小数), sw_index_close = close,

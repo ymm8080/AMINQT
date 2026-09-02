@@ -187,7 +187,9 @@ def test_check_file_entry_natural_fallback_weekend_buffer():
     """cal 不可用回退自然日: 周一面板停周五=自然日 3, 阈值 1+2 周末缓冲 → 不误报;
     周二=自然日 4 > 3 → 违规."""
     assert check_file_entry(_FILE_ENTRY, FRI, NEXT_MON, None) is None
-    assert check_file_entry(_FILE_ENTRY, FRI, pd.Timestamp("2026-09-01"), None) is not None
+    assert (
+        check_file_entry(_FILE_ENTRY, FRI, pd.Timestamp("2026-09-01"), None) is not None
+    )
 
 
 # ── check_columns_entry: 窗口内达标 / 全不达标 / 空列表 ─────────────────────
@@ -196,12 +198,15 @@ def test_check_file_entry_natural_fallback_weekend_buffer():
 def test_check_columns_entry_any_day_in_window_passes():
     """回看窗口内任一日达标即健康 — 事件型列隔日有数也算活."""
     counts = [
-        (pd.Timestamp("2026-08-28").date(), 5),      # 窗口外旧日, 低
-        (pd.Timestamp("2026-08-31").date(), 20),     # 窗口内, 低
-        (pd.Timestamp("2026-09-01").date(), 1200),   # 窗口内, 达标
-        (pd.Timestamp("2026-09-02").date(), 0),      # 最新日全 NaN (事故形态)
+        (pd.Timestamp("2026-08-28").date(), 5),  # 窗口外旧日, 低
+        (pd.Timestamp("2026-08-31").date(), 20),  # 窗口内, 低
+        (pd.Timestamp("2026-09-01").date(), 1200),  # 窗口内, 达标
+        (pd.Timestamp("2026-09-02").date(), 0),  # 最新日全 NaN (事故形态)
     ]
-    assert check_columns_entry(_COLS_ENTRY, counts, pd.Timestamp("2026-09-02"), CAL) is None
+    assert (
+        check_columns_entry(_COLS_ENTRY, counts, pd.Timestamp("2026-09-02"), CAL)
+        is None
+    )
 
 
 def test_check_columns_entry_all_below_threshold_violates():
@@ -260,7 +265,9 @@ def test_panel_stale_gate_monday_fresh_friday_data_passes_natural():
 def test_panel_stale_gate_week_old_data_blocks():
     """停更一周: 交易日 lag 5 > 3 / 自然日 7 > 4, 两口径都拦."""
     cal_with_fri = pd.bdate_range("2026-08-24", "2026-09-04")
-    allow, reason = panel_stale_gate(FRI.date(), pd.Timestamp("2026-09-04"), cal_with_fri)
+    allow, reason = panel_stale_gate(
+        FRI.date(), pd.Timestamp("2026-09-04"), cal_with_fri
+    )
     assert allow is False and "交易日落后" in reason
     allow2, reason2 = panel_stale_gate(FRI.date(), pd.Timestamp("2026-09-04"), None)
     assert allow2 is False and "自然日落后" in reason2
@@ -309,7 +316,9 @@ class _FakeIO:
     def dir_watermark(self, path, pattern):
         return self._lookup(self.watermarks, path)
 
-    def panel_column_daily_nonnull(self, path, columns, cal, tail_days, date_col="date"):
+    def panel_column_daily_nonnull(
+        self, path, columns, cal, tail_days, date_col="date"
+    ):
         return self._lookup(self.column_counts, path) or []
 
 
@@ -372,8 +381,8 @@ def test_panel_column_daily_nonnull_counts_min_across_columns(tmp_path):
             "date": pd.to_datetime(
                 ["2026-09-01", "2026-09-01", "2026-09-01", "2026-09-02", "2026-09-02"]
             ),
-            "a": [1.0, 2.0, 3.0, 4.0, 5.0],       # 09-02 有 2 个非空
-            "b": [1.0, None, 3.0, None, None],     # 09-01 仅 2 个非空, 09-02 全空
+            "a": [1.0, 2.0, 3.0, 4.0, 5.0],  # 09-02 有 2 个非空
+            "b": [1.0, None, 3.0, None, None],  # 09-01 仅 2 个非空, 09-02 全空
         }
     )
     p = tmp_path / "mini.parquet"
@@ -406,7 +415,9 @@ def test_dir_watermark_takes_max_date(tmp_path):
     (tmp_path / "new_symbols_20260816_001140.parquet").write_text("x")  # 不匹配尾部日期
     from app.pipeline1.freshness_guard import dir_watermark
 
-    assert dir_watermark(str(tmp_path), r"_(\d{8})\.parquet$") == datetime.date(2026, 8, 20)
+    assert dir_watermark(str(tmp_path), r"_(\d{8})\.parquet$") == datetime.date(
+        2026, 8, 20
+    )
 
 
 def test_dir_watermark_missing_dir_returns_none(tmp_path):

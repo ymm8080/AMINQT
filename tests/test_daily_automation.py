@@ -36,7 +36,14 @@ from scripts.run_daily_automation import (
 # 2026-08-13 = Thursday (weekday 3, 非重训日), 2026-08-14 = Friday (weekday 4, 重训日).
 THU, FRI = _dt.date(2026, 8, 13), _dt.date(2026, 8, 14)
 
-_LEGACY_CHAIN = ["cyq", "sw_history", "freshness", "legacy_prob_head", "legacy", "deliver"]
+_LEGACY_CHAIN = [
+    "cyq",
+    "sw_history",
+    "freshness",
+    "legacy_prob_head",
+    "legacy",
+    "deliver",
+]
 # ths_push 在 tail 首位: parallel 块之外恒执行 (parallel 跳过时自动回退 legacy 清单)
 _TAIL = ["ths_push", "drift", "drift_parallel", "shadow_xmodule"]
 _PARALLEL_CHAIN = ["parallel", "prob_head", "deliver_parallel"]
