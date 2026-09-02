@@ -17,6 +17,8 @@ legacy 预测链 ~35min 前置到一切重活之前, 重活卡死/超时被杀�
   [retrain]  scripts/_retrain_legacy_full.py <tag>     legacy 周频重训 (仅 RETRAIN_WEEKDAY; 重排后当日清单先用现有模型, 新模型自次一清单生效)
   [parallel] python -m app.pipeline_parallel.runner     并行回测 + 短名单 (sniper/fusion/slow_bull)
   [deliver_parallel] scripts/_shortlist_t5_t10.py <tag> 并行短名单交付 STOCK_LIST_DIR
+  [ths_push] scripts/_ths_watchlist_push.py <tag>       当日 TOP10 推同花顺自选股 (UI 自动化,
+                                            非关键; parallel 跳过时自动回退 legacy 清单)
   [drift]    scripts/_monitor_legacy_drift.py           幅度漂移监控 (全池 pred vs 实现偏差)
   [drift_parallel] scripts/_monitor_parallel_drift.py   parallel dual 漂移监控 (短名单 vs 检查点标签)
   [shadow_xmodule] scripts/_shadow_xmodule_blend.py     跨模块影子排名 (legacy×parallel 合池混排, 只记录不交付)
@@ -90,6 +92,8 @@ _STEP_TIMEOUT_S = {
     "legacy": 3 * 3600,
     "deliver": 30 * 60,
     "deliver_parallel": 30 * 60,
+    "ths_push": 15
+    * 60,  # 客户端已开 ~20s; 冷启动拉起+登录最长 ~2.5min, 下限 15min 只兜卡死
     "drift": 30 * 60,
     "drift_parallel": 30 * 60,
     "shadow_xmodule": 15 * 60,
@@ -188,6 +192,7 @@ _STEPS = {
     "legacy": ["scripts/_gen_legacy_list.py", "{tag}"],
     "deliver": ["scripts/_deliver_legacy_list.py", "{tag}"],
     "deliver_parallel": ["scripts/_shortlist_t5_t10.py", "{tag}"],
+    "ths_push": ["scripts/_ths_watchlist_push.py", "{tag}"],
     "drift": ["scripts/_monitor_legacy_drift.py"],
     "drift_parallel": ["scripts/_monitor_parallel_drift.py"],
     "shadow_xmodule": ["scripts/_shadow_xmodule_blend.py"],
@@ -236,6 +241,9 @@ def plan_steps(
         steps.append(
             "deliver_parallel"
         )  # 并行清单交付依赖当日 fresh parallel 重生成, 跳过则同步丢弃
+    # 同花顺自选股推送 (2026-09-01): TOP10 主源并行短名单 rank 序, parallel 跳过时
+    # collect_codes 自动回退 legacy 清单 — 故放在 parallel 块之外恒执行, 非关键步骤
+    steps.append("ths_push")
     steps.append("drift")  # 幅度漂移监控 (读历史 candidates, 非关键步骤)
     steps.append(
         "drift_parallel"
