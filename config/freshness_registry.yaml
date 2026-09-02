@@ -1,0 +1,152 @@
+# -*- coding: utf-8 -*-
+# 特征族新鲜度注册表 (2026-09-02) — 供 app/pipeline1/freshness_guard.py 与
+# scripts/_freshness_check.py 消费. 每个条目 = 一个特征族的"静默停更"探针.
+#
+# 事故背景 (2026-09-02 审计): 历史上 4 起"特征静默停更"全是事后数周才发现 —
+# cyq 停更@07-17 / sw_daily_history 冻结@07-31 (dim28 上游 39 列死 1 个月) /
+# 面板 announce_date 冻结@08-14 (dim31) / 面板 fina 列冻结 + sw_ret_1d 在
+# 08-27/09-01 整列 NaN. 守卫是防再犯的兜底.
+#
+# kind 三种:
+#   file          — 单文件水位: date_col 最大值, 交易日 lag <= max_lag_days
+#   panel_columns — 面板列族: 回看 lookback_days 个交易日内, 任一日族内各列
+#                   非空数最小值 >= min_nonnull 即健康
+#   dir_watermark — 目录水位: 文件名 pattern 首个捕获组 (YYYYMMDD) 取 max
+# 相对路径锚定仓库根; critical=true 的违规在 --strict 模式下 exit 1.
+
+entries:
+
+  # V3 主面板: 全链万源之源, 停更 = 当日 fetch 挂了 → 下游检查点/清单全脏
+  # (08-27 refresh 卡死事故的前置信号; 链级 A1 闸另拦, 此处双保险告警)
+  - name: v3_panel
+    kind: file
+    path: D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet
+    date_col: date
+    max_lag_days: 1          # 交易日
+    critical: true
+
+  # cyq_panel: 防 07-17 停更事故 — pct_70_con 慢牛列静默断供 3 周, 08-19 才发现
+  - name: cyq_panel
+    kind: file
+    path: data/cyq_panel.parquet
+    date_col: date
+    max_lag_days: 1
+    critical: false
+
+  # sw_daily_history: 防 07-31 冻结事故 — end 写死 + 无人挂链, dim28 上游 39 列死 1 个月
+  - name: sw_daily_history
+    kind: file
+    path: data/processed/sw_daily_history.parquet
+    date_col: trade_date
+    max_lag_days: 1
+    critical: false
+
+  # parallel 检查点: 防"检查点落后面板 → 短名单/回测缺最新交易日" (refresh 后置
+  # 断言是强拦截, 此处告警双保险; 断言只盖重建路径, 指纹跳过路径靠这里)
+  - name: checkpoint_main
+    kind: file
+    path: data/_diag_stage_main_3y.parquet
+    date_col: date
+    max_lag_days: 1
+    critical: false
+
+  - name: checkpoint_dual
+    kind: file
+    path: data/_diag_stage_dual_3y.parquet
+    date_col: date
+    max_lag_days: 1
+    critical: false
+
+  # fina 指标缓存目录: 防面板 fina 列冻结的根因 — 缓存断供后财报季 4950 股只换血 15 只
+  - name: fina_cache
+    kind: dir_watermark
+    path: data/supply_cache/alt_data/fina_indicator
+    pattern: '_(\d{8})\.parquet$'   # 文件名尾部日期取 max 为水位
+    max_lag_days: 5
+    critical: false
+
+  # 大宗交易缓存: 防 bt_ 特征族 (dim33 4 特征) 静默停更
+  - name: block_trade_cache
+    kind: file
+    path: data/supply_cache/alt_data/block_trade/block_trade_full.parquet
+    date_col: date
+    max_lag_days: 5
+    critical: false
+
+  # 解禁缓存: 防解禁硬过滤风控失效 (risk_overlays 同口径读 ann_date, PIT-safe)
+  - name: share_float_cache
+    kind: file
+    path: data/supply_cache/alt_data/share_float/share_float_full.parquet
+    date_col: ann_date
+    max_lag_days: 5
+    critical: false
+
+  # ── 以下为 V3 面板内列族 (panel_columns): 面板行照常日更、但某些 enrich 列
+  #    静默全 NaN 是 4 起事故里最常见的形态 (行在列死) ──────────────────────────
+
+  # 申万行业指数列: 防 08-27/09-01 sw_ret_1d 整列 NaN 事故 (面板行照常, 列全死)
+  - name: panel_sw_cols
+    kind: panel_columns
+    path: D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet
+    columns: [sw_ret_1d, sw_index_close, sw_index_vol]
+    lookback_days: 3          # 回看 N 个交易日
+    min_nonnull: 1000         # 任一交易日非空数达到即健康
+    critical: true
+
+  # 两融列: T+1 ffill 语义 (t 日写 t-1 余额), 健康日非空≈全量; 全 NaN = margin 源断供
+  - name: panel_margin_cols
+    kind: panel_columns
+    path: D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet
+    columns: [margin_balance, short_balance, margin_buy_amt, short_sell_vol]
+    lookback_days: 3
+    min_nonnull: 1000
+    critical: false
+
+  # 财报列: 防 08-14 起面板 fina 列冻结事故 (财报季 4950 股只换血 15 只, 09-02 才修)
+  # 阈值 3000: 健康日全市场 ~5000+ 只的财报字段整体就绪, 显著低于全量以容忍停牌/次新
+  - name: panel_fina_cols
+    kind: panel_columns
+    path: D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet
+    columns: [roe, roe_deducted, roa, gross_margin, eps_yoy, rev_yoy, profit_yoy,
+              debt_ratio, eps, roe_yoy]
+    lookback_days: 5
+    min_nonnull: 3000
+    critical: false
+
+  # 龙虎榜列: 事件型 (全国级几乎日日有上榜), 非空数 >=1 即健康; 全 0 = 源断供
+  - name: panel_lhb_cols
+    kind: panel_columns
+    path: D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet
+    columns: [lhb_buy_amt, lhb_net_buy]
+    lookback_days: 5
+    min_nonnull: 1
+    critical: false
+
+  # 股东增减持列: 事件稀疏 (可能连续多日无事件), 回看 15 个交易日容稀疏
+  - name: panel_sh_cols
+    kind: panel_columns
+    path: D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet
+    columns: [sh_net_change_sign, sh_change_amt_total, sh_net_sign]
+    lookback_days: 15
+    min_nonnull: 1
+    critical: false
+
+  # 大宗交易列: 事件稀疏, 回看 7 个交易日
+  - name: panel_bt_cols
+    kind: panel_columns
+    path: D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet
+    columns: [bt_count, bt_disc_raw]
+    lookback_days: 7
+    min_nonnull: 1
+    critical: false
+
+  # 公告日期列: 08-14 冻结事故 (dim31) — 修复暂缓中 (用户 09-02), 现在启用必天天报警,
+  # 修复落地后改 enabled: true 启用
+  - name: panel_announce_date
+    enabled: false
+    kind: panel_columns
+    path: D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet
+    columns: [announce_date]
+    lookback_days: 3
+    min_nonnull: 1000
+    critical: false

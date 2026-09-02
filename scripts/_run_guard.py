@@ -28,6 +28,7 @@ HEAVY_SENTINELS = (
     "_train_legacy_prob_head.py",
     "_train_parallel_prob_head.py",
     "_rankkey_multiseed_sweep.py",
+    "_diag_q90_slot_replay.py",
 )
 ORCHESTRATOR_SENTINEL = "run_daily_automation.py"
 # 链级守卫额外把另一条链实例视为冲突; 脚本级不含 (见模块 docstring).

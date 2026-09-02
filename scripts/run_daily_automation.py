@@ -85,6 +85,11 @@ RETRAIN_WEEKDAY = 4
 _STEP_TIMEOUT_S = {
     "refresh": 3 * 3600,
     "cyq": 40 * 60,
+    # sw_history 正常 3-4min (约 400 指数 × 0.15s 延迟 + API 延迟); 600s 原案上调到
+    # 15min 以守 "每步 ≥15min" 不误杀下限 (限流日变慢留余量)
+    "sw_history": 15 * 60,
+    # freshness 只读 schema/尾列 (实际约 1-2min); 15min 守 "每步 ≥15min" 下限惯例
+    "freshness": 15 * 60,
     "retrain": 12 * 3600,
     "parallel": 4 * 3600,
     "prob_head": 1 * 3600,
@@ -185,6 +190,10 @@ _STEPS = {
         "--workers",
         "6",
     ],  # cyq_panel 增量 (2026-08-19)
+    "sw_history": ["scripts/fetch_sw_daily_history.py", "--incremental"],
+    # 全族特征新鲜度守卫 (2026-09-02): 注册表 config/freshness_registry.yaml, 告警式
+    # 恒 exit 0 — 判定逻辑见 scripts/_freshness_check.py 模块 docstring
+    "freshness": ["scripts/_freshness_check.py"],
     "retrain": ["scripts/_retrain_legacy_full.py", "{tag}"],
     "parallel": ["-m", "app.pipeline_parallel.runner"],
     "prob_head": ["scripts/_train_parallel_prob_head.py"],
@@ -225,6 +234,13 @@ def plan_steps(
     # cyq_panel 增量回填 (2026-08-19): 读 V3 面板补 cache 缺失日期, 非关键步骤 —
     # 失败只损失当日 pct_70_con (慢牛 0.05 权重列跳过), 清单不受影响; 恒前置 (轻量)
     steps.append("cyq")
+    # 申万指数日线增量 (2026-09-02): 面板冻结@07-31 事故 (end 写死 + 无人挂链) 断供
+    # dim28 特征族 39 列上游; 恒前置轻量非关键步骤 — 失败只损失当日行业指数特征新鲜度
+    steps.append("sw_history")
+    # 全族特征新鲜度守卫 (2026-09-02): 四起静默停更事故 (cyq@07-17/sw冻结@07-31/
+    # announce_date@08-14/fina列冻结) 后建的系统级闸, 告警式不阻断 — 08-27 零清单
+    # 教训: 链对失败一视同仁, 告警绝不能拦交付 (恒 exit 0)
+    steps.append("freshness")
     # legacy 并行式概率头: 读面板+特征现场构建 (不依赖 parallel 检查点, 无前置依赖);
     # 自判断新鲜度 (21 交易日重训一次), 未到期开销小 — 放 legacy 预测前 (概率闸依赖 bundle)
     steps.append("legacy_prob_head")
@@ -436,19 +452,32 @@ def main() -> int:
 
     signal.signal(signal.SIGINT, _on_sigint)
 
-    # 数据新鲜度护栏: V3 面板超过 3 个自然日未更新 → 拒绝空跑数小时重活 (边界校验).
-    try:
-        import pandas as pd  # 惰性导入, 保持 --dry-run 轻量
+    # 数据新鲜度护栏 (2026-09-02 加固): V3 面板停更 → 拒绝空跑数小时重活.
+    # 修复旧闸三漏洞 (此前: except 静默放行 / 自然日阈值 / 阈值硬编码):
+    #   1. 读失败 → [FATAL] + state=panel_unreadable, 不再静默放行
+    #      (读失败 ≠ 数据新鲜, except-pass 正是旧闸漏洞);
+    #   2. 判定改调 freshness_guard.panel_stale_gate: 有交易日历时按交易日 lag 判
+    #      — 旧 "(today-pmax).days > 3" 自然日口径下, 周一跑链面板停周五 = 自然日 3
+    #      恰好放行, 周二才拦 (滞后 1-2 天); 交易日口径周一 lag=1 正常放行;
+    #   3. 阈值常量集中在 freshness_guard (_PANEL_MAX_LAG_TRADING/_NATURAL).
+    from app.pipeline1 import freshness_guard
+    from config.settings import PANEL_V3_PATH  # 惰性导入, 保持 --dry-run 轻量
 
-        from config.settings import PANEL_V3_PATH
-
-        pmax = pd.read_parquet(PANEL_V3_PATH, columns=["date"])["date"].max().date()
-    except Exception:
-        pmax = None
-    if pmax is not None and (today - pmax).days > 3:
+    pmax = freshness_guard.file_max_date(str(PANEL_V3_PATH), "date")
+    if pmax is None:
         print(
-            f"[FATAL] V3 面板最新日期 {pmax} 早于今天 3 天以上, 数据可能未 fetch. "
-            f"终止, 不跑重活. (先跑 _daily_fetch.py)",
+            "[FATAL] V3 面板不可读 (file_max_date=None), 数据可能损坏或被外部移动. "
+            "终止, 不跑重活. (先查 D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet)",
+            flush=True,
+        )
+        _write_state(tag, "failed", reason="panel_unreadable")
+        return 2
+    allow, reason = freshness_guard.panel_stale_gate(
+        pmax, today, freshness_guard.load_trade_cal()
+    )
+    if not allow:
+        print(
+            f"[FATAL] {reason}, 数据可能未 fetch. 终止, 不跑重活. (先跑 _daily_fetch.py)",
             flush=True,
         )
         _write_state(tag, "failed", reason="panel_stale")

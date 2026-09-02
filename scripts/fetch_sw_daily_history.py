@@ -19,6 +19,7 @@ import logging
 import os
 import sys
 import time
+from datetime import date
 
 import pandas as pd
 import tushare as ts
@@ -40,8 +41,20 @@ SW_CSV = str(data_others_path("data/processed/sw_stock_classification.csv"))
 OUTPUT = os.path.join(PROCESSED_DIR, "sw_daily_history.parquet")
 
 DEFAULT_START = "20180101"
-DEFAULT_END = "20260731"
+# 动态=今天 (2026-09-02 事故): 原写死 "20260731", 面板冻结一个多月无人发现,
+# 下游 dim28 特征族 39 列全陈旧/NaN; --end 仍可覆盖
+DEFAULT_END = date.today().strftime("%Y%m%d")
 API_DELAY = 0.15  # seconds between API calls
+
+
+def incremental_needs_fetch(max_date, today_str: str) -> bool:
+    """增量缺口判定 (纯函数): 现有 max_date < 今天 才有缺口需要拉取.
+
+    2026-09-02 事故: sw_history 挂入每日自动化链后, 周末/节假日/当日重复运行时
+    现有面板已是最新, 所有 fetch 返回空曾误报 "No data fetched!" exit 1;
+    无缺口必须静默 exit 0, 真缺口 fetch 全空仍大声失败.
+    """
+    return int(str(max_date)) < int(today_str)
 
 
 def get_all_sw_codes():
@@ -106,6 +119,14 @@ def main():
         if "trade_date" in existing_df.columns and len(existing_df) > 0:
             max_date = existing_df["trade_date"].max()
             args.start = max_date
+            # 无缺口早退 (2026-09-02): 自动化链每日都会跑到本步, 周末/节假日/当日
+            # 重复运行时现有数据已是最新, 不早退会走 "No data fetched!" exit 1 误报
+            if not incremental_needs_fetch(max_date, date.today().strftime("%Y%m%d")):
+                logger.info(
+                    "Incremental: no gap (existing max %s >= today), nothing to fetch",
+                    max_date,
+                )
+                return
             logger.info("Incremental: fetching from %s", max_date)
 
     # ── Fetch all indices ──

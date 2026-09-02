@@ -47,6 +47,17 @@ load_dotenv()
 from app.pipeline1 import cyq_ext  # noqa: E402
 from app.pipeline1.cleaning_pipeline import board_of  # noqa: E402
 from app.pipeline1.data_supply import SW_INDEX_CODES, merge_margin_renamed  # noqa: E402
+from app.pipeline1.fina_cache_merge import (  # noqa: E402
+    DEFAULT_CACHE_DIR as FINA_CACHE_DIR,
+)
+from app.pipeline1.fina_cache_merge import (
+    load_fina_cache,
+    overwrite_today_from_cache,
+)
+from app.pipeline1.sw_sector_fetch import (  # noqa: E402
+    fetch_sw_sector_map,
+    missing_industries,
+)
 
 _POS_ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
 TRADE_DATE = _POS_ARGS[0] if _POS_ARGS else datetime.now().strftime("%Y%m%d")
@@ -403,21 +414,22 @@ if "sw_ret_1d" in panel_cols and "industry" in df.columns:
     _ind2code = {v: k for k, v in SW_INDEX_CODES.items()}
     _ind2code["电气设备"] = "801730"
     _present_inds = set(df["industry"].unique()) & set(_ind2code)
-    _sw_map = {}
-    for _ind in sorted(_present_inds):
-        _code = _ind2code[_ind]
-        try:
-            _idx = pro.index_daily(ts_code=_code + ".SI", start_date=TRADE_DATE, end_date=TRADE_DATE)
-        except Exception as e:
-            print(f"    sw {_code} ({_ind}) {TRADE_DATE}: FAILED ({e})")
-            continue
-        if _idx is not None and len(_idx):
-            _r = _idx.iloc[0]
-            _sw_map[_ind] = {
-                "sw_ret_1d": float(_r["pct_chg"]) / 100.0,
-                "sw_index_close": float(_r["close"]),
-                "sw_index_vol": round(float(_r["vol"]) / 1e6, 2),
-            }
+    # 2026-09-02 修复: 旧逻辑失败只 print FAILED + continue, 全空只打一行 WARN →
+    # 08-27 / 09-01 两天全市场 sw 三列整列 NaN/0 无任何拦截. 改为逐指数 3 次重试,
+    # 仍缺任一行业 → [FATAL] sys.exit(1) fail-fast. 本段在面板追加写 ([8]) 之前,
+    # exit 即放弃当日整次 fetch — 有意取舍: 宁可不追加 (次日重跑补齐), 也不写
+    # sw 列半空的半拉子面板 (下游是行业动量类特征, 整列 NaN 会污染特征).
+    _sw_map = fetch_sw_sector_map(
+        lambda _code, _s, _e: pro.index_daily(ts_code=_code, start_date=_s, end_date=_e),
+        _ind2code, _present_inds, TRADE_DATE,
+    )
+    _missing_inds = missing_industries(_present_inds, _sw_map)
+    if _missing_inds:
+        print(f"[FATAL] sw sector index incomplete for {TRADE_DATE}: "
+              f"missing {len(_missing_inds)}/{len(_present_inds)}: {_missing_inds}\n"
+              f"        放弃当日整次 fetch (fail-fast: 不写 sw 列缺失的面板, "
+              f"次日重跑用 idempotent replace 补齐).")
+        sys.exit(1)
     if _sw_map:
         _sw_df = pd.DataFrame(_sw_map).T
         df["sw_ret_1d"] = df["industry"].map(_sw_df["sw_ret_1d"])
@@ -606,6 +618,26 @@ ffill_cols = [c for c in ffill_cols if c in panel_cols]
 # 慢列始终 ffill: 旧逻辑 `df[c].isna().all()` 在今日行部分拉取成功时会跳过整列,
 # 导致其余股票该列 NaN (2026-07-29/30/31 尾行缺失的根因之一)。
 needed_ffill = ffill_cols
+
+# ── 6a. 公告管线 fina 缓存 → 今日行覆盖 (2026-09-02 修复) ──
+# ffill 只能延续面板历史 (停在 Q1): Q2 财报季 2026-08-14→09-01 期间 4950 只股票
+# 仅 15 只 roe 变化, 因为公告管线 (run_announcement_pipeline.py) 每日写入
+# data/supply_cache/alt_data/fina_indicator/ 快照却没人接进面板. 缓存是更新的
+# 真相 → 今日行直接覆盖 (非 fillna); 缓存没有的股票/列留 NaN, 由下方 ffill 兜底.
+# 覆盖列 = FINA_CACHE_COLS 白名单 ∩ ffill_cols ∩ 缓存实际列 — announce_date /
+# sh_* / margin 等保护条目绝不从财务缓存覆盖 (硬闸在 fina_cache_merge 内).
+try:
+    _fina_cache = load_fina_cache(FINA_CACHE_DIR)
+    _fina_applied = overwrite_today_from_cache(df, _fina_cache, fina_cols=needed_ffill)
+    if _fina_applied:
+        print(f"    fina cache overwrite: {len(_fina_applied)} cols x "
+              f"{_fina_cache['symbol'].nunique()} symbols from announcement cache "
+              f"({', '.join(_fina_applied)})")
+    else:
+        print("    fina cache overwrite: no usable fina cols in cache — 今日行走纯 ffill")
+except Exception as e:
+    # 缓存加载失败不致命: ffill 仍提供面板历史值 (Q1), 只是回到事故前的旧状态
+    print(f"    fina cache overwrite: FAILED ({e}) — 今日行回退纯 ffill")
 
 if needed_ffill:
     ffill_hist = pq.read_table(PANEL, columns=["symbol", "date"] + needed_ffill).to_pandas()

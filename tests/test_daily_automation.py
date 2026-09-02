@@ -1,7 +1,7 @@
 """Tests for scripts/run_daily_automation 步骤编排 (2026-08-13).
 
 plan_steps 是纯函数, 决定当日四模块自动化的执行序列:
-  [cyq legacy_prob_head legacy deliver] [refresh?] [retrain?]
+  [cyq sw_history legacy_prob_head legacy deliver] [refresh?] [retrain?]
   [parallel? prob_head deliver_parallel] drift drift_parallel shadow_xmodule
 关键不变式:
   1. 交付保底优先 (2026-08-27): legacy 预测链 (cyq→lph→legacy→deliver) 恒在一切
@@ -22,6 +22,7 @@ import sys
 
 import scripts.run_daily_automation as ma
 from scripts.run_daily_automation import (
+    _CRITICAL,
     _STEP_TIMEOUT_S,
     _STEPS,
     RETRAIN_WEEKDAY,
@@ -35,7 +36,14 @@ from scripts.run_daily_automation import (
 # 2026-08-13 = Thursday (weekday 3, 非重训日), 2026-08-14 = Friday (weekday 4, 重训日).
 THU, FRI = _dt.date(2026, 8, 13), _dt.date(2026, 8, 14)
 
-_LEGACY_CHAIN = ["cyq", "legacy_prob_head", "legacy", "deliver"]
+_LEGACY_CHAIN = [
+    "cyq",
+    "sw_history",
+    "freshness",
+    "legacy_prob_head",
+    "legacy",
+    "deliver",
+]
 # ths_push 在 tail 首位: parallel 块之外恒执行 (parallel 跳过时自动回退 legacy 清单)
 _TAIL = ["ths_push", "drift", "drift_parallel", "shadow_xmodule"]
 _PARALLEL_CHAIN = ["parallel", "prob_head", "deliver_parallel"]
@@ -81,10 +89,50 @@ def test_plan_steps_delivery_chain_precedes_all_heavy_steps():
         plan_steps(FRI),
         plan_steps(THU, force_retrain=True),
     ):
-        assert steps[:4] == _LEGACY_CHAIN
+        assert steps[: len(_LEGACY_CHAIN)] == _LEGACY_CHAIN
         for heavy in ("refresh", "retrain", "parallel"):
             if heavy in steps:
-                assert steps.index(heavy) > 3, f"{heavy} 不得排在 legacy 交付链前"
+                assert steps.index(heavy) > len(_LEGACY_CHAIN) - 1, (
+                    f"{heavy} 不得排在 legacy 交付链前"
+                )
+
+
+def test_plan_steps_sw_history_always_runs():
+    """申万指数日线增量恒执行 (2026-09-02 冻结事故): cyq 后 legacy_prob_head 前, 非关键."""
+    for steps in (
+        plan_steps(THU),
+        plan_steps(FRI),
+        plan_steps(THU, skip_parallel=True),
+        plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True),
+    ):
+        assert "sw_history" in steps
+        assert (
+            steps.index("cyq")
+            < steps.index("sw_history")
+            < steps.index("legacy_prob_head")
+        )
+    # 非关键: 失败只损失行业指数特征新鲜度, 不拦当日清单
+    assert "sw_history" not in _CRITICAL
+
+
+def test_plan_steps_freshness_always_runs_after_sw_history():
+    """全族新鲜度守卫恒执行 (2026-09-02 四起静默停更事故): sw_history 后
+    legacy_prob_head 前, 告警式非关键 (08-27 零清单教训: 告警绝不拦交付)."""
+    for steps in (
+        plan_steps(THU),
+        plan_steps(FRI),
+        plan_steps(THU, skip_parallel=True),
+        plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True),
+    ):
+        assert "freshness" in steps
+        assert (
+            steps.index("sw_history")
+            < steps.index("freshness")
+            < steps.index("legacy_prob_head")
+        )
+    assert "freshness" not in _CRITICAL
+    assert _STEPS["freshness"] == ["scripts/_freshness_check.py"]
+    assert _STEP_TIMEOUT_S["freshness"] >= 15 * 60
 
 
 def test_plan_steps_skip_parallel_drops_deliver_parallel():
