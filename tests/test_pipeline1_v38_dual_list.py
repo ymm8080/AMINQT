@@ -518,3 +518,89 @@ class TestRegMinTrees:
         )
         preds = model.predict(rng.normal(size=(50, nf)))
         assert preds.std() > 0, "地板重训后 pred_ret_3d 不应为常数"
+
+
+# ============================================================
+# 时间衰减样本加权接线 (2026-09-03 过闸): reg 回归根 fit 收
+# prob_head.decay_sample_weights 权重 (常量/公式复用并行概率头, 单一真相源);
+# HALF_LIFE_DAYS=None → 回退原 time_weights (半衰期 250 交易日, B10).
+# 只测接线 (桩不真训练); 纯函数本身见 tests/test_prob_gate.py.
+# ============================================================
+class _RecordingLGBMStub:
+    """fit 参数记录桩 (reg/cls 共用); 不做真训练."""
+
+    def __init__(self, **kwargs):
+        self.init_kwargs = kwargs
+        self.fit_kwargs: dict = {}
+
+    def fit(self, x, y, **kwargs):
+        self.fit_kwargs = kwargs
+        return self
+
+
+class TestTimeDecaySampleWeight:
+    @staticmethod
+    def _segs():
+        rng = np.random.default_rng(7)
+
+        def frame(n, start):
+            f = rng.normal(size=(n, 2))
+            df = pd.DataFrame(f, columns=["f0", "f1"])
+            df["date"] = pd.bdate_range(start, periods=n)
+            # _resolve_label 链路: label_pm_10d[_cls] → *_net (两级同值)
+            df["label_pm_10d"] = f[:, 0] * 0.02
+            df["label_pm_10d_net"] = f[:, 0] * 0.02
+            df["label_pm_10d_cls"] = (f[:, 0] > 0).astype(float)
+            df["label_pm_10d_cls_net"] = (f[:, 0] > 0).astype(float)
+            return df
+
+        # es 仅 5 交易日 (< MIN_ES_DATES=20) → use_es=False, fit 无早停参数
+        return {"train": frame(60, "2024-01-01"), "es": frame(5, "2024-04-01")}
+
+    def test_reg_head_fit_receives_decay_weights(self, monkeypatch):
+        """half_life 非 None → reg 头 fit 收 sample_weight (len=行数, 值=衰减公式)."""
+        import app.pipeline1.dual_track_trainer as dtt
+        from app.pipeline_parallel import prob_head
+
+        monkeypatch.setattr("lightgbm.LGBMRegressor", _RecordingLGBMStub)
+        monkeypatch.setattr(prob_head, "HALF_LIFE_DAYS", 60)
+        segs = self._segs()
+        model, label = dtt.DualTrackTrainer()._train_one(
+            "10d_reg", segs, ["f0", "f1"], "dual"
+        )
+        assert label == "label_pm_10d_net"
+        w = model.fit_kwargs["sample_weight"]
+        assert len(w) == len(segs["train"])  # dropna/risk_filter 后同帧对齐
+        expected = prob_head.decay_sample_weights(segs["train"]["date"], 60)
+        assert np.allclose(w, expected)
+        assert (np.diff(w) > 0).all()  # 日期升序 → 权重升序
+        assert w[-1] == pytest.approx(1.0)  # 最新日 age=0
+
+    def test_reg_head_none_half_life_falls_back_to_legacy(self, monkeypatch):
+        """HALF_LIFE_DAYS=None → 回退原 time_weights (半衰期 250 交易日), 原行为."""
+        import app.pipeline1.dual_track_trainer as dtt
+        from app.pipeline_parallel import prob_head
+
+        monkeypatch.setattr("lightgbm.LGBMRegressor", _RecordingLGBMStub)
+        monkeypatch.setattr(prob_head, "HALF_LIFE_DAYS", None)
+        segs = self._segs()
+        model, _ = dtt.DualTrackTrainer()._train_one(
+            "10d_reg", segs, ["f0", "f1"], "dual"
+        )
+        w = model.fit_kwargs["sample_weight"]
+        assert np.allclose(w, dtt.DualTrackTrainer.time_weights(segs["train"]))
+
+    def test_cls_head_keeps_legacy_weights(self, monkeypatch):
+        """接线只进 reg 回归根: cls 头 (概率族另一支) 维持原 time_weights."""
+        import app.pipeline1.dual_track_trainer as dtt
+        from app.pipeline_parallel import prob_head
+
+        monkeypatch.setattr("lightgbm.LGBMClassifier", _RecordingLGBMStub)
+        monkeypatch.setattr(prob_head, "HALF_LIFE_DAYS", 60)
+        segs = self._segs()
+        model, label = dtt.DualTrackTrainer()._train_one(
+            "10d_cls", segs, ["f0", "f1"], "dual"
+        )
+        assert label == "label_pm_10d_cls_net"
+        w = model.fit_kwargs["sample_weight"]
+        assert np.allclose(w, dtt.DualTrackTrainer.time_weights(segs["train"]))
