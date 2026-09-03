@@ -17,12 +17,13 @@ def verdict_from_payload(
     payload: dict,
     board: str,
     *,
+    arm: str = "B",
     tol_full: float = 0.0,
     tol_half: float = -0.005,
     win_rate_min: float = 0.5,
     min_days: int = 10,
 ) -> dict:
-    delta = (payload.get(board) or {}).get("delta_B_vs_A")
+    delta = (payload.get(board) or {}).get(f"delta_{arm}_vs_A")
     if not isinstance(delta, dict) or not delta:
         return {"ok": False, "pass": False, "reason": "no_delta"}
     days = int(delta.get("days", 0) or 0)

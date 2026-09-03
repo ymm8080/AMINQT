@@ -90,6 +90,15 @@ LEGACY_TOP10_SECOND_VOTE = {
     "eval_days": 48,  # 终榜回放窗口 (T+10 标签成熟上限)
     "min_days": 10,  # 可比日下限, 不足视为无判词 (保留旧包)
     "top_n": 10,
+    # [09-02 防坏签] 构建间抽签稳定性: 构建混沌 ±2pp/日意味着"今天这一抽"可能
+    # 是幸运签 (dual 09-02 坏签/09-01 中性签同输入互证). 开启后 retrain 工具闸
+    # 把近 stability_window_days 日内最新 stability_max_extra 个同板构建包作为
+    # 额外臂一起对拍, 晋升 = 新包自身 PASS 且 全部抽签严格多数 PASS —
+    # 单抽幸运签不再晋升, 过程级坏签 (多数抽签差) 也被拦. 无额外臂时退化为
+    # 单抽判词 (与未开启一致).
+    "stability_enable": True,
+    "stability_max_extra": 2,
+    "stability_window_days": 3,
     # [09-01] 多 seed 集成判词 (仅 raw_head 口径): 修的是种子轴 ±0.4pp, 而构建间
     # 混沌 ±2pp/日才是主体 (09-02 终审). final_list_tool 口径下工具只判将交付的
     # 单包 (不重训 seeds), 更快也更对口. 回退 raw_head 时恢复生效.

@@ -15,6 +15,7 @@ import glob
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -38,10 +39,46 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 FINALTOP_TOOL = os.path.join(ROOT, "tmp_t", "_dual_pkg_finaltop_compare.py")
 
 
+def _recent_draw_bundles(board: str, exclude: set, cfg: dict) -> list:
+    """近 N 日同板 WORM 构建包 (构建间稳定性检查的额外抽签臂), 新→旧.
+
+    只认文件名日期在 stability_window_days 内的包 (更老的包是不同数据/代码
+    环境的产物, 不是同过程抽签); current/backup 无日期段自然被 regex 排除.
+    """
+    from datetime import datetime
+
+    max_extra = int(cfg.get("stability_max_extra", 2))
+    window = int(cfg.get("stability_window_days", 3))
+    t0 = datetime.strptime(time.strftime("%Y%m%d"), "%Y%m%d")
+    out: list = []
+    for p in sorted(
+        glob.glob(os.path.join(MODEL_DIR, f"{board}_*.pkl")),
+        key=os.path.getmtime,
+        reverse=True,
+    ):
+        if os.path.abspath(p) in exclude:
+            continue
+        m = re.search(r"_((20\d{6})\w*)\.pkl$", os.path.basename(p))
+        if not m:
+            continue
+        try:
+            age = (t0 - datetime.strptime(m.group(2), "%Y%m%d")).days
+        except ValueError:
+            continue
+        if not (0 <= age <= window):
+            continue
+        out.append(p)
+        if len(out) >= max_extra:
+            break
+    return out
+
+
 def _finaltop_gate(board: str, new_path: str, cfg: dict) -> bool:
     """[09-02] final_list_tool 口径第二票: IC 过闸后调终榜回放工具对拍
     current(A) vs 新包(B), 套新判词 (全窗≥0 且双半≥tol_half 且胜率≥min) 才放行.
 
+    防坏签稳定性 (stability_enable): 近 N 日同板构建包作额外臂 (C, D...) 一起
+    对拍, 晋升 = 新包自身 PASS 且 可判臂严格多数 PASS — 单抽幸运签不再晋升.
     fail-safe: 工具失败/超时/无产出/无判词 → 保留旧包 (False). 无 current 包
     → IC 闸独裁放行. 判据实现见 app/pipeline1/finaltop_verdict.py.
     """
@@ -51,6 +88,15 @@ def _finaltop_gate(board: str, new_path: str, cfg: dict) -> bool:
     if not os.path.exists(cur):
         print(f"[{board}] finaltop: 无 current 包可比, IC 闸独裁 -> 放行", flush=True)
         return True
+    arms = [cur, new_path]
+    extras: list = []
+    if cfg.get("stability_enable"):
+        extras = _recent_draw_bundles(
+            board,
+            exclude={os.path.abspath(cur), os.path.abspath(new_path)},
+            cfg=cfg,
+        )
+        arms += extras
     diag_dir = data_others_path("diag")
     before = set(glob.glob(str(diag_dir / "_dual_pkg_finaltop_compare_*.json")))
     flag = "--main-bundles" if board == "main" else "--dual-bundles"
@@ -60,9 +106,9 @@ def _finaltop_gate(board: str, new_path: str, cfg: dict) -> bool:
         "--boards",
         board,
         "--bundles",
-        "a,b",
+        ",".join(chr(ord("a") + i) for i in range(len(arms))),
         flag,
-        f"{cur},{new_path}",
+        ",".join(arms),
         "--eval-days",
         str(int(cfg.get("eval_days", 48))),
         "--guard-exclude-pid",
@@ -70,7 +116,8 @@ def _finaltop_gate(board: str, new_path: str, cfg: dict) -> bool:
     ]
     print(
         f"[{board}] finaltop: 终榜回放对拍 current vs "
-        f"{os.path.basename(new_path)} (eval_days={cfg.get('eval_days', 48)}) ...",
+        f"{os.path.basename(new_path)} (eval_days={cfg.get('eval_days', 48)}, "
+        f"臂={len(arms)} 含稳定性臂 {len(extras)}) ...",
         flush=True,
     )
     try:
@@ -97,13 +144,12 @@ def _finaltop_gate(board: str, new_path: str, cfg: dict) -> bool:
         )
         return False
     payload = json.loads(Path(new_json[-1]).read_text(encoding="utf-8"))
-    v = verdict_from_payload(
-        payload,
-        board,
+    kw = dict(
         tol_half=float(cfg.get("tol_half", -0.005)),
         win_rate_min=float(cfg.get("win_rate_min", 0.5)),
         min_days=int(cfg.get("min_days", 10)),
     )
+    v = verdict_from_payload(payload, board, **kw)
     if not v.get("ok"):
         print(f"[{board}] finaltop: 无判词 ({v.get('reason')}), 保留旧包", flush=True)
         return False
@@ -113,9 +159,73 @@ def _finaltop_gate(board: str, new_path: str, cfg: dict) -> bool:
         f"({v['win_days']}/{v['win_days'] + v['lose_days']}) checks={v['checks']}",
         flush=True,
     )
+    usable = []
+    for i, p in enumerate(extras):
+        xv = verdict_from_payload(payload, board, arm=chr(ord("C") + i), **kw)
+        tag = os.path.basename(p)
+        if xv.get("ok"):
+            usable.append(xv)
+            print(
+                f"[{board}] finaltop 稳定性臂 {tag}: Δ={xv['d3_full']:+.5f}/日 "
+                f"胜率 {xv['win_rate']:.3f} pass={xv['pass']}",
+                flush=True,
+            )
+        else:
+            print(
+                f"[{board}] finaltop 稳定性臂 {tag}: 无判词 ({xv.get('reason')}), "
+                f"不计入多数",
+                flush=True,
+            )
+    n = 1 + len(usable)
+    passing = (1 if v["pass"] else 0) + sum(1 for x in usable if x["pass"])
+    if len(usable) and passing * 2 <= n:
+        print(
+            f"[{board}] finaltop: 稳定性 FAIL ({passing}/{n} 抽签过判词), "
+            f"保留旧模型",
+            flush=True,
+        )
+        return False
     if not v["pass"]:
         print(f"[{board}] finaltop: FAIL, 保留旧模型", flush=True)
     return v["pass"]
+
+
+def _record_canary_state(board: str, tag: str, prev_tag: str, cfg: dict) -> None:
+    """晋升成功 → 记 canary state (scripts/_finaltop_canary.py 晋升后真 OOS 复核).
+
+    backup 指向被替换 tag 的 WORM 原包 (f"{board}_{prev_tag}.pkl", 不复制零额外
+    磁盘); 找不到才退回 _retrain_backup. 无可回退目标 → 不记 state.
+    """
+    tag_file = os.path.abspath(os.path.join(MODEL_DIR, f"{board}_{prev_tag}.pkl"))
+    bak = os.path.abspath(os.path.join(MODEL_DIR, f"{board}_current_retrain_backup.pkl"))
+    target = tag_file if (prev_tag and os.path.exists(tag_file)) else (
+        bak if os.path.exists(bak) else None
+    )
+    if target is None:
+        return
+    p = data_others_path("diag") / "finaltop_canary_state.json"
+    state: dict = {}
+    if p.exists():
+        try:
+            state = json.loads(p.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            state = {}
+    state[board] = {
+        "tag": tag,
+        "prev_tag": prev_tag,
+        "backup": target,
+        "promoted": time.strftime("%Y-%m-%d"),
+        "days": 10,
+        "ran": {},
+        "status": "active",
+    }
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(
+        f"[{board}] canary state 已记 (backup={os.path.basename(target)}, "
+        f"prev={prev_tag})",
+        flush=True,
+    )
 
 
 def main() -> int:
@@ -203,6 +313,7 @@ def main() -> int:
                 if not _finaltop_gate(board, res["path"], cfg):
                     continue
             cur = os.path.join(MODEL_DIR, f"{board}_current.pkl")
+            prev_tag = (mods.get(board) or {}).get("tag", "")
             bak = os.path.join(MODEL_DIR, f"{board}_current_retrain_backup.pkl")
             if os.path.exists(cur) and not os.path.exists(bak):
                 shutil.copy(cur, bak)
@@ -214,6 +325,7 @@ def main() -> int:
                 "updated": time.strftime("%Y-%m-%d %H:%M"),
             }
             print(f"[{board}] switched -> current = {res['path']}", flush=True)
+            _record_canary_state(board, tag, prev_tag, LEGACY_TOP10_SECOND_VOTE)
         else:
             print(
                 f"[{board}] OOS weighted_IC={res['oos'].get('weighted_ic'):.4f} "
