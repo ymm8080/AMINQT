@@ -137,9 +137,7 @@ class TestRetrainFinaltopGate:
             if rc == 0 and delta is not None:
                 diag = Path(st.DATA_OTHERS_DIR, "diag")
                 diag.mkdir(parents=True, exist_ok=True)
-                (
-                    diag / "_dual_pkg_finaltop_compare_20990101_000000.json"
-                ).write_text(
+                (diag / "_dual_pkg_finaltop_compare_20990101_000000.json").write_text(
                     json.dumps({board: {"delta_B_vs_A": delta}}), encoding="utf-8"
                 )
             return types.SimpleNamespace(returncode=rc, stdout="", stderr="")
@@ -147,7 +145,9 @@ class TestRetrainFinaltopGate:
         monkeypatch.setattr(
             m,
             "subprocess",
-            types.SimpleNamespace(run=fake_run, TimeoutExpired=subprocess.TimeoutExpired),
+            types.SimpleNamespace(
+                run=fake_run, TimeoutExpired=subprocess.TimeoutExpired
+            ),
         )
         return calls
 

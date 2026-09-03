@@ -92,8 +92,7 @@ def _finaltop_gate(board: str, new_path: str, cfg: dict) -> bool:
     if proc.returncode != 0 or not new_json:
         tail = (proc.stdout or "").strip().splitlines()[-5:]
         print(
-            f"[{board}] finaltop: 工具失败 rc={proc.returncode}, 保留旧包; "
-            f"tail={tail}",
+            f"[{board}] finaltop: 工具失败 rc={proc.returncode}, 保留旧包; tail={tail}",
             flush=True,
         )
         return False
