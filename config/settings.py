@@ -394,9 +394,15 @@ PROB_GATE = {
     "margin": 0.08,  # 边际 (legacy 配方, 平台中段, 勿扫)
     "base_rate_days": 20,  # base_rate 观测窗 (交易日)
     "abs_target": 0.03,  # 概率头目标: mfe_3d >= 3%
-    "refit_every_days": 21,  # 训练脚本: bundle 年龄 < 此值 → skip (交易日)
+    # 半衰期集成 (2026-09-03 用户定案 ensB3): 逐档训练 bundle (文件名 <board>_prob_hl<hl>_),
+    # serving 概率取算术均值, 排名键 mag×prob_avg 不变. 125d 配对 A/B (单 seed,
+    # 复刻头口径): ensB3 main +0.56pp/日 dual +0.62pp/日 双板双半窗全正, 全面优于
+    # 单档 (hl7 +0.54) 与含 60 的组合. 注意 A/B 为复刻头 (0.06/mfe_10d), 非生产配方.
+    "half_lives": [7, 15, 30],
+    "refit_every_days": 21,  # 训练脚本: bundle 年龄 < 此值 → skip (交易日, 逐档判断)
     "max_stale_days": 42,  # 短名单侧: bundle 年龄 > 此值 → 大声警告 + 闸失效 (fail-open)
-    "model_dir": DATA_DIR / "prob_head",  # WORM bundle 目录 (<board>_prob_<ts>.joblib)
+    "model_dir": DATA_DIR
+    / "prob_head",  # WORM bundle 目录 (<board>_prob_hl<hl>_<ts>.joblib)
 }
 
 # ── legacy 并行式概率闸 (2026-08-15 定案, 2026-08-16 已接线) ──

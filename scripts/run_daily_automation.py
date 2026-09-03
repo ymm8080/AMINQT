@@ -22,6 +22,8 @@ legacy 预测链 ~35min 前置到一切重活之前, 重活卡死/超时被杀�
   [deliver_parallel] scripts/_shortlist_t5_t10.py <tag> 并行短名单交付 STOCK_LIST_DIR
   [ths_push] scripts/_ths_watchlist_push.py <tag>       当日 TOP10 推同花顺自选股 (UI 自动化,
                                             非关键; parallel 跳过时自动回退 legacy 清单)
+  [ths_flush_guard] scripts/_ths_flush_guard.py <tag>   当日放量下跌标记→自选股剔除文档 (非关键,
+                                            判断只用日频 OHLCV/动量/量能; 09-03)
   [drift]    scripts/_monitor_legacy_drift.py           幅度漂移监控 (全池 pred vs 实现偏差)
   [drift_parallel] scripts/_monitor_parallel_drift.py   parallel dual 漂移监控 (短名单 vs 检查点标签)
   [shadow_xmodule] scripts/_shadow_xmodule_blend.py     跨模块影子排名 (legacy×parallel 合池混排, 只记录不交付)
@@ -95,7 +97,8 @@ _STEP_TIMEOUT_S = {
     "freshness": 15 * 60,
     "retrain": 12 * 3600,
     "parallel": 4 * 3600,
-    "prob_head": 1 * 3600,
+    # prob_head 半衰期集成后 = 2 板 × len(half_lives) 桡 bundle 训练 (09-03 起 6 次)
+    "prob_head": 3 * 3600,
     "legacy_prob_head": 1 * 3600,
     "legacy": 3 * 3600,
     "deliver": 30 * 60,
@@ -104,6 +107,7 @@ _STEP_TIMEOUT_S = {
     "deliver_parallel": 30 * 60,
     "ths_push": 15
     * 60,  # 客户端已开 ~20s; 冷启动拉起+登录最长 ~2.5min, 下限 15min 只兜卡死
+    "ths_flush_guard": 10 * 60,  # 面板单日切片+秩计算 ~1min, 下限只兜卡死
     "drift": 30 * 60,
     "drift_parallel": 30 * 60,
     "shadow_xmodule": 15 * 60,
@@ -208,6 +212,7 @@ _STEPS = {
     "canary": ["scripts/_finaltop_canary.py"],
     "deliver_parallel": ["scripts/_shortlist_t5_t10.py", "{tag}"],
     "ths_push": ["scripts/_ths_watchlist_push.py", "{tag}"],
+    "ths_flush_guard": ["scripts/_ths_flush_guard.py", "{tag}"],
     "drift": ["scripts/_monitor_legacy_drift.py"],
     "drift_parallel": ["scripts/_monitor_parallel_drift.py"],
     "shadow_xmodule": ["scripts/_shadow_xmodule_blend.py"],
@@ -271,6 +276,9 @@ def plan_steps(
     # 同花顺自选股推送 (2026-09-01): TOP10 主源并行短名单 rank 序, parallel 跳过时
     # collect_codes 自动回退 legacy 清单 — 故放在 parallel 块之外恒执行, 非关键步骤
     steps.append("ths_push")
+    # 放量下跌自选股守卫 (2026-09-03): 当日放量下跌标记 (日频 OHLCV/动量/量能) →
+    # 自选股剔除 + 当日删除文档; UI 删除待 Del 键流程探针验证后经 --apply 启用, 非关键步骤
+    steps.append("ths_flush_guard")
     steps.append("drift")  # 幅度漂移监控 (读历史 candidates, 非关键步骤)
     steps.append(
         "drift_parallel"

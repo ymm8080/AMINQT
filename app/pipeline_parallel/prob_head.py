@@ -6,9 +6,11 @@
 回测 250d OOS: dual 命中 68→70% / 实得 +8.06→+8.82%; main 60→61% / +3.63→+4.08%,
 双板 4/4 子窗实得赢. trailing 242d 训练=数据饥饿退化, 勿用.
 
-bundle (WORM, data/prob_head/<board>_prob_<ts>.joblib):
+bundle (WORM, data/prob_head/<board>_prob_hl<hl>_<ts>.joblib):
   {board, trained_through ("YYYY-MM-DD"), feat_cols, params, model}
-训练 = 全史扩窗 (行 <= 面板最新日), 每 refit_every_days 交易日重训一次 (训练脚本自判断);
+训练 = 全史扩窗 (行 <= 面板最新日), 每 refit_every_days 交易日重训一次 (训练脚本自判断,
+逐档位); 半衰期集成 (2026-09-03 ensB3 定案): PROB_GATE["half_lives"] 逐档训练,
+serving 概率取算术均值 (ensemble_predict), 任一档缺失 → 闸失效 fail-open;
 预测 = bundle.model 在当日截面特征上 predict_proba[:, 1];
 base_rate = 最近 base_rate_days 个可观测日 mfe 达标率均值 (无前瞻, 当日可观测 mfe
 只到 latest-4 — mfe_3d 窗口需 +4 交易日未来价, 见 _add_mfe_3d).
@@ -66,6 +68,20 @@ LGB_PARAMS = dict(
     random_state=42,
     n_jobs=-1,
 )
+# 时间衰减样本加权: reg 根默认半衰期 (dual_track_trainer 的 reg kind 读取, 回退=置 None
+# → 原 B10 time_weights). 概率头不走此常量 — 半衰期集成见 PROB_GATE["half_lives"].
+HALF_LIFE_DAYS = 60
+
+
+def decay_sample_weights(dates: pd.Series, half_life: float) -> np.ndarray:
+    """行日期 → 指数时间衰减 sample_weight, age 相对训练数据最新日 (自然日).
+
+    公式与 scripts/_diag_time_decay_ab.py _lgbm_walkforward 逐字一致:
+    age_days = (最新日 - 行日).days; w = 0.5 ** (age_days / half_life).
+    """
+    dv = pd.to_datetime(pd.Series(dates)).to_numpy()
+    age_days = (dv.max() - dv).astype("timedelta64[D]").astype(int)
+    return np.power(0.5, age_days / float(half_life))
 
 
 def bundle_dir() -> Path:
@@ -108,11 +124,15 @@ def feature_cols(t: pd.DataFrame) -> list[str]:
     ]
 
 
-def train_bundle(board: str, t: pd.DataFrame, trained_through: str) -> Path:
+def train_bundle(
+    board: str, t: pd.DataFrame, trained_through: str, half_life: int | None
+) -> Path:
     """全史扩窗训练概率头 → WORM bundle. t 需含全部特征 + mfe_3d + label_pain.
 
     trained_through = 训练数据覆盖到的最后交易日 ("YYYY-MM-DD", 面板最新日);
     行过滤与回测同口径: mfe_3d 非 NaN 且 label_pain 非 NaN (mfe 尾段 NaN 不可训练).
+    half_life = 时间衰减样本加权半衰期 (自然日, PROB_GATE["half_lives"] 逐档);
+    None → 不加权 (回退原行为).
     """
     cols = feature_cols(t)
     y = (t["mfe_3d"] >= PROB_GATE["abs_target"]).astype(float)
@@ -121,9 +141,13 @@ def train_bundle(board: str, t: pd.DataFrame, trained_through: str) -> Path:
     if len(x) < 5000:
         raise ValueError(f"[{board}] 训练样本不足 ({len(x)})")
     model = LGBMClassifier(**LGB_PARAMS)
-    model.fit(x, y.loc[ok].to_numpy())
+    fit_kwargs: dict = {}
+    if half_life is not None:
+        fit_kwargs["sample_weight"] = decay_sample_weights(t.loc[ok, "date"], half_life)
+    model.fit(x, y.loc[ok].to_numpy(), **fit_kwargs)
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-    path = bundle_dir() / f"{board}_prob_{ts}.joblib"
+    tag = "nodecay" if half_life is None else f"hl{int(half_life)}"
+    path = bundle_dir() / f"{board}_prob_{tag}_{ts}.joblib"
     path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(
         {
@@ -138,12 +162,29 @@ def train_bundle(board: str, t: pd.DataFrame, trained_through: str) -> Path:
     return path
 
 
-def load_latest(board: str) -> dict | None:
-    """该板块最新 WORM bundle (joblib dict); 无 → None."""
-    cands = sorted(bundle_dir().glob(f"{board}_prob_*.joblib"))
+def load_latest_tier(board: str, half_life: int) -> dict | None:
+    """该板块该半衰期档最新 WORM bundle (joblib dict); 无 → None."""
+    cands = sorted(bundle_dir().glob(f"{board}_prob_hl{int(half_life)}_*.joblib"))
     if not cands:
         return None
     return joblib.load(cands[-1])
+
+
+def load_all_tiers(board: str) -> dict[int, dict] | None:
+    """PROB_GATE["half_lives"] 全部档位的最新 bundle; 任一档缺失 → None (闸失效判据)."""
+    out: dict[int, dict] = {}
+    for hl in PROB_GATE["half_lives"]:
+        b = load_latest_tier(board, hl)
+        if b is None:
+            return None
+        out[int(hl)] = b
+    return out
+
+
+def ensemble_predict(bundles: list[dict], cs: pd.DataFrame) -> pd.Series:
+    """多半衰期 bundle 逐档预测取算术均值 (同截面同 index, rank 键 mag×prob_avg 用)."""
+    preds = [predict(b, cs).to_numpy() for b in bundles]
+    return pd.Series(np.mean(preds, axis=0), index=cs.index)
 
 
 def bundle_age_trading_days(
@@ -188,21 +229,30 @@ def _base_rate(tail: pd.DataFrame) -> float | None:
 def gate_probabilities(board: str) -> tuple[pd.Series, float] | None:
     """当日截面每股 pred_prob + base_rate 最新值; 不可用 → None (已大声告警).
 
-    读 _diag_stage_{board}_3y.parquet (parallel 检查点, 与短名单同源):
+    概率 = PROB_GATE["half_lives"] 全部档位 bundle 逐档预测取算术均值 (2026-09-03
+    ensB3 定案); 任一档缺失 → 闸失效 (fail-open). 读 _diag_stage_{board}_3y.parquet
+    (parallel 检查点, 与短名单同源):
     - base_rate 用窄尾读 (symbol/date/close/high/adv20, 近 ~base_rate_days+14 日)
     - pred_prob 用当日截面读 (symbol + bundle feat_cols)
+    - 新鲜度按最旧档 trained_through 判断 (任一档过旧 → 整组失效)
     """
-    b = load_latest(board)
-    if b is None:
-        print(f"[prob_head] {board} 无概率头 bundle -> 闸不可用", flush=True)
+    bundles_map = load_all_tiers(board)
+    if bundles_map is None:
+        print(
+            f"[prob_head] {board} 概率头 bundle 不全 (需档位 {PROB_GATE['half_lives']})"
+            " -> 闸不可用",
+            flush=True,
+        )
         return None
+    bundles = [bundles_map[hl] for hl in sorted(bundles_map)]
     fp = DATA_DIR / f"_diag_stage_{board}_3y.parquet"
     dates = pd.to_datetime(pq.read_table(str(fp), columns=["date"]).to_pandas()["date"])
     uniq = np.unique(dates.values)
     if len(uniq) < PROB_GATE["base_rate_days"] + 20:
         print(f"[prob_head] {board} 面板日期不足 -> 闸不可用", flush=True)
         return None
-    age = bundle_age_trading_days(uniq, str(b["trained_through"]))
+    oldest = min(str(b["trained_through"]) for b in bundles)
+    age = bundle_age_trading_days(uniq, oldest)
     if age is None or age > PROB_GATE["max_stale_days"]:
         print(
             f"[prob_head] {board} bundle 年龄 {age} 交易日 > "
@@ -225,14 +275,14 @@ def gate_probabilities(board: str) -> tuple[pd.Series, float] | None:
         return None
     cs = pq.read_table(
         str(fp),
-        columns=["symbol"] + list(b["feat_cols"]),
+        columns=["symbol"] + list(bundles[0]["feat_cols"]),
         filters=[("date", "==", latest)],
     ).to_pandas()
     if cs.empty:
         print(f"[prob_head] {board} 当日截面为空 -> 闸不可用", flush=True)
         return None
     cs["symbol"] = cs["symbol"].astype(str)
-    pred = predict(b, cs)
+    pred = ensemble_predict(bundles, cs)
     return pd.Series(pred.to_numpy(), index=cs["symbol"]), base
 
 
