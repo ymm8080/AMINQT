@@ -189,9 +189,8 @@ def main() -> int:
                 f"[canary:{board}] FAIL 非决定性 (Δ={v['d3_full']:+.5f}/日 未跌出"
                 f"非劣带), 继续观察 ({len(entry['ran'])}/{entry.get('days', 10)})"
             )
-        if (
-            entry.get("status", "active") == "active"
-            and len(entry["ran"]) >= int(entry.get("days", 10))
+        if entry.get("status", "active") == "active" and len(entry["ran"]) >= int(
+            entry.get("days", 10)
         ):
             entry["status"] = "done"
             print(f"[canary:{board}] 窗口满 ({entry['days']} 次), canary 结束")

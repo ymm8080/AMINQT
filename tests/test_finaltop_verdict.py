@@ -192,7 +192,13 @@ class TestRetrainFinaltopGate:
         return m
 
     def _fake_run(
-        self, monkeypatch, m, rc=0, delta=None, board="main", raise_exc=None,
+        self,
+        monkeypatch,
+        m,
+        rc=0,
+        delta=None,
+        board="main",
+        raise_exc=None,
         extra_arms=None,
     ):
         calls: dict = {}
@@ -207,15 +213,17 @@ class TestRetrainFinaltopGate:
                 body = {"delta_B_vs_A": delta}
                 for arm, d in (extra_arms or {}).items():
                     body[f"delta_{arm}_vs_A"] = d
-                (
-                    diag / "_dual_pkg_finaltop_compare_20990101_000000.json"
-                ).write_text(json.dumps({board: body}), encoding="utf-8")
+                (diag / "_dual_pkg_finaltop_compare_20990101_000000.json").write_text(
+                    json.dumps({board: body}), encoding="utf-8"
+                )
             return types.SimpleNamespace(returncode=rc, stdout="", stderr="")
 
         monkeypatch.setattr(
             m,
             "subprocess",
-            types.SimpleNamespace(run=fake_run, TimeoutExpired=subprocess.TimeoutExpired),
+            types.SimpleNamespace(
+                run=fake_run, TimeoutExpired=subprocess.TimeoutExpired
+            ),
         )
         return calls
 
@@ -255,7 +263,9 @@ class TestRetrainFinaltopGate:
 
     def _stability_cfg(self):
         return dict(
-            _gate_cfg(), stability_enable=True, stability_max_extra=2,
+            _gate_cfg(),
+            stability_enable=True,
+            stability_max_extra=2,
             stability_window_days=3,
         )
 
@@ -273,15 +283,15 @@ class TestRetrainFinaltopGate:
 
     def test_stability_pass_when_extra_also_passes(self, m, tmp_path, monkeypatch):
         (tmp_path / "models" / "main_20260901.pkl").write_bytes(b"x")
-        self._fake_run(
-            monkeypatch, m, delta=MAIN_REAL, extra_arms={"C": MAIN_REAL}
-        )
+        self._fake_run(monkeypatch, m, delta=MAIN_REAL, extra_arms={"C": MAIN_REAL})
         assert (
             m._finaltop_gate("main", str(tmp_path / "new.pkl"), self._stability_cfg())
             is True
         )
 
-    def test_stability_no_recent_draws_today_alone_decides(self, m, tmp_path, monkeypatch):
+    def test_stability_no_recent_draws_today_alone_decides(
+        self, m, tmp_path, monkeypatch
+    ):
         self._fake_run(monkeypatch, m, delta=MAIN_REAL)
         assert (
             m._finaltop_gate("main", str(tmp_path / "new.pkl"), self._stability_cfg())
@@ -292,9 +302,7 @@ class TestRetrainFinaltopGate:
         # 额外臂无判词 (可比日不足) → 不计入多数, 新包自身判词决定
         (tmp_path / "models" / "main_20260901.pkl").write_bytes(b"x")
         bad_days = dict(MAIN_REAL, days=5)
-        self._fake_run(
-            monkeypatch, m, delta=MAIN_REAL, extra_arms={"C": bad_days}
-        )
+        self._fake_run(monkeypatch, m, delta=MAIN_REAL, extra_arms={"C": bad_days})
         assert (
             m._finaltop_gate("main", str(tmp_path / "new.pkl"), self._stability_cfg())
             is True

@@ -20,10 +20,12 @@ MAIN_REAL = {
     "win_days": 30,
     "lose_days": 18,
 }
-DECISIVE_BAD = dict(MAIN_REAL, d3_full=-0.006, d3_h1=-0.007, d3_h2=-0.0052,
-                    win_days=20, lose_days=28)
-NON_DECISIVE_FAIL = dict(MAIN_REAL, d3_full=-0.004, d3_h1=-0.006, d3_h2=-0.003,
-                         win_days=23, lose_days=25)
+DECISIVE_BAD = dict(
+    MAIN_REAL, d3_full=-0.006, d3_h1=-0.007, d3_h2=-0.0052, win_days=20, lose_days=28
+)
+NON_DECISIVE_FAIL = dict(
+    MAIN_REAL, d3_full=-0.004, d3_h1=-0.006, d3_h2=-0.003, win_days=23, lose_days=25
+)
 
 
 class TestPureDecisions:
@@ -112,7 +114,9 @@ class TestEndToEnd:
         monkeypatch.setattr(
             m,
             "subprocess",
-            types.SimpleNamespace(run=fake_run, TimeoutExpired=subprocess.TimeoutExpired),
+            types.SimpleNamespace(
+                run=fake_run, TimeoutExpired=subprocess.TimeoutExpired
+            ),
         )
 
     def test_pass_maintains_and_records(self, m, monkeypatch):
@@ -175,7 +179,9 @@ class TestEndToEnd:
             json.dumps({"main": {"tag": "20260902", "file": "main_20260902.pkl"}}),
             encoding="utf-8",
         )
-        monkeypatch.setitem(sys.modules, "app.pipeline1.model_meta", _fake_meta(meta_path))
+        monkeypatch.setitem(
+            sys.modules, "app.pipeline1.model_meta", _fake_meta(meta_path)
+        )
         entry = {
             "backup": str(Path(m.MODEL_DIR) / "main_20260903.pkl"),
             "prev_tag": "20260903",

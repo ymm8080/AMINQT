@@ -180,8 +180,7 @@ def _finaltop_gate(board: str, new_path: str, cfg: dict) -> bool:
     passing = (1 if v["pass"] else 0) + sum(1 for x in usable if x["pass"])
     if len(usable) and passing * 2 <= n:
         print(
-            f"[{board}] finaltop: 稳定性 FAIL ({passing}/{n} 抽签过判词), "
-            f"保留旧模型",
+            f"[{board}] finaltop: 稳定性 FAIL ({passing}/{n} 抽签过判词), 保留旧模型",
             flush=True,
         )
         return False
@@ -197,9 +196,13 @@ def _record_canary_state(board: str, tag: str, prev_tag: str, cfg: dict) -> None
     磁盘); 找不到才退回 _retrain_backup. 无可回退目标 → 不记 state.
     """
     tag_file = os.path.abspath(os.path.join(MODEL_DIR, f"{board}_{prev_tag}.pkl"))
-    bak = os.path.abspath(os.path.join(MODEL_DIR, f"{board}_current_retrain_backup.pkl"))
-    target = tag_file if (prev_tag and os.path.exists(tag_file)) else (
-        bak if os.path.exists(bak) else None
+    bak = os.path.abspath(
+        os.path.join(MODEL_DIR, f"{board}_current_retrain_backup.pkl")
+    )
+    target = (
+        tag_file
+        if (prev_tag and os.path.exists(tag_file))
+        else (bak if os.path.exists(bak) else None)
     )
     if target is None:
         return
