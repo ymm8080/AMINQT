@@ -1,7 +1,7 @@
 """Tests for scripts/run_daily_automation 步骤编排 (2026-08-13).
 
 plan_steps 是纯函数, 决定当日四模块自动化的执行序列:
-  [cyq sw_history legacy_prob_head legacy deliver] [refresh?] [retrain?]
+  [cyq sw_history legacy_prob_head legacy deliver] [refresh?] canary [retrain?]
   [parallel? prob_head deliver_parallel] drift drift_parallel shadow_xmodule
 关键不变式:
   1. 交付保底优先 (2026-08-27): legacy 预测链 (cyq→lph→legacy→deliver) 恒在一切
@@ -66,19 +66,21 @@ def test_every_step_has_timeout():
 
 
 def test_plan_steps_weekday_full_chain():
-    assert plan_steps(THU) == _LEGACY_CHAIN + ["refresh"] + _PARALLEL_CHAIN + _TAIL
+    assert plan_steps(THU) == (
+        _LEGACY_CHAIN + ["refresh", "canary"] + _PARALLEL_CHAIN + _TAIL
+    )
 
 
 def test_plan_steps_retrain_day_inserts_retrain():
     assert plan_steps(FRI) == (
-        _LEGACY_CHAIN + ["refresh", "retrain"] + _PARALLEL_CHAIN + _TAIL
+        _LEGACY_CHAIN + ["refresh", "canary", "retrain"] + _PARALLEL_CHAIN + _TAIL
     )
 
 
 def test_plan_steps_force_retrain_inserts_retrain_on_non_retrain_day():
     """--force-retrain 在非周五也强制插入 retrain 步骤."""
     assert plan_steps(THU, force_retrain=True) == (
-        _LEGACY_CHAIN + ["refresh", "retrain"] + _PARALLEL_CHAIN + _TAIL
+        _LEGACY_CHAIN + ["refresh", "canary", "retrain"] + _PARALLEL_CHAIN + _TAIL
     )
 
 
@@ -140,23 +142,44 @@ def test_plan_steps_skip_parallel_drops_deliver_parallel():
 
     shadow_xmodule 仍跑: 它读磁盘上已交付清单 (任意一侧缺也容忍), 非交付步骤.
     """
-    assert plan_steps(THU, skip_parallel=True) == _LEGACY_CHAIN + ["refresh"] + _TAIL
+    assert plan_steps(THU, skip_parallel=True) == (
+        _LEGACY_CHAIN + ["refresh", "canary"] + _TAIL
+    )
     assert plan_steps(FRI, skip_parallel=True) == (
-        _LEGACY_CHAIN + ["refresh", "retrain"] + _TAIL
+        _LEGACY_CHAIN + ["refresh", "canary", "retrain"] + _TAIL
     )
 
 
 def test_plan_steps_skip_checkpoints_and_retrain():
     steps = plan_steps(FRI, skip_checkpoints=True, skip_retrain=True)
-    assert steps == _LEGACY_CHAIN + _PARALLEL_CHAIN + _TAIL
+    assert steps == _LEGACY_CHAIN + ["canary"] + _PARALLEL_CHAIN + _TAIL
     assert "refresh" not in steps and "retrain" not in steps
 
 
 def test_plan_steps_all_skip_keeps_legacy_chain():
     assert (
         plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True)
-        == _LEGACY_CHAIN + _TAIL
+        == _LEGACY_CHAIN + ["canary"] + _TAIL
     )
+
+
+def test_plan_steps_canary_always_runs_before_retrain():
+    """晋升后 canary (2026-09-02 防坏签) 恒执行, 且在 retrain 前 — retrain 晋升
+    会覆盖 canary state, 先跑让在窗晋升按自然日推进窗口; 非关键证据步."""
+    for steps in (
+        plan_steps(THU),
+        plan_steps(FRI),
+        plan_steps(THU, force_retrain=True),
+        plan_steps(THU, skip_parallel=True),
+        plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True),
+    ):
+        assert "canary" in steps
+        assert steps.index("canary") > steps.index("deliver")
+        if "retrain" in steps:
+            assert steps.index("canary") < steps.index("retrain")
+    assert "canary" not in _CRITICAL
+    assert _STEPS["canary"] == ["scripts/_finaltop_canary.py"]
+    assert _STEP_TIMEOUT_S["canary"] >= 3 * 3600  # 双板最坏 3h 合法耗时, 兜卡死不误杀
 
 
 def test_plan_steps_ths_push_always_runs():

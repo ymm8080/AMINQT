@@ -7,7 +7,7 @@ backup(A) vs current(B): 判词 FAIL 且 d3_full < -0.005 (明确跌出非劣带
 决定性坏签 → --revert 时把 backup 恢复为 current 并回滚 current_meta
 (镜像 retrain 切换语义). 每板最多重放 days 次, 窗口满 → status=done.
 
-用法: python scripts/_finaltop_canary.py [--revert] [--days 10]
+用法: python scripts/_finaltop_canary.py [--revert]
 非关键步骤: 无 state / 今日已跑 / 窗口已满 / 回放无判词 (不消窗口) → exit 0.
 """
 
@@ -137,7 +137,6 @@ def main() -> int:
         action="store_true",
         help="决定性坏签时执行回退 (缺省只留证不回退)",
     )
-    ap.add_argument("--days", type=int, default=10, help="每板重放窗口 (次)")
     args = ap.parse_args()
 
     state = load_state()
