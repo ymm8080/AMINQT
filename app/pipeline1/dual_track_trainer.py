@@ -814,6 +814,11 @@ class DualTrackTrainer:
         cfg = LEGACY_TOP10_SECOND_VOTE
         if not cfg.get("enable"):
             return {"skipped": True, "pass": True}
+        if cfg.get("caliber", "raw_head") == "final_list_tool":
+            # [09-02] 判决权移交 retrain 脚本内的终榜回放工具 (判什么就交付什么):
+            # 此处保持 IC 闸语义, 不再加载 current / 多 seed 重训 — 裸头 49 日
+            # 信噪比不足以区分改进与构建混沌 (±2pp/日 vs 种子轴 ±0.4pp, 09-02 终审).
+            return {"skipped": True, "pass": True, "reason": "delegated_finaltop_tool"}
         cur_path = os.path.join(self.model_dir, f"{trained['board']}_current.pkl")
         if not os.path.exists(cur_path):
             logger.info("[%s] TOP10 第二票: 无生产包可比, 空过", trained["board"])

@@ -30,6 +30,9 @@ HEAVY_SENTINELS = (
     "_rankkey_multiseed_sweep.py",
     "_diag_q90_slot_replay.py",
     "_diag_parallel_fullpool_replay.py",
+    "_diag_vp_family_ab.py",
+    "_diag_rank_head_replay.py",
+    "_dual_pkg_finaltop_compare.py",
 )
 ORCHESTRATOR_SENTINEL = "run_daily_automation.py"
 # 链级守卫额外把另一条链实例视为冲突; 脚本级不含 (见模块 docstring).

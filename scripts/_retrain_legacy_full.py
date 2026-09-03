@@ -11,23 +11,112 @@ current_meta.json 同步更新.
 from __future__ import annotations
 
 import argparse
+import glob
+import json
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import time
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from app.pipeline1.ram_guard import check_startup_gate, start_monitor
 from app.pipeline1.train_runner import run_training
 from config.settings import (
+    LEGACY_TOP10_SECOND_VOTE,
     PANEL_V3_PATH,
     RETRAIN_RAM_GUARD_MIN_FREE_GB,
     RETRAIN_RAM_GUARD_POLL_S,
+    data_others_path,
 )
 
 MODEL_DIR = "models/pipeline1"
+ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+FINALTOP_TOOL = os.path.join(ROOT, "tmp_t", "_dual_pkg_finaltop_compare.py")
+
+
+def _finaltop_gate(board: str, new_path: str, cfg: dict) -> bool:
+    """[09-02] final_list_tool 口径第二票: IC 过闸后调终榜回放工具对拍
+    current(A) vs 新包(B), 套新判词 (全窗≥0 且双半≥tol_half 且胜率≥min) 才放行.
+
+    fail-safe: 工具失败/超时/无产出/无判词 → 保留旧包 (False). 无 current 包
+    → IC 闸独裁放行. 判据实现见 app/pipeline1/finaltop_verdict.py.
+    """
+    from app.pipeline1.finaltop_verdict import verdict_from_payload
+
+    cur = os.path.join(MODEL_DIR, f"{board}_current.pkl")
+    if not os.path.exists(cur):
+        print(f"[{board}] finaltop: 无 current 包可比, IC 闸独裁 -> 放行", flush=True)
+        return True
+    diag_dir = data_others_path("diag")
+    before = set(glob.glob(str(diag_dir / "_dual_pkg_finaltop_compare_*.json")))
+    flag = "--main-bundles" if board == "main" else "--dual-bundles"
+    cmd = [
+        sys.executable,
+        FINALTOP_TOOL,
+        "--boards",
+        board,
+        "--bundles",
+        "a,b",
+        flag,
+        f"{cur},{new_path}",
+        "--eval-days",
+        str(int(cfg.get("eval_days", 48))),
+        "--guard-exclude-pid",
+        str(os.getpid()),
+    ]
+    print(
+        f"[{board}] finaltop: 终榜回放对拍 current vs "
+        f"{os.path.basename(new_path)} (eval_days={cfg.get('eval_days', 48)}) ...",
+        flush=True,
+    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5400,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"[{board}] finaltop: 工具超时 (>5400s), 保留旧包", flush=True)
+        return False
+    new_json = sorted(
+        set(glob.glob(str(diag_dir / "_dual_pkg_finaltop_compare_*.json"))) - before
+    )
+    if proc.returncode != 0 or not new_json:
+        tail = (proc.stdout or "").strip().splitlines()[-5:]
+        print(
+            f"[{board}] finaltop: 工具失败 rc={proc.returncode}, 保留旧包; "
+            f"tail={tail}",
+            flush=True,
+        )
+        return False
+    payload = json.loads(Path(new_json[-1]).read_text(encoding="utf-8"))
+    v = verdict_from_payload(
+        payload,
+        board,
+        tol_half=float(cfg.get("tol_half", -0.005)),
+        win_rate_min=float(cfg.get("win_rate_min", 0.5)),
+        min_days=int(cfg.get("min_days", 10)),
+    )
+    if not v.get("ok"):
+        print(f"[{board}] finaltop: 无判词 ({v.get('reason')}), 保留旧包", flush=True)
+        return False
+    print(
+        f"[{board}] finaltop 判词: Δ={v['d3_full']:+.5f}/日 双半 "
+        f"{v['d3_h1']:+.5f}/{v['d3_h2']:+.5f} 胜率 {v['win_rate']:.3f} "
+        f"({v['win_days']}/{v['win_days'] + v['lose_days']}) checks={v['checks']}",
+        flush=True,
+    )
+    if not v["pass"]:
+        print(f"[{board}] finaltop: FAIL, 保留旧模型", flush=True)
+    return v["pass"]
 
 
 def main() -> int:
@@ -110,6 +199,10 @@ def main() -> int:
             )
             continue
         if res["switched"]:
+            cfg = LEGACY_TOP10_SECOND_VOTE
+            if cfg.get("enable") and cfg.get("caliber") == "final_list_tool":
+                if not _finaltop_gate(board, res["path"], cfg):
+                    continue
             cur = os.path.join(MODEL_DIR, f"{board}_current.pkl")
             bak = os.path.join(MODEL_DIR, f"{board}_current_retrain_backup.pkl")
             if os.path.exists(cur) and not os.path.exists(bak):
