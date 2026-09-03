@@ -28,8 +28,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ic_dim")
 
-PANEL_PATH = "data/panel_full_enriched_v3.parquet"
-REGISTRY_DIR = "data/factor_registry"
+from config.settings import PARQUET_DIR, data_others_path  # noqa: E402
+
+PANEL_PATH = str(PARQUET_DIR / "panel_full_enriched_v3.parquet")
+REGISTRY_DIR = str(data_others_path("data/factor_registry"))
 MIN_AMOUNT = 200_000
 CACHE_DIR = "data/supply_cache/alt_data"
 
@@ -97,6 +99,7 @@ DIM_METHODS = {
     "dim28": "dim28_sector_index",
     "dim29": "dim29_holdertrade",
     "dim30": "dim30_kline_geometry",
+    "dim31": "dim31_announcement",
 }
 
 # dims that need float_shares_map
