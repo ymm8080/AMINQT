@@ -140,10 +140,10 @@ entries:
     min_nonnull: 1
     critical: false
 
-  # 公告日期列: 08-14 冻结事故 (dim31) — 修复暂缓中 (用户 09-02), 现在启用必天天报警,
-  # 修复落地后改 enabled: true 启用
+  # 公告日期列: 08-14 冻结事故 — 已修 (09-02 晚: 今日行专用车道 + PIT 存量回填,
+  # 22,090 行/3,493 只解冻), 启用守卫
   - name: panel_announce_date
-    enabled: false
+    enabled: true
     kind: panel_columns
     path: D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet
     columns: [announce_date]
