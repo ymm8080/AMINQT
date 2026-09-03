@@ -351,6 +351,14 @@ class DualTrackTrainer:
 
         import lightgbm as lgb
 
+        # [2026-09-03] 时间衰减样本加权 (幅度回归根 reg 头): 公式/常量复用并行概率头
+        # app.pipeline_parallel.prob_head (单一真相源); 函数内导入=每次调用取当前值,
+        # HALF_LIFE_DAYS=None → reg 头回退原 time_weights (半衰期 250 交易日, B10).
+        from app.pipeline_parallel.prob_head import (
+            HALF_LIFE_DAYS,
+            decay_sample_weights,
+        )
+
         label = self._resolve_label(kind, segs["train"].columns)
         if label is None:
             raise RuntimeError(
@@ -373,7 +381,13 @@ class DualTrackTrainer:
         y = train[label].values
         X_es = np.nan_to_num(es[cols_es_present].values, nan=0.0)
         y_es = es[label].values
-        w = self.time_weights(train)
+        # [2026-09-03] reg 回归根 (3d/5d/10d_reg) 用概率头同款 60 自然日指数衰减;
+        # cls/pain 等其余头维持原 time_weights. 权重与 fit 行严格对齐: train 已经
+        # 过 dropna(label)+risk_filter, X/y/w 同帧同行序.
+        if kind.endswith("reg") and HALF_LIFE_DAYS is not None:
+            w = decay_sample_weights(train["date"], HALF_LIFE_DAYS)
+        else:
+            w = self.time_weights(train)
 
         # 释放 DataFrame 引用 (X/y 已提取为 numpy 数组)
         del train, es

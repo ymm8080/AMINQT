@@ -32,7 +32,18 @@ HEAVY_SENTINELS = (
     "_diag_parallel_fullpool_replay.py",
     "_diag_vp_family_ab.py",
     "_diag_rank_head_replay.py",
+    "_diag_q50_ensemble_ab.py",
     "_dual_pkg_finaltop_compare.py",
+    "_diag_preinfo_audit.py",
+    "_diag_time_decay_ab.py",
+    "_diag_fakeleg_event.py",
+    "_diag_prerise_detector.py",
+    "_diag_volflush_study.py",
+    "_diag_preflush_detector.py",
+    "_diag_flushfilter_check.py",
+    "_diag_pool2stage_check.py",
+    "_diag_parallel_parity_audit.py",
+    "_diag_reg_decay_ab.py",
 )
 ORCHESTRATOR_SENTINEL = "run_daily_automation.py"
 # 链级守卫额外把另一条链实例视为冲突; 脚本级不含 (见模块 docstring).

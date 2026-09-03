@@ -9,6 +9,7 @@
   - WORM bundle 训练→加载→预测 roundtrip; 特征缺列 (schema 漂移) → predict raise
 """
 
+import joblib
 import numpy as np
 import pandas as pd
 import pytest
@@ -118,10 +119,10 @@ def test_train_load_predict_roundtrip(monkeypatch, tmp_path):
     t["symbol"] = "SZ000001"
     t["date"] = pd.date_range("2024-01-01", periods=n, freq="B")
 
-    path = prob_head.train_bundle("main", t, "2024-12-31")
-    assert path.name.startswith("main_prob_") and path.suffix == ".joblib"
+    path = prob_head.train_bundle("main", t, "2024-12-31", half_life=60)
+    assert path.name.startswith("main_prob_hl60_") and path.suffix == ".joblib"
 
-    b = prob_head.load_latest("main")
+    b = prob_head.load_latest_tier("main", 60)
     assert b["board"] == "main"
     assert b["feat_cols"] == [f"f{i}" for i in range(10)]
     pred = prob_head.predict(b, t.head(50))
@@ -129,6 +130,14 @@ def test_train_load_predict_roundtrip(monkeypatch, tmp_path):
     assert ((pred >= 0) & (pred <= 1)).all()
     with pytest.raises(ValueError):
         prob_head.predict(b, t.drop(columns=["f3"]))
+
+    # 集成装载: 配置档位全在 → 逐档返回; 缺任一档 → None (闸失效判据)
+    monkeypatch.setitem(prob_head.PROB_GATE, "half_lives", [60, 7])
+    assert prob_head.load_all_tiers("main") is None  # hl7 缺
+    path7 = prob_head.train_bundle("main", t, "2024-12-31", half_life=7)
+    assert path7.name.startswith("main_prob_hl7_")
+    got = prob_head.load_all_tiers("main")
+    assert sorted(got) == [7, 60]
 
 
 def test_apply_prob_gate_drop_and_failopen(monkeypatch):
@@ -165,3 +174,71 @@ def test_apply_prob_gate_disabled_returns_unchanged(monkeypatch):
     monkeypatch.setitem(prob_head.PROB_GATE, "enable", False)
     res = pd.DataFrame({"board": ["main"], "symbol": ["A"]})
     assert prob_head.apply_prob_gate(res)["symbol"].tolist() == ["A"]
+
+
+# ---- 时间衰减样本加权 (2026-09-03 过闸接入) ----
+
+
+def test_decay_sample_weights_monotone_and_half_life():
+    """w = 0.5**(age/half_life), age 相对最新日: 严格单调递减; age=30 天 → 0.5**0.5."""
+    dates = pd.Series(pd.date_range("2024-01-01", periods=121, freq="D"))
+    w = prob_head.decay_sample_weights(dates, 60)
+    age = (dates.max() - dates).dt.days.to_numpy()
+    assert (np.diff(w[np.argsort(age)]) < 0).all()  # 随 age 严格单调递减
+    assert w[-1] == pytest.approx(1.0)  # 最新日 age=0
+    assert w[-31] == pytest.approx(0.5**0.5)  # age=30 天
+    assert w[-61] == pytest.approx(0.5)  # age=60 天 = 半衰期
+
+
+class _RecordingLGBM:
+    """fit 参数记录桩 (模块级定义保证 joblib bundle 可 pickle); 不做真训练."""
+
+    def __init__(self, **kwargs):
+        self.init_kwargs = kwargs
+        self.fit_kwargs: dict = {}
+
+    def fit(self, x, y, **kwargs):
+        self.fit_kwargs = kwargs
+
+
+def test_train_bundle_sample_weight_wiring(monkeypatch, tmp_path):
+    """half_life 非 None → fit 传 sample_weight (len=行数, 日期升序→递减); None → 不传 (回退)."""
+    monkeypatch.setitem(prob_head.PROB_GATE, "model_dir", str(tmp_path))
+    monkeypatch.setattr(prob_head, "LGBMClassifier", _RecordingLGBM)
+    rng = np.random.default_rng(42)
+    n = 5100
+    t = pd.DataFrame(rng.uniform(-1, 1, (n, 3)), columns=["f0", "f1", "f2"])
+    t["mfe_3d"] = rng.uniform(-0.02, 0.08, n)
+    t["label_pain"] = False
+    t["symbol"] = "SZ000001"
+    t["date"] = pd.date_range("2024-01-01", periods=n, freq="B")
+
+    path = prob_head.train_bundle("main", t, "2024-12-31", half_life=30)
+    w = joblib.load(path)["model"].fit_kwargs["sample_weight"]
+    assert len(w) == n
+    assert (np.diff(w) > 0).all()  # 日期升序 → age 降序 → 权重随行升序
+
+    path2 = prob_head.train_bundle("main", t, "2024-12-31", half_life=None)
+    assert path2.name.startswith("main_prob_nodecay_")
+    assert "sample_weight" not in joblib.load(path2)["model"].fit_kwargs
+
+
+class _ConstProba:
+    """恒定概率预测桩 (predict_proba 契约: 列 0 = 负类, 列 1 = 正类)."""
+
+    def __init__(self, p):
+        self.p = p
+
+    def predict_proba(self, x):
+        n = len(x)
+        return np.column_stack([np.full(n, 1.0 - self.p), np.full(n, self.p)])
+
+
+def test_ensemble_predict_averages_tiers():
+    """多半衰期集成 = 逐档 predict_proba[:, 1] 算术均值, index 对齐截面."""
+    cs = pd.DataFrame({"f0": [1.0, 2.0]}, index=[10, 20])
+    b1 = {"feat_cols": ["f0"], "model": _ConstProba(0.2)}
+    b2 = {"feat_cols": ["f0"], "model": _ConstProba(0.6)}
+    out = prob_head.ensemble_predict([b1, b2], cs)
+    assert out.index.tolist() == [10, 20]
+    assert out.tolist() == [pytest.approx(0.4), pytest.approx(0.4)]
