@@ -74,18 +74,34 @@ LEGACY_EXCESS_LABEL_BOARDS: tuple = ("dual",)
 LEGACY_MKT_EXPECT_WINDOW = 60
 
 # ── legacy TOP10 第二票 (2026-08-29 用户批准: 切换闸 = IC 闸 + TOP10 非劣闸) ──
-# 周五重训时新包 vs current 生产包在测试段 (末 60 交易日) 各跑每日板内 top10
-# (10d_reg 预测降序), 已实现 label_pm_10d_net 日均净差: 全窗 ≥ 0 且前后半 ≥
-# tol_half 才放行切换 (非劣, 不要求严格更优 — 否则噪声所迫永不切换).
-# 起因: 超额标签案全截面 IC 判 REJECT 而 TOP10 口径 +4.36pp/日, IC 只是代理量.
+# [09-02 终审改判] caliber="final_list_tool": 判决权移交已验证的终榜回放工具
+# (tmp_t/_dual_pkg_finaltop_compare.py, 对拍过真实交付清单), retrain 脚本在
+# IC 过闸后调工具对拍 current vs 新包, 套新判据 (全窗≥0 且双半≥tol_half 且
+# 胜率≥win_rate_min) 才晋升. 判什么就交付什么 — 工具判的就是将上生产的那个包.
+# 起因: 裸头闸错杀实锤 — main_20260902 裸头 -0.31pp 判 FAIL, 终榜口径
+# +0.55pp/日 胜率 62.5% (WORM _dual_pkg_finaltop_compare_20260902_201413.json);
+# 49 日裸头信噪比不足以区分改进与构建混沌 (±2pp/日). 回退 caliber="raw_head".
 LEGACY_TOP10_SECOND_VOTE = {
     "enable": True,
-    "tol_half": -0.002,  # 前后半非劣容差 (/日)
+    "caliber": "final_list_tool",  # final_list_tool | raw_head (旧裸头判据回退口)
+    "tol_half": -0.005,  # [09-02] 前后半非劣容差 -0.002→-0.005 (/日):
+    #   旧值曾卡死 +1.02pp/日 全窗正改进 (09-01 09:36 main 后半 -0.38pp 0.18pp 技术性)
+    "win_rate_min": 0.5,  # 配对胜率下限 (终榜口径新判据)
+    "eval_days": 48,  # 终榜回放窗口 (T+10 标签成熟上限)
+    "min_days": 10,  # 可比日下限, 不足视为无判词 (保留旧包)
     "top_n": 10,
-    # [09-01] 多 seed 集成判词: LGBM run-to-run 方差 ±0.04/日 ≈ 闸信号量级
-    # (08-30 PASS vs 08-31 FAIL 近同配置翻面) → 新包 10d_reg 头按 seeds 重训
-    # 多次, 各 seed 对 current 的 TOP10 日均差按 agg 聚合后再判; 旧包恒单模型
-    # 不重训. 关闭 (multi_seed_enable=False) 则回退单次训练行为.
+    # [09-02 防坏签] 构建间抽签稳定性: 构建混沌 ±2pp/日意味着"今天这一抽"可能
+    # 是幸运签 (dual 09-02 坏签/09-01 中性签同输入互证). 开启后 retrain 工具闸
+    # 把近 stability_window_days 日内最新 stability_max_extra 个同板构建包作为
+    # 额外臂一起对拍, 晋升 = 新包自身 PASS 且 全部抽签严格多数 PASS —
+    # 单抽幸运签不再晋升, 过程级坏签 (多数抽签差) 也被拦. 无额外臂时退化为
+    # 单抽判词 (与未开启一致).
+    "stability_enable": True,
+    "stability_max_extra": 2,
+    "stability_window_days": 3,
+    # [09-01] 多 seed 集成判词 (仅 raw_head 口径): 修的是种子轴 ±0.4pp, 而构建间
+    # 混沌 ±2pp/日才是主体 (09-02 终审). final_list_tool 口径下工具只判将交付的
+    # 单包 (不重训 seeds), 更快也更对口. 回退 raw_head 时恢复生效.
     "multi_seed_enable": True,
     "multi_seed_seeds": [42, 43, 44],
     "multi_seed_agg": "median",  # median | mean

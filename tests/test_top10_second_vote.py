@@ -119,7 +119,20 @@ def _stub_train_one(tr, sign: float) -> list:
     return calls
 
 
+def _pin_raw_head(monkeypatch) -> None:
+    """raw_head 机制测试钉口径: 生产 config 已切 final_list_tool (委托 retrain 工具),
+    这些测试验证的是回退口机制本身, 不随生产口径翻转."""
+
+    cfg = dict(st.LEGACY_TOP10_SECOND_VOTE)
+    cfg["caliber"] = "raw_head"
+    monkeypatch.setattr(st, "LEGACY_TOP10_SECOND_VOTE", cfg)
+
+
 class TestSecondVote:
+    @pytest.fixture(autouse=True)
+    def _caliber_raw_head(self, monkeypatch):
+        _pin_raw_head(monkeypatch)
+
     def test_no_current_vacuous_pass(self, tmp_path):
         v = _make_trainer(tmp_path).top10_second_vote(_trained(sign=1.0))
         assert v["pass"] is True
@@ -171,6 +184,10 @@ class TestSecondVote:
 
 class TestMultiSeedVerdict:
     """多 seed 集成判词 (09-01): 各 seed 判词按 median 聚合, 明细 WORM 落盘."""
+
+    @pytest.fixture(autouse=True)
+    def _caliber_raw_head(self, monkeypatch):
+        _pin_raw_head(monkeypatch)
 
     def _setup(self, tmp_path, signs: dict, cur_sign: float = -1.0):
         tr = _make_trainer(tmp_path)
@@ -241,6 +258,39 @@ class TestMultiSeedVerdict:
         assert cfg["multi_seed_enable"] is True
         assert cfg["multi_seed_seeds"] == [42, 43, 44]
         assert cfg["multi_seed_agg"] == "median"
+
+
+class TestFinalListToolDelegation:
+    """[09-02] caliber=final_list_tool: trainer 只留 IC 闸, 判决权移交
+    retrain 脚本内终榜回放工具 — 不加载 current, 不做多 seed 重训."""
+
+    def test_delegates_before_loading_current(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            st,
+            "LEGACY_TOP10_SECOND_VOTE",
+            {"enable": True, "caliber": "final_list_tool", "tol_half": -0.005},
+        )
+        tr = _make_trainer(tmp_path)
+        calls = _stub_train_one(tr, 1.0)
+        with open(tmp_path / "main_current.pkl", "wb") as fh:
+            pickle.dump(_cur_bundle(sign=-1.0), fh)
+        v = tr.top10_second_vote(_trained(sign=1.0))
+        assert v == {
+            "skipped": True,
+            "pass": True,
+            "reason": "delegated_finaltop_tool",
+        }
+        assert calls == []  # 多 seed 重训不再发生
+        assert not Path(st.DATA_OTHERS_DIR, "diag").exists()  # 不落盘
+
+    def test_config_default_caliber_is_final_list_tool(self):
+        cfg = st.LEGACY_TOP10_SECOND_VOTE
+        assert cfg["caliber"] == "final_list_tool"
+        assert cfg["enable"] is True
+        assert cfg["tol_half"] == -0.005
+        assert cfg["win_rate_min"] == 0.5
+        assert cfg["eval_days"] == 48
+        assert cfg["min_days"] == 10
 
 
 class TestWormDiagFile:

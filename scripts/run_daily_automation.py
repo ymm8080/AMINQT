@@ -14,6 +14,9 @@ legacy 预测链 ~35min 前置到一切重活之前, 重活卡死/超时被杀�
   [legacy]   scripts/_gen_legacy_list.py <tag>          legacy 预测出清单 (用最新 current)
   [deliver]  scripts/_deliver_legacy_list.py <tag>      legacy 清单交付 STOCK_LIST_DIR
   [refresh]  scripts/_refresh_parallel_checkpoints.py  并行行集 3y 检查点 (需 19:15 fetch 后)
+  [canary]   scripts/_finaltop_canary.py <tag>        晋升后 canary 回放 (backup vs current,
+                                            非关键证据步恒 exit 0; 决定性坏签只留证,
+                                            回退需人工 --revert)
   [retrain]  scripts/_retrain_legacy_full.py <tag>     legacy 周频重训 (仅 RETRAIN_WEEKDAY; 重排后当日清单先用现有模型, 新模型自次一清单生效)
   [parallel] python -m app.pipeline_parallel.runner     并行回测 + 短名单 (sniper/fusion/slow_bull)
   [deliver_parallel] scripts/_shortlist_t5_t10.py <tag> 并行短名单交付 STOCK_LIST_DIR
@@ -96,6 +99,8 @@ _STEP_TIMEOUT_S = {
     "legacy_prob_head": 1 * 3600,
     "legacy": 3 * 3600,
     "deliver": 30 * 60,
+    # canary 每板回放工具内部超时 5400s, 双板合法最坏 3h; 4h 只兜卡死
+    "canary": 4 * 3600,
     "deliver_parallel": 30 * 60,
     "ths_push": 15
     * 60,  # 客户端已开 ~20s; 冷启动拉起+登录最长 ~2.5min, 下限 15min 只兜卡死
@@ -200,6 +205,7 @@ _STEPS = {
     "legacy_prob_head": ["scripts/_train_legacy_prob_head.py"],
     "legacy": ["scripts/_gen_legacy_list.py", "{tag}"],
     "deliver": ["scripts/_deliver_legacy_list.py", "{tag}"],
+    "canary": ["scripts/_finaltop_canary.py"],
     "deliver_parallel": ["scripts/_shortlist_t5_t10.py", "{tag}"],
     "ths_push": ["scripts/_ths_watchlist_push.py", "{tag}"],
     "drift": ["scripts/_monitor_legacy_drift.py"],
@@ -248,6 +254,11 @@ def plan_steps(
     steps.append("deliver")
     if not skip_checkpoints:
         steps.append("refresh")
+    # 晋升后 canary (2026-09-02 防坏签): 新 current vs 晋升前 backup 定期重放,
+    # 决定性坏签留证 (回退需人工 --revert, 链上不带). 放 retrain 前 — retrain
+    # 晋升会覆盖 canary state, 先跑让在窗晋升按自然日推进窗口; state 空/窗口满
+    # 时秒过恒 exit 0, 非关键步骤
+    steps.append("canary")
     if not skip_retrain and (force_retrain or today.weekday() == RETRAIN_WEEKDAY):
         steps.append("retrain")
     if not skip_parallel:
