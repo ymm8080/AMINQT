@@ -47,7 +47,10 @@ def main() -> int:
 
     src = pd.read_parquet(str(data_others_path("diag") / SRC_PQ))
     src["date"] = src["date"].astype(str)
-    print(f"[src] {len(src):,} rows, {src['date'].nunique()} days ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[src] {len(src):,} rows, {src['date'].nunique()} days ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     # 面板秩矩阵 (全历史, 再按 src 日期对齐)
     dts = pd.read_parquet(PANEL_V3_PATH, columns=["date"])["date"].unique()
@@ -65,7 +68,9 @@ def main() -> int:
         df = pd.DataFrame({"s": panel["symbol"], "d": dt, "v": panel[col]})
         df["rk"] = df.groupby("d")["v"].rank(pct=True)
         rank_mats[col] = (
-            df.pivot(index="s", columns="d", values="rk").sort_index().to_numpy("float32")
+            df.pivot(index="s", columns="d", values="rk")
+            .sort_index()
+            .to_numpy("float32")
         )
         del df
     del panel
@@ -73,7 +78,9 @@ def main() -> int:
 
     def nanmean_mats(cols):
         with np.errstate(invalid="ignore"):
-            return np.nanmean(np.stack([rank_mats[c] for c in cols]), axis=0).astype("float32")
+            return np.nanmean(np.stack([rank_mats[c] for c in cols]), axis=0).astype(
+                "float32"
+            )
 
     F1 = nanmean_mats(MOM_COLS)
     F2 = nanmean_mats(HOTVOL_COLS)
@@ -84,9 +91,7 @@ def main() -> int:
     # ---- 涨前预热臂 (④口径): A1 动量 / A2 量能预热(5日滚均) / A3 / A4 ----
     A1 = F1
     A2 = nanmean_mats(VOL_COLS_A)
-    A2_5 = (
-        pd.DataFrame(A2).T.rolling(5, min_periods=3).mean().T.to_numpy("float32")
-    )
+    A2_5 = pd.DataFrame(A2).T.rolling(5, min_periods=3).mean().T.to_numpy("float32")
     A3 = np.nanmean(np.stack([A1, A2]), axis=0).astype("float32")
     A4 = np.nanmean(np.stack([A1, A2_5]), axis=0).astype("float32")
     keep_arms = {"A1": A1, "A3": A3, "A4": A4}
@@ -106,7 +111,7 @@ def main() -> int:
         top_masks[name] = m
         del W
     gc.collect()
-    print(f"[arms] masks done ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[arms] masks done ({time.time() - t0:.0f}s)", flush=True)
 
     def flagged_matrix(names):
         out = np.zeros_like(next(iter(top_masks.values())))
@@ -124,14 +129,20 @@ def main() -> int:
 
     rows = []
     for veto_name, memb in veto_sets.items():
-        *names, mode = memb if isinstance(memb[-1], str) and memb[-1] in ("kick", "keep") else (*memb, "kick")
+        *names, mode = (
+            memb
+            if isinstance(memb[-1], str) and memb[-1] in ("kick", "keep")
+            else (*memb, "kick")
+        )
         FM = flagged_matrix(names)
         per_day = []
         for (d, board), g in src.groupby(["date", "board"]):
             j = d_idx.get(d)
             if j is None:
                 continue
-            g = g.dropna(subset=["rank_blend_base"]).sort_values("rank_blend_base", ascending=False)
+            g = g.dropna(subset=["rank_blend_base"]).sort_values(
+                "rank_blend_base", ascending=False
+            )
             if len(g) < TOP_N + 5:
                 continue
             top = g.head(TOP_N).copy()
@@ -174,8 +185,12 @@ def main() -> int:
                 "n3_kicked": round(float(pdf["net3_kicked"].mean()), 5),
                 "n3_kept": round(float(pdf["net3_kept"].mean()), 5),
                 "d_net3_per_day": round(float(d_all), 5),
-                "d_net3_h1": round(float((h1["net3_after"] - h1["net3_before"]).mean()), 5),
-                "d_net3_h2": round(float((h2["net3_after"] - h2["net3_before"]).mean()), 5),
+                "d_net3_h1": round(
+                    float((h1["net3_after"] - h1["net3_before"]).mean()), 5
+                ),
+                "d_net3_h2": round(
+                    float((h2["net3_after"] - h2["net3_before"]).mean()), 5
+                ),
             }
         )
         print(f"[{veto_name}] {rows[-1]}", flush=True)
@@ -199,7 +214,7 @@ def main() -> int:
         ),
         encoding="utf-8",
     )
-    print(f"[saved] flushfilter_check_{ts} ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[saved] flushfilter_check_{ts} ({time.time() - t0:.0f}s)", flush=True)
     print(res.to_string(index=False), flush=True)
     print("=== DONE ===", flush=True)
     return 0

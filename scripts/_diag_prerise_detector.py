@@ -98,12 +98,18 @@ def main() -> int:
     symbols = np.sort(panel["symbol"].unique())
     s_idx = {s: i for i, s in enumerate(symbols)}
     d_idx = {d: i for i, d in enumerate(cal)}
-    print(f"[panel] {len(symbols)} syms x {len(cal)} days ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[panel] {len(symbols)} syms x {len(cal)} days ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     # 价格矩阵 (ffill) + 前向净收益 + 强涨日标签
-    px_wide = panel.assign(d=dt).pivot_table(
-        index="symbol", columns="d", values="close_hfq", aggfunc="last"
-    ).sort_index().reindex(index=symbols, columns=pd.DatetimeIndex(cal))
+    px_wide = (
+        panel.assign(d=dt)
+        .pivot_table(index="symbol", columns="d", values="close_hfq", aggfunc="last")
+        .sort_index()
+        .reindex(index=symbols, columns=pd.DatetimeIndex(cal))
+    )
     px = px_wide.ffill(axis=1).to_numpy(dtype="float64")
     del px_wide
     gc.collect()
@@ -113,12 +119,17 @@ def main() -> int:
 
     pct = px / np.roll(px, 1, axis=1) - 1.0
     pct[:, 0] = np.nan
-    fwd3 = px[:, 4:] / px[:, 1:-3] - 1.0 - COST  # 列 j → 交易日 cal[j+1]买入, cal[j+4]卖
+    fwd3 = (
+        px[:, 4:] / px[:, 1:-3] - 1.0 - COST
+    )  # 列 j → 交易日 cal[j+1]买入, cal[j+4]卖
     n_eval = fwd3.shape[1]
     dual_mask = np.array([s[:2] in ("30", "68") for s in symbols])
     lu_thr = np.where(dual_mask, LU_THR_DUAL, LU_THR_MAIN)[:, None]
     big_rise = pct >= lu_thr
-    print(f"[fwd] eval days={n_eval} dual_syms={int(dual_mask.sum())} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[fwd] eval days={n_eval} dual_syms={int(dual_mask.sum())} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     # 四臂信号矩阵
     r_mom = _rank_mats(panel, MOM_COLS)
@@ -195,8 +206,12 @@ def main() -> int:
                 "top_net3": round(float(ds["top_net3"].mean()), 5),
                 "all_med_net3": round(float(ds["all_med_net3"].mean()), 5),
                 "spread": round(float(spread.mean()), 5),
-                "spread_h1": round(float((h1["top_net3"] - h1["all_med_net3"]).mean()), 5),
-                "spread_h2": round(float((h2["top_net3"] - h2["all_med_net3"]).mean()), 5),
+                "spread_h1": round(
+                    float((h1["top_net3"] - h1["all_med_net3"]).mean()), 5
+                ),
+                "spread_h2": round(
+                    float((h2["top_net3"] - h2["all_med_net3"]).mean()), 5
+                ),
                 "top_hit3": round(float(ds["top_hit3"].mean()), 4),
                 "lu_events": cap_ev,
                 "lu_capture": round(cap_hit / cap_ev, 4) if cap_ev else None,
@@ -216,7 +231,9 @@ def main() -> int:
     for arm, W in arms.items():
         w = W[:, last_j]
         ok = np.isfinite(w) & ~(today_rise >= lu_thr[:, 0])
-        cand = pd.DataFrame({"symbol": symbols[ok], "score": w[ok], "pct_today": today_rise[ok]})
+        cand = pd.DataFrame(
+            {"symbol": symbols[ok], "score": w[ok], "pct_today": today_rise[ok]}
+        )
         top15 = cand.nlargest(15, "score")
         for rank, (_, r) in enumerate(top15.iterrows(), 1):
             pred_rows.append(
@@ -237,8 +254,10 @@ def main() -> int:
         "cutoff": str(pd.Timestamp(cutoff).date()),
         "asof": last_date,
         "cost": COST,
-        "arms": {a: {"mom": list(MOM_COLS), "vol": list(VOL_COLS)} for a in ()} | {
-            "MOM_COLS": list(MOM_COLS), "VOL_COLS": list(VOL_COLS),
+        "arms": {a: {"mom": list(MOM_COLS), "vol": list(VOL_COLS)} for a in ()}
+        | {
+            "MOM_COLS": list(MOM_COLS),
+            "VOL_COLS": list(VOL_COLS),
         },
         "summary": res.to_dict("records"),
         "gate": {
@@ -257,7 +276,7 @@ def main() -> int:
     (out_dir / f"prerise_detector_{ts}.json").write_text(
         json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    print(f"[saved] {pq_path} ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[saved] {pq_path} ({time.time() - t0:.0f}s)", flush=True)
     print(f"[asof] {last_date} 预测清单 top15/臂 已落盘", flush=True)
     print(pred[pred["arm"] == "A4_warm5"].to_string(index=False), flush=True)
     print("=== DONE ===", flush=True)

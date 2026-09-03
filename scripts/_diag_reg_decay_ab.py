@@ -220,8 +220,20 @@ def _analyze(pool_df: pd.DataFrame, eval_n: int, t0: float) -> int:
                     }
                 )
 
-        logger.info("\n===== %s (depth=10, %s 评估日, seed=%s 配对) =====", board, len(s["date"].unique()), SEED)
-        logger.info("  %s%s%s%s%s  判定", f"{'键':<38}", f"{'日均净':>9}", f"{'delta':>9}", f"{'半窗h1/h2':>16}", f"{'子窗正':>7}")
+        logger.info(
+            "\n===== %s (depth=10, %s 评估日, seed=%s 配对) =====",
+            board,
+            len(s["date"].unique()),
+            SEED,
+        )
+        logger.info(
+            "  %s%s%s%s%s  判定",
+            f"{'键':<38}",
+            f"{'日均净':>9}",
+            f"{'delta':>9}",
+            f"{'半窗h1/h2':>16}",
+            f"{'子窗正':>7}",
+        )
         verdicts[board] = {}
         bs = key_series[(KEY_BASELINE, 10)]
         for key in KEYS:
@@ -239,8 +251,14 @@ def _analyze(pool_df: pd.DataFrame, eval_n: int, t0: float) -> int:
             subs_pos = sum(1 for x in subs if np.isfinite(x) and x > 0)
             n_valid = sum(1 for x in subs if np.isfinite(x))
             passed = bool(
-                np.isfinite(d) and d > 0 and n_valid > 0 and subs_pos * 4 >= 3 * n_valid
-                and np.isfinite(h1) and np.isfinite(h2) and h1 > 0 and h2 > 0
+                np.isfinite(d)
+                and d > 0
+                and n_valid > 0
+                and subs_pos * 4 >= 3 * n_valid
+                and np.isfinite(h1)
+                and np.isfinite(h2)
+                and h1 > 0
+                and h2 > 0
             )
             verdicts[board][key] = {
                 "delta": d,
@@ -342,7 +360,9 @@ def main() -> int:
     if args.analyze_only:
         pool_df, _ = _load_pool_from_ckpt(args.pool_tag)
         pool_df["date"] = pd.to_datetime(pool_df["date"])
-        logger.info("[analyze-only] 池 %s 行, 检查点 e%s", f"{len(pool_df):,}", args.eval)
+        logger.info(
+            "[analyze-only] 池 %s 行, 检查点 e%s", f"{len(pool_df):,}", args.eval
+        )
         return _analyze(pool_df, args.eval, time.time())
 
     t0 = time.time()

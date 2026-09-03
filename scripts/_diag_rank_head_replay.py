@@ -240,28 +240,30 @@ def eval_arms(df: pd.DataFrame, board: str) -> dict:
             )["symbol"]
         )
         daily[d]["blend_rq"] = list(
-            g.sort_values(
-                ["blend_rq_key", "symbol"], ascending=[False, True]
-            ).head(TOPN)["symbol"]
+            g.sort_values(["blend_rq_key", "symbol"], ascending=[False, True]).head(
+                TOPN
+            )["symbol"]
         )
 
     def day_net3(picks: list[str]) -> float | None:
-        vals = [day_net[d][s] for s in picks if s in day_net[d] and pd.notna(day_net[d][s])]
+        vals = [
+            day_net[d][s] for s in picks if s in day_net[d] and pd.notna(day_net[d][s])
+        ]
         return float(np.mean(vals)) if vals else None
 
     base_daily = {d: day_net3(v["base"]) for d, v in daily.items()}
     out: dict = {
         "pool_days": int(gated.groupby("date").ngroups),
-        "pool_mean_per_day": float(
-            len(gated) / max(gated.groupby("date").ngroups, 1)
-        ),
+        "pool_mean_per_day": float(len(gated) / max(gated.groupby("date").ngroups, 1)),
         "arms": {},
     }
     for arm in ("base", "head", "blend", "q90", "blend_rq"):
         picks_sets = {d: set(v[arm]) for d, v in daily.items()}
         net3s, hits, covs = [], [], []
         for d, ps in picks_sets.items():
-            vals = [day_net[d][s] for s in ps if s in day_net[d] and pd.notna(day_net[d][s])]
+            vals = [
+                day_net[d][s] for s in ps if s in day_net[d] and pd.notna(day_net[d][s])
+            ]
             if vals:
                 net3s.append(np.mean(vals))
                 hits.append(np.mean([v > 0 for v in vals]))
@@ -337,7 +339,10 @@ def main() -> int:
     all_cal = pd.to_datetime(cal)
     i_of = {d: i for i, d in enumerate(all_cal)}
     max_lag = 11
-    print(f"[pivot] symbols={len(px)} days={len(cal)} ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[pivot] symbols={len(px)} days={len(cal)} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     main_df, dual_df, state = CleaningPipeline(CleaningConfig()).run_inference(panel)
     print(
@@ -357,7 +362,10 @@ def main() -> int:
         cols = predictor.bundles[board]["feature_cols"]
         csr = board == "dual"  # 与训练/生产一致: 仅双创开截面排名
         feat = features.build(dfb, None, inference_cols=cols, cross_sectional_rank=csr)
-        print(f"[feat:{board}] {len(feat):,}r {len(feat.columns)}c ({time.time() - t0:.0f}s)", flush=True)
+        print(
+            f"[feat:{board}] {len(feat):,}r {len(feat.columns)}c ({time.time() - t0:.0f}s)",
+            flush=True,
+        )
         del dfb
         gc.collect()
 
@@ -426,7 +434,9 @@ def main() -> int:
             try:
                 pred = predictor.predict(day_feat, board)
             except Exception as exc:
-                print(f"[{board}] {pd.Timestamp(d).date()} predict err: {exc}", flush=True)
+                print(
+                    f"[{board}] {pd.Timestamp(d).date()} predict err: {exc}", flush=True
+                )
                 continue
             if pred.empty:
                 continue
@@ -450,8 +460,12 @@ def main() -> int:
             else:
                 sub["head_prob"] = np.nan  # 头仅 main 训练, dual 不外推
             di = i_of[d]
-            sub["net_3d"] = _net_vec(px, sub["symbol"], all_cal[di + 1], all_cal[di + 4])
-            sub["net_10d"] = _net_vec(px, sub["symbol"], all_cal[di + 1], all_cal[di + 11])
+            sub["net_3d"] = _net_vec(
+                px, sub["symbol"], all_cal[di + 1], all_cal[di + 4]
+            )
+            sub["net_10d"] = _net_vec(
+                px, sub["symbol"], all_cal[di + 1], all_cal[di + 11]
+            )
             if d in amt.columns:
                 sub["amount"] = amt[d].reindex(sub["symbol"]).to_numpy(dtype=float)
             else:
@@ -485,7 +499,9 @@ def main() -> int:
         "bundle": BUNDLE_MAIN,
         "bundle_mtime": pd.Timestamp(
             os.path.getmtime(
-                os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", BUNDLE_MAIN)
+                os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)), "..", BUNDLE_MAIN
+                )
             ),
             unit="s",
         ).isoformat(),
@@ -506,10 +522,13 @@ def main() -> int:
     print(f"[saved] {pq_path} rows={len(df):,} ({time.time() - t0:.0f}s)", flush=True)
     arms = result.get("main", {}).get("arms", {})
     for name, a in arms.items():
-        fmt = lambda v: f"{v:+.5f}" if v is not None else "  n/a  "
+        def fmt(v):
+            return f"{v:+.5f}" if v is not None else "  n/a  "
         extra = (
             f" Δ={fmt(a.get('d3_full'))} (h1 {fmt(a.get('d3_h1'))} / h2 {fmt(a.get('d3_h2'))}) "
-            f"win={a.get('win'):.2f}" if a.get("d3_full") is not None else ""
+            f"win={a.get('win'):.2f}"
+            if a.get("d3_full") is not None
+            else ""
         )
         print(
             f"  {name:9s} days={a['days']:3d} net3={a['net3']:+.4f} hit3={a['hit3']:.3f} "

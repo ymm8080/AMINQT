@@ -52,8 +52,8 @@ from config.settings import PANEL_V3_PATH, data_others_path
 COST = 0.0020
 TOP_FRAC = 0.01
 LU_THR = {"lu_main": 0.095, "lu_dual": 0.19}
-PRE_OFFS = tuple(range(1, 21))      # 涨前一个月 L-20..L-1
-PLC_OFFS = tuple(range(21, 41))     # 安慰剂 = 再前一个月 L-40..L-21
+PRE_OFFS = tuple(range(1, 21))  # 涨前一个月 L-20..L-1
+PLC_OFFS = tuple(range(21, 41))  # 安慰剂 = 再前一个月 L-40..L-21
 SUB_WINDOWS = {"w1": (1, 5), "w2": (6, 10), "w3": (11, 15), "w4": (16, 20)}
 MIN_VALID = 8
 EXCLUDE_COLS = {"symbol", "date", "announce_date"}
@@ -174,11 +174,7 @@ def _audit_column(
     df = panel[["symbol", "date", col]].copy()
     dt = pd.to_datetime(df["date"]).dt.normalize()
     df["rk"] = df.groupby(dt)[col].rank(pct=True)
-    mat = (
-        df.assign(dt=dt)
-        .pivot(index="symbol", columns="dt", values="rk")
-        .sort_index()
-    )
+    mat = df.assign(dt=dt).pivot(index="symbol", columns="dt", values="rk").sort_index()
     sym_order = mat.index.astype(str).str.zfill(6).to_numpy()
 
     # 新鲜度: 每日非空覆盖率
@@ -213,7 +209,8 @@ def _audit_column(
             pre_r = np.nanmean(pre, axis=1)
             plc_r = np.nanmean(plc, axis=1)
         ok = (
-            (~np.isnan(pre_r)) & (~np.isnan(plc_r))
+            (~np.isnan(pre_r))
+            & (~np.isnan(plc_r))
             & (np.sum(~np.isnan(pre), axis=1) >= MIN_VALID)
             & (np.sum(~np.isnan(plc), axis=1) >= MIN_VALID)
         )
@@ -229,13 +226,18 @@ def _audit_column(
             offs = np.arange(a, b + 1)
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                wr = np.nanmean(vals[sidx[:, None], (didx[:, None] - offs[None, :])], axis=1)
+                wr = np.nanmean(
+                    vals[sidx[:, None], (didx[:, None] - offs[None, :])], axis=1
+                )
             m = ok & np.isfinite(wr)
             rec[f"net_{wname}"] = (
                 round(float(np.mean(wr[m] - plc_r[m])), 4) if m.any() else None
             )
         out[cls] = rec
-    print(f"  [col] {col} {out.get('win_net3', {}).get('net_signal')} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"  [col] {col} {out.get('win_net3', {}).get('net_signal')} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     return out, fresh
 
 
@@ -264,16 +266,22 @@ def main() -> int:
     )
     panel["symbol"] = panel["symbol"].astype(str).str.zfill(6)
     px, cal = _pivots(panel[["symbol", "date", "close_hfq"]])
-    print(f"[pivot] symbols={len(px)} days={len(cal)} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[pivot] symbols={len(px)} days={len(cal)} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     date_vals = pd.to_datetime(panel["date"]).dt.normalize().to_numpy()
     events = _build_events(px, w0=40, last_i=len(cal) - 12)
-    for cls, (s, L) in events.items():
+    for cls, (s, _L) in events.items():
         print(f"[events] {cls}: {len(s):,}", flush=True)
 
     active, by_dim, src_cols = _legacy_registry_seen()
     ckpt_cols = _checkpoint_cols()
-    print(f"[xref] registry active={len(active)} ckpt main={len(ckpt_cols['main'])} dual={len(ckpt_cols['dual'])}", flush=True)
+    print(
+        f"[xref] registry active={len(active)} ckpt main={len(ckpt_cols['main'])} dual={len(ckpt_cols['dual'])}",
+        flush=True,
+    )
 
     rows = []
     for col in cols_all:
@@ -288,9 +296,14 @@ def main() -> int:
                 if col.startswith(pref) and any(by_dim.get(d) for d in dims):
                     legacy_seen, legacy_how = True, f"prefix:{pref}"
                     break
-        row = {"col": col, **fresh, "legacy_seen": legacy_seen, "legacy_how": legacy_how,
-               "in_parallel_main": col in ckpt_cols["main"],
-               "in_parallel_dual": col in ckpt_cols["dual"]}
+        row = {
+            "col": col,
+            **fresh,
+            "legacy_seen": legacy_seen,
+            "legacy_how": legacy_how,
+            "in_parallel_main": col in ckpt_cols["main"],
+            "in_parallel_dual": col in ckpt_cols["dual"],
+        }
         for cls in events:
             row.update({f"{cls}_{k}": v for k, v in metrics.get(cls, {}).items()})
         rows.append(row)
@@ -305,7 +318,9 @@ def main() -> int:
         "not_in_parallel_main": blind[~blind["in_parallel_main"]]["col"].tolist(),
         "not_in_parallel_dual": blind[~blind["in_parallel_dual"]]["col"].tolist(),
         "not_legacy_seen": blind[~blind["legacy_seen"]]["col"].tolist(),
-        "top10_abs_net": res.head(10)[["col", sig, "win_net3_pre_lift", "win_net3_enrich80"]].to_dict("records"),
+        "top10_abs_net": res.head(10)[
+            ["col", sig, "win_net3_pre_lift", "win_net3_enrich80"]
+        ].to_dict("records"),
     }
 
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
@@ -319,7 +334,11 @@ def main() -> int:
         "cutoff": str(pd.Timestamp(cutoff).date()),
         "top_frac": TOP_FRAC,
         "cost": COST,
-        "windows": {"pre": list(PRE_OFFS), "placebo": list(PLC_OFFS), "min_valid": MIN_VALID},
+        "windows": {
+            "pre": list(PRE_OFFS),
+            "placebo": list(PLC_OFFS),
+            "min_valid": MIN_VALID,
+        },
         "n_cols": len(cols_all),
         "events": {cls: int(len(s)) for cls, (s, _) in events.items()},
         "xref": {
@@ -339,7 +358,7 @@ def main() -> int:
     (out_dir / f"preinfo_audit_{ts}.json").write_text(
         json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    print(f"[saved] {pq_path} rows={len(res)} ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[saved] {pq_path} rows={len(res)} ({time.time() - t0:.0f}s)", flush=True)
     print(json.dumps(blind_list, ensure_ascii=False, indent=1))
     print("=== DONE ===", flush=True)
     return 0
