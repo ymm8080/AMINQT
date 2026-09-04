@@ -1,10 +1,13 @@
-"""_monitor_legacy_drift.py — legacy 幅度/校准漂移监控 (2026-08-17 / 08-24 加 ECE).
+"""_monitor_legacy_drift.py — legacy 幅度/校准/赢家判别漂移监控 (2026-08-17 / 08-24 加 ECE / 09-03 加赢家AUC).
 
 用户定案 (08-17): 幅度模型漂移 (pred_ret_10d 系统高估, 偏差随时间扩大) 修法 = 重训,
 监控 = 每日全池预测均值 vs T+10 净实现均值偏差, 滚动窗超阈值 → 告警 (提醒提前重训).
 08-24: 加 p_reg 校准检查 — prob_up_10d 建模事件 = gross_10d > 0.5% (label_engine
 CLS_THRESHOLD), ECE 事件 = gross_cc > 0.5% ⟺ realized_net > 0.5% − cost (与幅度同
 realized, 防 cost 偏差假触发); 全池分位桶滚动窗 ECE 超阈值 → 校准漂移告警.
+09-03: 加排名键赢家判别 AUC 月度节 (winner-leak 复盘: 6 月断裂 0.66→0.52 抛硬币
+且未恢复; 连续 2 个成熟月 <0.55 → 报警). candidates 无 base_rate, 用全池口径,
+绝对值与复盘 E7 回放不可比, 只看趋势; 配置见 DRIFT_MONITOR["winner_auc"].
 
 数据源 (全部 WORM, 无新落盘):
   preds   = data/lists/candidates_<YYYYMMDD>.parquet (每日全池原始预测, daily_pipeline)
@@ -35,8 +38,11 @@ from app.pipeline1.drift_monitor import (
     board_of,
     check_calibration,
     check_drift,
+    check_winner_auc,
     compute_realized,
     daily_bias,
+    daily_winner_auc,
+    monthly_winner_auc,
     rolling_bias,
     rolling_calibration,
 )
@@ -190,6 +196,15 @@ def main() -> int:
     cal_alerts = check_calibration(cal, cal_cfg.get("ece_threshold", {}))
     cal_ref = _replay_calibration_reference(cal_thr, cal_bins, float(cfg["cost"]))
 
+    wauc_cfg = cfg.get("winner_auc", {})
+    wauc = daily_winner_auc(preds, realized, win_t=float(wauc_cfg.get("win_t", 0.05)))
+    wauc_monthly = monthly_winner_auc(wauc, min_days=int(wauc_cfg.get("min_days", 8)))
+    wauc_alerts = check_winner_auc(
+        wauc_monthly,
+        threshold=float(wauc_cfg.get("threshold", 0.55)),
+        consecutive_months=int(wauc_cfg.get("consecutive_months", 2)),
+    )
+
     print(
         f"===== legacy 幅度漂移 (滚动窗 {window_days} 交易日, 成熟≥{min_matured} 日) =====",
         flush=True,
@@ -256,6 +271,30 @@ def main() -> int:
                 f"({cr['n_rows']:,} 票, 仅 picks 子集)",
                 flush=True,
             )
+
+    print(
+        f"\n===== 排名键赢家 AUC (月度, 全池, 赢家 = T+10 净 ≥ {wauc_cfg.get('win_t', 0.05):.0%}) =====",
+        flush=True,
+    )
+    if wauc_monthly.empty:
+        print("[info] 无成熟 AUC 日 — 积累期", flush=True)
+    for _, r in wauc_monthly.iterrows():
+        line = f"[{r['board']:>4}] {r['month']}  成熟 {r['n_auc_days']:>2}/{r['n_days']:>2} 日"
+        if r["auc"] is not None:
+            line += f" | AUC {r['auc']:.3f}"
+            if any(
+                a["board"] == r["board"] and r["month"] in a["months"]
+                for a in wauc_alerts
+            ):
+                line += f"  [AUC-ALERT] 判别衰减 (连续{wauc_cfg.get('consecutive_months', 2)}月 <{wauc_cfg.get('threshold', 0.55):.2f})"
+        else:
+            line += " | 无可判别日"
+        print(line, flush=True)
+    if not wauc_alerts:
+        print(
+            f"[ok] 无板块连续{wauc_cfg.get('consecutive_months', 2)}月 AUC <{wauc_cfg.get('threshold', 0.55):.2f}",
+            flush=True,
+        )
     if not cal_alerts:
         print("[ok] 无板块校准 ECE 超阈值", flush=True)
     if not alerts:
@@ -277,6 +316,10 @@ def main() -> int:
             "rolling": cal.to_dict("records"),
             "alerts": cal_alerts,
             "replay_reference": cal_ref,
+        },
+        "winner_auc": {
+            "monthly": wauc_monthly.to_dict("records"),
+            "alerts": wauc_alerts,
         },
     }
     (out_dir / f"legacy_drift_{ts}.json").write_text(

@@ -16,9 +16,12 @@ from app.pipeline1.drift_monitor import (
     board_of,
     check_calibration,
     check_drift,
+    check_winner_auc,
     compute_realized,
     compute_realized_mfe,
     daily_bias,
+    daily_winner_auc,
+    monthly_winner_auc,
     rolling_bias,
     rolling_calibration,
     rolling_calibration_mfe,
@@ -506,3 +509,196 @@ def test_rolling_calibration_mfe_accumulation():
     cal = rolling_calibration_mfe(preds, realized, thr=0.06, min_matured_days=3)
     assert len(cal) == 1
     assert cal["ece"].iloc[0] is None and cal["n_rows"].iloc[0] == 0
+
+
+# ── 排名键赢家判别 AUC (2026-09-03, winner-leak 复盘后新增) ──
+
+
+def _wauc_base_preds(date, symbols, board, preds_):
+    return pd.DataFrame(
+        {
+            "date": [pd.Timestamp(date)] * len(symbols),
+            "symbol": symbols,
+            "board": [board] * len(symbols),
+            "pred_ret_10d": preds_,
+        }
+    )
+
+
+def test_daily_winner_auc_mann_whitney_values():
+    """赢家 pred 最高 → AUC 1.0; 居中 → 0.5; 最低 → 0.0 (全池 Mann-Whitney)."""
+    date = "2026-08-10"
+    realized = pd.DataFrame(
+        {
+            "date": [pd.Timestamp(date)] * 3,
+            "symbol": ["W", "M", "L"],
+            "realized_net": [0.06, -0.01, -0.02],  # 仅 W ≥ 0.05 → 赢家
+        }
+    )
+    # 赢家 pred 最高: ranks L=1, M=2, W=3 → (3 - 1) / 2 = 1.0
+    preds = _wauc_base_preds(date, ["W", "M", "L"], "main", [0.9, 0.5, 0.1])
+    out = daily_winner_auc(preds, realized)
+    assert len(out) == 1
+    r = out.iloc[0]
+    assert r["board"] == "main" and r["n"] == 3 and r["winners"] == 1
+    assert r["density"] == pytest.approx(1 / 3)
+    assert r["auc"] == pytest.approx(1.0)
+
+    # 赢家 pred 居中: ranks L=1, W=2, M=3 → (2 - 1) / 2 = 0.5
+    preds = _wauc_base_preds(date, ["W", "M", "L"], "main", [0.5, 0.9, 0.1])
+    assert daily_winner_auc(preds, realized)["auc"].iloc[0] == pytest.approx(0.5)
+
+    # 赢家 pred 最低: ranks W=1 → (1 - 1) / 2 = 0.0
+    preds = _wauc_base_preds(date, ["W", "M", "L"], "main", [0.1, 0.5, 0.9])
+    assert daily_winner_auc(preds, realized)["auc"].iloc[0] == pytest.approx(0.0)
+
+
+def test_daily_winner_auc_no_winner_day_kept_nan():
+    """全输日 → auc NaN 但行保留, density=0; 无赢家/无非赢家都不可判别."""
+    date = "2026-08-10"
+    preds = _wauc_base_preds(date, ["A", "B", "C"], "main", [0.9, 0.5, 0.1])
+    realized = pd.DataFrame(
+        {
+            "date": [pd.Timestamp(date)] * 3,
+            "symbol": ["A", "B", "C"],
+            "realized_net": [0.04, -0.01, -0.02],  # 全 < 0.05 → 无赢家
+        }
+    )
+    out = daily_winner_auc(preds, realized, win_t=0.05)
+    assert len(out) == 1
+    assert np.isnan(out["auc"].iloc[0])
+    assert out["winners"].iloc[0] == 0 and out["density"].iloc[0] == 0
+
+
+def test_daily_winner_auc_inner_join_and_dropna():
+    """realized 无行的票不参与 (inner); pred_ret_10d NaN 不参与."""
+    date = "2026-08-10"
+    preds = _wauc_base_preds(date, ["A", "B", "C", "Z"], "main", [0.9, np.nan, 0.5, 0.5])
+    realized = pd.DataFrame(
+        {
+            "date": [pd.Timestamp(date)] * 2,
+            "symbol": ["A", "C"],
+            "realized_net": [0.06, -0.01],
+        }
+    )
+    out = daily_winner_auc(preds, realized)
+    assert out["n"].iloc[0] == 2  # B pred NaN, Z 无 realized → 只剩 A/C
+    assert out["winners"].iloc[0] == 1
+    assert out["density"].iloc[0] == pytest.approx(0.5)
+    # 幸存 2 票 (A 赢 C 输): ranks C=1, A=2 → (2-1)/(1*1) = 1.0
+    assert out["auc"].iloc[0] == pytest.approx(1.0)
+
+    # 全空合并 → 空表, 列齐全
+    realized_none = realized[realized["symbol"] == "X"]
+    out = daily_winner_auc(preds, realized_none)
+    assert out.empty
+    assert list(out.columns) == ["date", "board", "n", "winners", "density", "auc"]
+
+
+def test_monthly_winner_auc_median_and_maturity():
+    """月度 = 中位 AUC; 成熟 AUC 日 <min_days → mature=False 不参与判定."""
+    dates_jul = [pd.Timestamp(f"2026-07-{d:02d}") for d in range(1, 11)]  # 10 日
+    dates_aug = [pd.Timestamp(f"2026-08-{d:02d}") for d in range(3, 13)]  # 10 日
+    daily = pd.DataFrame(
+        {
+            "date": dates_jul + dates_aug,
+            "board": ["main"] * 20,
+            "n": [10] * 20,
+            "winners": [3] * 20,
+            "density": [0.3] * 20,
+            "auc": [0.6] * 5 + [np.nan] * 2 + [0.7] * 3 + [0.52] * 9 + [np.nan],
+        }
+    )
+    m = monthly_winner_auc(daily, min_days=8)
+    assert len(m) == 2
+    jul = m[m["month"] == "2026-07"].iloc[0]
+    assert jul["n_days"] == 10 and jul["n_auc_days"] == 8
+    assert jul["mature"]
+    assert jul["auc"] == pytest.approx(float(np.median([0.6] * 5 + [0.7] * 3)))
+    aug = m[m["month"] == "2026-08"].iloc[0]
+    assert aug["n_auc_days"] == 9 and aug["mature"]
+    assert aug["auc"] == pytest.approx(0.52)
+
+    # min_days=9 → 7 月只有 8 个 AUC 日 → 不成熟
+    m = monthly_winner_auc(daily, min_days=9)
+    assert not m[m["month"] == "2026-07"]["mature"].iloc[0]
+
+
+def test_monthly_winner_auc_per_board():
+    """main/dual 同月各出一行, 互不混算."""
+    date = pd.Timestamp("2026-08-10")
+    daily = pd.DataFrame(
+        {
+            "date": [date] * 2,
+            "board": ["main", "dual"],
+            "n": [10, 12],
+            "winners": [3, 4],
+            "density": [0.3, 1 / 3],
+            "auc": [0.61, 0.49],
+        }
+    )
+    m = monthly_winner_auc(daily, min_days=1)
+    assert set(m["board"]) == {"main", "dual"}
+    assert m[m["board"] == "main"]["auc"].iloc[0] == pytest.approx(0.61)
+    assert m[m["board"] == "dual"]["auc"].iloc[0] == pytest.approx(0.49)
+
+
+def _wauc_monthly(board, months, aucs, n_auc_days=None, mature=None):
+    n = len(months)
+    if n_auc_days is None:
+        n_auc_days = [18] * n
+    if mature is None:
+        mature = [True] * n
+    return pd.DataFrame(
+        {
+            "board": [board] * n,
+            "month": months,
+            "n_days": [20] * n,
+            "n_auc_days": n_auc_days,
+            "auc": aucs,
+            "mature": mature,
+        }
+    )
+
+
+def test_check_winner_auc_two_consecutive_months_alert():
+    m = _wauc_monthly("main", ["2026-06", "2026-07", "2026-08"], [0.60, 0.53, 0.52])
+    alerts = check_winner_auc(m, threshold=0.55, consecutive_months=2)
+    assert len(alerts) == 1
+    assert alerts[0]["board"] == "main"
+    assert alerts[0]["months"] == ["2026-07", "2026-08"]
+    assert alerts[0]["aucs"] == pytest.approx([0.53, 0.52])
+    assert alerts[0]["threshold"] == pytest.approx(0.55)
+
+
+def test_check_winner_auc_recovery_no_alert():
+    """6-7 月断裂但 8 月恢复 → 尾两月不全低 → 不告警."""
+    m = _wauc_monthly("main", ["2026-06", "2026-07", "2026-08"], [0.60, 0.53, 0.57])
+    assert check_winner_auc(m, threshold=0.55, consecutive_months=2) == []
+
+
+def test_check_winner_auc_ignores_immature_months():
+    """8 月不成熟 (AUC 日不足) → 只 1 个成熟月 → 不告警; 单月低也不告警."""
+    m = _wauc_monthly(
+        "main",
+        ["2026-07", "2026-08"],
+        [0.53, 0.50],
+        n_auc_days=[18, 3],
+        mature=[True, False],
+    )
+    assert check_winner_auc(m, threshold=0.55, consecutive_months=2) == []
+    # 仅 1 个成熟月也不够
+    m1 = _wauc_monthly("main", ["2026-07"], [0.53])
+    assert check_winner_auc(m1, threshold=0.55, consecutive_months=2) == []
+
+
+def test_check_winner_auc_per_board_independent():
+    """main 报警不影响 dual 不报警."""
+    m = pd.concat(
+        [
+            _wauc_monthly("main", ["2026-07", "2026-08"], [0.53, 0.52]),
+            _wauc_monthly("dual", ["2026-07", "2026-08"], [0.58, 0.61]),
+        ]
+    )
+    alerts = check_winner_auc(m, threshold=0.55, consecutive_months=2)
+    assert [a["board"] for a in alerts] == ["main"]
