@@ -79,120 +79,62 @@ def compute_flags(date: str) -> pd.DataFrame | None:
 
 
 def delete_codes_from_watchlist(codes: list[str]) -> dict[str, str]:
-    """UI 自动化逐码删除自选股成员 (Del 键流程, 来源 _diag_ths_del_probe.py).
+    """UI 自动化逐码删除自选股成员 (截图读码定位→点击选中→Del→复读复验).
 
-    状态: deleted = 确认对话框探到并回车 / dialog_timeout = {Delete} 后未探到
-    确认对话框, 删除是否生效未知 / not_found_or_failed = 码不在自选股 (被当成
-    新增弹了加自选股对话框, 已关闭) 或单码流程异常. 单码失败不中断后续码.
+    09-03 定案: 键入定位判死 (数字键即便网格有焦点也被全局代码入口截走,
+    Enter=跳分时图), 定位只允许截图读码. Del 无确认立即删除当前选中行,
+    删后光标自动落下一行 (盲发第二下 Del 会连环误删). 安全设计:
+      1. 入口空闲闸: 用户在场整体跳过 (非关键步, 文档已落盘)
+      2. 定位走 ui.delete_code_flow: 读码找行 → 点击后紫色选中态验证,
+         验证失败绝不发 Del; 全程无数字键入
+      3. Del 后复读同码: 码消失 = deleted; 仍在 = delete_failed
+      4. 每次按键前断言前台 ∈ hexin*, 用户中途回来抛 ForegroundLostError,
+         剩余码标记 user_returned_abort 整体中止
+    单码失败不中断后续码 (ForegroundLostError 除外).
     """
-    import ctypes
     import time
 
-    import psutil
-    import uiautomation as auto
-
-    from scripts._ths_watchlist_push import THS_HEXIN_PATH
+    from scripts import _ths_ui as ui
 
     def log(msg: str) -> None:
         print(f"[guard] {msg}", flush=True)
 
-    def hexin_pids() -> set[int]:
-        # 全量 hexin* 进程: 首个匹配常是 hexinhelper 辅助进程而非主程序
-        return {
-            p.info["pid"]
-            for p in psutil.process_iter(["name", "pid"])
-            if (p.info["name"] or "").lower().startswith("hexin")
-        }
-
-    def find_window(substr: str):
-        pids = hexin_pids()
-        for c in auto.GetRootControl().GetChildren():
-            try:
-                if c.ProcessId in pids and c.Name and substr in c.Name:
-                    return c
-            except Exception:
-                pass
-        return None
-
-    def close_x(dlg) -> None:
-        r = dlg.BoundingRectangle
-        auto.Click(r.right - 19, r.top + 21)  # ✕
-        time.sleep(0.8)
-
-    def find_confirm():
-        # 假设(未验证): {Delete} 后确认对话框的标题与默认按钮行为以 11:33 探针截图为准
-        for nm in ("删除", "提示", "确认", "警告"):
-            d = find_window(nm)
-            if d is not None:
-                return d
-        return None
+    if not ui.ensure_idle(what="自选股删除"):
+        return {c: "user_active_skip" for c in codes}
 
     results: dict[str, str] = {}
+    remaining = list(codes)
+    try:
+        win = ui.ensure_watchlist_window()
+    except Exception as exc:
+        log(f"自选股窗口不可用: {exc}")
+        return {c: "window_lost" for c in codes}
 
-    win = find_window("自选股")
-    if win is None:
-        if not THS_HEXIN_PATH.exists():
-            log(f"客户端不存在: {THS_HEXIN_PATH}")
-            return {c: "not_found_or_failed" for c in codes}
-        log(f"拉起客户端: {THS_HEXIN_PATH}")
-        os.startfile(THS_HEXIN_PATH)
-        for _ in range(60):
-            time.sleep(2)
-            win = find_window("自选股")
-            if win is not None:
-                break
-        if win is None:
-            log("120s 内未出现自选股窗口 (可能停在登录页)")
-            return {c: "not_found_or_failed" for c in codes}
-
-    ctypes.windll.user32.ShowWindow(int(win.NativeWindowHandle), 9)  # SW_RESTORE
-    time.sleep(0.5)
-
-    for code in codes:
-        try:
-            win = find_window("自选股")  # 每码重找激活, 防前码弹窗抢焦点
-            if win is None:
-                raise RuntimeError("自选股窗口丢失")
-            win.SetActive()
-            time.sleep(0.5)
-            auto.SendKeys(code, interval=0.05)
-            time.sleep(1.2)
-            add = find_window("复制识别")  # 防御: 码不在列表被当成新增
-            if add is not None:
-                log(f"{code} 不在自选股 (键入后弹加自选股对话框), 关闭")
-                close_x(add)
+    try:
+        while remaining:
+            code = remaining[0]
+            try:
+                win = ui.activate_watchlist()  # 每码重激活, 防前码弹窗抢焦点
+                results[code] = ui.delete_code_flow(win, code, log)
+                log(f"{code} {results[code]}")
+                remaining.pop(0)
+                time.sleep(1.0)  # 码间 settle
+            except ui.ForegroundLostError:
+                raise
+            except Exception as exc:
+                log(f"{code} 失败: {exc}")
                 results[code] = "not_found_or_failed"
-                continue
-            auto.SendKeys("{Enter}")  # 定位行
-            time.sleep(1.5)
-            add = find_window("复制识别")
-            if add is not None:
-                log(f"{code} 不在自选股 (定位后弹加自选股对话框), 关闭")
-                close_x(add)
-                results[code] = "not_found_or_failed"
-                continue
-            auto.SendKeys("{Delete}")
-            time.sleep(1.5)
-            confirm = find_confirm()
-            if confirm is not None:
-                auto.SendKeys("{Enter}")  # 默认按钮=确认删除 (待探针证实)
-                time.sleep(1.5)
-                log(f"{code} deleted (确认对话框: {confirm.Name})")
-                results[code] = "deleted"
-            else:
-                log(f"{code} dialog_timeout (删除键后未探到确认对话框, 生效未知)")
-                results[code] = "dialog_timeout"
-        except Exception as exc:
-            log(f"{code} 失败: {exc}")
-            results[code] = "not_found_or_failed"
-        time.sleep(1.0)  # 码间 settle
-
-    # 统一清理残留对话框 (右上角 ✕: right-19, top+21)
-    for nm in ("复制识别", "删除", "提示"):
-        d = find_window(nm)
+                remaining.pop(0)
+                time.sleep(1.0)
+    except ui.ForegroundLostError as exc:
+        log(f"前台丢失, 中止剩余码: {exc}")
+        for c in remaining:
+            results.setdefault(c, "user_returned_abort")
+    finally:
+        d = ui.find_window("复制识别")
         if d is not None:
             try:
-                close_x(d)
+                ui.close_x(d)
             except Exception:
                 pass
     return results
