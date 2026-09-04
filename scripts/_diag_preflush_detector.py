@@ -65,8 +65,18 @@ def main() -> int:
     cutoff = cal_all[-args.days]
     print(f"[cutoff] {pd.Timestamp(cutoff).date()} days={args.days}", flush=True)
 
-    read_cols = ["symbol", "date", "close_hfq", "open", "high", "low", "close",
-                 *MOM_COLS, *HOTVOL_COLS, "peak_roc_20d"]  # turnover_rate ∈ HOTVOL_COLS, 勿重复
+    read_cols = [
+        "symbol",
+        "date",
+        "close_hfq",
+        "open",
+        "high",
+        "low",
+        "close",
+        *MOM_COLS,
+        *HOTVOL_COLS,
+        "peak_roc_20d",
+    ]  # turnover_rate ∈ HOTVOL_COLS, 勿重复
     panel = pd.read_parquet(
         str(PANEL_V3_PATH), columns=read_cols, filters=[("date", ">=", cutoff)]
     )
@@ -75,11 +85,17 @@ def main() -> int:
     cal = np.sort(dt.unique())
     symbols = np.sort(panel["symbol"].unique())
     n_days = len(cal)
-    print(f"[panel] {len(symbols)} syms x {n_days} days ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[panel] {len(symbols)} syms x {n_days} days ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
-    px_wide = panel.assign(d=dt).pivot_table(
-        index="symbol", columns="d", values="close_hfq", aggfunc="last"
-    ).sort_index().reindex(index=symbols, columns=pd.DatetimeIndex(cal))
+    px_wide = (
+        panel.assign(d=dt)
+        .pivot_table(index="symbol", columns="d", values="close_hfq", aggfunc="last")
+        .sort_index()
+        .reindex(index=symbols, columns=pd.DatetimeIndex(cal))
+    )
     px = px_wide.ffill(axis=1).to_numpy(dtype="float64")
     del px_wide
     gc.collect()
@@ -93,7 +109,9 @@ def main() -> int:
         df = pd.DataFrame({"s": panel["symbol"], "d": dt, "v": panel[col]})
         df["rk"] = df.groupby("d")["v"].rank(pct=True)
         rank_mats[col] = (
-            df.pivot(index="s", columns="d", values="rk").sort_index().to_numpy("float32")
+            df.pivot(index="s", columns="d", values="rk")
+            .sort_index()
+            .to_numpy("float32")
         )
         del df
     turn_rk = rank_mats["turnover_rate"]
@@ -102,9 +120,12 @@ def main() -> int:
 
     # ---- 日线形状衍生 (用户 09-03: 判断纳入日线形状, 方向均取自⑤事件研究"延续/出货"向) ----
     def _raw_pivot(col: str) -> np.ndarray:
-        w = panel.assign(d=dt).pivot_table(
-            index="symbol", columns="d", values=col, aggfunc="last"
-        ).sort_index().reindex(index=symbols, columns=pd.DatetimeIndex(cal))
+        w = (
+            panel.assign(d=dt)
+            .pivot_table(index="symbol", columns="d", values=col, aggfunc="last")
+            .sort_index()
+            .reindex(index=symbols, columns=pd.DatetimeIndex(cal))
+        )
         return w.to_numpy(dtype="float64")
 
     O = _raw_pivot("open")
@@ -130,10 +151,17 @@ def main() -> int:
     del shapes
     gc.collect()
     # 形状坏分: 大振幅/长上影/冲高回落高分坏, 弱收(收在下半, close_pos 秩低)坏
-    shape_bad = np.nanmean(np.stack([
-        shape_rk["amp_pct"], shape_rk["upper_wick"], shape_rk["spike_rev"],
-        1.0 - shape_rk["close_pos"],
-    ]), axis=0).astype("float32")
+    shape_bad = np.nanmean(
+        np.stack(
+            [
+                shape_rk["amp_pct"],
+                shape_rk["upper_wick"],
+                shape_rk["spike_rev"],
+                1.0 - shape_rk["close_pos"],
+            ]
+        ),
+        axis=0,
+    ).astype("float32")
     del shape_rk
     S1 = np.full_like(shape_bad, np.nan)
     S1[:, 1:] = shape_bad[:, :-1]  # T-1 日形状, PIT 安全
@@ -145,7 +173,9 @@ def main() -> int:
 
     def nanmean_mats(cols):
         with np.errstate(invalid="ignore"):
-            return np.nanmean(np.stack([rank_mats[c] for c in cols]), axis=0).astype("float32")
+            return np.nanmean(np.stack([rank_mats[c] for c in cols]), axis=0).astype(
+                "float32"
+            )
 
     F1 = nanmean_mats(MOM_COLS)
     F2 = nanmean_mats(HOTVOL_COLS)
@@ -153,8 +183,12 @@ def main() -> int:
     F3 = np.nanmean(np.stack([F1, F2]), axis=0).astype("float32")
     F5 = np.nanmean(np.stack([F1, F2, S1]), axis=0).astype("float32")
     arms = {
-        "F1_hotmom": F1, "F2_hotvol": F2, "F3_combined": F3, "F4_runup": F4,
-        "S1_shape": S1, "F5_heatshape": F5,
+        "F1_hotmom": F1,
+        "F2_hotvol": F2,
+        "F3_combined": F3,
+        "F4_runup": F4,
+        "S1_shape": S1,
+        "F5_heatshape": F5,
     }
 
     eval_lo = n_eval - args.eval
@@ -187,16 +221,28 @@ def main() -> int:
         fmask = flush[:, days]
         pmask = prev_top[:, days]
         recall = float(pmask[fmask].mean()) if fmask.any() else np.nan
-        prec_hit = flush_next[:, days] & TM[:, days]
-        prec = float(flush_next[:, days][TM[:, days]].mean()) if TM[:, days].any() else np.nan
+        flush_next[:, days] & TM[:, days]
+        prec = (
+            float(flush_next[:, days][TM[:, days]].mean())
+            if TM[:, days].any()
+            else np.nan
+        )
         base_prec = float(flush_next[:, days].mean())
         f3v = fwd3[:, days]
         top_f = f3v[TM[:, days]]
         top_fwd3 = float(np.nanmean(top_f)) if np.isfinite(top_f).any() else np.nan
         h1m = np.zeros(len(days), dtype=bool)
         h1m[:half] = True
-        rec_h1 = float(pmask[:, h1m][fmask[:, h1m]].mean()) if fmask[:, h1m].any() else np.nan
-        rec_h2 = float(pmask[:, ~h1m][fmask[:, ~h1m]].mean()) if fmask[:, ~h1m].any() else np.nan
+        rec_h1 = (
+            float(pmask[:, h1m][fmask[:, h1m]].mean())
+            if fmask[:, h1m].any()
+            else np.nan
+        )
+        rec_h2 = (
+            float(pmask[:, ~h1m][fmask[:, ~h1m]].mean())
+            if fmask[:, ~h1m].any()
+            else np.nan
+        )
         rows.append(
             {
                 "arm": arm,
@@ -224,7 +270,9 @@ def main() -> int:
             {"symbol": symbols[ok], "score": w[ok], "pct_today": pct[ok, last_j]}
         )
         for rank, (_, r) in enumerate(cand.nlargest(15, "score").iterrows(), 1):
-            pred_rows.append({"arm": arm, "rank": rank, **r.to_dict(), "asof": last_date})
+            pred_rows.append(
+                {"arm": arm, "rank": rank, **r.to_dict(), "asof": last_date}
+            )
     pred = pd.DataFrame(pred_rows)
 
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
@@ -234,9 +282,14 @@ def main() -> int:
     res.to_parquet(pq_path, index=False)
     pred.to_parquet(out_dir / f"preflush_detector_{ts}_picks.parquet", index=False)
     meta = {
-        "ts": ts, "days": args.days, "eval": args.eval,
-        "cutoff": str(pd.Timestamp(cutoff).date()), "asof": last_date,
-        "flush_thr": FLUSH_THR, "vol_q": VOL_Q, "cost": COST,
+        "ts": ts,
+        "days": args.days,
+        "eval": args.eval,
+        "cutoff": str(pd.Timestamp(cutoff).date()),
+        "asof": last_date,
+        "flush_thr": FLUSH_THR,
+        "vol_q": VOL_Q,
+        "cost": COST,
         "summary": res.to_dict("records"),
         "protocol_deviations": [
             "事件=跌幅<=-5% 且换手秩>=0.80 (双创同阈)",
@@ -248,7 +301,7 @@ def main() -> int:
     (out_dir / f"preflush_detector_{ts}.json").write_text(
         json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    print(f"[saved] {pq_path} ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[saved] {pq_path} ({time.time() - t0:.0f}s)", flush=True)
     print(pred[pred["arm"] == "F3_combined"].to_string(index=False), flush=True)
     print("=== DONE ===", flush=True)
     return 0

@@ -64,7 +64,7 @@ def main() -> int:
     src = pd.read_parquet(str(data_others_path("diag") / args.src))
     src["date"] = src["date"].astype(str)
     print(
-        f"[src] {len(src):,} rows, {src['date'].nunique()} days ({time.time()-t0:.0f}s)",
+        f"[src] {len(src):,} rows, {src['date'].nunique()} days ({time.time() - t0:.0f}s)",
         flush=True,
     )
 
@@ -84,7 +84,9 @@ def main() -> int:
         df = pd.DataFrame({"s": panel["symbol"], "d": dt, "v": panel[col]})
         df["rk"] = df.groupby("d")["v"].rank(pct=True)
         rank_mats[col] = (
-            df.pivot(index="s", columns="d", values="rk").sort_index().to_numpy("float32")
+            df.pivot(index="s", columns="d", values="rk")
+            .sort_index()
+            .to_numpy("float32")
         )
         del df
     px = (
@@ -99,7 +101,9 @@ def main() -> int:
 
     def nanmean_mats(cols):
         with np.errstate(invalid="ignore"):
-            return np.nanmean(np.stack([rank_mats[c] for c in cols]), axis=0).astype("float32")
+            return np.nanmean(np.stack([rank_mats[c] for c in cols]), axis=0).astype(
+                "float32"
+            )
 
     F1 = nanmean_mats(MOM_COLS)
     F2 = nanmean_mats(HOTVOL_COLS)
@@ -127,11 +131,20 @@ def main() -> int:
 
     f3m = decile_mask(F3)
     union_m = decile_mask(F1) | decile_mask(F2) | f3m | decile_mask(F4)
-    print(f"[mats] done ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[mats] done ({time.time() - t0:.0f}s)", flush=True)
 
     METHODS = (
-        "prod", "a1", "a3", "a4", "veto_f3", "veto_union",
-        "s3_f3_a1", "s3_f3_a3", "s3_f3_a4", "s3_union_a3", "s3_union_a4",
+        "prod",
+        "a1",
+        "a3",
+        "a4",
+        "veto_f3",
+        "veto_union",
+        "s3_f3_a1",
+        "s3_f3_a3",
+        "s3_f3_a4",
+        "s3_union_a3",
+        "s3_union_a4",
     )
     acc: dict[str, dict[str, list]] = {m: {"main": [], "dual": []} for m in METHODS}
     win_pos: dict[str, list] = {"main": [], "dual": []}
@@ -180,9 +193,7 @@ def main() -> int:
             ("s3_union_a4", unf, a4v),
         ):
             keep = ~fl
-            order = np.lexsort(
-                (rank_order[keep], -np.nan_to_num(v[keep], nan=-np.inf))
-            )
+            order = np.lexsort((rank_order[keep], -np.nan_to_num(v[keep], nan=-np.inf)))
             sels[nm] = pool[keep].iloc[order[:TOP_N]]
 
         def net_px(sel, sell_off):
@@ -276,7 +287,7 @@ def main() -> int:
         ),
         encoding="utf-8",
     )
-    print(f"[saved] pool2stage_check_{ts} ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[saved] pool2stage_check_{ts} ({time.time() - t0:.0f}s)", flush=True)
     print(res.to_string(index=False), flush=True)
     print("=== DONE ===", flush=True)
     return 0

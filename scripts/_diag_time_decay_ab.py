@@ -139,7 +139,10 @@ def process_board(board: str, cutoff: pd.Timestamp, eval_n: int, t0: float, px, 
     df = _finalize_slice(df)
     df = add_mfe_labels(df, horizons=(10,), already_sorted=True)
     df, gate = tradability_gate(df)
-    print(f"[{board}] rows {len(df):,} gate -{gate['removed_rows']:,} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[{board}] rows {len(df):,} gate -{gate['removed_rows']:,} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     df["board"] = board
     df["_rid"] = np.arange(len(df))
     base_cols = [c for c in feature_cols(df) if c != "_rid"]
@@ -154,10 +157,12 @@ def process_board(board: str, cutoff: pd.Timestamp, eval_n: int, t0: float, px, 
     gc.collect()
     scored = scored.dropna(subset=["score"])
     mag = calibrate_mag10d(scored, score_col="score", target_col="label_pm_10d_net")
-    scored = scored.merge(mag[["symbol", "date", "mag"]], on=["symbol", "date"], how="inner")
+    scored = scored.merge(
+        mag[["symbol", "date", "mag"]], on=["symbol", "date"], how="inner"
+    )
     del mag
     gc.collect()
-    print(f"[{board}] scored {len(scored):,}r ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[{board}] scored {len(scored):,}r ({time.time() - t0:.0f}s)", flush=True)
 
     sub = df.set_index("_rid").loc[scored["_rid"].to_numpy()]
     del df
@@ -169,7 +174,10 @@ def process_board(board: str, cutoff: pd.Timestamp, eval_n: int, t0: float, px, 
     fit_ok = scored["label_mfe_10d_net"].notna().to_numpy()
     dates = np.sort(pd.to_datetime(scored["date"]).unique())
     dv = pd.to_datetime(scored["date"]).to_numpy()
-    print(f"[{board}] X {X.shape} fit_rows={int(fit_ok.sum()):,} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[{board}] X {X.shape} fit_rows={int(fit_ok.sum()):,} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     prob_base = _lgbm_walkforward(X, y, fit_ok, dv, dates, half_life=None)
     prob_tw = _lgbm_walkforward(X, y, fit_ok, dv, dates, half_life=HALF_LIFE_DAYS)
@@ -179,7 +187,9 @@ def process_board(board: str, cutoff: pd.Timestamp, eval_n: int, t0: float, px, 
     all_cal = pd.to_datetime(cal)
     i_of = {d: i for i, d in enumerate(all_cal)}
     day_dates = sorted(pd.unique(pd.to_datetime(scored["date"])))
-    eval_days = [d for d in day_dates if d in i_of and i_of[d] + MAX_LAG < len(all_cal)][-eval_n:]
+    eval_days = [
+        d for d in day_dates if d in i_of and i_of[d] + MAX_LAG < len(all_cal)
+    ][-eval_n:]
     sym_key = scored["symbol"].astype(str).str.zfill(6)
 
     pct_px = px.pct_change(axis=1, fill_method=None)
@@ -193,7 +203,7 @@ def process_board(board: str, cutoff: pd.Timestamp, eval_n: int, t0: float, px, 
     frames = []
     for k, d in enumerate(eval_days):
         di = i_of[d]
-        idx = np.nonzero((dv == np.datetime64(d)))[0]
+        idx = np.nonzero(dv == np.datetime64(d))[0]
         if not len(idx):
             continue
         b1, s3, s10 = all_cal[di + 1], all_cal[di + 4], all_cal[di + 11]
@@ -212,7 +222,10 @@ def process_board(board: str, cutoff: pd.Timestamp, eval_n: int, t0: float, px, 
         day["board"] = board
         frames.append(day)
         if (k + 1) % 25 == 0 or k == len(eval_days) - 1:
-            print(f"[{board}] eval {k+1}/{len(eval_days)} ({time.time()-t0:.0f}s)", flush=True)
+            print(
+                f"[{board}] eval {k + 1}/{len(eval_days)} ({time.time() - t0:.0f}s)",
+                flush=True,
+            )
     res = pd.concat(frames, ignore_index=True)
     res["rank_blend_base"] = res["mag"] * res["prob_base"]
     res["rank_blend_tw"] = res["mag"] * res["prob_tw"]
@@ -223,9 +236,12 @@ def process_board(board: str, cutoff: pd.Timestamp, eval_n: int, t0: float, px, 
     lu_all = []
     for arm in ("base", "tw"):
         col = f"rank_blend_{arm}"
-        by_day = {d: set(sub_df.nlargest(TOP_N, col)["symbol"]) for d, sub_df in res.groupby("date")}
+        by_day = {
+            d: set(sub_df.nlargest(TOP_N, col)["symbol"])
+            for d, sub_df in res.groupby("date")
+        }
         captured, leads, missed, events = 0, [], 0, 0
-        for (sym, L) in lu_days:
+        for sym, L in lu_days:
             Li = i_of.get(pd.Timestamp(L))
             if Li is None or not (w0 + 3 <= Li <= i_of[eval_days[-1]]):
                 continue
@@ -272,7 +288,10 @@ def main() -> int:
     cutoff = np.sort(pd.to_datetime(pd.Series(dts)))[-args.slice]
     print(f"[cutoff] {pd.Timestamp(cutoff).date()} slice={args.slice}", flush=True)
     px, cal = _panel_pivots(cutoff)
-    print(f"[panel-pivot] symbols={len(px)} days={len(cal)} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[panel-pivot] symbols={len(px)} days={len(cal)} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     all_cal = pd.to_datetime(cal)
 
     out_frames, lu_all = [], []
@@ -290,8 +309,9 @@ def main() -> int:
     half = len(days) // 2
     wins = {
         (board, d): set(
-            res[(res["date"] == d) & (res["board"] == board)]
-            .nlargest(TOP_N, "net_3d")["symbol"]
+            res[(res["date"] == d) & (res["board"] == board)].nlargest(TOP_N, "net_3d")[
+                "symbol"
+            ]
         )
         for board in ("main", "dual")
         for d in days
@@ -336,7 +356,9 @@ def main() -> int:
             "d_net3_h1": round(f_["net3_h1"] - b_["net3_h1"], 5),
             "d_net3_h2": round(f_["net3_h2"] - b_["net3_h2"], 5),
             "d_hit3": round(f_["hit3_mean"] - b_["hit3_mean"], 5),
-            "d_winners": round(f_["winner_overlap_mean"] - b_["winner_overlap_mean"], 4),
+            "d_winners": round(
+                f_["winner_overlap_mean"] - b_["winner_overlap_mean"], 4
+            ),
         }
     summary["deltas_tw_minus_base"] = deltas
     summary["limitup_capture"] = lu_all
@@ -370,8 +392,10 @@ def main() -> int:
     (out_dir / f"time_decay_ab_{ts}.json").write_text(
         json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    print(f"[saved] {pq_path} rows={len(res):,} ({time.time()-t0:.0f}s)", flush=True)
-    print(json.dumps({"deltas": deltas, "limitup": lu_all}, ensure_ascii=False, indent=1))
+    print(f"[saved] {pq_path} rows={len(res):,} ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        json.dumps({"deltas": deltas, "limitup": lu_all}, ensure_ascii=False, indent=1)
+    )
     print("=== DONE ===", flush=True)
     return 0
 

@@ -39,7 +39,9 @@ HOTVOL_COLS = ("amount", "turnover_rate", "volume_ratio", "ma_vol_ratio_5_20")
 
 def newest_panel_date() -> str:
     dts = pd.read_parquet(PANEL_V3_PATH, columns=["date"])["date"].unique()
-    return str(pd.Timestamp(np.sort(pd.to_datetime(pd.Series(dts)).unique())[-1]).date())
+    return str(
+        pd.Timestamp(np.sort(pd.to_datetime(pd.Series(dts)).unique())[-1]).date()
+    )
 
 
 def load_membership(list_dir, ref_date: str) -> set[str]:
@@ -167,8 +169,10 @@ def main() -> int:
     doc.to_csv(out, index=False, encoding="utf-8-sig")
 
     to_remove = sorted(ev.loc[ev["in_watchlist"], "symbol"])
-    print(f"[guard] {date_iso} 放量下跌 {len(ev)} 只, 自选股成员 {len(members)} 只, "
-          f"待删除 {len(to_remove)} 只: {' '.join(to_remove) if to_remove else '-'}")
+    print(
+        f"[guard] {date_iso} 放量下跌 {len(ev)} 只, 自选股成员 {len(members)} 只, "
+        f"待删除 {len(to_remove)} 只: {' '.join(to_remove) if to_remove else '-'}"
+    )
     print(f"[guard] 文档: {out}")
     if not to_remove:
         return 0
@@ -182,8 +186,10 @@ def main() -> int:
         for code, status in results.items():
             print(f"[guard] 删除 {code}: {status}")
         if n_fail:
-            print(f"[guard] 删除汇总: 成功 {n_ok}/{len(results)}, 未确认/失败 {n_fail} "
-                  f"(尽力而为, 不中断夜间链)")
+            print(
+                f"[guard] 删除汇总: 成功 {n_ok}/{len(results)}, 未确认/失败 {n_fail} "
+                f"(尽力而为, 不中断夜间链)"
+            )
     return 0
 
 

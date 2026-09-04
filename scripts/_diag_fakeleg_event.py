@@ -50,16 +50,41 @@ MIN_VALID = 3
 
 # 面板基本面列是裸名 (无 fina_ 前缀); margin_ 前缀不存在, 两融列仅两条
 FUND_COLS = (
-    "pe_ttm", "dv_ratio", "dv_ttm", "roe", "roe_deducted", "rev_yoy",
-    "asset_turnover", "ocf_to_or", "eps_yoy", "profit_yoy", "ocfps",
-    "revenue_ps", "eps", "dt_eps", "roe_yoy", "q_roe", "q_ocf_to_sales",
+    "pe_ttm",
+    "dv_ratio",
+    "dv_ttm",
+    "roe",
+    "roe_deducted",
+    "rev_yoy",
+    "asset_turnover",
+    "ocf_to_or",
+    "eps_yoy",
+    "profit_yoy",
+    "ocfps",
+    "revenue_ps",
+    "eps",
+    "dt_eps",
+    "roe_yoy",
+    "q_roe",
+    "q_ocf_to_sales",
 )
 FAMILY_PREFIXES = {
     # 筹码列在面板是裸名 (无 cyq_ 前缀)
     "chip": (
-        "pct_90_high", "pct_90_con", "winner_ratio", "cost_50pct", "cost_95pct",
-        "peak_price", "chip_entropy", "chip_skew_dist", "peak_roc_5d", "peak_roc_20d",
-        "cost_bias", "conc_trend_20d", "conc_90_industry_rank", "chip_gini",
+        "pct_90_high",
+        "pct_90_con",
+        "winner_ratio",
+        "cost_50pct",
+        "cost_95pct",
+        "peak_price",
+        "chip_entropy",
+        "chip_skew_dist",
+        "peak_roc_5d",
+        "peak_roc_20d",
+        "cost_bias",
+        "conc_trend_20d",
+        "conc_90_industry_rank",
+        "chip_gini",
         "resistance_dist",
     ),
     "holder": ("sh_",),
@@ -191,7 +216,10 @@ def main() -> int:
 
     fam_cols = {fam: _panel_cols(pre) for fam, pre in FAMILY_PREFIXES.items()}
     all_cols = sorted({c for cs in fam_cols.values() for c in cs})
-    print(f"[cols] {sum(len(v) for v in fam_cols.values())} in {len(fam_cols)} families", flush=True)
+    print(
+        f"[cols] {sum(len(v) for v in fam_cols.values())} in {len(fam_cols)} families",
+        flush=True,
+    )
 
     read_cols = ["symbol", "date"]
     for c in ["close_hfq", "volume", *all_cols]:
@@ -204,7 +232,10 @@ def main() -> int:
     )
     panel["symbol"] = panel["symbol"].astype(str).str.zfill(6)
     px, cal = _pivots(panel[["symbol", "date", "close_hfq"]])
-    print(f"[pivot] symbols={len(px)} days={len(cal)} ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[pivot] symbols={len(px)} days={len(cal)} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
     # vp 族 (判死族参照) 在面板上重算
     from scripts._diag_vp_family_ab import VP_COLS, add_vp_family
@@ -273,8 +304,13 @@ def main() -> int:
 
     boards_events = {}
     for board in ("main", "dual"):
-        boards_events[board] = _build_leg_events(px, w0=3, last_i=len(cal) - 5, thr=LEG_THR[board])
-        print(f"[events] {board} thr={LEG_THR[board]}: {len(boards_events[board][0]):,}", flush=True)
+        boards_events[board] = _build_leg_events(
+            px, w0=3, last_i=len(cal) - 5, thr=LEG_THR[board]
+        )
+        print(
+            f"[events] {board} thr={LEG_THR[board]}: {len(boards_events[board][0]):,}",
+            flush=True,
+        )
 
     date_to_idx = {d: i for i, d in enumerate(cal)}
     col_vals: dict[str, dict[int, np.ndarray]] = {}
@@ -292,14 +328,19 @@ def main() -> int:
             per_board = {}
             for board, (ev_sy, ev_T, _) in boards_events.items():
                 sidx = np.array([sym_to_idx.get(s, -1) for s in ev_sy])
-                didx = np.array([date_to_idx.get(pd.Timestamp(cal[t - off]), -1) for t in ev_T])
+                didx = np.array(
+                    [date_to_idx.get(pd.Timestamp(cal[t - off]), -1) for t in ev_T]
+                )
                 ok = (sidx >= 0) & (didx >= 0)
                 arr = np.full(len(ev_sy), np.nan, dtype=float)
                 arr[ok] = vals[sidx[ok], didx[ok]]
                 per_board[board] = arr
             col_vals[col][off] = per_board
         if (k + 1) % 20 == 0:
-            print(f"  [rank] {k+1}/{len(all_cols)} ({time.time()-t0:.0f}s)", flush=True)
+            print(
+                f"  [rank] {k + 1}/{len(all_cols)} ({time.time() - t0:.0f}s)",
+                flush=True,
+            )
     del panel
     gc.collect()
 
@@ -370,7 +411,7 @@ def main() -> int:
     (out_dir / f"fakeleg_event_{ts}.json").write_text(
         json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    print(f"[saved] {pq_path} rows={len(res)} ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[saved] {pq_path} rows={len(res)} ({time.time() - t0:.0f}s)", flush=True)
     print(top.to_string(index=False))
     print("=== DONE ===", flush=True)
     return 0

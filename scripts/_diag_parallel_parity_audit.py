@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_diag_parallel_parity_audit.py — parallel 模块 train/infer 特征对齐审计 (2026-09-03).
 
 背景: legacy brute 推理缺失修复 (+60% 真赢家) 证明"训练看得见、推理喂不对"类
@@ -44,7 +43,9 @@ from config.settings import DATA_DIR, data_others_path
 CHUNK = 48  # 每次读的列数 (控内存, 1.6M 行 × 48 列 float64 ≈ 0.6GB 峰值)
 
 
-def _col_stats(v: np.ndarray, mask: np.ndarray) -> tuple[float, float, float, float, float]:
+def _col_stats(
+    v: np.ndarray, mask: np.ndarray
+) -> tuple[float, float, float, float, float]:
     """单列单段统计: (nonnull率, 零率, std, 中位, inf率). 空段 → (0, nan, 0, nan, 0)."""
     x = v[mask]
     if x.size == 0:
@@ -54,7 +55,13 @@ def _col_stats(v: np.ndarray, mask: np.ndarray) -> tuple[float, float, float, fl
     n = x[fin]
     nonnull = float(n.size) / x.size
     if n.size:
-        return nonnull, float((n == 0).mean()), float(n.std()), float(np.median(n)), inf_rate
+        return (
+            nonnull,
+            float((n == 0).mean()),
+            float(n.std()),
+            float(np.median(n)),
+            inf_rate,
+        )
     return nonnull, float("nan"), 0.0, float("nan"), inf_rate
 
 
@@ -98,7 +105,13 @@ def audit_board(board: str, tail_days: int) -> dict:
                 flags.append("nonnull_drop")
             if tn >= 0.50 and ts_ == 0.0:
                 flags.append("const_tail")
-            if (not np.isnan(hz)) and hz <= 0.05 and (not np.isnan(tz)) and tz >= 0.90 and tn >= 0.50:
+            if (
+                (not np.isnan(hz))
+                and hz <= 0.05
+                and (not np.isnan(tz))
+                and tz >= 0.90
+                and tn >= 0.50
+            ):
                 flags.append("zero_collapse")
             if hs > 0 and tn >= 0.30 and (not np.isnan(tm)) and abs(tm - hm) >= 5 * hs:
                 flags.append("drift5")
@@ -143,7 +156,9 @@ def audit_board(board: str, tail_days: int) -> dict:
     return {
         "board": board,
         "bundle": {
-            "name": sorted(prob_head.bundle_dir().glob(f"{board}_prob_*.joblib"))[-1].name,
+            "name": sorted(prob_head.bundle_dir().glob(f"{board}_prob_*.joblib"))[
+                -1
+            ].name,
             "trained_through": str(b["trained_through"]),
             "feat_cols_n": len(feat_cols),
             "age_trading_days": age,
@@ -188,14 +203,14 @@ def main() -> int:
             print(f"  FATAL: {res['fatal']}")
             continue
         if res["schema_missing"]:
-            print(f"  FATAL schema_missing {len(res['schema_missing'])} 列 (闸已死): "
-                  f"{res['schema_missing'][:10]}")
+            print(
+                f"  FATAL schema_missing {len(res['schema_missing'])} 列 (闸已死): "
+                f"{res['schema_missing'][:10]}"
+            )
         for f, cols in res["flags"].items():
             print(f"  [{f}] {len(cols)} 列: {cols[:15]}")
         bad_pred = {
-            c: h
-            for c, h in res["pred_cols_tail"].items()
-            if h["tail_nonnull"] < 0.99
+            c: h for c, h in res["pred_cols_tail"].items() if h["tail_nonnull"] < 0.99
         }
         if bad_pred:
             print(f"  [pred_尾段] 非空<99%: {json.dumps(bad_pred, ensure_ascii=False)}")

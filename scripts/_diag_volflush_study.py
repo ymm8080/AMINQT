@@ -52,20 +52,33 @@ LU_MAIN, LU_DUAL = 0.095, 0.19
 
 MOM_COLS = ("bias_20", "bias_60", "bias_120", "bias_250")
 VOL_COLS = (
-    "turnover_rate", "amount", "free_float_turnover_rate",
-    "volume_ratio", "ma_vol_ratio_5_20",
+    "turnover_rate",
+    "amount",
+    "free_float_turnover_rate",
+    "volume_ratio",
+    "ma_vol_ratio_5_20",
 )
 CHIP_COLS = (
-    "winner_ratio", "pct_90_con", "chip_skew_dist", "cost_bias",
-    "resistance_dist", "conc_trend_20d", "chip_gini", "peak_roc_20d",
+    "winner_ratio",
+    "pct_90_con",
+    "chip_skew_dist",
+    "cost_bias",
+    "resistance_dist",
+    "conc_trend_20d",
+    "chip_gini",
+    "peak_roc_20d",
     "chip_entropy",
 )
 HOLDER_COLS = ("sh_net_change_sign", "sh_net_sign", "sh_change_vol")
 MARGIN_COLS = ("margin_buy_amt", "margin_balance")
 VAL_COLS = ("dv_ttm", "dv_ratio", "pe_ttm")
 FAM = {
-    "mom": MOM_COLS, "vol": VOL_COLS, "chip": CHIP_COLS,
-    "holder": HOLDER_COLS, "margin": MARGIN_COLS, "val": VAL_COLS,
+    "mom": MOM_COLS,
+    "vol": VOL_COLS,
+    "chip": CHIP_COLS,
+    "holder": HOLDER_COLS,
+    "margin": MARGIN_COLS,
+    "val": VAL_COLS,
 }
 
 
@@ -110,8 +123,17 @@ def main() -> int:
     all_cols = sorted({c for cs in FAM.values() for c in cs})
     panel = pd.read_parquet(
         str(PANEL_V3_PATH),
-        columns=["symbol", "date", "close_hfq", "open", "high", "low", "close",
-                 "volume", *all_cols],
+        columns=[
+            "symbol",
+            "date",
+            "close_hfq",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            *all_cols,
+        ],
         filters=[("date", ">=", cutoff)],
     )
     panel["symbol"] = panel["symbol"].astype(str).str.zfill(6)
@@ -119,11 +141,17 @@ def main() -> int:
     cal = np.sort(dt.unique())
     symbols = np.sort(panel["symbol"].unique())
     n_days = len(cal)
-    print(f"[panel] {len(symbols)} syms x {n_days} days ({time.time()-t0:.0f}s)", flush=True)
+    print(
+        f"[panel] {len(symbols)} syms x {n_days} days ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
 
-    px_wide = panel.assign(d=dt).pivot_table(
-        index="symbol", columns="d", values="close_hfq", aggfunc="last"
-    ).sort_index().reindex(index=symbols, columns=pd.DatetimeIndex(cal))
+    px_wide = (
+        panel.assign(d=dt)
+        .pivot_table(index="symbol", columns="d", values="close_hfq", aggfunc="last")
+        .sort_index()
+        .reindex(index=symbols, columns=pd.DatetimeIndex(cal))
+    )
     px = px_wide.ffill(axis=1).to_numpy(dtype="float64")
     del px_wide
     gc.collect()
@@ -141,11 +169,15 @@ def main() -> int:
         df["rk"] = df.groupby("d")["v"].rank(pct=True)
         rank_mats[col] = (
             df.pivot(index="s", columns="d", values="rk")
-            .sort_index().to_numpy(dtype="float32")
+            .sort_index()
+            .to_numpy(dtype="float32")
         )
         del df
         if (k + 1) % 10 == 0:
-            print(f"  [rank] {k+1}/{len(all_cols)} ({time.time()-t0:.0f}s)", flush=True)
+            print(
+                f"  [rank] {k + 1}/{len(all_cols)} ({time.time() - t0:.0f}s)",
+                flush=True,
+            )
 
     # 事件: 跌 <=-5% 且 换手秩 >=0.8
     turn_rk = rank_mats["turnover_rate"]
@@ -159,7 +191,7 @@ def main() -> int:
     ev_j = np.asarray(ev_j)
     n_ev = len(ev_s)
     f = fwd3[ev_s, ev_j]
-    print(f"[events] 放量下跌 {n_ev:,} ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[events] 放量下跌 {n_ev:,} ({time.time() - t0:.0f}s)", flush=True)
 
     # 基础率
     nxt_rise = np.zeros(n_ev, dtype=bool)
@@ -197,7 +229,9 @@ def main() -> int:
                 auc_h2 = _auc(sc[ok][~jmask], y[~jmask])
                 disc_rows.append(
                     {
-                        "family": fam, "col": col, "lag": lag,
+                        "family": fam,
+                        "col": col,
+                        "lag": lag,
                         "n": int(ok.sum()),
                         "n_cont": int(y.sum()),
                         "auc": round(auc, 4) if np.isfinite(auc) else None,
@@ -205,11 +239,15 @@ def main() -> int:
                         "auc_h2": round(auc_h2, 4) if np.isfinite(auc_h2) else None,
                     }
                 )
+
     # ---- OHLC 日频微观结构判别 (用户 09-03: 用 OHLC/量能/换手, 勿用慢变量) ----
     def _pivot_base(col: str) -> np.ndarray:
-        w = panel.assign(d=dt).pivot_table(
-            index="symbol", columns="d", values=col, aggfunc="last"
-        ).sort_index().reindex(index=symbols, columns=pd.DatetimeIndex(cal))
+        w = (
+            panel.assign(d=dt)
+            .pivot_table(index="symbol", columns="d", values=col, aggfunc="last")
+            .sort_index()
+            .reindex(index=symbols, columns=pd.DatetimeIndex(cal))
+        )
         return w.to_numpy(dtype="float64")
 
     O = _pivot_base("open")
@@ -230,13 +268,14 @@ def main() -> int:
             "lower_wick": np.where(rng > 0, (np.minimum(O, C) - L) / rng, np.nan),
             "gap": O / prevC - 1.0,
             "intraday": C / O - 1.0,
-            "spike_rev": C / H - 1.0,          # 收盘距最高 (冲高回落)
-            "amp_pct": (H - L) / prevC,        # 日振幅占昨收
+            "spike_rev": C / H - 1.0,  # 收盘距最高 (冲高回落)
+            "amp_pct": (H - L) / prevC,  # 日振幅占昨收
         }
     del O, H, L
     gc.collect()
     for name, base_mat, roll in (
-        ("vol_x5", V, 5), ("turn_x5", T_, 5),
+        ("vol_x5", V, 5),
+        ("turn_x5", T_, 5),
     ):
         b = pd.DataFrame(base_mat)
         m = b / b.T.rolling(roll, min_periods=3).mean().T
@@ -258,15 +297,18 @@ def main() -> int:
             jmask = ev_j[ok] <= half_j
             disc_rows.append(
                 {
-                    "family": "ohlc", "col": col, "lag": lag,
-                    "n": int(ok.sum()), "n_cont": int(y.sum()),
+                    "family": "ohlc",
+                    "col": col,
+                    "lag": lag,
+                    "n": int(ok.sum()),
+                    "n_cont": int(y.sum()),
                     "auc": round(auc, 4) if np.isfinite(auc) else None,
-                    "auc_h1": round(
-                        _auc(sc[ok][jmask], y[jmask]), 4
-                    ) if jmask.any() else None,
-                    "auc_h2": round(
-                        _auc(sc[ok][~jmask], y[~jmask]), 4
-                    ) if (~jmask).any() else None,
+                    "auc_h1": round(_auc(sc[ok][jmask], y[jmask]), 4)
+                    if jmask.any()
+                    else None,
+                    "auc_h2": round(_auc(sc[ok][~jmask], y[~jmask]), 4)
+                    if (~jmask).any()
+                    else None,
                 }
             )
         del m
@@ -289,7 +331,8 @@ def main() -> int:
             continue
         shape_rows.append(
             {
-                "shape": name, "n": int(mm.sum()),
+                "shape": name,
+                "n": int(mm.sum()),
                 "fwd3_mean": round(float(np.nanmean(f[mm])), 5),
                 "bounce_rate": round(float(np.mean(f[mm] >= BOUNCE_THR)), 4),
                 "next5_bigrise_rate": round(float(np.mean(nxt_rise[mm])), 4),
@@ -345,10 +388,9 @@ def main() -> int:
     )
     print("=== 判别 TOP (lag0, AUC>0.5=延续) ===")
     print(top_lag0.to_string(index=False), flush=True)
-    ohlc_lag0 = (
-        disc[(disc["family"] == "ohlc") & (disc["lag"] == 0) & disc["auc"].notna()]
-        .sort_values("auc", ascending=False)
-    )
+    ohlc_lag0 = disc[
+        (disc["family"] == "ohlc") & (disc["lag"] == 0) & disc["auc"].notna()
+    ].sort_values("auc", ascending=False)
     print("=== OHLC 判别 (lag0) ===")
     print(ohlc_lag0.to_string(index=False), flush=True)
 
@@ -380,7 +422,7 @@ def main() -> int:
     (out_dir / f"volflush_study_{ts}.json").write_text(
         json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    print(f"[saved] {pq_path} rows={len(disc)} ({time.time()-t0:.0f}s)", flush=True)
+    print(f"[saved] {pq_path} rows={len(disc)} ({time.time() - t0:.0f}s)", flush=True)
     print(json.dumps(base, ensure_ascii=False))
     print("=== DONE ===", flush=True)
     return 0
