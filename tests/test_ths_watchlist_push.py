@@ -85,3 +85,44 @@ def test_txt_format_and_worm_naming(tmp_path):
     mod.write_ths_txt(["002968", "603829"], out)
     content = out.read_text(encoding="utf-8")
     assert content == "002968\n603829\n"
+
+
+def test_flush_str_cannot_form_code_rows():
+    """冲刷串必须无法被识别器解析成代码行 (旧 "ths-push" 被识别成两只美股, 09-03)."""
+    assert not any(c.isalnum() for c in mod.FLUSH_STR)
+
+
+def _dlg_img(rows):
+    """合成对话框列表区截图: rows = [(y0, checked)]; 白底, 文字带 x40-80, 勾框 x17-28."""
+    import numpy as np
+
+    img = np.full((100, 500, 3), 240, dtype=np.uint8)
+    for y0, checked in rows:
+        img[y0 : y0 + 12, 40:80] = 60  # 文字带 (深色)
+        if checked:
+            img[y0 : y0 + 12, 17:28] = 50  # 勾墨迹 (min<80)
+        else:
+            img[y0 : y0 + 12, 17:28] = 200  # 空框 (min>=80)
+    return img
+
+
+def test_dlg_rows_detects_checked_and_unchecked():
+    rows = mod._dlg_rows_from_img(_dlg_img([(20, True), (60, False)]))
+    assert len(rows) == 2
+    assert rows[0][1] is True
+    assert rows[1][1] is False
+    assert abs(rows[0][0] - 26) <= 1
+    assert abs(rows[1][0] - 66) <= 1
+
+
+def test_dlg_rows_drops_sliver_bands():
+    import numpy as np
+
+    img = np.full((100, 500, 3), 240, dtype=np.uint8)
+    img[30:37, 40:80] = 60  # 7px 碎带 <10px 下限 → 丢弃
+    assert mod._dlg_rows_from_img(img) == []
+
+
+def test_chunk_size_fits_visible_list():
+    """对话框列表可视 ~16 行, 批量上限必须留裕量防滚动截断核验."""
+    assert mod.CHUNK_SIZE <= 14

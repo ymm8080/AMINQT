@@ -90,9 +90,9 @@ RETRAIN_WEEKDAY = 4
 _STEP_TIMEOUT_S = {
     "refresh": 3 * 3600,
     "cyq": 40 * 60,
-    # sw_history 正常 3-4min (约 400 指数 × 0.15s 延迟 + API 延迟); 600s 原案上调到
-    # 15min 以守 "每步 ≥15min" 不误杀下限 (限流日变慢留余量)
-    "sw_history": 15 * 60,
+    # sw_history 正常 3-4min (约 400 指数 × 0.15s 延迟 + API 延迟); 09-03 实测限流日
+    # 500 指数 ~16min (100 只/100s), 15min 超时被杀 → 上调 30min 留 2x 余量
+    "sw_history": 30 * 60,
     # freshness 只读 schema/尾列 (实际约 1-2min); 15min 守 "每步 ≥15min" 下限惯例
     "freshness": 15 * 60,
     "retrain": 12 * 3600,
