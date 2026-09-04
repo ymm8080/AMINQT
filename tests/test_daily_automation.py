@@ -45,7 +45,7 @@ _LEGACY_CHAIN = [
     "deliver",
 ]
 # ths_push 在 tail 首位: parallel 块之外恒执行 (parallel 跳过时自动回退 legacy 清单)
-_TAIL = ["ths_push", "drift", "drift_parallel", "shadow_xmodule"]
+_TAIL = ["ths_push", "a1_push", "ths_flush_guard", "drift", "drift_parallel", "shadow_xmodule"]
 _PARALLEL_CHAIN = ["parallel", "prob_head", "deliver_parallel"]
 
 
@@ -192,6 +192,21 @@ def test_plan_steps_ths_push_always_runs():
     ):
         assert "ths_push" in steps
         assert steps.index("ths_push") > steps.index("deliver")
+
+
+def test_plan_steps_a1_push_follows_ths_push():
+    """A1 动量影子单 (2026-09-04): 恒在 ths_push 之后并推, 非关键步骤."""
+    for steps in (
+        plan_steps(THU),
+        plan_steps(FRI),
+        plan_steps(THU, skip_parallel=True),
+        plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True),
+    ):
+        assert "a1_push" in steps
+        assert steps.index("a1_push") == steps.index("ths_push") + 1
+    assert "a1_push" not in _CRITICAL
+    assert _STEPS["a1_push"] == ["scripts/_a1_momentum_shadow.py", "{tag}"]
+    assert _STEP_TIMEOUT_S["a1_push"] >= 15 * 60
 
 
 # ── 中断中止 + 终态 state 文件 (08-21 事故: cyq 被 Ctrl+C 杀后仍启动 retrain,
