@@ -163,13 +163,13 @@ def main() -> int:
 
         def vals(W):
             return np.array(
-                [W[s_idx[s], j] if s in s_idx else np.nan for s in pool["symbol"]],
+                [W[s_idx[s], j] if s in s_idx else np.nan for s in pool["symbol"]],  # noqa: B023 (闭包当轮即调用)
                 dtype=float,
             )
 
         def flags(M):
             return np.array(
-                [bool(M[s_idx[s], j]) if s in s_idx else False for s in pool["symbol"]]
+                [bool(M[s_idx[s], j]) if s in s_idx else False for s in pool["symbol"]]  # noqa: B023 (闭包当轮即调用)
             )
 
         a1v, a3v, a4v = vals(F1), vals(A3), vals(A4)
@@ -197,11 +197,11 @@ def main() -> int:
             sels[nm] = pool[keep].iloc[order[:TOP_N]]
 
         def net_px(sel, sell_off):
-            k = j + sell_off
-            if j + 1 >= len(cal) or k >= len(cal):
+            k = j + sell_off  # noqa: B023 (闭包当轮即调用)
+            if j + 1 >= len(cal) or k >= len(cal):  # noqa: B023 (闭包当轮即调用)
                 return np.full(len(sel), np.nan)
             syms = sel["symbol"].astype(str)
-            pb = px.iloc[:, j + 1].reindex(syms).to_numpy(float)
+            pb = px.iloc[:, j + 1].reindex(syms).to_numpy(float)  # noqa: B023 (闭包当轮即调用)
             ps = px.iloc[:, k].reindex(syms).to_numpy(float)
             out = ps / pb - 1.0 - COST
             out[~(pb > 0)] = np.nan

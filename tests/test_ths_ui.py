@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_ths_ui 纯函数测试: 高亮判色 / 数字字形切分与匹配 / 空闲闸边界.
 
 不触碰真实窗口 (find_window 等带 UIA 依赖的函数不在此测).
@@ -7,7 +6,6 @@
 from unittest import mock
 
 import numpy as np
-import pytest
 
 from scripts import _ths_ui
 
@@ -113,7 +111,7 @@ def test_foreground_pid_smoke():
 
 def test_ths_hexin_path_default():
     # 环境变量缺省时落到默认安装路径 (单一来源: push 模块从这再导出)
-    from scripts._ths_watchlist_push import THS_HEXIN_PATH as alias
+    from scripts import _ths_watchlist_push as push_mod
 
-    assert alias == _ths_ui.THS_HEXIN_PATH
+    assert push_mod.THS_HEXIN_PATH == _ths_ui.THS_HEXIN_PATH
     assert _ths_ui.THS_HEXIN_PATH.name == "hexin.exe"
