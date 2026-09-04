@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """同花顺 UI 自动化共享助手: 空闲闸/前台断言/窗口管理/UIA 菜单点击/高亮行检测.
 
 2026-09-03 误删事故教训: 用户在场时 Windows 前台锁让 SetActive 失效, SendKeys
@@ -114,8 +113,6 @@ def assert_foreground_hexin(what: str = "按键") -> None:
 
 def activate_window(win) -> None:
     """激活窗口并断言前台已属于 hexin* (SetActive 被前台锁拒绝时此处即失败)."""
-    import uiautomation as auto
-
     ctypes.windll.user32.ShowWindow(int(win.NativeWindowHandle), 9)  # SW_RESTORE
     time.sleep(0.4)
     win.SetActive()
