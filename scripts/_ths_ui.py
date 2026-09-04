@@ -41,6 +41,7 @@ _HL_R = (40, 100)
 _HL_G = (0, 40)
 _HL_B = (95, 170)
 
+
 class ForegroundLostError(RuntimeError):
     """前台窗口不属于 hexin* — 用户可能回来了, 必须立即停止一切按键."""
 
@@ -226,9 +227,7 @@ def open_copy_recognition_dialog(win) -> bool:
     patch = np.asarray(ImageGrab.grab(bbox=(cx - 20, cy - 10, cx + 20, cy + 10)))
     light_frac = float((patch.mean(axis=2) > 180).mean())
     if light_frac < 0.5:
-        print(
-            f"[ths-ui] 工具下拉未展开 (亮像素占比 {light_frac:.0%}), 不盲点菜单项"
-        )
+        print(f"[ths-ui] 工具下拉未展开 (亮像素占比 {light_frac:.0%}), 不盲点菜单项")
         auto.SendKeys("{Esc}")
         return False
 
@@ -404,7 +403,9 @@ def _split_digit_cells(seg: np.ndarray) -> list[tuple[int, int]]:
     return cells
 
 
-def _read_rows_from_gray(gray: np.ndarray, ytop: int) -> list[tuple[int, int, str | None, float]]:
+def _read_rows_from_gray(
+    gray: np.ndarray, ytop: int
+) -> list[tuple[int, int, str | None, float]]:
     """读码核心 (纯数组): 代码列灰度图 → [(y0, y1, code, conf)], y 已加 ytop 偏移."""
     on = (gray > 140).mean(axis=1) > 0.02
     bands = []
@@ -494,9 +495,7 @@ def select_row(win, rel_y: float, log=print) -> bool:
 
     r = win.BoundingRectangle
     assert_foreground_hexin(f"点击代码行 y_rel={rel_y:.0f}")
-    auto.Click(
-        r.left + (_CODE_COL_REL[0] + _CODE_COL_REL[1]) // 2, r.top + int(rel_y)
-    )
+    auto.Click(r.left + (_CODE_COL_REL[0] + _CODE_COL_REL[1]) // 2, r.top + int(rel_y))
     time.sleep(0.8)
     if not row_is_selected(win, rel_y):
         log(f"[ths-ui] 点击后行未选中 (y_rel={rel_y:.0f})")
@@ -508,9 +507,7 @@ def _code_col_center_click(win, rel_y: float) -> None:
     import uiautomation as auto
 
     r = win.BoundingRectangle
-    auto.Click(
-        r.left + (_CODE_COL_REL[0] + _CODE_COL_REL[1]) // 2, r.top + int(rel_y)
-    )
+    auto.Click(r.left + (_CODE_COL_REL[0] + _CODE_COL_REL[1]) // 2, r.top + int(rel_y))
 
 
 def delete_code_flow(win, code: str, log=print) -> str:

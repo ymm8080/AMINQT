@@ -129,7 +129,9 @@ def _dlg_rows_from_img(img: np.ndarray) -> list[tuple[int, bool]]:
     return rows
 
 
-def _ensure_dialog_rows_checked(dlg, expected: int, log=print, max_rounds: int = 4) -> bool:
+def _ensure_dialog_rows_checked(
+    dlg, expected: int, log=print, max_rounds: int = 4
+) -> bool:
     """核验对话框列表恰好 expected 行且全部勾选, 未勾行逐个点选. True=可点加入.
 
     行数不符 (识别未齐/杂行混入) 只重查不强点 — 加入是外向动作, 宁可整批失败.

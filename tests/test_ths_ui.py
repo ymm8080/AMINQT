@@ -3,6 +3,7 @@
 不触碰真实窗口 (find_window 等带 UIA 依赖的函数不在此测).
 读码器真值验证 (19 行已知码复现) 在活体验证脚本完成, 这里测纯函数.
 """
+
 from unittest import mock
 
 import numpy as np

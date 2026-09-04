@@ -522,8 +522,10 @@ def main() -> int:
     print(f"[saved] {pq_path} rows={len(df):,} ({time.time() - t0:.0f}s)", flush=True)
     arms = result.get("main", {}).get("arms", {})
     for name, a in arms.items():
+
         def fmt(v):
             return f"{v:+.5f}" if v is not None else "  n/a  "
+
         extra = (
             f" Δ={fmt(a.get('d3_full'))} (h1 {fmt(a.get('d3_h1'))} / h2 {fmt(a.get('d3_h2'))}) "
             f"win={a.get('win'):.2f}"
