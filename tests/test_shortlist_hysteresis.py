@@ -34,6 +34,16 @@ def _run(tmp_path, full, trade_date="20260826"):
     return mod.hysteresis_keep(truncated, full, trade_date, hist_dir=str(tmp_path))
 
 
+@pytest.fixture(autouse=True)
+def _hysteresis_on(monkeypatch):
+    """机制测试统一钉 enable=True; 生产默认 09-06 起为 False, 不影响机制验证."""
+    monkeypatch.setattr(
+        mod,
+        "SHORTLIST_HYSTERESIS",
+        {"enable": True, "band_factor": 2.0, "max_keep": 3},
+    )
+
+
 def test_keep_yesterday_pick_within_band(tmp_path):
     """昨日上榜股今日第 12 名 (≤ 2×10 带) → 滞留, 原 TOP-10 不动."""
     _yesterday_file(tmp_path, ["000012"])
