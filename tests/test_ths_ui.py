@@ -4,11 +4,15 @@
 读码器真值验证 (19 行已知码复现) 在活体验证脚本完成, 这里测纯函数.
 """
 
+import sys
 from unittest import mock
 
 import numpy as np
+import pytest
 
 from scripts import _ths_ui
+
+_IS_WIN = sys.platform == "win32"
 
 
 def _img_with_bands(height=400, width=100, bands=(), base=(45, 45, 45)):
@@ -99,11 +103,13 @@ class TestEnsureIdle:
             assert m.call_count == 1
 
 
+@pytest.mark.skipif(not _IS_WIN, reason="ctypes.windll only available on Windows")
 def test_user_idle_seconds_smoke():
     idle = _ths_ui.user_idle_seconds()
     assert idle >= 0.0
 
 
+@pytest.mark.skipif(not _IS_WIN, reason="ctypes.windll only available on Windows")
 def test_foreground_pid_smoke():
     pid = _ths_ui.foreground_pid()
     assert isinstance(pid, int)
@@ -115,7 +121,11 @@ def test_ths_hexin_path_default():
     from scripts import _ths_watchlist_push as push_mod
 
     assert push_mod.THS_HEXIN_PATH == _ths_ui.THS_HEXIN_PATH
-    assert _ths_ui.THS_HEXIN_PATH.name == "hexin.exe"
+    # 跨平台: Windows 上 Path.name 取文件名; Linux 上不解析反斜杠 → 取尾段拼接
+    if _IS_WIN:
+        assert _ths_ui.THS_HEXIN_PATH.name == "hexin.exe"
+    else:
+        assert str(_ths_ui.THS_HEXIN_PATH).endswith("hexin.exe")
 
 
 class TestCandidateConstrainedMatch:
