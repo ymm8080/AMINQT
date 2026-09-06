@@ -427,7 +427,9 @@ def _patch_push_verify(monkeypatch, verify, idle=True, dialog=True):
 
     monkeypatch.setattr(wmod, "_ensure_dialog_rows_checked", _verify)
     monkeypatch.setattr(
-        ui, "read_all_codes", lambda win, log=print: sorted(calls["grid"])
+        ui,
+        "read_all_codes",
+        lambda win, log=print, candidates=None: sorted(calls["grid"]),
     )
     return calls
 
@@ -519,7 +521,11 @@ def test_push_grid_truth_overrules_dialog_false_success(monkeypatch, tmp_path, c
         return {c: True for c in row_codes if c is not None}
 
     _patch_push_verify(monkeypatch, verify)
-    monkeypatch.setattr(ui, "read_all_codes", lambda win, log=print: ["600001"])
+    monkeypatch.setattr(
+        ui,
+        "read_all_codes",
+        lambda win, log=print, candidates=None: ["600001"],
+    )
     txt, ok = _run_push(tmp_path, ["600001", "600002"])
     assert ok is False
     out = capsys.readouterr().out
@@ -539,7 +545,8 @@ def test_push_grid_empty_with_dialog_landed_hints_relogin(
         return {c: True for c in row_codes if c is not None}
 
     _patch_push_verify(monkeypatch, verify)
-    monkeypatch.setattr(ui, "read_all_codes", lambda win, log=print: [])
+    monkeypatch.setattr(ui, "read_all_codes",
+                        lambda win, log=print, candidates=None: [])
     txt, ok = _run_push(tmp_path, ["600001"])
     assert ok is False
     assert "疑似掉登录" in capsys.readouterr().out
@@ -556,7 +563,7 @@ def test_push_grid_read_failure_fail_closed(monkeypatch, tmp_path, capsys):
 
     _patch_push_verify(monkeypatch, verify)
 
-    def _boom(win, log=print):
+    def _boom(win, log=print, candidates=None):
         raise RuntimeError("用户回座")
 
     monkeypatch.setattr(ui, "read_all_codes", _boom)
@@ -564,6 +571,29 @@ def test_push_grid_read_failure_fail_closed(monkeypatch, tmp_path, capsys):
     assert ok is False
     assert "已核验加入自选股" not in capsys.readouterr().out
     assert _ledger(txt) == {"600001": "manual"}
+
+
+def test_push_grid_verdict_uses_candidate_constrained_read(monkeypatch, tmp_path,
+                                                           capsys):
+    """判词读网格必须带 candidates=今晚码单 (09-05 接产线: 约束匹配治 8/0
+    形歧义冤案) — 不带即视为接线缺失."""
+    from scripts import _ths_ui as ui
+
+    def verify(dlg, row_codes):
+        return {c: True for c in row_codes if c is not None}
+
+    _patch_push_verify(monkeypatch, verify)
+    seen = {}
+
+    def _fake_read(win, log=print, candidates=None):
+        seen["candidates"] = candidates
+        return ["600001", "600002"]
+
+    monkeypatch.setattr(ui, "read_all_codes", _fake_read)
+    txt, ok = _run_push(tmp_path, ["600001", "600002"])
+    assert seen["candidates"] == ["600001", "600002"]
+    assert ok is True
+    assert _ledger(txt) == {"600001": "landed", "600002": "landed"}
 
 
 def test_read_push_results_newest_per_source(tmp_path):

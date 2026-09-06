@@ -116,3 +116,64 @@ def test_ths_hexin_path_default():
 
     assert push_mod.THS_HEXIN_PATH == _ths_ui.THS_HEXIN_PATH
     assert _ths_ui.THS_HEXIN_PATH.name == "hexin.exe"
+
+
+class TestCandidateConstrainedMatch:
+    """约束匹配判词 (09-05 接产线): 判词只在候选码里挑, 治自由 OCR 8/0 形歧义.
+    校准 = tmp_t/_ths_cand_calib_0905.py 19 行真值 19/19 分离."""
+
+    def test_constants_locked(self):
+        assert _ths_ui._CAND_BIN_THR == 110
+        assert _ths_ui._CAND_SUM_MAX == 0.9
+        assert _ths_ui._CAND_CELL_MAX == 0.17
+
+    def _tpl_feats(self, code):
+        feats, labels = _ths_ui._digit_templates()
+        out = []
+        for ch in code:
+            m = np.where(labels == int(ch))[0][0]
+            out.append(feats[m])
+        return out
+
+    def test_exact_template_match_wins(self):
+        row = self._tpl_feats("123456")
+        code, mx = _ths_ui._match_candidate(row, ["654321", "123456"])
+        assert code == "123456"
+        assert mx < 0.05
+
+    def test_sum_pass_but_max_cell_rejects(self, monkeypatch):
+        # 形近假码维度: 行真值 600000, 候选 600008 → 5 位贴 0.1 + 1 位 0.2
+        # → 和 0.7 过 0.9 但单位 0.2 超 0.17 → 必须拒 (校准: 002868→002098
+        # sum 0.34 即此形态, 靠 max_cell 杀)
+        table = {("0", "8"): 0.2}
+
+        def fake_dist(feat, d):
+            return table.get((feat["ch"], str(d)), 0.1)
+
+        monkeypatch.setattr(_ths_ui, "_digit_dist", fake_dist)
+        row = [{"ch": ch} for ch in "600000"]
+        code, mx = _ths_ui._match_candidate(row, ["600008"])
+        assert code is None and mx == 1.0
+        # 对照: 真码 0.1×6=0.6 全过
+        code2, mx2 = _ths_ui._match_candidate(row, ["600000"])
+        assert code2 == "600000" and mx2 == 0.1
+
+    def test_read_rows_integration_template_glyph(self):
+        # 合成整行: 把 6 个数字模板字形画进灰底画布 → 约束路径应读回候选码;
+        # 候选不含真码 → None (宁缺勿错)
+        feats, labels = _ths_ui._digit_templates()
+        glyph_h, glyph_w = feats[0].shape
+        canvas = np.zeros((40, 6 * glyph_w + 5 * 4 + 8), dtype=np.uint8)
+        x = 4
+        for ch in "123456":
+            g = feats[np.where(labels == int(ch))[0][0]].astype(np.uint8) * 255
+            canvas[12 : 12 + glyph_h, x : x + glyph_w] = g
+            x += glyph_w + 4
+        rows = _ths_ui._read_rows_from_gray(canvas, 0, candidates=["123456"])
+        assert len(rows) == 1
+        y0, y1, code, conf = rows[0]
+        assert code == "123456"
+        assert conf <= _ths_ui._CAND_CELL_MAX
+        # 候选不含真码 → 拒
+        rows2 = _ths_ui._read_rows_from_gray(canvas, 0, candidates=["654321"])
+        assert rows2[0][2] is None
