@@ -267,6 +267,10 @@ Keep messages concise (one sentence per issue). Only report real violations.
             "temperature": 0.1,
             "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
+            # 流式 (SSE): glm-4.6 对 5 万字符 diff 的推理 ~4.5 分钟, 非流式
+            # 期间零字节流动 → 网关 ~270s 掐连接 (PR#137 四连挂死法).
+            # 流式让 reasoning 增量持续回传, 连接保持活跃.
+            "stream": True,
         }
         # DeepSeek-specific: disable thinking mode for predictable token
         # usage. GLM (Zhipu) does not support this param.
@@ -280,16 +284,37 @@ Keep messages concise (one sentence per issue). Only report real violations.
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
+                "Accept": "text/event-stream",
             },
         )
 
         try:
             # glm-4.6 reasoning on a large diff routinely exceeds 60s
             with urllib.request.urlopen(req, timeout=300) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-                msg = result["choices"][0]["message"]
-                content = msg.get("content") or ""
-                reasoning = msg.get("reasoning_content") or ""
+                content_parts: list[str] = []
+                reasoning_parts: list[str] = []
+                finish_reason = "unknown"
+                for raw in resp:
+                    line = raw.decode("utf-8", errors="replace").strip()
+                    if not line.startswith("data:"):
+                        continue
+                    chunk_str = line[len("data:"):].strip()
+                    if chunk_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(chunk_str)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = chunk.get("choices") or [{}]
+                    delta = choices[0].get("delta") or {}
+                    if delta.get("content"):
+                        content_parts.append(delta["content"])
+                    if delta.get("reasoning_content"):
+                        reasoning_parts.append(delta["reasoning_content"])
+                    if choices[0].get("finish_reason"):
+                        finish_reason = choices[0]["finish_reason"]
+                content = "".join(content_parts)
+                reasoning = "".join(reasoning_parts)
                 parsed = _extract_json(content)
                 if parsed is not None:
                     # Detect parroting: model returns the exact canned
@@ -313,9 +338,6 @@ Keep messages concise (one sentence per issue). Only report real violations.
                             len(diff),
                         )
                     return parsed
-                finish_reason = result.get("choices", [{}])[0].get(
-                    "finish_reason", "unknown"
-                )
                 logger.error(
                     "Could not parse review response (attempt %d). "
                     "finish_reason=%s, content (first 500): %r, "
