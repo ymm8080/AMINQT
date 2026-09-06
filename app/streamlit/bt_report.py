@@ -200,6 +200,85 @@ def parse_per_horizon(d: dict, board: str, cut: str) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=_PH_COLS)
 
 
+_PICK_STATS_COLS = [
+    "horizon",
+    "n",
+    "winrate",
+    "avg",
+    "median",
+    "avg_win",
+    "avg_loss",
+    "profit_factor",
+    "max_win",
+    "max_loss",
+    "max_drawdown",
+    "annualized",
+    "sharpe",
+    "volatility",
+    "beta",
+    "alpha_annual",
+    "deepest_date",
+    "recovery_days",
+    "underwater_days",
+]
+
+
+def _pick_oos_name(oos: dict) -> str:
+    """主 OOS 窗 label: 优先 6m/3m/10d, 否则首个含 per_horizon 的键; 无 → ''."""
+    for lab in _OOS_LABEL_PRIORITY:
+        w = oos.get(lab)
+        if isinstance(w, dict) and w.get("per_horizon"):
+            return lab
+    for k, w in oos.items():
+        if isinstance(w, dict) and w.get("per_horizon"):
+            return k
+    return ""
+
+
+def parse_equity(d: dict, board: str, cut: str = "top10") -> dict[str, pd.DataFrame]:
+    """主 OOS 窗各 horizon 净值/回撤序列 → {horizon: DataFrame(date, cum, dd, ret)}.
+
+    新 schema 才有 series 键; 旧 run 返回 {} 不崩页.
+    """
+    node = _base(_base(_boards(d).get(board), "merged"), cut)
+    ph = _base(_base(node, "oos").get(_pick_oos_name(_base(node, "oos"))), "per_horizon")
+    out = {}
+    for h in HORIZONS:
+        ser = _base(ph.get(h), "series")
+        if not ser or not ser.get("dates"):
+            continue
+        cols = {
+            "date": ser["dates"],
+            "cum": ser["cum"],
+            "dd": ser["dd"],
+            "ret": ser["ret"],
+        }
+        if ser.get("bench_cum"):
+            cols["bench"] = ser["bench_cum"]
+        out[h] = pd.DataFrame(cols).set_index("date")
+    return out
+
+
+def parse_diversification(d: dict, board: str, cut: str = "top10") -> dict:
+    """TOP-N 入选股分散度 (avg_pairwise_corr); 旧 schema → {}."""
+    node = _base(_base(_boards(d).get(board), "merged"), cut)
+    div = node.get("diversification")
+    return div if isinstance(div, dict) else {}
+
+
+def parse_pick_stats(d: dict, board: str, cut: str = "top10") -> pd.DataFrame:
+    """主 OOS 窗各 horizon 逐票风险统计 (一行一视界); 旧 schema → 空表."""
+    node = _base(_base(_boards(d).get(board), "merged"), cut)
+    ph = _base(_base(node, "oos").get(_pick_oos_name(_base(node, "oos"))), "per_horizon")
+    rows = []
+    for h in HORIZONS:
+        stx = _base(ph.get(h), "stats")
+        if not stx:
+            continue
+        rows.append({"horizon": h, **{k: stx.get(k) for k in _PICK_STATS_COLS[1:]}})
+    return pd.DataFrame(rows, columns=_PICK_STATS_COLS)
+
+
 def parse_systems(d: dict, board: str) -> pd.DataFrame:
     """板块三系统主 OOS 窗 primary 四视界指标 (系统对比表/图)."""
     systems = _base(_boards(d).get(board), "systems")
