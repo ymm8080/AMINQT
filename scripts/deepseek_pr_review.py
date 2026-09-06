@@ -298,7 +298,7 @@ Keep messages concise (one sentence per issue). Only report real violations.
                     line = raw.decode("utf-8", errors="replace").strip()
                     if not line.startswith("data:"):
                         continue
-                    chunk_str = line[len("data:"):].strip()
+                    chunk_str = line[len("data:") :].strip()
                     if chunk_str == "[DONE]":
                         break
                     try:
