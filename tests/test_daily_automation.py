@@ -1,13 +1,14 @@
 """Tests for scripts/run_daily_automation 步骤编排 (2026-08-13).
 
 plan_steps 是纯函数, 决定当日四模块自动化的执行序列:
-  [cyq sw_history legacy_prob_head legacy deliver] [refresh?] canary [retrain?]
+  [cyq sw_history freshness canary] [retrain?]
+  [legacy_prob_head legacy deliver] [refresh?]
   [parallel? prob_head deliver_parallel] drift drift_parallel shadow_xmodule
 关键不变式:
-  1. 交付保底优先 (2026-08-27): legacy 预测链 (cyq→lph→legacy→deliver) 恒在一切
-     重活 (refresh/retrain/parallel) 之前 — 重活卡死/超时被杀不影响当日清单落盘
-     (08-27 事故: refresh 卡 9h 全链无清单). legacy_prob_head 恒在 legacy 预测前
-     (概率闸依赖 bundle).
+  1. 重训先行 (2026-09-05 用户拍板, 推翻 2026-08-27 交付保底优先): 预测链
+     (lph→legacy→deliver) 恒在 retrain 之后 — 当日清单用当日新训模型; retrain
+     失败不拦预测 (fail-soft 沿用现有模型), 卡死由看门狗强杀兜底. legacy_prob_head
+     恒在 legacy 预测前 (概率闸依赖 bundle).
   2. deliver_parallel 依赖当日 fresh parallel 重生成 (run_dir), 故 parallel 被跳过
      (--skip-parallel) 时 deliver_parallel 必须同步丢弃, 否则会交付旧 run_dir 脏数据;
      prob_head 读 parallel 检查点面板, 同样只随 parallel 出现 (2026-08-15).
@@ -36,16 +37,17 @@ from scripts.run_daily_automation import (
 # 2026-08-13 = Thursday (weekday 3, 非重训日), 2026-08-14 = Friday (weekday 4, 重训日).
 THU, FRI = _dt.date(2026, 8, 13), _dt.date(2026, 8, 14)
 
-_LEGACY_CHAIN = [
-    "cyq",
-    "sw_history",
-    "freshness",
-    "legacy_prob_head",
-    "legacy",
-    "deliver",
+_HEAD = ["cyq", "sw_history", "freshness", "canary"]
+_PREDICT_CHAIN = ["legacy_prob_head", "legacy", "deliver"]
+# ths_push 在 tail 首位: parallel 块之外恒执行 (09-05 拆分: 双源各自成单, 单侧缺失只推另一侧)
+_TAIL = [
+    "ths_push",
+    "prob10dens_push",
+    "ths_flush_guard",
+    "drift",
+    "drift_parallel",
+    "shadow_xmodule",
 ]
-# ths_push 在 tail 首位: parallel 块之外恒执行 (parallel 跳过时自动回退 legacy 清单)
-_TAIL = ["ths_push", "drift", "drift_parallel", "shadow_xmodule"]
 _PARALLEL_CHAIN = ["parallel", "prob_head", "deliver_parallel"]
 
 
@@ -67,36 +69,46 @@ def test_every_step_has_timeout():
 
 def test_plan_steps_weekday_full_chain():
     assert plan_steps(THU) == (
-        _LEGACY_CHAIN + ["refresh", "canary"] + _PARALLEL_CHAIN + _TAIL
+        _HEAD + _PREDICT_CHAIN + ["refresh"] + _PARALLEL_CHAIN + _TAIL
     )
 
 
 def test_plan_steps_retrain_day_inserts_retrain():
     assert plan_steps(FRI) == (
-        _LEGACY_CHAIN + ["refresh", "canary", "retrain"] + _PARALLEL_CHAIN + _TAIL
+        _HEAD + ["retrain"] + _PREDICT_CHAIN + ["refresh"] + _PARALLEL_CHAIN + _TAIL
     )
 
 
 def test_plan_steps_force_retrain_inserts_retrain_on_non_retrain_day():
     """--force-retrain 在非周五也强制插入 retrain 步骤."""
     assert plan_steps(THU, force_retrain=True) == (
-        _LEGACY_CHAIN + ["refresh", "canary", "retrain"] + _PARALLEL_CHAIN + _TAIL
+        _HEAD + ["retrain"] + _PREDICT_CHAIN + ["refresh"] + _PARALLEL_CHAIN + _TAIL
     )
 
 
-def test_plan_steps_delivery_chain_precedes_all_heavy_steps():
-    """交付保底 (2026-08-27): legacy 交付链恒在 refresh/retrain/parallel 之前."""
+def test_plan_steps_retrain_precedes_predict_chain():
+    """重训先行 (2026-09-05 用户拍板): retrain 恒在预测链之前 — 当日清单用当日新训
+    模型; 预测交付恒在 refresh/parallel 之前 (清单一出即落盘)."""
     for steps in (
         plan_steps(THU),
         plan_steps(FRI),
         plan_steps(THU, force_retrain=True),
+        plan_steps(THU, skip_parallel=True),
+        plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True),
     ):
-        assert steps[: len(_LEGACY_CHAIN)] == _LEGACY_CHAIN
-        for heavy in ("refresh", "retrain", "parallel"):
-            if heavy in steps:
-                assert steps.index(heavy) > len(_LEGACY_CHAIN) - 1, (
-                    f"{heavy} 不得排在 legacy 交付链前"
-                )
+        if "retrain" in steps:
+            assert steps.index("retrain") < steps.index("legacy_prob_head"), (
+                "retrain 不得排在预测链后"
+            )
+        assert steps.index("canary") < steps.index("legacy_prob_head")
+        if "refresh" in steps:
+            assert steps.index("deliver") < steps.index("refresh"), (
+                "deliver 不得排在 refresh 后"
+            )
+        if "parallel" in steps:
+            assert steps.index("deliver") < steps.index("parallel"), (
+                "deliver 不得排在 parallel 后"
+            )
 
 
 def test_plan_steps_sw_history_always_runs():
@@ -143,23 +155,23 @@ def test_plan_steps_skip_parallel_drops_deliver_parallel():
     shadow_xmodule 仍跑: 它读磁盘上已交付清单 (任意一侧缺也容忍), 非交付步骤.
     """
     assert plan_steps(THU, skip_parallel=True) == (
-        _LEGACY_CHAIN + ["refresh", "canary"] + _TAIL
+        _HEAD + _PREDICT_CHAIN + ["refresh"] + _TAIL
     )
     assert plan_steps(FRI, skip_parallel=True) == (
-        _LEGACY_CHAIN + ["refresh", "canary", "retrain"] + _TAIL
+        _HEAD + ["retrain"] + _PREDICT_CHAIN + ["refresh"] + _TAIL
     )
 
 
 def test_plan_steps_skip_checkpoints_and_retrain():
     steps = plan_steps(FRI, skip_checkpoints=True, skip_retrain=True)
-    assert steps == _LEGACY_CHAIN + ["canary"] + _PARALLEL_CHAIN + _TAIL
+    assert steps == _HEAD + _PREDICT_CHAIN + _PARALLEL_CHAIN + _TAIL
     assert "refresh" not in steps and "retrain" not in steps
 
 
-def test_plan_steps_all_skip_keeps_legacy_chain():
+def test_plan_steps_all_skip_keeps_predict_chain():
     assert (
         plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True)
-        == _LEGACY_CHAIN + ["canary"] + _TAIL
+        == _HEAD + _PREDICT_CHAIN + _TAIL
     )
 
 
@@ -174,7 +186,6 @@ def test_plan_steps_canary_always_runs_before_retrain():
         plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True),
     ):
         assert "canary" in steps
-        assert steps.index("canary") > steps.index("deliver")
         if "retrain" in steps:
             assert steps.index("canary") < steps.index("retrain")
     assert "canary" not in _CRITICAL
@@ -192,6 +203,38 @@ def test_plan_steps_ths_push_always_runs():
     ):
         assert "ths_push" in steps
         assert steps.index("ths_push") > steps.index("deliver")
+
+
+def test_plan_steps_a1_push_stopped_but_registered():
+    """A1 动量影子单 2026-09-05 用户停推: 不在链上, 手动跑注册保留."""
+    for steps in (
+        plan_steps(THU),
+        plan_steps(FRI),
+        plan_steps(THU, skip_parallel=True),
+        plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True),
+    ):
+        assert "a1_push" not in steps
+    assert "a1_push" not in _CRITICAL
+    assert _STEPS["a1_push"] == ["scripts/_a1_momentum_shadow.py", "{tag}"]
+    assert _STEP_TIMEOUT_S["a1_push"] >= 15 * 60
+
+
+def test_plan_steps_prob10dens_follows_ths_push():
+    """概率头密度版影子单 (2026-09-05): 恒在 ths_push 之后并推, 非关键步骤."""
+    for steps in (
+        plan_steps(THU),
+        plan_steps(FRI),
+        plan_steps(THU, skip_parallel=True),
+        plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True),
+    ):
+        assert "prob10dens_push" in steps
+        assert steps.index("prob10dens_push") == steps.index("ths_push") + 1
+    assert "prob10dens_push" not in _CRITICAL
+    assert _STEPS["prob10dens_push"] == [
+        "scripts/_prob10_density_shadow.py",
+        "{tag}",
+    ]
+    assert _STEP_TIMEOUT_S["prob10dens_push"] >= 15 * 60
 
 
 # ── 中断中止 + 终态 state 文件 (08-21 事故: cyq 被 Ctrl+C 杀后仍启动 retrain,

@@ -43,6 +43,7 @@ from config.settings import (
     STOCK_LIST_DIR,
     data_others_path,
 )
+from scripts._pctfmt import parse_pct
 
 
 def _load_shortlist_probs() -> pd.DataFrame:
@@ -65,6 +66,8 @@ def _load_shortlist_probs() -> pd.DataFrame:
     if not parts:
         return pd.DataFrame(columns=cols)
     df = pd.concat(parts, ignore_index=True)
+    # 交付 CSV 百分比显示层 (09-05): "78.16%" → 0.7816; 旧数值文件原样通过
+    df["pred_prob_10d"] = df["pred_prob_10d"].map(parse_pct)
     df["symbol"] = df["symbol"].str.zfill(6)
     return df.drop_duplicates(subset=["date", "symbol"], keep="last")
 

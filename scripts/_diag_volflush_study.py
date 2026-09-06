@@ -243,14 +243,14 @@ def main() -> int:
     # ---- OHLC 日频微观结构判别 (用户 09-03: 用 OHLC/量能/换手, 勿用慢变量) ----
     def _pivot_base(col: str) -> np.ndarray:
         w = (
-            panel.assign(d=dt)
+            panel.assign(d=dt)  # noqa: F821 (归档研究: OHLC 扩展块)
             .pivot_table(index="symbol", columns="d", values=col, aggfunc="last")
             .sort_index()
             .reindex(index=symbols, columns=pd.DatetimeIndex(cal))
         )
         return w.to_numpy(dtype="float64")
 
-    O = _pivot_base("open")
+    O = _pivot_base("open")  # noqa: E741 (OHLC 矩阵惯例单字母)
     H = _pivot_base("high")
     L = _pivot_base("low")
     C = _pivot_base("close")

@@ -436,6 +436,91 @@ class TestStockPredictionQuery:
         assert "000004" not in bysym  # 仅存在于 raw → 排除
         assert ds.load_stock_list_on_date("20991231", list_dir=str(tmp_path)).empty
 
+    def test_load_stock_list_on_date_drops_nan_symbol_rows(self, tmp_path):
+        """交付 CSV 空行 (symbol=NaN) 不入池 — 0903 slowbull 池尾行实证,
+        看板池曾渲染出 name='-' 的空白行."""
+        self._mkfile(
+            tmp_path,
+            "slowbull_pool_main_20260903__slow_bull_v1_0.csv",
+            pd.DataFrame({"symbol": [np.nan], "board": [np.nan], "rk": [np.nan]}),
+        )
+        self._mkfile(
+            tmp_path,
+            "legacy_stocklist_20260903__modA.csv",
+            pd.DataFrame({"symbol": ["600001", np.nan], "board": ["main", np.nan]}),
+        )
+        rows = ds.load_stock_list_on_date("20260903", list_dir=str(tmp_path))
+        assert rows["symbol"].notna().all()
+        assert rows["symbol"].tolist() == ["600001"]
+
+    def test_load_stock_list_includes_prob10dens_family(self, tmp_path):
+        """影子单「密度王」= 统一模型族 (09-05 用户: 作为一个模型进日期清单,
+        不单独开页): 原版口径入 gain/prob_10d (百分比串还原数值), 并行值随行携带."""
+        self._mkfile(
+            tmp_path,
+            "prob10dens_20260903__prob10dens.csv",
+            pd.DataFrame(
+                {
+                    "rank": [1, 2],
+                    "board": ["main", "dual"],
+                    "symbol": ["002098", "000985"],
+                    "legacy_prob": ["78.16%", "68.43%"],
+                    "legacy_pred10": ["11.17%", "8.76%"],
+                    "parallel_prob": ["48.27%", "50.79%"],
+                    "parallel_pred10": ["1.73%", "3.30%"],
+                    "occ5": [3, 3],
+                }
+            ),
+        )
+        rows = ds.load_stock_list_on_date("20260903", list_dir=str(tmp_path))
+        assert (rows["family"] == "prob10dens").all()
+        r1 = rows[rows["symbol"] == "002098"].iloc[0]
+        assert abs(r1["gain_10d"] - 0.1117) < 1e-9
+        assert abs(r1["prob_10d"] - 0.7816) < 1e-9
+        assert r1["并行幅度"] == "1.73%"
+        assert r1["并行概率"] == "48.27%"
+        assert r1["rank"] == 1
+        assert r1["gain_3d"] is None or pd.isna(r1["gain_3d"])
+        assert ds.list_prediction_dates(str(tmp_path)) == ["20260903"]
+
+    def test_load_prob10dens_watchlist_newest(self, tmp_path):
+        """影子单明细 loader (看板独立区用): 取最新日期; symbol 字符串; 空行剔除;
+        不受生产池文件干扰; 保留原始全列 (occ5/pull/amt)."""
+        self._mkfile(
+            tmp_path,
+            "prob10dens_20260903__prob10dens.csv",
+            pd.DataFrame({"symbol": ["002098"], "legacy_pred10": ["11.17%"]}),
+        )
+        self._mkfile(
+            tmp_path,
+            "prob10dens_20260904__prob10dens.csv",
+            pd.DataFrame(
+                {
+                    "symbol": ["000985", np.nan],
+                    "legacy_prob": ["68.43%", "99%"],
+                    "parallel_pred10": ["3.30%", "1%"],
+                    "occ5": [3, 3],
+                    "amt": [1.386310e08, 1.0e08],
+                }
+            ),
+        )
+        self._mkfile(
+            tmp_path,
+            "parallel_shortlist_20260904__modA.csv",
+            pd.DataFrame({"symbol": ["600001"]}),
+        )
+        df, date = ds.load_prob10dens_watchlist(list_dir=str(tmp_path))
+        assert date == "20260904"
+        assert df["symbol"].astype(str).tolist() == ["000985"]
+        assert df["legacy_prob"].iloc[0] == "68.43%"
+        assert df["occ5"].iloc[0] == 3  # 原始全列保留
+        df0, date0 = ds.load_prob10dens_watchlist("20260903", list_dir=str(tmp_path))
+        assert date0 == "20260903" and df0["symbol"].tolist() == ["002098"]
+        assert ds.load_prob10dens_watchlist(list_dir=str(tmp_path / "nope")) == (
+            None,
+            None,
+        )
+
     def test_load_stock_list_on_dates(self, tmp_path):
         self._mkfile(
             tmp_path,

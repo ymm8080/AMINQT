@@ -249,7 +249,7 @@ def main() -> int:
 
     def _raw_pivot(col: str, idx) -> np.ndarray:
         w = (
-            panel.assign(d=dt_all)
+            panel.assign(d=dt_all)  # noqa: F821 (归档研究: OHLC 扩展块, panel 在调用点才定义)
             .pivot_table(index="symbol", columns="d", values=col, aggfunc="last")
             .sort_index()
             .reindex(index=idx, columns=pd.DatetimeIndex(cal))
@@ -262,7 +262,7 @@ def main() -> int:
         .sort_index()
     )
     _sym_idx = _close_w.index.astype(str).str.zfill(6)
-    O = _raw_pivot("open", _sym_idx)
+    O = _raw_pivot("open", _sym_idx)  # noqa: E741 (OHLC 矩阵惯例单字母)
     H = _raw_pivot("high", _sym_idx)
     L = _raw_pivot("low", _sym_idx)
     C = _raw_pivot("close", _sym_idx)

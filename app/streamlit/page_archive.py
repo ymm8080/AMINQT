@@ -245,6 +245,10 @@ def _render_date_list() -> None:
     for h in ("3d", "5d", "10d"):
         disp[f"涨{h}"] = df[f"gain_{h}"].map(_fmt_gain)
         disp[f"概率{h}"] = df[f"prob_{h}"].map(_fmt_prob)
+    # 影子单「密度王」(prob10dens) 随行并行模型值 (其余族无此列, 选含影子单日期才显示)
+    if "并行幅度" in df.columns:
+        disp["并行幅度"] = df["并行幅度"].fillna("")
+        disp["并行概率"] = df["并行概率"].fillna("")
     disp = disp.sort_values(["日期", "模块", "rk"], na_position="last")
     st.dataframe(disp, use_container_width=True, hide_index=True)
     st.caption(

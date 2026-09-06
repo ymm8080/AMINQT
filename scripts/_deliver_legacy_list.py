@@ -19,6 +19,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import pandas as pd
 
 from config.settings import STOCK_LIST_DIR
+from scripts._pctfmt import PCT_COLS_LEGACY, fmt_pct_columns
+from scripts._prob10_density_shadow import apply_chip_gate
 from scripts._stall_marker import stall_marker
 
 try:
@@ -195,6 +197,8 @@ def main():
     df = pd.read_parquet(src)
     if "symbol" in df.columns:
         df["symbol"] = df["symbol"].astype(str)
+    # 筹码派发闸 (2026-09-05 三线统一): 获利盘5日回落 → 剔除, 不补齐
+    df = apply_chip_gate(df, pd.Timestamp(trade_date))
     # 滞涨标记 (2026-08-19 用户方案): 入选 + 近10日滞涨<2% + 近20日入选≥3 → 洗盘待爆发
     df = stall_marker(df, trade_date, "legacy_stocklist_")
     module = resolve_module(df, trade_date)
@@ -220,6 +224,9 @@ def main():
     csv_path = os.path.join(
         str(STOCK_LIST_DIR), f"legacy_stocklist_{trade_date}__{module}.csv"
     )
+    # 交付 CSV 百分比显示层 (2026-09-05 用户: 预测值用百分比): 覆盖 csv + md +
+    # docx — 此点之后 df 仅用于展示, gate_sections 的审计帧不受影响
+    df = fmt_pct_columns(df, PCT_COLS_LEGACY)
     df.to_csv(csv_path, index=False)
     print(f"[csv] {csv_path} ({len(df)} 只)")
 

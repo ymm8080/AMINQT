@@ -6,24 +6,45 @@
   3. 并行 sniper   — 每日重生成 (app.pipeline_parallel.runner 回测 + 短名单)
   4. 并行 fusion   — 同上 (同一 runner, 内含 slow_bull 一并输出)
 
-步骤按"交付保底优先"编排 (2026-08-27 重排: 当日 refresh 卡死 9h 全链无清单, 故
-legacy 预测链 ~35min 前置到一切重活之前, 重活卡死/超时被杀都不影响当日清单落盘;
-每步独立子进程隔离执行释放内存, 避免 44GB commit 上限 OOM):
+步骤按"重训先行"编排 (2026-09-05 用户拍板, 推翻 2026-08-27 交付保底优先): 预测链
+后置到 retrain 之后, 当日清单用当日新训模型; 卡死兜底 = 每步看门狗强杀 + retrain
+失败不拦预测 (沿用现有模型); 每步独立子进程隔离执行释放内存, 避免 44GB commit 上限 OOM):
   [cyq]      scripts/_backfill_cyq_panel.py            cyq_panel 增量回填 (legacy 慢牛列)
-  [legacy_prob_head] scripts/_train_legacy_prob_head.py legacy 并行式概率头 (21 交易日自判断重训)
-  [legacy]   scripts/_gen_legacy_list.py <tag>          legacy 预测出清单 (用最新 current)
-  [deliver]  scripts/_deliver_legacy_list.py <tag>      legacy 清单交付 STOCK_LIST_DIR
-  [refresh]  scripts/_refresh_parallel_checkpoints.py  并行行集 3y 检查点 (需 19:15 fetch 后)
   [canary]   scripts/_finaltop_canary.py <tag>        晋升后 canary 回放 (backup vs current,
                                             非关键证据步恒 exit 0; 决定性坏签只留证,
                                             回退需人工 --revert)
-  [retrain]  scripts/_retrain_legacy_full.py <tag>     legacy 周频重训 (仅 RETRAIN_WEEKDAY; 重排后当日清单先用现有模型, 新模型自次一清单生效)
+  [retrain]  scripts/_retrain_legacy_full.py <tag>     legacy 周频重训 (仅 RETRAIN_WEEKDAY
+                                            或 --force-retrain)
+  [legacy_prob_head] scripts/_train_legacy_prob_head.py legacy 并行式概率头 (21 交易日自判断重训)
+  [legacy]   scripts/_gen_legacy_list.py <tag>          legacy 预测出清单 (用最新 current —
+                                            重训日即当日新训模型)
+  [deliver]  scripts/_deliver_legacy_list.py <tag>      legacy 清单交付 STOCK_LIST_DIR
+  [refresh]  scripts/_refresh_parallel_checkpoints.py  并行行集 3y 检查点 (需 19:15 fetch 后)
   [parallel] python -m app.pipeline_parallel.runner     并行回测 + 短名单 (sniper/fusion/slow_bull)
   [deliver_parallel] scripts/_shortlist_t5_t10.py <tag> 并行短名单交付 STOCK_LIST_DIR
   [ths_push] scripts/_ths_watchlist_push.py <tag>       当日 TOP10 推同花顺自选股 (UI 自动化,
-                                            非关键; parallel 跳过时自动回退 legacy 清单)
+                                            非关键; 09-05 拆分: parallel 前 10 与 legacy
+                                            前 10 各自独立成单分推, 单侧缺失只推另一侧;
+                                            死区报警夜停推不加自选, 清单照出; 标注三件套
+                                            STOPPED_DEADZONE/md横幅/结果单deadzone —
+                                            _deadzone_guard)
   [ths_flush_guard] scripts/_ths_flush_guard.py <tag>   当日放量下跌标记→自选股剔除文档 (非关键,
                                             判断只用日频 OHLCV/动量/量能; 09-03)
+  [a1_push]  scripts/_a1_momentum_shadow.py <tag>       差值加速度影子单 (r5−r5p top10, 剔北交所)
+                                            并推同花顺 (非关键, 250d 10 只/日 2.78 赢家; 09-04;
+                                            09-05 停推: 用户拍板, 手动可跑, 恢复需拍板)
+  [gappocket_push] scripts/_gap_pocket_shadow.py <tag>  隔板口袋单 (首板后d3~7缩量守板dry<0.8
+                                            +安全闸, bias60 top15) 并推同花顺 (非关键, 250d
+                                            11.4只/日 +0.52pp 2.36赢家 大亏4.4%;
+                                            09-04 接线, 09-05 拍板 dry 0.7→0.8;
+                                            09-05 停推: 同窗全面落后生产 TOP10, 恢复需拍板)
+  [prob10dens_push] scripts/_prob10_density_shadow.py <tag>  概率头密度版影子单 (prob10+回撤闸
+                                            -10%+近5上榜日≥3+额1亿) 并推同花顺 (非关键,
+                                            125d 6.8只/日 56.5%/+10.09pp 大亏3.4%,
+                                            补 gappocket 停推后的推送位; 09-05 用户拍板;
+                                            死区报警夜停推, 清单照出; 标注
+                                            STOPPED_DEADZONE+结果单deadzone —
+                                            _deadzone_guard)
   [drift]    scripts/_monitor_legacy_drift.py           幅度漂移监控 (全池 pred vs 实现偏差)
   [drift_parallel] scripts/_monitor_parallel_drift.py   parallel dual 漂移监控 (短名单 vs 检查点标签)
   [shadow_xmodule] scripts/_shadow_xmodule_blend.py     跨模块影子排名 (legacy×parallel 合池混排, 只记录不交付)
@@ -90,9 +111,9 @@ RETRAIN_WEEKDAY = 4
 _STEP_TIMEOUT_S = {
     "refresh": 3 * 3600,
     "cyq": 40 * 60,
-    # sw_history 正常 3-4min (约 400 指数 × 0.15s 延迟 + API 延迟); 600s 原案上调到
-    # 15min 以守 "每步 ≥15min" 不误杀下限 (限流日变慢留余量)
-    "sw_history": 15 * 60,
+    # sw_history 正常 3-4min (约 400 指数 × 0.15s 延迟 + API 延迟); 09-03 实测限流日
+    # 500 指数 ~16min (100 只/100s), 15min 超时被杀 → 上调 30min 留 2x 余量
+    "sw_history": 30 * 60,
     # freshness 只读 schema/尾列 (实际约 1-2min); 15min 守 "每步 ≥15min" 下限惯例
     "freshness": 15 * 60,
     "retrain": 12 * 3600,
@@ -107,7 +128,13 @@ _STEP_TIMEOUT_S = {
     "deliver_parallel": 30 * 60,
     "ths_push": 15
     * 60,  # 客户端已开 ~20s; 冷启动拉起+登录最长 ~2.5min, 下限 15min 只兜卡死
-    "ths_flush_guard": 10 * 60,  # 面板单日切片+秩计算 ~1min, 下限只兜卡死
+    "ths_flush_guard": 15 * 60,  # 面板单日切片+秩计算 ~1min, 下限守 "每步 ≥15min" 惯例
+    # A1 影子单: 面板 date 列读最新日+单日切片 ~1min + UI 推送复用 ths_push 机械
+    "a1_push": 15 * 60,
+    # 隔板口袋单: 面板 180 日历日切片+事件走查 ~1-2min + UI 推送复用 ths_push 机械
+    "gappocket_push": 15 * 60,
+    # 概率头密度版影子单: candidates 读截面+面板 45 日历日切片 ~1min + UI 推送复用 ths_push
+    "prob10dens_push": 15 * 60,
     "drift": 30 * 60,
     "drift_parallel": 30 * 60,
     "shadow_xmodule": 15 * 60,
@@ -213,6 +240,9 @@ _STEPS = {
     "deliver_parallel": ["scripts/_shortlist_t5_t10.py", "{tag}"],
     "ths_push": ["scripts/_ths_watchlist_push.py", "{tag}"],
     "ths_flush_guard": ["scripts/_ths_flush_guard.py", "{tag}"],
+    "a1_push": ["scripts/_a1_momentum_shadow.py", "{tag}"],
+    "gappocket_push": ["scripts/_gap_pocket_shadow.py", "{tag}"],
+    "prob10dens_push": ["scripts/_prob10_density_shadow.py", "{tag}"],
     "drift": ["scripts/_monitor_legacy_drift.py"],
     "drift_parallel": ["scripts/_monitor_parallel_drift.py"],
     "shadow_xmodule": ["scripts/_shadow_xmodule_blend.py"],
@@ -239,9 +269,11 @@ def plan_steps(
 ) -> list[str]:
     """按星期 + skip 标志选出当日步骤序列 (纯函数, 可单测)."""
     steps: list[str] = []
-    # [2026-08-27] 交付保底优先: legacy 预测链 (cyq→lph→legacy→deliver, ~35min) 前置到
-    # 一切重活 (refresh/retrain) 之前 — 08-27 事故 refresh 卡死 9h, 全链一条清单都没出.
-    # 代价: 重训日当日清单先用现有模型, 新模型自次一清单生效.
+    # [2026-09-05] 重训先行 (用户拍板, 推翻 2026-08-27 交付保底优先): 预测链
+    # (lph→legacy→deliver) 后置到 retrain 之后, 当日清单用当日新训模型, 新模型不再
+    # "次一清单生效". 残余风险 (用户知情接受): retrain 卡死会推迟当日清单落盘 —
+    # 兜底 = 每步看门狗强杀 (retrain 超时 8h) + retrain 失败不拦预测 (fail-soft
+    # 沿用现有模型出清单, 当日仍有交付).
     # cyq_panel 增量回填 (2026-08-19): 读 V3 面板补 cache 缺失日期, 非关键步骤 —
     # 失败只损失当日 pct_70_con (慢牛 0.05 权重列跳过), 清单不受影响; 恒前置 (轻量)
     steps.append("cyq")
@@ -252,13 +284,6 @@ def plan_steps(
     # announce_date@08-14/fina列冻结) 后建的系统级闸, 告警式不阻断 — 08-27 零清单
     # 教训: 链对失败一视同仁, 告警绝不能拦交付 (恒 exit 0)
     steps.append("freshness")
-    # legacy 并行式概率头: 读面板+特征现场构建 (不依赖 parallel 检查点, 无前置依赖);
-    # 自判断新鲜度 (21 交易日重训一次), 未到期开销小 — 放 legacy 预测前 (概率闸依赖 bundle)
-    steps.append("legacy_prob_head")
-    steps.append("legacy")
-    steps.append("deliver")
-    if not skip_checkpoints:
-        steps.append("refresh")
     # 晋升后 canary (2026-09-02 防坏签): 新 current vs 晋升前 backup 定期重放,
     # 决定性坏签留证 (回退需人工 --revert, 链上不带). 放 retrain 前 — retrain
     # 晋升会覆盖 canary state, 先跑让在窗晋升按自然日推进窗口; state 空/窗口满
@@ -266,6 +291,13 @@ def plan_steps(
     steps.append("canary")
     if not skip_retrain and (force_retrain or today.weekday() == RETRAIN_WEEKDAY):
         steps.append("retrain")
+    # legacy 并行式概率头: 读面板+特征现场构建 (不依赖 parallel 检查点, 无前置依赖);
+    # 自判断新鲜度 (21 交易日重训一次), 未到期开销小 — 放 legacy 预测前 (概率闸依赖 bundle)
+    steps.append("legacy_prob_head")
+    steps.append("legacy")
+    steps.append("deliver")
+    if not skip_checkpoints:
+        steps.append("refresh")
     if not skip_parallel:
         steps.append("parallel")
         # 概率头训练自判断新鲜度 (21 交易日重训一次); 仅并行交付启用时才有消费者
@@ -273,9 +305,21 @@ def plan_steps(
         steps.append(
             "deliver_parallel"
         )  # 并行清单交付依赖当日 fresh parallel 重生成, 跳过则同步丢弃
-    # 同花顺自选股推送 (2026-09-01): TOP10 主源并行短名单 rank 序, parallel 跳过时
-    # collect_codes 自动回退 legacy 清单 — 故放在 parallel 块之外恒执行, 非关键步骤
+    # 同花顺自选股推送 (2026-09-01; 09-05 用户拍板拆分): parallel 前 10 与 legacy
+    # 前 10 各自独立成单分推, 不再并集 — 单侧缺失只推另一侧, 故放在 parallel 块
+    # 之外恒执行, 非关键步骤
     steps.append("ths_push")
+    # 差值加速度影子单 (2026-09-04 用户拍板): (r5−r5_prev) top10 纯排 — 2026-09-05 用户
+    # 停推 ("A1影子单也不需要"): 下链, _a1_momentum_shadow.py 仍可手动跑, 恢复需拍板
+    # steps.append("a1_push")
+    # 概率头密度版影子单 (2026-09-05 用户拍板): prob10+回撤闸+密度occ5≥3+额1亿 推同花顺,
+    # 补 gappocket/a1 停推后的推送位 — 非关键步骤, 当日 candidates 缺失 fail-safe 跳过
+    steps.append("prob10dens_push")
+    # 隔板口袋单 (2026-09-04 用户拍板): 首板后 d3~7 缩量守板 + 安全闸, bias60 top15
+    # 推同花顺 — 2026-09-05 用户停推 ("THS成绩不如生产就不用了"): 同窗 125d 对比
+    # gappocket 20.8%/+0.47pp/大亏6.2% 全面落后生产 32.8~33.6%/+3.17~3.76pp;
+    # 恢复需重回"不输生产"且用户拍板 (_gap_pocket_shadow.py 仍可手动跑)
+    # steps.append("gappocket_push")
     # 放量下跌自选股守卫 (2026-09-03): 当日放量下跌标记 (日频 OHLCV/动量/量能) →
     # 自选股剔除 + 当日删除文档; UI 删除待 Del 键流程探针验证后经 --apply 启用, 非关键步骤
     steps.append("ths_flush_guard")

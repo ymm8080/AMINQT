@@ -121,14 +121,14 @@ def main() -> int:
     # ---- 日线形状衍生 (用户 09-03: 判断纳入日线形状, 方向均取自⑤事件研究"延续/出货"向) ----
     def _raw_pivot(col: str) -> np.ndarray:
         w = (
-            panel.assign(d=dt)
+            panel.assign(d=dt)  # noqa: F821 (归档研究: OHLC 扩展块)
             .pivot_table(index="symbol", columns="d", values=col, aggfunc="last")
             .sort_index()
             .reindex(index=symbols, columns=pd.DatetimeIndex(cal))
         )
         return w.to_numpy(dtype="float64")
 
-    O = _raw_pivot("open")
+    O = _raw_pivot("open")  # noqa: E741 (OHLC 矩阵惯例单字母)
     H = _raw_pivot("high")
     L = _raw_pivot("low")
     C = _raw_pivot("close")

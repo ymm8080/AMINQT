@@ -401,7 +401,7 @@ def main() -> int:
             # 训练标签: 当日 amount>=3e7 且 net3 有效 中 net3 TOP10
             lbl = pd.Series(False, index=feat.index)
             grp = feat[pd.to_datetime(feat["date"]).isin(train_days)]
-            for d, g in grp.groupby(pd.to_datetime(grp["date"]).dt.normalize()):
+            for d, g in grp.groupby(pd.to_datetime(grp["date"]).dt.normalize()):  # noqa: B007
                 ok = (g["amount_px"] >= AMOUNT_FLOOR) & g["net_3d"].notna()
                 cand = g[ok]
                 if len(cand) < TOPN:
@@ -522,8 +522,10 @@ def main() -> int:
     print(f"[saved] {pq_path} rows={len(df):,} ({time.time() - t0:.0f}s)", flush=True)
     arms = result.get("main", {}).get("arms", {})
     for name, a in arms.items():
+
         def fmt(v):
             return f"{v:+.5f}" if v is not None else "  n/a  "
+
         extra = (
             f" Δ={fmt(a.get('d3_full'))} (h1 {fmt(a.get('d3_h1'))} / h2 {fmt(a.get('d3_h2'))}) "
             f"win={a.get('win'):.2f}"

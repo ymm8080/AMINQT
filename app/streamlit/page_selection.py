@@ -38,6 +38,84 @@ def _pool_df(date_compact: str | None = None) -> tuple:
     return ds.demo_list(), "DEMO", True
 
 
+# ---------- 同花顺推送状态卡 (2026-09-05) ----------
+
+
+def _render_ths_push_status() -> None:
+    """读推送结果单 (scripts._ths_watchlist_push.write_push_result 产物),
+    每源一张卡: 绿=全落袋, 红=缺码 (列码+原因). 无结果单静默不占位."""
+    from scripts._ths_watchlist_push import read_push_results
+
+    try:
+        res = read_push_results()
+    except Exception:
+        return
+    if res is None or res.empty:
+        return
+    st.divider()
+    st.subheader("同花顺推送状态")
+    cols = st.columns(max(res["source"].nunique(), 1))
+    for col, (src, g) in zip(cols, res.groupby("source", sort=False)):
+        n, n_ok = len(g), int((g["status"] == "landed").sum())
+        manual = g.loc[g["status"] == "manual", "symbol"].tolist()
+        blocked = g.loc[g["status"] == "blocked", "symbol"].tolist()
+        if not manual and not blocked:
+            col.success(f"✅ {src}: {n_ok}/{n} 全落袋, 云同步稍后到手机")
+            continue
+        msg = f"❌ {src}: 落袋 {n_ok}/{n}"
+        if manual:
+            msg += f" | 需手动加: {' '.join(manual)}"
+        if blocked:
+            msg += f" | 未推送 (推送没开跑): {' '.join(blocked)}"
+        col.error(msg)
+
+
+# ---------- 影子单 WATCH LIST 明细区 (密度王, 09-05 用户: 选股看板保留独立区;
+# 统一族路径只带原版+并行四列, 本区读原始 CSV 全列含密度/回撤/成交额) ----------
+
+
+def _render_prob10dens_watchlist() -> None:
+    """渲染密度王影子单明细 (读原始 CSV 全列, 与池表中的统一族行并存)."""
+    df, date = ds.load_prob10dens_watchlist()
+    if df is None or df.empty:
+        return
+    st.divider()
+    st.subheader(f"影子单 · 密度王 ({date[:4]}-{date[4:6]}-{date[6:]})")
+    st.caption(
+        "影子观察单, 非生产推荐 (模型名 密度王, 内部 id prob10dens) | "
+        "原版/并行 = 两套模型各自的 10d 幅度/概率 | "
+        "密度 = occ5 当日次数, 回撤 = pull, 成交额 = amt"
+    )
+    show = df.copy()
+    show["name"] = show["symbol"].map(ds.stock_names()).fillna("-")
+    if "amt" in show.columns:
+        show["amt"] = (pd.to_numeric(show["amt"], errors="coerce") / 1e8).round(2)
+    if "pctChg" in show.columns:
+        show["pctChg"] = pd.to_numeric(show["pctChg"], errors="coerce")
+    col_cfg = {
+        "symbol": st.column_config.TextColumn("代码"),
+        "name": st.column_config.TextColumn("名称"),
+        "rank": st.column_config.NumberColumn("排名", format="%d"),
+        "board": st.column_config.TextColumn("板块"),
+        "legacy_prob": st.column_config.TextColumn("原版概率"),
+        "legacy_pred10": st.column_config.TextColumn("原版幅度"),
+        "parallel_prob": st.column_config.TextColumn("并行概率"),
+        "parallel_pred10": st.column_config.TextColumn("并行幅度"),
+        "occ5": st.column_config.NumberColumn("密度", format="%d"),
+        "pull": st.column_config.TextColumn("回撤"),
+        "amt": st.column_config.NumberColumn("成交额(亿)", format="%.2f"),
+        "pctChg": st.column_config.NumberColumn("当日涨跌", format="%.2f%%"),
+        "belief_down": st.column_config.TextColumn("信念降档"),
+    }
+    cols = [c for c in col_cfg if c in show.columns]
+    st.dataframe(
+        show[cols],
+        column_config=col_cfg,
+        hide_index=True,
+        use_container_width=True,
+    )
+
+
 # ---------- 选股池: 人为添加股票 ----------
 
 
@@ -83,6 +161,11 @@ def render() -> None:
         st.caption(
             f"交付日期: {pool_date} | 官方运行模块预测短名单 | 共 {len(pool)} 条推荐"
         )
+
+    # 同花顺推送状态 (绿=全落袋 / 红=缺码需手动) — 09-05 用户: 推送顺利与否一眼判读
+    _render_ths_push_status()
+    # 影子单·密度王明细区 (原始 CSV 全列, 与池表统一族行并存) — 09-05 用户拍板保留
+    _render_prob10dens_watchlist()
 
     # 人为添加股票
     with st.expander("➕ 添加股票到选股池", expanded=False):

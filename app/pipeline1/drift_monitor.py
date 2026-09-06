@@ -342,3 +342,88 @@ def check_calibration(rolling: pd.DataFrame, thresholds: dict) -> list[dict]:
                 }
             )
     return alerts
+
+
+# ── 排名键赢家判别 AUC (2026-09-03, winner-leak 复盘后新增) ──
+
+
+def daily_winner_auc(
+    preds: pd.DataFrame,
+    realized: pd.DataFrame,
+    win_t: float = 0.05,
+) -> pd.DataFrame:
+    """逐日逐板块排名键赢家判别 AUC (全池 Mann-Whitney).
+
+    赢家 = realized_net >= win_t; AUC = 随机抽一赢家一非赢家, 键值赢家更高的概率.
+    日内无赢家或无非赢家 → 该日无 AUC (NaN, 行保留, 密度照记).
+    preds: (date, symbol, board, pred_ret_10d); realized: (date, symbol, realized_net).
+    注: candidates 全池口径, 与 winner_leak 回放的 E7 池 AUC 绝对值不可比.
+    """
+    m = preds.merge(realized, on=["date", "symbol"], how="inner")
+    m = m.dropna(subset=["pred_ret_10d", "realized_net"])
+    cols = ["date", "board", "n", "winners", "density", "auc"]
+    if m.empty:
+        return pd.DataFrame(columns=cols)
+    rows = []
+    for (d, board), g in m.groupby(["date", "board"]):
+        win = g["realized_net"] >= win_t
+        n_win, n_rest = int(win.sum()), int((~win).sum())
+        auc = np.nan
+        if n_win >= 1 and n_rest >= 1:
+            ranks = g["pred_ret_10d"].rank()
+            auc = float((ranks[win].sum() - n_win * (n_win + 1) / 2) / (n_win * n_rest))
+        rows.append(
+            {
+                "date": d,
+                "board": board,
+                "n": int(len(g)),
+                "winners": n_win,
+                "density": n_win / len(g),
+                "auc": auc,
+            }
+        )
+    return pd.DataFrame(rows, columns=cols)
+
+
+def monthly_winner_auc(daily: pd.DataFrame, min_days: int = 8) -> pd.DataFrame:
+    """日 AUC 按板块×月聚合: 中位 AUC + 成熟日数; 成熟日 <min_days 的月不参与判定."""
+    rows = []
+    for board, g in daily.groupby("board"):
+        ym = pd.to_datetime(g["date"]).dt.strftime("%Y-%m")
+        for month, gg in g.groupby(ym):
+            aucs = gg["auc"].dropna()
+            rows.append(
+                {
+                    "board": board,
+                    "month": month,
+                    "n_days": int(len(gg)),
+                    "n_auc_days": int(len(aucs)),
+                    "auc": float(aucs.median()) if len(aucs) else None,
+                    "mature": bool(len(aucs) >= min_days),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def check_winner_auc(
+    monthly: pd.DataFrame,
+    threshold: float = 0.55,
+    consecutive_months: int = 2,
+) -> list[dict]:
+    """最近 consecutive_months 个成熟月 AUC 全部 < threshold → 告警 (6月型断裂探测)."""
+    alerts = []
+    for board, g in monthly.groupby("board"):
+        m = g[g["mature"] & g["auc"].notna()].sort_values("month")
+        if len(m) < consecutive_months:
+            continue
+        tail = m.tail(consecutive_months)
+        if bool((tail["auc"] < threshold).all()):
+            alerts.append(
+                {
+                    "board": board,
+                    "months": tail["month"].tolist(),
+                    "aucs": [float(a) for a in tail["auc"]],
+                    "threshold": threshold,
+                }
+            )
+    return alerts
