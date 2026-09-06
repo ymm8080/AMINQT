@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """交付 CSV 百分比显示层 + 兼容两代文件的容忍读取 (2026-09-05 用户: 交付文件
 预测值用百分比, 不要小数).
 
@@ -22,25 +21,48 @@ import pandas as pd
 # parallel_shortlist_*.csv: 预测幅度/概率/超额/实现收益/市场基线 (0..1 比例)
 # 不格式化: score/norm_*/rank_blend/sel_20d 等复合分与内部秩, 列位语义不是比例
 PCT_COLS_PARALLEL = (
-    "pred_mag_3d", "pred_prob_3d",
-    "pred_mag_5d", "pred_prob_5d",
-    "pred_mag_10d", "pred_prob_10d",
-    "pred_ret_3d", "pred_ret_5d", "pred_ret_10d",
+    "pred_mag_3d",
+    "pred_prob_3d",
+    "pred_mag_5d",
+    "pred_prob_5d",
+    "pred_mag_10d",
+    "pred_prob_10d",
+    "pred_ret_3d",
+    "pred_ret_5d",
+    "pred_ret_10d",
     "pred_prob",
-    "pred_excess_3d", "pred_excess_5d", "pred_excess_10d",
-    "ret_10d", "ret_1d", "market_base_rate",
+    "pred_excess_3d",
+    "pred_excess_5d",
+    "pred_excess_10d",
+    "ret_10d",
+    "ret_1d",
+    "market_base_rate",
 )
 
 # legacy_stocklist_*.csv: 当日涨跌(day_change 为比例, 与 Tushare pctChg 不同)、
 # 预测/概率/分位数/复合/痛苦概率/组合权重 (weight 0.0667 → "6.67%")
 PCT_COLS_LEGACY = (
     "day_change",
-    "pred_ret_3d", "pred_ret_5d", "pred_ret_10d",
-    "prob_up", "prob_up_3d", "prob_up_5d", "prob_up_10d",
-    "compound_ret", "compound_prob",
-    "pred_q10", "pred_q50", "pred_q90", "pred_q50_3d", "pred_q50_5d",
-    "uncertainty_width", "pain_prob", "weight",
-    "ret_10d", "ret_1d", "market_base_rate",
+    "pred_ret_3d",
+    "pred_ret_5d",
+    "pred_ret_10d",
+    "prob_up",
+    "prob_up_3d",
+    "prob_up_5d",
+    "prob_up_10d",
+    "compound_ret",
+    "compound_prob",
+    "pred_q10",
+    "pred_q50",
+    "pred_q90",
+    "pred_q50_3d",
+    "pred_q50_5d",
+    "uncertainty_width",
+    "pain_prob",
+    "weight",
+    "ret_10d",
+    "ret_1d",
+    "market_base_rate",
 )
 
 _NA_STR = {"", "nan", "none", "nat", "null"}

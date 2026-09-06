@@ -19,6 +19,7 @@ WORM: DATA OTHERS/diag/winner_horizon_{ts}.json + _monthly_{ts}.csv
 
 用法: python scripts/_diag_winner_horizon.py [--eval 125]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -99,7 +100,9 @@ def main() -> int:
     )
 
     for board in ("main", "dual"):
-        fr = pd.read_parquet(str(DATA_DIR / f"_diag_rankkey_scored_{board}_e{args.eval}.parquet"))
+        fr = pd.read_parquet(
+            str(DATA_DIR / f"_diag_rankkey_scored_{board}_e{args.eval}.parquet")
+        )
         fr["date"] = pd.to_datetime(fr["date"])
         fr["symbol"] = fr["symbol"].astype(str)
         fr = fr[np.isfinite(fr["realized_net"])].reset_index(drop=True)
@@ -116,14 +119,17 @@ def main() -> int:
             return 2
         for h in HORIZONS:
             fr[f"net{h}"] = realized_net_H(price, cal, sym_rows, j_cols, h)
-        d10 = fr.loc[np.isfinite(fr["net10"]), "net10"] - fr.loc[
-            np.isfinite(fr["net10"]), "realized_net"
-        ]
+        d10 = (
+            fr.loc[np.isfinite(fr["net10"]), "net10"]
+            - fr.loc[np.isfinite(fr["net10"]), "realized_net"]
+        )
         chk = float(np.nanmax(np.abs(d10)))
         drift = float((d10.abs() > 1e-6).mean())
-        print(f"[{board}] T+10 复算 vs ckpt: max|diff|={chk:.2e}, "
-              f"漂移行占比 {drift:.1%} (面板 vintage 除权回溯, 聚合对账 winner_leak 一致; "
-              f"{'OK' if drift < 0.05 else 'DRIFT>5% 排查'})")
+        print(
+            f"[{board}] T+10 复算 vs ckpt: max|diff|={chk:.2e}, "
+            f"漂移行占比 {drift:.1%} (面板 vintage 除权回溯, 聚合对账 winner_leak 一致; "
+            f"{'OK' if drift < 0.05 else 'DRIFT>5% 排查'})"
+        )
 
         top = topn_per_day(fr[fr["in_e7"]], "pred_ret_10d", DEPTH)
         ids = set(map(tuple, top[["date", "symbol"]].to_numpy()))
@@ -133,8 +139,14 @@ def main() -> int:
         rows = []
         for ym, g in fr.groupby("ym", sort=True):
             e7, tp = g[g["in_e7"]], g[g["in_top10"]]
-            row = {"board": board, "ym": ym, "days": g["date"].nunique(),
-                   "slot_rate10": float((tp["net10"] >= WIN_T).mean()) if len(tp) else np.nan}
+            row = {
+                "board": board,
+                "ym": ym,
+                "days": g["date"].nunique(),
+                "slot_rate10": float((tp["net10"] >= WIN_T).mean())
+                if len(tp)
+                else np.nan,
+            }
             for h in HORIZONS:
                 w = g[f"net{h}"] >= (WIN_T if h == 10 else WIN_T_SHORT)
                 wt = tp[f"net{h}"] >= (WIN_T if h == 10 else WIN_T_SHORT)
@@ -158,9 +170,10 @@ def main() -> int:
         print(monthly.to_string(index=False, float_format=lambda x: f"{x:.3f}"))
         full = monthly[~monthly["ym"].isin(("2026-06", "2026-07", "2026-08"))]
         late = monthly[monthly["ym"].isin(("2026-06", "2026-07", "2026-08"))]
-        b = {"anchor_slot10_check": ANCHOR_SLOT[board],
-             "anchor_computed": float(
-                 fr.loc[fr["in_top10"], "net10"].ge(WIN_T).mean())}
+        b = {
+            "anchor_slot10_check": ANCHOR_SLOT[board],
+            "anchor_computed": float(fr.loc[fr["in_top10"], "net10"].ge(WIN_T).mean()),
+        }
         for h in HORIZONS:
             b[f"early_auc{h}"] = float(full[f"auc{h}"].mean())
             b[f"late_auc{h}"] = float(late[f"auc{h}"].mean())
@@ -178,7 +191,9 @@ def main() -> int:
         json.dumps(report, indent=2, ensure_ascii=False, default=str),
         encoding="utf-8",
     )
-    print(f"\n[saved] {out_dir}\\winner_horizon_{ts}.json + _monthly_ ({time.time() - t0:.0f}s)")
+    print(
+        f"\n[saved] {out_dir}\\winner_horizon_{ts}.json + _monthly_ ({time.time() - t0:.0f}s)"
+    )
     print("=== DONE ===")
     return 0
 

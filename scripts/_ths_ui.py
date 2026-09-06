@@ -388,8 +388,9 @@ def _digit_dist(feat: np.ndarray, d: int) -> float:
     return float(np.abs(feats[m] - feat[None]).mean(axis=(1, 2)).min())
 
 
-def _match_candidate(cellfeats: list[np.ndarray],
-                     candidates: list[str]) -> tuple[str | None, float]:
+def _match_candidate(
+    cellfeats: list[np.ndarray], candidates: list[str]
+) -> tuple[str | None, float]:
     """约束匹配: 在候选码里挑最优 (和 ≤_CAND_SUM_MAX 且逐位 ≤_CAND_CELL_MAX).
 
     返回 (码, 逐位最大距离); 无候选过闸 → (None, 1.0) 宁缺勿错.
@@ -438,8 +439,7 @@ def _split_digit_cells(seg: np.ndarray) -> list[tuple[int, int]]:
     return cells
 
 
-def _cell_feats(seg2: np.ndarray,
-                cells: list[tuple[int, int]]) -> list[np.ndarray]:
+def _cell_feats(seg2: np.ndarray, cells: list[tuple[int, int]]) -> list[np.ndarray]:
     """已裁剪行二值图 + 数字格切分 → 每格归一化字形特征."""
     out = []
     for ca, cb in cells:
@@ -502,9 +502,11 @@ def _read_rows_from_gray(
     return rows
 
 
-def read_visible_rows(win, log=print,
-                      candidates: list[str] | None = None,
-                      ) -> list[tuple[int, int, str | None, float]]:
+def read_visible_rows(
+    win,
+    log=print,
+    candidates: list[str] | None = None,
+) -> list[tuple[int, int, str | None, float]]:
     """读当前可见行代码列 → [(y0_rel, y1_rel, code, conf)] (窗口相对物理 px).
 
     code=None = 该行切分/匹配失败 (宁缺勿错, 调用方不得猜测); conf = 6 格最大
@@ -612,8 +614,7 @@ def delete_code_flow(win, code: str, log=print) -> str:
     return "deleted" if gone else "delete_failed"
 
 
-def read_all_codes(win, log=print,
-                   candidates: list[str] | None = None) -> list[str]:
+def read_all_codes(win, log=print, candidates: list[str] | None = None) -> list[str]:
     """全清单读码: 顶视图 + 尾视图 ({End}) 合并去重, 有序. 只读+焦点点击, 无数字键.
 
     candidates 给定时判词走约束匹配 (09-05 接产线: 自由 OCR 有 8/0 形歧义,
@@ -631,8 +632,7 @@ def read_all_codes(win, log=print,
     assert_foreground_hexin("{End} 跳尾视图")
     auto.SendKeys("{End}")
     time.sleep(1.2)
-    codes_end = [c for _a, _b, c, _f in read_visible_rows(win, log, candidates)
-                 if c]
+    codes_end = [c for _a, _b, c, _f in read_visible_rows(win, log, candidates) if c]
     assert_foreground_hexin("{Home} 回顶")
     auto.SendKeys("{Home}")
     time.sleep(1.0)

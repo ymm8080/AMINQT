@@ -25,9 +25,11 @@ def _chip(mapping):
 
 
 def test_apply_chip_gate_cuts_and_logs(capsys, monkeypatch):
-    monkeypatch.setattr(mod, "load_chip_features",
-                        lambda ts: _chip({"000001": -0.23, "000002": 0.05,
-                                          "000003": float("nan")}))
+    monkeypatch.setattr(
+        mod,
+        "load_chip_features",
+        lambda ts: _chip({"000001": -0.23, "000002": 0.05, "000003": float("nan")}),
+    )
     df = _df(["000001", "000002", "000003"])
     out = apply_chip_gate(df, DAY)
     assert list(out["symbol"]) == ["000002", "000003"]  # wr5<0 剔; NaN 保留
@@ -43,8 +45,7 @@ def test_apply_chip_gate_failopen_and_clean(capsys, monkeypatch):
     assert len(out) == 1
     assert "fail-open" in capsys.readouterr().out
     # 全员健康 → 无剔除无日志
-    monkeypatch.setattr(mod, "load_chip_features",
-                        lambda ts: _chip({"000001": 0.10}))
+    monkeypatch.setattr(mod, "load_chip_features", lambda ts: _chip({"000001": 0.10}))
     out2 = apply_chip_gate(df, DAY)
     assert len(out2) == 1
     assert capsys.readouterr().out == ""
@@ -61,4 +62,4 @@ def test_delivery_scripts_wire_shared_gate():
     src = inspect.getsource(parallel.main)
     assert "apply_chip_gate(res, sel_date" in src  # 滞留行之后、锚定之前
     src_l = inspect.getsource(legacy.main)
-    assert "apply_chip_gate(df" in src_l           # symbol 规整后、滞涨标记之前
+    assert "apply_chip_gate(df" in src_l  # symbol 规整后、滞涨标记之前

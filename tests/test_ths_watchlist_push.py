@@ -72,9 +72,7 @@ def test_collect_lists_fallback_legacy_only(tmp_path):
         ["002968", "603829", "603326", "600706", "001217"],
     )
     lists = mod.collect_lists("20260901", tmp_path)
-    assert lists == [
-        ("legacy__M1", ["002968", "603829", "603326", "600706", "001217"])
-    ]
+    assert lists == [("legacy__M1", ["002968", "603829", "603326", "600706", "001217"])]
 
 
 def test_collect_lists_filters_bad_codes(tmp_path):
@@ -115,8 +113,9 @@ def test_collect_lists_keeps_index_colliding_000xxx(tmp_path):
     推送端隔离指数行 (见 _build_chunks), 清单侧不剔不补位."""
     rank_symbols = ["600001", "000985", "600002", "600003", "600004", "600005"]
     _write_shortlist(tmp_path / "parallel_shortlist_20260901__M1.csv", rank_symbols)
-    _write_legacy(tmp_path / "legacy_stocklist_20260901__M2.csv",
-                  ["000001", "603829", "000123"])
+    _write_legacy(
+        tmp_path / "legacy_stocklist_20260901__M2.csv", ["000001", "603829", "000123"]
+    )
     lists = mod.collect_lists("20260901", tmp_path)
     assert lists == [
         ("parallel__M1", rank_symbols),
@@ -178,7 +177,8 @@ def test_dlg_rows_detects_checked_and_unchecked():
 def test_dlg_rows_classifies_index_row_by_red_text():
     """指数行 = 市场列 x∈[285,331) 红字 ("中证" tag); 股票行灰"深A"无红 → False."""
     rows = mod._dlg_rows_from_img(
-        _dlg_img([(20, True, False), (44, False, True), (68, True, False)]))
+        _dlg_img([(20, True, False), (44, False, True), (68, True, False)])
+    )
     assert [r[2] for r in rows] == [False, True, False]
     assert rows[1][1] is False  # 指数行未勾
 
@@ -203,10 +203,10 @@ def _patch_verify_ui(monkeypatch, tmp_path):
 
     calls = {"click": [], "keys": []}
     monkeypatch.setattr(ui, "assert_foreground_hexin", lambda *a, **k: None)
-    monkeypatch.setattr(uiautomation, "Click",
-                        lambda x, y: calls["click"].append((x, y)))
-    monkeypatch.setattr(uiautomation, "SendKeys",
-                        lambda s: calls["keys"].append(s))
+    monkeypatch.setattr(
+        uiautomation, "Click", lambda x, y: calls["click"].append((x, y))
+    )
+    monkeypatch.setattr(uiautomation, "SendKeys", lambda s: calls["keys"].append(s))
     monkeypatch.setattr(wmod, "FAIL_DUMP_DIR", str(tmp_path))
     return calls
 
@@ -215,15 +215,16 @@ def _fake_dlg():
     import types
 
     return types.SimpleNamespace(
-        BoundingRectangle=types.SimpleNamespace(
-            left=0, top=0, right=500, bottom=200))
+        BoundingRectangle=types.SimpleNamespace(left=0, top=0, right=500, bottom=200)
+    )
 
 
 def _patch_grab(monkeypatch):
     import numpy as np
 
-    monkeypatch.setattr("PIL.ImageGrab.grab",
-                        lambda bbox=None: np.zeros((10, 10, 3), dtype=np.uint8))
+    monkeypatch.setattr(
+        "PIL.ImageGrab.grab", lambda bbox=None: np.zeros((10, 10, 3), dtype=np.uint8)
+    )
 
 
 def test_verify_full_checked_returns_map(monkeypatch, tmp_path):
@@ -231,8 +232,9 @@ def test_verify_full_checked_returns_map(monkeypatch, tmp_path):
     from scripts import _ths_watchlist_push as wmod
 
     _patch_grab(monkeypatch)
-    monkeypatch.setattr(wmod, "_dlg_rows_from_img",
-                        lambda img: [(26, True, False), (58, True, False)])
+    monkeypatch.setattr(
+        wmod, "_dlg_rows_from_img", lambda img: [(26, True, False), (58, True, False)]
+    )
     calls = _patch_verify_ui(monkeypatch, tmp_path)
     res = wmod._ensure_dialog_rows_checked(_fake_dlg(), ["600001", "600002"])
     assert res == {"600001": True, "600002": True}
@@ -246,11 +248,13 @@ def test_verify_keyboard_route_on_unchecked_partial_return(monkeypatch, tmp_path
     from scripts import _ths_watchlist_push as wmod
 
     _patch_grab(monkeypatch)
-    monkeypatch.setattr(wmod, "_dlg_rows_from_img",
-                        lambda img: [(26, True, False), (58, False, False)])
+    monkeypatch.setattr(
+        wmod, "_dlg_rows_from_img", lambda img: [(26, True, False), (58, False, False)]
+    )
     calls = _patch_verify_ui(monkeypatch, tmp_path)
     res = wmod._ensure_dialog_rows_checked(
-        _fake_dlg(), ["600001", "600002"], max_rounds=2)
+        _fake_dlg(), ["600001", "600002"], max_rounds=2
+    )
     assert res == {"600001": True, "600002": False}
     assert len(calls["click"]) >= 1
     assert "{Space}" in calls["keys"]
@@ -264,12 +268,19 @@ def test_verify_padded_batch_dead_position_success(monkeypatch, tmp_path):
 
     _patch_grab(monkeypatch)
     monkeypatch.setattr(
-        wmod, "_dlg_rows_from_img",
-        lambda img: [(26, True, False), (58, True, False), (90, False, False),
-                     (122, True, False)])
+        wmod,
+        "_dlg_rows_from_img",
+        lambda img: [
+            (26, True, False),
+            (58, True, False),
+            (90, False, False),
+            (122, True, False),
+        ],
+    )
     _patch_verify_ui(monkeypatch, tmp_path)
     res = wmod._ensure_dialog_rows_checked(
-        _fake_dlg(), ["002098", "000985", None, "688693"])
+        _fake_dlg(), ["002098", "000985", None, "688693"]
+    )
     assert res == {"002098": True, "000985": True, "688693": True}
 
 
@@ -279,12 +290,19 @@ def test_verify_padded_batch_index_slot_checked_fail_closed(monkeypatch, tmp_pat
 
     _patch_grab(monkeypatch)
     monkeypatch.setattr(
-        wmod, "_dlg_rows_from_img",
-        lambda img: [(26, True, False), (58, True, False), (90, True, False),
-                     (122, True, False)])
+        wmod,
+        "_dlg_rows_from_img",
+        lambda img: [
+            (26, True, False),
+            (58, True, False),
+            (90, True, False),
+            (122, True, False),
+        ],
+    )
     _patch_verify_ui(monkeypatch, tmp_path)
     res = wmod._ensure_dialog_rows_checked(
-        _fake_dlg(), ["600001", "000985", None, "600002"])
+        _fake_dlg(), ["600001", "000985", None, "600002"]
+    )
     assert res is None
 
 
@@ -294,8 +312,7 @@ def test_verify_red_tag_on_stock_slot_checked_fail_closed(monkeypatch, tmp_path)
     from scripts import _ths_watchlist_push as wmod
 
     _patch_grab(monkeypatch)
-    monkeypatch.setattr(wmod, "_dlg_rows_from_img",
-                        lambda img: [(26, True, True)])
+    monkeypatch.setattr(wmod, "_dlg_rows_from_img", lambda img: [(26, True, True)])
     _patch_verify_ui(monkeypatch, tmp_path)
     assert wmod._ensure_dialog_rows_checked(_fake_dlg(), ["600001"]) is None
 
@@ -314,7 +331,11 @@ def test_row_codes_pure_and_padded():
     """纯批行序=代码本身; 垫批撞码股后跟指数槽位 None."""
     assert mod._row_codes(["600001", "600002"]) == ["600001", "600002"]
     assert mod._row_codes(["600001", "000985", "600002"]) == [
-        "600001", "000985", None, "600002"]
+        "600001",
+        "000985",
+        None,
+        "600002",
+    ]
 
 
 def test_build_chunks_plain_no_collide():
@@ -346,8 +367,7 @@ def test_build_chunks_multiple_collide_each_own_batch():
 def test_build_chunks_collide_without_fillers_solo_batch():
     """普通码不足 2 只 → 单码批 (指数行会勾上, 核验 fail-closed 跳过, 不入指数)."""
     assert mod._build_chunks(["000985"]) == [["000985"]]
-    assert mod._build_chunks(["000985", "600001"]) == [
-        ["600001"], ["000985"]]
+    assert mod._build_chunks(["000985", "600001"]) == [["600001"], ["000985"]]
 
 
 def test_dlg_rows_drops_sliver_bands():
@@ -366,6 +386,7 @@ def test_chunk_size_fits_visible_list():
 
 # ---------------- 缺码补推循环 + 推送结果单 (2026-09-05 用户拍板) ----------------
 
+
 def _patch_push_verify(monkeypatch, verify, idle=True, dialog=True):
     """verify 注入 (_patch_push_ui 骨架 + 可调用核验结果)."""
     import ctypes
@@ -380,20 +401,19 @@ def _patch_push_verify(monkeypatch, verify, idle=True, dialog=True):
     calls = {"click": [], "verify": 0, "grid": set()}
     fake_dlg = types.SimpleNamespace(
         NativeWindowHandle=0,
-        BoundingRectangle=types.SimpleNamespace(
-            left=0, top=0, right=500, bottom=200))
+        BoundingRectangle=types.SimpleNamespace(left=0, top=0, right=500, bottom=200),
+    )
     monkeypatch.setattr(ui, "ensure_idle", lambda what="": idle)
-    monkeypatch.setattr(ui, "ensure_watchlist_window",
-                        lambda: types.SimpleNamespace())
+    monkeypatch.setattr(ui, "ensure_watchlist_window", lambda: types.SimpleNamespace())
     monkeypatch.setattr(ui, "close_stray_windows", lambda: None)
-    monkeypatch.setattr(ui, "find_window",
-                        lambda title: fake_dlg if dialog else None)
+    monkeypatch.setattr(ui, "find_window", lambda title: fake_dlg if dialog else None)
     monkeypatch.setattr(ui, "open_copy_recognition_dialog", lambda win: dialog)
     monkeypatch.setattr(ui, "close_x", lambda dlg: None)
     monkeypatch.setattr(ui, "assert_foreground_hexin", lambda *a, **k: None)
     monkeypatch.setattr(uiautomation, "SetClipboardText", lambda s: None)
-    monkeypatch.setattr(uiautomation, "Click",
-                        lambda x, y: calls["click"].append((x, y)))
+    monkeypatch.setattr(
+        uiautomation, "Click", lambda x, y: calls["click"].append((x, y))
+    )
     monkeypatch.setattr(uiautomation, "SendKeys", lambda s: None)
     monkeypatch.setattr(ctypes.windll.user32, "SetWindowPos", lambda *a, **k: 1)
     monkeypatch.setattr(_time, "sleep", lambda s: None)
@@ -406,8 +426,9 @@ def _patch_push_verify(monkeypatch, verify, idle=True, dialog=True):
         return res
 
     monkeypatch.setattr(wmod, "_ensure_dialog_rows_checked", _verify)
-    monkeypatch.setattr(ui, "read_all_codes",
-                        lambda win, log=print: sorted(calls["grid"]))
+    monkeypatch.setattr(
+        ui, "read_all_codes", lambda win, log=print: sorted(calls["grid"])
+    )
     return calls
 
 
@@ -467,6 +488,7 @@ def test_push_sweep_cap_ten(monkeypatch, tmp_path):
 
 def test_push_blocked_idle_gate_writes_blocked_ledger(monkeypatch, tmp_path):
     """空闲闸挡下 (用户在场) = 推送没开跑 → 全码 blocked, 不误报 manual."""
+
     def verify(dlg, row_codes):
         raise AssertionError("空闲闸挡下后不应有任何核验")
 
@@ -478,6 +500,7 @@ def test_push_blocked_idle_gate_writes_blocked_ledger(monkeypatch, tmp_path):
 
 def test_push_blocked_dialog_fail_writes_blocked_ledger(monkeypatch, tmp_path):
     """复制识别对话框从未出现 = 没开跑 → 全码 blocked."""
+
     def verify(dlg, row_codes):
         raise AssertionError("对话框未出现不应有核验")
 
@@ -487,8 +510,7 @@ def test_push_blocked_dialog_fail_writes_blocked_ledger(monkeypatch, tmp_path):
     assert _ledger(txt) == {"600001": "blocked"}
 
 
-def test_push_grid_truth_overrules_dialog_false_success(monkeypatch, tmp_path,
-                                                        capsys):
+def test_push_grid_truth_overrules_dialog_false_success(monkeypatch, tmp_path, capsys):
     """网格真值判词 (09-05 午前二次破案): 对话框全勾+加入已点, 但网格只见
     600001 → 600002 判 manual; 部分落袋=会话活, 不许报掉登录也不许假成功."""
     from scripts import _ths_ui as ui
@@ -497,8 +519,7 @@ def test_push_grid_truth_overrules_dialog_false_success(monkeypatch, tmp_path,
         return {c: True for c in row_codes if c is not None}
 
     _patch_push_verify(monkeypatch, verify)
-    monkeypatch.setattr(ui, "read_all_codes",
-                        lambda win, log=print: ["600001"])
+    monkeypatch.setattr(ui, "read_all_codes", lambda win, log=print: ["600001"])
     txt, ok = _run_push(tmp_path, ["600001", "600002"])
     assert ok is False
     out = capsys.readouterr().out
@@ -508,8 +529,9 @@ def test_push_grid_truth_overrules_dialog_false_success(monkeypatch, tmp_path,
     assert _ledger(txt) == {"600001": "landed", "600002": "manual"}
 
 
-def test_push_grid_empty_with_dialog_landed_hints_relogin(monkeypatch, tmp_path,
-                                                          capsys):
+def test_push_grid_empty_with_dialog_landed_hints_relogin(
+    monkeypatch, tmp_path, capsys
+):
     """对话框全勾+加入已点但网格全空 = 加入整体无效果 → 疑似掉登录提示."""
     from scripts import _ths_ui as ui
 
@@ -551,7 +573,7 @@ def test_read_push_results_newest_per_source(tmp_path):
     t2 = tmp_path / "ths_watchlist_20260905__09__parallel__M1.txt"
     t3 = tmp_path / "ths_watchlist_20260905__09__legacy__M2.txt"
     t4 = tmp_path / "ths_watchlist_20260905__prob10dens.txt"
-    mod.write_push_result(t1, ["600001"], ["600001"])            # 旧份: 全落袋
+    mod.write_push_result(t1, ["600001"], ["600001"])  # 旧份: 全落袋
     mod.write_push_result(t2, ["600001", "600002"], ["600001"])  # 新份: 缺 1
     mod.write_push_result(t3, ["603829"], [])
     mod.write_push_result(t4, ["002098"], ["002098"])
@@ -563,8 +585,9 @@ def test_read_push_results_newest_per_source(tmp_path):
     assert par == {"600001": "landed", "600002": "manual"}  # 新份赢, 旧份不掺
     leg = dict(zip(*[res[res.source == "legacy"][c] for c in ("symbol", "status")]))
     assert leg == {"603829": "manual"}
-    dens = dict(zip(*[res[res.source == "prob10dens"][c]
-                      for c in ("symbol", "status")]))
+    dens = dict(
+        zip(*[res[res.source == "prob10dens"][c] for c in ("symbol", "status")])
+    )
     assert dens == {"002098": "landed"}
 
 

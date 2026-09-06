@@ -76,8 +76,10 @@ def alarm_indices(di: np.ndarray, win: np.ndarray, n_days: int) -> set[int]:
     return out
 
 
-def _settled_outcomes(picks: pd.DataFrame, today: pd.Timestamp,
-                      ) -> tuple[pd.DataFrame, list[pd.Timestamp]]:
+def _settled_outcomes(
+    picks: pd.DataFrame,
+    today: pd.Timestamp,
+) -> tuple[pd.DataFrame, list[pd.Timestamp]]:
     """(date, symbol) 史 → (date, symbol, di, win) 已完结票 + 完整出票日格点。
 
     di = 出票日在全史格点 (含未完结的近 4 日) 中的序 — 与 125d 回放同构。
@@ -94,11 +96,14 @@ def _settled_outcomes(picks: pd.DataFrame, today: pd.Timestamp,
         return picks.assign(di=pd.Series(dtype=int), win=pd.Series(dtype=bool)), grid
     from config.settings import PANEL_V3_PATH
 
-    px = pd.read_parquet(PANEL_V3_PATH, columns=["symbol", "date", "close_hfq"],
-                         filters=[("date", ">=", grid[0]),
-                                  ("date", "<=", today)])
-    px["symbol"] = px["symbol"].astype(str).str.zfill(6).str.replace(
-        r"\..*", "", regex=True)
+    px = pd.read_parquet(
+        PANEL_V3_PATH,
+        columns=["symbol", "date", "close_hfq"],
+        filters=[("date", ">=", grid[0]), ("date", "<=", today)],
+    )
+    px["symbol"] = (
+        px["symbol"].astype(str).str.zfill(6).str.replace(r"\..*", "", regex=True)
+    )
     c = px.pivot(index="date", columns="symbol", values="close_hfq").sort_index()
     idx = {d: k for k, d in enumerate(c.index)}
     col = {s: j for j, s in enumerate(c.columns)}
@@ -128,9 +133,13 @@ def load_top10_history(list_dir=STOCK_LIST_DIR) -> pd.DataFrame:
     from scripts._ths_watchlist_push import collect_lists
 
     fps = glob.glob(str(list_dir / "legacy_stocklist_????????__*.csv"))
-    dates = sorted({m.group(1) for f in fps
-                    if (m := re.search(r"legacy_stocklist_(\d{8})__",
-                                       os.path.basename(f)))})
+    dates = sorted(
+        {
+            m.group(1)
+            for f in fps
+            if (m := re.search(r"legacy_stocklist_(\d{8})__", os.path.basename(f)))
+        }
+    )
     rows: list[tuple[str, str]] = []
     for d in dates:
         try:
@@ -169,28 +178,28 @@ def is_alarm(line: str, date: str) -> tuple[bool, str]:
         picks = _LOADERS[line]()
         out, grid = _settled_outcomes(picks, today)
         if len(out) < DZ_MIN_SAMPLES:
-            return False, (f"完结样本不足 ({len(out)} < {DZ_MIN_SAMPLES}), "
-                           "fail-open 照常推")
+            return False, (
+                f"完结样本不足 ({len(out)} < {DZ_MIN_SAMPLES}), fail-open 照常推"
+            )
         if today not in grid:
             return False, "今日不在出票格点, fail-open 照常推"
-        wr = rolling_win_rates(out["di"].to_numpy(),
-                               out["win"].to_numpy(), len(grid))
-        alarmed = alarm_indices(out["di"].to_numpy(),
-                                out["win"].to_numpy(), len(grid))
+        wr = rolling_win_rates(out["di"].to_numpy(), out["win"].to_numpy(), len(grid))
+        alarmed = alarm_indices(out["di"].to_numpy(), out["win"].to_numpy(), len(grid))
         t = grid.index(today)
         cur = wr.get(t)
         cur_s = f"{cur:.1%}" if cur is not None else "样本不足"
         if t not in alarmed:
             return False, f"滚动赢率 {cur_s} (未达报警线)"
-        return True, (f"滚动{DZ_WINDOW}日完结票赢率 {cur_s} < 报警线 "
-                      f"{DZ_ENTER:.0%} (解除: 连续{DZ_EXIT_DAYS}日 ≥ "
-                      f"{DZ_EXIT:.0%})")
+        return True, (
+            f"滚动{DZ_WINDOW}日完结票赢率 {cur_s} < 报警线 "
+            f"{DZ_ENTER:.0%} (解除: 连续{DZ_EXIT_DAYS}日 ≥ "
+            f"{DZ_EXIT:.0%})"
+        )
     except Exception as exc:  # noqa: BLE001 — 闸的任何故障都不拦推送
         return False, f"死区闸计算失败, fail-open 照常推: {exc}"
 
 
-def annotate_stop(line: str, date: str, why: str,
-                  list_dir=STOCK_LIST_DIR) -> Path:
+def annotate_stop(line: str, date: str, why: str, list_dir=STOCK_LIST_DIR) -> Path:
     """停推夜标注 (2026-09-05 用户: 不标注分不清 "闸停推" 和 "没推成功")。
 
     ① STOPPED_DEADZONE_{date}__{line}.txt 醒目标记 (write-if-absent, 含原因);
@@ -203,10 +212,13 @@ def annotate_stop(line: str, date: str, why: str,
         marker.write_text(
             f"死区停推 {date} ({line}): {why}\n"
             "清单照出, 今晚未入同花顺自选 (只加不删不变; 非推送故障)\n",
-            encoding="utf-8")
+            encoding="utf-8",
+        )
     if line == "top10":
-        banner = (f"\n---\n> ⛔ 死区停推 {date}: {why} — "
-                  "清单照出但今晚不入同花顺自选 (只加不删不变)\n")
+        banner = (
+            f"\n---\n> ⛔ 死区停推 {date}: {why} — "
+            "清单照出但今晚不入同花顺自选 (只加不删不变)\n"
+        )
         for fp in glob.glob(str(d / f"legacy_stocklist_{date}__*.md")):
             if "死区停推" in Path(fp).read_text(encoding="utf-8"):
                 continue

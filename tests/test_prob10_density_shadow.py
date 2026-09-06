@@ -28,12 +28,14 @@ DAY = pd.Timestamp("2026-09-04")
 
 def _cand():
     # main 板 4 只 prob 降序: A>B>C>D; dual 板 2 只 E>F (夹具避开 000xxx 撞码段)
-    return pd.DataFrame({
-        "symbol": ["600001", "600002", "600003", "600004", "300005", "688006"],
-        "board": ["main", "main", "main", "main", "GEM", "STAR"],
-        "prob_up_10d": [0.9, 0.8, 0.7, 0.6, 0.95, 0.85],
-        "pred_ret_10d": [0.10, 0.09, 0.08, 0.07, 0.12, 0.11],
-    })
+    return pd.DataFrame(
+        {
+            "symbol": ["600001", "600002", "600003", "600004", "300005", "688006"],
+            "board": ["main", "main", "main", "main", "GEM", "STAR"],
+            "prob_up_10d": [0.9, 0.8, 0.7, 0.6, 0.95, 0.85],
+            "pred_ret_10d": [0.10, 0.09, 0.08, 0.07, 0.12, 0.11],
+        }
+    )
 
 
 def _panel(symbols, close_last, amount_last, n=12, pull_ok=None):
@@ -67,7 +69,11 @@ def test_prob10_topn_per_board_and_mapping():
     m = prob10_membership(_cand(), DAY)
     assert set(m["board"]) == {"main", "dual"}
     assert list(m[m.board == "main"]["symbol"]) == [
-        "600001", "600002", "600003", "600004"]
+        "600001",
+        "600002",
+        "600003",
+        "600004",
+    ]
     assert list(m[m.board == "dual"]["symbol"]) == ["300005", "688006"]
     assert len(m) == 6
 
@@ -102,11 +108,13 @@ def test_parallel_pred_columns_merged_and_nan_fill():
 
     syms = ["600001", "600002", "600003", "300005"]
     close, amount = _panel(syms, [10.0] * 4, [2e8] * 4)
-    par = pd.DataFrame({
-        "symbol": ["600001", "999999", "600001"],
-        "pred_prob_10d": [0.55, 0.40, 0.56],
-        "pred_mag_10d": [0.08, 0.05, 0.081],
-    })
+    par = pd.DataFrame(
+        {
+            "symbol": ["600001", "999999", "600001"],
+            "pred_prob_10d": [0.55, 0.40, 0.56],
+            "pred_mag_10d": [0.08, 0.05, 0.081],
+        }
+    )
     out = density_picks(_cand(), _hist(), close, amount, DAY, par=par)
     r1 = out[out.symbol == "600001"].iloc[0]
     assert abs(r1["parallel_prob"] - 0.56) < 1e-12  # 同码多行取末行
@@ -144,17 +152,16 @@ def test_csv_percent_display_layer():
     r1 = disp[mask].iloc[0]
     assert r1["legacy_prob"] == "90.00%"
     assert r1["legacy_pred10"] == "10.00%"
-    assert r1["parallel_prob"] == ""      # 缺 raw 文件 → NaN → 空
+    assert r1["parallel_prob"] == ""  # 缺 raw 文件 → NaN → 空
     assert r1["pull"] == "0.00%"
-    assert r1["pctChg"] == "1.50%"        # 不再 ×100
+    assert r1["pctChg"] == "1.50%"  # 不再 ×100
     # 入参保持数值 (机器读/单测口径不变)
     assert abs(float(picks[mask]["legacy_prob"].iloc[0]) - 0.90) < 1e-12
 
 
 def test_density_pull_gate_filters_deep_pull():
     syms = ["600001", "600002", "600003", "300005"]
-    close, amount = _panel(syms, [10.0] * 4, [2e8] * 4,
-                           pull_ok={"600001": False})
+    close, amount = _panel(syms, [10.0] * 4, [2e8] * 4, pull_ok={"600001": False})
     out = density_picks(_cand(), _hist(), close, amount, DAY)
     assert "600001" not in list(out["symbol"])  # 回撤 >10% 被闸
 
@@ -233,16 +240,14 @@ def test_chip_gate_single_sided_direction_kept():
     chip = _chip(**{"600003": 0.05, "300005": 0.0})
     out = density_picks(_cand(), _hist(), close, amount, DAY, chip=chip)
     assert list(out["symbol"]) == ["600001", "600003", "300005"]  # 600002 occ5=1 非闸剔
-    out2 = density_picks(_cand(), _hist(), close, amount, DAY,
-                         chip=chip.iloc[:0])
+    out2 = density_picks(_cand(), _hist(), close, amount, DAY, chip=chip.iloc[:0])
     assert list(out2["symbol"]) == ["600001", "600003", "300005"]
 
 
 def test_apply_wr5_gate_cut_list_and_no_refill():
     """通用闸 (三线共享): 返回 (过滤后 df, 被剔清单); 不补齐 — 行数只减不增."""
     df = pd.DataFrame({"symbol": ["1", "2", "3", "4"]})
-    chip = pd.DataFrame({"symbol": ["000001", "000003"],
-                         "wr5": [-0.10, -0.02]})
+    chip = pd.DataFrame({"symbol": ["000001", "000003"], "wr5": [-0.10, -0.02]})
     out, cut = apply_wr5_gate(df, chip)
     assert cut == ["000001", "000003"]
     assert list(out["symbol"]) == ["2", "4"]  # 不补齐: 4 行变 2 行
@@ -266,8 +271,8 @@ def test_load_chip_features_values_nan_and_failopen(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "CYQ_PATH", str(fp))
     out = load_chip_features(pd.Timestamp("2026-09-04"))
     r1 = out[out.symbol == "600001"].iloc[0]
-    assert abs(r1["wr5"] - 0.10) < 1e-12            # 0.74 − 0.64
-    assert "cost5" not in out.columns               # 09-05 升级: 仅 wr5
+    assert abs(r1["wr5"] - 0.10) < 1e-12  # 0.74 − 0.64
+    assert "cost5" not in out.columns  # 09-05 升级: 仅 wr5
     r3 = out[out.symbol == "600003"].iloc[0]
     assert pd.isna(r3["wr5"])
     monkeypatch.setattr(mod, "CYQ_PATH", str(tmp_path / "nope.parquet"))
@@ -277,6 +282,11 @@ def test_load_chip_features_values_nan_and_failopen(tmp_path, monkeypatch):
 def test_empty_history_occ_never_passes():
     syms = ["600001", "300005"]
     close, amount = _panel(syms, [10.0] * 2, [2e8] * 2)
-    out = density_picks(_cand(), pd.DataFrame(columns=["date", "board", "symbol", "prob"]),
-                        close, amount, DAY)
+    out = density_picks(
+        _cand(),
+        pd.DataFrame(columns=["date", "board", "symbol", "prob"]),
+        close,
+        amount,
+        DAY,
+    )
     assert out.empty  # 无历史 → occ5<3 全剔 (影子冷启动由 bootstrap 兜底)

@@ -1095,6 +1095,7 @@ def _normalize_pred_rows(
     # 2026-08-09 并行交付新增: 全局质量排名 + 10d 制度门标注 (仅 parallel 清单含, legacy/slow_bull 留空)
     out["rank"] = df["rank"] if "rank" in df.columns else None
     out["过门"] = df["过门"] if "过门" in df.columns else None
+
     def _num(col: str):
         # 交付 CSV 百分比显示层 (09-05): "3.21%" → 0.0321 还原数值
         # (看板展示格式化依赖数值; 旧数值文件原样通过)

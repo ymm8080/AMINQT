@@ -32,10 +32,12 @@ from config.settings import PANEL_V3_PATH, STOCK_LIST_DIR
 
 ARM_TOP_N = 10
 MODULE = "a1diff"
-R_WIN = 5   # 差值两腿各 5 个交易日
+R_WIN = 5  # 差值两腿各 5 个交易日
 
 
-def diff_picks(close: pd.DataFrame, day_ts: pd.Timestamp, arm_top_n: int = ARM_TOP_N) -> pd.DataFrame:
+def diff_picks(
+    close: pd.DataFrame, day_ts: pd.Timestamp, arm_top_n: int = ARM_TOP_N
+) -> pd.DataFrame:
     """close = 透视表 (date × symbol, close_hfq) → 当日差值 top10 (纯函数, 可单测).
 
     diff = r5 - r5_prev; 历史不足 R_WIN*2+1 交易日为 NaN 剔除。
@@ -49,14 +51,18 @@ def diff_picks(close: pd.DataFrame, day_ts: pd.Timestamp, arm_top_n: int = ARM_T
     r5 = last / c.iloc[-1 - R_WIN] - 1
     r5p = c.iloc[-1 - R_WIN] / c.iloc[-1 - 2 * R_WIN] - 1
     d = (r5 - r5p).dropna()
-    d = d[~d.index.str.endswith(".BJ")]  # 北交所剔除 (2026-09-04 用户指示, 候选阶段剔, top10 补满)
+    d = d[
+        ~d.index.str.endswith(".BJ")
+    ]  # 北交所剔除 (2026-09-04 用户指示, 候选阶段剔, top10 补满)
     top = d.nlargest(arm_top_n)
-    out = pd.DataFrame({
-        "symbol": top.index,
-        "diff": top.values,
-        "r5": r5.reindex(top.index).values,
-        "r5p": r5p.reindex(top.index).values,
-    }).reset_index(drop=True)
+    out = pd.DataFrame(
+        {
+            "symbol": top.index,
+            "diff": top.values,
+            "r5": r5.reindex(top.index).values,
+            "r5p": r5p.reindex(top.index).values,
+        }
+    ).reset_index(drop=True)
     out.insert(0, "rank", np.arange(1, len(out) + 1))
     return out
 
@@ -83,9 +89,12 @@ def main() -> int:
         return 0
 
     close = pd.read_parquet(
-        PANEL_V3_PATH, columns=["symbol", "date", "close_hfq"],
-        filters=[("date", ">=", day_ts - pd.Timedelta(days=60)),
-                 ("date", "<=", day_ts)],
+        PANEL_V3_PATH,
+        columns=["symbol", "date", "close_hfq"],
+        filters=[
+            ("date", ">=", day_ts - pd.Timedelta(days=60)),
+            ("date", "<=", day_ts),
+        ],
     )
     close["symbol"] = close["symbol"].astype(str).str.zfill(6)
     piv = close.pivot(index="date", columns="symbol", values="close_hfq")

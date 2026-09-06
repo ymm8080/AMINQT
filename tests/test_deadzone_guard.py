@@ -1,6 +1,7 @@
 """死区停推闸 (scripts/_deadzone_guard.py) 单测: V4 状态机 + 前视防护 + fail-open
 + 交付史装载 + 双线接线。参数锁值断言跟 _deadzone_guard 模块头走。
 """
+
 import inspect
 
 import numpy as np
@@ -58,8 +59,7 @@ def test_exit_streak_resets_on_sampleless_day(monkeypatch):
     # 采样断日重置解除计数: day6 无样本 → day5 的 good=1 作废, day8 (30% 死区)
     # 仍属报警; 若不重置, day7 即解除且 30% 死区不重进 → 集合差异可判
     wr = {4: 0.10, 5: 0.50, 7: 0.50, 8: 0.30}
-    monkeypatch.setattr(dz, "rolling_win_rates",
-                        lambda di, win, n: wr)
+    monkeypatch.setattr(dz, "rolling_win_rates", lambda di, win, n: wr)
     out = dz.alarm_indices(np.array([4]), np.array([True]), 9)
     assert out == {4, 8}
 
@@ -86,13 +86,14 @@ def _panel_fp(tmp_path, close: pd.DataFrame) -> str:
 
 def test_settled_outcomes_grid_and_lookahead(tmp_path, monkeypatch):
     dates = pd.bdate_range("2026-01-05", periods=30)
-    close = pd.DataFrame({
-        "symbol": "600000.SH",  # 带后缀 → 裸 6 位归一
-        "date": dates,
-        "close_hfq": [10.0 * (1.02 ** k) for k in range(30)],
-    })
-    monkeypatch.setattr("config.settings.PANEL_V3_PATH",
-                        _panel_fp(tmp_path, close))
+    close = pd.DataFrame(
+        {
+            "symbol": "600000.SH",  # 带后缀 → 裸 6 位归一
+            "date": dates,
+            "close_hfq": [10.0 * (1.02**k) for k in range(30)],
+        }
+    )
+    monkeypatch.setattr("config.settings.PANEL_V3_PATH", _panel_fp(tmp_path, close))
     picks = pd.DataFrame({"date": dates[::2], "symbol": "600000"})
     out, grid = dz._settled_outcomes(picks, dates[-1])
     assert grid == list(dates[::2])
@@ -108,14 +109,15 @@ def test_settled_outcomes_grid_and_lookahead(tmp_path, monkeypatch):
 
 def test_settled_outcomes_loss_and_nan_drop(tmp_path, monkeypatch):
     dates = pd.bdate_range("2026-01-05", periods=20)
-    close = pd.DataFrame({
-        "symbol": ["600000"] * 18 + [None, None],  # 末两日缺价
-        "date": dates,
-        "close_hfq": [10.0] * 18 + [None, None],
-    })
+    close = pd.DataFrame(
+        {
+            "symbol": ["600000"] * 18 + [None, None],  # 末两日缺价
+            "date": dates,
+            "close_hfq": [10.0] * 18 + [None, None],
+        }
+    )
     close["symbol"] = close["symbol"].fillna("600000")
-    monkeypatch.setattr("config.settings.PANEL_V3_PATH",
-                        _panel_fp(tmp_path, close))
+    monkeypatch.setattr("config.settings.PANEL_V3_PATH", _panel_fp(tmp_path, close))
     picks = pd.DataFrame({"date": dates, "symbol": "600000"})
     out, grid = dz._settled_outcomes(picks, dates[-1])
     assert len(grid) == 20
@@ -128,17 +130,21 @@ def test_settled_outcomes_loss_and_nan_drop(tmp_path, monkeypatch):
 def test_load_density_history(tmp_path):
     fp = tmp_path / "prob10dens_20260105__prob10dens.csv"
     pd.DataFrame({"symbol": ["000001", "600000", "ABC123", None]}).to_csv(
-        fp, index=False, encoding="utf-8-sig")
+        fp, index=False, encoding="utf-8-sig"
+    )
     (tmp_path / "prob10dens_bad.csv").write_text("x", encoding="utf-8")
     h = dz.load_density_history(list_dir=tmp_path)
     assert sorted(map(tuple, h.values)) == [
-        ("20260105", "000001"), ("20260105", "600000")]
+        ("20260105", "000001"),
+        ("20260105", "600000"),
+    ]
 
 
 def test_load_top10_history_legacy_glob_and_board_files(tmp_path):
     legacy = tmp_path / "legacy_stocklist_20260105__M1.csv"
     pd.DataFrame({"symbol": [f"60000{k}" for k in range(8)]}).to_csv(
-        legacy, index=False)
+        legacy, index=False
+    )
     # 板级旧命名 (legacy_stocklist_main_日期) 不该被日期正则收进
     board = tmp_path / "legacy_stocklist_main_20260101__X.csv"
     pd.DataFrame({"symbol": ["300001"]}).to_csv(board, index=False)
@@ -155,18 +161,20 @@ def _loader_picks(dates):
 
 def _flat_or_rising_panel(tmp_path, growth):
     dates = pd.bdate_range("2026-01-05", periods=30)
-    close = pd.DataFrame({
-        "symbol": "600000", "date": dates,
-        "close_hfq": [10.0 * (growth ** k) for k in range(30)],
-    })
+    close = pd.DataFrame(
+        {
+            "symbol": "600000",
+            "date": dates,
+            "close_hfq": [10.0 * (growth**k) for k in range(30)],
+        }
+    )
     return dates, _panel_fp(tmp_path, close)
 
 
 def test_is_alarm_true_in_dead_stretch(tmp_path, monkeypatch):
     dates, fp = _flat_or_rising_panel(tmp_path, 1.0)  # 平价 → 全输
     monkeypatch.setattr("config.settings.PANEL_V3_PATH", fp)
-    monkeypatch.setitem(dz._LOADERS, "prob10dens",
-                        lambda: _loader_picks(dates))
+    monkeypatch.setitem(dz._LOADERS, "prob10dens", lambda: _loader_picks(dates))
     ok, why = dz.is_alarm("prob10dens", dates[-1].strftime("%Y%m%d"))
     assert ok is True
     assert "报警线" in why
@@ -175,8 +183,7 @@ def test_is_alarm_true_in_dead_stretch(tmp_path, monkeypatch):
 def test_is_alarm_false_in_healthy_stretch(tmp_path, monkeypatch):
     dates, fp = _flat_or_rising_panel(tmp_path, 1.02)  # 全赢
     monkeypatch.setattr("config.settings.PANEL_V3_PATH", fp)
-    monkeypatch.setitem(dz._LOADERS, "prob10dens",
-                        lambda: _loader_picks(dates))
+    monkeypatch.setitem(dz._LOADERS, "prob10dens", lambda: _loader_picks(dates))
     ok, why = dz.is_alarm("prob10dens", dates[-1].strftime("%Y%m%d"))
     assert ok is False
     assert "未达报警线" in why
@@ -185,8 +192,9 @@ def test_is_alarm_false_in_healthy_stretch(tmp_path, monkeypatch):
 def test_is_alarm_failopen_paths(tmp_path, monkeypatch):
     dates, fp = _flat_or_rising_panel(tmp_path, 1.0)
     monkeypatch.setattr("config.settings.PANEL_V3_PATH", fp)
-    monkeypatch.setitem(dz._LOADERS, "prob10dens",
-                        lambda: pd.DataFrame(columns=["date", "symbol"]))
+    monkeypatch.setitem(
+        dz._LOADERS, "prob10dens", lambda: pd.DataFrame(columns=["date", "symbol"])
+    )
     ok, why = dz.is_alarm("prob10dens", dates[-1].strftime("%Y%m%d"))
     assert ok is False and "完结样本不足" in why
 
@@ -207,8 +215,9 @@ def test_is_alarm_disabled(monkeypatch):
 def test_annotate_stop_marker_and_md_banner(tmp_path):
     md = tmp_path / "legacy_stocklist_20260105__M1.md"
     md.write_text("# 清单 20260105\n600000\n", encoding="utf-8")
-    mk = dz.annotate_stop("top10", "20260105", "滚动赢率 18.9% < 25%",
-                          list_dir=tmp_path)
+    mk = dz.annotate_stop(
+        "top10", "20260105", "滚动赢率 18.9% < 25%", list_dir=tmp_path
+    )
     assert mk.name == "STOPPED_DEADZONE_20260105__top10.txt"
     assert "18.9%" in mk.read_text(encoding="utf-8")
     assert "非推送故障" in mk.read_text(encoding="utf-8")
@@ -216,14 +225,14 @@ def test_annotate_stop_marker_and_md_banner(tmp_path):
     assert text.count("死区停推") == 1
     assert "18.9%" in text
     # 重跑幂等: 标记不重建不报错, 横幅不重复追加
-    dz.annotate_stop("top10", "20260105", "滚动赢率 18.9% < 25%",
-                     list_dir=tmp_path)
+    dz.annotate_stop("top10", "20260105", "滚动赢率 18.9% < 25%", list_dir=tmp_path)
     assert md.read_text(encoding="utf-8").count("死区停推") == 1
 
 
 def test_annotate_stop_density_line_no_md(tmp_path):
-    mk = dz.annotate_stop("prob10dens", "20260105", "滚动赢率 20.0% < 25%",
-                          list_dir=tmp_path)
+    mk = dz.annotate_stop(
+        "prob10dens", "20260105", "滚动赢率 20.0% < 25%", list_dir=tmp_path
+    )
     assert mk.exists()
     # 密度线无 legacy md 可挂横幅 → 不产生任何 md
     assert not list(tmp_path.glob("*.md"))
@@ -232,8 +241,12 @@ def test_annotate_stop_density_line_no_md(tmp_path):
 def test_write_push_result_note_overrides_all_rows(tmp_path):
     from scripts._ths_watchlist_push import write_push_result
 
-    fp = write_push_result(tmp_path / "ths_watchlist_20260105__deadzone.txt",
-                           ["600000", "000001"], ["600000"], note="deadzone")
+    fp = write_push_result(
+        tmp_path / "ths_watchlist_20260105__deadzone.txt",
+        ["600000", "000001"],
+        ["600000"],
+        note="deadzone",
+    )
     assert fp.name == "ths_push_result_20260105__deadzone.csv"
     import pandas as pd
 
@@ -258,5 +271,6 @@ def test_wiring_call_sites():
     assert 'annotate_stop("prob10dens"' in src_dens
     assert 'note="deadzone"' in src_dens
     # 闸在 txt 写出之前 (报警夜不落 ths_watchlist txt, flush guard 不会误动)
-    assert (src_dens.index('is_alarm("prob10dens"')
-            < src_dens.index("ths_watchlist_{date}__{MODULE}.txt"))
+    assert src_dens.index('is_alarm("prob10dens"') < src_dens.index(
+        "ths_watchlist_{date}__{MODULE}.txt"
+    )

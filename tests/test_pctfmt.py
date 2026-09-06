@@ -26,8 +26,7 @@ def test_fmt_multiplies_ratio_and_appends_pct():
 
 def test_fmt_already_pct_cols_skip_multiply():
     df = pd.DataFrame({"pctChg": [-3.105590, 1.285347], "pred_prob_10d": [0.78, 0.6]})
-    out = fmt_pct_columns(df, ("pctChg", "pred_prob_10d"),
-                          already_pct_cols=("pctChg",))
+    out = fmt_pct_columns(df, ("pctChg", "pred_prob_10d"), already_pct_cols=("pctChg",))
     assert list(out["pctChg"]) == ["-3.11%", "1.29%"]  # 只加 % 不 ×100
     assert list(out["pred_prob_10d"]) == ["78.00%", "60.00%"]
 
@@ -74,10 +73,12 @@ def test_mixed_generation_files_concat(tmp_path):
     old.to_csv(tmp_path / "parallel_shortlist_20260901__A.csv", index=False)
     new.to_csv(tmp_path / "parallel_shortlist_20260902__B.csv", index=False)
     parts = [
-        pd.read_csv(tmp_path / "parallel_shortlist_20260901__A.csv",
-                    dtype={"symbol": str}),
-        pd.read_csv(tmp_path / "parallel_shortlist_20260902__B.csv",
-                    dtype={"symbol": str}),
+        pd.read_csv(
+            tmp_path / "parallel_shortlist_20260901__A.csv", dtype={"symbol": str}
+        ),
+        pd.read_csv(
+            tmp_path / "parallel_shortlist_20260902__B.csv", dtype={"symbol": str}
+        ),
     ]
     df = pd.concat(parts, ignore_index=True)
     df["pred_prob_10d"] = df["pred_prob_10d"].map(parse_pct)

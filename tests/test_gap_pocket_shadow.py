@@ -34,10 +34,18 @@ def _frames():
             v[k] = val
         return v
 
-    a = close({i0: 11.0, i0 + 1: 11.1, i0 + 2: 11.2, i0 + 3: 11.3, i0 + 4: 11.4})   # 合格
-    b = close({i0: 11.0, i0 + 1: 10.9, i0 + 2: 10.8, i0 + 3: 10.7, i0 + 4: 10.6})   # 守板 fail
-    c = close({i0: 11.0, i0 + 1: 11.1, i0 + 2: 12.2, i0 + 3: 12.3, i0 + 4: 12.4})   # 再板 fail
-    d = close({i0: 11.0, i0 + 1: 11.05, i0 + 2: 11.1, i0 + 3: 11.15, i0 + 4: 11.2})  # 缩量 fail
+    a = close(
+        {i0: 11.0, i0 + 1: 11.1, i0 + 2: 11.2, i0 + 3: 11.3, i0 + 4: 11.4}
+    )  # 合格
+    b = close(
+        {i0: 11.0, i0 + 1: 10.9, i0 + 2: 10.8, i0 + 3: 10.7, i0 + 4: 10.6}
+    )  # 守板 fail
+    c = close(
+        {i0: 11.0, i0 + 1: 11.1, i0 + 2: 12.2, i0 + 3: 12.3, i0 + 4: 12.4}
+    )  # 再板 fail
+    d = close(
+        {i0: 11.0, i0 + 1: 11.05, i0 + 2: 11.1, i0 + 3: 11.15, i0 + 4: 11.2}
+    )  # 缩量 fail
 
     def pct_of(board_days):
         v = np.full(N, 0.5)
@@ -45,16 +53,32 @@ def _frames():
             v[k] = 10.0
         return v
 
-    pct = pd.DataFrame({"600001": pct_of([i0]), "600002": pct_of([i0]),
-                        "600003": pct_of([i0, i0 + 2]), "600004": pct_of([i0])}, index=idx)
-    close_df = pd.DataFrame({"600001": a, "600002": b, "600003": c, "600004": d}, index=idx)
+    pct = pd.DataFrame(
+        {
+            "600001": pct_of([i0]),
+            "600002": pct_of([i0]),
+            "600003": pct_of([i0, i0 + 2]),
+            "600004": pct_of([i0]),
+        },
+        index=idx,
+    )
+    close_df = pd.DataFrame(
+        {"600001": a, "600002": b, "600003": c, "600004": d}, index=idx
+    )
     # A/B/C 近3日均量 0.4×首板量 (缩量过); D 全程 3e8 → dry=1.0 fail
-    amt = pd.DataFrame({
-        col: np.r_[np.full(i0, 1e8), 3e8, np.full(N - i0 - 1, 1.2e8)]
-        for col in ("600001", "600002", "600003")}, index=idx)
+    amt = pd.DataFrame(
+        {
+            col: np.r_[np.full(i0, 1e8), 3e8, np.full(N - i0 - 1, 1.2e8)]
+            for col in ("600001", "600002", "600003")
+        },
+        index=idx,
+    )
     amt["600004"] = 3e8
-    tov = pd.DataFrame(np.full((N, 4), 5.0), index=idx,
-                       columns=["600001", "600002", "600003", "600004"])
+    tov = pd.DataFrame(
+        np.full((N, 4), 5.0),
+        index=idx,
+        columns=["600001", "600002", "600003", "600004"],
+    )
     return close_df, pct, amt, tov
 
 
@@ -66,16 +90,16 @@ def _single(d):
     v[i0:] = np.linspace(11.0, 11.0 + 0.1 * d, d + 1)
     close_df = pd.DataFrame({"600100": v}, index=idx)
     pct = pd.DataFrame({"600100": np.where(np.arange(N) == i0, 10.0, 0.5)}, index=idx)
-    amt = pd.DataFrame({"600100": np.r_[np.full(i0, 1e8), 3e8,
-                                        np.full(N - i0 - 1, 1.2e8)]}, index=idx)
+    amt = pd.DataFrame(
+        {"600100": np.r_[np.full(i0, 1e8), 3e8, np.full(N - i0 - 1, 1.2e8)]}, index=idx
+    )
     tov = pd.DataFrame({"600100": np.full(N, 5.0)}, index=idx)
     return close_df, pct, amt, tov
 
 
 def _call(frames, day_ts=None, **kw):
     close_df, pct, amt, tov = frames
-    return gap_pocket_picks(close_df, pct, amt, tov,
-                            day_ts or close_df.index[-1], **kw)
+    return gap_pocket_picks(close_df, pct, amt, tov, day_ts or close_df.index[-1], **kw)
 
 
 def test_picks_only_qualified_pool():
@@ -91,7 +115,7 @@ def test_rank_is_bias_descending():
     close_df, pct, amt, tov = f
     # 加一只 bias 更热的合格票 (底价相同、板上翻更高) → 应排第 1
     hot = np.full(N, 10.0)
-    hot[N - 4:] = 12.5  # r10 = 0.25 过闸; bias ≈ 0.229 > 600001 的 0.129
+    hot[N - 4 :] = 12.5  # r10 = 0.25 过闸; bias ≈ 0.229 > 600001 的 0.129
     close_df["600005"] = hot
     pct["600005"] = np.where(np.arange(N) == N - 4, 10.0, 0.5)
     amt["600005"] = np.r_[np.full(N - 4, 1e8), 3e8, np.full(3, 1.2e8)]
@@ -143,7 +167,7 @@ def test_top_n_cap():
         i0 = N - 1 - 3 - (k % 5)  # d ∈ 3..7 分散
         v = np.full(N, 10.0)
         v[i0] = 11.0
-        v[i0 + 1:] = 11.011
+        v[i0 + 1 :] = 11.011
         close_df[col] = v
         pct[col] = np.where(np.arange(N) == i0, 10.0, 0.5)
         amt[col] = np.r_[np.full(i0, 1e8), 3e8, np.full(N - i0 - 1, 1.2e8)]
@@ -157,8 +181,13 @@ def test_top_n_cap():
 
 def test_short_history_empty():
     close_df, pct, amt, tov = _frames()
-    out = gap_pocket_picks(close_df.iloc[:30], pct.iloc[:30], amt.iloc[:30],
-                           tov.iloc[:30], close_df.index[29])
+    out = gap_pocket_picks(
+        close_df.iloc[:30],
+        pct.iloc[:30],
+        amt.iloc[:30],
+        tov.iloc[:30],
+        close_df.index[29],
+    )
     assert out.empty
     assert list(out.columns) == ["rank", "symbol", "d", "dry", "pull", "r10", "tov"]
 
@@ -166,8 +195,9 @@ def test_short_history_empty():
 def test_uses_only_history_up_to_day_ts():
     close_df, pct, amt, tov = _frames()
     ts = close_df.index[-1]
-    out = gap_pocket_picks(close_df.iloc[:-1], pct.iloc[:-1], amt.iloc[:-1],
-                           tov.iloc[:-1], ts)  # 截断窗内 d=3 仍可判
+    out = gap_pocket_picks(
+        close_df.iloc[:-1], pct.iloc[:-1], amt.iloc[:-1], tov.iloc[:-1], ts
+    )  # 截断窗内 d=3 仍可判
     assert set(out["symbol"]).issubset({"600001", "600002", "600003", "600004"})
 
 

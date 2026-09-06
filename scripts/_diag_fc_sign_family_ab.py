@@ -108,7 +108,11 @@ def asof_days_since(panel: pd.DataFrame, events: pd.DataFrame) -> pd.Series:
         "evt_date", kind="stable"
     )
     m = pd.merge_asof(
-        left, ev, by="symbol", left_on="date", right_on="evt_date",
+        left,
+        ev,
+        by="symbol",
+        left_on="date",
+        right_on="evt_date",
         direction="backward",
     )
     days = (m["date"] - m["evt_date"]).dt.days.astype("float64")
@@ -197,7 +201,9 @@ def _top10_indices(blend: np.ndarray, dv: np.ndarray, eval_days: np.ndarray) -> 
     return picks
 
 
-def _daily_metrics(picks: list, eval_days, sym, net3, net10, fc_neg, winners) -> pd.DataFrame:
+def _daily_metrics(
+    picks: list, eval_days, sym, net3, net10, fc_neg, winners
+) -> pd.DataFrame:
     rows = []
     for d, idx in zip(eval_days, picks):
         n3 = net3[idx]
@@ -212,7 +218,9 @@ def _daily_metrics(picks: list, eval_days, sym, net3, net10, fc_neg, winners) ->
                 "net10": float(net10[idx][np.isfinite(net10[idx])].mean()),
                 "hit3": float((n3 > 0).mean()) if len(n3) else np.nan,
                 "winner_overlap": in_win,
-                "fc_neg_capture": int(((fcn >= NEG_WIN[0]) & (fcn <= NEG_WIN[1])).sum()),
+                "fc_neg_capture": int(
+                    ((fcn >= NEG_WIN[0]) & (fcn <= NEG_WIN[1])).sum()
+                ),
             }
         )
     return pd.DataFrame(rows)
@@ -257,9 +265,7 @@ def process_board(
     gc.collect()
     print(f"[{board}] scored {len(scored):,}r ({time.time() - t0:.0f}s)", flush=True)
 
-    sub = (
-        df.set_index("_rid").loc[scored["_rid"].to_numpy()].reset_index(drop=True)
-    )
+    sub = df.set_index("_rid").loc[scored["_rid"].to_numpy()].reset_index(drop=True)
     del df
     gc.collect()
     if len(sub) != len(scored):
@@ -319,9 +325,7 @@ def process_board(
     daily = []
     for arm in ("base", "fam"):
         picks = _top10_indices(blend[arm], dv, eval_d64)
-        m = _daily_metrics(
-            picks, eval_days, syms, net3, net10, fc_neg_days, winners
-        )
+        m = _daily_metrics(picks, eval_days, syms, net3, net10, fc_neg_days, winners)
         m["arm"] = arm
         m["board"] = board
         daily.append(m)
@@ -344,7 +348,8 @@ def _half_deltas(daily: pd.DataFrame) -> dict:
             "d_net3_h2": float(d.iloc[h:].mean()),
             "d_net10": float(
                 (
-                    g.pivot(index="date", columns="arm", values="net10").dropna()
+                    g.pivot(index="date", columns="arm", values="net10")
+                    .dropna()
                     .pipe(lambda x: x["fam"] - x["base"])
                 ).mean()
             ),
@@ -365,13 +370,9 @@ def _verdict(deltas: dict) -> dict:
         board_pass[b] = d["d_net3_h1"] > 0 and d["d_net3_h2"] > 0
     pos_boards = [b for b, ok in board_pass.items() if ok]
     neg_boards = [
-        b
-        for b, d in deltas.items()
-        if d["d_net3_h1"] < 0 and d["d_net3_h2"] < 0
+        b for b, d in deltas.items() if d["d_net3_h1"] < 0 and d["d_net3_h2"] < 0
     ]
-    cap_ok = all(
-        deltas[b]["cap_fam"] >= deltas[b]["cap_base"] - 1e-9 for b in deltas
-    )
+    cap_ok = all(deltas[b]["cap_fam"] >= deltas[b]["cap_base"] - 1e-9 for b in deltas)
     gate = bool(pos_boards) and not neg_boards and cap_ok
     return {
         "gate": gate,
@@ -393,7 +394,10 @@ def main() -> int:
     print(f"[slice] {args.slice}d cutoff={pd.Timestamp(cutoff).date()}", flush=True)
 
     px, cal = _panel_pivots(cutoff)
-    print(f"[pivot] {len(px)} syms x {len(cal)} days ({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[pivot] {len(px)} syms x {len(cal)} days ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     ev_all, ev_neg = load_fc_events()
     print(
         f"[fc] events all={len(ev_all):,} neg={len(ev_neg):,} "
@@ -442,8 +446,11 @@ def main() -> int:
         json.dumps(report, indent=2, ensure_ascii=False, default=str),
         encoding="utf-8",
     )
-    print(f"[saved] {out_dir}\\fc_sign_family_ab_{ts}.json + .parquet "
-          f"({time.time() - t0:.0f}s)", flush=True)
+    print(
+        f"[saved] {out_dir}\\fc_sign_family_ab_{ts}.json + .parquet "
+        f"({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     print("=== DONE ===")
     return 0
 

@@ -90,14 +90,16 @@ def collect_lists(
         df = pd.read_csv(parallel, dtype={"symbol": str})
         if "rank" in df.columns:
             df = df.dropna(subset=["rank"]).sort_values("rank")
-        lists.append((f"parallel__{_module_of(parallel)}",
-                      _valid_codes(df["symbol"])[:top_n]))
+        lists.append(
+            (f"parallel__{_module_of(parallel)}", _valid_codes(df["symbol"])[:top_n])
+        )
 
     legacy = _newest(f"legacy_stocklist_{date}__*.csv", list_dir)
     if legacy is not None:
         df = pd.read_csv(legacy, dtype={"symbol": str})
-        lists.append((f"legacy__{_module_of(legacy)}",
-                      _valid_codes(df["symbol"])[:top_n]))
+        lists.append(
+            (f"legacy__{_module_of(legacy)}", _valid_codes(df["symbol"])[:top_n])
+        )
 
     if not lists:
         raise SystemExit(f"无清单: parallel/legacy_stocklist_{date}__*.csv")
@@ -130,8 +132,7 @@ RETRY_PASTE = 3
 INDEX_TAG_X0, INDEX_TAG_X1 = 285, 331
 # 核验失败现场存档目录 (测试须重定向到 tmp_path — 09-05 单测曾把 10x10 零图
 # dump 进真实 tmp_t, 覆盖丢失 probe5 实弹 forensic 存档 idxchk1.png)
-FAIL_DUMP_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "tmp_t")
+FAIL_DUMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tmp_t")
 
 
 def _row_is_index(band: np.ndarray) -> bool:
@@ -225,13 +226,19 @@ def _ensure_dialog_rows_checked(
         if rnd:
             time.sleep(1.0)
         img, rows = _grab()
-        log(f"[ths] round {rnd + 1}: "
-            + " ".join(f"y{yc}/{'勾' if ck else '空'}/{'指' if ix else '股'}"
-                       for yc, ck, ix in rows)
-            + f" (期望 {len(row_codes)} 行)")
+        log(
+            f"[ths] round {rnd + 1}: "
+            + " ".join(
+                f"y{yc}/{'勾' if ck else '空'}/{'指' if ix else '股'}"
+                for yc, ck, ix in rows
+            )
+            + f" (期望 {len(row_codes)} 行)"
+        )
         if len(rows) != len(row_codes):
-            log(f"[ths] 对话框行数 {len(rows)} != 期望 {len(row_codes)} "
-                f"(round {rnd + 1})")
+            log(
+                f"[ths] 对话框行数 {len(rows)} != 期望 {len(row_codes)} "
+                f"(round {rnd + 1})"
+            )
             _dump_fail(img, f"rowcount_{len(row_codes)}_got{len(rows)}")
             continue
         for (yc, _ck, ix), rc in zip(rows, row_codes):
@@ -240,14 +247,20 @@ def _ensure_dialog_rows_checked(
         # 指数行按位序识别 (None 槽位): 09-05 实弹 "中证" 标签深灰非红字,
         # 红字判据从未实检命中过指数行; 垫批死位 09-03 v8 + 09-05 retry9 两次
         # 复现. None 槽位行/红 tag 行已勾 → 无法取消, 点加入连指数入自选 → 拒
-        index_checked = [y0 + yc for (yc, ck, ix), rc in zip(rows, row_codes)
-                         if (rc is None or ix) and ck]
+        index_checked = [
+            y0 + yc
+            for (yc, ck, ix), rc in zip(rows, row_codes)
+            if (rc is None or ix) and ck
+        ]
         if index_checked:
             log(f"[ths] 指数行已勾 {len(index_checked)} 行 (无法取消), 不点加入")
             _dump_fail(img, f"idxchk{len(index_checked)}")
             return None
-        unchecked = [y0 + yc for (yc, ck, ix), rc in zip(rows, row_codes)
-                     if rc is not None and not ix and not ck]
+        unchecked = [
+            y0 + yc
+            for (yc, ck, ix), rc in zip(rows, row_codes)
+            if rc is not None and not ix and not ck
+        ]
         if not unchecked:
             return {rc: True for rc in row_codes if rc is not None}
         for ay in unchecked:
@@ -255,34 +268,35 @@ def _ensure_dialog_rows_checked(
             auto.Click(r.left + 150, ay)  # 点行文字选中 (非勾选框)
             time.sleep(0.4)
             img2, rows2 = _grab()
-            still = [y for y, ck, ix in rows2
-                     if not ix and abs(y0 + y - ay) <= 3 and not ck]
+            still = [
+                y for y, ck, ix in rows2 if not ix and abs(y0 + y - ay) <= 3 and not ck
+            ]
             if not still:
                 log(f"[ths] 点击行文字 ({r.left + 150},{ay}) → 已勾")
                 continue
             auto.SendKeys("{Space}")  # 空格切换选中行勾选
             time.sleep(0.5)
             img3, rows3 = _grab()
-            still = [y for y, ck, ix in rows3
-                     if not ix and abs(y0 + y - ay) <= 3 and not ck]
-            log(f"[ths] 点击行文字+Space y={ay} → "
-                + ("仍未勾" if still else "已勾"))
+            still = [
+                y for y, ck, ix in rows3 if not ix and abs(y0 + y - ay) <= 3 and not ck
+            ]
+            log(f"[ths] 点击行文字+Space y={ay} → " + ("仍未勾" if still else "已勾"))
     # 重查耗尽: 终检一次, 行数/位序可映射就交现状 (部分勾选也是净进展)
     img, rows = _grab()
     if len(rows) != len(row_codes):
         log(f"[ths] 终检行数 {len(rows)} != 期望 {len(row_codes)}")
         _dump_fail(img, f"final_rowcount_{len(row_codes)}_got{len(rows)}")
         return None
-    if any((rc is None or ix) and ck
-           for (yc, ck, ix), rc in zip(rows, row_codes)):
+    if any((rc is None or ix) and ck for (yc, ck, ix), rc in zip(rows, row_codes)):
         log("[ths] 终检指数行已勾, 不点加入")
         _dump_fail(img, "final_idxchk")
         return None
-    out = {rc: bool(ck) for (yc, ck, ix), rc in zip(rows, row_codes)
-           if rc is not None}
+    out = {rc: bool(ck) for (yc, ck, ix), rc in zip(rows, row_codes) if rc is not None}
     if not all(out.values()):
-        log(f"[ths] 重查耗尽仍未勾 {sum(1 for g in out.values() if not g)} 只 "
-            "(部分勾选先落袋, 缺的重贴重试)")
+        log(
+            f"[ths] 重查耗尽仍未勾 {sum(1 for g in out.values() if not g)} 只 "
+            "(部分勾选先落袋, 缺的重贴重试)"
+        )
     return out
 
 
@@ -327,14 +341,17 @@ def _result_path(txt_path) -> Path:
     ths_push_result_20260903__09__parallel__M1.csv"""
     p = Path(txt_path)
     return p.with_name(
-        p.name.replace("ths_watchlist_", "ths_push_result_", 1)
-        .replace(".txt", ".csv")
+        p.name.replace("ths_watchlist_", "ths_push_result_", 1).replace(".txt", ".csv")
     )
 
 
-def write_push_result(txt_path, codes: list[str], landed: list[str],
-                      blocked: bool = False,
-                      note: str | None = None) -> Path:
+def write_push_result(
+    txt_path,
+    codes: list[str],
+    landed: list[str],
+    blocked: bool = False,
+    note: str | None = None,
+) -> Path:
     """推送结果单 (2026-09-05 用户: 缺码要能一眼看到): 每码一行 symbol,status.
 
     status: landed=核验勾选+点加入落袋 / manual=试过但终态缺 (需手动加) /
@@ -375,7 +392,7 @@ def read_push_results(date: str | None = None, list_dir=STOCK_LIST_DIR):
         if not hits:
             return pd.DataFrame(columns=cols)
         newest = max(os.path.basename(h) for h in hits)
-        date = newest[len("ths_push_result_"):].split("__", 1)[0]
+        date = newest[len("ths_push_result_") :].split("__", 1)[0]
     pats = sorted(
         _glob.glob(str(Path(list_dir) / f"ths_push_result_{date}__*.csv")),
         key=os.path.getmtime,
@@ -385,10 +402,9 @@ def read_push_results(date: str | None = None, list_dir=STOCK_LIST_DIR):
     # prob10dens 无批次串 → 单段
     newest_by_src: dict[str, str] = {}
     for fp in pats:  # mtime 升序 → 后写覆盖, 每源留最新
-        tag = os.path.basename(fp)[len("ths_push_result_"): -len(".csv")]
+        tag = os.path.basename(fp)[len("ths_push_result_") : -len(".csv")]
         rest = tag.split("__")[1:]  # 首段=日期
-        src = (rest[1] if len(rest) > 1 and re.fullmatch(r"\d{2}", rest[0])
-               else rest[0])
+        src = rest[1] if len(rest) > 1 and re.fullmatch(r"\d{2}", rest[0]) else rest[0]
         newest_by_src[src] = fp
     frames = []
     for src, fp in newest_by_src.items():
@@ -496,11 +512,14 @@ def push_via_ths(txt_path, dry_run: bool = False) -> bool:
         if sweep:
             # 补推轮开头重查空闲闸: 用户回座立即中止 — 键盘路线绝不与用户抢机器
             if not ui.ensure_idle(what="缺码补推循环"):
-                print(f"[ths] 用户回座, 补推中止 "
-                      f"(已落袋 {len(set(landed))}/{len(codes)})")
+                print(
+                    f"[ths] 用户回座, 补推中止 (已落袋 {len(set(landed))}/{len(codes)})"
+                )
                 break
-            print(f"[ths] 补推第 {sweep + 1}/{PUSH_SWEEPS} 轮, 缺 {len(pending)}: "
-                  + " ".join(pending))
+            print(
+                f"[ths] 补推第 {sweep + 1}/{PUSH_SWEEPS} 轮, 缺 {len(pending)}: "
+                + " ".join(pending)
+            )
             auto.SetClipboardText(FLUSH_STR)
             time.sleep(0.8)
             dlg = fresh_dialog()
@@ -534,8 +553,10 @@ def push_via_ths(txt_path, dry_run: bool = False) -> bool:
                 time.sleep(2.5 + 0.5 * len(row_codes))
                 res = _ensure_dialog_rows_checked(dlg, row_codes)
                 if res is None:
-                    print(f"[ths] 批次 {ci + 1} 第 {attempt + 1}/{RETRY_PASTE} 次"
-                          "核验不可加, 不点加入")
+                    print(
+                        f"[ths] 批次 {ci + 1} 第 {attempt + 1}/{RETRY_PASTE} 次"
+                        "核验不可加, 不点加入"
+                    )
                     continue
                 good = [c for c, g in res.items() if g]
                 bad = [c for c, g in res.items() if not g]
@@ -549,15 +570,19 @@ def push_via_ths(txt_path, dry_run: bool = False) -> bool:
                 if not bad:
                     joined_all = True
                     break
-                print(f"[ths] 批次 {ci + 1} 第 {attempt + 1}/{RETRY_PASTE} 次 "
-                      f"入 {len(good)} 缺 {len(bad)}: {' '.join(bad)}")
+                print(
+                    f"[ths] 批次 {ci + 1} 第 {attempt + 1}/{RETRY_PASTE} 次 "
+                    f"入 {len(good)} 缺 {len(bad)}: {' '.join(bad)}"
+                )
                 if not n_collide:
                     row_codes = bad  # 纯批: 下轮只贴缺的
             if not joined_all:
                 missing = [c for c in chunk if c not in landed]
                 if missing:
-                    print(f"[ths] 批次 {ci + 1} 未入自选 {len(missing)} 只 "
-                          f"(需手动加): {' '.join(missing)}")
+                    print(
+                        f"[ths] 批次 {ci + 1} 未入自选 {len(missing)} 只 "
+                        f"(需手动加): {' '.join(missing)}"
+                    )
                 # 撞码批失败只弃该批 (垫码在普通批已入); 纯批缺码留给补推轮重扫
                 continue
 
@@ -581,20 +606,30 @@ def push_via_ths(txt_path, dry_run: bool = False) -> bool:
     missing = [c for c in codes if c not in landed_grid]
     ok = not missing
     if ok:
-        print(f"[ths] 已核验加入自选股 ({len(landed_grid)}/{len(codes)} 只), "
-              "云同步稍后到手机")
+        print(
+            f"[ths] 已核验加入自选股 ({len(landed_grid)}/{len(codes)} 只), "
+            "云同步稍后到手机"
+        )
     else:
-        print(f"[ths] 网格核验在位 {len(landed_grid)}/{len(codes)}"
-              + (f": {' '.join(landed_grid)}" if landed_grid else ""))
-        hint = ("; 对话框曾核验但网格未见 → 疑似掉登录 (加入无效果), "
-                "登录后重推" if dlg_landed and not landed_grid else
-                "; 同轮已有他码落袋, 会话在活 — 属勾选判读假阳性, 已多轮重贴"
-                if dlg_landed else "")
-        print(f"[ths] 未入自选 {len(missing)} 只 (需手动加): "
-              + " ".join(missing) + hint)
+        print(
+            f"[ths] 网格核验在位 {len(landed_grid)}/{len(codes)}"
+            + (f": {' '.join(landed_grid)}" if landed_grid else "")
+        )
+        hint = (
+            "; 对话框曾核验但网格未见 → 疑似掉登录 (加入无效果), 登录后重推"
+            if dlg_landed and not landed_grid
+            else "; 同轮已有他码落袋, 会话在活 — 属勾选判读假阳性, 已多轮重贴"
+            if dlg_landed
+            else ""
+        )
+        print(
+            f"[ths] 未入自选 {len(missing)} 只 (需手动加): " + " ".join(missing) + hint
+        )
     fp = write_push_result(txt_path, codes, landed_grid)
-    print(f"[ths] 结果单 {os.path.basename(fp)} "
-          f"(落袋 {len(set(landed_grid))} / 缺 {len(missing)})")
+    print(
+        f"[ths] 结果单 {os.path.basename(fp)} "
+        f"(落袋 {len(set(landed_grid))} / 缺 {len(missing)})"
+    )
     return ok
 
 
@@ -623,11 +658,14 @@ def main() -> int:
         if not gen_only and not dry_run:
             all_codes = sorted({c for _, codes in lists for c in codes})
             _deadzone_guard.annotate_stop("top10", date, why)
-            write_push_result(ths_txt_path(date, "deadzone"), all_codes,
-                              [], note="deadzone")
+            write_push_result(
+                ths_txt_path(date, "deadzone"), all_codes, [], note="deadzone"
+            )
             print("[deadzone] 今晚停推: 不写 txt 不加自选 (清单照出, 只加不删不受影响)")
-            print("[deadzone] 已标注: STOPPED_DEADZONE 标记 + 清单 md 横幅"
-                  " + 推送结果单 status=deadzone (与没推成功区分)")
+            print(
+                "[deadzone] 已标注: STOPPED_DEADZONE 标记 + 清单 md 横幅"
+                " + 推送结果单 status=deadzone (与没推成功区分)"
+            )
             return 0
     if not gen_only and not THS_HEXIN_PATH.exists():
         print(f"[warn] 同花顺客户端不存在: {THS_HEXIN_PATH}")

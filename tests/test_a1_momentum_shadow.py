@@ -15,11 +15,12 @@ from scripts._a1_momentum_shadow import R_WIN, diff_picks
 def _close(n: int = 15) -> pd.DataFrame:
     """可人工判读收盘矩阵: A 后5日+20% / B 前5日+40%后平 / C 加速上行 / D 平后小跌."""
     idx = pd.date_range("2026-01-01", periods=n, freq="B")
-    a = np.concatenate([np.full(n - 5, 10.0), np.full(5, 12.0)])          # diff=+0.20
-    b = np.concatenate([np.full(n - 10, 10.0), np.full(10, 14.0)])[:n]    # diff=-0.40
-    c = np.concatenate([np.full(n - 10, 10.0), np.full(5, 10.5),
-                        np.full(5, 11.55)])[:n]                           # diff=+0.05
-    d = np.concatenate([np.full(n - 5, 10.0), np.full(5, 9.5)])           # diff=-0.05
+    a = np.concatenate([np.full(n - 5, 10.0), np.full(5, 12.0)])  # diff=+0.20
+    b = np.concatenate([np.full(n - 10, 10.0), np.full(10, 14.0)])[:n]  # diff=-0.40
+    c = np.concatenate([np.full(n - 10, 10.0), np.full(5, 10.5), np.full(5, 11.55)])[
+        :n
+    ]  # diff=+0.05
+    d = np.concatenate([np.full(n - 5, 10.0), np.full(5, 9.5)])  # diff=-0.05
     return pd.DataFrame({"600001": a, "600002": b, "600003": c, "600004": d}, index=idx)
 
 

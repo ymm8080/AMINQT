@@ -40,7 +40,14 @@ THU, FRI = _dt.date(2026, 8, 13), _dt.date(2026, 8, 14)
 _HEAD = ["cyq", "sw_history", "freshness", "canary"]
 _PREDICT_CHAIN = ["legacy_prob_head", "legacy", "deliver"]
 # ths_push 在 tail 首位: parallel 块之外恒执行 (09-05 拆分: 双源各自成单, 单侧缺失只推另一侧)
-_TAIL = ["ths_push", "prob10dens_push", "ths_flush_guard", "drift", "drift_parallel", "shadow_xmodule"]
+_TAIL = [
+    "ths_push",
+    "prob10dens_push",
+    "ths_flush_guard",
+    "drift",
+    "drift_parallel",
+    "shadow_xmodule",
+]
 _PARALLEL_CHAIN = ["parallel", "prob_head", "deliver_parallel"]
 
 

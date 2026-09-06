@@ -55,18 +55,30 @@ from scripts import _deadzone_guard
 from scripts._pctfmt import fmt_pct_columns
 
 MODULE = "prob10dens"
-TOP_N = 10          # 每板 top10 (prob10 口径)
+TOP_N = 10  # 每板 top10 (prob10 口径)
 PULL_FLOOR = -0.10  # 回撤闸: 距10日高点回撤下限
-AMT_MIN = 1e8       # 成交额下限 (元)
-OCC_WIN = 5         # 密度窗: 近 5 个上榜日
-OCC_MIN = 3         # 密度阈: 在榜 ≥3 天
+AMT_MIN = 1e8  # 成交额下限 (元)
+OCC_WIN = 5  # 密度窗: 近 5 个上榜日
+OCC_MIN = 3  # 密度阈: 在榜 ≥3 天
 HIST_PATH = os.path.join(DATA_DIR, "prob10_density_history.parquet")
-CHIP_WR5_MAX = 0.0  # 派发闸: 获利盘5日变化须低于此值 (负=回落; 09-05 三线统一 wr5<0 即剔)
+CHIP_WR5_MAX = (
+    0.0  # 派发闸: 获利盘5日变化须低于此值 (负=回落; 09-05 三线统一 wr5<0 即剔)
+)
 CYQ_PATH = os.path.join(DATA_DIR, "cyq_panel.parquet")
 
-_COLS = ["rank", "board", "symbol", "legacy_prob", "legacy_pred10",
-         "parallel_prob", "parallel_pred10", "occ5", "pull",
-         "amt", "belief_down"]
+_COLS = [
+    "rank",
+    "board",
+    "symbol",
+    "legacy_prob",
+    "legacy_pred10",
+    "parallel_prob",
+    "parallel_pred10",
+    "occ5",
+    "pull",
+    "amt",
+    "belief_down",
+]
 
 
 def _board_of(b: str) -> str:
@@ -79,10 +91,14 @@ def _membership_core(c: pd.DataFrame, prob_col: str) -> pd.DataFrame:
     c["symbol"] = c["symbol"].astype(str).str.zfill(6)
     c["board"] = c["board"].map(_board_of)
     c["prob"] = c[prob_col].astype(float)
-    c = c.sort_values(["board", "date", "prob", "symbol"],
-                      ascending=[True, True, False, True])
-    return c.groupby(["board", "date"], sort=False).head(TOP_N)[
-        ["date", "board", "symbol", "prob"]].reset_index(drop=True)
+    c = c.sort_values(
+        ["board", "date", "prob", "symbol"], ascending=[True, True, False, True]
+    )
+    return (
+        c.groupby(["board", "date"], sort=False)
+        .head(TOP_N)[["date", "board", "symbol", "prob"]]
+        .reset_index(drop=True)
+    )
 
 
 def prob10_membership(cand: pd.DataFrame, day_ts: pd.Timestamp) -> pd.DataFrame:
@@ -105,24 +121,32 @@ def load_chip_features(day_ts: pd.Timestamp) -> pd.DataFrame | None:
     if not os.path.exists(CYQ_PATH):
         return None
     cq = pd.read_parquet(
-        CYQ_PATH, columns=["symbol", "date", "winner_ratio"],
-        filters=[("date", ">=", day_ts - pd.Timedelta(days=21)),
-                 ("date", "<=", day_ts)])
+        CYQ_PATH,
+        columns=["symbol", "date", "winner_ratio"],
+        filters=[
+            ("date", ">=", day_ts - pd.Timedelta(days=21)),
+            ("date", "<=", day_ts),
+        ],
+    )
     if cq.empty:
         return None
     cq["symbol"] = cq["symbol"].astype(str).str.zfill(6)
     cq = cq.drop_duplicates(["symbol", "date"], keep="last")
-    wr = cq.pivot(index="date", columns="symbol",
-                  values="winner_ratio").sort_index()
+    wr = cq.pivot(index="date", columns="symbol", values="winner_ratio").sort_index()
     if len(wr.index) < 6:
         return None
     i = len(wr.index) - 1
-    return pd.DataFrame({"symbol": wr.columns.astype(str),
-                         "wr5": wr.iloc[i].values - wr.iloc[i - 5].values})
+    return pd.DataFrame(
+        {
+            "symbol": wr.columns.astype(str),
+            "wr5": wr.iloc[i].values - wr.iloc[i - 5].values,
+        }
+    )
 
 
-def apply_wr5_gate(df: pd.DataFrame,
-                   chip: pd.DataFrame | None) -> tuple[pd.DataFrame, list[str]]:
+def apply_wr5_gate(
+    df: pd.DataFrame, chip: pd.DataFrame | None
+) -> tuple[pd.DataFrame, list[str]]:
     """派发闸通用过滤 (2026-09-05 用户拍板三线统一 "只要派发都删"): wr5<0 → 剔除.
 
     chip None/空 或 df 空 → 原样返回; 个股 wr5 NaN → 比较恒 False → 保留
@@ -142,8 +166,9 @@ def apply_wr5_gate(df: pd.DataFrame,
     return df[~mask.to_numpy()].copy(), cut
 
 
-def apply_chip_gate(df: pd.DataFrame, day_ts: pd.Timestamp,
-                    flush: bool = False) -> pd.DataFrame:
+def apply_chip_gate(
+    df: pd.DataFrame, day_ts: pd.Timestamp, flush: bool = False
+) -> pd.DataFrame:
     """派发闸接线入口 (三线共享): load_chip_features → apply_wr5_gate → 剔除日志.
 
     cyq 数据缺 → 原样返回 (fail-open)。LEGACY 交付 (_deliver_legacy_list) 与
@@ -156,16 +181,22 @@ def apply_chip_gate(df: pd.DataFrame, day_ts: pd.Timestamp,
         return df
     out, cut = apply_wr5_gate(df, chip)
     if cut:
-        print(f"[chipgate] 派发闸剔除 {len(cut)} 只 (获利盘5日回落): "
-              f"{', '.join(cut)}", flush=flush)
+        print(
+            f"[chipgate] 派发闸剔除 {len(cut)} 只 (获利盘5日回落): {', '.join(cut)}",
+            flush=flush,
+        )
     return out
 
 
-def density_picks(cand: pd.DataFrame, hist: pd.DataFrame,
-                  close: pd.DataFrame, amount: pd.DataFrame,
-                  day_ts: pd.Timestamp,
-                  par: pd.DataFrame | None = None,
-                  chip: pd.DataFrame | None = None) -> pd.DataFrame:
+def density_picks(
+    cand: pd.DataFrame,
+    hist: pd.DataFrame,
+    close: pd.DataFrame,
+    amount: pd.DataFrame,
+    day_ts: pd.Timestamp,
+    par: pd.DataFrame | None = None,
+    chip: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """prob10+回撤闸+密度+额+派发方向 → 当日影子清单 (纯函数, 可单测).
 
     cand: 当日 candidates 截面 (symbol/board/prob_up_10d/pred_ret_10d)
@@ -180,8 +211,13 @@ def density_picks(cand: pd.DataFrame, hist: pd.DataFrame,
     c = cand.copy()
     c["symbol"] = c["symbol"].astype(str).str.zfill(6)
     c["board"] = c["board"].map(_board_of)
-    m = memb.merge(c[["symbol", "board", "pred_ret_10d"]].rename(
-        columns={"pred_ret_10d": "pred10"}), on=["symbol", "board"], how="left")
+    m = memb.merge(
+        c[["symbol", "board", "pred_ret_10d"]].rename(
+            columns={"pred_ret_10d": "pred10"}
+        ),
+        on=["symbol", "board"],
+        how="left",
+    )
 
     cl = close[close.index <= day_ts].sort_index()
     am = amount.reindex(cl.index)
@@ -193,7 +229,7 @@ def density_picks(cand: pd.DataFrame, hist: pd.DataFrame,
     # occ5 研究口径 OCC5=rolling(5) 含当日: 1(今日在榜) + 近4个上榜历日在榜数;
     # belief_down 对应研究 PM3=shift(3): 今日 prob − 3个上榜历日前 prob (未在榜=NaN)
     hdates = sorted(hist["date"].unique())
-    win4 = set(hdates[-(OCC_WIN - 1):]) if hdates else set()
+    win4 = set(hdates[-(OCC_WIN - 1) :]) if hdates else set()
     d3 = hdates[-3] if len(hdates) >= 3 else None
     occ, p3v = [], []
     for r in memb.itertuples():
@@ -203,26 +239,35 @@ def density_picks(cand: pd.DataFrame, hist: pd.DataFrame,
         p3 = h[h["date"] == d3]["prob"] if d3 is not None else None
         p3v.append(float(p3.iloc[0]) if p3 is not None and len(p3) else np.nan)
     m["occ5"] = occ
-    m["belief_down"] = [np.nan if np.isnan(v) else r.prob - v
-                        for v, r in zip(p3v, memb.itertuples())]
+    m["belief_down"] = [
+        np.nan if np.isnan(v) else r.prob - v for v, r in zip(p3v, memb.itertuples())
+    ]
 
-    ok = m[(m["pull"].fillna(-1) >= PULL_FLOOR) & (m["amt"] >= AMT_MIN)
-           & (m["occ5"] >= OCC_MIN)].copy()
+    ok = m[
+        (m["pull"].fillna(-1) >= PULL_FLOOR)
+        & (m["amt"] >= AMT_MIN)
+        & (m["occ5"] >= OCC_MIN)
+    ].copy()
     ok, _ = apply_wr5_gate(ok, chip)
     ok = ok.rename(columns={"prob": "legacy_prob", "pred10": "legacy_pred10"})
     if par is not None and len(par):
         p = par[["symbol", "pred_prob_10d", "pred_mag_10d"]].copy()
         p["symbol"] = p["symbol"].astype(str).str.zfill(6)
-        ok = ok.merge(p.drop_duplicates("symbol", keep="last").rename(
-            columns={"pred_prob_10d": "parallel_prob",
-                     "pred_mag_10d": "parallel_pred10"}),
-            on="symbol", how="left")
+        ok = ok.merge(
+            p.drop_duplicates("symbol", keep="last").rename(
+                columns={
+                    "pred_prob_10d": "parallel_prob",
+                    "pred_mag_10d": "parallel_pred10",
+                }
+            ),
+            on="symbol",
+            how="left",
+        )
     else:
         ok["parallel_prob"] = np.nan
         ok["parallel_pred10"] = np.nan
     ok["_b"] = (ok["board"] != "main").astype(int)  # 交付顺序 main 在前
-    ok = ok.sort_values(["_b", "legacy_prob", "symbol"],
-                        ascending=[True, False, True])
+    ok = ok.sort_values(["_b", "legacy_prob", "symbol"], ascending=[True, False, True])
     ok = ok.drop(columns="_b").reset_index(drop=True)
     ok.insert(0, "rank", np.arange(1, len(ok) + 1))
     return ok[_COLS]
@@ -233,8 +278,9 @@ def load_or_bootstrap_history(day_ts: pd.Timestamp) -> pd.DataFrame:
     if os.path.exists(HIST_PATH):
         return pd.read_parquet(HIST_PATH)
     frames, cand_dates = [], set()
-    for fp in sorted(glob.glob(os.path.join(DATA_DIR, "lists",
-                                            "candidates_*.parquet"))):
+    for fp in sorted(
+        glob.glob(os.path.join(DATA_DIR, "lists", "candidates_*.parquet"))
+    ):
         d = pd.Timestamp(os.path.basename(fp)[11:19])
         if d >= day_ts:
             continue
@@ -255,8 +301,11 @@ def load_or_bootstrap_history(day_ts: pd.Timestamp) -> pd.DataFrame:
         ck = ck[(ck["date"] < day_ts) & (~ck["date"].isin(cand_dates))]
         if len(ck):
             frames.append(_membership_core(ck, "prob"))
-    h = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(
-        columns=["date", "board", "symbol", "prob"])
+    h = (
+        pd.concat(frames, ignore_index=True)
+        if frames
+        else pd.DataFrame(columns=["date", "board", "symbol", "prob"])
+    )
     return h
 
 
@@ -272,8 +321,15 @@ def fmt_pct_display(df: pd.DataFrame) -> pd.DataFrame:
     DataFrame 不改, density_picks 上游保持数值供机器读. 实现共享于 _pctfmt."""
     return fmt_pct_columns(
         df,
-        ("legacy_prob", "legacy_pred10", "parallel_prob", "parallel_pred10",
-         "pull", "belief_down", "pctChg"),
+        (
+            "legacy_prob",
+            "legacy_pred10",
+            "parallel_prob",
+            "parallel_pred10",
+            "pull",
+            "belief_down",
+            "pctChg",
+        ),
         already_pct_cols=("pctChg",),
     )
 
@@ -286,8 +342,7 @@ def main() -> int:
     if args:
         day_ts = pd.Timestamp(args[0])
     else:
-        fs = sorted(glob.glob(os.path.join(DATA_DIR, "lists",
-                                           "candidates_*.parquet")))
+        fs = sorted(glob.glob(os.path.join(DATA_DIR, "lists", "candidates_*.parquet")))
         if not fs:
             print("[prob10dens] 无 candidates 文件, 跳过 (fail-safe)")
             return 0
@@ -298,35 +353,45 @@ def main() -> int:
     if not os.path.exists(cand_fp):
         print(f"[prob10dens] 无当日 {os.path.basename(cand_fp)}, 跳过 (fail-safe)")
         return 0
-    cand = pd.read_parquet(cand_fp,
-                           columns=["symbol", "board", "prob_up_10d",
-                                    "pred_ret_10d"])
+    cand = pd.read_parquet(
+        cand_fp, columns=["symbol", "board", "prob_up_10d", "pred_ret_10d"]
+    )
     if cand.empty:
         print(f"[prob10dens] {date} candidates 空, 跳过")
         return 0
 
     close = pd.read_parquet(
-        PANEL_V3_PATH, columns=["symbol", "date", "close_hfq", "amount"],
-        filters=[("date", ">=", day_ts - pd.Timedelta(days=45)),
-                 ("date", "<=", day_ts)])
+        PANEL_V3_PATH,
+        columns=["symbol", "date", "close_hfq", "amount"],
+        filters=[
+            ("date", ">=", day_ts - pd.Timedelta(days=45)),
+            ("date", "<=", day_ts),
+        ],
+    )
     close["symbol"] = close["symbol"].astype(str).str.zfill(6)
     close = close[~close["symbol"].str.endswith(".BJ")]
     cl = close.pivot(index="date", columns="symbol", values="close_hfq")
     am = close.pivot(index="date", columns="symbol", values="amount")
-    day_px = pd.read_parquet(PANEL_V3_PATH, columns=["symbol", "pctChg"],
-                             filters=[("date", "=", day_ts)])
+    day_px = pd.read_parquet(
+        PANEL_V3_PATH, columns=["symbol", "pctChg"], filters=[("date", "=", day_ts)]
+    )
     day_px["symbol"] = day_px["symbol"].astype(str).str.zfill(6)
 
     hist = load_or_bootstrap_history(day_ts)
-    par_fps = sorted(glob.glob(os.path.join(
-        STOCK_LIST_DIR, f"parallel_preds_raw_{date}__*.csv")))
+    par_fps = sorted(
+        glob.glob(os.path.join(STOCK_LIST_DIR, f"parallel_preds_raw_{date}__*.csv"))
+    )
     par = None
     if par_fps:
-        par = pd.read_csv(par_fps[-1], dtype={"symbol": str},
-                          usecols=["symbol", "pred_mag_10d", "pred_prob_10d"])
+        par = pd.read_csv(
+            par_fps[-1],
+            dtype={"symbol": str},
+            usecols=["symbol", "pred_mag_10d", "pred_prob_10d"],
+        )
     else:
-        print(f"[prob10dens] 无 parallel_preds_raw_{date}__*.csv, "
-              "parallel 两列空 (NaN)")
+        print(
+            f"[prob10dens] 无 parallel_preds_raw_{date}__*.csv, parallel 两列空 (NaN)"
+        )
     chip = load_chip_features(day_ts)
     if chip is None:
         print("[prob10dens] 筹码数据缺失, 派发闸未启用 (fail-open)")
@@ -358,10 +423,15 @@ def main() -> int:
 
             write_push_result(
                 STOCK_LIST_DIR / f"ths_watchlist_{date}__{MODULE}.txt",
-                picks["symbol"].tolist(), [], note="deadzone")
+                picks["symbol"].tolist(),
+                [],
+                note="deadzone",
+            )
             print(f"[deadzone] 今晚停推: 清单照出 {csv_path.name} (不写 txt 不加自选)")
-            print("[deadzone] 已标注: STOPPED_DEADZONE 标记"
-                  " + 推送结果单 status=deadzone (与没推成功区分)")
+            print(
+                "[deadzone] 已标注: STOPPED_DEADZONE 标记"
+                " + 推送结果单 status=deadzone (与没推成功区分)"
+            )
             print(picks.to_string(index=False))
             return 0
     txt_path = STOCK_LIST_DIR / f"ths_watchlist_{date}__{MODULE}.txt"

@@ -26,6 +26,7 @@ WORM: DATA OTHERS/diag/winner_leak_{ts}.json + *_daily_{ts}.csv + *_winners_{ts}
 
 用法: python scripts/_diag_winner_leak.py [--eval 125] [--win-t 0.05]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -81,7 +82,9 @@ def day_auc(win_vals: np.ndarray, rest_vals: np.ndarray) -> float:
     return float((r_w - n_w * (n_w + 1) / 2) / (n_w * n_r))
 
 
-def analyze_board(fr: pd.DataFrame, board: str, win_t: float) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
+def analyze_board(
+    fr: pd.DataFrame, board: str, win_t: float
+) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
     """单板三泄漏分账. 返回 (汇总, 逐日表, 赢家明细表)."""
     q50_gate = bool(LEGACY_ENTRY_GATE.get("q50_sign_gate", False))
     fr = fr.copy()
@@ -102,9 +105,7 @@ def analyze_board(fr: pd.DataFrame, board: str, win_t: float) -> tuple[dict, pd.
 
     top = topn_per_day(fr[fr["in_e7"]], "pred_ret_10d", DEPTH)
     top_ids = set(map(tuple, top[["date", "symbol"]].to_numpy()))
-    fr["in_top10"] = [
-        (d, s) in top_ids for d, s in zip(fr["date"], fr["symbol"])
-    ]
+    fr["in_top10"] = [(d, s) in top_ids for d, s in zip(fr["date"], fr["symbol"])]
     # 池内排名 (key 降序, 1 起)
     e7 = fr[fr["in_e7"]].copy()
     e7["pool_rank"] = (
@@ -150,7 +151,9 @@ def analyze_board(fr: pd.DataFrame, board: str, win_t: float) -> tuple[dict, pd.
                 "gate_killed_win": n_u_win - n_p_win,
                 "rank_missed_win": n_p_win - n_t_win,
                 "top10_mean_net": float(t["realized_net"].mean()) if len(t) else np.nan,
-                "top10_median_net": float(t["realized_net"].median()) if len(t) else np.nan,
+                "top10_median_net": float(t["realized_net"].median())
+                if len(t)
+                else np.nan,
                 "auc_key": a,
             }
         )
@@ -200,20 +203,36 @@ def analyze_board(fr: pd.DataFrame, board: str, win_t: float) -> tuple[dict, pd.
         if slots and pool_rows
         else np.nan,
         "days_top10_zero_win": int((d10["win_top10"] == 0).sum()),
-        "days_top10_zero_win_share": float((d10["win_top10"] == 0).mean()) if len(d10) else np.nan,
+        "days_top10_zero_win_share": float((d10["win_top10"] == 0).mean())
+        if len(d10)
+        else np.nan,
         "winners_per_top10_hist": {str(k): int(v) for k, v in counts_hist.items()},
         "winner_pool_rank_med": float(np.median(rank_arr)) if len(rank_arr) else np.nan,
-        "winner_pool_rank_p25": float(np.percentile(rank_arr, 25)) if len(rank_arr) else np.nan,
-        "winner_pool_rank_p75": float(np.percentile(rank_arr, 75)) if len(rank_arr) else np.nan,
-        "winner_share_beyond_top15": float((rank_arr > 15).mean()) if len(rank_arr) else np.nan,
+        "winner_pool_rank_p25": float(np.percentile(rank_arr, 25))
+        if len(rank_arr)
+        else np.nan,
+        "winner_pool_rank_p75": float(np.percentile(rank_arr, 75))
+        if len(rank_arr)
+        else np.nan,
+        "winner_share_beyond_top15": float((rank_arr > 15).mean())
+        if len(rank_arr)
+        else np.nan,
         "auc_key_med": float(np.median(auc_days)) if auc_days else np.nan,
-        "auc_key_gt55_share": float(np.mean(np.array(auc_days) > 0.55)) if auc_days else np.nan,
-        "auc_key_gt60_share": float(np.mean(np.array(auc_days) > 0.60)) if auc_days else np.nan,
+        "auc_key_gt55_share": float(np.mean(np.array(auc_days) > 0.55))
+        if auc_days
+        else np.nan,
+        "auc_key_gt60_share": float(np.mean(np.array(auc_days) > 0.60))
+        if auc_days
+        else np.nan,
         "top10_net_mean": float(top10_nets.mean()) if len(top10_nets) else np.nan,
         "top10_net_median": float(top10_nets.median()) if len(top10_nets) else np.nan,
         "top10_net_p90": float(top10_nets.quantile(0.9)) if len(top10_nets) else np.nan,
-        "top10_member_share_ge_win_t": float((top10_nets >= win_t).mean()) if len(top10_nets) else np.nan,
-        "top10_member_share_neg": float((top10_nets < 0).mean()) if len(top10_nets) else np.nan,
+        "top10_member_share_ge_win_t": float((top10_nets >= win_t).mean())
+        if len(top10_nets)
+        else np.nan,
+        "top10_member_share_neg": float((top10_nets < 0).mean())
+        if len(top10_nets)
+        else np.nan,
         "alt_win10_capture": (
             int(fr.loc[fr["in_top10"], "is_win_alt"].sum())
             / max(1, int(fr["is_win_alt"].sum()))
@@ -223,7 +242,9 @@ def analyze_board(fr: pd.DataFrame, board: str, win_t: float) -> tuple[dict, pd.
         ),
         "anchor_check": {
             "anchor": ANCHOR[board],
-            "computed_daily_mean": float(d10["top10_mean_net"].mean()) if len(d10) else np.nan,
+            "computed_daily_mean": float(d10["top10_mean_net"].mean())
+            if len(d10)
+            else np.nan,
         },
     }
     # 深度扰动 (5/15) 捕获率
@@ -257,7 +278,9 @@ def main() -> int:
             f"anchor={chk['anchor']:.6f} diff={diff:.2e} → {status}"
         )
         if status == "MISMATCH":
-            print("!!! 口径漂移: 池掩码与 sweep 不一致, 结果不可信, 先排查 q50_sign_gate 配置")
+            print(
+                "!!! 口径漂移: 池掩码与 sweep 不一致, 结果不可信, 先排查 q50_sign_gate 配置"
+            )
         summaries.append(s)
         dailies.append(d)
         winners.append(w)
@@ -338,7 +361,9 @@ def main() -> int:
         ),
         encoding="utf-8",
     )
-    print(f"\n[saved] {out_dir}\\winner_leak_{ts}.json + _daily_ + _winners_ ({time.time() - t0:.0f}s)")
+    print(
+        f"\n[saved] {out_dir}\\winner_leak_{ts}.json + _daily_ + _winners_ ({time.time() - t0:.0f}s)"
+    )
     print("=== DONE ===")
     return 0
 

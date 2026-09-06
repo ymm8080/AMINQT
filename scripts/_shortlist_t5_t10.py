@@ -1581,7 +1581,9 @@ def write_xlsx(
     wb.save(str(path))
 
 
-def _resolve_run_dir_for_delivery(trade_date: str, run_dir_arg: str | None) -> Path | None:
+def _resolve_run_dir_for_delivery(
+    trade_date: str, run_dir_arg: str | None
+) -> Path | None:
     """当日并行 run_dir 解析 (2026-09-05 补跑 override).
 
     --run-dir 显式指定优先: 隔日补跑时 run_dir 按实际运行日命名 (如 09-05 补跑
