@@ -573,7 +573,9 @@ def test_daily_winner_auc_no_winner_day_kept_nan():
 def test_daily_winner_auc_inner_join_and_dropna():
     """realized 无行的票不参与 (inner); pred_ret_10d NaN 不参与."""
     date = "2026-08-10"
-    preds = _wauc_base_preds(date, ["A", "B", "C", "Z"], "main", [0.9, np.nan, 0.5, 0.5])
+    preds = _wauc_base_preds(
+        date, ["A", "B", "C", "Z"], "main", [0.9, np.nan, 0.5, 0.5]
+    )
     realized = pd.DataFrame(
         {
             "date": [pd.Timestamp(date)] * 2,

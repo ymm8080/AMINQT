@@ -371,9 +371,7 @@ def daily_winner_auc(
         auc = np.nan
         if n_win >= 1 and n_rest >= 1:
             ranks = g["pred_ret_10d"].rank()
-            auc = float(
-                (ranks[win].sum() - n_win * (n_win + 1) / 2) / (n_win * n_rest)
-            )
+            auc = float((ranks[win].sum() - n_win * (n_win + 1) / 2) / (n_win * n_rest))
         rows.append(
             {
                 "date": d,
