@@ -129,6 +129,8 @@ _STEP_TIMEOUT_S = {
     "ths_push": 15
     * 60,  # 客户端已开 ~20s; 冷启动拉起+登录最长 ~2.5min, 下限 15min 只兜卡死
     "ths_flush_guard": 15 * 60,  # 面板单日切片+秩计算 ~1min, 下限守 "每步 ≥15min" 惯例
+    # 终版清单: 三源 CSV 读合并 ~秒级, 15min 下限惯例 (含死区闸三线整段重算)
+    "final_stocklist": 15 * 60,
     # A1 影子单: 面板 date 列读最新日+单日切片 ~1min + UI 推送复用 ths_push 机械
     "a1_push": 15 * 60,
     # 隔板口袋单: 面板 180 日历日切片+事件走查 ~1-2min + UI 推送复用 ths_push 机械
@@ -240,6 +242,9 @@ _STEPS = {
     "deliver_parallel": ["scripts/_shortlist_t5_t10.py", "{tag}"],
     "ths_push": ["scripts/_ths_watchlist_push.py", "{tag}"],
     "ths_flush_guard": ["scripts/_ths_flush_guard.py", "{tag}"],
+    # 终版清单 (2026-09-06 用户): 全闸之后单文件 Excel 合并三源 (module 列 +
+    # 当夜死区赢率 + landed/blocked), 置 flush_guard 后 — flush 删除需先落文档
+    "final_stocklist": ["scripts/_final_stocklist.py", "{tag}"],
     "a1_push": ["scripts/_a1_momentum_shadow.py", "{tag}"],
     "gappocket_push": ["scripts/_gap_pocket_shadow.py", "{tag}"],
     "prob10dens_push": ["scripts/_prob10_density_shadow.py", "{tag}"],
@@ -312,8 +317,11 @@ def plan_steps(
     # 差值加速度影子单 (2026-09-04 用户拍板): (r5−r5_prev) top10 纯排 — 2026-09-05 用户
     # 停推 ("A1影子单也不需要"): 下链, _a1_momentum_shadow.py 仍可手动跑, 恢复需拍板
     # steps.append("a1_push")
-    # 概率头密度版影子单 (2026-09-05 用户拍板): prob10+回撤闸+密度occ5≥3+额1亿 推同花顺,
-    # 补 gappocket/a1 停推后的推送位 — 非关键步骤, 当日 candidates 缺失 fail-safe 跳过
+    # 概率头密度版影子单 (2026-09-06 用户拍板替换口径, 原 09-05 版=TOP10榜+额1亿):
+    # 每板 prob 前20带 ∧ 带内密度 occ5≥3 ∧ 回撤闸+派发闸, 免额无信念 — 线名/文件/
+    # 死区线名不变; 125d: main 5.5只/日 54.7%/+7.82pp, dual 6.0只/日 47.7%/+7.62pp。
+    # 曾评估单独开 band20 第四线, 判冗余不开 (band20⊇密度线宇宙); 非关键步骤,
+    # 当日 candidates 缺失 fail-safe 跳过
     steps.append("prob10dens_push")
     # 隔板口袋单 (2026-09-04 用户拍板): 首板后 d3~7 缩量守板 + 安全闸, bias60 top15
     # 推同花顺 — 2026-09-05 用户停推 ("THS成绩不如生产就不用了"): 同窗 125d 对比
@@ -323,6 +331,9 @@ def plan_steps(
     # 放量下跌自选股守卫 (2026-09-03): 当日放量下跌标记 (日频 OHLCV/动量/量能) →
     # 自选股剔除 + 当日删除文档; UI 删除待 Del 键流程探针验证后经 --apply 启用, 非关键步骤
     steps.append("ths_flush_guard")
+    # 终版清单 (2026-09-06 用户): 全闸 (死区停推/派发/flush 守卫) 之后产出的
+    # 单文件 Excel, module/win_rate/status/reason 列 — 非关键步骤, 三源均缺失才退出
+    steps.append("final_stocklist")
     steps.append("drift")  # 幅度漂移监控 (读历史 candidates, 非关键步骤)
     steps.append(
         "drift_parallel"

@@ -1,34 +1,36 @@
-"""概率头密度版影子单: prob10+回撤闸+近5日上榜≥3天+额1亿 → 同花顺自选股 (2026-09-05 用户拍板).
+"""概率头密度版影子单: prob前20带+带内密度≥3+回撤闸+派发闸 → 同花顺自选股
+(2026-09-06 用户拍板把原 TOP10+额1亿 口径整线替换为 L3×TOP20免额; 线名/文件/
+夜链位置/死区线名不变).
 
-口径 (125d ckpt 回放 2026-02-09..08-17, tmp_t/_winner_streak2_0905.py, 同窗对生产
-  全面占优 — 总表见 memory/prob-head-verdict-0904.md):
-  ①prob10 = 每板 (main; dual=GEM+STAR) 按 legacy 概率头 prob_up_10d 降序 top10
+口径 (09-06 拍板; 125d 回放 tmp_t/_band_compare_0906.py 2026-02-09..08-17:
+  main 5.5只/日 赢率54.7%/+7.82pp 大亏3.5%, dual 6.0只/日 47.7%/+7.62pp 大亏5.1%
+  — 随机基准 = 全市场净≥5% 赢率 13.5%, 两板 ≈3.5~4 倍随机):
+  ①带成员 = 每板 (main; dual=GEM+STAR) 按 legacy 概率头 prob_up_10d 降序 前20
+    (原 TOP10 榜 → TOP20 带; 密度累计宇宙同步换成带, 11-20 名滞留也攒天数)
   ②回撤闸 = 收盘距 10 日高点回撤 ≥ -10% (信号夜可知)
-  ③密度 = occ5≥3, occ5 对应研究 OCC5=rolling(5) 含当日: 今日在榜 + 近4个上榜历日
-    在榜数 ≥2 (6.8只/日 56.5%/+10.09pp 大亏3.4%, 优于连续版 streak≥2 7.4只/日
-    54.6%/+9.44)
-  ④额 ≥1亿 (streak/密度赢家画像前置条件, 非额 streak 19.0%)
+  ③密度 = occ5≥3, occ5 对应研究带内 OCC5=rolling(5) 含当日: 今日在带 +
+    近4个上榜历日在带数
+  ④免额 (09-06 拍板 "去额"; 2×2 终审: 额闸在 prob 池头部近似装饰 — 撤之
+    +0.1~0.2只/日流量, 赢率代价 1~1.7pp); amt 列保留仅展示, 不作闸
   ⑤撞指数码 000xxx 不剔 (09-05 用户澄清 "不是删除股票号"), 推送端隔离指数行
     — 见 _ths_watchlist_push._build_chunks
-  ⑥筹码派发闸 (2026-09-05 用户拍板 "基本方向是派发就删除"; 09-05 晚升级三线统一
-    "只要派发都删"): 获利盘5日回落 (wr5<0) → 剔除, 不补齐; 125d 1151 票次回放
-    升级后保留组 6.6只/日 赢率56.1% 大亏2.8% (基线 3.6%, tmp_t/_densgate_upgrade_0905.py);
-    cyq 数据缺/个股特征缺 → 不拦 (fail-open)。同闸接 LEGACY 交付
+  ⑥筹码派发闸 (09-05 三线统一 "只要派发都删"): 获利盘5日回落 (wr5<0) → 剔除,
+    不补齐; cyq 数据缺/个股特征缺 → 不拦 (fail-open)。同闸接 LEGACY 交付
     (_deliver_legacy_list) 与 PARALLEL 短名单 (_shortlist_t5_t10)。
-  标签列 信念降 belief_down = 今日 prob − 3个上榜历日前 prob < 0 (质量档闸, 2~3个月
-  影子证据够了再决定是否升格; h2 大亏 4.8% vs 密度版 10.9%, memory 09-05 终表)。
-  双模型列 (2026-09-05 用户: "影子名单上两模型预测幅度和概率, 列出是什么模型出"):
-  legacy_prob/legacy_pred10 = legacy 概率头 prob_up_10d / 幅度头 pred_ret_10d
-  (选股口径即 legacy prob10); parallel_prob/parallel_pred10 = parallel raw
-  pred_prob_10d / pred_mag_10d (parallel_preds_raw_{date}__*.csv 全池落盘; raw
-  未校准 — 校准版 pred_ret_10d 仅短名单内, 全池逐股校准未复刻), 缺文件 → NaN。
-  交付 CSV 百分比显示 (2026-09-05 用户 "输出的EXCEL是百分比"): 上述预测列+回撤
-  列写 "%" 文本, pctChg 只加 %; 见 fmt_pct_display, 纯显示层不影响机器读。
+  标签列 信念降 belief_down = 今日 prob − 3个上榜历日前 prob (非闸; 09-06 L4
+  对照 = 半流量换 +1.6pp 判不接, 列保留供影子期攒证据)。
+  双模型列 (2026-09-05 用户): legacy_prob/legacy_pred10 = legacy 概率头
+  prob_up_10d / 幅度头 pred_ret_10d (选股口径即 legacy 概率头); parallel_prob/
+  parallel_pred10 = parallel raw pred_prob_10d / pred_mag_10d
+  (parallel_preds_raw_{date}__*.csv 全池落盘; raw 未校准), 缺文件 → NaN。
+  交付 CSV 百分比显示 (2026-09-05 用户): 上述预测列+回撤列写 "%" 文本,
+  pctChg 只加 %; 见 fmt_pct_display, 纯显示层不影响机器读。
 
 上榜历史: data/prob10_density_history.parquet (date/board/symbol/prob)。
-  首跑自动引导: data/_diag_rankkey_scored_{board}_e125.parquet (125d 连续全池打分,
-  与研究同源) 补 candidates 未覆盖日期, data/lists/candidates_*.parquet 补其后的
-  日期 (旧 vintage 缺 prob_up_10d 列跳过); 每夜追当日成员, 重跑同日先删后追 (幂等)。
+  引导: data/_diag_rankkey_scored_{board}_e125.parquet (125d 连续全池打分, 与
+  研究同源) 补 candidates 未覆盖日期, data/lists/candidates_*.parquet 补其后的
+  日期 (旧 vintage 缺 prob_up_10d 列跳过); 每夜追当日成员, 重跑同日先删后追
+  (幂等)。2026-09-06 口径替换时已按 TOP20 带整文件重建 (e125+candidates)。
   注: 打分文件止于 08-17, 08-18..08-29 无 candidates 文件为空洞 — 密度窗会伸到
   08-17, candidates 积累 ≥5 日后自然收敛到纯交易日历窗。
 
@@ -55,11 +57,10 @@ from scripts import _deadzone_guard
 from scripts._pctfmt import fmt_pct_columns
 
 MODULE = "prob10dens"
-TOP_N = 10  # 每板 top10 (prob10 口径)
+TOP_N = 20  # 带成员: 每板 prob 前20 (09-06 拍板, 原 top10 榜)
 PULL_FLOOR = -0.10  # 回撤闸: 距10日高点回撤下限
-AMT_MIN = 1e8  # 成交额下限 (元)
 OCC_WIN = 5  # 密度窗: 近 5 个上榜日
-OCC_MIN = 3  # 密度阈: 在榜 ≥3 天
+OCC_MIN = 3  # 密度阈: 带内在榜 ≥3 天 (免额, 09-06 拍板)
 HIST_PATH = os.path.join(DATA_DIR, "prob10_density_history.parquet")
 CHIP_WR5_MAX = (
     0.0  # 派发闸: 获利盘5日变化须低于此值 (负=回落; 09-05 三线统一 wr5<0 即剔)
@@ -85,8 +86,13 @@ def _board_of(b: str) -> str:
     return "main" if b == "main" else "dual"  # GEM/STAR → dual
 
 
-def _membership_core(c: pd.DataFrame, prob_col: str) -> pd.DataFrame:
-    """按 date/board 分组取 prob 降序 top10 → date/board/symbol/prob (纯函数)."""
+def _membership_core(
+    c: pd.DataFrame, prob_col: str, top_n: int = TOP_N
+) -> pd.DataFrame:
+    """按 date/board 分组取 prob 降序前 top_n → date/board/symbol/prob (纯函数).
+
+    默认 top_n=TOP_N=20 (09-06 拍板 TOP20 带, 原 top10 榜).
+    """
     c = c.copy()
     c["symbol"] = c["symbol"].astype(str).str.zfill(6)
     c["board"] = c["board"].map(_board_of)
@@ -96,16 +102,16 @@ def _membership_core(c: pd.DataFrame, prob_col: str) -> pd.DataFrame:
     )
     return (
         c.groupby(["board", "date"], sort=False)
-        .head(TOP_N)[["date", "board", "symbol", "prob"]]
+        .head(top_n)[["date", "board", "symbol", "prob"]]
         .reset_index(drop=True)
     )
 
 
 def prob10_membership(cand: pd.DataFrame, day_ts: pd.Timestamp) -> pd.DataFrame:
-    """candidates 当日截面 → prob10 成员 (date/board/symbol/prob, 纯函数).
+    """candidates 当日截面 → TOP20 带成员 (date/board/symbol/prob, 纯函数).
 
     board 映射 main→main, GEM/STAR→dual; 每板按 prob 降序 (并列 symbol 升序)
-    取 top10; 北交所不在 candidates 无需剔。
+    取前20 (09-06 拍板, 原 top10); 北交所不在 candidates 无需剔。
     """
     return _membership_core(cand.assign(date=day_ts), "prob_up_10d")
 
@@ -197,11 +203,11 @@ def density_picks(
     par: pd.DataFrame | None = None,
     chip: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """prob10+回撤闸+密度+额+派发方向 → 当日影子清单 (纯函数, 可单测).
+    """带密度≥3+回撤闸+派发方向 → 当日影子清单 (纯函数, 可单测).
 
     cand: 当日 candidates 截面 (symbol/board/prob_up_10d/pred_ret_10d)
-    hist: 上榜历史 (date/board/symbol/prob), 须不含当日 (当日成员由 cand 现算)
-    close/amount: 透视表 (date × symbol), ≤ day_ts
+    hist: 带上榜历史 (date/board/symbol/prob), 须不含当日 (当日成员由 cand 现算)
+    close/amount: 透视表 (date × symbol), ≤ day_ts; amount 仅算 amt 展示列
     par: parallel 全池 raw 预测 (symbol/pred_mag_10d/pred_prob_10d);
          None/缺 → parallel 两列 NaN
     chip: 筹码派发特征 (symbol/wr5, load_chip_features 产出); None →
@@ -226,8 +232,8 @@ def density_picks(
     m["pull"] = m["symbol"].map(pull)
     m["amt"] = m["symbol"].map(amt)
 
-    # occ5 研究口径 OCC5=rolling(5) 含当日: 1(今日在榜) + 近4个上榜历日在榜数;
-    # belief_down 对应研究 PM3=shift(3): 今日 prob − 3个上榜历日前 prob (未在榜=NaN)
+    # occ5 研究口径 OCC5=rolling(5) 含当日: 1(今日在带) + 近4个上榜历日在带数;
+    # belief_down 对应研究 PM3=shift(3): 今日 prob − 3个上榜历日前 prob (未在带=NaN)
     hdates = sorted(hist["date"].unique())
     win4 = set(hdates[-(OCC_WIN - 1) :]) if hdates else set()
     d3 = hdates[-3] if len(hdates) >= 3 else None
@@ -244,10 +250,8 @@ def density_picks(
     ]
 
     ok = m[
-        (m["pull"].fillna(-1) >= PULL_FLOOR)
-        & (m["amt"] >= AMT_MIN)
-        & (m["occ5"] >= OCC_MIN)
-    ].copy()
+        (m["pull"].fillna(-1) >= PULL_FLOOR) & (m["occ5"] >= OCC_MIN)
+    ].copy()  # 免额 (09-06 拍板): 额不作闸, amt 仅展示列
     ok, _ = apply_wr5_gate(ok, chip)
     ok = ok.rename(columns={"prob": "legacy_prob", "pred10": "legacy_pred10"})
     if par is not None and len(par):

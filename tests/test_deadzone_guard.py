@@ -242,6 +242,26 @@ def test_is_alarm_disabled(monkeypatch):
     assert ok is False and "关闭" in why
 
 
+# ---------------------------------------------------------------- win_rate
+def test_win_rate_value_and_failopen(tmp_path, monkeypatch):
+    dates, fp = _flat_or_rising_panel(tmp_path, 1.02)  # 全赢 → 滚动赢率 100%
+    monkeypatch.setattr("config.settings.PANEL_V3_PATH", fp)
+    monkeypatch.setitem(dz._LOADERS, "prob10dens", lambda: _loader_picks(dates))
+    d = dates[-1].strftime("%Y%m%d")
+    assert dz.win_rate("prob10dens", d) == 1.0
+    # 未知线 / 样本不足 → None (终版清单 win_rate 列留空)
+    assert dz.win_rate("unknown_line", d) is None
+    monkeypatch.setitem(
+        dz._LOADERS, "prob10dens", lambda: pd.DataFrame(columns=["date", "symbol"])
+    )
+    assert dz.win_rate("prob10dens", d) is None
+
+
+def test_win_rate_disabled(monkeypatch):
+    monkeypatch.setattr(dz, "DZ_ENABLED", False)
+    assert dz.win_rate("top10", "20260904") is None
+
+
 # ---------------------------------------------------------------- 停推标注
 def test_annotate_stop_marker_and_md_banner(tmp_path):
     md = tmp_path / "legacy_stocklist_20260105__M1.md"
