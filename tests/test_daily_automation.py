@@ -44,6 +44,7 @@ _TAIL = [
     "ths_push",
     "prob10dens_push",
     "ths_flush_guard",
+    "final_stocklist",
     "drift",
     "drift_parallel",
     "shadow_xmodule",
@@ -109,6 +110,14 @@ def test_plan_steps_retrain_precedes_predict_chain():
             assert steps.index("deliver") < steps.index("parallel"), (
                 "deliver 不得排在 parallel 后"
             )
+
+
+def test_plan_steps_final_stocklist_after_flush_guard():
+    """终版清单 (2026-09-06 用户) 恒紧跟 ths_flush_guard — flush 删除文档先落盘,
+    终表 blocked/flush 才可信; 非关键步骤 (三源均缺才退出, 不拦链)."""
+    for steps in (plan_steps(THU), plan_steps(FRI)):
+        assert steps.index("final_stocklist") == steps.index("ths_flush_guard") + 1
+    assert "final_stocklist" not in _CRITICAL
 
 
 def test_plan_steps_sw_history_always_runs():
