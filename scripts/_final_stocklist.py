@@ -117,7 +117,9 @@ def write(df: pd.DataFrame, date: str, list_dir=STOCK_LIST_DIR) -> Path:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("date", nargs="?", default=None, help="YYYYMMDD (缺省取最新 legacy 清单日)")
+    ap.add_argument(
+        "date", nargs="?", default=None, help="YYYYMMDD (缺省取最新 legacy 清单日)"
+    )
     ap.add_argument("--list-dir", default=str(STOCK_LIST_DIR))
     args = ap.parse_args()
     date = args.date

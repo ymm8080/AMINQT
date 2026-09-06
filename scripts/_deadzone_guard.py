@@ -198,9 +198,7 @@ _LOADERS = {
 }
 
 
-def _line_state(
-    line: str, date: str
-) -> tuple[dict[int, float], set[int], int]:
+def _line_state(line: str, date: str) -> tuple[dict[int, float], set[int], int]:
     """{line} 线在 {date} 夜的 (滚动赢率表, 报警日集合, 当日格点序)。
 
     完结样本不足 / 当日不在格点 → ValueError (调用方按 fail-open 处置);

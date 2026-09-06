@@ -86,22 +86,24 @@ def main() -> int:
     )
     _log(f"[read] 宽读取 {PANEL_V3_PATH} (amount>=0, 非停牌)")
     panel = pq.read_table(str(PANEL_V3_PATH), filters=filters).to_pandas()
-    _log(f"[read] {len(panel):,}r max={panel['date'].max()} ({time.time()-t0:.0f}s)")
+    _log(f"[read] {len(panel):,}r max={panel['date'].max()} ({time.time() - t0:.0f}s)")
 
     dates_all = sorted(pd.unique(pd.to_datetime(panel["date"])))
     cut = dates_all[-args.slice]
     panel = panel[pd.to_datetime(panel["date"]) >= cut].reset_index(drop=True)
-    _log(f"[slice] {pd.Timestamp(cut).date()}.. {len(panel):,}r ({time.time()-t0:.0f}s)")
+    _log(
+        f"[slice] {pd.Timestamp(cut).date()}.. {len(panel):,}r ({time.time() - t0:.0f}s)"
+    )
 
     pivot, cal = _build_realized_pivot(panel)
-    _log(f"[pivot] symbols={len(pivot)} days={len(cal)} ({time.time()-t0:.0f}s)")
+    _log(f"[pivot] symbols={len(pivot)} days={len(cal)} ({time.time() - t0:.0f}s)")
 
     # ── 2) 全宽清洗: 读墙与池底都放开 (real counterfactual serving pool) ──
     cleaner = CleaningPipeline(CleaningConfig(min_amount=0.0, abs_amount_floor=0.0))
     main_df, dual_df, state = cleaner.run_inference(panel)
     _log(
         f"[clean] valve={state} main={len(main_df):,}r dual={len(dual_df):,}r "
-        f"({time.time()-t0:.0f}s)"
+        f"({time.time() - t0:.0f}s)"
     )
     del panel
     gc.collect()
@@ -120,7 +122,9 @@ def main() -> int:
         feat = feat.reset_index(drop=True)
         feat["symbol"] = feat["symbol"].astype(str)
         feat["date"] = pd.to_datetime(feat["date"])
-        _log(f"[feat:{board}] {len(feat):,}r {len(feat.columns)}c ({time.time()-t0:.0f}s)")
+        _log(
+            f"[feat:{board}] {len(feat):,}r {len(feat.columns)}c ({time.time() - t0:.0f}s)"
+        )
 
         amt_map = dfb.assign(
             symbol=dfb["symbol"].astype(str), date=pd.to_datetime(dfb["date"])
@@ -147,7 +151,7 @@ def main() -> int:
                     lister.compute_scores(pred)
             except Exception:
                 pass
-        _log(f"[{board}] base_rate 预热完成 ({time.time()-t0:.0f}s)")
+        _log(f"[{board}] base_rate 预热完成 ({time.time() - t0:.0f}s)")
 
         for k, d in enumerate(eval_days):
             di = i_of[d]
@@ -212,7 +216,9 @@ def main() -> int:
             )
             scored_frames.setdefault(board, []).append(ing)
             if (k + 1) % 25 == 0:
-                _log(f"[{board}] eval {k+1}/{len(eval_days)} ({time.time()-t0:.0f}s)")
+                _log(
+                    f"[{board}] eval {k + 1}/{len(eval_days)} ({time.time() - t0:.0f}s)"
+                )
 
         del feat, dfb
         gc.collect()
@@ -232,7 +238,7 @@ def main() -> int:
     )
     _log(
         f"[save] {out_path} {len(out):,}r 档分布: "
-        f"{band.value_counts().to_dict()} ({time.time()-t0:.0f}s)"
+        f"{band.value_counts().to_dict()} ({time.time() - t0:.0f}s)"
     )
     _log("=== DONE ===")
     return 0
