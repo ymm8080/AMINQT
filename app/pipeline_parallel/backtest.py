@@ -388,9 +388,13 @@ def _pick_stats_and_series(s: pd.DataFrame, sub: pd.DataFrame, lab: str) -> dict
         "max_win": round(float(r.max()), 6),
         "max_loss": round(float(r.min()), 6),
         "max_drawdown": round(float(dd.min()), 6),
-        "annualized": round(cum_end ** (252 / n_dates) - 1.0, 6) if cum_end > 0 else None,
+        "annualized": round(cum_end ** (252 / n_dates) - 1.0, 6)
+        if cum_end > 0
+        else None,
         "sharpe": (
-            round((float(daily.mean()) - rf_daily) / sd * 252**0.5, 6) if sd > 0 else None
+            round((float(daily.mean()) - rf_daily) / sd * 252**0.5, 6)
+            if sd > 0
+            else None
         ),
         "volatility": round(sd * 252**0.5, 6),
         "beta": round(beta, 6) if beta is not None else None,

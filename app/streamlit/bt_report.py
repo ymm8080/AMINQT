@@ -241,7 +241,9 @@ def parse_equity(d: dict, board: str, cut: str = "top10") -> dict[str, pd.DataFr
     新 schema 才有 series 键; 旧 run 返回 {} 不崩页.
     """
     node = _base(_base(_boards(d).get(board), "merged"), cut)
-    ph = _base(_base(node, "oos").get(_pick_oos_name(_base(node, "oos"))), "per_horizon")
+    ph = _base(
+        _base(node, "oos").get(_pick_oos_name(_base(node, "oos"))), "per_horizon"
+    )
     out = {}
     for h in HORIZONS:
         ser = _base(ph.get(h), "series")
@@ -269,7 +271,9 @@ def parse_diversification(d: dict, board: str, cut: str = "top10") -> dict:
 def parse_pick_stats(d: dict, board: str, cut: str = "top10") -> pd.DataFrame:
     """主 OOS 窗各 horizon 逐票风险统计 (一行一视界); 旧 schema → 空表."""
     node = _base(_base(_boards(d).get(board), "merged"), cut)
-    ph = _base(_base(node, "oos").get(_pick_oos_name(_base(node, "oos"))), "per_horizon")
+    ph = _base(
+        _base(node, "oos").get(_pick_oos_name(_base(node, "oos"))), "per_horizon"
+    )
     rows = []
     for h in HORIZONS:
         stx = _base(ph.get(h), "stats")

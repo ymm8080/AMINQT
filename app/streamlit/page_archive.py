@@ -122,7 +122,7 @@ def _fmt_ratio(v) -> str:
 
 def _fmt_stat(v) -> str:
     """None/NaN (如无亏损票时 profit_factor=None) → —."""
-    if v is None or ( isinstance(v, float) and pd.isna(v)):
+    if v is None or (isinstance(v, float) and pd.isna(v)):
         return "—"
     return _fmt_gain(v)
 
@@ -134,7 +134,9 @@ def _render_bt_risk(d: dict, btr, board: str) -> None:
         return
     with st.expander("收益与风险 (净值/回撤/夏普 — OOS 主窗, 逐票复利口径)"):
         h_sel = st.selectbox(
-            "视界", [h for h in ("10d", "5d", "3d") if h in eq_all], key=f"bt_risk_h_{board}"
+            "视界",
+            [h for h in ("10d", "5d", "3d") if h in eq_all],
+            key=f"bt_risk_h_{board}",
         )
         eq = eq_all.get(h_sel)
         stats = btr.parse_pick_stats(d, board, "top10")

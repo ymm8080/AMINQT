@@ -774,7 +774,11 @@ def test_write_worm_writes_conclusion(monkeypatch, tmp_path):
 class TestPickStatsAndSeries:
     def _frame(self):
         return pd.DataFrame(
-            [("2026-03-02", "A", 0.10), ("2026-03-03", "A", -0.05), ("2026-03-04", "A", 0.02)],
+            [
+                ("2026-03-02", "A", 0.10),
+                ("2026-03-03", "A", -0.05),
+                ("2026-03-04", "A", 0.02),
+            ],
             columns=["date", "symbol", "lab"],
         )
 
