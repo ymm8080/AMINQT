@@ -1,9 +1,9 @@
-"""概率头密度版影子单纯函数单测 (2026-09-05, scripts/_prob10_density_shadow.py).
+"""概率头密度版影子单纯函数单测 (2026-09-05 建, 2026-09-06 口径替换).
 
-口径锁死 (125d ckpt 回放, 2026-09-05 用户拍板, 勿静默改):
-  名单 = prob10 (每板 prob 降序 top10) + 回撤闸 (-10%) + 密度 occ5≥3 + 额≥1亿
-  + 派发闸 (获利盘5日回落 wr5<0 → 剔, 不补齐; 数据缺 fail-open) — 09-05 晚
-  三线统一 "只要派发都删";
+口径锁死 (2026-09-06 用户拍板 "把密度王替换成 L3 TOP20这条线", 勿静默改):
+  名单 = 每板 prob 降序前20带 + 回撤闸 (-10%) + 带内密度 occ5≥3
+  + 派发闸 (获利盘5日回落 wr5<0 → 剔, 不补齐; 数据缺 fail-open);
+  免额 (额不作闸, amt 仅展示列) — 09-06 拍板 "去额";
   belief_down = prob − 3个上榜日前 prob (标签列, 非闸)。
 """
 
@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from scripts._prob10_density_shadow import (
-    AMT_MIN,
+    _COLS,
     CHIP_WR5_MAX,
     OCC_MIN,
     OCC_WIN,
@@ -78,27 +78,36 @@ def test_prob10_topn_per_board_and_mapping():
     assert len(m) == 6
 
 
-def test_prob10_cap_at_ten_and_deterministic():
-    big = pd.concat([_cand()] * 4, ignore_index=True)
-    big["symbol"] = [f"{i:06d}" for i in range(len(big))]
-    big.loc[big.index[10:], "prob_up_10d"] = 0.5  # 后 14 只 prob 更低
+def test_band_cap_at_twenty_and_deterministic():
+    big = pd.DataFrame(
+        {
+            "symbol": [f"{600100 + i:06d}" for i in range(25)],
+            "board": ["main"] * 25,
+            "prob_up_10d": [0.90 - 0.01 * i for i in range(25)],
+            "pred_ret_10d": [0.10] * 25,
+        }
+    )
     m1 = prob10_membership(big, DAY)
     m2 = prob10_membership(big, DAY)
     pd.testing.assert_frame_equal(m1, m2)
-    assert (m1["board"] == "main").sum() == 10  # 18 只 main → cap 10
-    assert (m1["prob"] == 0.95).sum() >= 1
+    assert len(m1) == TOP_N == 20  # 25 只 main → cap 20
+    assert "600120" not in set(m1["symbol"])  # prob 最低 5 只被 cap 剔
+    assert "600100" in set(m1["symbol"])
 
 
-def test_density_gates_pull_amount_occ():
+def test_density_gates_pull_occ_no_amount():
+    """免额 (09-06 拍板 "去额"): 额低不再剔 — amt 仅展示列."""
     syms = ["600001", "600002", "600003", "300005"]
     close, amount = _panel(syms, [10.0] * 4, [2e8] * 4)
+    amount["600003"] = 5e7  # 旧额闸会剔; 现口径保留
     out = density_picks(_cand(), _hist(), close, amount, DAY)
     # 600001 (occ5=5) 与 600003 (occ5=5, hist 全勤) 过; 600002 occ5=1 剔; 300005 dual 过
     assert list(out["symbol"]) == ["600001", "600003", "300005"]
     assert list(out["board"]) == ["main", "main", "dual"]
     assert out["occ5"].min() >= OCC_MIN
-    assert (out["amt"] >= AMT_MIN).all()
     assert (out["pull"] >= PULL_FLOOR).all()
+    assert "amt" in out.columns  # 展示列保留
+    assert abs(float(out[out.symbol == "600003"]["amt"].iloc[0]) - 5e7) < 1e-6
 
 
 def test_parallel_pred_columns_merged_and_nan_fill():
@@ -166,14 +175,6 @@ def test_density_pull_gate_filters_deep_pull():
     assert "600001" not in list(out["symbol"])  # 回撤 >10% 被闸
 
 
-def test_density_amount_gate():
-    syms = ["600001", "600002", "600003", "300005"]
-    close, amount = _panel(syms, [10.0] * 4, [2e8] * 4)
-    amount["600003"] = 5e7  # 额不足
-    out = density_picks(_cand(), _hist(), close, amount, DAY)
-    assert "600003" not in list(out["symbol"])
-
-
 def test_belief_down_tag_three_days_back():
     syms = ["600001", "600002", "600003", "300005"]
     close, amount = _panel(syms, [10.0] * 4, [2e8] * 4)
@@ -188,8 +189,9 @@ def test_belief_down_tag_three_days_back():
 
 
 def test_constants_locked():
-    assert (TOP_N, PULL_FLOOR, AMT_MIN, OCC_WIN, OCC_MIN) == (10, -0.10, 1e8, 5, 3)
+    assert (TOP_N, PULL_FLOOR, OCC_WIN, OCC_MIN) == (20, -0.10, 5, 3)  # 09-06 拍板
     assert CHIP_WR5_MAX == 0.0  # 09-05 三线统一: wr5<0 即剔 (原 cost5 组合条件废除)
+    assert "amt" in _COLS  # 免额后 amt 保留为展示列 (不作闸)
 
 
 def _chip(**over):
