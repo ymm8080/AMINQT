@@ -545,8 +545,9 @@ def test_push_grid_empty_with_dialog_landed_hints_relogin(
         return {c: True for c in row_codes if c is not None}
 
     _patch_push_verify(monkeypatch, verify)
-    monkeypatch.setattr(ui, "read_all_codes",
-                        lambda win, log=print, candidates=None: [])
+    monkeypatch.setattr(
+        ui, "read_all_codes", lambda win, log=print, candidates=None: []
+    )
     txt, ok = _run_push(tmp_path, ["600001"])
     assert ok is False
     assert "疑似掉登录" in capsys.readouterr().out
@@ -573,8 +574,9 @@ def test_push_grid_read_failure_fail_closed(monkeypatch, tmp_path, capsys):
     assert _ledger(txt) == {"600001": "manual"}
 
 
-def test_push_grid_verdict_uses_candidate_constrained_read(monkeypatch, tmp_path,
-                                                           capsys):
+def test_push_grid_verdict_uses_candidate_constrained_read(
+    monkeypatch, tmp_path, capsys
+):
     """判词读网格必须带 candidates=今晚码单 (09-05 接产线: 约束匹配治 8/0
     形歧义冤案) — 不带即视为接线缺失."""
     from scripts import _ths_ui as ui
