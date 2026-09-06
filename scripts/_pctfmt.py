@@ -78,7 +78,9 @@ def fmt_pct_columns(df: pd.DataFrame, cols, already_pct_cols=()) -> pd.DataFrame
         if c not in out.columns:
             continue
         mult = 1.0 if c in set(already_pct_cols) else 100.0
-        out[c] = out[c].map(lambda v: "" if pd.isna(v) else f"{v * mult:.2f}%")
+        out[c] = out[c].map(
+            lambda v, mult=mult: "" if pd.isna(v) else f"{v * mult:.2f}%"
+        )
     return out
 
 
