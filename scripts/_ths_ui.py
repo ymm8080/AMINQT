@@ -346,6 +346,15 @@ _THS_TEMPLATES_NPZ = Path(__file__).with_name("_ths_digit_templates.npz")
 # 单字匹配距离上限 (留一自洽 94/95, 唯一误配距离 0.083 → 0.15 足够分离)
 _DIGIT_MATCH_MAX_D = 0.15
 
+# 约束匹配 (09-05 用户拍板接产线): 判词只需在候选码里挑, 逐行对候选逐位模板
+# 距离评分。自由 OCR 有 8/0 形歧义 (688433 读成 600433 等, 09-05 实证), 任何
+# 单一阈值救不死; 校准 (tmp_t/_ths_cand_calib_0905.py, 19 行真值): thr110 +
+# 6 位距离和 ≤0.9 + 逐位距离 ≤0.17 → 19/19 分离 (真匹配 max_cell≤0.115,
+# 最近假码 002855→002098 max=0.229; 形近假码 002868 sum 0.34 靠 max_cell 杀)
+_CAND_BIN_THR = 110  # 约束路径二值阈值 (thr140 丢 8 腰线, thr110 校准全对)
+_CAND_SUM_MAX = 0.9  # 6 位距离和上限
+_CAND_CELL_MAX = 0.17  # 单位距离上限 (杀形近假码的维度)
+
 _digit_tpl_cache = None
 
 
@@ -370,6 +379,32 @@ def _match_digit(feat: np.ndarray) -> tuple[int | None, float]:
     d = np.abs(feats - feat[None]).mean(axis=(1, 2))
     i = int(d.argmin())
     return (int(labels[i]) if d[i] <= _DIGIT_MATCH_MAX_D else None), float(d[i])
+
+
+def _digit_dist(feat: np.ndarray, d: int) -> float:
+    """字形特征到指定数字类的最小模板距离 (无上限门, 供约束匹配评分)."""
+    feats, labels = _digit_templates()
+    m = labels == d
+    return float(np.abs(feats[m] - feat[None]).mean(axis=(1, 2)).min())
+
+
+def _match_candidate(cellfeats: list[np.ndarray],
+                     candidates: list[str]) -> tuple[str | None, float]:
+    """约束匹配: 在候选码里挑最优 (和 ≤_CAND_SUM_MAX 且逐位 ≤_CAND_CELL_MAX).
+
+    返回 (码, 逐位最大距离); 无候选过闸 → (None, 1.0) 宁缺勿错.
+    """
+    best: tuple[float, str, float] | None = None
+    for c in candidates:
+        per = [_digit_dist(f, int(ch)) for f, ch in zip(cellfeats, c)]
+        s = float(sum(per))
+        mx = float(max(per))
+        if s <= _CAND_SUM_MAX and mx <= _CAND_CELL_MAX:
+            if best is None or s < best[0]:
+                best = (s, c, mx)
+    if best is None:
+        return None, 1.0
+    return best[1], best[2]
 
 
 def _split_digit_cells(seg: np.ndarray) -> list[tuple[int, int]]:
@@ -403,10 +438,26 @@ def _split_digit_cells(seg: np.ndarray) -> list[tuple[int, int]]:
     return cells
 
 
+def _cell_feats(seg2: np.ndarray,
+                cells: list[tuple[int, int]]) -> list[np.ndarray]:
+    """已裁剪行二值图 + 数字格切分 → 每格归一化字形特征."""
+    out = []
+    for ca, cb in cells:
+        g = seg2[:, ca:cb]
+        ys2 = np.where(g.any(axis=1))[0]
+        xs2 = np.where(g.any(axis=0))[0]
+        out.append(_norm_glyph(g[ys2.min() : ys2.max() + 1, xs2.min() : xs2.max() + 1]))
+    return out
+
+
 def _read_rows_from_gray(
-    gray: np.ndarray, ytop: int
+    gray: np.ndarray, ytop: int, candidates: list[str] | None = None
 ) -> list[tuple[int, int, str | None, float]]:
-    """读码核心 (纯数组): 代码列灰度图 → [(y0, y1, code, conf)], y 已加 ytop 偏移."""
+    """读码核心 (纯数组): 代码列灰度图 → [(y0, y1, code, conf)], y 已加 ytop 偏移.
+
+    candidates 给定时走约束匹配 (行带按 _CAND_BIN_THR 二值, 在候选里挑最优,
+    无候选过闸 → None); 缺省自由匹配 (thr140, 有 8/0 形歧义) 行为不变.
+    """
     on = (gray > 140).mean(axis=1) > 0.02
     bands = []
     s = None
@@ -421,7 +472,8 @@ def _read_rows_from_gray(
         bands.append((s, len(on)))
     rows = []
     for ya, yb in bands:
-        seg = gray[ya:yb] > 140
+        thr = _CAND_BIN_THR if candidates is not None else 140
+        seg = gray[ya:yb] > thr
         rf = seg.mean(axis=1)
         ys = np.where(rf > 0.05)[0]
         if len(ys) == 0:
@@ -432,29 +484,31 @@ def _read_rows_from_gray(
         if len(cells) != 6:
             rows.append((ya + ytop, yb + ytop, None, 1.0))
             continue
-        digits, conf = [], 0.0
-        for ca, cb in cells:
-            g = seg2[:, ca:cb]
-            ys2 = np.where(g.any(axis=1))[0]
-            xs2 = np.where(g.any(axis=0))[0]
-            feat = _norm_glyph(g[ys2.min() : ys2.max() + 1, xs2.min() : xs2.max() + 1])
-            lab, dist = _match_digit(feat)
-            digits.append(lab)
-            conf = max(conf, dist)
-        code = (
-            "".join(str(d) for d in digits)
-            if all(d is not None for d in digits)
-            else None
-        )
+        feats = _cell_feats(seg2, cells)
+        if candidates is not None:
+            code, conf = _match_candidate(feats, candidates)
+        else:
+            digits, conf = [], 0.0
+            for feat in feats:
+                lab, dist = _match_digit(feat)
+                digits.append(lab)
+                conf = max(conf, dist)
+            code = (
+                "".join(str(d) for d in digits)
+                if all(d is not None for d in digits)
+                else None
+            )
         rows.append((ya + ytop, yb + ytop, code, conf))
     return rows
 
 
-def read_visible_rows(win, log=print) -> list[tuple[int, int, str | None, float]]:
+def read_visible_rows(win, log=print,
+                      candidates: list[str] | None = None,
+                      ) -> list[tuple[int, int, str | None, float]]:
     """读当前可见行代码列 → [(y0_rel, y1_rel, code, conf)] (窗口相对物理 px).
 
     code=None = 该行切分/匹配失败 (宁缺勿错, 调用方不得猜测); conf = 6 格最大
-    匹配距离. 只截图不点击, 用户在场也安全.
+    匹配距离. candidates 语义见 _read_rows_from_gray. 只截图不点击, 用户在场也安全.
     """
     from PIL import ImageGrab
 
@@ -464,7 +518,7 @@ def read_visible_rows(win, log=print) -> list[tuple[int, int, str | None, float]
     ytop = r.top + _ROWS_SCAN_TOP_REL
     ybot = r.top + r.height() - _BOTTOM_KEEP_REL
     gray = np.asarray(ImageGrab.grab(bbox=(x0, ytop, x1, ybot)).convert("L"))
-    return _read_rows_from_gray(gray, ytop - r.top)
+    return _read_rows_from_gray(gray, ytop - r.top, candidates)
 
 
 def find_row_by_code(win, code: str, rows=None) -> float | None:
@@ -558,11 +612,16 @@ def delete_code_flow(win, code: str, log=print) -> str:
     return "deleted" if gone else "delete_failed"
 
 
-def read_all_codes(win, log=print) -> list[str]:
-    """全清单读码: 顶视图 + 尾视图 ({End}) 合并去重, 有序. 只读+焦点点击, 无数字键."""
+def read_all_codes(win, log=print,
+                   candidates: list[str] | None = None) -> list[str]:
+    """全清单读码: 顶视图 + 尾视图 ({End}) 合并去重, 有序. 只读+焦点点击, 无数字键.
+
+    candidates 给定时判词走约束匹配 (09-05 接产线: 自由 OCR 有 8/0 形歧义,
+    推送判词只需在候选码里挑 — 校准 19 行真值 19/19 分离).
+    """
     import uiautomation as auto
 
-    rows = read_visible_rows(win, log)
+    rows = read_visible_rows(win, log, candidates)
     codes_top = [c for _a, _b, c, _f in rows if c]
     if not rows:
         return []
@@ -572,7 +631,8 @@ def read_all_codes(win, log=print) -> list[str]:
     assert_foreground_hexin("{End} 跳尾视图")
     auto.SendKeys("{End}")
     time.sleep(1.2)
-    codes_end = [c for _a, _b, c, _f in read_visible_rows(win, log) if c]
+    codes_end = [c for _a, _b, c, _f in read_visible_rows(win, log, candidates)
+                 if c]
     assert_foreground_hexin("{Home} 回顶")
     auto.SendKeys("{Home}")
     time.sleep(1.0)

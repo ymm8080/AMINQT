@@ -1,92 +1,79 @@
-"""A1 动量影子单纯函数单测 (2026-09-04, scripts/_a1_momentum_shadow.py).
+"""差值加速度影子单纯函数单测 (2026-09-04, scripts/_a1_momentum_shadow.py).
 
-口径锁死 (125d 回放判决 2, 勿静默改):
-  A1 = bias_20/60/120/250 截面百分位秩 nanmean;
-  剔当日强涨 pctChg>=9.5% (双创 19%); A1 降序 top10。
+口径锁死 (250d 回放, 2026-09-04 用户拍板, 勿静默改):
+  名单 = 全市场 (r5 - r5_prev) 差值 top10 纯排, 无累计动量臂、无三桶过滤。
+  沿革: a1union 纯并集 → a1tri 三桶 → a1diff 差值 (本版)。
+  严格比值 r5/r5p 判死 ≈ 基线; 三桶过滤杀差值臂 79% 赢家, 均勿再加。
 """
 
 import numpy as np
 import pandas as pd
 
-from scripts._a1_momentum_shadow import BIAS_COLS, a1_top10
+from scripts._a1_momentum_shadow import R_WIN, diff_picks
 
 
-def _day(n: int = 12) -> pd.DataFrame:
-    """构造可人工判读的单日截面: symbol i 的 bias 列值单调, i 越大动量越高."""
-    rows = []
-    for i in range(n):
-        rows.append(
-            {
-                "symbol": f"{600000 + i}",
-                "bias_20": float(i),
-                "bias_60": float(i),
-                "bias_120": float(i),
-                "bias_250": float(i),
-                "pctChg": 1.0,
-            }
-        )
-    return pd.DataFrame(rows)
+def _close(n: int = 15) -> pd.DataFrame:
+    """可人工判读收盘矩阵: A 后5日+20% / B 前5日+40%后平 / C 加速上行 / D 平后小跌."""
+    idx = pd.date_range("2026-01-01", periods=n, freq="B")
+    a = np.concatenate([np.full(n - 5, 10.0), np.full(5, 12.0)])          # diff=+0.20
+    b = np.concatenate([np.full(n - 10, 10.0), np.full(10, 14.0)])[:n]    # diff=-0.40
+    c = np.concatenate([np.full(n - 10, 10.0), np.full(5, 10.5),
+                        np.full(5, 11.55)])[:n]                           # diff=+0.05
+    d = np.concatenate([np.full(n - 5, 10.0), np.full(5, 9.5)])           # diff=-0.05
+    return pd.DataFrame({"600001": a, "600002": b, "600003": c, "600004": d}, index=idx)
 
 
-def test_a1_picks_highest_momentum_in_order():
-    df = _day()
-    out = a1_top10(df)
-    assert list(out["rank"]) == list(range(1, 11))
-    # i 越大 bias 越高 → 截面秩越高 → top10 是 i=11..2 降序
-    assert list(out["symbol"]) == [f"{600000 + i}" for i in range(11, 1, -1)]
-    # a1 = 四列截面秩的均值; 满截面时最强者 = 1.0
-    assert out["a1"].iloc[0] == 1.0
-    assert out["a1"].is_monotonic_decreasing
+def test_diff_picks_orders_by_acceleration():
+    out = diff_picks(_close(), pd.bdate_range("2026-01-01", periods=15)[-1])
+    assert list(out["symbol"]) == ["600001", "600003", "600004", "600002"]
+    assert out["diff"].is_monotonic_decreasing
+    assert list(out["rank"]) == [1, 2, 3, 4]
+    a = out.iloc[0]
+    assert abs(a["r5"] - 0.2) < 1e-9 and abs(a["r5p"]) < 1e-9
 
 
-def test_partial_nan_bias_uses_nanmean():
-    """部分 bias 列 NaN → 用可用列均值 (nanmean 语义), 不整行丢弃."""
-    df = _day()
-    df.loc[df.index[-1], "bias_250"] = np.nan  # 最强股缺一列
-    df.loc[df.index[0], BIAS_COLS] = np.nan  # 最弱股全缺
-    out = a1_top10(df)
-    syms = list(out["symbol"])
-    assert f"{600000 + 11}" == syms[0]  # 缺一列仍以 3 列满秩登顶
-    assert f"{600000 + 0}" not in syms  # 全缺被丢
+def test_diff_picks_top_n_cap():
+    close = pd.concat([_close()] * 3, axis=1)
+    close.columns = [f"{600000 + i:06d}" for i in range(close.shape[1])]
+    out = diff_picks(close, close.index[-1], arm_top_n=10)
+    assert len(out) == 10  # 12 只候选 cap 到 10
+    assert len(diff_picks(close, close.index[-1], arm_top_n=2)) == 2
 
 
-def test_hot_exclusion_main_board():
-    df = _day()
-    df.loc[df.index[-1], "pctChg"] = 9.9  # 主板最强股强涨
-    out = a1_top10(df)
-    assert f"{600000 + 11}" not in list(out["symbol"])
-    assert list(out["symbol"])[0] == f"{600000 + 10}"
+def test_diff_picks_short_history_empty():
+    out = diff_picks(_close(10), _close(10).index[-1])  # 需 2*5+1=11 交易日
+    assert out.empty
+    assert list(out.columns) == ["rank", "symbol", "diff", "r5", "r5p"]
 
 
-def test_hot_exclusion_creates_board_threshold_19():
-    df = _day(14)
-    c30 = df.index[df["symbol"] == "600012"][0]
-    c68 = df.index[df["symbol"] == "600013"][0]
-    df.loc[c30, "symbol"] = "300012"
-    df.loc[c68, "symbol"] = "688013"
-    df.loc[c30, "pctChg"] = 9.7  # 双创 <19% 不剔
-    df.loc[c68, "pctChg"] = 19.5  # 双创 >=19% 剔
-    out = a1_top10(df)
-    syms = list(out["symbol"])
-    assert "300012" in syms
-    assert "688013" not in syms
+def test_diff_picks_uses_only_history_up_to_day_ts():
+    close = _close(15)
+    out = diff_picks(close, close.index[9])  # 只剩 10 日历史 → 空
+    assert out.empty
 
 
-def test_symbol_zero_padded():
-    df = _day(3)
-    df["symbol"] = ["1", "600001", "600002"]
-    out = a1_top10(df)
-    assert "000001" in list(out["symbol"])
+def test_diff_picks_excludes_insufficient_history_symbols():
+    close = _close()
+    close["600009"] = np.nan  # 全缺 → 剔除
+    close.loc[close.index[:-8], "600008"] = np.nan  # 不足 11 日 → 剔除
+    out = diff_picks(close, close.index[-1])
+    assert "600009" not in list(out["symbol"])
+    assert "600008" not in list(out["symbol"])
 
 
-def test_fewer_than_10_candidates():
-    df = _day(6)
-    out = a1_top10(df)
-    assert len(out) == 6
-    assert list(out["rank"]) == [1, 2, 3, 4, 5, 6]
+def test_diff_picks_excludes_bse():
+    close = _close()
+    close["920999.BJ"] = close["600001"] * 1.1  # 更高差值也会被剔
+    out = diff_picks(close, close.index[-1])
+    assert "920999.BJ" not in list(out["symbol"])
+    assert len(out) == 4  # 剔后 top10 补满剩余 A 股
 
 
-def test_deterministic():
-    a = a1_top10(_day())
-    b = a1_top10(_day())
-    pd.testing.assert_frame_equal(a, b)
+def test_diff_picks_deterministic():
+    ts = _close().index[-1]
+    pd.testing.assert_frame_equal(diff_picks(_close(), ts), diff_picks(_close(), ts))
+
+
+def test_window_constant_is_five():
+    """差值两腿各 5 交易日 — 回放口径, 勿静默改."""
+    assert R_WIN == 5

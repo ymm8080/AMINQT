@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from config.settings import STOCK_LIST_DIR, data_others_path
+from scripts._pctfmt import parse_pct
 
 LIST_DIR = "data/lists"
 TUNING_REPORT = str(data_others_path("data/tuning_report.json"))
@@ -145,7 +146,9 @@ def pipeline_buy_candidates(df: pd.DataFrame) -> set[str]:
     if df is None or df.empty or "symbol" not in df.columns:
         return set()
     if "pred_ret_3d" in df.columns:
-        return set(df.loc[df["pred_ret_3d"] > 0, "symbol"])
+        # 交付 CSV 百分比显示层 (09-05): "3.21%" → 0.0321, 旧数值文件原样通过
+        ret = df["pred_ret_3d"].map(parse_pct)
+        return set(df.loc[ret > 0, "symbol"])
     if "score" in df.columns:
         threshold = df["score"].quantile(0.7)
         return set(df.loc[df["score"] >= threshold, "symbol"])
@@ -878,8 +881,9 @@ def load_real_signals() -> list[dict]:
         signals = []
         for _, row in matched.iterrows():
             sym = row["symbol"]
-            pred_ret = float(row.get("pred_ret_3d", 0))
-            prob = float(row.get("prob_up", 0))
+            # 交付 CSV 百分比显示层 (09-05): "3.21%" → 0.0321, 旧数值原样通过
+            pred_ret = parse_pct(row.get("pred_ret_3d", 0))
+            prob = parse_pct(row.get("prob_up", 0))
             side = "buy" if pred_ret > 0 else "sell"
             reason = f"prob={prob:.2f} pred_ret_3d={pred_ret:+.2%}"
             signals.append(
@@ -995,6 +999,7 @@ _PRED_FAMILY = {
     "parallel_shortlist": "parallel",
     "parallel_preds_raw": "parallel_raw",
     "slowbull_pool": "slow_bull",
+    "prob10dens": "prob10dens",
 }
 _FAMILY_GROUP = {
     "legacy": "legacy",
@@ -1002,12 +1007,14 @@ _FAMILY_GROUP = {
     "parallel": "parallel",
     "parallel_raw": "parallel",
     "slow_bull": "slow_bull",
+    "prob10dens": "prob10dens",
 }
 # 同 symbol+module+族 去重时: 交付族优先 (0), 底稿次之 (1)
 _FAMILY_PRIORITY = {
     "legacy": 0,
     "parallel": 0,
     "slow_bull": 0,
+    "prob10dens": 0,
     "legacy_raw": 1,
     "parallel_raw": 1,
 }
@@ -1088,21 +1095,37 @@ def _normalize_pred_rows(
     # 2026-08-09 并行交付新增: 全局质量排名 + 10d 制度门标注 (仅 parallel 清单含, legacy/slow_bull 留空)
     out["rank"] = df["rank"] if "rank" in df.columns else None
     out["过门"] = df["过门"] if "过门" in df.columns else None
+    def _num(col: str):
+        # 交付 CSV 百分比显示层 (09-05): "3.21%" → 0.0321 还原数值
+        # (看板展示格式化依赖数值; 旧数值文件原样通过)
+        s = df.get(col)
+        return None if s is None else s.map(parse_pct)
+
     if family == "slow_bull":
         out["system"] = "slow_bull"
         return out
+    if family == "prob10dens":
+        # 影子单「密度王」(09-05 用户: 作为一个模型进日期清单, 不单独开页):
+        # 原版口径 (legacy_*) 入统一 gain/prob 10d, 并行值随行携带供展示
+        out["gain_10d"] = _num("legacy_pred10")
+        out["prob_10d"] = _num("legacy_prob")
+        out["并行幅度"] = (
+            df["parallel_pred10"] if "parallel_pred10" in df.columns else None
+        )
+        out["并行概率"] = df["parallel_prob"] if "parallel_prob" in df.columns else None
+        return out
     if family.startswith("legacy"):
         for h in ("3d", "5d", "10d"):
-            out[f"gain_{h}"] = df.get(f"pred_ret_{h}")
-            out[f"prob_{h}"] = df.get(f"prob_up_{h}")
+            out[f"gain_{h}"] = _num(f"pred_ret_{h}")
+            out[f"prob_{h}"] = _num(f"prob_up_{h}")
     else:  # parallel
         for h in ("3d", "5d", "10d"):
             out[f"gain_{h}"] = (
-                df.get(f"pred_ret_{h}")
+                _num(f"pred_ret_{h}")
                 if f"pred_ret_{h}" in df.columns
-                else df.get(f"pred_mag_{h}")
+                else _num(f"pred_mag_{h}")
             )
-            out[f"prob_{h}"] = df.get(f"pred_prob_{h}")
+            out[f"prob_{h}"] = _num(f"pred_prob_{h}")
     return out
 
 
@@ -1136,6 +1159,9 @@ def load_stock_list_on_date(
             )
             continue
         if df is None or df.empty or "symbol" not in df.columns:
+            continue
+        df = df[df["symbol"].notna()]  # 空行 (如 0903 slowbull 池尾行) 不入池
+        if df.empty:
             continue
         norm = _normalize_pred_rows(info["family"], info["date"], info["module"], df)
         if norm.empty:
@@ -1185,3 +1211,52 @@ def load_stock_list_on_dates(
     if not frames:
         return pd.DataFrame(columns=_UNIFIED_COLS)
     return pd.concat(frames, ignore_index=True)
+
+
+_PROB10DENS_RE = re.compile(r"^prob10dens_(?P<date>\d{8})__.+\.csv$")
+
+
+def list_prob10dens_dates(list_dir: str = STOCK_LIST_DIR) -> list[str]:
+    """prob10dens 影子单出现过的日期, 降序."""
+    if not os.path.isdir(list_dir):
+        return []
+    dates = []
+    for fname in os.listdir(list_dir):
+        m = _PROB10DENS_RE.match(fname)
+        if m:
+            dates.append(m.group("date"))
+    return sorted(set(dates), reverse=True)
+
+
+def load_prob10dens_watchlist(
+    date_compact: str | None = None, list_dir: str = STOCK_LIST_DIR
+) -> tuple[pd.DataFrame | None, str | None]:
+    """prob10dens 影子单原始 CSV (双模型四列 + occ5/pull/amt 等全列), 默认最新日.
+
+    统一族路径 (_normalize_pred_rows) 只保留原版 gain/prob + 并行两列;
+    本 loader 供看板影子单明细区读全列 (百分比显示层字符串原样).
+    无该日/无文件 → (None, None).
+    """
+    dates = list_prob10dens_dates(list_dir)
+    if not dates:
+        return None, None
+    if date_compact is None:
+        date_compact = dates[0]
+    if date_compact not in dates:
+        return None, date_compact
+    fps = sorted(
+        p
+        for p in Path(list_dir).glob(f"prob10dens_{date_compact}__*.csv")
+        if _PROB10DENS_RE.match(p.name)
+    )
+    if not fps:
+        return None, date_compact
+    try:
+        df = pd.read_csv(fps[-1], dtype={"symbol": str})
+    except Exception:
+        _data_logger.warning("影子单读取失败: %s", fps[-1], exc_info=True)
+        return None, date_compact
+    if df is None or df.empty or "symbol" not in df.columns:
+        return None, date_compact
+    df = df[df["symbol"].notna()]
+    return (df.reset_index(drop=True) if not df.empty else None), date_compact

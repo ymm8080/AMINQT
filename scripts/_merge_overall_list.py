@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 
 from config.settings import STOCK_LIST_DIR
+from scripts._pctfmt import PCT_COLS_PARALLEL, parse_pct
 
 GATE_COLS = ("过门", "制度门", "gate_pass")
 
@@ -41,6 +42,11 @@ def load_parallel(date: str) -> pd.DataFrame:
     if not pats:
         sys.exit(f"无 parallel_shortlist_{date}__*.csv")
     sl = pd.read_csv(pats[0], dtype={"symbol": str})
+    # 交付 CSV 百分比显示层 (09-05): 预测列还原数值 (旧数值文件原样通过),
+    # 排序键 pred_mag_10d 必须数值
+    for c in PCT_COLS_PARALLEL:
+        if c in sl.columns:
+            sl[c] = sl[c].map(parse_pct)
     # 2026-08-23 入选=每板块 TOP-10 → 交付 CSV 为 cut=T-10 行; 按 board+symbol 去重兜底
     sl = sl.drop_duplicates(subset=["board", "symbol"]).copy()
     sl["module_parallel"] = (

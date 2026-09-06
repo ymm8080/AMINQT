@@ -69,6 +69,8 @@ from config.settings import (
     SHORTLIST_SCORE,
     STOCK_LIST_DIR,
 )
+from scripts._pctfmt import PCT_COLS_PARALLEL, fmt_pct_columns
+from scripts._prob10_density_shadow import apply_chip_gate
 from scripts._stall_marker import stall_marker
 
 try:
@@ -1579,6 +1581,20 @@ def write_xlsx(
     wb.save(str(path))
 
 
+def _resolve_run_dir_for_delivery(trade_date: str, run_dir_arg: str | None) -> Path | None:
+    """当日并行 run_dir 解析 (2026-09-05 补跑 override).
+
+    --run-dir 显式指定优先: 隔日补跑时 run_dir 按实际运行日命名 (如 09-05 补跑
+    09-04 链 → run_dir=20260905_*), 按 tag 前缀永远找不到, 显式指定即声明
+    "目录内数据即该 tag 交易日数据". 目录不存在 → None (调用方大声失败).
+    未指定 → 按 tag 前缀找当日最新 (常态路径, 行为不变).
+    """
+    if run_dir_arg:
+        d = Path(run_dir_arg)
+        return d if d.is_dir() else None
+    return _latest_fullrun_dir(prefix=trade_date)
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -1586,15 +1602,25 @@ def main() -> int:
         pass
     args = sys.argv[1:]
     trade_date = args[0] if (args and len(args[0]) == 8 and args[0].isdigit()) else None
-    watch = [a for a in args if a != trade_date]
+    run_dir_arg: str | None = None
+    watch: list[str] = []
+    _it = iter(args)
+    for a in _it:
+        if a == trade_date:
+            continue
+        if a == "--run-dir":
+            run_dir_arg = next(_it, None)
+            continue
+        watch.append(a)
 
     global FULLRUN_DIR
     if trade_date:
         # 自动化集成: 只交付"当日"并行 run_dir; 无当日 run_dir → 大声失败 (并行未跑, 无数据可交付)
-        d = _latest_fullrun_dir(prefix=trade_date)
+        d = _resolve_run_dir_for_delivery(trade_date, run_dir_arg)
         if d is None:
+            hint = " (--run-dir 目录不存在)" if run_dir_arg else ""
             print(
-                f"[error] 未找到 {trade_date} 当日并行 run_dir, 拒绝交付旧数据",
+                f"[error] 未找到 {trade_date} 当日并行 run_dir, 拒绝交付旧数据{hint}",
                 flush=True,
             )
             return 1
@@ -1661,6 +1687,9 @@ def main() -> int:
     res = rank_and_truncate(res)
     # 迟滞滞留 (2026-08-26): 昨日上榜仍在带内 → 滞留行 (降换手, 不改新选)
     res = hysteresis_keep(res, full_res, str(sel_date.date()).replace("-", ""))
+    # 筹码派发闸 (2026-09-05 三线统一): 获利盘5日回落 → 剔除, 不补齐;
+    # PARALLEL 无 125d 全池打分史无法回放, 接线为用户直接拍板 (真实删, 非影子)
+    res = apply_chip_gate(res, sel_date, flush=True)
     # 报告幅度锚定 (2026-08-14): 排名键 cal_n=21 保留, 报告 pred_ret_{h}/pred_mag_10d
     # 平移至模型近 ANCHOR_WINDOW 决策日 top-ANCHOR_TOP 已实现均值 — 每板块每视界常数, 排序不变
     res = _anchor_reported(res)
@@ -1716,7 +1745,9 @@ def main() -> int:
     except Exception:
         print("[recal] 概率再校准失败 → 保持原值 (fail-open)", flush=True)
     csv_path = STOCK_LIST_DIR / f"parallel_shortlist_{stamp}{suffix}.csv"
-    res.to_csv(csv_path, index=False)
+    # 交付 CSV 百分比显示层 (2026-09-05 用户: 预测值用百分比): 只格式化写出
+    # 副本, res 本身保持数值 — docx/xlsx 自带百分比格式, console/机器读不受影响
+    fmt_pct_columns(res, PCT_COLS_PARALLEL).to_csv(csv_path, index=False)
     print(f"[saved] {csv_path}", flush=True)
     # WORM: 同名旧文件若被 Word 锁定则换带标记的新名, 不覆盖不丢失
     docx_path = STOCK_LIST_DIR / f"STOCK LIST {stamp}{suffix}.docx"
