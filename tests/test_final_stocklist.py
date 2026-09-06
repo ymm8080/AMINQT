@@ -66,9 +66,9 @@ def test_status_priority_flush_landed_deadzone_result(tmp_path, monkeypatch):
         {"symbol": ["600000", "600001"], "status": ["landed", "manual"]}
     ).to_csv(tmp_path / f"ths_push_result_{DATE}__legacy__M1.csv", index=False)
     # 600002 被放量守卫删过 → flush 压过 landed/deadzone
-    pd.DataFrame(
-        {"asof": [DATE], "symbol": ["600002"], "action": ["removed"]}
-    ).to_csv(tmp_path / f"ths_flush_removed_{DATE}__flushguard.csv", index=False)
+    pd.DataFrame({"asof": [DATE], "symbol": ["600002"], "action": ["removed"]}).to_csv(
+        tmp_path / f"ths_flush_removed_{DATE}__flushguard.csv", index=False
+    )
     _patch_gate(monkeypatch, alarm=True, wr=0.2)
     df = fs.build(DATE, list_dir=tmp_path)
     by_sym = df.set_index("symbol")

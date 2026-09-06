@@ -86,7 +86,9 @@ def _board_of(b: str) -> str:
     return "main" if b == "main" else "dual"  # GEM/STAR → dual
 
 
-def _membership_core(c: pd.DataFrame, prob_col: str, top_n: int = TOP_N) -> pd.DataFrame:
+def _membership_core(
+    c: pd.DataFrame, prob_col: str, top_n: int = TOP_N
+) -> pd.DataFrame:
     """按 date/board 分组取 prob 降序前 top_n → date/board/symbol/prob (纯函数).
 
     默认 top_n=TOP_N=20 (09-06 拍板 TOP20 带, 原 top10 榜).
