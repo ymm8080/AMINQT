@@ -9,11 +9,14 @@
 """
 
 import os
+import sys
 
 import pandas as pd
 import pytest
 
 from scripts import _ths_watchlist_push as mod
+
+_IS_WIN = sys.platform == "win32"
 
 
 def _write_shortlist(path, rank_symbols):
@@ -191,22 +194,21 @@ def test_up_stock_red_price_not_index():
     assert rows[0][2] is False
 
 
+_uia = pytest.importorskip("uiautomation")
+
+
 def _patch_verify_ui(monkeypatch, tmp_path):
     """屏蔽核验循环的 UI 交互 (前台断言/点击/键盘) — 单测只验纯判定逻辑.
 
     失败现场 dump 重定向到 tmp_path — 曾把 10x10 零图 dump 进真实 tmp_t,
     覆盖丢失实弹 forensic 存档 idxchk1.png (09-05 事故)."""
-    import uiautomation
-
     from scripts import _ths_ui as ui
     from scripts import _ths_watchlist_push as wmod
 
     calls = {"click": [], "keys": []}
     monkeypatch.setattr(ui, "assert_foreground_hexin", lambda *a, **k: None)
-    monkeypatch.setattr(
-        uiautomation, "Click", lambda x, y: calls["click"].append((x, y))
-    )
-    monkeypatch.setattr(uiautomation, "SendKeys", lambda s: calls["keys"].append(s))
+    monkeypatch.setattr(_uia, "Click", lambda x, y: calls["click"].append((x, y)))
+    monkeypatch.setattr(_uia, "SendKeys", lambda s: calls["keys"].append(s))
     monkeypatch.setattr(wmod, "FAIL_DUMP_DIR", str(tmp_path))
     return calls
 
@@ -393,8 +395,6 @@ def _patch_push_verify(monkeypatch, verify, idle=True, dialog=True):
     import time as _time
     import types
 
-    import uiautomation
-
     from scripts import _ths_ui as ui
     from scripts import _ths_watchlist_push as wmod
 
@@ -410,12 +410,14 @@ def _patch_push_verify(monkeypatch, verify, idle=True, dialog=True):
     monkeypatch.setattr(ui, "open_copy_recognition_dialog", lambda win: dialog)
     monkeypatch.setattr(ui, "close_x", lambda dlg: None)
     monkeypatch.setattr(ui, "assert_foreground_hexin", lambda *a, **k: None)
-    monkeypatch.setattr(uiautomation, "SetClipboardText", lambda s: None)
-    monkeypatch.setattr(
-        uiautomation, "Click", lambda x, y: calls["click"].append((x, y))
-    )
-    monkeypatch.setattr(uiautomation, "SendKeys", lambda s: None)
-    monkeypatch.setattr(ctypes.windll.user32, "SetWindowPos", lambda *a, **k: 1)
+    monkeypatch.setattr(_uia, "SetClipboardText", lambda s: None)
+    monkeypatch.setattr(_uia, "Click", lambda x, y: calls["click"].append((x, y)))
+    monkeypatch.setattr(_uia, "SendKeys", lambda s: None)
+    # ctypes.windll 仅 Windows 可用; Linux CI 用 mock 替代
+    if _IS_WIN:
+        monkeypatch.setattr(ctypes.windll.user32, "SetWindowPos", lambda *a, **k: 1)
+    else:
+        monkeypatch.setattr(ui, "activate_window", lambda win: None)
     monkeypatch.setattr(_time, "sleep", lambda s: None)
 
     def _verify(dlg, row_codes, log=print, max_rounds=4):
