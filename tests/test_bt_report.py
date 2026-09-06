@@ -340,3 +340,115 @@ def test_real_run_parses():
             btr.parse_picks(dd, board)
     if parsed == 0:
         pytest.skip("BACKTEST_RESULT_DIR 无可用 run")
+
+
+# ───────────────────────── 收益与风险 (净值/回撤/夏普, 新 schema) ─────────────────────────
+def _make_series_fixture() -> dict:
+    """merged 含 stats+series 的新 schema (10d 带曲线, 3d 不带)."""
+    per_h = {
+        "3d": _horizon(0.02, 0.55, 100, 0.50),
+        "10d": {
+            **_horizon(0.04, 0.59, 100, 0.50),
+            "stats": {
+                "n": 100,
+                "winrate": 0.59,
+                "avg": 0.04,
+                "median": 0.035,
+                "avg_win": 0.08,
+                "avg_loss": -0.03,
+                "profit_factor": 1.8,
+                "max_win": 0.21,
+                "max_loss": -0.12,
+                "max_drawdown": -0.05,
+                "annualized": 0.30,
+                "sharpe": 1.2,
+                "volatility": 0.25,
+                "beta": 0.85,
+                "alpha_annual": 0.12,
+                "deepest_date": "2026-03-09",
+                "recovery_days": 1,
+                "underwater_days": 1,
+                "method": "逐票复利",
+            },
+            "series": {
+                "dates": ["2026-03-06", "2026-03-09", "2026-03-10"],
+                "cum": [1.01, 1.005, 1.03],
+                "dd": [0.0, -0.00495, 0.0],
+                "ret": [0.01, -0.005, 0.025],
+                "bench_cum": [1.002, 1.008, 1.005],
+            },
+        },
+    }
+    board = {
+        "merged": {
+            "top5": {"oos": {"6m": {"per_horizon": per_h, "kept": True}}},
+            "top10": {"oos": {"6m": {"per_horizon": per_h, "kept": True}}},
+        }
+    }
+    return {"ts": "20260905_000000", "boards": {"main": board}}
+
+
+class TestEquityAndStats:
+    def test_parse_equity(self):
+        eq = btr.parse_equity(_make_series_fixture(), "main", "top10")
+        assert set(eq) == {"10d"}  # 3d 无 series
+        df = eq["10d"]
+        assert list(df.columns) == ["cum", "dd", "ret", "bench"]  # bench_cum → bench 列
+        assert list(df.index) == ["2026-03-06", "2026-03-09", "2026-03-10"]
+        assert df["cum"].iloc[2] == pytest.approx(1.03)
+        assert df["bench"].iloc[0] == pytest.approx(1.002)
+
+    def test_parse_equity_no_bench_old_series(self):
+        # series 无 bench_cum (round-1 产出) → 不加 bench 列
+        d = _make_series_fixture()
+        del d["boards"]["main"]["merged"]["top10"]["oos"]["6m"]["per_horizon"]["10d"][
+            "series"
+        ]["bench_cum"]
+        df = btr.parse_equity(d, "main", "top10")["10d"]
+        assert list(df.columns) == ["cum", "dd", "ret"]
+
+    def test_parse_equity_default_cut_top10(self):
+        assert "10d" in btr.parse_equity(_make_series_fixture(), "main")
+
+    def test_parse_pick_stats(self):
+        df = btr.parse_pick_stats(_make_series_fixture(), "main", "top10")
+        assert list(df["horizon"]) == ["10d"]
+        row = df.iloc[0]
+        assert row["profit_factor"] == 1.8
+        assert row["max_drawdown"] == -0.05
+        assert row["sharpe"] == 1.2
+        # 第二期新列
+        assert row["beta"] == 0.85
+        assert row["alpha_annual"] == 0.12
+        assert row["deepest_date"] == "2026-03-09"
+        assert row["recovery_days"] == 1
+        assert row["underwater_days"] == 1
+
+    def test_parse_diversification(self):
+        d = _make_series_fixture()
+        d["boards"]["main"]["merged"]["top10"]["diversification"] = {
+            "avg_pairwise_corr": 0.45,
+            "n_dates": 120,
+            "lookback": 60,
+        }
+        div = btr.parse_diversification(d, "main", "top10")
+        assert div["avg_pairwise_corr"] == 0.45
+        assert div["n_dates"] == 120
+        # 无该键 (round-1 产出) → {} 防御
+        assert btr.parse_diversification(_make_series_fixture(), "main", "top10") == {}
+
+    def test_old_schema_defensive(self):
+        assert btr.parse_equity(_make_old_schema(), "main") == {}
+        assert btr.parse_pick_stats(_make_old_schema(), "main").empty
+        assert btr.parse_diversification(_make_old_schema(), "main") == {}
+
+    def test_single_window_label_fallback(self):
+        # 单窗 run (label="oos") 走 fallback 路径, 无 series → 空不崩
+        assert btr.parse_equity(_make_single_window(), "main", "top5") == {}
+
+    def test_semi_new_schema_no_stats(self):
+        # horizon 节点存在但被剥掉 stats (半新 schema) → 空防御
+        d = _make_series_fixture()
+        node = d["boards"]["main"]["merged"]["top10"]["oos"]["6m"]["per_horizon"]["10d"]
+        del node["stats"]
+        assert btr.parse_pick_stats(d, "main", "top10").empty

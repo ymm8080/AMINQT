@@ -768,3 +768,126 @@ def test_write_worm_writes_conclusion(monkeypatch, tmp_path):
     log_text = log.read_text(encoding="utf-8")
     assert "结论" in log_text  # 结论置顶
     assert log_text.index("结论") < log_text.index("PIPELINE")
+
+
+# ── 逐票统计 + 净值序列 (看板回测完整度, 2026-09-05) ──
+class TestPickStatsAndSeries:
+    def _frame(self):
+        return pd.DataFrame(
+            [("2026-03-02", "A", 0.10), ("2026-03-03", "A", -0.05), ("2026-03-04", "A", 0.02)],
+            columns=["date", "symbol", "lab"],
+        )
+
+    def test_stats_math(self):
+        from app.pipeline_parallel.backtest import _pick_stats_and_series
+        from app.pipeline_parallel.config import RF_ANNUAL
+
+        st_ = _pick_stats_and_series(self._frame(), self._frame(), "lab")["stats"]
+        assert st_["n"] == 3
+        assert st_["winrate"] == pytest.approx(2 / 3)
+        assert st_["avg"] == pytest.approx(0.023333, abs=1e-5)
+        assert st_["median"] == pytest.approx(0.02)
+        assert st_["avg_win"] == pytest.approx(0.06)
+        assert st_["avg_loss"] == pytest.approx(-0.05)
+        assert st_["profit_factor"] == pytest.approx(2.4)
+        assert st_["max_win"] == pytest.approx(0.10)
+        assert st_["max_loss"] == pytest.approx(-0.05)
+        # 净值 [1.10, 1.045, 1.0659] → 回撤最深在 t2
+        assert st_["max_drawdown"] == pytest.approx(-0.05)
+        assert st_["annualized"] == pytest.approx(1.0659 ** (252 / 3) - 1, rel=1e-3)
+        daily = np.array([0.10, -0.05, 0.02])
+        # ch6 公式口径: 分子扣无风险利率 rf_daily=RF_ANNUAL/252
+        assert st_["sharpe"] == pytest.approx(
+            (daily.mean() - RF_ANNUAL / 252) / daily.std(ddof=0) * np.sqrt(252),
+            rel=1e-3,
+        )
+        assert st_["volatility"] == pytest.approx(
+            daily.std(ddof=0) * np.sqrt(252), rel=1e-3
+        )
+        # ch7 恢复统计: 深坑在 t2 (dd=[0,-0.05,-0.031]), 窗口末未回前高
+        assert st_["deepest_date"] == "2026-03-03"
+        assert st_["recovery_days"] is None
+        assert st_["underwater_days"] == 2
+
+    def test_beta_alpha_and_bench_cum(self):
+        from app.pipeline_parallel.backtest import _pick_stats_and_series
+
+        # 基准=组合自身 → Beta=1, Alpha=0, bench_cum 与 cum 重合
+        out = _pick_stats_and_series(self._frame(), self._frame(), "lab")
+        assert out["stats"]["beta"] == pytest.approx(1.0, abs=1e-5)
+        assert out["stats"]["alpha_annual"] == pytest.approx(0.0, abs=1e-5)
+        ser = out["series"]
+        assert "bench_cum" in ser
+        assert ser["bench_cum"] == pytest.approx(ser["cum"])
+
+    def test_no_bench_when_sub_missing_dates(self):
+        from app.pipeline_parallel.backtest import _pick_stats_and_series
+
+        # 基准日期完全不重叠 → 无 bench_cum, beta=None (旧 run 兼容路径)
+        other = self._frame().copy()
+        other["date"] = ["2026-01-02", "2026-01-03", "2026-01-06"]
+        out = _pick_stats_and_series(self._frame(), other, "lab")
+        assert "bench_cum" not in out["series"]
+        assert out["stats"]["beta"] is None
+
+    def test_series_arrays(self):
+        from app.pipeline_parallel.backtest import _pick_stats_and_series
+
+        ser = _pick_stats_and_series(self._frame(), self._frame(), "lab")["series"]
+        assert "bench_cum" in ser  # 基准=自身 → 与 cum 重合
+        assert ser["dates"] == ["2026-03-02", "2026-03-03", "2026-03-04"]
+        assert ser["ret"] == pytest.approx([0.10, -0.05, 0.02])
+        assert ser["cum"][0] == pytest.approx(1.10)
+        assert ser["cum"][1] == pytest.approx(1.10 * 0.95)
+        assert ser["cum"][2] == pytest.approx(1.10 * 0.95 * 1.02)
+        assert ser["dd"][0] == 0.0
+        assert ser["dd"][1] == pytest.approx(1.045 / 1.10 - 1)
+
+    def test_empty_and_all_nan(self):
+        from app.pipeline_parallel.backtest import _pick_stats_and_series
+
+        empty = pd.DataFrame({"date": [], "symbol": [], "lab": []})
+        assert _pick_stats_and_series(empty, empty, "lab") is None
+        nan_df = pd.DataFrame(
+            {"date": ["d1", "d2"], "symbol": ["A", "B"], "lab": [np.nan, np.nan]}
+        )
+        assert _pick_stats_and_series(nan_df, nan_df, "lab") is None
+
+
+def test_pick_diversification_two_clusters():
+    from app.pipeline_parallel.backtest import _pick_diversification
+
+    # 两簇: A=B 同向, C=D=反向 → 6 对相关 (2×1 + 4×(−1))/6 = −1/3
+    n = 41
+    dates = [f"2026-01-{d:02d}" for d in range(1, n + 1)]
+    base = np.array([0.01 if i % 2 == 0 else -0.01 for i in range(n)])
+    rets = {"A": base, "B": base, "C": -base, "D": -base}
+    rows = []
+    for sym, rr in rets.items():
+        px = 100.0
+        for d, r in zip(dates, rr):
+            px *= 1 + r
+            rows.append((d, sym, px))
+    sub = pd.DataFrame(rows, columns=["date", "symbol", "close_hfq"])
+    last = dates[-1]
+    slc = pd.DataFrame(
+        [(last, s) for s in ("A", "B", "C", "D")], columns=["date", "symbol"]
+    )
+    div = _pick_diversification(sub, slc)
+    assert div["n_dates"] == 1
+    assert div["lookback"] == 60
+    assert div["avg_pairwise_corr"] == pytest.approx(-1 / 3, abs=1e-6)
+
+
+def test_dual_per_horizon_with_series_toggle():
+    from app.pipeline_parallel.backtest import _dual_per_horizon
+    from app.pipeline_parallel.config import FUSION
+
+    df = _with_labels(_panel(extra_cols=FUSION.pool))
+    sel = df[["date", "symbol"]]
+    per = _dual_per_horizon(df, sel, FUSION)
+    assert "series" not in per["3d"]  # 默认关, 生产行为不变
+    assert "stats" not in per["3d"]
+    per2 = _dual_per_horizon(df, sel, FUSION, with_series=True)
+    assert "series" in per2["3d"]
+    assert per2["3d"]["stats"]["n"] == per2["3d"]["n"]

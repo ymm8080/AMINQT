@@ -19,6 +19,10 @@ from dataclasses import dataclass, field
 MIN_WINRATE = 0.50  # 上涨概率下限 (≥ 随机 50%)
 MIN_MAG = 0.01  # 平均净收益下限 (≥ 1%)
 
+# 风险统计 (2026-09-05 第二期采纳: Sharpe 减无风险利率 / TOP-10 分散度回看窗)
+RF_ANNUAL = 0.02  # 无风险年利率 (夏普分子扣除), 日频按 /252
+DIVERSIFICATION_LOOKBACK = 60  # 入选股两两相关的日收益回看窗 (交易日)
+
 # OOS 样本外窗口 (2026-08-04 用户: "BACKTESTING CONSISTS OF 6M, 3M, 10D").
 # 6m (≈126 交易日, 主验收) + 3m (≈63 交易日) 两个聚合回测;
 # 10d 额外给出逐日股票清单 + 每日期回测结果 (last_days_report).

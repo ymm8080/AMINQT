@@ -30,6 +30,7 @@ from app.pipeline_parallel.config import (
     ALL_HORIZON_INTS,
     BOARD_PREFIXES,
     BOARD_THRESHOLDS,
+    DIVERSIFICATION_LOOKBACK,
     FUSION,
     HORIZONS,
     MAG10D_CAL,
@@ -37,6 +38,7 @@ from app.pipeline_parallel.config import (
     MIN_WINRATE,
     OOS_WINDOWS,
     PANEL,
+    RF_ANNUAL,
     SLOW_BULL,
     SLOW_BULL_REGIME,
     SNIPER,
@@ -323,10 +325,153 @@ def run_system(
     }
 
 
+def _pick_stats_and_series(s: pd.DataFrame, sub: pd.DataFrame, lab: str) -> dict | None:
+    """逐票净收益 → 风险统计 + 净值/回撤/基准序列 (JSON 安全, 全 NaN/空 → None).
+
+    曲线口径: 按入选日分组的等权组合日收益 r_t → cumprod(1+r_t) → dd=cum/cummax-1.
+    逐票复利口径, 非可交易组合 (持有期重叠); 年化/夏普按 252 交易日换算.
+    基准 = 窗口全池等权日收益 (sub 按日取 lab 均值, 与 baseline 聚合同源):
+    Beta = cov(port,bench)/var(bench); Alpha(年化) = (1+mean(port-β·bench))^252-1.
+    Sharpe 分子扣无风险利率 RF_ANNUAL (ch6 公式口径).
+    """
+    v = s[["date", lab]].dropna()
+    if v.empty:
+        return None
+    r = v[lab].astype(float)
+    wins = r[r > 0]
+    losses = r[r < 0]
+    daily = v.groupby("date")[lab].mean().sort_index()
+    cum = (1.0 + daily).cumprod()
+    dd = cum / cum.cummax() - 1.0
+    n_dates = len(daily)
+    cum_end = float(cum.iloc[-1])
+    sd = float(daily.std(ddof=0))
+
+    # Beta/Alpha vs 窗口全池等权基准 (共同日期对齐)
+    bench = sub.groupby("date")[lab].mean().sort_index()
+    common = daily.index.intersection(bench.index)
+    beta = alpha_annual = None
+    if len(common) >= 2:
+        p = daily.loc[common].astype(float)
+        b = bench.loc[common].astype(float)
+        var_b = float(b.var(ddof=0))
+        if var_b > 0:
+            beta = float(np.cov(p, b, ddof=0)[0, 1] / var_b)
+            alpha_annual = round((1.0 + float((p - beta * b).mean())) ** 252 - 1.0, 6)
+
+    # 回撤恢复 (ch7 水下宽度): 最深日 → 回到前高的交易日数; 最长连续水下天数
+    if float(dd.min()) < 0:
+        deepest_ts = dd.idxmin()
+        deepest_date = str(deepest_ts)[:10]
+        after_mask = (dd.loc[deepest_ts:] >= 0).values
+        first = int(np.argmax(after_mask)) if after_mask.any() else None
+        recovery_days = first if (first is not None and after_mask[first]) else None
+        uw = (dd < 0).values
+        max_run = run = 0
+        for flag in uw:
+            run = run + 1 if flag else 0
+            max_run = max(max_run, run)
+        underwater_days = int(max_run)
+    else:
+        deepest_date, recovery_days, underwater_days = None, None, 0
+
+    rf_daily = RF_ANNUAL / 252
+    gross_win, gross_loss = float(wins.sum()), float(-losses.sum())
+    stats = {
+        "n": int(len(r)),
+        "winrate": round(float((r > 0).mean()), 6),
+        "avg": round(float(r.mean()), 6),
+        "median": round(float(r.median()), 6),
+        "avg_win": round(float(wins.mean()), 6) if len(wins) else None,
+        "avg_loss": round(float(losses.mean()), 6) if len(losses) else None,
+        "profit_factor": round(gross_win / gross_loss, 6) if gross_loss > 0 else None,
+        "max_win": round(float(r.max()), 6),
+        "max_loss": round(float(r.min()), 6),
+        "max_drawdown": round(float(dd.min()), 6),
+        "annualized": round(cum_end ** (252 / n_dates) - 1.0, 6) if cum_end > 0 else None,
+        "sharpe": (
+            round((float(daily.mean()) - rf_daily) / sd * 252**0.5, 6) if sd > 0 else None
+        ),
+        "volatility": round(sd * 252**0.5, 6),
+        "beta": round(beta, 6) if beta is not None else None,
+        "alpha_annual": alpha_annual,
+        "deepest_date": deepest_date,
+        "recovery_days": recovery_days,
+        "underwater_days": underwater_days,
+        "method": (
+            "按入选日等权组合逐票复利 (持有期重叠, 非可交易组合口径); "
+            f"基准=窗口全池等权; Sharpe 扣 rf={RF_ANNUAL}"
+        ),
+    }
+    series = {
+        "dates": [str(x)[:10] for x in daily.index],
+        "cum": [round(float(x), 6) for x in cum],
+        "dd": [round(float(x), 6) for x in dd],
+        "ret": [round(float(x), 6) for x in daily],
+    }
+    bench_al = bench.reindex(daily.index)
+    if len(bench_al) >= 2 and bench_al.notna().all():
+        bench_cum = (1.0 + bench_al.astype(float)).cumprod()
+        series["bench_cum"] = [round(float(x), 6) for x in bench_cum]
+    return {"stats": stats, "series": series}
+
+
+def _pick_diversification(sub: pd.DataFrame, slc: pd.DataFrame) -> dict:
+    """TOP-N 入选股分散度: 各入选日截面成分近 60d 两两相关均值 (ch8 采纳).
+
+    close_hfq 宽表 (限入选股) → 每个入选日取截至当日 (含) 回看窗日收益,
+    当日入选股两两 Pearson 上三角均值 → 全部入选日再求均值. 全窗口径, 不分 OOS.
+    """
+    lookback = DIVERSIFICATION_LOOKBACK
+    if slc.empty or "close_hfq" not in sub.columns:
+        return {}
+    syms = set(slc["symbol"].unique())
+    px = (
+        sub[sub["symbol"].isin(syms)]
+        .pivot_table(index="date", columns="symbol", values="close_hfq", aggfunc="last")
+        .sort_index()
+    )
+    rets = px.pct_change()
+    all_dates = rets.index
+    vals = []
+    for d, g in slc.groupby("date"):
+        cols = [c for c in g["symbol"].tolist() if c in rets.columns]
+        if len(cols) < 2:
+            continue
+        pos = all_dates.get_indexer([d])[0]
+        if pos < 1:
+            continue
+        win = rets.iloc[max(0, pos - lookback + 1) : pos + 1][cols].dropna(
+            axis=0, how="any"
+        )
+        if len(win) < lookback // 2:
+            continue
+        c = win.corr().values
+        iu = np.triu_indices(len(cols), k=1)
+        pair = c[iu]
+        pair = pair[~np.isnan(pair)]
+        if len(pair):
+            vals.append(float(pair.mean()))
+    if not vals:
+        return {}
+    return {
+        "avg_pairwise_corr": round(float(np.mean(vals)), 6),
+        "n_dates": len(vals),
+        "lookback": lookback,
+    }
+
+
 def _dual_per_horizon(
-    sub: pd.DataFrame, sel: pd.DataFrame, spec, crit: tuple[float, float] | None = None
+    sub: pd.DataFrame,
+    sel: pd.DataFrame,
+    spec,
+    crit: tuple[float, float] | None = None,
+    with_series: bool = False,
 ) -> dict:
-    """对选中切片 sel (含 symbol/date) 逐视界量双头, 基准取 sub 窗口."""
+    """对选中切片 sel (含 symbol/date) 逐视界量双头, 基准取 sub 窗口.
+
+    with_series=True 时每视界附加逐票 stats + 净值/回撤 series (merged 档评估用).
+    """
     min_wr, min_mag = crit if crit is not None else (MIN_WINRATE, MIN_MAG)
     per = {}
     for h, lab in zip(spec.horizons, spec.labels, strict=False):
@@ -344,6 +489,11 @@ def _dual_per_horizon(
             "baseline": base,
             "delta_wr": (m["winrate"] - base["winrate"]) if m["n"] else None,
         }
+        if with_series:
+            ps = _pick_stats_and_series(s, sub, lab)
+            if ps:
+                per[h]["stats"] = ps["stats"]
+                per[h]["series"] = ps["series"]
     return per
 
 
@@ -1114,11 +1264,15 @@ def _horizon_nan_dict() -> dict:
     }
 
 
-def _merged_dual(sub: pd.DataFrame, sl: pd.DataFrame, crit) -> dict:
+def _merged_dual(
+    sub: pd.DataFrame, sl: pd.DataFrame, crit, with_series: bool = False
+) -> dict:
     """merged 短名单 (sl) 对 sub 窗逐视界量双头; sl 空 → 全 NaN."""
     if sl.empty:
         return _horizon_nan_dict()
-    return _dual_per_horizon(sub, sl[["date", "symbol"]], FUSION, crit)
+    return _dual_per_horizon(
+        sub, sl[["date", "symbol"]], FUSION, crit, with_series=with_series
+    )
 
 
 def evaluate_merged(
@@ -1159,18 +1313,22 @@ def _build_merged_eval(
     sl = build_merged_shortlist(sub, 10)
     for cut, n in (("top5", 5), ("top10", 10)):
         slc = sl[sl["rk"] <= n] if not sl.empty else sl
-        full_ph = _merged_dual(sub, slc, bcrit)
+        full_ph = _merged_dual(sub, slc, bcrit, with_series=True)
         oos = {}
         for lab, d in oos_windows.items():
             m = sub["date"].values >= dates[-d]
             sub_m = sub[m]
             sl_m = slc[slc["date"].isin(set(sub_m["date"]))] if not slc.empty else slc
-            mh = _merged_dual(sub_m, sl_m, bcrit)
+            mh = _merged_dual(sub_m, sl_m, bcrit, with_series=True)
             oos[lab] = {
                 "per_horizon": mh,
                 "kept": bool(any(r.get("ok") for r in mh.values())),
             }
-        merged[cut] = {"full": {"per_horizon": full_ph, "kept": None}, "oos": oos}
+        node = {"full": {"per_horizon": full_ph, "kept": None}, "oos": oos}
+        div = _pick_diversification(sub, slc)
+        if div:
+            node["diversification"] = div
+        merged[cut] = node
     return merged
 
 
