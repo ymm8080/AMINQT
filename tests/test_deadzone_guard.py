@@ -140,7 +140,7 @@ def test_load_density_history(tmp_path):
     ]
 
 
-def test_load_top10_history_legacy_glob_and_board_files(tmp_path):
+def test_load_legacy_history_pure_sample(tmp_path):
     legacy = tmp_path / "legacy_stocklist_20260105__M1.csv"
     pd.DataFrame({"symbol": [f"60000{k}" for k in range(8)]}).to_csv(
         legacy, index=False
@@ -148,10 +148,32 @@ def test_load_top10_history_legacy_glob_and_board_files(tmp_path):
     # 板级旧命名 (legacy_stocklist_main_日期) 不该被日期正则收进
     board = tmp_path / "legacy_stocklist_main_20260101__X.csv"
     pd.DataFrame({"symbol": ["300001"]}).to_csv(board, index=False)
-    h = dz.load_top10_history(list_dir=tmp_path)
+    # parallel 单不得混入 legacy 纯样本 (09-05 晚拍板: 互不混合)
+    par = tmp_path / "parallel_shortlist_20260105__M1.csv"
+    pd.DataFrame({"symbol": ["601000", "601001"], "rank": [0, 1]}).to_csv(
+        par, index=False
+    )
+    h = dz.load_legacy_history(list_dir=tmp_path)
     assert set(h["date"]) == {"20260105"}
     assert len(h) == 8
     assert h["symbol"].str.fullmatch(r"\d{6}").all()
+    assert not h["symbol"].str.startswith("601").any()
+
+
+def test_load_parallel_history_rank_top10_excludes_legacy(tmp_path):
+    par = tmp_path / "parallel_shortlist_20260105__M1.csv"
+    pd.DataFrame(
+        {"symbol": [f"6010{k:02d}" for k in range(12)], "rank": list(range(12))}
+    ).to_csv(par, index=False)
+    legacy = tmp_path / "legacy_stocklist_20260105__M1.csv"
+    pd.DataFrame({"symbol": ["600000", "600001"]}).to_csv(legacy, index=False)
+    h = dz.load_parallel_history(list_dir=tmp_path)
+    assert set(h["date"]) == {"20260105"}
+    assert h["symbol"].tolist() == [f"6010{k:02d}" for k in range(10)]
+
+
+def test_loaders_register_all_three_lines():
+    assert set(dz._LOADERS) == {"top10", "parallel", "prob10dens"}
 
 
 # ---------------------------------------------------------------- is_alarm
@@ -176,6 +198,15 @@ def test_is_alarm_true_in_dead_stretch(tmp_path, monkeypatch):
     monkeypatch.setattr("config.settings.PANEL_V3_PATH", fp)
     monkeypatch.setitem(dz._LOADERS, "prob10dens", lambda: _loader_picks(dates))
     ok, why = dz.is_alarm("prob10dens", dates[-1].strftime("%Y%m%d"))
+    assert ok is True
+    assert "报警线" in why
+
+
+def test_is_alarm_parallel_line_dead_stretch(tmp_path, monkeypatch):
+    dates, fp = _flat_or_rising_panel(tmp_path, 1.0)  # 平价 → 全输
+    monkeypatch.setattr("config.settings.PANEL_V3_PATH", fp)
+    monkeypatch.setitem(dz._LOADERS, "parallel", lambda: _loader_picks(dates))
+    ok, why = dz.is_alarm("parallel", dates[-1].strftime("%Y%m%d"))
     assert ok is True
     assert "报警线" in why
 
@@ -260,10 +291,13 @@ def test_wiring_call_sites():
     from scripts import _ths_watchlist_push as push
 
     src_push = inspect.getsource(push.main)
-    assert '_deadzone_guard.is_alarm("top10"' in src_push
+    # 09-05 晚拍板: legacy/parallel 各用各的纯样本赢率, 推送按单分闸
+    assert '"legacy": "top10"' in src_push
+    assert '"parallel": "parallel"' in src_push
+    assert "_deadzone_guard.is_alarm(" in src_push
     assert "今晚停推" in src_push
     # 停推夜标注三件套 (09-05 用户: 分不清 "闸停推" 和 "没推成功")
-    assert 'annotate_stop("top10"' in src_push
+    assert "_deadzone_guard.annotate_stop(" in src_push
     assert 'note="deadzone"' in src_push
 
     src_dens = inspect.getsource(dens.main)

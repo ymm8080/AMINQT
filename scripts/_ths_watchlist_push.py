@@ -650,23 +650,42 @@ def main() -> int:
     if all(not codes for _, codes in lists):
         print(f"[warn] {date} 双源清单均为空, 不推送")
         return 0
-    # 死区停推闸 (2026-09-05 用户拍板 "那就一起停吧"): 报警夜不写 txt 不加自选,
-    # 清单 CSV 照出照存; gen-only/dry-run 为人工演练不拦 (fail-open 在闸内)
-    alarm, why = _deadzone_guard.is_alarm("top10", date)
-    if alarm:
-        print(f"[deadzone] 死区报警 (TOP10): {why}")
-        if not gen_only and not dry_run:
-            all_codes = sorted({c for _, codes in lists for c in codes})
-            _deadzone_guard.annotate_stop("top10", date, why)
-            write_push_result(
-                ths_txt_path(date, "deadzone"), all_codes, [], note="deadzone"
-            )
-            print("[deadzone] 今晚停推: 不写 txt 不加自选 (清单照出, 只加不删不受影响)")
-            print(
-                "[deadzone] 已标注: STOPPED_DEADZONE 标记 + 清单 md 横幅"
-                " + 推送结果单 status=deadzone (与没推成功区分)"
-            )
-            return 0
+    # 死区停推闸 (2026-09-05 拍板 "那就一起停吧"; 晚间细化: legacy/parallel 各用
+    # 各的纯样本赢率互不混合): legacy 单看 top10 线, parallel 单看 parallel 线,
+    # 只停报警的单另一单照推; 清单 CSV 照出照存; gen-only/dry-run 人工演练不拦
+    dz_line = {"legacy": "top10", "parallel": "parallel"}
+    alarms = {
+        module: _deadzone_guard.is_alarm(dz_line[module.split("__", 1)[0]], date)
+        for module, codes in lists
+        if codes
+    }
+    stopped: set[str] = set()
+    for module, codes in lists:
+        if not codes:
+            continue
+        alarm, why = alarms[module]
+        if alarm:
+            print(f"[deadzone] 死区报警 ({module}): {why}")
+            if not gen_only and not dry_run:
+                _deadzone_guard.annotate_stop(
+                    dz_line[module.split("__", 1)[0]], date, why
+                )
+                stopped.add(module)
+                print(
+                    f"[deadzone] {module} 今晚停推: 不写 txt 不加自选"
+                    " (清单照出, 只加不删不受影响)"
+                )
+    if stopped:
+        all_codes = sorted({c for m, cs in lists if m in stopped for c in cs})
+        write_push_result(
+            ths_txt_path(date, "deadzone"), all_codes, [], note="deadzone"
+        )
+        print(
+            "[deadzone] 已标注: STOPPED_DEADZONE 标记 + 清单 md 横幅(top10线)"
+            " + 推送结果单 status=deadzone (与没推成功区分)"
+        )
+    if not gen_only and alarms and all(m in stopped for m in alarms):
+        return 0  # 双单全停, 无可推
     if not gen_only and not THS_HEXIN_PATH.exists():
         print(f"[warn] 同花顺客户端不存在: {THS_HEXIN_PATH}")
         return 0
@@ -676,6 +695,8 @@ def main() -> int:
     for module, codes in lists:
         if not codes:
             print(f"[warn] {date} {module} 清单为空, 跳过")
+            continue
+        if module in stopped:
             continue
         out = ths_txt_path(date, f"{hh}__{module}")
         write_ths_txt(codes, out)

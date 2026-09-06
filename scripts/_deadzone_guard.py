@@ -2,8 +2,10 @@
 不往同花顺加新股; 清单 CSV 照出照存 (txt 不写 — _ths_flush_guard 按
 ths_watchlist_*__*.txt glob, 不写即不会误动未入自选的票)。
 
-两线独立探测器 (生产线 TOP10 / 密度影子单), 参数同 V4 (tmp_t/
-_deadzone_hyst_tune_0905.py 变体扫描定稿):
+三线独立探测器 (legacy TOP10 / parallel TOP10 / 密度影子单), 参数同 V4
+(tmp_t/_deadzone_hyst_tune_0905.py 变体扫描定稿; 2026-09-05 晚用户拍板
+legacy/parallel 各用各自纯样本赢率互不混合 — V4 参数原在混合池上标定,
+拆分后纯样本沿用同参, 待积累后再校):
   出票日 t 夜可知的结局 = T+1 买 → T+4 卖 (net4 = C[t+4]/C[t+1] − 1 − 0.2%),
   赢 = net4 ≥ 5%; 信号 = 出票日在 [t−10, t−4] 的已完结票赢率
   < 25% → 报警; 连续 2 个采样日 ≥ 40% → 解除 (滞回; 06-17~06-26 型
@@ -13,8 +15,8 @@ _deadzone_hyst_tune_0905.py 变体扫描定稿):
 回放证据 (125d): 生产 TOP10 池 V4 停推票合计 −0.18pp/票 (7月 −1.57pp/大跌17%
 全段躲掉, 6月/8月误伤 +0.92/+5.94pp 为用户接受); 密度池 7月 −5.78pp/大跌22%
 躲掉, 8月 +1.77pp 误伤 = "一起停" 拍板接受的尾部保险代价。
-冷启动: top10 史回溯 2026-08-05 起当晚即武装; 密度单史自 09-03 起需 ~2-3 周
-攒样本, 期间 fail-open 照推。
+冷启动: top10 史回溯 2026-08-05、parallel 史回溯 2026-08-04, 拆分当晚即武装;
+密度单史自 09-03 起需 ~2-3 周攒样本, 期间 fail-open 照推。
 """
 
 import glob
@@ -126,18 +128,30 @@ def _settled_outcomes(
     return p[["date", "symbol", "di", "win"]], grid
 
 
-def load_top10_history(list_dir=STOCK_LIST_DIR) -> pd.DataFrame:
-    """生产线 TOP10 出票史 = 每日实推集合 (parallel rank 前10 ∪ legacy 清单序
-    前10, 即 collect_lists 口径), 回溯 legacy_stocklist_{date}__*.csv 全集。
-    函数内导入 collect_lists 防循环 (_ths_watchlist_push 依赖本模块)。"""
+def _collect_history(
+    source: str, list_dir=STOCK_LIST_DIR
+) -> pd.DataFrame:
+    """collect_lists 口径下指定源 ("legacy"/"parallel") 单独成史的出票样本。
+
+    2026-09-05 晚用户拍板: legacy/parallel 各用各自纯样本赢率, 不再混合。
+    函数内导入 collect_lists 防循环 (_ths_watchlist_push 依赖本模块)。
+    """
     from scripts._ths_watchlist_push import collect_lists
 
-    fps = glob.glob(str(list_dir / "legacy_stocklist_????????__*.csv"))
+    if source == "legacy":
+        fps = glob.glob(str(list_dir / "legacy_stocklist_????????__*.csv"))
+    else:
+        fps = glob.glob(str(list_dir / "parallel_shortlist_????????__*.csv"))
     dates = sorted(
         {
             m.group(1)
             for f in fps
-            if (m := re.search(r"legacy_stocklist_(\d{8})__", os.path.basename(f)))
+            if (
+                m := re.search(
+                    r"(?:legacy_stocklist|parallel_shortlist)_(\d{8})__",
+                    os.path.basename(f),
+                )
+            )
         }
     )
     rows: list[tuple[str, str]] = []
@@ -146,9 +160,22 @@ def load_top10_history(list_dir=STOCK_LIST_DIR) -> pd.DataFrame:
             lists = collect_lists(d, list_dir=list_dir)
         except SystemExit:
             continue
-        for _tag, codes in lists:
-            rows.extend((d, c) for c in codes)
+        for tag, codes in lists:
+            if tag.startswith(source):
+                rows.extend((d, c) for c in codes)
     return pd.DataFrame(rows, columns=["date", "symbol"])
+
+
+def load_legacy_history(list_dir=STOCK_LIST_DIR) -> pd.DataFrame:
+    """legacy TOP10 出票史 = legacy 清单序前10 (collect_lists 口径纯 legacy 单),
+    回溯 legacy_stocklist_{date}__*.csv 全集。"""
+    return _collect_history("legacy", list_dir)
+
+
+def load_parallel_history(list_dir=STOCK_LIST_DIR) -> pd.DataFrame:
+    """parallel TOP10 出票史 = parallel_shortlist rank 前10 (collect_lists 口径
+    纯 parallel 单), 回溯 parallel_shortlist_{date}__*.csv 全集。"""
+    return _collect_history("parallel", list_dir)
 
 
 def load_density_history(list_dir=STOCK_LIST_DIR) -> pd.DataFrame:
@@ -166,7 +193,11 @@ def load_density_history(list_dir=STOCK_LIST_DIR) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["date", "symbol"])
 
 
-_LOADERS = {"top10": load_top10_history, "prob10dens": load_density_history}
+_LOADERS = {
+    "top10": load_legacy_history,
+    "parallel": load_parallel_history,
+    "prob10dens": load_density_history,
+}
 
 
 def is_alarm(line: str, date: str) -> tuple[bool, str]:
