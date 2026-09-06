@@ -19,13 +19,21 @@ import scripts.deepseek_pr_review as dsr
 
 
 class FakeHTTPResponse:
-    """Minimal file-like object for urllib.request.urlopen context."""
+    """Minimal file-like object for urllib.request.urlopen context.
+
+    评审调用走 SSE 流式 (for raw in resp): body 整体包成一条 data 行 + [DONE];
+    post_comment / fetch_pr_diff 走 read().
+    """
 
     def __init__(self, body_bytes: bytes):
         self._buf = io.BytesIO(body_bytes)
 
     def read(self):
         return self._buf.read()
+
+    def __iter__(self):
+        yield b"data: " + self._buf.getvalue() + b"\n\n"
+        yield b"data: [DONE]\n\n"
 
     def __enter__(self):
         return self
@@ -39,16 +47,16 @@ def _api_response(
     reasoning: str | None = "",
     finish_reason: str = "stop",
 ) -> bytes:
-    """Build a DeepSeek chat/completions response body.
+    """Build a streaming (SSE) chat/completions chunk body.
 
-    ``content`` and ``reasoning`` can be ``None`` to simulate the API
-    returning ``null`` when thinking mode exhausts the token budget.
+    评审走 stream=True: chunk 用 delta 形状 (非流式才是 message).
+    ``content``/``reasoning`` 传 None 模拟 thinking 吃满预算时 API 回 null.
     """
     return json.dumps(
         {
             "choices": [
                 {
-                    "message": {
+                    "delta": {
                         "role": "assistant",
                         "content": content,
                         "reasoning_content": reasoning,
@@ -430,6 +438,52 @@ class TestTransientNetworkRetry:
         assert calls[0] == 1
         assert result["error"] is True
         assert "401" in result["summary"]
+
+
+class TestSSEStreaming:
+    """流式 SSE 消费: 请求必须带 stream=True (治网关 ~270s 掐零流量长连接),
+    content/reasoning 从 delta 增量累积."""
+
+    def test_payload_uses_stream(self, monkeypatch):
+        captured = {}
+
+        def fake_urlopen(req, timeout=None):
+            captured["data"] = json.loads(req.data.decode())
+            return FakeHTTPResponse(_api_response('{"issues": [], "summary": "ok"}'))
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        dsr.review_with_deepseek("diff", "key", "m", "https://x")
+
+        assert captured["data"]["stream"] is True
+
+    def test_multichunk_deltas_accumulate(self, monkeypatch):
+        """多条 data 行: 内容分片跨 chunk 拼接, finish_reason 取末块."""
+
+        class MultiChunkSSE:
+            def __iter__(self):
+                yield b'data: {"choices":[{"delta":{"reasoning_content":"think"}}]}\n\n'
+                yield b'data: {"choices":[{"delta":{"content":"{\\"issues\\": [], "}}]}\n\n'
+                yield b": keep-alive comment, must be skipped\n\n"
+                yield b'data: {"choices":[{"delta":{"content":"\\"summary\\": \\"ok\\"}"}}]}\n\n'
+                yield b'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+                yield b"data: [DONE]\n\n"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                pass
+
+        monkeypatch.setattr(
+            dsr.urllib.request, "urlopen", lambda req, timeout=None: MultiChunkSSE()
+        )
+
+        result = dsr.review_with_deepseek("diff", "key", "m", "https://x")
+
+        assert "error" not in result
+        assert result["issues"] == []
+        assert result["summary"] == "ok"
 
 
 # ── post_comment ───────────────────────────────────────────────────

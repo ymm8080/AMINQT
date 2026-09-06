@@ -15,6 +15,7 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -109,6 +110,121 @@ def _render_bt_run(d: dict, btr) -> None:
         if not picks.empty:
             st.markdown("**近日入选个股**")
             st.dataframe(picks, use_container_width=True)
+        _render_bt_risk(d, btr, board)
+
+
+def _fmt_ratio(v) -> str:
+    try:
+        return f"{float(v):.2f}"
+    except (ValueError, TypeError):
+        return "—"
+
+
+def _fmt_stat(v) -> str:
+    """None/NaN (如无亏损票时 profit_factor=None) → —."""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return "—"
+    return _fmt_gain(v)
+
+
+def _render_bt_risk(d: dict, btr, board: str) -> None:
+    """收益与风险块 (净值/回撤/夏普, 新 schema 才显示; 旧 run 静默跳过)."""
+    eq_all = btr.parse_equity(d, board, "top10")
+    if not eq_all:
+        return
+    with st.expander("收益与风险 (净值/回撤/夏普 — OOS 主窗, 逐票复利口径)"):
+        h_sel = st.selectbox(
+            "视界",
+            [h for h in ("10d", "5d", "3d") if h in eq_all],
+            key=f"bt_risk_h_{board}",
+        )
+        eq = eq_all.get(h_sel)
+        stats = btr.parse_pick_stats(d, board, "top10")
+        row = stats[stats["horizon"] == h_sel] if not stats.empty else pd.DataFrame()
+        if not row.empty:
+            r = row.iloc[0]
+            c = st.columns(6)
+            c[0].metric("年化", _fmt_stat(r.get("annualized")))
+            c[1].metric("夏普", _fmt_ratio(r.get("sharpe")))
+            c[2].metric("最大回撤", _fmt_stat(r.get("max_drawdown")))
+            c[3].metric("波动率(年化)", _fmt_stat(r.get("volatility")))
+            c[4].metric("盈亏比", _fmt_ratio(r.get("profit_factor")))
+            aw, al = r.get("avg_win"), r.get("avg_loss")
+            c[5].metric(
+                "平均盈/亏",
+                f"{_fmt_stat(aw)} / {_fmt_stat(al)}",
+            )
+        if not row.empty:
+            r = row.iloc[0]
+            c = st.columns(2)
+            c[0].metric("Beta (vs 窗口基准)", _fmt_ratio(r.get("beta")))
+            c[1].metric("Alpha (年化)", _fmt_stat(r.get("alpha_annual")))
+            st.caption(
+                f"回撤恢复: 最深回撤日 {_fmt_txt(r.get('max_drawdown'))} 于 "
+                f"{r.get('deepest_date') or '—'} · 恢复交易日 "
+                f"{r.get('recovery_days') if r.get('recovery_days') is not None else '—'} "
+                f"(未恢复则 —) · 最长水下 {r.get('underwater_days') if r.get('underwater_days') is not None else '—'} 交易日"
+            )
+        div = btr.parse_diversification(d, board, "top10")
+        if div:
+            rho = div.get("avg_pairwise_corr")
+            if rho is not None:
+                note = (
+                    "高同质 (同涨同跌风险大)"
+                    if rho > 0.6
+                    else "中等"
+                    if rho >= 0.4
+                    else "分散好"
+                )
+                st.caption(
+                    f"TOP-10 分散度: 平均两两相关 ρ={rho:.2f} → {note} "
+                    f"(回看 {div.get('lookback')} 交易日, {div.get('n_dates')} 个入选日)"
+                )
+        if eq is not None and not eq.empty:
+            t1, t2 = st.tabs(["净值曲线", "回撤曲线"])
+            with t1:
+                if "bench" in eq.columns:
+                    st.line_chart(eq[["cum", "bench"]], height=260)
+                    st.caption("蓝=组合 (逐票复利) · 橙=窗口全池等权基准")
+                else:
+                    st.line_chart(eq["cum"], height=260)
+            with t2:
+                st.area_chart(eq["dd"], height=200)
+            counts, edges = np.histogram(eq["ret"].dropna(), bins=20)
+            hist = pd.DataFrame(
+                {"count": counts}, index=[f"{e:.1%}" for e in edges[:-1]]
+            )
+            st.caption("日组合收益分布")
+            st.bar_chart(hist, height=180)
+        mdd = None
+        if not row.empty:
+            try:
+                mdd = abs(float(row.iloc[0].get("max_drawdown")))
+            except (ValueError, TypeError):
+                mdd = None
+        if mdd and mdd > 0:
+            budget = st.number_input(
+                "可承受最大回撤 (%) — 反推建议仓位系数",
+                min_value=1.0,
+                max_value=100.0,
+                value=15.0,
+                step=1.0,
+                key=f"bt_dd_budget_{board}",
+            )
+            w = min(1.0, (budget / 100.0) / mdd)
+            st.caption(
+                f"回撤预算 {budget:.0f}% ÷ 实测最大回撤 {mdd:.1%} → 建议仓位系数 "
+                f"w={w:.2f} (线性近似, 仅展示参考; 生产仓位逻辑不变)"
+            )
+
+
+def _fmt_txt(v) -> str:
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return "—"
+    try:
+        return f"{float(v):+.1%}"
+    except (ValueError, TypeError):
+        return str(v)
 
 
 # ───────────────────────── 个股预测查询 / 日期清单 ─────────────────────────
