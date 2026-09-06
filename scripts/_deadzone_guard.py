@@ -128,9 +128,7 @@ def _settled_outcomes(
     return p[["date", "symbol", "di", "win"]], grid
 
 
-def _collect_history(
-    source: str, list_dir=STOCK_LIST_DIR
-) -> pd.DataFrame:
+def _collect_history(source: str, list_dir=STOCK_LIST_DIR) -> pd.DataFrame:
     """collect_lists 口径下指定源 ("legacy"/"parallel") 单独成史的出票样本。
 
     2026-09-05 晚用户拍板: legacy/parallel 各用各自纯样本赢率, 不再混合。
