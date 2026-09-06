@@ -198,34 +198,59 @@ _LOADERS = {
 }
 
 
+def _line_state(
+    line: str, date: str
+) -> tuple[dict[int, float], set[int], int]:
+    """{line} 线在 {date} 夜的 (滚动赢率表, 报警日集合, 当日格点序)。
+
+    完结样本不足 / 当日不在格点 → ValueError (调用方按 fail-open 处置);
+    未知线名/其他异常 → 原样上抛 (is_alarm 捕获, win_rate 返 None)。
+    """
+    today = pd.Timestamp(date)
+    picks = _LOADERS[line]()
+    out, grid = _settled_outcomes(picks, today)
+    if len(out) < DZ_MIN_SAMPLES:
+        raise ValueError(f"完结样本不足 ({len(out)} < {DZ_MIN_SAMPLES})")
+    if today not in grid:
+        raise ValueError("今日不在出票格点")
+    wr = rolling_win_rates(out["di"].to_numpy(), out["win"].to_numpy(), len(grid))
+    alarmed = alarm_indices(out["di"].to_numpy(), out["win"].to_numpy(), len(grid))
+    return wr, alarmed, grid.index(today)
+
+
+def win_rate(line: str, date: str) -> float | None:
+    """当夜 {line} 线滚动赢率数值 (终版清单 win_rate 列单源)。
+
+    样本不足 / 当日不在格点 / 任何异常 → None (fail-open 语义同 is_alarm)。
+    """
+    if not DZ_ENABLED:
+        return None
+    try:
+        wr, _alarmed, t = _line_state(line, date)
+    except Exception:  # noqa: BLE001 — 闸的任何故障都不拦展示
+        return None
+    return wr.get(t)
+
+
 def is_alarm(line: str, date: str) -> tuple[bool, str]:
     """当夜 {line} 线是否死区报警 (真 → 停推)。fail-open 永远返回不报警。"""
     if not DZ_ENABLED:
         return False, "死区停推闸关闭 (DZ_ENABLED=False)"
     try:
-        today = pd.Timestamp(date)
-        picks = _LOADERS[line]()
-        out, grid = _settled_outcomes(picks, today)
-        if len(out) < DZ_MIN_SAMPLES:
-            return False, (
-                f"完结样本不足 ({len(out)} < {DZ_MIN_SAMPLES}), fail-open 照常推"
-            )
-        if today not in grid:
-            return False, "今日不在出票格点, fail-open 照常推"
-        wr = rolling_win_rates(out["di"].to_numpy(), out["win"].to_numpy(), len(grid))
-        alarmed = alarm_indices(out["di"].to_numpy(), out["win"].to_numpy(), len(grid))
-        t = grid.index(today)
-        cur = wr.get(t)
-        cur_s = f"{cur:.1%}" if cur is not None else "样本不足"
-        if t not in alarmed:
-            return False, f"滚动赢率 {cur_s} (未达报警线)"
-        return True, (
-            f"滚动{DZ_WINDOW}日完结票赢率 {cur_s} < 报警线 "
-            f"{DZ_ENTER:.0%} (解除: 连续{DZ_EXIT_DAYS}日 ≥ "
-            f"{DZ_EXIT:.0%})"
-        )
+        wr, alarmed, t = _line_state(line, date)
+    except ValueError as exc:
+        return False, f"{exc}, fail-open 照常推"
     except Exception as exc:  # noqa: BLE001 — 闸的任何故障都不拦推送
         return False, f"死区闸计算失败, fail-open 照常推: {exc}"
+    cur = wr.get(t)
+    cur_s = f"{cur:.1%}" if cur is not None else "样本不足"
+    if t not in alarmed:
+        return False, f"滚动赢率 {cur_s} (未达报警线)"
+    return True, (
+        f"滚动{DZ_WINDOW}日完结票赢率 {cur_s} < 报警线 "
+        f"{DZ_ENTER:.0%} (解除: 连续{DZ_EXIT_DAYS}日 ≥ "
+        f"{DZ_EXIT:.0%})"
+    )
 
 
 def annotate_stop(line: str, date: str, why: str, list_dir=STOCK_LIST_DIR) -> Path:
