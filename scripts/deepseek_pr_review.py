@@ -23,6 +23,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.request
 from urllib.error import HTTPError
 
@@ -367,6 +368,26 @@ Keep messages concise (one sentence per issue). Only report real violations.
             return {
                 "issues": [],
                 "summary": f"Review failed: HTTP {e.code} — {body}",
+                "error": True,
+            }
+        except OSError as e:
+            # 瞬时网络故障 (端点掐长连接/读超时, PR#137 四连挂死法):
+            # RemoteDisconnected/ConnectionReset/URLError 都是 OSError 子类,
+            # HTTPError 已在上方先行捕获. 退避后重试.
+            if attempt < 2:
+                delay = 15 * (attempt + 1)
+                logger.warning(
+                    "Transient LLM API error (attempt %d/3): %s — retry in %ds",
+                    attempt + 1,
+                    e,
+                    delay,
+                )
+                time.sleep(delay)
+                continue
+            logger.error("LLM API error after 3 attempts: %s", e)
+            return {
+                "issues": [],
+                "summary": f"Review failed: {e}",
                 "error": True,
             }
         except Exception as e:

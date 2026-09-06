@@ -31,7 +31,8 @@ jobs:
   review:
     name: GLM-4.6 Review
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 网络瞬断重试 (3 次 + 退避) 最坏 ~16min, 10min 会在重试中途杀掉作业
+    timeout-minutes: 20
     permissions:
       pull-requests: write
       contents: read

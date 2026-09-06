@@ -370,6 +370,68 @@ class TestHTTPError:
         assert "Model Not Exist" in result["summary"]
 
 
+class TestTransientNetworkRetry:
+    """PR#137 四连挂死法: 端点 ~270s 掐断长连接 (RemoteDisconnected ⊂ OSError)
+    → 必须退避重试, 而不是一击即溃发 'Review failed' 评论."""
+
+    def test_transient_error_then_success(self, monkeypatch):
+        calls = [0]
+        sleeps = []
+
+        def fake_urlopen(req, timeout=None):
+            calls[0] += 1
+            if calls[0] == 1:
+                raise ConnectionResetError(
+                    "Remote end closed connection without response"
+                )
+            return FakeHTTPResponse(_api_response('{"issues": [], "summary": "ok"}'))
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(dsr.time, "sleep", sleeps.append)
+
+        result = dsr.review_with_deepseek("diff", "key", "m", "https://x")
+
+        assert calls[0] == 2
+        assert sleeps == [15]  # 首次退避 15s
+        assert "error" not in result
+        assert result["summary"] == "ok"
+
+    def test_transient_error_3_times_returns_error(self, monkeypatch):
+        calls = [0]
+
+        def fake_urlopen(req, timeout=None):
+            calls[0] += 1
+            raise ConnectionResetError("Remote end closed connection without response")
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(dsr.time, "sleep", lambda s: None)
+
+        result = dsr.review_with_deepseek("diff", "key", "m", "https://x")
+
+        assert calls[0] == 3
+        assert result["error"] is True
+        assert "Remote end closed" in result["summary"]
+
+    def test_http_error_not_retried(self, monkeypatch):
+        """HTTPError 是确定性失败 (鉴权/参数错), 重试无意义 → 立即返回."""
+        calls = [0]
+
+        def fake_urlopen(req, timeout=None):
+            calls[0] += 1
+            raise HTTPError(
+                url="https://x", code=401, msg="Unauthorized", hdrs=None, fp=None
+            )
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(dsr.time, "sleep", lambda s: None)
+
+        result = dsr.review_with_deepseek("diff", "key", "m", "https://x")
+
+        assert calls[0] == 1
+        assert result["error"] is True
+        assert "401" in result["summary"]
+
+
 # ── post_comment ───────────────────────────────────────────────────
 
 
