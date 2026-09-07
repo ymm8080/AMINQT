@@ -121,9 +121,11 @@ function Set-Settings {
         if (!$json.ContainsKey("modelOverrides")) {
             $json["modelOverrides"] = @{}
         }
-        $json["modelOverrides"]["claude-opus-4-8"]           = $MODEL
-        $json["modelOverrides"]["claude-sonnet-4-6"]         = $MODEL
-        $json["modelOverrides"]["claude-haiku-4-5-20251001"] = $MODEL
+        $json["modelOverrides"]["claude-opus-4-8"]             = $MODEL
+        $json["modelOverrides"]["claude-sonnet-4-6"]           = $MODEL
+        $json["modelOverrides"]["claude-haiku-4-5-20251001"]   = $MODEL
+        $json["modelOverrides"]["claude-sonnet-4-5-20250929"]  = $MODEL
+        $json["modelOverrides"]["claude-opus-4-20250514"]      = $MODEL
     }
 
     $json | ConvertTo-Json -Depth 10 | Set-Content -Path $Path -Encoding UTF8
@@ -170,7 +172,7 @@ function Set-UserEnvRegistry {
 }
 
 # ── Execute ────────────────────────────────────────────────────
-Set-Settings -Path $UserSettings -Label "User-level "
+Set-Settings -Path $UserSettings -Label "User-level " -ApplyOverrides
 Set-Settings -Path $ProjectSettings -Label "Project-level" -ApplyOverrides
 Set-UserEnvRegistry
 
