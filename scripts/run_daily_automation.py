@@ -45,6 +45,13 @@
                                             死区报警夜停推, 清单照出; 标注
                                             STOPPED_DEADZONE+结果单deadzone —
                                             _deadzone_guard)
+  [slowbull_shadow] _slowbull_list.py (仓库根)      SLOW BULL 长持影子单 (2026-09-07 用户命名+
+                                            拍板, 承接旧 SLOW_BULL_PAUSE 暂停模块的长持
+                                            产出位): band[90,99.5)×grind8×回撤+wr5闸×
+                                            宽度>MA60×trail8/40日, 格内mom(60,90]区×
+                                            低波半格 (极致确定性); 读 V3 面板+cyq 自算
+                                            (不依赖 refresh/parallel), 只落盘 DATA
+                                            OTHERS/shadow/ **不推送同花顺**; 非关键步骤
   [drift]    scripts/_monitor_legacy_drift.py           幅度漂移监控 (全池 pred vs 实现偏差)
   [drift_parallel] scripts/_monitor_parallel_drift.py   parallel dual 漂移监控 (短名单 vs 检查点标签)
   [shadow_xmodule] scripts/_shadow_xmodule_blend.py     跨模块影子排名 (legacy×parallel 合池混排, 只记录不交付)
@@ -137,6 +144,8 @@ _STEP_TIMEOUT_S = {
     "gappocket_push": 15 * 60,
     # 概率头密度版影子单: candidates 读截面+面板 45 日历日切片 ~1min + UI 推送复用 ths_push
     "prob10dens_push": 15 * 60,
+    # SLOW BULL 长持影子单: V3 面板 3 列切片+宽度 MA60 预热 ~1-2min, 15min 下限惯例
+    "slowbull_shadow": 15 * 60,
     "drift": 30 * 60,
     "drift_parallel": 30 * 60,
     "shadow_xmodule": 15 * 60,
@@ -248,6 +257,9 @@ _STEPS = {
     "a1_push": ["scripts/_a1_momentum_shadow.py", "{tag}"],
     "gappocket_push": ["scripts/_gap_pocket_shadow.py", "{tag}"],
     "prob10dens_push": ["scripts/_prob10_density_shadow.py", "{tag}"],
+    # SLOW BULL 长持影子单 (2026-09-07 用户命名+拍板, 承接旧 SLOW_BULL_PAUSE 暂停模块
+    # 的长持产出位): 仓库根 _slowbull_list.py, 读 V3 面板+cyq 自算, 只落盘不推送
+    "slowbull_shadow": ["_slowbull_list.py"],
     "drift": ["scripts/_monitor_legacy_drift.py"],
     "drift_parallel": ["scripts/_monitor_parallel_drift.py"],
     "shadow_xmodule": ["scripts/_shadow_xmodule_blend.py"],
@@ -323,6 +335,10 @@ def plan_steps(
     # 曾评估单独开 band20 第四线, 判冗余不开 (band20⊇密度线宇宙); 非关键步骤,
     # 当日 candidates 缺失 fail-safe 跳过
     steps.append("prob10dens_push")
+    # SLOW BULL 长持影子单 (2026-09-07 用户命名+拍板): band[90,99.5)×grind8×回撤+wr5闸
+    # ×宽度>MA60×trail8/40日, 格内mom(60,90]区×低波半格 (极致确定性);
+    # 只落盘 shadow 目录不推送同花顺; 非关键 (失败不拦链, 次日重出)
+    steps.append("slowbull_shadow")
     # 隔板口袋单 (2026-09-04 用户拍板): 首板后 d3~7 缩量守板 + 安全闸, bias60 top15
     # 推同花顺 — 2026-09-05 用户停推 ("THS成绩不如生产就不用了"): 同窗 125d 对比
     # gappocket 20.8%/+0.47pp/大亏6.2% 全面落后生产 32.8~33.6%/+3.17~3.76pp;

@@ -63,6 +63,7 @@ from app.pipeline_parallel.scoring import pool_score
 from config.settings import (
     DATA_DIR,
     DATA_OTHERS_DIR,
+    PARALLEL_CHIP_GATE,
     PARALLEL_PROB_RECAL,
     REGIME_GATE,
     SHORTLIST_HYSTERESIS,
@@ -1689,9 +1690,11 @@ def main() -> int:
     res = rank_and_truncate(res)
     # 迟滞滞留 (2026-08-26): 昨日上榜仍在带内 → 滞留行 (降换手, 不改新选)
     res = hysteresis_keep(res, full_res, str(sel_date.date()).replace("-", ""))
-    # 筹码派发闸 (2026-09-05 三线统一): 获利盘5日回落 → 剔除, 不补齐;
-    # PARALLEL 无 125d 全池打分史无法回放, 接线为用户直接拍板 (真实删, 非影子)
-    res = apply_chip_gate(res, sel_date, flush=True)
+    # 筹码派发闸 (2026-09-05 三线统一; 2026-09-07 PARALLEL 撤闸): 获利盘5日回落 →
+    # 剔除, 不补齐。125d 检查点回放证伪 (删走票三项全优于留存, 赢家/日腰斩,
+    # 大亏反升无防御性) → PARALLEL_CHIP_GATE.enable=False 默认关; 密度线 wr5 不动
+    if PARALLEL_CHIP_GATE.get("enable", False):
+        res = apply_chip_gate(res, sel_date, flush=True)
     # 报告幅度锚定 (2026-08-14): 排名键 cal_n=21 保留, 报告 pred_ret_{h}/pred_mag_10d
     # 平移至模型近 ANCHOR_WINDOW 决策日 top-ANCHOR_TOP 已实现均值 — 每板块每视界常数, 排序不变
     res = _anchor_reported(res)

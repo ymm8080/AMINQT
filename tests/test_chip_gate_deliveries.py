@@ -63,3 +63,16 @@ def test_delivery_scripts_wire_shared_gate():
     assert "apply_chip_gate(res, sel_date" in src  # 滞留行之后、锚定之前
     src_l = inspect.getsource(legacy.main)
     assert "apply_chip_gate(df" in src_l  # symbol 规整后、滞涨标记之前
+
+
+def test_parallel_chip_gate_disabled_by_default():
+    """2026-09-07 PARALLEL 撤闸: 默认 enable=False, 调用点必须被开关守卫;
+    密度线 wr5 不受此开关影响 (回退改 True)."""
+    from config.settings import PARALLEL_CHIP_GATE
+
+    assert PARALLEL_CHIP_GATE["enable"] is False
+    import inspect
+
+    parallel = importlib.import_module("scripts._shortlist_t5_t10")
+    src = inspect.getsource(parallel.main)
+    assert 'if PARALLEL_CHIP_GATE.get("enable"' in src  # 守卫锁死, 防裸调用回归

@@ -33,6 +33,16 @@ def _hermetic_gate_state(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _pin_old_selection_stack(monkeypatch):
+    """本模块锁旧栈语义 (E7+prob_gate+幅度键, 09-07 前生产栈); 新栈见
+    test_legacy_selection_mode.py。LEGACY_SELECTION (09-07 默认 prob10_pull)
+    在此整体关闭。"""
+    from config.settings import LEGACY_SELECTION
+
+    monkeypatch.setitem(LEGACY_SELECTION, "enable", False)
+
+
+@pytest.fixture(autouse=True)
 def _hermetic_risk_scans(tmp_path, monkeypatch):
     """FINAL STOCK SCAN 隔离: 空缓存 → 永不剔除 (不依赖外部缓存文件状态)."""
     from app.pipeline1 import risk_overlays
