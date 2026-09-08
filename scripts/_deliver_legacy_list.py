@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 import pandas as pd
 
-from config.settings import STOCK_LIST_DIR
+from config.settings import LEGACY_SELECTION, STOCK_LIST_DIR
 from scripts._pctfmt import PCT_COLS_LEGACY, fmt_pct_columns
 from scripts._prob10_density_shadow import apply_chip_gate
 from scripts._stall_marker import stall_marker
@@ -198,7 +198,12 @@ def main():
     if "symbol" in df.columns:
         df["symbol"] = df["symbol"].astype(str)
     # 筹码派发闸 (2026-09-05 三线统一): 获利盘5日回落 → 剔除, 不补齐
-    df = apply_chip_gate(df, pd.Timestamp(trade_date))
+    # 09-07: LEGACY_SELECTION mode="prob10_pull" 时摘除 — 该臂回放 wr5 被切票赢率
+    # 47% > 留守 42.8% (毁值); 密度/PARALLEL 两线 wr5 不动。
+    if not (
+        LEGACY_SELECTION.get("enable") and LEGACY_SELECTION.get("mode") == "prob10_pull"
+    ):
+        df = apply_chip_gate(df, pd.Timestamp(trade_date))
     # 滞涨标记 (2026-08-19 用户方案): 入选 + 近10日滞涨<2% + 近20日入选≥3 → 洗盘待爆发
     df = stall_marker(df, trade_date, "legacy_stocklist_")
     module = resolve_module(df, trade_date)

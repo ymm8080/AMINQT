@@ -75,7 +75,7 @@ LEGACY_MKT_EXPECT_WINDOW = 60
 
 # ── legacy TOP10 第二票 (2026-08-29 用户批准: 切换闸 = IC 闸 + TOP10 非劣闸) ──
 # [09-02 终审改判] caliber="final_list_tool": 判决权移交已验证的终榜回放工具
-# (tmp_t/_dual_pkg_finaltop_compare.py, 对拍过真实交付清单), retrain 脚本在
+# (scripts/_dual_pkg_finaltop_compare.py, 对拍过真实交付清单), retrain 脚本在
 # IC 过闸后调工具对拍 current vs 新包, 套新判据 (全窗≥0 且双半≥tol_half 且
 # 胜率≥win_rate_min) 才晋升. 判什么就交付什么 — 工具判的就是将上生产的那个包.
 # 起因: 裸头闸错杀实锤 — main_20260902 裸头 -0.31pp 判 FAIL, 终榜口径
@@ -440,6 +440,23 @@ LEGACY_PROB_GATE = {
     "es_floor": 50,  # 早停树数 < 此地板 → 固定 floor 树重训 (防 dual 塌缩)
 }
 
+# ── LEGACY 交付选择栈 (09-07 用户令 "FIRST UPDATE 密度MODULE" + "YOU MAKE DECISION") ──
+# mode="prob10_pull" = 纯 prob_up_10d 板内降序 + 回撤闸, 跳过 E7/prob_gate/幅度键;
+#   交付帽 (TOP_N=15 全局 + D18 降仓) 与风险扫描不变。
+#   依据 (tmp_t/_rankkey_prob_vs_pred_0907.py, 125d 02-09..08-17 同窗同口径不去重):
+#   E7 闸内换排名键 = 空操作 (B1≡A1 逐字节, mag≡prob 池内同序); 胜出来自撤闸 —
+#   纯prob10+回撤闸 13.8只/日 44.2%/+6.42pp/赢家6.12/日 vs 旧栈(E7+pred键+wr5)
+#   11.0只/日 33.2%/+3.77pp/赢家3.66/日, 全轴胜 (与 09-05 终表独立互证)。
+#   wr5 派发闸在该臂毁值 (被切票赢率 47% > 留守 42.8%, 一并摘除 — 与 09-05 三线
+#   拍板的冲突已亮, 密度/PARALLEL 两线 wr5 不动)。
+# mode="e7_pred" = 旧栈回退 (E7 准入 + LEGACY_PROB_GATE + pred_ret_10d 排名)。
+LEGACY_SELECTION = {
+    "enable": True,
+    "mode": "prob10_pull",  # 回退改 "e7_pred"
+    "pull_min": -0.10,  # 回撤闸: 距10日高点回撤下限 (与密度线同口径)
+    "board_top_n": 10,  # 每板初选数 (全局帽 TOP_N 再截, 真删不补齐)
+}
+
 # ── 滞涨标记 (2026-08-19 用户定案: legacy+parallel 双交付) ──
 # 用户线索: 300911 连续入选短名单 (模型已识别) + 价格横盘洗盘 (10 日涨幅≈0) → 终将突破.
 # 250d 检验 (_diag_stall_regime, 2026-08-19): 入选+滞涨+近20日入选≥3 全窗 63.2%/+5.88%,
@@ -472,6 +489,16 @@ SHORTLIST_HYSTERESIS = {
     "max_keep": 3,  # 每板块最多滞留数 (防爆清单)
 }
 
+# ── PARALLEL 短名单筹码派发闸 (2026-09-07 撤闸) ──
+# 125d scored 检查点回放 (tmp_t/_parallel_wr5_125d_0907.py, 锚逐位复现 S16):
+# 过 wr5 5.30只/日 vs 不过 9.98只/日 — 删走584票净+3.82pp/赢率35.1%/大亏5.3%
+# 三项全优于留存, 赢家/日腰斩 (3.35→1.71), 大亏反升 (5.7%→6.0%) 无防御性;
+# 18夜四臂同向。09-05 "三线统一删派发" 在 PARALLEL 线证伪 (密度线 wr5 维持不动)。
+# 回退改 True。
+PARALLEL_CHIP_GATE = {
+    "enable": False,
+}
+
 # ── parallel 概率展示层再校准 (2026-08-29 用户批准) ──
 # 08-29 实测交付概率高估 (pred_prob_10d 均值 55.8% vs MFE>6% 实得 27.5%, +28pp;
 # tmp_t/_rebase_diag_0829.py). 展示层每板块每视界乘一个收敛因子 = 实得命中率/预测
@@ -496,6 +523,27 @@ XMODULE_SHADOW = {
     "enable": False,
     "weights": {"legacy": 0.5, "parallel": 0.5},
     "top_n": 10,
+    "out_root": "shadow",  # 相对 DATA_OTHERS_DIR, 影子清单不进 STOCK LIST 交付目录
+}
+
+# ── SLOW BULL 长持影子单 (2026-09-07 用户命名+拍板; 前身=动量带×grind 长持格,
+#    功能位承接旧 app/pipeline_parallel SLOW_BULL_* 暂停模块, 那套代码维持暂停) ──
+# 125d 回放过闸: 全闸 tr40 +3.49% 双半窗正; 加宽度>MA60自适应闸后 +8.21% 四半窗超基线.
+# 铁律: 闸基准必须自适应 (滚动统计量), 禁止固定绝对阈值 (水平版≥0.45 已证是坑).
+SLOW_BULL = {
+    "enable": True,
+    "band_lo": 0.90,       # 20日动量截面分位下界
+    "band_hi": 0.995,      # 上界 (排彩票极端动量尾)
+    "grind_max1d": 0.08,   # 近20日最大单日涨幅上限 (grind 定义)
+    "pull_min": -0.10,     # 回撤闸: close/10日高 - 1 下限
+    "breadth_ma": 60,      # 宽度闸: breadth > 其60日滚动均值
+    "mom_lo": 0.60,        # v4 格内选股: mom__r 格内分位 (60%, 90%] 区 — 剂量曲线确定性中段峰
+    "mom_hi": 0.90,        #   (格内90-100%过热尾=反信号: 赢率46%/中位-0.8 纯右尾驱动)
+    "vol_half": "low",     # v4 极致确定性拍板 (09-07"我要极致确定性"+"低波半"): 只取格内低波半
+    #   (mom(60,90]×低波半: 5.3只/日 赢59% 中位+4.1% 大亏7% 125+9.5%;
+    #    高波半=只有均值没确定性: 赢率46-48%/中位负/大亏12-15%)
+    "trail_stop": 0.08,    # 退出: 8% 跟踪止损
+    "hold_days": 40,       # 持有上限 (交易日)
     "out_root": "shadow",  # 相对 DATA_OTHERS_DIR, 影子清单不进 STOCK LIST 交付目录
 }
 

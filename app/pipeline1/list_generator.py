@@ -21,7 +21,11 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-from config.settings import LEGACY_ENTRY_GATE  # noqa: E402  (分板块概率边际)
+from config.settings import (  # noqa: E402  (分板块概率边际)
+    LEGACY_ENTRY_GATE,
+    LEGACY_SELECTION,
+    PANEL_V3_PATH,
+)
 
 
 # board 命名兼容生产 (main/GEM/STAR) 与内部 (main/dual)
@@ -449,6 +453,48 @@ class ListGenerator:
                 return df.sort_values(col, ascending=False)
         return df.sort_values("score", ascending=False)
 
+    @staticmethod
+    def _select_prob10_pull(scored: pd.DataFrame) -> pd.DataFrame:
+        """[09-07] LEGACY_SELECTION mode="prob10_pull": 纯 prob_up_10d 板内降序 +
+        回撤闸 (pull ≥ pull_min, 真删不补齐), 每板取 board_top_n.
+
+        依据见 settings.LEGACY_SELECTION 注释 (E7 内换键=空操作, 胜出来自撤闸)。
+        prob_up_10d 缺列/全 NaN (旧 bundle) → 级联回退幅度键 (与 _rank_by_magnitude
+        同回退链, 只换不炸); 面板读不到 → 回撤闸整体跳过 (fail-open)。
+        排序后截板内 top_n — 返回已排序帧, emit 跳过 entry_filter/prob_gate/幅度键。
+        """
+        df = scored.copy()
+        key = "prob_up_10d"
+        if key not in df.columns or not df[key].notna().any():
+            logger.warning("prob10_pull: %s 缺失/全 NaN → 回退幅度键排序", key)
+            df = ListGenerator._rank_by_magnitude(df)
+        else:
+            df = df.sort_values(key, ascending=False)
+        # 生产语义 = 排序后先截板内 top_n, 再过回撤闸 (真删不补齐, 不 refill)
+        df = df.groupby("board", sort=False).head(
+            int(LEGACY_SELECTION.get("board_top_n", 10))
+        )
+        try:
+            ref = ListGenerator._scan_ref_date(df)
+            px = pd.read_parquet(
+                PANEL_V3_PATH,
+                columns=["symbol", "date", "close_hfq"],
+                filters=[
+                    ("date", ">=", ref - pd.Timedelta(days=45)),
+                    ("date", "<=", ref),
+                ],
+            )
+            px["symbol"] = px["symbol"].astype(str).str.zfill(6)
+            cl = px.pivot(
+                index="date", columns="symbol", values="close_hfq"
+            ).sort_index()
+            pull = (cl / cl.rolling(10, min_periods=2).max() - 1).iloc[-1]
+            sym = df["symbol"].astype(str).str.zfill(6)
+            df = df[~(sym.map(pull).fillna(0) < float(LEGACY_SELECTION["pull_min"]))]
+        except Exception as exc:
+            logger.warning("prob10_pull: 回撤闸失效 (fail-open): %s", exc)
+        return df
+
     def emit(
         self,
         candidates: pd.DataFrame,
@@ -496,8 +542,16 @@ class ListGenerator:
             }
         # 计算排序分
         scored = self.compute_scores(candidates)
-        # 准入过滤
-        passed = self.entry_filter(scored, market_state=market_state)
+        # [09-07] LEGACY_SELECTION 选择栈切换: prob10_pull = 纯 prob_up_10d 板内降序
+        # + 回撤闸 (依据/回退见 settings.LEGACY_SELECTION); 闸审计/帽/风险扫描照旧共享。
+        new_sel = bool(LEGACY_SELECTION.get("enable")) and (
+            LEGACY_SELECTION.get("mode") == "prob10_pull"
+        )
+        if new_sel:
+            passed = self._select_prob10_pull(scored)
+        else:
+            # 准入过滤
+            passed = self.entry_filter(scored, market_state=market_state)
         # 闸审计 (2026-08-31): E7 被剔逐股 (pain 软区优先) + prob_gate 被剔逐股 →
         # result["gate_audit"] → daily_pipeline 落盘 gate_audit_{date}.parquet →
         # 交付"仅供参考"节 (信息不丢, 不改生产清单语义).
@@ -552,7 +606,7 @@ class ListGenerator:
         # 排名前 — 保留 ⇔ pred_prob > base_rate + margin (prob 只作闸, 排名键保持纯
         # pred_ret_10d, blend 已证伪). 闸不可用/未传输入 → fail-open 不杀清单;
         # 概率头异常 (特征缺列 = schema 漂移) → 大声告警后 fail-open.
-        if prob_gate is not None and len(passed):
+        if prob_gate is not None and len(passed) and not new_sel:
             try:
                 from . import prob_head
 
@@ -579,7 +633,8 @@ class ListGenerator:
                     "gate_audit": pd.DataFrame(audit_rows),
                 }
         # 按预测幅度排序取 TOP_N (2026-08-07: 纯 pred_ret_3d 幅度, 回测赢 d3 混合; 行业分散在清单层面)
-        passed = self._rank_by_magnitude(passed)
+        if not new_sel:
+            passed = self._rank_by_magnitude(passed)
         # 行业集中度限制: 同一行业 <= MAX_PER_INDUSTRY 只
         final = self.apply_industry_limit(passed).reset_index(drop=True)
         # D18 降仓 → 仅 Top 5; 正常 → Top 15

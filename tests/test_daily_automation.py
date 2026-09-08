@@ -43,6 +43,7 @@ _PREDICT_CHAIN = ["legacy_prob_head", "legacy", "deliver"]
 _TAIL = [
     "ths_push",
     "prob10dens_push",
+    "slowbull_shadow",
     "ths_flush_guard",
     "final_stocklist",
     "drift",
@@ -244,6 +245,26 @@ def test_plan_steps_prob10dens_follows_ths_push():
         "{tag}",
     ]
     assert _STEP_TIMEOUT_S["prob10dens_push"] >= 15 * 60
+
+
+def test_plan_steps_slowbull_shadow_longhold_slot():
+    """SLOW BULL 长持影子单 (2026-09-07 用户命名+拍板): 承接旧 SLOW_BULL_PAUSE 模块
+    的长持产出位.
+
+    恒执行 (读 V3 面板+cyq 自算, 不依赖 refresh/parallel), 紧跟 prob10dens_push;
+    非关键步骤; 只落盘 shadow 目录不推送同花顺 (脚本内无推送逻辑).
+    """
+    for steps in (
+        plan_steps(THU),
+        plan_steps(FRI),
+        plan_steps(THU, skip_parallel=True),
+        plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True),
+    ):
+        assert "slowbull_shadow" in steps
+        assert steps.index("slowbull_shadow") == steps.index("prob10dens_push") + 1
+    assert "slowbull_shadow" not in _CRITICAL
+    assert _STEPS["slowbull_shadow"] == ["_slowbull_list.py"]
+    assert _STEP_TIMEOUT_S["slowbull_shadow"] >= 15 * 60
 
 
 # ── 中断中止 + 终态 state 文件 (08-21 事故: cyq 被 Ctrl+C 杀后仍启动 retrain,

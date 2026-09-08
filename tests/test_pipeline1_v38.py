@@ -548,6 +548,15 @@ def _cands(rows: list[dict]) -> pd.DataFrame:
 
 
 class TestDynamicEntry:
+    @pytest.fixture(autouse=True)
+    def _pin_e7_stack(self, monkeypatch):
+        """[09-07] 生产默认 LEGACY_SELECTION mode="prob10_pull" 跳过 E7 准入闸,
+        本类守护旧栈 (mode="e7_pred" 回退路径) 的 E7 门行为 → 钉旧模式
+        (惯例同 test_prob_gate_adaptive.py / test_legacy_selection_mode.py)."""
+        from config.settings import LEGACY_SELECTION
+
+        monkeypatch.setitem(LEGACY_SELECTION, "mode", "e7_pred")
+
     def test_gate_filters_low_quality(self):
         """计算闸: prob 需超当日基准率 (均值) + main margin 0.08, 净预期 compound 需 > 0."""
         cands = _cands(
@@ -848,6 +857,15 @@ class TestScorePainPenalty:
 
 
 class TestDistributionWeights:
+    @pytest.fixture(autouse=True)
+    def _pin_e7_stack(self, monkeypatch):
+        """[09-07] 生产默认 LEGACY_SELECTION mode="prob10_pull" 板内截 top_n 会
+        掉候选 (12→10); 本类 GATE_OFF 构造器只对 entry_filter 生效 → 钉旧栈
+        (mode="e7_pred") 恢复"跳过闸门、全候选算权重"的测试意图."""
+        from config.settings import LEGACY_SELECTION
+
+        monkeypatch.setitem(LEGACY_SELECTION, "mode", "e7_pred")
+
     @staticmethod
     def _dist_cands(n_normal=11) -> pd.DataFrame:
         inds = ["白酒", "电池", "保险", "半导体"]
