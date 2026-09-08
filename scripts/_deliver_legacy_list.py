@@ -201,8 +201,7 @@ def main():
     # 09-07: LEGACY_SELECTION mode="prob10_pull" 时摘除 — 该臂回放 wr5 被切票赢率
     # 47% > 留守 42.8% (毁值); 密度/PARALLEL 两线 wr5 不动。
     if not (
-        LEGACY_SELECTION.get("enable")
-        and LEGACY_SELECTION.get("mode") == "prob10_pull"
+        LEGACY_SELECTION.get("enable") and LEGACY_SELECTION.get("mode") == "prob10_pull"
     ):
         df = apply_chip_gate(df, pd.Timestamp(trade_date))
     # 滞涨标记 (2026-08-19 用户方案): 入选 + 近10日滞涨<2% + 近20日入选≥3 → 洗盘待爆发

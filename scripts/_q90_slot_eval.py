@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_q90_slot_eval.py — q90 彩票槽位规则网格终审 (重建版, 原 08-30 稿被清理).
 
 输入: scripts/_diag_q90_slot_replay.py 产出的全池回放 parquet
@@ -60,8 +59,11 @@ def gate_mask(df: pd.DataFrame, board: str, q50_gate: bool) -> pd.Series:
     return ok
 
 
-def arm_stats(picks: list[set[str]], day_net: dict[str, tuple[dict, dict]],
-              winners: dict[str, set[str]]) -> dict:
+def arm_stats(
+    picks: list[set[str]],
+    day_net: dict[str, tuple[dict, dict]],
+    winners: dict[str, set[str]],
+) -> dict:
     """picks: 日→symbol 集; day_net: 日→(sym→net3, sym→net10); winners: 日→真赢家集."""
     net3s, net10s, hits, covs = [], [], [], []
     for d, picks_set in picks.items():
@@ -97,8 +99,14 @@ def paired_delta(arm: dict[str, float], base: dict[str, float]) -> dict:
     }
 
 
-def process_board(df: pd.DataFrame, board: str, amount_floor: float,
-                  band_lo: float, band_hi: float, q50_gate: bool) -> dict:
+def process_board(
+    df: pd.DataFrame,
+    board: str,
+    amount_floor: float,
+    band_lo: float,
+    band_hi: float,
+    q50_gate: bool,
+) -> dict:
     b = df[df["board"] == board].copy()
     b["symbol"] = b["symbol"].astype(str).str.zfill(6)
     b["date"] = b["date"].astype(str)
@@ -131,17 +139,23 @@ def process_board(df: pd.DataFrame, board: str, amount_floor: float,
             dict(zip(g["symbol"], g["net_10d"])),
         )
 
-    out: dict = {"gate": {
-        "prob_margin": LEGACY_ENTRY_GATE["prob_margin"][board],
-        "pain_max": LEGACY_ENTRY_GATE["pain_max"][board],
-        "q50_sign_gate": LEGACY_ENTRY_GATE.get("q50_sign_gate", False),
-        "pool_days": int(gated.groupby("date").ngroups),
-        "pool_mean_per_day": float(len(gated) / max(gated.groupby("date").ngroups, 1)),
-    }}
+    out: dict = {
+        "gate": {
+            "prob_margin": LEGACY_ENTRY_GATE["prob_margin"][board],
+            "pain_max": LEGACY_ENTRY_GATE["pain_max"][board],
+            "q50_sign_gate": LEGACY_ENTRY_GATE.get("q50_sign_gate", False),
+            "pool_days": int(gated.groupby("date").ngroups),
+            "pool_mean_per_day": float(
+                len(gated) / max(gated.groupby("date").ngroups, 1)
+            ),
+        }
+    }
 
     daily_base: dict[str, list[str]] = {}
     for d, g in gated.groupby("date"):
-        top = g.sort_values(["pred_ret_10d", "symbol"], ascending=[False, True]).head(TOPN)
+        top = g.sort_values(["pred_ret_10d", "symbol"], ascending=[False, True]).head(
+            TOPN
+        )
         daily_base[d] = list(top["symbol"])
 
     def build_arm(kind: str, k: int) -> dict[str, list[str]]:
@@ -156,7 +170,7 @@ def process_board(df: pd.DataFrame, board: str, amount_floor: float,
                 cand = sub.nlargest(k, "pred_q90_3d")["symbol"].tolist()
             else:  # blend
                 cand = pool.nlargest(k, "blend")["symbol"].tolist()
-            picks = base[: TOPN - k] + cand + base[TOPN - len(cand):] if cand else base
+            picks = base[: TOPN - k] + cand + base[TOPN - len(cand) :] if cand else base
             daily[d] = list(dict.fromkeys(picks))[:TOPN]
         return daily
 
@@ -172,14 +186,24 @@ def process_board(df: pd.DataFrame, board: str, amount_floor: float,
         st = arm_stats(picks_sets, day_net, winners)
         if name == "base":
             base_daily_net3 = {
-                d: np.mean([day_net[d][0][s] for s in v
-                            if s in day_net[d][0] and pd.notna(day_net[d][0][s])])
+                d: np.mean(
+                    [
+                        day_net[d][0][s]
+                        for s in v
+                        if s in day_net[d][0] and pd.notna(day_net[d][0][s])
+                    ]
+                )
                 for d, v in daily.items()
             }
         else:
             arm_daily_net3 = {
-                d: np.mean([day_net[d][0][s] for s in v
-                            if s in day_net[d][0] and pd.notna(day_net[d][0][s])])
+                d: np.mean(
+                    [
+                        day_net[d][0][s]
+                        for s in v
+                        if s in day_net[d][0] and pd.notna(day_net[d][0][s])
+                    ]
+                )
                 for d, v in daily.items()
             }
             st.update(paired_delta(arm_daily_net3, base_daily_net3))
@@ -197,8 +221,10 @@ def process_board(df: pd.DataFrame, board: str, amount_floor: float,
             if s in n10 and pd.notna(n10[s]):
                 r["net10"].append(n10[s])
     out["seat_decay"] = {
-        s: {"net3": float(np.mean(v["net3"])) if v["net3"] else None,
-            "net10": float(np.mean(v["net10"])) if v["net10"] else None}
+        s: {
+            "net3": float(np.mean(v["net3"])) if v["net3"] else None,
+            "net10": float(np.mean(v["net10"])) if v["net10"] else None,
+        }
         for s, v in sorted(seat.items(), key=lambda kv: int(kv[0]))
     }
 
@@ -211,16 +237,25 @@ def process_board(df: pd.DataFrame, board: str, amount_floor: float,
         g = g.set_index("symbol")
         for s in wset:
             if s in g.index:
-                wrows.append({
-                    "q90_pct": g.at[s, "q90_pct"] if pd.notna(g.at[s, "q90_pct"]) else np.nan,
-                    "ret_pct": g.at[s, "ret_pct"] if pd.notna(g.at[s, "ret_pct"]) else np.nan,
-                })
+                wrows.append(
+                    {
+                        "q90_pct": g.at[s, "q90_pct"]
+                        if pd.notna(g.at[s, "q90_pct"])
+                        else np.nan,
+                        "ret_pct": g.at[s, "ret_pct"]
+                        if pd.notna(g.at[s, "ret_pct"])
+                        else np.nan,
+                    }
+                )
     w = pd.DataFrame(wrows)
     out["winner_band"] = {
         "n": int(len(w)),
         "q90_pct_median": float(w["q90_pct"].median()) if len(w) else None,
-        "q90_in_band": float(((w["q90_pct"] >= band_lo) & (w["q90_pct"] <= band_hi)).mean())
-        if len(w) else None,
+        "q90_in_band": float(
+            ((w["q90_pct"] >= band_lo) & (w["q90_pct"] <= band_hi)).mean()
+        )
+        if len(w)
+        else None,
         "q90_top20": float((w["q90_pct"] >= 0.80).mean()) if len(w) else None,
         "q90_top10": float((w["q90_pct"] >= 0.90).mean()) if len(w) else None,
         "ret_pct_median": float(w["ret_pct"].median()) if len(w) else None,
@@ -236,8 +271,9 @@ def main() -> int:
     ap.add_argument("--band-lo", type=float, default=0.80)
     ap.add_argument("--band-hi", type=float, default=0.95)
     ap.add_argument("--expect", default=None, help="旧评估 JSON 路径, 对拍校验")
-    ap.add_argument("--q50-gate", action="store_true",
-                    help="复现 08-30 旧环境 (q50 符号闸当时未撤)")
+    ap.add_argument(
+        "--q50-gate", action="store_true", help="复现 08-30 旧环境 (q50 符号闸当时未撤)"
+    )
     args = ap.parse_args()
 
     df = pd.read_parquet(args.replay)
@@ -252,24 +288,36 @@ def main() -> int:
         "amount_floor": args.amount_floor,
     }
     for board in ("main", "dual"):
-        result[board] = process_board(df, board, args.amount_floor,
-                                      args.band_lo, args.band_hi, args.q50_gate)
+        result[board] = process_board(
+            df, board, args.amount_floor, args.band_lo, args.band_hi, args.q50_gate
+        )
 
-    out_path = data_others_path(f"_q90_slot_eval_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.json")
-    out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+    out_path = data_others_path(
+        f"_q90_slot_eval_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.json"
+    )
+    out_path.write_text(
+        json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
     print(f"[saved] {out_path}")
 
     for board in ("main", "dual"):
-        print(f"\n== {board} ==  池/日 {result[board]['gate']['pool_mean_per_day']:.0f}")
+        print(
+            f"\n== {board} ==  池/日 {result[board]['gate']['pool_mean_per_day']:.0f}"
+        )
         for name, st in result[board]["arms"].items():
-            fmt = lambda v: f"{v:+.5f}" if v is not None else "  n/a  "
-            print(f"  {name:10s} days={st['days']:3d} net3={st['net3']:+.4f} "
-                  f"Δ={fmt(st.get('d3_full'))} (h1 {fmt(st.get('d3_h1'))} / h2 {fmt(st.get('d3_h2'))}) "
-                  f"hit3={st['hit3']:.3f} cov={st['cov']:.3f}")
+            def fmt(v):
+                return f"{v:+.5f}" if v is not None else "  n/a  "
+            print(
+                f"  {name:10s} days={st['days']:3d} net3={st['net3']:+.4f} "
+                f"Δ={fmt(st.get('d3_full'))} (h1 {fmt(st.get('d3_h1'))} / h2 {fmt(st.get('d3_h2'))}) "
+                f"hit3={st['hit3']:.3f} cov={st['cov']:.3f}"
+            )
         wb = result[board]["winner_band"]
-        print(f"  赢家带位 n={wb['n']} q90中位={wb['q90_pct_median']:.2f} "
-              f"带内={wb['q90_in_band']:.2f} top20={wb['q90_top20']:.2f} "
-              f"| ret中位={wb['ret_pct_median']:.2f}")
+        print(
+            f"  赢家带位 n={wb['n']} q90中位={wb['q90_pct_median']:.2f} "
+            f"带内={wb['q90_in_band']:.2f} top20={wb['q90_top20']:.2f} "
+            f"| ret中位={wb['ret_pct_median']:.2f}"
+        )
 
     if args.expect:
         old = json.loads(open(args.expect, encoding="utf-8").read())
@@ -279,10 +327,20 @@ def main() -> int:
                 o = old["arms"].get(f"{board}:{name}")
                 if not o:
                     continue
-                for key in ("net3", "net10", "hit3", "cov", "d3_full", "d3_h1", "d3_h2"):
+                for key in (
+                    "net3",
+                    "net10",
+                    "hit3",
+                    "cov",
+                    "d3_full",
+                    "d3_h1",
+                    "d3_h2",
+                ):
                     if st.get(key) is not None and o.get(key) is not None:
                         worst = max(worst, abs(st[key] - o[key]))
-        print(f"\n[expect] 对拍 {os.path.basename(args.expect)} 最大绝对差 = {worst:.2e}")
+        print(
+            f"\n[expect] 对拍 {os.path.basename(args.expect)} 最大绝对差 = {worst:.2e}"
+        )
     return 0
 
 

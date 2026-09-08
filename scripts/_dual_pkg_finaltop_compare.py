@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """_dual_pkg_finaltop_compare.py — 多模型包"终版交付清单"质量对拍 (影子回放).
 
 对每个指定包, 在 TODAY 面板上重放 label-matured 窗口内逐日的最终交付清单口径
@@ -46,17 +45,17 @@ from app.pipeline1.list_generator import ListGenerator
 from app.pipeline1.predictor import V35Predictor
 from config.settings import PANEL_V3_PATH, data_others_path
 from scripts._diag_q90_slot_replay import COST, _net_vec, _pivots
-from scripts._run_guard import find_conflicts
 from scripts._q90_slot_eval import TOPN, gate_mask
+from scripts._run_guard import find_conflicts
 
 DEFAULT_MAIN = [
-    "models/pipeline1/main_current.pkl",       # A: tag 20260903
-    "models/pipeline1/main_20260902.pkl",      # B
+    "models/pipeline1/main_current.pkl",  # A: tag 20260903
+    "models/pipeline1/main_20260902.pkl",  # B
 ]
 DEFAULT_DUAL = [
-    "models/pipeline1/dual_current.pkl",       # A: tag 20260830excessfix
-    "models/pipeline1/dual_20260902.pkl",      # B
-    "models/pipeline1/dual_20260903.pkl",      # C: 09-01 build
+    "models/pipeline1/dual_current.pkl",  # A: tag 20260830excessfix
+    "models/pipeline1/dual_20260902.pkl",  # B
+    "models/pipeline1/dual_20260903.pkl",  # C: 09-01 build
 ]
 KEEP_PRED = [
     "symbol",
@@ -74,8 +73,13 @@ def log(msg: str) -> None:
     print(f"[{time.time() - T0:6.0f}s] {msg}", flush=True)
 
 
-def replay_arm(predictor: V35Predictor, board: str, groups: dict,
-               eval_days: list, warmup_days: list) -> pd.DataFrame:
+def replay_arm(
+    predictor: V35Predictor,
+    board: str,
+    groups: dict,
+    eval_days: list,
+    warmup_days: list,
+) -> pd.DataFrame:
     """单包单板: 预热 base_rate 20 日历史 → 逐日预测+评分, 返回全池行."""
     lister = ListGenerator()
     rows: list[pd.DataFrame] = []
@@ -105,8 +109,13 @@ def replay_arm(predictor: V35Predictor, board: str, groups: dict,
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
-def attach_nets(df: pd.DataFrame, px: pd.DataFrame, all_cal: pd.DatetimeIndex,
-                i_of: dict, amt: pd.DataFrame) -> pd.DataFrame:
+def attach_nets(
+    df: pd.DataFrame,
+    px: pd.DataFrame,
+    all_cal: pd.DatetimeIndex,
+    i_of: dict,
+    amt: pd.DataFrame,
+) -> pd.DataFrame:
     """net_3d/net_10d + anchor amount (同 q90 回放口径); 视界不足 → NaN."""
     out = []
     for d, g in df.groupby("date"):
@@ -115,16 +124,19 @@ def attach_nets(df: pd.DataFrame, px: pd.DataFrame, all_cal: pd.DatetimeIndex,
         g = g.copy()
         g["net_3d"] = (
             _net_vec(px, syms, all_cal[di + 1], all_cal[di + 4])
-            if di + 4 < len(all_cal) else np.nan
+            if di + 4 < len(all_cal)
+            else np.nan
         )
         g["net_10d"] = (
             _net_vec(px, syms, all_cal[di + 1], all_cal[di + 11])
-            if di + 11 < len(all_cal) else np.nan
+            if di + 11 < len(all_cal)
+            else np.nan
         )
         dts = pd.Timestamp(d)
         g["amount"] = (
             amt[dts].reindex(syms).to_numpy(dtype=float)
-            if dts in amt.columns else np.nan
+            if dts in amt.columns
+            else np.nan
         )
         out.append(g)
     return pd.concat(out, ignore_index=True)
@@ -160,13 +172,15 @@ def arm_stats(picks: dict[str, list[str]], day_net: dict, winners: dict) -> dict
         n3, n10 = day_net.get(d, ({}, {}))
         v3 = [n3[s] for s in syms if s in n3 and pd.notna(n3[s])]
         v10 = [n10[s] for s in syms if s in n10 and pd.notna(n10[s])]
-        daily.append({
-            "date": d,
-            "net3": float(np.mean(v3)) if v3 else np.nan,
-            "net10": float(np.mean(v10)) if v10 else np.nan,
-            "hit3": float(np.mean([v > 0 for v in v3])) if v3 else np.nan,
-            "cov": len(set(syms) & winners.get(d, set())),
-        })
+        daily.append(
+            {
+                "date": d,
+                "net3": float(np.mean(v3)) if v3 else np.nan,
+                "net10": float(np.mean(v10)) if v10 else np.nan,
+                "hit3": float(np.mean([v > 0 for v in v3])) if v3 else np.nan,
+                "cov": len(set(syms) & winners.get(d, set())),
+            }
+        )
     dd = pd.DataFrame(daily)
     return {
         "daily": dd,
@@ -197,8 +211,12 @@ def paired(ref: dict, other: dict) -> dict:
     }
 
 
-def expect_check(replay_days: list, merged_picks15: dict[str, list[str]],
-                 merged_rows: pd.DataFrame, csv_paths: list) -> list[dict]:
+def expect_check(
+    replay_days: list,
+    merged_picks15: dict[str, list[str]],
+    merged_rows: pd.DataFrame,
+    csv_paths: list,
+) -> list[dict]:
     """与交付 CSV 对拍: symbol 集重叠 + 重叠票 pred_ret_10d 值差 (诚实呈现)."""
     out = []
     for p in csv_paths:
@@ -225,20 +243,27 @@ def expect_check(replay_days: list, merged_picks15: dict[str, list[str]],
         if len(rows_d) and hit:
             rr = rows_d.set_index("symbol")["pred_ret_10d"].astype(float)
             cv = csv.set_index("symbol")["pred_ret_10d"].astype(float)
-            both = [s for s in hit if s in rr.index and s in cv.index and pd.notna(rr[s])]
+            both = [
+                s for s in hit if s in rr.index and s in cv.index and pd.notna(rr[s])
+            ]
             if both:
                 val_diff = float(np.median(np.abs(rr[both] - cv[both])))
         rec = {
-            "csv": os.path.basename(p), "csv_date": m.group(1), "replay_date": str(d),
-            "csv_syms": len(want_syms), "overlap": len(hit),
+            "csv": os.path.basename(p),
+            "csv_date": m.group(1),
+            "replay_date": str(d),
+            "csv_syms": len(want_syms),
+            "overlap": len(hit),
             "csv_only": sorted(want_syms - got15),
             "replay_only": sorted(got15 - want_syms),
             "pred10_medabsdiff": val_diff,
         }
         out.append(rec)
         vd = "n/a" if val_diff is None else f"{val_diff:.2e}"
-        log(f"[expect] {os.path.basename(p)} → replay {d}: 重叠 {len(hit)}/{len(want_syms)}"
-            f" | 重叠票 pred10 中位差 {vd}")
+        log(
+            f"[expect] {os.path.basename(p)} → replay {d}: 重叠 {len(hit)}/{len(want_syms)}"
+            f" | 重叠票 pred10 中位差 {vd}"
+        )
         log(f"[expect]   csv独有: {rec['csv_only']}")
         log(f"[expect]   replay独有: {rec['replay_only']}")
     return out
@@ -278,7 +303,9 @@ def main() -> int:
     for board in boards:
         paths = (args.main_bundles if board == "main" else args.dual_bundles).split(",")
         bundles[board] = [p.strip() for p in paths if p.strip()]
-    all_labels = [chr(ord("A") + i) for i in range(max(len(v) for v in bundles.values()))]
+    all_labels = [
+        chr(ord("A") + i) for i in range(max(len(v) for v in bundles.values()))
+    ]
     if args.bundles != "all":
         sel = {c.strip().upper() for c in args.bundles.split(",")}
         keep = [i for i, lb in enumerate(all_labels) if lb in sel]
@@ -296,8 +323,12 @@ def main() -> int:
     ds = sorted(pd.unique(dates_all))
     cut = ds[-args.slice]
     del dates_all
-    panel = pd.read_parquet(str(PANEL_V3_PATH), filters=[("date", ">=", pd.Timestamp(cut))])
-    log(f"[slice] {pd.Timestamp(cut).date()}..{pd.Timestamp(ds[-1]).date()} -> {len(panel):,}r")
+    panel = pd.read_parquet(
+        str(PANEL_V3_PATH), filters=[("date", ">=", pd.Timestamp(cut))]
+    )
+    log(
+        f"[slice] {pd.Timestamp(cut).date()}..{pd.Timestamp(ds[-1]).date()} -> {len(panel):,}r"
+    )
 
     px, amt, cal = _pivots(panel)
     all_cal = pd.to_datetime(cal)
@@ -322,9 +353,12 @@ def main() -> int:
             if board not in pred.bundles:
                 raise SystemExit(f"[fatal] 包加载失败: {path}")
             predictors[lb] = pred
-        cols = sorted({c for p in predictors.values()
-                       for c in p.bundles[board]["feature_cols"]})
-        log(f"[feat:{board}] inference_cols={len(cols)} (union of {len(predictors)} 包)")
+        cols = sorted(
+            {c for p in predictors.values() for c in p.bundles[board]["feature_cols"]}
+        )
+        log(
+            f"[feat:{board}] inference_cols={len(cols)} (union of {len(predictors)} 包)"
+        )
         feat = features.build(dfb, None, inference_cols=cols, cross_sectional_rank=csr)
         del dfb
         gc.collect()
@@ -336,17 +370,21 @@ def main() -> int:
             eval_days = [d for d in day_dates if d in want]
             missing = set(want) - set(eval_days)
             if missing:
-                log(f"[warn] only-dates 不在面板: {sorted(str(x.date()) for x in missing)}")
+                log(
+                    f"[warn] only-dates 不在面板: {sorted(str(x.date()) for x in missing)}"
+                )
             if not eval_days:
                 raise SystemExit("[fatal] 冒烟日期全部不在面板")
             first_i = min(day_dates.index(d) for d in eval_days)
-            warmup_days = day_dates[:first_i][-args.warmup:]
+            warmup_days = day_dates[:first_i][-args.warmup :]
         else:
             matured = [d for d in day_dates if i_of[d] + 11 < len(all_cal)]
-            eval_days = matured[-args.eval_days:]
-            warmup_days = day_dates[: day_dates.index(eval_days[0])][-args.warmup:]
-        log(f"[{board}] warmup={len(warmup_days)}d | eval={len(eval_days)}d "
-            f"{pd.Timestamp(eval_days[0]).date()}..{pd.Timestamp(eval_days[-1]).date()}")
+            eval_days = matured[-args.eval_days :]
+            warmup_days = day_dates[: day_dates.index(eval_days[0])][-args.warmup :]
+        log(
+            f"[{board}] warmup={len(warmup_days)}d | eval={len(eval_days)}d "
+            f"{pd.Timestamp(eval_days[0]).date()}..{pd.Timestamp(eval_days[-1]).date()}"
+        )
         rows_by_board[board] = {}
         for lb in labels:
             if lb not in predictors:
@@ -393,20 +431,32 @@ def main() -> int:
             stats[lb] = st
             result[board][lb] = {k: v for k, v in st.items() if k != "daily"}
             for _, r in st["daily"].iterrows():
-                daily_records.append({
-                    "board": board, "arm": lb, "date": r["date"], "net3": r["net3"],
-                    "net10": r["net10"], "hit3": r["hit3"], "cov": r["cov"],
-                    "picks": ";".join(picks[r["date"]]),
-                })
-            log(f"[eval] {board}:{lb} days={st['days']} net3={st['net3']:+.5f} "
-                f"net10={st['net10']:+.5f} hit3={st['hit3']:.3f} cov={st['cov']:.3f}")
+                daily_records.append(
+                    {
+                        "board": board,
+                        "arm": lb,
+                        "date": r["date"],
+                        "net3": r["net3"],
+                        "net10": r["net10"],
+                        "hit3": r["hit3"],
+                        "cov": r["cov"],
+                        "picks": ";".join(picks[r["date"]]),
+                    }
+                )
+            log(
+                f"[eval] {board}:{lb} days={st['days']} net3={st['net3']:+.5f} "
+                f"net10={st['net10']:+.5f} hit3={st['hit3']:.3f} cov={st['cov']:.3f}"
+            )
         for lb in labels[1:]:
             if lb in stats and stats[lb]["days"] and stats[ref_lb]["days"]:
-                result[board][f"delta_{lb}_vs_{ref_lb}"] = paired(stats[ref_lb], stats[lb])
+                result[board][f"delta_{lb}_vs_{ref_lb}"] = paired(
+                    stats[ref_lb], stats[lb]
+                )
         gated_by_board[board] = board_gated
 
-    common_labels = [lb for lb in labels
-                     if all(lb in rows_by_board[b] for b in rows_by_board)]
+    common_labels = [
+        lb for lb in labels if all(lb in rows_by_board[b] for b in rows_by_board)
+    ]
     if len(rows_by_board) > 1 and common_labels:
         ref_lb = common_labels[0]
         merged_rows = pd.concat(
@@ -418,8 +468,9 @@ def main() -> int:
         mstats = {}
         merged_picks15: dict[str, list[str]] = {}
         for lb in common_labels:
-            mg = pd.concat([gated_by_board[b][lb] for b in rows_by_board],
-                           ignore_index=True)
+            mg = pd.concat(
+                [gated_by_board[b][lb] for b in rows_by_board], ignore_index=True
+            )
             picks10 = daily_top(mg, TOPN)
             if lb == ref_lb:
                 merged_picks15 = daily_top(mg, 15)
@@ -427,20 +478,32 @@ def main() -> int:
             mstats[lb] = st
             result["merged"][lb] = {k: v for k, v in st.items() if k != "daily"}
             for _, r in st["daily"].iterrows():
-                daily_records.append({
-                    "board": "merged", "arm": lb, "date": r["date"], "net3": r["net3"],
-                    "net10": r["net10"], "hit3": r["hit3"], "cov": r["cov"],
-                    "picks": ";".join(picks10[r["date"]]),
-                    "picks15": ";".join(merged_picks15.get(r["date"], [])),
-                })
-            log(f"[eval] merged:{lb} days={st['days']} net3={st['net3']:+.5f} "
-                f"hit3={st['hit3']:.3f} cov={st['cov']:.3f}")
+                daily_records.append(
+                    {
+                        "board": "merged",
+                        "arm": lb,
+                        "date": r["date"],
+                        "net3": r["net3"],
+                        "net10": r["net10"],
+                        "hit3": r["hit3"],
+                        "cov": r["cov"],
+                        "picks": ";".join(picks10[r["date"]]),
+                        "picks15": ";".join(merged_picks15.get(r["date"], [])),
+                    }
+                )
+            log(
+                f"[eval] merged:{lb} days={st['days']} net3={st['net3']:+.5f} "
+                f"hit3={st['hit3']:.3f} cov={st['cov']:.3f}"
+            )
         for lb in common_labels[1:]:
-            result["merged"][f"delta_{lb}_vs_{ref_lb}"] = paired(mstats[ref_lb], mstats[lb])
+            result["merged"][f"delta_{lb}_vs_{ref_lb}"] = paired(
+                mstats[ref_lb], mstats[lb]
+            )
         if args.expect_csv:
             replay_days = [str(pd.Timestamp(d).date()) for d in eval_days]
-            result["expect"] = expect_check(replay_days, merged_picks15,
-                                            merged_rows, args.expect_csv)
+            result["expect"] = expect_check(
+                replay_days, merged_picks15, merged_rows, args.expect_csv
+            )
 
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     out_dir = data_others_path("diag")

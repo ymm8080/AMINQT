@@ -485,7 +485,9 @@ class ListGenerator:
                 ],
             )
             px["symbol"] = px["symbol"].astype(str).str.zfill(6)
-            cl = px.pivot(index="date", columns="symbol", values="close_hfq").sort_index()
+            cl = px.pivot(
+                index="date", columns="symbol", values="close_hfq"
+            ).sort_index()
             pull = (cl / cl.rolling(10, min_periods=2).max() - 1).iloc[-1]
             sym = df["symbol"].astype(str).str.zfill(6)
             df = df[~(sym.map(pull).fillna(0) < float(LEGACY_SELECTION["pull_min"]))]
