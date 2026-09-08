@@ -75,7 +75,7 @@ LEGACY_MKT_EXPECT_WINDOW = 60
 
 # ── legacy TOP10 第二票 (2026-08-29 用户批准: 切换闸 = IC 闸 + TOP10 非劣闸) ──
 # [09-02 终审改判] caliber="final_list_tool": 判决权移交已验证的终榜回放工具
-# (tmp_t/_dual_pkg_finaltop_compare.py, 对拍过真实交付清单), retrain 脚本在
+# (scripts/_dual_pkg_finaltop_compare.py, 对拍过真实交付清单), retrain 脚本在
 # IC 过闸后调工具对拍 current vs 新包, 套新判据 (全窗≥0 且双半≥tol_half 且
 # 胜率≥win_rate_min) 才晋升. 判什么就交付什么 — 工具判的就是将上生产的那个包.
 # 起因: 裸头闸错杀实锤 — main_20260902 裸头 -0.31pp 判 FAIL, 终榜口径
