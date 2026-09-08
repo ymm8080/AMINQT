@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import pandas as pd
 
 from config.settings import LEGACY_SELECTION, STOCK_LIST_DIR
+from scripts._amt_agree_gate import apply_amt_agree_kill
 from scripts._pctfmt import PCT_COLS_LEGACY, fmt_pct_columns
 from scripts._prob10_density_shadow import apply_chip_gate
 from scripts._stall_marker import stall_marker
@@ -208,6 +209,8 @@ def main():
     # 滞涨标记 (2026-08-19 用户方案): 入选 + 近10日滞涨<2% + 近20日入选≥3 → 洗盘待爆发
     df = stall_marker(df, trade_date, "legacy_stocklist_")
     module = resolve_module(df, trade_date)
+    # 量价删查线 (2026-09-08 用户拍板): 清单内 amt_agree10 最高档真删不补齐
+    df = apply_amt_agree_kill(df, pd.Timestamp(trade_date), module)
     os.makedirs(str(STOCK_LIST_DIR), exist_ok=True)
 
     # 被整体退回的板块 (有候选但最终清单 0 只): 仍出该板清单, 醒目标注未接受原因

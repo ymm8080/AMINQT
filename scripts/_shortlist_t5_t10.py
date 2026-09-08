@@ -70,6 +70,7 @@ from config.settings import (
     SHORTLIST_SCORE,
     STOCK_LIST_DIR,
 )
+from scripts._amt_agree_gate import apply_amt_agree_kill
 from scripts._pctfmt import PCT_COLS_PARALLEL, fmt_pct_columns
 from scripts._prob10_density_shadow import apply_chip_gate
 from scripts._stall_marker import stall_marker
@@ -1711,6 +1712,9 @@ def main() -> int:
         .drop(columns=["_co"])
         .reset_index(drop=True)
     )
+    # 量价删查线 (2026-09-08 用户拍板): 清单内 amt_agree10 最高档真删不补齐 —
+    # 落盘前切, CSV/THS 推送/终版 Excel 全部继承
+    res = apply_amt_agree_kill(res, sel_date, _module_suffix(module).lstrip("_"))
     summary = build_summary(res, stats, sel_date)
     summary = summary[:1] + fmt_regime(gate) + summary[1:]
     # 未接受板块 (被退回) → SUMMARY 顶部醒目标注原因, 清单仍照常输出
