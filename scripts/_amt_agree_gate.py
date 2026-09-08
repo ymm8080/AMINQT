@@ -12,7 +12,8 @@
   R = close_hfq.pct_change(); DA = amount.diff()
   agree = ((R>0)&(DA>0)) | ((R<0)&(DA<0)); amt_agree10 = agree.rolling(10).mean()
 面板缺失/个股算不出 → 不删 (fail-open)。
-留痕: STOCK_LIST_DIR/amtagree_removed_{date}__{module}.csv (WORM, 只在有删时写)。
+留痕: STOCK_LIST_DIR/amtagree_removed_{date}__{module}__{line}.csv (WORM, 只在有删时写;
+line=legacy/parallel — 两线模块 tag 相同, 无线标会同名互覆)。
 """
 
 import math
@@ -69,11 +70,13 @@ def apply_amt_agree_kill(
     ag: pd.Series | None = None,
     cfg: dict | None = None,
     list_dir=None,
+    line: str = "",
 ) -> pd.DataFrame:
     """清单内删 amt_agree10 最高档 (真删不补齐, fail-open, 留痕 WORM).
 
-    module 进留痕文件名 (amtagree_removed_{date}__{module}.csv); ag 供测试注入,
-    缺省从面板现算。
+    module 进留痕文件名 (amtagree_removed_{date}__{module}.csv); line 为线标
+    ("legacy"/"parallel") — 两线共享同一模块 tag 时区分留痕, 防同名互覆 (09-08
+    首跑实发: parallel 覆盖 legacy 删票记录)。ag 供测试注入, 缺省从面板现算。
     """
     conf = cfg if cfg is not None else AMT_AGREE_GATE
     if not conf.get("enable", False) or df is None or not len(df):
@@ -100,7 +103,7 @@ def apply_amt_agree_kill(
     )
     date8 = pd.Timestamp(day_ts).strftime("%Y%m%d")
     doc = Path(list_dir if list_dir is not None else STOCK_LIST_DIR) / (
-        f"amtagree_removed_{date8}__{module}.csv"
+        f"amtagree_removed_{date8}__{module}{f'__{line}' if line else ''}.csv"
     )
     cut.to_csv(doc, index=False)
     print(

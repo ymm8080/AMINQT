@@ -209,7 +209,7 @@ def main():
     df = stall_marker(df, trade_date, "legacy_stocklist_")
     module = resolve_module(df, trade_date)
     # 量价删查线 (2026-09-08 用户拍板): 清单内 amt_agree10 最高档真删不补齐
-    df = apply_amt_agree_kill(df, pd.Timestamp(trade_date), module)
+    df = apply_amt_agree_kill(df, pd.Timestamp(trade_date), module, line="legacy")
     os.makedirs(str(STOCK_LIST_DIR), exist_ok=True)
 
     # 被整体退回的板块 (有候选但最终清单 0 只): 仍出该板清单, 醒目标注未接受原因

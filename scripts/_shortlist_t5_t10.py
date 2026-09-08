@@ -1714,7 +1714,9 @@ def main() -> int:
     )
     # 量价删查线 (2026-09-08 用户拍板): 清单内 amt_agree10 最高档真删不补齐 —
     # 落盘前切, CSV/THS 推送/终版 Excel 全部继承
-    res = apply_amt_agree_kill(res, sel_date, _module_suffix(module).lstrip("_"))
+    res = apply_amt_agree_kill(
+        res, sel_date, _module_suffix(module).lstrip("_"), line="parallel"
+    )
     summary = build_summary(res, stats, sel_date)
     summary = summary[:1] + fmt_regime(gate) + summary[1:]
     # 未接受板块 (被退回) → SUMMARY 顶部醒目标注原因, 清单仍照常输出

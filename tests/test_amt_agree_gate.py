@@ -69,6 +69,21 @@ def test_failopen_when_factor_unavailable(monkeypatch, tmp_path):
     assert not (tmp_path / "amtagree_removed_20260908__m.csv").exists()
 
 
+def test_line_tag_in_doc_name(tmp_path):
+    # 两线共享模块 tag → 留痕文件名靠 line 区分, 防同名互覆 (09-08 首跑实发)
+    gate.apply_amt_agree_kill(
+        _mk([0.9, 0.1]),
+        "2026-09-08",
+        "m",
+        ag=_ag([0.9, 0.1]),
+        cfg=CFG,
+        list_dir=tmp_path,
+        line="legacy",
+    )
+    assert (tmp_path / "amtagree_removed_20260908__m__legacy.csv").exists()
+    assert not (tmp_path / "amtagree_removed_20260908__m.csv").exists()
+
+
 def test_disabled_noop(tmp_path):
     out = gate.apply_amt_agree_kill(
         _mk([0.9, 0.1]),
