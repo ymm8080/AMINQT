@@ -12,7 +12,9 @@ exclude = ["*.yaml", "*.yml"]
 # N   — pep8-naming
 select = ["E4", "E7", "E9", "F", "W", "I", "B", "UP", "N"]
 # B905 (zip-without-explicit-strict) requires Python 3.10+; project targets 3.9+
-ignore = ["B905"]
+# UP009: project mandates `# -*- coding: utf-8 -*-` header per AGENTS.md iron rule
+# E731: diagnostic scripts use lambda for brevity
+ignore = ["B905", "UP009", "E731"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/test_ths_indicators.py" = ["E402"]
