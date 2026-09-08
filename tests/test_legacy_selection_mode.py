@@ -38,7 +38,9 @@ def _panel_fp(tmp_path, frame):
     return fp
 
 
-def _make_panel(cut_symbol, end, syms=("600001", "600002", "600003", "300001", "688001")):
+def _make_panel(
+    cut_symbol, end, syms=("600001", "600002", "600003", "300001", "688001")
+):
     """12 个交易日面板: cut_symbol 末日暴跌 → pull=-20%; 其余恒价 → pull=0."""
     dates = pd.bdate_range(end=end, periods=12)
     rows = []
@@ -108,9 +110,7 @@ def test_emit_new_mode_skips_prob_gate_and_mag_rank(tmp_path, monkeypatch, sel_o
     monkeypatch.setattr(
         prob_head, "gate_probabilities", lambda *a, **k: calls.append(1)
     )
-    fp = _panel_fp(
-        tmp_path, _make_panel("600002", pd.Timestamp("2026-06-20"))
-    )
+    fp = _panel_fp(tmp_path, _make_panel("600002", pd.Timestamp("2026-06-20")))
     monkeypatch.setattr(lg, "PANEL_V3_PATH", fp)
     out = ListGenerator(**GATE_OFF).emit(_candidates())
     assert not out["empty"]
