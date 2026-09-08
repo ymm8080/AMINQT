@@ -36,7 +36,7 @@ from config.settings import (
 
 MODEL_DIR = "models/pipeline1"
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-FINALTOP_TOOL = os.path.join(ROOT, "tmp_t", "_dual_pkg_finaltop_compare.py")
+FINALTOP_TOOL = os.path.join(ROOT, "scripts", "_dual_pkg_finaltop_compare.py")
 
 
 def _recent_draw_bundles(board: str, exclude: set, cfg: dict) -> list:
