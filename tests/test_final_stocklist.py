@@ -127,8 +127,8 @@ def test_write_xlsx_roundtrip(tmp_path):
 
 
 def test_archive_push_artifacts_moves_only_push_files(tmp_path):
-    """链末归档: 当日 ths txt/结果单移入 ths_push_archive/, 清单 CSV 不动;
-    归档后 read_push_results 仍读到 (看板卡/终表重建不断粮)."""
+    """????: ?? ths txt/????? ths_push_archive/, ?? CSV ??;
+    ??? read_push_results ??? (???/???????)."""
     from scripts._ths_watchlist_push import read_push_results
 
     (tmp_path / f"ths_watchlist_{DATE}__18__parallel__M1.txt").write_text("600001\n")
@@ -144,11 +144,11 @@ def test_archive_push_artifacts_moves_only_push_files(tmp_path):
     assert (
         tmp_path / fs.THS_PUSH_ARCHIVE / f"ths_push_result_{DATE}__18__parallel__M1.csv"
     ).exists()
-    assert (tmp_path / f"legacy_stocklist_{DATE}__M1.csv").exists()  # 清单留主目录
+    assert (tmp_path / f"legacy_stocklist_{DATE}__M1.csv").exists()  # ??????
 
     res = read_push_results(DATE, list_dir=tmp_path)
     assert res["source"].tolist() == ["parallel"]
     assert res["status"].tolist() == ["landed"]
 
-    # 幂等: 二次归档无件可移
+    # ??: ????????
     assert fs.archive_push_artifacts(DATE, list_dir=tmp_path) == 0
