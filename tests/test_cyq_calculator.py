@@ -141,6 +141,31 @@ def test_ovd_overhead_density_formula():
     assert abs(r["ovd_15p"] - 0.0) < 1e-9
 
 
+def test_nan_turnover_treated_as_zero():
+    """2026-09-09 修复: NaN 换手不得当成 100% 全换手.
+
+    day0 一字板 10 元全换手 (筹码集中 10 元); day1 放量区间日但换手为 NaN.
+    修复后 NaN→0: 旧筹码不衰减不新增 → close=11 下 winner_ratio=1.0.
+    (bug 时 min(1.0,nan)=1.0: 旧筹码清零, 新筹码铺 10-12 → winner_ratio<1)
+    """
+    from app.pipeline1.cyq_ext import _compute_cyq_one_day
+
+    records = [
+        {
+            "date": pd.Timestamp("2025-01-01"),
+            "open": 10.0, "high": 10.0, "low": 10.0, "close": 10.0,
+            "turnover_rate": 100.0,
+        },
+        {
+            "date": pd.Timestamp("2025-01-02"),
+            "open": 10.0, "high": 12.0, "low": 10.0, "close": 11.0,
+            "turnover_rate": float("nan"),
+        },
+    ]
+    r = _compute_cyq_one_day(1, records)
+    assert abs(r["winner_ratio"] - 1.0) < 1e-9, "NaN 换手被当成全换手 (bug 复发)"
+
+
 def test_ovd_zero_when_no_overhead():
     """横盘一字板 (现价=筹码档) → 上方无筹码, ovd 两列归 0."""
     from app.pipeline1.cyq_ext import _compute_cyq_one_day

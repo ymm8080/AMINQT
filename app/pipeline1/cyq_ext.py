@@ -105,7 +105,9 @@ def _compute_cyq_one_day(
     for k in kdata:
         o, c, h, l = k["open"], k["close"], k["high"], k["low"]  # noqa: E741
         avg = (o + c + h + l) / 4.0
-        turnover_rate = min(1.0, (k.get("hsl", k.get("turnover_rate", 0)) or 0) / 100.0)
+        # NaN 为真值, `or 0` 拦不住; min(1.0, nan)=1.0 会把缺换手当成全换手
+        _hsl = k.get("hsl", k.get("turnover_rate", 0)) or 0
+        turnover_rate = min(1.0, (_hsl if _hsl == _hsl else 0.0) / 100.0)
         hsl_val = turnover_rate
 
         H = math.floor((h - minprice) / accuracy)
