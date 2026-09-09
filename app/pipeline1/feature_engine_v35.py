@@ -2068,13 +2068,11 @@ class FeatureEngineV35:
             g["close_vs_low"] = (c / l - 1).replace([np.inf, -np.inf], np.nan) * 100
             # 5 日均值: 持续收在低点上方是反指 (09-09 日内指纹实验 IC -0.076
             # t=-13.7 双半窗稳, 对 r5/r10 残差 IC -0.064 独立于动量)
-            g["close_vs_low_ma5"] = (
-                (c / l - 1)
-                .replace([np.inf, -np.inf], np.nan)
-                .rolling(5, min_periods=5)
-                .mean()
-                * 100
-            )
+            # 20 日均值: 对 ma5 残差 IC -0.0225 t=-3.9 全窗双半窗稳 = 真增量;
+            # ma10 残差 -0.014 不达线未加 (09-09 窗口扫描)
+            cl_low = (c / l - 1).replace([np.inf, -np.inf], np.nan)
+            g["close_vs_low_ma5"] = cl_low.rolling(5, min_periods=5).mean() * 100
+            g["close_vs_low_ma20"] = cl_low.rolling(20, min_periods=20).mean() * 100
 
             # 量价背离: 涨但缩量 / 跌但放量 (1d 反转信号)
             ret = c / pc - 1

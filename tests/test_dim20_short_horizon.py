@@ -46,6 +46,22 @@ def test_close_vs_low_ma5_equals_rolling5_mean():
     assert np.allclose(got[m], exp[m], atol=1e-9)
 
 
+def test_close_vs_low_ma20_equals_rolling20_mean():
+    df = _toy_panel(n_days=25)
+    out = FeatureEngineV35().dim20_short_horizon(df.copy())
+
+    exp = (
+        (df["close"] / df["low"] - 1.0)
+        .groupby(df["symbol"])
+        .transform(lambda s: s.rolling(20, min_periods=20).mean())
+        * 100
+    )
+    got = out["close_vs_low_ma20"]
+    m = exp.notna() & got.notna()
+    assert m.sum() >= 5
+    assert np.allclose(got[m], exp[m], atol=1e-9)
+
+
 def test_close_vs_low_ma5_warmup_nan_then_filled():
     df = _toy_panel()
     out = FeatureEngineV35().dim20_short_horizon(df.copy())
