@@ -166,6 +166,30 @@ def test_nan_turnover_treated_as_zero():
     assert abs(r["winner_ratio"] - 1.0) < 1e-9, "NaN 换手被当成全换手 (bug 复发)"
 
 
+def test_nan_turnover_treated_as_zero_calculator():
+    """2026-09-09 修复 (与 cyq_ext 同 bug): NaN 换手不得当成 100% 全换手.
+
+    生产缓存 data/cyq_panel.parquet 走的是 cyq_calculator (非 cyq_ext),
+    同一字段解析 bug 必须双模块同修.
+    """
+    from app.pipeline1.cyq_calculator import _compute_cyq_one_day
+
+    records = [
+        {
+            "date": pd.Timestamp("2025-01-01"),
+            "open": 10.0, "high": 10.0, "low": 10.0, "close": 10.0,
+            "turnover_rate": 100.0,
+        },
+        {
+            "date": pd.Timestamp("2025-01-02"),
+            "open": 10.0, "high": 12.0, "low": 10.0, "close": 11.0,
+            "turnover_rate": float("nan"),
+        },
+    ]
+    r = _compute_cyq_one_day(1, records)
+    assert abs(r["winner_ratio"] - 1.0) < 1e-9, "NaN 换手被当成全换手 (bug 复发)"
+
+
 def test_ovd_zero_when_no_overhead():
     """横盘一字板 (现价=筹码档) → 上方无筹码, ovd 两列归 0."""
     from app.pipeline1.cyq_ext import _compute_cyq_one_day
