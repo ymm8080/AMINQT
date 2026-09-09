@@ -154,9 +154,7 @@ def review(list_dir=None, panel_path=None) -> dict:
             "picks": n_tot,
             "win_rate": wr,
             "mean_alpha": mean_alpha,
-            "alpha_by_day": {
-                d.strftime("%Y-%m-%d"): per_day[d]["alpha"] for d in days
-            },
+            "alpha_by_day": {d.strftime("%Y-%m-%d"): per_day[d]["alpha"] for d in days},
             "flag": flags,
             "reason": reasons,
         }

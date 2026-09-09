@@ -4,6 +4,7 @@
 口径锚定 09-09 日内指纹实验: mean5(close/low-1)*100, IC -0.0756 t=-13.7,
 对 r5/r10 残差 IC -0.064 (独立动量). 改动本列口径须同步更新本测试.
 """
+
 import numpy as np
 import pandas as pd
 
@@ -22,10 +23,17 @@ def _toy_panel(n_days: int = 12) -> pd.DataFrame:
             low = close * (1 - abs(rng.normal(0, 0.01)))
             high = close * (1 + abs(rng.normal(0, 0.01)))
             open_ = low + (high - low) * rng.uniform()
-            rows.append({
-                "symbol": sym, "date": d, "open": open_, "high": high,
-                "low": low, "close": close, "volume": float(rng.randint(1, 5) * 1e6),
-            })
+            rows.append(
+                {
+                    "symbol": sym,
+                    "date": d,
+                    "open": open_,
+                    "high": high,
+                    "low": low,
+                    "close": close,
+                    "volume": float(rng.randint(1, 5) * 1e6),
+                }
+            )
             base = close
     return pd.DataFrame(rows)
 
@@ -34,12 +42,9 @@ def test_close_vs_low_ma5_equals_rolling5_mean():
     df = _toy_panel()
     out = FeatureEngineV35().dim20_short_horizon(df.copy())
 
-    exp = (
-        (df["close"] / df["low"] - 1.0)
-        .groupby(df["symbol"])
-        .transform(lambda s: s.rolling(5, min_periods=5).mean())
-        * 100
-    )
+    exp = (df["close"] / df["low"] - 1.0).groupby(df["symbol"]).transform(
+        lambda s: s.rolling(5, min_periods=5).mean()
+    ) * 100
     got = out["close_vs_low_ma5"]
     m = exp.notna() & got.notna()
     assert m.sum() >= 10
@@ -50,12 +55,9 @@ def test_close_vs_low_ma20_equals_rolling20_mean():
     df = _toy_panel(n_days=25)
     out = FeatureEngineV35().dim20_short_horizon(df.copy())
 
-    exp = (
-        (df["close"] / df["low"] - 1.0)
-        .groupby(df["symbol"])
-        .transform(lambda s: s.rolling(20, min_periods=20).mean())
-        * 100
-    )
+    exp = (df["close"] / df["low"] - 1.0).groupby(df["symbol"]).transform(
+        lambda s: s.rolling(20, min_periods=20).mean()
+    ) * 100
     got = out["close_vs_low_ma20"]
     m = exp.notna() & got.notna()
     assert m.sum() >= 5
@@ -65,7 +67,7 @@ def test_close_vs_low_ma20_equals_rolling20_mean():
 def test_close_vs_low_ma5_warmup_nan_then_filled():
     df = _toy_panel()
     out = FeatureEngineV35().dim20_short_horizon(df.copy())
-    for sym, g in out.groupby("symbol"):
+    for _sym, g in out.groupby("symbol"):
         assert g["close_vs_low_ma5"].iloc[:4].isna().all()  # 4 日预热
         assert g["close_vs_low_ma5"].iloc[4:].notna().all()
         assert np.isinf(g["close_vs_low_ma5"]).sum() == 0
@@ -84,10 +86,17 @@ def _board_panel(n_days: int = 25) -> pd.DataFrame:
     for sym in ("000001.SZ",):
         for i, d in enumerate(dates):
             c = closes[i]
-            rows.append({
-                "symbol": sym, "date": d, "open": c * 0.995, "high": c * 1.01,
-                "low": c * 0.99, "close": c, "volume": float(vols[i]),
-            })
+            rows.append(
+                {
+                    "symbol": sym,
+                    "date": d,
+                    "open": c * 0.995,
+                    "high": c * 1.01,
+                    "low": c * 0.99,
+                    "close": c,
+                    "volume": float(vols[i]),
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -145,11 +154,18 @@ def _fade_panel(n_days: int = 80) -> pd.DataFrame:
             close = base * (1 + ret)
             high = close * (1 + abs(rng.normal(0, 0.01)))
             low = close * (1 - abs(rng.normal(0, 0.01)))
-            rows.append({
-                "symbol": sym, "date": d, "open": low, "high": high,
-                "low": low, "close": close, "volume": 1e6,
-                "turnover_rate": 1.0 + 0.01 * i,
-            })
+            rows.append(
+                {
+                    "symbol": sym,
+                    "date": d,
+                    "open": low,
+                    "high": high,
+                    "low": low,
+                    "close": close,
+                    "volume": 1e6,
+                    "turnover_rate": 1.0 + 0.01 * i,
+                }
+            )
             base = close
     return pd.DataFrame(rows)
 
@@ -163,20 +179,26 @@ def test_fade_score_formula_and_warmup():
     g = df.sort_values(["symbol", "date"]).groupby("symbol")
     c = df.sort_values(["symbol", "date"])["close"]
     ret1 = c / g["close"].shift(1) - 1.0
-    raw = pd.DataFrame({
-        "r20": g["close"].pct_change(20),
-        "vol20": ret1.groupby(df.sort_values(["symbol", "date"])["symbol"]).transform(
-            lambda s: s.rolling(20).std()),
-        "turn20": g["turnover_rate"].transform(lambda s: s.rolling(20).mean()),
-        "pos250": c / g["high"].transform(
-            lambda s: s.rolling(250, min_periods=60).max()) - 1.0,
-    })
+    raw = pd.DataFrame(
+        {
+            "r20": g["close"].pct_change(20),
+            "vol20": ret1.groupby(
+                df.sort_values(["symbol", "date"])["symbol"]
+            ).transform(lambda s: s.rolling(20).std()),
+            "turn20": g["turnover_rate"].transform(lambda s: s.rolling(20).mean()),
+            "pos250": c
+            / g["high"].transform(lambda s: s.rolling(250, min_periods=60).max())
+            - 1.0,
+        }
+    )
     m = raw.notna().all(axis=1)
     exp = raw[m].groupby(df.loc[m, "date"]).rank(pct=True).mean(axis=1)
 
     assert got.notna().sum() == len(exp)
     join = pd.DataFrame({"got": got, "exp": exp}).dropna()
-    assert len(join) == got.notna().sum()  # 全部对齐; pos250 min_periods=60 → 80日仅末21日有值
+    assert (
+        len(join) == got.notna().sum()
+    )  # 全部对齐; pos250 min_periods=60 → 80日仅末21日有值
     assert np.allclose(join["got"], join["exp"], atol=1e-9)
     # 预热期 NaN (pos250 min_periods=60 → 前59日 NaN; r20 需21日, 取严者)
     per = out.groupby("symbol")["fade_score"]

@@ -123,7 +123,10 @@ def market_fade_sheet(fc_fn=None) -> tuple[str, pd.DataFrame] | None:
         return None
     rows = [
         ("预测交易日", fc["next_date"]),
-        ("状态基准 (上证收盘)", f"{fc['state_date']}  {fc['close']:.2f} ({fc['ret'] * 100:+.2f}%)"),
+        (
+            "状态基准 (上证收盘)",
+            f"{fc['state_date']}  {fc['close']:.2f} ({fc['ret'] * 100:+.2f}%)",
+        ),
         ("行情带 (距MA20)", f"{fc['regime']} ({fc['above_ma20'] * 100:+.2f}%)"),
         ("近5日涨幅 r5", f"{fc['r5'] * 100:+.2f}%"),
         ("量比 (vs 20日均量)", f"{fc['vratio']:.2f}"),
@@ -132,7 +135,10 @@ def market_fade_sheet(fc_fn=None) -> tuple[str, pd.DataFrame] | None:
         ("P(回落日) 预测", f"{fc['p_fade_day'] * 100:.0f}%"),
         ("P(回落日) 无条件基准", f"{fc['base_fade'] * 100:.1f}%"),
         ("判读", f"{fc['verdict']}; 回落日次日不偏空 (+0.05% vs +0.03%)"),
-        ("口径", f"上证2005-今条件频率 状态=前收盘 n={fc['n_regime']}日; 回落日=g≥0.4%且吐回≥60%"),
+        (
+            "口径",
+            f"上证2005-今条件频率 状态=前收盘 n={fc['n_regime']}日; 回落日=g≥0.4%且吐回≥60%",
+        ),
     ]
     return ("市场FADE预测", pd.DataFrame(rows, columns=["指标", "值"]))
 

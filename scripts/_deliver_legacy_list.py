@@ -302,7 +302,9 @@ def main():
             doc.add_paragraph(
                 f"⚠ 昨日冲高回落 {n_fade} 只 (见 fade_flag 列): 易再冲高回落, 勿追高",
             )
-        n_risk = int((df["fade_risk"] == "高").sum()) if "fade_risk" in df.columns else 0
+        n_risk = (
+            int((df["fade_risk"] == "高").sum()) if "fade_risk" in df.columns else 0
+        )
         if n_risk:
             doc.add_paragraph(
                 f"△ 冲高回落风险高 {n_risk} 只 (预测, fade_risk=高 / fade_score≥"

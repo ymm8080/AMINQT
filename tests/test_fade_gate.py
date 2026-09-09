@@ -125,8 +125,13 @@ def test_fade_risk_tiers(tmp_path):
         "2026-09-09",
         "m",
         profile=_prof([0.9, 0.6, 0.3, 0.749]),
-        cfg={"enable": True, "kill_enable": False, "flag_enable": True,
-             "risk_hi": 0.75, "risk_mid": 0.5},
+        cfg={
+            "enable": True,
+            "kill_enable": False,
+            "flag_enable": True,
+            "risk_hi": 0.75,
+            "risk_mid": 0.5,
+        },
         list_dir=tmp_path,
     )
     assert list(out["fade_risk"]) == ["高", "中", "低", "中"]
@@ -157,18 +162,24 @@ def _synth_panel(tmp_path):
     dates = pd.date_range("2026-06-01", periods=70)
     rows = []
     prof = {
-        "000001": dict(base=10.0, drift=0.06, vol=3.0, turn=9.0),   # 暴涨高波高换
-        "000002": dict(base=20.0, drift=0.0, vol=0.4, turn=1.0),    # 平稳
+        "000001": dict(base=10.0, drift=0.06, vol=3.0, turn=9.0),  # 暴涨高波高换
+        "000002": dict(base=20.0, drift=0.0, vol=0.4, turn=1.0),  # 平稳
         "000003": dict(base=50.0, drift=-0.01, vol=0.8, turn=2.0),  # 阴跌
     }
     for s, p in prof.items():
         for i, dt in enumerate(dates):
             close = p["base"] * (1 + p["drift"]) ** i + (i % 2) * p["vol"] * 0.05
             high = close * (1 + p["vol"] * 0.01)
-            rows.append({
-                "symbol": s, "date": dt, "high": high, "close": close,
-                "pre_close": close, "turnover_rate": p["turn"],
-            })
+            rows.append(
+                {
+                    "symbol": s,
+                    "date": dt,
+                    "high": high,
+                    "close": close,
+                    "pre_close": close,
+                    "turnover_rate": p["turn"],
+                }
+            )
     df = pd.DataFrame(rows)
     # 末日: 000002 冲高 g=5% 后收在 +1.4% → 吐回 (5-1.4)/5 = 72%
     m = (df["symbol"] == "000002") & (df["date"] == dates[-1])

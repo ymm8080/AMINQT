@@ -16,8 +16,14 @@ CRIT = {
 }
 
 
-def _mk(n_days=40, killed_ret5=-0.02, kept_ret5=0.01, back_killed_ret5=None,
-        back_kept_ret5=None, leak_winner=False):
+def _mk(
+    n_days=40,
+    killed_ret5=-0.02,
+    kept_ret5=0.01,
+    back_killed_ret5=None,
+    back_kept_ret5=None,
+    leak_winner=False,
+):
     """n_days 清单日 × 10 票/日; 前2票 killed。前后半可分别设收益."""
     days = pd.date_range("2026-01-01", periods=n_days, freq="B")
     rows = []
@@ -32,8 +38,15 @@ def _mk(n_days=40, killed_ret5=-0.02, kept_ret5=0.01, back_killed_ret5=None,
             # leak_winner: 每天 1 个大赢家且落在删除区
             if leak_winner and killed and j == 0:
                 ret5 = 0.12
-            rows.append({"list_date": d, "symbol": f"{i:03d}{j:02d}",
-                         "killed": killed, "ret5": ret5, "o2c": ret5 / 2})
+            rows.append(
+                {
+                    "list_date": d,
+                    "symbol": f"{i:03d}{j:02d}",
+                    "killed": killed,
+                    "ret5": ret5,
+                    "o2c": ret5 / 2,
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -47,9 +60,7 @@ def test_pass_stable_positive():
 
 def test_fail_half_flip():
     # fade 删线翻车模式: 前半有效 (删除区差), 后半翻转 (删除区反而更好)
-    rep = ga.evaluate_gate(
-        _mk(back_killed_ret5=0.03, back_kept_ret5=0.01), CRIT
-    )
+    rep = ga.evaluate_gate(_mk(back_killed_ret5=0.03, back_kept_ret5=0.01), CRIT)
     assert rep["verdict"] == "FAIL"
     assert any("后半" in r and "半窗不稳" in r for r in rep["reasons"])
     assert rep["edge_front_pp"] > 0 > rep["edge_back_pp"]
@@ -79,22 +90,27 @@ def test_fail_min_edge():
 
 
 def test_apply_kill_rule_fade_threshold():
-    recs = pd.DataFrame({
-        "line": "legacy", "list_date": pd.Timestamp("2026-09-09"),
-        "symbol": [f"{i:06d}" for i in range(4)],
-        "factor": [0.9, 0.75, 0.749, np.nan],
-    })
+    recs = pd.DataFrame(
+        {
+            "line": "legacy",
+            "list_date": pd.Timestamp("2026-09-09"),
+            "symbol": [f"{i:06d}" for i in range(4)],
+            "factor": [0.9, 0.75, 0.749, np.nan],
+        }
+    )
     out = ga.apply_kill_rule(recs, "fade")
     assert list(out["killed"]) == [True, True, False, False]  # ≥0.75 且 NaN 不删
 
 
 def test_apply_kill_rule_amt_top_frac():
-    recs = pd.DataFrame({
-        "line": ["legacy"] * 10,
-        "list_date": pd.Timestamp("2026-09-09"),
-        "symbol": [f"{i:06d}" for i in range(10)],
-        "factor": [0.01 * i for i in range(10)],  # top 20% = 最高2只
-    })
+    recs = pd.DataFrame(
+        {
+            "line": ["legacy"] * 10,
+            "list_date": pd.Timestamp("2026-09-09"),
+            "symbol": [f"{i:06d}" for i in range(10)],
+            "factor": [0.01 * i for i in range(10)],  # top 20% = 最高2只
+        }
+    )
     out = ga.apply_kill_rule(recs, "amt_agree")
     assert sorted(out.loc[out["killed"], "symbol"]) == ["000008", "000009"]
 
@@ -102,7 +118,9 @@ def test_apply_kill_rule_amt_top_frac():
 def test_load_lists_keep_last_and_dedupe(tmp_path):
     d = tmp_path
     (d / "legacy_stocklist_20260908__m__v1.csv").write_text("symbol\n000001\n000002\n")
-    (d / "legacy_stocklist_20260908__m__v2.csv").write_text("symbol\n000001\n")  # keep-last
+    (d / "legacy_stocklist_20260908__m__v2.csv").write_text(
+        "symbol\n000001\n"
+    )  # keep-last
     (d / "parallel_shortlist_20260908__p.csv").write_text("symbol\n600000\n")
     (d / "legacy_stocklist_20260907__m.csv").write_text("symbol\n000001\n")
     (d / "unrelated.csv").write_text("symbol\n300000\n")

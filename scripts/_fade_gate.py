@@ -63,7 +63,9 @@ def compute_fade_profile(day_ts, panel_path=None) -> dict | None:
         return None
     h = df.pivot(index="date", columns="symbol", values="high").reindex_like(c)
     pc = df.pivot(index="date", columns="symbol", values="pre_close").reindex_like(c)
-    turn = df.pivot(index="date", columns="symbol", values="turnover_rate").reindex_like(c)
+    turn = df.pivot(
+        index="date", columns="symbol", values="turnover_rate"
+    ).reindex_like(c)
     ret = c / pc - 1
 
     r20 = c.pct_change(20, fill_method=None).iloc[-1]
@@ -155,11 +157,19 @@ def apply_fade_gate(
         out = d.drop(columns=["_sym"]).reset_index(drop=True)
     if conf.get("flag_enable", True) and len(fade_today):
         out = out.copy()
-        flagged = out["symbol"].astype(str).str.split(".").str[0].str.zfill(6).isin(
-            set(fade_today[fade_today].index)
+        flagged = (
+            out["symbol"]
+            .astype(str)
+            .str.split(".")
+            .str[0]
+            .str.zfill(6)
+            .isin(set(fade_today[fade_today].index))
         )
         out["fade_flag"] = np.where(flagged, _FLAG_TEXT, "")
         n_flag = int((out["fade_flag"] != "").sum())
         if n_flag:
-            print(f"[fadegate] 昨日冲高回落提示 {n_flag} 只 (fade_flag 列, 勿追高)", flush=True)
+            print(
+                f"[fadegate] 昨日冲高回落提示 {n_flag} 只 (fade_flag 列, 勿追高)",
+                flush=True,
+            )
     return out

@@ -118,12 +118,18 @@ def test_ovd_overhead_density_formula():
         records = [
             {
                 "date": pd.Timestamp("2025-01-01"),
-                "open": 10.0, "high": 10.0, "low": 10.0, "close": 10.0,
+                "open": 10.0,
+                "high": 10.0,
+                "low": 10.0,
+                "close": 10.0,
                 "turnover_rate": 100.0,
             },
             {
                 "date": pd.Timestamp("2025-01-02"),
-                "open": 10.0, "high": 10.0, "low": 8.6, "close": close1,
+                "open": 10.0,
+                "high": 10.0,
+                "low": 8.6,
+                "close": close1,
                 "turnover_rate": 0.0,
             },
         ]
@@ -153,12 +159,18 @@ def test_nan_turnover_treated_as_zero():
     records = [
         {
             "date": pd.Timestamp("2025-01-01"),
-            "open": 10.0, "high": 10.0, "low": 10.0, "close": 10.0,
+            "open": 10.0,
+            "high": 10.0,
+            "low": 10.0,
+            "close": 10.0,
             "turnover_rate": 100.0,
         },
         {
             "date": pd.Timestamp("2025-01-02"),
-            "open": 10.0, "high": 12.0, "low": 10.0, "close": 11.0,
+            "open": 10.0,
+            "high": 12.0,
+            "low": 10.0,
+            "close": 11.0,
             "turnover_rate": float("nan"),
         },
     ]
@@ -177,12 +189,18 @@ def test_nan_turnover_treated_as_zero_calculator():
     records = [
         {
             "date": pd.Timestamp("2025-01-01"),
-            "open": 10.0, "high": 10.0, "low": 10.0, "close": 10.0,
+            "open": 10.0,
+            "high": 10.0,
+            "low": 10.0,
+            "close": 10.0,
             "turnover_rate": 100.0,
         },
         {
             "date": pd.Timestamp("2025-01-02"),
-            "open": 10.0, "high": 12.0, "low": 10.0, "close": 11.0,
+            "open": 10.0,
+            "high": 12.0,
+            "low": 10.0,
+            "close": 11.0,
             "turnover_rate": float("nan"),
         },
     ]
@@ -197,12 +215,18 @@ def test_ovd_zero_when_no_overhead():
     records = [
         {
             "date": pd.Timestamp("2025-01-01"),
-            "open": 10.0, "high": 10.0, "low": 10.0, "close": 10.0,
+            "open": 10.0,
+            "high": 10.0,
+            "low": 10.0,
+            "close": 10.0,
             "turnover_rate": 100.0,
         },
         {
             "date": pd.Timestamp("2025-01-02"),
-            "open": 10.0, "high": 10.0, "low": 10.0, "close": 10.0,
+            "open": 10.0,
+            "high": 10.0,
+            "low": 10.0,
+            "close": 10.0,
             "turnover_rate": 100.0,
         },
     ]

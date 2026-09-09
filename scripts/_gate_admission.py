@@ -99,7 +99,9 @@ def evaluate_gate(recs: pd.DataFrame, criteria: dict | None = None) -> dict:
         checks.append(f"全窗留存−删除差 {edge_full:+.2f}pp < {cr['min_edge_pp']}pp")
     for name, label in (("front", "前半"), ("back", "后半")):
         if not (halves[name] > float(cr["half_tol_pp"])):
-            checks.append(f"{label}半窗差 {halves[name]:+.2f}pp ≤ {cr['half_tol_pp']}pp (半窗不稳)")
+            checks.append(
+                f"{label}半窗差 {halves[name]:+.2f}pp ≤ {cr['half_tol_pp']}pp (半窗不稳)"
+            )
     crit = leaks[f"{float(cr['winner_ret5']):.0%}"]
     if crit["enrich"] is not None and crit["enrich"] > float(cr["max_leak_enrich"]):
         checks.append(
@@ -118,7 +120,9 @@ def evaluate_gate(recs: pd.DataFrame, criteria: dict | None = None) -> dict:
         "edge_full_pp": edge_full,
         "edge_front_pp": halves["front"],
         "edge_back_pp": halves["back"],
-        "killed_ret5_mean": float(killed["ret5"].mean()) if len(killed) else float("nan"),
+        "killed_ret5_mean": float(killed["ret5"].mean())
+        if len(killed)
+        else float("nan"),
         "kept_ret5_mean": float(kept["ret5"].mean()) if len(kept) else float("nan"),
         "winner_leak": leaks,
         "criteria": dict(cr),
@@ -200,7 +204,9 @@ def _pivots(panel_path, d0) -> dict:
         ("hfq", "close_hfq"),
         ("amt", "amount"),
     ):
-        pv[k] = df.pivot(index="date", columns="symbol", values=col).reindex_like(pv["c"])
+        pv[k] = df.pivot(index="date", columns="symbol", values=col).reindex_like(
+            pv["c"]
+        )
     return pv
 
 
@@ -253,9 +259,7 @@ def build_records(L: pd.DataFrame, pv: dict, factor: pd.DataFrame) -> pd.DataFra
         if ti + 5 >= len(dates):
             continue
         j = pos[s]
-        recs.append(
-            (line, t, s, factor.iloc[ti, j], o2c.iloc[ti, j], ret5.iloc[ti, j])
-        )
+        recs.append((line, t, s, factor.iloc[ti, j], o2c.iloc[ti, j], ret5.iloc[ti, j]))
     return pd.DataFrame(
         recs, columns=["line", "list_date", "symbol", "factor", "o2c", "ret5"]
     )
@@ -306,8 +310,12 @@ def audit_gate(
     rep = evaluate_gate(recs, criteria)
     rep["gate"] = gate
     rep["window"] = {
-        "first": str(pd.Timestamp(recs["list_date"].min()).date()) if len(recs) else None,
-        "last": str(pd.Timestamp(recs["list_date"].max()).date()) if len(recs) else None,
+        "first": str(pd.Timestamp(recs["list_date"].min()).date())
+        if len(recs)
+        else None,
+        "last": str(pd.Timestamp(recs["list_date"].max()).date())
+        if len(recs)
+        else None,
     }
     _write_report(rep)
     return rep

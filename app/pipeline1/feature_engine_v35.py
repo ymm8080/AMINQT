@@ -2094,19 +2094,25 @@ class FeatureEngineV35:
             #   ≤20日封顶变体 IC -0.066 t=-9.5 残差 -0.030 t=-4.2, t 更弱故未采用)
             #   (断板后换手抬升=派发反指)
             _to = v
-            if "turnover_rate" in g.columns and g["turnover_rate"].notna().mean() > 0.95:
+            if (
+                "turnover_rate" in g.columns
+                and g["turnover_rate"].notna().mean() > 0.95
+            ):
                 _to = g["turnover_rate"]
             exp_mean = _to.groupby(grp).cumsum() / (pos + 1)
-            g["vol_decay_ratio"] = (_to / exp_mean.shift(1)).replace(
-                [np.inf, -np.inf], np.nan
-            ).where(dsb.notna() & (pos >= 2))
+            g["vol_decay_ratio"] = (
+                (_to / exp_mean.shift(1))
+                .replace([np.inf, -np.inf], np.nan)
+                .where(dsb.notna() & (pos >= 2))
+            )
             # quiet_drift: 20 日复权价对时间 OLS 斜率/价格×100, 负向入模
             #   IC -0.064 t=-8.7 残差 -0.022 t=-3.6 (带内光滑反指)
             hfq = g.get("close_hfq", c)
             tser = pd.Series(np.arange(len(g)), index=g.index, dtype=float)
-            slope = hfq.rolling(20, min_periods=20).cov(tser) / tser.rolling(
-                20, min_periods=20
-            ).var()
+            slope = (
+                hfq.rolling(20, min_periods=20).cov(tser)
+                / tser.rolling(20, min_periods=20).var()
+            )
             g["quiet_drift"] = (slope / hfq).replace([np.inf, -np.inf], np.nan) * 100
 
             # 量价背离: 涨但缩量 / 跌但放量 (1d 反转信号)

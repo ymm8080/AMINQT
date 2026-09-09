@@ -67,10 +67,20 @@ def test_build_no_core_sources_raises(tmp_path):
 
 def test_market_fade_sheet_formats():
     fc = {
-        "next_date": "2026-09-10", "state_date": "20260909", "close": 3951.51,
-        "ret": 0.0028, "regime": "线上(0~+2%)", "above_ma20": 0.0038,
-        "r5": 0.0026, "vratio": 1.01, "p_surge": 0.539, "p_fade_given_surge": 0.337,
-        "p_fade_day": 0.182, "base_fade": 0.219, "verdict": "≈常态", "n_regime": 1409,
+        "next_date": "2026-09-10",
+        "state_date": "20260909",
+        "close": 3951.51,
+        "ret": 0.0028,
+        "regime": "线上(0~+2%)",
+        "above_ma20": 0.0038,
+        "r5": 0.0026,
+        "vratio": 1.01,
+        "p_surge": 0.539,
+        "p_fade_given_surge": 0.337,
+        "p_fade_day": 0.182,
+        "base_fade": 0.219,
+        "verdict": "≈常态",
+        "n_regime": 1409,
     }
     name, df = sc.market_fade_sheet(fc_fn=lambda: fc)
     assert name == "市场FADE预测"
