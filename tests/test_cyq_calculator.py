@@ -213,7 +213,7 @@ def test_ovd_zero_when_no_overhead():
     assert r["ovd_15p"] == 0.0
 
 
-
+def test_chip_shape_metrics():
     out = _compute_cyq_for_stock(_synthetic_kdata())
     last = out.iloc[-1]
     assert last["chip_entropy"] >= 0.0
