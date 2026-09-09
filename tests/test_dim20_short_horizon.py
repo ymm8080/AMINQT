@@ -130,3 +130,57 @@ def test_quiet_drift_linear_slope():
     for k in (21, 22, 23, 24):
         exp = 0.02 / df["close"].iloc[k] * 100
         assert np.isclose(got.iloc[k], exp, atol=1e-9), k
+
+
+# ---------------- fade_score (2026-09-09 注入) ----------------
+def _fade_panel(n_days: int = 80) -> pd.DataFrame:
+    """两票确定性面板 (含 turnover_rate), 供 fade_score 口径对拍."""
+    dates = pd.bdate_range("2026-01-01", periods=n_days)
+    rng = np.random.RandomState(7)
+    rows = []
+    for sym in ("000001.SZ", "300001.SZ"):
+        base = 10.0
+        for i, d in enumerate(dates):
+            ret = rng.normal(0, 0.02)
+            close = base * (1 + ret)
+            high = close * (1 + abs(rng.normal(0, 0.01)))
+            low = close * (1 - abs(rng.normal(0, 0.01)))
+            rows.append({
+                "symbol": sym, "date": d, "open": low, "high": high,
+                "low": low, "close": close, "volume": 1e6,
+                "turnover_rate": 1.0 + 0.01 * i,
+            })
+            base = close
+    return pd.DataFrame(rows)
+
+
+def test_fade_score_formula_and_warmup():
+    df = _fade_panel()
+    out = FeatureEngineV35().dim20_short_horizon(df.copy())
+    got = out["fade_score"]
+
+    # 独立复刻: r20/vol20/turn20/pos250 四列齐备才计, 日截面 pct-rank 等权
+    g = df.sort_values(["symbol", "date"]).groupby("symbol")
+    c = df.sort_values(["symbol", "date"])["close"]
+    ret1 = c / g["close"].shift(1) - 1.0
+    raw = pd.DataFrame({
+        "r20": g["close"].pct_change(20),
+        "vol20": ret1.groupby(df.sort_values(["symbol", "date"])["symbol"]).transform(
+            lambda s: s.rolling(20).std()),
+        "turn20": g["turnover_rate"].transform(lambda s: s.rolling(20).mean()),
+        "pos250": c / g["high"].transform(
+            lambda s: s.rolling(250, min_periods=60).max()) - 1.0,
+    })
+    m = raw.notna().all(axis=1)
+    exp = raw[m].groupby(df.loc[m, "date"]).rank(pct=True).mean(axis=1)
+
+    assert got.notna().sum() == len(exp)
+    join = pd.DataFrame({"got": got, "exp": exp}).dropna()
+    assert len(join) == got.notna().sum()  # 全部对齐; pos250 min_periods=60 → 80日仅末21日有值
+    assert np.allclose(join["got"], join["exp"], atol=1e-9)
+    # 预热期 NaN (pos250 min_periods=60 → 前59日 NaN; r20 需21日, 取严者)
+    per = out.groupby("symbol")["fade_score"]
+    assert per.apply(lambda s: s.iloc[:59].isna().all()).all()
+    # 值域 [0,1]
+    v = got.dropna()
+    assert ((v >= 0) & (v <= 1)).all()

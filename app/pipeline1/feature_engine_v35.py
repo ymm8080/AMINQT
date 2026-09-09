@@ -2116,7 +2116,38 @@ class FeatureEngineV35:
 
             return g
 
-        return _apply_per_stock(df, _per_stock)
+        df = _apply_per_stock(df, _per_stock)
+
+        # fade_score 冲高回落体质分 (2026-09-09 注入): r20/vol20/turn20/pos250
+        # 日截面 pct-rank 等权, 与 scripts/_fade_gate.compute_fade_profile 同公式
+        # (全市场口径; 训练内截面=板内宇宙). 对生产207特征空间+族网格78列对照的
+        # 残差IC -0.025 t=-16 双半稳, 行情切片除线上强(>+2%)外各带均稳.
+        gg = df.groupby("symbol", sort=False)
+        ret1 = df["close"] / gg["close"].shift(1) - 1.0
+        turn = (
+            df["turnover_rate"]
+            if "turnover_rate" in df.columns
+            else pd.Series(np.nan, index=df.index)
+        )
+        fade_raw = pd.DataFrame(
+            {
+                "r20": gg["close"].pct_change(20),
+                "vol20": ret1.groupby(df["symbol"], sort=False).transform(
+                    lambda s: s.rolling(20).std()
+                ),
+                "turn20": turn.groupby(df["symbol"], sort=False).transform(
+                    lambda s: s.rolling(20).mean()
+                ),
+                "pos250": df["close"]
+                / gg["high"].transform(lambda s: s.rolling(250, min_periods=60).max())
+                - 1.0,
+            }
+        )
+        _m = fade_raw.notna().all(axis=1)
+        df["fade_score"] = (
+            fade_raw[_m].groupby(df.loc[_m, "date"]).rank(pct=True).mean(axis=1)
+        )
+        return df
 
     # ---------------- ⑱ 龙虎榜特征 (源自 uzi-skill lhb-analyzer) ----------------
     def dim18_lhb(self, df: pd.DataFrame) -> pd.DataFrame:

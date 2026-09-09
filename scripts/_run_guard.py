@@ -53,6 +53,7 @@ HEAVY_SENTINELS = (
     "_revival_ab_legacy.py",
     "_revival_ab_parallel.py",
     "_pin_ab_cl_0909.py",
+    "_pin_ab_fade_0909.py",
     "_volume_repair_v3_0909.py",
     "_ohlc_repair_v3_0909.py",
     "_pin_ab_l1ovd_0909.py",
