@@ -7,7 +7,8 @@
   样本不足留空)
 - status 列 = landed (当日任一次实推已落袋) / blocked;
   reason 优先级: flush(守卫已删) > deadzone(停推) > manual/ui_fail/not_pushed
-ths_push_result 文件保留不动: 看板推送状态卡数据源 + 本脚本 landed 合并依据。
+ths_push_result 文件链末归档进 ths_push_archive/ 子目录 (2026-09-08 用户: STOCK LIST
+只留清单/终表): 看板推送状态卡数据源 + 本脚本 landed 合并依据不变 (归档兼读)。
 输出: STOCK_LIST_DIR/stocklist_final_{date}__{HH}.xlsx (HH 戳 WORM, 同日重跑各留各的)。
 链路: run_daily_automation "final_stocklist" 步骤, 置 ths_flush_guard 后 (非关键)。
 """
@@ -17,6 +18,7 @@ import datetime
 import glob
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -26,7 +28,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config.settings import STOCK_LIST_DIR  # noqa: E402
 from scripts._deadzone_guard import is_alarm, win_rate  # noqa: E402
-from scripts._ths_watchlist_push import read_push_results  # noqa: E402
+from scripts._ths_watchlist_push import (  # noqa: E402
+    THS_PUSH_ARCHIVE,
+    read_push_results,
+)
 
 # (源名, 文件 glob, 死区闸线名) — 顺序 = 终表行序 (生产在前)
 _SOURCES = [
@@ -107,6 +112,24 @@ def build(date: str, list_dir=STOCK_LIST_DIR) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
+def archive_push_artifacts(date: str, list_dir=STOCK_LIST_DIR) -> int:
+    """当日推送中间产物 (ths_watchlist txt + ths_push_result csv) 移入归档子目录.
+
+    移动非删除 (WORM): read_push_results 兼读归档目录, 看板推送状态卡/本脚本
+    landed 合并不受影响. 只能在链末 (本步骤) 调用 — ths_flush_guard 同夜还要
+    glob 主目录取推送成员并集, 归档提前会漏成员.
+    """
+    list_dir = Path(list_dir)
+    dest = list_dir / THS_PUSH_ARCHIVE
+    moved = 0
+    for pat in (f"ths_watchlist_{date}__*.txt", f"ths_push_result_{date}__*.csv"):
+        for fp in list_dir.glob(pat):
+            dest.mkdir(exist_ok=True)
+            shutil.move(str(fp), dest / fp.name)
+            moved += 1
+    return moved
+
+
 def write(df: pd.DataFrame, date: str, list_dir=STOCK_LIST_DIR) -> Path:
     hh = datetime.datetime.now().strftime("%H")
     fp = Path(list_dir) / f"stocklist_final_{date}__{hh}.xlsx"
@@ -135,6 +158,9 @@ def main() -> int:
         f"[final] {out} ({len(df)} 行, landed={n_landed}/blocked="
         f"{int((df['status'] == 'blocked').sum())})"
     )
+    n_arch = archive_push_artifacts(date, list_dir=Path(args.list_dir))
+    if n_arch:
+        print(f"[final] 推送中间产物归档 {n_arch} 件 → {THS_PUSH_ARCHIVE}/")
     return 0
 
 

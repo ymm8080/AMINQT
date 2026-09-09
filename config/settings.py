@@ -391,7 +391,17 @@ REGIME_GATE = {
 # 闸在 t3 门后、pred_mag_10d TOP-5 排名前; bundle 缺失/过旧 → fail-open 不杀清单.
 PROB_GATE = {
     "enable": True,  # False → 闸关闭 (概率头照常训练但不拦截)
-    "margin": 0.08,  # 边际 (legacy 配方, 平台中段, 勿扫)
+    "margin": 0.08,  # 边际 (legacy 配方, 平台中段, 勿扫; margin_mode=fixed 时的静态档)
+    # 自适应 margin (2026-09-08 移植 legacy 引擎 app/core/gate_margin.py, 用户令
+    # 硬指标全自适应化). 起步 "fixed" = 零行为变化; 125d AB 回放 (静态 0.08 vs
+    # rolling_q) 过闸后翻 "rolling_q" (回退改回 "fixed" 一键还原).
+    "margin_mode": "fixed",
+    "margin_q": 0.90,  # 目标保留参与池前 ~10% (与 legacy 同档)
+    "margin_min": 0.03,  # 地板: 差日子不许放低于 base+3% 的票 (低于静态档)
+    "margin_max": 0.15,  # 顶: 静态 0.08 的约 2x 封顶
+    "spread_lookback_days": 20,  # spread 池化窗 (交易日, 严格 < 当日)
+    "gate_margin_dir": DATA_DIR
+    / "gate_margin_parallel",  # spreads/decision WORM (与 legacy 池隔离)
     "base_rate_days": 20,  # base_rate 观测窗 (交易日)
     "abs_target": 0.03,  # 概率头目标: mfe_3d >= 3%
     # 半衰期集成 (2026-09-03 用户定案 ensB3): 逐档训练 bundle (文件名 <board>_prob_hl<hl>_),

@@ -14,13 +14,17 @@ from scripts import _deadzone_guard as dz
 def test_constants_locked_v4():
     assert dz.DZ_ENABLED is True
     assert dz.DZ_ENTER == 0.25
-    assert dz.DZ_EXIT == 0.40
+    assert dz.DZ_EXIT == 0.40  # 强市锚/市场基线缺失回退线
     assert dz.DZ_EXIT_DAYS == 2
     assert dz.DZ_WINDOW == 10
     assert dz.DZ_MIN_SAMPLES == 5
     assert dz.DZ_SETTLE == 4
     assert dz.DZ_COST == 0.0020
     assert dz.DZ_WIN == 0.05
+    # 09-08 解除线自适应 (125d 回放双板占优; enter 比例自适应判死)
+    assert dz.DZ_EXIT_FLOOR == 0.25
+    assert dz.DZ_EXIT_MKT_K == 1.2
+    assert dz.DZ_MKT_MIN_SYMBOLS == 200
 
 
 # ---------------------------------------------------------------- 状态机
@@ -75,6 +79,76 @@ def test_insufficient_samples_never_alarms():
     di = np.arange(0, 30, 3)
     win = np.zeros(len(di), dtype=bool)
     assert dz.alarm_indices(di, win, 30) == set()
+
+
+# ------------------------------------------------- 解除线自适应 (09-08)
+def test_alarm_indices_adaptive_exit_thr(monkeypatch):
+    # 同 test_exit_streak_resets_on_sampleless_day 序列: day6 断样重置后, t=8
+    # 赢率 0.30 — 固定 40% 口径解除不了 (报警含 8); 弱市自适应线 0.25 下
+    # 0.30 ≥ 0.25 → 当日 good=2 解除, 8 不再报警
+    wr = {4: 0.10, 5: 0.50, 7: 0.50, 8: 0.30}
+    monkeypatch.setattr(dz, "rolling_win_rates", lambda di, win, n: wr)
+    di, win = np.array([4]), np.array([True])
+    thr = {5: 0.25, 7: 0.25, 8: 0.25}
+    assert dz.alarm_indices(di, win, 9, thr) == {4}
+    assert dz.alarm_indices(di, win, 9) == {4, 8}  # 固定口径对照
+    # 缺日回退 DZ_EXIT: 仅 t=5 有低阈值, 断样重置后凑不齐 2 连 → 同固定口径
+    assert dz.alarm_indices(di, win, 9, {5: 0.25}) == {4, 8}
+
+
+def test_mkt_wr_small_panel_returns_empty(tmp_path, monkeypatch):
+    # <200 只股 → 市场基线不可算 → {} → 调用方回退固定解除线 (fail-open)
+    dates = pd.bdate_range("2026-01-05", periods=15)
+    close = pd.DataFrame(
+        {"symbol": "600000", "date": dates, "close_hfq": [10.0] * 15}
+    )
+    monkeypatch.setattr("config.settings.PANEL_V3_PATH", _panel_fp(tmp_path, close))
+    assert dz._mkt_wr_by_date(dates[0], dates[-1]) == {}
+
+
+def test_mkt_wr_causal_window_no_lookahead(tmp_path, monkeypatch):
+    # 前 15 日日涨 2% (出票 i≤10 时 net4=1.02^3−0.2%≈5.9% 赢; i≥11 起撞平段输),
+    # 后 10 日平; t 日只看 [t−10, t−4] 已结算窗
+    dates = pd.bdate_range("2026-01-05", periods=25)
+    px = [10.0 * 1.02**k for k in range(15)] + [10.0 * 1.02**14] * 10
+    close = pd.DataFrame(
+        {"symbol": "600000", "date": dates, "close_hfq": px}
+    )
+    monkeypatch.setattr("config.settings.PANEL_V3_PATH", _panel_fp(tmp_path, close))
+    monkeypatch.setattr(dz, "DZ_MKT_MIN_SYMBOLS", 1)
+    mwr = dz._mkt_wr_by_date(dates[0], dates[-1])
+    # t=10..14: 窗 [t−10, t−4] 全落赢段 (i≤10) → 1.0; t=14 夜 (末涨日) 崩盘不可见
+    # (t<10 预热期窗越界 → 无条目, 与 125d 回放口径一致)
+    for t in range(10, 15):
+        assert mwr[dates[t]] == 1.0
+    # t=20: 窗 [10,16] 仅 i=10 赢 → 1/7
+    assert abs(mwr[dates[20]] - 1 / 7) < 1e-9
+
+
+def test_line_state_adaptive_exit_thr_wiring(tmp_path, monkeypatch):
+    # 小面板 (<200 股) 无市场基线 → exit_thr=None 固定 40%;
+    # 市场赢率已知 → max(25%, 1.2×mwr): 弱市 0.10 → 0.25, 强市 0.40 → 0.48
+    dates, fp = _flat_or_rising_panel(tmp_path, 1.02)
+    monkeypatch.setattr("config.settings.PANEL_V3_PATH", fp)
+    monkeypatch.setitem(dz._LOADERS, "prob10dens", lambda: _loader_picks(dates))
+    captured = {}
+    real = dz.alarm_indices
+
+    def _spy(di, win, n, exit_thr=None):
+        captured["exit_thr"] = exit_thr
+        return real(di, win, n, exit_thr)
+
+    monkeypatch.setattr(dz, "alarm_indices", _spy)
+    d = dates[-1].strftime("%Y%m%d")
+    dz._line_state("prob10dens", d)
+    assert captured["exit_thr"] is None  # 1 股 < 200 → 无基线回退
+    monkeypatch.setattr(dz, "_mkt_wr_by_date", lambda a, b: {dt: 0.10 for dt in dates})
+    dz._line_state("prob10dens", d)
+    assert captured["exit_thr"] is not None
+    assert set(captured["exit_thr"].values()) == {0.25}
+    monkeypatch.setattr(dz, "_mkt_wr_by_date", lambda a, b: {dt: 0.40 for dt in dates})
+    dz._line_state("prob10dens", d)
+    assert set(captured["exit_thr"].values()) == {0.48}
 
 
 # ---------------------------------------------------------------- 结局计算

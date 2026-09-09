@@ -25,7 +25,6 @@ base_rate = 最近 base_rate_days 个可观测日 mfe 达标率均值 (无前瞻
 from __future__ import annotations
 
 import datetime
-import json
 from pathlib import Path
 
 import joblib
@@ -33,6 +32,7 @@ import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier, callback
 
+from app.core import gate_margin
 from app.pipeline1.label_engine import COST, slippage_tier
 from config.settings import LEGACY_PROB_GATE
 
@@ -289,90 +289,22 @@ def gate_probabilities(
     return pd.Series(pred.to_numpy(), index=cs["symbol"]), base
 
 
-def _gate_margin_dir() -> Path:
-    return Path(LEGACY_PROB_GATE["gate_margin_dir"])
-
-
-def _history_dates(board: str, today: str, limit: int) -> list[str]:
-    """spread 历史日期 (严格 < today, 降序, 最多 limit 个) — no-lookahead 边界."""
-    d = _gate_margin_dir()
-    dates = []
-    for fp in d.glob(f"spreads_{board}_*.csv"):
-        date = fp.stem.removeprefix(f"spreads_{board}_")
-        if date.isdigit() and date < today:
-            dates.append(date)
-    return sorted(dates, reverse=True)[:limit]
-
-
-def _breaker_tripped(board: str, today: str) -> bool:
-    """连续 3 个决策日 (n_total>0) 全部 0 保留 → True (闸退化成板禁时强制放开)."""
-    d = _gate_margin_dir()
-    dates = []
-    for fp in d.glob(f"margin_{board}_*.json"):
-        date = fp.stem.removeprefix(f"margin_{board}_")
-        if date.isdigit() and date < today:
-            dates.append(date)
-    n_checked = 0
-    for date in sorted(dates, reverse=True):
-        try:
-            with open(d / f"margin_{board}_{date}.json", encoding="utf-8") as fh:
-                dec = json.load(fh)
-        except Exception:
-            continue
-        if int(dec.get("n_total", 0)) <= 0:
-            continue  # 无参与者的日子不算决策日
-        n_checked += 1
-        if int(dec.get("n_kept", 0)) > 0:
-            return False
-        if n_checked >= 3:
-            return True
-    return False
+# ── 自适应 margin 引擎已抽至 app/core/gate_margin.py (2026-09-08: PARALLEL 移植
+# 复用同一引擎, 两线独立 cfg/状态目录). 下列薄包装绑定 LEGACY_PROB_GATE,
+# 签名/行为/测试零改动 (引擎逻辑细节见 core 模块 docstring). ──
 
 
 def compute_adaptive_margin(
     board: str, today_spreads: pd.Series | None, today: str
 ) -> tuple[float, str]:
-    """自适应 margin: 滚动分位数 / 熔断 / bootstrap / 静态回退.
+    """自适应 margin (legacy 绑定): 滚动分位数 / 熔断 / bootstrap / 静态回退.
 
     Returns:
         (margin, mode): mode ∈ fixed | breaker | rolling_q | bootstrap | fixed_fallback
     """
-    cfg = LEGACY_PROB_GATE
-    if cfg.get("margin_mode", "fixed") == "fixed":
-        return float(cfg["margin"]), "fixed"
-    q = float(cfg["margin_q"])
-    lo = float(cfg["margin_min"])
-    hi = float(cfg["margin_max"])
-    if _breaker_tripped(board, today):
-        print(
-            f"[prob_gate] {board} 熔断: 连续 3 决策日 100% 剔除 → margin 放开至地板 "
-            f"{lo} (检查概率头/分布漂移!)",
-            flush=True,
-        )
-        return lo, "breaker"
-    vals: list[np.ndarray] = []
-    for date in _history_dates(board, today, int(cfg["spread_lookback_days"])):
-        try:
-            df = pd.read_csv(_gate_margin_dir() / f"spreads_{board}_{date}.csv")
-            v = pd.to_numeric(df["spread"], errors="coerce").dropna().to_numpy(float)
-        except Exception:
-            continue
-        if len(v):
-            vals.append(v[np.isfinite(v)])
-    if vals:
-        pooled = np.concatenate(vals)
-        return float(np.clip(np.quantile(pooled, q), lo, hi)), "rolling_q"
-    if today_spreads is not None:
-        s = pd.Series(today_spreads).dropna()
-        s = s[np.isfinite(s.astype(float))].astype(float)
-        if len(s):
-            return float(np.clip(np.quantile(s.to_numpy(), q), lo, hi)), "bootstrap"
-    print(
-        f"[prob_gate] {board} 无 spread 历史/当日截面 → 回退静态 margin "
-        f"{cfg['margin']} (fail-open 保守)",
-        flush=True,
+    return gate_margin.compute_adaptive_margin(
+        board, today_spreads, today, LEGACY_PROB_GATE
     )
-    return float(cfg["margin"]), "fixed_fallback"
 
 
 def _persist_gate_state(
@@ -387,42 +319,9 @@ def _persist_gate_state(
     keep: pd.Series,
 ) -> None:
     """当日 spread 逐股 + margin 决策落盘 (WORM 逐日文件; 当日重跑覆盖当日文件)."""
-    d = _gate_margin_dir()
-    d.mkdir(parents=True, exist_ok=True)
-    hist_dates = _history_dates(
-        board, today, int(LEGACY_PROB_GATE["spread_lookback_days"])
+    gate_margin.persist_gate_state(
+        board, today, symbols, p, base, margin, mode, thr, keep, LEGACY_PROB_GATE
     )
-    try:
-        sp = pd.DataFrame(
-            {
-                "symbol": p.index.astype(str).tolist(),
-                "pred_prob": p.to_numpy(float),
-                "spread": (p - base).to_numpy(float),
-            }
-        )
-        sp.to_csv(d / f"spreads_{board}_{today}.csv", index=False)
-        n_total = int(len(symbols))
-        n_kept = int(keep.sum())
-        with open(d / f"margin_{board}_{today}.json", "w", encoding="utf-8") as fh:
-            json.dump(
-                {
-                    "date": today,
-                    "board": board,
-                    "mode": mode,
-                    "margin": margin,
-                    "thr": thr,
-                    "base_rate": base,
-                    "q": LEGACY_PROB_GATE["margin_q"],
-                    "n_total": n_total,
-                    "n_kept": n_kept,
-                    "n_history_days": len(hist_dates),
-                },
-                fh,
-                ensure_ascii=False,
-                indent=1,
-            )
-    except Exception as exc:  # 状态落盘失败不影响闸 (非阻塞)
-        print(f"[prob_gate] {board} 状态落盘失败 (非阻塞): {exc}", flush=True)
 
 
 def apply_prob_gate(

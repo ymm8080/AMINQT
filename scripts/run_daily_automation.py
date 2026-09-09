@@ -74,6 +74,9 @@ skipped), 监督方 (scripts/_babysit_daily_automation.py) 见终态即退出, �
 (08-24). 三闸任一命中不启动: ①活的重训/预测进程 (含另一条链) → 2h 守候循环,
 冲突清空且当日清单仍缺才启动; ②今日链 state=ok; ③今日 legacy 清单已交付.
 --force 绕过. 守卫逻辑见 scripts/_run_guard.py, 日志与步骤日志同文件.
+四线补产 (2026-09-08): 守卫 skip/守候放弃时补查合并清单 — 手动日白天已交付
+legacy → 整链被跳过 → 密度/SLOW_BULL 页永不产出; 合并清单缺失 → 只补跑
+prob10dens_push/slowbull_shadow/stocklist_combined 三轻量尾步 (四线闭环).
 
 用法:
   python scripts/run_daily_automation.py                      # 完整跑 (推荐: 定时任务)
@@ -133,11 +136,15 @@ _STEP_TIMEOUT_S = {
     # canary 每板回放工具内部超时 5400s, 双板合法最坏 3h; 4h 只兜卡死
     "canary": 4 * 3600,
     "deliver_parallel": 30 * 60,
-    "ths_push": 15
-    * 60,  # 客户端已开 ~20s; 冷启动拉起+登录最长 ~2.5min, 下限 15min 只兜卡死
+    # 客户端已开 ~20s; 冷启动+登录 ~2.5min; 09-08 三修后新增合法耗时: 单间休
+    # 150s+有界守候 10min / 补推轮间静默 95s×≤10 轮 / 掉登录重启重推 ~3min —
+    # 现实最坏 ~25min, 30min 兜卡死不误杀
+    "ths_push": 30 * 60,
     "ths_flush_guard": 15 * 60,  # 面板单日切片+秩计算 ~1min, 下限守 "每步 ≥15min" 惯例
     # 终版清单: 三源 CSV 读合并 ~秒级, 15min 下限惯例 (含死区闸三线整段重算)
     "final_stocklist": 15 * 60,
+    # 合并清单: 四线 CSV 读+xlsx 写 ~秒级, 15min 下限惯例
+    "stocklist_combined": 15 * 60,
     # A1 影子单: 面板 date 列读最新日+单日切片 ~1min + UI 推送复用 ths_push 机械
     "a1_push": 15 * 60,
     # 隔板口袋单: 面板 180 日历日切片+事件走查 ~1-2min + UI 推送复用 ths_push 机械
@@ -254,6 +261,9 @@ _STEPS = {
     # 终版清单 (2026-09-06 用户): 全闸之后单文件 Excel 合并三源 (module 列 +
     # 当夜死区赢率 + landed/blocked), 置 flush_guard 后 — flush 删除需先落文档
     "final_stocklist": ["scripts/_final_stocklist.py", "{tag}"],
+    # 合并清单单文件 (2026-09-08 用户: combined sheet daily): 四线五页 xlsx
+    # (多模块重叠/LEGACY/PARALLEL/密度/SLOW_BULL), 09-07 手工 v3 版产线化
+    "stocklist_combined": ["scripts/_stocklist_combined.py", "{tag}"],
     "a1_push": ["scripts/_a1_momentum_shadow.py", "{tag}"],
     "gappocket_push": ["scripts/_gap_pocket_shadow.py", "{tag}"],
     "prob10dens_push": ["scripts/_prob10_density_shadow.py", "{tag}"],
@@ -350,6 +360,9 @@ def plan_steps(
     # 终版清单 (2026-09-06 用户): 全闸 (死区停推/派发/flush 守卫) 之后产出的
     # 单文件 Excel, module/win_rate/status/reason 列 — 非关键步骤, 三源均缺失才退出
     steps.append("final_stocklist")
+    # 合并清单单文件 (2026-09-08 用户 "combined sheet daily"): 五页 xlsx
+    # (多模块重叠 + 四线全列) — 非关键步骤, LEGACY/PARALLEL 双缺才退出
+    steps.append("stocklist_combined")
     steps.append("drift")  # 幅度漂移监控 (读历史 candidates, 非关键步骤)
     steps.append(
         "drift_parallel"
@@ -416,6 +429,61 @@ def _today_list_delivered(tag: str) -> bool:
     return bool(
         glob.glob(os.path.join(str(STOCK_LIST_DIR), f"legacy_stocklist_{tag}__*.csv"))
     )
+
+
+# 四线补产步 (2026-09-08 用户令 "PIPELINE WILL PRODUCE FOUR MODULE RESULT DAILY"):
+# 手动日 legacy 清单白天已交付 → 守卫③跳过整链 → prob10dens/slowbull/combined
+# 三步当晚永不跑, 合并清单缺密度/SLOW_BULL 页 (09-08 实弹)。守卫放弃前补查
+# 合并清单, 缺则只跑这三个轻量尾步 (无重活/不重跑预测, 全 fail-safe 自愈)。
+_MAKEUP_STEPS = ["prob10dens_push", "slowbull_shadow", "stocklist_combined"]
+
+
+def _combined_delivered(tag: str) -> bool:
+    """当日合并清单是否已产出 (含 __v2 等迭代后缀) — 四线结果的终态判据."""
+    return bool(
+        glob.glob(os.path.join(str(STOCK_LIST_DIR), f"stocklist_combined_{tag}*.xlsx"))
+    )
+
+
+def _run_makeup_if_incomplete(tag: str) -> int | None:
+    """守卫 skip 后的四线补查: 合并清单缺 → 补跑尾部三步; 已齐 → None (正常跳过).
+
+    只覆盖"当日清单已交付但四线未闭环"的手动日缺口; 步骤全为轻量非关键步,
+    失败只记不拦 (次日正常链自愈), 不引入 SIGINT 链控 (无长活可中断).
+    """
+    if _combined_delivered(tag):
+        return None
+    msg = (
+        f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S} makeup] {tag} 合并清单缺失 "
+        f"(手动日守卫跳过整链) → 补产四线尾步 {_MAKEUP_STEPS}"
+    )
+    print(msg, flush=True)
+    _write_state(tag, "running", reason="makeup")
+    failures: list[str] = []
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    with _log_fh(tag) as fh:
+        print(msg, file=fh, flush=True)
+        for step in _MAKEUP_STEPS:
+            argv = [PY, "-u"] + [a.replace("{tag}", tag) for a in _STEPS[step]]
+            ts = f"[{_dt.datetime.now():%H:%M:%S} start] {step}: {' '.join(argv)}"
+            print(ts, flush=True)
+            print(ts, file=fh, flush=True)
+            t0 = time.time()
+            rc, timed_out = _run_step_with_watchdog(
+                argv, fh, env, _STEP_TIMEOUT_S[step]
+            )
+            if timed_out:
+                rc = 124
+            done = (
+                f"[{_dt.datetime.now():%H:%M:%S} {'ok' if rc == 0 else 'FAIL'}] "
+                f"{step} rc={rc} ({time.time() - t0:.0f}s)"
+            )
+            print(done, flush=True)
+            print(done, file=fh, flush=True)
+            if rc != 0:
+                failures.append(step)
+    _write_state(tag, _exit_status(failures), reason="makeup", failed_steps=failures)
+    return 1 if failures else 0
 
 
 def _guard_log(tag: str, msg: str) -> None:
@@ -521,12 +589,18 @@ def main() -> int:
     if not args.dry_run and not args.force:
         verdict = _run_startup_guard(tag)
         if verdict == "skip":
+            rc_makeup = _run_makeup_if_incomplete(tag)
+            if rc_makeup is not None:
+                return rc_makeup
             _write_state(tag, "skipped", reason="guard")
             return 0
         if verdict == "wait":
             # 立刻写 skipped 终态: babysitter 见此即退出, 不陪守候循环空等
             _write_state(tag, "skipped", reason="guard_live_process_waiting")
             if not _wait_for_clearance(tag):
+                rc_makeup = _run_makeup_if_incomplete(tag)
+                if rc_makeup is not None:
+                    return rc_makeup
                 return 0
             # 复查通过 → 走正常链, state 下方覆盖为 running
 

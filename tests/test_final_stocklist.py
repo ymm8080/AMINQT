@@ -124,3 +124,31 @@ def test_write_xlsx_roundtrip(tmp_path):
     back = pd.read_excel(fp, dtype={"symbol": str})
     assert back["symbol"].tolist() == ["600000"]
     assert list(back.columns) == ["module", "symbol", "status"]
+
+
+def test_archive_push_artifacts_moves_only_push_files(tmp_path):
+    """链末归档: 当日 ths txt/结果单移入 ths_push_archive/, 清单 CSV 不动;
+    归档后 read_push_results 仍读到 (看板卡/终表重建不断粮)."""
+    from scripts._ths_watchlist_push import read_push_results
+
+    (tmp_path / f"ths_watchlist_{DATE}__18__parallel__M1.txt").write_text("600001\n")
+    pd.DataFrame({"symbol": ["600001"], "status": ["landed"]}).to_csv(
+        tmp_path / f"ths_push_result_{DATE}__18__parallel__M1.csv", index=False
+    )
+    (tmp_path / f"legacy_stocklist_{DATE}__M1.csv").write_text("symbol\n600001\n")
+
+    n = fs.archive_push_artifacts(DATE, list_dir=tmp_path)
+    assert n == 2
+    assert not list(tmp_path.glob(f"ths_watchlist_{DATE}__*.txt"))
+    assert not list(tmp_path.glob(f"ths_push_result_{DATE}__*.csv"))
+    assert (
+        tmp_path / fs.THS_PUSH_ARCHIVE / f"ths_push_result_{DATE}__18__parallel__M1.csv"
+    ).exists()
+    assert (tmp_path / f"legacy_stocklist_{DATE}__M1.csv").exists()  # 清单留主目录
+
+    res = read_push_results(DATE, list_dir=tmp_path)
+    assert res["source"].tolist() == ["parallel"]
+    assert res["status"].tolist() == ["landed"]
+
+    # 幂等: 二次归档无件可移
+    assert fs.archive_push_artifacts(DATE, list_dir=tmp_path) == 0

@@ -65,6 +65,7 @@ DIM_GROUPS = [
     "dim32_lhb_glm",
     "dim33_block_trade",
     "dim34_lhb_v2",
+    "dim35_regime_interact",
     # Post-processing (not real dims but produce features)
     "_industry_neutralize",
     "_missingness_flags",

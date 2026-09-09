@@ -20,6 +20,7 @@ base_rate = 最近 base_rate_days 个可观测日 mfe 达标率均值 (无前瞻
 
 from __future__ import annotations
 
+import datetime
 from pathlib import Path
 
 import joblib
@@ -28,6 +29,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 from lightgbm import LGBMClassifier
 
+from app.core import gate_margin
 from app.pipeline1.label_engine import COST, slippage_tier
 from config.settings import DATA_DIR, PROB_GATE
 
@@ -289,15 +291,24 @@ def gate_probabilities(board: str) -> tuple[pd.Series, float] | None:
 def apply_prob_gate(res: pd.DataFrame) -> pd.DataFrame:
     """真模型概率闸 (2026-08-15 定案): t3 门后、pred_mag_10d TOP-5 排名前.
 
-    保留 ⇔ pred_prob > base_rate + margin. bundle 缺失/过旧/当日不可用 →
-    fail-open (保留) + 大声告警 (不杀清单); 个股 pred_prob 缺失 → fail-open 保留.
-    附带: pred_prob 列写入输出 (排名键 blend 用, 2026-08-15 A/B 定案 — 闸可用时
-    rank_and_truncate 按 pred_mag_10d × pred_prob 排名; 闸失效则列缺失, 退回纯 mag).
+    保留 ⇔ pred_prob > base_rate + margin. margin 自适应 (2026-09-08 移植 legacy
+    引擎 app/core/gate_margin.py: rolling_q/熔断/bootstrap; PROB_GATE margin_mode
+    起步 "fixed" 零行为变化, 125d AB 回放过闸后翻 "rolling_q"). bundle 缺失/过旧/
+    当日不可用 → fail-open (保留) + 大声告警 (不杀清单); 个股 pred_prob 缺失 →
+    fail-open 保留. 附带: pred_prob 列写入输出 (排名键 blend 用, 2026-08-15 A/B
+    定案 — 闸可用时 rank_and_truncate 按 pred_mag_10d × pred_prob 排名; 闸失效则
+    列缺失, 退回纯 mag).
+    当日 spreads/decision WORM 落盘 {gate_margin_dir}/ (gate_margin_parallel,
+    与 legacy 状态池隔离; 次日自适应输入).
     """
     cfg = PROB_GATE
     if not cfg.get("enable", True):
         return res
     out = res.copy()
+    if "date" in out.columns and out["date"].notna().any():
+        today = pd.Timestamp(out["date"].max()).strftime("%Y%m%d")
+    else:
+        today = datetime.date.today().strftime("%Y%m%d")
     for board in ("main", "dual"):
         mask = out["board"] == board
         if not mask.any():
@@ -307,16 +318,25 @@ def apply_prob_gate(res: pd.DataFrame) -> pd.DataFrame:
             print(f"[prob_gate] {board} 概率头不可用 -> 闸失效 (fail-open)", flush=True)
             continue
         prob, base = got
-        thr = base + cfg["margin"]
-        p = out.loc[mask, "symbol"].astype(str).map(prob)
+        symbols = out.loc[mask, "symbol"].astype(str)
+        p = symbols.map(prob)
+        spreads = (p - base).dropna()
+        margin, mode = gate_margin.compute_adaptive_margin(
+            board, spreads, today, cfg
+        )
+        thr = base + margin
         out.loc[mask, "pred_prob"] = p.to_numpy()
         keep = (p > thr) | p.isna()
+        gate_margin.persist_gate_state(
+            board, today, symbols.index, p, base, margin, mode, thr, keep, cfg
+        )
         n_drop = int((~keep).sum())
         if n_drop:
             dropped = out.loc[mask & ~keep, "symbol"].astype(str).tolist()
             print(
-                f"[prob_gate] {board} 剔除 {n_drop} 只 (pred_prob≤{thr:.1%}, "
-                f"base_rate {base:.1%}): {', '.join(dropped)}",
+                f"[prob_gate] {board} 剔除 {n_drop} 只 (margin={margin:.3f}/{mode}, "
+                f"pred_prob≤{thr:.1%}, base_rate {base:.1%}): "
+                f"{', '.join(dropped[:20])}{' ...' if len(dropped) > 20 else ''}",
                 flush=True,
             )
         else:

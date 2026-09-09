@@ -8,8 +8,10 @@ legacy/parallel 各用各自纯样本赢率互不混合 — V4 参数原在混�
 拆分后纯样本沿用同参, 待积累后再校):
   出票日 t 夜可知的结局 = T+1 买 → T+4 卖 (net4 = C[t+4]/C[t+1] − 1 − 0.2%),
   赢 = net4 ≥ 5%; 信号 = 出票日在 [t−10, t−4] 的已完结票赢率
-  < 25% → 报警; 连续 2 个采样日 ≥ 40% → 解除 (滞回; 06-17~06-26 型
-  解除太快假阴性间隙的修正)。无样本日重置解除计数 (停夜不残留旧进度)。
+  < 25% → 报警; 连续 2 个采样日 ≥ max(25%, 1.2×市场同口径赢率) → 解除
+  (滞回; 09-08 自适应化: 弱市固定 40% 够不着 → 误报警拖长; 强市 1.2×市场
+  ≥ 40% 抗抖语义不变; 市场基线缺失/故障 → 回退固定 40%)。
+  无样本日重置解除计数 (停夜不残留旧进度)。
 实现 = 每夜从交付史整段重算 (无跨夜状态文件): 幂等、停夜自愈、可单测。
 样本 < 5 / 今日不在格点 / 任何异常 → fail-open 照常推 (返回不报警)。
 回放证据 (125d): 生产 TOP10 池 V4 停推票合计 −0.18pp/票 (7月 −1.57pp/大跌17%
@@ -32,13 +34,22 @@ from config.settings import STOCK_LIST_DIR
 # 参数 (V4 定稿; 改动须同步 tests/test_deadzone_guard.py 锁值断言)
 DZ_ENABLED = True
 DZ_ENTER = 0.25  # 滚动赢率 < 25% → 报警
-DZ_EXIT = 0.40  # 连续 DZ_EXIT_DAYS 个采样日 ≥ 40% → 解除
+DZ_EXIT = 0.40  # 连续 DZ_EXIT_DAYS 个采样日 ≥ 40% → 解除 (强市锚/回退线)
 DZ_EXIT_DAYS = 2
 DZ_WINDOW = 10  # 出票日回看窗口 (交易日序)
 DZ_MIN_SAMPLES = 5  # 窗口内完结票少于此 → 不报警 (fail-open)
 DZ_SETTLE = 4  # T+4 结算: 出票 di+4 ≤ 今日才可知结局
 DZ_COST = 0.0020  # T+1 买 → T+4 卖 往返成本
 DZ_WIN = 0.05  # 赢 = net4 ≥ 5%
+
+# [09-08] 解除线自适应 (硬指标自适应化): 弱市里市场同口径赢率本身 4~20%, 线赢率
+# 够不着固定 0.40 → 报警拖长误伤 (125d 回放 dual 停掉票均值 +1.90pp, main +0.20pp;
+# 混合臂 max(地板, 1.2×市场) 双板占优: main 停掉票 −0.09pp 更准, dual 少停 20 日)。
+# 强市 mwr≥33% 时 1.2×mwr ≥ 0.40, 维持 V4 抗抖语义不变。enter 比例自适应判死
+# (市场赢率全窗上限 ~30%, 0.5~0.6× 永够不到线赢率 = 等于无守卫)。
+DZ_EXIT_FLOOR = 0.25  # 弱市解除地板 (= enter 线; 抗抖靠连续 2 采样日确认)
+DZ_EXIT_MKT_K = 1.2  # exit_t = max(DZ_EXIT_FLOOR, DZ_EXIT_MKT_K × mwr_t)
+DZ_MKT_MIN_SYMBOLS = 200  # 市场基线单日有效股票数下限 (不足 → 当日无基线)
 
 
 def rolling_win_rates(di: np.ndarray, win: np.ndarray, n_days: int) -> dict[int, float]:
@@ -52,10 +63,16 @@ def rolling_win_rates(di: np.ndarray, win: np.ndarray, n_days: int) -> dict[int,
     return out
 
 
-def alarm_indices(di: np.ndarray, win: np.ndarray, n_days: int) -> set[int]:
+def alarm_indices(
+    di: np.ndarray,
+    win: np.ndarray,
+    n_days: int,
+    exit_thr: dict[int, float] | None = None,
+) -> set[int]:
     """V4 状态机: <进阈值报警; 报警中连续 exit_days 个采样日 ≥ 出阈值才解除。
 
     纯函数 (di/win 为出票日序与赢标记)。无样本日不改报警态、重置解除计数。
+    exit_thr: {t: 当日解除阈值} (自适应解除线); None/缺日 → DZ_EXIT 固定 0.40。
     """
     wr = rolling_win_rates(di, win, n_days)
     on, good, out = False, 0, set()
@@ -68,13 +85,69 @@ def alarm_indices(di: np.ndarray, win: np.ndarray, n_days: int) -> set[int]:
             if v < DZ_ENTER:
                 on, good = True, 0
                 out.add(t)
-        elif v >= DZ_EXIT:
+        elif v >= (exit_thr.get(t, DZ_EXIT) if exit_thr else DZ_EXIT):
             good += 1
             if good >= DZ_EXIT_DAYS:
                 on, good = False, 0
         else:
             good = 0
             out.add(t)
+    return out
+
+
+_MKT_WR_CACHE: dict = {}
+
+
+def _mkt_wr_by_date(pstart: pd.Timestamp, pend: pd.Timestamp) -> dict:
+    """{date: 市场同口径滚动赢率} — 解除线自适应的输入 (09-08 接线).
+
+    口径与线赢率同构: 全市场票 net4 (T+1→T+4 −成本, 赢≥DZ_WIN) 的当日占比,
+    t 日可知窗 [t−DZ_WINDOW, t−DZ_SETTLE] (同滞后, 无 look-ahead)。单条目缓存
+    (同夜三线同窗只算一次)。读/算失败 → {} (调用方回退固定 DZ_EXIT)。
+    """
+    out: dict = {}
+    try:
+        from config.settings import PANEL_V3_PATH
+
+        key = (str(PANEL_V3_PATH), str(pd.Timestamp(pstart).date()), str(pd.Timestamp(pend).date()))
+        if _MKT_WR_CACHE.get("key") == key:
+            return _MKT_WR_CACHE["val"]
+        px = pd.read_parquet(
+            PANEL_V3_PATH,
+            columns=["symbol", "date", "close_hfq"],
+            filters=[
+                ("date", ">=", pd.Timestamp(pstart) - pd.Timedelta(days=40)),
+                ("date", "<=", pend),
+            ],
+        )
+        px["symbol"] = (
+            px["symbol"].astype(str).str.zfill(6).str.replace(r"\..*", "", regex=True)
+        )
+        px = px[~px["symbol"].str.startswith(("43", "83", "87", "92"))]
+        if len(px):
+            c = px.pivot(index="date", columns="symbol", values="close_hfq").sort_index()
+            cv = c.values
+            n = len(c)
+            if n > DZ_SETTLE + 1:
+                with np.errstate(invalid="ignore", divide="ignore"):
+                    net = np.full_like(cv, np.nan)
+                    net[:-DZ_SETTLE] = cv[DZ_SETTLE:] / cv[1 : 1 - DZ_SETTLE] - 1 - DZ_COST
+                mkt_win_day = np.full(n, np.nan)
+                for i in range(n - DZ_SETTLE - 1):
+                    v = net[i]
+                    v = v[np.isfinite(v)]
+                    if len(v) >= DZ_MKT_MIN_SYMBOLS:
+                        mkt_win_day[i] = float((v >= DZ_WIN).mean())
+                for t in range(DZ_SETTLE, n):
+                    seg = mkt_win_day[t - DZ_WINDOW : t - DZ_SETTLE + 1]
+                    seg = seg[np.isfinite(seg)]
+                    if len(seg) >= DZ_WINDOW - DZ_SETTLE - 1:
+                        out[c.index[t]] = float(seg.mean())
+    except Exception:  # noqa: BLE001 — 市场基线任何故障 → 回退固定解除线
+        out = {}
+    _MKT_WR_CACHE.clear()
+    _MKT_WR_CACHE["key"] = key
+    _MKT_WR_CACHE["val"] = out
     return out
 
 
@@ -212,7 +285,16 @@ def _line_state(line: str, date: str) -> tuple[dict[int, float], set[int], int]:
     if today not in grid:
         raise ValueError("今日不在出票格点")
     wr = rolling_win_rates(out["di"].to_numpy(), out["win"].to_numpy(), len(grid))
-    alarmed = alarm_indices(out["di"].to_numpy(), out["win"].to_numpy(), len(grid))
+    # 解除线自适应 (09-08): 市场赢率可知 → max(地板, 1.2×市场); 否则固定 0.40
+    mwr = _mkt_wr_by_date(grid[0], today)
+    exit_thr = {
+        k: max(DZ_EXIT_FLOOR, DZ_EXIT_MKT_K * float(v))
+        for k, d in enumerate(grid)
+        if np.isfinite(v := mwr.get(d, np.nan))
+    }
+    alarmed = alarm_indices(
+        out["di"].to_numpy(), out["win"].to_numpy(), len(grid), exit_thr or None
+    )
     return wr, alarmed, grid.index(today)
 
 
@@ -246,8 +328,9 @@ def is_alarm(line: str, date: str) -> tuple[bool, str]:
         return False, f"滚动赢率 {cur_s} (未达报警线)"
     return True, (
         f"滚动{DZ_WINDOW}日完结票赢率 {cur_s} < 报警线 "
-        f"{DZ_ENTER:.0%} (解除: 连续{DZ_EXIT_DAYS}日 ≥ "
-        f"{DZ_EXIT:.0%})"
+        f"{DZ_ENTER:.0%} (解除: 连续{DZ_EXIT_DAYS}日 ≥ max("
+        f"{DZ_EXIT_FLOOR:.0%}, {DZ_EXIT_MKT_K:g}×市场赢率), "
+        f"市场基线缺失时回退 {DZ_EXIT:.0%})"
     )
 
 

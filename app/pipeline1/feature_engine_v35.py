@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from app.pipeline1.label_engine import _ensure_sorted
-from config.settings import LHB_V2_SPEC
+from config.settings import LHB_V2_SPEC, PANEL_V3_PATH
 
 from .cleaning_pipeline import limit_pct_series
 from .feature_selector import brute_bases, inject_missing_brute
@@ -59,6 +59,120 @@ def _half_life_alpha(h: float) -> float:
 
 # 大宗交易 spec §四: EWMA 半衰期 h=10 交易日 → α = 1 − 2^(−1/10) ≈ 0.067
 _BT_ALPHA = _half_life_alpha(10)
+
+
+# ---------------- dim35: 新因子 × 行情交互 (2026-09-08 两阶段入模候选) ----------------
+# 公式与 0908 证据脚本逐字对齐: STR/CGO ← tmp_t/_factor_regime_0908.py;
+# deriv1 残差 ← tmp_t/_envrecheck_deriv_0908c.py; wr_sm5/控盘升×未涨 ←
+# tmp_t/_envrecheck_chip_0908.py; 行情因果口径 ← tmp_t/_regime_label_0908.py.
+# 口径声明: 研究在全市场截面; 入模 deriv1 残差截面=板内, STR bench=全市场等权 eq_ret.
+DIM35_STR_DELTA = 0.7
+DIM35_STR_TW = 60
+DIM35_CGO_TR_CAP = 0.5
+DIM35_REGIME_MARGIN_DAYS = 80
+DIM35_PULLBACK_RANK_MIN = 0.8  # 回调衰竭事件: mom20 日截面分位门槛
+DIM35_BREADTH_GATE = 0.5  # 事件×breadth 健康侧门槛
+DIM35_INTERACT_FACTORS = (
+    "str_trend60",
+    "cgo_turn",
+    "deriv1_resid",
+    "wr_sm5",
+    "ctrlup_notrisen",
+)
+_DIM35_REGIME_CACHE: dict = {}
+
+
+def _dim35_str(ret_wide: pd.DataFrame, bench: pd.Series) -> pd.DataFrame:
+    """STR 趋势强度 (60d): 相对离散 SIG 的衰减计数权重 × 收益滚动和.
+
+    W_t = DELTA^(1 + #{k∈[1,59]: SIG_{t-k} > SIG_t}); STR = (W·R).rolling(60).sum().
+    59 次 shift 比较向量化, 与 rolling(60).apply 等价.
+    """
+    sig = (ret_wide.sub(bench, axis=0)).abs() / (
+        ret_wide.abs().add(bench.abs(), axis=0) + 0.1
+    )
+    sig_v = sig.to_numpy()
+    cnt = np.zeros(sig_v.shape, dtype=np.int64)
+    for k in range(1, DIM35_STR_TW):
+        cnt += sig.shift(k).to_numpy() > sig_v
+    w = pd.DataFrame(
+        DIM35_STR_DELTA ** (1 + cnt), index=sig.index, columns=sig.columns
+    )
+    w.iloc[: DIM35_STR_TW - 1] = np.nan  # 窗未满 W 置 NaN (= rolling.apply 预热语义)
+    return (w * ret_wide).rolling(DIM35_STR_TW).sum()
+
+
+def _dim35_cgo(
+    price_wide: pd.DataFrame, turnover_frac_wide: pd.DataFrame
+) -> pd.DataFrame:
+    """CGO 获利盘悬垂: 换手递归参考价 rp = tr·P + (1−tr)·rp₋₁ (宽矩阵按日循环)."""
+    p = price_wide.to_numpy(dtype=float)
+    tr = np.clip(turnover_frac_wide.to_numpy(dtype=float), None, DIM35_CGO_TR_CAP)
+    tr = np.nan_to_num(tr, nan=0.0)
+    rp = np.full_like(p, np.nan)
+    prev = np.full(p.shape[1], np.nan)
+    for i in range(len(p)):
+        ok = ~np.isnan(p[i])
+        prev_ok = ~np.isnan(prev)
+        updated = np.where(prev_ok, tr[i] * p[i] + (1 - tr[i]) * prev, p[i])
+        prev = np.where(ok, updated, prev)
+        rp[i] = prev
+    return pd.DataFrame(p / rp - 1, index=price_wide.index, columns=price_wide.columns)
+
+
+def _dim35_deriv1_resid(df: pd.DataFrame) -> pd.Series:
+    """deriv1 = mom5 − mom5₋₅ 对 mom5+mom60 的逐日截面 rank-OLS 残差 (标准化)."""
+    sym, c, by = df["symbol"], df["close_hfq"], df["date"]
+    mom5 = c / c.groupby(sym).shift(5) - 1
+    d1 = mom5 - mom5.groupby(sym).shift(5)
+    mom60 = c / c.groupby(sym).shift(60) - 1
+    mask = d1.notna() & mom5.notna() & mom60.notna()
+
+    def _zrank(s: pd.Series) -> pd.Series:
+        r = s.where(mask).groupby(by).rank()
+        return r.groupby(by).transform(lambda x: (x - x.mean()) / x.std())
+
+    y, z1, z2 = _zrank(d1), _zrank(mom5), _zrank(mom60)
+
+    def _m(a: pd.Series) -> pd.Series:
+        return a.groupby(by).transform("mean")
+
+    s11, s22, s12 = _m(z1 * z1), _m(z2 * z2), _m(z1 * z2)
+    c1, c2 = _m(y * z1), _m(y * z2)
+    det = s11 * s22 - s12 * s12
+    a = (c1 * s22 - c2 * s12) / det
+    b = (c2 * s11 - c1 * s12) / det
+    e = y - a * z1 - b * z2
+    return e / e.groupby(by).transform("std")
+
+
+def _dim35_market_regime(min_date: pd.Timestamp) -> pd.DataFrame:
+    """全市场因果行情序列 [eq_ret, trend20, breadth] (tmp_t/_regime_label_0908 口径).
+
+    trend20 = eq_ret.shift(1).rolling(20).mean(); breadth = mom20>0 占比.
+    """
+    key = (str(PANEL_V3_PATH), str(pd.Timestamp(min_date).date()))
+    hit = _DIM35_REGIME_CACHE.get("v")
+    if hit and hit[0] == key:
+        return hit[1]
+    load_from = pd.Timestamp(min_date) - pd.offsets.BDay(DIM35_REGIME_MARGIN_DAYS)
+    df = pd.read_parquet(
+        PANEL_V3_PATH,
+        columns=["symbol", "date", "close_hfq"],
+        filters=[("date", ">=", load_from)],
+    )
+    df["symbol"] = (
+        df["symbol"].astype(str).str.zfill(6).str.replace(r"\..*", "", regex=True)
+    )
+    df = df[~df["symbol"].str.startswith(("43", "83", "87", "92"))]
+    sym, c, by = df["symbol"], df["close_hfq"], df["date"]
+    ret1 = c.groupby(sym).pct_change()
+    mom20 = c / c.groupby(sym).shift(20) - 1
+    reg = pd.DataFrame({"eq_ret": ret1.groupby(by).mean()})
+    reg["breadth"] = (mom20 > 0).groupby(by).mean()
+    reg["trend20"] = reg["eq_ret"].shift(1).rolling(20).mean()
+    _DIM35_REGIME_CACHE["v"] = (key, reg)
+    return reg
 
 
 def _mem_floor(s: pd.Series, ratio: float) -> pd.Series:
@@ -338,6 +452,7 @@ class FeatureEngineV35:
         "dim32": "dim32_lhb_glm",
         "dim33": "dim33_block_trade",
         "dim34": "dim34_lhb_v2",
+        "dim35": "dim35_regime_interact",
     }
 
     # ---------------- 总装 ----------------
@@ -456,6 +571,10 @@ class FeatureEngineV35:
             df = self.dim34_lhb_v2(
                 df
             )  # KIMI LHB v2.0 (修正分母净占比+情境权重+价格交互)
+        if _ok("dim35"):
+            df = self.dim35_regime_interact(
+                df
+            )  # 新因子×行情交互 (2026-09-08 入模候选, 两阶段协议评审中)
 
         # ── Phase 2: Auto-adopt new panel columns ──
         # IRON RULE #1: Auto-adoption with IC pre-screen uses forward return
@@ -3368,6 +3487,81 @@ class FeatureEngineV35:
             return g
 
         return _apply_per_stock(df, per_stock)
+
+    # ---------------- ㉟ 新因子 × 行情交互 (2026-09-08 两阶段入模候选) ----------------
+    @staticmethod
+    def dim35_regime_interact(df: pd.DataFrame) -> pd.DataFrame:
+        """6 因子 + 2 市场行情列 + 5×(bull/bear) 交互 + 2 回调衰竭事件列, 共 20 列.
+
+        行情列按日期 join 全市场因果序列; 缺源列 (winner_ratio/chip_gini) →
+        对应因子列置 NaN (fail-open, 由 NaN 率过滤兜底).
+        """
+        df = df.copy()
+        reg = _dim35_market_regime(df["date"].min())
+        df["mkt_trend20"] = df["date"].map(reg["trend20"])
+        df["mkt_breadth"] = df["date"].map(reg["breadth"])
+
+        wide_px = df.pivot(index="date", columns="symbol", values="close_hfq")
+        wide_px = wide_px.sort_index()
+        str_w = _dim35_str(wide_px.pct_change(), reg["eq_ret"])
+
+        tr_w = (
+            df.pivot(index="date", columns="symbol", values="turnover_rate")
+            .sort_index()
+            / 100.0
+        )
+        cgo_w = _dim35_cgo(wide_px.reindex_like(tr_w), tr_w)
+
+        key = df.set_index(["date", "symbol"]).index
+
+        def _join(name: str, w: pd.DataFrame) -> None:
+            m = (
+                w.reset_index()
+                .melt(id_vars="date", value_name=name)
+                .set_index(["date", "symbol"])[name]
+            )
+            df[name] = key.map(m)
+
+        _join("str_trend60", str_w)
+        _join("cgo_turn", cgo_w)
+        df["deriv1_resid"] = _dim35_deriv1_resid(df)
+
+        if "winner_ratio" in df.columns:
+            df["wr_sm5"] = df.groupby("symbol")["winner_ratio"].transform(
+                lambda s: s.rolling(5).mean()
+            )
+        else:
+            df["wr_sm5"] = np.nan
+        if "chip_gini" in df.columns:
+            g5 = df.groupby("symbol")["chip_gini"].transform(
+                lambda s: s.rolling(5).mean()
+            )
+            df["chipgini_chg20"] = g5 - g5.groupby(df["symbol"]).shift(20)
+        else:
+            df["chipgini_chg20"] = np.nan
+        mom10 = df["close_hfq"] / df.groupby("symbol")["close_hfq"].shift(10) - 1
+        not_risen = (mom10 < 0).astype(float)
+        not_risen[mom10.isna()] = np.nan
+        df["ctrlup_notrisen"] = df["chipgini_chg20"] * not_risen
+
+        bull = (df["mkt_trend20"] > 0).astype(float).where(df["mkt_trend20"].notna())
+        for f in DIM35_INTERACT_FACTORS:
+            df[f"{f}_bull"] = df[f] * bull
+            df[f"{f}_bear"] = df[f] * (1 - bull)
+
+        # 回调衰竭事件 × breadth (D批复活, tmp_t/_envrecheck_pullback_0908.py 同口径):
+        # 事件A = mom20 日截面分位>0.8 且 ret5<0; 事件B = A 且当日 R1>=0 (衰竭确认).
+        # NaN 语义与研究脚本一致: 排名/收益 NaN → 事件为 0 (非事件).
+        mom20 = df["close_hfq"] / df.groupby("symbol")["close_hfq"].shift(20) - 1
+        mom20_rank = mom20.groupby(df["date"]).rank(pct=True)
+        ret5 = df["close_hfq"] / df.groupby("symbol")["close_hfq"].shift(5) - 1
+        ret1 = df["close_hfq"] / df.groupby("symbol")["close_hfq"].shift(1) - 1
+        ev_pb = (mom20_rank > DIM35_PULLBACK_RANK_MIN) & (ret5 < 0)
+        ev_ex = ev_pb & (ret1 >= 0)
+        bhi = (df["mkt_breadth"] > DIM35_BREADTH_GATE).astype(float)
+        df["pullback_ev_breadth"] = ev_pb.astype(float) * bhi
+        df["exhaust_ev_breadth"] = ev_ex.astype(float) * bhi
+        return df
 
     # ---------------- ㉚ K线几何特征 (缺口/实体/影线/连续) ----------------
     @staticmethod

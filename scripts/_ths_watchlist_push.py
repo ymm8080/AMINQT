@@ -48,6 +48,19 @@ INDEX_COLLIDE_RE = re.compile(r"^000\d{3}$")
 # 终态仍有缺码 → 只贴缺的整单重扫, 粘贴自动勾选是抽签重贴重抽; 每轮开头重查
 # 空闲闸, 用户回座立即中止 (键盘路线绝不与用户抢机器)
 PUSH_SWEEPS = 10
+# 推送中间产物 (ths_watchlist txt / ths_push_result csv) 链末归档子目录名
+# (2026-09-08 用户: STOCK LIST 只留清单/终表, 推送结果单不堆主目录);
+# 移动非删除 — read_push_results 兼读此目录, 看板推送状态卡不断粮
+THS_PUSH_ARCHIVE = "ths_push_archive"
+# 补推轮间静默 (2026-09-08 自毒化修复): 上一轮自己的合成点击/剪贴板让空闲闸
+# (IDLE_MIN_S=90) 把第 2 轮误判成"用户在场" → 补推循环从未真正跑过第 2 轮
+# (09-08 实弹)。轮头先静默 95s 让合成输入衰减过阈值再查闸 — 用户真回座照常拦。
+SWEEP_REST_S = 95
+# 一进程双单 (main) 同理: 单1 (parallel) 的合成输入毒化单2 (legacy) 的入口空闲闸
+# → legacy 恒 blocked (09-08 实弹)。单间休 150s + 有界真空闲守候 (用户恰在间隙
+# 回座 → 最多等 10min, 到点放弃走 blocked, 不死等)。
+INTER_ORDER_REST_S = 150
+INTER_ORDER_IDLE_WAIT_S = 10 * 60
 
 
 def _newest(pattern: str, list_dir) -> str | None:
@@ -387,24 +400,29 @@ def read_push_results(date: str | None = None, list_dir=STOCK_LIST_DIR):
     import pandas as pd
 
     cols = ["source", "symbol", "status"]
+    # 归档子目录兼读: 推送中间产物 (txt/结果单) 链末移入 ths_push_archive (09-08
+    # 用户: STOCK LIST 只留清单/终表), 看板卡/终表重建仍要能读到
+    dirs = [Path(list_dir), Path(list_dir) / THS_PUSH_ARCHIVE]
     if date is None:
-        hits = _glob.glob(str(Path(list_dir) / "ths_push_result_*__*.csv"))
+        hits = [h for d in dirs for h in _glob.glob(str(d / "ths_push_result_*__*.csv"))]
         if not hits:
             return pd.DataFrame(columns=cols)
         newest = max(os.path.basename(h) for h in hits)
         date = newest[len("ths_push_result_") :].split("__", 1)[0]
     pats = sorted(
-        _glob.glob(str(Path(list_dir) / f"ths_push_result_{date}__*.csv")),
+        [h for d in dirs for h in _glob.glob(str(d / f"ths_push_result_{date}__*.csv"))],
         key=os.path.getmtime,
     )
     # 结果单名 = ths_push_result_{date}__{tag}; tag 两代:
-    # {HH}__{源}__{批次串} (09-05 起带小时) / {源}__{批次串};
-    # prob10dens 无批次串 → 单段
+    # {HH|HHMM}__{源}__{批次串} (09-05 起带小时; 09-08 起残单/合并单用 HHMM 级戳
+    # 防同小时覆盖) / {源}__{批次串}; prob10dens 无批次串 → 单段
     newest_by_src: dict[str, str] = {}
     for fp in pats:  # mtime 升序 → 后写覆盖, 每源留最新
         tag = os.path.basename(fp)[len("ths_push_result_") : -len(".csv")]
         rest = tag.split("__")[1:]  # 首段=日期
-        src = rest[1] if len(rest) > 1 and re.fullmatch(r"\d{2}", rest[0]) else rest[0]
+        src = (
+            rest[1] if len(rest) > 1 and re.fullmatch(r"\d{2,4}", rest[0]) else rest[0]
+        )
         newest_by_src[src] = fp
     frames = []
     for src, fp in newest_by_src.items():
@@ -433,13 +451,18 @@ def push_via_ths(txt_path, dry_run: bool = False) -> bool:
          重贴重试. 分批 ≤12 只/批, 防对话框列表区滚动截断行数核验
       7. **缺码补推循环 (2026-09-05 用户 "LOOP PUSHING TILL COMPLETE 最多10轮")**:
          终态仍有缺码 → 只贴缺的整单重扫 (粘贴自动勾选是抽签, 重贴重抽),
-         最多 PUSH_SWEEPS=10 轮; 每轮开头重查空闲闸, 用户回座立即中止
+         最多 PUSH_SWEEPS=10 轮; 每轮开头先静默 SWEEP_REST_S 让合成输入衰减
+         (2026-09-08 自毒化修复), 再重查空闲闸, 用户回座立即中止
       8. 关闭对话框. 无成功/失败回执 (成功 toast 对部分加也报成功), 对话框
          像素判词不可信 (09-05 实证) → **终态判词 = read_all_codes 读 PC
          网格真值** (candidates=今晚码单, 约束匹配 — 09-05 接产线, 自由 OCR
          8/0 形歧义曾把真落袋冤判成需手动): 网格在位=落袋, 未见=需手动
          (对话框曾核验但网格未见=疑似掉登录提示). 终态写结果单
          (write_push_result, 看板卡数据源), 推送没开跑也写 (全 blocked)
+      9. **掉登录自愈 (2026-09-08 "以后推送自动化")**: 疑似掉登录签名
+         (对话框核验过但网格全空) → 杀 hexin 整进程集 + 重启拉起 + settle,
+         单次重推; 重启后仍撞登录墙 (晚间登录墙 09-07/09-08 实弹) → 结果单
+         blocked + note=login_wall 明示需人工登录, 不静默 no-op.
 
     安全闸 (2026-09-03 误删事故后加, 见 scripts/_ths_ui.py 模块头):
       入口空闲闸 (用户在场直接 return False) + 每次点击前前台 hexin 断言.
@@ -448,6 +471,49 @@ def push_via_ths(txt_path, dry_run: bool = False) -> bool:
         print(f"[dry] 将导入同花顺: {txt_path}")
         return True
 
+    codes = [c for c in Path(txt_path).read_text(encoding="utf-8").split() if c]
+    if not codes:
+        print("[ths] txt 为空, 跳过")
+        return True
+
+    ok, verdict = _push_once(txt_path, codes)
+    if verdict != "dead_session":
+        return ok
+
+    import subprocess
+    import time
+
+    from scripts import _ths_ui as ui
+
+    print("[ths] 疑似掉登录 (加入无效果): 重启客户端单次重推")
+    killed = 0
+    for pid in ui.hexin_pids():
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/PID", str(pid)], capture_output=True, timeout=30
+            )
+            killed += 1
+        except Exception:  # noqa: BLE001 — 杀不掉只能放弃重启尝试
+            pass
+    if not killed:
+        print("[ths] 无 hexin 进程可杀, 直接冷启动")
+    time.sleep(5)
+    try:
+        ui.ensure_watchlist_window()  # 冷启动拉起 (记住密码自动登录)
+    except Exception as exc:
+        write_push_result(txt_path, codes, [], blocked=True, note="login_wall")
+        print(f"[ths] 重启后撞登录墙 ({exc}) — 需人工登录, 结果单已标 login_wall")
+        return False
+    time.sleep(40 + SWEEP_REST_S)  # settle + 重启点击的合成输入同样要衰减过闸
+    ok2, verdict2 = _push_once(txt_path, codes)
+    if verdict2 == "dead_session":
+        print("[ths] 重启后仍加入无效果 — 留待人工, 不再重试")
+    return ok2
+
+
+def _push_once(txt_path, codes: list[str]) -> tuple[bool, str]:
+    """单会话推送主体 (push_via_ths 拆出): 返回 (ok, 判词), 判词 dead_session =
+    掉登录签名 — 由调用方决定是否重启重推."""
     import ctypes
     import time
 
@@ -455,14 +521,9 @@ def push_via_ths(txt_path, dry_run: bool = False) -> bool:
 
     from scripts import _ths_ui as ui
 
-    codes = [c for c in Path(txt_path).read_text(encoding="utf-8").split() if c]
-    if not codes:
-        print("[ths] txt 为空, 跳过")
-        return True
-
     if not ui.ensure_idle(what="自选股推送"):
         write_push_result(txt_path, codes, [], blocked=True)
-        return False
+        return False, ""
 
     try:
         # 共享窗口原语: 现存自选股窗 → 主窗 F6 呼出 (客户端在跑但停在别的页,
@@ -471,11 +532,11 @@ def push_via_ths(txt_path, dry_run: bool = False) -> bool:
     except ui.ForegroundLostError as exc:
         print(f"[ths] {exc}")
         write_push_result(txt_path, codes, [], blocked=True)
-        return False
+        return False, ""
     except Exception as exc:
         print(f"[ths] 自选股窗口不可用: {exc}")
         write_push_result(txt_path, codes, [], blocked=True)
-        return False
+        return False, ""
 
     def fresh_dialog():
         dlg = ui.find_window("复制识别")
@@ -502,7 +563,7 @@ def push_via_ths(txt_path, dry_run: bool = False) -> bool:
     if dlg is None:
         print("[ths] 复制识别对话框未出现 (校准路径失败)")
         write_push_result(txt_path, codes, [], blocked=True)
-        return False
+        return False, ""
 
     landed: list[str] = []
     for sweep in range(PUSH_SWEEPS):
@@ -510,7 +571,10 @@ def push_via_ths(txt_path, dry_run: bool = False) -> bool:
         if not pending:
             break
         if sweep:
-            # 补推轮开头重查空闲闸: 用户回座立即中止 — 键盘路线绝不与用户抢机器
+            # 轮间静默 (2026-09-08 自毒化修复): 上一轮自己的合成点击/剪贴板会让
+            # 空闲闸把本轮误判成用户在场 → 旧码轮询一次即自灭. 先静默让合成输入
+            # 衰减过 IDLE_MIN_S 再查闸 — 用户真回座照常立即中止
+            time.sleep(SWEEP_REST_S)
             if not ui.ensure_idle(what="缺码补推循环"):
                 print(
                     f"[ths] 用户回座, 补推中止 (已落袋 {len(set(landed))}/{len(codes)})"
@@ -630,7 +694,7 @@ def push_via_ths(txt_path, dry_run: bool = False) -> bool:
         f"[ths] 结果单 {os.path.basename(fp)} "
         f"(落袋 {len(set(landed_grid))} / 缺 {len(missing)})"
     )
-    return ok
+    return ok, ("dead_session" if dlg_landed and not landed_grid else "")
 
 
 def main() -> int:
@@ -692,6 +756,7 @@ def main() -> int:
 
     rc = 0
     hh = datetime.now().strftime("%H")  # 小时戳: 同日重推各留各的 txt (WORM)
+    attempted = False  # 已实推过至少一单 (dry-run 不算 — 无合成输入)
     for module, codes in lists:
         if not codes:
             print(f"[warn] {date} {module} 清单为空, 跳过")
@@ -701,9 +766,35 @@ def main() -> int:
         out = ths_txt_path(date, f"{hh}__{module}")
         write_ths_txt(codes, out)
         print(f"[ths] {out} ({len(codes)} 只, module {module})")
-        if not gen_only and not push_via_ths(out, dry_run):
-            rc = 1
+        if not gen_only:
+            if attempted:
+                _rest_between_orders(module)
+            if not push_via_ths(out, dry_run):
+                rc = 1
+            attempted = True
     return rc
+
+
+def _rest_between_orders(next_module: str) -> None:
+    """双单连推的合成输入衰减 (2026-09-08): 单1 的剪贴板/点击刚发生, 入口空闲闸
+    (IDLE_MIN_S=90) 会把单2 误判成用户在场 → legacy 恒 blocked (09-08 实弹).
+    先静默 INTER_ORDER_REST_S 让合成输入衰减, 再有界守候真空闲 — 用户恰在此
+    间隙回座 → 到点放弃, 下一单交 push_via_ths 入口闸自然写 blocked, 不死等."""
+    import time
+
+    from scripts import _ths_ui as ui
+
+    print(
+        f"[ths] 单间休 {INTER_ORDER_REST_S}s "
+        f"(上一单合成输入衰减, 下一单 {next_module})"
+    )
+    time.sleep(INTER_ORDER_REST_S)
+    deadline = time.monotonic() + INTER_ORDER_IDLE_WAIT_S
+    while time.monotonic() < deadline:
+        if ui.user_idle_seconds() >= ui.IDLE_MIN_S:
+            return
+        time.sleep(5)
+    print("[ths] 单间等不到真空闲 (用户在场), 下一单交入口闸判")
 
 
 if __name__ == "__main__":
