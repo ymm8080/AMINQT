@@ -2066,6 +2066,15 @@ class FeatureEngineV35:
             # close vs high of day: 收盘在日内高位 → 尾盘强势
             g["close_vs_high"] = (c / h - 1).replace([np.inf, -np.inf], np.nan) * 100
             g["close_vs_low"] = (c / l - 1).replace([np.inf, -np.inf], np.nan) * 100
+            # 5 日均值: 持续收在低点上方是反指 (09-09 日内指纹实验 IC -0.076
+            # t=-13.7 双半窗稳, 对 r5/r10 残差 IC -0.064 独立于动量)
+            g["close_vs_low_ma5"] = (
+                (c / l - 1)
+                .replace([np.inf, -np.inf], np.nan)
+                .rolling(5, min_periods=5)
+                .mean()
+                * 100
+            )
 
             # 量价背离: 涨但缩量 / 跌但放量 (1d 反转信号)
             ret = c / pc - 1
