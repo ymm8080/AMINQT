@@ -10,6 +10,8 @@
 
 接线: legacy (_deliver_legacy_list) + parallel (_shortlist_t5_t10) 清单落盘前 —
 CSV 落盘后 THS 推送/终版 Excel/合并清单自动继承。回退 enable=False。
+[09-09 当日撤删线] 复核发现删线优势半窗翻转 (前半有效/后半消失) + 09-09 实盘误杀
+涨停股 → kill_enable=False, 删线代码保留待 ≥40 清单日复验后重议。
 复验: 累积 ≥40 个清单日后重跑 _fade_top10_replay.py (样本警示: 现证据仅 21 日,
 其中 25 只落在删除区)。
 因子因果: 只用 ≤清单日 t 的 close/pre_close/high/turnover_rate;
@@ -114,7 +116,9 @@ def apply_fade_gate(
     fade_today = profile.get("fade_today", pd.Series(dtype=bool))
     d["fade_score"] = d["_sym"].map(score).round(3)
     thr = float(conf.get("kill_score", 0.75))
-    kill = sorted(d.loc[d["fade_score"].notna() & (d["fade_score"] >= thr), "_sym"])
+    kill = []
+    if conf.get("kill_enable", True):
+        kill = sorted(d.loc[d["fade_score"].notna() & (d["fade_score"] >= thr), "_sym"])
     if kill:
         out = d[~d["_sym"].isin(kill)].drop(columns=["_sym"]).reset_index(drop=True)
         date8 = pd.Timestamp(day_ts).strftime("%Y%m%d")

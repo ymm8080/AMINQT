@@ -102,6 +102,22 @@ def test_disabled_noop(tmp_path):
     assert not (tmp_path / "faderemoved_20260909__m.csv").exists()
 
 
+def test_kill_disabled_still_scores(tmp_path):
+    # 09-09 撤删线: kill_enable=False → 不删但 fade_score 列照给 (透明)
+    out = gate.apply_fade_gate(
+        _mk([0.9, 0.1]),
+        "2026-09-09",
+        "m",
+        profile=_prof([0.9, 0.1]),
+        cfg={"enable": True, "kill_enable": False, "flag_enable": True},
+        list_dir=tmp_path,
+    )
+    assert len(out) == 2
+    assert "fade_score" in out.columns
+    assert out["fade_score"].iloc[0] == 0.9
+    assert not (tmp_path / "faderemoved_20260909__m.csv").exists()
+
+
 def test_empty_df_passthrough(tmp_path):
     out = gate.apply_fade_gate(
         _mk([]), "2026-09-09", "m", profile=_prof([]), cfg=CFG, list_dir=tmp_path
