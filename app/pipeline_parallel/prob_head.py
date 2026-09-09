@@ -321,9 +321,7 @@ def apply_prob_gate(res: pd.DataFrame) -> pd.DataFrame:
         symbols = out.loc[mask, "symbol"].astype(str)
         p = symbols.map(prob)
         spreads = (p - base).dropna()
-        margin, mode = gate_margin.compute_adaptive_margin(
-            board, spreads, today, cfg
-        )
+        margin, mode = gate_margin.compute_adaptive_margin(board, spreads, today, cfg)
         thr = base + margin
         out.loc[mask, "pred_prob"] = p.to_numpy()
         keep = (p > thr) | p.isna()

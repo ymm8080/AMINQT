@@ -202,7 +202,9 @@ def main():
         from scripts._manual_preflight import run_preflight
 
         run_preflight("_deliver_legacy_list")
-    trade_date = sys.argv[1] if len(sys.argv) > 1 else pd.Timestamp.now().strftime("%Y%m%d")
+    trade_date = (
+        sys.argv[1] if len(sys.argv) > 1 else pd.Timestamp.now().strftime("%Y%m%d")
+    )
     src = os.path.join(LIST_DIR, f"list_{trade_date}.parquet")
     if not os.path.exists(src):
         raise SystemExit(f"无清单: {src}")

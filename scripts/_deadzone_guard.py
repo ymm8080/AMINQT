@@ -109,7 +109,11 @@ def _mkt_wr_by_date(pstart: pd.Timestamp, pend: pd.Timestamp) -> dict:
     try:
         from config.settings import PANEL_V3_PATH
 
-        key = (str(PANEL_V3_PATH), str(pd.Timestamp(pstart).date()), str(pd.Timestamp(pend).date()))
+        key = (
+            str(PANEL_V3_PATH),
+            str(pd.Timestamp(pstart).date()),
+            str(pd.Timestamp(pend).date()),
+        )
         if _MKT_WR_CACHE.get("key") == key:
             return _MKT_WR_CACHE["val"]
         px = pd.read_parquet(
@@ -125,13 +129,17 @@ def _mkt_wr_by_date(pstart: pd.Timestamp, pend: pd.Timestamp) -> dict:
         )
         px = px[~px["symbol"].str.startswith(("43", "83", "87", "92"))]
         if len(px):
-            c = px.pivot(index="date", columns="symbol", values="close_hfq").sort_index()
+            c = px.pivot(
+                index="date", columns="symbol", values="close_hfq"
+            ).sort_index()
             cv = c.values
             n = len(c)
             if n > DZ_SETTLE + 1:
                 with np.errstate(invalid="ignore", divide="ignore"):
                     net = np.full_like(cv, np.nan)
-                    net[:-DZ_SETTLE] = cv[DZ_SETTLE:] / cv[1 : 1 - DZ_SETTLE] - 1 - DZ_COST
+                    net[:-DZ_SETTLE] = (
+                        cv[DZ_SETTLE:] / cv[1 : 1 - DZ_SETTLE] - 1 - DZ_COST
+                    )
                 mkt_win_day = np.full(n, np.nan)
                 for i in range(n - DZ_SETTLE - 1):
                     v = net[i]

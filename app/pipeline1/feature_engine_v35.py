@@ -95,9 +95,7 @@ def _dim35_str(ret_wide: pd.DataFrame, bench: pd.Series) -> pd.DataFrame:
     cnt = np.zeros(sig_v.shape, dtype=np.int64)
     for k in range(1, DIM35_STR_TW):
         cnt += sig.shift(k).to_numpy() > sig_v
-    w = pd.DataFrame(
-        DIM35_STR_DELTA ** (1 + cnt), index=sig.index, columns=sig.columns
-    )
+    w = pd.DataFrame(DIM35_STR_DELTA ** (1 + cnt), index=sig.index, columns=sig.columns)
     w.iloc[: DIM35_STR_TW - 1] = np.nan  # 窗未满 W 置 NaN (= rolling.apply 预热语义)
     return (w * ret_wide).rolling(DIM35_STR_TW).sum()
 
@@ -3506,8 +3504,9 @@ class FeatureEngineV35:
         str_w = _dim35_str(wide_px.pct_change(), reg["eq_ret"])
 
         tr_w = (
-            df.pivot(index="date", columns="symbol", values="turnover_rate")
-            .sort_index()
+            df.pivot(
+                index="date", columns="symbol", values="turnover_rate"
+            ).sort_index()
             / 100.0
         )
         cgo_w = _dim35_cgo(wide_px.reindex_like(tr_w), tr_w)

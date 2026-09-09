@@ -56,7 +56,9 @@ def run_preflight(caller: str) -> list[tuple[str, int]] | None:
         )
         return None
     os.makedirs(LOG_DIR, exist_ok=True)
-    log_path = os.path.join(LOG_DIR, f"manual_preflight_{time.strftime('%Y%m%d_%H%M%S')}.log")
+    log_path = os.path.join(
+        LOG_DIR, f"manual_preflight_{time.strftime('%Y%m%d_%H%M%S')}.log"
+    )
     results: list[tuple[str, int]] = []
     env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"}
     print(
