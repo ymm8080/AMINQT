@@ -495,6 +495,11 @@ def main():
         action="store_true",
         help="Aggressive memory saving: date-filtered panel, extra gc",
     )
+    ap.add_argument(
+        "--no-preflight",
+        action="store_true",
+        help="跳过数据前置 cyq/sw_history/freshness (scripts/_manual_preflight.py)",
+    )
     args = ap.parse_args()
 
     board = "main"
@@ -528,6 +533,31 @@ def main():
         else:
             print("\nNo training checkpoint (clean state)")
         return
+
+    # 并发守卫 (2026-09-08): 手工重训/预测与链互斥 — 同 _retrain_legacy_full
+    # (08-17 页交换卡 7h / 08-24 双建 OOM 事故; 本入口此前无守卫)
+    from scripts._run_guard import find_conflicts
+
+    others = find_conflicts()
+    if others:
+        for c in others:
+            print(
+                f"[guard] 冲突进程: {c['sentinel']} (PID {c['pid']}) {c['cmdline']}",
+                flush=True,
+            )
+        print(
+            f"[guard] 已有 {len(others)} 个重训/预测进程在跑, 本实例退出 (rc=3). "
+            f"等其结束后再启动.",
+            flush=True,
+        )
+        return 3
+
+    # 数据前置 (2026-09-08): 手工跑要有链的全部功能 — cyq 回填/sw 增量/
+    # freshness 守卫, 保证派发闸等下游看到当日数据
+    if not args.no_preflight:
+        from scripts._manual_preflight import run_preflight
+
+        run_preflight("train_predict_main")
 
     # ── Force re-run ──
     force_steps = set(args.force or [])

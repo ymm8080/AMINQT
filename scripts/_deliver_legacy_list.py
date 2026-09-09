@@ -196,7 +196,13 @@ def write_md(
 
 
 def main():
-    trade_date = sys.argv[1] if len(sys.argv) > 1 else "20260805"
+    # 数据前置 (2026-09-08): 手工补页要有链的全部功能 — cyq 回填保派发闸看到
+    # 当日获利盘 (链内自动跳过; 补历史日无害 — 闸只取 ≤day_ts 的 cyq 行)
+    if "--no-preflight" not in sys.argv:
+        from scripts._manual_preflight import run_preflight
+
+        run_preflight("_deliver_legacy_list")
+    trade_date = sys.argv[1] if len(sys.argv) > 1 else pd.Timestamp.now().strftime("%Y%m%d")
     src = os.path.join(LIST_DIR, f"list_{trade_date}.parquet")
     if not os.path.exists(src):
         raise SystemExit(f"无清单: {src}")
