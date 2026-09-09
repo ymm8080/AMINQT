@@ -9,6 +9,11 @@ import pytest
 
 from app.pipeline1.feature_registry import FeatureRegistry
 
+_skip_ci = pytest.mark.skipif(
+    os.environ.get("CI", "").lower() in ("true", "1"),
+    reason="Skipped in CI: requires large parquet files",
+)
+
 
 class TestFeatureRegistryCore:
     """Load / save / basic queries."""
@@ -251,7 +256,6 @@ class TestFeatureRegistryAdoption:
 class TestFeatureRegistrySeed:
     """_seed() auto-discovers features from FeatureEngine."""
 
-    @_skip_ci
     def test_seed_from_minimal_panel(self):
         """Seed on a small synthetic panel produces valid registry."""
 
@@ -301,7 +305,6 @@ class TestFeatureRegistrySeed:
             # All features active after seed
             assert s["active"] == n
 
-    @_skip_ci
     def test_seed_produces_valid_registry(self):
         """Seed result can be loaded back."""
 
