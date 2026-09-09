@@ -34,6 +34,8 @@ EXTENDED_COLS = [
     "mass_below_0_9x",
     "resistance_dist",
     "support_dist",
+    "ovd_wdist",
+    "ovd_15p",
     "peak_roc_5d",
     "peak_roc_20d",
 ]
@@ -76,7 +78,7 @@ def test_extended_exports_present():
     out = _compute_cyq_for_stock(_synthetic_kdata())
     missing = [c for c in EXTENDED_COLS if c not in out.columns]
     assert not missing, f"缺扩展导出列: {missing}"
-    assert len(out.columns) == 1 + 14 + 22  # date + 基础14 + 扩展22
+    assert len(out.columns) == 1 + 14 + 24  # date + 基础14 + 扩展24
 
 
 def test_cost_percentiles_monotonic():
@@ -103,7 +105,66 @@ def test_mass_fractions_bounded():
     )
 
 
-def test_entropy_gini_nonnegative():
+def test_ovd_overhead_density_formula():
+    """ovd_wdist/ovd_15p 公式锚定 (09-09 筹码缺口实验注入).
+
+    构造: day0 一字板 10 元全换手 (筹码 74.5 全部集中在 10 元档);
+    day1 hsl=0 (不衰减不新增), close 跌至 X → 全部筹码位于上方,
+    ovd_wdist ≈ (10-X)/X (档位离散化误差一档以内), ovd_15p 按阈值翻转.
+    """
+    from app.pipeline1.cyq_ext import _compute_cyq_one_day
+
+    def _run(close1: float) -> dict:
+        records = [
+            {
+                "date": pd.Timestamp("2025-01-01"),
+                "open": 10.0, "high": 10.0, "low": 10.0, "close": 10.0,
+                "turnover_rate": 100.0,
+            },
+            {
+                "date": pd.Timestamp("2025-01-02"),
+                "open": 10.0, "high": 10.0, "low": 8.6, "close": close1,
+                "turnover_rate": 0.0,
+            },
+        ]
+        return _compute_cyq_one_day(1, records)
+
+    # close=8.6: 全部筹码 d=(10-8.6)/8.6≈0.163 ≥ 0.15 → ovd_15p=1, wdist≈0.163
+    # 容差 0.002 ≈ 一档离散化 (accuracy/close) 的两倍, 覆盖 floor 边界两种落位
+    r = _run(8.6)
+    assert abs(r["ovd_wdist"] - 1.4 / 8.6) < 0.002
+    assert abs(r["ovd_15p"] - 1.0) < 1e-9
+
+    # close=9.0: d=(10-9)/9≈0.111 < 0.15 → ovd_15p=0, wdist≈0.111
+    r = _run(9.0)
+    assert abs(r["ovd_wdist"] - 1.0 / 9.0) < 0.002
+    assert abs(r["ovd_15p"] - 0.0) < 1e-9
+
+
+def test_ovd_zero_when_no_overhead():
+    """横盘一字板 (现价=筹码档) → 上方无筹码, ovd 两列归 0."""
+    from app.pipeline1.cyq_ext import _compute_cyq_one_day
+
+    records = [
+        {
+            "date": pd.Timestamp("2025-01-01"),
+            "open": 10.0, "high": 10.0, "low": 10.0, "close": 10.0,
+            "turnover_rate": 100.0,
+        },
+        {
+            "date": pd.Timestamp("2025-01-02"),
+            "open": 10.0, "high": 10.0, "low": 10.0, "close": 10.0,
+            "turnover_rate": 100.0,
+        },
+    ]
+    r = _compute_cyq_one_day(1, records)
+    # maxprice=minprice=10 → accuracy=0.01, 筹码落在 bucket 0 (档价=10);
+    # 现价 10 = 档价 → d=0 不在上方 → ovd=0
+    assert r["ovd_wdist"] == 0.0
+    assert r["ovd_15p"] == 0.0
+
+
+
     out = _compute_cyq_for_stock(_synthetic_kdata())
     last = out.iloc[-1]
     assert last["chip_entropy"] >= 0.0
