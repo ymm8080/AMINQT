@@ -20,6 +20,7 @@ import pandas as pd
 
 from config.settings import LEGACY_SELECTION, STOCK_LIST_DIR
 from scripts._amt_agree_gate import apply_amt_agree_kill
+from scripts._fade_gate import apply_fade_gate
 from scripts._pctfmt import PCT_COLS_LEGACY, fmt_pct_columns
 from scripts._prob10_density_shadow import apply_chip_gate
 from scripts._stall_marker import stall_marker
@@ -167,6 +168,13 @@ def write_md(
         # 参与度提示 (2026-08-19): 高基线日模型整体负期望 → 建议降参与
         if "advice" in df.columns and df["advice"].iloc[0]:
             fh.write(df["advice"].iloc[0] + "\n\n")
+        # 冲高回落提示 (2026-09-09): 昨日已冲高回落的票 — 易再回落, 勿追高
+        if "fade_flag" in df.columns and (df["fade_flag"] != "").any():
+            syms_f = df.loc[df["fade_flag"] != "", "symbol"].astype(str).tolist()
+            fh.write(
+                f"⚠ 昨日冲高回落 {len(syms_f)} 只 ({', '.join(syms_f)}): "
+                f"易再冲高回落, 勿追高\n\n"
+            )
         # 被整体退回的板块: 仍出清单, 醒目标注未接受原因 (不静默跳过)
         for b, r in (rejected or {}).items():
             fh.write(f"⚠ {b} 未接受 (被退回): {r} — 当日未出股\n\n")
@@ -223,6 +231,8 @@ def main():
     module = resolve_module(df, trade_date)
     # 量价删查线 (2026-09-08 用户拍板): 清单内 amt_agree10 最高档真删不补齐
     df = apply_amt_agree_kill(df, pd.Timestamp(trade_date), module, line="legacy")
+    # 冲高回落闸 (2026-09-09 用户): fade_score≥0.75 真删; 昨日冲高回落只标 fade_flag
+    df = apply_fade_gate(df, pd.Timestamp(trade_date), module, line="legacy")
     os.makedirs(str(STOCK_LIST_DIR), exist_ok=True)
 
     # 被整体退回的板块 (有候选但最终清单 0 只): 仍出该板清单, 醒目标注未接受原因
@@ -285,6 +295,11 @@ def main():
         if n_stall:
             doc.add_paragraph(
                 f"⚠ 洗盘待爆发 {n_stall} 只 (入选+近10日滞涨<2%+近20日入选≥3, 见 stall_flag 列)",
+            )
+        n_fade = int((df["fade_flag"] != "").sum()) if "fade_flag" in df.columns else 0
+        if n_fade:
+            doc.add_paragraph(
+                f"⚠ 昨日冲高回落 {n_fade} 只 (见 fade_flag 列): 易再冲高回落, 勿追高",
             )
         for b, r in rejected.items():
             p = doc.add_paragraph()

@@ -523,6 +523,19 @@ AMT_AGREE_GATE = {
     "window": 10,  # 量价配合度滚动窗 (交易日)
 }
 
+# ── 冲高回落闸 (2026-09-09 用户: "TOP10里如果有冲高回落票需要给提示或者删除") ──
+# 回放 (_fade_top10_replay.py, 21 清单日 280 票): fade_score = vol20/turn20/r20/
+# pos250 全市场日截面 pct-rank 复合 (≤清单日收盘可知)。≥0.75 的票 (8.9%): 执行日
+# open→close −1.03% vs 留守 +0.30~+0.56%, 上涨率 32% vs 55%, 5日 −1.40% vs +0.45%
+# → 真删不补齐。昨日刚冲高回落的票收益不差但再回落率翻倍 (14.3% vs 7.4%) → 只标
+# fade_flag 提示不删。样本警示: 证据仅 21 日 (25 只落删除区), ≥40 清单日后复跑
+# _fade_top10_replay.py 复验。接线 legacy+parallel 交付前; 回退 enable=False。
+FADE_GATE = {
+    "enable": True,
+    "kill_score": 0.75,  # 状态型体质分删除线 (全市场 pct-rank 复合)
+    "flag_enable": True,  # 事件型 (昨日冲高回落) 提示列开关
+}
+
 # ── parallel 概率展示层再校准 (2026-08-29 用户批准) ──
 # 08-29 实测交付概率高估 (pred_prob_10d 均值 55.8% vs MFE>6% 实得 27.5%, +28pp;
 # tmp_t/_rebase_diag_0829.py). 展示层每板块每视界乘一个收敛因子 = 实得命中率/预测

@@ -71,6 +71,7 @@ from config.settings import (
     STOCK_LIST_DIR,
 )
 from scripts._amt_agree_gate import apply_amt_agree_kill
+from scripts._fade_gate import apply_fade_gate
 from scripts._pctfmt import PCT_COLS_PARALLEL, fmt_pct_columns
 from scripts._prob10_density_shadow import apply_chip_gate
 from scripts._stall_marker import stall_marker
@@ -1721,6 +1722,10 @@ def main() -> int:
     # 量价删查线 (2026-09-08 用户拍板): 清单内 amt_agree10 最高档真删不补齐 —
     # 落盘前切, CSV/THS 推送/终版 Excel 全部继承
     res = apply_amt_agree_kill(
+        res, sel_date, _module_suffix(module).lstrip("_"), line="parallel"
+    )
+    # 冲高回落闸 (2026-09-09 用户): fade_score≥0.75 真删; 昨日冲高回落标 fade_flag
+    res = apply_fade_gate(
         res, sel_date, _module_suffix(module).lstrip("_"), line="parallel"
     )
     summary = build_summary(res, stats, sel_date)
