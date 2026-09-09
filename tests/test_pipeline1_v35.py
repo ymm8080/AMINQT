@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -33,6 +35,11 @@ from app.pipeline1.list_generator import (
 from app.pipeline1.oos_monitor import OOSMonitor
 from app.pipeline1.prob_calibrator import ProbCalibrator
 from app.pipeline1.serenity_overlay import SerenityOverlay
+
+_skip_ci = pytest.mark.skipif(
+    os.environ.get("CI", "").lower() in ("true", "1"),
+    reason="Skipped in CI: requires large parquet files",
+)
 
 
 # ============================================================
@@ -366,6 +373,7 @@ class TestLabels:
 # 特征引擎
 # ============================================================
 class TestFeatures:
+    @_skip_ci
     def test_dims_and_groupby(self):
         """14 维特征产出 + groupby(symbol) 无跨股泄漏."""
         df = make_panel(symbols=("600519", "300750"), days=300)
