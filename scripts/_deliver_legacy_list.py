@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 import pandas as pd
 
-from config.settings import LEGACY_SELECTION, STOCK_LIST_DIR
+from config.settings import FADE_GATE, LEGACY_SELECTION, STOCK_LIST_DIR
 from scripts._amt_agree_gate import apply_amt_agree_kill
 from scripts._fade_gate import apply_fade_gate
 from scripts._pctfmt import PCT_COLS_LEGACY, fmt_pct_columns
@@ -231,7 +231,8 @@ def main():
     module = resolve_module(df, trade_date)
     # 量价删查线 (2026-09-08 用户拍板): 清单内 amt_agree10 最高档真删不补齐
     df = apply_amt_agree_kill(df, pd.Timestamp(trade_date), module, line="legacy")
-    # 冲高回落闸 (2026-09-09 用户): fade_score≥0.75 真删; 昨日冲高回落只标 fade_flag
+    # 冲高回落闸 (2026-09-09): 删线已撤 (kill_enable=False); fade_score/fade_risk
+    # = 预测体质分+人读档位 (用户: 要预测非记录昨日), fade_flag=昨日事件辅助
     df = apply_fade_gate(df, pd.Timestamp(trade_date), module, line="legacy")
     os.makedirs(str(STOCK_LIST_DIR), exist_ok=True)
 
@@ -300,6 +301,13 @@ def main():
         if n_fade:
             doc.add_paragraph(
                 f"⚠ 昨日冲高回落 {n_fade} 只 (见 fade_flag 列): 易再冲高回落, 勿追高",
+            )
+        n_risk = int((df["fade_risk"] == "高").sum()) if "fade_risk" in df.columns else 0
+        if n_risk:
+            doc.add_paragraph(
+                f"△ 冲高回落风险高 {n_risk} 只 (预测, fade_risk=高 / fade_score≥"
+                f"{FADE_GATE.get('risk_hi', 0.75)} 全市场分位): 该档日内冲高回落概率"
+                "≈1/3 (基线~23%), 追高谨慎",
             )
         for b, r in rejected.items():
             p = doc.add_paragraph()

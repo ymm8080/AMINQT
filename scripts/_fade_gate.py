@@ -12,6 +12,10 @@
 CSV 落盘后 THS 推送/终版 Excel/合并清单自动继承。回退 enable=False。
 [09-09 当日撤删线] 复核发现删线优势半窗翻转 (前半有效/后半消失) + 09-09 实盘误杀
 涨停股 → kill_enable=False, 删线代码保留待 ≥40 清单日复验后重议。
+[09-09 用户澄清 "要预测是否会冲高回落, 非记录昨日"] fade_score 本就是 t-1 预测
+体质分 (vol20/turn20/r20/pos250 → 当日吐回倾向, 研究 IC vol20 +0.19), 加 fade_risk
+人读档位列 (高≥risk_hi / 中≥risk_mid / 低; 高档日内冲高回落概率≈1/3 vs 池基线
+~23%); fade_flag (昨日事件) 降为辅助。
 复验: 累积 ≥40 个清单日后重跑 _fade_top10_replay.py (样本警示: 现证据仅 21 日,
 其中 25 只落在删除区)。
 因子因果: 只用 ≤清单日 t 的 close/pre_close/high/turnover_rate;
@@ -115,6 +119,20 @@ def apply_fade_gate(
     score = profile["score"]
     fade_today = profile.get("fade_today", pd.Series(dtype=bool))
     d["fade_score"] = d["_sym"].map(score).round(3)
+    # fade_risk = 预测档位 (09-09 用户: 要预测是否冲高回落, 非记录昨日事件)
+    hi = float(conf.get("risk_hi", 0.75))
+    mid = float(conf.get("risk_mid", 0.5))
+    s = d["fade_score"]
+    d["fade_risk"] = pd.Series(
+        np.where(s >= hi, "高", np.where(s >= mid, "中", "低")), index=d.index
+    ).where(s.notna(), "")
+    n_hi = int((d["fade_risk"] == "高").sum())
+    if n_hi:
+        print(
+            f"[fadegate] 冲高回落预测: 高风险 {n_hi} 只 (fade_risk=高, 全市场分位≥{hi}; "
+            "该档日内回落概率≈1/3, 慎追高)",
+            flush=True,
+        )
     thr = float(conf.get("kill_score", 0.75))
     kill = []
     if conf.get("kill_enable", True):

@@ -118,6 +118,32 @@ def test_kill_disabled_still_scores(tmp_path):
     assert not (tmp_path / "faderemoved_20260909__m.csv").exists()
 
 
+def test_fade_risk_tiers(tmp_path):
+    # 09-09 用户澄清 "要预测非记录昨日": fade_risk 档位 高/中/低, 无分空串
+    out = gate.apply_fade_gate(
+        _mk([0.9, 0.6, 0.3, 0.749]),
+        "2026-09-09",
+        "m",
+        profile=_prof([0.9, 0.6, 0.3, 0.749]),
+        cfg={"enable": True, "kill_enable": False, "flag_enable": True,
+             "risk_hi": 0.75, "risk_mid": 0.5},
+        list_dir=tmp_path,
+    )
+    assert list(out["fade_risk"]) == ["高", "中", "低", "中"]
+
+
+def test_fade_risk_nan_blank(tmp_path):
+    out = gate.apply_fade_gate(
+        _mk([0.8, None]),
+        "2026-09-09",
+        "m",
+        profile=_prof([0.8, float("nan")]),
+        cfg={"enable": True, "kill_enable": False, "flag_enable": True},
+        list_dir=tmp_path,
+    )
+    assert list(out["fade_risk"]) == ["高", ""]
+
+
 def test_empty_df_passthrough(tmp_path):
     out = gate.apply_fade_gate(
         _mk([]), "2026-09-09", "m", profile=_prof([]), cfg=CFG, list_dir=tmp_path

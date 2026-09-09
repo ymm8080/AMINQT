@@ -538,6 +538,10 @@ FADE_GATE = {
     "kill_enable": False,  # 体质分删线 09-09 撤 (半窗翻转+误杀强势股); 重开须双半窗一致证据
     "kill_score": 0.75,  # 状态型体质分删除线 (全市场 pct-rank 复合)
     "flag_enable": True,  # 事件型 (昨日冲高回落) 提示列开关
+    # 09-09 用户澄清 "要预测是否会冲高回落, 非记录昨日事件": fade_score 本就是
+    # t-1 预测体质分, 加 fade_risk 人读档位列 (高档日内冲高回落概率≈1/3 vs 基线~23%)
+    "risk_hi": 0.75,
+    "risk_mid": 0.5,
 }
 
 # ── 闸准入协议 (2026-09-09 用户: "先判断是否应该用闸, 闸是否有正效果再行动,
@@ -547,7 +551,8 @@ FADE_GATE = {
 # 基础删除率 8.9% ≈ 2.0x) + 实盘误杀涨停股 → 同日撤线 (528c50bd)。
 # 教训: 均值级回放证据不够。此后任何删票/拦截闸:
 #   ① 接线前必须 scripts/_gate_admission.py --gate <name> 判 PASS;
-#   ② 已上线闸每周由 run_weekly_selfevolve 自动复审 (告警式, 不自动改闸)。
+#   ② 已上线闸每夜由 run_daily_automation gate_audit 步日审 (2026-09-09 用户指令
+#      "FADE线能DAILY来重审嘛", 原 Sunday 周审保留作冗余; 告警式, 不自动改闸)。
 # 判据 (交付清单回放, 删除区 vs 留存, ret5 = T+1收→T+5收):
 #   - 样本充分: 清单日 ≥ min_days 且删除区成熟票 ≥ min_killed, 否则 INSUFFICIENT
 #   - 全窗效果: 留存−删除 ret5 差 ≥ min_edge_pp

@@ -1724,7 +1724,7 @@ def main() -> int:
     res = apply_amt_agree_kill(
         res, sel_date, _module_suffix(module).lstrip("_"), line="parallel"
     )
-    # 冲高回落闸 (2026-09-09 用户): fade_score≥0.75 真删; 昨日冲高回落标 fade_flag
+    # 冲高回落闸 (2026-09-09): 删线已撤; fade_score/fade_risk=预测体质分+档位, fade_flag=事件
     res = apply_fade_gate(
         res, sel_date, _module_suffix(module).lstrip("_"), line="parallel"
     )
