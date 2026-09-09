@@ -405,6 +405,9 @@ def _patch_push_verify(monkeypatch, verify, idle=True, dialog=True):
     )
     monkeypatch.setattr(ui, "ensure_idle", lambda what="": idle)
     monkeypatch.setattr(ui, "ensure_watchlist_window", lambda: types.SimpleNamespace())
+    # 掉登录自愈 (09-08) 会 taskkill hexin 真进程 — 测试必须中和: 空集=无可杀,
+    # 自愈路径走 "直接冷启动" 分支也不碰真机
+    monkeypatch.setattr(ui, "hexin_pids", lambda: set())
     monkeypatch.setattr(ui, "close_stray_windows", lambda: None)
     monkeypatch.setattr(ui, "find_window", lambda title: fake_dlg if dialog else None)
     monkeypatch.setattr(ui, "open_copy_recognition_dialog", lambda win: dialog)
@@ -635,3 +638,193 @@ def test_read_push_results_latest_date_default(tmp_path):
     mod.write_push_result(t, ["600001"], ["600001"])
     res = mod.read_push_results(list_dir=tmp_path)
     assert res["source"].tolist() == ["legacy"]
+
+
+def test_read_push_results_hhmm_stamp_parses_source(tmp_path):
+    """HHMM 级戳 (09-08 起残单/每源合并单) 不能坍缩成伪源 — 09-08 实弹: __1907
+    两源同键 "1907" 互覆, legacy 回退 18 点 blocked 旧单, 终版 landed 少算."""
+    for hh, src, codes, landed in (
+        ("18", "parallel", ["600001"], []),
+        ("18", "legacy", ["603829"], []),
+        ("1907", "parallel", ["600001"], ["600001"]),
+        ("1907", "legacy", ["603829"], ["603829"]),
+    ):
+        mod.write_push_result(
+            tmp_path / f"ths_watchlist_20260908__{hh}__{src}__M1.txt", codes, landed
+        )
+    res = mod.read_push_results("20260908", tmp_path)
+    par = dict(zip(*[res[res.source == "parallel"][c] for c in ("symbol", "status")]))
+    leg = dict(zip(*[res[res.source == "legacy"][c] for c in ("symbol", "status")]))
+    assert par == {"600001": "landed"}
+    assert leg == {"603829": "landed"}
+    assert "1907" not in set(res["source"])  # 伪源键不再出现
+
+
+def test_read_push_results_reads_archive_dir(tmp_path):
+    """归档子目录兼读: 推送中间产物链末移入 ths_push_archive 后看板卡仍可读."""
+    t = tmp_path / "ths_watchlist_20260905__legacy__M1.txt"
+    mod.write_push_result(t, ["600001"], ["600001"])
+    res_fp = mod._result_path(t)
+    arch = tmp_path / mod.THS_PUSH_ARCHIVE
+    arch.mkdir()
+    res_fp.rename(arch / res_fp.name)
+
+    res = mod.read_push_results("20260905", tmp_path)
+    assert res["source"].tolist() == ["legacy"]
+    assert res["status"].tolist() == ["landed"]
+
+    # date 缺省分支同样要扫归档目录
+    res2 = mod.read_push_results(list_dir=tmp_path)
+    assert res2["source"].tolist() == ["legacy"]
+
+
+# ── 推送自动化三修 (2026-09-08 "以后推送自动化") ─────────────────────────────
+# ① 单内自毒化: 补推轮自己的合成点击让空闲闸把第 2 轮误判用户在场 → 从未跑过
+#    第 2 轮; ② 单间自毒化: parallel 单毒化 legacy 单入口闸 → legacy 恒 blocked;
+# ③ 掉登录自愈: 对话框核验过但网格全空 → 重启客户端单次重推, 登录墙明示.
+
+
+def test_sweep_rest_precedes_idle_gate_check(monkeypatch, tmp_path):
+    """轮间静默契约: 补推第 2 轮必须先 sleep(SWEEP_REST_S) 衰减合成输入, 再查
+    空闲闸 — 顺序颠倒即自毒化复发 (闸看的是最近 90s 输入, 静默不先做必拦).
+    空闲闸全放行时 10 轮补推真正跑满 (09-05 "LOOP TILL COMPLETE 最多10轮" 契约)."""
+    import time as _time
+
+    from scripts import _ths_ui as ui
+
+    events: list[tuple] = []
+
+    def verify(dlg, row_codes):
+        return {c: False for c in row_codes if c is not None}  # 永不勾 → 轮满
+
+    calls = _patch_push_verify(monkeypatch, verify)
+    monkeypatch.setattr(_time, "sleep", lambda s: events.append(("sleep", s)))
+
+    def _idle(what=""):
+        events.append(("idle", what))
+        return True
+
+    monkeypatch.setattr(ui, "ensure_idle", _idle)
+    txt, ok = _run_push(tmp_path, ["600009"])
+    assert ok is False
+    # 10 轮全部实跑 (每轮 3 次重贴), 不是轮询一次即自灭
+    assert calls["verify"] == mod.PUSH_SWEEPS * mod.RETRY_PASTE
+    # 每个补推轮 (2..10) 先静默 SWEEP_REST_S 再查闸
+    gates = [i for i, e in enumerate(events) if e == ("idle", "缺码补推循环")]
+    assert len(gates) == mod.PUSH_SWEEPS - 1
+    for gi in gates:
+        assert ("sleep", mod.SWEEP_REST_S) in events[max(0, gi - 3) : gi]
+
+
+def test_dead_session_restart_retries_once(monkeypatch, tmp_path, capsys):
+    """掉登录自愈: dead_session 判词 → 杀进程+重启+单次重推; 二次成功即真成功."""
+
+    def fake_push_once(txt_path, codes):
+        fake_push_once.n += 1
+        return (False, "dead_session") if fake_push_once.n == 1 else (True, "")
+
+    fake_push_once.n = 0
+    monkeypatch.setattr(mod, "_push_once", fake_push_once)
+
+    import subprocess as _subp
+    import types
+
+    from scripts import _ths_ui as ui
+
+    killed = {"n": 0}
+    monkeypatch.setattr(ui, "hexin_pids", lambda: {4321, 8765})
+    monkeypatch.setattr(
+        _subp, "run", lambda *a, **k: killed.__setitem__("n", killed["n"] + 1)
+    )
+    monkeypatch.setattr(ui, "ensure_watchlist_window", lambda: types.SimpleNamespace())
+    import time as _time
+
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+
+    txt = tmp_path / "ths_watchlist_20260908__19__legacy__M1.txt"
+    txt.write_text("600001\n", encoding="utf-8")
+    assert mod.push_via_ths(txt) is True
+    assert fake_push_once.n == 2  # 重启后单次重推, 不无限
+    assert killed["n"] == 2  # 两个 hexin pid 各杀一次
+
+
+def test_login_wall_after_restart_writes_blocked_note(monkeypatch, tmp_path, capsys):
+    """重启后撞登录墙 (晚间 09-07/09-08 实弹): 结果单 blocked + note=login_wall
+    明示需人工登录, 单次判死不重试 — 不再静默 no-op."""
+
+    def fake_push_once(txt_path, codes):
+        return False, "dead_session"
+
+    monkeypatch.setattr(mod, "_push_once", fake_push_once)
+
+    from scripts import _ths_ui as ui
+
+    monkeypatch.setattr(ui, "hexin_pids", lambda: set())
+
+    def _boom():
+        raise RuntimeError("重启后 120s 未出自选股窗 (登录墙)")
+
+    monkeypatch.setattr(ui, "ensure_watchlist_window", _boom)
+    written = {}
+    monkeypatch.setattr(
+        mod,
+        "write_push_result",
+        lambda txt, codes, landed, blocked=False, note=None: written.update(
+            note=note, blocked=blocked
+        ),
+    )
+    import time as _time
+
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+
+    txt = tmp_path / "ths_watchlist_20260908__19__legacy__M1.txt"
+    txt.write_text("600001\n", encoding="utf-8")
+    assert mod.push_via_ths(txt) is False
+    assert written == {"note": "login_wall", "blocked": True}
+    assert "login_wall" in capsys.readouterr().out
+
+
+def test_main_rests_between_orders(monkeypatch, tmp_path):
+    """单间自毒化修复: parallel 单推完后先休 INTER_ORDER_REST_S (合成输入衰减),
+    legacy 单才进推送 — 双单连推不再恒 blocked."""
+    import time as _time
+
+    from scripts import _ths_ui as ui
+
+    events: list[tuple] = []
+    # collect_lists/ths_txt_path 默认参在 def 时绑真实目录 — 测试直接换函数
+    monkeypatch.setattr(
+        mod,
+        "collect_lists",
+        lambda date, list_dir=None: [
+            ("parallel__M1", ["600001", "600002"]),
+            ("legacy__M2", ["603829"]),
+        ],
+    )
+    monkeypatch.setattr(
+        mod,
+        "ths_txt_path",
+        lambda date, label, list_dir=None: (
+            tmp_path / f"ths_watchlist_{date}__{label}.txt"
+        ),
+    )
+    monkeypatch.setattr(mod, "THS_HEXIN_PATH", tmp_path / "hexin.exe")
+    (tmp_path / "hexin.exe").write_text("x")
+    monkeypatch.setattr(sys, "argv", ["prog", "20260901"])
+    monkeypatch.setattr(mod._deadzone_guard, "is_alarm", lambda line, date: (False, ""))
+    monkeypatch.setattr(
+        mod,
+        "push_via_ths",
+        lambda out, dry_run=False: events.append(("push", out.name)) or True,
+    )
+    monkeypatch.setattr(_time, "sleep", lambda s: events.append(("sleep", s)))
+    monkeypatch.setattr(ui, "user_idle_seconds", lambda: 999.0)
+
+    assert mod.main() == 0
+    pushes = [e for e in events if e[0] == "push"]
+    assert len(pushes) == 2
+    assert "parallel" in pushes[0][1] and "legacy" in pushes[1][1]
+    rests = [e for e in events if e == ("sleep", mod.INTER_ORDER_REST_S)]
+    assert len(rests) == 1  # 恰一次单间休, 在两单之间
+    idx_rest = events.index(("sleep", mod.INTER_ORDER_REST_S))
+    assert events.index(pushes[0]) < idx_rest < events.index(pushes[1])

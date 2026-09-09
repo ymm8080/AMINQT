@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import pandas as pd
 
 from config.settings import LEGACY_SELECTION, STOCK_LIST_DIR
+from scripts._amt_agree_gate import apply_amt_agree_kill
 from scripts._pctfmt import PCT_COLS_LEGACY, fmt_pct_columns
 from scripts._prob10_density_shadow import apply_chip_gate
 from scripts._stall_marker import stall_marker
@@ -120,6 +121,28 @@ def _board_reject_reasons(
     return reasons
 
 
+def _sort_desc() -> str:
+    """清单头部排序说明 — 跟随 LEGACY_SELECTION mode (回退 e7_pred 时文案自动还原)."""
+    if LEGACY_SELECTION.get("enable") and LEGACY_SELECTION.get("mode") == "prob10_pull":
+        return "排序 = prob_up_10d (10日上涨概率) 板内降序 + 回撤闸"
+    return "E7 闸3 = 3d/5d 中位数均正 · 排序 = d3 目标 (50% d3涨幅 + 50% d3概率 归一化混合)"
+
+
+# 头部列 (2026-09-08 用户: "我只要最后出的STOCK LIST上有幅度和概率, 3/5/10"):
+# 人读表只留 3/5/10 日预测+概率六列; score/q50/pain 等全列仍在 CSV (机器源真相),
+# 洗盘/涨停警示走 md/docx 的文字段不走表格列
+_HEAD_COLS = [
+    "symbol",
+    "board",
+    "pred_ret_3d",
+    "prob_up_3d",
+    "pred_ret_5d",
+    "prob_up_5d",
+    "pred_ret_10d",
+    "prob_up_10d",
+]
+
+
 def write_md(
     df: pd.DataFrame,
     path: str,
@@ -127,23 +150,7 @@ def write_md(
     rejected: dict[str, str] | None = None,
     gate_sections: list[tuple[str, pd.DataFrame]] | None = None,
 ) -> None:
-    cols = [
-        "symbol",
-        "board",
-        "score",
-        "weight",
-        "compound_ret",
-        "prob_up",
-        "prob_up_3d",
-        "pred_ret_3d",
-        "pred_ret_5d",
-        "pred_q50_3d",
-        "pred_q50_5d",
-        "pain_prob",
-        "stall_flag",
-        "limit_flag",
-        "model_version",
-    ]
+    cols = [c for c in _HEAD_COLS if c in df.columns]
     cols = [c for c in cols if c in df.columns]
     sub = df[cols].copy()
     for c in sub.columns:
@@ -155,8 +162,7 @@ def write_md(
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(f"# LEGACY 股票清单 {trade_date} (module {module})\n\n")
         fh.write(
-            f"交易日 {trade_date} · module {module} · E7 闸3 = 3d/5d 中位数均正 · "
-            f"排序 = d3 目标 (50% d3涨幅 + 50% d3概率 归一化混合) · {len(sub)} 只\n\n"
+            f"交易日 {trade_date} · module {module} · {_sort_desc()} · {len(sub)} 只\n\n"
         )
         # 参与度提示 (2026-08-19): 高基线日模型整体负期望 → 建议降参与
         if "advice" in df.columns and df["advice"].iloc[0]:
@@ -190,7 +196,15 @@ def write_md(
 
 
 def main():
-    trade_date = sys.argv[1] if len(sys.argv) > 1 else "20260805"
+    # 数据前置 (2026-09-08): 手工补页要有链的全部功能 — cyq 回填保派发闸看到
+    # 当日获利盘 (链内自动跳过; 补历史日无害 — 闸只取 ≤day_ts 的 cyq 行)
+    if "--no-preflight" not in sys.argv:
+        from scripts._manual_preflight import run_preflight
+
+        run_preflight("_deliver_legacy_list")
+    trade_date = (
+        sys.argv[1] if len(sys.argv) > 1 else pd.Timestamp.now().strftime("%Y%m%d")
+    )
     src = os.path.join(LIST_DIR, f"list_{trade_date}.parquet")
     if not os.path.exists(src):
         raise SystemExit(f"无清单: {src}")
@@ -207,6 +221,8 @@ def main():
     # 滞涨标记 (2026-08-19 用户方案): 入选 + 近10日滞涨<2% + 近20日入选≥3 → 洗盘待爆发
     df = stall_marker(df, trade_date, "legacy_stocklist_")
     module = resolve_module(df, trade_date)
+    # 量价删查线 (2026-09-08 用户拍板): 清单内 amt_agree10 最高档真删不补齐
+    df = apply_amt_agree_kill(df, pd.Timestamp(trade_date), module, line="legacy")
     os.makedirs(str(STOCK_LIST_DIR), exist_ok=True)
 
     # 被整体退回的板块 (有候选但最终清单 0 只): 仍出该板清单, 醒目标注未接受原因
@@ -232,6 +248,9 @@ def main():
     # 交付 CSV 百分比显示层 (2026-09-05 用户: 预测值用百分比): 覆盖 csv + md +
     # docx — 此点之后 df 仅用于展示, gate_sections 的审计帧不受影响
     df = fmt_pct_columns(df, PCT_COLS_LEGACY)
+    # 幅度+概率六列打头 (人读列序), 其余列原序跟后 — 纯显示层
+    head = [c for c in _HEAD_COLS if c in df.columns]
+    df = df[head + [c for c in df.columns if c not in head]]
     df.to_csv(csv_path, index=False)
     print(f"[csv] {csv_path} ({len(df)} 只)")
 
@@ -258,8 +277,7 @@ def main():
         doc = Document()
         doc.add_heading(f"LEGACY 股票清单 {trade_date} (module {module})", level=0)
         doc.add_paragraph(
-            f"交易日 {trade_date} · module {module} · "
-            f"E7 闸3 = 3d/5d 中位数均正 · 排序 = d3 目标 (50% d3涨幅 + 50% d3概率) · {len(df)} 只"
+            f"交易日 {trade_date} · module {module} · {_sort_desc()} · {len(df)} 只"
         )
         n_stall = (
             int((df["stall_flag"] != "").sum()) if "stall_flag" in df.columns else 0
@@ -290,23 +308,7 @@ def main():
                 for i, col in enumerate(cols):
                     v = rr[col]
                     c[i].text = f"{v:.4f}" if isinstance(v, float) else str(v)
-        cols = [
-            "symbol",
-            "board",
-            "score",
-            "weight",
-            "compound_ret",
-            "prob_up",
-            "prob_up_3d",
-            "pred_ret_3d",
-            "pred_ret_5d",
-            "pred_q50_3d",
-            "pred_q50_5d",
-            "pain_prob",
-            "stall_flag",
-            "model_version",
-        ]
-        cols = [c for c in cols if c in df.columns]
+        cols = [c for c in _HEAD_COLS if c in df.columns]
         tbl = doc.add_table(rows=1, cols=len(cols))
         tbl.style = "Light Grid Accent 1"
         for i, h in enumerate(cols):

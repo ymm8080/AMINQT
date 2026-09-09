@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """_q90_slot_eval.py — q90 彩票槽位规则网格终审 (重建版, 原 08-30 稿被清理).
 
 输入: scripts/_diag_q90_slot_replay.py 产出的全池回放 parquet
@@ -305,8 +306,7 @@ def main() -> int:
             f"\n== {board} ==  池/日 {result[board]['gate']['pool_mean_per_day']:.0f}"
         )
         for name, st in result[board]["arms"].items():
-            def fmt(v):
-                return f"{v:+.5f}" if v is not None else "  n/a  "
+            fmt = lambda v: f"{v:+.5f}" if v is not None else "  n/a  "
             print(
                 f"  {name:10s} days={st['days']:3d} net3={st['net3']:+.4f} "
                 f"Δ={fmt(st.get('d3_full'))} (h1 {fmt(st.get('d3_h1'))} / h2 {fmt(st.get('d3_h2'))}) "

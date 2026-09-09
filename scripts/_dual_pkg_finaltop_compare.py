@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """_dual_pkg_finaltop_compare.py — 多模型包"终版交付清单"质量对拍 (影子回放).
 
 对每个指定包, 在 TODAY 面板上重放 label-matured 窗口内逐日的最终交付清单口径

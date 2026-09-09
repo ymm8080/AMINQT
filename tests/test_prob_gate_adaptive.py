@@ -22,7 +22,7 @@ import pytest
 
 from app.pipeline1 import prob_head
 from app.pipeline1.list_generator import ListGenerator
-from config.settings import LEGACY_PROB_GATE
+from config.settings import LEGACY_PROB_GATE, LEGACY_SELECTION
 
 GATE_OFF = {"entry_prob": 0.0, "entry_ret_mult": 0.0}
 TODAY = "20260901"
@@ -30,7 +30,11 @@ TODAY = "20260901"
 
 @pytest.fixture(autouse=True)
 def _hermetic(monkeypatch, tmp_path):
-    """隔离: gate 状态目录指 tmp; 默认开 rolling_q (本模块专测自适应)."""
+    """隔离: gate 状态目录指 tmp; 默认开 rolling_q (本模块专测自适应).
+
+    LEGACY_SELECTION mode 钉为 "e7_pred": 生产默认 "prob10_pull" 跳 E7/prob_gate,
+    本模块专测旧栈 → fixture 级钉回, 消除 CI 上默认切换导致闸被跳过的风险.
+    """
     gdir = tmp_path / "gate_margin"
     gdir.mkdir()
     monkeypatch.setitem(LEGACY_PROB_GATE, "gate_margin_dir", str(gdir))
@@ -40,6 +44,7 @@ def _hermetic(monkeypatch, tmp_path):
     monkeypatch.setitem(LEGACY_PROB_GATE, "margin_min", 0.05)
     monkeypatch.setitem(LEGACY_PROB_GATE, "margin_max", 0.25)
     monkeypatch.setitem(LEGACY_PROB_GATE, "spread_lookback_days", 20)
+    monkeypatch.setitem(LEGACY_SELECTION, "mode", "e7_pred")
     return gdir
 
 
@@ -288,6 +293,10 @@ def test_entry_filter_attaches_audit_columns():
 def test_emit_returns_gate_audit_with_pain_soft_and_gate_drops(_hermetic, monkeypatch):
     from app.pipeline1 import risk_overlays
 
+    # [09-07] 生产 LEGACY_SELECTION 默认 mode="prob10_pull" (跳过 E7+prob_gate);
+    # 本测试专测 e7_pred 闸路径 → 钉回旧栈, 不受生产默认切换影响.
+    # (fixture _hermetic 已 monkeypatch LEGACY_SELECTION mode="e7_pred", 此处冗余保险.)
+    monkeypatch.setitem(LEGACY_SELECTION, "mode", "e7_pred")
     monkeypatch.setattr(risk_overlays, "block_trade_recent_scan", lambda *a, **k: [])
     monkeypatch.setattr(risk_overlays, "share_float_upcoming_scan", lambda *a, **k: [])
 

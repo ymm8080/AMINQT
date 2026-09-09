@@ -268,9 +268,19 @@ def main() -> int:
         default=None,
         help="只重训指定板块 (默认双板)",
     )
+    ap.add_argument(
+        "--no-preflight",
+        action="store_true",
+        help="跳过数据前置 cyq/sw_history/freshness (scripts/_manual_preflight.py)",
+    )
     args = ap.parse_args()
     tag = args.tag or time.strftime("%Y%m%d")
     boards = (args.board,) if args.board else ("main", "dual")
+    # 数据前置 (2026-09-08): 手工跑要有链的全部功能 (链内自动跳过 — 链已跑过)
+    if not args.no_preflight:
+        from scripts._manual_preflight import run_preflight
+
+        run_preflight("_retrain_legacy_full")
     # LEGACY_FORCE_FALLBACK=1 → 只对 main 跳过 FeatureSelector (bruteforce_dedup 选择
     # 过大必 OOM, 直用 FeatureEngine 全量 316 特征), dual 仍走 gate_d (38). 两段式发布:
     # 先落 cls 修复, 再单独验证 cap 选择过 OOS 门.

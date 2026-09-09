@@ -1,85 +1,88 @@
-"""四模块每日自动化编排 (2026-08-06) — 重训 → 预测出清单 → 落盘 → 看板可见.
+"""?????????? (2026-08-06) ? ?? ? ????? ? ?? ? ????.
 
-覆盖"四个模块":
-  1. legacy main   — 周频全量重训 (_retrain_legacy_full.py, OOS 过闸才切换 current)
-  2. legacy dual   — 同上 (同一脚本双板)
-  3. 并行 sniper   — 每日重生成 (app.pipeline_parallel.runner 回测 + 短名单)
-  4. 并行 fusion   — 同上 (同一 runner, 内含 slow_bull 一并输出)
+??"????":
+  1. legacy main   ? ?????? (_retrain_legacy_full.py, OOS ????? current)
+  2. legacy dual   ? ?? (??????)
+  3. ?? sniper   ? ????? (app.pipeline_parallel.runner ?? + ???)
+  4. ?? fusion   ? ?? (?? runner, ?? slow_bull ????)
 
-步骤按"重训先行"编排 (2026-09-05 用户拍板, 推翻 2026-08-27 交付保底优先): 预测链
-后置到 retrain 之后, 当日清单用当日新训模型; 卡死兜底 = 每步看门狗强杀 + retrain
-失败不拦预测 (沿用现有模型); 每步独立子进程隔离执行释放内存, 避免 44GB commit 上限 OOM):
-  [cyq]      scripts/_backfill_cyq_panel.py            cyq_panel 增量回填 (legacy 慢牛列)
-  [canary]   scripts/_finaltop_canary.py <tag>        晋升后 canary 回放 (backup vs current,
-                                            非关键证据步恒 exit 0; 决定性坏签只留证,
-                                            回退需人工 --revert)
-  [retrain]  scripts/_retrain_legacy_full.py <tag>     legacy 周频重训 (仅 RETRAIN_WEEKDAY
-                                            或 --force-retrain)
-  [legacy_prob_head] scripts/_train_legacy_prob_head.py legacy 并行式概率头 (21 交易日自判断重训)
-  [legacy]   scripts/_gen_legacy_list.py <tag>          legacy 预测出清单 (用最新 current —
-                                            重训日即当日新训模型)
-  [deliver]  scripts/_deliver_legacy_list.py <tag>      legacy 清单交付 STOCK_LIST_DIR
-  [refresh]  scripts/_refresh_parallel_checkpoints.py  并行行集 3y 检查点 (需 19:15 fetch 后)
-  [parallel] python -m app.pipeline_parallel.runner     并行回测 + 短名单 (sniper/fusion/slow_bull)
-  [deliver_parallel] scripts/_shortlist_t5_t10.py <tag> 并行短名单交付 STOCK_LIST_DIR
-  [ths_push] scripts/_ths_watchlist_push.py <tag>       当日 TOP10 推同花顺自选股 (UI 自动化,
-                                            非关键; 09-05 拆分: parallel 前 10 与 legacy
-                                            前 10 各自独立成单分推, 单侧缺失只推另一侧;
-                                            死区报警夜停推不加自选, 清单照出; 标注三件套
-                                            STOPPED_DEADZONE/md横幅/结果单deadzone —
+???"????"?? (2026-09-05 ????, ?? 2026-08-27 ??????): ???
+??? retrain ??, ???????????; ???? = ??????? + retrain
+?????? (??????); ???????????????, ?? 44GB commit ?? OOM):
+  [cyq]      scripts/_backfill_cyq_panel.py            cyq_panel ???? (legacy ???)
+  [canary]   scripts/_finaltop_canary.py <tag>        ??? canary ?? (backup vs current,
+                                            ??????? exit 0; ????????,
+                                            ????? --revert)
+  [retrain]  scripts/_retrain_legacy_full.py <tag>     legacy ???? (? RETRAIN_WEEKDAY
+                                            ? --force-retrain)
+  [legacy_prob_head] scripts/_train_legacy_prob_head.py legacy ?????? (21 ????????)
+  [legacy]   scripts/_gen_legacy_list.py <tag>          legacy ????? (??? current ?
+                                            ??????????)
+  [deliver]  scripts/_deliver_legacy_list.py <tag>      legacy ???? STOCK_LIST_DIR
+  [refresh]  scripts/_refresh_parallel_checkpoints.py  ???? 3y ??? (? 19:15 fetch ?)
+  [parallel] python -m app.pipeline_parallel.runner     ???? + ??? (sniper/fusion/slow_bull)
+  [deliver_parallel] scripts/_shortlist_t5_t10.py <tag> ??????? STOCK_LIST_DIR
+  [ths_push] scripts/_ths_watchlist_push.py <tag>       ?? TOP10 ??????? (UI ???,
+                                            ???; 09-05 ??: parallel ? 10 ? legacy
+                                            ? 10 ????????, ?????????;
+                                            ???????????, ????; ?????
+                                            STOPPED_DEADZONE/md??/???deadzone ?
                                             _deadzone_guard)
-  [ths_flush_guard] scripts/_ths_flush_guard.py <tag>   当日放量下跌标记→自选股剔除文档 (非关键,
-                                            判断只用日频 OHLCV/动量/量能; 09-03)
-  [a1_push]  scripts/_a1_momentum_shadow.py <tag>       差值加速度影子单 (r5−r5p top10, 剔北交所)
-                                            并推同花顺 (非关键, 250d 10 只/日 2.78 赢家; 09-04;
-                                            09-05 停推: 用户拍板, 手动可跑, 恢复需拍板)
-  [gappocket_push] scripts/_gap_pocket_shadow.py <tag>  隔板口袋单 (首板后d3~7缩量守板dry<0.8
-                                            +安全闸, bias60 top15) 并推同花顺 (非关键, 250d
-                                            11.4只/日 +0.52pp 2.36赢家 大亏4.4%;
-                                            09-04 接线, 09-05 拍板 dry 0.7→0.8;
-                                            09-05 停推: 同窗全面落后生产 TOP10, 恢复需拍板)
-  [prob10dens_push] scripts/_prob10_density_shadow.py <tag>  概率头密度版影子单 (prob10+回撤闸
-                                            -10%+近5上榜日≥3+额1亿) 并推同花顺 (非关键,
-                                            125d 6.8只/日 56.5%/+10.09pp 大亏3.4%,
-                                            补 gappocket 停推后的推送位; 09-05 用户拍板;
-                                            死区报警夜停推, 清单照出; 标注
-                                            STOPPED_DEADZONE+结果单deadzone —
+  [ths_flush_guard] scripts/_ths_flush_guard.py <tag>   ???????????????? (???,
+                                            ?????? OHLCV/??/??; 09-03)
+  [a1_push]  scripts/_a1_momentum_shadow.py <tag>       ???????? (r5?r5p top10, ????)
+                                            ????? (???, 250d 10 ?/? 2.78 ??; 09-04;
+                                            09-05 ??: ????, ????, ?????)
+  [gappocket_push] scripts/_gap_pocket_shadow.py <tag>  ????? (???d3~7????dry<0.8
+                                            +???, bias60 top15) ????? (???, 250d
+                                            11.4?/? +0.52pp 2.36?? ??4.4%;
+                                            09-04 ??, 09-05 ?? dry 0.7?0.8;
+                                            09-05 ??: ???????? TOP10, ?????)
+  [prob10dens_push] scripts/_prob10_density_shadow.py <tag>  ????????? (prob10+???
+                                            -10%+?5????3+?1?) ????? (???,
+                                            125d 6.8?/? 56.5%/+10.09pp ??3.4%,
+                                            ? gappocket ???????; 09-05 ????;
+                                            ???????, ????; ??
+                                            STOPPED_DEADZONE+???deadzone ?
                                             _deadzone_guard)
-  [slowbull_shadow] _slowbull_list.py (仓库根)      SLOW BULL 长持影子单 (2026-09-07 用户命名+
-                                            拍板, 承接旧 SLOW_BULL_PAUSE 暂停模块的长持
-                                            产出位): band[90,99.5)×grind8×回撤+wr5闸×
-                                            宽度>MA60×trail8/40日, 格内mom(60,90]区×
-                                            低波半格 (极致确定性); 读 V3 面板+cyq 自算
-                                            (不依赖 refresh/parallel), 只落盘 DATA
-                                            OTHERS/shadow/ **不推送同花顺**; 非关键步骤
-  [drift]    scripts/_monitor_legacy_drift.py           幅度漂移监控 (全池 pred vs 实现偏差)
-  [drift_parallel] scripts/_monitor_parallel_drift.py   parallel dual 漂移监控 (短名单 vs 检查点标签)
-  [shadow_xmodule] scripts/_shadow_xmodule_blend.py     跨模块影子排名 (legacy×parallel 合池混排, 只记录不交付)
+  [slowbull_shadow] _slowbull_list.py (???)      SLOW BULL ????? (2026-09-07 ????+
+                                            ??, ??? SLOW_BULL_PAUSE ???????
+                                            ???): band[90,99.5)?grind8???+wr5??
+                                            ??>MA60?trail8/40?, ??mom(60,90]??
+                                            ???? (?????); ? V3 ??+cyq ??
+                                            (??? refresh/parallel), ??? DATA
+                                            OTHERS/shadow/ **??????**; ?????
+  [drift]    scripts/_monitor_legacy_drift.py           ?????? (?? pred vs ????)
+  [drift_parallel] scripts/_monitor_parallel_drift.py   parallel dual ???? (??? vs ?????)
+  [shadow_xmodule] scripts/_shadow_xmodule_blend.py     ??????? (legacy?parallel ????, ??????)
 
-"推送看板" = 各步落盘到看板只读目录, 看板渲染时自动展示:
-  模型 → models/pipeline1/current_meta.json + *.pkl (档案页·模型档案)
-  回测 → BACKTEST_RESULT_DIR/<ts>/ (档案页·回测历史, 含 hv 胜率图)
-  清单 → STOCK_LIST_DIR (档案页·落盘清单) + PredictionDB (每日预测)
+"????" = ???????????, ?????????:
+  ?? ? models/pipeline1/current_meta.json + *.pkl (????????)
+  ?? ? BACKTEST_RESULT_DIR/<ts>/ (????????, ? hv ???)
+  ?? ? STOCK_LIST_DIR (????????) + PredictionDB (????)
 
-失败策略 (失败要大声): refresh 失败 → 跳过 parallel (无新鲜行集); retrain 失败 →
-继续当日清单 (沿用现有模型); parallel 失败 → 跳过 deliver_parallel (否则交付旧 run_dir);
-任一关键步骤 (legacy/deliver/deliver_parallel) 失败 → 非零退出.
-中断策略 (08-21 事故): 任何步骤返回 0xC013A (STATUS_CONTROL_C_EXIT, 控制台
-Ctrl+C/进程组被杀) → 立即终止整条链, 不启动后续重活步骤; 收到 SIGINT 同理.
-终态判据: logs/daily_automation_<tag>.state.json (running → ok/failed/interrupted/
-skipped), 监督方 (scripts/_babysit_daily_automation.py) 见终态即退出, 不再无限等待
-耗 token. 每步 rc/耗时 + 全部子进程输出 → logs/daily_automation_<tag>.log (WORM, 不覆盖).
+???? (?????): refresh ?? ? ?? parallel (?????); retrain ?? ?
+?????? (??????); parallel ?? ? ?? deliver_parallel (????? run_dir);
+?????? (legacy/deliver/deliver_parallel) ?? ? ????.
+???? (08-21 ??): ?????? 0xC013A (STATUS_CONTROL_C_EXIT, ???
+Ctrl+C/?????) ? ???????, ?????????; ?? SIGINT ??.
+????: logs/daily_automation_<tag>.state.json (running ? ok/failed/interrupted/
+skipped), ??? (scripts/_babysit_daily_automation.py) ??????, ??????
+? token. ?? rc/?? + ??????? ? logs/daily_automation_<tag>.log (WORM, ???).
 
-启动守卫 (2026-09-01): 手动重训/预测与链并发 → 页交换卡死 (08-17) / OOM 整链被杀
-(08-24). 三闸任一命中不启动: ①活的重训/预测进程 (含另一条链) → 2h 守候循环,
-冲突清空且当日清单仍缺才启动; ②今日链 state=ok; ③今日 legacy 清单已交付.
---force 绕过. 守卫逻辑见 scripts/_run_guard.py, 日志与步骤日志同文件.
+???? (2026-09-01): ????/?????? ? ????? (08-17) / OOM ????
+(08-24). ?????????: ?????/???? (?????) ? 2h ????,
+??????????????; ???? state=ok; ??? legacy ?????.
+--force ??. ????? scripts/_run_guard.py, ??????????.
+???? (2026-09-08): ?? skip/??????????? ? ????????
+legacy ? ????? ? ??/SLOW_BULL ?????; ?????? ? ???
+prob10dens_push/slowbull_shadow/stocklist_combined ????? (????).
 
-用法:
-  python scripts/run_daily_automation.py                      # 完整跑 (推荐: 定时任务)
-  python scripts/run_daily_automation.py --dry-run            # 只打印计划不执行
+??:
+  python scripts/run_daily_automation.py                      # ??? (??: ????)
+  python scripts/run_daily_automation.py --dry-run            # ????????
   python scripts/run_daily_automation.py --skip-checkpoints --skip-retrain --skip-parallel
-                                                              # 只跑 legacy 预测+交付 (轻量验证)
+                                                              # ?? legacy ??+?? (????)
 """
 
 from __future__ import annotations
@@ -99,7 +102,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = sys.executable
 LOG_DIR = os.path.join(ROOT, "logs")
 
-# 脚本直跑时 sys.path[0]=scripts/, 补 ROOT 使 scripts.* 包导入在两种模式下都成立
+# ????? sys.path[0]=scripts/, ? ROOT ? scripts.* ????????????
 sys.path.insert(0, ROOT)
 
 from config.settings import STOCK_LIST_DIR  # noqa: E402
@@ -109,59 +112,63 @@ from scripts._run_guard import (  # noqa: E402
     skip_reason,
 )
 
-# 0=Mon .. 6=Sun. 周频重训落在周五晚 (周末分析用周五收盘后最新模型).
+# 0=Mon .. 6=Sun. ????????? (??????????????).
 RETRAIN_WEEKDAY = 4
 
-# 每步超时兜底 (2026-08-17): 08-17 run1 legacy 预测卡死 7h (与手动重训并发页交换),
-# 无超时则僵尸进程占内存影响后续所有步骤. 取值=正常耗时的 4-6 倍 (refresh 08-17 实测
-# 70min / legacy 18-30min / retrain 5-7h), 只兜底卡死不误杀慢跑. 超时按步骤记为 rc=124.
+# ?????? (2026-08-17): 08-17 run1 legacy ???? 7h (??????????),
+# ???????????????????. ??=????? 4-6 ? (refresh 08-17 ??
+# 70min / legacy 18-30min / retrain 5-7h), ??????????. ??????? rc=124.
 _STEP_TIMEOUT_S = {
     "refresh": 3 * 3600,
     "cyq": 40 * 60,
-    # sw_history 正常 3-4min (约 400 指数 × 0.15s 延迟 + API 延迟); 09-03 实测限流日
-    # 500 指数 ~16min (100 只/100s), 15min 超时被杀 → 上调 30min 留 2x 余量
+    # sw_history ?? 3-4min (? 400 ?? ? 0.15s ?? + API ??); 09-03 ?????
+    # 500 ?? ~16min (100 ?/100s), 15min ???? ? ?? 30min ? 2x ??
     "sw_history": 30 * 60,
-    # freshness 只读 schema/尾列 (实际约 1-2min); 15min 守 "每步 ≥15min" 下限惯例
+    # freshness ?? schema/?? (??? 1-2min); 15min ? "?? ?15min" ????
     "freshness": 15 * 60,
     "retrain": 12 * 3600,
     "parallel": 4 * 3600,
-    # prob_head 半衰期集成后 = 2 板 × len(half_lives) 桡 bundle 训练 (09-03 起 6 次)
+    # prob_head ?????? = 2 ? ? len(half_lives) ? bundle ?? (09-03 ? 6 ?)
     "prob_head": 3 * 3600,
     "legacy_prob_head": 1 * 3600,
     "legacy": 3 * 3600,
     "deliver": 30 * 60,
-    # canary 每板回放工具内部超时 5400s, 双板合法最坏 3h; 4h 只兜卡死
+    # canary ?????????? 5400s, ?????? 3h; 4h ????
     "canary": 4 * 3600,
     "deliver_parallel": 30 * 60,
-    "ths_push": 15
-    * 60,  # 客户端已开 ~20s; 冷启动拉起+登录最长 ~2.5min, 下限 15min 只兜卡死
-    "ths_flush_guard": 15 * 60,  # 面板单日切片+秩计算 ~1min, 下限守 "每步 ≥15min" 惯例
-    # 终版清单: 三源 CSV 读合并 ~秒级, 15min 下限惯例 (含死区闸三线整段重算)
+    # ????? ~20s; ???+?? ~2.5min; 09-08 ?????????: ???
+    # 150s+???? 10min / ?????? 95s??10 ? / ??????? ~3min ?
+    # ???? ~25min, 30min ??????
+    "ths_push": 30 * 60,
+    "ths_flush_guard": 15 * 60,  # ??????+??? ~1min, ??? "?? ?15min" ??
+    # ????: ?? CSV ??? ~??, 15min ???? (??????????)
     "final_stocklist": 15 * 60,
-    # A1 影子单: 面板 date 列读最新日+单日切片 ~1min + UI 推送复用 ths_push 机械
+    # ????: ?? CSV ?+xlsx ? ~??, 15min ????
+    "stocklist_combined": 15 * 60,
+    # A1 ???: ?? date ?????+???? ~1min + UI ???? ths_push ??
     "a1_push": 15 * 60,
-    # 隔板口袋单: 面板 180 日历日切片+事件走查 ~1-2min + UI 推送复用 ths_push 机械
+    # ?????: ?? 180 ?????+???? ~1-2min + UI ???? ths_push ??
     "gappocket_push": 15 * 60,
-    # 概率头密度版影子单: candidates 读截面+面板 45 日历日切片 ~1min + UI 推送复用 ths_push
+    # ?????????: candidates ???+?? 45 ????? ~1min + UI ???? ths_push
     "prob10dens_push": 15 * 60,
-    # SLOW BULL 长持影子单: V3 面板 3 列切片+宽度 MA60 预热 ~1-2min, 15min 下限惯例
+    # SLOW BULL ?????: V3 ?? 3 ???+?? MA60 ?? ~1-2min, 15min ????
     "slowbull_shadow": 15 * 60,
     "drift": 30 * 60,
     "drift_parallel": 30 * 60,
     "shadow_xmodule": 15 * 60,
 }
 
-# 启动守卫守候循环 (2026-09-01): 活进程冲突时每 2h 复查一次, 最多 3 轮 (6h).
-# 上限的硬约束是计划任务 ExecutionTimeLimit=PT16H — 周五最坏 20:15+6h 守候+7h 重训
-# 仍留有余量; 更长的守候会让链跑不完被任务限时强杀.
+# ???????? (2026-09-01): ??????? 2h ????, ?? 3 ? (6h).
+# ??????????? ExecutionTimeLimit=PT16H ? ???? 20:15+6h ??+7h ??
+# ?????; ??????????????????.
 _GUARD_TICK_S = 2 * 3600
 _GUARD_MAX_TICKS = 3
 
 
 def _kill_tree(pid: int) -> None:
-    """整树强杀 — 含步骤脚本派生的 worker 孙进程 (它们继承 stdout 管道,
-    只杀直接子进程会漏).
-    Windows: taskkill /T /F; POSIX: kill -9 -- -pgid (杀进程组).
+    """???? ? ???????? worker ??? (???? stdout ??,
+    ?????????).
+    Windows: taskkill /T /F; POSIX: kill -9 -- -pgid (????).
     """
     if sys.platform == "win32":
         try:
@@ -170,14 +177,14 @@ def _kill_tree(pid: int) -> None:
                 capture_output=True,
                 timeout=30,
             )
-        except Exception:  # noqa: BLE001 — 看门狗杀不掉只能放弃, 不影响主流程
+        except Exception:  # noqa: BLE001 ? ??????????, ??????
             pass
     else:
         try:
             pgid = os.getpgid(pid)
             os.killpg(pgid, signal.SIGKILL)
         except (ProcessLookupError, PermissionError, OSError):
-            # 进程已退出或无权限; 降级杀单进程
+            # ?????????; ??????
             try:
                 os.kill(pid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError, OSError):
@@ -187,14 +194,14 @@ def _kill_tree(pid: int) -> None:
 def _run_step_with_watchdog(
     argv: list[str], fh, env: dict, timeout_s: int
 ) -> tuple[int, bool]:
-    """Popen + 外部看门狗线程, 超时 taskkill 整树强杀. 返回 (rc, timed_out).
+    """Popen + ???????, ?? taskkill ????. ?? (rc, timed_out).
 
-    不再用 subprocess.run(timeout=): 08-27 事故中 refresh 爬行 8h+, 其 3h 内部
-    超时始终未触发 (日志无 TIMEOUT 记录, 机器全程未休眠), 内部计时器不可信;
-    看门狗线程 sleep 到点后 poll + 整树强杀, 与主线程等待互为冗余.
+    ??? subprocess.run(timeout=): 08-27 ??? refresh ?? 8h+, ? 3h ??
+    ??????? (??? TIMEOUT ??, ???????), ????????;
+    ????? sleep ??? poll + ????, ??????????.
     """
-    # Windows: CREATE_NEW_PROCESS_GROUP 使其成为进程组头, taskkill /T 可杀整树.
-    # POSIX: start_new_session=True 跑在新会话/进程组, os.killpg 整树强杀不影响父进程.
+    # Windows: CREATE_NEW_PROCESS_GROUP ????????, taskkill /T ????.
+    # POSIX: start_new_session=True ?????/???, os.killpg ??????????.
     popen_kwargs: dict = {}
     if sys.platform == "win32":
         popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
@@ -217,7 +224,7 @@ def _run_step_with_watchdog(
 
 
 def _prevent_sleep() -> None:
-    """链运行期间请求系统不睡眠 (08-27: 12:52 电池睡眠恰好落在链运行中)."""
+    """???????????? (08-27: 12:52 ????????????)."""
     if sys.platform == "win32":
         try:
             import ctypes
@@ -225,21 +232,21 @@ def _prevent_sleep() -> None:
             ctypes.windll.kernel32.SetThreadExecutionState(
                 0x80000000 | 0x00000001  # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
             )
-        except Exception:  # noqa: BLE001 — 拿不到也不拦链启动
+        except Exception:  # noqa: BLE001 ? ?????????
             pass
 
 
-# (步骤名, argv) — argv 不含解释器, run_step 负责拼 [PY, "-u", ...]
+# (???, argv) ? argv ?????, run_step ??? [PY, "-u", ...]
 _STEPS = {
     "refresh": ["scripts/_refresh_parallel_checkpoints.py"],
     "cyq": [
         "scripts/_backfill_cyq_panel.py",
         "--workers",
         "6",
-    ],  # cyq_panel 增量 (2026-08-19)
+    ],  # cyq_panel ?? (2026-08-19)
     "sw_history": ["scripts/fetch_sw_daily_history.py", "--incremental"],
-    # 全族特征新鲜度守卫 (2026-09-02): 注册表 config/freshness_registry.yaml, 告警式
-    # 恒 exit 0 — 判定逻辑见 scripts/_freshness_check.py 模块 docstring
+    # ????????? (2026-09-02): ??? config/freshness_registry.yaml, ???
+    # ? exit 0 ? ????? scripts/_freshness_check.py ?? docstring
     "freshness": ["scripts/_freshness_check.py"],
     "retrain": ["scripts/_retrain_legacy_full.py", "{tag}"],
     "parallel": ["-m", "app.pipeline_parallel.runner"],
@@ -251,28 +258,31 @@ _STEPS = {
     "deliver_parallel": ["scripts/_shortlist_t5_t10.py", "{tag}"],
     "ths_push": ["scripts/_ths_watchlist_push.py", "{tag}"],
     "ths_flush_guard": ["scripts/_ths_flush_guard.py", "{tag}"],
-    # 终版清单 (2026-09-06 用户): 全闸之后单文件 Excel 合并三源 (module 列 +
-    # 当夜死区赢率 + landed/blocked), 置 flush_guard 后 — flush 删除需先落文档
+    # ???? (2026-09-06 ??): ??????? Excel ???? (module ? +
+    # ?????? + landed/blocked), ? flush_guard ? ? flush ???????
     "final_stocklist": ["scripts/_final_stocklist.py", "{tag}"],
+    # ??????? (2026-09-08 ??: combined sheet daily): ???? xlsx
+    # (?????/LEGACY/PARALLEL/??/SLOW_BULL), 09-07 ?? v3 ????
+    "stocklist_combined": ["scripts/_stocklist_combined.py", "{tag}"],
     "a1_push": ["scripts/_a1_momentum_shadow.py", "{tag}"],
     "gappocket_push": ["scripts/_gap_pocket_shadow.py", "{tag}"],
     "prob10dens_push": ["scripts/_prob10_density_shadow.py", "{tag}"],
-    # SLOW BULL 长持影子单 (2026-09-07 用户命名+拍板, 承接旧 SLOW_BULL_PAUSE 暂停模块
-    # 的长持产出位): 仓库根 _slowbull_list.py, 读 V3 面板+cyq 自算, 只落盘不推送
+    # SLOW BULL ????? (2026-09-07 ????+??, ??? SLOW_BULL_PAUSE ????
+    # ??????): ??? _slowbull_list.py, ? V3 ??+cyq ??, ??????
     "slowbull_shadow": ["_slowbull_list.py"],
     "drift": ["scripts/_monitor_legacy_drift.py"],
     "drift_parallel": ["scripts/_monitor_parallel_drift.py"],
     "shadow_xmodule": ["scripts/_shadow_xmodule_blend.py"],
 }
-# refresh 失败后应跳过的后续步骤 (parallel 需要新鲜检查点);
-# deliver_parallel 需要当日 fresh parallel run_dir (短名单), 否则会交付旧 run_dir 脏数据;
-# prob_head 读 parallel 检查点 (面板), 需当日 fresh 面板.
+# refresh ??????????? (parallel ???????);
+# deliver_parallel ???? fresh parallel run_dir (???), ?????? run_dir ???;
+# prob_head ? parallel ??? (??), ??? fresh ??.
 _DEPENDS = {
     "parallel": "refresh",
     "prob_head": "parallel",
     "deliver_parallel": "parallel",
 }
-# 关键步骤: 失败 → 整个任务非零退出 (看板当日清单缺失)
+# ????: ?? ? ???????? (????????)
 _CRITICAL = {"legacy", "deliver", "deliver_parallel"}
 
 
@@ -284,32 +294,32 @@ def plan_steps(
     skip_parallel: bool = False,
     force_retrain: bool = False,
 ) -> list[str]:
-    """按星期 + skip 标志选出当日步骤序列 (纯函数, 可单测)."""
+    """??? + skip ?????????? (???, ???)."""
     steps: list[str] = []
-    # [2026-09-05] 重训先行 (用户拍板, 推翻 2026-08-27 交付保底优先): 预测链
-    # (lph→legacy→deliver) 后置到 retrain 之后, 当日清单用当日新训模型, 新模型不再
-    # "次一清单生效". 残余风险 (用户知情接受): retrain 卡死会推迟当日清单落盘 —
-    # 兜底 = 每步看门狗强杀 (retrain 超时 8h) + retrain 失败不拦预测 (fail-soft
-    # 沿用现有模型出清单, 当日仍有交付).
-    # cyq_panel 增量回填 (2026-08-19): 读 V3 面板补 cache 缺失日期, 非关键步骤 —
-    # 失败只损失当日 pct_70_con (慢牛 0.05 权重列跳过), 清单不受影响; 恒前置 (轻量)
+    # [2026-09-05] ???? (????, ?? 2026-08-27 ??????): ???
+    # (lph?legacy?deliver) ??? retrain ??, ???????????, ?????
+    # "??????". ???? (??????): retrain ??????????? ?
+    # ?? = ??????? (retrain ?? 8h) + retrain ?????? (fail-soft
+    # ?????????, ??????).
+    # cyq_panel ???? (2026-08-19): ? V3 ??? cache ????, ????? ?
+    # ??????? pct_70_con (?? 0.05 ?????), ??????; ??? (??)
     steps.append("cyq")
-    # 申万指数日线增量 (2026-09-02): 面板冻结@07-31 事故 (end 写死 + 无人挂链) 断供
-    # dim28 特征族 39 列上游; 恒前置轻量非关键步骤 — 失败只损失当日行业指数特征新鲜度
+    # ???????? (2026-09-02): ????@07-31 ?? (end ?? + ????) ??
+    # dim28 ??? 39 ???; ?????????? ? ????????????????
     steps.append("sw_history")
-    # 全族特征新鲜度守卫 (2026-09-02): 四起静默停更事故 (cyq@07-17/sw冻结@07-31/
-    # announce_date@08-14/fina列冻结) 后建的系统级闸, 告警式不阻断 — 08-27 零清单
-    # 教训: 链对失败一视同仁, 告警绝不能拦交付 (恒 exit 0)
+    # ????????? (2026-09-02): ???????? (cyq@07-17/sw??@07-31/
+    # announce_date@08-14/fina???) ???????, ?????? ? 08-27 ???
+    # ??: ????????, ???????? (? exit 0)
     steps.append("freshness")
-    # 晋升后 canary (2026-09-02 防坏签): 新 current vs 晋升前 backup 定期重放,
-    # 决定性坏签留证 (回退需人工 --revert, 链上不带). 放 retrain 前 — retrain
-    # 晋升会覆盖 canary state, 先跑让在窗晋升按自然日推进窗口; state 空/窗口满
-    # 时秒过恒 exit 0, 非关键步骤
+    # ??? canary (2026-09-02 ???): ? current vs ??? backup ????,
+    # ??????? (????? --revert, ????). ? retrain ? ? retrain
+    # ????? canary state, ???????????????; state ?/???
+    # ???? exit 0, ?????
     steps.append("canary")
     if not skip_retrain and (force_retrain or today.weekday() == RETRAIN_WEEKDAY):
         steps.append("retrain")
-    # legacy 并行式概率头: 读面板+特征现场构建 (不依赖 parallel 检查点, 无前置依赖);
-    # 自判断新鲜度 (21 交易日重训一次), 未到期开销小 — 放 legacy 预测前 (概率闸依赖 bundle)
+    # legacy ??????: ???+?????? (??? parallel ???, ?????);
+    # ?????? (21 ???????), ?????? ? ? legacy ??? (????? bundle)
     steps.append("legacy_prob_head")
     steps.append("legacy")
     steps.append("deliver")
@@ -317,46 +327,43 @@ def plan_steps(
         steps.append("refresh")
     if not skip_parallel:
         steps.append("parallel")
-        # 概率头训练自判断新鲜度 (21 交易日重训一次); 仅并行交付启用时才有消费者
+        # ??????????? (21 ???????); ?????????????
         steps.append("prob_head")
-        steps.append(
-            "deliver_parallel"
-        )  # 并行清单交付依赖当日 fresh parallel 重生成, 跳过则同步丢弃
-    # 同花顺自选股推送 (2026-09-01; 09-05 用户拍板拆分): parallel 前 10 与 legacy
-    # 前 10 各自独立成单分推, 不再并集 — 单侧缺失只推另一侧, 故放在 parallel 块
-    # 之外恒执行, 非关键步骤
+        steps.append("deliver_parallel")  # ?????????? fresh parallel ???, ???????
+    # ???????? (2026-09-01; 09-05 ??????): parallel ? 10 ? legacy
+    # ? 10 ????????, ???? ? ?????????, ??? parallel ?
+    # ?????, ?????
     steps.append("ths_push")
-    # 差值加速度影子单 (2026-09-04 用户拍板): (r5−r5_prev) top10 纯排 — 2026-09-05 用户
-    # 停推 ("A1影子单也不需要"): 下链, _a1_momentum_shadow.py 仍可手动跑, 恢复需拍板
+    # ???????? (2026-09-04 ????): (r5?r5_prev) top10 ?? ? 2026-09-05 ??
+    # ?? ("A1???????"): ??, _a1_momentum_shadow.py ?????, ?????
     # steps.append("a1_push")
-    # 概率头密度版影子单 (2026-09-06 用户拍板替换口径, 原 09-05 版=TOP10榜+额1亿):
-    # 每板 prob 前20带 ∧ 带内密度 occ5≥3 ∧ 回撤闸+派发闸, 免额无信念 — 线名/文件/
-    # 死区线名不变; 125d: main 5.5只/日 54.7%/+7.82pp, dual 6.0只/日 47.7%/+7.62pp。
-    # 曾评估单独开 band20 第四线, 判冗余不开 (band20⊇密度线宇宙); 非关键步骤,
-    # 当日 candidates 缺失 fail-safe 跳过
+    # ????????? (2026-09-06 ????????, ? 09-05 ?=TOP10?+?1?):
+    # ?? prob ?20? ? ???? occ5?3 ? ???+???, ????? ? ??/??/
+    # ??????; 125d: main 5.5?/? 54.7%/+7.82pp, dual 6.0?/? 47.7%/+7.62pp?
+    # ?????? band20 ???, ????? (band20??????); ?????,
+    # ?? candidates ?? fail-safe ??
     steps.append("prob10dens_push")
-    # SLOW BULL 长持影子单 (2026-09-07 用户命名+拍板): band[90,99.5)×grind8×回撤+wr5闸
-    # ×宽度>MA60×trail8/40日, 格内mom(60,90]区×低波半格 (极致确定性);
-    # 只落盘 shadow 目录不推送同花顺; 非关键 (失败不拦链, 次日重出)
+    # SLOW BULL ????? (2026-09-07 ????+??): band[90,99.5)?grind8???+wr5?
+    # ???>MA60?trail8/40?, ??mom(60,90]?????? (?????);
+    # ??? shadow ????????; ??? (?????, ????)
     steps.append("slowbull_shadow")
-    # 隔板口袋单 (2026-09-04 用户拍板): 首板后 d3~7 缩量守板 + 安全闸, bias60 top15
-    # 推同花顺 — 2026-09-05 用户停推 ("THS成绩不如生产就不用了"): 同窗 125d 对比
-    # gappocket 20.8%/+0.47pp/大亏6.2% 全面落后生产 32.8~33.6%/+3.17~3.76pp;
-    # 恢复需重回"不输生产"且用户拍板 (_gap_pocket_shadow.py 仍可手动跑)
+    # ????? (2026-09-04 ????): ??? d3~7 ???? + ???, bias60 top15
+    # ???? ? 2026-09-05 ???? ("THS??????????"): ?? 125d ??
+    # gappocket 20.8%/+0.47pp/??6.2% ?????? 32.8~33.6%/+3.17~3.76pp;
+    # ?????"????"????? (_gap_pocket_shadow.py ?????)
     # steps.append("gappocket_push")
-    # 放量下跌自选股守卫 (2026-09-03): 当日放量下跌标记 (日频 OHLCV/动量/量能) →
-    # 自选股剔除 + 当日删除文档; UI 删除待 Del 键流程探针验证后经 --apply 启用, 非关键步骤
+    # ????????? (2026-09-03): ???????? (?? OHLCV/??/??) ?
+    # ????? + ??????; UI ??? Del ????????? --apply ??, ?????
     steps.append("ths_flush_guard")
-    # 终版清单 (2026-09-06 用户): 全闸 (死区停推/派发/flush 守卫) 之后产出的
-    # 单文件 Excel, module/win_rate/status/reason 列 — 非关键步骤, 三源均缺失才退出
+    # ???? (2026-09-06 ??): ?? (????/??/flush ??) ?????
+    # ??? Excel, module/win_rate/status/reason ? ? ?????, ????????
     steps.append("final_stocklist")
-    steps.append("drift")  # 幅度漂移监控 (读历史 candidates, 非关键步骤)
-    steps.append(
-        "drift_parallel"
-    )  # parallel dual 漂移监控 (读历史短名单+检查点, 非关键步骤)
-    steps.append(
-        "shadow_xmodule"
-    )  # 跨模块影子排名 (读两侧已交付清单纯记录, 非关键步骤, 2026-08-26)
+    # ??????? (2026-09-08 ?? "combined sheet daily"): ?? xlsx
+    # (????? + ????) ? ?????, LEGACY/PARALLEL ?????
+    steps.append("stocklist_combined")
+    steps.append("drift")  # ?????? (??? candidates, ?????)
+    steps.append("drift_parallel")  # parallel dual ???? (??????+???, ?????)
+    steps.append("shadow_xmodule")  # ??????? (???????????, ?????, 2026-08-26)
     return steps
 
 
@@ -367,9 +374,9 @@ def _log_fh(tag: str):
     )
 
 
-# 0xC000013A STATUS_CONTROL_C_EXIT — 控制台 Ctrl+C / 进程组被杀. 此类中断 ≠ 普通
-# 步骤失败: 必须立即终止整条链, 不得继续启动下一个重活步骤 (08-21 事故: cyq 被
-# Ctrl+C 杀后仍启动 6h retrain; 监督方也靠终态 state 文件判定停止, 否则永远等待).
+# 0xC000013A STATUS_CONTROL_C_EXIT ? ??? Ctrl+C / ?????. ???? ? ??
+# ????: ?????????, ????????????? (08-21 ??: cyq ?
+# Ctrl+C ????? 6h retrain; ??????? state ??????, ??????).
 _INTERRUPT_RC = 3221225786
 
 
@@ -378,10 +385,10 @@ def _state_path(tag: str) -> str:
 
 
 def _write_state(tag: str, status: str, **extra) -> None:
-    """写运行状态文件 — 监督方 (babysitter) 的终态判据.
+    """??????? ? ??? (babysitter) ?????.
 
-    status: running → 启动; ok/failed/interrupted → 终态 (监督方见此即退出,
-    不再无限等待耗 token). 同一 tag 重跑时覆盖 (该 tag 当前运行的真实状态).
+    status: running ? ??; ok/failed/interrupted ? ?? (????????,
+    ??????? token). ?? tag ????? (? tag ?????????).
     """
     os.makedirs(LOG_DIR, exist_ok=True)
     payload = {"tag": tag, "status": status, "ts": time.time(), **extra}
@@ -390,17 +397,17 @@ def _write_state(tag: str, status: str, **extra) -> None:
 
 
 def _is_interrupt_rc(rc: int) -> bool:
-    """0xC013A STATUS_CONTROL_C_EXIT — 控制台中断/进程组被杀, 须终止整条链."""
+    """0xC013A STATUS_CONTROL_C_EXIT ? ?????/?????, ??????."""
     return rc == _INTERRUPT_RC
 
 
 def _exit_status(failures: list[str]) -> str:
-    """失败步骤列表 → 终态 status."""
+    """?????? ? ?? status."""
     return "ok" if not failures else "failed"
 
 
-# ── 启动守卫 (2026-09-01): 手动重训/预测与晚上链并发 → 页交换卡死 (08-17) /
-#    OOM 整链被杀 (08-24). 三闸 + 活进程冲突守候循环, 判定逻辑见 scripts/_run_guard.py ──
+# ?? ???? (2026-09-01): ????/???????? ? ????? (08-17) /
+#    OOM ???? (08-24). ?? + ?????????, ????? scripts/_run_guard.py ??
 
 
 def _read_state(tag: str) -> dict | None:
@@ -412,14 +419,69 @@ def _read_state(tag: str) -> dict | None:
 
 
 def _today_list_delivered(tag: str) -> bool:
-    """今日 legacy 清单是否已交付 (任一板块) — 守卫"预测已实现"闸."""
+    """?? legacy ??????? (????) ? ??"?????"?."""
     return bool(
         glob.glob(os.path.join(str(STOCK_LIST_DIR), f"legacy_stocklist_{tag}__*.csv"))
     )
 
 
+# ????? (2026-09-08 ??? "PIPELINE WILL PRODUCE FOUR MODULE RESULT DAILY"):
+# ??? legacy ??????? ? ??????? ? prob10dens/slowbull/combined
+# ???????, ???????/SLOW_BULL ? (09-08 ??)????????
+# ????, ??????????? (???/?????, ? fail-safe ??)?
+_MAKEUP_STEPS = ["prob10dens_push", "slowbull_shadow", "stocklist_combined"]
+
+
+def _combined_delivered(tag: str) -> bool:
+    """??????????? (? __v2 ?????) ? ?????????."""
+    return bool(
+        glob.glob(os.path.join(str(STOCK_LIST_DIR), f"stocklist_combined_{tag}*.xlsx"))
+    )
+
+
+def _run_makeup_if_incomplete(tag: str) -> int | None:
+    """?? skip ??????: ????? ? ??????; ?? ? None (????).
+
+    ???"?????????????"??????; ??????????,
+    ?????? (???????), ??? SIGINT ?? (??????).
+    """
+    if _combined_delivered(tag):
+        return None
+    msg = (
+        f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S} makeup] {tag} ?????? "
+        f"(?????????) ? ?????? {_MAKEUP_STEPS}"
+    )
+    print(msg, flush=True)
+    _write_state(tag, "running", reason="makeup")
+    failures: list[str] = []
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    with _log_fh(tag) as fh:
+        print(msg, file=fh, flush=True)
+        for step in _MAKEUP_STEPS:
+            argv = [PY, "-u"] + [a.replace("{tag}", tag) for a in _STEPS[step]]
+            ts = f"[{_dt.datetime.now():%H:%M:%S} start] {step}: {' '.join(argv)}"
+            print(ts, flush=True)
+            print(ts, file=fh, flush=True)
+            t0 = time.time()
+            rc, timed_out = _run_step_with_watchdog(
+                argv, fh, env, _STEP_TIMEOUT_S[step]
+            )
+            if timed_out:
+                rc = 124
+            done = (
+                f"[{_dt.datetime.now():%H:%M:%S} {'ok' if rc == 0 else 'FAIL'}] "
+                f"{step} rc={rc} ({time.time() - t0:.0f}s)"
+            )
+            print(done, flush=True)
+            print(done, file=fh, flush=True)
+            if rc != 0:
+                failures.append(step)
+    _write_state(tag, _exit_status(failures), reason="makeup", failed_steps=failures)
+    return 1 if failures else 0
+
+
 def _guard_log(tag: str, msg: str) -> None:
-    """守卫日志同时进 stdout 与当日链日志 — 计划任务的 stdout 无人看见, 文件才是真相."""
+    """??????? stdout ?????? ? ????? stdout ????, ??????."""
     print(msg, flush=True)
     os.makedirs(LOG_DIR, exist_ok=True)
     with open(
@@ -433,7 +495,7 @@ def _startup_guard_conflicts() -> list[dict]:
 
 
 def _run_startup_guard(tag: str) -> str:
-    """启动三闸. 返回 "go" 放行 / "skip" 放弃 / "wait" 进入守候循环."""
+    """????. ?? "go" ?? / "skip" ?? / "wait" ??????."""
     conflicts = _startup_guard_conflicts()
     verdict = skip_reason(
         conflicts,
@@ -445,13 +507,13 @@ def _run_startup_guard(tag: str) -> str:
     code, detail = verdict
     ts = f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S} guard]"
     if code == "live_process":
-        for c in conflicts:  # 全量列出留证, 便于排查是谁挡的
+        for c in conflicts:  # ??????, ????????
             _guard_log(
-                tag, f"{ts} 冲突进程: {c['sentinel']} (PID {c['pid']}) {c['cmdline']}"
+                tag, f"{ts} ????: {c['sentinel']} (PID {c['pid']}) {c['cmdline']}"
             )
-        _guard_log(tag, f"{ts} 守卫拦截 ({code}): {detail} → 进入守候循环, 每 2h 复查")
+        _guard_log(tag, f"{ts} ???? ({code}): {detail} ? ??????, ? 2h ??")
         return "wait"
-    _guard_log(tag, f"{ts} 守卫跳过 ({code}): {detail}")
+    _guard_log(tag, f"{ts} ???? ({code}): {detail}")
     return "skip"
 
 
@@ -461,103 +523,107 @@ def _wait_for_clearance(
     tick_s: int = _GUARD_TICK_S,
     max_ticks: int = _GUARD_MAX_TICKS,
 ) -> bool:
-    """守候循环 (活进程冲突专属): 每 2h 复查 — 今日清单已出 → 不必启动 (False);
-    冲突清空且清单仍缺 → 启动 (True); 超过 max_ticks 轮仍冲突 → 放弃 (False).
+    """???? (???????): ? 2h ?? ? ?????? ? ???? (False);
+    ????????? ? ?? (True); ?? max_ticks ???? ? ?? (False).
     """
     for i in range(1, max_ticks + 1):
         try:
             time.sleep(tick_s)
         except KeyboardInterrupt:
-            _guard_log(tag, "[guard] 守候中被 Ctrl+C 中断, 放弃")
+            _guard_log(tag, "[guard] ???? Ctrl+C ??, ??")
             return False
         ts = f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S} guard]"
         if _today_list_delivered(tag):
-            _guard_log(tag, f"{ts} 第{i}次复查: 今日清单已出, 守候结束不启动")
+            _guard_log(tag, f"{ts} ?{i}???: ??????, ???????")
             return False
         conflicts = _startup_guard_conflicts()
         if not conflicts:
-            _guard_log(tag, f"{ts} 第{i}次复查: 冲突清空且当日清单仍缺 → 启动链")
+            _guard_log(tag, f"{ts} ?{i}???: ??????????? ? ???")
             return True
         c0 = conflicts[0]
-        more = f" 等 {len(conflicts)} 个" if len(conflicts) > 1 else ""
+        more = f" ? {len(conflicts)} ?" if len(conflicts) > 1 else ""
         _guard_log(
             tag,
-            f"{ts} 第{i}次复查: 仍冲突 ({c0['sentinel']} PID {c0['pid']}{more}) → 继续守候",
+            f"{ts} ?{i}???: ??? ({c0['sentinel']} PID {c0['pid']}{more}) ? ????",
         )
     _guard_log(
         tag,
-        f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S} guard] 守候 {max_ticks} 轮仍冲突 → "
-        f"放弃, 今日不启动 (冲突清空后可手动触发或用 --force)",
+        f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S} guard] ?? {max_ticks} ???? ? "
+        f"??, ????? (???????????? --force)",
     )
     return False
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="四模块每日自动化")
-    ap.add_argument("--dry-run", action="store_true", help="只打印计划不执行")
+    ap = argparse.ArgumentParser(description="????????")
+    ap.add_argument("--dry-run", action="store_true", help="????????")
+    ap.add_argument("--skip-checkpoints", action="store_true", help="?????????")
+    ap.add_argument("--skip-retrain", action="store_true", help="?? legacy ????")
     ap.add_argument(
-        "--skip-checkpoints", action="store_true", help="跳过并行检查点刷新"
+        "--force-retrain", action="store_true", help="?? legacy ???? (?????)"
     )
-    ap.add_argument("--skip-retrain", action="store_true", help="跳过 legacy 周频重训")
-    ap.add_argument(
-        "--force-retrain", action="store_true", help="强制 legacy 周频重训 (不限于周五)"
-    )
-    ap.add_argument("--skip-parallel", action="store_true", help="跳过并行系统重生成")
-    ap.add_argument("--tag", default=None, help="清单交易日 YYYYMMDD (默认今天)")
+    ap.add_argument("--skip-parallel", action="store_true", help="?????????")
+    ap.add_argument("--tag", default=None, help="????? YYYYMMDD (????)")
     ap.add_argument(
         "--force",
         action="store_true",
-        help="绕过启动守卫 (并发进程/今日链已 ok/今日清单已交付三闸)",
+        help="?????? (????/???? ok/?????????)",
     )
     args = ap.parse_args()
 
     today = _dt.date.today()
     tag = args.tag or today.strftime("%Y%m%d")
 
-    # 守候/链运行期间机器不睡眠 (08-27 事故), 守卫守候循环同样要覆盖
+    # ??/?????????? (08-27 ??), ???????????
     _prevent_sleep()
 
-    # 启动守卫 (2026-09-01) — dry-run 只看计划不执行, 不受守卫约束
+    # ???? (2026-09-01) ? dry-run ???????, ??????
     if not args.dry_run and not args.force:
         verdict = _run_startup_guard(tag)
         if verdict == "skip":
+            rc_makeup = _run_makeup_if_incomplete(tag)
+            if rc_makeup is not None:
+                return rc_makeup
             _write_state(tag, "skipped", reason="guard")
             return 0
         if verdict == "wait":
-            # 立刻写 skipped 终态: babysitter 见此即退出, 不陪守候循环空等
+            # ??? skipped ??: babysitter ?????, ????????
             _write_state(tag, "skipped", reason="guard_live_process_waiting")
             if not _wait_for_clearance(tag):
+                rc_makeup = _run_makeup_if_incomplete(tag)
+                if rc_makeup is not None:
+                    return rc_makeup
                 return 0
-            # 复查通过 → 走正常链, state 下方覆盖为 running
+            # ???? ? ????, state ????? running
 
-    # 运行状态文件 (监督方终态判据): 启动先写 running, 结束/中断覆盖为终态.
+    # ?????? (???????): ???? running, ??/???????.
     _write_state(tag, "running")
     current_step: str | None = None
 
-    # Ctrl+C/控制台关闭 → 立即写 interrupted 终态并退出, 不留"无标记裸退出"
-    # (那会让监督方永远等不到终态而一直耗 token).
+    # Ctrl+C/????? ? ??? interrupted ?????, ??"??????"
+    # (????????????????? token).
     def _on_sigint(_signum, _frame):
         _write_state(tag, "interrupted", step=current_step)
         raise SystemExit(130)
 
     signal.signal(signal.SIGINT, _on_sigint)
 
-    # 数据新鲜度护栏 (2026-09-02 加固): V3 面板停更 → 拒绝空跑数小时重活.
-    # 修复旧闸三漏洞 (此前: except 静默放行 / 自然日阈值 / 阈值硬编码):
-    #   1. 读失败 → [FATAL] + state=panel_unreadable, 不再静默放行
-    #      (读失败 ≠ 数据新鲜, except-pass 正是旧闸漏洞);
-    #   2. 判定改调 freshness_guard.panel_stale_gate: 有交易日历时按交易日 lag 判
-    #      — 旧 "(today-pmax).days > 3" 自然日口径下, 周一跑链面板停周五 = 自然日 3
-    #      恰好放行, 周二才拦 (滞后 1-2 天); 交易日口径周一 lag=1 正常放行;
-    #   3. 阈值常量集中在 freshness_guard (_PANEL_MAX_LAG_TRADING/_NATURAL).
+    # ??????? (2026-09-02 ??): V3 ???? ? ?????????.
+    # ??????? (??: except ???? / ????? / ?????):
+    #   1. ??? ? [FATAL] + state=panel_unreadable, ??????
+    #      (??? ? ????, except-pass ??????);
+    #   2. ???? freshness_guard.panel_stale_gate: ?????????? lag ?
+    #      ? ? "(today-pmax).days > 3" ??????, ????????? = ??? 3
+    #      ????, ???? (?? 1-2 ?); ??????? lag=1 ????;
+    #   3. ??????? freshness_guard (_PANEL_MAX_LAG_TRADING/_NATURAL).
     from app.pipeline1 import freshness_guard
-    from config.settings import PANEL_V3_PATH  # 惰性导入, 保持 --dry-run 轻量
+    from config.settings import PANEL_V3_PATH  # ????, ?? --dry-run ??
 
     pmax = freshness_guard.file_max_date(str(PANEL_V3_PATH), "date")
     if pmax is None:
         print(
-            "[FATAL] V3 面板不可读 (file_max_date=None), 数据可能损坏或被外部移动. "
-            "终止, 不跑重活. (先查 D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet)",
+            "[FATAL] V3 ????? (file_max_date=None), ????????????. "
+            "??, ????. (?? D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet)",
             flush=True,
         )
         _write_state(tag, "failed", reason="panel_unreadable")
@@ -567,7 +633,7 @@ def main() -> int:
     )
     if not allow:
         print(
-            f"[FATAL] {reason}, 数据可能未 fetch. 终止, 不跑重活. (先跑 _daily_fetch.py)",
+            f"[FATAL] {reason}, ????? fetch. ??, ????. (?? _daily_fetch.py)",
             flush=True,
         )
         _write_state(tag, "failed", reason="panel_stale")
@@ -581,8 +647,8 @@ def main() -> int:
         force_retrain=args.force_retrain,
     )
     print(
-        f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S}] 四模块自动化 tag={tag} "
-        f"星期={today.strftime('%A')} 步骤={steps}",
+        f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S}] ?????? tag={tag} "
+        f"??={today.strftime('%A')} ??={steps}",
         flush=True,
     )
     if args.dry_run:
@@ -597,16 +663,16 @@ def main() -> int:
     failures: list[str] = []
     with _log_fh(tag) as fh:
         print(
-            f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S}] 四模块自动化 tag={tag} "
-            f"星期={today.strftime('%A')} 步骤={steps}",
+            f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S}] ?????? tag={tag} "
+            f"??={today.strftime('%A')} ??={steps}",
             file=fh,
             flush=True,
         )
         for step in steps:
             dep = _DEPENDS.get(step)
             if dep in failures:
-                print(f"[skip] {step} (前置 {dep} 失败, 无新鲜输入)", flush=True)
-                print(f"[skip] {step} (前置 {dep} 失败)", file=fh, flush=True)
+                print(f"[skip] {step} (?? {dep} ??, ?????)", flush=True)
+                print(f"[skip] {step} (?? {dep} ??)", file=fh, flush=True)
                 continue
             current_step = step
             argv = [PY, "-u"] + [a.replace("{tag}", tag) for a in _STEPS[step]]
@@ -620,15 +686,15 @@ def main() -> int:
                 flush=True,
             )
             t0 = time.time()
-            # 统一子进程 stdout 为 UTF-8: 有的脚本 reconfigure 有的不, 混合编码会污染日志文件.
+            # ????? stdout ? UTF-8: ???? reconfigure ???, ???????????.
             env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
             rc, timed_out = _run_step_with_watchdog(
                 argv, fh, env, _STEP_TIMEOUT_S[step]
             )
             if timed_out:
                 msg = (
-                    f"[{_dt.datetime.now():%H:%M:%S} TIMEOUT] {step} 超过 "
-                    f"{_STEP_TIMEOUT_S[step]}s 未完成, 已终止 (疑似卡死, 见上日志)"
+                    f"[{_dt.datetime.now():%H:%M:%S} TIMEOUT] {step} ?? "
+                    f"{_STEP_TIMEOUT_S[step]}s ???, ??? (????, ????)"
                 )
                 print(msg, flush=True)
                 print(msg, file=fh, flush=True)
@@ -636,8 +702,8 @@ def main() -> int:
             dt = time.time() - t0
             if _is_interrupt_rc(rc):
                 msg = (
-                    f"[{_dt.datetime.now():%H:%M:%S} interrupt] {step} 被控制台中断 "
-                    f"(rc={rc}=0xC013A), 终止整条链, 不启动后续重活步骤"
+                    f"[{_dt.datetime.now():%H:%M:%S} interrupt] {step} ?????? "
+                    f"(rc={rc}=0xC013A), ?????, ?????????"
                 )
                 print(msg, flush=True)
                 print(msg, file=fh, flush=True)
@@ -658,23 +724,23 @@ def main() -> int:
                 failures.append(step)
 
         print(
-            f"[done] 失败步骤={failures or '无'} → "
-            f"{'非零退出 (看板当日清单缺失)' if failures else '全部成功'}",
+            f"[done] ????={failures or '?'} ? "
+            f"{'???? (????????)' if failures else '????'}",
             flush=True,
         )
         print(
-            f"[done] 失败步骤={failures or '无'} → "
-            f"{'非零退出 (看板当日清单缺失)' if failures else '全部成功'}",
+            f"[done] ????={failures or '?'} ? "
+            f"{'???? (????????)' if failures else '????'}",
             file=fh,
             flush=True,
         )
         if failures:
             print(
-                f"[hint] 看日志 logs/daily_automation_{tag}.log 定位失败步骤; "
-                f"重跑可用 --skip-* 跳过已成功步骤",
+                f"[hint] ??? logs/daily_automation_{tag}.log ??????; "
+                f"???? --skip-* ???????",
                 flush=True,
             )
-        # 终态 state 文件 — 监督方 (babysitter) 见 ok/failed 即退出
+        # ?? state ?? ? ??? (babysitter) ? ok/failed ???
         _write_state(tag, _exit_status(failures), failed_steps=failures)
     return 1 if failures else 0
 

@@ -70,6 +70,7 @@ from config.settings import (
     SHORTLIST_SCORE,
     STOCK_LIST_DIR,
 )
+from scripts._amt_agree_gate import apply_amt_agree_kill
 from scripts._pctfmt import PCT_COLS_PARALLEL, fmt_pct_columns
 from scripts._prob10_density_shadow import apply_chip_gate
 from scripts._stall_marker import stall_marker
@@ -1603,6 +1604,12 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
+    # 数据前置 (2026-09-08): 手工跑要有链的全部功能 — cyq 回填保派发闸看到
+    # 当日获利盘 (链内自动跳过)
+    if "--no-preflight" not in sys.argv:
+        from scripts._manual_preflight import run_preflight
+
+        run_preflight("_shortlist_t5_t10")
     args = sys.argv[1:]
     trade_date = args[0] if (args and len(args[0]) == 8 and args[0].isdigit()) else None
     run_dir_arg: str | None = None
@@ -1710,6 +1717,11 @@ def main() -> int:
         .sort_values(["rank", "_co"], na_position="last")
         .drop(columns=["_co"])
         .reset_index(drop=True)
+    )
+    # 量价删查线 (2026-09-08 用户拍板): 清单内 amt_agree10 最高档真删不补齐 —
+    # 落盘前切, CSV/THS 推送/终版 Excel 全部继承
+    res = apply_amt_agree_kill(
+        res, sel_date, _module_suffix(module).lstrip("_"), line="parallel"
     )
     summary = build_summary(res, stats, sel_date)
     summary = summary[:1] + fmt_regime(gate) + summary[1:]

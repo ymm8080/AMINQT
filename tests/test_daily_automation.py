@@ -46,6 +46,7 @@ _TAIL = [
     "slowbull_shadow",
     "ths_flush_guard",
     "final_stocklist",
+    "stocklist_combined",
     "drift",
     "drift_parallel",
     "shadow_xmodule",
@@ -336,6 +337,74 @@ def test_today_list_delivered_matches_tag_glob(tmp_path, monkeypatch):
     assert ma._today_list_delivered("20260901") is True
     # 其它日期不受影响
     assert ma._today_list_delivered("20260902") is False
+
+
+# ?? ????? (2026-09-08 ??? "PIPELINE WILL PRODUCE FOUR MODULE RESULT
+#    DAILY"): ????????? ? ??/SLOW_BULL/????????? ? ??
+#    ????; ???????, ?????????? ??????????????????????????
+
+
+def test_combined_delivered_matches_tag_glob_with_suffixes(tmp_path, monkeypatch):
+    monkeypatch.setattr(ma, "STOCK_LIST_DIR", tmp_path)
+    assert ma._combined_delivered("20260908") is False
+    (tmp_path / "stocklist_combined_20260908.xlsx").write_text("x", encoding="utf-8")
+    assert ma._combined_delivered("20260908") is True
+    # WORM ???? (__v2) ??????
+    (tmp_path / "stocklist_combined_20260908.xlsx").unlink()
+    (tmp_path / "stocklist_combined_20260908__v2.xlsx").write_text(
+        "x", encoding="utf-8"
+    )
+    assert ma._combined_delivered("20260908") is True
+    assert ma._combined_delivered("20260909") is False
+
+
+def test_makeup_runs_only_tail_steps_when_combined_missing(tmp_path, monkeypatch):
+    """????? ? ??? ??/SLOW_BULL/?? ????? (??????),
+    {tag} ????????, ?? state=ok (????)?"""
+    monkeypatch.setattr(ma, "STOCK_LIST_DIR", tmp_path)
+    monkeypatch.setattr(ma, "LOG_DIR", str(tmp_path))
+    ran: list[list[str]] = []
+    monkeypatch.setattr(
+        ma,
+        "_run_step_with_watchdog",
+        lambda argv, fh, env, timeout_s: (ran.append(argv), (0, False))[1],
+    )
+    assert ma._run_makeup_if_incomplete("20260908") == 0
+    assert [a[2] for a in ran] == [
+        "scripts/_prob10_density_shadow.py",
+        "_slowbull_list.py",
+        "scripts/_stocklist_combined.py",
+    ]
+    assert ran[0][-1] == "20260908" and ran[2][-1] == "20260908"
+    state = json.loads(
+        (tmp_path / "daily_automation_20260908.state.json").read_text("utf-8")
+    )
+    assert state["status"] == "ok" and state["reason"] == "makeup"
+
+
+def test_makeup_noop_when_combined_exists(tmp_path, monkeypatch):
+    """?????? (????? __v2) ? ??????, ????? skip ???"""
+    monkeypatch.setattr(ma, "STOCK_LIST_DIR", tmp_path)
+    (tmp_path / "stocklist_combined_20260908__v2.xlsx").write_text(
+        "x", encoding="utf-8"
+    )
+    called: list = []
+    monkeypatch.setattr(ma, "_run_step_with_watchdog", lambda *a: called.append(a))
+    assert ma._run_makeup_if_incomplete("20260908") is None
+    assert called == []
+
+
+def test_makeup_failure_recorded_not_raised(tmp_path, monkeypatch):
+    """?????????: state=failed + rc=1 (???????)?"""
+    monkeypatch.setattr(ma, "STOCK_LIST_DIR", tmp_path)
+    monkeypatch.setattr(ma, "LOG_DIR", str(tmp_path))
+    monkeypatch.setattr(ma, "_run_step_with_watchdog", lambda *a: (1, False))
+    assert ma._run_makeup_if_incomplete("20260908") == 1
+    state = json.loads(
+        (tmp_path / "daily_automation_20260908.state.json").read_text("utf-8")
+    )
+    assert state["status"] == "failed"
+    assert state["failed_steps"] == ma._MAKEUP_STEPS
 
 
 def test_startup_guard_verdicts(monkeypatch):

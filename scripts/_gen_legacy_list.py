@@ -65,7 +65,15 @@ def main():
         )
         return 3
 
-    trade_date = sys.argv[1] if len(sys.argv) > 1 else "20260804"
+    # 数据前置 (2026-09-08): 手工重出清单要有链的全部功能 — cyq 回填保派发闸看
+    # 到当日获利盘 (链内自动跳过 — 链已跑过)
+    if "--no-preflight" not in sys.argv:
+        from scripts._manual_preflight import run_preflight
+
+        run_preflight("_gen_legacy_list")
+
+    argv = [a for a in sys.argv[1:] if a != "--no-preflight"]
+    trade_date = argv[0] if argv else time.strftime("%Y%m%d")
     t0 = time.time()
     panel = pd.read_parquet(str(PANEL_V3_PATH))
     print(

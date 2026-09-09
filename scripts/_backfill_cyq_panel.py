@@ -43,6 +43,15 @@ PREFIX_DAYS = 130  # > RANGE_DAYS=120, 保证补算日窗口完整
 NEEDED = ["symbol", "date", "open", "high", "low", "close", "turnover_rate"]
 
 
+def cache_is_current(cache_max, cache_syms: set, panel_max, panel_syms: set) -> bool:
+    """cache 已覆盖面板最新交易日且无缺股 → True.
+
+    手工 preflight (scripts/_manual_preflight.py) 恒调本脚本 — 已新鲜时秒退,
+    不做 130 日全量重算.
+    """
+    return cache_max >= panel_max and not (panel_syms - cache_syms)
+
+
 def _compute_chunks_resilient(chunk_frames: list) -> list:
     """并行算各 chunk; worker 被硬杀 (BrokenProcessPool) 时降级重试.
 
@@ -94,6 +103,19 @@ def main() -> int:
     cache_max = cache["date"].max()
     cache_syms = set(cache["symbol"].unique())
     print(f"[0] cache: {len(cache)} 行 {len(cache_syms)} 只, 截至 {cache_max.date()}")
+
+    # 新鲜度快查 (2026-09-08): 已含 V3 最新交易日且无缺股 → 秒退 (preflight 恒调)
+    panel_max = pd.to_datetime(
+        pd.read_parquet(str(PANEL_V3_PATH), columns=["date"])["date"]
+    ).max()
+    panel_syms = set(
+        pd.read_parquet(str(PANEL_V3_PATH), columns=["symbol"])["symbol"].unique()
+    )
+    if cache_is_current(cache_max, cache_syms, panel_max, panel_syms):
+        print(
+            f"[skip] cyq_panel 已含 {panel_max.date()} 全部 {len(panel_syms)} 股, 无需回填"
+        )
+        return 0
 
     # 计算 cutoff: cache_max 前 PREFIX_DAYS 个交易日
     dates = pd.to_datetime(

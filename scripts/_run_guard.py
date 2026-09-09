@@ -23,6 +23,7 @@ import os
 HEAVY_SENTINELS = (
     "_retrain_legacy_full.py",
     "_gen_legacy_list.py",
+    "train_predict_main.py",
     "_refresh_parallel_checkpoints.py",
     "app.pipeline_parallel.runner",
     "_train_legacy_prob_head.py",
@@ -45,6 +46,12 @@ HEAVY_SENTINELS = (
     "_diag_parallel_parity_audit.py",
     "_diag_reg_decay_ab.py",
     "_diag_widepool_valve_replay.py",
+    "_slowbull_overheat_exit_0908.py",
+    "_factor_infotest_0908.py",
+    "_newfactor_phase1_0908.py",
+    "_newfactor_phase1v2_mkt_0908.py",
+    "_revival_ab_legacy.py",
+    "_revival_ab_parallel.py",
 )
 ORCHESTRATOR_SENTINEL = "run_daily_automation.py"
 # 链级守卫额外把另一条链实例视为冲突; 脚本级不含 (见模块 docstring).
