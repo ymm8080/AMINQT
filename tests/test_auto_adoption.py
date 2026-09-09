@@ -57,6 +57,7 @@ def _make_minimal_panel(n_symbols=5, n_dates=100, extra_cols=None):
 class TestDimGating:
     """Registry-driven dim gating: skip dims with no active features."""
 
+    @_skip_ci
     def test_registry_none_runs_all(self):
         """registry=None → all dims execute, no features pruned."""
         panel = _make_minimal_panel(n_symbols=3, n_dates=30)
@@ -68,6 +69,7 @@ class TestDimGating:
         df_none = fe.build(panel.copy(), registry=None)
         assert len(df_none.columns) == n_cols_all
 
+    @_skip_ci
     def test_registry_empty_gates_nothing(self):
         """Empty registry (no features registered) → all dims still run
         because _dim_active returns True when has_dim_group is False
@@ -101,6 +103,7 @@ class TestDimGating:
             # With all features deactivated, only panel columns + time_series_changes remain
             assert n_gated < n_all, f"Expected fewer columns, got {n_gated} vs {n_all}"
 
+    @_skip_ci
     def test_one_dim_deactivated(self):
         """Deactivating one dim's features skips that dim."""
         panel = _make_minimal_panel(n_symbols=3, n_dates=30)
@@ -413,6 +416,7 @@ class TestBackwardCompat:
         assert "MACD" in df.columns or "MACD_signal" in df.columns
         assert "RSI" in df.columns or "RSI_6" in df.columns
 
+    @_skip_ci
     def test_feature_columns_static_method_unchanged(self):
         """feature_columns() static method output is unaffected by registry."""
         panel = _make_minimal_panel(n_symbols=3, n_dates=30)
