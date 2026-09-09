@@ -191,7 +191,7 @@ def main():
         log(f"run-guard 冲突, 等10min重试 ({attempt + 1}/60): {sens}")
         time.sleep(600)
         attempt += 1
-        conflicts = find_conflicts()
+        conflicts = find_conflicts(sentinels=PRED)
     if conflicts:
         log("CYQ_RECOMPUTE_DONE status=aborted reason=guard_conflict")
         return 2
