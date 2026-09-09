@@ -124,9 +124,7 @@ def persist_gate_state(
     """当日 spread 逐股 + margin 决策落盘 (WORM 逐日文件; 当日重跑覆盖当日文件)."""
     d = gate_margin_dir(cfg)
     d.mkdir(parents=True, exist_ok=True)
-    hist_dates = history_dates(
-        board, today, int(cfg["spread_lookback_days"]), cfg
-    )
+    hist_dates = history_dates(board, today, int(cfg["spread_lookback_days"]), cfg)
     try:
         sp = pd.DataFrame(
             {

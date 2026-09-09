@@ -37,9 +37,7 @@ def test_cache_is_current_false_when_symbol_missing():
     )
 
 
-def test_run_preflight_runs_three_steps_and_survives_failure(
-    monkeypatch, tmp_path
-):
+def test_run_preflight_runs_three_steps_and_survives_failure(monkeypatch, tmp_path):
     recorded: list[tuple[str, int]] = []
 
     def fake_watchdog(argv, fh, env, timeout_s):
@@ -71,8 +69,6 @@ def test_run_preflight_runs_three_steps_and_survives_failure(
 def test_run_preflight_skips_under_chain(monkeypatch):
     monkeypatch.setattr(mp, "_under_chain", lambda: True)
     called = []
-    monkeypatch.setattr(
-        mp, "_run_step_with_watchdog", lambda *a, **k: called.append(a)
-    )
+    monkeypatch.setattr(mp, "_run_step_with_watchdog", lambda *a, **k: called.append(a))
     assert mp.run_preflight("test") is None
     assert called == []
