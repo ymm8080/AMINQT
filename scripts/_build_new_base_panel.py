@@ -187,10 +187,12 @@ def main() -> None:
         df[f"{c}_hfq"] = df[c] * factor
     df["adj_factor"] = factor
 
-    # volume = amount/close (股, 新股票统一 gu 惯例 — 无面板历史可判 hand)
-    valid = df["amount"].notna() & df["close"].notna() & (df["close"] > 0)
+    # volume (2026-09-09 修复): Tushare vol (手) ×100 = 股 (新股票统一 gu 惯例 —
+    # 无面板历史可判 hand). 旧法 amount/close 是 vwap 近似 (±4% 噪声) 且使
+    # amount/(vol×close) 恒等 1 → vwap 族特征不可算.
+    valid = df["vol"].notna() & (df["vol"] > 0)
     df["volume"] = np.nan
-    df.loc[valid, "volume"] = df.loc[valid, "amount"] / df.loc[valid, "close"]
+    df.loc[valid, "volume"] = df.loc[valid, "vol"] * 100.0
 
     # ── 3. daily_basic ──
     b_cols = [

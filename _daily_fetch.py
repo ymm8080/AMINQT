@@ -476,14 +476,18 @@ hist = hist[hist["date"] <= pd.Timestamp(TRADE_DATE)]
 hist = hist.sort_values(["symbol", "date"])
 print(f"    History: {len(hist):,} rows for {hist.symbol.nunique()} symbols")
 
-# volume 派生 (2026-08-04 修复): amount 已 ×1000 为元, amount/close = 股 (gu 惯例);
-# 手惯例 symbol (历史 amount/(vol×close) 中位>2) 需 ÷100 → 手, 与自身历史一致.
+# volume (2026-09-09 修复): 直接用 Tushare vol (手) — gu 惯例 ×100=股, 手惯例原值.
+# 旧法 volume=amount/close 是 vwap 近似 (每行 ±4% 噪声), 且使 amount/(vol×close)
+# 恒等 1/100 → vwap 族特征全窗不可算, 2024 起面板 volume 均为此重构值.
 # 惯例取 TRADE_DATE 之前最近 60 交易日判定: 个别 symbol 历史惯例会漂移
 # (例 001298: 3.1→2.1→1.45→1.0), 全史中位会误判, 近期窗口才能对齐当下惯例.
-if "volume" in df.columns and all(c in df.columns for c in ["amount", "close"]):
-    valid = df["amount"].notna() & df["close"].notna() & (df["close"] > 0)
+if "volume" in df.columns:
+    if "vol" not in df.columns:
+        print("FATAL: Tushare daily 缺 vol 列, 拒绝用 amount/close 重构 volume")
+        sys.exit(1)
+    valid = df["vol"].notna() & (df["vol"] > 0)
     df.loc[~valid, "volume"] = np.nan
-    df.loc[valid, "volume"] = df.loc[valid, "amount"] / df.loc[valid, "close"]
+    df.loc[valid, "volume"] = df.loc[valid, "vol"] * 100.0
     if "close" in hist.columns and "volume" in hist.columns and len(hist):
         prev = hist[hist["date"] < pd.Timestamp(TRADE_DATE)]
         recent_days = sorted(prev["date"].unique())[-60:]
@@ -492,7 +496,7 @@ if "volume" in df.columns and all(c in df.columns for c in ["amount", "close"]):
         r = r.dropna(subset=["_r"])
         hand = set(r.groupby("symbol")["_r"].median()[lambda s: s > 2].index)
         is_hand = df["symbol"].isin(hand) & valid
-        df.loc[is_hand, "volume"] = df.loc[is_hand, "volume"] / 100
+        df.loc[is_hand, "volume"] = df.loc[is_hand, "vol"]
 
 close_today = df.set_index("symbol")["close_hfq"]
 
