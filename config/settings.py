@@ -540,6 +540,29 @@ FADE_GATE = {
     "flag_enable": True,  # 事件型 (昨日冲高回落) 提示列开关
 }
 
+# ── 闸准入协议 (2026-09-09 用户: "先判断是否应该用闸, 闸是否有正效果再行动,
+#    这个应该写进PIPELINE并验证") ──
+# 起因: FADE_GATE 删线凭 21 清单日回放均值直接接线, 当日复核发现半窗翻转
+# (前半 +2.2pp / 后半 −0.3pp) + 大赢家误杀富集 (ret5≥10% 落删除区 18.2% vs
+# 基础删除率 8.9% ≈ 2.0x) + 实盘误杀涨停股 → 同日撤线 (528c50bd)。
+# 教训: 均值级回放证据不够。此后任何删票/拦截闸:
+#   ① 接线前必须 scripts/_gate_admission.py --gate <name> 判 PASS;
+#   ② 已上线闸每周由 run_weekly_selfevolve 自动复审 (告警式, 不自动改闸)。
+# 判据 (交付清单回放, 删除区 vs 留存, ret5 = T+1收→T+5收):
+#   - 样本充分: 清单日 ≥ min_days 且删除区成熟票 ≥ min_killed, 否则 INSUFFICIENT
+#   - 全窗效果: 留存−删除 ret5 差 ≥ min_edge_pp
+#   - 半窗稳定: 按清单日对半, 前后半各自差 > half_tol_pp
+#   - 赢家误杀: P(删除|ret5≥winner_ret5) / P(删除) ≤ max_leak_enrich
+#     (比例口径与删除带宽无关, 1=随机基线)
+GATE_ADMISSION = {
+    "min_days": 40,  # ≥40 清单日 (既有复验标准, fade 21 日接线即违此线)
+    "min_killed": 20,  # 删除区成熟票下限 (ret5 可结算)
+    "min_edge_pp": 0.5,  # 全窗留存−删除差下限 (百分点)
+    "half_tol_pp": 0.0,  # 双半窗各自差须严格 > 此值 (百分点)
+    "winner_ret5": 0.10,  # 大赢家定义 (ret5 ≥ 10%)
+    "max_leak_enrich": 1.5,  # 大赢家落删除区比例/总删除率 上限
+}
+
 # ── parallel 概率展示层再校准 (2026-08-29 用户批准) ──
 # 08-29 实测交付概率高估 (pred_prob_10d 均值 55.8% vs MFE>6% 实得 27.5%, +28pp;
 # tmp_t/_rebase_diag_0829.py). 展示层每板块每视界乘一个收敛因子 = 实得命中率/预测
