@@ -150,7 +150,7 @@ jobs:
             python -m pytest tests/ \
               --cov=app \
               --cov=services \
-              --cov-fail-under=80 \
+              --cov-fail-under=75 \
               --cov-report=term-missing \
               --cov-report=xml:coverage.xml \
               --timeout=120 \

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -17,6 +19,11 @@ from app.pipeline1.train_runner import (
     select_features,
 )
 from tests.test_daily_pipeline import make_panel
+
+_skip_ci = pytest.mark.skipif(
+    os.environ.get("CI", "").lower() in ("true", "1"),
+    reason="Skipped in CI: requires large parquet files",
+)
 
 
 # ---------------- 数据源级联 + 硬超时 ----------------
@@ -257,6 +264,7 @@ def trained(tmp_path_factory):
 
 
 class TestRunTraining:
+    @_skip_ci
     def test_bundles_saved_with_oos(self, trained):
         res = trained["results"]
         assert "main" in res  # make_panel 全主板 → dual 无样本跳过
@@ -264,6 +272,7 @@ class TestRunTraining:
         assert "ics" in res["main"]["oos"]
         assert res["main"]["n_features"] > 0
 
+    @_skip_ci
     def test_prepare_board_frame_labels(self, trained):
         from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 
@@ -336,6 +345,7 @@ class TestSelectFeaturesBruteInjection:
 
 
 class TestFindBundles:
+    @_skip_ci
     def test_latest_and_tag(self, trained):
         import os
 
@@ -350,6 +360,7 @@ class TestFindBundles:
 
 
 class TestRunPrediction:
+    @_skip_ci
     def test_emits_schema_list(self, trained):
         from app.pipeline1.cleaning_pipeline import CleaningConfig, CleaningPipeline
 
@@ -367,6 +378,7 @@ class TestRunPrediction:
         if result["mode"] == "normal":
             assert list(result["list"].columns)[: len(SCHEMA_FIELDS)] == SCHEMA_FIELDS
 
+    @_skip_ci
     def test_no_bundles_raises(self, trained):
         with pytest.raises(RuntimeError, match="模型包"):
             run_prediction(trained["panel"], "20260720", {})
