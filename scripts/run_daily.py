@@ -30,6 +30,11 @@ BUNDLES = {
 
 
 def main(trade_date: str | None = None) -> dict:
+    # 数据前置 (2026-09-08): 手工跑要有链的全部功能 (链内自动跳过)
+    if "--no-preflight" not in sys.argv:
+        from scripts._manual_preflight import run_preflight
+
+        run_preflight("run_daily")
     trade_date = trade_date or time.strftime("%Y%m%d")
     pipe = DailySelectionPipeline(supply=DataSupplyChain(), bundle_paths=BUNDLES)
     result = pipe.run(trade_date)  # panel=None → 生产装配路径

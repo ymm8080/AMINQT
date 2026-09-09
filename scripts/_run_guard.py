@@ -23,6 +23,7 @@ import os
 HEAVY_SENTINELS = (
     "_retrain_legacy_full.py",
     "_gen_legacy_list.py",
+    "train_predict_main.py",
     "_refresh_parallel_checkpoints.py",
     "app.pipeline_parallel.runner",
     "_train_legacy_prob_head.py",

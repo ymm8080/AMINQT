@@ -1604,6 +1604,12 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
+    # 数据前置 (2026-09-08): 手工跑要有链的全部功能 — cyq 回填保派发闸看到
+    # 当日获利盘 (链内自动跳过)
+    if "--no-preflight" not in sys.argv:
+        from scripts._manual_preflight import run_preflight
+
+        run_preflight("_shortlist_t5_t10")
     args = sys.argv[1:]
     trade_date = args[0] if (args and len(args[0]) == 8 and args[0].isdigit()) else None
     run_dir_arg: str | None = None
