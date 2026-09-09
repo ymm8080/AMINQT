@@ -736,9 +736,7 @@ def test_dead_session_restart_retries_once(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         _subp, "run", lambda *a, **k: killed.__setitem__("n", killed["n"] + 1)
     )
-    monkeypatch.setattr(
-        ui, "ensure_watchlist_window", lambda: types.SimpleNamespace()
-    )
+    monkeypatch.setattr(ui, "ensure_watchlist_window", lambda: types.SimpleNamespace())
     import time as _time
 
     monkeypatch.setattr(_time, "sleep", lambda s: None)
@@ -806,14 +804,14 @@ def test_main_rests_between_orders(monkeypatch, tmp_path):
     monkeypatch.setattr(
         mod,
         "ths_txt_path",
-        lambda date, label, list_dir=None: tmp_path / f"ths_watchlist_{date}__{label}.txt",
+        lambda date, label, list_dir=None: (
+            tmp_path / f"ths_watchlist_{date}__{label}.txt"
+        ),
     )
     monkeypatch.setattr(mod, "THS_HEXIN_PATH", tmp_path / "hexin.exe")
     (tmp_path / "hexin.exe").write_text("x")
     monkeypatch.setattr(sys, "argv", ["prog", "20260901"])
-    monkeypatch.setattr(
-        mod._deadzone_guard, "is_alarm", lambda line, date: (False, "")
-    )
+    monkeypatch.setattr(mod._deadzone_guard, "is_alarm", lambda line, date: (False, ""))
     monkeypatch.setattr(
         mod,
         "push_via_ths",

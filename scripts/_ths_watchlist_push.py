@@ -404,13 +404,19 @@ def read_push_results(date: str | None = None, list_dir=STOCK_LIST_DIR):
     # 用户: STOCK LIST 只留清单/终表), 看板卡/终表重建仍要能读到
     dirs = [Path(list_dir), Path(list_dir) / THS_PUSH_ARCHIVE]
     if date is None:
-        hits = [h for d in dirs for h in _glob.glob(str(d / "ths_push_result_*__*.csv"))]
+        hits = [
+            h for d in dirs for h in _glob.glob(str(d / "ths_push_result_*__*.csv"))
+        ]
         if not hits:
             return pd.DataFrame(columns=cols)
         newest = max(os.path.basename(h) for h in hits)
         date = newest[len("ths_push_result_") :].split("__", 1)[0]
     pats = sorted(
-        [h for d in dirs for h in _glob.glob(str(d / f"ths_push_result_{date}__*.csv"))],
+        [
+            h
+            for d in dirs
+            for h in _glob.glob(str(d / f"ths_push_result_{date}__*.csv"))
+        ],
         key=os.path.getmtime,
     )
     # 结果单名 = ths_push_result_{date}__{tag}; tag 两代:
@@ -785,8 +791,7 @@ def _rest_between_orders(next_module: str) -> None:
     from scripts import _ths_ui as ui
 
     print(
-        f"[ths] 单间休 {INTER_ORDER_REST_S}s "
-        f"(上一单合成输入衰减, 下一单 {next_module})"
+        f"[ths] 单间休 {INTER_ORDER_REST_S}s (上一单合成输入衰减, 下一单 {next_module})"
     )
     time.sleep(INTER_ORDER_REST_S)
     deadline = time.monotonic() + INTER_ORDER_IDLE_WAIT_S

@@ -130,7 +130,6 @@ def archive_push_artifacts(date: str, list_dir=STOCK_LIST_DIR) -> int:
     return moved
 
 
-
 def write(df: pd.DataFrame, date: str, list_dir=STOCK_LIST_DIR) -> Path:
     hh = datetime.datetime.now().strftime("%H")
     fp = Path(list_dir) / f"stocklist_final_{date}__{hh}.xlsx"

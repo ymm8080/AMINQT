@@ -43,9 +43,7 @@ PREFIX_DAYS = 130  # > RANGE_DAYS=120, 保证补算日窗口完整
 NEEDED = ["symbol", "date", "open", "high", "low", "close", "turnover_rate"]
 
 
-def cache_is_current(
-    cache_max, cache_syms: set, panel_max, panel_syms: set
-) -> bool:
+def cache_is_current(cache_max, cache_syms: set, panel_max, panel_syms: set) -> bool:
     """cache 已覆盖面板最新交易日且无缺股 → True.
 
     手工 preflight (scripts/_manual_preflight.py) 恒调本脚本 — 已新鲜时秒退,
@@ -114,7 +112,9 @@ def main() -> int:
         pd.read_parquet(str(PANEL_V3_PATH), columns=["symbol"])["symbol"].unique()
     )
     if cache_is_current(cache_max, cache_syms, panel_max, panel_syms):
-        print(f"[skip] cyq_panel 已含 {panel_max.date()} 全部 {len(panel_syms)} 股, 无需回填")
+        print(
+            f"[skip] cyq_panel 已含 {panel_max.date()} 全部 {len(panel_syms)} 股, 无需回填"
+        )
         return 0
 
     # 计算 cutoff: cache_max 前 PREFIX_DAYS 个交易日

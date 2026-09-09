@@ -99,9 +99,7 @@ def test_alarm_indices_adaptive_exit_thr(monkeypatch):
 def test_mkt_wr_small_panel_returns_empty(tmp_path, monkeypatch):
     # <200 只股 → 市场基线不可算 → {} → 调用方回退固定解除线 (fail-open)
     dates = pd.bdate_range("2026-01-05", periods=15)
-    close = pd.DataFrame(
-        {"symbol": "600000", "date": dates, "close_hfq": [10.0] * 15}
-    )
+    close = pd.DataFrame({"symbol": "600000", "date": dates, "close_hfq": [10.0] * 15})
     monkeypatch.setattr("config.settings.PANEL_V3_PATH", _panel_fp(tmp_path, close))
     assert dz._mkt_wr_by_date(dates[0], dates[-1]) == {}
 
@@ -111,9 +109,7 @@ def test_mkt_wr_causal_window_no_lookahead(tmp_path, monkeypatch):
     # 后 10 日平; t 日只看 [t−10, t−4] 已结算窗
     dates = pd.bdate_range("2026-01-05", periods=25)
     px = [10.0 * 1.02**k for k in range(15)] + [10.0 * 1.02**14] * 10
-    close = pd.DataFrame(
-        {"symbol": "600000", "date": dates, "close_hfq": px}
-    )
+    close = pd.DataFrame({"symbol": "600000", "date": dates, "close_hfq": px})
     monkeypatch.setattr("config.settings.PANEL_V3_PATH", _panel_fp(tmp_path, close))
     monkeypatch.setattr(dz, "DZ_MKT_MIN_SYMBOLS", 1)
     mwr = dz._mkt_wr_by_date(dates[0], dates[-1])
