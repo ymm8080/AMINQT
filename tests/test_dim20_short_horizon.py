@@ -69,3 +69,64 @@ def test_close_vs_low_ma5_warmup_nan_then_filled():
         assert g["close_vs_low_ma5"].iloc[:4].isna().all()  # 4 日预热
         assert g["close_vs_low_ma5"].iloc[4:].notna().all()
         assert np.isinf(g["close_vs_low_ma5"]).sum() == 0
+
+
+def _board_panel(n_days: int = 25) -> pd.DataFrame:
+    """确定性断板面板: day1 涨停(+10%), day2 断板, day2 起线性漂移.
+
+    closes: [10.0, 11.0, 10.5+0.02*i ...]; vols: [5e6, 8e6, 4e6, 3e6, 2e6, 2e6...]
+    (无 turnover_rate 列 → vol_decay 走 volume 回退路径)
+    """
+    dates = pd.bdate_range("2026-08-01", periods=n_days)
+    closes = [10.0, 11.0] + [10.5 + 0.02 * i for i in range(n_days - 2)]
+    vols = [5e6, 8e6, 4e6, 3e6] + [2e6] * (n_days - 4)
+    rows = []
+    for sym in ("000001.SZ",):
+        for i, d in enumerate(dates):
+            c = closes[i]
+            rows.append({
+                "symbol": sym, "date": d, "open": c * 0.995, "high": c * 1.01,
+                "low": c * 0.99, "close": c, "volume": float(vols[i]),
+            })
+    return pd.DataFrame(rows)
+
+
+def test_days_since_board_break_epoch_and_cap():
+    df = _board_panel()
+    out = FeatureEngineV35().dim20_short_horizon(df.copy())
+    got = out["days_since_board_break"]
+    # day0(无断板史)/day1(涨停日) = NaN; day2=断板日(0), day3=1, ...
+    assert got.iloc[:2].isna().all()
+    assert got.iloc[2] == 0
+    assert got.iloc[3] == 1
+    # 距断板 >20 日归 NaN (day2+21=day23 起)
+    assert got.iloc[2:23].notna().all()
+    assert got.iloc[23:].isna().all()
+    assert got.iloc[22] == 20  # 封顶值
+
+
+def test_vol_decay_ratio_epoch_mean_denominator():
+    df = _board_panel()
+    out = FeatureEngineV35().dim20_short_horizon(df.copy())
+    got = out["vol_decay_ratio"]
+    # pos>=2 才有值: day2(pos0)/day3(pos1) = NaN
+    assert got.iloc[:4].isna().all()
+    # day4: to=2e6, denom=mean(v[day2],v[day3])=mean(4e6,3e6)=3.5e6
+    assert np.isclose(got.iloc[4], 2e6 / 3.5e6, atol=1e-12)
+    # day5: denom=mean(4,3,2)e6=3e6
+    assert np.isclose(got.iloc[5], 2e6 / 3e6, atol=1e-12)
+    # 口径=不限期 expanding (与实验主脚本一致, IC -0.059 t=-11.5 残差 -0.030 t=-6.9):
+    # 断板 epoch 内一直有值, 不随 days_since 的 20 日封顶失效
+    assert got.iloc[6:23].notna().all()
+
+
+def test_quiet_drift_linear_slope():
+    df = _board_panel(n_days=25)
+    out = FeatureEngineV35().dim20_short_horizon(df.copy())
+    got = out["quiet_drift"]
+    # 前 19 日预热 NaN
+    assert got.iloc[:19].isna().all()
+    # 窗口全落在线性段(day2 起 slope=0.02/日)的最早位置是 day21
+    for k in (21, 22, 23, 24):
+        exp = 0.02 / df["close"].iloc[k] * 100
+        assert np.isclose(got.iloc[k], exp, atol=1e-9), k

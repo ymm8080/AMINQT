@@ -2074,6 +2074,41 @@ class FeatureEngineV35:
             g["close_vs_low_ma5"] = cl_low.rolling(5, min_periods=5).mean() * 100
             g["close_vs_low_ma20"] = cl_low.rolling(20, min_periods=20).mean() * 100
 
+            # --- L1 断板后状态序列 (09-09 状态机实验, 400股×500日 seed42) ---
+            # days_since_board_break: 距最近断板(昨涨停今未涨停)天数, >20 归 NaN
+            #   IC +0.084 t=11.1 双半窗稳, 残差(中性化 mom5+close_vs_low_ma5)
+            #   IC +0.033 t=4.9 = 真增量 (近期断板=毒药, 印证断板即死)
+            if "is_limit_up" in g.columns:
+                lim = g["is_limit_up"].astype(bool)
+            else:  # dim07 未执行时的近似口径 (30/68 前缀 19.8%, 其余 9.8%)
+                sym0 = str(g["symbol"].iloc[0]) if "symbol" in g.columns else ""
+                thr0 = 0.198 if sym0.startswith(("30", "68")) else 0.098
+                lim = ((c / pc - 1) >= thr0).fillna(False)
+            brk = lim.shift(1, fill_value=False) & ~lim  # 断板日: 昨涨停今日未涨停
+            grp = brk.cumsum()
+            pos = brk.groupby(grp).cumcount()  # 距断板天数, 断板日=0
+            dsb = pos.where(grp > 0)
+            g["days_since_board_break"] = dsb.where(dsb <= 20)
+            # vol_decay_ratio: 当日换手/(断板日..昨日 expanding 均值), 断板 epoch 内
+            #   不限期 (主脚本口径 IC -0.059 t=-11.5 残差 -0.030 t=-6.9;
+            #   ≤20日封顶变体 IC -0.066 t=-9.5 残差 -0.030 t=-4.2, t 更弱故未采用)
+            #   (断板后换手抬升=派发反指)
+            _to = v
+            if "turnover_rate" in g.columns and g["turnover_rate"].notna().mean() > 0.95:
+                _to = g["turnover_rate"]
+            exp_mean = _to.groupby(grp).cumsum() / (pos + 1)
+            g["vol_decay_ratio"] = (_to / exp_mean.shift(1)).replace(
+                [np.inf, -np.inf], np.nan
+            ).where(dsb.notna() & (pos >= 2))
+            # quiet_drift: 20 日复权价对时间 OLS 斜率/价格×100, 负向入模
+            #   IC -0.064 t=-8.7 残差 -0.022 t=-3.6 (带内光滑反指)
+            hfq = g.get("close_hfq", c)
+            tser = pd.Series(np.arange(len(g)), index=g.index, dtype=float)
+            slope = hfq.rolling(20, min_periods=20).cov(tser) / tser.rolling(
+                20, min_periods=20
+            ).var()
+            g["quiet_drift"] = (slope / hfq).replace([np.inf, -np.inf], np.nan) * 100
+
             # 量价背离: 涨但缩量 / 跌但放量 (1d 反转信号)
             ret = c / pc - 1
             vol_chg = v / v.shift(1).replace(0, np.nan)
