@@ -52,6 +52,7 @@ HEAVY_SENTINELS = (
     "_newfactor_phase1v2_mkt_0908.py",
     "_revival_ab_legacy.py",
     "_revival_ab_parallel.py",
+    "_pin_ab_cl_0909.py",
 )
 ORCHESTRATOR_SENTINEL = "run_daily_automation.py"
 # 链级守卫额外把另一条链实例视为冲突; 脚本级不含 (见模块 docstring).
