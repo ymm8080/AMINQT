@@ -583,8 +583,6 @@ class TestFeatureSelectorSelection:
 
     def test_force_include_appends_to_pin(self):
         """冻结 pin + force_include: 在面板列与可生成 brute 名追加, 未知名剔除."""
-        import json as _json
-        import os as _os
 
         df = _make_small_df(n_symbols=5, n_dates=40)
         df["ths_bull"] = np.random.randint(0, 2, len(df)).astype("float64")
@@ -754,12 +752,16 @@ class TestFeatureSelectorSelection:
                 json.dump({"features": pin_feats}, fh)
             sel = FeatureSelector(registry_dir=tmp)
             features = sel.select(df, "dual")
-            # 返回 = pin 特征 (且都存在于面板), 不是消融结果
-            assert set(features) == set(pin_feats)
+            # 返回 = pin 特征 + force_include 当日入池族 (dim36 bkd_/up_, ths 名不在帧被剔),
+            # 不是消融结果. [2026-09-10] DEFAULT_CONFIG 增 dim36 族后同步更新断言.
+            assert set(pin_feats) <= set(features)
+            extra = set(features) - set(pin_feats)
+            dim36_family = set(FeatureSelector.DEFAULT_CONFIG["dual"]["gate_d"]["force_include"])
+            assert extra and extra <= dim36_family
             snap = self._latest_snapshot(tmp, "dual")
             m = snap["metrics"]
             assert m["pinned"] is True
-            assert m["n_returned"] == len(pin_feats)
+            assert m["n_returned"] == len(features)
             # 诊断消融仍在跑 (metrics 有消融记录), 但结果不进训练
             assert m["n_candidates"] > 0 and "ablation_log" in m
             assert len(m["gain_rank"]) == m["n_candidates"]
