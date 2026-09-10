@@ -120,9 +120,15 @@ def main():
         _kill_tree(a.pid)
         return 1
 
-    log("Phase1: B=parallel 支启动 (refresh→parallel→prob_head→deliver_parallel)")
-    argv_b = [PY, "-X", "utf8", B_WORKER]
-    b, b_fh = popen_logged(argv_b, "logs/nightp_branchb_0909.log")
+    # NIGHTP_SKIP_B=1: parallel 支本夜已单独先行跑完 (deliver_parallel 已交付), 不重跑
+    if os.environ.get("NIGHTP_SKIP_B", "0") == "1":
+        log("Phase1: B 跳过 (NIGHTP_SKIP_B=1, parallel 支已先行单独完成)")
+        b = None
+        b_fh = None
+    else:
+        log("Phase1: B=parallel 支启动 (refresh→parallel→prob_head→deliver_parallel)")
+        argv_b = [PY, "-X", "utf8", B_WORKER]
+        b, b_fh = popen_logged(argv_b, "logs/nightp_branchb_0909.log")
 
     # RAM 监督: 双活且 available<1GB×3 → 杀 B 保 A (用户条款: 过载转串行)
     strikes = 0
@@ -130,7 +136,7 @@ def main():
     b_killed = False
     while True:
         a_alive = a.poll() is None
-        b_alive = b.poll() is None
+        b_alive = b is not None and b.poll() is None
         if not a_alive and not b_alive:
             break
         avail = psutil.virtual_memory().available / 2**30
@@ -156,16 +162,20 @@ def main():
     a_fh.close()
 
     # B 终态/重跑 (被杀或并发期失败 → A 后串行重跑一次)
-    b_rc = b.returncode
-    if b_killed or b_rc != 0:
-        why = "被杀(过载)" if b_killed else f"rc={b_rc}"
-        log(f"B 支并发期未完成 ({why}) → A 后串行重跑")
-        b_fh.close()
-        r = subprocess.run([PY, "-X", "utf8", B_WORKER], cwd=".")
-        b_rc = r.returncode
+    if b is None:
+        b_rc = 0
+        log("B 支跳过 (NIGHTP_SKIP_B), 视为完成")
     else:
-        b_fh.close()
-        log("B 支并发完成")
+        b_rc = b.returncode
+        if b_killed or b_rc != 0:
+            why = "被杀(过载)" if b_killed else f"rc={b_rc}"
+            log(f"B 支并发期未完成 ({why}) → A 后串行重跑")
+            b_fh.close()
+            r = subprocess.run([PY, "-X", "utf8", B_WORKER], cwd=".")
+            b_rc = r.returncode
+        else:
+            b_fh.close()
+            log("B 支并发完成")
     if b_rc != 0:
         failed.append("parallel_branch")
 
