@@ -1548,21 +1548,25 @@ def write_xlsx(
         ws.append([line])
     ws.column_dimensions["A"].width = 110
 
-    data_cols = [
-        "date",
-        "board",
-        "cut",
-        "rank",
-        "symbol",
-        "module",
-        "co_occur",
-        "score",
-        "过门",
-        "stall_flag",
-    ] + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")] + [
-        "chip_wr5",
-        "chip_flag",
-    ]
+    data_cols = (
+        [
+            "date",
+            "board",
+            "cut",
+            "rank",
+            "symbol",
+            "module",
+            "co_occur",
+            "score",
+            "过门",
+            "stall_flag",
+        ]
+        + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
+        + [
+            "chip_wr5",
+            "chip_flag",
+        ]
+    )
     pct_cols = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")] + [
         "chip_wr5"
     ]
