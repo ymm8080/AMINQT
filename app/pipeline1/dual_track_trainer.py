@@ -209,6 +209,55 @@ def risk_filter(df: pd.DataFrame) -> pd.DataFrame:
     return df[mask]
 
 
+# ── [2026-09-10] 10d 头秩目标变换 (LEGACY_10D_RANK_TARGET, 688228 案) ──
+def rank_target_enabled(board: str) -> bool:
+    """10d_reg 是否用截面百分位目标训练 (配置门控, 生产默认关)."""
+    from config.settings import LEGACY_10D_RANK_TARGET
+
+    return bool(LEGACY_10D_RANK_TARGET.get("enable")) and board in set(
+        LEGACY_10D_RANK_TARGET.get("boards", ("main", "dual"))
+    )
+
+
+def rank_map_apply(rmap: dict | None, p) -> np.ndarray:
+    """预测百分位 → 收益语义 (桶中位映射线性插值; rmap 为空原样返回).
+
+    映射已单调化 (fit_rank_map 内 accumulate) → pct 排名 = 映射后收益排名,
+    排名键/闸语义在两个空间一致; 只有承诺水平被压回训练段可兑现水平.
+    """
+    arr = np.asarray(p, dtype=np.float64)
+    if not rmap:
+        return arr
+    gp = np.asarray(rmap["grid_pct"], dtype=np.float64)
+    gr = np.asarray(rmap["grid_ret"], dtype=np.float64)
+    return np.interp(np.clip(arr, 0.0, 1.0), gp, gr)
+
+
+def fit_rank_map(
+    model, train_seg: pd.DataFrame, label: str, feature_cols: list[str], bins: int = 20
+) -> dict:
+    """训练段桶中位映射: 预测百分位分桶 → 桶内 label 中位数 (单调化).
+
+    train_seg 须与训练同帧过滤 (dropna(label) + risk_filter 由调用方完成 —
+    与 _train_one 的拟合行同分布). 空桶相邻插值; np.maximum.accumulate 保证
+    非降 (桶中位数天然近单调, accumulate 只除噪声翻转).
+    """
+    cols = [c for c in feature_cols if c in train_seg.columns]
+    p = np.clip(
+        np.asarray(model.predict(np.nan_to_num(train_seg[cols].values, nan=0.0))),
+        0.0,
+        1.0,
+    )
+    b = np.minimum((p * bins).astype(int), bins - 1)
+    med = pd.Series(train_seg[label].values).groupby(b).median()
+    med = med.reindex(range(bins)).interpolate().bfill().ffill()
+    return {
+        "grid_pct": ((np.arange(bins) + 0.5) / bins).tolist(),
+        "grid_ret": np.maximum.accumulate(med.to_numpy(dtype=np.float64)).tolist(),
+        "bins": int(bins),
+    }
+
+
 def top10_verdict(delta: pd.Series, tol_half: float) -> dict:
     """TOP10 第二票判据: 新−旧 日均净差 全窗 ≥ 0 且前后半 ≥ tol_half (非劣容差)."""
     half = len(delta) // 2
@@ -368,6 +417,14 @@ class DualTrackTrainer:
         es = segs["es"].dropna(subset=[label])
         train = risk_filter(train)
         es = risk_filter(es)
+        # [2026-09-10] 秩目标 (LEGACY_10D_RANK_TARGET): 幅度 Huber 目标让树追逐
+        # 彩票尾 — pred10>+6% 桶承诺 +11.2% 实得 −0.2% (T+1→T+10 匹配视界审计,
+        # 688228 案). 改训 per-date 截面百分位 (0..1); 预测输出为秩, 由
+        # train_window 落盘的 10d_rank_map (训练段桶中位) 映射回收益语义.
+        use_rank = kind == "10d_reg" and rank_target_enabled(board)
+        if use_rank:
+            train["_rank_target"] = train.groupby("date")[label].rank(pct=True)
+            es["_rank_target"] = es.groupby("date")[label].rank(pct=True)
 
         # ── 内存: float32 下转 (混合 dtype 的 DataFrame.values 会 upcast 到 float64) ──
         cols_present = [c for c in feature_cols if c in train.columns]
@@ -378,9 +435,9 @@ class DualTrackTrainer:
             es[cols_es_present] = es[cols_es_present].astype("float32", copy=False)
 
         X = np.nan_to_num(train[cols_present].values, nan=0.0)
-        y = train[label].values
+        y = train["_rank_target"].values if use_rank else train[label].values
         X_es = np.nan_to_num(es[cols_es_present].values, nan=0.0)
-        y_es = es[label].values
+        y_es = es["_rank_target"].values if use_rank else es[label].values
         # [2026-09-03] reg 回归根 (3d/5d/10d_reg) 用概率头同款 60 自然日指数衰减;
         # cls/pain 等其余头维持原 time_weights. 权重与 fit 行严格对齐: train 已经
         # 过 dropna(label)+risk_filter, X/y/w 同帧同行序.
@@ -554,6 +611,30 @@ class DualTrackTrainer:
             # 每完成一个模型种类立即写入 checkpoint
             if checkpoint is not None:
                 self._save_checkpoint(out, checkpoint)
+
+        # ── [2026-09-10] 秩目标校准映射: 10d_reg 输出为百分位, 经训练段桶中位
+        # 映射回收益语义 (checkpoint 不持久化该映射 → 断点续训恢复后此处确定性
+        # 重拟合; 拟合行 = 训练同帧 dropna+risk_filter). fit_calibrator 的 10d
+        # 残差在收益语义空间计算依赖此映射, 必须先落 out.
+        if "10d_reg" in out["models"] and rank_target_enabled(board):
+            label10 = out["models"]["10d_reg"][1]
+            seg_train = risk_filter(segs["train"].dropna(subset=[label10]))
+            if len(seg_train):
+                from config.settings import LEGACY_10D_RANK_TARGET
+
+                out["10d_rank_map"] = fit_rank_map(
+                    out["models"]["10d_reg"][0],
+                    seg_train,
+                    label10,
+                    feature_cols,
+                    bins=int(LEGACY_10D_RANK_TARGET.get("bins", 20)),
+                )
+                logger.info(
+                    "[%s] 10d 秩目标映射: %d 桶, 顶桶中位 %+.3f",
+                    board,
+                    out["10d_rank_map"]["bins"],
+                    out["10d_rank_map"]["grid_ret"][-1],
+                )
 
         # ── 训练未完成的 extras ──
         self._train_extras(out, checkpoint=checkpoint)
@@ -804,6 +885,10 @@ class DualTrackTrainer:
             r = reg_model.predict(
                 np.nan_to_num(calib[trained["feature_cols"]].values, nan=0.0)
             )
+            # [2026-09-10] 秩目标头: 残差须在收益语义空间 (label − 映射(百分位)),
+            # 否则推理端 prob_up = P(ret>TH|pred) 的 pred 口径错位 (秩 vs 收益)
+            if kind_reg == "10d_reg":
+                r = rank_map_apply(trained.get("10d_rank_map"), r)
             e = (calib[reg_label].values - r).astype(np.float64)
             e = e[np.isfinite(e)]
             if len(e) >= 30:
@@ -1090,6 +1175,7 @@ class DualTrackTrainer:
             "quantile_models_5d",
             "pain_model",
             "rank_model",
+            "10d_rank_map",  # [2026-09-10] 秩目标校准映射 (推理端百分位→收益)
         ):
             if extra in trained:
                 bundle[extra] = trained[extra]

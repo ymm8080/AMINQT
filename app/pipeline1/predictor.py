@@ -21,7 +21,7 @@ import pandas as pd
 
 from app.core.factor_engine import safe_divide
 
-from .dual_track_trainer import DualTrackTrainer
+from .dual_track_trainer import DualTrackTrainer, rank_map_apply
 from .feature_selector import inject_missing_brute
 from .label_engine import CLS_THRESHOLD, LABEL_WEIGHTS
 
@@ -93,6 +93,14 @@ class V35Predictor:
         latest["pred_ret_10d"] = (
             models["10d_reg"][0].predict(X) if "10d_reg" in models else np.nan
         )
+        # [2026-09-10] 秩目标 bundle (LEGACY_10D_RANK_TARGET): 10d 头输出为截面
+        # 百分位, 经训练段桶中位映射回收益语义 — 须在 excess 加回 / prob 残差派生
+        # 之前 (二者都读 pred_ret_10d). 旧 bundle 无 10d_rank_map → no-op.
+        if "10d_rank_map" in bundle:
+            latest["pred_ret_10d"] = rank_map_apply(
+                bundle["10d_rank_map"],
+                latest["pred_ret_10d"].to_numpy(dtype=float),
+            )
         # [08-29] 超额标签 bundle: 回归头输出 = 板内超额口径, 加回训练时存的市场
         # 均值常数复原绝对口径 — 下游概率派生/闸/清单语义不变, 只有日内排名变化.
         # 必须在 _reg_resid_prob (读 pred_ret) 之前.

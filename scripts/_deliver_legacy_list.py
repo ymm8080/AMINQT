@@ -18,8 +18,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 import pandas as pd
 
-from config.settings import LEGACY_SELECTION, STOCK_LIST_DIR
+from config.settings import FADE_GATE, LEGACY_SELECTION, STOCK_LIST_DIR
 from scripts._amt_agree_gate import apply_amt_agree_kill
+from scripts._fade_gate import apply_fade_gate
 from scripts._pctfmt import PCT_COLS_LEGACY, fmt_pct_columns
 from scripts._prob10_density_shadow import apply_chip_gate
 from scripts._stall_marker import stall_marker
@@ -167,6 +168,20 @@ def write_md(
         # 参与度提示 (2026-08-19): 高基线日模型整体负期望 → 建议降参与
         if "advice" in df.columns and df["advice"].iloc[0]:
             fh.write(df["advice"].iloc[0] + "\n\n")
+        # 冲高回落提示 (2026-09-09): 昨日已冲高回落的票 — 易再回落, 勿追高
+        if "fade_flag" in df.columns and (df["fade_flag"] != "").any():
+            syms_f = df.loc[df["fade_flag"] != "", "symbol"].astype(str).tolist()
+            fh.write(
+                f"⚠ 昨日冲高回落 {len(syms_f)} 只 ({', '.join(syms_f)}): "
+                f"易再冲高回落, 勿追高\n\n"
+            )
+        # 筹码派发提示 (2026-09-09 用户: 派发不删, 清单标注): 获利盘5日回落
+        if "chip_flag" in df.columns and (df["chip_flag"] != "").any():
+            syms_c = df.loc[df["chip_flag"] != "", "symbol"].astype(str).tolist()
+            fh.write(
+                f"⚠ 筹码派发 {len(syms_c)} 只 ({', '.join(syms_c)}): "
+                f"获利盘5日回落 (chip_wr5<0), 慎追\n\n"
+            )
         # 被整体退回的板块: 仍出清单, 醒目标注未接受原因 (不静默跳过)
         for b, r in (rejected or {}).items():
             fh.write(f"⚠ {b} 未接受 (被退回): {r} — 当日未出股\n\n")
@@ -211,18 +226,18 @@ def main():
     df = pd.read_parquet(src)
     if "symbol" in df.columns:
         df["symbol"] = df["symbol"].astype(str)
-    # 筹码派发闸 (2026-09-05 三线统一): 获利盘5日回落 → 剔除, 不补齐
-    # 09-07: LEGACY_SELECTION mode="prob10_pull" 时摘除 — 该臂回放 wr5 被切票赢率
-    # 47% > 留守 42.8% (毁值); 密度/PARALLEL 两线 wr5 不动。
-    if not (
-        LEGACY_SELECTION.get("enable") and LEGACY_SELECTION.get("mode") == "prob10_pull"
-    ):
-        df = apply_chip_gate(df, pd.Timestamp(trade_date))
+    # 筹码派发标注 (2026-09-09 用户拍板 "派发不删, 清单标注"; 09-05~09-09 曾为
+    # 删除闸, 09-07 prob10_pull 臂曾摘除): 获利盘5日回落 → chip_flag=派发 列,
+    # 不删票 — 标注为信息列, 两种 LEGACY_SELECTION 模式都带
+    df = apply_chip_gate(df, pd.Timestamp(trade_date))
     # 滞涨标记 (2026-08-19 用户方案): 入选 + 近10日滞涨<2% + 近20日入选≥3 → 洗盘待爆发
     df = stall_marker(df, trade_date, "legacy_stocklist_")
     module = resolve_module(df, trade_date)
     # 量价删查线 (2026-09-08 用户拍板): 清单内 amt_agree10 最高档真删不补齐
     df = apply_amt_agree_kill(df, pd.Timestamp(trade_date), module, line="legacy")
+    # 冲高回落闸 (2026-09-09): 删线已撤 (kill_enable=False); fade_score/fade_risk
+    # = 预测体质分+人读档位 (用户: 要预测非记录昨日), fade_flag=昨日事件辅助
+    df = apply_fade_gate(df, pd.Timestamp(trade_date), module, line="legacy")
     os.makedirs(str(STOCK_LIST_DIR), exist_ok=True)
 
     # 被整体退回的板块 (有候选但最终清单 0 只): 仍出该板清单, 醒目标注未接受原因
@@ -285,6 +300,26 @@ def main():
         if n_stall:
             doc.add_paragraph(
                 f"⚠ 洗盘待爆发 {n_stall} 只 (入选+近10日滞涨<2%+近20日入选≥3, 见 stall_flag 列)",
+            )
+        n_fade = int((df["fade_flag"] != "").sum()) if "fade_flag" in df.columns else 0
+        if n_fade:
+            doc.add_paragraph(
+                f"⚠ 昨日冲高回落 {n_fade} 只 (见 fade_flag 列): 易再冲高回落, 勿追高",
+            )
+        n_chip = int((df["chip_flag"] != "").sum()) if "chip_flag" in df.columns else 0
+        if n_chip:
+            doc.add_paragraph(
+                f"⚠ 筹码派发 {n_chip} 只 (见 chip_flag/chip_wr5 列): "
+                "获利盘5日回落, 慎追",
+            )
+        n_risk = (
+            int((df["fade_risk"] == "高").sum()) if "fade_risk" in df.columns else 0
+        )
+        if n_risk:
+            doc.add_paragraph(
+                f"△ 冲高回落风险高 {n_risk} 只 (预测, fade_risk=高 / fade_score≥"
+                f"{FADE_GATE.get('risk_hi', 0.75)} 全市场分位): 该档日内冲高回落概率"
+                "≈1/3 (基线~23%), 追高谨慎",
             )
         for b, r in rejected.items():
             p = doc.add_paragraph()

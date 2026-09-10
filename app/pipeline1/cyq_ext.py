@@ -61,6 +61,8 @@ EXTENDED_OUTPUT_COLS = [
     "mass_below_0_9x",
     "resistance_dist",
     "support_dist",
+    "ovd_wdist",
+    "ovd_15p",
     "peak_roc_5d",
     "peak_roc_20d",
 ]
@@ -74,6 +76,8 @@ TARGET_COLS = [
     "chip_gini",
     "resistance_dist",
     "support_dist",
+    "ovd_wdist",
+    "ovd_15p",
     "peak_roc_5d",
     "peak_roc_20d",
 ]
@@ -101,7 +105,9 @@ def _compute_cyq_one_day(
     for k in kdata:
         o, c, h, l = k["open"], k["close"], k["high"], k["low"]  # noqa: E741
         avg = (o + c + h + l) / 4.0
-        turnover_rate = min(1.0, (k.get("hsl", k.get("turnover_rate", 0)) or 0) / 100.0)
+        # NaN 为真值, `or 0` 拦不住; min(1.0, nan)=1.0 会把缺换手当成全换手
+        _hsl = k.get("hsl", k.get("turnover_rate", 0)) or 0
+        turnover_rate = min(1.0, (_hsl if _hsl == _hsl else 0.0) / 100.0)
         hsl_val = turnover_rate
 
         H = math.floor((h - minprice) / accuracy)
@@ -240,6 +246,26 @@ def _compute_cyq_one_day(
     resistance_dist = _nearest_extremum(above=True)
     support_dist = _nearest_extremum(above=False)
 
+    # ---- ovd 上方套牢密度 (09-09 筹码缺口实验, tmp_chip/_full_true150.py 同口径) ----
+    # 逐档精确距离 d=(档价-收盘)/收盘; ovd_wdist=上方筹码的距离加权均值 (套牢越深越重),
+    # ovd_15p=距现价>=15% 以远筹码占总筹码比. 500股×500日 seed42 真分布复验:
+    # ovd_wdist IC +0.0845 t=23.2 残差(winner_ratio+cost_bias+mom5) +0.0074 t=19.2
+    # 双半窗同号; ovd_15p IC +0.0818 t=22.4 残差 +0.0070 t=18.9 (proxy 对照方向守住)
+    if total_chips > 0 and current_price > 0:
+        _wsum = _wmass = _far15 = 0.0
+        for i in range(factor):
+            _d = (prices[i] - current_price) / current_price
+            if _d > 0:
+                _wsum += xdata[i] * _d
+                _wmass += xdata[i]
+                if _d >= 0.15:
+                    _far15 += xdata[i]
+        ovd_wdist = _wsum / _wmass if _wmass > 0 else 0.0
+        ovd_15p = _far15 / total_chips
+    else:
+        ovd_wdist = 0.0
+        ovd_15p = 0.0
+
     pc60 = compute_percent_chips(0.6)
     pc80 = compute_percent_chips(0.8)
 
@@ -278,6 +304,8 @@ def _compute_cyq_one_day(
         "mass_below_0_9x": mass_below_0_9x,
         "resistance_dist": resistance_dist,
         "support_dist": support_dist,
+        "ovd_wdist": ovd_wdist,
+        "ovd_15p": ovd_15p,
     }
 
 

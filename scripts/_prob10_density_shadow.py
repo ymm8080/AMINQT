@@ -14,9 +14,10 @@
     +0.1~0.2只/日流量, 赢率代价 1~1.7pp); amt 列保留仅展示, 不作闸
   ⑤撞指数码 000xxx 不剔 (09-05 用户澄清 "不是删除股票号"), 推送端隔离指数行
     — 见 _ths_watchlist_push._build_chunks
-  ⑥筹码派发闸 (09-05 三线统一 "只要派发都删"): 获利盘5日回落 (wr5<0) → 剔除,
-    不补齐; cyq 数据缺/个股特征缺 → 不拦 (fail-open)。同闸接 LEGACY 交付
-    (_deliver_legacy_list) 与 PARALLEL 短名单 (_shortlist_t5_t10)。
+  ⑥筹码派发标注 (09-05 三线统一删 → 09-09 用户推翻改标注 "派发不删, 清单标注"):
+    获利盘5日回落 (wr5<0) → chip_flag=派发 列标注, 不删票; cyq 数据缺/个股特征缺
+    → 不标 (fail-open)。同标注接 LEGACY 交付 (_deliver_legacy_list) 与 PARALLEL
+    短名单 (_shortlist_t5_t10)。
   标签列 信念降 belief_down = 今日 prob − 3个上榜历日前 prob (非闸; 09-06 L4
   对照 = 半流量换 +1.6pp 判不接, 列保留供影子期攒证据)。
   双模型列 (2026-09-05 用户): legacy_prob/legacy_pred10 = legacy 概率头
@@ -79,6 +80,8 @@ _COLS = [
     "pull",
     "amt",
     "belief_down",
+    "chip_wr5",
+    "chip_flag",
 ]
 
 
@@ -153,42 +156,48 @@ def load_chip_features(day_ts: pd.Timestamp) -> pd.DataFrame | None:
 def apply_wr5_gate(
     df: pd.DataFrame, chip: pd.DataFrame | None
 ) -> tuple[pd.DataFrame, list[str]]:
-    """派发闸通用过滤 (2026-09-05 用户拍板三线统一 "只要派发都删"): wr5<0 → 剔除.
+    """派发标注 (2026-09-09 用户拍板 "派发不删, 清单标注"): wr5<0 → chip_flag=派发.
 
-    chip None/空 或 df 空 → 原样返回; 个股 wr5 NaN → 比较恒 False → 保留
-    (fail-open)。返回 (过滤后 df, 被剔 symbol 列表); 不补齐 — 生产 TOP10 回放
-    补齐被不补全面压制 (tmp_t/_top10_chipdir_replay_0905.py)。
+    09-05~09-09 曾为删除闸 (wr5<0 真删不补齐); 09-09 用户推翻 — 单日 wr5 噪声大,
+    删票丢强名, 改为清单标注让人裁。加列 chip_wr5 (获利盘5日变化, 数值) +
+    chip_flag ("派发"/""); 不删任何行。
+    chip None/空 或 df 空 → 原样返回 (fail-open); 个股 wr5 NaN → 不标。
+    返回 (标注后 df 副本, 被标 symbol 列表)。
     生产接线: 密度影子单 (density_picks) / LEGACY 交付 (_deliver_legacy_list) /
     PARALLEL 短名单 (_shortlist_t5_t10)。
     """
     if chip is None or not len(chip) or df.empty:
         return df, []
     ch = chip.drop_duplicates("symbol", keep="last").set_index("symbol")
-    sym = df["symbol"].astype(str).str.zfill(6)
-    mask = sym.map(ch["wr5"]) < CHIP_WR5_MAX  # NaN < x → False → 保留
-    if not mask.any():
-        return df, []
-    cut = sorted(sym[mask].unique())
-    return df[~mask.to_numpy()].copy(), cut
+    d = df.copy()
+    sym = d["symbol"].astype(str).str.zfill(6)
+    wr = sym.map(ch["wr5"])
+    flagged = wr < CHIP_WR5_MAX  # NaN < x → False → 不标
+    d["chip_wr5"] = wr
+    d["chip_flag"] = np.where(flagged, "派发", "")
+    if not flagged.any():
+        return d, []
+    return d, sorted(sym[flagged].unique())
 
 
 def apply_chip_gate(
     df: pd.DataFrame, day_ts: pd.Timestamp, flush: bool = False
 ) -> pd.DataFrame:
-    """派发闸接线入口 (三线共享): load_chip_features → apply_wr5_gate → 剔除日志.
+    """派发标注接线入口 (三线共享): load_chip_features → apply_wr5_gate → 标注日志.
 
     cyq 数据缺 → 原样返回 (fail-open)。LEGACY 交付 (_deliver_legacy_list) 与
     PARALLEL 短名单 (_shortlist_t5_t10) 调用; 密度影子单走 density_picks 内联
-    (main 里另有双跑剔除日志, 不走此处避免重复打印)。
+    (main 里另有标注日志, 不走此处避免重复打印)。
     """
     chip = load_chip_features(day_ts)
     if chip is None:
-        print("[chipgate] 筹码数据缺失, 派发闸未启用 (fail-open)", flush=flush)
+        print("[chipgate] 筹码数据缺失, 派发标注未启用 (fail-open)", flush=flush)
         return df
     out, cut = apply_wr5_gate(df, chip)
     if cut:
         print(
-            f"[chipgate] 派发闸剔除 {len(cut)} 只 (获利盘5日回落): {', '.join(cut)}",
+            f"[chipgate] 派发标注 {len(cut)} 只 (获利盘5日回落, chip_flag=派发): "
+            f"{', '.join(cut)}",
             flush=flush,
         )
     return out
@@ -211,7 +220,7 @@ def density_picks(
     par: parallel 全池 raw 预测 (symbol/pred_mag_10d/pred_prob_10d);
          None/缺 → parallel 两列 NaN
     chip: 筹码派发特征 (symbol/wr5, load_chip_features 产出); None →
-          派发闸不启用; 个股特征 NaN → 不拦 (fail-open)
+          不加派发标注列; 个股特征 NaN → 不标 (fail-open)
     """
     memb = prob10_membership(cand, day_ts)
     c = cand.copy()
@@ -253,6 +262,9 @@ def density_picks(
         (m["pull"].fillna(-1) >= PULL_FLOOR) & (m["occ5"] >= OCC_MIN)
     ].copy()  # 免额 (09-06 拍板): 额不作闸, amt 仅展示列
     ok, _ = apply_wr5_gate(ok, chip)
+    if "chip_wr5" not in ok.columns:  # chip 缺 (fail-open) 也保稳定 schema
+        ok["chip_wr5"] = np.nan
+        ok["chip_flag"] = ""
     ok = ok.rename(columns={"prob": "legacy_prob", "pred10": "legacy_pred10"})
     if par is not None and len(par):
         p = par[["symbol", "pred_prob_10d", "pred_mag_10d"]].copy()
@@ -332,6 +344,7 @@ def fmt_pct_display(df: pd.DataFrame) -> pd.DataFrame:
             "parallel_pred10",
             "pull",
             "belief_down",
+            "chip_wr5",
             "pctChg",
         ),
         already_pct_cols=("pctChg",),
@@ -398,15 +411,14 @@ def main() -> int:
         )
     chip = load_chip_features(day_ts)
     if chip is None:
-        print("[prob10dens] 筹码数据缺失, 派发闸未启用 (fail-open)")
+        print("[prob10dens] 筹码数据缺失, 派发标注未启用 (fail-open)")
     picks = density_picks(cand, hist, cl, am, day_ts, par=par, chip=chip)
-    if chip is not None:
-        base = density_picks(cand, hist, cl, am, day_ts, par=par)
-        cut = sorted(set(base["symbol"]) - set(picks["symbol"]))
-        if cut:
-            print(f"[prob10dens] 派发闸剔除 {len(cut)} 只: {', '.join(cut)}")
+    if chip is not None and len(picks):
+        flagged = picks.loc[picks["chip_flag"] == "派发", "symbol"].tolist()
+        if flagged:
+            print(f"[prob10dens] 派发标注 {len(flagged)} 只: {', '.join(flagged)}")
     if picks.empty:
-        print(f"[prob10dens] {date} 密度/派发闸后无票, 跳过 (fail-safe)")
+        print(f"[prob10dens] {date} 密度/回撤闸后无票, 跳过 (fail-safe)")
         return 0
     save_history(hist, prob10_membership(cand, day_ts))
 

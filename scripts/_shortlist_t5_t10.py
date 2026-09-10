@@ -71,6 +71,7 @@ from config.settings import (
     STOCK_LIST_DIR,
 )
 from scripts._amt_agree_gate import apply_amt_agree_kill
+from scripts._fade_gate import apply_fade_gate
 from scripts._pctfmt import PCT_COLS_PARALLEL, fmt_pct_columns
 from scripts._prob10_density_shadow import apply_chip_gate
 from scripts._stall_marker import stall_marker
@@ -645,11 +646,6 @@ def _c2c_latest(panel: dict, board: str, h: str, last) -> pd.Series:
     return row.set_index("symbol")["mag"]
 
 
-def _mag10d_latest(panel: dict, board: str, last) -> pd.Series:
-    """排名键 pred_mag_10d: 委托 _c2c_latest (score→label_pm_10d_net, T+10 c2c)."""
-    return _c2c_latest(panel, board, "10d", last)
-
-
 def _anchor_frame(board: str, window: int = ANCHOR_WINDOW) -> pd.DataFrame:
     """报告锚专用加宽面板 (每板块 ~window+12 交易日 score + close-to-close 净收益).
 
@@ -769,22 +765,25 @@ def _anchor_reported(res: pd.DataFrame, panel: dict | None = None) -> pd.DataFra
                 f"市场基准 {mkt_exp:+.1%}",
                 flush=True,
             )
-    # 排名键与 docx 头条同步: pred_mag_10d == pred_ret_10d (同源 score→label_pm_10d_net)
-    if "pred_mag_10d" in out.columns and "pred_ret_10d" in out.columns:
-        m = out["pred_ret_10d"].notna()
-        out.loc[m, "pred_mag_10d"] = out.loc[m, "pred_ret_10d"]
+    # pred_mag == pred_ret 全视界同步 (锚定后; 2026-09-10 完成 MFE→c2c 迁移,
+    # 同时中和 ema_smooth 对 mag 的旧 MFE 历史残留 — 平滑层混入的历史值不再外漏)
+    for h in HORIZONS:
+        if f"pred_mag_{h}" in out.columns and f"pred_ret_{h}" in out.columns:
+            m = out[f"pred_ret_{h}"].notna()
+            out.loc[m, f"pred_mag_{h}"] = out.loc[m, f"pred_ret_{h}"]
     return out
 
 
 def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
-    """每只短名单股: 用最新 score 经 OOS 校准给 逐视界 前瞻 预期涨幅(MFE)+逐股自然概率.
+    """每只短名单股: 用最新 score 经 OOS 校准给 逐视界 前瞻 预期涨幅+逐股自然概率.
 
     2026-08-07: 排名键 pred_mag_10d 用共享 calibrate_mag10d (score→label_pm_10d_net,
-    T+10 close-to-close 校准幅度) 覆盖 — 与并行 build_merged_shortlist 同源; 其余
-    pred_mag_{2,3,5}d 与全部 pred_prob 保持每股 MFE/自然概率口径不变 (prob 校准与
-    select_confident T+2/T+3 门不动).
+    T+10 close-to-close 校准幅度) 覆盖 — 与并行 build_merged_shortlist 同源.
     2026-08-09: 另输出 pred_ret_{3,5,10}d = 每股 close-to-close 平均预期 (score→
     label_pm_{h}_net, 非 MFE 最大), 供看板"预期"列展示 (用户定案).
+    2026-09-10: pred_mag_{h} 全视界统一 c2c (= pred_ret_{h}; 600108 5D MFE +10.7% vs
+    c2c -0.9% 方向相反, MFE 口径交付虚高 — 补完 08-07 迁移). pred_prob 仍是每股
+    MFE 自然概率 (select_confident T+2/T+3 门与 prob_head 闸口径不动).
     """
     cals = _fit_calibrators(records)
     out = res.copy()
@@ -797,22 +796,11 @@ def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
             records, r["board"], key, str(r["symbol"]), float(r["score"]), cals
         )
         for h in HORIZONS:
-            mag, prob = cal[h]
-            out.at[idx, f"pred_mag_{h}"] = mag
+            _mag, prob = cal[h]
             out.at[idx, f"pred_prob_{h}"] = prob
-    # 排名键覆盖: pred_mag_10d ← 共享 calibrate_mag10d (无前瞻, 全板块日截面)
     panel = _panel_per_stock()
-    for board in ("main", "dual"):
-        fr = panel.get((board, "both"))
-        if fr is None or fr.empty:
-            continue
-        mag10 = _mag10d_latest(panel, board, fr["date"].max())
-        if mag10.empty:
-            continue
-        mask = out["board"] == board
-        out.loc[mask, "pred_mag_10d"] = out.loc[mask, "symbol"].map(mag10)
     # 平均预期 (close-to-close, 非 MFE): 每视界 每股 score→label_pm_{h}_net 校准
-    # (2026-08-09 用户: 看板显示平均预测而非 MFE 最大). 与排名键同源; pred_mag 保留不动.
+    # (2026-08-09 用户: 看板显示平均预测而非 MFE 最大).
     for h in HORIZONS:
         out[f"pred_ret_{h}"] = float("nan")
     for board in ("main", "dual"):
@@ -826,6 +814,9 @@ def add_oos_pred(res: pd.DataFrame, records: dict) -> pd.DataFrame:
             if mag.empty:
                 continue
             out.loc[mask, f"pred_ret_{h}"] = out.loc[mask, "symbol"].map(mag)
+    # pred_mag 全视界统一 c2c (2026-09-10, 见 docstring); 排名键 pred_mag_10d 同源不变
+    for h in HORIZONS:
+        out[f"pred_mag_{h}"] = out[f"pred_ret_{h}"]
     # est_wr 已移除: 系统级常量 (同系统每股同值), 且是旧 P(MFE>0) 虚高口径 (用户 2026-08-05 否决)
     first = ["date", "board", "cut", "rk", "symbol", "systems", "co_occur", "score"]
     ph = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
@@ -1450,7 +1441,7 @@ def write_docx(
             "stall_flag",
         ]
         + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
-        + ["pred_excess_10d"]
+        + ["pred_excess_10d", "chip_wr5", "chip_flag"]
     )
     for board in ("main", "dual"):
         b = res[res["board"] == board]
@@ -1492,6 +1483,14 @@ def write_docx(
                 ex = r.get("pred_excess_10d")
                 cells[8 + 2 * len(HORIZONS)].text = (
                     "n/a" if ex is None or pd.isna(ex) else f"{float(ex):+.1%}"
+                )
+                wr5 = r.get("chip_wr5")
+                cells[8 + 2 * len(HORIZONS) + 1].text = (
+                    "n/a" if wr5 is None or pd.isna(wr5) else f"{float(wr5):+.1%}"
+                )
+                fl = r.get("chip_flag")
+                cells[8 + 2 * len(HORIZONS) + 2].text = (
+                    "" if fl is None or pd.isna(fl) else str(fl)
                 )
     doc.save(str(path))
 
@@ -1539,19 +1538,28 @@ def write_xlsx(
         ws.append([line])
     ws.column_dimensions["A"].width = 110
 
-    data_cols = [
-        "date",
-        "board",
-        "cut",
-        "rank",
-        "symbol",
-        "module",
-        "co_occur",
-        "score",
-        "过门",
-        "stall_flag",
-    ] + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
-    pct_cols = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
+    data_cols = (
+        [
+            "date",
+            "board",
+            "cut",
+            "rank",
+            "symbol",
+            "module",
+            "co_occur",
+            "score",
+            "过门",
+            "stall_flag",
+        ]
+        + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
+        + [
+            "chip_wr5",
+            "chip_flag",
+        ]
+    )
+    pct_cols = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")] + [
+        "chip_wr5"
+    ]
     if merged is not None and not merged.empty:
         mcols = [
             "rank",
@@ -1697,9 +1705,8 @@ def main() -> int:
     res = rank_and_truncate(res)
     # 迟滞滞留 (2026-08-26): 昨日上榜仍在带内 → 滞留行 (降换手, 不改新选)
     res = hysteresis_keep(res, full_res, str(sel_date.date()).replace("-", ""))
-    # 筹码派发闸 (2026-09-05 三线统一; 2026-09-07 PARALLEL 撤闸): 获利盘5日回落 →
-    # 剔除, 不补齐。125d 检查点回放证伪 (删走票三项全优于留存, 赢家/日腰斩,
-    # 大亏反升无防御性) → PARALLEL_CHIP_GATE.enable=False 默认关; 密度线 wr5 不动
+    # 筹码派发标注 (09-05 删 → 09-07 撤闸 → 09-09 用户拍板三线统一改标注):
+    # 获利盘5日回落 → chip_flag=派发 列, 不删票
     if PARALLEL_CHIP_GATE.get("enable", False):
         res = apply_chip_gate(res, sel_date, flush=True)
     # 报告幅度锚定 (2026-08-14): 排名键 cal_n=21 保留, 报告 pred_ret_{h}/pred_mag_10d
@@ -1721,6 +1728,10 @@ def main() -> int:
     # 量价删查线 (2026-09-08 用户拍板): 清单内 amt_agree10 最高档真删不补齐 —
     # 落盘前切, CSV/THS 推送/终版 Excel 全部继承
     res = apply_amt_agree_kill(
+        res, sel_date, _module_suffix(module).lstrip("_"), line="parallel"
+    )
+    # 冲高回落闸 (2026-09-09): 删线已撤; fade_score/fade_risk=预测体质分+档位, fade_flag=事件
+    res = apply_fade_gate(
         res, sel_date, _module_suffix(module).lstrip("_"), line="parallel"
     )
     summary = build_summary(res, stats, sel_date)

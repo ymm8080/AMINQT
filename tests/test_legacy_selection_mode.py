@@ -137,9 +137,10 @@ def test_mode_e7_pred_restores_old_stack(monkeypatch):
     ]
 
 
-def test_deliver_wr5_gate_guarded_by_mode():
-    """交付端 wr5 派发闸被 LEGACY_SELECTION 开关守卫 (新栈摘除, 旧栈保留)."""
+def test_deliver_chip_mark_unconditional():
+    """交付端派发标注不分模式 (09-09 改标注后 prob10_pull 守卫已废):
+    两种 LEGACY_SELECTION 模式都带 chip_flag 标注."""
     legacy = importlib.import_module("scripts._deliver_legacy_list")
     src = inspect.getsource(legacy.main)
-    assert "prob10_pull" in src  # 守卫存在
-    assert "apply_chip_gate(df" in src  # 调用保留 (旧栈路径)
+    assert "    df = apply_chip_gate(df, pd.Timestamp(trade_date))" in src
+    # 4空格缩进 = main 顶层恒调用, 旧 prob10_pull 模式守卫不得回归
