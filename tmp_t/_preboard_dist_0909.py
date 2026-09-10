@@ -101,17 +101,14 @@ for pl, sub in board.groupby("pos_label"):
         f" | 单日Δ中位 {d1.median():+.1f}pp P(Δ<0)={(d1<0).mean()*100:.1f}%"
     )
 
-print("\n== 对照: 全体非板日的下一日也不板 (纯随机底) wr5<0 ==")
-nb = df[df["is_board"].eq(False)]
-v = nb["wr5_m1"].dropna()  # wr5_m1 对非板行=次日板的板前特征, 需另算
-# 正确底: 非板行自身的 wr5 (当日口径)
-df["wr5_self"] = (df["winner_ratio"] - g.shift(5)) * 100
+print("\n== 对照: 任意非板日自身 wr5 (当日口径, 纯随机底) ==")
 v = df.loc[base_mask, "wr5_self"].dropna()
 print(f"任意非板日 P(wr5<0)={(v<0).mean()*100:.1f}% 中位 {v.median():+.1f}pp n={len(v):,}")
 
 # 板前一日 vs 次日板/不板 的判别力 (信息量视角)
 df["next_board"] = df.groupby("symbol")["is_board"].shift(-1)
 both = df[df["wr5_self"].notna() & df["next_board"].notna() & df["is_board"].eq(False)]
-for lab, m in [("次日板", both["next_board"]), ("次日不板", ~both["next_board"])]:
+nb = both["next_board"].astype(bool)  # shift(-1)混NaN→object, 显式转bool防.loc按标签查
+for lab, m in [("次日板", nb), ("次日不板", ~nb)]:
     v2 = both.loc[m, "wr5_self"]
     print(f"{lab}: P(wr5<0)={(v2<0).mean()*100:.1f}% 中位 {v2.median():+.1f}pp n={len(v2):,}")
