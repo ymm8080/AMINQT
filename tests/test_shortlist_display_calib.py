@@ -118,6 +118,69 @@ def test_anchor_reported_excess_nan_without_panel():
         assert anchored[f"pred_ret_{h}"].equals(res_dual[f"pred_ret_{h}"])
 
 
+def test_anchor_reported_mag_equals_ret_all_horizons():
+    # 2026-09-10 MFE→c2c 迁移收尾: 锚定后 pred_mag_{h} == pred_ret_{h} 全视界
+    # (此前仅 10d 同步, 3d/5d 残留 MFE 口径 → 600108 5D +10.7% vs c2c -0.9% 反向)
+    panel, res = _anchor_fixture()
+    res["pred_mag_3d"] = [0.99] * len(res)  # MFE 残留值, 锚定后必须被覆盖
+    res["pred_mag_5d"] = [0.98] * len(res)
+    anchored = _anchor_reported(res, panel)
+    m = anchored["pred_ret_3d"].notna()
+    assert m.any()
+    for h in HORIZONS:
+        assert np.allclose(
+            anchored.loc[m, f"pred_mag_{h}"], anchored.loc[m, f"pred_ret_{h}"]
+        )
+
+
+def test_add_oos_pred_mag_equals_ret_all_horizons(monkeypatch):
+    # add_oos_pred 原始路径 (raw CSV 落盘前): mag 全视界 = ret (c2c), prob 保留
+    dates = pd.bdate_range("2025-01-06", periods=30)
+    panel = {
+        ("main", "both"): pd.DataFrame(
+            {
+                "symbol": ["S0"] * len(dates),
+                "date": dates,
+                "score": [0.5] * len(dates),
+                "label_pm_3d_net": [0.01] * len(dates),
+                "label_pm_5d_net": [0.02] * len(dates),
+                "label_pm_10d_net": [0.03] * len(dates),
+            }
+        )
+    }
+    c2c_vals = {"3d": 0.011, "5d": 0.021, "10d": 0.031}
+    monkeypatch.setattr(mod, "_panel_per_stock", lambda: panel)
+    monkeypatch.setattr(
+        mod,
+        "_c2c_latest",
+        lambda p, b, h, last: pd.Series({"S0": c2c_vals[h]}),
+    )
+    monkeypatch.setattr(mod, "_fit_calibrators", lambda records: None)
+    monkeypatch.setattr(
+        mod,
+        "calibrate",
+        lambda records, board, key, sym, score, cals: {
+            h: (0.90 - 0.01 * int(h[:-1]), 0.6) for h in HORIZONS
+        },
+    )
+    res = pd.DataFrame(
+        {
+            "date": ["2025-01-06"],
+            "board": ["main"],
+            "cut": ["T-10"],
+            "rk": [1],
+            "symbol": ["S0"],
+            "systems": [""],
+            "co_occur": [0],
+            "score": [0.5],
+        }
+    )
+    out = mod.add_oos_pred(res, {})
+    for h in HORIZONS:
+        assert out[f"pred_mag_{h}"].iloc[0] == pytest.approx(c2c_vals[h])
+        assert out[f"pred_prob_{h}"].iloc[0] == pytest.approx(0.6)
+
+
 # ---------------------------------------------------------------- _recal_factor
 def test_recal_factor_math():
     b = (0.2, 1.5)
