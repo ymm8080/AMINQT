@@ -31,7 +31,6 @@ import numpy as np
 import pandas as pd
 
 import config.settings as rank_cfg
-
 from app.pipeline1.dual_track_trainer import (  # noqa: E402
     DualTrackTrainer,
     fit_rank_map,
@@ -185,7 +184,7 @@ def main() -> int:
     stage = STAGE[board]
     stage_names = set(pq.ParquetFile(stage).schema_arrow.names)
     if [c for c in META_COLS if c not in stage_names]:
-        print(f"[stage] 缺元列, staging 帧不可用 (rc=4)", flush=True)
+        print("[stage] 缺元列, staging 帧不可用 (rc=4)", flush=True)
         return 4
 
     missing = [c for c in META_COLS if c not in stage_names]
