@@ -67,6 +67,10 @@ print(f"[cal] {len(dates)}个交易日 {dates[0].date()} ~ {dates[-1].date()}")
 state = {"last_done": "", "fail_date": "", "consec_fail": 0}
 if STATE.exists():
     state.update(json.load(open(STATE, encoding="utf-8")))
+# consec 是进程内概念: 上次abort遗留的计数若被继承, 新实例首败即触发>=8假abort
+state["consec_fail"] = 0
+STATE.write_text(json.dumps(state), encoding="utf-8")
+state["consec_fail"] = 0  # 失败连击每进程清零: 不继承上实例残值(8940继承8首败即abort)
 
 # 单实例锁: 活PID持锁, 死PID自动过期 (防 babysitter/runner 双开竞写审计)
 LOCK = OUT_DIR / "_sweep.lock"
