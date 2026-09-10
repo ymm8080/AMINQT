@@ -1698,9 +1698,8 @@ def main() -> int:
     res = rank_and_truncate(res)
     # 迟滞滞留 (2026-08-26): 昨日上榜仍在带内 → 滞留行 (降换手, 不改新选)
     res = hysteresis_keep(res, full_res, str(sel_date.date()).replace("-", ""))
-    # 筹码派发闸 (2026-09-05 三线统一; 2026-09-07 PARALLEL 撤闸): 获利盘5日回落 →
-    # 剔除, 不补齐。125d 检查点回放证伪 (删走票三项全优于留存, 赢家/日腰斩,
-    # 大亏反升无防御性) → PARALLEL_CHIP_GATE.enable=False 默认关; 密度线 wr5 不动
+    # 筹码派发标注 (09-05 删 → 09-07 撤闸 → 09-09 用户拍板三线统一改标注):
+    # 获利盘5日回落 → chip_flag=派发 列, 不删票
     if PARALLEL_CHIP_GATE.get("enable", False):
         res = apply_chip_gate(res, sel_date, flush=True)
     # 报告幅度锚定 (2026-08-14): 排名键 cal_n=21 保留, 报告 pred_ret_{h}/pred_mag_10d

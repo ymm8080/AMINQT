@@ -37,6 +37,7 @@ PCT_COLS_PARALLEL = (
     "ret_10d",
     "ret_1d",
     "market_base_rate",
+    "chip_wr5",
 )
 
 # legacy_stocklist_*.csv: 当日涨跌(day_change 为比例, 与 Tushare pctChg 不同)、
@@ -63,6 +64,7 @@ PCT_COLS_LEGACY = (
     "ret_10d",
     "ret_1d",
     "market_base_rate",
+    "chip_wr5",
 )
 
 _NA_STR = {"", "nan", "none", "nat", "null"}

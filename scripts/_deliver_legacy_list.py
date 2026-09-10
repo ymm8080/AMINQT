@@ -175,6 +175,13 @@ def write_md(
                 f"⚠ 昨日冲高回落 {len(syms_f)} 只 ({', '.join(syms_f)}): "
                 f"易再冲高回落, 勿追高\n\n"
             )
+        # 筹码派发提示 (2026-09-09 用户: 派发不删, 清单标注): 获利盘5日回落
+        if "chip_flag" in df.columns and (df["chip_flag"] != "").any():
+            syms_c = df.loc[df["chip_flag"] != "", "symbol"].astype(str).tolist()
+            fh.write(
+                f"⚠ 筹码派发 {len(syms_c)} 只 ({', '.join(syms_c)}): "
+                f"获利盘5日回落 (chip_wr5<0), 慎追\n\n"
+            )
         # 被整体退回的板块: 仍出清单, 醒目标注未接受原因 (不静默跳过)
         for b, r in (rejected or {}).items():
             fh.write(f"⚠ {b} 未接受 (被退回): {r} — 当日未出股\n\n")
@@ -219,13 +226,10 @@ def main():
     df = pd.read_parquet(src)
     if "symbol" in df.columns:
         df["symbol"] = df["symbol"].astype(str)
-    # 筹码派发闸 (2026-09-05 三线统一): 获利盘5日回落 → 剔除, 不补齐
-    # 09-07: LEGACY_SELECTION mode="prob10_pull" 时摘除 — 该臂回放 wr5 被切票赢率
-    # 47% > 留守 42.8% (毁值); 密度/PARALLEL 两线 wr5 不动。
-    if not (
-        LEGACY_SELECTION.get("enable") and LEGACY_SELECTION.get("mode") == "prob10_pull"
-    ):
-        df = apply_chip_gate(df, pd.Timestamp(trade_date))
+    # 筹码派发标注 (2026-09-09 用户拍板 "派发不删, 清单标注"; 09-05~09-09 曾为
+    # 删除闸, 09-07 prob10_pull 臂曾摘除): 获利盘5日回落 → chip_flag=派发 列,
+    # 不删票 — 标注为信息列, 两种 LEGACY_SELECTION 模式都带
+    df = apply_chip_gate(df, pd.Timestamp(trade_date))
     # 滞涨标记 (2026-08-19 用户方案): 入选 + 近10日滞涨<2% + 近20日入选≥3 → 洗盘待爆发
     df = stall_marker(df, trade_date, "legacy_stocklist_")
     module = resolve_module(df, trade_date)
@@ -301,6 +305,12 @@ def main():
         if n_fade:
             doc.add_paragraph(
                 f"⚠ 昨日冲高回落 {n_fade} 只 (见 fade_flag 列): 易再冲高回落, 勿追高",
+            )
+        n_chip = int((df["chip_flag"] != "").sum()) if "chip_flag" in df.columns else 0
+        if n_chip:
+            doc.add_paragraph(
+                f"⚠ 筹码派发 {n_chip} 只 (见 chip_flag/chip_wr5 列): "
+                "获利盘5日回落, 慎追",
             )
         n_risk = (
             int((df["fade_risk"] == "高").sum()) if "fade_risk" in df.columns else 0
