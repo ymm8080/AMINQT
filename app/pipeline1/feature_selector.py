@@ -1298,6 +1298,23 @@ class FeatureSelector:
             # [2026-08-31] 特征集冻结 (用户批准): 每周重选换血 32/353 列 → 第二票方差.
             # 填快照名 = 冻结 (同 dual gate_d 语义); 更新 pin = 显式动作.
             "pinned": "selected_main_pinned.json",
+            # [2026-09-10] THS问财信号当日入池 (用户指令): pin 快照早于该特征族,
+            # 精确名强制注入, 不解冻 pin. brute 名由训练端 post-injection 物化.
+            "force_include": [
+                # 看涨侧 (个股级旗标+密度)
+                "ths_bull",
+                "ths_bull_brute_pct1",
+                "ths_bull_brute_ma5",
+                "ths_bull_brute_ma20",
+                "ths_bull_buy_sig_n_brute_ma5",
+                "ths_bull_tech_n_brute_ma5",
+                # 看跌侧 (个股级旗标 + 市场日计数)
+                "ths_bear",
+                "ths_bear_brute_pct1",
+                "ths_bear_brute_ma5",
+                "ths_bear_brute_ma20",
+                "ths_bear_pool_brute_pct1",
+            ],
         },
         "dual": {
             "pipeline": "gate_d",
@@ -1313,6 +1330,20 @@ class FeatureSelector:
                 # 动作 (新特征家族落地 / 季度重选 2026-11-14 前), 人工核对+250d
                 # replay 通过才写新 pin. 空字符串 = 不冻结 (回退旧行为).
                 "pinned": "selected_dual_pinned.json",
+                # [2026-09-10] THS问财信号当日入池 (同 main 语义, 看涨/看跌分开列).
+                "force_include": [
+                    "ths_bull",
+                    "ths_bull_brute_pct1",
+                    "ths_bull_brute_ma5",
+                    "ths_bull_brute_ma20",
+                    "ths_bull_buy_sig_n_brute_ma5",
+                    "ths_bull_tech_n_brute_ma5",
+                    "ths_bear",
+                    "ths_bear_brute_pct1",
+                    "ths_bear_brute_ma5",
+                    "ths_bear_brute_ma20",
+                    "ths_bear_pool_brute_pct1",
+                ],
             },
         },
         "fallback": {"pipeline": "ic_screener"},
@@ -1416,6 +1447,36 @@ class FeatureSelector:
         )
         return buckets
 
+    def _force_include_avail(self, df, board, cfg):
+        """cfg["force_include"]: 冻结 pin 模式下强制注入的精确特征名列表.
+
+        pin 快照早于新特征族落地时 (THS信号 2026-09-10) 不必解冻 pin. 语义:
+        - 在 df 的列: 过 nan 门 (与 pin 特征同标准);
+        - brute 名且基列 (名字 "_brute_" 前段) 在 df: 直接放行 — 列由训练端
+          post-selection injection 物化 (与非 pin 路径返回 brute 名同一机制);
+        - 其余: 剔除并告警 (基列不在面板 = 该源未接线, 不伪造).
+        """
+        names = cfg.get("force_include") or []
+        if not names:
+            return []
+        nan_thr = cfg.get("nan_threshold", 0.95)
+        out = []
+        for f in names:
+            if f in df.columns:
+                if float(df[f].isna().mean()) < nan_thr:
+                    out.append(f)
+                else:
+                    logger.warning("[%s] force_include %s nan超阈, 剔除", board, f)
+            elif "_brute_" in f and f.split("_brute_")[0] in df.columns:
+                out.append(f)
+            else:
+                logger.warning(
+                    "[%s] force_include %s 不在面板且基列不可生成, 剔除", board, f
+                )
+        if out:
+            logger.info("[%s] force_include 注入 %d 特征: %s", board, len(out), out)
+        return out
+
     def _run_bruteforce_dedup(self, df, board, cfg, generator=None, metrics_out=None):
         # [2026-08-31] 特征集冻结 (镜像 gate_d pin 语义): 每周重选换血 32/353 列
         # (08-31 实测) 是 main TOP10 第二票的第二大方差源. pin 指向既有快照,
@@ -1437,6 +1498,9 @@ class FeatureSelector:
                 for f in pin_feats
                 if f in df.columns and float(df[f].isna().mean()) < nan_thr
             ]
+            avail.extend(
+                f for f in self._force_include_avail(df, board, cfg) if f not in avail
+            )
             missing = [f for f in pin_feats if f not in avail]
             if missing:
                 logger.warning(
@@ -1603,6 +1667,11 @@ class FeatureSelector:
             metrics_out=metrics_out,
         )
         avail = [f for f in pin_feats if f in valid]
+        avail.extend(
+            f
+            for f in self._force_include_avail(df, board, gcfg)
+            if f not in avail
+        )
         missing = [f for f in pin_feats if f not in avail]
         if missing:
             logger.warning(

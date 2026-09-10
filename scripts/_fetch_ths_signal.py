@@ -7,6 +7,7 @@
 
 行为:
   - 看涨池全量(分页+代码去重早停) -> data/supply_cache/ths_signal/bull_{date}.parquet (WORM, 存在即跳过)
+  - 看跌池个股级全量(perpage=100) -> data/supply_cache/ths_signal/bear_{date}.parquet (WORM)
   - 看跌池规模 -> data/supply_cache/ths_signal/bear_counts.csv (追加, 按日期去重)
   - cookie 失效 -> exit 2 (fail-fast, 需刷新 cookies.json)
 cookie 来源: 用真实Edge挂真实profile导出 (tmp_t/_ths_v8_0910.py 的方法),
@@ -59,9 +60,9 @@ def _headers_with_token():
     return headers, round(random.random(), 6)
 
 
-def _post(question: str, page: int, ck: dict) -> dict:
+def _post(question: str, page: int, ck: dict, perpage: int = 10) -> dict:
     headers, rval = _headers_with_token()
-    params = {"question": question, "secondary_intent": "stock", "perpage": 10,
+    params = {"question": question, "secondary_intent": "stock", "perpage": perpage,
               "page": page, "block_list": "", "add_info": "1", "r": rval,
               "source": "Ths_iwencai_Xuangu", "version": "2.0",
               "query_type": "stock", "hexin-v": headers["hexin-v"]}
@@ -110,10 +111,10 @@ def _validate_date_suffix(d: dict, dstr: str) -> None:
                     f"THS日期回退: 请求{dstr} 实际[{m.group(1)}] (非交易日?) — 不落盘")
 
 
-def fetch_bull_pool(dstr: str, ck: dict) -> pd.DataFrame:
+def _paginate_pool(question: str, dstr: str, ck: dict, perpage: int, max_pages: int) -> pd.DataFrame:
     rows, seen = [], set()
-    for page in range(1, 41):
-        d = _post(f"{dstr}看涨信号的股票", page, ck)
+    for page in range(1, max_pages + 1):
+        d = _post(question, page, ck, perpage=perpage)
         if d.get("status_code") != 0:
             raise RuntimeError(f"API status={d.get('status_code')} "
                                f"{str(d.get('status_msg'))[:60]} (date={dstr} p{page})")
@@ -128,10 +129,25 @@ def fetch_bull_pool(dstr: str, ck: dict) -> pd.DataFrame:
         for r in recs:
             r["_query_date"] = dstr
         rows.extend(recs)
-        if len(recs) < 10:
+        if len(recs) < perpage:
             break
         time.sleep(0.3)
     return pd.DataFrame(rows)
+
+
+def fetch_bull_pool(dstr: str, ck: dict) -> pd.DataFrame:
+    return _paginate_pool(f"{dstr}看涨信号的股票", dstr, ck, perpage=10, max_pages=40)
+
+
+def fetch_bear_pool(dstr: str, ck: dict) -> pd.DataFrame:
+    """看跌池~2400只/日, perpage=100 → ~24页; 只留代码列 (旗标语义)."""
+    df = _paginate_pool(f"{dstr}看跌信号的股票", dstr, ck, perpage=100, max_pages=60)
+    if len(df) == 0:
+        return df
+    if len(df) % 100 == 0 and len(df) >= 600:
+        # perpage被服务端忽略(仍10/页)会在此触发: 60页×10=600整 → 静默截断, 宁可不落盘
+        raise RuntimeError(f"bear池{len(df)}行=整页边界, 疑似perpage未生效截断 (date={dstr})")
+    return df[["股票代码"] + [c for c in ("股票简称", "最新涨跌幅") if c in df.columns]]
 
 
 def prev_trading_day(dstr: str) -> str:
@@ -170,17 +186,19 @@ def main():
     else:
         dstr = today
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    out_f = CACHE_DIR / f"bull_{dstr}.parquet"
-    if out_f.exists():
-        print(f"[skip] {out_f.name} 已存在 (WORM)")
-    else:
+    for label, fetcher in (("看涨池", fetch_bull_pool), ("看跌池", fetch_bear_pool)):
+        out_f = CACHE_DIR / f"{'bull' if label == '看涨池' else 'bear'}_{dstr}.parquet"
+        if out_f.exists():
+            print(f"[skip] {out_f.name} 已存在 (WORM)")
+            continue
         try:
-            df = fetch_bull_pool(dstr, ck)
+            df = fetcher(dstr, ck)
         except RuntimeError as e:
             print(f"[FATAL] {e}\n若为鉴权类失败(403/-1091连续), 刷新cookies.json后重试")
             sys.exit(2)
         df.to_parquet(out_f)
-        print(f"[ok] {dstr} 看涨池 {len(df)}行 -> {out_f.name}")
+        print(f"[ok] {dstr} {label} {len(df)}行 -> {out_f.name}")
+        time.sleep(1.0)
 
     # 看跌池规模
     d = _post(f"{dstr}看跌信号的股票", 1, ck)

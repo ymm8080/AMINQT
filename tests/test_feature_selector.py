@@ -566,6 +566,79 @@ class TestFeatureSelectorSelection:
             assert snap["metrics"]["pinned"] is True
             assert snap["metrics"]["n_returned"] == 3
 
+    @staticmethod
+    def _write_pin(tmp, features):
+        import json as _json
+        import os as _os
+
+        pin = {
+            "board": "main",
+            "pipeline": "bruteforce_dedup",
+            "created": "2026-08-31T20:05:00",
+            "selected_count": len(features),
+            "features": features,
+        }
+        with open(_os.path.join(tmp, "selected_main_pinned.json"), "w", encoding="utf-8") as fh:
+            _json.dump(pin, fh)
+
+    def test_force_include_appends_to_pin(self):
+        """冻结 pin + force_include: 在面板列与可生成 brute 名追加, 未知名剔除."""
+        import json as _json
+        import os as _os
+
+        df = _make_small_df(n_symbols=5, n_dates=40)
+        df["ths_bull"] = np.random.randint(0, 2, len(df)).astype("float64")
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write_pin(tmp, ["close", "volume"])
+            cfg = {
+                "main": {
+                    "pipeline": "bruteforce_dedup",
+                    "pinned": "selected_main_pinned.json",
+                    "force_include": [
+                        "ths_bull",            # 在 df → 直接入
+                        "ths_bull_brute_ma5",  # 基列在 df → brute 放行
+                        "ghost_brute_pct1",    # 基列不在 → 剔除
+                    ],
+                }
+            }
+            sel = FeatureSelector(config=cfg, registry_dir=tmp)
+            features = sel.select(df, "main")
+            assert features == ["close", "volume", "ths_bull", "ths_bull_brute_ma5"]
+            snap = self._latest_snapshot(tmp, "main")
+            assert snap["metrics"]["n_returned"] == 4
+
+    def test_force_include_nan_gate(self):
+        """force_include 在面板列但 nan 超阈 → 剔除 (与 pin 特征同门)."""
+        df = _make_small_df(n_symbols=5, n_dates=40)
+        df["ths_bear"] = float("nan")
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write_pin(tmp, ["close"])
+            cfg = {
+                "main": {
+                    "pipeline": "bruteforce_dedup",
+                    "pinned": "selected_main_pinned.json",
+                    "force_include": ["ths_bear"],
+                }
+            }
+            sel = FeatureSelector(config=cfg, registry_dir=tmp)
+            features = sel.select(df, "main")
+            assert features == ["close"]
+
+    def test_force_include_empty_or_absent_noop(self):
+        """无 force_include 键 / 空列表 → pin 行为与旧语义完全一致."""
+        df = _make_small_df(n_symbols=5, n_dates=40)
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write_pin(tmp, ["close", "volume"])
+            cfg = {
+                "main": {
+                    "pipeline": "bruteforce_dedup",
+                    "pinned": "selected_main_pinned.json",
+                    "force_include": [],
+                }
+            }
+            sel = FeatureSelector(config=cfg, registry_dir=tmp)
+            assert sel.select(df, "main") == ["close", "volume"]
+
     @_skip_ci
     def test_select_dual_gate_d(self):
         """DUAL board runs gate_d pipeline (features built via FeatureEngineV35)."""

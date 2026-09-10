@@ -552,51 +552,100 @@ def merge_cyq_tushare(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFram
 THS_SIGNAL_DIR = ROOT / "data" / "supply_cache" / "ths_signal"
 
 
+def _norm_symbols(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["symbol"] = (
+        df["symbol"].astype(str).str.replace(r"\D", "", regex=True).str.zfill(6)
+    )
+    return df
+
+
 def merge_ths_signal(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame:
-    """THS问财看涨信号池(逐日收盘快照) + 看跌池规模.
+    """THS问财看涨/看跌信号池(逐日收盘快照, 个股级) + 看跌池市场日计数.
 
-    数据源: data/supply_cache/ths_signal/bull_*.parquet (scripts/_fetch_ths_signal.py 产出).
+    数据源: data/supply_cache/ths_signal/{bull,bear}_*.parquet
+    (scripts/_fetch_ths_signal.py 产出).
     信号在D收盘评估, 赋date=D, 与其他源口径一致 (消费端按t-1铁律取用).
-    NaN = 该日未抓取 (回填起点之前), 不回填0以免伪造常量段.
-    """
-    files = sorted(THS_SIGNAL_DIR.glob("bull_*.parquet"))
-    if not files:
-        logger.warning("ths_signal: no bull_*.parquet under %s", THS_SIGNAL_DIR)
-        return panel
 
+    0填充语义: 回填区间内 (date >= 最早信号日) 无信号=0 — 否则nan率>95%会被
+    特征选择整列剔除; 区间前 (永不训段) 留NaN 不伪造常量段.
+    """
+    sig_start = None
+    before = len(panel.columns)
+
+    # ── 看涨池: 个股级旗标 + 信号文本 + 计数 ──
     frames = []
-    for f in files:
+    for f in sorted(THS_SIGNAL_DIR.glob("bull_*.parquet")):
         d = pd.read_parquet(f)
         if len(d) == 0:
             continue
         rename = {"股票代码": "symbol"}
+        # 看涨派生列一律带 ths_bull_ 前缀: 特征池里与看跌侧 (ths_bear_*) 一眼可分
         for c in d.columns:
             if c.startswith("准备拉升"):
-                rename[c] = "ths_ready_rise"
+                rename[c] = "ths_bull_ready_rise"
             elif c.startswith("买入信号"):
-                rename[c] = "ths_buy_signals"
+                rename[c] = "ths_bull_buy_signals"
             elif c.startswith("技术形态"):
-                rename[c] = "ths_tech_pattern"
+                rename[c] = "ths_bull_tech_pattern"
         d = d.rename(columns=rename)
         d["date"] = pd.to_datetime(f.stem.split("_")[1], format="%Y%m%d")
-        d["ths_bull"] = 1
+        d["ths_bull"] = 1.0
+        # "||"必须regex=False: pandas对长度>1的pat默认按正则, "||"是空交替→按字符切开
+        def _count_signals(col):
+            if col not in d.columns:
+                return 0.0
+            return (
+                d[col].fillna("").astype(str)
+                .str.split("||", regex=False)
+                .apply(lambda xs: sum(1 for x in xs if x.strip()))
+            )
+
+        d["ths_bull_buy_sig_n"] = _count_signals("ths_bull_buy_signals")
+        d["ths_bull_tech_n"] = _count_signals("ths_bull_tech_pattern")
         # 外部源schema可能漂移, 按实际存在的列取
-        want = ["symbol", "date", "ths_bull", "ths_ready_rise",
-                "ths_buy_signals", "ths_tech_pattern"]
+        want = ["symbol", "date", "ths_bull", "ths_bull_ready_rise", "ths_bull_buy_signals",
+                "ths_bull_tech_pattern", "ths_bull_buy_sig_n", "ths_bull_tech_n"]
         frames.append(d[[c for c in want if c in d.columns]])
-    if not frames:
-        logger.warning("ths_signal: all bull files empty")
-        return panel
+    if frames:
+        sig = pd.concat(frames, ignore_index=True)
+        sig = _norm_symbols(sig).drop_duplicates(subset=["symbol", "date"])
+        panel = panel.merge(sig, on=["symbol", "date"], how="left")
+        sig_start = sig["date"].min()
+        n_bull = int(sig["ths_bull"].sum())
+    else:
+        logger.warning("ths_signal: no bull_*.parquet under %s", THS_SIGNAL_DIR)
+        n_bull = 0
 
-    sig = pd.concat(frames, ignore_index=True)
-    sig["symbol"] = sig["symbol"].astype(str).str.replace(r"\D", "", regex=True).str.zfill(6)
-    # 防重复行炸面板 (4M行 × dup = 灾难)
-    sig = sig.drop_duplicates(subset=["symbol", "date"])
+    # ── 看跌池: 个股级旗标 ──
+    bframes = []
+    for f in sorted(THS_SIGNAL_DIR.glob("bear_*.parquet")):
+        d = pd.read_parquet(f)
+        if len(d) == 0 or "股票代码" not in d.columns:
+            continue
+        d = d.rename(columns={"股票代码": "symbol"})[["symbol"]].copy()
+        d["date"] = pd.to_datetime(f.stem.split("_")[1], format="%Y%m%d")
+        d["ths_bear"] = 1.0
+        bframes.append(d)
+    if bframes:
+        bsig = pd.concat(bframes, ignore_index=True)
+        bsig = _norm_symbols(bsig).drop_duplicates(subset=["symbol", "date"])
+        panel = panel.merge(bsig, on=["symbol", "date"], how="left")
+        sig_start = bsig["date"].min() if sig_start is None else min(sig_start, bsig["date"].min())
+        n_bear = int(bsig["ths_bear"].sum())
+    else:
+        logger.info("ths_signal: no bear_*.parquet (看跌个股级未回填?)")
+        n_bear = 0
 
-    before = len(panel.columns)
-    panel = panel.merge(sig, on=["symbol", "date"], how="left")
+    # ── 条件0填充: 区间内无信号=0 (特征资格), 区间前留NaN ──
+    if sig_start is not None:
+        in_range = panel["date"] >= sig_start
+        for c in ["ths_bull", "ths_bear", "ths_bull_buy_sig_n", "ths_bull_tech_n"]:
+            if c in panel.columns:
+                panel[c] = panel[c].fillna(0.0)
+                panel.loc[~in_range, c] = float("nan")
 
-    # 看跌池=市场级日计数, 广播到当日全部行 (市场上下文特征)
+    # ── 看跌池市场日计数 (市场上下文) ──
     bear_f = THS_SIGNAL_DIR / "bear_counts.csv"
     if bear_f.exists():
         bear = pd.read_csv(bear_f, dtype={"date": str})
@@ -608,9 +657,8 @@ def merge_ths_signal(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame
             on="date", how="left",
         )
 
-    n_hit = int(pd.Series(panel["ths_bull"]).fillna(0).sum())
-    logger.info("ths_signal: %d signal rows, panel hits %d, +%d cols",
-                len(sig), n_hit, len(panel.columns) - before)
+    logger.info("ths_signal: bull %d rows, bear %d rows, +%d cols",
+                n_bull, n_bear, len(panel.columns) - before)
     return panel
 
 
