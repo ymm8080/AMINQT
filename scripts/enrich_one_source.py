@@ -549,6 +549,71 @@ def merge_cyq_tushare(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFram
     return panel
 
 
+THS_SIGNAL_DIR = ROOT / "data" / "supply_cache" / "ths_signal"
+
+
+def merge_ths_signal(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame:
+    """THS问财看涨信号池(逐日收盘快照) + 看跌池规模.
+
+    数据源: data/supply_cache/ths_signal/bull_*.parquet (scripts/_fetch_ths_signal.py 产出).
+    信号在D收盘评估, 赋date=D, 与其他源口径一致 (消费端按t-1铁律取用).
+    NaN = 该日未抓取 (回填起点之前), 不回填0以免伪造常量段.
+    """
+    files = sorted(THS_SIGNAL_DIR.glob("bull_*.parquet"))
+    if not files:
+        logger.warning("ths_signal: no bull_*.parquet under %s", THS_SIGNAL_DIR)
+        return panel
+
+    frames = []
+    for f in files:
+        d = pd.read_parquet(f)
+        if len(d) == 0:
+            continue
+        rename = {"股票代码": "symbol"}
+        for c in d.columns:
+            if c.startswith("准备拉升"):
+                rename[c] = "ths_ready_rise"
+            elif c.startswith("买入信号"):
+                rename[c] = "ths_buy_signals"
+            elif c.startswith("技术形态"):
+                rename[c] = "ths_tech_pattern"
+        d = d.rename(columns=rename)
+        d["date"] = pd.to_datetime(f.stem.split("_")[1], format="%Y%m%d")
+        d["ths_bull"] = 1
+        # 外部源schema可能漂移, 按实际存在的列取
+        want = ["symbol", "date", "ths_bull", "ths_ready_rise",
+                "ths_buy_signals", "ths_tech_pattern"]
+        frames.append(d[[c for c in want if c in d.columns]])
+    if not frames:
+        logger.warning("ths_signal: all bull files empty")
+        return panel
+
+    sig = pd.concat(frames, ignore_index=True)
+    sig["symbol"] = sig["symbol"].astype(str).str.replace(r"\D", "", regex=True).str.zfill(6)
+    # 防重复行炸面板 (4M行 × dup = 灾难)
+    sig = sig.drop_duplicates(subset=["symbol", "date"])
+
+    before = len(panel.columns)
+    panel = panel.merge(sig, on=["symbol", "date"], how="left")
+
+    # 看跌池=市场级日计数, 广播到当日全部行 (市场上下文特征)
+    bear_f = THS_SIGNAL_DIR / "bear_counts.csv"
+    if bear_f.exists():
+        bear = pd.read_csv(bear_f, dtype={"date": str})
+        bear["date"] = pd.to_datetime(bear["date"], format="%Y%m%d")
+        # CSV可能在断点重启中积累重复日期行; dup会让当日全部面板行翻倍
+        bear = bear.drop_duplicates(subset=["date"])
+        panel = panel.merge(
+            bear[["date", "bear_count"]].rename(columns={"bear_count": "ths_bear_pool"}),
+            on="date", how="left",
+        )
+
+    n_hit = int(pd.Series(panel["ths_bull"]).fillna(0).sum())
+    logger.info("ths_signal: %d signal rows, panel hits %d, +%d cols",
+                len(sig), n_hit, len(panel.columns) - before)
+    return panel
+
+
 # ---------------------------------------------------------------------------
 # Source registry
 # ---------------------------------------------------------------------------
@@ -563,6 +628,7 @@ SOURCES = {
     "daily_basic": merge_daily_basic,
     "stk_limit": merge_stk_limit,
     "cyq_tushare": merge_cyq_tushare,
+    "ths_signal": merge_ths_signal,
 }
 
 
@@ -619,6 +685,7 @@ SOURCE_COL_PREFIXES: dict[str, list[str]] = {
         "pct_90_con",
         "pct_70_con",
     ],
+    "ths_signal": ["ths_"],
 }
 
 
