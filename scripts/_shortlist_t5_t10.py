@@ -1451,7 +1451,7 @@ def write_docx(
             "stall_flag",
         ]
         + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
-        + ["pred_excess_10d"]
+        + ["pred_excess_10d", "chip_wr5", "chip_flag"]
     )
     for board in ("main", "dual"):
         b = res[res["board"] == board]
@@ -1493,6 +1493,14 @@ def write_docx(
                 ex = r.get("pred_excess_10d")
                 cells[8 + 2 * len(HORIZONS)].text = (
                     "n/a" if ex is None or pd.isna(ex) else f"{float(ex):+.1%}"
+                )
+                wr5 = r.get("chip_wr5")
+                cells[8 + 2 * len(HORIZONS) + 1].text = (
+                    "n/a" if wr5 is None or pd.isna(wr5) else f"{float(wr5):+.1%}"
+                )
+                fl = r.get("chip_flag")
+                cells[8 + 2 * len(HORIZONS) + 2].text = (
+                    "" if fl is None or pd.isna(fl) else str(fl)
                 )
     doc.save(str(path))
 
@@ -1551,8 +1559,13 @@ def write_xlsx(
         "score",
         "过门",
         "stall_flag",
-    ] + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
-    pct_cols = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
+    ] + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")] + [
+        "chip_wr5",
+        "chip_flag",
+    ]
+    pct_cols = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")] + [
+        "chip_wr5"
+    ]
     if merged is not None and not merged.empty:
         mcols = [
             "rank",
