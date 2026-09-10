@@ -1298,6 +1298,11 @@ class FeatureSelector:
             # [2026-08-31] 特征集冻结 (用户批准): 每周重选换血 32/353 列 → 第二票方差.
             # 填快照名 = 冻结 (同 dual gate_d 语义); 更新 pin = 显式动作.
             "pinned": "selected_main_pinned.json",
+            # [2026-09-10] pin brute 逃生舱门控 (默认关): 开启后 pin 快照里基列仍
+            # 可生成的 brute 名恢复注入 (修 08-31 起 main 零 brute 事故, 见
+            # _run_bruteforce_dedup pin 路径). 周日 A/B 对拍翻 true, PASS 前生产
+            # 保持 270 列零 brute 口径.
+            "pin_allow_brute": False,
             # [2026-09-10] THS问财信号当日入池 (用户指令): pin 快照早于该特征族,
             # 精确名强制注入, 不解冻 pin. brute 名由训练端 post-injection 物化.
             "force_include": [
@@ -1505,6 +1510,19 @@ class FeatureSelector:
                 for f in pin_feats
                 if f in df.columns and float(df[f].isna().mean()) < nan_thr
             ]
+            # [2026-09-10] pin brute 逃生舱 (默认关): pin 快照里的 brute 名不在面板
+            # df (训练端 post-injection 物化), 裸 `f in df.columns` 整批误杀 —
+            # 08-31 冻结后 main 实训 270 列零 brute 事故的根因. 与
+            # _force_include_avail 同款基列放行; A/B 通过前由 pin_allow_brute
+            # 门控, 生产保持零 brute 口径不变.
+            if cfg.get("pin_allow_brute"):
+                avail.extend(
+                    f
+                    for f in pin_feats
+                    if f not in avail
+                    and "_brute_" in f
+                    and f.split("_brute_")[0] in df.columns
+                )
             avail.extend(
                 f for f in self._force_include_avail(df, board, cfg) if f not in avail
             )

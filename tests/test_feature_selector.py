@@ -637,6 +637,36 @@ class TestFeatureSelectorSelection:
             sel = FeatureSelector(config=cfg, registry_dir=tmp)
             assert sel.select(df, "main") == ["close", "volume"]
 
+    def test_pin_brute_escape_default_off(self):
+        """默认关: pin 里基列可生成的 brute 名仍被裸 `f in df.columns` 误杀
+        (08-31 冻结后 main 实训 270 列零 brute 的现状口径, 回归护栏)."""
+        df = _make_small_df(n_symbols=5, n_dates=40)
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write_pin(tmp, ["close", "close_brute_ma5"])
+            cfg = {
+                "main": {
+                    "pipeline": "bruteforce_dedup",
+                    "pinned": "selected_main_pinned.json",
+                }
+            }
+            sel = FeatureSelector(config=cfg, registry_dir=tmp)
+            assert sel.select(df, "main") == ["close"]
+
+    def test_pin_brute_escape_gate_on_restores(self):
+        """门开: pin brute 名基列在面板 → 恢复注入; 基列不在 → 仍剔除."""
+        df = _make_small_df(n_symbols=5, n_dates=40)
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write_pin(tmp, ["close", "close_brute_ma5", "ghost_brute_pct1"])
+            cfg = {
+                "main": {
+                    "pipeline": "bruteforce_dedup",
+                    "pinned": "selected_main_pinned.json",
+                    "pin_allow_brute": True,
+                }
+            }
+            sel = FeatureSelector(config=cfg, registry_dir=tmp)
+            assert sel.select(df, "main") == ["close", "close_brute_ma5"]
+
     @_skip_ci
     def test_select_dual_gate_d(self):
         """DUAL board runs gate_d pipeline (features built via FeatureEngineV35)."""
