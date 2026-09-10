@@ -130,6 +130,7 @@ def test_xlsx_res_stall_flag_writes_real_value(tmp_path):
             "stall_flag",
         ]
         + PRED_COLS
+        + ["chip_wr5", "chip_flag"]  # 09-09 bbb294d4 派发标注列 (bbb294d4 漏更测试)
     )
     j = hdr.index("stall_flag") + 1
     assert ws.cell(row=2, column=j).value == "洗盘待爆发"
