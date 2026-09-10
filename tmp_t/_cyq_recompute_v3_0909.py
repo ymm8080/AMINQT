@@ -281,7 +281,7 @@ def main():
     del tbl
 
     chk = pq.ParquetFile(PANEL)
-    log(f"panel verify: rows={chk.num_rows:,} cols={chk.num_columns} "
+    log(f"panel verify: rows={chk.metadata.num_rows:,} cols={chk.metadata.num_columns} "
         f"cyq在={[c for c in CYQ14 if c in chk.schema_arrow.names]}")
 
     out = {
