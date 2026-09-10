@@ -210,7 +210,11 @@ def test_chip_gate_marks_distribution_direction():
     close, amount = _panel(syms, [10.0] * 4, [2e8] * 4)
     chip = _chip(**{"600001": -0.058})
     out = density_picks(_cand(), _hist(), close, amount, DAY, chip=chip)
-    assert list(out["symbol"]) == ["600001", "600003", "300005"]  # 600002 occ5=1 被密度剔
+    assert list(out["symbol"]) == [
+        "600001",
+        "600003",
+        "300005",
+    ]  # 600002 occ5=1 被密度剔
     assert out.loc[out.symbol == "600001", "chip_flag"].iloc[0] == "派发"
     assert out.loc[out.symbol == "600003", "chip_flag"].iloc[0] == ""
 
