@@ -211,6 +211,9 @@ def main() -> int:
 
     trainer = DualTrackTrainer(model_dir=os.path.join("models", "pipeline1"))
     reps = []
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    out = data_others_path("diag") / f"ranktarget_decayrank_v4_{board}_{ts}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
     for k in range(args.windows):
         r = eval_window(trainer, cols, df, board, k)
         if r is None:
@@ -222,6 +225,9 @@ def main() -> int:
             for a in ARM_NAMES
         )
         print(f"[win{k}] {r['test_span'][0]}→{r['test_span'][1]} {seg} ({time.time() - t0:.0f}s)", flush=True)
+        # 每窗先落盘 (聚合步崩溃不丢窗口数据)
+        with open(out, "w", encoding="utf-8") as fh:
+            json.dump({"board": board, "n_windows": len(reps), "windows": reps}, fh, ensure_ascii=False, indent=2, default=str)
         gc.collect()
 
     n = len(reps)
@@ -257,8 +263,8 @@ def main() -> int:
             and agg["spread_mean_pp"]["mag5"] >= agg["spread_mean_pp"]["mag60"] - 0.5
         )
         wins_top10 = {
-            a: sum(1 for r in reps if r["rank"][a]["top10_real"] >= max(
-                r["rank"][b]["top10_real"] for b in ARM_NAMES if b != a
+            a: sum(1 for r in reps if r[f"rank_{a}"]["top10_real"] >= max(
+                r[f"rank_{b}"]["top10_real"] for b in ARM_NAMES if b != a
             ))
             for a in ARM_NAMES
         }
@@ -268,9 +274,6 @@ def main() -> int:
             "OK" if (o0 is not None and o0 <= -4.0) else "SUSPECT(mag60头win0缺口非负,幅度头过度承诺未现)"
         )
 
-    ts = time.strftime("%Y%m%d_%H%M%S")
-    out = data_others_path("diag") / f"ranktarget_decayrank_v4_{board}_{ts}.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", encoding="utf-8") as fh:
         json.dump(agg, fh, ensure_ascii=False, indent=2, default=str)
     if n:
