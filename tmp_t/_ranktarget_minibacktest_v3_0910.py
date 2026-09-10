@@ -187,11 +187,6 @@ def main() -> int:
         print("[stage] 缺元列, staging 帧不可用 (rc=4)", flush=True)
         return 4
 
-    missing = [c for c in META_COLS if c not in stage_names]
-    if missing:
-        print(f"[stage] 缺元列 {missing} (rc=4)", flush=True)
-        return 4
-
     # 生产 bundle 仅取特征列清单 (不加载模型, 对照头全部现训)
     import pickle
 
