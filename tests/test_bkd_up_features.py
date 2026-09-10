@@ -144,13 +144,14 @@ class TestWiring(unittest.TestCase):
         self.assertFalse(FeatureEngineV35._dim_active(_Reg([]), "dim36_bkd_up"))
         self.assertTrue(FeatureEngineV35._dim_active(None, "dim36_bkd_up"))
 
-    def test_force_include_both_boards(self):
+    def test_force_include_gate_off_until_ab_pass(self):
+        """A/B v6 PASS 前 dim36 族不得进生产 force_include (用户指令: 通过了才接线)."""
         cfg = FeatureSelector.DEFAULT_CONFIG
         inc_main = set(cfg["main"]["force_include"])
         inc_dual = set(cfg["dual"]["gate_d"]["force_include"])
         for name in TARGET_14:
-            self.assertIn(name, inc_main, f"main force_include 缺 {name}")
-            self.assertIn(name, inc_dual, f"dual force_include 缺 {name}")
+            self.assertNotIn(name, inc_main, f"A/B 未过 {name} 已在 main force_include")
+            self.assertNotIn(name, inc_dual, f"A/B 未过 {name} 已在 dual force_include")
 
     def test_registry_registered(self):
         reg = FeatureRegistry()

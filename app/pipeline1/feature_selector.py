@@ -1314,23 +1314,11 @@ class FeatureSelector:
                 "ths_bear_brute_ma5",
                 "ths_bear_brute_ma20",
                 "ths_bear_pool_brute_pct1",
-                # [2026-09-10] dim36 双向短期族当日入池 (用户指令, 688228 案立项):
-                # bkd_ 破位 + up_ 上涨, 引擎 dim36_bkd_up 物化, 注册中心已注册.
-                # A/B v6 FAIL 时回退 = 删本段 (一行配置).
-                "bkd_dn_streak",
-                "bkd_dn_days5",
-                "bkd_dd5_high20",
-                "bkd_dd_high60",
-                "bkd_min10_dist",
-                "bkd_below_ma_cnt",
-                "bkd_ma_bear_align",
-                "bkd_ma5_slope5",
-                "up_vol_confirm5",
-                "up_body5",
-                "up_break20_vol",
-                "up_followthrough",
-                "up_pullback_depth",
-                "up_gap_hold",
+                # [2026-09-10] dim36 双向短期族 (bkd_ 8 + up_ 6, 688228 案立项):
+                # 引擎 dim36_bkd_up 物化 + 注册中心已注册, 但**A/B v6 PASS 才接入生产**
+                # (用户指令: "AB 通过了才接线进生产"). PASS 后把 14 名加回此处 +
+                # dual.gate_d.force_include (名单: commit c474b444 / tests
+                # test_bkd_up_features.py TARGET_14).
             ],
         },
         "dual": {
@@ -1360,21 +1348,8 @@ class FeatureSelector:
                     "ths_bear_brute_ma5",
                     "ths_bear_brute_ma20",
                     "ths_bear_pool_brute_pct1",
-                    # [2026-09-10] dim36 双向短期族 (同 main 语义); 回退 = 删本段.
-                    "bkd_dn_streak",
-                    "bkd_dn_days5",
-                    "bkd_dd5_high20",
-                    "bkd_dd_high60",
-                    "bkd_min10_dist",
-                    "bkd_below_ma_cnt",
-                    "bkd_ma_bear_align",
-                    "bkd_ma5_slope5",
-                    "up_vol_confirm5",
-                    "up_body5",
-                    "up_break20_vol",
-                    "up_followthrough",
-                    "up_pullback_depth",
-                    "up_gap_hold",
+                    # [2026-09-10] dim36 双向短期族: A/B v6 PASS 才接入 (同 main 语义),
+                    # 名单见 tests/test_bkd_up_features.py TARGET_14.
                 ],
             },
         },

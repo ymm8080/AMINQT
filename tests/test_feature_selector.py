@@ -752,16 +752,13 @@ class TestFeatureSelectorSelection:
                 json.dump({"features": pin_feats}, fh)
             sel = FeatureSelector(registry_dir=tmp)
             features = sel.select(df, "dual")
-            # 返回 = pin 特征 + force_include 当日入池族 (dim36 bkd_/up_, ths 名不在帧被剔),
-            # 不是消融结果. [2026-09-10] DEFAULT_CONFIG 增 dim36 族后同步更新断言.
-            assert set(pin_feats) <= set(features)
-            extra = set(features) - set(pin_feats)
-            dim36_family = set(FeatureSelector.DEFAULT_CONFIG["dual"]["gate_d"]["force_include"])
-            assert extra and extra <= dim36_family
+            # 返回 = pin 特征 (且都存在于面板), 不是消融结果
+            # [2026-09-10] dim36 族 A/B PASS 前不进 force_include (默认 OFF)
+            assert set(features) == set(pin_feats)
             snap = self._latest_snapshot(tmp, "dual")
             m = snap["metrics"]
             assert m["pinned"] is True
-            assert m["n_returned"] == len(features)
+            assert m["n_returned"] == len(pin_feats)
             # 诊断消融仍在跑 (metrics 有消融记录), 但结果不进训练
             assert m["n_candidates"] > 0 and "ablation_log" in m
             assert len(m["gain_rank"]) == m["n_candidates"]
