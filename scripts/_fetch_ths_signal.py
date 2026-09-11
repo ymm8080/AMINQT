@@ -22,7 +22,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 import requests

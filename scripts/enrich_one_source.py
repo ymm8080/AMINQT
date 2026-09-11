@@ -600,17 +600,17 @@ def merge_ths_signal(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame
         d["date"] = pd.to_datetime(f.stem.split("_")[1], format="%Y%m%d")
         d["ths_bull"] = 1.0
         # "||"必须regex=False: pandas对长度>1的pat默认按正则, "||"是空交替→按字符切开
-        def _count_signals(col):
-            if col not in d.columns:
+        def _count_signals(col, df):
+            if col not in df.columns:
                 return 0.0
             return (
-                d[col].fillna("").astype(str)
+                df[col].fillna("").astype(str)
                 .str.split("||", regex=False)
                 .apply(lambda xs: sum(1 for x in xs if x.strip()))
             )
 
-        d["ths_bull_buy_sig_n"] = _count_signals("ths_bull_buy_signals")
-        d["ths_bull_tech_n"] = _count_signals("ths_bull_tech_pattern")
+        d["ths_bull_buy_sig_n"] = _count_signals("ths_bull_buy_signals", d)
+        d["ths_bull_tech_n"] = _count_signals("ths_bull_tech_pattern", d)
         # 外部源schema可能漂移, 按实际存在的列取
         want = ["symbol", "date", "ths_bull", "ths_bull_ready_rise", "ths_bull_buy_signals",
                 "ths_bull_tech_pattern", "ths_bull_buy_sig_n", "ths_bull_tech_n"]
