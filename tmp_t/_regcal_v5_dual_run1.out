@@ -1,0 +1,2 @@
+[load] data/_diag_stage_dual_3y.parquet
+[load] 949581 rows x 212 cols; 弱市日占比 43.80% (6s)

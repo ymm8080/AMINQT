@@ -1,0 +1,49 @@
+[preflight:_retrain_legacy_full] 数据前置: cyq → sw_history → freshness (log=D:\AMINQT\AMINQT CODES\logs\manual_preflight_20260910_233918.log)
+[preflight] cyq ok (210s)
+[preflight] sw_history ok (3s)
+[preflight] freshness ok (4s)
+[preflight:_retrain_legacy_full] 数据前置全部 ok
+2026-09-10 23:43:02,173 INFO app.pipeline1.train_runner [panel_path] V3 直读 + 3y 窗口: 2594239 rows max=2026-09-10
+2026-09-10 23:43:02,174 INFO app.pipeline1.train_runner [timing] panel load: 7.1s
+2026-09-10 23:43:02,174 INFO app.pipeline1.train_runner FeatureSelector 已初始化: MAIN=bruteforce_dedup DUAL=gate_d
+2026-09-10 23:43:02,201 INFO app.pipeline1.feature_registry FeatureRegistry: 已加载 D:\AMINQT\DATA OTHERS\factor_registry\feature_registry.json (460 特征)
+2026-09-10 23:43:36,958 INFO app.pipeline1.train_runner [timing] cleaning (run_train): 34.8s
+2026-09-10 23:43:55,260 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.5G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 23:49:25,508 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.8G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 23:58:25,997 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.4G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 23:59:56,295 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:00:56,456 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.3G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:02:26,580 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.1G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:06:28,011 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:07:58,239 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.5G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:10:05,282 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:11:36,000 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.1G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:14:20,644 INFO app.pipeline1.feature_engine_v35 dim28: SW daily history loaded: 883530 rows, 431 indices
+2026-09-11 00:15:39,089 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 5.3G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:15:39,140 INFO app.pipeline1.feature_engine_v35 dim28: L1 — 1611518/1643337 rows filled (98.1%)
+2026-09-11 00:16:11,043 INFO app.pipeline1.feature_engine_v35 dim28: L2 — 1608783/1643337 rows filled (97.9%)
+2026-09-11 00:16:41,592 INFO app.pipeline1.feature_engine_v35 dim28: L3 — 1540730/1643337 rows filled (93.8%)
+2026-09-11 00:17:40,101 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:18:41,234 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.1G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:22:41,500 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 2.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:28:11,789 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.2G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:30:41,862 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.8G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:31:41,894 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 2.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:36:42,056 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.9G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:39:42,153 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.9G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 00:49:12,417 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.8G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 01:03:42,800 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 2.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 01:15:16,905 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.8G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 01:26:47,228 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.5G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 01:30:17,330 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 2.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 01:33:47,444 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.9G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 02:19:46,934 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 2.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 02:24:17,038 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.6G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 02:46:47,636 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 2.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 02:49:47,700 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 2.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 03:00:47,992 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 2.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 03:11:18,289 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.9G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 05:25:21,659 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.9G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 05:26:51,698 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.5G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 05:33:51,887 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 2.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-11 05:54:17,831 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.7G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.

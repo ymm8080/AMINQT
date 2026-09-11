@@ -1,0 +1,8 @@
+[cal] 733个交易日 2023-09-01 ~ 2026-09-10
+[round 1/12] 待处理 15/733 天
+[r1 5/15] 20241231: 找到N=None 抓到4588 (short_page) | 0.1h
+[r1 10/15] 20250725: 找到N=None 抓到2714 (short_page) | 0.1h
+[r1 15/15] 20260422: 找到N=None 抓到2423 (short_page) | 0.2h
+[round 1 done] 本轮处理15天, 剩0天
+[done] 全部交易日完成, audit complete 733/733, 最后 20260422
+SCRIPT-END

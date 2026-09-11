@@ -1,0 +1,17 @@
+[relaunch-wait] 20:05:19 daily_fetch_alive=True free=5.3GB (need 8GB)
+[relaunch-wait] 20:07:24 daily_fetch_alive=False free=7.5GB (need 8GB)
+[relaunch-wait] 20:09:26 daily_fetch_alive=False free=7.4GB (need 8GB)
+[relaunch-wait] 20:11:28 daily_fetch_alive=False free=5.5GB (need 8GB)
+[relaunch-wait] 20:13:29 daily_fetch_alive=False free=4.9GB (need 8GB)
+[relaunch-wait] 20:15:31 daily_fetch_alive=False free=3.7GB (need 8GB)
+[relaunch-wait] 20:17:33 daily_fetch_alive=False free=3.3GB (need 8GB)
+[relaunch-wait] 20:19:34 daily_fetch_alive=False free=2.4GB (need 8GB)
+[relaunch-wait] 20:21:36 daily_fetch_alive=False free=2.2GB (need 8GB)
+[relaunch-wait] 20:23:38 daily_fetch_alive=False free=3.4GB (need 8GB)
+[relaunch-wait] 20:25:40 daily_fetch_alive=False free=0.2GB (need 8GB)
+[relaunch-wait] 20:27:42 daily_fetch_alive=False free=2.6GB (need 8GB)
+[relaunch-wait] 20:29:44 daily_fetch_alive=False free=2.9GB (need 8GB)
+[relaunch-wait] 20:31:47 daily_fetch_alive=False free=8.7GB (need 8GB)
+[relaunch] 启动重训: scripts/_retrain_legacy_full.py 20260910
+[relaunch] retrain PID=12216 out=D:\AMINQT\AMINQT CODES\tmp_t\_retrain_20260910_rerun.out
+[relaunch] retrain rc=1

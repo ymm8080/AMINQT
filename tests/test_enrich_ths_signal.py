@@ -110,8 +110,10 @@ def test_bear_duplicate_rows_do_not_explode_panel(ths_dir):
 def test_bear_pool_broadcast_by_date(ths_dir):
     _make_bull_file(ths_dir, "20260908", ["600104"])
     pd.DataFrame(
-        [{"date": "20260908", "bear_count": 2390},
-         {"date": "20260908", "bear_count": 2390}]  # 断点重启dup防线
+        [
+            {"date": "20260908", "bear_count": 2390},
+            {"date": "20260908", "bear_count": 2390},
+        ]  # 断点重启dup防线
     ).to_csv(ths_dir / "bear_counts.csv", index=False)
     out = enrich_one_source.merge_ths_signal(_panel())
     day = out[out["date"] == "2026-09-08"]
@@ -122,8 +124,9 @@ def test_bear_pool_broadcast_by_date(ths_dir):
 
 
 def test_single_signal_no_pipe_counts_as_one(ths_dir):
-    _make_bull_file(ths_dir, "20260908", ["600104"],
-                    buy_sigs=["月线bias买入"], tech=["阳线"])
+    _make_bull_file(
+        ths_dir, "20260908", ["600104"], buy_sigs=["月线bias买入"], tech=["阳线"]
+    )
     out = enrich_one_source.merge_ths_signal(_panel())
     assert out["ths_bull_buy_sig_n"].iloc[0] == 1.0
     assert out["ths_bull_tech_n"].iloc[0] == 1.0

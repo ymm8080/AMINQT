@@ -1,0 +1,5 @@
+[chain] {'ts': '2026-09-10 08:41:45', 'stage': 'waiting_v4_dual', 'wait_pid': 18860}
+[chain] {'ts': '2026-09-10 08:45:15', 'stage': 'v4_dual_exited', 'waited_s': 210}
+[chain] {'ts': '2026-09-10 08:45:15', 'stage': 'v5_main_running'}
+[chain] {'ts': '2026-09-10 09:09:45', 'stage': 'v5_main_done'}
+[chain] {'ts': '2026-09-10 09:09:45', 'stage': 'v5_dual_running'}

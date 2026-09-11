@@ -1,0 +1,7 @@
+[load] data/_diag_stage_main_3y.parquet
+[load] 1640968 rows x 273 cols (18s)
+[win0] 2026-06-17→2026-08-26 mag60 gap -2.43 top10 8.62% IC 0.0995 | mag5 gap -4.40 top10 -1.51% IC 0.0439 | rank60 gap -1.39 top10 3.05% IC 0.1293 (669s)
+[win1] 2026-03-19→2026-06-16 mag60 gap -4.74 top10 4.90% IC 0.0107 | mag5 gap -4.06 top10 7.29% IC 0.0116 | rank60 gap -10.00 top10 0.37% IC 0.0050 (1267s)
+[win2] 2025-12-15→2026-03-18 mag60 gap 0.82 top10 6.69% IC 0.0711 | mag5 gap -9.85 top10 1.71% IC 0.0418 | rank60 gap 0.57 top10 3.44% IC 0.0815 (1714s)
+[win3] 2025-09-12→2025-12-12 mag60 gap -5.18 top10 2.71% IC 0.0293 | mag5 gap -9.01 top10 1.17% IC -0.0357 | rank60 gap 3.17 top10 7.40% IC 0.1123 (2333s)
+[win4] 2025-06-20→2025-09-11 mag60 gap -2.54 top10 6.65% IC 0.0646 | mag5 gap -5.05 top10 5.44% IC 0.0397 | rank60 gap -2.59 top10 7.02% IC 0.0687 (3237s)

@@ -450,6 +450,29 @@ def main() -> int:
             )
             print(picks.to_string(index=False))
             return 0
+    # [2026-09-10 用户令"不需要推了"] 一次性推送总闸: 旗标存在当晚全线不推 (清单照出,
+    # 不写 txt 不加自选); 次日删旗标即恢复. 一次性 override 勿 commit.
+    _no_push_flag = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "tmp_t",
+        "_no_push_20260910.flag",
+    )
+    if os.path.exists(_no_push_flag):
+        print(
+            f"[no-push] 推送总闸关闭 ({os.path.basename(_no_push_flag)}):"
+            " 清单照出, 不写 txt 不加自选"
+        )
+        from scripts._ths_watchlist_push import write_push_result
+
+        write_push_result(
+            STOCK_LIST_DIR / f"ths_watchlist_{date}__{MODULE}.txt",
+            picks["symbol"].tolist(),
+            [],
+            note="no_push_user_hold",
+        )
+        print(picks.to_string(index=False))
+        return 0
     txt_path = STOCK_LIST_DIR / f"ths_watchlist_{date}__{MODULE}.txt"
     with open(txt_path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(picks["symbol"]) + "\n")

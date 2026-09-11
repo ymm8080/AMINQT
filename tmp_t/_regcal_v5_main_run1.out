@@ -1,0 +1,9 @@
+[load] data/_diag_stage_main_3y.parquet
+[load] 1640968 rows x 273 cols; 弱市日占比 43.80% (26s)
+[win0] 2026-06-17→2026-08-26 mag60 gap -2.43 top10 8.62% IC 0.10 | regcal gap -4.47 top10 8.84% IC 0.10 | 弱市日 gap mag60 -5.12→regcal -7.10 | 强市日 gap mag60 2.30→regcal 0.61 (339s)
+[win1] 2026-03-19→2026-06-16 mag60 gap -4.74 top10 4.90% IC 0.01 | regcal gap -5.63 top10 4.98% IC 0.01 | 弱市日 gap mag60 -4.50→regcal -5.77 | 强市日 gap mag60 -5.29→regcal -5.21 (719s)
+[win2] 2025-12-15→2026-03-18 mag60 gap 0.82 top10 6.69% IC 0.07 | regcal gap -3.95 top10 6.37% IC 0.07 | 弱市日 gap mag60 1.67→regcal -1.62 | 强市日 gap mag60 0.10→regcal -5.92 (864s)
+[win3] 2025-09-12→2025-12-12 mag60 gap -5.18 top10 2.71% IC 0.03 | regcal gap -5.77 top10 2.79% IC 0.03 | 弱市日 gap mag60 -3.36→regcal -4.35 | 强市日 gap mag60 -6.53→regcal -6.34 (1067s)
+[win4] 2025-06-20→2025-09-11 mag60 gap -2.54 top10 6.65% IC 0.06 | regcal gap -3.08 top10 6.58% IC 0.06 | 弱市日 gap mag60 -0.18→regcal -0.89 | 强市日 gap mag60 -3.00→regcal -3.52 (1469s)
+[verdict] main v5 行情条件化校准 FAIL | gt6缺口均值 mag60 -2.82pp → regcal -4.58pp (闸±1.5) | 弱市 -2.30→-3.95 | 强市 -2.48→-4.08 | IC 0.0550→0.0546 | top10 5.91%→5.91% | 单窗不爆(>-4pp): False | gap_mean_abs_le_1.5=False ic_not_hurt=True top10_not_hurt=True spread_not_hurt=True no_window_gap_lt_-4=False | (1469s)
+[worm] D:\AMINQT\DATA OTHERS\diag\ranktarget_regcal_v5_main_20260910_084541.json

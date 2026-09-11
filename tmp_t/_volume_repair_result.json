@@ -1,0 +1,12 @@
+{
+ "panel": "D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet",
+ "backup": "D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet.pre_volfix_20260909_071124",
+ "rows": 3989403,
+ "recon_before": 1343887,
+ "fixed_local": 789897,
+ "fixed_tushare": 1157042,
+ "hand_div100": 9670,
+ "resid_kept_approx": -603052,
+ "recon_after": 23337,
+ "hand_symbols": 300
+}

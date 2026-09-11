@@ -1671,9 +1671,7 @@ class FeatureSelector:
         )
         avail = [f for f in pin_feats if f in valid]
         avail.extend(
-            f
-            for f in self._force_include_avail(df, board, gcfg)
-            if f not in avail
+            f for f in self._force_include_avail(df, board, gcfg) if f not in avail
         )
         missing = [f for f in pin_feats if f not in avail]
         if missing:

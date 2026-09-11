@@ -1,0 +1,240 @@
+[
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "cuc",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13441289304455081,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "escapename",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13441289304454964,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "sess_tk",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13441289304455056,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "ticket",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13441289304454979,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "u_did",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434453929495136,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "u_dpass",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434453929495119,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "u_name",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13441289304454944,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "u_ttype",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434453929495170,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "u_ukey",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434453929495045,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "u_uver",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434453929495103,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "user",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13441289304454905,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "user_status",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13441289304454996,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "userid",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13441289304454929,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "utk",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13441289304455012,
+  "secure": false
+ },
+ {
+  "domain": ".10jqka.com.cn",
+  "name": "v",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13468073304277293,
+  "secure": false
+ },
+ {
+  "domain": ".iwencai.com",
+  "name": "_clck",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13465049228000000,
+  "secure": false
+ },
+ {
+  "domain": ".iwencai.com",
+  "name": "_clsk",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13433602118000000,
+  "secure": false
+ },
+ {
+  "domain": ".iwencai.com",
+  "name": "cid",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13465049228768318,
+  "secure": false
+ },
+ {
+  "domain": ".iwencai.com",
+  "name": "cuc",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434118105042635,
+  "secure": false
+ },
+ {
+  "domain": ".iwencai.com",
+  "name": "escapename",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434118105042558,
+  "secure": false
+ },
+ {
+  "domain": ".iwencai.com",
+  "name": "sess_tk",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434118105042619,
+  "secure": false
+ },
+ {
+  "domain": ".iwencai.com",
+  "name": "ticket",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434118105042572,
+  "secure": false
+ },
+ {
+  "domain": ".iwencai.com",
+  "name": "u_name",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434118105042541,
+  "secure": false
+ },
+ {
+  "domain": ".iwencai.com",
+  "name": "user",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434118105042400,
+  "secure": false
+ },
+ {
+  "domain": ".iwencai.com",
+  "name": "user_status",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434118105042604,
+  "secure": false
+ },
+ {
+  "domain": ".iwencai.com",
+  "name": "userid",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434118105042478,
+  "secure": false
+ },
+ {
+  "domain": ".iwencai.com",
+  "name": "utk",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434118105042588,
+  "secure": false
+ },
+ {
+  "domain": ".iwencai.com",
+  "name": "v",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13468073794384632,
+  "secure": false
+ },
+ {
+  "domain": "stat.10jqka.com.cn",
+  "name": "uid",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13436161896040941,
+  "secure": false
+ },
+ {
+  "domain": "upass.10jqka.com.cn",
+  "name": "PHPSESSID",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 0,
+  "secure": false
+ },
+ {
+  "domain": "upass.10jqka.com.cn",
+  "name": "ta_random_userid",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13468073259713101,
+  "secure": false
+ },
+ {
+  "domain": "upass.10jqka.com.cn",
+  "name": "ths_login_uname",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13434118104454847,
+  "secure": false
+ },
+ {
+  "domain": "www.iwencai.com",
+  "name": "THSSESSID",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 0,
+  "secure": false
+ },
+ {
+  "domain": "www.iwencai.com",
+  "name": "other_uid",
+  "value": "(v20 app-bound 暂不解)",
+  "expires_utc": 13468073228419594,
+  "secure": false
+ }
+]

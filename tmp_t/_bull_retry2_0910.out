@@ -1,0 +1,11 @@
+[cal] 732个交易日 2023-09-01 ~ 2026-09-09
+[sweep v3] 全量扫描: 无审计行/不完整的日子一律重抓
+[FAIL] 20230901: RuntimeError WAF 非JSON HTTP403 consec=1
+[FAIL] 20230904: RuntimeError WAF 非JSON HTTP403 consec=2
+[FAIL] 20230905: RuntimeError WAF 非JSON HTTP403 consec=3
+[FAIL] 20230914: RuntimeError WAF 非JSON HTTP403 consec=4
+[FAIL] 20230915: RuntimeError WAF 非JSON HTTP403 consec=5
+[FAIL] 20230918: RuntimeError WAF 非JSON HTTP403 consec=6
+[FAIL] 20230919: RuntimeError WAF 非JSON HTTP403 consec=7
+[FAIL] 20230925: RuntimeError WAF 非JSON HTTP403 consec=8
+[ABORT] 连续8失败, fail-fast退出

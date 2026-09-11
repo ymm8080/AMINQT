@@ -1,0 +1,5 @@
+[load] data/_diag_stage_main_3y.parquet
+[load] 1640968 rows x 273 cols (28s)
+[win0] 2026-06-17→2026-08-26 gt6缺口 new -1.39 vs prod -4.20 | top10 new 3.05% vs prod 9.79% | spread new 0.43 vs prod 8.53 | IC new 0.1293 vs prod 0.0901 (253s)
+[win1] 2026-03-19→2026-06-16 gt6缺口 new -10.00 vs prod 8.06 | top10 new 0.37% vs prod 39.22% | spread new 1.38 vs prod 14.34 | IC new 0.0050 vs prod 0.4324 (434s)
+[win2] 2025-12-15→2026-03-18 gt6缺口 new 0.57 vs prod 10.14 | top10 new 3.44% vs prod 50.26% | spread new 1.89 vs prod 23.94 | IC new 0.0815 vs prod 0.4412 (597s)

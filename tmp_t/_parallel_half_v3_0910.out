@@ -1,0 +1,8 @@
+﻿[00:12:27] v3 babysitter start; waiting for night queue PID 26548 (no push edition)
+[01:14:19] v3 babysitter start; waiting for night queue PID 26548 (no push edition)
+[06:17:26] night queue gone; waiting for >=4GB free RAM
+[06:17:26] free RAM 5.2GB ok
+[06:17:26] 120s settle buffer
+[06:19:26] start parallel
+[06:26:47] parallel exited rc=
+[06:26:47] parallel FAILED rc=

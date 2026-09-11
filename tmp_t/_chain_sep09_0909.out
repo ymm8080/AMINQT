@@ -1,0 +1,3 @@
+[18:34:18] 等前驱 (1/90): ['_cyq_recompute_v3_0909.py']
+[18:44:19] 等前驱 (2/90): ['_cyq_recompute_v3_0909.py']
+[18:54:20] 前驱清空; cyq 终态=ok (manual verify fix — script line284 ParquetFile.num_rows AttributeError, replace已成功); 启动夜链 --force-retrain --force

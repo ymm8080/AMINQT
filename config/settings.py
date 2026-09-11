@@ -454,7 +454,7 @@ LEGACY_PROB_GATE = {
 # dual_20260910 OOS IC -0.1232 史上最差 → dual 板票不进 TOP10 混排 (预测/候选落盘/
 # drift 监控照常, 仅 emit 前过滤). board 取值实为 main/GEM/STAR (dual板行=GEM/STAR,
 # 无"dual"字面值). 回退(恢复双创进混排): 改回 ("main", "GEM", "STAR").
-LEGACY_LIST_BOARDS = ("main", "GEM", "STAR")
+LEGACY_LIST_BOARDS = ("main",)
 
 # ── LEGACY 交付选择栈 (09-07 用户令 "FIRST UPDATE 密度MODULE" + "YOU MAKE DECISION") ──
 # mode="prob10_pull" = 纯 prob_up_10d 板内降序 + 回撤闸, 跳过 E7/prob_gate/幅度键;

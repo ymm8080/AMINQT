@@ -1,0 +1,19 @@
+﻿python : 2026-09-10 09:33:31,192 [INFO] enrich_one: ============================================================
+At line:1 char:333
++ ... NG='utf-8'; python "D:\AMINQT\AMINQT CODES\scripts\enrich_one_source. ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (2026-09-10 09:3...===============:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+2026-09-10 09:33:31,192 [INFO] enrich_one: Loading panel: D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet
+2026-09-10 09:33:35,441 [INFO] enrich_one: Panel: 3994646 rows, 5252 symbols, 122 cols
+2026-09-10 09:33:35,441 [INFO] enrich_one: Running enrich: ths_signal (refresh=False)
+2026-09-10 09:33:47,063 [INFO] enrich_one: ths_signal: no bear_*.parquet (看跌个股级未回填?)
+2026-09-10 09:34:17,864 [INFO] enrich_one: ths_signal: bull 1708 rows, bear 0 rows, +7 cols
+2026-09-10 09:34:18,201 [INFO] enrich_one: ths_signal: done in 43s, +7 new cols: ['ths_bear_pool', 'ths_bull', 
+'ths_bull_buy_sig_n', 'ths_bull_buy_signals', 'ths_bull_ready_rise', 'ths_bull_tech_n', 'ths_bull_tech_pattern']
+2026-09-10 09:34:18,654 [INFO] enrich_one: Partial output for ths_signal: 7 cols: ['ths_bull', 'ths_bull_ready_rise', 
+'ths_bull_buy_signals', 'ths_bull_tech_pattern', 'ths_bull_buy_sig_n', 'ths_bull_tech_n', 'ths_bear_pool']
+2026-09-10 09:34:20,206 [INFO] enrich_one: Wrote partial: D:\AMINQT\AMINQT CODES\data\enrich_parts\ths_signal.parquet 
+(2.1 MB, 3994646 rows)
+2026-09-10 09:34:20,206 [INFO] enrich_one: ============================================================

@@ -1,0 +1,12 @@
+内存挤兑警报: 可用内存 0.3G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+Traceback (most recent call last):
+  File "D:\AMINQT\AMINQT CODES\tmp_t\_rankshadow_10d_0910.py", line 305, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "D:\AMINQT\AMINQT CODES\tmp_t\_rankshadow_10d_0910.py", line 280, in main
+    trained, test, case_row = train_board(board)
+                              ^^^^^^^^^^^^^^^^^^
+  File "D:\AMINQT\AMINQT CODES\tmp_t\_rankshadow_10d_0910.py", line 210, in train_board
+    (board_df,) = cleaner.run_train(panel, board=board)
+    ^^^^^^^^^^^
+ValueError: too many values to unpack (expected 1)

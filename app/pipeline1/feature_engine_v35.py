@@ -3651,6 +3651,7 @@ class FeatureEngineV35:
     def dim36_bkd_up(df: pd.DataFrame) -> pd.DataFrame:
         """双向短期特征族 14 特征 (2026-09-10 立项, tmp_t/_bkd_ab_minibacktest_v6_0910.py
         同一实现, 数学逐字一致). 输入须已按 symbol,date 排序. 全部 t 日收盘可知, 零前视."""
+
         def _roll(series: pd.Series, win: int, how: str) -> pd.Series:
             return series.groupby(df["symbol"], sort=False).transform(
                 lambda s: getattr(s.rolling(win, min_periods=win), how)()
@@ -3665,8 +3666,11 @@ class FeatureEngineV35:
         ma10 = g["close_hfq"].transform(lambda s: s.rolling(10, min_periods=10).mean())
         ma20 = g["close_hfq"].transform(lambda s: s.rolling(20, min_periods=20).mean())
         hi20 = g["high_hfq"].transform(lambda s: s.rolling(20, min_periods=20).max())
-        hi20p = g["high_hfq"].shift(1).groupby(df["symbol"], sort=False).transform(
-            lambda s: s.rolling(20, min_periods=20).max()
+        hi20p = (
+            g["high_hfq"]
+            .shift(1)
+            .groupby(df["symbol"], sort=False)
+            .transform(lambda s: s.rolling(20, min_periods=20).max())
         )
         hi5 = g["close_hfq"].transform(lambda s: s.rolling(5, min_periods=5).max())
         lo10 = g["low_hfq"].transform(lambda s: s.rolling(10, min_periods=10).min())
@@ -3683,12 +3687,18 @@ class FeatureEngineV35:
         df["bkd_dd_high60"] = c / hi60 - 1.0
         df["bkd_min10_dist"] = c / lo10 - 1.0
         df["bkd_below_ma_cnt"] = (
-            (c < ma5).astype("float64") + (c < ma10).astype("float64") + (c < ma20).astype("float64")
+            (c < ma5).astype("float64")
+            + (c < ma10).astype("float64")
+            + (c < ma20).astype("float64")
         )
         df["bkd_ma_bear_align"] = (
-            (ma5 < ma10).astype("float64") + (ma10 < ma20).astype("float64") + (c < ma5).astype("float64")
+            (ma5 < ma10).astype("float64")
+            + (ma10 < ma20).astype("float64")
+            + (c < ma5).astype("float64")
         ) / 3.0
-        df["bkd_ma5_slope5"] = ma5.groupby(df["symbol"], sort=False).pct_change(5, fill_method=None)
+        df["bkd_ma5_slope5"] = ma5.groupby(df["symbol"], sort=False).pct_change(
+            5, fill_method=None
+        )
         up5 = _roll(up, 5, "sum")
         upvol5 = _roll(up * df["volume"], 5, "sum")
         df["up_vol_confirm5"] = (upvol5 / up5.replace(0.0, np.nan)) / v20

@@ -1,0 +1,31 @@
+[load] data/_diag_stage_main_3y.parquet
+[load] 1640968 rows | base 268 cols -> bkd 282 (25s)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[win0] 2026-06-17→2026-08-26 base gap -2.43 weak -5.12 top10 8.62% IC 0.0995 | bkd gap -2.19 weak -4.99 top10 8.28% IC 0.0937 (633s)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[win1] 2026-03-19→2026-06-16 base gap -4.74 weak -4.50 top10 4.90% IC 0.0107 | bkd gap -4.55 weak -4.36 top10 4.88% IC 0.0117 (1167s)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[main/10d_reg] 早停仅 10 树 (< 30), 重训 30 树保底
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[main/10d_reg] 早停仅 10 树 (< 30), 重训 30 树保底
+[win2] 2025-12-15→2026-03-18 base gap 0.82 weak 1.67 top10 6.69% IC 0.0711 | bkd gap 0.32 weak 0.96 top10 6.20% IC 0.0723 (1520s)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[win3] 2025-09-12→2025-12-12 base gap -5.18 weak -3.36 top10 2.71% IC 0.0293 | bkd gap -3.97 weak -1.93 top10 5.43% IC 0.0215 (1920s)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[win4] 2025-06-20→2025-09-11 base gap -2.54 weak -0.18 top10 6.65% IC 0.0646 | bkd gap -2.98 weak -1.15 top10 5.90% IC 0.0645 (2644s)
+[verdict] main | 不伤 PASS (IC 0.0550->0.0527, top10 5.91%->6.14%, spread 3.03->3.33) | 治病 FAIL (弱市gt6缺口 -2.30->-2.29, 改善 +0.01; 下杀切片缺口 -5.91->-5.21, 改善 +0.70) | 不爆 PASS | case688228 win0 {} | OVERALL FAIL | (2644s)
+[worm] D:\AMINQT\DATA OTHERS\diag\bkd_ab_v6_main_20260910_095751.json

@@ -1,0 +1,176 @@
+
+### 000565
+      date  close  pctChg       amount  volume_ratio  turnover_rate
+2026-08-24   5.93  -1.331  53871485.50          0.62          2.092
+2026-08-25   6.03   1.686  64275752.20          0.71          2.475
+2026-08-26   6.03   0.000  61825245.50          0.64          2.370
+2026-08-27   6.02  -0.166  42179471.00          0.53          1.618
+2026-08-28   6.62   9.967 146280396.41          2.37          5.348
+2026-08-31   6.48  -2.115 287508592.79          3.63         10.098
+2026-09-01   6.50   0.309 135805409.11          1.10          4.832
+2026-09-02   6.48  -0.308 106144624.88          0.78          3.775
+2026-09-03   6.30  -2.778  86997566.62          0.61          3.150
+2026-09-04   6.33   0.476  73740673.08          0.49          2.675
+2026-09-07   6.45   1.896  74706625.00          0.55          2.685
+2026-09-08   6.54   1.395  86025269.91          0.89          3.052
+2026-09-09   7.19   9.939 270737859.40          2.90          8.900
+
+### 600876
+      date  close  pctChg     amount  volume_ratio  turnover_rate
+2026-08-24   6.97  -2.107 15463959.0          0.75          0.560
+2026-08-25   7.10   1.865 17414969.0          0.83          0.623
+2026-08-26   7.18   1.127 20200882.0          1.05          0.712
+2026-08-27   7.05  -1.811 20662597.0          1.16          0.744
+2026-08-28   7.18   1.844 22780151.0          1.21          0.807
+2026-08-31   7.18   0.000 19253903.0          0.98          0.679
+2026-09-01   7.26   1.114 22729864.0          1.11          0.793
+2026-09-02   7.21  -0.689 15161185.0          0.72          0.535
+2026-09-03   7.07  -1.942 23801127.0          1.19          0.845
+2026-09-04   7.05  -0.283 23628905.0          1.15          0.839
+2026-09-07   7.12   0.993 15412317.0          0.74          0.549
+2026-09-08   7.22   1.404 16637893.0          0.82          0.585
+2026-09-09   7.19  -0.416 13775101.0          0.72          0.484
+
+### 002790
+      date  close  pctChg       amount  volume_ratio  turnover_rate
+2026-08-24   5.88  -0.170  20601970.00          0.74          1.346
+2026-08-25   6.02   2.381  27014405.68          1.02          1.739
+2026-08-26   6.05   0.498  22084884.68          0.79          1.406
+2026-08-27   5.99  -0.992  20987155.00          0.83          1.340
+2026-08-28   6.17   3.005  29472687.16          1.23          1.850
+2026-08-31   6.36   3.079  47685624.76          1.89          2.910
+2026-09-01   6.42   0.943  48666751.60          1.59          2.931
+2026-09-02   6.61   2.960  63760661.32          1.80          3.758
+2026-09-03   6.45  -2.421  70220114.80          1.60          4.099
+2026-09-04   6.45   0.000  38905555.80          0.74          2.296
+2026-09-07   6.35  -1.550  24442250.72          0.46          1.468
+2026-09-08   6.99  10.079  82816843.32          1.60          4.650
+2026-09-09   7.69  10.014 170843793.02          2.62          8.522
+
+### 002201
+      date  close  pctChg       amount  volume_ratio  turnover_rate
+2026-08-24   7.98  -1.238 8.770423e+07          0.89          1.833
+2026-08-25   8.14   2.005 9.148431e+07          0.96          1.895
+2026-08-26   8.17   0.369 8.156245e+07          0.84          1.664
+2026-08-27   8.29   1.469 7.971282e+07          0.89          1.602
+2026-08-28   8.35   0.724 8.752193e+07          0.98          1.741
+2026-08-31   8.37   0.240 7.035579e+07          0.80          1.406
+2026-09-01   8.38   0.119 7.765621e+07          0.93          1.538
+2026-09-02   9.22  10.024 3.866018e+08          4.45          7.072
+2026-09-03   9.89   7.267 1.039151e+09          6.77         18.101
+2026-09-04   9.27  -6.269 6.731649e+08          2.00         11.916
+2026-09-07   9.05  -2.373 4.161525e+08          0.95          7.631
+2026-09-08   9.30   2.762 5.596341e+08          1.09         10.102
+2026-09-09   9.16  -1.505 4.043455e+08          0.66          7.288
+
+### 000993
+      date  close  pctChg       amount  volume_ratio  turnover_rate
+2026-08-24   9.75   0.412  48404747.00          0.88          1.089
+2026-08-25   9.81   0.615  38850038.14          0.73          0.868
+2026-08-26   9.88   0.714  48431064.00          0.98          1.070
+2026-08-27   9.91   0.304  46947207.00          1.05          1.038
+2026-08-28   9.92   0.101  36166785.68          0.79          0.797
+2026-08-31   9.91  -0.101  35463293.00          0.81          0.785
+2026-09-01  10.07   1.615  62356033.53          1.49          1.356
+2026-09-02  10.26   1.887  96860890.60          2.06          2.084
+2026-09-03  10.49   2.242 277434228.75          4.73          5.729
+2026-09-04  10.73   2.288 300633675.92          2.86          6.154
+2026-09-07  10.46  -2.516 167351213.93          1.09          3.496
+2026-09-08  10.43  -0.287 122955526.68          0.68          2.576
+2026-09-09  11.47   9.971 327480754.89          1.59          6.355
+
+========== RANK DEPTH v2 ==========
+
+--- 20260902: leg n=3239 par n=3882
+  002377: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 182 1249 0.046783 0.47054 0.0168
+  002204: LEG #1264/3239 mag10=-0.0036 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 588 2232 0.021082 0.447725 0.006504
+  002201: LEG #2870/3239 mag10=-0.0257 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 1922 677 0.062737 0.403654 -0.013711
+  301176: LEG #2697/3239 mag10=-0.0221 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] dual 436 75 0.128353 0.591771 -0.004767
+  600318: LEG #2913/3239 mag10=-0.0268 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 915 1864 0.031895 0.435901 0.001131
+  600359: LEG #1069/3239 mag10=-0.0012 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 540 1105 0.050134 0.45011 0.007584
+  000993: LEG #833/3239 mag10=+0.0026 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 365 1049 0.051945 0.459482 0.011819
+  000565: LEG #46/3239 mag10=+0.0543 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 847 1990 0.028348 0.437884 0.002034
+  600876: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] NOT-IN-POOL
+  002790: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 2 914 0.056247 0.503001 0.033733
+
+--- 20260903: leg n=3104 par n=3807
+  002377: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 51 1126 0.049651 0.49749 0.028027
+  002204: LEG #1404/3104 mag10=+0.0002 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 520 2214 0.020721 0.468761 0.011834
+  002201: LEG #2766/3104 mag10=-0.0223 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 1854 657 0.063403 0.427179 -0.01184
+  301176: LEG #2850/3104 mag10=-0.0254 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] dual 532 84 0.12674 0.610753 -0.006686
+  600318: LEG #2075/3104 mag10=-0.0084 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 613 1817 0.033136 0.465078 0.009753
+  600359: LEG #409/3104 mag10=+0.0176 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 209 795 0.059233 0.482767 0.019737
+  000993: LEG #1628/3104 mag10=-0.0022 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 1129 852 0.057851 0.448822 0.000534
+  000565: LEG #41/3104 mag10=+0.0595 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 626 1812 0.033189 0.46466 0.009516
+  600876: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] NOT-IN-POOL
+  002790: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 5 713 0.06109 0.516662 0.038821
+
+--- 20260904: leg n=3306 par n=3997
+  002377: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 30 1123 0.050571 0.505404 0.034379
+  002204: LEG #948/3306 mag10=+0.0064 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 744 2297 0.020544 0.465655 0.01107
+  002201: LEG #2563/3306 mag10=-0.0136 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 1591 747 0.060861 0.443091 -0.002256
+  301176: LEG #2925/3306 mag10=-0.0210 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] dual 298 87 0.12409 0.577229 -0.00096
+  600318: LEG #3000/3306 mag10=-0.0233 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 1304 1833 0.033795 0.450807 0.002314
+  600359: LEG #2698/3306 mag10=-0.0160 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 497 999 0.054305 0.474984 0.016553
+  000993: LEG #2032/3306 mag10=-0.0061 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 1441 819 0.059105 0.447038 0.000083
+  000565: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 279 1411 0.043684 0.484169 0.021941
+  600876: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] NOT-IN-POOL
+  002790: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] NOT-IN-POOL
+
+--- 20260907: leg n=3112 par n=3763
+  002377: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 24 1110 0.05034 0.507029 0.042872
+  002204: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 649 2175 0.020284 0.472433 0.015869
+  002201: LEG #2744/3112 mag10=-0.0224 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 1343 764 0.060795 0.45734 0.00404
+  301176: LEG #2944/3112 mag10=-0.0294 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] dual 433 89 0.123537 0.595727 -0.001431
+  600318: LEG #2407/3112 mag10=-0.0147 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 787 1676 0.035647 0.468654 0.012912
+  600359: LEG #2568/3112 mag10=-0.0182 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 895 1141 0.049393 0.46658 0.011288
+  000993: LEG #637/3112 mag10=+0.0083 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 1093 826 0.058937 0.462549 0.008128
+  000565: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 354 1556 0.038729 0.483073 0.024185
+  600876: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] NOT-IN-POOL
+  002790: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] NOT-IN-POOL
+
+--- 20260908: leg n=3214 par n=3864
+  002377: LEG #2864/3214 mag10=-0.0300 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 573 1480 0.042177 0.488962 0.026014
+  002204: LEG #2350/3214 mag10=-0.0221 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 897 2260 0.020713 0.483327 0.018792
+  002201: LEG #1129/3214 mag10=-0.0100 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 1939 624 0.064773 0.469054 0.000469
+  301176: LEG #2757/3214 mag10=-0.0277 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] dual 714 83 0.126168 0.634019 -0.00626
+  600318: LEG #2530/3214 mag10=-0.0243 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 925 1723 0.036055 0.48289 0.018231
+  600359: LEG #2975/3214 mag10=-0.0332 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 853 1070 0.052149 0.483928 0.019562
+  000993: LEG #1843/3214 mag10=-0.0175 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 1070 824 0.059119 0.48094 0.01573
+  000565: LEG #3119/3214 mag10=-0.0426 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 491 1783 0.034761 0.490647 0.028173
+  600876: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] NOT-IN-POOL
+  002790: LEG #470/3214 mag10=+0.0038 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 3 993 0.054466 0.511479 0.058298
+
+--- 20260909: leg n=3108 par n=3770
+  002377: LEG #1518/3108 mag10=+0.0065 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 959 1684 0.03677 0.510621 0.021288
+  002204: LEG #1944/3108 mag10=+0.0004 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 1021 2229 0.020581 0.510572 0.020376
+  002201: LEG #1266/3108 mag10=+0.0104 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 890 787 0.060415 0.510705 0.022851
+  301176: LEG #2911/3108 mag10=-0.0268 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] dual 816 54 0.128452 0.658266 -0.009378
+  600318: LEG #1608/3108 mag10=+0.0051 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 833 1715 0.036064 0.510769 0.024053
+  600359: LEG #3075/3108 mag10=-0.0404 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 1086 940 0.05557 0.510493 0.01889
+  000993: LEG #1838/3108 mag10=+0.0021 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 1310 804 0.060074 0.51023 0.01399
+  000565: LEG #3002/3108 mag10=-0.0316 | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 972 2103 0.025077 0.510613 0.021136
+  600876: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] NOT-IN-POOL
+  002790: LEG NOT-IN-POOL | PAR[brd,rkScore,rkMag5,mag5,prob5,mag10] main 121 707 0.062729 0.511944 0.045973
+
+========== PB / MV / PRICE (20260905) ==========
+Empty DataFrame
+Columns: [ts_code, close, pb, total_mv亿, circ_mv亿]
+Index: []
+
+   ts_code name industry market
+000565.SZ 渝三峡A     染料涂料     主板
+000993.SZ 闽东电力     水力发电     主板
+002201.SZ 九鼎新材       玻璃     主板
+002204.SZ 大连重工     专用机械     主板
+002377.SZ 国创高新     其他建材     主板
+002790.SZ  瑞尔特     家居用品     主板
+301176.SZ 逸豪新材      元器件    创业板
+600318.SH 新力金融     多元金融     主板
+600359.SH 新农开发      种植业     主板
+600876.SH 凯盛新能       玻璃     主板
+Traceback (most recent call last):
+  File "D:\AMINQT\AMINQT CODES\tmp_t\_ths_bull_miss2_0910.py", line 64, in <module>
+    print(f"\nȫ�г����� 0905: n={len(allb)}, �ͼ�(<13Ԫ)&PB<1.5&��ͨ<80�� = {len(low_pb_lowp)} ({len(low_pb_lowp)/len(allb):.1%})")
+                                                                                                  ~~~~~~~~~~~~~~~~^~~~~~~~~~
+ZeroDivisionError: division by zero

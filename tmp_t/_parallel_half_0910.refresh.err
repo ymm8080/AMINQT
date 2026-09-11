@@ -1,0 +1,170 @@
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1350: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["ret_pct"] = df.groupby("symbol")[close_col].pct_change()
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1351: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["limit_pct"] = limit_pct_series(df["board"], df["date"])
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1359: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["is_limit_up"] = (
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1363: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["limit_up_days_10"] = g.rolling(10).sum().reset_index(level=0, drop=True)
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1364: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["limit_up_days_20"] = g.rolling(20).sum().reset_index(level=0, drop=True)
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1377: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["consecutive_board"] = cons.clip(upper=4)
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1389: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["sector_limit_up_count"] = df.groupby(grp)["is_limit_up"].transform("sum")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1390: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["sector_return"] = df.groupby(grp)["ret_pct"].transform("mean")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1391: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["sector_return_5d"] = df.groupby("industry")["sector_return"].transform(
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:2298: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise an error in a future version of pandas. Value '[       nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan 1.42876836
+ 0.98329263        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan 0.83102032        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan        nan        nan        nan        nan
+        nan        nan]' has dtype incompatible with float32, please explicitly cast to a compatible dtype first.
+  df.loc[common, col] = proxy.loc[common, col].values
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:3588: FutureWarning: The default fill_method='pad' in DataFrame.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+  str_w = _dim35_str(wide_px.pct_change(), reg["eq_ret"])
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1097: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1101: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1350: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["ret_pct"] = df.groupby("symbol")[close_col].pct_change()
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1351: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["limit_pct"] = limit_pct_series(df["board"], df["date"])
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1359: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["is_limit_up"] = (
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1363: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["limit_up_days_10"] = g.rolling(10).sum().reset_index(level=0, drop=True)
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1364: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["limit_up_days_20"] = g.rolling(20).sum().reset_index(level=0, drop=True)
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1377: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["consecutive_board"] = cons.clip(upper=4)
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1389: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["sector_limit_up_count"] = df.groupby(grp)["is_limit_up"].transform("sum")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1390: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["sector_return"] = df.groupby(grp)["ret_pct"].transform("mean")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1391: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["sector_return_5d"] = df.groupby("industry")["sector_return"].transform(
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:2298: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise an error in a future version of pandas. Value '[nan nan nan ... nan nan nan]' has dtype incompatible with float32, please explicitly cast to a compatible dtype first.
+  df.loc[common, col] = proxy.loc[common, col].values
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:2298: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise an error in a future version of pandas. Value '[nan nan nan ... nan nan nan]' has dtype incompatible with float32, please explicitly cast to a compatible dtype first.
+  df.loc[common, col] = proxy.loc[common, col].values
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:3588: FutureWarning: The default fill_method='pad' in DataFrame.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+  str_w = _dim35_str(wide_px.pct_change(), reg["eq_ret"])
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1097: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_chg{w}"] = abs_chg
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\feature_engine_v35.py:1101: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{col}_pct_chg{w}"] = pct_chg
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:240: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_mdd_{n}d"] = _safe_divide(min_low, exec_close) - 1
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:240: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_mdd_{n}d"] = _safe_divide(min_low, exec_close) - 1
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:240: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_mdd_{n}d"] = _safe_divide(min_low, exec_close) - 1
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:241: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["label_pain"] = (df["label_mdd_3d"] < PAIN_THRESHOLD).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:136: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_{k}d"] = _safe_divide(future_close, df["close_hfq"]) - 1
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:136: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_{k}d"] = _safe_divide(future_close, df["close_hfq"]) - 1
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:136: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_{k}d"] = _safe_divide(future_close, df["close_hfq"]) - 1
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:136: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_{k}d"] = _safe_divide(future_close, df["close_hfq"]) - 1
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:136: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_{k}d"] = _safe_divide(future_close, df["close_hfq"]) - 1
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:153: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_pm_{k}d"] = _safe_divide(future_close, exec_px) - 1
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:153: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_pm_{k}d"] = _safe_divide(future_close, exec_px) - 1
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:153: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_pm_{k}d"] = _safe_divide(future_close, exec_px) - 1
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:153: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_pm_{k}d"] = _safe_divide(future_close, exec_px) - 1
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:153: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_pm_{k}d"] = _safe_divide(future_close, exec_px) - 1
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:155: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["label_pm_cls"] = (df["label_pm_1d"] > CLS_THRESHOLD).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:161: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_pm_{k}d_cls"] = (df[pm_col] > CLS_THRESHOLD).astype(
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:161: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_pm_{k}d_cls"] = (df[pm_col] > CLS_THRESHOLD).astype(
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:161: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_pm_{k}d_cls"] = (df[pm_col] > CLS_THRESHOLD).astype(
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:161: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_pm_{k}d_cls"] = (df[pm_col] > CLS_THRESHOLD).astype(
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:166: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["label_cls"] = (df["label_1d"] > CLS_THRESHOLD).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:170: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > CLS_THRESHOLD).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:170: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > CLS_THRESHOLD).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:170: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > CLS_THRESHOLD).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:170: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"label_{k}d_cls"] = (df[f"label_{k}d"] > CLS_THRESHOLD).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:197: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{prefix}_net"] = df[prefix] - cost_total
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:197: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{prefix}_net"] = df[prefix] - cost_total
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:197: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{prefix}_net"] = df[prefix] - cost_total
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:197: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{prefix}_net"] = df[prefix] - cost_total
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:197: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{prefix}_net"] = df[prefix] - cost_total
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:197: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{prefix}_net"] = df[prefix] - cost_total
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:197: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{prefix}_net"] = df[prefix] - cost_total
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:197: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{prefix}_net"] = df[prefix] - cost_total
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:197: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{prefix}_net"] = df[prefix] - cost_total
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:197: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[f"{prefix}_net"] = df[prefix] - cost_total
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:200: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["label_pm_cls_net"] = (df["label_pm_1d_net"] > 0).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:203: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["label_cls_net"] = (df["label_1d_net"] > 0).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:212: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[col] = (df[base] > 0).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:212: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[col] = (df[base] > 0).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:212: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[col] = (df[base] > 0).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:212: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[col] = (df[base] > 0).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:212: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[col] = (df[base] > 0).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:212: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[col] = (df[base] > 0).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:212: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[col] = (df[base] > 0).astype("float")
+D:\AMINQT\AMINQT CODES\scripts/..\app\pipeline1\label_engine.py:212: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df[col] = (df[base] > 0).astype("float")

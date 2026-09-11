@@ -1,0 +1,22 @@
+{
+ "同花顺看涨信号": {
+  "ok": false,
+  "err": "'dict' object has no attribute 'columns'"
+ },
+ "同花顺看跌信号": {
+  "ok": false,
+  "err": "'dict' object has no attribute 'columns'"
+ },
+ "我的自选股": {
+  "ok": true,
+  "n": 78,
+  "cols": [
+   "股票代码",
+   "股票简称",
+   "最新价",
+   "最新涨跌幅",
+   "market_code",
+   "code"
+  ]
+ }
+}

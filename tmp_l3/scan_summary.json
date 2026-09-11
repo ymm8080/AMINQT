@@ -1,0 +1,60 @@
+{
+  "seed": 42,
+  "n_stocks": 500,
+  "eval_window": [
+    "2024-08-16",
+    "2026-09-08"
+  ],
+  "min_cs_ic": 10,
+  "n_ic_tests": 2880,
+  "n_direct_tests": 180,
+  "rho_scen": 0.089,
+  "rho_regime": 0.208,
+  "rho_factor": 0.301,
+  "rho_horizon": 0.57,
+  "n_eff": 61.4,
+  "bonf_z_0.05": 3.35,
+  "scen_ns": {
+    "all": [
+      249689,
+      500
+    ],
+    "brk0_20": [
+      40931,
+      500
+    ],
+    "quiet_comp": [
+      56096,
+      498
+    ],
+    "next_lu": [
+      3391,
+      496
+    ],
+    "streak2": [
+      3397,
+      496
+    ],
+    "hivol": [
+      83454,
+      500
+    ],
+    "hito": [
+      79155,
+      500
+    ],
+    "illiq": [
+      82955,
+      500
+    ],
+    "bigup": [
+      19687,
+      500
+    ],
+    "bigdn": [
+      11327,
+      476
+    ]
+  },
+  "ic_engine": "rank-Pearson == Spearman, min_cs=10, welch t on Hi/Lo day IC series"
+}

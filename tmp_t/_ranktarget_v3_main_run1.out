@@ -1,0 +1,2 @@
+[load] data/_diag_stage_main_3y.parquet
+[load] 1640968 rows x 273 cols (18s)

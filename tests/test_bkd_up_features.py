@@ -21,10 +21,20 @@ from app.pipeline1.feature_registry import DIM_GROUPS, FeatureRegistry
 from app.pipeline1.feature_selector import FeatureSelector
 
 TARGET_14 = [
-    "bkd_dn_streak", "bkd_dn_days5", "bkd_dd5_high20", "bkd_dd_high60",
-    "bkd_min10_dist", "bkd_below_ma_cnt", "bkd_ma_bear_align", "bkd_ma5_slope5",
-    "up_vol_confirm5", "up_body5", "up_break20_vol", "up_followthrough",
-    "up_pullback_depth", "up_gap_hold",
+    "bkd_dn_streak",
+    "bkd_dn_days5",
+    "bkd_dd5_high20",
+    "bkd_dd_high60",
+    "bkd_min10_dist",
+    "bkd_below_ma_cnt",
+    "bkd_ma_bear_align",
+    "bkd_ma5_slope5",
+    "up_vol_confirm5",
+    "up_body5",
+    "up_break20_vol",
+    "up_followthrough",
+    "up_pullback_depth",
+    "up_gap_hold",
 ]
 
 
@@ -37,20 +47,38 @@ def _make_frame() -> pd.DataFrame:
     # symbol A
     closes_a = [100.0] * (n - 4) + [95.0, 94.0, 93.0, 92.0]
     for i, cl in enumerate(closes_a):
-        rows.append({
-            "symbol": "000001", "date": dates[i],
-            "open": cl, "high": cl + 1.0, "low": cl - 1.0, "close": cl,
-            "open_hfq": cl, "high_hfq": cl + 1.0, "low_hfq": cl - 1.0,
-            "close_hfq": cl, "volume": 1000.0,
-        })
+        rows.append(
+            {
+                "symbol": "000001",
+                "date": dates[i],
+                "open": cl,
+                "high": cl + 1.0,
+                "low": cl - 1.0,
+                "close": cl,
+                "open_hfq": cl,
+                "high_hfq": cl + 1.0,
+                "low_hfq": cl - 1.0,
+                "close_hfq": cl,
+                "volume": 1000.0,
+            }
+        )
     # symbol B: prev_close 全 100 (首行除外) → body=(101-100)/100=0.01
     for i in range(n):
-        rows.append({
-            "symbol": "000002", "date": dates[i],
-            "open": 100.0, "high": 102.0, "low": 99.5, "close": 101.0,
-            "open_hfq": 100.0, "high_hfq": 102.0, "low_hfq": 99.5,
-            "close_hfq": 101.0, "volume": 1000.0,
-        })
+        rows.append(
+            {
+                "symbol": "000002",
+                "date": dates[i],
+                "open": 100.0,
+                "high": 102.0,
+                "low": 99.5,
+                "close": 101.0,
+                "open_hfq": 100.0,
+                "high_hfq": 102.0,
+                "low_hfq": 99.5,
+                "close_hfq": 101.0,
+                "volume": 1000.0,
+            }
+        )
     df = pd.DataFrame(rows)
     df = df.sort_values(["symbol", "date"], kind="mergesort").reset_index(drop=True)
     return df
@@ -62,7 +90,7 @@ class TestDim36Math(unittest.TestCase):
         self.out = FeatureEngineV35.dim36_bkd_up(self.df.copy())
 
     def _row(self, sym, idx):
-        m = (self.out["symbol"] == sym)
+        m = self.out["symbol"] == sym
         sub = self.out.loc[m].reset_index(drop=True)
         return sub.iloc[idx]
 
@@ -103,7 +131,9 @@ class TestDim36Math(unittest.TestCase):
         # B row5: 窗口 [rows1..5] 有 4 个非 NaN → min_periods=5 未满 → NaN
         # B row6: 窗口 5 个 1/101 → 1/101
         self.assertTrue(pd.isna(self._row("000002", 4)["up_body5"]))
-        self.assertAlmostEqual(self._row("000002", 5)["up_body5"], 1.0 / 101.0, places=12)
+        self.assertAlmostEqual(
+            self._row("000002", 5)["up_body5"], 1.0 / 101.0, places=12
+        )
 
     def test_up_gap_hold_flat_is_zero(self):
         # A 平盘段 low=99 < prev_close=100 → 不算跳空回补, 10日均=0
@@ -197,8 +227,12 @@ class TestBuildEndToEnd(unittest.TestCase):
             self.assertIn(name, out.columns, f"build 未物化 {name}")
         # 值与直接调静态方法一致 (抽查 streak)
         direct = FeatureEngineV35.dim36_bkd_up(_make_frame())
-        m_out = out.loc[out["symbol"] == "000001", "bkd_dn_streak"].reset_index(drop=True)
-        m_dir = direct.loc[direct["symbol"] == "000001", "bkd_dn_streak"].reset_index(drop=True)
+        m_out = out.loc[out["symbol"] == "000001", "bkd_dn_streak"].reset_index(
+            drop=True
+        )
+        m_dir = direct.loc[direct["symbol"] == "000001", "bkd_dn_streak"].reset_index(
+            drop=True
+        )
         np.testing.assert_allclose(m_out.to_numpy(), m_dir.to_numpy())
 
     def test_build_skips_dim36_when_not_registered(self):

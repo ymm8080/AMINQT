@@ -1,0 +1,66 @@
+[cookie] 34对, 登录态=True
+
+===== query: 同花顺看涨信号
+[pywencai] 2026-09-10 08:22:35,973 - INFO - ��ȡcondition��ʼ
+(node:15608) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[pywencai] 2026-09-10 08:22:36,959 - INFO - ��ȡget_robot_data�ɹ�
+   FAIL AttributeError: 'dict' object has no attribute 'columns'
+
+===== query: 同花顺看跌信号
+[pywencai] 2026-09-10 08:22:36,959 - INFO - ��ȡcondition��ʼ
+(node:19100) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[pywencai] 2026-09-10 08:22:38,109 - INFO - ��ȡget_robot_data�ɹ�
+   FAIL AttributeError: 'dict' object has no attribute 'columns'
+
+===== query: 我的自选股
+[pywencai] 2026-09-10 08:22:38,109 - INFO - ��ȡcondition��ʼ
+(node:11292) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[pywencai] 2026-09-10 08:22:38,550 - WARNING - 1�γ���ʧ��
+(node:17624) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[pywencai] 2026-09-10 08:22:38,944 - WARNING - 2�γ���ʧ��
+(node:18728) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[pywencai] 2026-09-10 08:22:39,389 - WARNING - 3�γ���ʧ��
+(node:10612) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[pywencai] 2026-09-10 08:22:39,758 - WARNING - 4�γ���ʧ��
+(node:744) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[pywencai] 2026-09-10 08:22:40,364 - INFO - ��ȡget_robot_data�ɹ�
+[pywencai] 2026-09-10 08:22:40,364 - INFO - ��1ҳ��ʼ
+(node:6528) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[pywencai] 2026-09-10 08:22:40,745 - WARNING - 1�γ���ʧ��
+(node:4960) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[pywencai] 2026-09-10 08:22:41,137 - WARNING - 2�γ���ʧ��
+(node:12624) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[pywencai] 2026-09-10 08:22:41,483 - WARNING - 3�γ���ʧ��
+(node:17604) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[pywencai] 2026-09-10 08:22:41,849 - WARNING - 4�γ���ʧ��
+(node:15992) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[pywencai] 2026-09-10 08:22:42,248 - WARNING - 5�γ���ʧ��
+(node:15176) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[pywencai] 2026-09-10 08:22:42,698 - INFO - ��1ҳ�ɹ�
+   -> 78行 x 6列
+   cols: ['股票代码', '股票简称', '最新价', '最新涨跌幅', 'market_code', 'code']
+   saved: D:/AMINQT/AMINQT CODES/tmp_t/_ths_cap_我的自选股_0910.parquet
+        股票代码  股票简称     最新价                 最新涨跌幅 market_code    code
+0  688228.SH   开普云   75.02    -3.200000000000005          17  688228
+1  600822.SH  上海物贸     9.2    1.8826135105204866          17  600822
+2  603136.SH   天目湖    9.62    -1.736465781409601          17  603136
+3  600802.SH  福建水泥    5.61     4.664179104477611          17  600802
+4  688498.SH  源杰科技  1719.0   0.05820721769499418          17  688498
+5  603186.SH  华正新材  217.99     2.796378383476378          17  603186
+6  600097.SH  开创国际    9.85    -1.696606786427145          17  600097
+7  688655.SH   迅捷兴   56.32  -0.35385704175513594          17  688655
+
+SCRIPT-END

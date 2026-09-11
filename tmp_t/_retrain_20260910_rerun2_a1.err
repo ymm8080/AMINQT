@@ -1,0 +1,20 @@
+D:\AMINQT\AMINQT CODES\scripts\..\app\pipeline1\feature_engine_v35.py:1350: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["ret_pct"] = df.groupby("symbol")[close_col].pct_change()
+D:\AMINQT\AMINQT CODES\scripts\..\app\pipeline1\feature_engine_v35.py:1351: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["limit_pct"] = limit_pct_series(df["board"], df["date"])
+D:\AMINQT\AMINQT CODES\scripts\..\app\pipeline1\feature_engine_v35.py:1359: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["is_limit_up"] = (
+D:\AMINQT\AMINQT CODES\scripts\..\app\pipeline1\feature_engine_v35.py:1363: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["limit_up_days_10"] = g.rolling(10).sum().reset_index(level=0, drop=True)
+D:\AMINQT\AMINQT CODES\scripts\..\app\pipeline1\feature_engine_v35.py:1364: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["limit_up_days_20"] = g.rolling(20).sum().reset_index(level=0, drop=True)
+D:\AMINQT\AMINQT CODES\scripts\..\app\pipeline1\feature_engine_v35.py:1377: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["consecutive_board"] = cons.clip(upper=4)
+D:\AMINQT\AMINQT CODES\scripts\..\app\pipeline1\feature_engine_v35.py:1389: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["sector_limit_up_count"] = df.groupby(grp)["is_limit_up"].transform("sum")
+D:\AMINQT\AMINQT CODES\scripts\..\app\pipeline1\feature_engine_v35.py:1390: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["sector_return"] = df.groupby(grp)["ret_pct"].transform("mean")
+D:\AMINQT\AMINQT CODES\scripts\..\app\pipeline1\feature_engine_v35.py:1391: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+  df["sector_return_5d"] = df.groupby("industry")["sector_return"].transform(
+D:\AMINQT\AMINQT CODES\scripts\..\app\indicators\chip_distribution.py:44: RuntimeWarning: invalid value encountered in divide
+  return w / w.sum()

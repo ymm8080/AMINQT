@@ -1,0 +1,170 @@
+[preflight:_retrain_legacy_full] 数据前置: cyq → sw_history → freshness (log=D:\AMINQT\AMINQT CODES\logs\manual_preflight_20260910_170038.log)
+[preflight] cyq ok (193s)
+[preflight] sw_history ok (2s)
+[preflight] freshness ok (4s)
+[preflight:_retrain_legacy_full] 数据前置全部 ok
+2026-09-10 17:04:04,932 INFO app.pipeline1.train_runner [panel_path] V3 直读 + 3y 窗口: 2594238 rows max=2026-09-10
+2026-09-10 17:04:04,933 INFO app.pipeline1.train_runner [timing] panel load: 8.0s
+2026-09-10 17:04:04,934 INFO app.pipeline1.train_runner FeatureSelector 已初始化: MAIN=bruteforce_dedup DUAL=gate_d
+2026-09-10 17:04:04,939 INFO app.pipeline1.feature_registry FeatureRegistry: 已加载 D:\AMINQT\DATA OTHERS\factor_registry\feature_registry.json (460 特征)
+2026-09-10 17:04:27,018 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.4G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:04:43,753 INFO app.pipeline1.train_runner [timing] cleaning (run_train): 38.8s
+2026-09-10 17:09:57,284 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 2.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:11:27,331 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.7G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:18:27,751 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.4G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:19:58,167 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.3G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:21:28,541 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:22:29,137 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:24:00,938 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.1G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:29:48,322 INFO app.pipeline1.feature_engine_v35 dim28: SW daily history loaded: 883530 rows, 431 indices
+2026-09-10 17:30:05,458 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:30:42,853 INFO app.pipeline1.feature_engine_v35 dim28: L1 — 1611518/1643336 rows filled (98.1%)
+2026-09-10 17:31:16,189 INFO app.pipeline1.feature_engine_v35 dim28: L2 — 1608783/1643336 rows filled (97.9%)
+2026-09-10 17:31:42,617 INFO app.pipeline1.feature_engine_v35 dim28: L3 — 1540730/1643336 rows filled (93.8%)
+2026-09-10 17:32:05,871 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.1G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:35:06,228 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.5G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:50:17,660 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.4G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:50:27,133 INFO app.pipeline1.feature_engine_v35 Registry prune: 507 -> 372 features (dropped 135 across 3 dims)
+2026-09-10 17:50:27,134 INFO app.pipeline1.feature_engine_v35   Pruned [_auto_adopted]: 3 features — ['sw_index_close', 'sw_index_vol', 'sw_ret_1d']
+2026-09-10 17:50:27,134 INFO app.pipeline1.feature_engine_v35   Pruned [dim29_holdertrade]: 1 features — ['sh_is_executing']
+2026-09-10 17:50:27,134 INFO app.pipeline1.feature_engine_v35   Pruned [unknown]: 131 features — ['sw_l1_name', 'sw_l2_name', 'sw_l3_name', 'pe_ttm', 'pb']
+2026-09-10 17:50:46,583 INFO app.pipeline1.train_runner [timing][main] feature build: 2762.8s
+2026-09-10 17:50:48,194 WARNING app.pipeline1.train_runner [main] NaN+类型预筛剔除 17/372 因子, 保留 355
+2026-09-10 17:50:48,951 WARNING app.pipeline1.feature_selector [main] pin 特征 88/358 不在候选集或 nan 超阈, 已剔除 (前10): ['bt_disc_ewma_brute_pct60', 'A04_brute_pct1', 'A04_brute_mom40', 'VAR51_brute_mom40', 'lhb_sell_pressure_brute_pct20', 'lhb_sell_pressure_brute_pct5', 'lhb_retail_flow_brute_mom40', 'lhb_retail_flow_brute_pct40', 'lhb_retail_flow_brute_pct20', 'lhb_retail_flow_brute_pct5']
+2026-09-10 17:50:48,952 INFO app.pipeline1.feature_selector [main] 特征集冻结: 返回 pin 270 特征 (选择计算短路)
+2026-09-10 17:50:50,980 INFO app.pipeline1.feature_selector scope_ic_union[sh_net_ratio]: sh_net_ratio scope-IC=0.0148 (bar=0.01) -> 并入
+2026-09-10 17:50:51,537 INFO app.pipeline1.feature_selector scope_ic_union[sh_net_ratio]: sh_g_ratio scope-IC=0.0272 (bar=0.01) -> 并入
+2026-09-10 17:50:52,071 INFO app.pipeline1.feature_selector scope_ic_union[sh_net_ratio]: sh_c_ratio scope-IC=0.0117 (bar=0.01) -> 并入
+2026-09-10 17:50:52,072 INFO app.pipeline1.feature_selector scope_ic_union[sh_net_ratio]: 并入 3 个特征 ['sh_net_ratio', 'sh_g_ratio', 'sh_c_ratio']
+2026-09-10 17:50:52,072 INFO app.pipeline1.feature_selector apply_event_scope_screens[dim29_holdertrade]: 并入 3 个特征
+2026-09-10 17:50:53,687 INFO app.pipeline1.train_runner [main] FeatureSelector(bruteforce_dedup) 精选 273/355 因子 (pool=273)
+2026-09-10 17:50:53,724 INFO app.pipeline1.train_runner [timing][main] feature selection: 7.1s
+2026-09-10 17:50:53,767 INFO app.pipeline1.dual_track_trainer 窗口切分(反锚): total=727 train=647 es=20 test=60
+2026-09-10 17:51:17,831 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:53:35,770 WARNING app.pipeline1.dual_track_trainer [main/3d_reg] 早停仅 4 树 (< 30), 重训 30 树保底
+2026-09-10 17:54:10,198 INFO app.pipeline1.dual_track_trainer [main] 3d_reg 训练完成, 样本 1448331
+2026-09-10 17:54:10,269 INFO app.pipeline1.checkpoint [main/20260910] Checkpoint saved: kinds=['3d_reg'] extras=[]
+2026-09-10 17:54:20,644 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.6G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:56:49,970 INFO app.pipeline1.dual_track_trainer [main] 3d_cls 训练完成, 样本 1448331
+2026-09-10 17:56:50,058 INFO app.pipeline1.checkpoint [main/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls'] extras=[]
+2026-09-10 17:57:20,766 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.2G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 17:58:44,502 INFO app.pipeline1.dual_track_trainer [main] 5d_reg 训练完成, 样本 1448161
+2026-09-10 17:58:44,575 INFO app.pipeline1.checkpoint [main/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg'] extras=[]
+2026-09-10 17:58:50,863 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.6G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 18:00:57,269 INFO app.pipeline1.dual_track_trainer [main] 5d_cls 训练完成, 样本 1448161
+2026-09-10 18:00:57,358 INFO app.pipeline1.checkpoint [main/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls'] extras=[]
+2026-09-10 18:01:22,739 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 18:05:27,621 INFO app.pipeline1.dual_track_trainer [main] 10d_reg 训练完成, 样本 1447416
+2026-09-10 18:05:27,757 INFO app.pipeline1.checkpoint [main/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls', '10d_reg'] extras=[]
+2026-09-10 18:05:53,415 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.6G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 18:09:03,987 INFO app.pipeline1.dual_track_trainer [main] 10d_cls 训练完成, 样本 1447416
+2026-09-10 18:09:04,100 INFO app.pipeline1.checkpoint [main/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls', '10d_reg', '10d_cls'] extras=[]
+2026-09-10 18:09:28,735 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 18:10:54,996 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.10 训练完成, 样本 1448331
+2026-09-10 18:13:25,266 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.25 训练完成, 样本 1448331
+2026-09-10 18:17:47,776 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.50 训练完成, 样本 1448331
+2026-09-10 18:20:50,695 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.75 训练完成, 样本 1448331
+2026-09-10 18:23:44,528 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.90 训练完成, 样本 1448331
+2026-09-10 18:23:44,529 INFO app.pipeline1.dual_track_trainer [main] E1 分位数五模型训练完成 (label=label_pm_3d_net, 3d)
+2026-09-10 18:23:45,276 INFO app.pipeline1.checkpoint [main/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls', '10d_reg', '10d_cls'] extras=['quantile_models_3d']
+2026-09-10 18:23:59,736 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.6G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 18:25:47,720 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.10 训练完成, 样本 1448161
+2026-09-10 18:27:35,647 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.25 训练完成, 样本 1448161
+2026-09-10 18:29:25,744 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.50 训练完成, 样本 1448161
+2026-09-10 18:32:00,843 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.75 训练完成, 样本 1448161
+2026-09-10 18:34:14,575 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.90 训练完成, 样本 1448161
+2026-09-10 18:34:14,577 INFO app.pipeline1.dual_track_trainer [main] E1 分位数五模型训练完成 (label=label_pm_5d_net, 5d)
+2026-09-10 18:34:15,352 INFO app.pipeline1.checkpoint [main/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls', '10d_reg', '10d_cls'] extras=['quantile_models_3d', 'quantile_models_5d']
+2026-09-10 18:34:30,070 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.6G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 18:36:15,837 INFO app.pipeline1.dual_track_trainer [main] LambdaRank 排序模型训练完成
+2026-09-10 18:36:16,017 INFO app.pipeline1.checkpoint [main/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls', '10d_reg', '10d_cls'] extras=['quantile_models_3d', 'quantile_models_5d', 'rank_model']
+2026-09-10 18:36:30,350 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.2G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 18:38:25,409 INFO app.pipeline1.quantile_models E2 痛苦预警模型训练完成, 样本 1448331, 正例率 0.258
+2026-09-10 18:38:26,192 INFO app.pipeline1.checkpoint [main/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls', '10d_reg', '10d_cls'] extras=['quantile_models_3d', 'quantile_models_5d', 'pain_model', 'rank_model']
+2026-09-10 18:38:44,384 INFO app.pipeline1.dual_track_trainer [main] checkpoint 已清理 (归档完成)
+2026-09-10 18:38:44,692 INFO app.pipeline1.train_runner [timing][main] model training: 2871.0s
+2026-09-10 18:38:45,356 INFO app.pipeline1.train_runner [main] 模型包 models/pipeline1\main_20260910.pkl | OOS weighted_IC=0.0103 | switched=True
+2026-09-10 18:49:27,935 INFO app.pipeline1.feature_engine_v35 dim28: SW daily history loaded: 883530 rows, 431 indices
+2026-09-10 18:49:40,216 INFO app.pipeline1.feature_engine_v35 dim28: L1 — 944595/950902 rows filled (99.3%)
+2026-09-10 18:49:52,668 INFO app.pipeline1.feature_engine_v35 dim28: L2 — 939278/950902 rows filled (98.8%)
+2026-09-10 18:50:04,987 INFO app.pipeline1.feature_engine_v35 dim28: L3 — 915171/950902 rows filled (96.2%)
+2026-09-10 18:51:01,318 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.9G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 18:54:31,569 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.3G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 18:56:31,645 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 2.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 18:57:31,949 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 18:57:43,279 INFO app.pipeline1.feature_engine_v35 Registry prune: 526 -> 385 features (dropped 141 across 3 dims)
+2026-09-10 18:57:43,291 INFO app.pipeline1.feature_engine_v35   Pruned [_auto_adopted]: 3 features — ['sw_index_close', 'sw_index_vol', 'sw_ret_1d']
+2026-09-10 18:57:43,292 INFO app.pipeline1.feature_engine_v35   Pruned [dim29_holdertrade]: 1 features — ['sh_is_executing']
+2026-09-10 18:57:43,292 INFO app.pipeline1.feature_engine_v35   Pruned [unknown]: 137 features — ['sw_l1_name', 'sw_l2_name', 'sw_l3_name', 'pe_ttm', 'pb']
+2026-09-10 18:57:58,011 INFO app.pipeline1.train_runner [dual] 超额标签: 市场均值常数 {'mkt_expected_3d': '-0.0037', 'mkt_expected_5d': '-0.0055', 'mkt_expected_10d': '-0.0053'}
+2026-09-10 18:57:58,220 INFO app.pipeline1.train_runner [timing][dual] feature build: 1152.9s
+2026-09-10 18:57:59,004 WARNING app.pipeline1.train_runner [dual] NaN+类型预筛剔除 17/385 因子, 保留 368
+2026-09-10 18:57:59,584 INFO app.pipeline1.feature_selector NaN filter: 385 -> 364 (threshold=0.95, min_support=0)
+2026-09-10 19:01:53,126 INFO app.pipeline1.feature_selector GateD: 364 -> 100 features (best_ir=0.1242 @ n=100, sat_n=100)
+2026-09-10 19:01:53,487 INFO app.pipeline1.feature_selector [dual] 特征集冻结: 返回 pin 203 特征 (诊断消融结果仅记录, 不进训练)
+2026-09-10 19:01:56,617 INFO app.pipeline1.feature_selector scope_ic_union[sh_net_ratio]: sh_ratio_30d scope-IC=0.0211 (bar=0.01) -> 并入
+2026-09-10 19:01:57,114 INFO app.pipeline1.feature_selector scope_ic_union[sh_net_ratio]: sh_net_ratio scope-IC=0.0143 (bar=0.01) -> 并入
+2026-09-10 19:01:58,156 INFO app.pipeline1.feature_selector scope_ic_union[sh_net_ratio]: sh_c_ratio scope-IC=0.0353 (bar=0.01) -> 并入
+2026-09-10 19:01:58,157 INFO app.pipeline1.feature_selector scope_ic_union[sh_net_ratio]: 并入 3 个特征 ['sh_ratio_30d', 'sh_net_ratio', 'sh_c_ratio']
+2026-09-10 19:01:58,157 INFO app.pipeline1.feature_selector apply_event_scope_screens[dim29_holdertrade]: 并入 3 个特征
+2026-09-10 19:02:00,492 INFO app.pipeline1.feature_selector scope_ic_union[bt_count]: bt_act_ewma scope-IC=0.0294 (bar=0.01) -> 并入
+2026-09-10 19:02:02,006 INFO app.pipeline1.feature_selector scope_ic_union[bt_count]: bt_disc_ewma scope-IC=0.0266 (bar=0.01) -> 并入
+2026-09-10 19:02:03,416 INFO app.pipeline1.feature_selector scope_ic_union[bt_count]: bt_inst_abs_ewma scope-IC=0.0198 (bar=0.01) -> 并入
+2026-09-10 19:02:04,851 INFO app.pipeline1.feature_selector scope_ic_union[bt_count]: bt_mv_ratio_ewma scope-IC=0.0184 (bar=0.01) -> 并入
+2026-09-10 19:02:04,852 INFO app.pipeline1.feature_selector scope_ic_union[bt_count]: 并入 4 个特征 ['bt_act_ewma', 'bt_disc_ewma', 'bt_inst_abs_ewma', 'bt_mv_ratio_ewma']
+2026-09-10 19:02:04,852 INFO app.pipeline1.feature_selector apply_event_scope_screens[dim33_blocktrade]: 并入 4 个特征
+2026-09-10 19:02:04,852 INFO app.pipeline1.train_runner [dual] FeatureSelector(gate_d) 精选 210/368 因子 (pool=210)
+2026-09-10 19:02:04,887 INFO app.pipeline1.train_runner [timing][dual] feature selection: 246.7s
+2026-09-10 19:02:04,907 INFO app.pipeline1.dual_track_trainer 窗口切分(反锚): total=727 train=647 es=20 test=60
+2026-09-10 19:02:50,393 WARNING app.pipeline1.dual_track_trainer [dual/3d_reg] 早停仅 17 树 (< 30), 重训 30 树保底
+2026-09-10 19:03:04,076 INFO app.pipeline1.dual_track_trainer [dual] 3d_reg 训练完成, 样本 827552
+2026-09-10 19:03:04,131 INFO app.pipeline1.checkpoint [dual/20260910] Checkpoint saved: kinds=['3d_reg'] extras=[]
+2026-09-10 19:04:24,605 INFO app.pipeline1.dual_track_trainer [dual] 3d_cls 训练完成, 样本 827552
+2026-09-10 19:04:24,669 INFO app.pipeline1.checkpoint [dual/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls'] extras=[]
+2026-09-10 19:04:57,630 WARNING app.pipeline1.dual_track_trainer [dual/5d_reg] 早停仅 23 树 (< 30), 重训 30 树保底
+2026-09-10 19:05:10,931 INFO app.pipeline1.dual_track_trainer [dual] 5d_reg 训练完成, 样本 827403
+2026-09-10 19:05:10,993 INFO app.pipeline1.checkpoint [dual/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg'] extras=[]
+2026-09-10 19:06:43,351 INFO app.pipeline1.dual_track_trainer [dual] 5d_cls 训练完成, 样本 827403
+2026-09-10 19:06:43,434 INFO app.pipeline1.checkpoint [dual/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls'] extras=[]
+2026-09-10 19:09:33,614 INFO app.pipeline1.dual_track_trainer [dual] 10d_reg 训练完成, 样本 826862
+2026-09-10 19:09:33,730 INFO app.pipeline1.checkpoint [dual/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls', '10d_reg'] extras=[]
+2026-09-10 19:11:31,717 INFO app.pipeline1.dual_track_trainer [dual] 10d_cls 训练完成, 样本 826862
+2026-09-10 19:11:31,859 INFO app.pipeline1.checkpoint [dual/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls', '10d_reg', '10d_cls'] extras=[]
+2026-09-10 19:12:39,386 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.10 训练完成, 样本 827552
+2026-09-10 19:13:54,100 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.25 训练完成, 样本 827552
+2026-09-10 19:14:24,949 WARNING app.pipeline1.quantile_models E1 分位数 q=0.50 早停仅 3 树 (< 30), 重训 30 树保底
+2026-09-10 19:14:44,263 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.50 训练完成, 样本 827552
+2026-09-10 19:15:42,171 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.75 训练完成, 样本 827552
+2026-09-10 19:16:39,781 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.90 训练完成, 样本 827552
+2026-09-10 19:16:39,781 INFO app.pipeline1.dual_track_trainer [dual] E1 分位数五模型训练完成 (label=label_pm_3d_net, 3d)
+2026-09-10 19:16:40,151 INFO app.pipeline1.checkpoint [dual/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls', '10d_reg', '10d_cls'] extras=['quantile_models_3d']
+2026-09-10 19:17:28,483 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.10 训练完成, 样本 827403
+2026-09-10 19:18:11,773 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.25 训练完成, 样本 827403
+2026-09-10 19:18:44,118 WARNING app.pipeline1.quantile_models E1 分位数 q=0.50 早停仅 14 树 (< 30), 重训 30 树保底
+2026-09-10 19:19:03,390 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.50 训练完成, 样本 827403
+2026-09-10 19:19:57,246 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.75 训练完成, 样本 827403
+2026-09-10 19:21:07,807 INFO app.pipeline1.quantile_models E1 分位数模型 q=0.90 训练完成, 样本 827403
+2026-09-10 19:21:07,808 INFO app.pipeline1.dual_track_trainer [dual] E1 分位数五模型训练完成 (label=label_pm_5d_net, 5d)
+2026-09-10 19:21:08,275 INFO app.pipeline1.checkpoint [dual/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls', '10d_reg', '10d_cls'] extras=['quantile_models_3d', 'quantile_models_5d']
+2026-09-10 19:22:02,744 INFO app.pipeline1.dual_track_trainer [dual] LambdaRank 排序模型训练完成
+2026-09-10 19:22:02,900 INFO app.pipeline1.checkpoint [dual/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls', '10d_reg', '10d_cls'] extras=['quantile_models_3d', 'quantile_models_5d', 'rank_model']
+2026-09-10 19:23:06,488 INFO app.pipeline1.quantile_models E2 痛苦预警模型训练完成, 样本 827552, 正例率 0.367
+2026-09-10 19:23:07,558 INFO app.pipeline1.checkpoint [dual/20260910] Checkpoint saved: kinds=['3d_reg', '3d_cls', '5d_reg', '5d_cls', '10d_reg', '10d_cls'] extras=['quantile_models_3d', 'quantile_models_5d', 'pain_model', 'rank_model']
+2026-09-10 19:23:19,045 WARNING app.pipeline1.dual_track_trainer [dual] 保留旧模型: IC闸=False (weighted_IC=-0.1232, 阈值 0.01) | TOP10闸=True
+2026-09-10 19:23:19,047 INFO app.pipeline1.dual_track_trainer [dual] checkpoint 已清理 (归档完成)
+2026-09-10 19:23:19,270 INFO app.pipeline1.train_runner [timing][dual] model training: 1274.4s
+2026-09-10 19:23:19,685 INFO app.pipeline1.train_runner [dual] 模型包 models/pipeline1\dual_20260910.pkl | OOS weighted_IC=-0.1232 | switched=False
+[main] finaltop: 终榜回放对拍 current vs main_20260910.pkl (eval_days=48, 臂=4 含稳定性臂 2) ...
+2026-09-10 19:23:33,456 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.2G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 19:31:33,682 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.4G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 19:33:33,723 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 1.8G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 19:36:33,811 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.6G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 19:45:34,097 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 2.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 19:47:04,204 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.3G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+[main] finaltop 判词: Δ=-0.00254/日 双半 -0.00039/-0.00469 胜率 0.500 (24/48) checks={'full': False, 'half1': True, 'half2': True, 'win_rate': True}
+[main] finaltop 稳定性臂 main_20260909.pkl: Δ=-0.00780/日 胜率 0.438 pass=False
+[main] finaltop 稳定性臂 main_20260908.pkl: Δ=+0.00000/日 胜率 0.000 pass=False
+[main] finaltop: 稳定性 FAIL (0/3 抽签过判词), 保留旧模型
+[dual] OOS weighted_IC=-0.1232 < ?, 保留旧模型
+[meta] current_meta.json = {'main': {'tag': '20260903', 'file': 'main_20260903.pkl', 'updated': '2026-09-10 05:51'}, 'dual': {'tag': '20260830excessfix', 'file': 'dual_20260830excessfix.pkl', 'updated': '2026-08-30 10:31'}}
+[done] 全部完成 (10671s)

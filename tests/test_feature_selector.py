@@ -578,7 +578,9 @@ class TestFeatureSelectorSelection:
             "selected_count": len(features),
             "features": features,
         }
-        with open(_os.path.join(tmp, "selected_main_pinned.json"), "w", encoding="utf-8") as fh:
+        with open(
+            _os.path.join(tmp, "selected_main_pinned.json"), "w", encoding="utf-8"
+        ) as fh:
             _json.dump(pin, fh)
 
     def test_force_include_appends_to_pin(self):
@@ -593,9 +595,9 @@ class TestFeatureSelectorSelection:
                     "pipeline": "bruteforce_dedup",
                     "pinned": "selected_main_pinned.json",
                     "force_include": [
-                        "ths_bull",            # 在 df → 直接入
+                        "ths_bull",  # 在 df → 直接入
                         "ths_bull_brute_ma5",  # 基列在 df → brute 放行
-                        "ghost_brute_pct1",    # 基列不在 → 剔除
+                        "ghost_brute_pct1",  # 基列不在 → 剔除
                     ],
                 }
             }

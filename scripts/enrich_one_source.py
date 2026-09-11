@@ -578,8 +578,10 @@ def merge_ths_signal(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame
     _stale = [c for c in panel.columns if c.startswith(("ths_bull", "ths_bear"))]
     if _stale:
         panel = panel.drop(columns=_stale)
-        logger.info("ths_signal: dropped %d pre-existing ths cols for idempotent merge",
-                    len(_stale))
+        logger.info(
+            "ths_signal: dropped %d pre-existing ths cols for idempotent merge",
+            len(_stale),
+        )
 
     # ── 看涨池: 个股级旗标 + 信号文本 + 计数 ──
     frames = []
@@ -599,12 +601,15 @@ def merge_ths_signal(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame
         d = d.rename(columns=rename)
         d["date"] = pd.to_datetime(f.stem.split("_")[1], format="%Y%m%d")
         d["ths_bull"] = 1.0
+
         # "||"必须regex=False: pandas对长度>1的pat默认按正则, "||"是空交替→按字符切开
         def _count_signals(col, df):
             if col not in df.columns:
                 return 0.0
             return (
-                df[col].fillna("").astype(str)
+                df[col]
+                .fillna("")
+                .astype(str)
                 .str.split("||", regex=False)
                 .apply(lambda xs: sum(1 for x in xs if x.strip()))
             )
@@ -612,8 +617,16 @@ def merge_ths_signal(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame
         d["ths_bull_buy_sig_n"] = _count_signals("ths_bull_buy_signals", d)
         d["ths_bull_tech_n"] = _count_signals("ths_bull_tech_pattern", d)
         # 外部源schema可能漂移, 按实际存在的列取
-        want = ["symbol", "date", "ths_bull", "ths_bull_ready_rise", "ths_bull_buy_signals",
-                "ths_bull_tech_pattern", "ths_bull_buy_sig_n", "ths_bull_tech_n"]
+        want = [
+            "symbol",
+            "date",
+            "ths_bull",
+            "ths_bull_ready_rise",
+            "ths_bull_buy_signals",
+            "ths_bull_tech_pattern",
+            "ths_bull_buy_sig_n",
+            "ths_bull_tech_n",
+        ]
         frames.append(d[[c for c in want if c in d.columns]])
     if frames:
         sig = pd.concat(frames, ignore_index=True)
@@ -639,7 +652,11 @@ def merge_ths_signal(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame
         bsig = pd.concat(bframes, ignore_index=True)
         bsig = _norm_symbols(bsig).drop_duplicates(subset=["symbol", "date"])
         panel = panel.merge(bsig, on=["symbol", "date"], how="left")
-        sig_start = bsig["date"].min() if sig_start is None else min(sig_start, bsig["date"].min())
+        sig_start = (
+            bsig["date"].min()
+            if sig_start is None
+            else min(sig_start, bsig["date"].min())
+        )
         n_bear = int(bsig["ths_bear"].sum())
     else:
         logger.info("ths_signal: no bear_*.parquet (看跌个股级未回填?)")
@@ -661,12 +678,19 @@ def merge_ths_signal(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame
         # CSV可能在断点重启中积累重复日期行; dup会让当日全部面板行翻倍
         bear = bear.drop_duplicates(subset=["date"])
         panel = panel.merge(
-            bear[["date", "bear_count"]].rename(columns={"bear_count": "ths_bear_pool"}),
-            on="date", how="left",
+            bear[["date", "bear_count"]].rename(
+                columns={"bear_count": "ths_bear_pool"}
+            ),
+            on="date",
+            how="left",
         )
 
-    logger.info("ths_signal: bull %d rows, bear %d rows, +%d cols",
-                n_bull, n_bear, len(panel.columns) - before)
+    logger.info(
+        "ths_signal: bull %d rows, bear %d rows, +%d cols",
+        n_bull,
+        n_bear,
+        len(panel.columns) - before,
+    )
     return panel
 
 

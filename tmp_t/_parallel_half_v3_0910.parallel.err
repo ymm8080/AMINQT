@@ -1,0 +1,8 @@
+D:\AMINQT\AMINQT CODES\app\pipeline_parallel\backtest.py:438: FutureWarning: The default fill_method='pad' in DataFrame.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+  rets = px.pct_change()
+D:\AMINQT\AMINQT CODES\app\pipeline_parallel\backtest.py:438: FutureWarning: The default fill_method='pad' in DataFrame.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+  rets = px.pct_change()
+D:\AMINQT\AMINQT CODES\app\pipeline_parallel\backtest.py:438: FutureWarning: The default fill_method='pad' in DataFrame.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+  rets = px.pct_change()
+D:\AMINQT\AMINQT CODES\app\pipeline_parallel\backtest.py:438: FutureWarning: The default fill_method='pad' in DataFrame.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+  rets = px.pct_change()

@@ -1,0 +1,19 @@
+   [frame>] https://www.iwencai.com/home/index
+   [frame>] https://www.iwencai.com/screener
+   [frame+] 
+   [frame>] about:blank
+   [frame+] 
+[enum] 4个含'登'元素:
+   V <LI> class='user-info' href='' txt='登录'
+   V <DIV> class='info-content' href='' txt='登录'
+   V <SPAN> class='info' href='' txt='登录'
+   V <SPAN> class='login' href='' txt='登录'
+[try#1] clicked <LI> '登录' cls='user-info'
+[try#2] clicked <DIV> '登录' cls='info-content'
+   [frame+] 
+[try#3] clicked <SPAN> '登录' cls='info'
+   [frame>] https://upass.iwencai.com/login?isIframe=1&source=iwc_aime_web&main=15&detail=7&pannel=3&r
+   click#4 FAIL Page.evaluate: TypeError: Cannot read properties of undefine
+[fallback] 可见候选尽, 试 /screener 项
+[login] 仍未出现密码框 — 请在打开的浏览器窗口手动点登录输密码(敏敏5us)
+[wait] 轮询userid cookie 10分钟 (滑块请手动滑)...

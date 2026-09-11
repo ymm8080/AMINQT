@@ -1,0 +1,4 @@
+[2026-09-10 06:14:00] ?????? tag=20260910 ??=Thursday ??=['cyq', 'sw_history', 'freshness', 'canary', 'legacy_prob_head', 'legacy', 'deliver', 'refresh', 'parallel', 'prob_head', 'deliver_parallel', 'ths_push', 'prob10dens_push', 'slowbull_shadow', 'ths_flush_guard', 'final_stocklist', 'stocklist_combined', 'drift', 'drift_parallel', 'shadow_xmodule', 'gate_audit']
+[06:14:00 start] cyq: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_backfill_cyq_panel.py --workers 6
+[06:16:48 ok] cyq rc=0 (168s)
+[06:16:48 start] sw_history: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/fetch_sw_daily_history.py --incremental

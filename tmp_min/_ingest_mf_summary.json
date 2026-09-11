@@ -1,0 +1,10 @@
+{
+  "n_days": 725,
+  "n_fetched": 664,
+  "n_skipped_exist": 61,
+  "n_empty": 0,
+  "n_fail": 0,
+  "rows_written": 3402769,
+  "elapsed_min": 45.1,
+  "failures_file": null
+}

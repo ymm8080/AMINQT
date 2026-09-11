@@ -9,6 +9,8 @@ env/
 
 # Data (keep dir structure, ignore large files)
 *.parquet
+data/*.parquet
+data/**/*.parquet
 data/raw/*.csv
 data/intraday/*.csv
 data/processed/*.csv

@@ -1,0 +1,5 @@
+[bull] copied=733 skipped_unstable=0
+[bull] validated 733 files in supply_cache
+[bear] copied=733 skipped_unstable=0 skipped_empty=0
+[bear] validated 733 files in supply_cache
+[bear_csv] rows=733 range=20230901~20260910 (null_count=3)

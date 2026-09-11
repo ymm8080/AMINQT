@@ -1,0 +1,16 @@
+{
+ "panel": "D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet",
+ "backup": "D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet.pre_ohlcfix_20260909_162038",
+ "rows": 3994646,
+ "affected_symbols": 3454,
+ "bad_close_before": 1758727,
+ "bad_close_after": 1088,
+ "recon_before": 23342,
+ "recon_after": 5535,
+ "ohlc_fixed": 1757639,
+ "adj_missing": 833,
+ "vol_fixed": 23342,
+ "hand_symbols": 300,
+ "pull_failures": [],
+ "spot_check_pass": true
+}

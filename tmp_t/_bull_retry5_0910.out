@@ -1,0 +1,38 @@
+[cal] 733个交易日 2023-09-01 ~ 2026-09-10
+[sweep v3] 全量扫描: 无审计行/不完整的日子一律重抓
+[455/733] 20250722: 找到N=None 抓到189 (short_page) | 本轮25天 2min
+[480/733] 20250826: 找到N=None 抓到154 (short_page) | 本轮50天 4min
+[484/733] 20250901: 找到N=0 抓到0 (no_table) | 本轮54天 4min
+[485/733] 20250902: 找到N=0 抓到0 (no_table) | 本轮55天 4min
+[486/733] 20250903: 找到N=0 抓到0 (no_table) | 本轮56天 5min
+[505/733] 20250930: 找到N=None 抓到10 (short_page) | 本轮75天 6min
+[530/733] 20251112: 找到N=None 抓到26 (short_page) | 本轮100天 8min
+[555/733] 20251217: 找到N=None 抓到13 (short_page) | 本轮125天 10min
+[580/733] 20260123: 找到N=None 抓到64 (short_page) | 本轮150天 13min
+[605/733] 20260309: 找到N=None 抓到9 (short_page) | 本轮175天 14min
+[625/733] 20260407: 找到N=None 抓到0 (no_more) | 本轮195天 16min
+[627/733] 20260409: 找到N=None 抓到0 (no_more) | 本轮197天 16min
+[630/733] 20260414: 找到N=None 抓到6 (short_page) | 本轮200天 16min
+[FAIL] 20260506: RuntimeError list API -8302 组件不存在 consec=1
+[656/733] 20260525: 找到N=None 抓到12 (short_page) | 本轮225天 19min
+[664/733] 20260604: 找到N=None 抓到0 (no_more) | 本轮233天 22min
+[666/733] 20260608: 找到N=None 抓到0 (no_more) | 本轮235天 22min
+[667/733] 20260609: 找到N=None 抓到0 (no_more) | 本轮236天 22min
+[669/733] 20260611: 找到N=None 抓到0 (no_more) | 本轮238天 22min
+[678/733] 20260625: 找到N=None 抓到0 (no_more) | 本轮247天 24min
+[679/733] 20260626: 找到N=None 抓到0 (no_more) | 本轮248天 24min
+[681/733] 20260630: 找到N=None 抓到0 (no_more) | 本轮250天 24min
+[686/733] 20260707: 找到N=None 抓到0 (no_more) | 本轮255天 26min
+[688/733] 20260709: 找到N=None 抓到0 (no_more) | 本轮257天 27min
+[689/733] 20260710: 找到N=None 抓到0 (no_more) | 本轮258天 27min
+[690/733] 20260713: 找到N=None 抓到0 (no_more) | 本轮259天 27min
+[691/733] 20260714: 找到N=None 抓到0 (no_more) | 本轮260天 28min
+[693/733] 20260716: 找到N=None 抓到0 (no_more) | 本轮262天 28min
+[697/733] 20260722: 找到N=None 抓到0 (no_more) | 本轮266天 28min
+[706/733] 20260804: 找到N=None 抓到3 (short_page) | 本轮275天 29min
+[707/733] 20260805: 找到N=None 抓到0 (no_more) | 本轮276天 29min
+[FAIL] 20260820: RuntimeError API None None consec=1
+[732/733] 20260909: 找到N=None 抓到26 (short_page) | 本轮300天 31min
+[done] sweep完成, audit complete 731/733, 最后 20260910
+[WARN] 不完整日子: []
+SCRIPT-END
