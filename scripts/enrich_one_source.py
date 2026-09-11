@@ -573,6 +573,14 @@ def merge_ths_signal(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame
     sig_start = None
     before = len(panel.columns)
 
+    # 幂等: 面板已含ths列(复跑/重灌)先丢, 否则merge撞名产生 _x/_y 双份垃圾列
+    # (20260910: 面板经merge后含7个ths列, enrich重建时产出14个 _x/_y 列)
+    _stale = [c for c in panel.columns if c.startswith(("ths_bull", "ths_bear"))]
+    if _stale:
+        panel = panel.drop(columns=_stale)
+        logger.info("ths_signal: dropped %d pre-existing ths cols for idempotent merge",
+                    len(_stale))
+
     # ── 看涨池: 个股级旗标 + 信号文本 + 计数 ──
     frames = []
     for f in sorted(THS_SIGNAL_DIR.glob("bull_*.parquet")):
@@ -743,9 +751,10 @@ def _filter_new_cols(
     """Extract only the new columns this source added, plus symbol+date keys."""
     new_cols = [c for c in panel.columns if c not in base_cols]
     keep = ["symbol", "date"] + [c for c in new_cols if not c.startswith("_")]
-    # Also check prefix patterns
+    # Prefix patterns scan ALL panel cols, not just new ones: 幂等重跑时源列与
+    # base_cols 同名(先drop再重加), 只扫new_cols会把part淘空成0列 (20260910)
     prefixes = SOURCE_COL_PREFIXES.get(source, [])
-    for c in new_cols:
+    for c in panel.columns:
         if c in keep:
             continue
         for pfx in prefixes:

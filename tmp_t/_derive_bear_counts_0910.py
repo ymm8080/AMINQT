@@ -24,8 +24,11 @@ if not files:
 rows = []
 for f in files:
     dstr = f.stem.split("_")[1]
-    d = pd.read_parquet(f, columns=["股票代码"])
-    n = int(d["股票代码"].nunique())
+    try:
+        d = pd.read_parquet(f, columns=["股票代码"])
+        n = int(d["股票代码"].nunique())
+    except Exception:
+        n = 0  # 空壳文件(no_table/no_more日) = 0计数
     rows.append({"date": dstr, "bear_count": n})
 
 out = pd.DataFrame(rows).drop_duplicates(subset=["date"]).sort_values("date")

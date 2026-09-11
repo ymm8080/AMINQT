@@ -22,6 +22,7 @@ import re
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse, parse_qs
 
 import pandas as pd
 import requests
@@ -112,41 +113,108 @@ def _validate_date_suffix(d: dict, dstr: str) -> None:
 
 
 def _paginate_pool(question: str, dstr: str, ck: dict, perpage: int, max_pages: int) -> pd.DataFrame:
+    """v3真分页: robot-data(body风格)拿 footer_info.url → getDataList (form) perpage=100 真生效.
+
+    沿革: 旧版对 get-robot-data 传 page=N, 但该端点 page 参数被无视(永远第1页),
+    perpage>10 也被忽略 → 池子>10 必截断 (20230904 实测 找到58 只抓10).
+    pywencai 源码逆向出的 getDataList 是唯一真分页通道 (20230910 探针 58/58 一页全中).
+    """
+    # ① robot 会话: found_n + footer_info.url
+    hv_headers = _headers_with_token()[0]
+    body = {"add_info": '{"urp":{"scene":1,"company":1,"business":1},'
+                        '"contentType":"json","searchInfo":true}',
+            "perpage": "10", "page": 1, "source": "Ths_iwencai_Xuangu",
+            "log_info": '{"input_type":"click"}', "version": "2.0",
+            "secondary_intent": "stock", "question": question}
+    resp = requests.post("http://www.iwencai.com/customized/chart/get-robot-data",
+                         json=body, headers=hv_headers, cookies=ck, timeout=25)
+    if not resp.text.lstrip().startswith("{"):
+        raise RuntimeError(f"WAF 非JSON HTTP{resp.status_code} (date={dstr} robot)")
+    d = resp.json()
+    if d.get("status_code") != 0:
+        raise RuntimeError(f"API status={d.get('status_code')} "
+                           f"{str(d.get('status_msg'))[:60]} (date={dstr} robot)")
+    _validate_date_suffix(d, dstr)
+    total = _find_total(d)
+    comps = d["data"]["answer"][0]["txt"][0]["content"]["components"]
+    tb = next((c for c in comps if str(c.get("show_type", "")).startswith("xuangu_table")), None)
+    furl = ""
+    if tb is not None:
+        oi = (tb.get("config") or {}).get("other_info") or {}
+        furl = (oi.get("footer_info") or {}).get("url", "")
+    if total == 0 or (not furl and not total):
+        return pd.DataFrame()
+    if not furl:
+        raise RuntimeError(f"robot 无 footer_info.url (found_n={total}, date={dstr}) — 不落盘")
+    u = urlparse(furl if "://" in furl else "http://x.com" + (furl if furl.startswith("/") else "/" + furl))
+    up = {k: (v[0] if isinstance(v, list) and len(v) == 1 else v)
+          for k, v in parse_qs(u.query).items()}
+
+    # ② getDataList 分页 (perpage=100 真生效)
     rows, seen = [], set()
     for page in range(1, max_pages + 1):
-        d = _post(question, page, ck, perpage=perpage)
-        if d.get("status_code") != 0:
-            raise RuntimeError(f"API status={d.get('status_code')} "
-                               f"{str(d.get('status_msg'))[:60]} (date={dstr} p{page})")
-        _validate_date_suffix(d, dstr)
-        recs = _extract_table(d)
-        if not recs:
+        # getDataList 是 form POST: 必须去掉 robot 调用的 Content-Type: application/json,
+        # 否则表单体被声明成 JSON → 服务端 -8302 (20230910 实测)
+        list_headers = {k: v for k, v in _headers_with_token()[0].items()
+                        if k != "Content-Type"}
+        lr = None
+        last_err = None
+        for attempt in range(3):  # 大页payload重, 瞬时超时重试; 鉴权/业务错仍大声失败
+            try:
+                lr = requests.post("http://www.iwencai.com/gateway/urp/v7/landing/getDataList",
+                                   data={**up, "perpage": perpage, "page": page},
+                                   headers=list_headers, cookies=ck, timeout=(10, 60))
+                break
+            except requests.RequestException as e:
+                last_err = e
+                time.sleep(5 * (attempt + 1))
+        if lr is None:
+            raise RuntimeError(f"list 连接3败: {last_err} (date={dstr} list p{page})")
+        if not lr.text.lstrip().startswith("{"):
+            raise RuntimeError(f"WAF 非JSON HTTP{lr.status_code} (date={dstr} list p{page})")
+        ld = lr.json()
+        if str(ld.get("status_code")) != "0":
+            raise RuntimeError(f"list API status={ld.get('status_code')} "
+                               f"{str(ld.get('status_msg'))[:60]} (date={dstr} list p{page})")
+        lcomps = ld.get("answer", {}).get("components", [])
+        datas = lcomps[0].get("data", {}).get("datas", []) if lcomps else []
+        if not datas:
             break
-        page_codes = [str(r.get("股票代码", "")) for r in recs]
-        if page_codes and all(c in seen for c in page_codes):
-            break  # THS在数据末尾循环重复
-        seen.update(page_codes)
-        for r in recs:
-            r["_query_date"] = dstr
-        rows.extend(recs)
-        if len(recs) < perpage:
+        new_cnt = 0
+        for row in datas:
+            rec = {}
+            for k, cell in row.items():
+                rec[k] = cell.get("value", cell) if isinstance(cell, dict) else cell
+            code = re.sub(r"\.\w+$", "", str(rec.get("股票代码", "")).strip())
+            if code and code not in seen:
+                seen.add(code)
+                rec["股票代码"] = code
+                rec["_query_date"] = dstr
+                rows.append(rec)
+                new_cnt += 1
+        if total is not None and len(seen) >= total:
+            break
+        if new_cnt == 0:
+            break  # 服务端循环重复
+        if len(datas) < perpage:
             break
         time.sleep(0.3)
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    if total is not None and len(seen) < total:
+        raise RuntimeError(f"分页不完整: 找到{total} 抓到{len(seen)} (date={dstr}) — 不落盘")
+    return df
 
 
 def fetch_bull_pool(dstr: str, ck: dict) -> pd.DataFrame:
-    return _paginate_pool(f"{dstr}看涨信号的股票", dstr, ck, perpage=10, max_pages=40)
+    return _paginate_pool(f"{dstr}看涨信号的股票", dstr, ck, perpage=100, max_pages=40)
 
 
 def fetch_bear_pool(dstr: str, ck: dict) -> pd.DataFrame:
-    """看跌池~2400只/日, perpage=100 → ~24页; 只留代码列 (旗标语义)."""
+    """看跌池~2700只/日 (median 2869, max 5096), perpage=100 → ~28页; 只留代码列 (旗标语义).
+    完整性由 _paginate_pool 内部 找到N vs 抓到数 守门, 不齐即 raise 不落盘."""
     df = _paginate_pool(f"{dstr}看跌信号的股票", dstr, ck, perpage=100, max_pages=60)
     if len(df) == 0:
         return df
-    if len(df) % 100 == 0 and len(df) >= 600:
-        # perpage被服务端忽略(仍10/页)会在此触发: 60页×10=600整 → 静默截断, 宁可不落盘
-        raise RuntimeError(f"bear池{len(df)}行=整页边界, 疑似perpage未生效截断 (date={dstr})")
     return df[["股票代码"] + [c for c in ("股票简称", "最新涨跌幅") if c in df.columns]]
 
 

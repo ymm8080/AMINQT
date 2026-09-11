@@ -37,7 +37,17 @@ panel.to_parquet(TMP, index=False)
 if not os.path.exists(BAK):
     shutil.copy2(PANEL, BAK)
     print(f"[bak] {BAK}")
-os.replace(TMP, PANEL)
+import time as _time
+
+for attempt in range(6):
+    try:
+        os.replace(TMP, PANEL)
+        break
+    except PermissionError as e:
+        if attempt == 5:
+            raise
+        print(f"[lock] 目标被占用 ({e.strerror}), 20s后重试 {attempt + 2}/6")
+        _time.sleep(20)
 print("[done] 生产面板已替换")
 
 # ── 验证: 重读, 抽样 + 覆盖统计 ──

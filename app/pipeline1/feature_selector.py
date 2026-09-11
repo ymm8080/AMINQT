@@ -1303,22 +1303,10 @@ class FeatureSelector:
             # _run_bruteforce_dedup pin 路径). 周日 A/B 对拍翻 true, PASS 前生产
             # 保持 270 列零 brute 口径.
             "pin_allow_brute": False,
-            # [2026-09-10] THS问财信号当日入池 (用户指令): pin 快照早于该特征族,
-            # 精确名强制注入, 不解冻 pin. brute 名由训练端 post-injection 物化.
+            # [2026-09-10] THS问财信号列 11 名曾于 16:26 cron 强注入, 被用户叫停:
+            # 定案 = A/B 对拍 PASS 才入池 (bull 侧 672d 可评; bear 个股级 0910 才
+            # 有数据, 待 pass-2 回填后 A/B #2). PASS 前生产口径不含 THS.
             "force_include": [
-                # 看涨侧 (个股级旗标+密度)
-                "ths_bull",
-                "ths_bull_brute_pct1",
-                "ths_bull_brute_ma5",
-                "ths_bull_brute_ma20",
-                "ths_bull_buy_sig_n_brute_ma5",
-                "ths_bull_tech_n_brute_ma5",
-                # 看跌侧 (个股级旗标 + 市场日计数)
-                "ths_bear",
-                "ths_bear_brute_pct1",
-                "ths_bear_brute_ma5",
-                "ths_bear_brute_ma20",
-                "ths_bear_pool_brute_pct1",
                 # [2026-09-10] dim36 双向短期族 (bkd_ 8 + up_ 6, 688228 案立项):
                 # 引擎 dim36_bkd_up 物化 + 注册中心已注册, 但**A/B v6 PASS 才接入生产**
                 # (用户指令: "AB 通过了才接线进生产"). PASS 后把 14 名加回此处 +
@@ -1340,19 +1328,9 @@ class FeatureSelector:
                 # 动作 (新特征家族落地 / 季度重选 2026-11-14 前), 人工核对+250d
                 # replay 通过才写新 pin. 空字符串 = 不冻结 (回退旧行为).
                 "pinned": "selected_dual_pinned.json",
-                # [2026-09-10] THS问财信号当日入池 (同 main 语义, 看涨/看跌分开列).
+                # [2026-09-10] THS问财信号列 11 名曾强注入, 被用户叫停 (同 main 语义):
+                # A/B 对拍 PASS 才回填此名单, 看涨/看跌分开列.
                 "force_include": [
-                    "ths_bull",
-                    "ths_bull_brute_pct1",
-                    "ths_bull_brute_ma5",
-                    "ths_bull_brute_ma20",
-                    "ths_bull_buy_sig_n_brute_ma5",
-                    "ths_bull_tech_n_brute_ma5",
-                    "ths_bear",
-                    "ths_bear_brute_pct1",
-                    "ths_bear_brute_ma5",
-                    "ths_bear_brute_ma20",
-                    "ths_bear_pool_brute_pct1",
                     # [2026-09-10] dim36 双向短期族: A/B v6 PASS 才接入 (同 main 语义),
                     # 名单见 tests/test_bkd_up_features.py TARGET_14.
                 ],
