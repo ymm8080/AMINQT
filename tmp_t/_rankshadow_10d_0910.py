@@ -207,7 +207,10 @@ def train_board(board: str) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
     panel = panel[panel["date"] >= cut]
     print(f"[panel] {len(panel)} rows 3y cut ({time.time() - t0:.0f}s)", flush=True)
     cleaner = CleaningPipeline()
-    (board_df,) = cleaner.run_train(panel, board=board)
+    main_df, dual_df = cleaner.run_train(panel, board=board)
+    board_df = main_df if board == "main" else dual_df
+    del main_df, dual_df
+    gc.collect()
     del panel
     gc.collect()
     use_xrank = board != "main"

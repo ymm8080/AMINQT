@@ -167,7 +167,7 @@ def eval_window(trainer, cols, df, board, k):
     }
     rep.update(_metrics(d, ARM_NAMES))
     g6r = (rep["calib_gt6"]["rank60"] or {}).get("gap_pp")
-    rep["window_PASS_gap"] = bool(g6r is not None and g6r < 3.0)
+    rep["window_PASS_gap"] = bool(g6r is not None and abs(g6r) < 3.0)  # |缺口|<3pp (负向超诺同样爆闸)
     rep["mag60_gt6_gap_pp"] = (rep["calib_gt6"]["mag60"] or {}).get("gap_pp")
     return rep
 
