@@ -37,7 +37,7 @@ from scripts.run_daily_automation import (
 # 2026-08-13 = Thursday (weekday 3, 非重训日), 2026-08-14 = Friday (weekday 4, 重训日).
 THU, FRI = _dt.date(2026, 8, 13), _dt.date(2026, 8, 14)
 
-_HEAD = ["cyq", "sw_history", "freshness", "canary"]
+_HEAD = ["cyq", "ths_signal", "sw_history", "freshness", "canary"]
 _PREDICT_CHAIN = ["legacy_prob_head", "legacy", "deliver"]
 # ths_push 在 tail 首位: parallel 块之外恒执行 (09-05 拆分: 双源各自成单, 单侧缺失只推另一侧)
 # gate_audit 收尾 (09-09 7ba31e58 周自进化链并入): 周日 review→gate_audit→旗标才 retrain

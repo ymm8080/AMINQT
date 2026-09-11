@@ -121,8 +121,8 @@ RETRAIN_WEEKDAY = 4
 _STEP_TIMEOUT_S = {
     "refresh": 3 * 3600,
     "cyq": 40 * 60,
-    # THS问财信号抓取: 看涨池(小)+看跌计数 ~1-2min; 留 WAF退避余量 → 10min
-    "ths_signal": 10 * 60,
+    # THS问财信号抓取: 看涨池(小)+看跌计数 ~1-2min; 留 WAF退避余量 → 15min (2026-09-11 对齐CI最低超时闸)
+    "ths_signal": 15 * 60,
     # sw_history ?? 3-4min (? 400 ?? ? 0.15s ?? + API ??); 09-03 ?????
     # 500 ?? ~16min (100 ?/100s), 15min ???? ? ?? 30min ? 2x ??
     "sw_history": 30 * 60,
