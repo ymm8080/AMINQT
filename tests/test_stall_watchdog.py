@@ -37,6 +37,9 @@ def _clean_root_logger():
     target.setLevel(prev_target_level)
     for h in list(root.handlers):
         if isinstance(h, ProgressTracker):
+            # 显式停止 watchdog 线程, 防止 daemon 线程泄漏到后续测试
+            if hasattr(h, "_stop_evt"):
+                h._stop_evt.set()
             root.removeHandler(h)
 
 

@@ -51,10 +51,13 @@ def start_stall_watchdog(
     tracker = ProgressTracker()
     logging.getLogger().addHandler(tracker)
     started_at = time.strftime("%H:%M:%S")
+    _stop_evt = threading.Event()
 
     def _loop() -> None:
-        while True:
-            time.sleep(poll_s)
+        while not _stop_evt.is_set():
+            _stop_evt.wait(timeout=poll_s)
+            if _stop_evt.is_set():
+                return
             silent = tracker.silent_for()
             if silent < timeout_s:
                 continue
@@ -70,4 +73,5 @@ def start_stall_watchdog(
             return
 
     threading.Thread(target=_loop, name="stall-watchdog", daemon=True).start()
+    tracker._stop_evt = _stop_evt  # noqa: SLF001 — 供单测 teardown 显式停止
     return tracker
