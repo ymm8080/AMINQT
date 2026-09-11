@@ -149,7 +149,10 @@ def test_rank_map_apply_interp_and_clip():
 
 # ── fit_calibrator: 10d 残差在收益语义空间 ─────────────────────
 def test_fit_calibrator_resid_in_return_space(monkeypatch):
-    monkeypatch.setattr("config.settings.LEGACY_10D_RANK_TARGET", {"enable": True, "bins": 20, "boards": ["main"]})
+    monkeypatch.setattr(
+        "config.settings.LEGACY_10D_RANK_TARGET",
+        {"enable": True, "bins": 20, "boards": ["main"]},
+    )
     p = np.linspace(0.05, 0.95, 60)
     labels = np.linspace(-0.02, 0.10, 60)
     calib = pd.DataFrame({"f1": p, "label_10d_net": labels})
