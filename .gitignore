@@ -11,6 +11,8 @@ env/
 *.parquet
 data/*.parquet
 data/**/*.parquet
+data/**/*.parquet.*
+data/**/*.csv.*
 data/raw/*.csv
 data/intraday/*.csv
 data/processed/*.csv
