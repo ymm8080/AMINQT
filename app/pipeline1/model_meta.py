@@ -20,7 +20,8 @@ META_PATH = "models/pipeline1/current_meta.json"
 def load_modules(meta_path: str = META_PATH) -> dict:
     """{board: {tag, file, updated}}; 缺失/损坏返回 {} (调用方回退 'na')."""
     try:
-        with open(meta_path, encoding="utf-8") as fh:
+        # utf-8-sig: 容忍 Windows 工具 (PowerShell 等) 写入时带的 BOM
+        with open(meta_path, encoding="utf-8-sig") as fh:
             return json.load(fh)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return {}
