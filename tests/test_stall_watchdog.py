@@ -46,7 +46,9 @@ def test_silence_beyond_timeout_fires_once():
 def test_regular_info_logs_keep_alive():
     calls: list[int] = []
     start_stall_watchdog(_TIMEOUT, poll_s=_POLL, exit_fn=calls.append)
-    for _ in range(20):  # 2.0s 总时长 > 阈值, 但每 0.05s 一条 INFO 刷新 (留足 CI 调度余量)
+    for _ in range(
+        20
+    ):  # 2.0s 总时长 > 阈值, 但每 0.05s 一条 INFO 刷新 (留足 CI 调度余量)
         logging.getLogger("app.pipeline1.train_runner").info("tick")
         time.sleep(0.05)
     assert calls == []
