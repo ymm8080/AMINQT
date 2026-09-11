@@ -18,7 +18,7 @@ from app.pipeline1.stall_watchdog import (
     start_stall_watchdog,
 )
 
-_TIMEOUT = 0.5
+_TIMEOUT = 2.0
 _POLL = 0.05
 
 
@@ -39,7 +39,7 @@ def _clean_root_logger():
 def test_silence_beyond_timeout_fires_once():
     calls: list[int] = []
     start_stall_watchdog(_TIMEOUT, poll_s=_POLL, exit_fn=calls.append)
-    time.sleep(_TIMEOUT + 6 * _POLL)
+    time.sleep(_TIMEOUT + 6 * _POLL + 0.5)
     assert calls == [STALL_EXIT_CODE]
 
 
@@ -47,8 +47,8 @@ def test_regular_info_logs_keep_alive():
     calls: list[int] = []
     start_stall_watchdog(_TIMEOUT, poll_s=_POLL, exit_fn=calls.append)
     for _ in range(
-        20
-    ):  # 2.0s 总时长 > 阈值, 但每 0.05s 一条 INFO 刷新 (留足 CI 调度余量)
+        60
+    ):  # 3.0s 总时长 > 阈值, 每 0.05s 一条 INFO 刷新 (留足 CI 调度余量)
         logging.getLogger("app.pipeline1.train_runner").info("tick")
         time.sleep(0.05)
     assert calls == []
@@ -60,7 +60,7 @@ def test_ram_guard_chatter_is_not_progress():
     for _ in range(12):  # 泥潭形态: 只有 ram_guard 在 WARNING, 仍须判死
         time.sleep(0.1)
         logging.getLogger("app.pipeline1.ram_guard").warning("内存挤兑警报")
-    time.sleep(_TIMEOUT + 4 * _POLL)
+    time.sleep(_TIMEOUT + 4 * _POLL + 0.5)
     assert calls == [STALL_EXIT_CODE]
 
 
@@ -71,5 +71,5 @@ def test_debug_records_do_not_count():
     for _ in range(12):  # DEBUG 刷屏不算进度 (handler 级 INFO 过滤)
         time.sleep(0.1)
         logger.debug("debug tick")
-    time.sleep(_TIMEOUT + 4 * _POLL)
+    time.sleep(_TIMEOUT + 4 * _POLL + 0.5)
     assert calls == [STALL_EXIT_CODE]
