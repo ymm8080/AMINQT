@@ -29,8 +29,12 @@ def _clean_root_logger():
     root = logging.getLogger()
     prev_level = root.level
     root.setLevel(logging.INFO)
+    target = logging.getLogger("app.pipeline1.train_runner")
+    prev_target_level = target.level
+    target.setLevel(logging.INFO)
     yield
     root.setLevel(prev_level)
+    target.setLevel(prev_target_level)
     for h in list(root.handlers):
         if isinstance(h, ProgressTracker):
             root.removeHandler(h)
