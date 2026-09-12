@@ -1321,6 +1321,16 @@ class FeatureSelector:
                 "SL多头持续天数",
                 "带20斜率20",
                 "获利盘斜率20",
+                # [2026-09-12] 族级 A/B 8格矩阵 LEGACY 半场 (WORM: diag/
+                # ab_families_0912_main_20260912_110635.json): 筹码 chip4 入 main —
+                # reg 头 top10 5.15%→6.82% (+1.67pp 达线, IC +0.41pp), cls 头
+                # 7.14%→6.91% (−0.23pp 留观带内), 双头共列净正. dual 已由选择收录
+                # 勿重复. ps_ttm 摘 (reg IC +1.34pp 但 top10 −2.53pp, 方法条件性);
+                # quality 合成列摘 (main reg −3.52pp; dual cls +2.88pp 低基数不可信).
+                "cost_bias",
+                "peak_roc_20d",
+                "chip_gini",
+                "chip_entropy",
                 # [2026-09-10] dim36 双向短期族 (bkd_ 8 + up_ 6, 688228 案立项):
                 # 引擎 dim36_bkd_up 物化 + 注册中心已注册, 但**A/B v6 PASS 才接入生产**
                 # (用户指令: "AB 通过了才接线进生产"). PASS 后把 14 名加回此处 +
