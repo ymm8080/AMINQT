@@ -595,8 +595,10 @@ LEGACY_10D_RANK_TARGET = {
 # 落在 top_q 分位的样本 ×weight — 尾部错判代价放大, 目标定义/排名键/闸全不动。
 # 只作用 reg 幅度头 (3d/5d/10d_reg, 与时间衰减权重相乘); cls/pain 头不动。
 # [0912 夜 A/B 判 FAIL 已关] main 板 60d OOS tail 臂隔离: reg_IC 0.0808→0.0284,
-# top10 −1.16pp, 爆发重叠 3.41→2.96; 且交付清单=prob10_pull(cls 头)够不着 reg 头
-# → 零清单收益纯副作用。第三次修幅度头失败 (前两次: 0910 rank 目标/decay5)。
+# top10 −1.16pp, 爆发重叠 3.41→2.96。⚠[0912 更正] 交付清单排序键 prob_up_10d =
+# reg 残差概率 (predictor 08-24 起 p_reg 优先, Platt cls 仅补 NaN 行) → 清单本就
+# 由 reg 头驱动, tail 臂伤 reg = 直接伤交付头, FAIL 更实锤 (原"够不着"推断作废)。
+# 第三次修幅度头失败 (前两次: 0910 rank 目标/decay5)。
 # 复测 = enable=True (数学保留, 见 tests/test_legacy_tail_weight.py)。
 LEGACY_TAIL_WEIGHT = {
     "enable": False,
