@@ -29,7 +29,6 @@ NOT fetched here (separate pipelines):
 """
 import logging
 import os
-import subprocess
 import sys
 import time
 from datetime import datetime
@@ -834,81 +833,6 @@ if any(c in panel_cols for c in (
             print("    holdertrade today: WARN 3 次重试后仍空 — 当日事件未写入 (列留稀疏)")
     except Exception as e:
         print(f"    holdertrade today: FAILED ({e})")
-
-# ── 6.8 ths_signal 问财看涨/看跌池 → 8 列 ──
-# 抓取 subprocess 复用生产 fetcher (WORM/分页契约/bear_counts 追加都在它那边, rc=2=cookie失效);
-# 聚合语义镜像 enrich_one_source.merge_ths_signal: 池成员=1 非成员=0, 计数列非成员=0,
-# 文本列仅成员有值, ths_bear_pool=当日池规模广播. 抓取失败不致命: 列留NA, 下次
-# enrich --refresh 会按其 in-range 语义归一.
-_THS_COLS = (
-    "ths_bull", "ths_bull_ready_rise", "ths_bull_buy_signals", "ths_bull_tech_pattern",
-    "ths_bull_buy_sig_n", "ths_bull_tech_n", "ths_bear", "ths_bear_pool",
-)
-if any(c in panel_cols for c in _THS_COLS):
-  try:
-    _ths_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "data", "supply_cache", "ths_signal")
-    _fetcher = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "scripts", "_fetch_ths_signal.py")
-    _rc = None
-    for _attempt in range(3):
-        _rc = subprocess.call([sys.executable, _fetcher, "--date", TRADE_DATE])
-        if _rc == 0:
-            break
-        print(f"    ths_signal fetch attempt {_attempt + 1}/3 rc={_rc}"
-              + (" (cookie失效, 停止重试需人工刷新)" if _rc == 2 else ""))
-        if _rc == 2:
-            break
-        time.sleep(30)
-
-    def _ths_sig_count(val) -> float:
-        return float(sum(1 for x in str(val if pd.notna(val) else "").split("||")
-                         if x.strip()))
-
-    _bull_f = os.path.join(_ths_dir, f"bull_{TRADE_DATE}.parquet")
-    if os.path.exists(_bull_f) and "ths_bull" in panel_cols:
-        _b = pd.read_parquet(_bull_f)
-        if len(_b):
-            _sym = (_b["股票代码"].astype(str).str.replace(r"\D", "", regex=True)
-                    .str.zfill(6))
-            _pool = set(_sym)
-            df["ths_bull"] = df["symbol"].isin(_pool).astype(float)
-            for _zh, _txt_col, _n_col in (
-                ("技术形态", "ths_bull_tech_pattern", "ths_bull_tech_n"),
-                ("买入信号", "ths_bull_buy_signals", "ths_bull_buy_sig_n"),
-            ):
-                _src = next((c for c in _b.columns if c.startswith(_zh)), None)
-                if _src is None:
-                    continue
-                _vals = (pd.Series(_b[_src].values, index=_sym)
-                         .groupby(level=0).first())
-                _txt = df["symbol"].map(_vals)
-                df[_txt_col] = _txt
-                df[_n_col] = _txt.map(_ths_sig_count)
-            _ready = next((c for c in _b.columns if c.startswith("准备拉升")), None)
-            if _ready is not None:
-                _rv = (pd.Series(_b[_ready].values, index=_sym)
-                       .groupby(level=0).first())
-                df["ths_bull_ready_rise"] = df["symbol"].map(_rv)
-            print(f"    ths_signal: 看涨池 {len(_pool)} 只已写入")
-
-    _bear_f = os.path.join(_ths_dir, f"bear_{TRADE_DATE}.parquet")
-    if os.path.exists(_bear_f) and "ths_bear" in panel_cols:
-        _d = pd.read_parquet(_bear_f)
-        if len(_d) and "股票代码" in _d.columns:
-            _bsym = (_d["股票代码"].astype(str).str.replace(r"\D", "", regex=True)
-                     .str.zfill(6))
-            df["ths_bear"] = df["symbol"].isin(set(_bsym)).astype(float)
-            print(f"    ths_signal: 看跌池 {len(set(_bsym))} 只已写入")
-
-    _csv_f = os.path.join(_ths_dir, "bear_counts.csv")
-    if os.path.exists(_csv_f) and "ths_bear_pool" in panel_cols:
-        _bc = pd.read_csv(_csv_f, dtype={"date": str}).drop_duplicates(subset=["date"])
-        _row = _bc.loc[_bc["date"] == TRADE_DATE, "bear_count"]
-        if len(_row):
-            df["ths_bear_pool"] = float(_row.iloc[0])
-  except Exception as _e:
-    print(f"    ths_signal: FAILED ({_e}) — 当日 ths 列留 NA (fail-open, 不阻链)")
 
 # ── 7. Align to panel schema ──
 print("\n[7] Aligning to panel schema...")
