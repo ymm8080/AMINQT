@@ -14,9 +14,9 @@
 指标 = 每头各出: 日截面全局 IC (mean/ICIR/胜率) + 该头排名 top10 实得/胜率
        + 赢家预测抬升
 判词 = 某特征两板 Δtop10 均 ≥0 → 留 force_include; 任一板降 >1pp → 摘
-前视警示: 获利盘斜率20 / 出货密度×3 (dual 臂) 继承 dim09 ChipDistribution 全帧网格
-前视 (chip_distribution.py:52, 0912 夜合成验证历史行 max 漂移 58pp) — 这 4 列
-正向结果视为可疑 (前视夸大), 负向结果加倍判死; 最终去留等网格修复后复测.
+前视注记: 获利盘斜率20 / 出货密度×3 (dual 臂) 原继承 dim09 ChipDistribution 全帧网格
+前视 — 但网格修复 (固定绝对对数网格, commit 818bd386) 已在本跑之前落地, 本轮帧
+为干净因果口径, 4 列结果可直接采信。对照: 昨夜 Phase A 同列数值仍带旧前视。
 
 用法: python tmp_t/_cls_top10_0912.py  (串行两板, 自写日志 tmp_t/_cls_top10_0912.log)
 重活: 哨兵 _cls_top10_0912.py 已入 scripts/_run_guard.HEAVY_SENTINELS.
@@ -188,9 +188,10 @@ def run_board(board: str) -> dict:
     trainer = DualTrackTrainer()
     rep = {"board": board, "n_base": len(base_cols), "features": avail,
            "test_days": int(test["date"].nunique()),
-           # 产物自带解释上下文: 4 列含前视, 正向结果不可直接采信
-           "lookahead_caveat": "获利盘斜率20/出货_density_* 继承 dim09 ChipDistribution 全帧网格前视 "
-                               "(chip_distribution.py:52, 0912 夜验证 58pp); 正向结果可疑, 网格修复后复测",
+           # 产物自带解释上下文: 网格修复 (818bd386) 在本跑前落地, 帧为干净因果口径
+           "engine_note": "dim09 ChipDistribution 已换固定绝对对数网格 (commit 818bd386, 跑前落地): "
+                          "获利盘斜率20/出货_density_* 为干净因果口径, 结果可直接采信; "
+                          "昨夜 Phase A (night0912_ab_*) 同列数值仍带旧全帧网格前视, 勿直接对比",
            "arms": {}}
     try:
         for arm, cols in arms:
