@@ -1352,12 +1352,16 @@ class FeatureSelector:
                     "出货_density_5d",
                     "出货_density_10d",
                     "出货_density_20d",
-                    # [2026-09-12] 益盟 S-L/斜率族与 main 同注同摘 (逐特征 A/B 判词:
-                    # SL斜率20 main -1.46pp / 带20 main -1.85pp 破任一板 -1pp 线, 两板
-                    # 一致摘除; 留 5 列的完整数字见 main 侧 force_include 注释).
+                    # [2026-09-12] 益盟 S-L/斜率族 — 分板判词 (用户定调: main/dual/
+                    # parallel 独立模块各配特征集, 勿跨板统一摘留): 本板 cls top10
+                    # 全族为正 (SL斜率20 +1.72pp / 带20 +2.58pp, 仅 main 破线在 main
+                    # 摘), 7 列全留. 注: dual cls IC 多数微降 + base top10 仅 0.54%,
+                    # 头部增益部分是低基数效应, dual cls 头重新上岗时须复核.
                     "SL差值",
                     "SL标准化",
+                    "SL斜率20",
                     "SL多头持续天数",
+                    "带20",
                     "带20斜率20",
                     "获利盘斜率20",
                     # [2026-09-10] dim36 双向短期族: A/B v6 PASS 才接入 (同 main 语义),

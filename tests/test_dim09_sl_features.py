@@ -5,9 +5,9 @@
 1. 7 列数学正确性 (SL差值/标准化/斜率20/多头持续/带20/带20斜率20/获利盘斜率20);
 2. 跨股边界 (B 股首 20 行斜率列必须 NaN, 不串 A 股);
 3. 零前视 (扰动 t 之后行, t 之前行特征不变);
-4. force_include 接线: 两板同注 0912 A/B 判词后留的 5 列 (SL斜率20/带20 已摘 —
-   逐特征 A/B main cls top10 -1.46/-1.85pp 破任一板 -1pp 线); main 不重复出货密度
-   (pin 已有), dual 补出货密度 5/10/20d.
+4. force_include 接线: 分板判词 — main 留 5 (SL斜率20/带20 摘, main cls top10
+   -1.46/-1.85pp 破线), dual 7 列全留 (dual cls top10 全族为正); main 不重复出货
+   密度 (pin 已有), dual 补出货密度 5/10/20d.
 """
 
 import unittest
@@ -28,9 +28,10 @@ NEW_7 = [
     "获利盘斜率20",
 ]
 
-# 0912 逐特征 A/B 判词 (cls top10 主判, 任一板降 >1pp 摘): 摘 SL斜率20/带20, 留 5
-INJECTED_5 = [c for c in NEW_7 if c not in ("SL斜率20", "带20")]
-DROPPED_2 = ["SL斜率20", "带20"]
+# 0912 逐特征 A/B 判词 — 分板执行 (独立模块各配特征集, 勿跨板统一摘留):
+# main 摘 SL斜率20(-1.46pp)/带20(-1.85pp) 破 -1pp 线, 留 5; dual 全族为正, 7 列全留
+MAIN_INJECTED_5 = [c for c in NEW_7 if c not in ("SL斜率20", "带20")]
+MAIN_DROPPED_2 = ["SL斜率20", "带20"]
 
 
 def _make_frame() -> pd.DataFrame:
@@ -165,26 +166,24 @@ class TestDim09SlBoundaryAndLookahead(unittest.TestCase):
 
 
 class TestForceIncludeWiring(unittest.TestCase):
-    """两板同注判词后留的 5 列 (用户令两板一致, 摘留同动作); 摘除列必须不在名单;
-    main 不重复注入出货密度 (pin 273 列已含), dual 补出货密度 5/10/20d."""
+    """分板判词接线: main 留 5 (摘 SL斜率20/带20), dual 7 列全留 + 补出货密度;
+    main 不重复注入出货密度 (pin 273 列已含)."""
 
-    def test_main_includes_injected5_excludes_density_and_dropped(self):
+    def test_main_includes_5_excludes_density_and_dropped(self):
         inc = set(FeatureSelector.DEFAULT_CONFIG["main"]["force_include"])
-        for name in INJECTED_5:
+        for name in MAIN_INJECTED_5:
             self.assertIn(name, inc, f"main force_include 缺 {name}")
-        for name in DROPPED_2:
+        for name in MAIN_DROPPED_2:
             self.assertNotIn(name, inc, f"main force_include 应已摘 {name}")
         for w in (5, 10, 20):
             self.assertNotIn(
                 f"出货_density_{w}d", inc, "main pin 273 列已含出货密度, 勿重复注入"
             )
 
-    def test_dual_includes_injected5_and_density(self):
+    def test_dual_includes_all_new7_and_density(self):
         inc = set(FeatureSelector.DEFAULT_CONFIG["dual"]["gate_d"]["force_include"])
-        for name in INJECTED_5:
+        for name in NEW_7:
             self.assertIn(name, inc, f"dual force_include 缺 {name}")
-        for name in DROPPED_2:
-            self.assertNotIn(name, inc, f"dual force_include 应已摘 {name}")
         for w in (5, 10, 20):
             self.assertIn(f"出货_density_{w}d", inc, f"dual force_include 缺 {w}d")
 
