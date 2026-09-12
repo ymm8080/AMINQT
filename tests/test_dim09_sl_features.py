@@ -143,10 +143,9 @@ class TestDim09SlBoundaryAndLookahead(unittest.TestCase):
             self.assertTrue(b[col][:20].isna().all(), f"{col} 跨股泄漏")
 
     def test_no_lookahead(self):
-        # 获利盘斜率20 不进严格断言: ChipDistribution 价格网格用全帧 low.min/high.max
-        # (chip_distribution.py:52, 既有行为) → 未来行高价会平移网格, 过去行获利盘
-        # 随之漂移 (实测 3.45pp) — 继承自既有获利盘族, 已单独挂账待修, 非 0912 注入引入.
-        cols = [c for c in NEW_7 if c != "获利盘斜率20"]
+        # 0912 修复: ChipDistribution 改固定绝对对数网格后全 NEW_7 无前视
+        # (旧全帧 low.min/high.max 网格下 获利盘斜率20 实测漂移 3.45pp, 曾挂账排除)
+        cols = list(NEW_7)
         df = _make_frame()
         base = _dim09(df)
         pert = df.copy()
