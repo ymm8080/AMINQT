@@ -63,7 +63,7 @@ def main() -> int:
         by_feat.setdefault(r["feat"], {})[r["board"]] = r
 
     verdicts = {}
-    print(f"\n=== 逐特征 Δ vs base (cls top10 实得 pp 为主判 | 参考: cls IC / reg top10 / reg IC) ===")
+    print("\n=== 逐特征 Δ vs base (cls top10 实得 pp 为主判 | 参考: cls IC / reg top10 / reg IC) ===")
     print(f"{'特征':<14} {'板':<5} {'Δcls_top10':>10} {'Δcls_IC':>8} {'Δreg_top10':>10} {'Δreg_IC':>8}")
     for feat, brd in by_feat.items():
         for board in ("main", "dual"):
@@ -72,7 +72,7 @@ def main() -> int:
                 print(f"{feat:<14} {board:<5} {_fmt(r['d_cls_top10']):>10} "
                       f"{_fmt(r['d_cls_ic']):>8} {_fmt(r['d_reg_top10']):>10} {_fmt(r['d_reg_ic']):>8}")
 
-    print(f"\n=== 判词 (主判 cls top10: 两板 Δ≥0 留 / 任一板 <-1pp 摘 / 其间留观) ===")
+    print("\n=== 判词 (主判 cls top10: 两板 Δ≥0 留 / 任一板 <-1pp 摘 / 其间留观) ===")
     for feat, brd in by_feat.items():
         ds = {b: r["d_cls_top10"] for b, r in brd.items() if r}
         if not ds:
