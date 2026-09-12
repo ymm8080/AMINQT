@@ -73,7 +73,10 @@ class TestTailWeight(unittest.TestCase):
     def test_reg_head_top_decile_gets_4x(self):
         segs = _make_segs()
         trainer = DualTrackTrainer()
-        model, label = trainer._train_one("10d_reg", segs, ["f1", "f2"], "main")
+        # 默认 enable=False (0912 A/B 判 FAIL 关闭); ON 分支数学显式 mock 验证
+        on = dict(settings.LEGACY_TAIL_WEIGHT, enable=True)
+        with mock.patch.object(settings, "LEGACY_TAIL_WEIGHT", on):
+            model, label = trainer._train_one("10d_reg", segs, ["f1", "f2"], "main")
         self.assertEqual(label, "label_pm_10d_net")
         y = segs["train"][label].to_numpy()
         thr = np.quantile(y, settings.LEGACY_TAIL_WEIGHT["top_q"])

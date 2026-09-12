@@ -594,9 +594,12 @@ LEGACY_10D_RANK_TARGET = {
 # 将爆发的票预测幅度系统性压低 (见 +3.8% 实际 +10%)。修法: 训练时给实际 fwd10
 # 落在 top_q 分位的样本 ×weight — 尾部错判代价放大, 目标定义/排名键/闸全不动。
 # 只作用 reg 幅度头 (3d/5d/10d_reg, 与时间衰减权重相乘); cls/pain 头不动。
-# 用户令免全量 A/B 直接接入, 小型 A/B 验证 FAIL 再关; 回退 = enable=False。
+# [0912 夜 A/B 判 FAIL 已关] main 板 60d OOS tail 臂隔离: reg_IC 0.0808→0.0284,
+# top10 −1.16pp, 爆发重叠 3.41→2.96; 且交付清单=prob10_pull(cls 头)够不着 reg 头
+# → 零清单收益纯副作用。第三次修幅度头失败 (前两次: 0910 rank 目标/decay5)。
+# 复测 = enable=True (数学保留, 见 tests/test_legacy_tail_weight.py)。
 LEGACY_TAIL_WEIGHT = {
-    "enable": True,
+    "enable": False,
     "top_q": 0.9,  # 训练段 label 分位阈值 (top 10% 实际涨幅样本)
     "weight": 4.0,  # 尾部样本权重倍数 (与 decay_sample_weights 相乘)
     "kinds": ("3d_reg", "5d_reg", "10d_reg"),
