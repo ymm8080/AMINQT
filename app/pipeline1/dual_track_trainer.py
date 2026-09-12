@@ -446,6 +446,25 @@ class DualTrackTrainer:
         else:
             w = self.time_weights(train)
 
+        # [2026-09-12] 尾部样本加权 LEGACY_TAIL_WEIGHT (爆发猎杀): L2 平均化让
+        # reg 头"说小声话" (002848 见+3.8% 实际+10%), 训练段 label top 分位样本
+        # ×weight 放大尾部错判代价; 与时间衰减权重相乘, 目标/排名键/闸不动.
+        # 回退 = enable=False (config/settings.py 注释).
+        from config.settings import LEGACY_TAIL_WEIGHT
+
+        if LEGACY_TAIL_WEIGHT["enable"] and kind in tuple(LEGACY_TAIL_WEIGHT["kinds"]):
+            thr = np.quantile(y, LEGACY_TAIL_WEIGHT["top_q"])
+            w = w * np.where(y >= thr, float(LEGACY_TAIL_WEIGHT["weight"]), 1.0)
+            logger.info(
+                "[%s/%s] 尾部加权: top_q=%.2f thr=%.4f w=%.1f 覆盖=%.1f%%",
+                board,
+                kind,
+                LEGACY_TAIL_WEIGHT["top_q"],
+                thr,
+                LEGACY_TAIL_WEIGHT["weight"],
+                100.0 * (y >= thr).mean(),
+            )
+
         # 释放 DataFrame 引用 (X/y 已提取为 numpy 数组)
         del train, es
         gc.collect()
