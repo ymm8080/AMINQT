@@ -65,7 +65,6 @@ HEAVY_SENTINELS = (
     "_pin_brute_prob_ab_0910.py",
     "_night0912_orch.py",
     "_cls_top10_0912.py",
-    "_feat_global_0912.py",
 )
 ORCHESTRATOR_SENTINEL = "run_daily_automation.py"
 # 链级守卫额外把另一条链实例视为冲突; 脚本级不含 (见模块 docstring).
