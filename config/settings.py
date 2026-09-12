@@ -607,6 +607,24 @@ LEGACY_TAIL_WEIGHT = {
     "kinds": ("3d_reg", "5d_reg", "10d_reg"),
 }
 
+# ── [2026-09-12] per-head 特征集: reg/cls 头分开训练, 各头族挂独有特征 ──
+# 8 格矩阵 A/B 判词分格执行 (WORM cls_top10_0912_{main,dual} + ab_families_0912_{main,dual}):
+#   main reg += SL斜率20   : reg IC +2.27pp/top10 +0.30pp/lift 4.08→8.31; cls top10 −1.46pp → 只入 reg
+#   main cls += quality_factor: cls IC +0.75pp/top10 +0.19pp 双正; reg top10 −3.52pp → 只入 cls
+#   dual cls += quality_factor + ps_ttm: top10 +2.88/+1.46pp (base 0.54% 低基数已注)
+# dual 不挂 SL斜率20 per-head — 已在 dual force_include 共享集内 (feature_selector)。
+# 训练列清单铁律: 帧内缺失的 extra 由 kind_feature_cols 剔除+告警 (模型列数=bundle 声明),
+# quality_factor 由训练/推理端同公式合成 (feature_selector.add_quality_factor)。
+LEGACY_HEAD_EXTRA_COLS = {
+    "main": {
+        "reg": ["SL斜率20"],
+        "cls": ["quality_factor"],
+    },
+    "dual": {
+        "cls": ["quality_factor", "ps_ttm"],
+    },
+}
+
 # ── parallel 概率展示层再校准 (2026-08-29 用户批准) ──
 # 08-29 实测交付概率高估 (pred_prob_10d 均值 55.8% vs MFE>6% 实得 27.5%, +28pp;
 # tmp_t/_rebase_diag_0829.py). 展示层每板块每视界乘一个收敛因子 = 实得命中率/预测

@@ -22,6 +22,41 @@ from config.settings import data_others_path
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────
+# [2026-09-12] per-head 合成特征: quality_factor (cls 头专属)
+# ──────────────────────────────────────────────────────────
+# 16 基本面列当日截面 pct-rank 均值 (与 A/B harness tmp_t/_ab_families_0912.py
+# 逐字节同公式)。rank(pct=True) 的 NaN→NaN + mean(axis=1) skipna ⇒ 帧内子集
+# 均值 ≡ 全 16 列均值, 缺列不改变语义。
+QUALITY_BASE_COLS = (
+    "q_roe",
+    "eps",
+    "dt_eps",
+    "roe",
+    "roa",
+    "roe_deducted",
+    "rev_yoy",
+    "eps_yoy",
+    "profit_yoy",
+    "ocfps",
+    "bps",
+    "net_margin",
+    "revenue_ps",
+    "q_ocf_to_sales",
+    "asset_turnover",
+    "inventory_turnover",
+)
+
+
+def add_quality_factor(df: pd.DataFrame) -> bool:
+    """就地合成 quality_factor 列; 帧内无任何基列 → 不加列返回 False (调用方按缺失剔除)."""
+    have = [c for c in QUALITY_BASE_COLS if c in df.columns]
+    if not have:
+        return False
+    qrank = df.groupby("date")[have].rank(pct=True)
+    df["quality_factor"] = qrank.mean(axis=1).astype("float32")
+    return True
+
+# ──────────────────────────────────────────────────────────
 # BruteForceGenerator (Layer1)
 # ──────────────────────────────────────────────────────────
 

@@ -187,6 +187,45 @@ MODEL_KINDS = (
     "10d_reg",
     "10d_cls",
 )
+
+
+# ── [2026-09-12] per-head 特征集 (LEGACY_HEAD_EXTRA_COLS, 8 格矩阵判词) ──
+def kind_feature_cols(
+    board: str, feature_cols: list[str], available=None
+) -> dict[str, list[str]]:
+    """共享清单 + 本头族 (reg/cls) extras → {kind: 列清单}.
+
+    available 给定时 (训练帧列集合), 缺失 extra 剔除 + 大声告警 — 模型实际训练
+    列数必须与 bundle 声明一致, 否则 serving 端 0 填充后特征数错位直接崩溃
+    (同 _force_include_avail 纪律)。
+    """
+    from config.settings import LEGACY_HEAD_EXTRA_COLS
+
+    board_cfg = LEGACY_HEAD_EXTRA_COLS.get(board) or {}
+    by_kind: dict[str, list[str]] = {}
+    for kind in MODEL_KINDS:
+        fam = "cls" if kind.endswith("cls") else "reg"
+        extras = list(board_cfg.get(fam) or [])
+        cols = list(feature_cols) + [c for c in extras if c not in feature_cols]
+        if available is not None:
+            dropped = [c for c in cols if c not in available]
+            if dropped:
+                logger.warning(
+                    "[%s/%s] per-head 特征缺失 %d 列, 剔除不进该头: %s",
+                    board,
+                    kind,
+                    len(dropped),
+                    dropped[:5],
+                )
+                cols = [c for c in cols if c in available]
+        by_kind[kind] = cols
+    return by_kind
+
+
+def cols_for(bundle: dict, kind: str) -> list[str]:
+    """per-kind 列清单; 旧 bundle 无 feature_cols_by_kind → 共享清单回退。"""
+    by_kind = bundle.get("feature_cols_by_kind") or {}
+    return by_kind.get(kind) or bundle.get("feature_cols") or []
 EXTRA_KINDS = (
     "quantile_models_3d",
     "quantile_models_5d",
@@ -558,14 +597,31 @@ class DualTrackTrainer:
                 f"[{board}] 训练样本深度不足: {depth} 交易日 "
                 f"(需 ≥ {ES_DAYS + CALIB_DAYS + TEST_DAYS + MIN_TRAIN_DAYS})"
             )
+        # ── [2026-09-12] per-head 合成特征: quality_factor 需 per-date 截面 rank,
+        # 在 split_window 前的整帧合成 (split 后 segs 为拷贝); 公式单一来源
+        # feature_selector.add_quality_factor, 推理端同款。
+        from config.settings import LEGACY_HEAD_EXTRA_COLS
+
+        _extras_ref: set[str] = set()
+        for _fam_cols in (LEGACY_HEAD_EXTRA_COLS.get(board) or {}).values():
+            _extras_ref.update(_fam_cols)
+        if "quality_factor" in _extras_ref and "quality_factor" not in df.columns:
+            from .feature_selector import add_quality_factor
+
+            add_quality_factor(df)
+        available = set(df.columns)
+
         segs = self.split_window(df, window)
         # 内存 (2026-08-13): split_window 已把数据拷贝进 segs, df (整块增强帧 ~3GB)
         # 不再被引用 → 立即释放, 否则训练全程驻留导致 main OOM
         del df
         gc.collect()
 
+        # ── [2026-09-12] per-head 列清单: 共享 + 本头族 extras (缺失列剔除+告警) ──
+        by_kind = kind_feature_cols(board, feature_cols, available=available)
+
         # ── 内存: 只保留训练/校准/OOS 需要的列, 释放 OHLCV 原始列 ──
-        keep_cols = set(feature_cols) | {
+        keep_cols = {c for ks in by_kind.values() for c in ks} | {
             "symbol",
             "date",
             "board",
@@ -589,6 +645,7 @@ class DualTrackTrainer:
         out = {
             "board": board,
             "feature_cols": feature_cols,
+            "feature_cols_by_kind": by_kind,
             "models": {},
             "segs": segs,
             "_window_total": window,
@@ -618,7 +675,7 @@ class DualTrackTrainer:
             if self._resolve_label(kind, segs["train"].columns) is None:
                 logger.info("[%s] %s — 标签列缺失, 跳过", board, kind)
                 continue
-            model, label = self._train_one(kind, segs, feature_cols, board)
+            model, label = self._train_one(kind, segs, by_kind[kind], board)
             out["models"][kind] = (model, label)
             logger.info(
                 "[%s] %s 训练完成, 样本 %d",
@@ -645,7 +702,7 @@ class DualTrackTrainer:
                     out["models"]["10d_reg"][0],
                     seg_train,
                     label10,
-                    feature_cols,
+                    by_kind.get("10d_reg") or feature_cols,
                     bins=int(LEGACY_10D_RANK_TARGET.get("bins", 20)),
                 )
                 logger.info(
@@ -873,7 +930,7 @@ class DualTrackTrainer:
                 continue  # 该视界未训练 (标签列缺失) → 不注册校准器
             model, label = trained["models"][kind]
             calib = trained["segs"]["calib"].dropna(subset=[label])
-            cols = trained["feature_cols"]
+            cols = cols_for(trained, kind)
             # 校准集可能为空 (小窗口 + 多特征列 NaN), 此时跳过校准用原始 prob
             if len(calib) == 0:
                 logger.warning(
@@ -902,7 +959,7 @@ class DualTrackTrainer:
             if len(calib) < 30:
                 continue
             r = reg_model.predict(
-                np.nan_to_num(calib[trained["feature_cols"]].values, nan=0.0)
+                np.nan_to_num(calib[cols_for(trained, kind_reg)].values, nan=0.0)
             )
             # [2026-09-10] 秩目标头: 残差须在收益语义空间 (label − 映射(百分位)),
             # 否则推理端 prob_up = P(ret>TH|pred) 的 pred 口径错位 (秩 vs 收益)
@@ -950,6 +1007,9 @@ class DualTrackTrainer:
 
         test = trained["segs"]["test"].copy()
         need = set(trained["feature_cols"]) | set(cur.get("feature_cols") or [])
+        for _b in (trained, cur):
+            for _ks in (_b.get("feature_cols_by_kind") or {}).values():
+                need.update(_ks)
         missing = [c for c in sorted(need) if c not in test.columns]
         if missing:
             from .feature_selector import BRUTE_FAMILIES, BruteForceGenerator
@@ -981,7 +1041,7 @@ class DualTrackTrainer:
         tol_half = float(cfg.get("tol_half", -0.002))
 
         def _daily(bundle: dict, model) -> tuple[pd.Series, dict[str, float]]:
-            cols = bundle["feature_cols"]
+            cols = cols_for(bundle, "10d_reg")
             t = test[["symbol", "date", "label_pm_10d_net"]].copy()
             t["pred"] = model.predict(
                 np.nan_to_num(test[cols].to_numpy(dtype=float), nan=0.0)
@@ -1019,7 +1079,7 @@ class DualTrackTrainer:
                 model, _label = self._train_one(
                     "10d_reg",
                     trained["segs"],
-                    trained["feature_cols"],
+                    cols_for(trained, "10d_reg"),
                     trained["board"],
                     seed=seed,
                 )
@@ -1151,14 +1211,15 @@ class DualTrackTrainer:
         from .label_engine import LABEL_WEIGHTS
 
         test = trained["segs"]["test"]
-        cols = trained["feature_cols"]
         ics = {}
         for kind, (model, label) in trained["models"].items():
             sub = test.dropna(subset=[label]).copy()
             if len(sub) < 30:
                 ics[kind] = 0.0
                 continue
-            sub["_pred"] = model.predict(np.nan_to_num(sub[cols].values, nan=0.0))
+            sub["_pred"] = model.predict(
+                np.nan_to_num(sub[cols_for(trained, kind)].values, nan=0.0)
+            )
             ics[kind] = ICScreener.rank_ic(
                 sub.rename(columns={"_pred": "score"}), "score", label
             )
@@ -1186,6 +1247,9 @@ class DualTrackTrainer:
             "models": trained["models"],
             "calibrator": trained["calibrator"],
         }
+        # [2026-09-12] per-head 列清单: 推理端 cols_for 回退共享, 不落盘则 extras 失效
+        if trained.get("feature_cols_by_kind"):
+            bundle["feature_cols_by_kind"] = trained["feature_cols_by_kind"]
         for (
             extra
         ) in (  # 多视界校准器 + E1/E2/排序 (quantile 3d/5d 必须落盘, gate3 用其中位数)
