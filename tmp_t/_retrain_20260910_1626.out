@@ -1,0 +1,17 @@
+[preflight:_retrain_legacy_full] 数据前置: cyq → sw_history → freshness (log=D:\AMINQT\AMINQT CODES\logs\manual_preflight_20260910_162805.log)
+[preflight] cyq ok (210s)
+[preflight] sw_history ok (145s)
+[preflight] freshness ok (4s)
+[preflight:_retrain_legacy_full] 数据前置全部 ok
+2026-09-10 16:34:13,218 INFO app.pipeline1.train_runner [panel_path] V3 直读 + 3y 窗口: 2594238 rows max=2026-09-10
+2026-09-10 16:34:13,223 INFO app.pipeline1.train_runner [timing] panel load: 9.3s
+2026-09-10 16:34:13,232 INFO app.pipeline1.train_runner FeatureSelector 已初始化: MAIN=bruteforce_dedup DUAL=gate_d
+2026-09-10 16:34:13,257 INFO app.pipeline1.feature_registry FeatureRegistry: 已加载 D:\AMINQT\DATA OTHERS\factor_registry\feature_registry.json (460 特征)
+2026-09-10 16:34:34,020 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.3G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 16:34:52,426 INFO app.pipeline1.train_runner [timing] cleaning (run_train): 39.2s
+2026-09-10 16:41:34,404 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 16:48:34,843 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.6G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 16:50:05,336 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 16:51:07,094 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 16:55:14,071 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.
+2026-09-10 16:57:14,904 WARNING app.pipeline1.ram_guard 内存挤兑警报: 可用内存 0.0G 低于下限 2.0G — 检测到其他重活抢内存, 训练可能像 08-14 那样数小时零完成. 建议立刻停掉并行的回测/扫描.

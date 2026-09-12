@@ -451,6 +451,7 @@ class FeatureEngineV35:
         "dim33": "dim33_block_trade",
         "dim34": "dim34_lhb_v2",
         "dim35": "dim35_regime_interact",
+        "dim36": "dim36_bkd_up",
     }
 
     # ---------------- 总装 ----------------
@@ -573,6 +574,10 @@ class FeatureEngineV35:
             df = self.dim35_regime_interact(
                 df
             )  # 新因子×行情交互 (2026-09-08 入模候选, 两阶段协议评审中)
+        if _ok("dim36"):
+            df = self.dim36_bkd_up(
+                df
+            )  # 双向短期族 bkd_+up_ 14特征 (2026-09-10 立项, force_include 通道)
 
         # ── Phase 2: Auto-adopt new panel columns ──
         # IRON RULE #1: Auto-adoption with IC pre-screen uses forward return
@@ -3639,6 +3644,74 @@ class FeatureEngineV35:
         bhi = (df["mkt_breadth"] > DIM35_BREADTH_GATE).astype(float)
         df["pullback_ev_breadth"] = ev_pb.astype(float) * bhi
         df["exhaust_ev_breadth"] = ev_ex.astype(float) * bhi
+        return df
+
+    # ---------------- ㊱ 双向短期族 (bkd_ 破位 + up_ 上涨) ----------------
+    @staticmethod
+    def dim36_bkd_up(df: pd.DataFrame) -> pd.DataFrame:
+        """双向短期特征族 14 特征 (2026-09-10 立项, tmp_t/_bkd_ab_minibacktest_v6_0910.py
+        同一实现, 数学逐字一致). 输入须已按 symbol,date 排序. 全部 t 日收盘可知, 零前视."""
+
+        def _roll(series: pd.Series, win: int, how: str) -> pd.Series:
+            return series.groupby(df["symbol"], sort=False).transform(
+                lambda s: getattr(s.rolling(win, min_periods=win), how)()
+            )
+
+        g = df.groupby("symbol", sort=False)
+        c = df["close_hfq"]
+        pc = g["close_hfq"].shift(1)
+        dn = (c < pc).astype("float64")
+        up = (c > pc).astype("float64")
+        ma5 = g["close_hfq"].transform(lambda s: s.rolling(5, min_periods=5).mean())
+        ma10 = g["close_hfq"].transform(lambda s: s.rolling(10, min_periods=10).mean())
+        ma20 = g["close_hfq"].transform(lambda s: s.rolling(20, min_periods=20).mean())
+        hi20 = g["high_hfq"].transform(lambda s: s.rolling(20, min_periods=20).max())
+        hi20p = (
+            g["high_hfq"]
+            .shift(1)
+            .groupby(df["symbol"], sort=False)
+            .transform(lambda s: s.rolling(20, min_periods=20).max())
+        )
+        hi5 = g["close_hfq"].transform(lambda s: s.rolling(5, min_periods=5).max())
+        lo10 = g["low_hfq"].transform(lambda s: s.rolling(10, min_periods=10).min())
+        hi60 = g["high_hfq"].transform(lambda s: s.rolling(60, min_periods=60).max())
+        v20 = g["volume"].transform(lambda s: s.rolling(20, min_periods=20).mean())
+
+        # 连跌分块: shift 必须在 symbol 组内 (跨股 shift 会串股边界)
+        dn_prev = dn.groupby(df["symbol"], sort=False).shift(1)
+        blk = (dn != dn_prev).groupby(df["symbol"], sort=False).cumsum()
+        streak = dn.groupby([df["symbol"], blk], sort=False).cumsum()
+        df["bkd_dn_streak"] = streak.clip(upper=10) * dn
+        df["bkd_dn_days5"] = _roll(dn, 5, "sum")
+        df["bkd_dd5_high20"] = c / hi20 - 1.0
+        df["bkd_dd_high60"] = c / hi60 - 1.0
+        df["bkd_min10_dist"] = c / lo10 - 1.0
+        df["bkd_below_ma_cnt"] = (
+            (c < ma5).astype("float64")
+            + (c < ma10).astype("float64")
+            + (c < ma20).astype("float64")
+        )
+        df["bkd_ma_bear_align"] = (
+            (ma5 < ma10).astype("float64")
+            + (ma10 < ma20).astype("float64")
+            + (c < ma5).astype("float64")
+        ) / 3.0
+        df["bkd_ma5_slope5"] = ma5.groupby(df["symbol"], sort=False).pct_change(
+            5, fill_method=None
+        )
+        up5 = _roll(up, 5, "sum")
+        upvol5 = _roll(up * df["volume"], 5, "sum")
+        df["up_vol_confirm5"] = (upvol5 / up5.replace(0.0, np.nan)) / v20
+        body = (df["close_hfq"] - df["open_hfq"]) / pc
+        df["up_body5"] = _roll(body, 5, "mean")
+        vr = df["volume"] / v20
+        df["up_break20_vol"] = (c / hi20p - 1.0) * vr
+        gap = df["open_hfq"] / pc - 1.0
+        up_prev = (pc > g["close_hfq"].shift(2)).astype("float64")
+        df["up_followthrough"] = _roll((gap * up_prev).fillna(0.0), 5, "mean")
+        df["up_pullback_depth"] = c / hi5 - 1.0
+        upgap_hold = (df["low_hfq"] > pc).astype("float64")
+        df["up_gap_hold"] = _roll(upgap_hold, 10, "mean")
         return df
 
     # ---------------- ㉚ K线几何特征 (缺口/实体/影线/连续) ----------------

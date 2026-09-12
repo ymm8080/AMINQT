@@ -1,0 +1,11 @@
+{
+  "seed": 42,
+  "n_stocks": 400,
+  "eval_dates": [
+    "2024-08-16T00:00:00.000000000",
+    "2026-09-08T00:00:00.000000000"
+  ],
+  "warmup_days": 40,
+  "label": "r5=close_hfq(t+5)/close_hfq(t)-1",
+  "limit_rule": "close/pre_close-1>=thr, 30/68:19.8% else 9.8% (approx; ST/BSE/rounding ignored)"
+}

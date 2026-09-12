@@ -1,0 +1,12 @@
+{
+  "universe": "FULL (no sampling)",
+  "n_stocks": 5252,
+  "eval_dates": [
+    "2024-08-16T00:00:00.000000000",
+    "2026-09-08T00:00:00.000000000"
+  ],
+  "warmup_days": 40,
+  "label": "r5=close_hfq(t+5)/close_hfq(t)-1",
+  "flat_days_rule": "|close_hfq/close_hfq.shift(10)-1|<0.03 consecutive days count",
+  "prior_sample_run": "seed42 400 stocks: ic=0.0238 t=5.1 h2_t=1.79 resid=-0.0226 t=-5.26"
+}

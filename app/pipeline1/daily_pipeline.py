@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 
 from config.settings import (
+    LEGACY_LIST_BOARDS,
     LEGACY_PARALLEL_FEATURES,
     LEGACY_PROB_GATE,
     PANEL_V3_PATH,
@@ -204,6 +205,10 @@ class DailySelectionPipeline:
                 logger.error(
                     "LEGACY_PROB_GATE 输入组装失败 -> 闸跳过 (fail-open): %s", exc
                 )
+
+        # [2026-09-10] dual 板不进 TOP10 混排 (LEGACY_LIST_BOARDS 白名单, emit 前过滤;
+        # WORM 候选落盘/平滑/prob_gate 输入均在过滤前, 监控链路不受影响)
+        candidates = candidates[candidates["board"].isin(LEGACY_LIST_BOARDS)]
 
         # 清单生成 (含 D18 空仓触发)
         result = self.lister.emit(

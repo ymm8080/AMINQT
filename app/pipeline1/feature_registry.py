@@ -66,6 +66,7 @@ DIM_GROUPS = [
     "dim33_block_trade",
     "dim34_lhb_v2",
     "dim35_regime_interact",
+    "dim36_bkd_up",  # [2026-09-10] 双向短期族: bkd_ 破位 + up_ 上涨 (688228 案立项)
     # Post-processing (not real dims but produce features)
     "_industry_neutralize",
     "_missingness_flags",

@@ -1,0 +1,34 @@
+[load] data/_diag_stage_dual_3y.parquet
+[assert] 688228@2026-09-09 streak=4 OK
+[load] 949581 rows | base 207 cols -> bkd 221 (12s)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[win0] 2026-06-17→2026-08-26 base gap -5.82 weak -5.15 top10 -4.13% IC 0.0021 | bkd gap -4.92 weak -4.12 top10 -3.52% IC 0.0047 case688228 +0.0783->+0.0987 (888s)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[win1] 2026-03-19→2026-06-16 base gap -4.65 weak -5.05 top10 1.91% IC -0.0182 | bkd gap -3.99 weak -4.08 top10 2.34% IC -0.0146 (1431s)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[dual/10d_reg] 早停仅 1 树 (< 30), 重训 30 树保底
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[dual/10d_reg] 早停仅 1 树 (< 30), 重训 30 树保底
+[win2] 2025-12-15→2026-03-18 base gap 9.33 weak 9.01 top10 5.00% IC 0.0778 | bkd gap 9.33 weak 9.01 top10 5.00% IC 0.0778 (1596s)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[win3] 2025-09-12→2025-12-12 base gap -8.53 weak -7.02 top10 2.04% IC 0.0415 | bkd gap -8.48 weak -6.90 top10 2.66% IC 0.0432 (2176s)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[dual/10d_reg] 早停仅 7 树 (< 30), 重训 30 树保底
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[dual/10d_reg] 早停仅 17 树 (< 30), 重训 30 树保底
+[win4] 2025-06-20→2025-09-11 base gap 1.84 weak 3.04 top10 8.89% IC 0.0704 | bkd gap 2.61 weak 3.83 top10 8.61% IC 0.0622 (2310s)
+[verdict] dual | 不伤 PASS (IC 0.0347->0.0347, top10 2.74%->3.02%, spread 0.84->1.20) | 治病 FAIL (弱市gt6缺口 -1.03->-0.45, 改善 +0.58; 下杀切片缺口 -7.12->-7.27, 改善 -0.15) | 不爆 PASS | case688228 win0 {'base': 0.07827862875037307, 'bkd': 0.09868464108651624} | OVERALL FAIL | (2310s)
+[worm] D:\AMINQT\DATA OTHERS\diag\bkd_ab_v6_dual_20260910_104143.json

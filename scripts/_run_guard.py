@@ -61,6 +61,8 @@ HEAVY_SENTINELS = (
     "_cyq_recompute_v3_0909.py",
     "_mech_pilot_0909.py",
     "_rankshadow_10d_0910.py",
+    "_pin_brute_ab_0910.py",
+    "_pin_brute_prob_ab_0910.py",
 )
 ORCHESTRATOR_SENTINEL = "run_daily_automation.py"
 # 链级守卫额外把另一条链实例视为冲突; 脚本级不含 (见模块 docstring).

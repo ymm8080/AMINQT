@@ -1,0 +1,11 @@
+[stage] stage 已含 THS 列 ['ths_bull', 'ths_bull_buy_sig_n', 'ths_bull_tech_n'] (直接用, 不再 join)
+[load] data/_diag_stage_main_3y.parquet
+[sanity] ths_bull==1 日均 35.2 只 / 中位 8 / 有池天数 651
+[load] 1643337 rows | base 273 cols -> ths 279 (50s)
+[win0] 2026-06-18→2026-08-27 base gap -0.32 top10 9.10% IC 0.1142 | ths gap -1.19 top10 8.35% IC 0.1185 (857s)
+[win1] 2026-03-20→2026-06-17 base gap 1.97 top10 3.82% IC 0.0060 | ths gap 2.28 top10 4.07% IC 0.0088 (1285s)
+[win2] 2025-12-16→2026-03-19 base gap -0.23 top10 5.55% IC 0.0743 | ths gap -0.23 top10 5.55% IC 0.0743 (1610s)
+[win3] 2025-09-15→2025-12-15 base gap -5.84 top10 3.59% IC 0.0304 | ths gap -5.31 top10 4.51% IC 0.0208 (1890s)
+[win4] 2025-06-23→2025-09-12 base gap -3.10 top10 5.76% IC 0.0609 | ths gap -3.36 top10 5.82% IC 0.0599 (2547s)
+[verdict] main | 不伤 PASS (IC 0.0572->0.0565, top10 5.57%->5.66%, spread 3.11->2.86) | 有益 FAIL (top10 +0.10pp, IC -0.0007) | 不爆 PASS | OVERALL FAIL | (2547s)
+[worm] D:\AMINQT\DATA OTHERS\diag\ths_ab_v1_main_20260911_061729.json

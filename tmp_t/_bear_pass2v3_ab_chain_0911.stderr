@@ -1,0 +1,10 @@
+2026-09-11 07:14:30,376 [INFO] enrich_one: ============================================================
+2026-09-11 07:14:30,376 [INFO] enrich_one: Loading panel: D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet
+2026-09-11 07:14:36,931 [INFO] enrich_one: Panel: 3999890 rows, 5255 symbols, 130 cols
+2026-09-11 07:14:36,932 [INFO] enrich_one: Running enrich: ths_signal (refresh=True)
+2026-09-11 07:14:46,894 [INFO] enrich_one: ths_signal: dropped 8 pre-existing ths cols for idempotent merge
+2026-09-11 07:16:30,482 [INFO] enrich_one: ths_signal: bull 54940 rows, bear 1880235 rows, +0 cols
+2026-09-11 07:16:32,220 [INFO] enrich_one: ths_signal: done in 115s, +0 new cols: []
+2026-09-11 07:16:33,347 [INFO] enrich_one: Partial output for ths_signal: 8 cols: ['ths_bull', 'ths_bull_ready_rise', 'ths_bull_buy_signals', 'ths_bull_tech_pattern', 'ths_bull_buy_sig_n', 'ths_bull_tech_n', 'ths_bear', 'ths_bear_pool']
+2026-09-11 07:16:37,453 [INFO] enrich_one: Wrote partial: D:\AMINQT\AMINQT CODES\data\enrich_parts\ths_signal.parquet (4.4 MB, 3999890 rows)
+2026-09-11 07:16:37,456 [INFO] enrich_one: ============================================================

@@ -27,10 +27,26 @@ NOT fetched here (separate pipelines):
   - fina_indicator → run_announcement_pipeline.py (Pipeline 2, quarterly)
   - holdernumber → separate pipeline (no longer tracked)
 """
+import logging
 import os
 import sys
 import time
 from datetime import datetime
+
+# 无人值守脚本: 输出必须落盘, 严禁依赖控制台流.
+# 20260910事故: 计划任务启动后原会话消亡, stderr管道无读者 → data_supply的
+# logger.warning 在 emit 里永久阻塞4.7h, AKShare降级链全部饿死, 当日数据未入库.
+_LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+os.makedirs(_LOG_DIR, exist_ok=True)
+_LOG_PATH = os.path.join(_LOG_DIR, f"_daily_fetch_{datetime.now():%Y%m%d}.log")
+_log_f = open(_LOG_PATH, "a", encoding="utf-8", buffering=1)
+sys.stdout = _log_f
+sys.stderr = _log_f
+logging.basicConfig(
+    stream=_log_f,
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 import numpy as np
 import pandas as pd

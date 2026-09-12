@@ -1,0 +1,46 @@
+[main] force_include ths_bull 不在面板且基列不可生成, 剔除
+[main] force_include ths_bull_brute_pct1 不在面板且基列不可生成, 剔除
+[main] force_include ths_bull_brute_ma5 不在面板且基列不可生成, 剔除
+[main] force_include ths_bull_brute_ma20 不在面板且基列不可生成, 剔除
+[main] force_include ths_bull_buy_sig_n_brute_ma5 不在面板且基列不可生成, 剔除
+[main] force_include ths_bull_tech_n_brute_ma5 不在面板且基列不可生成, 剔除
+[main] force_include ths_bear 不在面板且基列不可生成, 剔除
+[main] force_include ths_bear_brute_pct1 不在面板且基列不可生成, 剔除
+[main] force_include ths_bear_brute_ma5 不在面板且基列不可生成, 剔除
+[main] force_include ths_bear_brute_ma20 不在面板且基列不可生成, 剔除
+[main] force_include ths_bear_pool_brute_pct1 不在面板且基列不可生成, 剔除
+[main] pin 特征 88/358 不在候选集或 nan 超阈, 已剔除 (前10): ['bt_disc_ewma_brute_pct60', 'A04_brute_pct1', 'A04_brute_mom40', 'VAR51_brute_mom40', 'lhb_sell_pressure_brute_pct20', 'lhb_sell_pressure_brute_pct5', 'lhb_retail_flow_brute_mom40', 'lhb_retail_flow_brute_pct40', 'lhb_retail_flow_brute_pct20', 'lhb_retail_flow_brute_pct5']
+[main] force_include ths_bull 不在面板且基列不可生成, 剔除
+[main] force_include ths_bull_brute_pct1 不在面板且基列不可生成, 剔除
+[main] force_include ths_bull_brute_ma5 不在面板且基列不可生成, 剔除
+[main] force_include ths_bull_brute_ma20 不在面板且基列不可生成, 剔除
+[main] force_include ths_bull_buy_sig_n_brute_ma5 不在面板且基列不可生成, 剔除
+[main] force_include ths_bull_tech_n_brute_ma5 不在面板且基列不可生成, 剔除
+[main] force_include ths_bear 不在面板且基列不可生成, 剔除
+[main] force_include ths_bear_brute_pct1 不在面板且基列不可生成, 剔除
+[main] force_include ths_bear_brute_ma5 不在面板且基列不可生成, 剔除
+[main] force_include ths_bear_brute_ma20 不在面板且基列不可生成, 剔除
+[main] force_include ths_bear_pool_brute_pct1 不在面板且基列不可生成, 剔除
+[main] pin 特征 3/358 不在候选集或 nan 超阈, 已剔除 (前10): ['sh_net_ratio', 'sh_g_ratio', 'sh_c_ratio']
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[main/10d_reg] 早停仅 10 树 (< 30), 重训 30 树保底
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+[main/10d_reg] 早停仅 4 树 (< 30), 重训 30 树保底
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)
+C:\Users\91454\AppData\Local\Programs\Python\Python312\Lib\site-packages\lightgbm\sklearn.py:1106: LGBMDeprecationWarning: The argument 'eval_set' is deprecated, use 'eval_X' and 'eval_y' instead.
+  eval_set = _validate_eval_set_Xy(eval_set=eval_set, eval_X=eval_X, eval_y=eval_y)

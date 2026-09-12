@@ -1,0 +1,12 @@
+== pass.10jqka.com.cn 根路径探测
+   / status=403 loc=None len=552
+   body[:250]: '<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n<!-- a padding to disable MSIE and Chrome friendly error page -->\r\n<!-- a padding to disable MSIE an'
+   [net:req] https://s.thsi.cn/cb?;/js/;jquery-1.8.3-assign.min.js;sso_https.min.js;vue-paginate-1.9.3.js;ta_https_1.2.min.js;js/m/v2.10/busine
+   [frame+] 
+   [frame+] 
+[nav] 同花顺问财 https://www.iwencai.com/screener
+[diag] frames after 10s:
+   https://www.iwencai.com/screener
+[login] pw-frame: NOT-FOUND
+[login] 请在浏览器窗口手动点登录并输入账号密码(敏敏5us)
+[wait] 轮询userid cookie(最多10分钟; 滑块请手动滑)...

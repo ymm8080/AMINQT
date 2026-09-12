@@ -25,12 +25,14 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from app.pipeline1.ram_guard import check_startup_gate, start_monitor
+from app.pipeline1.stall_watchdog import start_stall_watchdog
 from app.pipeline1.train_runner import run_training
 from config.settings import (
     LEGACY_TOP10_SECOND_VOTE,
     PANEL_V3_PATH,
     RETRAIN_RAM_GUARD_MIN_FREE_GB,
     RETRAIN_RAM_GUARD_POLL_S,
+    RETRAIN_STALL_KILL_MIN,
     data_others_path,
 )
 
@@ -292,6 +294,9 @@ def main() -> int:
     # 每 30s 采样, 被其他重活挤兑 → WARNING (不杀进程, 训练有 per-model 检查点).
     check_startup_gate(RETRAIN_RAM_GUARD_MIN_FREE_GB * 1024**3)
     start_monitor(RETRAIN_RAM_GUARD_MIN_FREE_GB * 1024**3, RETRAIN_RAM_GUARD_POLL_S)
+    # 进度静默看门狗 (2026-09-11): 换页泥潭 = CPU 满核但数小时零日志进度
+    # (08-14 / 09-10 a1 两起靠人工击杀), 静默超阈值自杀 rc=86 交外层重试.
+    start_stall_watchdog(RETRAIN_STALL_KILL_MIN * 60)
     # 面板由 run_training 内部直读并持有 (panel_path 模式): 若本脚本持有 panel 引用,
     # run_training 内 `del panel` 失效 → 特征 build 阶段 (dim17) 峰值贴 commit 上限
     # 偶发 OOM (2026-08-13 r2/r4 同一崩溃点). 直读预过滤 (amount>=5000万 且 非停牌)

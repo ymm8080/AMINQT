@@ -9,6 +9,10 @@ env/
 
 # Data (keep dir structure, ignore large files)
 *.parquet
+data/*.parquet
+data/**/*.parquet
+data/**/*.parquet.*
+data/**/*.csv.*
 data/raw/*.csv
 data/intraday/*.csv
 data/processed/*.csv
@@ -94,3 +98,10 @@ web/node_modules/
 data/predictions.db
 data/**/*.joblib
 .claude/settings.json
+
+# THS wencai credentials / session (never commit)
+tmp_t/_ths_cookies*.json
+tmp_t/_ths_creds*.json
+tmp_t/_ths_pw_profile/
+tmp_t/edge_ck*
+data/supply_cache/ths_signal/cookies.json

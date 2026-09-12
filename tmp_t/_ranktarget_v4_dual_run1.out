@@ -1,0 +1,9 @@
+[load] data/_diag_stage_dual_3y.parquet
+[load] 949581 rows x 212 cols (4s)
+[win0] 2026-06-17→2026-08-26 mag60 gap -5.82 top10 -4.13% IC 0.0021 | mag5 gap -10.72 top10 -5.94% IC -0.1375 | rank60 gap -21.41 top10 -1.48% IC -0.0207 (822s)
+[win1] 2026-03-19→2026-06-16 mag60 gap -4.65 top10 1.91% IC -0.0183 | mag5 gap -6.76 top10 3.53% IC 0.0570 | rank60 gap -8.06 top10 1.23% IC -0.0370 (1652s)
+[win2] 2025-12-15→2026-03-18 mag60 gap 9.33 top10 5.00% IC 0.0778 | mag5 gap -8.24 top10 2.16% IC 0.0877 | rank60 gap -1.36 top10 5.21% IC 0.1081 (1902s)
+[win3] 2025-09-12→2025-12-12 mag60 gap -8.53 top10 2.04% IC 0.0415 | mag5 gap -10.50 top10 0.26% IC -0.0232 | rank60 gap -7.71 top10 0.53% IC 0.0547 (2548s)
+[win4] 2025-06-20→2025-09-11 mag60 gap 1.84 top10 8.89% IC 0.0704 | mag5 gap -3.69 top10 6.32% IC 0.0612 | rank60 gap 0.47 top10 9.83% IC 0.1124 (2785s)
+[verdict] dual | RANK(秩目标) PASS (全窗缺口<3pp: True) | DECAY5(半衰期5日) FAIL | mag60 win0缺口 -5.82pp (OK) | mag60: IC 0.0347 spread 0.84pp top10 2.74% (胜1/5) | mag5: IC 0.0091 spread -0.06pp top10 1.27% (胜1/5) | rank60: IC 0.0435 spread 1.88pp top10 3.06% (胜3/5) | (2785s)
+[worm] D:\AMINQT\DATA OTHERS\diag\ranktarget_decayrank_v4_dual_20260910_075829.json

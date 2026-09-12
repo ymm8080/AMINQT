@@ -1,0 +1,48 @@
+[LightGBM] [Info] Number of positive: 670666, number of negative: 955637
+[LightGBM] [Info] Auto-choosing col-wise multi-threading, the overhead of testing was 5.192312 seconds.
+You can set `force_col_wise=true` to remove the overhead.
+[LightGBM] [Info] Total Bins 102975
+[LightGBM] [Info] Number of data points in the train set: 1626303, number of used features: 510
+[LightGBM] [Info] [binary:BoostFromScore]: pavg=0.431301 -> initscore=-0.276546
+[LightGBM] [Info] Start training from score -0.276546
+[main/hl7] 训练 1,643,337 行 (正样本 672,629, 特征 535 列) -> main_prob_hl7_20260910_232051.joblib
+[LightGBM] [Info] Number of positive: 670666, number of negative: 955637
+[LightGBM] [Info] Auto-choosing col-wise multi-threading, the overhead of testing was 4.831096 seconds.
+You can set `force_col_wise=true` to remove the overhead.
+[LightGBM] [Info] Total Bins 102975
+[LightGBM] [Info] Number of data points in the train set: 1626303, number of used features: 510
+[LightGBM] [Info] [binary:BoostFromScore]: pavg=0.451675 -> initscore=-0.193907
+[LightGBM] [Info] Start training from score -0.193907
+[main/hl15] 训练 1,643,337 行 (正样本 672,629, 特征 535 列) -> main_prob_hl15_20260910_232455.joblib
+[LightGBM] [Info] Number of positive: 670666, number of negative: 955637
+[LightGBM] [Info] Auto-choosing col-wise multi-threading, the overhead of testing was 4.759730 seconds.
+You can set `force_col_wise=true` to remove the overhead.
+[LightGBM] [Info] Total Bins 102975
+[LightGBM] [Info] Number of data points in the train set: 1626303, number of used features: 510
+[LightGBM] [Info] [binary:BoostFromScore]: pavg=0.459390 -> initscore=-0.162800
+[LightGBM] [Info] Start training from score -0.162800
+[main/hl30] 训练 1,643,337 行 (正样本 672,629, 特征 535 列) -> main_prob_hl30_20260910_232912.joblib
+[LightGBM] [Info] Number of positive: 485722, number of negative: 454938
+[LightGBM] [Info] Auto-choosing col-wise multi-threading, the overhead of testing was 2.949559 seconds.
+You can set `force_col_wise=true` to remove the overhead.
+[LightGBM] [Info] Total Bins 107814
+[LightGBM] [Info] Number of data points in the train set: 940660, number of used features: 529
+[LightGBM] [Info] [binary:BoostFromScore]: pavg=0.500315 -> initscore=0.001261
+[LightGBM] [Info] Start training from score 0.001261
+[dual/hl7] 训练 950,902 行 (正样本 486,903, 特征 554 列) -> dual_prob_hl7_20260910_233203.joblib
+[LightGBM] [Info] Number of positive: 485722, number of negative: 454938
+[LightGBM] [Info] Auto-choosing col-wise multi-threading, the overhead of testing was 2.699298 seconds.
+You can set `force_col_wise=true` to remove the overhead.
+[LightGBM] [Info] Total Bins 107814
+[LightGBM] [Info] Number of data points in the train set: 940660, number of used features: 529
+[LightGBM] [Info] [binary:BoostFromScore]: pavg=0.535470 -> initscore=0.142120
+[LightGBM] [Info] Start training from score 0.142120
+[dual/hl15] 训练 950,902 行 (正样本 486,903, 特征 554 列) -> dual_prob_hl15_20260910_233410.joblib
+[LightGBM] [Info] Number of positive: 485722, number of negative: 454938
+[LightGBM] [Info] Auto-choosing col-wise multi-threading, the overhead of testing was 2.689718 seconds.
+You can set `force_col_wise=true` to remove the overhead.
+[LightGBM] [Info] Total Bins 107814
+[LightGBM] [Info] Number of data points in the train set: 940660, number of used features: 529
+[LightGBM] [Info] [binary:BoostFromScore]: pavg=0.551265 -> initscore=0.205784
+[LightGBM] [Info] Start training from score 0.205784
+[dual/hl30] 训练 950,902 行 (正样本 486,903, 特征 554 列) -> dual_prob_hl30_20260910_233614.joblib

@@ -549,6 +549,151 @@ def merge_cyq_tushare(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFram
     return panel
 
 
+THS_SIGNAL_DIR = ROOT / "data" / "supply_cache" / "ths_signal"
+
+
+def _norm_symbols(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["symbol"] = (
+        df["symbol"].astype(str).str.replace(r"\D", "", regex=True).str.zfill(6)
+    )
+    return df
+
+
+def merge_ths_signal(panel: pd.DataFrame, refresh: bool = False) -> pd.DataFrame:
+    """THS问财看涨/看跌信号池(逐日收盘快照, 个股级) + 看跌池市场日计数.
+
+    数据源: data/supply_cache/ths_signal/{bull,bear}_*.parquet
+    (scripts/_fetch_ths_signal.py 产出).
+    信号在D收盘评估, 赋date=D, 与其他源口径一致 (消费端按t-1铁律取用).
+
+    0填充语义: 回填区间内 (date >= 最早信号日) 无信号=0 — 否则nan率>95%会被
+    特征选择整列剔除; 区间前 (永不训段) 留NaN 不伪造常量段.
+    """
+    sig_start = None
+    before = len(panel.columns)
+
+    # 幂等: 面板已含ths列(复跑/重灌)先丢, 否则merge撞名产生 _x/_y 双份垃圾列
+    # (20260910: 面板经merge后含7个ths列, enrich重建时产出14个 _x/_y 列)
+    _stale = [c for c in panel.columns if c.startswith(("ths_bull", "ths_bear"))]
+    if _stale:
+        panel = panel.drop(columns=_stale)
+        logger.info(
+            "ths_signal: dropped %d pre-existing ths cols for idempotent merge",
+            len(_stale),
+        )
+
+    # ── 看涨池: 个股级旗标 + 信号文本 + 计数 ──
+    frames = []
+    for f in sorted(THS_SIGNAL_DIR.glob("bull_*.parquet")):
+        d = pd.read_parquet(f)
+        if len(d) == 0:
+            continue
+        rename = {"股票代码": "symbol"}
+        # 看涨派生列一律带 ths_bull_ 前缀: 特征池里与看跌侧 (ths_bear_*) 一眼可分
+        for c in d.columns:
+            if c.startswith("准备拉升"):
+                rename[c] = "ths_bull_ready_rise"
+            elif c.startswith("买入信号"):
+                rename[c] = "ths_bull_buy_signals"
+            elif c.startswith("技术形态"):
+                rename[c] = "ths_bull_tech_pattern"
+        d = d.rename(columns=rename)
+        d["date"] = pd.to_datetime(f.stem.split("_")[1], format="%Y%m%d")
+        d["ths_bull"] = 1.0
+
+        # "||"必须regex=False: pandas对长度>1的pat默认按正则, "||"是空交替→按字符切开
+        def _count_signals(col, df):
+            if col not in df.columns:
+                return 0.0
+            return (
+                df[col]
+                .fillna("")
+                .astype(str)
+                .str.split("||", regex=False)
+                .apply(lambda xs: sum(1 for x in xs if x.strip()))
+            )
+
+        d["ths_bull_buy_sig_n"] = _count_signals("ths_bull_buy_signals", d)
+        d["ths_bull_tech_n"] = _count_signals("ths_bull_tech_pattern", d)
+        # 外部源schema可能漂移, 按实际存在的列取
+        want = [
+            "symbol",
+            "date",
+            "ths_bull",
+            "ths_bull_ready_rise",
+            "ths_bull_buy_signals",
+            "ths_bull_tech_pattern",
+            "ths_bull_buy_sig_n",
+            "ths_bull_tech_n",
+        ]
+        frames.append(d[[c for c in want if c in d.columns]])
+    if frames:
+        sig = pd.concat(frames, ignore_index=True)
+        sig = _norm_symbols(sig).drop_duplicates(subset=["symbol", "date"])
+        panel = panel.merge(sig, on=["symbol", "date"], how="left")
+        sig_start = sig["date"].min()
+        n_bull = int(sig["ths_bull"].sum())
+    else:
+        logger.warning("ths_signal: no bull_*.parquet under %s", THS_SIGNAL_DIR)
+        n_bull = 0
+
+    # ── 看跌池: 个股级旗标 ──
+    bframes = []
+    for f in sorted(THS_SIGNAL_DIR.glob("bear_*.parquet")):
+        d = pd.read_parquet(f)
+        if len(d) == 0 or "股票代码" not in d.columns:
+            continue
+        d = d.rename(columns={"股票代码": "symbol"})[["symbol"]].copy()
+        d["date"] = pd.to_datetime(f.stem.split("_")[1], format="%Y%m%d")
+        d["ths_bear"] = 1.0
+        bframes.append(d)
+    if bframes:
+        bsig = pd.concat(bframes, ignore_index=True)
+        bsig = _norm_symbols(bsig).drop_duplicates(subset=["symbol", "date"])
+        panel = panel.merge(bsig, on=["symbol", "date"], how="left")
+        sig_start = (
+            bsig["date"].min()
+            if sig_start is None
+            else min(sig_start, bsig["date"].min())
+        )
+        n_bear = int(bsig["ths_bear"].sum())
+    else:
+        logger.info("ths_signal: no bear_*.parquet (看跌个股级未回填?)")
+        n_bear = 0
+
+    # ── 条件0填充: 区间内无信号=0 (特征资格), 区间前留NaN ──
+    if sig_start is not None:
+        in_range = panel["date"] >= sig_start
+        for c in ["ths_bull", "ths_bear", "ths_bull_buy_sig_n", "ths_bull_tech_n"]:
+            if c in panel.columns:
+                panel[c] = panel[c].fillna(0.0)
+                panel.loc[~in_range, c] = float("nan")
+
+    # ── 看跌池市场日计数 (市场上下文) ──
+    bear_f = THS_SIGNAL_DIR / "bear_counts.csv"
+    if bear_f.exists():
+        bear = pd.read_csv(bear_f, dtype={"date": str})
+        bear["date"] = pd.to_datetime(bear["date"], format="%Y%m%d")
+        # CSV可能在断点重启中积累重复日期行; dup会让当日全部面板行翻倍
+        bear = bear.drop_duplicates(subset=["date"])
+        panel = panel.merge(
+            bear[["date", "bear_count"]].rename(
+                columns={"bear_count": "ths_bear_pool"}
+            ),
+            on="date",
+            how="left",
+        )
+
+    logger.info(
+        "ths_signal: bull %d rows, bear %d rows, +%d cols",
+        n_bull,
+        n_bear,
+        len(panel.columns) - before,
+    )
+    return panel
+
+
 # ---------------------------------------------------------------------------
 # Source registry
 # ---------------------------------------------------------------------------
@@ -563,6 +708,7 @@ SOURCES = {
     "daily_basic": merge_daily_basic,
     "stk_limit": merge_stk_limit,
     "cyq_tushare": merge_cyq_tushare,
+    "ths_signal": merge_ths_signal,
 }
 
 
@@ -619,6 +765,7 @@ SOURCE_COL_PREFIXES: dict[str, list[str]] = {
         "pct_90_con",
         "pct_70_con",
     ],
+    "ths_signal": ["ths_"],
 }
 
 
@@ -628,9 +775,10 @@ def _filter_new_cols(
     """Extract only the new columns this source added, plus symbol+date keys."""
     new_cols = [c for c in panel.columns if c not in base_cols]
     keep = ["symbol", "date"] + [c for c in new_cols if not c.startswith("_")]
-    # Also check prefix patterns
+    # Prefix patterns scan ALL panel cols, not just new ones: 幂等重跑时源列与
+    # base_cols 同名(先drop再重加), 只扫new_cols会把part淘空成0列 (20260910)
     prefixes = SOURCE_COL_PREFIXES.get(source, [])
-    for c in new_cols:
+    for c in panel.columns:
         if c in keep:
             continue
         for pfx in prefixes:

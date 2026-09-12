@@ -151,7 +151,7 @@ def write(sheets, date: str, list_dir=STOCK_LIST_DIR) -> Path:
             ws = xw.sheets[name]
             ws.freeze_panes = "A2"
             for i, col in enumerate(df.columns, start=1):
-                width = max(len(str(col)), *(len(str(v)) for v in df[col]))
+                width = max([len(str(col))] + [len(str(v)) for v in df[col]])
                 ws.column_dimensions[
                     ws.cell(row=1, column=i).column_letter
                 ].width = min(width + 4, 40)

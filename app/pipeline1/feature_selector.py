@@ -1298,6 +1298,21 @@ class FeatureSelector:
             # [2026-08-31] 特征集冻结 (用户批准): 每周重选换血 32/353 列 → 第二票方差.
             # 填快照名 = 冻结 (同 dual gate_d 语义); 更新 pin = 显式动作.
             "pinned": "selected_main_pinned.json",
+            # [2026-09-10] pin brute 逃生舱门控 (默认关): 开启后 pin 快照里基列仍
+            # 可生成的 brute 名恢复注入 (修 08-31 起 main 零 brute 事故, 见
+            # _run_bruteforce_dedup pin 路径). 周日 A/B 对拍翻 true, PASS 前生产
+            # 保持 270 列零 brute 口径.
+            "pin_allow_brute": False,
+            # [2026-09-10] THS问财信号列 11 名曾于 16:26 cron 强注入, 被用户叫停:
+            # 定案 = A/B 对拍 PASS 才入池 (bull 侧 672d 可评; bear 个股级 0910 才
+            # 有数据, 待 pass-2 回填后 A/B #2). PASS 前生产口径不含 THS.
+            "force_include": [
+                # [2026-09-10] dim36 双向短期族 (bkd_ 8 + up_ 6, 688228 案立项):
+                # 引擎 dim36_bkd_up 物化 + 注册中心已注册, 但**A/B v6 PASS 才接入生产**
+                # (用户指令: "AB 通过了才接线进生产"). PASS 后把 14 名加回此处 +
+                # dual.gate_d.force_include (名单: commit c474b444 / tests
+                # test_bkd_up_features.py TARGET_14).
+            ],
         },
         "dual": {
             "pipeline": "gate_d",
@@ -1313,6 +1328,12 @@ class FeatureSelector:
                 # 动作 (新特征家族落地 / 季度重选 2026-11-14 前), 人工核对+250d
                 # replay 通过才写新 pin. 空字符串 = 不冻结 (回退旧行为).
                 "pinned": "selected_dual_pinned.json",
+                # [2026-09-10] THS问财信号列 11 名曾强注入, 被用户叫停 (同 main 语义):
+                # A/B 对拍 PASS 才回填此名单, 看涨/看跌分开列.
+                "force_include": [
+                    # [2026-09-10] dim36 双向短期族: A/B v6 PASS 才接入 (同 main 语义),
+                    # 名单见 tests/test_bkd_up_features.py TARGET_14.
+                ],
             },
         },
         "fallback": {"pipeline": "ic_screener"},
@@ -1416,6 +1437,36 @@ class FeatureSelector:
         )
         return buckets
 
+    def _force_include_avail(self, df, board, cfg):
+        """cfg["force_include"]: 冻结 pin 模式下强制注入的精确特征名列表.
+
+        pin 快照早于新特征族落地时 (THS信号 2026-09-10) 不必解冻 pin. 语义:
+        - 在 df 的列: 过 nan 门 (与 pin 特征同标准);
+        - brute 名且基列 (名字 "_brute_" 前段) 在 df: 直接放行 — 列由训练端
+          post-selection injection 物化 (与非 pin 路径返回 brute 名同一机制);
+        - 其余: 剔除并告警 (基列不在面板 = 该源未接线, 不伪造).
+        """
+        names = cfg.get("force_include") or []
+        if not names:
+            return []
+        nan_thr = cfg.get("nan_threshold", 0.95)
+        out = []
+        for f in names:
+            if f in df.columns:
+                if float(df[f].isna().mean()) < nan_thr:
+                    out.append(f)
+                else:
+                    logger.warning("[%s] force_include %s nan超阈, 剔除", board, f)
+            elif "_brute_" in f and f.split("_brute_")[0] in df.columns:
+                out.append(f)
+            else:
+                logger.warning(
+                    "[%s] force_include %s 不在面板且基列不可生成, 剔除", board, f
+                )
+        if out:
+            logger.info("[%s] force_include 注入 %d 特征: %s", board, len(out), out)
+        return out
+
     def _run_bruteforce_dedup(self, df, board, cfg, generator=None, metrics_out=None):
         # [2026-08-31] 特征集冻结 (镜像 gate_d pin 语义): 每周重选换血 32/353 列
         # (08-31 实测) 是 main TOP10 第二票的第二大方差源. pin 指向既有快照,
@@ -1437,6 +1488,22 @@ class FeatureSelector:
                 for f in pin_feats
                 if f in df.columns and float(df[f].isna().mean()) < nan_thr
             ]
+            # [2026-09-10] pin brute 逃生舱 (默认关): pin 快照里的 brute 名不在面板
+            # df (训练端 post-injection 物化), 裸 `f in df.columns` 整批误杀 —
+            # 08-31 冻结后 main 实训 270 列零 brute 事故的根因. 与
+            # _force_include_avail 同款基列放行; A/B 通过前由 pin_allow_brute
+            # 门控, 生产保持零 brute 口径不变.
+            if cfg.get("pin_allow_brute"):
+                avail.extend(
+                    f
+                    for f in pin_feats
+                    if f not in avail
+                    and "_brute_" in f
+                    and f.split("_brute_")[0] in df.columns
+                )
+            avail.extend(
+                f for f in self._force_include_avail(df, board, cfg) if f not in avail
+            )
             missing = [f for f in pin_feats if f not in avail]
             if missing:
                 logger.warning(
@@ -1603,6 +1670,9 @@ class FeatureSelector:
             metrics_out=metrics_out,
         )
         avail = [f for f in pin_feats if f in valid]
+        avail.extend(
+            f for f in self._force_include_avail(df, board, gcfg) if f not in avail
+        )
         missing = [f for f in pin_feats if f not in avail]
         if missing:
             logger.warning(

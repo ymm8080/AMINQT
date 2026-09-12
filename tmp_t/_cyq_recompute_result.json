@@ -1,0 +1,8 @@
+{
+ "status": "ok (manual verify fix — script line284 ParquetFile.num_rows AttributeError, replace已成功)",
+ "panel_rows": 3994646,
+ "panel_cols": 122,
+ "cyq_overlay_coverage_pct": 92.43,
+ "max_date": "2026-09-09",
+ "finished": "2026-09-09T18:47:51"
+}

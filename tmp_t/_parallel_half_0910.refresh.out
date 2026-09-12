@@ -1,0 +1,17 @@
+[stale] data\_diag_stage_main_3y.parquet -> data\_diag_stage_main_3y.parquet.stale_20260910_214813
+[stale] data\_diag_stage_dual_3y.parquet -> data\_diag_stage_dual_3y.parquet.stale_20260910_214813
+读取 V3 面板 ...
+[timing][dual] panel load: 6.4s | run_train: 29.5s
+run_train[dual]: rows=1,058,541
+[dual] 构建 rows=950,902 stocks=1,932 cols=626 | latest=2026-09-10
+[dual] 检查点已落盘 data\_diag_stage_dual_3y.parquet (1.88 GB)
+[timing][dual] build_board_slice: 1860.0s
+[dual] 检查点已写 data\_diag_stage_dual_3y.parquet | latest=2026-09-10 rows=950,902 cols=626
+[timing][main] panel load: 4.9s | run_train: 41.4s
+run_train[main]: rows=1,860,550
+[main] 构建 rows=1,643,337 stocks=3,198 cols=607 | latest=2026-09-10
+[main] 检查点已落盘 data\_diag_stage_main_3y.parquet (3.01 GB)
+[timing][main] build_board_slice: 3263.5s
+[main] 检查点已写 data\_diag_stage_main_3y.parquet | latest=2026-09-10 rows=1,643,337 cols=607
+[assert] 检查点新鲜度 ok: main/dual max == 面板 max 2026-09-10
+完成

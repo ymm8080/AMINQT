@@ -1,0 +1,16 @@
+--- amtagree_removed_20260908__M20260908__D20260830excessfix__legacy.csv  n_removed=3  002790_in=False
+--- amtagree_removed_20260908__M20260908__D20260830excessfix__parallel.csv  n_removed=4  002790_in=True
+symbol  amt_agree10
+002790          0.7
+--- amtagree_removed_20260909__M20260908__D20260830excessfix__legacy.csv  n_removed=3  002790_in=False
+--- amtagree_removed_20260909__M20260908__D20260830excessfix__parallel.csv  n_removed=4  002790_in=False
+
+shortlist 0908: n=16, cutoff_rank=16
+
+002790 0908->latest:
+symbol       date  close    pctChg  amount_M
+002790 2026-09-08   6.99 10.078740      82.8
+002790 2026-09-09   7.69 10.014306     170.8
+
+cum 0908close->0909close: +0.1001
+3日连板累计(0907close->0909close): +0.2110

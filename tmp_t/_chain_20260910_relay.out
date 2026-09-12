@@ -1,0 +1,10 @@
+[2026-09-10 20:06:27] ?????? tag=20260910 ??=Thursday ??=['cyq', 'ths_signal', 'sw_history', 'freshness', 'canary', 'legacy_prob_head', 'legacy', 'deliver', 'refresh', 'parallel', 'prob_head', 'deliver_parallel', 'ths_push', 'prob10dens_push', 'slowbull_shadow', 'ths_flush_guard', 'final_stocklist', 'stocklist_combined', 'drift', 'drift_parallel', 'shadow_xmodule', 'gate_audit']
+[20:06:27 start] cyq: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_backfill_cyq_panel.py --workers 6
+[20:10:16 ok] cyq rc=0 (229s)
+[20:10:16 start] ths_signal: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_fetch_ths_signal.py
+[20:10:18 ok] ths_signal rc=0 (2s)
+[20:10:18 start] sw_history: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/fetch_sw_daily_history.py --incremental
+[20:10:20 ok] sw_history rc=0 (2s)
+[20:10:20 start] freshness: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_freshness_check.py
+[20:10:24 ok] freshness rc=0 (4s)
+[20:10:24 start] canary: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_finaltop_canary.py

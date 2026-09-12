@@ -1,0 +1,8 @@
+﻿[06:47:32] v4 start; waiting for THS bull A/B #1 (_ths_ab_minibacktest) to exit
+[06:59:34] A/B #1 gone
+[06:59:34] waiting for >=6GB free RAM
+[06:59:34] free RAM 9.9GB ok
+[06:59:34] 180s settle buffer
+[07:02:34] start parallel
+[07:06:38] parallel exited rc=
+[07:06:38] parallel FAILED rc=

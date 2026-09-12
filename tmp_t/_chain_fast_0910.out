@@ -1,0 +1,39 @@
+[2026-09-10 20:30:59] ?????? tag=20260910 ??=Thursday ??=['cyq', 'ths_signal', 'sw_history', 'freshness', 'canary', 'legacy_prob_head', 'legacy', 'deliver', 'ths_push', 'prob10dens_push', 'slowbull_shadow', 'ths_flush_guard', 'final_stocklist', 'stocklist_combined', 'drift', 'drift_parallel', 'shadow_xmodule', 'gate_audit']
+[20:30:59 start] cyq: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_backfill_cyq_panel.py --workers 6
+[20:37:25 ok] cyq rc=0 (385s)
+[20:37:25 start] ths_signal: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_fetch_ths_signal.py
+[20:37:34 ok] ths_signal rc=0 (9s)
+[20:37:34 start] sw_history: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/fetch_sw_daily_history.py --incremental
+[20:37:37 ok] sw_history rc=0 (3s)
+[20:37:37 start] freshness: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_freshness_check.py
+[20:37:41 ok] freshness rc=0 (4s)
+[20:37:41 start] canary: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_finaltop_canary.py
+[21:09:03 ok] canary rc=0 (1882s)
+[21:09:03 start] legacy_prob_head: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_train_legacy_prob_head.py
+[21:10:01 ok] legacy_prob_head rc=0 (58s)
+[21:10:01 start] legacy: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_gen_legacy_list.py 20260910
+[21:42:29 ok] legacy rc=0 (1949s)
+[21:42:29 start] deliver: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_deliver_legacy_list.py 20260910
+[21:42:48 ok] deliver rc=0 (19s)
+[21:42:48 start] ths_push: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_ths_watchlist_push.py 20260910
+[21:42:51 ok] ths_push rc=0 (3s)
+[21:42:51 start] prob10dens_push: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_prob10_density_shadow.py 20260910
+[21:46:58 FAIL] prob10dens_push rc=1 (246s)
+[21:46:58 start] slowbull_shadow: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u _slowbull_list.py
+[21:47:14 ok] slowbull_shadow rc=0 (17s)
+[21:47:14 start] ths_flush_guard: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_ths_flush_guard.py 20260910
+[21:47:15 ok] ths_flush_guard rc=0 (1s)
+[21:47:15 start] final_stocklist: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_final_stocklist.py 20260910
+[21:47:20 ok] final_stocklist rc=0 (4s)
+[21:47:20 start] stocklist_combined: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_stocklist_combined.py 20260910
+[21:47:22 FAIL] stocklist_combined rc=1 (2s)
+[21:47:22 start] drift: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_monitor_legacy_drift.py
+[21:47:27 ok] drift rc=0 (6s)
+[21:47:27 start] drift_parallel: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_monitor_parallel_drift.py
+[21:47:30 ok] drift_parallel rc=0 (3s)
+[21:47:30 start] shadow_xmodule: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_shadow_xmodule_blend.py
+[21:47:31 ok] shadow_xmodule rc=0 (1s)
+[21:47:31 start] gate_audit: C:\Users\91454\AppData\Local\Programs\Python\Python312\python.exe -u scripts/_gate_admission.py --gate all
+[21:47:44 ok] gate_audit rc=0 (13s)
+[done] ????=['prob10dens_push', 'stocklist_combined'] ? ???? (????????)
+[hint] ??? logs/daily_automation_20260910.log ??????; ???? --skip-* ???????

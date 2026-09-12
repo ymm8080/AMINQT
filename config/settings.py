@@ -450,6 +450,12 @@ LEGACY_PROB_GATE = {
     "es_floor": 50,  # 早停树数 < 此地板 → 固定 floor 树重训 (防 dual 塌缩)
 }
 
+# ── legacy 清单板块白名单 (2026-09-10 用户令一次性判断: "两模型都换模型..如果DUAL太差就不进TOP10混排") ──
+# dual_20260910 OOS IC -0.1232 史上最差 → dual 板票不进 TOP10 混排 (预测/候选落盘/
+# drift 监控照常, 仅 emit 前过滤). board 取值实为 main/GEM/STAR (dual板行=GEM/STAR,
+# 无"dual"字面值). 回退(恢复双创进混排): 改回 ("main", "GEM", "STAR").
+LEGACY_LIST_BOARDS = ("main",)
+
 # ── LEGACY 交付选择栈 (09-07 用户令 "FIRST UPDATE 密度MODULE" + "YOU MAKE DECISION") ──
 # mode="prob10_pull" = 纯 prob_up_10d 板内降序 + 回撤闸, 跳过 E7/prob_gate/幅度键;
 #   交付帽 (TOP_N=15 全局 + D18 降仓) 与风险扫描不变。
@@ -696,3 +702,7 @@ PARALLEL_DRIFT_MONITOR = {
 # ram_guard.start_monitor: 运行期每 poll_s 采样, 低于下限 → 每段挤兑一条 WARNING.
 RETRAIN_RAM_GUARD_MIN_FREE_GB = 2.0  # 启动闸下限 (可用物理内存, GB)
 RETRAIN_RAM_GUARD_POLL_S = 30  # 运行期警报采样间隔 (秒)
+# 进度静默判死阈值: 非 ram_guard 日志静默超此值 → stall_watchdog 硬退 rc=86,
+# 交外层队列/手工冷却重试 (08-14 / 09-10 a1 两起换页泥潭 6h+ 零进度人工击杀).
+# 45min = 1.8x 健康跑最大静默 25.1min (2026-09-10 clean run 校准).
+RETRAIN_STALL_KILL_MIN = 45

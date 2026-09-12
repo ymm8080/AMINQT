@@ -1,0 +1,9 @@
+{
+ "status": "ok (manual replace fix)",
+ "coverage_pct": 85.15,
+ "rows_ovd_nonnan": 3401321,
+ "stocks_with_ovd": 4922,
+ "panel_cols": 122,
+ "note": "18:12:42 os.replace WinError5(fade A/B瞬态句柄); 18:14:32 重试成功; 面板本体无损",
+ "finished": "2026-09-09T18:14:32"
+}

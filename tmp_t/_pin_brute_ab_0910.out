@@ -1,0 +1,10 @@
+[load] data/_diag_stage_main_3y.parquet (need 273 cols)
+[sel] base 270 列 (brute 0) | brute85 臂 355 列 (brute 85) (41s)
+[inject] brute 列全物化 (51s)
+[win0] 2026-06-17→2026-08-26 base gap -3.27 weak -5.75 top10 8.70% IC 0.1132 | brute85 gap -2.65 weak -5.23 top10 8.96% IC 0.1029 (1025s)
+[win1] 2026-03-19→2026-06-16 base gap -4.06 weak -3.82 top10 5.64% IC 0.0104 | brute85 gap -3.33 weak -3.59 top10 4.58% IC 0.0054 (1617s)
+[win2] 2025-12-15→2026-03-18 base gap -0.64 weak 0.07 top10 5.55% IC 0.0744 | brute85 gap 1.12 weak 1.75 top10 6.69% IC 0.0771 (2074s)
+[win3] 2025-09-12→2025-12-12 base gap -4.47 weak -2.46 top10 4.77% IC 0.0319 | brute85 gap -4.01 weak -1.45 top10 4.66% IC 0.0285 (2521s)
+[win4] 2025-06-20→2025-09-11 base gap -2.93 weak -1.18 top10 5.98% IC 0.0691 | brute85 gap -2.92 weak -0.75 top10 6.03% IC 0.0580 (3412s)
+[verdict] main | 不伤 FAIL (IC 0.0598->0.0543, top10 6.13%->6.18%, spread 3.45->3.53) | 不爆 PASS | 恢复 brute 85 个 | case688228 win0 {} | OVERALL FAIL | (3412s)
+[worm] D:\AMINQT\DATA OTHERS\diag\pin_brute_ab_main_20260910_124139.json
