@@ -231,6 +231,7 @@ def _append_head_choice_ledger(board: str, tag: str, res: dict, promoted: bool) 
         chosen=oos.get("gate_head"),
         gate_pass=bool(oos.get("pass")),
         switched=promoted,
+        ics=oos.get("ics"),
         n_features=res.get("n_features"),
     )
     print(

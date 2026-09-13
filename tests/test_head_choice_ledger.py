@@ -28,6 +28,8 @@ def test_first_write_creates_header_and_row(tmp_path):
         chosen="cls",
         gate_pass=True,
         switched=True,
+        ics={"3d_reg": -0.02, "5d_reg": 0.01, "10d_reg": 0.08,
+             "3d_cls": 0.05, "5d_cls": 0.07, "10d_cls": 0.066},
         n_features=358,
         ledger_path=p,
     )
@@ -43,6 +45,10 @@ def test_first_write_creates_header_and_row(tmp_path):
     assert r["gate_pass"] == "True"
     assert r["switched"] == "True"
     assert r["n_features"] == "358"
+    # 逐视界双头列 (0912 夜用户令: 3d/5d/10d 都要)
+    assert r["ic_reg_3d"] == "-0.02"
+    assert r["ic_reg_10d"] == "0.08"
+    assert r["ic_cls_10d"] == "0.066"
 
 
 def test_same_key_skipped_worm(tmp_path):

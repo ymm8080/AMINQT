@@ -54,6 +54,14 @@ def _load_board(board: str) -> pd.DataFrame | None:
     return t
 
 
+def _missing_feat_cols(bundle: dict | None, columns) -> list[str]:
+    """[0912 夜] bundle 特征已不在面板的列 (schema 漂移检测, 供自愈重训)."""
+    if bundle is None:
+        return []
+    have = set(columns)
+    return [c for c in bundle.get("feat_cols", []) if c not in have]
+
+
 def main() -> int:
     force = "--force" in sys.argv[1:]
     ok = True
@@ -72,8 +80,19 @@ def main() -> int:
                 if b is None
                 else prob_head.bundle_age_trading_days(dates, str(b["trained_through"]))
             )
+            # [0912 夜] schema 漂移自愈: bundle 特征列被面板删列 (ths_* 8列清除后
+            # 0910 批 bundle 5 列悬空) → serving predict() 直接 raise, 且新鲜度
+            # 判据 (age<21 skip) 看不见 → 必须无视年龄强制重训.
+            missing = _missing_feat_cols(b, t.columns)
+            if missing:
+                print(
+                    f"[{board}/hl{hl}] 面板已缺 bundle 特征 {len(missing)} 列 "
+                    f"(如 {missing[:3]}) → 重训 (schema 漂移自愈)",
+                    flush=True,
+                )
             if (
                 not force
+                and not missing
                 and b is not None
                 and age is not None
                 and age < PROB_GATE["refit_every_days"]
