@@ -27,7 +27,9 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, ".."))
+sys.path.insert(0, ROOT)
 sys.stdout.reconfigure(encoding="utf-8")
 # _ab_families_0912 import 时劫持 stderr → 先 import 再建自己的重定向覆盖 (replay 同序)
 from _ab_families_0912 import FAMILIES
@@ -56,10 +58,10 @@ from config.settings import (
 TAG = "rescan_mag_pool_0913"
 LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_rescan_mag_pool_0913.log")
 STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_rescan_mag_pool_0913.state.json")
-SANDBOX = Path("tmp_t") / "_rescan_pool_sandbox_0913"
+SANDBOX = Path(ROOT) / "tmp_t" / "_rescan_pool_sandbox_0913"  # ROOT 锚定: schtasks 发射 cwd 不定
 STAGE = {
-    "main": Path("data") / "_diag_stage_main_3y.parquet",
-    "dual": Path("data") / "_diag_stage_dual_3y.parquet",
+    "main": Path(ROOT) / "data" / "_diag_stage_main_3y.parquet",
+    "dual": Path(ROOT) / "data" / "_diag_stage_dual_3y.parquet",
 }
 TEST_DAYS = 60
 HALF_LIVES = (15,)
@@ -98,6 +100,14 @@ def _state(phase: str, **kw) -> None:
     payload = {"phase": phase, "ts": time.strftime("%Y-%m-%d %H:%M:%S"), **kw}
     with open(STATE_PATH, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
+
+
+# 崩溃也落终态 (对抗性审查): 模块顶 excepthook 直接 os._exit 绕过 __main__ 的 state 写 → RUNNING 悬挂
+sys.excepthook = lambda t, v, tb: (
+    _state("FAIL_CRASH"),
+    print("".join(__import__("traceback").format_exception(t, v, tb)), file=_err, flush=True),
+    os._exit(1),
+)
 
 
 def _worm(name: str, payload: dict) -> str:
@@ -223,18 +233,24 @@ def _eval_halves(fr: pd.DataFrame, key: str) -> dict:
 def _loser_enrich(fr_base: pd.DataFrame, fr_arm: pd.DataFrame, key: str) -> dict:
     """base TOP10 掉出者中 5d 净≥10% 占比 vs base TOP10 整体占比; >1.5x = 误杀红旗."""
     def _top(fr):
-        s = fr[["date", "symbol", key]].dropna().copy()
-        s["rk"] = s.groupby("date")[key].rank(ascending=False, method="first")
-        return set(zip(s.loc[s["rk"] <= 10, "date"], s.loc[s["rk"] <= 10, "symbol"]))
+        s = fr[["date", "symbol", key]].dropna()
+        q = s.sort_values(key, ascending=False)  # 与判官 daily_rank_metrics 同式 (弃 rank method="first" 的次序差)
+        h = q.groupby("date", sort=False).head(10)
+        return set(zip(h["date"], h["symbol"]))
 
     bi = _top(fr_base)
     dropped = bi - _top(fr_arm)
-    b = fr_base.set_index(["date", "symbol"])["label_pm_5d_net"]
-    base_rate = float((b.loc[list(bi)] >= ENRICH_HIT).mean()) if bi else None
+    b = fr_base.set_index(["date", "symbol"])["label_pm_5d_net"].dropna()  # 未实现 5d 标签不入分母 (尾部数日)
+
+    def _rate(members: set) -> float | None:
+        vals = b.reindex([x for x in members if x in b.index])
+        return float((vals >= ENRICH_HIT).mean()) if len(vals) else None
+
+    base_rate = _rate(bi)
     if not dropped:
         return {"n_dropped": 0, "base_hit_rate": base_rate, "drop_hit_rate": None, "enrich": None, "flag": False}
-    drop_rate = float((b.loc[list(dropped)] >= ENRICH_HIT).mean())
-    enrich = drop_rate / base_rate if base_rate and base_rate > 0 else None
+    drop_rate = _rate(dropped)
+    enrich = drop_rate / base_rate if (base_rate is not None and base_rate > 0 and drop_rate is not None) else None
     return {
         "n_dropped": len(dropped),
         "base_hit_rate": base_rate,
@@ -313,6 +329,8 @@ def run_board(board: str, cands: list[str], cand_meta: dict) -> dict:
         base_half = _eval_halves(frs["base"], base_chosen)
 
         def _guarded(arm: str) -> dict | None:
+            if base_top is None:
+                return None
             v = rep["arms"].get(arm)
             if not v or v["top10_net_mean"][v["chosen"]] is None:
                 return None
@@ -431,7 +449,7 @@ def main() -> int:
     start_monitor(RETRAIN_RAM_GUARD_MIN_FREE_GB * 1024**3, RETRAIN_RAM_GUARD_POLL_S)
 
     cands, cand_meta = pick_candidates()
-    for board in ("main", "dual"):
+    for board in ("dual", "main"):  # 小板先行: 中途被杀也先落 dual WORM (对抗性审查)
         run_board(board, cands, cand_meta)
     log.info("[DONE] PARALLEL 池重扫两板完成")
     _state("DONE")
