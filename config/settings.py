@@ -494,6 +494,19 @@ LEGACY_PROB_SOURCE_FALLBACK = {
     "dual": "cls",  # Platt 校准 cls predict_proba
 }
 
+# ── LEGACY 超参 json 旋钮源 (0913 #8 自适应再扫, rank_source 式三件套) ──
+# 周末自适应再扫 (TOP10 实净判官 + PARAM_ADMISSION 护栏) 赢家落 WORM json
+# (data/others/param_source/), dual_track_trainer.model_params 解析时叠覆盖 —
+# 机器换 incumbent 免 commit. "auto" = 最新 json (trained_through 距今 ≤
+# LEGACY_PARAM_MAX_STALE_DAYS); "code" = 强制代码表 (回退旋钮).
+# 无 json / 过旧 / 异常 → 代码表 NUM_LEAVES_OVERRIDE/PARAMS_OVERRIDE (fail-open).
+# 回退三层: 显式旋钮 > 删最新 json 回上一版 > 代码表兜底.
+LEGACY_PARAM_SOURCE = {
+    "main": "auto",
+    "dual": "auto",
+}
+LEGACY_PARAM_MAX_STALE_DAYS = 45
+
 # ── 滞涨标记 (2026-08-19 用户定案: legacy+parallel 双交付) ──
 # 用户线索: 300911 连续入选短名单 (模型已识别) + 价格横盘洗盘 (10 日涨幅≈0) → 终将突破.
 # 250d 检验 (_diag_stall_regime, 2026-08-19): 入选+滞涨+近20日入选≥3 全窗 63.2%/+5.88%,

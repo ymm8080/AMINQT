@@ -161,6 +161,11 @@ def model_params(board: str, kind: str) -> dict:
     if nl is not None:
         params["num_leaves"] = nl
     params.update(PARAMS_OVERRIDE.get((board, kind), {}))
+    # [0913 #8] 周末自适应再扫 json 旋钮叠覆盖 (rank_source 式 WORM+新鲜度+fail-open;
+    # 无 json/过旧/异常 → {} 零行为变化, 代码表兜底). 见 app/pipeline1/param_source.py
+    from app.pipeline1 import param_source
+
+    params.update(param_source.resolve_param_override(board, kind))
     # [2026-08-31] 10d_reg 是 TOP10 第二票唯一评估头 — 多线程直方图浮点累加顺序
     # 非确定, 同配置重训 TOP10 日均可差 ±0.04 (08-30 +0.0571 vs 08-31 +0.0092,
     # 特征/标签/超参/seed 全同, 窗仅差 1 日), 方差与闸信号同量级 → 闸近似抛硬币.
