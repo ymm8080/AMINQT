@@ -51,8 +51,13 @@ _LATEST_REVIEW = DATA_OTHERS_DIR / "weekly_review_latest.json"
 _GUARD_TICK_S = 2 * 3600
 _GUARD_MAX_TICKS = 2
 _REVIEW_STEPS = ["weekly_review", "gate_audit"]  # 恒 rc=0 告警式, 失败不拦链
-_EVOLVE_STEPS = ["retrain", "legacy_prob_head", "legacy", "deliver"]
+# [0913 #8] 头插 param_resweep (周末超参再扫): 赢家落 param_source json 后,
+# 紧随的 retrain (knob auto) 即生效; fail-soft 不在 _CRITICAL。
+_EVOLVE_STEPS = ["param_resweep", "retrain", "legacy_prob_head", "legacy", "deliver"]
 _CRITICAL = {"legacy", "deliver"}
+# 本链专属步注册 (run_daily_automation 无此步; 复制后追加, 防污染日链字典)
+_STEPS = {**_STEPS, "param_resweep": ["scripts/_param_resweep_weekly.py"]}
+_STEP_TIMEOUT_S = {**_STEP_TIMEOUT_S, "param_resweep": 2 * 3600}
 
 
 def _state_path(tag: str) -> str:

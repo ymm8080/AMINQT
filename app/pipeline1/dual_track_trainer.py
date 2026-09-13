@@ -497,6 +497,13 @@ class DualTrackTrainer:
         # 过 dropna(label)+risk_filter, X/y/w 同帧同行序.
         if kind.endswith("reg") and HALF_LIFE_DAYS is not None:
             w = decay_sample_weights(train["date"], HALF_LIFE_DAYS)
+        elif kind.endswith("cls"):
+            # [0913 #8] cls 半衰期 json 旋钮 (relay-7 W_hl60 杠杆的着陆位;
+            # None (无 json/过旧/非法) → B10 默认 250, fail-open)
+            from app.pipeline1 import param_source
+
+            hl = param_source.resolve_cls_half_life(board)
+            w = self.time_weights(train, half_life=hl or HALF_LIFE)
         else:
             w = self.time_weights(train)
 

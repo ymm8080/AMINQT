@@ -12,11 +12,13 @@
 payload: {
   "board", "trained_through" ("YYYY-MM-DD"),
   "overrides": {kind: {LGBM 参数增量}},   # 只叠 model_params 产出之上
+  "cls_half_life_days": int,             # [0913 #8] cls 样本权重半衰期 (交易日),
+                                         # 缺席 → None → trainer 默认 250 (B10)
   "evidence": {"sweep": ..., "judge": "TOP10 实净", ...},  # 判词证据链
   "ts": "..."
 }
 kind 命名同 model_params: "3d_cls".."10d_cls"/"3d_reg".."10d_reg"/"pain".
-半衰期等非 LGBM 覆盖键后续版本再加 (须有已过闸扫描证据才允许生效).
+半衰期是非 LGBM 覆盖键 → 独立顶层字段 (混进 overrides 会漏进 LGBM **params 报未知参数).
 """
 
 from __future__ import annotations
@@ -116,3 +118,49 @@ def resolve_param_override(
     except Exception as exc:
         print(f"[param_source] {board} 解析异常 ({exc}) → 代码表", flush=True)
         return {}
+
+
+def resolve_cls_half_life(
+    board: str,
+    as_of=None,
+    knob=None,
+    directory=None,
+    max_stale_days=None,
+) -> int | None:
+    """解析该板 cls 样本权重半衰期 (交易日) → int | None (None = trainer 默认 250).
+
+    与 resolve_param_override 同链 (旋钮 "code" > json 新鲜度闸 > None);
+    非 LGBM 键 → 独立顶层字段 cls_half_life_days, 不经 model_params。
+    """
+    from config.settings import LEGACY_PARAM_MAX_STALE_DAYS, LEGACY_PARAM_SOURCE
+
+    chosen = LEGACY_PARAM_SOURCE.get(board, "auto") if knob is None else knob
+    if chosen != "auto":
+        return None
+    try:
+        rec = load_latest_param_source(board, directory)
+        if rec is None:
+            return None
+        trained_through = rec.get("trained_through")
+        if not trained_through:
+            return None
+        stale = (
+            LEGACY_PARAM_MAX_STALE_DAYS if max_stale_days is None else int(max_stale_days)
+        )
+        as_of_ts = (
+            pd.Timestamp(as_of) if as_of is not None else pd.Timestamp.now().normalize()
+        )
+        if abs((as_of_ts - pd.Timestamp(trained_through)).days) > stale:
+            return None
+        hl = rec.get("cls_half_life_days")
+        if isinstance(hl, bool) or not isinstance(hl, int) or hl <= 0:
+            if hl is not None:
+                print(
+                    f"[param_source] {board} cls_half_life_days 非法 ({hl!r}) → 默认 250",
+                    flush=True,
+                )
+            return None
+        return hl
+    except Exception as exc:
+        print(f"[param_source] {board} 半衰期解析异常 ({exc}) → 默认 250", flush=True)
+        return None
