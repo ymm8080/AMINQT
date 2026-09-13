@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
-"""rank_source purged_v1 影子重评 (0913) — _shadow_prob 集成单测.
+"""rank_source purged_v2_wf2 逐折新鲜影子重评 (0913) — _shadow_prob 集成单测.
 
 动机: 原口径用在役全史 bundle 评 eval 窗 → 尾部 eval 日 100% in-sample →
-prob 系统性虚高 (0912 首评双板选 prob, walk-forward #11 实测 mag 碾压).
-purged_v1 = eval 窗 cutoff 前推 RANK_SOURCE_PURGE_DAYS=11 交易日重拟合影子
-集预测。本文件验证:
-① 影子训练集确实在 eval 窗前 11 个交易日截断 (隔离性), 全半衰期档都拟合;
+prob 系统性虚高 (0912 首评双板选 prob, walk-forward #11 实测 mag 碾压);
+purged_v1 单次 cutoff 又令窗尾被陈旧模型评分 (chosen=prob 陈旧假象,
+freshwf 定裁: 新鲜口径 prob 双板全负) → purged_v2 = 评估窗分
+RANK_SOURCE_WF_FOLDS=2 折, 每折折首前推 RANK_SOURCE_PURGE_DAYS=11 交易日
+截断重拟合影子集预测。本文件验证:
+① 逐折隔离: 每折训练集在该折首日前 11 交易日截断, 折二 cutoff 晚于折一
+   (逐折新鲜), 全半衰期档每折都拟合;
 ② 诚实影子下 mag 胜; 泄漏反例 (影子背全史) 下 prob 反超 → 口径可分胜负;
 ③ 影子 fit raise → fail-open (无 json 无台账, 不抛);
 ④ 旧 payload (无 eval_mode 字段) 兼容解析;
-⑤ payload 带 eval_mode/eval_days, 台账行照写.
+⑤ payload 带 eval_mode=purged_v2_wf2/eval_days, 台账行照写.
 """
 
 from __future__ import annotations
@@ -21,7 +24,11 @@ import pandas as pd
 
 from app.pipeline_parallel import calibration as calibration_mod
 from app.pipeline_parallel import prob_head, rank_source
-from app.pipeline_parallel.config import RANK_SOURCE_EVAL_DAYS, RANK_SOURCE_PURGE_DAYS
+from app.pipeline_parallel.config import (
+    RANK_SOURCE_EVAL_DAYS,
+    RANK_SOURCE_PURGE_DAYS,
+    RANK_SOURCE_WF_FOLDS,
+)
 from config.settings import PROB_GATE
 from scripts import _head_choice_ledger as ledger_mod
 from scripts import _shortlist_t5_t10 as sl_mod
@@ -117,25 +124,29 @@ def test_purge_isolation_all_tiers(tmp_path, monkeypatch):
     cap: list = []
     _patch_happy(monkeypatch, tmp_path, t, leaky=False, captures=cap)
     tph._eval_rank_source("main", t, "2026-05-31")
-    assert len(cap) == len(PROB_GATE["half_lives"])
-    assert {c["hl"] for c in cap} == set(PROB_GATE["half_lives"])
-    # eval_lo = 评估窗首日 (use_dates[0]); 影子 cutoff 应恰在前推 11 交易日
+    n_hl = len(PROB_GATE["half_lives"])
+    assert len(cap) == int(RANK_SOURCE_WF_FOLDS) * n_hl
+    # 逐折: 每折折首前推 11 交易日截断, 折二 cutoff 晚于折一 (逐折新鲜 refit)
     use_dates = sorted(t["date"].unique())[-(int(RANK_SOURCE_EVAL_DAYS) + 15) :]
-    eval_lo = pd.Timestamp(use_dates[0])
     uniq = np.unique(t["date"].values)
-    pos = int(np.searchsorted(uniq, eval_lo.to_datetime64()))
-    assert pos >= int(RANK_SOURCE_PURGE_DAYS)
-    cut_expected = uniq[pos - int(RANK_SOURCE_PURGE_DAYS)]
-    for c in cap:
-        assert c["train_max"] == pd.Timestamp(cut_expected)
-        assert c["train_max"] < eval_lo
-        assert (
-            c["n_train"] == (pos - int(RANK_SOURCE_PURGE_DAYS) + 1) * N_SYMS
-        )  # <= cut 含当日
-    gap = int(np.searchsorted(uniq, np.datetime64(eval_lo))) - int(
-        np.searchsorted(uniq, cut_expected)
-    )
-    assert gap == int(RANK_SOURCE_PURGE_DAYS)
+    folds = np.array_split(np.asarray(use_dates), int(RANK_SOURCE_WF_FOLDS))
+    fold_cuts = []
+    for fd in folds:
+        fold_lo = pd.Timestamp(fd[0])
+        pos = int(np.searchsorted(uniq, fold_lo.to_datetime64()))
+        assert pos >= int(RANK_SOURCE_PURGE_DAYS)
+        cut = uniq[pos - int(RANK_SOURCE_PURGE_DAYS)]
+        fold_cuts.append(pd.Timestamp(cut))
+        sub = [c for c in cap if c["train_max"] == pd.Timestamp(cut)]
+        assert len(sub) == n_hl  # 该折全半衰期档都拟合
+        assert {c["hl"] for c in sub} == set(PROB_GATE["half_lives"])
+        for c in sub:
+            assert c["train_max"] < fold_lo
+            assert (
+                c["n_train"] == (pos - int(RANK_SOURCE_PURGE_DAYS) + 1) * N_SYMS
+            )  # <= cut 含当日
+    assert fold_cuts[1] > fold_cuts[0]  # 折二训练窗更长 (更新鲜)
+    assert set(c["train_max"] for c in cap) == set(fold_cuts)  # 无第三种 cutoff
 
 
 def test_purged_mag_wins_and_leak_flips_to_prob(tmp_path, monkeypatch):
@@ -194,7 +205,7 @@ def test_payload_eval_mode_and_ledger_row(tmp_path, monkeypatch):
     _patch_happy(monkeypatch, tmp_path, t, leaky=False, captures=[])
     tph._eval_rank_source("main", t, "2026-05-31")
     rec = rank_source.load_latest_rank_source("main", directory=tmp_path)
-    assert rec["eval_mode"] == "purged_v1"
+    assert rec["eval_mode"] == "purged_v2_wf2"
     assert rec["eval_days"] == int(RANK_SOURCE_EVAL_DAYS)
     assert rec["board"] == "main"
     ledger = tmp_path / "head_choice_ledger.csv"
