@@ -85,7 +85,13 @@ class ChipDistribution:
 
     def winner(self, price: float) -> float:
         # clip: 子集/全量求和的浮点误差可微越 [0,1] (实测 1.0000000000000003)
-        return float(np.clip(self.dist[self.grid < price].sum() / max(self.dist.sum(), 1e-12), 0.0, 1.0))
+        return float(
+            np.clip(
+                self.dist[self.grid < price].sum() / max(self.dist.sum(), 1e-12),
+                0.0,
+                1.0,
+            )
+        )
 
 
 # ---- 引擎接口实现（控盘红柱/获利盘）----

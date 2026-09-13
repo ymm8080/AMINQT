@@ -56,6 +56,7 @@ def add_quality_factor(df: pd.DataFrame) -> bool:
     df["quality_factor"] = qrank.mean(axis=1).astype("float32")
     return True
 
+
 # ──────────────────────────────────────────────────────────
 # BruteForceGenerator (Layer1)
 # ──────────────────────────────────────────────────────────

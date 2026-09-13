@@ -23,9 +23,7 @@ RANK_KEYS = ("mag", "prob", "blend")
 DEFAULT_KEY = "blend"
 
 
-def daily_rank_metrics(
-    df: pd.DataFrame, key: str, label: str, top_n: int = 10
-) -> dict:
+def daily_rank_metrics(df: pd.DataFrame, key: str, label: str, top_n: int = 10) -> dict:
     """逐日 (决策日截面) Spearman IC + TOP-n 实得均值, 再对日聚合.
 
     df 需含 date/key/label 列; NaN 行剔除 (标签未实现的尾段日期自然出局)。
@@ -85,7 +83,7 @@ def evaluate_keys(frame: pd.DataFrame, eval_days: int = 60, top_n: int = 10) -> 
             if sub.empty:
                 per[h] = {"ic": None, "top10_net": None, "n_days": 0}
                 continue
-            keep = sorted(sub["date"].unique())[-int(eval_days):]
+            keep = sorted(sub["date"].unique())[-int(eval_days) :]
             per[h] = daily_rank_metrics(sub[sub["date"].isin(keep)], key, lab, top_n)
         out[key] = {
             "per_horizon": per,
@@ -179,7 +177,11 @@ def resolve_rank_key(
         trained_through = rec.get("trained_through")
         if trained_through is None:
             return DEFAULT_KEY
-        stale = RANK_SOURCE_MAX_STALE_DAYS if max_stale_days is None else int(max_stale_days)
+        stale = (
+            RANK_SOURCE_MAX_STALE_DAYS
+            if max_stale_days is None
+            else int(max_stale_days)
+        )
         as_of_ts = (
             pd.Timestamp(as_of) if as_of is not None else pd.Timestamp.now().normalize()
         )

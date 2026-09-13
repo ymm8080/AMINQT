@@ -19,8 +19,8 @@ import csv
 import numpy as np
 import pandas as pd
 
-from app.pipeline_parallel import prob_head, rank_source
 from app.pipeline_parallel import calibration as calibration_mod
+from app.pipeline_parallel import prob_head, rank_source
 from app.pipeline_parallel.config import RANK_SOURCE_EVAL_DAYS, RANK_SOURCE_PURGE_DAYS
 from config.settings import PROB_GATE
 from scripts import _head_choice_ledger as ledger_mod
@@ -120,7 +120,7 @@ def test_purge_isolation_all_tiers(tmp_path, monkeypatch):
     assert len(cap) == len(PROB_GATE["half_lives"])
     assert {c["hl"] for c in cap} == set(PROB_GATE["half_lives"])
     # eval_lo = 评估窗首日 (use_dates[0]); 影子 cutoff 应恰在前推 11 交易日
-    use_dates = sorted(t["date"].unique())[-(int(RANK_SOURCE_EVAL_DAYS) + 15):]
+    use_dates = sorted(t["date"].unique())[-(int(RANK_SOURCE_EVAL_DAYS) + 15) :]
     eval_lo = pd.Timestamp(use_dates[0])
     uniq = np.unique(t["date"].values)
     pos = int(np.searchsorted(uniq, eval_lo.to_datetime64()))
@@ -129,7 +129,9 @@ def test_purge_isolation_all_tiers(tmp_path, monkeypatch):
     for c in cap:
         assert c["train_max"] == pd.Timestamp(cut_expected)
         assert c["train_max"] < eval_lo
-        assert c["n_train"] == (pos - int(RANK_SOURCE_PURGE_DAYS) + 1) * N_SYMS  # <= cut 含当日
+        assert (
+            c["n_train"] == (pos - int(RANK_SOURCE_PURGE_DAYS) + 1) * N_SYMS
+        )  # <= cut 含当日
     gap = int(np.searchsorted(uniq, np.datetime64(eval_lo))) - int(
         np.searchsorted(uniq, cut_expected)
     )
@@ -154,7 +156,9 @@ def test_purged_mag_wins_and_leak_flips_to_prob(tmp_path, monkeypatch):
     tph._eval_rank_source("main", t, "2026-05-31")
     rec2 = rank_source.load_latest_rank_source("main", directory=leak_dir)
     assert rec2 is not None
-    assert rec2["metrics"]["prob"]["weighted_ic"] > rec2["metrics"]["mag"]["weighted_ic"]
+    assert (
+        rec2["metrics"]["prob"]["weighted_ic"] > rec2["metrics"]["mag"]["weighted_ic"]
+    )
     assert rec2["chosen"] == "prob"
 
 

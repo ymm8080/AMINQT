@@ -97,7 +97,9 @@ def resolve_param_override(
             )
             return {}
         stale = (
-            LEGACY_PARAM_MAX_STALE_DAYS if max_stale_days is None else int(max_stale_days)
+            LEGACY_PARAM_MAX_STALE_DAYS
+            if max_stale_days is None
+            else int(max_stale_days)
         )
         as_of_ts = (
             pd.Timestamp(as_of) if as_of is not None else pd.Timestamp.now().normalize()

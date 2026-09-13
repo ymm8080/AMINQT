@@ -21,8 +21,13 @@ from app.indicators.chip_distribution import ChipDistribution
 CHIP_COLS = ("A01", "A02", "A03", "获利盘")
 
 
-def _synth(n: int = 120, p0: float = 10.0, drift: float = 0.002, vol: float = 0.02,
-           seed: int = 42) -> pd.DataFrame:
+def _synth(
+    n: int = 120,
+    p0: float = 10.0,
+    drift: float = 0.002,
+    vol: float = 0.02,
+    seed: int = 42,
+) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     close = p0 * np.exp(np.cumsum(rng.normal(drift, vol, n)))
     o = close * np.exp(rng.normal(0, 0.004, n))
@@ -50,7 +55,9 @@ class TestChipGridCausality(unittest.TestCase):
     def test_future_perturbation_keeps_history(self):
         df = _synth()
         cut = len(df) // 2
-        base = ChipDistribution().build(df.copy(), float_shares=5e8)["获利盘"].to_numpy()
+        base = (
+            ChipDistribution().build(df.copy(), float_shares=5e8)["获利盘"].to_numpy()
+        )
         pert = df.copy()
         pert.loc[pert.index >= cut, ["close", "high"]] *= 1.5
         after = ChipDistribution().build(pert, float_shares=5e8)["获利盘"].to_numpy()

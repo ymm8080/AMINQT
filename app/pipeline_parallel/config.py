@@ -238,6 +238,7 @@ def effective_pool(spec: SystemSpec, board: str | None) -> tuple[str, ...]:
     extra = PARALLEL_HEAD_EXTRA_COLS.get(board or "", {}).get("mag") or []
     return tuple(spec.pool) + tuple(c for c in extra if c not in spec.pool)
 
+
 # ── SLOW_BULL 市场状态条件退出 (2026-08-06) ──
 # 依据 data/_diag_slowbull_stability_* + _diag_slowbull_regime_*: trail8 是趋势跟随
 # 放大器 (上升段 +2~4pp, 下行段 -1.4~-5.2pp); 下行段池子所有退出都亏 (cur -0.68%/

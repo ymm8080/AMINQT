@@ -231,6 +231,8 @@ def cols_for(bundle: dict, kind: str) -> list[str]:
     """per-kind 列清单; 旧 bundle 无 feature_cols_by_kind → 共享清单回退。"""
     by_kind = bundle.get("feature_cols_by_kind") or {}
     return by_kind.get(kind) or bundle.get("feature_cols") or []
+
+
 EXTRA_KINDS = (
     "quantile_models_3d",
     "quantile_models_5d",
@@ -1250,7 +1252,9 @@ class DualTrackTrainer:
             x = np.nan_to_num(sub[cols_for(trained, kind)].values, nan=0.0)
             # cls 头取 predict_proba: hard label 是 0/1, Rank IC 无分辨力
             sub["_pred"] = (
-                model.predict_proba(x)[:, 1] if kind.endswith("cls") else model.predict(x)
+                model.predict_proba(x)[:, 1]
+                if kind.endswith("cls")
+                else model.predict(x)
             )
             ics[kind] = ICScreener.rank_ic(
                 sub.rename(columns={"_pred": "score"}), "score", label

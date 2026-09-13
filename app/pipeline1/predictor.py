@@ -67,7 +67,9 @@ class V35Predictor:
         cols = bundle["feature_cols"]
         by_kind = bundle.get("feature_cols_by_kind") or {}
         # [2026-09-12] per-head 特征集: 缺列补 0 须覆盖全头并集 (reg/cls 头列集可不同)
-        all_cols = list(dict.fromkeys(cols + [c for ks in by_kind.values() for c in ks]))
+        all_cols = list(
+            dict.fromkeys(cols + [c for ks in by_kind.values() for c in ks])
+        )
         # [2026-08-31] brute 补齐第二层: 调用方经非 inference 模式 build (自动全量)
         # 的帧缺 _brute_ 列 — 带多日历史时在此定向补齐; 单日截面无法算滚动窗,
         # 跳过 (下游补 0 语义不变). build(inference_cols) 已补齐时此处零交集 no-op.
@@ -129,9 +131,7 @@ class V35Predictor:
             rmap = bundle.get(f"{k}d_rank_map")
             col = f"pred_ret_{k}d"
             if rmap is not None and col in latest.columns:
-                latest[col] = rank_map_apply(
-                    rmap, latest[col].to_numpy(dtype=float)
-                )
+                latest[col] = rank_map_apply(rmap, latest[col].to_numpy(dtype=float))
         # [08-29] 超额标签 bundle: 回归头输出 = 板内超额口径, 加回训练时存的市场
         # 均值常数复原绝对口径 — 下游概率派生/闸/清单语义不变, 只有日内排名变化.
         # 必须在 _reg_resid_prob (读 pred_ret) 之前.

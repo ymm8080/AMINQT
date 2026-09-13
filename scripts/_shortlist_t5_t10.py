@@ -429,18 +429,14 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
         pool_sn = effective_pool(SNIPER, board)
         pool_fu = effective_pool(FUSION, board)
         schema = set(pq.ParquetFile(str(fp)).schema_arrow.names)
-        miss = sorted(
-            (set(pool_sn) | set(pool_fu)) - schema - {"pv_corr_5"}
-        )
+        miss = sorted((set(pool_sn) | set(pool_fu)) - schema - {"pv_corr_5"})
         if miss:
             print(
                 f"[pool:{board}] mag extras 缺席 stage 面板, 剔除: {miss}",
                 flush=True,
             )
         need = base_need + [
-            c
-            for c in set(pool_sn) | set(pool_fu)
-            if c != "pv_corr_5" and c in schema
+            c for c in set(pool_sn) | set(pool_fu) if c != "pv_corr_5" and c in schema
         ]
         dates = pd.to_datetime(
             pq.read_table(str(fp), columns=["date"]).to_pandas()["date"]
@@ -684,9 +680,7 @@ def _anchor_frame(board: str, window: int = ANCHOR_WINDOW) -> pd.DataFrame:
     pool_fu = effective_pool(FUSION, board)
     schema = set(pq.ParquetFile(str(fp)).schema_arrow.names)
     pool_cols = [
-        c
-        for c in set(pool_sn) | set(pool_fu)
-        if c != "pv_corr_5" and c in schema
+        c for c in set(pool_sn) | set(pool_fu) if c != "pv_corr_5" and c in schema
     ]
     cols = ["symbol", "date"] + pool_cols + [f"label_pm_{h}_net" for h in HORIZONS]
     t = pq.read_table(

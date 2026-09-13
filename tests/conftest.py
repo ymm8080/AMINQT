@@ -28,5 +28,7 @@ def _hermetic_rank_source(monkeypatch):
     monkeypatch.setattr(
         rank_source,
         "load_latest_rank_source",
-        lambda board, directory=None: None if directory is None else real(board, directory=directory),
+        lambda board, directory=None: (
+            None if directory is None else real(board, directory=directory)
+        ),
     )

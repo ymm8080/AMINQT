@@ -70,7 +70,11 @@ def append_head_choice_row(
         "pipeline": pipeline,
         "board": board,
         "tag": tag,
-        **{f"ic_{s}_{k}d": ics.get(f"{k}d_{s}") for s in ("reg", "cls") for k in _HORIZONS},
+        **{
+            f"ic_{s}_{k}d": ics.get(f"{k}d_{s}")
+            for s in ("reg", "cls")
+            for k in _HORIZONS
+        },
         "weighted_ic_reg": weighted_ic_reg,
         "weighted_ic_cls": weighted_ic_cls,
         "chosen": chosen,

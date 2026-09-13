@@ -397,9 +397,27 @@ def test_rank_and_truncate_board_gate_down_falls_back_to_mag():
 def _adaptive_rows():
     """mag 序 A>C>B; prob 序 B>C>A; blend 序 B>C>A — 三键可分胜负."""
     return [
-        {"board": "main", "symbol": "A", "pred_mag_10d": 0.10, "pred_prob": 0.30, "score": 0.5},
-        {"board": "main", "symbol": "B", "pred_mag_10d": 0.08, "pred_prob": 0.90, "score": 0.5},
-        {"board": "main", "symbol": "C", "pred_mag_10d": 0.09, "pred_prob": 0.60, "score": 0.5},
+        {
+            "board": "main",
+            "symbol": "A",
+            "pred_mag_10d": 0.10,
+            "pred_prob": 0.30,
+            "score": 0.5,
+        },
+        {
+            "board": "main",
+            "symbol": "B",
+            "pred_mag_10d": 0.08,
+            "pred_prob": 0.90,
+            "score": 0.5,
+        },
+        {
+            "board": "main",
+            "symbol": "C",
+            "pred_mag_10d": 0.09,
+            "pred_prob": 0.60,
+            "score": 0.5,
+        },
     ]
 
 

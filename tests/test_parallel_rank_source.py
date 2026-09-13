@@ -107,7 +107,9 @@ def test_load_latest_bad_json_returns_none(tmp_path):
 
 def test_resolve_explicit_knob_passthrough(tmp_path):
     assert rank_source.resolve_rank_key("main", knob="mag", directory=tmp_path) == "mag"
-    assert rank_source.resolve_rank_key("main", knob="prob", directory=tmp_path) == "prob"
+    assert (
+        rank_source.resolve_rank_key("main", knob="prob", directory=tmp_path) == "prob"
+    )
 
 
 def test_resolve_auto_uses_fresh_json(tmp_path):
@@ -132,7 +134,9 @@ def test_resolve_auto_stale_json_falls_back_blend(tmp_path):
 
 def test_resolve_missing_or_bad_chosen_defaults_blend(tmp_path):
     assert (
-        rank_source.resolve_rank_key("main", as_of="2026-09-12", knob="auto", directory=tmp_path)
+        rank_source.resolve_rank_key(
+            "main", as_of="2026-09-12", knob="auto", directory=tmp_path
+        )
         == "blend"
     )
     rank_source.save_rank_source(

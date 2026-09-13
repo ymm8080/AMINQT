@@ -121,7 +121,10 @@ def _eval_rank_source(board: str, t: pd.DataFrame, trained_through: str) -> None
     try:
         bundles = prob_head.load_all_tiers(board)
         if bundles is None:
-            print(f"[{board}] rank_source 评估跳过: 概率 bundle 不全 (fail-open)", flush=True)
+            print(
+                f"[{board}] rank_source 评估跳过: 概率 bundle 不全 (fail-open)",
+                flush=True,
+            )
             return
         panel = _panel_per_stock().get((board, "both"))
         if panel is None or panel.empty:
@@ -137,16 +140,17 @@ def _eval_rank_source(board: str, t: pd.DataFrame, trained_through: str) -> None
         missing = [c for c in feat_union if c not in t.columns]
         if missing:
             raise ValueError(f"概率头特征缺 {len(missing)} 列: {missing[:5]}")
-        use_dates = sorted(mag["date"].unique())[-(int(RANK_SOURCE_EVAL_DAYS) + 15):]
+        use_dates = sorted(mag["date"].unique())[-(int(RANK_SOURCE_EVAL_DAYS) + 15) :]
         # [0913 purged_v1] prob 换 purged 影子重评: 在役 bundle 见过全部历史,
         # eval 尾段 in-sample → prob 虚高; 影子 = cutoff 前推 11 交易日重拟合.
         rows = t.loc[t["date"].isin(use_dates), ["symbol", "date"] + feat_union].copy()
         rows["prob"] = _shadow_prob(board, t, rows, use_dates[0])
-        labels = panel[["symbol", "date"] + [f"label_pm_{h}_net" for h in rank_source.HORIZONS]]
-        frame = (
-            mag.merge(rows[["symbol", "date", "prob"]], on=["symbol", "date"], how="left")
-            .merge(labels, on=["symbol", "date"], how="left")
-        )
+        labels = panel[
+            ["symbol", "date"] + [f"label_pm_{h}_net" for h in rank_source.HORIZONS]
+        ]
+        frame = mag.merge(
+            rows[["symbol", "date", "prob"]], on=["symbol", "date"], how="left"
+        ).merge(labels, on=["symbol", "date"], how="left")
         evaluation = rank_source.evaluate_keys(frame, eval_days=RANK_SOURCE_EVAL_DAYS)
         chosen = rank_source.choose_rank_key(evaluation)
         prev = rank_source.load_latest_rank_source(board)
@@ -185,7 +189,10 @@ def _eval_rank_source(board: str, t: pd.DataFrame, trained_through: str) -> None
             flush=True,
         )
     except Exception as exc:
-        print(f"[{board}] rank_source 评估失败 (fail-open, serving 维持 blend): {exc}", flush=True)
+        print(
+            f"[{board}] rank_source 评估失败 (fail-open, serving 维持 blend): {exc}",
+            flush=True,
+        )
 
 
 def main() -> int:

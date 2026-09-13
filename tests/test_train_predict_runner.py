@@ -417,7 +417,8 @@ class TestHorizonWeights:
         # [0912 夜] 闸头 auto 自选: 公式随 gate_head (不再钉死 reg 族)
         head = oos["gate_head"]
         expected = sum(
-            LABEL_WEIGHTS[k] * oos["ics"].get(f"{k}d_{head}", 0.0) for k in LABEL_WEIGHTS
+            LABEL_WEIGHTS[k] * oos["ics"].get(f"{k}d_{head}", 0.0)
+            for k in LABEL_WEIGHTS
         ) / sum(LABEL_WEIGHTS.values())
         assert oos["weighted_ic"] == pytest.approx(expected, abs=1e-6)
         assert oos["weighted_ic"] == pytest.approx(

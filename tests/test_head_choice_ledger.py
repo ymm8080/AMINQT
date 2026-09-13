@@ -28,8 +28,14 @@ def test_first_write_creates_header_and_row(tmp_path):
         chosen="cls",
         gate_pass=True,
         switched=True,
-        ics={"3d_reg": -0.02, "5d_reg": 0.01, "10d_reg": 0.08,
-             "3d_cls": 0.05, "5d_cls": 0.07, "10d_cls": 0.066},
+        ics={
+            "3d_reg": -0.02,
+            "5d_reg": 0.01,
+            "10d_reg": 0.08,
+            "3d_cls": 0.05,
+            "5d_cls": 0.07,
+            "10d_cls": 0.066,
+        },
         n_features=358,
         ledger_path=p,
     )
@@ -60,13 +66,18 @@ def test_same_key_skipped_worm(tmp_path):
         gate_pass=False,
         switched=False,
     )
-    assert append_head_choice_row("legacy", "dual", "T", ledger_path=p, **kwargs) is True
+    assert (
+        append_head_choice_row("legacy", "dual", "T", ledger_path=p, **kwargs) is True
+    )
     # 同键重跑 (数值漂移也不覆盖 — WORM)
     assert (
         append_head_choice_row(
-            "legacy", "dual", "T", ledger_path=p, weighted_ic_reg=9.0, **{
-                k: v for k, v in kwargs.items() if k != "weighted_ic_reg"
-            }
+            "legacy",
+            "dual",
+            "T",
+            ledger_path=p,
+            weighted_ic_reg=9.0,
+            **{k: v for k, v in kwargs.items() if k != "weighted_ic_reg"},
         )
         is False
     )
@@ -78,17 +89,38 @@ def test_same_key_skipped_worm(tmp_path):
 def test_different_key_appends_and_pipelines_coexist(tmp_path):
     p = tmp_path / "ledger.csv"
     append_head_choice_row(
-        "legacy", "dual", "T", weighted_ic_reg=1.0, weighted_ic_cls=2.0,
-        chosen="cls", gate_pass=True, switched=False, ledger_path=p,
+        "legacy",
+        "dual",
+        "T",
+        weighted_ic_reg=1.0,
+        weighted_ic_cls=2.0,
+        chosen="cls",
+        gate_pass=True,
+        switched=False,
+        ledger_path=p,
     )
     # 同板同 tag 不同管线 = 不同行; 同管线不同板 = 不同行
     assert append_head_choice_row(
-        "parallel", "dual", "T", weighted_ic_reg=None, weighted_ic_cls=0.5,
-        chosen="prob", gate_pass=True, switched=False, ledger_path=p,
+        "parallel",
+        "dual",
+        "T",
+        weighted_ic_reg=None,
+        weighted_ic_cls=0.5,
+        chosen="prob",
+        gate_pass=True,
+        switched=False,
+        ledger_path=p,
     )
     assert append_head_choice_row(
-        "legacy", "main", "T", weighted_ic_reg=0.02, weighted_ic_cls=0.07,
-        chosen="cls", gate_pass=True, switched=True, ledger_path=p,
+        "legacy",
+        "main",
+        "T",
+        weighted_ic_reg=0.02,
+        weighted_ic_cls=0.07,
+        chosen="cls",
+        gate_pass=True,
+        switched=True,
+        ledger_path=p,
     )
     rows = _read_rows(p)
     assert [r["pipeline"] for r in rows] == ["legacy", "parallel", "legacy"]

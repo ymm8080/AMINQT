@@ -10,6 +10,7 @@
      显式值强制。cls hard-label 不进 Rank IC。
   3. bundle 持久化: save() 落 prob_source, 旧包无键。
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -79,7 +80,9 @@ class TestPredictorProbSource:
         n = 6
         reg_out = np.linspace(0.01, 0.06, n)
         cls_out = np.array([0.20, 0.35, 0.50, 0.60, 0.75, 0.90])
-        out = _predict_with(_make_bundle(n, reg_out, cls_out), "dual", _make_features(n))
+        out = _predict_with(
+            _make_bundle(n, reg_out, cls_out), "dual", _make_features(n)
+        )
         assert np.allclose(out["prob_up_10d"], cls_out)
         assert np.allclose(out["prob_up_3d"], cls_out)  # prob_up 别名同源
         # dual 排序 ≡ cls 序, 与 (反向的) pred_ret 序脱钩
@@ -91,7 +94,9 @@ class TestPredictorProbSource:
         n = 6
         reg_out = np.array([0.06, 0.05, 0.04, 0.03, 0.02, np.nan])
         cls_out = np.full(n, 0.40)
-        out = _predict_with(_make_bundle(n, reg_out, cls_out), "main", _make_features(n))
+        out = _predict_with(
+            _make_bundle(n, reg_out, cls_out), "main", _make_features(n)
+        )
         p_reg = out["prob_up_10d"].to_numpy()
         assert np.isfinite(p_reg).all()
         assert p_reg[0] > p_reg[1] > p_reg[4]  # pred 越大残差概率越高 (同向)
@@ -99,16 +104,22 @@ class TestPredictorProbSource:
 
     def test_rollback_knob_restores_reg_for_dual(self, monkeypatch):
         monkeypatch.setitem(
-            __import__("config.settings", fromlist=["LEGACY_PROB_SOURCE"]).LEGACY_PROB_SOURCE,
+            __import__(
+                "config.settings", fromlist=["LEGACY_PROB_SOURCE"]
+            ).LEGACY_PROB_SOURCE,
             "dual",
             "reg",
         )
         n = 4
         reg_out = np.linspace(0.01, 0.05, n)
         cls_out = np.full(n, 0.30)
-        out = _predict_with(_make_bundle(n, reg_out, cls_out), "dual", _make_features(n))
+        out = _predict_with(
+            _make_bundle(n, reg_out, cls_out), "dual", _make_features(n)
+        )
         # 回退后 = main 同公式: 与 main 同输入同输出
-        out_main = _predict_with(_make_bundle(n, reg_out, cls_out), "main", _make_features(n))
+        out_main = _predict_with(
+            _make_bundle(n, reg_out, cls_out), "main", _make_features(n)
+        )
         assert np.allclose(out["prob_up_10d"], out_main["prob_up_10d"])
 
     def test_auto_honors_bundle_recorded_choice(self):
@@ -119,17 +130,25 @@ class TestPredictorProbSource:
         b = _make_bundle(n, reg_out, cls_out)
         b["prob_source"] = "cls"
         out = _predict_with(b, "main", _make_features(n))
-        assert np.allclose(out["prob_up_10d"], cls_out)  # main FALLBACK=reg 被包记录压过
+        assert np.allclose(
+            out["prob_up_10d"], cls_out
+        )  # main FALLBACK=reg 被包记录压过
         b2 = _make_bundle(n, reg_out, cls_out)
         b2["prob_source"] = "reg"
         out2 = _predict_with(b2, "dual", _make_features(n))
-        out_main = _predict_with(_make_bundle(n, reg_out, cls_out), "main", _make_features(n))
-        assert np.allclose(out2["prob_up_10d"], out_main["prob_up_10d"])  # dual FALLBACK=cls 被压过
+        out_main = _predict_with(
+            _make_bundle(n, reg_out, cls_out), "main", _make_features(n)
+        )
+        assert np.allclose(
+            out2["prob_up_10d"], out_main["prob_up_10d"]
+        )  # dual FALLBACK=cls 被压过
 
     def test_forced_knob_overrides_bundle(self, monkeypatch):
         """显式强制旋钮最高优先: 压过 bundle 记录 (回滚语义)."""
         monkeypatch.setitem(
-            __import__("config.settings", fromlist=["LEGACY_PROB_SOURCE"]).LEGACY_PROB_SOURCE,
+            __import__(
+                "config.settings", fromlist=["LEGACY_PROB_SOURCE"]
+            ).LEGACY_PROB_SOURCE,
             "main",
             "cls",
         )
@@ -191,7 +210,9 @@ class TestValidateOosGateHead:
     def test_forced_knob_pins_reg_gate_for_main(self, monkeypatch):
         """显式强制 = 回滚旋钮: 钉死 reg 头闸判 (压过 argmax)."""
         monkeypatch.setitem(
-            __import__("config.settings", fromlist=["LEGACY_PROB_SOURCE"]).LEGACY_PROB_SOURCE,
+            __import__(
+                "config.settings", fromlist=["LEGACY_PROB_SOURCE"]
+            ).LEGACY_PROB_SOURCE,
             "main",
             "reg",
         )
@@ -205,10 +226,9 @@ class TestValidateOosGateHead:
 
         trainer = dtt.DualTrackTrainer.__new__(dtt.DualTrackTrainer)
         oos = trainer.validate_oos(_make_trained("dual"))
-        expected = (
-            sum(LABEL_WEIGHTS[k] * oos["ics"].get(f"{k}d_cls", 0.0) for k in LABEL_WEIGHTS)
-            / sum(LABEL_WEIGHTS.values())
-        )
+        expected = sum(
+            LABEL_WEIGHTS[k] * oos["ics"].get(f"{k}d_cls", 0.0) for k in LABEL_WEIGHTS
+        ) / sum(LABEL_WEIGHTS.values())
         assert oos["weighted_ic"] == pytest.approx(expected, abs=1e-9)
 
     def test_both_head_family_aggregates_always_stored(self):
@@ -219,16 +239,11 @@ class TestValidateOosGateHead:
         for board in ("main", "dual"):
             oos = trainer.validate_oos(_make_trained(board))
             for suffix in ("reg", "cls"):
-                expected = (
-                    sum(
-                        LABEL_WEIGHTS[k] * oos["ics"].get(f"{k}d_{suffix}", 0.0)
-                        for k in LABEL_WEIGHTS
-                    )
-                    / sum(LABEL_WEIGHTS.values())
-                )
-                assert oos[f"weighted_ic_{suffix}"] == pytest.approx(
-                    expected, abs=1e-9
-                )
+                expected = sum(
+                    LABEL_WEIGHTS[k] * oos["ics"].get(f"{k}d_{suffix}", 0.0)
+                    for k in LABEL_WEIGHTS
+                ) / sum(LABEL_WEIGHTS.values())
+                assert oos[f"weighted_ic_{suffix}"] == pytest.approx(expected, abs=1e-9)
             assert oos["weighted_ic"] == pytest.approx(
                 oos[f"weighted_ic_{oos['gate_head']}"], abs=1e-12
             )
