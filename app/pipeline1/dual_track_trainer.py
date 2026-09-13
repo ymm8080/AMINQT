@@ -1219,15 +1219,15 @@ class DualTrackTrainer:
 
         切换判据 = 跨视界加权 IC (LABEL_WEIGHTS): 闸头模型 IC 按权重求和,
         1d 最不可执行 (T+1 买入当日不可卖) 权重最低, 3d 历史预测力最强.
-        [09-12] 闸头随 settings.LEGACY_PROB_SOURCE 板级切换: dual=cls (交付
-        排名头切 cls 后闸同头, reg 悬崖下旧闸必 FAIL); main=reg 不变。
+        [09-12] 闸头 = serving 头: LEGACY_PROB_SOURCE="auto" (默认) 时每次重训
+        argmax(weighted_ic_reg, weighted_ic_cls) 自选 (用户令: cls vs reg 不
+        固定); 显式 "reg"/"cls" = 强制回滚. 闸判与交付同头 (判即所服务)。
         """
         from config.settings import LEGACY_PROB_SOURCE
 
         from .ic_screener import ICScreener
         from .label_engine import LABEL_WEIGHTS
 
-        gate_suffix = "cls" if LEGACY_PROB_SOURCE.get(trained.get("board")) == "cls" else "reg"
         test = trained["segs"]["test"]
         ics = {}
         for kind, (model, label) in trained["models"].items():
@@ -1253,6 +1253,14 @@ class DualTrackTrainer:
             / total_w
             for suffix in ("reg", "cls")
         }
+        # serving 头判定: auto = argmax 双头族聚合 (平手取 reg, 历史默认头);
+        # 显式 reg/cls = 强制回滚旋钮
+        src = LEGACY_PROB_SOURCE.get(trained.get("board"), "reg")
+        gate_suffix = (
+            src
+            if src in ("reg", "cls")
+            else max(("reg", "cls"), key=lambda s: weighted_ic_by_head[s])
+        )
         weighted_ic = weighted_ic_by_head[gate_suffix]
         return {
             "ics": ics,
@@ -1299,6 +1307,10 @@ class DualTrackTrainer:
         for key, val in trained.items():
             if key.startswith("reg_resid_") and key.endswith("d"):
                 bundle[key] = val
+        # [09-12 夜] 动态头选择: 本批自选的 serving 头 (auto 旋钮; 旧包无此键
+        # → 推理端按 LEGACY_PROB_SOURCE_FALLBACK 回退)
+        if trained.get("prob_source"):
+            bundle["prob_source"] = trained["prob_source"]
         # [08-29] 超额标签: 标记 + 市场均值常数 (推理端 pred_ret_{k}d 加回复原绝对口径)
         for key in ("label_excess",) + tuple(f"mkt_expected_{k}d" for k in (3, 5, 10)):
             if key in trained:
@@ -1377,6 +1389,9 @@ class DualTrackTrainer:
             if extras:
                 trained.update(extras)
             oos = self.validate_oos(trained)
+            # [09-12 夜] 动态头选择入包: auto 旋钮下本批自选的 serving 头 →
+            # bundle["prob_source"] (推理端按此走; 强制旋钮压过它, 见 predictor)。
+            trained["prob_source"] = oos["gate_head"]
             # [08-29] TOP10 第二票: 交付口径非劣闸 (用户裁决: 切换按 TOP10 质量判,
             # IC 只是代理量). oos["pass"] 保持纯 IC 语义 (recalibrate 链独读).
             oos["top10"] = self.top10_second_vote(trained)

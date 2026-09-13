@@ -414,10 +414,15 @@ class TestHorizonWeights:
         trained = trainer.train_window(df, "main", ["f1", "f2"])
         oos = trainer.validate_oos(trained)
         assert "weighted_ic" in oos
+        # [0912 夜] 闸头 auto 自选: 公式随 gate_head (不再钉死 reg 族)
+        head = oos["gate_head"]
         expected = sum(
-            LABEL_WEIGHTS[k] * oos["ics"].get(f"{k}d_reg", 0.0) for k in LABEL_WEIGHTS
+            LABEL_WEIGHTS[k] * oos["ics"].get(f"{k}d_{head}", 0.0) for k in LABEL_WEIGHTS
         ) / sum(LABEL_WEIGHTS.values())
         assert oos["weighted_ic"] == pytest.approx(expected, abs=1e-6)
+        assert oos["weighted_ic"] == pytest.approx(
+            max(oos["weighted_ic_reg"], oos["weighted_ic_cls"]), abs=1e-6
+        )
 
 
 # ---------------- run_training 逐板块分期 (内存减半, 模型不变) ----------------

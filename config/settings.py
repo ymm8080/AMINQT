@@ -473,14 +473,23 @@ LEGACY_SELECTION = {
     "board_top_n": 10,  # 每板初选数 (全局帽 TOP_N 再截, 真删不补齐)
 }
 
-# ── prob_up 来源头 (2026-09-12 用户拍板: dual 交付切 cls 头) ──
-# dual reg 三视界 60d OOS IC -0.11~-0.14 全负 (真行情悬崖, dualreg_recon P1:
-# 3d -0.1185 / 5d -0.1408 / 10d -0.1093), cls 同窗 +0.041~+0.047 且 top10 实净
-# +53.5~55.5% → dual 的 prob_up (即 prob10_pull 排名键) 与晋升闸头全部改 cls。
-# main 保持 reg 残差概率不变 (08-24 原型 p_reg IC +0.105 vs p_cls -0.136)。
+# ── prob_up 来源头 (2026-09-12 用户拍板: dual 切 cls → 当夜再定为每训动态) ──
+# [0912 夜用户令] cls vs reg 不固定: 每次重训 argmax(weighted_ic_reg,
+# weighted_ic_cls) 自选 serving 头, 判定落 bundle["prob_source"] +
+# data/others/head_choice_ledger.csv (双管线四格统一台账, 只追加)。
+# "auto" = 动态自选 (默认, 平手取 reg=历史默认头);
+# 显式 "reg"/"cls" = 强制回滚旋钮 (闸判与推理都按强制头, 压过 bundle 记录)。
+# 旧 bundle 无 prob_source 键 → 按 LEGACY_PROB_SOURCE_FALLBACK 回退 = auto 前
+# 各板静态默认 (main=reg 残差, dual=cls)。不硬性提名 cls: main 何时切 cls 由
+# 下次重训的 argmax 按该批 OOS 自判 (0910 批 60d 重放 cls IC +0.066 vs reg
+# +0.0214 → 下次大概率自选 cls, 但由管线说了算)。
 # 同一旋钮驱动两处: V35Predictor.prob_up_kd 源 + DualTrackTrainer.validate_oos
-# 闸头 (cls 经 predict_proba 取 Rank IC; 回退改值即可, 无代码回退开关)。
+# 闸头 (cls 经 predict_proba 取 Rank IC)。
 LEGACY_PROB_SOURCE = {
+    "main": "auto",
+    "dual": "auto",
+}
+LEGACY_PROB_SOURCE_FALLBACK = {
     "main": "reg",  # reg 残差派生概率 1-F_e(CLS_THRESHOLD-pred)
     "dual": "cls",  # Platt 校准 cls predict_proba
 }

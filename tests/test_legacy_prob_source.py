@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-"""LEGACY_PROB_SOURCE 板级概率源/闸头 (0912 dual 切 cls) — 交付规则单测.
+"""LEGACY_PROB_SOURCE 概率源/闸头 (0912 夜: 每训动态自选) — 交付规则单测.
 
-铁律对应: 交易规则改动必须同时更新单元测试。覆盖三面:
-  1. V35Predictor: dual prob_up_kd = cls predict_proba (校准直通);
-     main 保持 reg 残差派生 (pred NaN 行回退 cls); 旋钮可回退。
-  2. DualTrackTrainer.validate_oos: 闸头随板切换 (dual=cls 经 predict_proba,
-     main=reg); cls hard-label 不进 Rank IC。
+铁律对应: 交易规则改动必须同时更新单元测试。覆盖四面:
+  1. V35Predictor: 显式 reg/cls 强制 > bundle["prob_source"] (重训 argmax
+     落盘) > 旧 bundle 回退 FALLBACK (main=reg 残差 / dual=cls Platt);
+     pred NaN 行回退 cls 不变。
+  2. DualTrackTrainer.validate_oos: "auto" 默认 = argmax(weighted_ic_reg,
+     weighted_ic_cls) 自选闸头 (用户令: cls vs reg 不固定, 每训复判);
+     显式值强制。cls hard-label 不进 Rank IC。
+  3. bundle 持久化: save() 落 prob_source, 旧包无键。
 """
 from __future__ import annotations
 
@@ -108,6 +111,36 @@ class TestPredictorProbSource:
         out_main = _predict_with(_make_bundle(n, reg_out, cls_out), "main", _make_features(n))
         assert np.allclose(out["prob_up_10d"], out_main["prob_up_10d"])
 
+    def test_auto_honors_bundle_recorded_choice(self):
+        """auto 旋钮: bundle 记录的重训自选头生效 (压过板级 FALLBACK)."""
+        n = 6
+        reg_out = np.linspace(0.01, 0.06, n)
+        cls_out = np.array([0.20, 0.35, 0.50, 0.60, 0.75, 0.90])
+        b = _make_bundle(n, reg_out, cls_out)
+        b["prob_source"] = "cls"
+        out = _predict_with(b, "main", _make_features(n))
+        assert np.allclose(out["prob_up_10d"], cls_out)  # main FALLBACK=reg 被包记录压过
+        b2 = _make_bundle(n, reg_out, cls_out)
+        b2["prob_source"] = "reg"
+        out2 = _predict_with(b2, "dual", _make_features(n))
+        out_main = _predict_with(_make_bundle(n, reg_out, cls_out), "main", _make_features(n))
+        assert np.allclose(out2["prob_up_10d"], out_main["prob_up_10d"])  # dual FALLBACK=cls 被压过
+
+    def test_forced_knob_overrides_bundle(self, monkeypatch):
+        """显式强制旋钮最高优先: 压过 bundle 记录 (回滚语义)."""
+        monkeypatch.setitem(
+            __import__("config.settings", fromlist=["LEGACY_PROB_SOURCE"]).LEGACY_PROB_SOURCE,
+            "main",
+            "cls",
+        )
+        n = 4
+        reg_out = np.linspace(0.01, 0.05, n)
+        cls_out = np.array([0.20, 0.40, 0.60, 0.80])
+        b = _make_bundle(n, reg_out, cls_out)
+        b["prob_source"] = "reg"
+        out = _predict_with(b, "main", _make_features(n))
+        assert np.allclose(out["prob_up_10d"], cls_out)
+
 
 def _make_trained(board: str) -> dict:
     """假模型帧: cls 概率与标签正相关 (IC>0), reg 与标签反相关 (IC<0)."""
@@ -148,11 +181,24 @@ class TestValidateOosGateHead:
         assert oos["ics"]["10d_cls"] > 0.3
         assert oos["ics"]["10d_reg"] < -0.3  # 残差头反相关被如实记录
 
-    def test_main_gate_keeps_reg_heads(self):
+    def test_auto_picks_winning_head_for_main(self):
+        """[0912 夜] auto 默认: main 不再钉死 reg — argmax 自选 (cls 正 → cls)."""
+        trainer = dtt.DualTrackTrainer.__new__(dtt.DualTrackTrainer)
+        oos = trainer.validate_oos(_make_trained("main"))
+        assert oos["gate_head"] == "cls"
+        assert oos["pass"] is True  # cls 头正 IC, reg 头全负也不拦
+
+    def test_forced_knob_pins_reg_gate_for_main(self, monkeypatch):
+        """显式强制 = 回滚旋钮: 钉死 reg 头闸判 (压过 argmax)."""
+        monkeypatch.setitem(
+            __import__("config.settings", fromlist=["LEGACY_PROB_SOURCE"]).LEGACY_PROB_SOURCE,
+            "main",
+            "reg",
+        )
         trainer = dtt.DualTrackTrainer.__new__(dtt.DualTrackTrainer)
         oos = trainer.validate_oos(_make_trained("main"))
         assert oos["gate_head"] == "reg"
-        assert oos["pass"] is False  # main 闸仍由 (反相关) reg 头判死
+        assert oos["pass"] is False  # (反相关) reg 头判死
 
     def test_gate_formula_matches_head_ics(self):
         from app.pipeline1.label_engine import LABEL_WEIGHTS
@@ -191,3 +237,24 @@ class TestValidateOosGateHead:
         oos_main = trainer.validate_oos(_make_trained("main"))
         assert oos_main["weighted_ic_cls"] > 0
         assert oos_main["weighted_ic_reg"] < 0
+
+
+class TestProbSourcePersistence:
+    def test_save_persists_prob_source(self, tmp_path):
+        trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
+        trained = _make_trained("dual")
+        trained["calibrators"] = {}
+        trained["calibrator"] = {}
+        trained["prob_source"] = "cls"
+        path = trainer.save(trained, "t1")
+        b = dtt.DualTrackTrainer.load(path)
+        assert b["prob_source"] == "cls"
+
+    def test_save_without_prob_source_omits_key(self, tmp_path):
+        trainer = dtt.DualTrackTrainer(model_dir=str(tmp_path))
+        trained = _make_trained("main")
+        trained["calibrators"] = {}
+        trained["calibrator"] = {}
+        path = trainer.save(trained, "t2")
+        b = dtt.DualTrackTrainer.load(path)
+        assert "prob_source" not in b  # 旧包语义: 推理端走 FALLBACK
