@@ -342,3 +342,4 @@ MAG10D_CAL = {
 PARALLEL_RANK_SOURCE = {"main": "auto", "dual": "auto"}
 RANK_SOURCE_MAX_STALE_DAYS = 45  # json trained_through 距 serving 日上限 (日历日)
 RANK_SOURCE_EVAL_DAYS = 60  # trailing 已实现决策日评估窗
+RANK_SOURCE_PURGE_DAYS = 11  # [0913 purged_v1] 影子重评 purge 间隔 (交易日) = buy_lag 1 + 10d 视界, 同 MAG10D_CAL realized_drop (calibration.py)

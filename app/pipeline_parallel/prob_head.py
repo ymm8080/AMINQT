@@ -154,15 +154,15 @@ def synthesize_prob_extras(df: pd.DataFrame, board: str) -> pd.DataFrame:
     return df
 
 
-def train_bundle(
-    board: str, t: pd.DataFrame, trained_through: str, half_life: int | None
-) -> Path:
-    """全史扩窗训练概率头 → WORM bundle. t 需含全部特征 + mfe_3d + label_pain.
+def _fit_cls_model(
+    board: str, t: pd.DataFrame, half_life: int | None
+) -> tuple[LGBMClassifier, list[str]]:
+    """拟合单档概率头 LGBM → (model, feat_cols). train_bundle 与 purged 影子重评
+    (scripts/_train_parallel_prob_head._shadow_prob) 共用的唯一拟合口径.
 
-    trained_through = 训练数据覆盖到的最后交易日 ("YYYY-MM-DD", 面板最新日);
-    行过滤与回测同口径: mfe_3d 非 NaN 且 label_pain 非 NaN (mfe 尾段 NaN 不可训练).
-    half_life = 时间衰减样本加权半衰期 (自然日, PROB_GATE["half_lives"] 逐档);
-    None → 不加权 (回退原行为).
+    t 需含全部特征列 + mfe_3d + label_pain; 行过滤: mfe_3d 非 NaN 且 label_pain
+    非 NaN (mfe 尾段 NaN 不可训练). half_life = 时间衰减样本加权半衰期 (自然日);
+    None → 不加权. 训练样本 < 5000 → raise.
     """
     cols = feature_cols(t)
     y = (t["mfe_3d"] >= PROB_GATE["abs_target"]).astype(float)
@@ -175,6 +175,20 @@ def train_bundle(
     if half_life is not None:
         fit_kwargs["sample_weight"] = decay_sample_weights(t.loc[ok, "date"], half_life)
     model.fit(x, y.loc[ok].to_numpy(), **fit_kwargs)
+    return model, cols
+
+
+def train_bundle(
+    board: str, t: pd.DataFrame, trained_through: str, half_life: int | None
+) -> Path:
+    """全史扩窗训练概率头 → WORM bundle. t 需含全部特征 + mfe_3d + label_pain.
+
+    trained_through = 训练数据覆盖到的最后交易日 ("YYYY-MM-DD", 面板最新日);
+    行过滤与回测同口径: mfe_3d 非 NaN 且 label_pain 非 NaN (mfe 尾段 NaN 不可训练).
+    half_life = 时间衰减样本加权半衰期 (自然日, PROB_GATE["half_lives"] 逐档);
+    None → 不加权 (回退原行为).
+    """
+    model, cols = _fit_cls_model(board, t, half_life)
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     tag = "nodecay" if half_life is None else f"hl{int(half_life)}"
     path = bundle_dir() / f"{board}_prob_{tag}_{ts}.joblib"

@@ -63,13 +63,53 @@ def _missing_feat_cols(bundle: dict | None, columns) -> list[str]:
     return [c for c in bundle.get("feat_cols", []) if c not in have]
 
 
+def _shadow_prob(
+    board: str, t: pd.DataFrame, eval_rows: pd.DataFrame, eval_lo
+) -> np.ndarray:
+    """purged 影子概率 (0913 purged_v1): eval 窗前推 RANK_SOURCE_PURGE_DAYS 交易日
+    截断面板重拟合各半衰期档, 影子集预测 eval_rows.
+
+    动机: 原口径用在役全史 bundle 评 eval 窗 → 尾部 eval 日 100% in-sample →
+    prob 系统性虚高 (0912 首评双板选 prob, walk-forward #11 实测 mag 碾压).
+    purge = buy_lag 1 + 10d 视界 = 11 交易日, 同 MAG10D_CAL realized_drop
+    (calibration.py) 无前瞻口径; label_pain 3d 窗 < 11 亦全覆盖.
+    任一档 fit raise → 向上抛 (调用方 fail-open).
+    """
+    from app.pipeline_parallel.config import RANK_SOURCE_PURGE_DAYS
+
+    uniq = np.unique(t["date"].values)
+    pos = int(np.searchsorted(uniq, pd.Timestamp(eval_lo).to_datetime64()))
+    purge = int(RANK_SOURCE_PURGE_DAYS)
+    if pos < purge:
+        raise ValueError(
+            f"[{board}] 面板日期不足以前推 {purge} 交易日 purge "
+            f"(eval_lo={eval_lo}) -> 影子评估放弃 (fail-open)"
+        )
+    cut = uniq[pos - purge]
+    train = t.loc[t["date"] <= cut]
+    if train.empty:
+        raise ValueError(f"[{board}] purged 影子训练集为空 (cutoff={cut})")
+    shadow: list[dict] = []
+    for hl in PROB_GATE["half_lives"]:
+        print(
+            f"[{board}] purged 影子拟合 hl={hl} "
+            f"(train<={pd.Timestamp(cut):%Y-%m-%d}, {len(train):,} 行)",
+            flush=True,
+        )
+        model, cols = prob_head._fit_cls_model(board, train, hl)
+        shadow.append({"feat_cols": cols, "model": model})
+    return prob_head.ensemble_predict(shadow, eval_rows).to_numpy()
+
+
 def _eval_rank_source(board: str, t: pd.DataFrame, trained_through: str) -> None:
     """[0912 夜用户令] 重训后评估 mag/prob/blend 三键 → WORM json + 头选择台账行.
 
     mag = 服务同款 calibrate_mag10d (both 口径 score, 只用已实现标签, 无前瞻);
-    prob = 全档位 bundle 集成; 指标 = trailing RANK_SOURCE_EVAL_DAYS 个已实现决策日
-    逐视界 (3d/5d/10d, 用户令) Spearman + TOP10 实得。argmax 加权 IC 自选
-    (平局→blend)。任何异常 → fail-open 跳过 (serving 维持 blend, 不杀链)。
+    prob = [0913 purged_v1] purged 影子重评 (_shadow_prob): eval 窗 cutoff 前推
+    11 交易日截断重拟合, 消除在役全史 bundle 对 eval 尾段的 in-sample 虚高;
+    指标 = trailing RANK_SOURCE_EVAL_DAYS 个已实现决策日逐视界 (3d/5d/10d,
+    用户令) Spearman + TOP10 实得。argmax 加权 IC 自选 (平局→blend)。
+    任何异常 → fail-open 跳过 (serving 维持 blend, 不杀链)。
     头名映射 (台账列共用): mag≈reg 幅度头, prob≈cls 概率头。
     """
     from app.pipeline_parallel import rank_source
@@ -98,8 +138,10 @@ def _eval_rank_source(board: str, t: pd.DataFrame, trained_through: str) -> None
         if missing:
             raise ValueError(f"概率头特征缺 {len(missing)} 列: {missing[:5]}")
         use_dates = sorted(mag["date"].unique())[-(int(RANK_SOURCE_EVAL_DAYS) + 15):]
+        # [0913 purged_v1] prob 换 purged 影子重评: 在役 bundle 见过全部历史,
+        # eval 尾段 in-sample → prob 虚高; 影子 = cutoff 前推 11 交易日重拟合.
         rows = t.loc[t["date"].isin(use_dates), ["symbol", "date"] + feat_union].copy()
-        rows["prob"] = prob_head.ensemble_predict(list(bundles.values()), rows).to_numpy()
+        rows["prob"] = _shadow_prob(board, t, rows, use_dates[0])
         labels = panel[["symbol", "date"] + [f"label_pm_{h}_net" for h in rank_source.HORIZONS]]
         frame = (
             mag.merge(rows[["symbol", "date", "prob"]], on=["symbol", "date"], how="left")
@@ -112,6 +154,7 @@ def _eval_rank_source(board: str, t: pd.DataFrame, trained_through: str) -> None
             "board": board,
             "trained_through": trained_through,
             "chosen": chosen,
+            "eval_mode": "purged_v1",
             "eval_days": int(RANK_SOURCE_EVAL_DAYS),
             "metrics": evaluation,
             "n_rows": int(len(frame)),
