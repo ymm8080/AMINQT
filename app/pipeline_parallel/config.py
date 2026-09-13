@@ -340,7 +340,12 @@ MAG10D_CAL = {
 # 按最新 json 换板级排序键。头名映射: mag≈LEGACY reg, prob≈LEGACY cls。
 # "auto"=按 json; 显式 "mag"/"prob"/"blend"=强制旋钮 (回退用)。
 # fail-open: 无 json / 过旧 / 异常 → blend (2026-08-15 A/B 定案现状, 不杀清单)。
-PARALLEL_RANK_SOURCE = {"main": "auto", "dual": "auto"}
+# [0913 用户令] auto→mag 双板强制: 夜间影子单次 refit (评估窗前 11td 截断) →
+# 窗尾由 ~4 月陈旧模型评分, json chosen=prob 是陈旧假象; freshwf 定裁检查
+# (rankkey_freshwf_check_0913, 2 折新鲜 refit 同帧) prob 双板全负 (main
+# −.011/−.021/−.030, dual −.000/−.004/−.005), TOP10 mag 双板最优。恢复 auto
+# 须先把夜间影子升级为逐折新鲜 refit 口径。
+PARALLEL_RANK_SOURCE = {"main": "mag", "dual": "mag"}
 RANK_SOURCE_MAX_STALE_DAYS = 45  # json trained_through 距 serving 日上限 (日历日)
 RANK_SOURCE_EVAL_DAYS = 60  # trailing 已实现决策日评估窗
 RANK_SOURCE_PURGE_DAYS = 11  # [0913 purged_v1] 影子重评 purge 间隔 (交易日) = buy_lag 1 + 10d 视界, 同 MAG10D_CAL realized_drop (calibration.py)
