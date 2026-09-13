@@ -145,6 +145,10 @@ def load_stage_cands(board: str, cands: list[str]) -> tuple[pd.DataFrame, list[s
         base_cols = [c for c in base_cols if c in schema]
     overhead = ["symbol", "date", "close_hfq", "high_hfq", "adv20", "label_pain", "label_pm_10d_net", *NET_LABELS]
     pool_cols = sorted(set(SNIPER.pool) | set(FUSION.pool))
+    pool_missing = [c for c in pool_cols if c not in schema]  # pv_corr_5 缺席 stage: 入池(2fbd4374)早于检查点转储
+    if pool_missing:
+        log.warning("[load:%s] 池列缺席 stage (read 剔除, pool_score 同口径跳过): %s", board, pool_missing)
+        pool_cols = [c for c in pool_cols if c in schema]
     cands = [c for c in cands if c in schema]
     miss = [c for c in FAMILY_PACKS_COLS if c not in schema and c not in base_cols]
     if miss:
