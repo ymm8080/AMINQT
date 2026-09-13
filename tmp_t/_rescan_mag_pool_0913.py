@@ -268,6 +268,9 @@ def _frame_from(df, test_idx, mag: pd.Series, prob: np.ndarray) -> pd.DataFrame:
     fr = df.loc[test_idx, ["symbol", "date"]].reset_index(drop=True)
     fr["mag"] = mag.loc[test_idx].to_numpy(dtype=float)
     fr["prob"] = prob
+    # 物化 blend (rank_source.py:73 同式 mag×prob): 判官 argmax 可选 blend 键,
+    # _loser_enrich 按键取列 — 缺列必 KeyError (0713 第二崩, addendum 同病)
+    fr["blend"] = fr["mag"] * fr["prob"]
     for c in NET_LABELS:
         fr[c] = df.loc[test_idx, c].to_numpy()
     return fr
