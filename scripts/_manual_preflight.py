@@ -41,7 +41,9 @@ def _under_chain() -> bool:
 
         parent = psutil.Process(os.getppid())
         cmd = " ".join(parent.cmdline() or [])
-        return any(k in cmd for k in ("run_daily_automation.py", "_four_module_run_0913.py"))
+        return any(
+            k in cmd for k in ("run_daily_automation.py", "_four_module_run_0913.py")
+        )
     except Exception:  # noqa: BLE001 — 判不出当手工跑 (宁重复勿跳过)
         return False
 
