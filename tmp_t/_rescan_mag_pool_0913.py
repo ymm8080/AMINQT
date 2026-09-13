@@ -67,7 +67,7 @@ TEST_DAYS = 60
 HALF_LIVES = (15,)
 NET_LABELS = ("label_pm_3d_net", "label_pm_5d_net", "label_pm_10d_net")
 AUDIT_CSV = Path(r"D:\AMINQT\DATA OTHERS\diag\panel_nonpin_oosic_20260912.csv")
-START_AT = "2026-09-13 09:15:00"  # 用户令 8h 后启动 (挂载时刻 ~01:15)
+START_AT = "2026-09-13 05:00:00"  # 0913 晨用户令提前手动发射 (09:15 schtasks 已停用防双跑)
 
 MIN_ABS_IC = 0.02
 MIN_COV = 0.90
