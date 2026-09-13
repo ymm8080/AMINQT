@@ -6,6 +6,8 @@
   Layer 2 输出级时间 EMA 平滑 — 近 SMOOTH_K 可用交易日 raw 预测衰减加权 (ema_smooth)
 """
 
+import time
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -390,3 +392,56 @@ def test_rank_and_truncate_board_gate_down_falls_back_to_mag():
     assert m["symbol"].tolist() == ["mB", "mA"]  # blend: 0.072 > 0.030
     assert d["symbol"].tolist() == ["dB", "dA"]  # 失效板纯 mag
     assert d["rank_blend"].tolist() == [0.09, 0.05]  # NaN 归一为 mag
+
+
+def _adaptive_rows():
+    """mag 序 A>C>B; prob 序 B>C>A; blend 序 B>C>A — 三键可分胜负."""
+    return [
+        {"board": "main", "symbol": "A", "pred_mag_10d": 0.10, "pred_prob": 0.30, "score": 0.5},
+        {"board": "main", "symbol": "B", "pred_mag_10d": 0.08, "pred_prob": 0.90, "score": 0.5},
+        {"board": "main", "symbol": "C", "pred_mag_10d": 0.09, "pred_prob": 0.60, "score": 0.5},
+    ]
+
+
+def _patch_rank_source_choice(monkeypatch, chosen: str):
+    """注入受控评估 json (新鲜), 走真实 resolve_rank_key 链路."""
+    from app.pipeline_parallel import rank_source
+
+    monkeypatch.setattr(
+        rank_source,
+        "load_latest_rank_source",
+        lambda board, directory=None: {
+            "chosen": chosen,
+            "trained_through": time.strftime("%Y-%m-%d"),
+        },
+    )
+
+
+def test_rank_and_truncate_adaptive_mag_key(monkeypatch):
+    """[0912 夜] json chosen=mag → 板级键纯 mag (blend 序被 mag 序接管)."""
+    from scripts._shortlist_t5_t10 import rank_and_truncate
+
+    _patch_rank_source_choice(monkeypatch, "mag")
+    out = rank_and_truncate(pd.DataFrame(_adaptive_rows()))
+    assert out["symbol"].tolist() == ["A", "C", "B"]  # 纯 mag 序
+
+
+def test_rank_and_truncate_adaptive_prob_key(monkeypatch):
+    """[0912 夜] json chosen=prob → 板级键纯 pred_prob."""
+    from scripts._shortlist_t5_t10 import rank_and_truncate
+
+    _patch_rank_source_choice(monkeypatch, "prob")
+    out = rank_and_truncate(pd.DataFrame(_adaptive_rows()))
+    assert out["symbol"].tolist() == ["B", "C", "A"]  # 纯 prob 序
+
+
+def test_rank_and_truncate_adaptive_prob_key_guards_dead_gate(monkeypatch):
+    """chosen=prob 但该板 pred_prob 全 NaN (闸失效) → 回退纯 mag, 不出任意序."""
+    from scripts._shortlist_t5_t10 import rank_and_truncate
+
+    _patch_rank_source_choice(monkeypatch, "prob")
+    rows = _adaptive_rows()
+    for r in rows:
+        r["pred_prob"] = float("nan")
+    out = rank_and_truncate(pd.DataFrame(rows))
+    assert out["symbol"].tolist() == ["A", "C", "B"]  # mag 序接管

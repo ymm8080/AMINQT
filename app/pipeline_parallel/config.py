@@ -331,3 +331,14 @@ MAG10D_CAL = {
     "buy_lag": 1,  # 买在 close[T+1] (相对决策日 D)
     "label_horizon": 10,  # 视界 10 交易日
 }
+
+# ── 排名键自适应 (0912 夜用户令: parallel 自动选更好的一头出预测) ──
+# 每次概率头重训/夜间脚本评估 mag(幅度头)/prob(概率头)/blend 三键在 trailing
+# 已实现决策日的逐视界 (3d/5d/10d) 表现 (app.pipeline_parallel.rank_source),
+# WORM json 记 chosen (argmax 加权 IC, 平局→blend); serving rank_and_truncate
+# 按最新 json 换板级排序键。头名映射: mag≈LEGACY reg, prob≈LEGACY cls。
+# "auto"=按 json; 显式 "mag"/"prob"/"blend"=强制旋钮 (回退用)。
+# fail-open: 无 json / 过旧 / 异常 → blend (2026-08-15 A/B 定案现状, 不杀清单)。
+PARALLEL_RANK_SOURCE = {"main": "auto", "dual": "auto"}
+RANK_SOURCE_MAX_STALE_DAYS = 45  # json trained_through 距 serving 日上限 (日历日)
+RANK_SOURCE_EVAL_DAYS = 60  # trailing 已实现决策日评估窗

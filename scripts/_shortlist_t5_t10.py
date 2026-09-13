@@ -59,6 +59,7 @@ from app.pipeline1.risk_overlays import share_float_upcoming_scan
 from app.pipeline_parallel import prob_head
 from app.pipeline_parallel.calibration import calibrate_mag10d
 from app.pipeline_parallel.config import FUSION, HORIZONS, SNIPER, effective_pool
+from app.pipeline_parallel.rank_source import resolve_rank_key
 from app.pipeline_parallel.scoring import pool_score
 from config.settings import (
     DATA_DIR,
@@ -1145,17 +1146,38 @@ def unlock_hard_filter(res: pd.DataFrame, ref_date) -> pd.DataFrame:
     return res.loc[~mask].reset_index(drop=True)
 
 
+def board_rank_key_values(board: str, frame: pd.DataFrame) -> tuple[str, pd.Series]:
+    """[0912 夜] 板级排名键自适应: 返回 (键名, 键值列)。
+
+    键名 = resolve_rank_key (auto→最新评估 json; 显式旋钮强制; 异常/无 json→blend)。
+    数据在位守卫: prob/blend 键需该板 pred_prob 有非 NaN — 闸失效板回退纯 mag
+    (不能拿全 NaN 的 prob/blend 排, 会出任意序)。回退时键名记 "mag"。
+    """
+    chosen = resolve_rank_key(board)
+    has_prob = "pred_prob" in frame.columns and frame["pred_prob"].notna().any()
+    if chosen == "prob" and has_prob:
+        return "prob", frame["pred_prob"]
+    if chosen == "blend" and has_prob:
+        if "rank_blend" in frame.columns:
+            return "blend", frame["rank_blend"]
+        return "blend", frame[CAND_RANK_KEY] * frame["pred_prob"]
+    return "mag", frame[CAND_RANK_KEY]
+
+
 def rank_and_truncate(res: pd.DataFrame) -> pd.DataFrame:
     """2026-08-23 定案 (用户 top-10 档, feedback-need-top10): 入选 = 每板块 TOP-10.
 
     08-14 曾收紧 TOP-5 (250d 前沿 top5 幅度略优: 双创 +6.34% vs +5.76%, 主板 +3.49%
     vs +3.22%), 但用户交付/汇报默认 Top10 (memory feedback-need-top10, "i need top10"),
-    08-23 改回 TOP-10, cut 统一标 T-10 — 评价桶与交付桶同一深度. 排名键不变
-    (2026-08-15 A/B 定案): 概率闸已附 pred_prob 列时用 pred_mag_10d × pred_prob
-    (250d OOS 双板 TOP-5/TOP-10 全窗实得全赢); 无 pred_prob (闸失效 fail-open) →
-    退回纯 CAND_RANK_KEY (pred_mag_10d). 板块级回退: 该板 pred_prob 全 NaN → 该板
-    纯 mag 排 (不能拿全 NaN 的 blend 排, 会出任意序). 个股级 NaN 仍排尾 (A/B 口径).
-    入选行 rank_blend 把 NaN 归一为 mag 值, 供 build_merged 跨板全局排名.
+    08-23 改回 TOP-10, cut 统一标 T-10 — 评价桶与交付桶同一深度. 排名键 (2026-08-15
+    A/B 定案): 概率闸已附 pred_prob 列时用 pred_mag_10d × pred_prob; 无 pred_prob
+    (闸失效 fail-open) → 退回纯 CAND_RANK_KEY (pred_mag_10d). 个股级 NaN 仍排尾
+    (A/B 口径). 入选行 rank_blend 把 NaN 归一为 mag 值, 供 build_merged 跨板全局排名.
+
+    [0912 夜] 键自适应 (用户令: parallel 自动选更好的一头出预测): 板级键不再写死
+    blend — board_rank_key_values 按 rank_source 评估 json 在 mag/prob/blend 中
+    自选 (无 json/过旧 → blend = 原行为, 零变化). rank_blend 列仍始终构造,
+    build_merged 全局排名口径不受板级键切换影响.
     """
     if res.empty:
         return res
@@ -1167,12 +1189,15 @@ def rank_and_truncate(res: pd.DataFrame) -> pd.DataFrame:
         b = res[res["board"] == board]
         if b.empty:
             continue
-        key = (
-            "rank_blend"
-            if "rank_blend" in b.columns and b["pred_prob"].notna().any()
-            else CAND_RANK_KEY
+        name, key = board_rank_key_values(board, b)
+        if name != "blend":
+            print(f"[rank] {board} 自适应排名键 = {name}", flush=True)
+        # sort_values 不收任意值 Series (会当列标签解) → 挂临时列排
+        b = (
+            b.assign(_rk=key)
+            .sort_values("_rk", ascending=False, na_position="last")
+            .drop(columns="_rk")
         )
-        b = b.sort_values(key, ascending=False, na_position="last")
         out.append(b.head(10).assign(cut="T-10"))
     merged = pd.concat(out, ignore_index=True).reset_index(drop=True)
     if "rank_blend" in merged.columns:
@@ -1229,12 +1254,7 @@ def hysteresis_keep(
         bf = full[full["board"] == board]
         if bf.empty:
             continue
-        prob = (
-            bf["pred_prob"]
-            if "pred_prob" in bf.columns
-            else pd.Series(np.nan, index=bf.index)
-        )
-        k = bf[CAND_RANK_KEY] * prob  # NaN prob → NaN → 排尾 (rank_and_truncate 同口径)
+        _name, k = board_rank_key_values(board, bf)  # rank_and_truncate 同口径 (自适应)
         order = pd.DataFrame({"_i": bf.index, "_k": k}).sort_values(
             "_k", ascending=False, na_position="last"
         )

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -60,6 +61,88 @@ def _missing_feat_cols(bundle: dict | None, columns) -> list[str]:
         return []
     have = set(columns)
     return [c for c in bundle.get("feat_cols", []) if c not in have]
+
+
+def _eval_rank_source(board: str, t: pd.DataFrame, trained_through: str) -> None:
+    """[0912 夜用户令] 重训后评估 mag/prob/blend 三键 → WORM json + 头选择台账行.
+
+    mag = 服务同款 calibrate_mag10d (both 口径 score, 只用已实现标签, 无前瞻);
+    prob = 全档位 bundle 集成; 指标 = trailing RANK_SOURCE_EVAL_DAYS 个已实现决策日
+    逐视界 (3d/5d/10d, 用户令) Spearman + TOP10 实得。argmax 加权 IC 自选
+    (平局→blend)。任何异常 → fail-open 跳过 (serving 维持 blend, 不杀链)。
+    头名映射 (台账列共用): mag≈reg 幅度头, prob≈cls 概率头。
+    """
+    from app.pipeline_parallel import rank_source
+    from app.pipeline_parallel.calibration import calibrate_mag10d
+    from app.pipeline_parallel.config import RANK_SOURCE_EVAL_DAYS
+    from scripts._head_choice_ledger import append_head_choice_row
+    from scripts._shortlist_t5_t10 import _panel_per_stock
+
+    try:
+        bundles = prob_head.load_all_tiers(board)
+        if bundles is None:
+            print(f"[{board}] rank_source 评估跳过: 概率 bundle 不全 (fail-open)", flush=True)
+            return
+        panel = _panel_per_stock().get((board, "both"))
+        if panel is None or panel.empty:
+            print(f"[{board}] rank_source 评估跳过: both 面板缺失", flush=True)
+            return
+        work = panel[["symbol", "date", "score", "label_pm_10d_net"]].copy()
+        work["board"] = board
+        mag = calibrate_mag10d(work)  # → [symbol, date, board, mag] (已实现边界内)
+        # prob 只在评估窗行上预测 (trailing 已实现日 + 成熟余量), 特征取自训练帧 t
+        feat_union = sorted(
+            {c for b in bundles.values() for c in b.get("feat_cols", [])}
+        )
+        missing = [c for c in feat_union if c not in t.columns]
+        if missing:
+            raise ValueError(f"概率头特征缺 {len(missing)} 列: {missing[:5]}")
+        use_dates = sorted(mag["date"].unique())[-(int(RANK_SOURCE_EVAL_DAYS) + 15):]
+        rows = t.loc[t["date"].isin(use_dates), ["symbol", "date"] + feat_union].copy()
+        rows["prob"] = prob_head.ensemble_predict(list(bundles.values()), rows).to_numpy()
+        labels = panel[["symbol", "date"] + [f"label_pm_{h}_net" for h in rank_source.HORIZONS]]
+        frame = (
+            mag.merge(rows[["symbol", "date", "prob"]], on=["symbol", "date"], how="left")
+            .merge(labels, on=["symbol", "date"], how="left")
+        )
+        evaluation = rank_source.evaluate_keys(frame, eval_days=RANK_SOURCE_EVAL_DAYS)
+        chosen = rank_source.choose_rank_key(evaluation)
+        prev = rank_source.load_latest_rank_source(board)
+        payload = {
+            "board": board,
+            "trained_through": trained_through,
+            "chosen": chosen,
+            "eval_days": int(RANK_SOURCE_EVAL_DAYS),
+            "metrics": evaluation,
+            "n_rows": int(len(frame)),
+            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        path = rank_source.save_rank_source(board, payload)
+        ics = {
+            f"{h}_{s}": evaluation[k]["per_horizon"][h]["ic"]
+            for h in rank_source.HORIZONS
+            for s, k in (("reg", "mag"), ("cls", "prob"))
+        }
+        wrote = append_head_choice_row(
+            "parallel",
+            board,
+            time.strftime("%Y%m%d"),
+            weighted_ic_reg=evaluation["mag"]["weighted_ic"],
+            weighted_ic_cls=evaluation["prob"]["weighted_ic"],
+            chosen=chosen,
+            gate_pass=True,
+            switched=bool(prev is not None and prev.get("chosen") != chosen),
+            ics=ics,
+            n_features=len(feat_union),
+        )
+        print(
+            f"[{board}] rank_source: chosen={chosen} "
+            f"(mag={evaluation['mag']['weighted_ic']}, prob={evaluation['prob']['weighted_ic']}) "
+            f"-> {path.name} (台账{'写入' if wrote else '已有跳过'})",
+            flush=True,
+        )
+    except Exception as exc:
+        print(f"[{board}] rank_source 评估失败 (fail-open, serving 维持 blend): {exc}", flush=True)
 
 
 def main() -> int:
@@ -111,6 +194,8 @@ def main() -> int:
                 f"-> {path.name}",
                 flush=True,
             )
+        # [0912 夜用户令] 每次运行都评估三键 (bundle 未重训日也可用新鲜面板复核)
+        _eval_rank_source(board, t, str(latest.date()))
     return 0 if ok else 1
 
 
