@@ -73,6 +73,7 @@ HEAVY_SENTINELS = (
     "_legacy_reg_fix_ab_0912.py",
     "_legacy_cls_ab_0912.py",
     "_overall_serving_replay_0912.py",
+    "_missfeat_sweep_parallel_0913.py",
 )
 ORCHESTRATOR_SENTINEL = "run_daily_automation.py"
 # 链级守卫额外把另一条链实例视为冲突; 脚本级不含 (见模块 docstring).
