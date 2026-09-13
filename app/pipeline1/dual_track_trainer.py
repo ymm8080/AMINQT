@@ -1234,8 +1234,10 @@ class DualTrackTrainer:
         切换判据 = 跨视界加权 IC (LABEL_WEIGHTS): 闸头模型 IC 按权重求和,
         1d 最不可执行 (T+1 买入当日不可卖) 权重最低, 3d 历史预测力最强.
         [09-12] 闸头 = serving 头: LEGACY_PROB_SOURCE="auto" (默认) 时每次重训
-        argmax(weighted_ic_reg, weighted_ic_cls) 自选 (用户令: cls vs reg 不
-        固定); 显式 "reg"/"cls" = 强制回滚. 闸判与交付同头 (判即所服务)。
+        自选 (用户令: cls vs reg 不固定); 显式 "reg"/"cls" = 强制回滚.
+        [09-13 用户令] auto 判据 IC→TOP10 净: IC 与 TOP10 可背离 (#11 WORM
+        main reg 修复臂 gw +.081 > cls +.058 但 TOP10 −.006 vs +.050),
+        TOP10=判定对象. 闸判与交付同头 (判即所服务)。
         """
         from config.settings import LEGACY_PROB_SOURCE
 
@@ -1269,13 +1271,44 @@ class DualTrackTrainer:
             / total_w
             for suffix in ("reg", "cls")
         }
-        # serving 头判定: auto = argmax 双头族聚合 (平手取 reg, 历史默认头);
-        # 显式 reg/cls = 强制回滚旋钮
+        # [0913 用户令] auto 头选择判据 IC→TOP10 净 (判定对象=TOP10): 双头族各
+        # 视界每日 top10 净收益均值再跨视界平均; 平手取 reg (历史默认头)
+        top10_net_by_head = {}
+        for suffix in ("reg", "cls"):
+            per_h = []
+            for k in LABEL_WEIGHTS:
+                kind = f"{k}d_{suffix}"
+                if kind not in trained["models"]:
+                    continue
+                model, _ = trained["models"][kind]
+                net_label = self._resolve_label(f"{k}d_reg", test.columns)
+                if net_label is None:
+                    continue
+                sub = test[["date", net_label]].dropna(subset=[net_label])
+                if sub.empty:
+                    continue
+                x = np.nan_to_num(
+                    test.loc[sub.index, cols_for(trained, kind)].values, nan=0.0
+                )
+                sub = sub.assign(
+                    _pred=(
+                        model.predict_proba(x)[:, 1]
+                        if suffix == "cls"
+                        else model.predict(x)
+                    )
+                ).sort_values(["date", "_pred"], ascending=[True, False])
+                sub["_rk"] = sub.groupby("date").cumcount() + 1
+                daily = sub.loc[sub["_rk"] <= 10].groupby("date")[net_label].mean()
+                per_h.append(float(daily.mean()))
+            top10_net_by_head[suffix] = (
+                float(np.mean(per_h)) if per_h else float("-inf")
+            )
+        # serving 头判定: auto = argmax 双头族 TOP10 净; 显式 reg/cls = 强制回滚旋钮
         src = LEGACY_PROB_SOURCE.get(trained.get("board"), "reg")
         gate_suffix = (
             src
             if src in ("reg", "cls")
-            else max(("reg", "cls"), key=lambda s: weighted_ic_by_head[s])
+            else max(("reg", "cls"), key=lambda s: top10_net_by_head[s])
         )
         weighted_ic = weighted_ic_by_head[gate_suffix]
         return {
@@ -1284,6 +1317,8 @@ class DualTrackTrainer:
             "weighted_ic": weighted_ic,
             "weighted_ic_reg": weighted_ic_by_head["reg"],
             "weighted_ic_cls": weighted_ic_by_head["cls"],
+            "top10_net_reg": top10_net_by_head["reg"],
+            "top10_net_cls": top10_net_by_head["cls"],
             "pass": weighted_ic >= ic_min,
             "threshold": ic_min,
             "best_ic_key": max(ics, key=lambda k: ics.get(k, 0.0)),

@@ -474,15 +474,17 @@ LEGACY_SELECTION = {
 }
 
 # ── prob_up 来源头 (2026-09-12 用户拍板: dual 切 cls → 当夜再定为每训动态) ──
-# [0912 夜用户令] cls vs reg 不固定: 每次重训 argmax(weighted_ic_reg,
-# weighted_ic_cls) 自选 serving 头, 判定落 bundle["prob_source"] +
-# data/others/head_choice_ledger.csv (双管线四格统一台账, 只追加)。
+# [0912 夜用户令] cls vs reg 不固定: 每次重训 argmax 自选 serving 头, 判定落
+# bundle["prob_source"] + data/others/head_choice_ledger.csv (双管线四格
+# 统一台账, 只追加)。[0913 用户令] 自选判据 IC→TOP10 净 (argmax(top10_net_reg,
+# top10_net_cls)): 判定对象=TOP10, IC 与 TOP10 可背离 (#11 WORM main reg 修复
+# 臂 gw +.081>cls +.058 但 TOP10 −.006 vs +.050)。
 # "auto" = 动态自选 (默认, 平手取 reg=历史默认头);
 # 显式 "reg"/"cls" = 强制回滚旋钮 (闸判与推理都按强制头, 压过 bundle 记录)。
 # 旧 bundle 无 prob_source 键 → 按 LEGACY_PROB_SOURCE_FALLBACK 回退 = auto 前
 # 各板静态默认 (main=reg 残差, dual=cls)。不硬性提名 cls: main 何时切 cls 由
-# 下次重训的 argmax 按该批 OOS 自判 (0910 批 60d 重放 cls IC +0.066 vs reg
-# +0.0214 → 下次大概率自选 cls, 但由管线说了算)。
+# 下次重训的 argmax 按该批 OOS 自判 (0912 夜 #11 WORM main cls TOP10 净 +.050
+# vs reg 最好修复臂 −.006 → 下次大概率自选 cls, 但由管线说了算)。
 # 同一旋钮驱动两处: V35Predictor.prob_up_kd 源 + DualTrackTrainer.validate_oos
 # 闸头 (cls 经 predict_proba 取 Rank IC)。
 LEGACY_PROB_SOURCE = {

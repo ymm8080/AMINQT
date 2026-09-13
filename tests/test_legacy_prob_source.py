@@ -5,9 +5,9 @@
   1. V35Predictor: 显式 reg/cls 强制 > bundle["prob_source"] (重训 argmax
      落盘) > 旧 bundle 回退 FALLBACK (main=reg 残差 / dual=cls Platt);
      pred NaN 行回退 cls 不变。
-  2. DualTrackTrainer.validate_oos: "auto" 默认 = argmax(weighted_ic_reg,
-     weighted_ic_cls) 自选闸头 (用户令: cls vs reg 不固定, 每训复判);
-     显式值强制。cls hard-label 不进 Rank IC。
+  2. DualTrackTrainer.validate_oos: "auto" 默认 = argmax(top10_net_reg,
+     top10_net_cls) 自选闸头 (0913 用户令: 判据 IC→TOP10 净, 判定对象=TOP10;
+     cls vs reg 不固定, 每训复判); 显式值强制。cls hard-label 不进 Rank IC。
   3. bundle 持久化: save() 落 prob_source, 旧包无键。
 """
 
@@ -191,6 +191,45 @@ def _make_trained(board: str) -> dict:
     }
 
 
+def _make_trained_top10_divergent(board: str) -> dict:
+    """IC 与 TOP10 背离帧 (0913 判据用): reg IC 近完美但 top10 选到中段
+    (真顶部10只预测被压到165档), cls IC 中等 (中段倒序) 但 top10 全对."""
+    n_sym, n_days = 200, 2
+    labels = np.arange(1, n_sym + 1, dtype=float)
+    reg_pred = labels.copy()
+    reg_pred[-10:] = 165.1 + np.arange(10)  # 191..200 压到 165.x → top10=181..190
+    cls_pred = labels / 250.0  # 缩放进 (0,1) 保 _FakeCls clip 不失序
+    cls_pred[50:150] = cls_pred[50:150][::-1]  # 中段倒序 → IC 降, 顶部不动
+    frames = []
+    for d in range(n_days):
+        frames.append(
+            pd.DataFrame(
+                {
+                    "symbol": [f"{300000 + i:06d}" for i in range(n_sym)],
+                    "date": pd.Timestamp("2026-08-01") + pd.Timedelta(days=d),
+                    "f1": labels / n_sym,
+                    "label_3d": labels,
+                    "label_5d": labels,
+                    "label_10d": labels,
+                    "label_3d_cls": (labels > n_sym / 2).astype(float),
+                    "label_5d_cls": (labels > n_sym / 2).astype(float),
+                    "label_10d_cls": (labels > n_sym / 2).astype(float),
+                }
+            )
+        )
+    df = pd.concat(frames, ignore_index=True)
+    models = {}
+    for k in (3, 5, 10):
+        models[f"{k}d_reg"] = (_FakeReg(np.tile(reg_pred, n_days)), f"label_{k}d")
+        models[f"{k}d_cls"] = (_FakeCls(np.tile(cls_pred, n_days)), f"label_{k}d_cls")
+    return {
+        "board": board,
+        "segs": {"test": df},
+        "models": models,
+        "feature_cols": ["f1"],
+    }
+
+
 class TestValidateOosGateHead:
     def test_dual_gate_uses_cls_heads(self):
         trainer = dtt.DualTrackTrainer.__new__(dtt.DualTrackTrainer)
@@ -220,6 +259,16 @@ class TestValidateOosGateHead:
         oos = trainer.validate_oos(_make_trained("main"))
         assert oos["gate_head"] == "reg"
         assert oos["pass"] is False  # (反相关) reg 头判死
+
+    def test_auto_judges_by_top10_not_ic(self):
+        """[0913 用户令] auto 判据 = TOP10 净非 IC: reg IC 近完美但 top10 选到
+        中段 (185.5), cls IC 中等但 top10 全对 (195.5) → 选 cls."""
+        trainer = dtt.DualTrackTrainer.__new__(dtt.DualTrackTrainer)
+        oos = trainer.validate_oos(_make_trained_top10_divergent("main"))
+        assert oos["weighted_ic_reg"] > oos["weighted_ic_cls"]  # IC 讲反话
+        assert oos["top10_net_cls"] == pytest.approx(195.5)
+        assert oos["top10_net_reg"] == pytest.approx(185.5)
+        assert oos["gate_head"] == "cls"
 
     def test_gate_formula_matches_head_ics(self):
         from app.pipeline1.label_engine import LABEL_WEIGHTS
