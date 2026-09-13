@@ -1243,20 +1243,25 @@ class DualTrackTrainer:
             ics[kind] = ICScreener.rank_ic(
                 sub.rename(columns={"_pred": "score"}), "score", label
             )
-        # 跨视界加权 IC (闸头模型; 另一头仅记录不贡献)
+        # 跨视界加权 IC: 双头族聚合恒存 (闸头另存 weighted_ic 供闸判; 09-12 前
+        # 只留闸头聚合 → 另一头逐批无档可查, 历史轨迹只能重放 bundle)
         total_w = sum(LABEL_WEIGHTS.values())
-        weighted_ic = (
-            sum(
-                LABEL_WEIGHTS[k] * ics.get(f"{k}d_{gate_suffix}", 0.0)
-                for k in LABEL_WEIGHTS
+        weighted_ic_by_head = {
+            suffix: sum(
+                LABEL_WEIGHTS[k] * ics.get(f"{k}d_{suffix}", 0.0) for k in LABEL_WEIGHTS
             )
             / total_w
-        )
+            for suffix in ("reg", "cls")
+        }
+        weighted_ic = weighted_ic_by_head[gate_suffix]
         return {
             "ics": ics,
             "gate_head": gate_suffix,
             "weighted_ic": weighted_ic,
+            "weighted_ic_reg": weighted_ic_by_head["reg"],
+            "weighted_ic_cls": weighted_ic_by_head["cls"],
             "pass": weighted_ic >= ic_min,
+            "threshold": ic_min,
             "best_ic_key": max(ics, key=lambda k: ics.get(k, 0.0)),
         }
 

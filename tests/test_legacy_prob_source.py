@@ -164,3 +164,30 @@ class TestValidateOosGateHead:
             / sum(LABEL_WEIGHTS.values())
         )
         assert oos["weighted_ic"] == pytest.approx(expected, abs=1e-9)
+
+    def test_both_head_family_aggregates_always_stored(self):
+        """[09-12] cls/reg 双头族聚合恒存: 重训曾只落闸头聚合 → 另一头无档可查."""
+        from app.pipeline1.label_engine import LABEL_WEIGHTS
+
+        trainer = dtt.DualTrackTrainer.__new__(dtt.DualTrackTrainer)
+        for board in ("main", "dual"):
+            oos = trainer.validate_oos(_make_trained(board))
+            for suffix in ("reg", "cls"):
+                expected = (
+                    sum(
+                        LABEL_WEIGHTS[k] * oos["ics"].get(f"{k}d_{suffix}", 0.0)
+                        for k in LABEL_WEIGHTS
+                    )
+                    / sum(LABEL_WEIGHTS.values())
+                )
+                assert oos[f"weighted_ic_{suffix}"] == pytest.approx(
+                    expected, abs=1e-9
+                )
+            assert oos["weighted_ic"] == pytest.approx(
+                oos[f"weighted_ic_{oos['gate_head']}"], abs=1e-12
+            )
+            assert "threshold" in oos  # FAIL 行占位 '?' 修复
+        # main=reg 闸帧: cls 聚合为正、reg 聚合为负 → 同一报告双头齐备
+        oos_main = trainer.validate_oos(_make_trained("main"))
+        assert oos_main["weighted_ic_cls"] > 0
+        assert oos_main["weighted_ic_reg"] < 0

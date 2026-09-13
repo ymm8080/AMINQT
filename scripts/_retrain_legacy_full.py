@@ -191,6 +191,32 @@ def _finaltop_gate(board: str, new_path: str, cfg: dict) -> bool:
     return v["pass"]
 
 
+def _persist_oos_report(board: str, tag: str, res: dict) -> None:
+    """[09-12] OOS 逐头留档 (WORM): 含双头族聚合 weighted_ic_reg/cls.
+
+    重训日志曾只留闸头聚合 → cls/reg 另一头逐批无档可查 (main cls 轨迹缺口由此).
+    tag 即批次键, 同 tag 重跑不覆盖.
+    """
+    diag = data_others_path("diag")
+    diag.mkdir(parents=True, exist_ok=True)
+    out = diag / f"retrain_oos_{board}_{tag}.json"
+    if out.exists():
+        print(f"[{board}] OOS 留档已存在, 跳过 (WORM): {out}", flush=True)
+        return
+    payload = {
+        "board": board,
+        "tag": tag,
+        "path": res["path"],
+        "n_features": res.get("n_features"),
+        **res["oos"],
+    }
+    out.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    print(f"[{board}] OOS 留档 -> {out}", flush=True)
+
+
 def _record_canary_state(board: str, tag: str, prev_tag: str, cfg: dict) -> None:
     """晋升成功 → 记 canary state (scripts/_finaltop_canary.py 晋升后真 OOS 复核).
 
@@ -319,6 +345,7 @@ def main() -> int:
     skip_dual_switch = os.environ.get("LEGACY_FORCE_FALLBACK", "0") == "1"
     mods = load_modules()
     for board, res in results.items():
+        _persist_oos_report(board, tag, res)
         if skip_dual_switch and board == "dual" and res["switched"]:
             print(
                 "[dual] gate_d 非确定性漂移 (38→208 特征), 保留 20260811b, 跳过切换",
@@ -347,6 +374,8 @@ def main() -> int:
         else:
             print(
                 f"[{board}] OOS weighted_IC={res['oos'].get('weighted_ic'):.4f} "
+                f"(reg={res['oos'].get('weighted_ic_reg', float('nan')):.4f} "
+                f"cls={res['oos'].get('weighted_ic_cls', float('nan')):.4f}) "
                 f"< {res['oos'].get('threshold', '?')}, 保留旧模型",
                 flush=True,
             )
