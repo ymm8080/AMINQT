@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
-"""Tests for 10d 头秩目标变换 (LEGACY_10D_RANK_TARGET, 2026-09-10, 688228 案).
+"""Tests for reg 头秩目标变换 (LEGACY_REG_RANK_TARGET, 2026-09-10, 688228 案;
+2026-09-12 由 10d 单头泛化到全部 reg 幅度头 — dual 三头 OOS IC −0.11~−0.14).
 
-背景: 纯幅度 Huber 目标下 10d 头顶部承诺虚高 ~−10pp (匹配视界审计), 排名键
+背景: 纯幅度 Huber 目标下 reg 头顶部承诺虚高 ~−10pp (匹配视界审计), 排名键
 恰好取到最虚高的承诺 → 四连阴股入 TOP10。修复 = 训练目标改 per-date 截面
-百分位 + 训练段桶中位映射回收益语义 (bundle["10d_rank_map"])。
+百分位 + 训练段桶中位映射回收益语义 (bundle["{k}d_rank_map"], 10d 键不变).
 
-覆盖: 门控开关 / _train_one 秩目标分支 (真实训练, 断言目标 ∈ [0,1] 且
-per-date 归一) / fit_rank_map (单调 + 空桶插值 + 顶桶中位) / rank_map_apply
-(空映射透传 + 插值 + 裁剪) / fit_calibrator 10d 残差在收益语义空间 /
-V35Predictor 百分位→收益映射 (旧 bundle no-op)。
+覆盖: 门控开关 (enable/boards/kinds) / _train_one 秩目标分支 (真实训练,
+断言目标 ∈ [0,1] 且 per-date 归一, 3d/10d 双头) / fit_rank_map (单调 +
+空桶插值 + 顶桶中位) / rank_map_apply (空映射透传 + 插值 + 裁剪) /
+fit_calibrator reg 残差在收益语义空间 (10d + 5d 泛化) / V35Predictor
+百分位→收益映射 (3d 泛化 + 旧 bundle no-op).
 """
 
 import numpy as np
@@ -19,7 +21,7 @@ from app.pipeline1.dual_track_trainer import (
     DualTrackTrainer,
     fit_rank_map,
     rank_map_apply,
-    rank_target_enabled,
+    rank_target_kinds,
 )
 from app.pipeline1.predictor import V35Predictor
 
@@ -43,27 +45,37 @@ class _StubCls:
 
 
 def _patch_cfg(monkeypatch, **kw):
-    cfg = {"enable": False, "bins": 20, "boards": ["main", "dual"]}
+    cfg = {
+        "enable": False,
+        "bins": 20,
+        "boards": ["main", "dual"],
+        "kinds": ["3d_reg", "5d_reg", "10d_reg"],
+    }
     cfg.update(kw)
-    monkeypatch.setattr("config.settings.LEGACY_10D_RANK_TARGET", cfg)
+    monkeypatch.setattr("config.settings.LEGACY_REG_RANK_TARGET", cfg)
     return cfg
 
 
 # ── 门控 ──────────────────────────────────────────────────────
 def test_gate_off_by_default(monkeypatch):
     _patch_cfg(monkeypatch, enable=False)
-    assert not rank_target_enabled("main")
-    assert not rank_target_enabled("dual")
+    assert rank_target_kinds("main") == ()
+    assert rank_target_kinds("dual") == ()
 
 
 def test_gate_board_filter(monkeypatch):
     _patch_cfg(monkeypatch, enable=True, boards=["main"])
-    assert rank_target_enabled("main")
-    assert not rank_target_enabled("dual")
+    assert rank_target_kinds("main") == ("3d_reg", "5d_reg", "10d_reg")
+    assert rank_target_kinds("dual") == ()
+
+
+def test_gate_kinds_filter(monkeypatch):
+    _patch_cfg(monkeypatch, enable=True, kinds=["10d_reg"])
+    assert rank_target_kinds("main") == ("10d_reg",)
 
 
 # ── _train_one 秩目标分支 (真实 LightGBM, 迷你数据) ────────────
-def _mk_segs():
+def _mk_segs(h: str = "10d"):
     rows = []
     labels = [-0.05, 0.0, 0.03, 0.10]
     for d in ("2026-01-05", "2026-01-06", "2026-01-07"):
@@ -73,7 +85,7 @@ def _mk_segs():
                     "date": d,
                     "symbol": f"{600000 + i}.SH",
                     "f1": float(i) + 0.1 * labels.index(labels[i]),
-                    "label_10d_net": labels[i],
+                    f"label_{h}_net": labels[i],
                 }
             )
     tr = pd.DataFrame(rows)
@@ -97,6 +109,28 @@ def test_train_one_off_returns_raw_scale(monkeypatch, tmp_path):
     seg = _mk_segs()["train"].dropna(subset=[label])
     p = np.asarray(model.predict(seg[["f1"]].to_numpy(dtype=float)))
     # 幅度目标: 输出量级 = 标签量级 (百分位量级为 0..1, 幅度可超 ±0.1)
+    assert np.nanmax(np.abs(p)) > 0.01
+
+
+def test_train_one_3d_rank_target_in_unit_interval(monkeypatch, tmp_path):
+    # [0912 泛化] 3d 头同样可开秩目标 (kinds 门控)
+    _patch_cfg(monkeypatch, enable=True, kinds=["3d_reg"])
+    trainer = DualTrackTrainer(model_dir=str(tmp_path))
+    model, label = trainer._train_one("3d_reg", _mk_segs("3d"), ["f1"], "main")
+    assert label == "label_3d_net"
+    seg = _mk_segs("3d")["train"].dropna(subset=[label])
+    p = np.asarray(model.predict(seg[["f1"]].to_numpy(dtype=float)))
+    assert np.nanmin(p) >= 0.0 - 1e-6
+    assert np.nanmax(p) <= 1.0 + 1e-6
+
+
+def test_train_one_kind_not_enabled_returns_raw_scale(monkeypatch, tmp_path):
+    # kinds 未含 10d_reg → 10d 头保持幅度目标
+    _patch_cfg(monkeypatch, enable=True, kinds=["3d_reg"])
+    trainer = DualTrackTrainer(model_dir=str(tmp_path))
+    model, label = trainer._train_one("10d_reg", _mk_segs(), ["f1"], "main")
+    seg = _mk_segs()["train"].dropna(subset=[label])
+    p = np.asarray(model.predict(seg[["f1"]].to_numpy(dtype=float)))
     assert np.nanmax(np.abs(p)) > 0.01
 
 
@@ -150,8 +184,13 @@ def test_rank_map_apply_interp_and_clip():
 # ── fit_calibrator: 10d 残差在收益语义空间 ─────────────────────
 def test_fit_calibrator_resid_in_return_space(monkeypatch):
     monkeypatch.setattr(
-        "config.settings.LEGACY_10D_RANK_TARGET",
-        {"enable": True, "bins": 20, "boards": ["main"]},
+        "config.settings.LEGACY_REG_RANK_TARGET",
+        {
+            "enable": True,
+            "bins": 20,
+            "boards": ["main"],
+            "kinds": ["3d_reg", "5d_reg", "10d_reg"],
+        },
     )
     p = np.linspace(0.05, 0.95, 60)
     labels = np.linspace(-0.02, 0.10, 60)
@@ -170,6 +209,30 @@ def test_fit_calibrator_resid_in_return_space(monkeypatch):
     }
     DualTrackTrainer.fit_calibrator(trained)
     resid = np.asarray(trained["reg_resid_10d"])
+    mapped = np.interp(p, rmap["grid_pct"], rmap["grid_ret"])
+    expect = np.sort(labels - mapped)
+    assert np.allclose(resid, expect, atol=1e-9)
+
+
+def test_fit_calibrator_resid_5d_rank_map():
+    # [0912 泛化] 5d 秩映射头: 残差同样在收益语义空间
+    p = np.linspace(0.05, 0.95, 60)
+    labels = np.linspace(-0.01, 0.05, 60)
+    calib = pd.DataFrame({"f1": p, "label_5d_net": labels})
+    rmap = {
+        "grid_pct": [0.05, 0.5, 0.95],
+        "grid_ret": [-0.01, 0.02, 0.05],
+        "bins": 3,
+    }
+    trained = {
+        "board": "main",
+        "feature_cols": ["f1"],
+        "models": {"5d_reg": (_StubReg(p), "label_5d_net")},
+        "segs": {"calib": calib},
+        "5d_rank_map": rmap,
+    }
+    DualTrackTrainer.fit_calibrator(trained)
+    resid = np.asarray(trained["reg_resid_5d"])
     mapped = np.interp(p, rmap["grid_pct"], rmap["grid_ret"])
     expect = np.sort(labels - mapped)
     assert np.allclose(resid, expect, atol=1e-9)
@@ -215,6 +278,24 @@ def test_predictor_maps_rank_to_return_space():
     v = out.sort_values("symbol")["pred_ret_10d"].to_numpy(dtype=float)
     assert v[0] == pytest.approx(0.08)  # pct 0.95 → 顶桶收益
     assert v[1] == pytest.approx(0.03)  # pct 0.50 → 中桶收益
+
+
+def test_predictor_maps_rank_3d_per_horizon():
+    # [0912 泛化] 3d 秩映射独立生效 (10d 无映射 → 不动)
+    rmap = {"grid_pct": [0.05, 0.5, 0.95], "grid_ret": [-0.01, 0.02, 0.05], "bins": 3}
+    bundle = _mk_bundle(None)
+    bundle["models"]["3d_reg"] = (_StubReg([0.95, 0.50]), "label_3d_net")
+    bundle["3d_rank_map"] = rmap
+    pred = object.__new__(V35Predictor)
+    pred.bundles = {"main": bundle}
+    out = pred.predict(_mk_features(), "main")
+    v = out.sort_values("symbol")["pred_ret_3d"].to_numpy(dtype=float)
+    assert v[0] == pytest.approx(0.05)  # pct 0.95 → 顶桶收益
+    assert v[1] == pytest.approx(0.02)  # pct 0.50 → 中桶收益
+    # 10d 无映射 → 保留 stub 原始百分位输出
+    v10 = out.sort_values("symbol")["pred_ret_10d"].to_numpy(dtype=float)
+    assert v10[0] == pytest.approx(0.95)
+    assert v10[1] == pytest.approx(0.50)
 
 
 def test_predictor_legacy_bundle_without_map_unchanged():

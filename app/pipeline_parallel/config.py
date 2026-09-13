@@ -224,6 +224,21 @@ SLOW_BULL = SystemSpec(
 
 SYSTEMS: dict[str, SystemSpec] = {s.name: s for s in (SNIPER, FUSION, SLOW_BULL)}
 
+
+def effective_pool(spec: SystemSpec, board: str | None) -> tuple[str, ...]:
+    """幅度头 (mag) 有效特征池 = spec.pool + 该板 extras (8格矩阵 0912).
+
+    PARALLEL_HEAD_EXTRA_COLS[board]["mag"]; 空配置/未知板/board=None → 原 pool
+    原样 (零行为变化). extras 缺列由 pool_score 自动跳过并再归一化.
+    只作用于交付打分链 (write_system_lists / build_merged_shortlist /
+    _panel_per_stock / _anchor_frame); 诊断类 run_system 仍用 spec 原池.
+    """
+    from config.settings import PARALLEL_HEAD_EXTRA_COLS
+
+    extra = PARALLEL_HEAD_EXTRA_COLS.get(board or "", {}).get("mag") or []
+    return tuple(spec.pool) + tuple(c for c in extra if c not in spec.pool)
+
+
 # ── SLOW_BULL 市场状态条件退出 (2026-08-06) ──
 # 依据 data/_diag_slowbull_stability_* + _diag_slowbull_regime_*: trail8 是趋势跟随
 # 放大器 (上升段 +2~4pp, 下行段 -1.4~-5.2pp); 下行段池子所有退出都亏 (cur -0.68%/
@@ -317,3 +332,20 @@ MAG10D_CAL = {
     "buy_lag": 1,  # 买在 close[T+1] (相对决策日 D)
     "label_horizon": 10,  # 视界 10 交易日
 }
+
+# ── 排名键自适应 (0912 夜用户令: parallel 自动选更好的一头出预测) ──
+# 每次概率头重训/夜间脚本评估 mag(幅度头)/prob(概率头)/blend 三键在 trailing
+# 已实现决策日的逐视界 (3d/5d/10d) 表现 (app.pipeline_parallel.rank_source),
+# WORM json 记 chosen (argmax 加权 IC, 平局→blend); serving rank_and_truncate
+# 按最新 json 换板级排序键。头名映射: mag≈LEGACY reg, prob≈LEGACY cls。
+# "auto"=按 json; 显式 "mag"/"prob"/"blend"=强制旋钮 (回退用)。
+# fail-open: 无 json / 过旧 / 异常 → blend (2026-08-15 A/B 定案现状, 不杀清单)。
+# [0913 用户令] 撤销 auto→mag 硬切, 恢复 auto: 前提 = 夜间影子已升级逐折新鲜
+# refit (purged_v2_wf2: 评估窗分 RANK_SOURCE_WF_FOLDS 折, 每折折首−11td 截断
+# 重拟合) — purged_v1 单次 refit 的窗尾陈旧评分曾令 json chosen=prob 成为
+# 陈旧假象 (freshwf 定裁: 新鲜口径 prob 双板全负, rankkey_freshwf_check_0913)。
+PARALLEL_RANK_SOURCE = {"main": "auto", "dual": "auto"}
+RANK_SOURCE_MAX_STALE_DAYS = 45  # json trained_through 距 serving 日上限 (日历日)
+RANK_SOURCE_EVAL_DAYS = 60  # trailing 已实现决策日评估窗
+RANK_SOURCE_PURGE_DAYS = 11  # [0913 purged_v1] 影子重评 purge 间隔 (交易日) = buy_lag 1 + 10d 视界, 同 MAG10D_CAL realized_drop (calibration.py)
+RANK_SOURCE_WF_FOLDS = 2  # [0913 purged_v2] 评估窗折数: 每折独立新鲜 refit (折首−purge 截断), 评分口径对齐 freshwf 定裁

@@ -65,14 +65,25 @@ class V35Predictor:
         if bundle is None:
             raise RuntimeError(f"板块 {board} 模型包未加载")
         cols = bundle["feature_cols"]
+        by_kind = bundle.get("feature_cols_by_kind") or {}
+        # [2026-09-12] per-head 特征集: 缺列补 0 须覆盖全头并集 (reg/cls 头列集可不同)
+        all_cols = list(
+            dict.fromkeys(cols + [c for ks in by_kind.values() for c in ks])
+        )
         # [2026-08-31] brute 补齐第二层: 调用方经非 inference 模式 build (自动全量)
         # 的帧缺 _brute_ 列 — 带多日历史时在此定向补齐; 单日截面无法算滚动窗,
         # 跳过 (下游补 0 语义不变). build(inference_cols) 已补齐时此处零交集 no-op.
         if features["date"].nunique() > 1:
-            inject_missing_brute(features, cols)
+            inject_missing_brute(features, all_cols)
+        # [2026-09-12] per-head 合成特征: 与训练端 train_window 同公式整帧合成
+        # (per-date 截面 rank, 必须在最新截面截断之前)
+        if "quality_factor" in all_cols and "quality_factor" not in features.columns:
+            from .feature_selector import add_quality_factor
+
+            add_quality_factor(features)
         latest = features.sort_values("date").groupby("symbol").tail(1).copy()
         # 推理端无法复现的特征 (训练注入 _brute_ / 面板缺列) 补 0 + 告警, 防 KeyError
-        missing = [c for c in cols if c not in latest.columns]
+        missing = [c for c in all_cols if c not in latest.columns]
         if missing:
             for c in missing:
                 latest[c] = 0.0
@@ -80,27 +91,47 @@ class V35Predictor:
                 "[%s] 特征缺失 %d/%d 补 0: %s",
                 board,
                 len(missing),
-                len(cols),
+                len(all_cols),
                 missing[:5],
             )
         # np.nan_to_num: 特征面板可能含 NaN, 模型输入前必须清洗 (防 LightGBM 异常)
+        # [2026-09-12] per-head X: 同族头 (3d/5d/10d_reg 或 *_cls) 列清单一致 →
+        # 至多三个矩阵 (共享 + reg 族 + cls 族), 按列清单元组缓存;
+        # 共享矩阵 X 服务 extras (quantile/pain/rank 训练即共享清单)
         X = np.nan_to_num(
             latest[cols].to_numpy(dtype=float), nan=0.0, posinf=0.0, neginf=0.0
         )
+        _x_cache: dict[tuple, np.ndarray] = {tuple(cols): X}
+
+        def _x(kind: str) -> np.ndarray:
+            kcols = by_kind.get(kind) or cols
+            key = tuple(kcols)
+            if key not in _x_cache:
+                _x_cache[key] = np.nan_to_num(
+                    latest[kcols].to_numpy(dtype=float),
+                    nan=0.0,
+                    posinf=0.0,
+                    neginf=0.0,
+                )
+            return _x_cache[key]
+
         models = bundle["models"]
-        latest["pred_ret_3d"] = models["3d_reg"][0].predict(X)
-        latest["pred_ret_5d"] = models["5d_reg"][0].predict(X)
+        latest["pred_ret_3d"] = models["3d_reg"][0].predict(_x("3d_reg"))
+        latest["pred_ret_5d"] = models["5d_reg"][0].predict(_x("5d_reg"))
         latest["pred_ret_10d"] = (
-            models["10d_reg"][0].predict(X) if "10d_reg" in models else np.nan
+            models["10d_reg"][0].predict(_x("10d_reg"))
+            if "10d_reg" in models
+            else np.nan
         )
-        # [2026-09-10] 秩目标 bundle (LEGACY_10D_RANK_TARGET): 10d 头输出为截面
+        # [2026-09-10] 秩目标 bundle (LEGACY_REG_RANK_TARGET): 启用头输出为截面
         # 百分位, 经训练段桶中位映射回收益语义 — 须在 excess 加回 / prob 残差派生
-        # 之前 (二者都读 pred_ret_10d). 旧 bundle 无 10d_rank_map → no-op.
-        if "10d_rank_map" in bundle:
-            latest["pred_ret_10d"] = rank_map_apply(
-                bundle["10d_rank_map"],
-                latest["pred_ret_10d"].to_numpy(dtype=float),
-            )
+        # 之前 (二者都读 pred_ret_*). [0912 泛化] 逐视界各自映射; 旧 bundle 无
+        # {k}d_rank_map → no-op (10d 键不变).
+        for k in (3, 5, 10):
+            rmap = bundle.get(f"{k}d_rank_map")
+            col = f"pred_ret_{k}d"
+            if rmap is not None and col in latest.columns:
+                latest[col] = rank_map_apply(rmap, latest[col].to_numpy(dtype=float))
         # [08-29] 超额标签 bundle: 回归头输出 = 板内超额口径, 加回训练时存的市场
         # 均值常数复原绝对口径 — 下游概率派生/闸/清单语义不变, 只有日内排名变化.
         # 必须在 _reg_resid_prob (读 pred_ret) 之前.
@@ -116,10 +147,24 @@ class V35Predictor:
         #         IC_ret +0.105 vs p_cls -0.136; cls 头 test 段 IC≈0/负, 不排序).
         #         事件口径 = 净收益>0.5% (reg 主标签), 较旧 Platt cls (毛收益>0.5%) 低 ~0.2pp.
         #         旧 bundle 无 reg_resid_* → 回退 Platt cls (原逻辑).
+        # [09-12 夜] 源优先级: 显式 reg/cls 强制 (回滚旋钮) > bundle 动态选择
+        #         (重训 argmax 落盘 prob_source) > 旧 bundle 回退 (auto 前各板
+        #         静态默认 FALLBACK — 在役旧包行为不变).
+        from config.settings import LEGACY_PROB_SOURCE, LEGACY_PROB_SOURCE_FALLBACK
+
+        _src = LEGACY_PROB_SOURCE.get(board, "reg")
+        prob_src = (
+            _src
+            if _src in ("reg", "cls")
+            else (
+                bundle.get("prob_source")
+                or LEGACY_PROB_SOURCE_FALLBACK.get(board, "reg")
+            )
+        )
         calibrators = bundle.get("calibrators", {})
 
         def _platt_cls_prob(k: int, kind: str) -> np.ndarray:
-            raw = models[kind][0].predict_proba(X)[:, 1]
+            raw = models[kind][0].predict_proba(_x(kind))[:, 1]
             cal_k = calibrators.get(k) if calibrators else None
             return cal_k.predict_proba(raw) if cal_k is not None else raw
 
@@ -139,6 +184,10 @@ class V35Predictor:
                 continue
             p_cls = _platt_cls_prob(k, kind)
             p_reg = _reg_resid_prob(k)
+            if prob_src == "cls":
+                # dual [09-12]: cls 概率恒有限, 直接整列采用 (无 NaN 回退面)
+                latest[f"prob_up_{k}d"] = p_cls
+                continue
             # 单个 pred 异常 (NaN) 时按列回退 p_cls, 不整列报废
             latest[f"prob_up_{k}d"] = (
                 np.where(
@@ -207,11 +256,11 @@ class V35Predictor:
                         board,
                         np.std(raw_rank),
                     )
-                    reg_pred = models["3d_reg"][0].predict(X)
+                    reg_pred = models["3d_reg"][0].predict(_x("3d_reg"))
                     raw_rank = _cross_sectional_rank(reg_pred)
             except Exception:
                 logger.warning("[%s] LambdaRank 预测异常, 回退 pred_ret_3d 排名", board)
-                reg_pred = models["3d_reg"][0].predict(X)
+                reg_pred = models["3d_reg"][0].predict(_x("3d_reg"))
                 raw_rank = _cross_sectional_rank(reg_pred)
             latest["rank_score"] = raw_rank
             keep.append("rank_score")

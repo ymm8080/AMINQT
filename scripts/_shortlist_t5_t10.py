@@ -58,7 +58,8 @@ from app.pipeline1.label_engine import COST, slippage_tier
 from app.pipeline1.risk_overlays import share_float_upcoming_scan
 from app.pipeline_parallel import prob_head
 from app.pipeline_parallel.calibration import calibrate_mag10d
-from app.pipeline_parallel.config import FUSION, HORIZONS, SNIPER
+from app.pipeline_parallel.config import FUSION, HORIZONS, SNIPER, effective_pool
+from app.pipeline_parallel.rank_source import resolve_rank_key
 from app.pipeline_parallel.scoring import pool_score
 from config.settings import (
     DATA_DIR,
@@ -410,7 +411,7 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
     返回 {(board, key): DataFrame[symbol, date, score, mfe_3d..mfe_10d]}.
     """
     out: dict[tuple[str, str], pd.DataFrame] = {}
-    need = [
+    base_need = [
         "symbol",
         "date",
         "close_hfq",
@@ -419,11 +420,24 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
         "label_pm_3d_net",
         "label_pm_5d_net",
         "label_pm_10d_net",
-    ] + [c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"]
+    ]
     if _PANEL_CACHE.get("ready"):
         return _PANEL_CACHE["data"]
     for board in ("main", "dual"):
         fp = DATA_DIR / f"_diag_stage_{board}_3y.parquet"
+        # 幅度头 per-board extras (8格 0912): 有效池打分; 缺席面板的 extras 剔除+告警
+        pool_sn = effective_pool(SNIPER, board)
+        pool_fu = effective_pool(FUSION, board)
+        schema = set(pq.ParquetFile(str(fp)).schema_arrow.names)
+        miss = sorted((set(pool_sn) | set(pool_fu)) - schema - {"pv_corr_5"})
+        if miss:
+            print(
+                f"[pool:{board}] mag extras 缺席 stage 面板, 剔除: {miss}",
+                flush=True,
+            )
+        need = base_need + [
+            c for c in set(pool_sn) | set(pool_fu) if c != "pv_corr_5" and c in schema
+        ]
         dates = pd.to_datetime(
             pq.read_table(str(fp), columns=["date"]).to_pandas()["date"]
         )
@@ -440,9 +454,9 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
         t = t.sort_values(["symbol", "date"]).reset_index(drop=True)
         t = _add_mfe(t)
         fr_sn = t[["symbol", "date"]].copy()
-        fr_sn["score"] = pool_score(t, SNIPER.pool)
+        fr_sn["score"] = pool_score(t, pool_sn)
         fr_fu = t[["symbol", "date"]].copy()
-        fr_fu["score"] = pool_score(t, FUSION.pool)
+        fr_fu["score"] = pool_score(t, pool_fu)
         for h in HORIZONS:
             fr_sn[f"mfe_{h}"] = t[f"mfe_{h}"]
             fr_fu[f"mfe_{h}"] = t[f"mfe_{h}"]
@@ -660,7 +674,14 @@ def _anchor_frame(board: str, window: int = ANCHOR_WINDOW) -> pd.DataFrame:
     if len(uniq) < window + 12:
         return pd.DataFrame()
     cutoff = uniq[-(window + 12)]
-    pool_cols = [c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"]
+    # 幅度头 per-board extras (8格 0912): 与 _panel_per_stock 同有效池 (score 跨日
+    # 截面分位须与预测面板重叠日一致 → 锚的 top-N 即模型当日入选集)
+    pool_sn = effective_pool(SNIPER, board)
+    pool_fu = effective_pool(FUSION, board)
+    schema = set(pq.ParquetFile(str(fp)).schema_arrow.names)
+    pool_cols = [
+        c for c in set(pool_sn) | set(pool_fu) if c != "pv_corr_5" and c in schema
+    ]
     cols = ["symbol", "date"] + pool_cols + [f"label_pm_{h}_net" for h in HORIZONS]
     t = pq.read_table(
         str(fp), columns=cols, filters=[("date", ">=", cutoff)]
@@ -668,8 +689,8 @@ def _anchor_frame(board: str, window: int = ANCHOR_WINDOW) -> pd.DataFrame:
     if t.empty:
         return pd.DataFrame()
     t["symbol"] = t["symbol"].astype(str)
-    sn = pool_score(t, SNIPER.pool)
-    fu = pool_score(t, FUSION.pool)
+    sn = pool_score(t, pool_sn)
+    fu = pool_score(t, pool_fu)
     t["score"] = np.maximum(sn.values, fu.values)
     keep = ["symbol", "date", "score"] + [f"label_pm_{h}_net" for h in HORIZONS]
     return t[keep].dropna(subset=["score"]).reset_index(drop=True)
@@ -1119,17 +1140,38 @@ def unlock_hard_filter(res: pd.DataFrame, ref_date) -> pd.DataFrame:
     return res.loc[~mask].reset_index(drop=True)
 
 
+def board_rank_key_values(board: str, frame: pd.DataFrame) -> tuple[str, pd.Series]:
+    """[0912 夜] 板级排名键自适应: 返回 (键名, 键值列)。
+
+    键名 = resolve_rank_key (auto→最新评估 json; 显式旋钮强制; 异常/无 json→blend)。
+    数据在位守卫: prob/blend 键需该板 pred_prob 有非 NaN — 闸失效板回退纯 mag
+    (不能拿全 NaN 的 prob/blend 排, 会出任意序)。回退时键名记 "mag"。
+    """
+    chosen = resolve_rank_key(board)
+    has_prob = "pred_prob" in frame.columns and frame["pred_prob"].notna().any()
+    if chosen == "prob" and has_prob:
+        return "prob", frame["pred_prob"]
+    if chosen == "blend" and has_prob:
+        if "rank_blend" in frame.columns:
+            return "blend", frame["rank_blend"]
+        return "blend", frame[CAND_RANK_KEY] * frame["pred_prob"]
+    return "mag", frame[CAND_RANK_KEY]
+
+
 def rank_and_truncate(res: pd.DataFrame) -> pd.DataFrame:
     """2026-08-23 定案 (用户 top-10 档, feedback-need-top10): 入选 = 每板块 TOP-10.
 
     08-14 曾收紧 TOP-5 (250d 前沿 top5 幅度略优: 双创 +6.34% vs +5.76%, 主板 +3.49%
     vs +3.22%), 但用户交付/汇报默认 Top10 (memory feedback-need-top10, "i need top10"),
-    08-23 改回 TOP-10, cut 统一标 T-10 — 评价桶与交付桶同一深度. 排名键不变
-    (2026-08-15 A/B 定案): 概率闸已附 pred_prob 列时用 pred_mag_10d × pred_prob
-    (250d OOS 双板 TOP-5/TOP-10 全窗实得全赢); 无 pred_prob (闸失效 fail-open) →
-    退回纯 CAND_RANK_KEY (pred_mag_10d). 板块级回退: 该板 pred_prob 全 NaN → 该板
-    纯 mag 排 (不能拿全 NaN 的 blend 排, 会出任意序). 个股级 NaN 仍排尾 (A/B 口径).
-    入选行 rank_blend 把 NaN 归一为 mag 值, 供 build_merged 跨板全局排名.
+    08-23 改回 TOP-10, cut 统一标 T-10 — 评价桶与交付桶同一深度. 排名键 (2026-08-15
+    A/B 定案): 概率闸已附 pred_prob 列时用 pred_mag_10d × pred_prob; 无 pred_prob
+    (闸失效 fail-open) → 退回纯 CAND_RANK_KEY (pred_mag_10d). 个股级 NaN 仍排尾
+    (A/B 口径). 入选行 rank_blend 把 NaN 归一为 mag 值, 供 build_merged 跨板全局排名.
+
+    [0912 夜] 键自适应 (用户令: parallel 自动选更好的一头出预测): 板级键不再写死
+    blend — board_rank_key_values 按 rank_source 评估 json 在 mag/prob/blend 中
+    自选 (无 json/过旧 → blend = 原行为, 零变化). rank_blend 列仍始终构造,
+    build_merged 全局排名口径不受板级键切换影响.
     """
     if res.empty:
         return res
@@ -1141,12 +1183,15 @@ def rank_and_truncate(res: pd.DataFrame) -> pd.DataFrame:
         b = res[res["board"] == board]
         if b.empty:
             continue
-        key = (
-            "rank_blend"
-            if "rank_blend" in b.columns and b["pred_prob"].notna().any()
-            else CAND_RANK_KEY
+        name, key = board_rank_key_values(board, b)
+        if name != "blend":
+            print(f"[rank] {board} 自适应排名键 = {name}", flush=True)
+        # sort_values 不收任意值 Series (会当列标签解) → 挂临时列排
+        b = (
+            b.assign(_rk=key)
+            .sort_values("_rk", ascending=False, na_position="last")
+            .drop(columns="_rk")
         )
-        b = b.sort_values(key, ascending=False, na_position="last")
         out.append(b.head(10).assign(cut="T-10"))
     merged = pd.concat(out, ignore_index=True).reset_index(drop=True)
     if "rank_blend" in merged.columns:
@@ -1203,12 +1248,7 @@ def hysteresis_keep(
         bf = full[full["board"] == board]
         if bf.empty:
             continue
-        prob = (
-            bf["pred_prob"]
-            if "pred_prob" in bf.columns
-            else pd.Series(np.nan, index=bf.index)
-        )
-        k = bf[CAND_RANK_KEY] * prob  # NaN prob → NaN → 排尾 (rank_and_truncate 同口径)
+        _name, k = board_rank_key_values(board, bf)  # rank_and_truncate 同口径 (自适应)
         order = pd.DataFrame({"_i": bf.index, "_k": k}).sort_values(
             "_k", ascending=False, na_position="last"
         )

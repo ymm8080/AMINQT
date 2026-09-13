@@ -191,6 +191,57 @@ def _finaltop_gate(board: str, new_path: str, cfg: dict) -> bool:
     return v["pass"]
 
 
+def _persist_oos_report(board: str, tag: str, res: dict) -> None:
+    """[09-12] OOS 逐头留档 (WORM): 含双头族聚合 weighted_ic_reg/cls.
+
+    重训日志曾只留闸头聚合 → cls/reg 另一头逐批无档可查 (main cls 轨迹缺口由此).
+    tag 即批次键, 同 tag 重跑不覆盖.
+    """
+    diag = data_others_path("diag")
+    diag.mkdir(parents=True, exist_ok=True)
+    out = diag / f"retrain_oos_{board}_{tag}.json"
+    if out.exists():
+        print(f"[{board}] OOS 留档已存在, 跳过 (WORM): {out}", flush=True)
+        return
+    payload = {
+        "board": board,
+        "tag": tag,
+        "path": res["path"],
+        "n_features": res.get("n_features"),
+        **res["oos"],
+    }
+    out.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    print(f"[{board}] OOS 留档 -> {out}", flush=True)
+
+
+def _append_head_choice_ledger(board: str, tag: str, res: dict, promoted: bool) -> None:
+    """[0912 夜] 头选择台账: 该批双头 OOS 聚合 + 自选 serving 头 + 终态晋升."""
+    from scripts._head_choice_ledger import append_head_choice_row
+
+    oos = res["oos"]
+    wrote = append_head_choice_row(
+        "legacy",
+        board,
+        tag,
+        weighted_ic_reg=oos.get("weighted_ic_reg"),
+        weighted_ic_cls=oos.get("weighted_ic_cls"),
+        chosen=oos.get("gate_head"),
+        gate_pass=bool(oos.get("pass")),
+        switched=promoted,
+        ics=oos.get("ics"),
+        n_features=res.get("n_features"),
+    )
+    print(
+        f"[{board}] 头选择台账{'写入' if wrote else '已有该行跳过'}: "
+        f"chosen={oos.get('gate_head')} "
+        f"(reg={oos.get('weighted_ic_reg')}, cls={oos.get('weighted_ic_cls')})",
+        flush=True,
+    )
+
+
 def _record_canary_state(board: str, tag: str, prev_tag: str, cfg: dict) -> None:
     """晋升成功 → 记 canary state (scripts/_finaltop_canary.py 晋升后真 OOS 复核).
 
@@ -319,37 +370,44 @@ def main() -> int:
     skip_dual_switch = os.environ.get("LEGACY_FORCE_FALLBACK", "0") == "1"
     mods = load_modules()
     for board, res in results.items():
+        _persist_oos_report(board, tag, res)
+        promoted = False
         if skip_dual_switch and board == "dual" and res["switched"]:
             print(
                 "[dual] gate_d 非确定性漂移 (38→208 特征), 保留 20260811b, 跳过切换",
                 flush=True,
             )
-            continue
-        if res["switched"]:
+        elif res["switched"]:
             cfg = LEGACY_TOP10_SECOND_VOTE
+            # continue 改 promoted 标记: 台账行要记终态 (finaltop FAIL 不算晋升)
+            finaltop_ok = True
             if cfg.get("enable") and cfg.get("caliber") == "final_list_tool":
-                if not _finaltop_gate(board, res["path"], cfg):
-                    continue
-            cur = os.path.join(MODEL_DIR, f"{board}_current.pkl")
-            prev_tag = (mods.get(board) or {}).get("tag", "")
-            bak = os.path.join(MODEL_DIR, f"{board}_current_retrain_backup.pkl")
-            if os.path.exists(cur) and not os.path.exists(bak):
-                shutil.copy(cur, bak)
-                print(f"[{board}] 旧 current 备份 -> {bak}", flush=True)
-            shutil.copy(res["path"], cur)
-            mods[board] = {
-                "tag": tag,
-                "file": os.path.basename(res["path"]),
-                "updated": time.strftime("%Y-%m-%d %H:%M"),
-            }
-            print(f"[{board}] switched -> current = {res['path']}", flush=True)
-            _record_canary_state(board, tag, prev_tag, LEGACY_TOP10_SECOND_VOTE)
+                finaltop_ok = _finaltop_gate(board, res["path"], cfg)
+            if finaltop_ok:
+                cur = os.path.join(MODEL_DIR, f"{board}_current.pkl")
+                prev_tag = (mods.get(board) or {}).get("tag", "")
+                bak = os.path.join(MODEL_DIR, f"{board}_current_retrain_backup.pkl")
+                if os.path.exists(cur) and not os.path.exists(bak):
+                    shutil.copy(cur, bak)
+                    print(f"[{board}] 旧 current 备份 -> {bak}", flush=True)
+                shutil.copy(res["path"], cur)
+                mods[board] = {
+                    "tag": tag,
+                    "file": os.path.basename(res["path"]),
+                    "updated": time.strftime("%Y-%m-%d %H:%M"),
+                }
+                print(f"[{board}] switched -> current = {res['path']}", flush=True)
+                _record_canary_state(board, tag, prev_tag, LEGACY_TOP10_SECOND_VOTE)
+                promoted = True
         else:
             print(
                 f"[{board}] OOS weighted_IC={res['oos'].get('weighted_ic'):.4f} "
+                f"(reg={res['oos'].get('weighted_ic_reg', float('nan')):.4f} "
+                f"cls={res['oos'].get('weighted_ic_cls', float('nan')):.4f}) "
                 f"< {res['oos'].get('threshold', '?')}, 保留旧模型",
                 flush=True,
             )
+        _append_head_choice_ledger(board, tag, res, promoted)
     save_modules(mods)
     print(f"[meta] current_meta.json = {mods}", flush=True)
     print(f"[done] 全部完成 ({time.time() - t0:.0f}s)", flush=True)

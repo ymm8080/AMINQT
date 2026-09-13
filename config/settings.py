@@ -473,6 +473,42 @@ LEGACY_SELECTION = {
     "board_top_n": 10,  # 每板初选数 (全局帽 TOP_N 再截, 真删不补齐)
 }
 
+# ── prob_up 来源头 (2026-09-12 用户拍板: dual 切 cls → 当夜再定为每训动态) ──
+# [0912 夜用户令] cls vs reg 不固定: 每次重训 argmax 自选 serving 头, 判定落
+# bundle["prob_source"] + data/others/head_choice_ledger.csv (双管线四格
+# 统一台账, 只追加)。[0913 用户令] 自选判据 IC→TOP10 净 (argmax(top10_net_reg,
+# top10_net_cls)): 判定对象=TOP10, IC 与 TOP10 可背离 (#11 WORM main reg 修复
+# 臂 gw +.081>cls +.058 但 TOP10 −.006 vs +.050)。
+# "auto" = 动态自选 (默认, 平手取 reg=历史默认头);
+# 显式 "reg"/"cls" = 强制回滚旋钮 (闸判与推理都按强制头, 压过 bundle 记录)。
+# 旧 bundle 无 prob_source 键 → 按 LEGACY_PROB_SOURCE_FALLBACK 回退 = auto 前
+# 各板静态默认 (main=reg 残差, dual=cls)。不硬性提名 cls: main 何时切 cls 由
+# 下次重训的 argmax 按该批 OOS 自判 (0912 夜 #11 WORM main cls TOP10 净 +.050
+# vs reg 最好修复臂 −.006 → 下次大概率自选 cls, 但由管线说了算)。
+# 同一旋钮驱动两处: V35Predictor.prob_up_kd 源 + DualTrackTrainer.validate_oos
+# 闸头 (cls 经 predict_proba 取 Rank IC)。
+LEGACY_PROB_SOURCE = {
+    "main": "auto",
+    "dual": "auto",
+}
+LEGACY_PROB_SOURCE_FALLBACK = {
+    "main": "reg",  # reg 残差派生概率 1-F_e(CLS_THRESHOLD-pred)
+    "dual": "cls",  # Platt 校准 cls predict_proba
+}
+
+# ── LEGACY 超参 json 旋钮源 (0913 #8 自适应再扫, rank_source 式三件套) ──
+# 周末自适应再扫 (TOP10 实净判官 + PARAM_ADMISSION 护栏) 赢家落 WORM json
+# (data/others/param_source/), dual_track_trainer.model_params 解析时叠覆盖 —
+# 机器换 incumbent 免 commit. "auto" = 最新 json (trained_through 距今 ≤
+# LEGACY_PARAM_MAX_STALE_DAYS); "code" = 强制代码表 (回退旋钮).
+# 无 json / 过旧 / 异常 → 代码表 NUM_LEAVES_OVERRIDE/PARAMS_OVERRIDE (fail-open).
+# 回退三层: 显式旋钮 > 删最新 json 回上一版 > 代码表兜底.
+LEGACY_PARAM_SOURCE = {
+    "main": "auto",
+    "dual": "auto",
+}
+LEGACY_PARAM_MAX_STALE_DAYS = 45
+
 # ── 滞涨标记 (2026-08-19 用户定案: legacy+parallel 双交付) ──
 # 用户线索: 300911 连续入选短名单 (模型已识别) + 价格横盘洗盘 (10 日涨幅≈0) → 终将突破.
 # 250d 检验 (_diag_stall_regime, 2026-08-19): 入选+滞涨+近20日入选≥3 全窗 63.2%/+5.88%,
@@ -578,15 +614,71 @@ GATE_ADMISSION = {
 # 纯幅度 Huber 目标下 pred10>+6% 桶承诺 +11.2~11.5% 实得 −0.2~+1.5% (校准缺口
 # −9.7~−11.8pp); 排名键按幅度取头部恰好取到最虚高的承诺 (rank≤10 实得≈0 vs
 # rank 11-30 下跌股 +2.32%)。用户指令: 修预测精度, 不加闸。
-# 机制: 10d_reg 改训 per-date 截面百分位 (0..1, rank pct of net label), 预测输出
+# 机制: reg 头改训 per-date 截面百分位 (0..1, rank pct of net label), 预测输出
 # 经桶中位映射 (训练段按预测分桶取 label 中位数, np.maximum.accumulate 单调化)
 # 回收益语义 — 下游 E7/prob 残差/排名键语义不变, 顶部承诺被结构性压回可兑现水平,
 # 树的优化目标从"追彩票尾"变为"排序明日截面"。
-# 达线才置 enable=True: OOS 校准缺口 (pred10>6% 桶承诺−实得) < 3pp 且 RankIC 不降。
-LEGACY_10D_RANK_TARGET = {
-    "enable": False,  # 生产默认关; 影子重训验证达线后由 A/B 拍板打开
+# [0912 泛化] 从 10d 单头扩到全部 reg 幅度头: dual 3d/5d/10d_reg OOS IC −0.11~−0.14
+# 三头全负 (cls 同窗全正, top10 实净 +55%) — huber 在双创/科创重尾标签
+# (|lab|>0.20@10d: STAR 11.26% vs main 4.49%, 峰度 303) 上把分裂容量耗在月度翻转
+# 的尾部方差; rank 目标 = 评测口径本身 (评估即 rank IC)。main 板 reg 头同修同判
+# (用户指令 0912)。boards/kinds 分格门控, 默认全关 = 零行为变化; A/B 拍板后开启。
+LEGACY_REG_RANK_TARGET = {
+    "enable": False,  # 生产默认关; 影子重训 A/B 拍板后按板开启
     "bins": 20,  # 校准映射分桶数 (预测百分位 → 桶内 label 中位数)
     "boards": ["main", "dual"],
+    "kinds": ["3d_reg", "5d_reg", "10d_reg"],
+}
+
+# ── [2026-09-12] 尾部样本加权: 爆发猎杀 (002848 池内 347 名案) ──
+# L2 拟合 fwd10 条件均值 → 全市场 90% 小波动样本主导 loss → 模型"说小声话",
+# 将爆发的票预测幅度系统性压低 (见 +3.8% 实际 +10%)。修法: 训练时给实际 fwd10
+# 落在 top_q 分位的样本 ×weight — 尾部错判代价放大, 目标定义/排名键/闸全不动。
+# 只作用 reg 幅度头 (3d/5d/10d_reg, 与时间衰减权重相乘); cls/pain 头不动。
+# [0912 夜 A/B 判 FAIL 已关] main 板 60d OOS tail 臂隔离: reg_IC 0.0808→0.0284,
+# top10 −1.16pp, 爆发重叠 3.41→2.96。⚠[0912 更正] 交付清单排序键 prob_up_10d =
+# reg 残差概率 (predictor 08-24 起 p_reg 优先, Platt cls 仅补 NaN 行) → 清单本就
+# 由 reg 头驱动, tail 臂伤 reg = 直接伤交付头, FAIL 更实锤 (原"够不着"推断作废)。
+# 第三次修幅度头失败 (前两次: 0910 rank 目标/decay5)。
+# 复测 = enable=True (数学保留, 见 tests/test_legacy_tail_weight.py)。
+LEGACY_TAIL_WEIGHT = {
+    "enable": False,
+    "top_q": 0.9,  # 训练段 label 分位阈值 (top 10% 实际涨幅样本)
+    "weight": 4.0,  # 尾部样本权重倍数 (与 decay_sample_weights 相乘)
+    "kinds": ("3d_reg", "5d_reg", "10d_reg"),
+}
+
+# ── [2026-09-12] per-head 特征集: reg/cls 头分开训练, 各头族挂独有特征 ──
+# 8 格矩阵 A/B 判词分格执行 (WORM cls_top10_0912_{main,dual} + ab_families_0912_{main,dual}):
+#   main reg += SL斜率20   : reg IC +2.27pp/top10 +0.30pp/lift 4.08→8.31; cls top10 −1.46pp → 只入 reg
+#   main cls += quality_factor: cls IC +0.75pp/top10 +0.19pp 双正; reg top10 −3.52pp → 只入 cls
+#   dual cls += quality_factor + ps_ttm: top10 +2.88/+1.46pp (base 0.54% 低基数已注)
+# dual 不挂 SL斜率20 per-head — 已在 dual force_include 共享集内 (feature_selector)。
+# 训练列清单铁律: 帧内缺失的 extra 由 kind_feature_cols 剔除+告警 (模型列数=bundle 声明),
+# quality_factor 由训练/推理端同公式合成 (feature_selector.add_quality_factor)。
+LEGACY_HEAD_EXTRA_COLS = {
+    "main": {
+        "reg": ["SL斜率20"],
+        "cls": ["quality_factor"],
+    },
+    "dual": {
+        "cls": ["quality_factor", "ps_ttm"],
+    },
+}
+
+# ── [2026-09-12] PARALLEL per-head 特征集 (8格矩阵, 结构先行; 内容随 #11 A/B 判词填) ──
+# 板×头: mag = 幅度头 pool 追加列 (app.pipeline_parallel.config.effective_pool,
+#   作用于交付打分链: backtest.write_system_lists / build_merged_shortlist +
+#   交付端 _panel_per_stock / _anchor_frame; 诊断类 run_system/分档/last_days
+#   仍用 spec 原池). prob = 概率头 LGBM feat_cols 追加列 — 概率头是宽集
+#   (feature_cols 全数值列自动收录), 故 prob extras 只对**面板外合成列**有意义
+#   (现支持 quality_factor, 公式=feature_selector.add_quality_factor,
+#   train/serve 同源合成). 默认全空 = 当前产线行为零变化.
+# 列缺失: mag 由 pool_score 跳过并再归一化; prob 合成失败保持缺失 →
+#   predict 缺列 raise (schema 漂移大声失败, fail-loud).
+PARALLEL_HEAD_EXTRA_COLS = {
+    "main": {"mag": [], "prob": []},
+    "dual": {"mag": [], "prob": []},
 }
 
 # ── parallel 概率展示层再校准 (2026-08-29 用户批准) ──
@@ -622,18 +714,18 @@ XMODULE_SHADOW = {
 # 铁律: 闸基准必须自适应 (滚动统计量), 禁止固定绝对阈值 (水平版≥0.45 已证是坑).
 SLOW_BULL = {
     "enable": True,
-    "band_lo": 0.90,       # 20日动量截面分位下界
-    "band_hi": 0.995,      # 上界 (排彩票极端动量尾)
-    "grind_max1d": 0.08,   # 近20日最大单日涨幅上限 (grind 定义)
-    "pull_min": -0.10,     # 回撤闸: close/10日高 - 1 下限
-    "breadth_ma": 60,      # 宽度闸: breadth > 其60日滚动均值
-    "mom_lo": 0.60,        # v4 格内选股: mom__r 格内分位 (60%, 90%] 区 — 剂量曲线确定性中段峰
-    "mom_hi": 0.90,        #   (格内90-100%过热尾=反信号: 赢率46%/中位-0.8 纯右尾驱动)
-    "vol_half": "low",     # v4 极致确定性拍板 (09-07"我要极致确定性"+"低波半"): 只取格内低波半
+    "band_lo": 0.90,  # 20日动量截面分位下界
+    "band_hi": 0.995,  # 上界 (排彩票极端动量尾)
+    "grind_max1d": 0.08,  # 近20日最大单日涨幅上限 (grind 定义)
+    "pull_min": -0.10,  # 回撤闸: close/10日高 - 1 下限
+    "breadth_ma": 60,  # 宽度闸: breadth > 其60日滚动均值
+    "mom_lo": 0.60,  # v4 格内选股: mom__r 格内分位 (60%, 90%] 区 — 剂量曲线确定性中段峰
+    "mom_hi": 0.90,  #   (格内90-100%过热尾=反信号: 赢率46%/中位-0.8 纯右尾驱动)
+    "vol_half": "low",  # v4 极致确定性拍板 (09-07"我要极致确定性"+"低波半"): 只取格内低波半
     #   (mom(60,90]×低波半: 5.3只/日 赢59% 中位+4.1% 大亏7% 125+9.5%;
     #    高波半=只有均值没确定性: 赢率46-48%/中位负/大亏12-15%)
-    "trail_stop": 0.08,    # 退出: 8% 跟踪止损
-    "hold_days": 40,       # 持有上限 (交易日)
+    "trail_stop": 0.08,  # 退出: 8% 跟踪止损
+    "hold_days": 40,  # 持有上限 (交易日)
     "out_root": "shadow",  # 相对 DATA_OTHERS_DIR, 影子清单不进 STOCK LIST 交付目录
 }
 

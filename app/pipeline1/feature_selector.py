@@ -22,6 +22,42 @@ from config.settings import data_others_path
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────
+# [2026-09-12] per-head 合成特征: quality_factor (cls 头专属)
+# ──────────────────────────────────────────────────────────
+# 16 基本面列当日截面 pct-rank 均值 (与 A/B harness tmp_t/_ab_families_0912.py
+# 逐字节同公式)。rank(pct=True) 的 NaN→NaN + mean(axis=1) skipna ⇒ 帧内子集
+# 均值 ≡ 全 16 列均值, 缺列不改变语义。
+QUALITY_BASE_COLS = (
+    "q_roe",
+    "eps",
+    "dt_eps",
+    "roe",
+    "roa",
+    "roe_deducted",
+    "rev_yoy",
+    "eps_yoy",
+    "profit_yoy",
+    "ocfps",
+    "bps",
+    "net_margin",
+    "revenue_ps",
+    "q_ocf_to_sales",
+    "asset_turnover",
+    "inventory_turnover",
+)
+
+
+def add_quality_factor(df: pd.DataFrame) -> bool:
+    """就地合成 quality_factor 列; 帧内无任何基列 → 不加列返回 False (调用方按缺失剔除)."""
+    have = [c for c in QUALITY_BASE_COLS if c in df.columns]
+    if not have:
+        return False
+    qrank = df.groupby("date")[have].rank(pct=True)
+    df["quality_factor"] = qrank.mean(axis=1).astype("float32")
+    return True
+
+
+# ──────────────────────────────────────────────────────────
 # BruteForceGenerator (Layer1)
 # ──────────────────────────────────────────────────────────
 
@@ -1307,6 +1343,30 @@ class FeatureSelector:
             # 定案 = A/B 对拍 PASS 才入池 (bull 侧 672d 可评; bear 个股级 0910 才
             # 有数据, 待 pass-2 回填后 A/B #2). PASS 前生产口径不含 THS.
             "force_include": [
+                # [2026-09-12] 益盟 S-L 关系 + 多周斜率/持续族, 逐特征 A/B 判词后留
+                # 5/7 (cls top10 主判, 任一板降 >1pp 摘; WORM: diag/cls_top10_0912_*
+                # + ab_verdict_0912_*). 留 = SL标准化(+0.65/+3.50pp) / 带20斜率20
+                # (+1.02/+1.31, 唯一双板双指标齐升) / 获利盘斜率20(main 零分裂惰性,
+                # dual +0.98) / SL差值(-0.13/+3.23, 留观未破线) / SL多头持续天数
+                # (-0.65/+1.50, 留观未破线). 摘 = SL斜率20(main -1.46pp 破线; 其
+                # reg IC 全场第一(+2.27pp)的真幅度信号两个交付头都变现不了, 已记
+                # 方法条件性名单) / 带20(main -1.85pp 破线; 与 带20斜率20 对照 =
+                # 带位置水平毒、带变化斜率增益).
+                "SL差值",
+                "SL标准化",
+                "SL多头持续天数",
+                "带20斜率20",
+                "获利盘斜率20",
+                # [2026-09-12] 族级 A/B 8格矩阵 LEGACY 半场 (WORM: diag/
+                # ab_families_0912_main_20260912_110635.json): 筹码 chip4 入 main —
+                # reg 头 top10 5.15%→6.82% (+1.67pp 达线, IC +0.41pp), cls 头
+                # 7.14%→6.91% (−0.23pp 留观带内), 双头共列净正. dual 已由选择收录
+                # 勿重复. ps_ttm 摘 (reg IC +1.34pp 但 top10 −2.53pp, 方法条件性);
+                # quality 合成列摘 (main reg −3.52pp; dual cls +2.88pp 低基数不可信).
+                "cost_bias",
+                "peak_roc_20d",
+                "chip_gini",
+                "chip_entropy",
                 # [2026-09-10] dim36 双向短期族 (bkd_ 8 + up_ 6, 688228 案立项):
                 # 引擎 dim36_bkd_up 物化 + 注册中心已注册, 但**A/B v6 PASS 才接入生产**
                 # (用户指令: "AB 通过了才接线进生产"). PASS 后把 14 名加回此处 +
@@ -1331,6 +1391,25 @@ class FeatureSelector:
                 # [2026-09-10] THS问财信号列 11 名曾强注入, 被用户叫停 (同 main 语义):
                 # A/B 对拍 PASS 才回填此名单, 看涨/看跌分开列.
                 "force_include": [
+                    # [2026-09-12] 出货密度 5/10/20d: 全池 OOS 20250820~20260828 股内
+                    # TS IC +0.077/+0.088/+0.106 (比 dual pin 已有的吸筹密度还强);
+                    # main pin 273 列本就含全部 36 密度列, dual 210 列只剩 5 条密度
+                    # (吸筹10d/20d+洗盘5d) — 出货全缺, 此处补齐 (用户令直接加).
+                    "出货_density_5d",
+                    "出货_density_10d",
+                    "出货_density_20d",
+                    # [2026-09-12] 益盟 S-L/斜率族 — 分板判词 (用户定调: main/dual/
+                    # parallel 独立模块各配特征集, 勿跨板统一摘留): 本板 cls top10
+                    # 全族为正 (SL斜率20 +1.72pp / 带20 +2.58pp, 仅 main 破线在 main
+                    # 摘), 7 列全留. 注: dual cls IC 多数微降 + base top10 仅 0.54%,
+                    # 头部增益部分是低基数效应, dual cls 头重新上岗时须复核.
+                    "SL差值",
+                    "SL标准化",
+                    "SL斜率20",
+                    "SL多头持续天数",
+                    "带20",
+                    "带20斜率20",
+                    "获利盘斜率20",
                     # [2026-09-10] dim36 双向短期族: A/B v6 PASS 才接入 (同 main 语义),
                     # 名单见 tests/test_bkd_up_features.py TARGET_14.
                 ],

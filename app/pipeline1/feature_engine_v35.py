@@ -1578,6 +1578,7 @@ class FeatureEngineV35:
 
         产出: 主力轨迹/MAZL/吸筹/拉高/出货 (zhuli) + 益盟三线/红蓝距离 (yimeng)
               + SS金叉/多头排列 (faxian) + A04红柱/A08/获利盘 (chip)
+              + S-L 关系/斜率20/多头持续/带20/获利盘斜率20 (0912 轨迹编码注入)
 
         P18 精简:
           1. chip 优先使用面板 float_share 列, 回退 float_shares_map
@@ -1601,6 +1602,23 @@ class FeatureEngineV35:
             g = yimeng_dingdi(g)
             g = faxian_niugu(g)
 
+            # ── S-L 关系/多周轨迹族 (0912 注入: IC 探针达线, 免受控 A/B 直接入) ──
+            # 水平有信息 (SL标准化 +0.058/SL差值 +0.052), 日变化族判死不派生;
+            # 斜率20 = level − level.shift(20) 多周累计趋势, 与已判死的 1d/5d Δ 不同族
+            sl = g["短期线"] - g["长期线"]
+            g["SL差值"] = sl
+            g["SL标准化"] = sl / g["长期线"]
+            g["SL斜率20"] = sl - sl.shift(20)
+            above = (sl > 0).astype(int)
+            g["SL多头持续天数"] = above.groupby((above == 0).cumsum()).cumsum()
+            band20 = (
+                g["high"].rolling(20, min_periods=20).max()
+                / g["low"].rolling(20, min_periods=20).min()
+                - 1
+            )
+            g["带20"] = band20
+            g["带20斜率20"] = band20 - band20.shift(20)
+
             # ── chip_distribution: 优先面板 float_share, 回退 float_shares_map ──
             float_shares = None
             sym = g["symbol"].iloc[0]
@@ -1612,6 +1630,7 @@ class FeatureEngineV35:
                 float_shares = float_shares_map[sym]
             if float_shares is not None:
                 g = ChipDistribution().build(g, float_shares)
+                g["获利盘斜率20"] = g["获利盘"] - g["获利盘"].shift(20)
 
             # ── 二元信号 → 连续密度 (唯一经 IC 验证有增益的变换) ──
             density_sigs = [

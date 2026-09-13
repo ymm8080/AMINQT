@@ -20,7 +20,7 @@ import pandas as pd
 
 
 class ChipDistribution:
-    def __init__(self, n_bins: int = 400):
+    def __init__(self, n_bins: int = 2000):
         self.n_bins = n_bins
         self.grid: np.ndarray | None = None
         self.dist: np.ndarray | None = None
@@ -49,8 +49,12 @@ class ChipDistribution:
         float_shares: 流通股本（股），换手率 = volume/float_shares
         返回: 原表 + A01/A02/A03/A04/A08/A0A/获利盘
         """
-        lo, hi = df["low"].min() * 0.9, df["high"].max() * 1.1
-        self.grid = np.linspace(lo, hi, self.n_bins)
+        # [0912 前视修复] 固定绝对对数网格: 旧 linspace(全帧 low.min*0.9, high.max*1.1)
+        # 让未来价格拉伸网格 → 历史行获利盘被改写 (合成验证漂移最高 100pp)。常数包络
+        # 0.5~6000 覆盖 A 股价格域, 与数据/窗口/股票全无关 → 因果且 train/serve 一致;
+        # 出界由 _triangle 的 argmin 分支优雅降级。2000 bin 下 bin 宽 ≈0.44% 相对,
+        # 与旧 per-stock 400 网格同档分辨率。验证: tmp_t/_chip_fix_optionb_validate_0912.py
+        self.grid = np.exp(np.linspace(np.log(0.5), np.log(6000.0), self.n_bins))
         self.dist = np.zeros(self.n_bins)
 
         out = {k: [] for k in ("A01", "A02", "A03", "获利盘")}
@@ -80,7 +84,14 @@ class ChipDistribution:
         return df
 
     def winner(self, price: float) -> float:
-        return float(self.dist[self.grid < price].sum() / max(self.dist.sum(), 1e-12))
+        # clip: 子集/全量求和的浮点误差可微越 [0,1] (实测 1.0000000000000003)
+        return float(
+            np.clip(
+                self.dist[self.grid < price].sum() / max(self.dist.sum(), 1e-12),
+                0.0,
+                1.0,
+            )
+        )
 
 
 # ---- 引擎接口实现（控盘红柱/获利盘）----

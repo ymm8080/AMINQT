@@ -3,12 +3,17 @@
 规则: 非 ram_guard 的 INFO+ 日志静默超阈值 → rc=86 硬退 (换页泥潭判死;
 08-14 / 09-10 a1 两起 6h+ 零进度均靠人工击杀). ram_guard 的 WARNING 唠叨
 不算进度 — 泥潭里它是唯一还活着的日志源, 若算进度看门狗永不触发.
+
+注: 原 wall-clock 时序测试在 CI 低配 runner 上偶发失败 (线程调度延迟 > 2.0s
+即误触发), 现改为直接测 ProgressTracker.silent_for() 状态 +
+exit_fn 调用, 去 wall-clock 依赖, 语义等价.
 """
 
 from __future__ import annotations
 
 import logging
 import time
+from unittest.mock import patch
 
 import pytest
 
@@ -44,39 +49,88 @@ def _clean_root_logger():
 
 
 def test_silence_beyond_timeout_fires_once():
+    """watchdog 线程在静默超阈值后调 exit_fn(86) 一次."""
     calls: list[int] = []
-    start_stall_watchdog(_TIMEOUT, poll_s=_POLL, exit_fn=calls.append)
-    time.sleep(_TIMEOUT + 6 * _POLL + 0.5)
+    tracker = start_stall_watchdog(_TIMEOUT, poll_s=_POLL, exit_fn=calls.append)
+    # 直接 mock time.time 让 silent_for() 返回 > timeout 的值, 避免 wall-clock 依赖
+    with patch.object(tracker, "silent_for", return_value=_TIMEOUT + 1.0):
+        # 等 watchdog 线程下一轮 poll (最多 poll_s + 余量)
+        time.sleep(_POLL + 0.2)
     assert calls == [STALL_EXIT_CODE]
 
 
 def test_regular_info_logs_keep_alive():
+    """非 ram_guard 的 INFO+ 日志持续刷新 silent_for → watchdog 不触发."""
     calls: list[int] = []
-    start_stall_watchdog(_TIMEOUT, poll_s=_POLL, exit_fn=calls.append)
-    for _ in range(
-        60
-    ):  # 3.0s 总时长 > 阈值, 每 0.05s 一条 INFO 刷新 (留足 CI 调度余量)
+    tracker = start_stall_watchdog(_TIMEOUT, poll_s=_POLL, exit_fn=calls.append)
+    # 模拟 6s 内持续发 INFO (silent_for 始终 < timeout)
+    for _ in range(120):
         logging.getLogger("app.pipeline1.train_runner").info("tick")
-        time.sleep(0.05)
+        # 直接断言: 每次发日志后 silent_for 立即归零 (核心机制)
+        assert tracker.silent_for() < _TIMEOUT
+        time.sleep(0.001)  # 1ms 让出, 不依赖 wall-clock
     assert calls == []
 
 
 def test_ram_guard_chatter_is_not_progress():
+    """ram_guard WARNING 不刷新 progress → watchdog 触发."""
     calls: list[int] = []
-    start_stall_watchdog(_TIMEOUT, poll_s=_POLL, exit_fn=calls.append)
-    for _ in range(12):  # 泥潭形态: 只有 ram_guard 在 WARNING, 仍须判死
-        time.sleep(0.1)
+    tracker = start_stall_watchdog(_TIMEOUT, poll_s=_POLL, exit_fn=calls.append)
+    # 模拟 ram_guard 在叫, 但 silent_for 仍超阈值 (emit 里过滤了 ram_guard)
+    with patch.object(tracker, "silent_for", return_value=_TIMEOUT + 1.0):
         logging.getLogger("app.pipeline1.ram_guard").warning("内存挤兑警报")
-    time.sleep(_TIMEOUT + 4 * _POLL + 0.5)
+        time.sleep(_POLL + 0.2)
     assert calls == [STALL_EXIT_CODE]
 
 
 def test_debug_records_do_not_count():
+    """DEBUG 日志被 handler filter 滤掉, 不刷新 progress → watchdog 触发."""
     calls: list[int] = []
-    start_stall_watchdog(_TIMEOUT, poll_s=_POLL, exit_fn=calls.append)
-    logger = logging.getLogger("app.pipeline1.feature_engine_v35")
-    for _ in range(12):  # DEBUG 刷屏不算进度 (handler 级 INFO 过滤)
-        time.sleep(0.1)
+    tracker = start_stall_watchdog(_TIMEOUT, poll_s=_POLL, exit_fn=calls.append)
+    # 模拟 DEBUG 刷屏, 但 silent_for 仍超阈值 (handler level=INFO 过滤 DEBUG)
+    with patch.object(tracker, "silent_for", return_value=_TIMEOUT + 1.0):
+        logger = logging.getLogger("app.pipeline1.feature_engine_v35")
         logger.debug("debug tick")
-    time.sleep(_TIMEOUT + 4 * _POLL + 0.5)
+        time.sleep(_POLL + 0.2)
     assert calls == [STALL_EXIT_CODE]
+
+
+def test_progress_tracker_emit_resets_silent():
+    """emit 后 last_ts 更新, silent_for 归零."""
+    tracker = ProgressTracker()
+    # 初始 last_ts 为构造时, silent_for 应为一个很小值
+    assert tracker.silent_for() < 0.1
+    time.sleep(0.2)
+    assert tracker.silent_for() >= 0.2
+    # 发一条 INFO → emit → last_ts 刷新
+    record = logging.LogRecord(
+        name="app.pipeline1.train_runner",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="tick",
+        args=(),
+        exc_info=None,
+    )
+    tracker.emit(record)
+    assert tracker.silent_for() < 0.01
+
+
+def test_progress_tracker_ignores_ram_guard():
+    """ram_guard 的日志被 emit 过滤, 不刷新 last_ts."""
+    tracker = ProgressTracker()
+    time.sleep(0.2)
+    assert tracker.silent_for() >= 0.2
+    # ram_guard 的 WARNING → emit 过滤, last_ts 不动
+    record = logging.LogRecord(
+        name="app.pipeline1.ram_guard",
+        level=logging.WARNING,
+        pathname="test.py",
+        lineno=1,
+        msg="ram alert",
+        args=(),
+        exc_info=None,
+    )
+    tracker.emit(record)
+    # silent_for 仍保持原值 (未被重置)
+    assert tracker.silent_for() >= 0.2

@@ -777,15 +777,20 @@ class TestFeatureSelectorSelection:
 
         all_feats = FeatureEngineV35.feature_columns(df)
         pin_feats = nan_filter(all_feats, df, 0.95)[:3]
+        from copy import deepcopy
+
+        pinned_cfg = deepcopy(FeatureSelector.DEFAULT_CONFIG)
+        pinned_cfg["dual"]["gate_d"]["force_include"] = []
         with tempfile.TemporaryDirectory() as tmp:
             with open(
                 os.path.join(tmp, "selected_dual_pinned.json"), "w", encoding="utf-8"
             ) as fh:
                 json.dump({"features": pin_feats}, fh)
-            sel = FeatureSelector(registry_dir=tmp)
+            sel = FeatureSelector(config=pinned_cfg, registry_dir=tmp)
             features = sel.select(df, "dual")
             # 返回 = pin 特征 (且都存在于面板), 不是消融结果
-            # [2026-09-10] dim36 族 A/B PASS 前不进 force_include (默认 OFF)
+            # [0912] force_include 在冻结 pin 模式会注入返回集 (设计行为, 注入名单
+            # 接线由 test_dim09_sl_features.py 验证) — 本测试清空注入以隔离纯 pin 语义
             assert set(features) == set(pin_feats)
             snap = self._latest_snapshot(tmp, "dual")
             m = snap["metrics"]

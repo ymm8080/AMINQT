@@ -50,6 +50,7 @@ _FINGERPRINT_FILES = [
     "app/pipeline1/feature_engine_v35.py",
     "app/pipeline1/cleaning_pipeline.py",  # load_panel_v3 预过滤口径 (2026-08-10)
     "app/pipeline1/label_engine.py",
+    "app/indicators/chip_distribution.py",  # dim09 获利盘族计算源 (0912 网格前视修复: 缺此键指纹不变 → 修复永远进不了检查点)
     "scripts/_reclassify_all_features.py",
     "scripts/_diag_column_feed.py",  # MASK_RECENT_DAYS 等构造常量
     "scripts/_refresh_parallel_checkpoints.py",  # load_panel 预过滤改变检查点行集 (2026-08-10)

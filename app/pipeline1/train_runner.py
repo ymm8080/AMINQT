@@ -401,10 +401,12 @@ def run_training(
         res["n_features"] = n_features
         results[board] = res
         logger.info(
-            "[%s] 模型包 %s | OOS weighted_IC=%.4f | switched=%s",
+            "[%s] 模型包 %s | OOS weighted_IC=%.4f (reg=%.4f cls=%.4f) | switched=%s",
             board,
             res["path"],
             res["oos"].get("weighted_ic", 0.0),
+            res["oos"].get("weighted_ic_reg", float("nan")),
+            res["oos"].get("weighted_ic_cls", float("nan")),
             res["switched"],
         )
 

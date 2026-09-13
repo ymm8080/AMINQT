@@ -126,15 +126,43 @@ def feature_cols(t: pd.DataFrame) -> list[str]:
     ]
 
 
-def train_bundle(
-    board: str, t: pd.DataFrame, trained_through: str, half_life: int | None
-) -> Path:
-    """全史扩窗训练概率头 → WORM bundle. t 需含全部特征 + mfe_3d + label_pain.
+def synthesize_prob_extras(df: pd.DataFrame, board: str) -> pd.DataFrame:
+    """概率头 extras 缺列合成 (8格矩阵 0912; train/serve 同源调用).
 
-    trained_through = 训练数据覆盖到的最后交易日 ("YYYY-MM-DD", 面板最新日);
-    行过滤与回测同口径: mfe_3d 非 NaN 且 label_pain 非 NaN (mfe 尾段 NaN 不可训练).
-    half_life = 时间衰减样本加权半衰期 (自然日, PROB_GATE["half_lives"] 逐档);
-    None → 不加权 (回退原行为).
+    概率头是宽集 (feature_cols 全数值列自动收录) → extras 只对面板外合成列有
+    意义. 现支持 quality_factor (公式=app.pipeline1.feature_selector.
+    add_quality_factor, 与 LEGACY per-head 完全同源); 帧内已有该列 → 跳过.
+    无法合成的 extra 保持缺失并 print 告警 — predict 缺列 raise = schema 漂移
+    大声失败 (fail-loud), 不静默.
+    """
+    from config.settings import PARALLEL_HEAD_EXTRA_COLS
+
+    extra = PARALLEL_HEAD_EXTRA_COLS.get(board, {}).get("prob") or []
+    for col in extra:
+        if col in df.columns:
+            continue
+        if col == "quality_factor":
+            from app.pipeline1.feature_selector import add_quality_factor
+
+            if add_quality_factor(df):
+                continue
+        print(
+            f"[prob_head] {board} prob extra '{col}' 无法合成 (非合成列/基列缺失) "
+            "-> 保持缺失, predict 将按 schema 漂移 raise",
+            flush=True,
+        )
+    return df
+
+
+def _fit_cls_model(
+    board: str, t: pd.DataFrame, half_life: int | None
+) -> tuple[LGBMClassifier, list[str]]:
+    """拟合单档概率头 LGBM → (model, feat_cols). train_bundle 与 purged 影子重评
+    (scripts/_train_parallel_prob_head._shadow_prob) 共用的唯一拟合口径.
+
+    t 需含全部特征列 + mfe_3d + label_pain; 行过滤: mfe_3d 非 NaN 且 label_pain
+    非 NaN (mfe 尾段 NaN 不可训练). half_life = 时间衰减样本加权半衰期 (自然日);
+    None → 不加权. 训练样本 < 5000 → raise.
     """
     cols = feature_cols(t)
     y = (t["mfe_3d"] >= PROB_GATE["abs_target"]).astype(float)
@@ -147,6 +175,20 @@ def train_bundle(
     if half_life is not None:
         fit_kwargs["sample_weight"] = decay_sample_weights(t.loc[ok, "date"], half_life)
     model.fit(x, y.loc[ok].to_numpy(), **fit_kwargs)
+    return model, cols
+
+
+def train_bundle(
+    board: str, t: pd.DataFrame, trained_through: str, half_life: int | None
+) -> Path:
+    """全史扩窗训练概率头 → WORM bundle. t 需含全部特征 + mfe_3d + label_pain.
+
+    trained_through = 训练数据覆盖到的最后交易日 ("YYYY-MM-DD", 面板最新日);
+    行过滤与回测同口径: mfe_3d 非 NaN 且 label_pain 非 NaN (mfe 尾段 NaN 不可训练).
+    half_life = 时间衰减样本加权半衰期 (自然日, PROB_GATE["half_lives"] 逐档);
+    None → 不加权 (回退原行为).
+    """
+    model, cols = _fit_cls_model(board, t, half_life)
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
     tag = "nodecay" if half_life is None else f"hl{int(half_life)}"
     path = bundle_dir() / f"{board}_prob_{tag}_{ts}.joblib"
@@ -275,14 +317,18 @@ def gate_probabilities(board: str) -> tuple[pd.Series, float] | None:
     if base is None:
         print(f"[prob_head] {board} base_rate 可观测样本不足 -> 闸不可用", flush=True)
         return None
+    feat_cols = list(bundles[0]["feat_cols"])
+    schema = set(pq.ParquetFile(str(fp)).schema_arrow.names)
+    have = [c for c in feat_cols if c in schema]
     cs = pq.read_table(
         str(fp),
-        columns=["symbol"] + list(bundles[0]["feat_cols"]),
+        columns=["symbol"] + have,
         filters=[("date", "==", latest)],
     ).to_pandas()
     if cs.empty:
         print(f"[prob_head] {board} 当日截面为空 -> 闸不可用", flush=True)
         return None
+    cs = synthesize_prob_extras(cs, board)
     cs["symbol"] = cs["symbol"].astype(str)
     pred = ensemble_predict(bundles, cs)
     return pd.Series(pred.to_numpy(), index=cs["symbol"]), base

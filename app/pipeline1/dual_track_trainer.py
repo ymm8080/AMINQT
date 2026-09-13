@@ -161,6 +161,11 @@ def model_params(board: str, kind: str) -> dict:
     if nl is not None:
         params["num_leaves"] = nl
     params.update(PARAMS_OVERRIDE.get((board, kind), {}))
+    # [0913 #8] 周末自适应再扫 json 旋钮叠覆盖 (rank_source 式 WORM+新鲜度+fail-open;
+    # 无 json/过旧/异常 → {} 零行为变化, 代码表兜底). 见 app/pipeline1/param_source.py
+    from app.pipeline1 import param_source
+
+    params.update(param_source.resolve_param_override(board, kind))
     # [2026-08-31] 10d_reg 是 TOP10 第二票唯一评估头 — 多线程直方图浮点累加顺序
     # 非确定, 同配置重训 TOP10 日均可差 ±0.04 (08-30 +0.0571 vs 08-31 +0.0092,
     # 特征/标签/超参/seed 全同, 窗仅差 1 日), 方差与闸信号同量级 → 闸近似抛硬币.
@@ -187,6 +192,47 @@ MODEL_KINDS = (
     "10d_reg",
     "10d_cls",
 )
+
+
+# ── [2026-09-12] per-head 特征集 (LEGACY_HEAD_EXTRA_COLS, 8 格矩阵判词) ──
+def kind_feature_cols(
+    board: str, feature_cols: list[str], available=None
+) -> dict[str, list[str]]:
+    """共享清单 + 本头族 (reg/cls) extras → {kind: 列清单}.
+
+    available 给定时 (训练帧列集合), 缺失 extra 剔除 + 大声告警 — 模型实际训练
+    列数必须与 bundle 声明一致, 否则 serving 端 0 填充后特征数错位直接崩溃
+    (同 _force_include_avail 纪律)。
+    """
+    from config.settings import LEGACY_HEAD_EXTRA_COLS
+
+    board_cfg = LEGACY_HEAD_EXTRA_COLS.get(board) or {}
+    by_kind: dict[str, list[str]] = {}
+    for kind in MODEL_KINDS:
+        fam = "cls" if kind.endswith("cls") else "reg"
+        extras = list(board_cfg.get(fam) or [])
+        cols = list(feature_cols) + [c for c in extras if c not in feature_cols]
+        if available is not None:
+            dropped = [c for c in cols if c not in available]
+            if dropped:
+                logger.warning(
+                    "[%s/%s] per-head 特征缺失 %d 列, 剔除不进该头: %s",
+                    board,
+                    kind,
+                    len(dropped),
+                    dropped[:5],
+                )
+                cols = [c for c in cols if c in available]
+        by_kind[kind] = cols
+    return by_kind
+
+
+def cols_for(bundle: dict, kind: str) -> list[str]:
+    """per-kind 列清单; 旧 bundle 无 feature_cols_by_kind → 共享清单回退。"""
+    by_kind = bundle.get("feature_cols_by_kind") or {}
+    return by_kind.get(kind) or bundle.get("feature_cols") or []
+
+
 EXTRA_KINDS = (
     "quantile_models_3d",
     "quantile_models_5d",
@@ -209,14 +255,22 @@ def risk_filter(df: pd.DataFrame) -> pd.DataFrame:
     return df[mask]
 
 
-# ── [2026-09-10] 10d 头秩目标变换 (LEGACY_10D_RANK_TARGET, 688228 案) ──
-def rank_target_enabled(board: str) -> bool:
-    """10d_reg 是否用截面百分位目标训练 (配置门控, 生产默认关)."""
-    from config.settings import LEGACY_10D_RANK_TARGET
+# ── [2026-09-10] reg 头秩目标变换 (LEGACY_REG_RANK_TARGET, 688228 案;
+#    0912 由 10d 单头泛化到全部 reg 幅度头) ──
+def rank_target_kinds(board: str) -> tuple[str, ...]:
+    """该板启用秩目标的 reg 头种类 (配置门控, 生产默认空 = 零行为变化)."""
+    from config.settings import LEGACY_REG_RANK_TARGET
 
-    return bool(LEGACY_10D_RANK_TARGET.get("enable")) and board in set(
-        LEGACY_10D_RANK_TARGET.get("boards", ("main", "dual"))
-    )
+    if not LEGACY_REG_RANK_TARGET.get("enable"):
+        return ()
+    if board not in set(LEGACY_REG_RANK_TARGET.get("boards", ("main", "dual"))):
+        return ()
+    return tuple(LEGACY_REG_RANK_TARGET.get("kinds", ("10d_reg",)))
+
+
+def _rank_map_key(kind: str) -> str:
+    """reg 头种类 → bundle 秩映射键 ("10d_reg" → "10d_rank_map", 旧键不变)."""
+    return kind.removesuffix("_reg") + "_rank_map"
 
 
 def rank_map_apply(rmap: dict | None, p) -> np.ndarray:
@@ -417,11 +471,13 @@ class DualTrackTrainer:
         es = segs["es"].dropna(subset=[label])
         train = risk_filter(train)
         es = risk_filter(es)
-        # [2026-09-10] 秩目标 (LEGACY_10D_RANK_TARGET): 幅度 Huber 目标让树追逐
+        # [2026-09-10] 秩目标 (LEGACY_REG_RANK_TARGET): 幅度 Huber 目标让树追逐
         # 彩票尾 — pred10>+6% 桶承诺 +11.2% 实得 −0.2% (T+1→T+10 匹配视界审计,
-        # 688228 案). 改训 per-date 截面百分位 (0..1); 预测输出为秩, 由
-        # train_window 落盘的 10d_rank_map (训练段桶中位) 映射回收益语义.
-        use_rank = kind == "10d_reg" and rank_target_enabled(board)
+        # 688228 案); [0912 泛化] dual 三 reg 头 OOS IC −0.11~−0.14 (cls 同窗全正)
+        # — huber 在双创/科创重尾标签上把分裂容量耗在翻转的尾部方差, rank 目标 =
+        # 评测口径本身 (评估即 rank IC). 改训 per-date 截面百分位 (0..1); 预测输出
+        # 为秩, 由 train_window 落盘的 {k}d_rank_map (训练段桶中位) 映射回收益语义.
+        use_rank = kind in rank_target_kinds(board)
         if use_rank:
             train["_rank_target"] = train.groupby("date")[label].rank(pct=True)
             es["_rank_target"] = es.groupby("date")[label].rank(pct=True)
@@ -443,8 +499,34 @@ class DualTrackTrainer:
         # 过 dropna(label)+risk_filter, X/y/w 同帧同行序.
         if kind.endswith("reg") and HALF_LIFE_DAYS is not None:
             w = decay_sample_weights(train["date"], HALF_LIFE_DAYS)
+        elif kind.endswith("cls"):
+            # [0913 #8] cls 半衰期 json 旋钮 (relay-7 W_hl60 杠杆的着陆位;
+            # None (无 json/过旧/非法) → B10 默认 250, fail-open)
+            from app.pipeline1 import param_source
+
+            hl = param_source.resolve_cls_half_life(board)
+            w = self.time_weights(train, half_life=hl or HALF_LIFE)
         else:
             w = self.time_weights(train)
+
+        # [2026-09-12] 尾部样本加权 LEGACY_TAIL_WEIGHT (爆发猎杀): L2 平均化让
+        # reg 头"说小声话" (002848 见+3.8% 实际+10%), 训练段 label top 分位样本
+        # ×weight 放大尾部错判代价; 与时间衰减权重相乘, 目标/排名键/闸不动.
+        # 回退 = enable=False (config/settings.py 注释).
+        from config.settings import LEGACY_TAIL_WEIGHT
+
+        if LEGACY_TAIL_WEIGHT["enable"] and kind in tuple(LEGACY_TAIL_WEIGHT["kinds"]):
+            thr = np.quantile(y, LEGACY_TAIL_WEIGHT["top_q"])
+            w = w * np.where(y >= thr, float(LEGACY_TAIL_WEIGHT["weight"]), 1.0)
+            logger.info(
+                "[%s/%s] 尾部加权: top_q=%.2f thr=%.4f w=%.1f 覆盖=%.1f%%",
+                board,
+                kind,
+                LEGACY_TAIL_WEIGHT["top_q"],
+                thr,
+                LEGACY_TAIL_WEIGHT["weight"],
+                100.0 * (y >= thr).mean(),
+            )
 
         # 释放 DataFrame 引用 (X/y 已提取为 numpy 数组)
         del train, es
@@ -539,14 +621,31 @@ class DualTrackTrainer:
                 f"[{board}] 训练样本深度不足: {depth} 交易日 "
                 f"(需 ≥ {ES_DAYS + CALIB_DAYS + TEST_DAYS + MIN_TRAIN_DAYS})"
             )
+        # ── [2026-09-12] per-head 合成特征: quality_factor 需 per-date 截面 rank,
+        # 在 split_window 前的整帧合成 (split 后 segs 为拷贝); 公式单一来源
+        # feature_selector.add_quality_factor, 推理端同款。
+        from config.settings import LEGACY_HEAD_EXTRA_COLS
+
+        _extras_ref: set[str] = set()
+        for _fam_cols in (LEGACY_HEAD_EXTRA_COLS.get(board) or {}).values():
+            _extras_ref.update(_fam_cols)
+        if "quality_factor" in _extras_ref and "quality_factor" not in df.columns:
+            from .feature_selector import add_quality_factor
+
+            add_quality_factor(df)
+        available = set(df.columns)
+
         segs = self.split_window(df, window)
         # 内存 (2026-08-13): split_window 已把数据拷贝进 segs, df (整块增强帧 ~3GB)
         # 不再被引用 → 立即释放, 否则训练全程驻留导致 main OOM
         del df
         gc.collect()
 
+        # ── [2026-09-12] per-head 列清单: 共享 + 本头族 extras (缺失列剔除+告警) ──
+        by_kind = kind_feature_cols(board, feature_cols, available=available)
+
         # ── 内存: 只保留训练/校准/OOS 需要的列, 释放 OHLCV 原始列 ──
-        keep_cols = set(feature_cols) | {
+        keep_cols = {c for ks in by_kind.values() for c in ks} | {
             "symbol",
             "date",
             "board",
@@ -570,6 +669,7 @@ class DualTrackTrainer:
         out = {
             "board": board,
             "feature_cols": feature_cols,
+            "feature_cols_by_kind": by_kind,
             "models": {},
             "segs": segs,
             "_window_total": window,
@@ -599,7 +699,7 @@ class DualTrackTrainer:
             if self._resolve_label(kind, segs["train"].columns) is None:
                 logger.info("[%s] %s — 标签列缺失, 跳过", board, kind)
                 continue
-            model, label = self._train_one(kind, segs, feature_cols, board)
+            model, label = self._train_one(kind, segs, by_kind[kind], board)
             out["models"][kind] = (model, label)
             logger.info(
                 "[%s] %s 训练完成, 样本 %d",
@@ -612,28 +712,31 @@ class DualTrackTrainer:
             if checkpoint is not None:
                 self._save_checkpoint(out, checkpoint)
 
-        # ── [2026-09-10] 秩目标校准映射: 10d_reg 输出为百分位, 经训练段桶中位
+        # ── [0910→0912 泛化] 秩目标校准映射: 启用头输出为百分位, 经训练段桶中位
         # 映射回收益语义 (checkpoint 不持久化该映射 → 断点续训恢复后此处确定性
-        # 重拟合; 拟合行 = 训练同帧 dropna+risk_filter). fit_calibrator 的 10d
+        # 重拟合; 拟合行 = 训练同帧 dropna+risk_filter). fit_calibrator 的 reg
         # 残差在收益语义空间计算依赖此映射, 必须先落 out.
-        if "10d_reg" in out["models"] and rank_target_enabled(board):
-            label10 = out["models"]["10d_reg"][1]
-            seg_train = risk_filter(segs["train"].dropna(subset=[label10]))
+        for kind in rank_target_kinds(board):
+            if kind not in out["models"]:
+                continue
+            label_k = out["models"][kind][1]
+            seg_train = risk_filter(segs["train"].dropna(subset=[label_k]))
             if len(seg_train):
-                from config.settings import LEGACY_10D_RANK_TARGET
+                from config.settings import LEGACY_REG_RANK_TARGET
 
-                out["10d_rank_map"] = fit_rank_map(
-                    out["models"]["10d_reg"][0],
+                out[_rank_map_key(kind)] = fit_rank_map(
+                    out["models"][kind][0],
                     seg_train,
-                    label10,
-                    feature_cols,
-                    bins=int(LEGACY_10D_RANK_TARGET.get("bins", 20)),
+                    label_k,
+                    by_kind.get(kind) or feature_cols,
+                    bins=int(LEGACY_REG_RANK_TARGET.get("bins", 20)),
                 )
                 logger.info(
-                    "[%s] 10d 秩目标映射: %d 桶, 顶桶中位 %+.3f",
+                    "[%s] %s 秩目标映射: %d 桶, 顶桶中位 %+.3f",
                     board,
-                    out["10d_rank_map"]["bins"],
-                    out["10d_rank_map"]["grid_ret"][-1],
+                    kind,
+                    out[_rank_map_key(kind)]["bins"],
+                    out[_rank_map_key(kind)]["grid_ret"][-1],
                 )
 
         # ── 训练未完成的 extras ──
@@ -854,7 +957,7 @@ class DualTrackTrainer:
                 continue  # 该视界未训练 (标签列缺失) → 不注册校准器
             model, label = trained["models"][kind]
             calib = trained["segs"]["calib"].dropna(subset=[label])
-            cols = trained["feature_cols"]
+            cols = cols_for(trained, kind)
             # 校准集可能为空 (小窗口 + 多特征列 NaN), 此时跳过校准用原始 prob
             if len(calib) == 0:
                 logger.warning(
@@ -883,12 +986,12 @@ class DualTrackTrainer:
             if len(calib) < 30:
                 continue
             r = reg_model.predict(
-                np.nan_to_num(calib[trained["feature_cols"]].values, nan=0.0)
+                np.nan_to_num(calib[cols_for(trained, kind_reg)].values, nan=0.0)
             )
             # [2026-09-10] 秩目标头: 残差须在收益语义空间 (label − 映射(百分位)),
             # 否则推理端 prob_up = P(ret>TH|pred) 的 pred 口径错位 (秩 vs 收益)
-            if kind_reg == "10d_reg":
-                r = rank_map_apply(trained.get("10d_rank_map"), r)
+            # [0912 泛化] 逐 reg 头各自的秩映射 (未启用头 get 返 None → 原样透传)
+            r = rank_map_apply(trained.get(_rank_map_key(kind_reg)), r)
             e = (calib[reg_label].values - r).astype(np.float64)
             e = e[np.isfinite(e)]
             if len(e) >= 30:
@@ -931,6 +1034,9 @@ class DualTrackTrainer:
 
         test = trained["segs"]["test"].copy()
         need = set(trained["feature_cols"]) | set(cur.get("feature_cols") or [])
+        for _b in (trained, cur):
+            for _ks in (_b.get("feature_cols_by_kind") or {}).values():
+                need.update(_ks)
         missing = [c for c in sorted(need) if c not in test.columns]
         if missing:
             from .feature_selector import BRUTE_FAMILIES, BruteForceGenerator
@@ -962,7 +1068,7 @@ class DualTrackTrainer:
         tol_half = float(cfg.get("tol_half", -0.002))
 
         def _daily(bundle: dict, model) -> tuple[pd.Series, dict[str, float]]:
-            cols = bundle["feature_cols"]
+            cols = cols_for(bundle, "10d_reg")
             t = test[["symbol", "date", "label_pm_10d_net"]].copy()
             t["pred"] = model.predict(
                 np.nan_to_num(test[cols].to_numpy(dtype=float), nan=0.0)
@@ -1000,7 +1106,7 @@ class DualTrackTrainer:
                 model, _label = self._train_one(
                     "10d_reg",
                     trained["segs"],
-                    trained["feature_cols"],
+                    cols_for(trained, "10d_reg"),
                     trained["board"],
                     seed=seed,
                 )
@@ -1123,36 +1229,98 @@ class DualTrackTrainer:
         return out
 
     def validate_oos(self, trained: dict, ic_min: float = OOS_IC_MIN) -> dict:
-        """测试段 Rank IC (仅月度归因段). IC >= 0.03 才允许切换新模型.
+        """测试段 Rank IC (仅月度归因段).
 
-        切换判据 = 跨视界加权 IC (LABEL_WEIGHTS): 各回归模型 IC 按权重求和,
+        切换判据 = 跨视界加权 IC (LABEL_WEIGHTS): 闸头模型 IC 按权重求和,
         1d 最不可执行 (T+1 买入当日不可卖) 权重最低, 3d 历史预测力最强.
+        [09-12] 闸头 = serving 头: LEGACY_PROB_SOURCE="auto" (默认) 时每次重训
+        自选 (用户令: cls vs reg 不固定); 显式 "reg"/"cls" = 强制回滚.
+        [09-13 用户令] auto 判据 IC→TOP10 净: IC 与 TOP10 可背离 (#11 WORM
+        main reg 修复臂 gw +.081 > cls +.058 但 TOP10 −.006 vs +.050),
+        TOP10=判定对象. 闸判与交付同头 (判即所服务)。
         """
+        from config.settings import LEGACY_PROB_SOURCE
+
         from .ic_screener import ICScreener
         from .label_engine import LABEL_WEIGHTS
 
         test = trained["segs"]["test"]
-        cols = trained["feature_cols"]
         ics = {}
         for kind, (model, label) in trained["models"].items():
             sub = test.dropna(subset=[label]).copy()
             if len(sub) < 30:
                 ics[kind] = 0.0
                 continue
-            sub["_pred"] = model.predict(np.nan_to_num(sub[cols].values, nan=0.0))
+            x = np.nan_to_num(sub[cols_for(trained, kind)].values, nan=0.0)
+            # cls 头取 predict_proba: hard label 是 0/1, Rank IC 无分辨力
+            sub["_pred"] = (
+                model.predict_proba(x)[:, 1]
+                if kind.endswith("cls")
+                else model.predict(x)
+            )
             ics[kind] = ICScreener.rank_ic(
                 sub.rename(columns={"_pred": "score"}), "score", label
             )
-        # 跨视界加权 IC (回归模型; 分类分不直接贡献收益率)
+        # 跨视界加权 IC: 双头族聚合恒存 (闸头另存 weighted_ic 供闸判; 09-12 前
+        # 只留闸头聚合 → 另一头逐批无档可查, 历史轨迹只能重放 bundle)
         total_w = sum(LABEL_WEIGHTS.values())
-        weighted_ic = (
-            sum(LABEL_WEIGHTS[k] * ics.get(f"{k}d_reg", 0.0) for k in LABEL_WEIGHTS)
+        weighted_ic_by_head = {
+            suffix: sum(
+                LABEL_WEIGHTS[k] * ics.get(f"{k}d_{suffix}", 0.0) for k in LABEL_WEIGHTS
+            )
             / total_w
+            for suffix in ("reg", "cls")
+        }
+        # [0913 用户令] auto 头选择判据 IC→TOP10 净 (判定对象=TOP10): 双头族各
+        # 视界每日 top10 净收益均值再跨视界平均; 平手取 reg (历史默认头)
+        top10_net_by_head = {}
+        for suffix in ("reg", "cls"):
+            per_h = []
+            for k in LABEL_WEIGHTS:
+                kind = f"{k}d_{suffix}"
+                if kind not in trained["models"]:
+                    continue
+                model, _ = trained["models"][kind]
+                net_label = self._resolve_label(f"{k}d_reg", test.columns)
+                if net_label is None:
+                    continue
+                sub = test[["date", net_label]].dropna(subset=[net_label])
+                if sub.empty:
+                    continue
+                x = np.nan_to_num(
+                    test.loc[sub.index, cols_for(trained, kind)].values, nan=0.0
+                )
+                sub = sub.assign(
+                    _pred=(
+                        model.predict_proba(x)[:, 1]
+                        if suffix == "cls"
+                        else model.predict(x)
+                    )
+                ).sort_values(["date", "_pred"], ascending=[True, False])
+                sub["_rk"] = sub.groupby("date").cumcount() + 1
+                daily = sub.loc[sub["_rk"] <= 10].groupby("date")[net_label].mean()
+                per_h.append(float(daily.mean()))
+            top10_net_by_head[suffix] = (
+                float(np.mean(per_h)) if per_h else float("-inf")
+            )
+        # serving 头判定: auto = argmax 双头族 TOP10 净; 显式 reg/cls = 强制回滚旋钮
+        src = LEGACY_PROB_SOURCE.get(trained.get("board"), "reg")
+        gate_suffix = (
+            src
+            if src in ("reg", "cls")
+            else max(("reg", "cls"), key=lambda s: top10_net_by_head[s])
         )
+        weighted_ic = weighted_ic_by_head[gate_suffix]
         return {
             "ics": ics,
+            "gate_head": gate_suffix,
             "weighted_ic": weighted_ic,
+            "weighted_ic_reg": weighted_ic_by_head["reg"],
+            "weighted_ic_cls": weighted_ic_by_head["cls"],
+            "top10_net_reg": top10_net_by_head["reg"],
+            "top10_net_cls": top10_net_by_head["cls"],
             "pass": weighted_ic >= ic_min,
+            "threshold": ic_min,
             "best_ic_key": max(ics, key=lambda k: ics.get(k, 0.0)),
         }
 
@@ -1167,6 +1335,9 @@ class DualTrackTrainer:
             "models": trained["models"],
             "calibrator": trained["calibrator"],
         }
+        # [2026-09-12] per-head 列清单: 推理端 cols_for 回退共享, 不落盘则 extras 失效
+        if trained.get("feature_cols_by_kind"):
+            bundle["feature_cols_by_kind"] = trained["feature_cols_by_kind"]
         for (
             extra
         ) in (  # 多视界校准器 + E1/E2/排序 (quantile 3d/5d 必须落盘, gate3 用其中位数)
@@ -1175,7 +1346,10 @@ class DualTrackTrainer:
             "quantile_models_5d",
             "pain_model",
             "rank_model",
-            "10d_rank_map",  # [2026-09-10] 秩目标校准映射 (推理端百分位→收益)
+            # [0910→0912] 秩目标校准映射 (推理端百分位→收益, 逐 reg 头; 10d 键不变)
+            "3d_rank_map",
+            "5d_rank_map",
+            "10d_rank_map",
         ):
             if extra in trained:
                 bundle[extra] = trained[extra]
@@ -1184,6 +1358,10 @@ class DualTrackTrainer:
         for key, val in trained.items():
             if key.startswith("reg_resid_") and key.endswith("d"):
                 bundle[key] = val
+        # [09-12 夜] 动态头选择: 本批自选的 serving 头 (auto 旋钮; 旧包无此键
+        # → 推理端按 LEGACY_PROB_SOURCE_FALLBACK 回退)
+        if trained.get("prob_source"):
+            bundle["prob_source"] = trained["prob_source"]
         # [08-29] 超额标签: 标记 + 市场均值常数 (推理端 pred_ret_{k}d 加回复原绝对口径)
         for key in ("label_excess",) + tuple(f"mkt_expected_{k}d" for k in (3, 5, 10)):
             if key in trained:
@@ -1262,6 +1440,9 @@ class DualTrackTrainer:
             if extras:
                 trained.update(extras)
             oos = self.validate_oos(trained)
+            # [09-12 夜] 动态头选择入包: auto 旋钮下本批自选的 serving 头 →
+            # bundle["prob_source"] (推理端按此走; 强制旋钮压过它, 见 predictor)。
+            trained["prob_source"] = oos["gate_head"]
             # [08-29] TOP10 第二票: 交付口径非劣闸 (用户裁决: 切换按 TOP10 质量判,
             # IC 只是代理量). oos["pass"] 保持纯 IC 语义 (recalibrate 链独读).
             oos["top10"] = self.top10_second_vote(trained)
@@ -1275,9 +1456,10 @@ class DualTrackTrainer:
             }
             if not results[board]["switched"]:
                 logger.warning(
-                    "[%s] 保留旧模型: IC闸=%s (weighted_IC=%.4f, 阈值 %.2f) | TOP10闸=%s",
+                    "[%s] 保留旧模型: IC闸=%s (头=%s, weighted_IC=%.4f, 阈值 %.2f) | TOP10闸=%s",
                     board,
                     oos["pass"],
+                    oos.get("gate_head", "reg"),
                     oos.get("weighted_ic", 0.0),
                     OOS_IC_MIN,
                     oos["top10"]["pass"],

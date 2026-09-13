@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -46,8 +47,168 @@ def _load_board(board: str) -> pd.DataFrame | None:
         return None
     t["symbol"] = t["symbol"].astype(str)
     t["date"] = pd.to_datetime(t["date"])
+    # prob 头 extras (面板外合成列) 与 serving 同源合成 (8格 0912); 宽集 feature_cols
+    # 自动收录. 全史扩窗 = per-date 截面 rank 在全训练史上合成, 与 gate_probabilities
+    # 单日截面合成同公式 (add_quality_factor groupby date).
+    t = prob_head.synthesize_prob_extras(t, board)
     t = prob_head._add_mfe_3d(t)
     return t
+
+
+def _missing_feat_cols(bundle: dict | None, columns) -> list[str]:
+    """[0912 夜] bundle 特征已不在面板的列 (schema 漂移检测, 供自愈重训)."""
+    if bundle is None:
+        return []
+    have = set(columns)
+    return [c for c in bundle.get("feat_cols", []) if c not in have]
+
+
+def _shadow_prob(
+    board: str, t: pd.DataFrame, eval_rows: pd.DataFrame, eval_lo
+) -> np.ndarray:
+    """purged 影子概率 (0913; purged_v2 起逐折调用): eval_lo 前推
+    RANK_SOURCE_PURGE_DAYS 交易日截断面板重拟合各半衰期档, 影子集预测
+    eval_rows (调用方按折切 eval_lo → 逐折新鲜 refit).
+
+    动机: 原口径用在役全史 bundle 评 eval 窗 → 尾部 eval 日 100% in-sample →
+    prob 系统性虚高 (0912 首评双板选 prob, walk-forward #11 实测 mag 碾压).
+    purge = buy_lag 1 + 10d 视界 = 11 交易日, 同 MAG10D_CAL realized_drop
+    (calibration.py) 无前瞻口径; label_pain 3d 窗 < 11 亦全覆盖.
+    任一档 fit raise → 向上抛 (调用方 fail-open).
+    """
+    from app.pipeline_parallel.config import RANK_SOURCE_PURGE_DAYS
+
+    uniq = np.unique(t["date"].values)
+    pos = int(np.searchsorted(uniq, pd.Timestamp(eval_lo).to_datetime64()))
+    purge = int(RANK_SOURCE_PURGE_DAYS)
+    if pos < purge:
+        raise ValueError(
+            f"[{board}] 面板日期不足以前推 {purge} 交易日 purge "
+            f"(eval_lo={eval_lo}) -> 影子评估放弃 (fail-open)"
+        )
+    cut = uniq[pos - purge]
+    train = t.loc[t["date"] <= cut]
+    if train.empty:
+        raise ValueError(f"[{board}] purged 影子训练集为空 (cutoff={cut})")
+    shadow: list[dict] = []
+    for hl in PROB_GATE["half_lives"]:
+        print(
+            f"[{board}] purged 影子拟合 hl={hl} "
+            f"(train<={pd.Timestamp(cut):%Y-%m-%d}, {len(train):,} 行)",
+            flush=True,
+        )
+        model, cols = prob_head._fit_cls_model(board, train, hl)
+        shadow.append({"feat_cols": cols, "model": model})
+    return prob_head.ensemble_predict(shadow, eval_rows).to_numpy()
+
+
+def _eval_rank_source(board: str, t: pd.DataFrame, trained_through: str) -> None:
+    """[0912 夜用户令] 重训后评估 mag/prob/blend 三键 → WORM json + 头选择台账行.
+
+    mag = 服务同款 calibrate_mag10d (both 口径 score, 只用已实现标签, 无前瞻);
+    prob = [0913 purged_v2] 逐折新鲜影子重评: 评估窗分 RANK_SOURCE_WF_FOLDS 折,
+    每折折首前推 11 交易日截断重拟合 (_shadow_prob), 消除在役全史 bundle 的
+    in-sample 虚高与单次 cutoff 的窗尾陈旧评分 (purged_v1 假象根因);
+    指标 = trailing RANK_SOURCE_EVAL_DAYS 个已实现决策日逐视界 (3d/5d/10d,
+    用户令) Spearman + TOP10 实得。argmax 加权 IC 自选 (平局→blend)。
+    任何异常 → fail-open 跳过 (serving 维持 blend, 不杀链)。
+    头名映射 (台账列共用): mag≈reg 幅度头, prob≈cls 概率头。
+    """
+    from app.pipeline_parallel import rank_source
+    from app.pipeline_parallel.calibration import calibrate_mag10d
+    from app.pipeline_parallel.config import RANK_SOURCE_EVAL_DAYS
+    from scripts._head_choice_ledger import append_head_choice_row
+    from scripts._shortlist_t5_t10 import _panel_per_stock
+
+    try:
+        bundles = prob_head.load_all_tiers(board)
+        if bundles is None:
+            print(
+                f"[{board}] rank_source 评估跳过: 概率 bundle 不全 (fail-open)",
+                flush=True,
+            )
+            return
+        panel = _panel_per_stock().get((board, "both"))
+        if panel is None or panel.empty:
+            print(f"[{board}] rank_source 评估跳过: both 面板缺失", flush=True)
+            return
+        work = panel[["symbol", "date", "score", "label_pm_10d_net"]].copy()
+        work["board"] = board
+        mag = calibrate_mag10d(work)  # → [symbol, date, board, mag] (已实现边界内)
+        # prob 只在评估窗行上预测 (trailing 已实现日 + 成熟余量), 特征取自训练帧 t
+        feat_union = sorted(
+            {c for b in bundles.values() for c in b.get("feat_cols", [])}
+        )
+        missing = [c for c in feat_union if c not in t.columns]
+        if missing:
+            raise ValueError(f"概率头特征缺 {len(missing)} 列: {missing[:5]}")
+        use_dates = sorted(mag["date"].unique())[-(int(RANK_SOURCE_EVAL_DAYS) + 15) :]
+        # [0913 purged_v2] 逐折新鲜 refit: purged_v1 单次 cutoff (use_dates[0] 前 11td)
+        # 令窗尾被 ~4 个月陈旧模型评分 → json chosen=prob 陈旧假象 (freshwf 定裁:
+        # 新鲜口径 prob 双板全负, rankkey_freshwf_check_0913). 分 RANK_SOURCE_WF_FOLDS
+        # 折, 每折折首前推 11td 截断重拟合 → 评分口径对齐 freshwf.
+        from app.pipeline_parallel.config import RANK_SOURCE_WF_FOLDS
+
+        rows = t.loc[t["date"].isin(use_dates), ["symbol", "date"] + feat_union].copy()
+        fold_dates = np.array_split(np.asarray(use_dates), int(RANK_SOURCE_WF_FOLDS))
+        probs = []
+        for fd in fold_dates:
+            sel = rows["date"].isin(fd)
+            probs.append(
+                pd.Series(
+                    _shadow_prob(board, t, rows.loc[sel], fd[0]),
+                    index=rows.loc[sel].index,
+                )
+            )
+        rows["prob"] = pd.concat(probs)
+        labels = panel[
+            ["symbol", "date"] + [f"label_pm_{h}_net" for h in rank_source.HORIZONS]
+        ]
+        frame = mag.merge(
+            rows[["symbol", "date", "prob"]], on=["symbol", "date"], how="left"
+        ).merge(labels, on=["symbol", "date"], how="left")
+        evaluation = rank_source.evaluate_keys(frame, eval_days=RANK_SOURCE_EVAL_DAYS)
+        chosen = rank_source.choose_rank_key(evaluation)
+        prev = rank_source.load_latest_rank_source(board)
+        payload = {
+            "board": board,
+            "trained_through": trained_through,
+            "chosen": chosen,
+            "eval_mode": "purged_v2_wf2",
+            "eval_days": int(RANK_SOURCE_EVAL_DAYS),
+            "metrics": evaluation,
+            "n_rows": int(len(frame)),
+            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        path = rank_source.save_rank_source(board, payload)
+        ics = {
+            f"{h}_{s}": evaluation[k]["per_horizon"][h]["ic"]
+            for h in rank_source.HORIZONS
+            for s, k in (("reg", "mag"), ("cls", "prob"))
+        }
+        wrote = append_head_choice_row(
+            "parallel",
+            board,
+            time.strftime("%Y%m%d"),
+            weighted_ic_reg=evaluation["mag"]["weighted_ic"],
+            weighted_ic_cls=evaluation["prob"]["weighted_ic"],
+            chosen=chosen,
+            gate_pass=True,
+            switched=bool(prev is not None and prev.get("chosen") != chosen),
+            ics=ics,
+            n_features=len(feat_union),
+        )
+        print(
+            f"[{board}] rank_source: chosen={chosen} "
+            f"(mag={evaluation['mag']['weighted_ic']}, prob={evaluation['prob']['weighted_ic']}) "
+            f"-> {path.name} (台账{'写入' if wrote else '已有跳过'})",
+            flush=True,
+        )
+    except Exception as exc:
+        print(
+            f"[{board}] rank_source 评估失败 (fail-open, serving 维持 blend): {exc}",
+            flush=True,
+        )
 
 
 def main() -> int:
@@ -68,8 +229,19 @@ def main() -> int:
                 if b is None
                 else prob_head.bundle_age_trading_days(dates, str(b["trained_through"]))
             )
+            # [0912 夜] schema 漂移自愈: bundle 特征列被面板删列 (ths_* 8列清除后
+            # 0910 批 bundle 5 列悬空) → serving predict() 直接 raise, 且新鲜度
+            # 判据 (age<21 skip) 看不见 → 必须无视年龄强制重训.
+            missing = _missing_feat_cols(b, t.columns)
+            if missing:
+                print(
+                    f"[{board}/hl{hl}] 面板已缺 bundle 特征 {len(missing)} 列 "
+                    f"(如 {missing[:3]}) → 重训 (schema 漂移自愈)",
+                    flush=True,
+                )
             if (
                 not force
+                and not missing
                 and b is not None
                 and age is not None
                 and age < PROB_GATE["refit_every_days"]
@@ -88,6 +260,8 @@ def main() -> int:
                 f"-> {path.name}",
                 flush=True,
             )
+        # [0912 夜用户令] 每次运行都评估三键 (bundle 未重训日也可用新鲜面板复核)
+        _eval_rank_source(board, t, str(latest.date()))
     return 0 if ok else 1
 
 
