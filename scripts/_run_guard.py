@@ -79,6 +79,7 @@ HEAVY_SENTINELS = (
     "_rescan_mag_pool_0913.py",
     "_dual_cls_feat_review_0913.py",
     "_param_resweep_weekly.py",
+    "_missfeat_topn_addendum_0913.py",
 )
 ORCHESTRATOR_SENTINEL = "run_daily_automation.py"
 # 链级守卫额外把另一条链实例视为冲突; 脚本级不含 (见模块 docstring).
