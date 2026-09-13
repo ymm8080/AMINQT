@@ -637,6 +637,21 @@ LEGACY_HEAD_EXTRA_COLS = {
     },
 }
 
+# ── [2026-09-12] PARALLEL per-head 特征集 (8格矩阵, 结构先行; 内容随 #11 A/B 判词填) ──
+# 板×头: mag = 幅度头 pool 追加列 (app.pipeline_parallel.config.effective_pool,
+#   作用于交付打分链: backtest.write_system_lists / build_merged_shortlist +
+#   交付端 _panel_per_stock / _anchor_frame; 诊断类 run_system/分档/last_days
+#   仍用 spec 原池). prob = 概率头 LGBM feat_cols 追加列 — 概率头是宽集
+#   (feature_cols 全数值列自动收录), 故 prob extras 只对**面板外合成列**有意义
+#   (现支持 quality_factor, 公式=feature_selector.add_quality_factor,
+#   train/serve 同源合成). 默认全空 = 当前产线行为零变化.
+# 列缺失: mag 由 pool_score 跳过并再归一化; prob 合成失败保持缺失 →
+#   predict 缺列 raise (schema 漂移大声失败, fail-loud).
+PARALLEL_HEAD_EXTRA_COLS = {
+    "main": {"mag": [], "prob": []},
+    "dual": {"mag": [], "prob": []},
+}
+
 # ── parallel 概率展示层再校准 (2026-08-29 用户批准) ──
 # 08-29 实测交付概率高估 (pred_prob_10d 均值 55.8% vs MFE>6% 实得 27.5%, +28pp;
 # tmp_t/_rebase_diag_0829.py). 展示层每板块每视界乘一个收敛因子 = 实得命中率/预测

@@ -126,6 +126,34 @@ def feature_cols(t: pd.DataFrame) -> list[str]:
     ]
 
 
+def synthesize_prob_extras(df: pd.DataFrame, board: str) -> pd.DataFrame:
+    """概率头 extras 缺列合成 (8格矩阵 0912; train/serve 同源调用).
+
+    概率头是宽集 (feature_cols 全数值列自动收录) → extras 只对面板外合成列有
+    意义. 现支持 quality_factor (公式=app.pipeline1.feature_selector.
+    add_quality_factor, 与 LEGACY per-head 完全同源); 帧内已有该列 → 跳过.
+    无法合成的 extra 保持缺失并 print 告警 — predict 缺列 raise = schema 漂移
+    大声失败 (fail-loud), 不静默.
+    """
+    from config.settings import PARALLEL_HEAD_EXTRA_COLS
+
+    extra = PARALLEL_HEAD_EXTRA_COLS.get(board, {}).get("prob") or []
+    for col in extra:
+        if col in df.columns:
+            continue
+        if col == "quality_factor":
+            from app.pipeline1.feature_selector import add_quality_factor
+
+            if add_quality_factor(df):
+                continue
+        print(
+            f"[prob_head] {board} prob extra '{col}' 无法合成 (非合成列/基列缺失) "
+            "-> 保持缺失, predict 将按 schema 漂移 raise",
+            flush=True,
+        )
+    return df
+
+
 def train_bundle(
     board: str, t: pd.DataFrame, trained_through: str, half_life: int | None
 ) -> Path:
@@ -275,14 +303,18 @@ def gate_probabilities(board: str) -> tuple[pd.Series, float] | None:
     if base is None:
         print(f"[prob_head] {board} base_rate 可观测样本不足 -> 闸不可用", flush=True)
         return None
+    feat_cols = list(bundles[0]["feat_cols"])
+    schema = set(pq.ParquetFile(str(fp)).schema_arrow.names)
+    have = [c for c in feat_cols if c in schema]
     cs = pq.read_table(
         str(fp),
-        columns=["symbol"] + list(bundles[0]["feat_cols"]),
+        columns=["symbol"] + have,
         filters=[("date", "==", latest)],
     ).to_pandas()
     if cs.empty:
         print(f"[prob_head] {board} 当日截面为空 -> 闸不可用", flush=True)
         return None
+    cs = synthesize_prob_extras(cs, board)
     cs["symbol"] = cs["symbol"].astype(str)
     pred = ensemble_predict(bundles, cs)
     return pd.Series(pred.to_numpy(), index=cs["symbol"]), base

@@ -46,6 +46,10 @@ def _load_board(board: str) -> pd.DataFrame | None:
         return None
     t["symbol"] = t["symbol"].astype(str)
     t["date"] = pd.to_datetime(t["date"])
+    # prob 头 extras (面板外合成列) 与 serving 同源合成 (8格 0912); 宽集 feature_cols
+    # 自动收录. 全史扩窗 = per-date 截面 rank 在全训练史上合成, 与 gate_probabilities
+    # 单日截面合成同公式 (add_quality_factor groupby date).
+    t = prob_head.synthesize_prob_extras(t, board)
     t = prob_head._add_mfe_3d(t)
     return t
 

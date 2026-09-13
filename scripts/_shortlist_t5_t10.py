@@ -58,7 +58,7 @@ from app.pipeline1.label_engine import COST, slippage_tier
 from app.pipeline1.risk_overlays import share_float_upcoming_scan
 from app.pipeline_parallel import prob_head
 from app.pipeline_parallel.calibration import calibrate_mag10d
-from app.pipeline_parallel.config import FUSION, HORIZONS, SNIPER
+from app.pipeline_parallel.config import FUSION, HORIZONS, SNIPER, effective_pool
 from app.pipeline_parallel.scoring import pool_score
 from config.settings import (
     DATA_DIR,
@@ -410,7 +410,7 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
     返回 {(board, key): DataFrame[symbol, date, score, mfe_3d..mfe_10d]}.
     """
     out: dict[tuple[str, str], pd.DataFrame] = {}
-    need = [
+    base_need = [
         "symbol",
         "date",
         "close_hfq",
@@ -419,11 +419,28 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
         "label_pm_3d_net",
         "label_pm_5d_net",
         "label_pm_10d_net",
-    ] + [c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"]
+    ]
     if _PANEL_CACHE.get("ready"):
         return _PANEL_CACHE["data"]
     for board in ("main", "dual"):
         fp = DATA_DIR / f"_diag_stage_{board}_3y.parquet"
+        # 幅度头 per-board extras (8格 0912): 有效池打分; 缺席面板的 extras 剔除+告警
+        pool_sn = effective_pool(SNIPER, board)
+        pool_fu = effective_pool(FUSION, board)
+        schema = set(pq.ParquetFile(str(fp)).schema_arrow.names)
+        miss = sorted(
+            (set(pool_sn) | set(pool_fu)) - schema - {"pv_corr_5"}
+        )
+        if miss:
+            print(
+                f"[pool:{board}] mag extras 缺席 stage 面板, 剔除: {miss}",
+                flush=True,
+            )
+        need = base_need + [
+            c
+            for c in set(pool_sn) | set(pool_fu)
+            if c != "pv_corr_5" and c in schema
+        ]
         dates = pd.to_datetime(
             pq.read_table(str(fp), columns=["date"]).to_pandas()["date"]
         )
@@ -440,9 +457,9 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
         t = t.sort_values(["symbol", "date"]).reset_index(drop=True)
         t = _add_mfe(t)
         fr_sn = t[["symbol", "date"]].copy()
-        fr_sn["score"] = pool_score(t, SNIPER.pool)
+        fr_sn["score"] = pool_score(t, pool_sn)
         fr_fu = t[["symbol", "date"]].copy()
-        fr_fu["score"] = pool_score(t, FUSION.pool)
+        fr_fu["score"] = pool_score(t, pool_fu)
         for h in HORIZONS:
             fr_sn[f"mfe_{h}"] = t[f"mfe_{h}"]
             fr_fu[f"mfe_{h}"] = t[f"mfe_{h}"]
@@ -660,7 +677,16 @@ def _anchor_frame(board: str, window: int = ANCHOR_WINDOW) -> pd.DataFrame:
     if len(uniq) < window + 12:
         return pd.DataFrame()
     cutoff = uniq[-(window + 12)]
-    pool_cols = [c for c in set(SNIPER.pool) | set(FUSION.pool) if c != "pv_corr_5"]
+    # 幅度头 per-board extras (8格 0912): 与 _panel_per_stock 同有效池 (score 跨日
+    # 截面分位须与预测面板重叠日一致 → 锚的 top-N 即模型当日入选集)
+    pool_sn = effective_pool(SNIPER, board)
+    pool_fu = effective_pool(FUSION, board)
+    schema = set(pq.ParquetFile(str(fp)).schema_arrow.names)
+    pool_cols = [
+        c
+        for c in set(pool_sn) | set(pool_fu)
+        if c != "pv_corr_5" and c in schema
+    ]
     cols = ["symbol", "date"] + pool_cols + [f"label_pm_{h}_net" for h in HORIZONS]
     t = pq.read_table(
         str(fp), columns=cols, filters=[("date", ">=", cutoff)]
@@ -668,8 +694,8 @@ def _anchor_frame(board: str, window: int = ANCHOR_WINDOW) -> pd.DataFrame:
     if t.empty:
         return pd.DataFrame()
     t["symbol"] = t["symbol"].astype(str)
-    sn = pool_score(t, SNIPER.pool)
-    fu = pool_score(t, FUSION.pool)
+    sn = pool_score(t, pool_sn)
+    fu = pool_score(t, pool_fu)
     t["score"] = np.maximum(sn.values, fu.values)
     keep = ["symbol", "date", "score"] + [f"label_pm_{h}_net" for h in HORIZONS]
     return t[keep].dropna(subset=["score"]).reset_index(drop=True)

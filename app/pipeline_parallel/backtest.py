@@ -44,6 +44,7 @@ from app.pipeline_parallel.config import (
     SNIPER,
     SYSTEMS,
     board_of,
+    effective_pool,
 )
 from app.pipeline_parallel.scoring import (
     dual_head_ok,
@@ -989,9 +990,10 @@ def export_stock_lists(work: pd.DataFrame, oos_start, run_dir: Path) -> list[str
         oos_mask = bwork["date"].values >= oos_start
         oos_frames: list[pd.DataFrame] = []
         for spec in (SNIPER, FUSION):
+            pool = effective_pool(spec, b)
             for tag, mask in (("full", None), ("oos", oos_mask)):
                 sub = bwork if mask is None else bwork[mask]
-                score = pool_score(sub, spec.pool)
+                score = pool_score(sub, pool)
                 top = select_topn(sub, score, spec.top_n)
                 if top.empty:
                     continue
@@ -1204,8 +1206,12 @@ def build_merged_shortlist(
         )
     sub = work if mask is None else work[mask]
     # 全池 score = max(sniper, fusion) 截面分位分 (自动跳过缺列, pv_corr_5 面板缺)
-    score_s = pool_score(sub, SNIPER.pool)
-    score_f = pool_score(sub, FUSION.pool)
+    boards = sub["board"].dropna().unique() if "board" in sub.columns else []
+    # 幅度头 per-board extras (8格 0912): 交付链单板块帧 → 用该板有效池;
+    # 混板块帧 (罕见) → 无板可查退回原池 (空配置行为不变)
+    board = boards[0] if len(boards) == 1 else None
+    score_s = pool_score(sub, effective_pool(SNIPER, board))
+    score_f = pool_score(sub, effective_pool(FUSION, board))
     scored = sub[["symbol", "date"]].copy()
     if "board" in sub.columns:
         scored["board"] = sub["board"].values
@@ -1225,8 +1231,8 @@ def build_merged_shortlist(
     del scored, mag
     gc.collect()
     # 旧 top-N 标签 (纯标注) — 用 sub 重算 (mask 已作用于 sub; 标签只需 sub 内即可)
-    score_s = pool_score(sub, SNIPER.pool)
-    score_f = pool_score(sub, FUSION.pool)
+    score_s = pool_score(sub, effective_pool(SNIPER, board))
+    score_f = pool_score(sub, effective_pool(FUSION, board))
     tags = _old_top_tags(sub, score_s, score_f)
     if not tags.empty:
         res = res.merge(tags, on=["symbol", "date"], how="left")

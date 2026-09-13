@@ -224,6 +224,20 @@ SLOW_BULL = SystemSpec(
 
 SYSTEMS: dict[str, SystemSpec] = {s.name: s for s in (SNIPER, FUSION, SLOW_BULL)}
 
+
+def effective_pool(spec: SystemSpec, board: str | None) -> tuple[str, ...]:
+    """幅度头 (mag) 有效特征池 = spec.pool + 该板 extras (8格矩阵 0912).
+
+    PARALLEL_HEAD_EXTRA_COLS[board]["mag"]; 空配置/未知板/board=None → 原 pool
+    原样 (零行为变化). extras 缺列由 pool_score 自动跳过并再归一化.
+    只作用于交付打分链 (write_system_lists / build_merged_shortlist /
+    _panel_per_stock / _anchor_frame); 诊断类 run_system 仍用 spec 原池.
+    """
+    from config.settings import PARALLEL_HEAD_EXTRA_COLS
+
+    extra = PARALLEL_HEAD_EXTRA_COLS.get(board or "", {}).get("mag") or []
+    return tuple(spec.pool) + tuple(c for c in extra if c not in spec.pool)
+
 # ── SLOW_BULL 市场状态条件退出 (2026-08-06) ──
 # 依据 data/_diag_slowbull_stability_* + _diag_slowbull_regime_*: trail8 是趋势跟随
 # 放大器 (上升段 +2~4pp, 下行段 -1.4~-5.2pp); 下行段池子所有退出都亏 (cur -0.68%/
