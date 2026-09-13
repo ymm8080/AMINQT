@@ -9,7 +9,8 @@ train_predict_main / _retrain_legacy_full / _gen_legacy_list / run_daily.
 argv/超时复用 run_daily_automation 的 _STEPS/_STEP_TIMEOUT_S (单一真相源, 链改
 步骤名/超时这里自动跟随). 语义与链一致: 三步全非关键 — 单步失败大声告警不拦
 主流程 (cyq→派发闸 fail-open, sw→行业特征滞后一日, freshness→告警式恒 exit 0).
-被链调起时 (父进程=run_daily_automation) 自动跳过 — 链在前面已跑过, 不重复.
+被链调起时 (父进程=run_daily_automation / _four_module_run_0913) 自动跳过 — 链在前面
+已跑过, 不重复.
 """
 
 from __future__ import annotations
@@ -39,7 +40,8 @@ def _under_chain() -> bool:
         import psutil
 
         parent = psutil.Process(os.getppid())
-        return "run_daily_automation.py" in " ".join(parent.cmdline() or [])
+        cmd = " ".join(parent.cmdline() or [])
+        return any(k in cmd for k in ("run_daily_automation.py", "_four_module_run_0913.py"))
     except Exception:  # noqa: BLE001 — 判不出当手工跑 (宁重复勿跳过)
         return False
 
