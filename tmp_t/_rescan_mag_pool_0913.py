@@ -320,7 +320,7 @@ def run_board(board: str, cands: list[str], cand_meta: dict) -> dict:
         for c in cands:
             if c in pool_union:
                 log.info("[%s] 候选 %s 已在池内, 加法臂由 LOO 覆盖", board, c)
-        l0_loo = {f"−{c}": [] for c in pool_union}
+        l0_loo = {f"−{c}": c for c in pool_union}
         log.info("[%s] L0: %d 加法 + %d LOO", board, len(l0_add), len(l0_loo))
         for arm, add in l0_add.items():
             _run_mag(arm, add, set())
