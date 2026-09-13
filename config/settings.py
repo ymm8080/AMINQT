@@ -473,6 +473,18 @@ LEGACY_SELECTION = {
     "board_top_n": 10,  # 每板初选数 (全局帽 TOP_N 再截, 真删不补齐)
 }
 
+# ── prob_up 来源头 (2026-09-12 用户拍板: dual 交付切 cls 头) ──
+# dual reg 三视界 60d OOS IC -0.11~-0.14 全负 (真行情悬崖, dualreg_recon P1:
+# 3d -0.1185 / 5d -0.1408 / 10d -0.1093), cls 同窗 +0.041~+0.047 且 top10 实净
+# +53.5~55.5% → dual 的 prob_up (即 prob10_pull 排名键) 与晋升闸头全部改 cls。
+# main 保持 reg 残差概率不变 (08-24 原型 p_reg IC +0.105 vs p_cls -0.136)。
+# 同一旋钮驱动两处: V35Predictor.prob_up_kd 源 + DualTrackTrainer.validate_oos
+# 闸头 (cls 经 predict_proba 取 Rank IC; 回退改值即可, 无代码回退开关)。
+LEGACY_PROB_SOURCE = {
+    "main": "reg",  # reg 残差派生概率 1-F_e(CLS_THRESHOLD-pred)
+    "dual": "cls",  # Platt 校准 cls predict_proba
+}
+
 # ── 滞涨标记 (2026-08-19 用户定案: legacy+parallel 双交付) ──
 # 用户线索: 300911 连续入选短名单 (模型已识别) + 价格横盘洗盘 (10 日涨幅≈0) → 终将突破.
 # 250d 检验 (_diag_stall_regime, 2026-08-19): 入选+滞涨+近20日入选≥3 全窗 63.2%/+5.88%,

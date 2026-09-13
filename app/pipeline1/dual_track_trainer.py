@@ -1202,14 +1202,19 @@ class DualTrackTrainer:
         return out
 
     def validate_oos(self, trained: dict, ic_min: float = OOS_IC_MIN) -> dict:
-        """测试段 Rank IC (仅月度归因段). IC >= 0.03 才允许切换新模型.
+        """测试段 Rank IC (仅月度归因段).
 
-        切换判据 = 跨视界加权 IC (LABEL_WEIGHTS): 各回归模型 IC 按权重求和,
+        切换判据 = 跨视界加权 IC (LABEL_WEIGHTS): 闸头模型 IC 按权重求和,
         1d 最不可执行 (T+1 买入当日不可卖) 权重最低, 3d 历史预测力最强.
+        [09-12] 闸头随 settings.LEGACY_PROB_SOURCE 板级切换: dual=cls (交付
+        排名头切 cls 后闸同头, reg 悬崖下旧闸必 FAIL); main=reg 不变。
         """
+        from config.settings import LEGACY_PROB_SOURCE
+
         from .ic_screener import ICScreener
         from .label_engine import LABEL_WEIGHTS
 
+        gate_suffix = "cls" if LEGACY_PROB_SOURCE.get(trained.get("board")) == "cls" else "reg"
         test = trained["segs"]["test"]
         ics = {}
         for kind, (model, label) in trained["models"].items():
@@ -1217,20 +1222,26 @@ class DualTrackTrainer:
             if len(sub) < 30:
                 ics[kind] = 0.0
                 continue
-            sub["_pred"] = model.predict(
-                np.nan_to_num(sub[cols_for(trained, kind)].values, nan=0.0)
+            x = np.nan_to_num(sub[cols_for(trained, kind)].values, nan=0.0)
+            # cls 头取 predict_proba: hard label 是 0/1, Rank IC 无分辨力
+            sub["_pred"] = (
+                model.predict_proba(x)[:, 1] if kind.endswith("cls") else model.predict(x)
             )
             ics[kind] = ICScreener.rank_ic(
                 sub.rename(columns={"_pred": "score"}), "score", label
             )
-        # 跨视界加权 IC (回归模型; 分类分不直接贡献收益率)
+        # 跨视界加权 IC (闸头模型; 另一头仅记录不贡献)
         total_w = sum(LABEL_WEIGHTS.values())
         weighted_ic = (
-            sum(LABEL_WEIGHTS[k] * ics.get(f"{k}d_reg", 0.0) for k in LABEL_WEIGHTS)
+            sum(
+                LABEL_WEIGHTS[k] * ics.get(f"{k}d_{gate_suffix}", 0.0)
+                for k in LABEL_WEIGHTS
+            )
             / total_w
         )
         return {
             "ics": ics,
+            "gate_head": gate_suffix,
             "weighted_ic": weighted_ic,
             "pass": weighted_ic >= ic_min,
             "best_ic_key": max(ics, key=lambda k: ics.get(k, 0.0)),
@@ -1358,9 +1369,10 @@ class DualTrackTrainer:
             }
             if not results[board]["switched"]:
                 logger.warning(
-                    "[%s] 保留旧模型: IC闸=%s (weighted_IC=%.4f, 阈值 %.2f) | TOP10闸=%s",
+                    "[%s] 保留旧模型: IC闸=%s (头=%s, weighted_IC=%.4f, 阈值 %.2f) | TOP10闸=%s",
                     board,
                     oos["pass"],
+                    oos.get("gate_head", "reg"),
                     oos.get("weighted_ic", 0.0),
                     OOS_IC_MIN,
                     oos["top10"]["pass"],

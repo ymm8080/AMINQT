@@ -144,6 +144,11 @@ class V35Predictor:
         #         IC_ret +0.105 vs p_cls -0.136; cls 头 test 段 IC≈0/负, 不排序).
         #         事件口径 = 净收益>0.5% (reg 主标签), 较旧 Platt cls (毛收益>0.5%) 低 ~0.2pp.
         #         旧 bundle 无 reg_resid_* → 回退 Platt cls (原逻辑).
+        # [09-12] LEGACY_PROB_SOURCE 板级源切换: dual=cls (reg 三视界悬崖判词,
+        #         cls 同窗 top10 实净 +55%), main=reg 不变.
+        from config.settings import LEGACY_PROB_SOURCE
+
+        prob_src = LEGACY_PROB_SOURCE.get(board, "reg")
         calibrators = bundle.get("calibrators", {})
 
         def _platt_cls_prob(k: int, kind: str) -> np.ndarray:
@@ -167,6 +172,10 @@ class V35Predictor:
                 continue
             p_cls = _platt_cls_prob(k, kind)
             p_reg = _reg_resid_prob(k)
+            if prob_src == "cls":
+                # dual [09-12]: cls 概率恒有限, 直接整列采用 (无 NaN 回退面)
+                latest[f"prob_up_{k}d"] = p_cls
+                continue
             # 单个 pred 异常 (NaN) 时按列回退 p_cls, 不整列报废
             latest[f"prob_up_{k}d"] = (
                 np.where(
