@@ -39,15 +39,24 @@ import time
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")))
+sys.path.insert(
+    0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+)
 
 TAG = "param_resweep_weekly"
-MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "pipeline1")
+MODEL_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "models", "pipeline1"
+)
 WINDOW_TOTAL = 770
 CLS_KINDS = ("3d_cls", "5d_cls", "10d_cls")
 MIN_TEST_DAYS = 40
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S", stream=sys.stdout)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+    stream=sys.stdout,
+)
 log = logging.getLogger(TAG)
 
 # 每板挑战臂: (臂名, {"nl": int, "es_auc": bool, "hl60": bool}); A0/J 由 run_board 注入
@@ -68,7 +77,12 @@ def half_window_delta(chal_daily: pd.Series, a0_daily: pd.Series) -> dict:
     """挑战者−A0 日净差序列 → 全窗/前半/后半均值 (对齐交集日期)."""
     both = pd.concat([chal_daily, a0_daily], axis=1, join="inner").dropna()
     if len(both) < 2:
-        return {"delta_full": float("nan"), "delta_h1": float("nan"), "delta_h2": float("nan"), "n_days": int(len(both))}
+        return {
+            "delta_full": float("nan"),
+            "delta_h1": float("nan"),
+            "delta_h2": float("nan"),
+            "n_days": int(len(both)),
+        }
     delta = both.iloc[:, 0] - both.iloc[:, 1]
     half = len(delta) // 2
     return {
@@ -83,14 +97,27 @@ def admission_verdict(n_days: int, delta: dict, min_days: int = MIN_TEST_DAYS) -
     """准入闸: A 样本量 + B 双半窗稳 (全窗/前后半 ≥0, 严格)."""
     gates = {
         "A_days": n_days >= min_days,
-        "B_full": bool(np.isfinite(delta.get("delta_full", np.nan)) and delta["delta_full"] >= 0),
-        "B_h1": bool(np.isfinite(delta.get("delta_h1", np.nan)) and delta["delta_h1"] >= 0),
-        "B_h2": bool(np.isfinite(delta.get("delta_h2", np.nan)) and delta["delta_h2"] >= 0),
+        "B_full": bool(
+            np.isfinite(delta.get("delta_full", np.nan)) and delta["delta_full"] >= 0
+        ),
+        "B_h1": bool(
+            np.isfinite(delta.get("delta_h1", np.nan)) and delta["delta_h1"] >= 0
+        ),
+        "B_h2": bool(
+            np.isfinite(delta.get("delta_h2", np.nan)) and delta["delta_h2"] >= 0
+        ),
     }
-    return {"pass": all(gates.values()), "gates": gates, "delta": delta, "n_days": n_days}
+    return {
+        "pass": all(gates.values()),
+        "gates": gates,
+        "delta": delta,
+        "n_days": n_days,
+    }
 
 
-def landing_action(arm_net: dict[str, float], admissions: dict[str, dict], json_active: bool) -> dict:
+def landing_action(
+    arm_net: dict[str, float], admissions: dict[str, dict], json_active: bool
+) -> dict:
     """着陆判定 (纯函数). arm_net = {臂名: top10_net_mean}."""
     winner = max(arm_net, key=lambda a: arm_net[a])
     if winner == "A0_prod":
@@ -103,7 +130,9 @@ def landing_action(arm_net: dict[str, float], admissions: dict[str, dict], json_
     return {"action": "none", "arm": winner, "reason": "admission_fail"}
 
 
-def build_payload(board: str, arm: str, arm_cfg: dict, trained_through: str, evidence: dict) -> dict:
+def build_payload(
+    board: str, arm: str, arm_cfg: dict, trained_through: str, evidence: dict
+) -> dict:
     """挑战臂 → param_source json payload (半衰期独立顶层字段, 勿混 overrides)."""
     overrides: dict[str, dict] = {}
     if arm_cfg.get("es_auc"):
@@ -138,11 +167,19 @@ def _daily_spearman(pred: np.ndarray, y: np.ndarray, dates: np.ndarray) -> list[
     return ics
 
 
-def head_metrics(test: pd.DataFrame, pred: np.ndarray, label: str, top10_label: str) -> dict:
+def head_metrics(
+    test: pd.DataFrame, pred: np.ndarray, label: str, top10_label: str
+) -> dict:
     y = test[label].to_numpy(dtype=float)
     ics = _daily_spearman(pred, y, test["date"].to_numpy())
     arr = np.array(ics) if ics else np.array([np.nan])
-    d = pd.DataFrame({"date": test["date"].to_numpy(), "y": test[top10_label].to_numpy(dtype=float), "p": pred}).dropna(subset=["y"])
+    d = pd.DataFrame(
+        {
+            "date": test["date"].to_numpy(),
+            "y": test[top10_label].to_numpy(dtype=float),
+            "p": pred,
+        }
+    ).dropna(subset=["y"])
     d["rk_p"] = d.groupby("date")["p"].rank(ascending=False, method="first")
     top10 = d[d["rk_p"] <= 10]
     return {
@@ -155,24 +192,38 @@ def head_metrics(test: pd.DataFrame, pred: np.ndarray, label: str, top10_label: 
 
 
 def _align_X(test: pd.DataFrame, cols: list[str]) -> np.ndarray:
-    parts = [test[c].to_numpy(dtype=np.float32) if c in test.columns else np.zeros(len(test), dtype=np.float32) for c in cols]
+    parts = [
+        test[c].to_numpy(dtype=np.float32)
+        if c in test.columns
+        else np.zeros(len(test), dtype=np.float32)
+        for c in cols
+    ]
     return np.nan_to_num(np.column_stack(parts), nan=0.0, posinf=0.0, neginf=0.0)
 
 
 # ── 单板扫描 ──────────────────────────────────────────────────────
 def run_board(board: str) -> dict:
-    import config.settings as cfg
     import app.pipeline1.dual_track_trainer as tr
+    import config.settings as cfg
     from app.pipeline1 import param_source
     from app.pipeline1.dual_track_trainer import DualTrackTrainer
-    from scripts.train_predict_main import find_latest_features, load_features_for_training
+    from scripts.train_predict_main import (
+        find_latest_features,
+        load_features_for_training,
+    )
 
     features_path = find_latest_features(board)
     with open(os.path.join(MODEL_DIR, f"{board}_current.pkl"), "rb") as fh:
         bundle = pickle.load(fh)
     pin_cols = list(bundle["feature_cols"])
     df = load_features_for_training(board, features_path, set(pin_cols))
-    log.info("[%s] Layer1 帧=%s pin=%d 列 → %d 行", board, os.path.basename(features_path), len(pin_cols), len(df))
+    log.info(
+        "[%s] Layer1 帧=%s pin=%d 列 → %d 行",
+        board,
+        os.path.basename(features_path),
+        len(pin_cols),
+        len(df),
+    )
 
     prod_extras = list((cfg.LEGACY_HEAD_EXTRA_COLS.get(board) or {}).get("cls") or [])
     if "quality_factor" in prod_extras and "quality_factor" not in df.columns:
@@ -184,16 +235,23 @@ def run_board(board: str) -> dict:
     missing = [c for c in prod_extras if c not in df.columns]
     if missing:
         log.warning("[%s] extras %d 列帧内缺失剔除: %s", board, len(missing), missing)
-    cols = [c for c in sorted(set(pin_cols)) if c in df.columns and float(df[c].isna().mean()) < 0.95]
+    cols = [
+        c
+        for c in sorted(set(pin_cols))
+        if c in df.columns and float(df[c].isna().mean()) < 0.95
+    ]
     cols += [c for c in extras_avail if c not in cols]
 
     # J_json 入池判定: 生产旋钮 auto 且 json 对 cls 族有非空效果
     knob_now = dict(cfg.LEGACY_PARAM_SOURCE).get(board, "auto")
     json_active = knob_now == "auto" and (
-        any(param_source.resolve_param_override(board, k, knob="auto") for k in CLS_KINDS)
+        any(
+            param_source.resolve_param_override(board, k, knob="auto")
+            for k in CLS_KINDS
+        )
         or param_source.resolve_cls_half_life(board, knob="auto") is not None
     )
-    arms = ([("A0_prod", {})] + ([("J_json", {})] if json_active else []) + ARMS[board])
+    arms = [("A0_prod", {})] + ([("J_json", {})] if json_active else []) + ARMS[board]
 
     trainer = DualTrackTrainer()
     segs = DualTrackTrainer.split_window(df, WINDOW_TOTAL)
@@ -201,7 +259,10 @@ def run_board(board: str) -> dict:
     del df
     gc.collect()
     test = segs["test"]
-    net_label = {k: DualTrackTrainer._resolve_label(f"{k}d_reg", segs["train"].columns) for k in (3, 5, 10)}
+    net_label = {
+        k: DualTrackTrainer._resolve_label(f"{k}d_reg", segs["train"].columns)
+        for k in (3, 5, 10)
+    }
     rep: dict = {
         "board": board,
         "features": os.path.basename(features_path),
@@ -223,13 +284,18 @@ def run_board(board: str) -> dict:
     try:
         for arm, arm_cfg in arms:
             # 旋钮隔离: A0/C_* 强制 code; J 用 auto (现役 json)
-            cfg.LEGACY_PARAM_SOURCE = {**orig_source, board: ("auto" if arm == "J_json" else "code")}
+            cfg.LEGACY_PARAM_SOURCE = {
+                **orig_source,
+                board: ("auto" if arm == "J_json" else "code"),
+            }
             if arm_cfg.get("es_auc"):
+
                 def _mp(b, k, _o=orig_mp):
                     p = _o(b, k)
                     if k.endswith("cls"):
                         p["metric"] = "auc"
                     return p
+
                 tr.model_params = _mp
             if arm_cfg.get("nl"):
                 for kind in CLS_KINDS:
@@ -243,19 +309,44 @@ def run_board(board: str) -> dict:
                     t0 = time.time()
                     model, label = trainer._train_one(kind, segs, cols, board)
                     pred = model.predict_proba(_align_X(test, cols))[:, 1]
-                    armrep[kind] = head_metrics(test, pred, label, top10_label=net_label[int(kind.split("_")[0][:-1])])
+                    armrep[kind] = head_metrics(
+                        test,
+                        pred,
+                        label,
+                        top10_label=net_label[int(kind.split("_")[0][:-1])],
+                    )
                     m = armrep[kind]
-                    log.info("[%s:%s] %-7s IC=%.4f top10(净)=%+.4f win=%.1f%% (%.0fs)",
-                             board, arm, kind, m["ic_mean"],
-                             m["top10_real_net"] if m["top10_real_net"] is not None else np.nan,
-                             (m["top10_win"] or 0) * 100, time.time() - t0)
+                    log.info(
+                        "[%s:%s] %-7s IC=%.4f top10(净)=%+.4f win=%.1f%% (%.0fs)",
+                        board,
+                        arm,
+                        kind,
+                        m["ic_mean"],
+                        m["top10_real_net"]
+                        if m["top10_real_net"] is not None
+                        else np.nan,
+                        (m["top10_win"] or 0) * 100,
+                        time.time() - t0,
+                    )
                     del model, pred
                     gc.collect()
-                armrep["top10_net_mean"] = float(np.mean([armrep[k]["top10_real_net"] for k in CLS_KINDS]))
-                daily = pd.concat([armrep[k]["top10_daily"] for k in CLS_KINDS], axis=1).mean(axis=1)
-                armrep["top10_daily_agg"] = {str(d.date()): float(v) for d, v in daily.items()}
+                armrep["top10_net_mean"] = float(
+                    np.mean([armrep[k]["top10_real_net"] for k in CLS_KINDS])
+                )
+                daily = pd.concat(
+                    [armrep[k]["top10_daily"] for k in CLS_KINDS], axis=1
+                ).mean(axis=1)
+                armrep["top10_daily_agg"] = {
+                    str(d.date()): float(v) for d, v in daily.items()
+                }
                 rep["arms"][arm] = armrep
-                log.info("[%s:%s] TOP10 净均 = %+.4f (%.0fs)", board, arm, armrep["top10_net_mean"], time.time() - t_arm)
+                log.info(
+                    "[%s:%s] TOP10 净均 = %+.4f (%.0fs)",
+                    board,
+                    arm,
+                    armrep["top10_net_mean"],
+                    time.time() - t_arm,
+                )
                 rep["_daily_" + arm] = daily
             finally:
                 tr.model_params = orig_mp
@@ -284,8 +375,17 @@ def run_board(board: str) -> dict:
         "admissions": admissions,
         "landing": landing,
     }
-    log.info("[%s] winner=%s action=%s | Δvs A0: %s", board, landing["arm"], landing["action"],
-             {a: f"{v - arm_net['A0_prod']:+.4f}" for a, v in arm_net.items() if a != "A0_prod"})
+    log.info(
+        "[%s] winner=%s action=%s | Δvs A0: %s",
+        board,
+        landing["arm"],
+        landing["action"],
+        {
+            a: f"{v - arm_net['A0_prod']:+.4f}"
+            for a, v in arm_net.items()
+            if a != "A0_prod"
+        },
+    )
 
     # 着陆写入 (旋钮 code 时只判不写)
     if landing["action"] == "none" or knob_now != "auto":
@@ -296,18 +396,34 @@ def run_board(board: str) -> dict:
         "sweep": TAG,
         "judge": "cls 3/5/10d TOP10 实净均 + 双半窗准入",
         "arm_net": arm_net,
-        "admissions": {a: {"pass": v["pass"], "delta": v["delta"]} for a, v in admissions.items()},
+        "admissions": {
+            a: {"pass": v["pass"], "delta": v["delta"]} for a, v in admissions.items()
+        },
         "features": rep["features"],
     }
     if landing["action"] == "save":
         arm_cfg = next(c for a, c in arms if a == landing["arm"])
-        payload = build_payload(board, landing["arm"], arm_cfg, trained_through, evidence)
+        payload = build_payload(
+            board, landing["arm"], arm_cfg, trained_through, evidence
+        )
     elif landing["action"] == "refresh":
         rec = param_source.load_latest_param_source(board) or {}
-        payload = {**rec, "board": board, "trained_through": trained_through, "evidence": evidence}
+        payload = {
+            **rec,
+            "board": board,
+            "trained_through": trained_through,
+            "evidence": evidence,
+        }
     else:  # retire
-        payload = {"board": board, "trained_through": trained_through, "overrides": {},
-                   "evidence": {**evidence, "action": "retire: json 输给 A0/J-不稳, 空 overrides 退役"}}
+        payload = {
+            "board": board,
+            "trained_through": trained_through,
+            "overrides": {},
+            "evidence": {
+                **evidence,
+                "action": "retire: json 输给 A0/J-不稳, 空 overrides 退役",
+            },
+        }
     path = param_source.save_param_source(board, payload)
     log.info("[%s] %s → %s", board, landing["action"], path)
     rep["verdict"]["written"] = str(path)

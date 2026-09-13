@@ -57,7 +57,12 @@ def test_admission_fails_on_days_and_half_window():
     bad_h1 = {"delta_full": 0.01, "delta_h1": -0.001, "delta_h2": 0.02, "n_days": 60}
     v = admission_verdict(60, bad_h1)
     assert v["pass"] is False and not v["gates"]["B_h1"]
-    nan_delta = {"delta_full": float("nan"), "delta_h1": 0.0, "delta_h2": 0.0, "n_days": 60}
+    nan_delta = {
+        "delta_full": float("nan"),
+        "delta_h1": 0.0,
+        "delta_h2": 0.0,
+        "n_days": 60,
+    }
     assert admission_verdict(60, nan_delta)["pass"] is False
 
 
@@ -65,7 +70,10 @@ def test_landing_paths():
     net = {"A0_prod": 0.01, "C_hl60": 0.03, "J_json": 0.02}
     passed = {"C_hl60": {"pass": True}, "J_json": {"pass": True}}
     # 挑战者赢+过闸 → save
-    assert landing_action(net, passed, json_active=True) == {"action": "save", "arm": "C_hl60"}
+    assert landing_action(net, passed, json_active=True) == {
+        "action": "save",
+        "arm": "C_hl60",
+    }
     # 挑战者赢+闸败 → none (现状不动)
     failed = {"C_hl60": {"pass": False}, "J_json": {"pass": True}}
     assert landing_action(net, failed, json_active=True)["action"] == "none"
@@ -85,7 +93,14 @@ def test_build_payload_shapes():
     hl = build_payload("main", "C_hl60", {"hl60": True}, "2026-09-12", ev)
     assert hl["cls_half_life_days"] == 60 and hl["overrides"] == {}
     auc = build_payload("main", "C_auc", {"es_auc": True}, "2026-09-12", ev)
-    assert auc["overrides"] == {"3d_cls": {"metric": "auc"}, "5d_cls": {"metric": "auc"}, "10d_cls": {"metric": "auc"}}
+    assert auc["overrides"] == {
+        "3d_cls": {"metric": "auc"},
+        "5d_cls": {"metric": "auc"},
+        "10d_cls": {"metric": "auc"},
+    }
     assert "cls_half_life_days" not in auc  # 非 LGBM 键绝不混 overrides/顶层误挂
     nl = build_payload("main", "C_nl31", {"nl": 31}, "2026-09-12", ev)
-    assert nl["overrides"]["5d_cls"] == {"num_leaves": 31} and "cls_half_life_days" not in nl
+    assert (
+        nl["overrides"]["5d_cls"] == {"num_leaves": 31}
+        and "cls_half_life_days" not in nl
+    )

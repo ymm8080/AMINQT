@@ -181,9 +181,14 @@ def test_model_params_knob_code_restores_code_table(tmp_path, monkeypatch):
 
 # ── [0913 #8] cls 半衰期旋钮 (resolve_cls_half_life; 独立顶层字段非 LGBM) ──
 def test_cls_half_life_fresh_json_returns_value(tmp_path, monkeypatch):
-    monkeypatch.setattr("config.settings.LEGACY_PARAM_SOURCE", {"main": "auto", "dual": "auto"})
+    monkeypatch.setattr(
+        "config.settings.LEGACY_PARAM_SOURCE", {"main": "auto", "dual": "auto"}
+    )
     param_source.save_param_source(
-        "main", {**_payload(), "cls_half_life_days": 60}, directory=tmp_path, ts="20260913_0300"
+        "main",
+        {**_payload(), "cls_half_life_days": 60},
+        directory=tmp_path,
+        ts="20260913_0300",
     )
     assert (
         param_source.resolve_cls_half_life(
@@ -194,8 +199,12 @@ def test_cls_half_life_fresh_json_returns_value(tmp_path, monkeypatch):
 
 
 def test_cls_half_life_absent_or_no_json_returns_none(tmp_path, monkeypatch):
-    monkeypatch.setattr("config.settings.LEGACY_PARAM_SOURCE", {"main": "auto", "dual": "auto"})
-    param_source.save_param_source("main", _payload(), directory=tmp_path, ts="20260913_0300")
+    monkeypatch.setattr(
+        "config.settings.LEGACY_PARAM_SOURCE", {"main": "auto", "dual": "auto"}
+    )
+    param_source.save_param_source(
+        "main", _payload(), directory=tmp_path, ts="20260913_0300"
+    )
     assert (
         param_source.resolve_cls_half_life(
             "main", as_of="2026-09-13", directory=tmp_path, max_stale_days=45
@@ -211,7 +220,9 @@ def test_cls_half_life_absent_or_no_json_returns_none(tmp_path, monkeypatch):
 
 
 def test_cls_half_life_stale_or_illegal_returns_none(tmp_path, monkeypatch):
-    monkeypatch.setattr("config.settings.LEGACY_PARAM_SOURCE", {"main": "auto", "dual": "auto"})
+    monkeypatch.setattr(
+        "config.settings.LEGACY_PARAM_SOURCE", {"main": "auto", "dual": "auto"}
+    )
     param_source.save_param_source(
         "main",
         {**_payload(trained_through="2026-06-01"), "cls_half_life_days": 60},
@@ -225,7 +236,10 @@ def test_cls_half_life_stale_or_illegal_returns_none(tmp_path, monkeypatch):
         is None
     )
     param_source.save_param_source(
-        "main", {**_payload(), "cls_half_life_days": "60"}, directory=tmp_path, ts="20260913_0400"
+        "main",
+        {**_payload(), "cls_half_life_days": "60"},
+        directory=tmp_path,
+        ts="20260913_0400",
     )
     assert (
         param_source.resolve_cls_half_life(
@@ -236,8 +250,16 @@ def test_cls_half_life_stale_or_illegal_returns_none(tmp_path, monkeypatch):
 
 
 def test_cls_half_life_knob_code_returns_none(tmp_path, monkeypatch):
-    monkeypatch.setattr("config.settings.LEGACY_PARAM_SOURCE", {"main": "auto", "dual": "auto"})
-    param_source.save_param_source(
-        "main", {**_payload(), "cls_half_life_days": 60}, directory=tmp_path, ts="20260913_0300"
+    monkeypatch.setattr(
+        "config.settings.LEGACY_PARAM_SOURCE", {"main": "auto", "dual": "auto"}
     )
-    assert param_source.resolve_cls_half_life("main", knob="code", directory=tmp_path) is None
+    param_source.save_param_source(
+        "main",
+        {**_payload(), "cls_half_life_days": 60},
+        directory=tmp_path,
+        ts="20260913_0300",
+    )
+    assert (
+        param_source.resolve_cls_half_life("main", knob="code", directory=tmp_path)
+        is None
+    )
