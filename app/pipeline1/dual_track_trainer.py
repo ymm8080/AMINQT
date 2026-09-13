@@ -248,14 +248,22 @@ def risk_filter(df: pd.DataFrame) -> pd.DataFrame:
     return df[mask]
 
 
-# ── [2026-09-10] 10d 头秩目标变换 (LEGACY_10D_RANK_TARGET, 688228 案) ──
-def rank_target_enabled(board: str) -> bool:
-    """10d_reg 是否用截面百分位目标训练 (配置门控, 生产默认关)."""
-    from config.settings import LEGACY_10D_RANK_TARGET
+# ── [2026-09-10] reg 头秩目标变换 (LEGACY_REG_RANK_TARGET, 688228 案;
+#    0912 由 10d 单头泛化到全部 reg 幅度头) ──
+def rank_target_kinds(board: str) -> tuple[str, ...]:
+    """该板启用秩目标的 reg 头种类 (配置门控, 生产默认空 = 零行为变化)."""
+    from config.settings import LEGACY_REG_RANK_TARGET
 
-    return bool(LEGACY_10D_RANK_TARGET.get("enable")) and board in set(
-        LEGACY_10D_RANK_TARGET.get("boards", ("main", "dual"))
-    )
+    if not LEGACY_REG_RANK_TARGET.get("enable"):
+        return ()
+    if board not in set(LEGACY_REG_RANK_TARGET.get("boards", ("main", "dual"))):
+        return ()
+    return tuple(LEGACY_REG_RANK_TARGET.get("kinds", ("10d_reg",)))
+
+
+def _rank_map_key(kind: str) -> str:
+    """reg 头种类 → bundle 秩映射键 ("10d_reg" → "10d_rank_map", 旧键不变)."""
+    return kind.removesuffix("_reg") + "_rank_map"
 
 
 def rank_map_apply(rmap: dict | None, p) -> np.ndarray:
@@ -456,11 +464,13 @@ class DualTrackTrainer:
         es = segs["es"].dropna(subset=[label])
         train = risk_filter(train)
         es = risk_filter(es)
-        # [2026-09-10] 秩目标 (LEGACY_10D_RANK_TARGET): 幅度 Huber 目标让树追逐
+        # [2026-09-10] 秩目标 (LEGACY_REG_RANK_TARGET): 幅度 Huber 目标让树追逐
         # 彩票尾 — pred10>+6% 桶承诺 +11.2% 实得 −0.2% (T+1→T+10 匹配视界审计,
-        # 688228 案). 改训 per-date 截面百分位 (0..1); 预测输出为秩, 由
-        # train_window 落盘的 10d_rank_map (训练段桶中位) 映射回收益语义.
-        use_rank = kind == "10d_reg" and rank_target_enabled(board)
+        # 688228 案); [0912 泛化] dual 三 reg 头 OOS IC −0.11~−0.14 (cls 同窗全正)
+        # — huber 在双创/科创重尾标签上把分裂容量耗在翻转的尾部方差, rank 目标 =
+        # 评测口径本身 (评估即 rank IC). 改训 per-date 截面百分位 (0..1); 预测输出
+        # 为秩, 由 train_window 落盘的 {k}d_rank_map (训练段桶中位) 映射回收益语义.
+        use_rank = kind in rank_target_kinds(board)
         if use_rank:
             train["_rank_target"] = train.groupby("date")[label].rank(pct=True)
             es["_rank_target"] = es.groupby("date")[label].rank(pct=True)
@@ -688,28 +698,31 @@ class DualTrackTrainer:
             if checkpoint is not None:
                 self._save_checkpoint(out, checkpoint)
 
-        # ── [2026-09-10] 秩目标校准映射: 10d_reg 输出为百分位, 经训练段桶中位
+        # ── [0910→0912 泛化] 秩目标校准映射: 启用头输出为百分位, 经训练段桶中位
         # 映射回收益语义 (checkpoint 不持久化该映射 → 断点续训恢复后此处确定性
-        # 重拟合; 拟合行 = 训练同帧 dropna+risk_filter). fit_calibrator 的 10d
+        # 重拟合; 拟合行 = 训练同帧 dropna+risk_filter). fit_calibrator 的 reg
         # 残差在收益语义空间计算依赖此映射, 必须先落 out.
-        if "10d_reg" in out["models"] and rank_target_enabled(board):
-            label10 = out["models"]["10d_reg"][1]
-            seg_train = risk_filter(segs["train"].dropna(subset=[label10]))
+        for kind in rank_target_kinds(board):
+            if kind not in out["models"]:
+                continue
+            label_k = out["models"][kind][1]
+            seg_train = risk_filter(segs["train"].dropna(subset=[label_k]))
             if len(seg_train):
-                from config.settings import LEGACY_10D_RANK_TARGET
+                from config.settings import LEGACY_REG_RANK_TARGET
 
-                out["10d_rank_map"] = fit_rank_map(
-                    out["models"]["10d_reg"][0],
+                out[_rank_map_key(kind)] = fit_rank_map(
+                    out["models"][kind][0],
                     seg_train,
-                    label10,
-                    by_kind.get("10d_reg") or feature_cols,
-                    bins=int(LEGACY_10D_RANK_TARGET.get("bins", 20)),
+                    label_k,
+                    by_kind.get(kind) or feature_cols,
+                    bins=int(LEGACY_REG_RANK_TARGET.get("bins", 20)),
                 )
                 logger.info(
-                    "[%s] 10d 秩目标映射: %d 桶, 顶桶中位 %+.3f",
+                    "[%s] %s 秩目标映射: %d 桶, 顶桶中位 %+.3f",
                     board,
-                    out["10d_rank_map"]["bins"],
-                    out["10d_rank_map"]["grid_ret"][-1],
+                    kind,
+                    out[_rank_map_key(kind)]["bins"],
+                    out[_rank_map_key(kind)]["grid_ret"][-1],
                 )
 
         # ── 训练未完成的 extras ──
@@ -963,8 +976,8 @@ class DualTrackTrainer:
             )
             # [2026-09-10] 秩目标头: 残差须在收益语义空间 (label − 映射(百分位)),
             # 否则推理端 prob_up = P(ret>TH|pred) 的 pred 口径错位 (秩 vs 收益)
-            if kind_reg == "10d_reg":
-                r = rank_map_apply(trained.get("10d_rank_map"), r)
+            # [0912 泛化] 逐 reg 头各自的秩映射 (未启用头 get 返 None → 原样透传)
+            r = rank_map_apply(trained.get(_rank_map_key(kind_reg)), r)
             e = (calib[reg_label].values - r).astype(np.float64)
             e = e[np.isfinite(e)]
             if len(e) >= 30:
@@ -1269,7 +1282,10 @@ class DualTrackTrainer:
             "quantile_models_5d",
             "pain_model",
             "rank_model",
-            "10d_rank_map",  # [2026-09-10] 秩目标校准映射 (推理端百分位→收益)
+            # [0910→0912] 秩目标校准映射 (推理端百分位→收益, 逐 reg 头; 10d 键不变)
+            "3d_rank_map",
+            "5d_rank_map",
+            "10d_rank_map",
         ):
             if extra in trained:
                 bundle[extra] = trained[extra]

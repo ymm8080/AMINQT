@@ -590,15 +590,20 @@ GATE_ADMISSION = {
 # 纯幅度 Huber 目标下 pred10>+6% 桶承诺 +11.2~11.5% 实得 −0.2~+1.5% (校准缺口
 # −9.7~−11.8pp); 排名键按幅度取头部恰好取到最虚高的承诺 (rank≤10 实得≈0 vs
 # rank 11-30 下跌股 +2.32%)。用户指令: 修预测精度, 不加闸。
-# 机制: 10d_reg 改训 per-date 截面百分位 (0..1, rank pct of net label), 预测输出
+# 机制: reg 头改训 per-date 截面百分位 (0..1, rank pct of net label), 预测输出
 # 经桶中位映射 (训练段按预测分桶取 label 中位数, np.maximum.accumulate 单调化)
 # 回收益语义 — 下游 E7/prob 残差/排名键语义不变, 顶部承诺被结构性压回可兑现水平,
 # 树的优化目标从"追彩票尾"变为"排序明日截面"。
-# 达线才置 enable=True: OOS 校准缺口 (pred10>6% 桶承诺−实得) < 3pp 且 RankIC 不降。
-LEGACY_10D_RANK_TARGET = {
-    "enable": False,  # 生产默认关; 影子重训验证达线后由 A/B 拍板打开
+# [0912 泛化] 从 10d 单头扩到全部 reg 幅度头: dual 3d/5d/10d_reg OOS IC −0.11~−0.14
+# 三头全负 (cls 同窗全正, top10 实净 +55%) — huber 在双创/科创重尾标签
+# (|lab|>0.20@10d: STAR 11.26% vs main 4.49%, 峰度 303) 上把分裂容量耗在月度翻转
+# 的尾部方差; rank 目标 = 评测口径本身 (评估即 rank IC)。main 板 reg 头同修同判
+# (用户指令 0912)。boards/kinds 分格门控, 默认全关 = 零行为变化; A/B 拍板后开启。
+LEGACY_REG_RANK_TARGET = {
+    "enable": False,  # 生产默认关; 影子重训 A/B 拍板后按板开启
     "bins": 20,  # 校准映射分桶数 (预测百分位 → 桶内 label 中位数)
     "boards": ["main", "dual"],
+    "kinds": ["3d_reg", "5d_reg", "10d_reg"],
 }
 
 # ── [2026-09-12] 尾部样本加权: 爆发猎杀 (002848 池内 347 名案) ──
