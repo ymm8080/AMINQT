@@ -346,8 +346,8 @@ def test_sheet2_sort_key_default_is_observation_score():
 # ── 大涨闸: 低动量 + 右侧拐头 + 缩量 (2026-09-14 用户令, 用 B 摘除见 config 注释) ──
 
 
-def test_dir_gate_filters_sheet1_only_and_marks_others(chip_stub):
-    """三条件闸**只筛 Sheet1**; Sheet2/全量一票不丢, 只标「大涨闸」。"""
+def test_dir_gate_marks_without_dropping_rows(chip_stub):
+    """三条件闸**只标注不删行** (0914 用户令): 三张表一票不丢, 只多一列「大涨闸」。"""
     chip_stub()
     ok = {"r10": -0.10, "r5": 0.05, "vr": 1.0}
     df = _layer_frame([
@@ -360,15 +360,18 @@ def test_dir_gate_filters_sheet1_only_and_marks_others(chip_stub):
     ])
     s1, s2, s3 = kt.build_delivery(df, "20260911")
 
-    assert list(s1["symbol"]) == ["000001"]
-    assert set(s2["symbol"]) == {"000003", "000004"}     # 观察池**不过闸**
+    # 冠军表两只都在 (被拦的 000002 不再被剔掉), 只按层序 + 段内 r60 排
+    assert list(s1["symbol"]) == ["000001", "000002"]
+    assert list(s1["大涨闸"]) == ["过闸", "被拦"]
+    assert set(s2["symbol"]) == {"000003", "000004"}
+    assert dict(zip(s2["symbol"], s2["大涨闸"])) == {"000003": "过闸", "000004": "被拦"}
     assert set(s3["symbol"]) == {"000001", "000002", "000003", "000004"}
     assert dict(zip(s3["symbol"], s3["大涨闸"])) == {
         "000001": "过闸", "000002": "被拦", "000003": "过闸", "000004": "被拦",
     }
-    # 被拦者排最前 (回看优先), 过闸者殿后
+    # 全量表: 被拦者排最前 (回看优先), 过闸者殿后
     assert list(s3["大涨闸"]) == ["被拦", "被拦", "过闸", "过闸"]
-    assert "大涨闸" in s2.columns and "大涨闸" not in s1.columns
+    assert "大涨闸" in s1.columns and "大涨闸" in s2.columns
 
 
 def test_dir_gate_ignores_chip_ma_slope(chip_stub):
@@ -382,6 +385,7 @@ def test_dir_gate_ignores_chip_ma_slope(chip_stub):
     s1, _, s3 = kt.build_delivery(df, "20260911")
 
     assert list(s1["symbol"]) == ["000001", "000002"]
+    assert set(s1["大涨闸"]) == {"过闸"}
     assert set(s3["大涨闸"]) == {"过闸"}
 
 
@@ -403,7 +407,11 @@ def test_dir_gate_boundary_is_strict_and_fails_closed(chip_stub):
     ])
     s1, _, s3 = kt.build_delivery(df, "20260911")
 
-    assert list(s1["symbol"]) == ["000001"]
+    assert len(s1) == 5                                    # 全在, 一只没删
+    assert dict(zip(s1["symbol"], s1["大涨闸"])) == {
+        "000001": "过闸", "000002": "被拦", "000003": "被拦",
+        "000004": "被拦", "000005": "被拦",
+    }
     assert dict(zip(s3["symbol"], s3["大涨闸"])) == {
         "000001": "过闸", "000002": "被拦", "000003": "被拦",
         "000004": "被拦", "000005": "被拦",
@@ -411,7 +419,7 @@ def test_dir_gate_boundary_is_strict_and_fails_closed(chip_stub):
 
 
 def test_dir_gate_off_admits_everything(chip_stub, monkeypatch):
-    """回退旋钮 dir_gate=False: 闸不生效, Sheet1 全体过闸。"""
+    """回退旋钮 dir_gate=False: 闸不生效, 全部标「过闸」。"""
     chip_stub()
     monkeypatch.setitem(GENIOUS, "dir_gate", False)
     df = _layer_frame([

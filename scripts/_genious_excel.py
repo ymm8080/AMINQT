@@ -61,9 +61,10 @@ WAIT_TICK_S = 60
 HEAL_TIMEOUT_S = 180  # 自拉硬超时; 超时=大声失败, 不留挂死实例 (见 _heal_rows_bounded)
 
 BANNER1 = (
-    "GENIOUS 冠军四段 — 已过【大涨闸】(低动量+右侧拐头+缩量)。末250日口径: 冠军四段 19.2票·日 "
-    "→ 过闸 1.3票·日 (93%被拦); 过闸后 未来10日均值 +9.00% 胜81.3%, "
-    "≥10% 命中 53.0% = 2.05x, ≥20% 命中 12.7% = 1.94x。"
+    "GENIOUS 冠军四段 — 段位全留, 【大涨闸】列标出其中哪几只是 低动量+右侧拐头+缩量。"
+    "末250日口径: 冠军四段 19.2票·日 里只有 1.3票·日 过闸 (93%被拦), "
+    "过闸后 未来10日均值 +9.00% 胜81.3%, ≥10% 命中 53.0% = 2.05x, ≥20% 命中 12.7% = 1.94x; "
+    "所以**只标注、不删票** — 过闸那几只是窄名单, 其余仍按层序读。"
     "「全样本口径」列含选段偏差(**80% 勿信**)。扣0.7%往返费后火群整体≈0, 钱在层头部, "
     "请按层序自上而下读。执行档: 温火/质量层=T+1开盘进; 涨停/深跌层=T+1仍涨确认→T+1收盘进"
 )
@@ -71,13 +72,14 @@ BANNER2 = (
     f"GENIOUS 观察池 — 已按【观察分】从最好到最差排序, 取前 {GENIOUS['sheet2_top_n']} 名 "
     "(全部名次见「火群全量」表)。观察分 = 带宽窄 + 未偏离MA10 + 获利盘低 + 深跌 → "
     "越靠前越'还没涨透'; 已发挥完的票自动沉底。全 896 日实测: 前半档 +0.65% vs 末档 -0.03%, "
-    "IC 0.077 (t 8.7), 前后半样本同号。期望≈50% 平水, 非全买清单"
+    "IC 0.077 (t 8.7), 前后半样本同号。期望≈50% 平水, 非全买清单。"
+    "【大涨闸】列仅为标注, 不删除任何一行"
 )
 BANNER3 = (
     "GENIOUS 火群·全量 — 冠军四段 + 观察池**全部**触发票, 一票不丢。"
     "【大涨闸】列: 过闸 = 三条件全中 (十日涨幅≤0 且 近5日涨幅>0 且 量比≤1); "
-    "被拦 = 未全中 (**排在最前**, 供回看)。**该闸只作用于冠军表** — 观察池不过闸, 本列仅供自查。"
-    "被拦者按层序排列, 深跌层 (CH2/CH3) 天然被拦比例最高 — 这是形态筛选的代价, 非数据错误"
+    "被拦 = 未全中 (**排在最前**, 供回看)。**该列只标注不筛表** — 三张表都是全量, 别把它当筛选器。"
+    "被拦者按层序排列, 深跌层 (CH2/CH3) 天然被拦比例最高 — 这是形态特征, 非数据错误"
 )
 
 # 列 → Excel number_format (写的是**实数**, 显示带符号百分号; 文本会被 Excel 按字典序排坏)
@@ -503,16 +505,20 @@ def main() -> int:
     df = kt.compute_triggers(df)
     s1, s2, s2_full = kt.build_delivery(df, target)
     counts = pd.concat([s1["层"], s2_full["层"]]).value_counts().to_dict()
+    n_pass = int((s1["大涨闸"] == "过闸").sum())
     log.info(
-        "[genious] %s 冠军四段 %d 票, 观察池 %d/%d 票 (截断/全量); 层分布 %s",
-        target, len(s1), len(s2), len(s2_full), counts,
+        "[genious] %s 冠军四段 %d 票 (大涨闸过 %d), 观察池 %d/%d 票 (截断/全量); 层分布 %s",
+        target, len(s1), n_pass, len(s2), len(s2_full), counts,
     )
 
     if args.dry_run:
         for name, sheet in (("冠军四段", s1), ("观察池", s2), ("火群全量", s2_full)):
             print(f"\n===== {name} ({len(sheet)}) =====")
             print(sheet.to_string(index=False) if len(sheet) else "(空)")
-        _write_state(tag, "dry_run", s1=len(s1), s2=len(s2), s2_full=len(s2_full), layers=counts)
+        _write_state(
+            tag, "dry_run", s1=len(s1), s1_pass=n_pass, s2=len(s2),
+            s2_full=len(s2_full), layers=counts,
+        )
         return 0
 
     fp = write_xlsx(_fmt_sheet(s1), _fmt_sheet(s2), _fmt_sheet(s2_full), target)
@@ -521,7 +527,8 @@ def main() -> int:
     if csv_fp is not None:
         log.info("[genious] 推送边车 %s", csv_fp)
     _write_state(
-        tag, "ok", file=str(fp), s1=len(s1), s2=len(s2), s2_full=len(s2_full), layers=counts
+        tag, "ok", file=str(fp), s1=len(s1), s1_pass=n_pass, s2=len(s2),
+        s2_full=len(s2_full), layers=counts,
     )
     print(str(fp))
     if GENIOUS.get("push_to_ths") and csv_fp is not None and not args.no_push:
