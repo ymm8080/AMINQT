@@ -29,6 +29,8 @@ import argparse
 import datetime
 import json
 import logging
+import os
+import subprocess
 import sys
 import threading
 import time
@@ -59,19 +61,23 @@ WAIT_TICK_S = 60
 HEAL_TIMEOUT_S = 180  # 自拉硬超时; 超时=大声失败, 不留挂死实例 (见 _heal_rows_bounded)
 
 BANNER1 = (
-    "GENIOUS 冠军四段 — 全样本 61.3%胜率 / 15.0票·日 (2026年口径 ~55%/+1~2%); "
+    "GENIOUS 冠军四段 — 已过【大涨闸】(低动量+右侧拐头+缩量)。末250日口径: 冠军四段 19.2票·日 "
+    "→ 过闸 1.3票·日 (93%被拦); 过闸后 未来10日均值 +9.00% 胜81.3%, "
+    "≥10% 命中 53.0% = 2.05x, ≥20% 命中 12.7% = 1.94x。"
     "「全样本口径」列含选段偏差(**80% 勿信**)。扣0.7%往返费后火群整体≈0, 钱在层头部, "
     "请按层序自上而下读。执行档: 温火/质量层=T+1开盘进; 涨停/深跌层=T+1仍涨确认→T+1收盘进"
 )
 BANNER2 = (
     f"GENIOUS 观察池 — 已按【观察分】从最好到最差排序, 取前 {GENIOUS['sheet2_top_n']} 名 "
-    "(全部名次见「观察池全量」表)。观察分 = 带宽窄 + 未偏离MA10 + 获利盘低 + 深跌 → "
+    "(全部名次见「火群全量」表)。观察分 = 带宽窄 + 未偏离MA10 + 获利盘低 + 深跌 → "
     "越靠前越'还没涨透'; 已发挥完的票自动沉底。全 896 日实测: 前半档 +0.65% vs 末档 -0.03%, "
     "IC 0.077 (t 8.7), 前后半样本同号。期望≈50% 平水, 非全买清单"
 )
 BANNER3 = (
-    "GENIOUS 观察池·全量 — 同上排序, 不截断 (洪峰日可能数百行)。价值在整张表, "
-    "尖峰日的火集中在这里; 「观察池」表只是它的前 N 名"
+    "GENIOUS 火群·全量 — 冠军四段 + 观察池**全部**触发票, 一票不丢。"
+    "【大涨闸】列: 过闸 = 三条件全中 (十日涨幅≤0 且 近5日涨幅>0 且 量比≤1); "
+    "被拦 = 未全中 (**排在最前**, 供回看)。**该闸只作用于冠军表** — 观察池不过闸, 本列仅供自查。"
+    "被拦者按层序排列, 深跌层 (CH2/CH3) 天然被拦比例最高 — 这是形态筛选的代价, 非数据错误"
 )
 
 # 列 → Excel number_format (写的是**实数**, 显示带符号百分号; 文本会被 Excel 按字典序排坏)
@@ -84,8 +90,9 @@ _NUMFMT = {
     "5日回撤": _PCT2,
     "乖离MA10": "+0.0%;-0.0%",
     "获利盘": "0.0%",
+    "主力筹码比例": "0.0",
+    "换手率": "0.00%",
     "量比": "0.00",
-    "close": "0.00",
     "SL翻正年龄": "0",
     "SL洗盘天数": "0",
 }
@@ -239,6 +246,47 @@ def _fmt_sheet(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def write_stocklist_csv(s1: pd.DataFrame, date: str, list_dir=STOCK_LIST_DIR) -> Path | None:
+    """冠军四段 → genious_stocklist_{date}__{HHMMSS}.csv (WORM), 给 THS 推送当第三源。
+
+    Sheet2 观察池不落这张 CSV: 推送侧只认个股买入名单, 观察池进去会污染自选股。
+    空榜不落文件 (推送侧缺源即跳过, 不推空单)。
+    """
+    if not len(s1):
+        log.warning("[genious] %s 冠军四段为空, 不落推送边车", date)
+        return None
+    stamp = datetime.datetime.now().strftime("%H%M%S")
+    fp = Path(list_dir) / f"genious_stocklist_{date}__{stamp}.csv"
+    s1[["排名", "symbol"]].to_csv(fp, index=False)
+    return fp
+
+
+def _spawn_ths_push(date: str) -> None:
+    """分离子进程跑同花顺推送 — 不与交付链同生共死。
+
+    推送是 UI 自动化 (空闲闸 + 多轮补推 + 轮间静默), 单次可跑十几分钟, 且用户
+    在场时按设计 fail-closed 退出; 挂在交付链上会把 GENIOUS 的 ok 终态拖住。
+    """
+    script = Path(__file__).with_name("_ths_watchlist_push.py")
+    if not script.exists():
+        log.warning("[genious] 找不到推送脚本 %s, 只落边车不推", script)
+        return
+    opts = 0
+    if os.name == "nt":
+        opts = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+        )
+    try:
+        subprocess.Popen(  # noqa: S603 — 固定脚本路径 + 日期参数, 无 shell
+            [sys.executable, str(script), date],
+            cwd=str(Path(__file__).resolve().parent.parent),
+            creationflags=opts,
+        )
+        log.info("[genious] 已分离启动同花顺推送 (date=%s)", date)
+    except Exception as exc:  # noqa: BLE001 — 推送失败不影响交付物
+        log.warning("[genious] 启动推送失败: %s", exc)
+
+
 def write_xlsx(
     sheet1: pd.DataFrame,
     sheet2: pd.DataFrame,
@@ -255,7 +303,7 @@ def write_xlsx(
         for name, df, banner, legend in (
             ("冠军四段", sheet1, BANNER1, kt.sheet1_legend()),
             ("观察池", sheet2, BANNER2, kt.sheet2_legend()),
-            ("观察池全量", sheet2_full, BANNER3, kt.sheet2_legend()),
+            ("火群全量", sheet2_full, BANNER3, kt.sheet2_legend()),
         ):
             raw = df if len(df) else pd.DataFrame(columns=list(df.columns))
             raw.to_excel(xw, sheet_name=name, index=False, startrow=2)
@@ -418,6 +466,7 @@ def main() -> int:
     ap.add_argument("--verify", action="store_true", help="全历史复现研究层表 (验收闸)")
     ap.add_argument("--no-fetch", action="store_true", help="面板缺当日行时不自拉, 直接失败")
     ap.add_argument("--dry-run", action="store_true", help="只打印不落文件")
+    ap.add_argument("--no-push", action="store_true", help="落边车但不推同花顺自选股")
     ap.add_argument("--wait-min", type=int, default=10, help="等面板更新的上限分钟")
     args = ap.parse_args()
 
@@ -460,7 +509,7 @@ def main() -> int:
     )
 
     if args.dry_run:
-        for name, sheet in (("冠军四段", s1), ("观察池", s2), ("观察池全量", s2_full)):
+        for name, sheet in (("冠军四段", s1), ("观察池", s2), ("火群全量", s2_full)):
             print(f"\n===== {name} ({len(sheet)}) =====")
             print(sheet.to_string(index=False) if len(sheet) else "(空)")
         _write_state(tag, "dry_run", s1=len(s1), s2=len(s2), s2_full=len(s2_full), layers=counts)
@@ -468,10 +517,15 @@ def main() -> int:
 
     fp = write_xlsx(_fmt_sheet(s1), _fmt_sheet(s2), _fmt_sheet(s2_full), target)
     log.info("[genious] 写出 %s", fp)
+    csv_fp = write_stocklist_csv(s1, target)
+    if csv_fp is not None:
+        log.info("[genious] 推送边车 %s", csv_fp)
     _write_state(
         tag, "ok", file=str(fp), s1=len(s1), s2=len(s2), s2_full=len(s2_full), layers=counts
     )
     print(str(fp))
+    if GENIOUS.get("push_to_ths") and csv_fp is not None and not args.no_push:
+        _spawn_ths_push(target)
     return 0
 
 

@@ -153,11 +153,43 @@ _LAYER_COLS = {
     "r60": 0.0, "r120": -0.5, "r20": 0.0, "vr": 1.0, "pct": 0.0, "ext10p": 1.0,
     "ext10": 1.0, "pb5": 0.0, "winner_ratio": 0.5, "band20": 0.10,
     "board": "main", "close": 10.0, "sl_flip_age": 5.0, "sl_wash_days": 8.0,
+    "date": "20260911", "symbol": "000000",
+    # 主力筹码比例 (逐股递归) 与 换手率 需要这几列
+    "open": 10.0, "high": 10.2, "low": 9.8, "turnover_rate": 2.0,
+    # 大涨闸三条件的默认值 = **过闸** (r10<=0 / r5>0 / vr<=1), 于是不用管闸的单测保持原语义
+    "r10": -0.10, "r5": 0.05,
 }
 
 
 def _layer_frame(rows: list[dict]) -> pd.DataFrame:
     return pd.DataFrame([{**_LAYER_COLS, **r} for r in rows])
+
+
+@pytest.fixture
+def chip_stub(monkeypatch):
+    """筹码替身: build_delivery 里的 compute_main_chip_ratio / compute_chip_trend 都是逐股
+    递归真算, 单测要可控。
+
+    被替身读 `_chip` / `_slope` 列 (缺省 95.0 / 1.0), 于是每行能单独指定红柱与控盘MA10斜率;
+    `集中度Δ10` 只是展示列, 替身给 0.0。
+    """
+
+    def _apply(default: float = 95.0, slope: float = 1.0):
+        def _ratio(d: pd.DataFrame) -> pd.DataFrame:
+            d = d.copy()
+            d["主力筹码比例"] = d["_chip"] if "_chip" in d.columns else default
+            return d
+
+        def _trend(d: pd.DataFrame) -> pd.DataFrame:
+            d = d.copy()
+            d["控盘MA10斜率"] = d["_slope"] if "_slope" in d.columns else slope
+            d["集中度Δ10"] = d["_d10"] if "_d10" in d.columns else 0.0
+            return d
+
+        monkeypatch.setattr(kt, "compute_main_chip_ratio", _ratio)
+        monkeypatch.setattr(kt, "compute_chip_trend", _trend)
+
+    return _apply
 
 
 def test_assign_layers_each_segment():
@@ -220,8 +252,9 @@ def test_band_requires_trigger_and_drops_untuned_gap():
     assert kt.assign_layers(df).tolist() == ["", "", "", ""]
 
 
-def test_build_delivery_splits_sheets_and_ranks():
+def test_build_delivery_splits_sheets_and_ranks(chip_stub):
     """Sheet1=冠军四段; Sheet2=其余, 排名从 1 起; 只取当日。"""
+    chip_stub()  # 本测测分表/排名, 不测红柱闸 → 全体过闸
     df = _layer_frame([
         {"T1": True, "r120": -0.20, "r20": 0.10, "date": "20260911", "symbol": "000001"},
         {"T3": True, "r60": -0.40, "vr": 1.0, "pct": 0.08, "date": "20260911", "symbol": "000002"},
@@ -235,7 +268,10 @@ def test_build_delivery_splits_sheets_and_ranks():
     assert list(s2["symbol"]) == ["000004", "000003"]
     assert list(s2["层"]) == [kt.BAND_T3_LIMIT, kt.T1_REST]
     assert list(s1["排名"]) == [1, 2] and list(s2["排名"]) == [1, 2]
-    assert list(s2_full["排名"]) == [1, 2]
+    # 全量表 = 冠军段 + 观察池**全部** (含 20260910 的隔日票不算), 一票不丢
+    assert len(s2_full) == 4
+    assert set(s2_full["symbol"]) == {"000001", "000002", "000003", "000004"}
+    assert list(s2_full["排名"]) == [1, 2, 3, 4]
     assert set(s1["层"]) <= set(kt.SHEET1_LAYERS)
     assert set(s2["层"]) <= set(kt.SHEET2_LAYERS)
     assert list(s1.columns)[:4] == ["排名", "symbol", "层", "触发器"]
@@ -249,8 +285,9 @@ def test_build_delivery_splits_sheets_and_ranks():
         assert s2_full[extra].notna().all()
 
 
-def test_sheet2_ranks_unrun_first_and_truncates():
+def test_sheet2_ranks_unrun_first_and_truncates(chip_stub):
     """观察分把"还没涨透"的顶到前面, 已涨透的沉底; Sheet2 截断, 全量表不截断。"""
+    chip_stub()
     top_n = int(GENIOUS["sheet2_top_n"])
     rows = [
         # 已涨透: 带宽大 / 乖离高 / 获利盘高 / r60 正
@@ -283,8 +320,9 @@ def test_sheet2_ranks_unrun_first_and_truncates():
     assert set(s2["层"]) <= set(kt.SHEET2_LAYERS)
 
 
-def test_sheet2_sort_key_switch_orders_by_sl_flip(monkeypatch):
+def test_sheet2_sort_key_switch_orders_by_sl_flip(monkeypatch, chip_stub):
     """"SL翻正" 备用模式: 刚翻正 + 洗得久 → 前; 从未翻正的沉底。"""
+    chip_stub()
     monkeypatch.setitem(GENIOUS, "sheet2_sort_key", "SL翻正")
     df = _layer_frame([
         {"T1": True, "r120": 0.0, "r20": 0.0, "sl_flip_age": 0.0, "sl_wash_days": 30.0,
@@ -303,6 +341,108 @@ def test_sheet2_sort_key_switch_orders_by_sl_flip(monkeypatch):
 def test_sheet2_sort_key_default_is_observation_score():
     """默认排序键必须是观察分 (全 897 日实测最优); 形态模式只是备用。"""
     assert GENIOUS["sheet2_sort_key"] == "观察分"
+
+
+# ── 大涨闸: 低动量 + 右侧拐头 + 缩量 (2026-09-14 用户令, 用 B 摘除见 config 注释) ──
+
+
+def test_dir_gate_filters_sheet1_only_and_marks_others(chip_stub):
+    """三条件闸**只筛 Sheet1**; Sheet2/全量一票不丢, 只标「大涨闸」。"""
+    chip_stub()
+    ok = {"r10": -0.10, "r5": 0.05, "vr": 1.0}
+    df = _layer_frame([
+        {"T3": True, "r60": -0.40, "pct": 0.08, "symbol": "000001", **ok},
+        # 近 5 日还在跌 = 左侧 → 拦
+        {"T3": True, "r60": -0.40, "pct": 0.08, "symbol": "000002", **{**ok, "r5": -0.01}},
+        {"T1": True, "r120": 0.0, "r20": 0.0, "symbol": "000003", **ok},
+        # 十日已涨 = 非低动量 → 拦
+        {"T1": True, "r120": 0.0, "r20": 0.0, "symbol": "000004", **{**ok, "r10": 0.05}},
+    ])
+    s1, s2, s3 = kt.build_delivery(df, "20260911")
+
+    assert list(s1["symbol"]) == ["000001"]
+    assert set(s2["symbol"]) == {"000003", "000004"}     # 观察池**不过闸**
+    assert set(s3["symbol"]) == {"000001", "000002", "000003", "000004"}
+    assert dict(zip(s3["symbol"], s3["大涨闸"])) == {
+        "000001": "过闸", "000002": "被拦", "000003": "过闸", "000004": "被拦",
+    }
+    # 被拦者排最前 (回看优先), 过闸者殿后
+    assert list(s3["大涨闸"]) == ["被拦", "被拦", "过闸", "过闸"]
+    assert "大涨闸" in s2.columns and "大涨闸" not in s1.columns
+
+
+def test_dir_gate_ignores_chip_ma_slope(chip_stub):
+    """筹码MA10斜率已摘出闸: 它下行/为 NaN 都不影响过闸 (只当展示列)。"""
+    chip_stub()
+    ok = {"r10": -0.10, "r5": 0.05, "vr": 1.0}
+    df = _layer_frame([
+        {"T3": True, "r60": -0.40, "pct": 0.08, "symbol": "000001", **{**ok, "_slope": -1.0}},
+        {"T3": True, "r60": -0.40, "pct": 0.08, "symbol": "000002", **{**ok, "_slope": np.nan}},
+    ])
+    s1, _, s3 = kt.build_delivery(df, "20260911")
+
+    assert list(s1["symbol"]) == ["000001", "000002"]
+    assert set(s3["大涨闸"]) == {"过闸"}
+
+
+def test_dir_gate_boundary_is_strict_and_fails_closed(chip_stub):
+    """边界: r5 严格 >0, r10 / 量比 取等号算过闸; NaN (历史不足) 一律被拦。"""
+    chip_stub()
+    vr_max = float(GENIOUS["dir_gate_vr_max"])
+    edge = {"r10": 0.0, "r5": 1e-9, "vr": vr_max}
+    rows = [
+        ("000001", {}),                    # 恰在阈值上, 三条全过
+        ("000002", {"r5": 0.0}),           # 严格 > 才过
+        ("000003", {"r10": 1e-9}),         # 低动量上限取等号算过, 超一点就拦
+        ("000004", {"vr": vr_max + 1e-9}),
+        ("000005", {"r5": np.nan}),        # 算不出 → 不静默放行
+    ]
+    df = _layer_frame([
+        {"T3": True, "r60": -0.40, "pct": 0.08, "symbol": sym, **{**edge, **over}}
+        for sym, over in rows
+    ])
+    s1, _, s3 = kt.build_delivery(df, "20260911")
+
+    assert list(s1["symbol"]) == ["000001"]
+    assert dict(zip(s3["symbol"], s3["大涨闸"])) == {
+        "000001": "过闸", "000002": "被拦", "000003": "被拦",
+        "000004": "被拦", "000005": "被拦",
+    }
+
+
+def test_dir_gate_off_admits_everything(chip_stub, monkeypatch):
+    """回退旋钮 dir_gate=False: 闸不生效, Sheet1 全体过闸。"""
+    chip_stub()
+    monkeypatch.setitem(GENIOUS, "dir_gate", False)
+    df = _layer_frame([
+        # 三条件全不满足 (十日已涨 / 五日还在跌 / 量比>1 但仍在 CH3 的 vr 闸内)
+        {"T3": True, "r60": -0.40, "pct": 0.08, "symbol": "000001",
+         "r10": 0.50, "r5": -0.20, "vr": 1.2},
+        # T1余 属观察池 (不筛), 用来验证闸关时它也标「过闸」
+        {"T1": True, "r120": 0.0, "r20": 0.0, "symbol": "000002", "r10": 0.50},
+    ])
+    s1, _, s3 = kt.build_delivery(df, "20260911")
+    assert list(s1["symbol"]) == ["000001"]
+    assert set(s3["大涨闸"]) == {"过闸"}
+
+
+def test_dir_gate_does_not_reorder_sheet2(chip_stub, monkeypatch):
+    """Sheet2 不过闸 → 闸开关对观察池逐位不变, 只在「大涨闸」列上体现。"""
+    chip_stub()
+    df = _layer_frame([
+        {"T1": True, "r120": -0.30, "r20": 0.0, "symbol": "000001"},
+        {"T1": True, "r120": -0.20, "r20": 0.0, "symbol": "000002", "r5": -0.50},  # 唯一被拦
+        {"T1": True, "r120": 0.30, "r20": 0.0, "symbol": "000003"},
+    ])
+    monkeypatch.setitem(GENIOUS, "dir_gate", False)
+    _, s2_off, _ = kt.build_delivery(df, "20260911")
+    monkeypatch.setitem(GENIOUS, "dir_gate", True)
+    _, s2_on, _ = kt.build_delivery(df, "20260911")
+
+    assert list(s2_off["symbol"]) == ["000001", "000002", "000003"]
+    assert list(s2_on["symbol"]) == ["000001", "000002", "000003"]   # 逐位不变
+    assert dict(zip(s2_on["symbol"], s2_on["大涨闸"]))["000002"] == "被拦"
+    assert set(s2_off["大涨闸"]) == {"过闸"}
 
 
 # ── 真实面板案例回归 ─────────────────────────────────────────────────────────

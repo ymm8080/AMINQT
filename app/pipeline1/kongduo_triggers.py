@@ -41,12 +41,29 @@ PANEL_COLUMNS = (
     "symbol",
     "date",
     "board",
+    "open",
     "high",
     "low",
     "close",
     "volume",
+    "turnover_rate",
     "winner_ratio",
+    "cost_50pct",
+    "cost_95pct",
 )
+
+# ── 主力筹码比例 (益盟 A04 红柱复刻) ────────────────────────────────────────────
+# 网格与 app/indicators/chip_distribution.py 逐字一致: 固定对数包络 0.5~6000。
+# 绝不用 per-stock min/max 网格 —— 未来价格会拉伸网格、改写历史行的获利盘
+# (0912 前视修复 818bd386, 合成验证漂移最高 100pp)。
+CHIP_GRID_BINS = 2000
+CHIP_GRID_LO = 0.5
+CHIP_GRID_HI = 6000.0
+# 红柱取样价位 = 典型价 × 0.96; 绿柱顶上沿 = 典型价 × 1.04
+CHIP_RED_BAR_OFF = 0.96
+CHIP_GREEN_TOP_OFF = 1.04
+# 筹码趋势列的平滑窗 (控盘 MA10 斜率 / 集中度带宽 Δ10 都取 10 个交易日 ≈ 两周)
+CHIP_TREND_MA = 10
 
 # ── 交付层段位 (层名用段位不用裸字母: 续13 的第5层"B1"数值上=T1余, 与类型标签 B1 易混) ──
 CH3_T3_DEEP_QUIET = "CH3 T3深跌缩量"
@@ -131,8 +148,6 @@ def _col_lines() -> tuple[tuple[str, str], ...]:
             "今日命中的触发器: T1洗盘日 / T2翻转日 / T3状态点火 / T2+T3(同日双触发)",
         ),
         ("类型", "r60/r120 分桶标签 — 见下方\"类型说明\""),
-        ("board", "板块: main=主板 / GEM=创业板 / STAR=科创板"),
-        ("close", "今日收盘价 (面板未复权原价)"),
         ("当日涨幅", "今日涨跌幅 = 今收 / 昨收 − 1"),
         (
             "执行档",
@@ -142,6 +157,14 @@ def _col_lines() -> tuple[tuple[str, str], ...]:
         ("r60", f"最近 60 个交易日涨跌幅 (中期位置; ≤{deep} 即本表的\"深跌\")"),
         ("r120", f"最近 120 个交易日涨跌幅 (长期位置; ≤{base} 即\"半年没涨\")"),
         ("获利盘", "当日获利盘比例; 越高 = 上方套牢盘越少"),
+        (
+            "主力筹码比例",
+            "益盟「主力筹码红柱」= 成本低于「典型价×0.96」的筹码占比 (%, 0~100); "
+            "越高 = 筹码越聚在当前价下方 (主力控盘越实)。**当警戒读数用, 别当买入信号** —"
+            "末 250 日 OOS 对未来10日 IC −0.059 (t −5.9), 五分位向下 (最低桶 +0.15% → "
+            "最高桶 −0.02%); 深跌层 (r60≤−30%) 天然上方套牢重 ⇒ 红柱必然偏小, 属形态使然",
+        ),
+        ("换手率", "今日成交量 / 流通股本 (Tushare daily_basic 口径)"),
         ("量比", "今量 / 前 5 日均量; <1 缩量, >1 放量"),
         (
             "乖离MA10",
@@ -195,6 +218,24 @@ def _band_lines() -> tuple[str, ...]:
         f"  {BAND_T3_WARM} = T3余 且 r120≤{base}"
         f" 且 {c['band_t3_lo']:.0%}<涨幅≤{c['band_t3_hi']:.0%} 且 量比≤{c['band_vr_max']:g}",
         f"  {BAND_T3_LIMIT} = T3余 且 r120≤{base} 且 涨幅>{c['limit_up']:.0%}",
+    )
+
+
+def _gate_lines() -> tuple[str, ...]:
+    """大涨闸说明 (观察池/火群全量表底部)。数=引擎真实口径末250日实测。"""
+    c = GENIOUS
+    if not c["dir_gate"]:
+        return ("大涨闸: 已关闭 (dir_gate=False) — 全部标「过闸」。",)
+    return (
+        "大涨闸说明 (只作用于冠军四段; 本表「大涨闸」列仅供自查, 不过滤)",
+        f"  过闸 = 三条件同时成立: 十日涨幅≤{c['dir_gate_mom_max']:.0%} (低动量) "
+        f"+ 近5日涨幅>0 (右侧拐头, 不做左侧) + 量比≤{c['dir_gate_vr_max']:g} (缩量)",
+        "  目标 = 未来10日涨幅≥20% 的命中率。末250日实测: 冠军四段 12.7% 命中 (基准 1.94x), "
+        "未来10日均值 +9.00% 胜 81.3%; 全样本 ≥10% 命中率 1.30x (末250 为 2.05x)。",
+        "  ★ 很窄: 冠军四段由 19.2票/日 砍到 1.3票/日 (93% 被拦), 所以**没有**用在观察池上"
+        " (否则 Top20 会被掏空)。观察池上该列的边际比冠军段更弱, 只当自查标注。",
+        "  风险: 全样本(含 2023)只 1.07x, 收益集中在近端; 样本极薄, 当**窄名单**用, 别当主力信号。",
+        "  注: 筹码MA10斜率 (控盘A08的十日斜率) 已实测无增益, 从闸里摘除, 仅保留为展示列。",
     )
 
 
@@ -253,15 +294,16 @@ def sheet2_legend() -> tuple[str, ...]:
         f"(T3臂 {vr3_txt})、昨日乖离≤{c['band2_ext10p_max']:.2f}"
         f" — 无此闸温火臂会吞掉任何 r120≤0 的当日上涨票 (24.5 → 140 票/日)。",
         "",
-        "★ 排序键 = 观察分 (不显示在列里; 表已按它从高到低排好, 重复名次见「观察池全量」)",
+        "★ 排序键 = 观察分 (不显示在列里; 表已按它从高到低排好, 重复名次见「火群全量」)",
         f"  = 同日截面 z 分求和  -({' + '.join(RANK_Z_COLUMNS)})",
         "  含义: 带宽越窄 / 越贴 MA10 / 获利盘越低 / 跌得越深 → 分越高 = 越\"还没涨透\"; "
         "已发挥完的自动沉底。",
         "  实测 (全 896 日): 首档 +0.65% vs 末档 -0.03%, IC +0.077 (t 8.7), 前后半样本同号。",
         "  期望≈50% 平水 — 这是**观察**排序, 不是全买清单 (排名键换成段位反而伤 IC, 同日截面 IC -0.025)。",
         "",
-        "列说明 (按表内从左到右; 中间两列 SL* 仅本表有)",
+        "列说明 (按表内从左到右; 中间三列 大涨闸/SL* 仅本表有)",
         *(_pad("  " + k, cw + 2) + "= " + v for k, v in cols[:-1]),
+        "  " + _pad("大涨闸", cw) + "= 过闸 | 被拦 — 大涨三条件闸, 见下方\"大涨闸说明\"",
         "  " + _pad("SL翻正年龄", cw) + "= 益盟 S-L 由负转正至今的交易日数 (0 = 今日刚翻正)",
         "  " + _pad("SL洗盘天数", cw) + "= 这次翻正之前那段负值持续了多少交易日 (越长洗得越久)",
         "  两列只作标注: 实测 IC 仅 0.013 (t 1.5), 80.6% 与 T2 图标翻转重叠, 故不当排序键。",
@@ -269,6 +311,8 @@ def sheet2_legend() -> tuple[str, ...]:
         "",
         "类型说明 (r60/r120 分桶; 重叠时优先级 A > C > B2 > B1 > B3 > D1 > D2)",
         *(_pad("  " + k, tw + 2) + "= " + v for k, v in types),
+        "",
+        *_gate_lines(),
         "",
         *_tail_lines(),
     )
@@ -302,8 +346,8 @@ def _date_filter(trade_date, days: int) -> list | None:
 def load_panel(path, trade_date, lookback_days: int | None = None) -> pd.DataFrame:
     """只读面板尾部窗口 (r120 + SIG 34+6 rolling 需 ~250 交易日历史).
 
-    返回: symbol(6位) / date(YYYYMMDD str) / board / high / low / close / volume /
-    winner_ratio, 已按 (symbol, date) 排序且宇宙过滤。
+    返回: symbol(6位) / date(YYYYMMDD str) / board / open / high / low / close /
+    volume / turnover_rate / winner_ratio, 已按 (symbol, date) 排序且宇宙过滤。
     """
     days = GENIOUS["lookback_days"] if lookback_days is None else int(lookback_days)
     tbl = pq.read_table(
@@ -320,6 +364,108 @@ def load_panel(path, trade_date, lookback_days: int | None = None) -> pd.DataFra
     df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y%m%d")
     df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
     return df[list(PANEL_COLUMNS)]
+
+
+def _chip_grid() -> np.ndarray:
+    return np.exp(
+        np.linspace(np.log(CHIP_GRID_LO), np.log(CHIP_GRID_HI), CHIP_GRID_BINS)
+    )
+
+
+def _triangle(grid: np.ndarray, low: float, high: float, peak: float) -> np.ndarray:
+    """当日新增筹码的三角分布 (峰值在典型价); 全出界时退化为最近格点。"""
+    w = np.zeros(grid.size)
+    m = (grid >= low) & (grid <= high)
+    if m.any():
+        w[m] = np.where(
+            grid[m] <= peak,
+            (grid[m] - low) / max(peak - low, 1e-9),
+            (high - grid[m]) / max(high - peak, 1e-9),
+        )
+        np.clip(w, 0, None, out=w)
+        s = w.sum()
+        if s > 0:
+            return w / s
+    w[np.argmin(np.abs(grid - peak))] = 1.0
+    return w
+
+
+def compute_main_chip_ratio(df: pd.DataFrame) -> pd.DataFrame:
+    """加三列益盟「主力筹码控盘程度N」复刻量 (%, 0~100):
+
+      `主力筹码比例` = A04 红柱 = WINNER(典型价 × 0.96) × 100  — **成本低于今价 4% 以上**的筹码占比。
+                       实测与面板 `winner_ratio`(获利盘) 秩相关 ~0.98 ⇒ 它是**获利盘口径**, 不是控盘。
+      `绿顶筹码`     = A02 绿柱顶 = WINNER(典型价 × 1.04) × 100 — 含 ±4% 带上沿, 即"上方套牢"的补集。
+      `主力筹码控盘` = A08 黄柱 = A02 − A03 = 成本落在**典型价 ±4% 带内**的筹码占比。
+
+    ★ A08 才是"控盘": 筹码越集中在现价附近 (控盘越足) 就越大, 与"赚没赚钱"无关 — 与获利盘正交。
+      用户 0914 点名 000978/000823: 爆发前夜 000823 的 A08 连续 P92~P98 (含 9/4 前收 0.057 的
+      极窄成本带), 而同期 A04 只有 P55~P69; A04 门槛 30 会把 000823 直接闸掉, A08 不会。
+
+    口径源头 = app/indicators/chip_distribution.py::ChipDistribution.build 的 A02/A03/A04/A08
+    (换手率衰减迁移 + 三角分布); 命名源头 = app/core/ths_indicators.compute_chip_control
+    的 tech_ths_ctrl_low ("低价区筹码%")。
+
+    逐股递归 ⇒ 必须在**切当日之前**对整窗调用 (当日值依赖全部历史筹码迁移)。窗口取
+    GENIOUS['lookback_days'] 已够: 累计换手上百 % 后初始分布被冲刷掉。换手率列是
+    Tushare daily_basic 的百分比口径 (3.5 = 3.5%), 故先 /100。
+    """
+    grid = _chip_grid()
+    res = df.copy()
+    res["主力筹码比例"] = np.nan
+    res["绿顶筹码"] = np.nan
+    res["主力筹码控盘"] = np.nan
+    for _, g in df.groupby("symbol", sort=False):
+        o = g["open"].to_numpy(float)
+        h = g["high"].to_numpy(float)
+        low = g["low"].to_numpy(float)
+        c = g["close"].to_numpy(float)
+        t = np.clip(
+            np.nan_to_num(g["turnover_rate"].to_numpy(float)) / 100.0, 0.0, 1.0
+        )
+        red = np.full(len(g), np.nan)
+        green = np.full(len(g), np.nan)
+        dist = np.zeros(grid.size)
+        for i in range(len(g)):
+            if not (np.isfinite(o[i]) and np.isfinite(c[i])):
+                continue
+            a01 = (c[i] + o[i] + low[i] + h[i]) / 4.0
+            w = _triangle(grid, low[i], h[i], a01)
+            dist = w if dist.sum() == 0 else dist * (1.0 - t[i]) + t[i] * w
+            tot = dist.sum()
+            if tot > 0:
+                red[i] = dist[grid < a01 * CHIP_RED_BAR_OFF].sum() / tot * 100.0
+                green[i] = dist[grid < a01 * CHIP_GREEN_TOP_OFF].sum() / tot * 100.0
+        res.loc[g.index, "主力筹码比例"] = red
+        res.loc[g.index, "绿顶筹码"] = green
+        res.loc[g.index, "主力筹码控盘"] = green - red
+    return res
+
+
+def compute_chip_trend(df: pd.DataFrame) -> pd.DataFrame:
+    """加两列筹码趋势量 (按 symbol 时序, rolling/shift 只吃 t 及更早):
+
+      `控盘MA10斜率` = MA10(主力筹码控盘) 与 10 日前的差 (>0 = 筹码向现价收敛)。
+                       **只作展示列** — 0914 全枚举实测它是最弱的条件 (冠军末250 单条件 ≥20% 仅
+                       0.95x, 往闸里加每加一次都掉), 已从大涨闸摘除。
+      `集中度Δ10`    = 带宽 W 的 10 日变化, W = (cost_95pct − cost_50pct) / cost_50pct。
+                       W↑ 即 `集中度Δ10` > 0 = 筹码带变宽(发散)。**只作展示列, 不作闸** —
+                       实测方向与直觉相反且很强 (变发散 ≥10% 命中 1.19x / 变集中 0.62x), 但用户
+                       两个种子案例 000978/000823 恰是强变集中, 硬闸会把它们筛掉。见 settings.GENIOUS。
+
+    必须在 compute_main_chip_ratio **之后**调用 (依赖 `主力筹码控盘`)。两列都是 MA 级平滑,
+    lookback_days 默认 400 日足够预热。
+    """
+    n = CHIP_TREND_MA
+    res = df.copy()
+    k = res.groupby("symbol", sort=False)["主力筹码控盘"].transform(
+        lambda x: x.rolling(n, min_periods=n).mean()
+    )
+    res["控盘MA10斜率"] = k - k.groupby(res["symbol"]).shift(n)
+    c50 = res["cost_50pct"].to_numpy(float)
+    w = (res["cost_95pct"].to_numpy(float) - c50) / np.where(c50 == 0.0, np.nan, c50)
+    res["集中度Δ10"] = pd.Series(w, index=res.index).groupby(res["symbol"]).diff(n)
+    return res
 
 
 # ── 特征 ──────────────────────────────────────────────────────────────────────
@@ -387,7 +533,7 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
     out["gap"] = gap
 
     out["pct"] = close.groupby(g, sort=False).pct_change()
-    for n in (20, 60, 120):
+    for n in (5, 10, 20, 60, 120):
         out[f"r{n}"] = close.groupby(g, sort=False).pct_change(n)
 
     wr = out["winner_ratio"]
@@ -577,14 +723,16 @@ DISPLAY_COLUMNS = (
     "层",
     "触发器",
     "类型",
-    "board",
-    "close",
     "当日涨幅",
     "执行档",
     "r20",
     "r60",
     "r120",
     "获利盘",
+    "主力筹码比例",
+    "控盘MA10斜率",
+    "集中度Δ10",
+    "换手率",
     "量比",
     "乖离MA10",
     "5日回撤",
@@ -610,7 +758,13 @@ SHEET2_EXTRA_COLUMNS = ("SL翻正年龄", "SL洗盘天数")
 def build_delivery(
     df: pd.DataFrame, trade_date: str
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """取 trade_date 当日分层结果, 返回 (Sheet1 冠军四段, Sheet2 观察池, Sheet2 全量)。
+    """取 trade_date 当日分层结果, 返回 (Sheet1 冠军四段, Sheet2 观察池, Sheet3 全量表)。
+
+    **大涨闸** (GENIOUS['dir_gate']) — 三条件缺一不可: r10 <= dir_gate_mom_max (低动量) &
+    r5 > 0 (右侧拐头, 不做左侧) & vr <= dir_gate_vr_max (缩量)。**只筛 Sheet1 冠军四段** ——
+    三条件合计仅 ~1.3票/日, 同时砍 Sheet2 会把观察池 Top20 掏空。Sheet2/Sheet3 保留全部候选,
+    只写「大涨闸」标注列 (过闸/被拦), Sheet3 被拦者排最前。NaN (历史不足) 一律判被拦, 不静默放行。
+    (筹码MA10斜率曾作第 4 条, 0914 实测每加一次 ≥20% lift 都掉, 已摘除, 只留展示列。)
 
     Sheet2 主键 = **观察分** 高→低 = 日内截面 z 的 -(band20 + ext10 + winner_ratio + r60 + r120),
     即"带宽窄 / 未偏离MA10 / 获利盘低 / 深跌" 越足越靠前。全 896 日实测 IC +0.077 (t 8.7),
@@ -620,6 +774,8 @@ def build_delivery(
     层序**不作主键**: 层内 IC 实测为负 (-0.025), 按层质量排序反而有害; r60 深→浅只作同分兜底。
     Sheet2 截断到 GENIOUS['sheet2_top_n'] 供阅读, 不截断的全量留在第三张表 (洪峰日的钱不丢)。
     """
+    # 主力筹码比例是逐股递归量, 必须在切当日之前对整窗算 (当日值依赖全部历史迁移)
+    df = compute_chip_trend(compute_main_chip_ratio(df))
     day = df[df["date"] == _iso(trade_date)].copy()
     day["层"] = assign_layers(day)
     day = day[day["层"] != ""]
@@ -627,6 +783,7 @@ def build_delivery(
     day["类型"] = classify_type(day)
     day["当日涨幅"] = day["pct"]
     day["获利盘"] = day["winner_ratio"]
+    day["换手率"] = day["turnover_rate"] / 100.0
     day["量比"] = day["vr"]
     day["乖离MA10"] = day["ext10"]
     day["5日回撤"] = day["pb5"]
@@ -634,6 +791,18 @@ def build_delivery(
     day["全样本口径"] = day["层"].map(LAYER_RESEARCH)
     day["SL翻正年龄"] = day["sl_flip_age"]
     day["SL洗盘天数"] = day["sl_wash_days"]
+
+    if GENIOUS["dir_gate"]:
+        # 三条件缺一不可。NaN (历史不足算不出 r5 / r10 / vr) → 比较为 False = 被拦,
+        # 落全量表可查, 不静默放行。
+        day["_passed"] = (
+            (day["r10"] <= float(GENIOUS["dir_gate_mom_max"]))
+            & (day["r5"] > 0.0)
+            & (day["vr"] <= float(GENIOUS["dir_gate_vr_max"]))
+        )
+    else:
+        day["_passed"] = True
+    day["大涨闸"] = np.where(day["_passed"], "过闸", "被拦")
 
     order = {name: i for i, name in enumerate(ALL_LAYERS)}
     day["_layer_rank"] = day["层"].map(order)
@@ -646,9 +815,12 @@ def build_delivery(
         out.insert(0, "排名", range(1, len(out) + 1))
         return out.reset_index(drop=True)
 
-    s1 = day[day["层"].isin(SHEET1_LAYERS)].sort_values(
+    s1 = day[day["层"].isin(SHEET1_LAYERS) & day["_passed"]].sort_values(
         ["_layer_rank", "r60"], ascending=[True, True], na_position="last"
     )
+    # 观察分在**未过闸的全池**上算 → 每只票的分值与闸无关, 闸只做筛选不改序。
+    # Sheet2 **不过闸** (三条件合计 ~1.3票/日, 砍下去观察池会被掏空): 保留前 N,
+    # 只把「大涨闸」标注列带上, 用户可自行在 Excel 里筛。
     s2 = day[day["层"].isin(SHEET2_LAYERS)].copy()
     for col in RANK_Z_COLUMNS:
         s2[f"_z_{col}"] = s2.groupby("date")[col].transform(_zscore).fillna(0.0)
@@ -665,7 +837,20 @@ def build_delivery(
         s2 = s2.sort_values(["观察分", "r60"], ascending=[False, True], na_position="last")
 
     top = s2.head(int(GENIOUS["sheet2_top_n"]))
-    return sheet(s1), sheet(top, SHEET2_EXTRA_COLUMNS), sheet(s2, SHEET2_EXTRA_COLUMNS)
+
+    # Sheet3 全量: 冠军段 + 观察池**全部** (含被闸拦下的), 一票不丢。被拦者排最前,
+    # 其余按层序 / 层内 r60 深→浅。
+    day["_gate_rank"] = day["_passed"].astype(int)  # 被拦 (0) 排最前, 过闸 (1) 殿后
+    s3 = day.sort_values(
+        ["_gate_rank", "_layer_rank", "r60"],
+        ascending=[True, True, True],
+        na_position="last",
+    )
+    return (
+        sheet(s1),
+        sheet(top, ("大涨闸",) + SHEET2_EXTRA_COLUMNS),
+        sheet(s3, ("大涨闸",) + SHEET2_EXTRA_COLUMNS),
+    )
 
 
 def panel_max_date(path) -> datetime.date | None:
