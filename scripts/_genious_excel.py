@@ -30,6 +30,7 @@ import datetime
 import json
 import logging
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -55,6 +56,7 @@ from config.settings import (  # noqa: E402
 LOG_DIR = Path(PROJECT_ROOT) / "logs"
 DIAG_DIR = Path(PROJECT_ROOT) / "diag"
 WAIT_TICK_S = 60
+HEAL_TIMEOUT_S = 180  # 自拉硬超时; 超时=大声失败, 不留挂死实例 (见 _heal_rows_bounded)
 
 BANNER1 = (
     "GENIOUS 冠军四段 — 全样本 61.3%胜率 / 15.0票·日 (2026年口径 ~55%/+1~2%); "
@@ -160,6 +162,35 @@ def _heal_rows(target: str) -> pd.DataFrame:
     return out[list(kt.PANEL_COLUMNS)]
 
 
+def _heal_rows_bounded(target: str) -> pd.DataFrame:
+    """自拉带硬超时。
+
+    Tushare 的 fetch_daily / cyq_perf **不接受 timeout 参数**, 底层 socket 挂起会永久阻塞。
+    0914 实测: 冒烟进程 0 CPU 挂死 40 分钟, 让计划任务永久停在 Running (schtasks 默认
+    IgnoreNew) — 之后每个交易日的 20:30 都会被静默跳过, 且不写任何终态。
+    故用守护线程包一层: 超时即抛错 → 调用方写 state=failed + exit 2, 挂死变大声失败。
+    """
+    box: dict = {}
+
+    def work() -> None:
+        try:
+            box["df"] = _heal_rows(target)
+        except BaseException as e:  # noqa: BLE001 — 转发给主线程统一处理
+            box["err"] = e
+
+    th = threading.Thread(target=work, name="genious-heal", daemon=True)
+    th.start()
+    th.join(HEAL_TIMEOUT_S)
+    if th.is_alive():
+        raise TimeoutError(
+            f"自拉 {target} 超过 {HEAL_TIMEOUT_S}s 未返回 (Tushare 连接挂起); "
+            "拒绝无限等待 — 不产文件"
+        )
+    if "err" in box:
+        raise box["err"]
+    return box["df"]
+
+
 def _load_fresh_panel(target: str, no_fetch: bool, wait_min: int) -> pd.DataFrame:
     """要求面板含 target 当日行; 不足则等待 → 自愈; 都不行抛错。"""
     cal = load_trade_cal()
@@ -189,7 +220,7 @@ def _load_fresh_panel(target: str, no_fetch: bool, wait_min: int) -> pd.DataFram
     if no_fetch:
         raise RuntimeError(f"面板无 {target} 当日行且 --no-fetch: 不产文件")
     log.warning("[fresh] 面板无 %s 当日行 → 自拉当日截面 (只拼内存, 不写面板)", target)
-    healed = _heal_rows(target)
+    healed = _heal_rows_bounded(target)
     log.info("[heal] 当日截面 %d 行, 其中 winner_ratio 非空 %d",
              len(healed), int(healed["winner_ratio"].notna().sum()))
     return pd.concat([df, healed], ignore_index=True)
