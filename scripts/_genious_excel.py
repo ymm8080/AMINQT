@@ -254,8 +254,8 @@ def write_xlsx(
     with pd.ExcelWriter(fp, engine="openpyxl") as xw:
         for name, df, banner, legend in (
             ("冠军四段", sheet1, BANNER1, kt.sheet1_legend()),
-            ("观察池", sheet2, BANNER2, ()),
-            ("观察池全量", sheet2_full, BANNER3, ()),
+            ("观察池", sheet2, BANNER2, kt.sheet2_legend()),
+            ("观察池全量", sheet2_full, BANNER3, kt.sheet2_legend()),
         ):
             raw = df if len(df) else pd.DataFrame(columns=list(df.columns))
             raw.to_excel(xw, sheet_name=name, index=False, startrow=2)
@@ -278,7 +278,7 @@ def write_xlsx(
             # 供文本溢出显示 — 不合并单元格, 免得挡住用户自己加行。
             for j, line in enumerate(legend):
                 cell = ws.cell(row=4 + len(raw) + 1 + j, column=1, value=line)
-                if line.startswith(("段位说明", "列说明", "类型说明")):
+                if line.startswith(("段位说明", "层说明", "列说明", "类型说明", "★")):
                     cell.font = Font(bold=True, size=10)
             ws.freeze_panes = "A4"
     return fp

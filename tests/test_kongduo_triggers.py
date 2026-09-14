@@ -241,10 +241,11 @@ def test_build_delivery_splits_sheets_and_ranks():
     assert list(s1.columns)[:4] == ["排名", "symbol", "层", "触发器"]
     # 每个段位都要有执行档与研究口径, 不能出现 NaN
     assert s1["执行档"].notna().all() and s1["全样本口径"].notna().all()
-    # S-L 形态标注只上 Sheet2, 且插在 执行档 之前
+    # S-L 形态标注只上 Sheet2, 且插在数值块末尾 (5日回撤 之后), 不打散前面几列
     for extra in kt.SHEET2_EXTRA_COLUMNS:
         assert extra not in s1.columns
-        assert s2.columns.get_loc(extra) < s2.columns.get_loc("执行档")
+        assert s2.columns.get_loc(extra) > s2.columns.get_loc("5日回撤")
+        assert s2.columns.get_loc(extra) < s2.columns.get_loc("全样本口径")
         assert s2_full[extra].notna().all()
 
 

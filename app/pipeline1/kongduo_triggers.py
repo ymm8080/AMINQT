@@ -93,32 +93,36 @@ LAYER_RESEARCH = {
 }
 
 
+def _w(s: str) -> int:
+    """显示宽度 (CJK 算 2 列)。"""
+    return sum(2 if ord(ch) > 0x2E80 else 1 for ch in s)
+
+
 def _pad(s: str, width: int) -> str:
-    """按**显示宽度**右侧补空格 (CJK 算 2 列), 让 Excel 里说明列对齐。"""
-    w = sum(2 if ord(ch) > 0x2E80 else 1 for ch in s)
-    return s + " " * max(width - w, 1)
+    """按**显示宽度**右侧补空格, 让 Excel 里说明列对齐。"""
+    return s + " " * max(width - _w(s), 1)
 
 
-def sheet1_legend() -> tuple[str, ...]:
-    """冠军四段表底部图例 (0914 用户令: 段位中文含义 + r20 口径写进表里)。
-
-    阈值一律从 GENIOUS 取 — 改 config 图例跟着变, 不会与实算口径脱节。
-    """
+def _seg_lines() -> tuple[str, ...]:
+    """冠军四段条件 (冠军表底图例与观察池图例共用); 阈值一律从 GENIOUS 取。"""
     c = GENIOUS
     deep = f"{c['r60_deep']:.0%}"                      # -30%
     base = "0" if c["r120_base"] == 0 else f"{c['r120_base']:.0%}"
-    cond = (
+    return (
         f"  {CH3_T3_DEEP_QUIET} = T3状态点火 且 r60≤{deep} 且 量比≤{c['vr_quiet']}",
         f"  {CH2_T2_DEEP} = T2翻转日 且 r60≤{deep}",
         f"  {CH1_T1_LONGBASE} = T1洗盘日 且 r120≤{base} 且 r20>+{c['r20_min']:.0%}",
         f"  {CH2B_T2_STEADY} = T2翻转日 且 昨日乖离MA10≤{c['t2b_ext_prev_max']:.2f}"
         f" 且 r120≤{base}",
     )
-    layers = SHEET1_LAYERS
-    w = max(sum(2 if ord(ch) > 0x2E80 else 1 for ch in s) for s in cond)
 
+
+def _col_lines() -> tuple[tuple[str, str], ...]:
+    """列说明 — 冠军四段与观察池的列完全相同, 只写一份, 免得两处漂移。"""
+    c = GENIOUS
     deep = f"{c['r60_deep']:.0%}"                       # -30%
-    cols = (
+    base = "0" if c["r120_base"] == 0 else f"{c['r120_base']:.0%}"
+    return (
         ("排名", "表内序号; 先按段位序 (CH3→CH2→CH1→CH2B), 段内按 r60 从深到浅"),
         ("symbol", "6 位股票代码 (已去掉 .SH/.SZ 后缀)"),
         ("层", "冠军段位 — 四段互斥, 见上方\"段位说明\""),
@@ -130,6 +134,10 @@ def sheet1_legend() -> tuple[str, ...]:
         ("board", "板块: main=主板 / GEM=创业板 / STAR=科创板"),
         ("close", "今日收盘价 (面板未复权原价)"),
         ("当日涨幅", "今日涨跌幅 = 今收 / 昨收 − 1"),
+        (
+            "执行档",
+            "T+1开盘进 | T+1仍涨确认→T+1收盘进 (20:30 已收盘, 只能 T+1 买)",
+        ),
         ("r20", "最近 20 个交易日涨跌幅 (= 今收 / 20交易日前收 − 1)"),
         ("r60", f"最近 60 个交易日涨跌幅 (中期位置; ≤{deep} 即本表的\"深跌\")"),
         ("r120", f"最近 120 个交易日涨跌幅 (长期位置; ≤{base} 即\"半年没涨\")"),
@@ -140,14 +148,16 @@ def sheet1_legend() -> tuple[str, ...]:
             "收盘 / 10日均线 − 1: 正 = 在均线上方, 越大越\"追高/过热\"; 负 = 均线下方",
         ),
         ("5日回撤", "近 5 日相对 20 日高点的最深回撤 (负值, 越负回撤越深)"),
-        (
-            "执行档",
-            "T+1开盘进 | T+1仍涨确认→T+1收盘进 (20:30 已收盘, 只能 T+1 买)",
-        ),
         ("全样本口径", "该段位全样本 (2023-01~2026-09) 胜率 / 5日均收益; 含选段偏差"),
     )
-    cw = max(sum(2 if ord(ch) > 0x2E80 else 1 for ch in k) for k, _ in cols)
-    types = (
+
+
+def _type_lines() -> tuple[tuple[str, str], ...]:
+    """r60/r120 分桶标签 (A/C/B2/B1/B3/D1/D2) 说明。"""
+    c = GENIOUS
+    deep = f"{c['r60_deep']:.0%}"                       # -30%
+    base = "0" if c["r120_base"] == 0 else f"{c['r120_base']:.0%}"
+    return (
         (
             TYPE_A,
             f"r60 ≤ {deep} — 已深跌 (最深一桶, 优先级最高)",
@@ -170,12 +180,44 @@ def sheet1_legend() -> tuple[str, ...]:
         (TYPE_D1, f"+{TYPE_R60_D1:.0%} < r60 ≤ +{TYPE_R60_D2:.0%} — 已涨"),
         (TYPE_D2, f"r60 > +{TYPE_R60_D2:.0%} — 大涨 (已发挥完, 多在观察池)"),
     )
-    tw = max(sum(2 if ord(ch) > 0x2E80 else 1 for ch in k) for k, _ in types)
+
+
+def _band_lines() -> tuple[str, ...]:
+    """观察池五臂条件 (T1余 + 带双指纹四臂)。"""
+    c = GENIOUS
+    base = "0" if c["r120_base"] == 0 else f"{c['r120_base']:.0%}"
+    return (
+        f"  {T1_REST} = T1洗盘日 且 r120≤{c['t1_wide_r120_max']:.0%}"
+        f" 且 r60≥{c['t1_wide_r60_min']:.0%} (T1宽, 未进冠军段)",
+        f"  {BAND_T2_WARM} = T2余 且 r120≤{base}"
+        f" 且 {c['band_t2_lo']:.0%}<涨幅≤{c['band_t2_hi']:.0%} 且 量比≤{c['band_vr_max']:g}",
+        f"  {BAND_T2_LIMIT} = T2余 且 r120≤{base} 且 涨幅>{c['limit_up']:.0%}",
+        f"  {BAND_T3_WARM} = T3余 且 r120≤{base}"
+        f" 且 {c['band_t3_lo']:.0%}<涨幅≤{c['band_t3_hi']:.0%} 且 量比≤{c['band_vr_max']:g}",
+        f"  {BAND_T3_LIMIT} = T3余 且 r120≤{base} 且 涨幅>{c['limit_up']:.0%}",
+    )
+
+
+def _tail_lines() -> tuple[str, ...]:
+    """两表共用的口径警示 (放最后, 不被上面的说明淹没)。"""
+    return (
+        "r20/r60/r120 用面板未复权原价计算 (与全样本判词同口径), 除权日会注入假跌幅。",
+        "全样本口径含选段偏差 (前半 86 → 后半 61 衰减), 2026 年诚实口径约 55% / +1~2%, 勿按它下注。",
+        "扣 0.7% 往返费后火群整体 ≈0 — 钱只在冠军四段的头部, 请按层序读, 勿无脑全买。",
+    )
+
+
+def sheet1_legend() -> tuple[str, ...]:
+    """冠军四段表底部图例 (0914 用户令: 段位中文含义 + r20 口径写进表里)。"""
+    cond, cols, types = _seg_lines(), _col_lines(), _type_lines()
+    w = max(_w(s) for s in cond)
+    cw = max(_w(k) for k, _ in cols)
+    tw = max(_w(k) for k, _ in types)
     return (
         "段位说明 (四段互斥, 优先级 CH3 > CH2 > CH1 > CH2B)",
         *(
             _pad(s, w) + f"[全样本 {LAYER_RESEARCH[name]}]"
-            for s, name in zip(cond, layers)
+            for s, name in zip(cond, SHEET1_LAYERS)
         ),
         "",
         "列说明 (按表内从左到右)",
@@ -184,8 +226,51 @@ def sheet1_legend() -> tuple[str, ...]:
         "类型说明 (r60/r120 分桶; 重叠时优先级 A > C > B2 > B1 > B3 > D1 > D2)",
         *(_pad("  " + k, tw + 2) + "= " + v for k, v in types),
         "",
-        "r20/r60/r120 用面板未复权原价计算 (与全样本判词同口径), 除权日会注入假跌幅。",
-        "全样本口径含选段偏差 (前半 86 → 后半 61 衰减), 2026 年诚实口径约 55% / +1~2%, 勿按它下注。",
+        *_tail_lines(),
+    )
+
+
+def sheet2_legend() -> tuple[str, ...]:
+    """观察池表底部图例 (0914 用户令: 观察池也要有 footer)。
+
+    与冠军表图例同源 (_col_lines / _type_lines / _tail_lines), 只在层说明与排序键两处不同。
+    """
+    c = GENIOUS
+    bands, cols, types = _band_lines(), _col_lines(), _type_lines()
+    bw = max(_w(s) for s in bands)
+    cw = max(_w(k) for k, _ in cols)
+    tw = max(_w(k) for k, _ in types)
+    vr3 = c["band3_vr_outer_max"]
+    vr3_txt = "不限" if vr3 is None else f"{vr3:g}"
+    return (
+        "层说明 (五臂互斥; 冠军四段之外的余票, 与冠军表零重叠)",
+        *(
+            _pad(s, bw) + f"[全样本 {LAYER_RESEARCH[name]}]"
+            for s, name in zip(bands, SHEET2_LAYERS)
+        ),
+        "  余票口径: T2余/T3余 = 命中 T2/T3 但已进冠军段的票不再进观察带。",
+        f"  四臂\"剔毒\"外闸: r60≤{c['band_r60_max']:.0%}、量比≤{c['band2_vr_outer_max']:g}"
+        f"(T3臂 {vr3_txt})、昨日乖离≤{c['band2_ext10p_max']:.2f}"
+        f" — 无此闸温火臂会吞掉任何 r120≤0 的当日上涨票 (24.5 → 140 票/日)。",
+        "",
+        "★ 排序键 = 观察分 (不显示在列里; 表已按它从高到低排好, 重复名次见「观察池全量」)",
+        f"  = 同日截面 z 分求和  -({' + '.join(RANK_Z_COLUMNS)})",
+        "  含义: 带宽越窄 / 越贴 MA10 / 获利盘越低 / 跌得越深 → 分越高 = 越\"还没涨透\"; "
+        "已发挥完的自动沉底。",
+        "  实测 (全 896 日): 首档 +0.65% vs 末档 -0.03%, IC +0.077 (t 8.7), 前后半样本同号。",
+        "  期望≈50% 平水 — 这是**观察**排序, 不是全买清单 (排名键换成段位反而伤 IC, 同日截面 IC -0.025)。",
+        "",
+        "列说明 (按表内从左到右; 中间两列 SL* 仅本表有)",
+        *(_pad("  " + k, cw + 2) + "= " + v for k, v in cols[:-1]),
+        "  " + _pad("SL翻正年龄", cw) + "= 益盟 S-L 由负转正至今的交易日数 (0 = 今日刚翻正)",
+        "  " + _pad("SL洗盘天数", cw) + "= 这次翻正之前那段负值持续了多少交易日 (越长洗得越久)",
+        "  两列只作标注: 实测 IC 仅 0.013 (t 1.5), 80.6% 与 T2 图标翻转重叠, 故不当排序键。",
+        *(_pad("  " + k, cw + 2) + "= " + v for k, v in cols[-1:]),
+        "",
+        "类型说明 (r60/r120 分桶; 重叠时优先级 A > C > B2 > B1 > B3 > D1 > D2)",
+        *(_pad("  " + k, tw + 2) + "= " + v for k, v in types),
+        "",
+        *_tail_lines(),
     )
 
 
@@ -495,6 +580,7 @@ DISPLAY_COLUMNS = (
     "board",
     "close",
     "当日涨幅",
+    "执行档",
     "r20",
     "r60",
     "r120",
@@ -502,7 +588,6 @@ DISPLAY_COLUMNS = (
     "量比",
     "乖离MA10",
     "5日回撤",
-    "执行档",
     "全样本口径",
 )
 
@@ -517,7 +602,7 @@ def _zscore(s: pd.Series) -> pd.Series:
 
 RANK_Z_COLUMNS = ("band20", "ext10", "winner_ratio", "r60", "r120")
 
-# Sheet2 附加观察列 (插在 执行档 之前): 把"正→负→正"形态显式写进表里,
+# Sheet2 附加观察列 (插在 全样本口径 之前, 即数值块末尾): 把"正→负→正"形态显式写进表里,
 # 用户在 Excel 里可自行按它排序; 默认排序键仍是观察分 (实测更强)。
 SHEET2_EXTRA_COLUMNS = ("SL翻正年龄", "SL洗盘天数")
 
@@ -556,7 +641,7 @@ def build_delivery(
     def sheet(sub: pd.DataFrame, extra: tuple = ()) -> pd.DataFrame:
         cols = list(DISPLAY_COLUMNS)
         if extra:
-            cols[cols.index("执行档"):cols.index("执行档")] = list(extra)
+            cols[cols.index("全样本口径"):cols.index("全样本口径")] = list(extra)
         out = sub[cols].copy()
         out.insert(0, "排名", range(1, len(out) + 1))
         return out.reset_index(drop=True)
