@@ -348,9 +348,11 @@ def update_v3_panel_holdertrade(
         writer.close()
         pf.close()
 
-        if os.path.exists(PANEL):
-            os.remove(PANEL)
-        os.rename(tmp_path, PANEL)
+        # 必须原子替换: remove+rename 之间存在"面板不存在"的窗口, 20:30 的
+        # GENIOUS 交付链正好在跑, 撞上即 FileNotFoundError (本机 job 可跑 ~38 分钟,
+        # 19:45 起跑, 与 20:30 只差 45 分钟)。os.replace 在 Windows 走
+        # MoveFileEx(REPLACE_EXISTING), 读者要么见旧文件要么见新文件, 永不见空。
+        os.replace(tmp_path, PANEL)
 
         msg = f"updated {updated_count} stocks, panel rewritten OK"
         logger.info("V3 panel update: %s", msg)
