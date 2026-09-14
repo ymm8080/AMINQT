@@ -505,8 +505,10 @@ class ListGenerator:
             sym = df["symbol"].astype(str).str.zfill(6)
             df = df[~(sym.map(pull).fillna(0) < float(LEGACY_SELECTION["pull_min"]))]
             pv = sym.map(pull).fillna(0)
-            df["pull_flag"] = np.where(  # [0913 撤删改标] 原闸档降为标注, 不删票 (同 chip_flag)
-                pv < float(LEGACY_SELECTION.get("pull_flag_max", -0.10)), "回撤", ""
+            df["pull_flag"] = (
+                np.where(  # [0913 撤删改标] 原闸档降为标注, 不删票 (同 chip_flag)
+                    pv < float(LEGACY_SELECTION.get("pull_flag_max", -0.10)), "回撤", ""
+                )
             )
         except Exception as exc:
             logger.warning("prob10_pull: 趋势/回撤闸失效 (fail-open): %s", exc)

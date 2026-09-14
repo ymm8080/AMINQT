@@ -88,6 +88,7 @@ def trend_rising(close: pd.DataFrame) -> pd.Series | None:
     ma10 = close.rolling(10, min_periods=1).mean()
     return ma10.iloc[-1] > ma10.iloc[-2]
 
+
 _COLS = [
     "rank",
     "board",

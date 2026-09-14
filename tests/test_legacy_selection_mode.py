@@ -42,7 +42,10 @@ def _panel_fp(tmp_path, frame):
 
 
 def _make_panel(
-    cut_symbol, end, final_px=8.9, syms=("600001", "600002", "600003", "300001", "688001")
+    cut_symbol,
+    end,
+    final_px=8.9,
+    syms=("600001", "600002", "600003", "300001", "688001"),
 ):
     """12 交易日斜坡面板 (5.0→10.5, MA10 恒升); cut_symbol 末日 = final_px:
     8.9 → MA10 仍升 (6.5..10 均值 8.0 → 换入 8.9 后 8.09) 但 pull=−11%;

@@ -204,7 +204,9 @@ def test_constants_locked():
     assert CHIP_WR5_MAX == 0.0  # wr5<0 即标派发 (09-09 标注口径; 原 cost5 组合条件废除)
     assert TREND_MA10_GATE is True  # 0914 用户拍板闸位 B: occ5 后终选滤当日 MA10↑
     assert "amt" in _COLS  # 免额后 amt 保留为展示列 (不作闸)
-    assert {"chip_wr5", "chip_flag", "pull_flag"} <= set(_COLS)  # 09-09 派发 + 0913 回撤标注列交付
+    assert {"chip_wr5", "chip_flag", "pull_flag"} <= set(
+        _COLS
+    )  # 09-09 派发 + 0913 回撤标注列交付
 
 
 def test_trend_rising_pure():
@@ -380,7 +382,9 @@ def test_empty_night_still_records_band_membership(tmp_path, monkeypatch, capsys
     monkeypatch.setattr(mod, "PANEL_V3_PATH", str(panel_fp))
     monkeypatch.setattr(mod, "CYQ_PATH", str(tmp_path / "no_cyq.parquet"))
 
-    monkeypatch.setattr(sys, "argv", ["_prob10_density_shadow.py", "20260913", "--gen-only"])
+    monkeypatch.setattr(
+        sys, "argv", ["_prob10_density_shadow.py", "20260913", "--gen-only"]
+    )
     rc = mod.main()
     assert rc == 0
     assert "无票" in capsys.readouterr().out  # 空夜 fail-safe 照跳
@@ -439,8 +443,12 @@ def test_trend_gate_final_stage_b_wired_in_main(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(mod, "STOCK_LIST_DIR", tmp_path)
     monkeypatch.setattr(mod, "PANEL_V3_PATH", str(panel_fp))
     monkeypatch.setattr(mod, "CYQ_PATH", str(tmp_path / "no_cyq.parquet"))
-    monkeypatch.setattr(mod._deadzone_guard, "is_alarm", lambda line, date: (False, "test"))
-    monkeypatch.setattr(sys, "argv", ["_prob10_density_shadow.py", "20260913", "--gen-only"])
+    monkeypatch.setattr(
+        mod._deadzone_guard, "is_alarm", lambda line, date: (False, "test")
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["_prob10_density_shadow.py", "20260913", "--gen-only"]
+    )
     rc = mod.main()
     out = capsys.readouterr().out
     assert rc == 0
@@ -448,5 +456,7 @@ def test_trend_gate_final_stage_b_wired_in_main(tmp_path, monkeypatch, capsys):
     saved = pd.read_parquet(hist_fp)
     today_rows = saved[saved["date"] == day]
     assert set(today_rows["symbol"]) == {"600011", "600012"}  # 带史=原始带, 跌票照记
-    picks = pd.read_csv(tmp_path / "prob10dens_20260913__prob10dens.csv", dtype={"symbol": str})
+    picks = pd.read_csv(
+        tmp_path / "prob10dens_20260913__prob10dens.csv", dtype={"symbol": str}
+    )
     assert list(picks["symbol"]) == ["600011"]  # 清单只剩升势票

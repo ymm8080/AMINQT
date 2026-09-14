@@ -1221,13 +1221,7 @@ def apply_trend_gate(res: pd.DataFrame, sel_date: pd.Timestamp) -> pd.DataFrame:
             sel = boards == b
             if not sel.any():
                 continue
-            mb = (
-                sym[sel]
-                .map(_keep(mode))
-                .astype("boolean")
-                .fillna(True)
-                .astype(bool)
-            )
+            mb = sym[sel].map(_keep(mode)).astype("boolean").fillna(True).astype(bool)
             m.loc[sel] = mb.values
             n_kill = int((~mb).sum())
             if n_kill:
