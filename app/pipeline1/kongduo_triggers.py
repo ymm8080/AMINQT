@@ -92,6 +92,53 @@ LAYER_RESEARCH = {
     BAND_T3_LIMIT: "47.3%",
 }
 
+
+def _pad(s: str, width: int) -> str:
+    """按**显示宽度**右侧补空格 (CJK 算 2 列), 让 Excel 里说明列对齐。"""
+    w = sum(2 if ord(ch) > 0x2E80 else 1 for ch in s)
+    return s + " " * max(width - w, 1)
+
+
+def sheet1_legend() -> tuple[str, ...]:
+    """冠军四段表底部图例 (0914 用户令: 段位中文含义 + r20 口径写进表里)。
+
+    阈值一律从 GENIOUS 取 — 改 config 图例跟着变, 不会与实算口径脱节。
+    """
+    c = GENIOUS
+    deep = f"{c['r60_deep']:.0%}"                      # -30%
+    base = "0" if c["r120_base"] == 0 else f"{c['r120_base']:.0%}"
+    cond = (
+        f"  {CH3_T3_DEEP_QUIET} = T3状态点火 且 r60≤{deep} 且 量比≤{c['vr_quiet']}",
+        f"  {CH2_T2_DEEP} = T2翻转日 且 r60≤{deep}",
+        f"  {CH1_T1_LONGBASE} = T1洗盘日 且 r120≤{base} 且 r20>+{c['r20_min']:.0%}",
+        f"  {CH2B_T2_STEADY} = T2翻转日 且 昨日乖离MA10≤{c['t2b_ext_prev_max']:.2f}"
+        f" 且 r120≤{base}",
+    )
+    layers = SHEET1_LAYERS
+    w = max(sum(2 if ord(ch) > 0x2E80 else 1 for ch in s) for s in cond)
+    return (
+        "段位说明 (四段互斥, 优先级 CH3 > CH2 > CH1 > CH2B)",
+        *(
+            _pad(s, w) + f"[全样本 {LAYER_RESEARCH[name]}]"
+            for s, name in zip(cond, layers)
+        ),
+        "",
+        "列说明",
+        "  r20  = 最近 20 个交易日涨跌幅 (= 今收 / 20交易日前收 − 1)",
+        "  r60  = 最近 60 个交易日涨跌幅 (中期位置; 本表 ≤−30% 即\"深跌\")",
+        "  r120 = 最近 120 个交易日涨跌幅 (长期位置; ≤0 即\"半年没涨\")",
+        "  获利盘   = 当日获利盘比例; 越高 = 上方套牢盘越少",
+        "  量比     = 今量 / 前 5 日均量; <1 缩量, >1 放量",
+        "  乖离MA10 = 收盘 / 10日均线 − 1 (表内已 −1, 显示为 %):",
+        "             正 = 在均线上方, 越大越\"追高/过热\"; 负 = 在均线下方。",
+        "             CH2B 要\"昨日乖离≤0.95\"= 昨日没追高。",
+        "  5日回撤  = 近 5 日相对 20 日高点的最深回撤 (负值, 越负回撤越深)",
+        "  执行档   = T+1开盘进 | T+1仍涨确认→T+1收盘进 (20:30 已收盘, 只能 T+1 买)",
+        "",
+        "r20/r60/r120 用面板未复权原价计算 (与全样本判词同口径), 除权日会注入假跌幅。",
+    )
+
+
 # 类型标签 (续13 表); B3/D1 在研究中被引用但未给规则, 按回放 r60 分桶补齐
 TYPE_A = "A深跌反转"
 TYPE_C = "C强牛深回调"

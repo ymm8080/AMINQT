@@ -252,10 +252,10 @@ def write_xlsx(
         stamp = datetime.datetime.now().strftime("%H%M%S")
         fp = Path(list_dir) / f"{GENIOUS['filename_prefix']}_{date}__{stamp}.xlsx"
     with pd.ExcelWriter(fp, engine="openpyxl") as xw:
-        for name, df, banner in (
-            ("冠军四段", sheet1, BANNER1),
-            ("观察池", sheet2, BANNER2),
-            ("观察池全量", sheet2_full, BANNER3),
+        for name, df, banner, legend in (
+            ("冠军四段", sheet1, BANNER1, kt.sheet1_legend()),
+            ("观察池", sheet2, BANNER2, ()),
+            ("观察池全量", sheet2_full, BANNER3, ()),
         ):
             raw = df if len(df) else pd.DataFrame(columns=list(df.columns))
             raw.to_excel(xw, sheet_name=name, index=False, startrow=2)
@@ -274,6 +274,12 @@ def write_xlsx(
                 if nf:
                     for r in range(4, 4 + len(raw)):
                         ws.cell(row=r, column=i).number_format = nf
+            # 图例写数据下方: 保持上方是干净表格 (筛选/排序不被打断), A 列右侧留空
+            # 供文本溢出显示 — 不合并单元格, 免得挡住用户自己加行。
+            for j, line in enumerate(legend):
+                cell = ws.cell(row=4 + len(raw) + 1 + j, column=1, value=line)
+                if line in ("段位说明 (四段互斥, 优先级 CH3 > CH2 > CH1 > CH2B)", "列说明"):
+                    cell.font = Font(bold=True, size=10)
             ws.freeze_panes = "A4"
     return fp
 
