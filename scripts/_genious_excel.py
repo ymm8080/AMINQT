@@ -278,7 +278,7 @@ def write_xlsx(
             # 供文本溢出显示 — 不合并单元格, 免得挡住用户自己加行。
             for j, line in enumerate(legend):
                 cell = ws.cell(row=4 + len(raw) + 1 + j, column=1, value=line)
-                if line in ("段位说明 (四段互斥, 优先级 CH3 > CH2 > CH1 > CH2B)", "列说明"):
+                if line.startswith(("段位说明", "列说明", "类型说明")):
                     cell.font = Font(bold=True, size=10)
             ws.freeze_panes = "A4"
     return fp

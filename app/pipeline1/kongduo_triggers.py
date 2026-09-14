@@ -116,6 +116,61 @@ def sheet1_legend() -> tuple[str, ...]:
     )
     layers = SHEET1_LAYERS
     w = max(sum(2 if ord(ch) > 0x2E80 else 1 for ch in s) for s in cond)
+
+    deep = f"{c['r60_deep']:.0%}"                       # -30%
+    cols = (
+        ("排名", "表内序号; 先按段位序 (CH3→CH2→CH1→CH2B), 段内按 r60 从深到浅"),
+        ("symbol", "6 位股票代码 (已去掉 .SH/.SZ 后缀)"),
+        ("层", "冠军段位 — 四段互斥, 见上方\"段位说明\""),
+        (
+            "触发器",
+            "今日命中的触发器: T1洗盘日 / T2翻转日 / T3状态点火 / T2+T3(同日双触发)",
+        ),
+        ("类型", "r60/r120 分桶标签 — 见下方\"类型说明\""),
+        ("board", "板块: main=主板 / GEM=创业板 / STAR=科创板"),
+        ("close", "今日收盘价 (面板未复权原价)"),
+        ("当日涨幅", "今日涨跌幅 = 今收 / 昨收 − 1"),
+        ("r20", "最近 20 个交易日涨跌幅 (= 今收 / 20交易日前收 − 1)"),
+        ("r60", f"最近 60 个交易日涨跌幅 (中期位置; ≤{deep} 即本表的\"深跌\")"),
+        ("r120", f"最近 120 个交易日涨跌幅 (长期位置; ≤{base} 即\"半年没涨\")"),
+        ("获利盘", "当日获利盘比例; 越高 = 上方套牢盘越少"),
+        ("量比", "今量 / 前 5 日均量; <1 缩量, >1 放量"),
+        (
+            "乖离MA10",
+            "收盘 / 10日均线 − 1: 正 = 在均线上方, 越大越\"追高/过热\"; 负 = 均线下方",
+        ),
+        ("5日回撤", "近 5 日相对 20 日高点的最深回撤 (负值, 越负回撤越深)"),
+        (
+            "执行档",
+            "T+1开盘进 | T+1仍涨确认→T+1收盘进 (20:30 已收盘, 只能 T+1 买)",
+        ),
+        ("全样本口径", "该段位全样本 (2023-01~2026-09) 胜率 / 5日均收益; 含选段偏差"),
+    )
+    cw = max(sum(2 if ord(ch) > 0x2E80 else 1 for ch in k) for k, _ in cols)
+    types = (
+        (
+            TYPE_A,
+            f"r60 ≤ {deep} — 已深跌 (最深一桶, 优先级最高)",
+        ),
+        (
+            TYPE_C,
+            f"r120 > +{TYPE_R120_C:.0%} 且 r60 ≤ {TYPE_R60_FLAT:.0%} — "
+            "半年大涨过、近期回调",
+        ),
+        (
+            TYPE_B2,
+            f"r120 ≤ {base} 且 {TYPE_R60_FLAT:.0%} ≤ r60 ≤ +{TYPE_R60_D1:.0%} — "
+            "长期没涨、近期横盘",
+        ),
+        (
+            TYPE_B1,
+            f"{deep} < r60 < {TYPE_R60_FLAT:.0%} — 中等跌幅",
+        ),
+        (TYPE_B3, f"{TYPE_R60_FLAT:.0%} ≤ r60 ≤ +{TYPE_R60_D1:.0%} — 浅跌/平"),
+        (TYPE_D1, f"+{TYPE_R60_D1:.0%} < r60 ≤ +{TYPE_R60_D2:.0%} — 已涨"),
+        (TYPE_D2, f"r60 > +{TYPE_R60_D2:.0%} — 大涨 (已发挥完, 多在观察池)"),
+    )
+    tw = max(sum(2 if ord(ch) > 0x2E80 else 1 for ch in k) for k, _ in types)
     return (
         "段位说明 (四段互斥, 优先级 CH3 > CH2 > CH1 > CH2B)",
         *(
@@ -123,19 +178,14 @@ def sheet1_legend() -> tuple[str, ...]:
             for s, name in zip(cond, layers)
         ),
         "",
-        "列说明",
-        "  r20  = 最近 20 个交易日涨跌幅 (= 今收 / 20交易日前收 − 1)",
-        "  r60  = 最近 60 个交易日涨跌幅 (中期位置; 本表 ≤−30% 即\"深跌\")",
-        "  r120 = 最近 120 个交易日涨跌幅 (长期位置; ≤0 即\"半年没涨\")",
-        "  获利盘   = 当日获利盘比例; 越高 = 上方套牢盘越少",
-        "  量比     = 今量 / 前 5 日均量; <1 缩量, >1 放量",
-        "  乖离MA10 = 收盘 / 10日均线 − 1 (表内已 −1, 显示为 %):",
-        "             正 = 在均线上方, 越大越\"追高/过热\"; 负 = 在均线下方。",
-        "             CH2B 要\"昨日乖离≤0.95\"= 昨日没追高。",
-        "  5日回撤  = 近 5 日相对 20 日高点的最深回撤 (负值, 越负回撤越深)",
-        "  执行档   = T+1开盘进 | T+1仍涨确认→T+1收盘进 (20:30 已收盘, 只能 T+1 买)",
+        "列说明 (按表内从左到右)",
+        *(_pad("  " + k, cw + 2) + "= " + v for k, v in cols),
+        "",
+        "类型说明 (r60/r120 分桶; 重叠时优先级 A > C > B2 > B1 > B3 > D1 > D2)",
+        *(_pad("  " + k, tw + 2) + "= " + v for k, v in types),
         "",
         "r20/r60/r120 用面板未复权原价计算 (与全样本判词同口径), 除权日会注入假跌幅。",
+        "全样本口径含选段偏差 (前半 86 → 后半 61 衰减), 2026 年诚实口径约 55% / +1~2%, 勿按它下注。",
     )
 
 
@@ -338,6 +388,13 @@ def compute_triggers(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+# 类型分桶边界 (r60 / r120); 单列出来供 sheet1_legend 复用, 免得图例与实算漂移
+TYPE_R60_D2 = 0.20
+TYPE_R60_D1 = 0.10
+TYPE_R60_FLAT = -0.05
+TYPE_R120_C = 0.40
+
+
 def classify_type(df: pd.DataFrame) -> pd.Series:
     """类型标签。重叠时按 优先级 A > C > B2 > B1 > B3 > D1 > D2 定死。
 
@@ -348,12 +405,12 @@ def classify_type(df: pd.DataFrame) -> pd.Series:
     r60, r120 = df["r60"], df["r120"]
     deep, base = cfg["r60_deep"], cfg["r120_base"]
     lab = pd.Series(TYPE_UNKNOWN, index=df.index, dtype=object)
-    lab[r60 > 0.20] = TYPE_D2
-    lab[(r60 > 0.10) & (r60 <= 0.20)] = TYPE_D1
-    lab[(r60 >= -0.05) & (r60 <= 0.10)] = TYPE_B3
-    lab[(r60 > deep) & (r60 < -0.05)] = TYPE_B1
-    lab[(r120 <= base) & (r60 >= -0.05) & (r60 <= 0.10)] = TYPE_B2
-    lab[(r120 > 0.40) & (r60 <= -0.05)] = TYPE_C
+    lab[r60 > TYPE_R60_D2] = TYPE_D2
+    lab[(r60 > TYPE_R60_D1) & (r60 <= TYPE_R60_D2)] = TYPE_D1
+    lab[(r60 >= TYPE_R60_FLAT) & (r60 <= TYPE_R60_D1)] = TYPE_B3
+    lab[(r60 > deep) & (r60 < TYPE_R60_FLAT)] = TYPE_B1
+    lab[(r120 <= base) & (r60 >= TYPE_R60_FLAT) & (r60 <= TYPE_R60_D1)] = TYPE_B2
+    lab[(r120 > TYPE_R120_C) & (r60 <= TYPE_R60_FLAT)] = TYPE_C
     lab[r60 <= deep] = TYPE_A
     lab[r60.isna()] = TYPE_UNKNOWN
     return lab
