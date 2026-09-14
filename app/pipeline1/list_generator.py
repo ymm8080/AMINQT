@@ -94,6 +94,7 @@ SCHEMA_FIELDS = [
     "pain_prob",
     "announce_score",
     "weight",
+    "pull_flag",  # [0913 撤删改标] 原回撤闸降为标注列 ("回撤"/""), 同 chip_flag 模式
     "schema_version",
 ]
 
@@ -456,12 +457,19 @@ class ListGenerator:
     @staticmethod
     def _select_prob10_pull(scored: pd.DataFrame) -> pd.DataFrame:
         """[09-07] LEGACY_SELECTION mode="prob10_pull": 纯 prob_up_10d 板内降序 +
-        回撤闸 (pull ≥ pull_min, 真删不补齐), 每板取 board_top_n.
+        趋势闸 (MA10↑, 先滤后截补位) + 回撤闸, 每板取 board_top_n.
 
         依据见 settings.LEGACY_SELECTION 注释 (E7 内换键=空操作, 胜出来自撤闸)。
+        [0913 趋势闸] 数据驱动定案 (tmp_t/_trend_gate_sweep_0913.py, 22 夜存档
+        0807-0904, WORM diag/trend_gate_sweep_0913_*.json): MA10↑ 闸 riser5
+        54.1% vs 无闸 53.6%, fail_trend 17.7%→10%; 5D 头换键/益盟线做键/
+        (5D+益盟) 组合键全劣 → 不换键只加闸 ("10天线上升, 1/3 天可跌", 0913 用户令;
+        MA5↑&MA10↑ 双条件 50.9% 反而杀短线回调, 勿加).
         prob_up_10d 缺列/全 NaN (旧 bundle) → 级联回退幅度键 (与 _rank_by_magnitude
-        同回退链, 只换不炸); 面板读不到 → 回撤闸整体跳过 (fail-open)。
-        排序后截板内 top_n — 返回已排序帧, emit 跳过 entry_filter/prob_gate/幅度键。
+        同回退链, 只换不炸); 面板读不到 → 趋势/回撤闸整体跳过 (fail-open);
+        个股缺 MA 行 → 该股过闸 (与候选⊆面板的现实一致, fail-open).
+        排序 → 趋势闸 (补位) → 板内 top_n → 回撤闸 — 返回已排序帧,
+        emit 跳过 entry_filter/prob_gate/幅度键。
         """
         df = scored.copy()
         key = "prob_up_10d"
@@ -470,10 +478,7 @@ class ListGenerator:
             df = ListGenerator._rank_by_magnitude(df)
         else:
             df = df.sort_values(key, ascending=False)
-        # 生产语义 = 排序后先截板内 top_n, 再过回撤闸 (真删不补齐, 不 refill)
-        df = df.groupby("board", sort=False).head(
-            int(LEGACY_SELECTION.get("board_top_n", 10))
-        )
+        df["pull_flag"] = ""  # [0913 撤删改标] fail-open 默认空, 面板读到后按标注线填
         try:
             ref = ListGenerator._scan_ref_date(df)
             px = pd.read_parquet(
@@ -488,11 +493,28 @@ class ListGenerator:
             cl = px.pivot(
                 index="date", columns="symbol", values="close_hfq"
             ).sort_index()
+            if LEGACY_SELECTION.get("trend_gate", "ma10_up") == "ma10_up":
+                ma10 = cl.rolling(10, min_periods=1).mean()
+                rising = ma10.iloc[-1] > ma10.iloc[-2]
+                df = df[df["symbol"].astype(str).str.zfill(6).map(rising).fillna(True)]
+            # 生产语义 = 趋势闸后截板内 top_n (闸位补位), 再过回撤闸 (真删不补齐)
+            df = df.groupby("board", sort=False).head(
+                int(LEGACY_SELECTION.get("board_top_n", 10))
+            )
             pull = (cl / cl.rolling(10, min_periods=2).max() - 1).iloc[-1]
             sym = df["symbol"].astype(str).str.zfill(6)
             df = df[~(sym.map(pull).fillna(0) < float(LEGACY_SELECTION["pull_min"]))]
+            pv = sym.map(pull).fillna(0)
+            df["pull_flag"] = (
+                np.where(  # [0913 撤删改标] 原闸档降为标注, 不删票 (同 chip_flag)
+                    pv < float(LEGACY_SELECTION.get("pull_flag_max", -0.10)), "回撤", ""
+                )
+            )
         except Exception as exc:
-            logger.warning("prob10_pull: 回撤闸失效 (fail-open): %s", exc)
+            logger.warning("prob10_pull: 趋势/回撤闸失效 (fail-open): %s", exc)
+            df = df.groupby("board", sort=False).head(
+                int(LEGACY_SELECTION.get("board_top_n", 10))
+            )
         return df
 
     def emit(
@@ -723,6 +745,7 @@ class ListGenerator:
             "momentum",
             "consensus_score",
             "signal_conflict",
+            "pull_flag",
         ):
             if col not in final.columns:
                 final[col] = np.nan

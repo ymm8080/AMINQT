@@ -8,6 +8,8 @@
   belief_down = prob − 3个上榜日前 prob (标签列, 非闸)。
 """
 
+import sys
+
 import numpy as np
 import pandas as pd
 
@@ -16,12 +18,15 @@ from scripts._prob10_density_shadow import (
     CHIP_WR5_MAX,
     OCC_MIN,
     OCC_WIN,
+    PULL_FLAG_MAX,
     PULL_FLOOR,
     TOP_N,
+    TREND_MA10_GATE,
     apply_wr5_gate,
     density_picks,
     load_chip_features,
     prob10_membership,
+    trend_rising,
 )
 
 DAY = pd.Timestamp("2026-09-04")
@@ -169,11 +174,14 @@ def test_csv_percent_display_layer():
     assert abs(float(picks[mask]["legacy_prob"].iloc[0]) - 0.90) < 1e-12
 
 
-def test_density_pull_gate_filters_deep_pull():
+def test_density_pull_flag_marks_deep_pull():
+    """[0913 撤删改标] 深回撤不再删票: 留在清单标 pull_flag=回撤 (原闸语义降级为标注)."""
     syms = ["600001", "600002", "600003", "300005"]
     close, amount = _panel(syms, [10.0] * 4, [2e8] * 4, pull_ok={"600001": False})
     out = density_picks(_cand(), _hist(), close, amount, DAY)
-    assert "600001" not in list(out["symbol"])  # 回撤 >10% 被闸
+    assert "600001" in list(out["symbol"])  # 闸撤, 不删
+    assert out.loc[out.symbol == "600001", "pull_flag"].iloc[0] == "回撤"
+    assert (out.loc[out.symbol != "600001", "pull_flag"] == "").all()
 
 
 def test_belief_down_tag_three_days_back():
@@ -190,10 +198,28 @@ def test_belief_down_tag_three_days_back():
 
 
 def test_constants_locked():
-    assert (TOP_N, PULL_FLOOR, OCC_WIN, OCC_MIN) == (20, -0.10, 5, 3)  # 09-06 拍板
+    # 0913 用户令撤回撤闸: PULL_FLOOR −0.10→−1.0 等效关闭, 原闸档降为标注线
+    assert (TOP_N, PULL_FLOOR, OCC_WIN, OCC_MIN) == (20, -1.0, 5, 3)
+    assert PULL_FLAG_MAX == -0.10  # 0913 撤删改标: 标注线=原闸档
     assert CHIP_WR5_MAX == 0.0  # wr5<0 即标派发 (09-09 标注口径; 原 cost5 组合条件废除)
+    assert TREND_MA10_GATE is True  # 0914 用户拍板闸位 B: occ5 后终选滤当日 MA10↑
     assert "amt" in _COLS  # 免额后 amt 保留为展示列 (不作闸)
-    assert {"chip_wr5", "chip_flag"} <= set(_COLS)  # 09-09: 派发标注列交付
+    assert {"chip_wr5", "chip_flag", "pull_flag"} <= set(
+        _COLS
+    )  # 09-09 派发 + 0913 回撤标注列交付
+
+
+def test_trend_rising_pure():
+    """MA10↑ 纯判定: 斜坡升 True / 末日暴跌拐头 False / 恒平 False / 行不足 None."""
+    idx = pd.bdate_range("2026-08-01", periods=12)
+    ramp = pd.DataFrame({"A": 10.0 + 0.5 * np.arange(12)}, index=idx)
+    assert bool(trend_rising(ramp).iloc[0]) is True
+    crash = ramp.copy()
+    crash.iloc[-1, 0] = 5.0  # 末日 5.0: MA10 末行 < 前行
+    assert bool(trend_rising(crash).iloc[0]) is False
+    flat = pd.DataFrame({"A": [10.0] * 12}, index=idx)
+    assert bool(trend_rising(flat).iloc[0]) is False  # 恒平 = 不升
+    assert trend_rising(ramp.iloc[:1]) is None  # 行不足 fail-open
 
 
 def _chip(**over):
@@ -306,3 +332,131 @@ def test_empty_history_occ_never_passes():
         DAY,
     )
     assert out.empty  # 无历史 → occ5<3 全剔 (影子冷启动由 bootstrap 兜底)
+
+
+def test_empty_night_still_records_band_membership(tmp_path, monkeypatch, capsys):
+    """[0913] 空夜也落带上榜史: 换模后 occ5 窗若冻结在旧模型带 (空夜不记史),
+    新带成员 occ5 恒 0 → 永久空清单死锁. 榜=prob 带成员, 与闸过否无关."""
+    import scripts._prob10_density_shadow as mod
+
+    day = pd.Timestamp("2026-09-13")
+    cand = pd.DataFrame(
+        {
+            "symbol": ["600011", "600012", "600013"],
+            "board": ["main"] * 3,
+            "prob_up_10d": [0.9, 0.8, 0.7],
+            "pred_ret_10d": [0.1, 0.09, 0.08],
+        }
+    )
+    lists_dir = tmp_path / "lists"
+    lists_dir.mkdir()
+    cand.to_parquet(lists_dir / "candidates_20260913.parquet")
+    # 旧史全是无关旧码 → 今日新带 occ5=0 → 闸后必空
+    hist = pd.DataFrame(
+        {
+            "date": pd.date_range("2026-09-07", periods=5, freq="B").tolist() * 1,
+            "board": ["main"] * 5,
+            "symbol": ["600999"] * 5,
+            "prob": [0.5] * 5,
+        }
+    )
+    hist_fp = tmp_path / "hist.parquet"
+    hist.to_parquet(hist_fp)
+    idx = pd.date_range("2026-08-28", periods=12, freq="B")  # 末行 09-11 (≤ day)
+    ramp = 10.0 + 0.5 * np.arange(12)  # 斜坡夹具沿用 (B 终选闸不动带史)
+    panel = pd.DataFrame(
+        {
+            "symbol": ["600011"] * 12 + ["600012"] * 12 + ["600013"] * 12,
+            "date": list(idx) * 3,
+            "close_hfq": list(ramp) * 3,
+            "amount": [2e8] * 36,
+            "pctChg": [0.5] * 36,
+        }
+    )
+    panel_fp = tmp_path / "panel.parquet"
+    panel.to_parquet(panel_fp)
+
+    monkeypatch.setattr(mod, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(mod, "HIST_PATH", str(hist_fp))
+    monkeypatch.setattr(mod, "STOCK_LIST_DIR", tmp_path)
+    monkeypatch.setattr(mod, "PANEL_V3_PATH", str(panel_fp))
+    monkeypatch.setattr(mod, "CYQ_PATH", str(tmp_path / "no_cyq.parquet"))
+
+    monkeypatch.setattr(
+        sys, "argv", ["_prob10_density_shadow.py", "20260913", "--gen-only"]
+    )
+    rc = mod.main()
+    assert rc == 0
+    assert "无票" in capsys.readouterr().out  # 空夜 fail-safe 照跳
+    saved = pd.read_parquet(hist_fp)
+    today_rows = saved[saved["date"] == day]
+    assert set(today_rows["symbol"]) == {"600011", "600012", "600013"}  # 带成员已记
+    assert (saved["symbol"] == "600999").any()  # 旧史保留 (dedup 不误删)
+
+
+def test_trend_gate_final_stage_b_wired_in_main(tmp_path, monkeypatch, capsys):
+    """[0914 用户拍板闸位 B] 趋势闸在终选: 带史/occ5 用原始带 (跌票也记史攒
+    occ5), occ5≥3 后终选滤当日 MA10↑ — 刚拐头票当天即可出 (B 独有 301220)."""
+    import scripts._prob10_density_shadow as mod
+
+    day = pd.Timestamp("2026-09-13")
+    cand = pd.DataFrame(
+        {
+            "symbol": ["600011", "600012"],
+            "board": ["main"] * 2,
+            "prob_up_10d": [0.9, 0.95],  # 跌票 prob 更高 (cls 头偏超卖画像)
+            "pred_ret_10d": [0.1, 0.12],
+        }
+    )
+    lists_dir = tmp_path / "lists"
+    lists_dir.mkdir()
+    cand.to_parquet(lists_dir / "candidates_20260913.parquet")
+    # 两票近 4 个上榜日全勤 → occ5=5 双双过密度闸, 终选闸是唯一分拣者
+    hist = pd.DataFrame(
+        {
+            "date": pd.date_range("2026-09-07", periods=4, freq="B").tolist() * 2,
+            "board": ["main"] * 8,
+            "symbol": ["600011"] * 4 + ["600012"] * 4,
+            "prob": [0.88] * 4 + [0.93] * 4,
+        }
+    )
+    hist_fp = tmp_path / "hist.parquet"
+    hist.to_parquet(hist_fp)
+    idx = pd.date_range("2026-08-28", periods=12, freq="B")  # 末行 09-11 (≤ day)
+    ramp = 10.0 + 0.5 * np.arange(12)  # MA10↑
+    crash = np.full(12, 10.0)  # 恒平后末日崩 5.0 → MA10 拐头向下
+    crash[-1] = 5.0
+    panel = pd.DataFrame(
+        {
+            "symbol": ["600011"] * 12 + ["600012"] * 12,
+            "date": list(idx) * 2,
+            "close_hfq": list(ramp) + list(crash),
+            "amount": [2e8] * 24,
+            "pctChg": [0.5] * 24,
+        }
+    )
+    panel_fp = tmp_path / "panel.parquet"
+    panel.to_parquet(panel_fp)
+
+    monkeypatch.setattr(mod, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(mod, "HIST_PATH", str(hist_fp))
+    monkeypatch.setattr(mod, "STOCK_LIST_DIR", tmp_path)
+    monkeypatch.setattr(mod, "PANEL_V3_PATH", str(panel_fp))
+    monkeypatch.setattr(mod, "CYQ_PATH", str(tmp_path / "no_cyq.parquet"))
+    monkeypatch.setattr(
+        mod._deadzone_guard, "is_alarm", lambda line, date: (False, "test")
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["_prob10_density_shadow.py", "20260913", "--gen-only"]
+    )
+    rc = mod.main()
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "MA10↑ 趋势闸 (终选): 2 → 1" in out  # 闸动作日志: 跌票终选被滤
+    saved = pd.read_parquet(hist_fp)
+    today_rows = saved[saved["date"] == day]
+    assert set(today_rows["symbol"]) == {"600011", "600012"}  # 带史=原始带, 跌票照记
+    picks = pd.read_csv(
+        tmp_path / "prob10dens_20260913__prob10dens.csv", dtype={"symbol": str}
+    )
+    assert list(picks["symbol"]) == ["600011"]  # 清单只剩升势票

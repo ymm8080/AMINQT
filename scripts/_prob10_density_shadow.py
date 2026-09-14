@@ -7,7 +7,8 @@
   — 随机基准 = 全市场净≥5% 赢率 13.5%, 两板 ≈3.5~4 倍随机):
   ①带成员 = 每板 (main; dual=GEM+STAR) 按 legacy 概率头 prob_up_10d 降序 前20
     (原 TOP10 榜 → TOP20 带; 密度累计宇宙同步换成带, 11-20 名滞留也攒天数)
-  ②回撤闸 = 收盘距 10 日高点回撤 ≥ -10% (信号夜可知)
+  ②回撤 [0913 撤删改标]: 原硬闸 pull ≥ -10% 已撤 (PULL_FLOOR=-1.0 等效关闭);
+    pull < -0.10 (PULL_FLAG_MAX) 标 pull_flag=回撤 列标注不删票 (同 ⑥ 派发标注模式)
   ③密度 = occ5≥3, occ5 对应研究带内 OCC5=rolling(5) 含当日: 今日在带 +
     近4个上榜历日在带数
   ④免额 (09-06 拍板 "去额"; 2×2 终审: 额闸在 prob 池头部近似装饰 — 撤之
@@ -18,6 +19,12 @@
     获利盘5日回落 (wr5<0) → chip_flag=派发 列标注, 不删票; cyq 数据缺/个股特征缺
     → 不标 (fail-open)。同标注接 LEGACY 交付 (_deliver_legacy_list) 与 PARALLEL
     短名单 (_shortlist_t5_t10)。
+  ⑦趋势闸 [0913 用户令 "DENSITY 接闸后票" → 0914 用户拍板闸位选 B]: MA10↑ 闸
+    在终选 — 带史/occ5 按原始 TOP20 带 (跌票也记史攒 occ5), occ5≥3 后终选滤
+    当日 MA10↑ (刚拐头票当天即可出, B 独有 301220 案例; 数据面 A 带前闸微胜,
+    diag/density_gate_pos_ab_0913_*.json); cls 头原始排序偏超卖 (跌票高概率),
+    LEGACY 线已闸 (LEGACY_SELECTION.trend_gate, 同规则同扫描依据
+    diag/trend_gate_sweep_0913_*.json); 面板行不足 → 闸跳过 (fail-open)。
   标签列 信念降 belief_down = 今日 prob − 3个上榜历日前 prob (非闸; 09-06 L4
   对照 = 半流量换 +1.6pp 判不接, 列保留供影子期攒证据)。
   双模型列 (2026-09-05 用户): legacy_prob/legacy_pred10 = legacy 概率头
@@ -59,7 +66,8 @@ from scripts._pctfmt import fmt_pct_columns
 
 MODULE = "prob10dens"
 TOP_N = 20  # 带成员: 每板 prob 前20 (09-06 拍板, 原 top10 榜)
-PULL_FLOOR = -0.10  # 回撤闸: 距10日高点回撤下限
+PULL_FLOOR = -1.0  # [0913 用户令撤回撤闸] -1.0 等效关闭; 原档 -0.10, 恢复改回
+PULL_FLAG_MAX = -0.10  # [0913 撤删改标] 原闸档降为标注线: pull 低于此值标"回撤"不删
 OCC_WIN = 5  # 密度窗: 近 5 个上榜日
 OCC_MIN = 3  # 密度阈: 带内在榜 ≥3 天 (免额, 09-06 拍板)
 HIST_PATH = os.path.join(DATA_DIR, "prob10_density_history.parquet")
@@ -67,6 +75,19 @@ CHIP_WR5_MAX = (
     0.0  # 派发闸: 获利盘5日变化须低于此值 (负=回落; 09-05 三线统一 wr5<0 即剔)
 )
 CYQ_PATH = os.path.join(DATA_DIR, "cyq_panel.parquet")
+TREND_MA10_GATE = True  # [0914 用户拍板闸位 B] 终选闸: occ5 后滤当日 MA10↑; False 关
+
+
+def trend_rising(close: pd.DataFrame) -> pd.Series | None:
+    """MA10↑ 判定 (纯函数): 末行 MA10 > 前一行 → True; 行不足 → None (fail-open).
+
+    与 LEGACY _select_prob10_pull 趋势闸同公式 (rolling(10, min_periods=1));
+    MA10 vs 益盟长线定裁见 diag/ym_vs_ma10_faceoff_0913_*.json (MA10 全指标胜)."""
+    if len(close.index) < 2:
+        return None
+    ma10 = close.rolling(10, min_periods=1).mean()
+    return ma10.iloc[-1] > ma10.iloc[-2]
+
 
 _COLS = [
     "rank",
@@ -78,6 +99,7 @@ _COLS = [
     "parallel_pred10",
     "occ5",
     "pull",
+    "pull_flag",
     "amt",
     "belief_down",
     "chip_wr5",
@@ -265,6 +287,9 @@ def density_picks(
     if "chip_wr5" not in ok.columns:  # chip 缺 (fail-open) 也保稳定 schema
         ok["chip_wr5"] = np.nan
         ok["chip_flag"] = ""
+    ok["pull_flag"] = np.where(  # [0913 撤删改标] 原回撤闸降为标注 (同 chip_flag 模式)
+        ok["pull"].fillna(-1) < PULL_FLAG_MAX, "回撤", ""
+    )
     ok = ok.rename(columns={"prob": "legacy_prob", "pred10": "legacy_pred10"})
     if par is not None and len(par):
         p = par[["symbol", "pred_prob_10d", "pred_mag_10d"]].copy()
@@ -417,10 +442,25 @@ def main() -> int:
         flagged = picks.loc[picks["chip_flag"] == "派发", "symbol"].tolist()
         if flagged:
             print(f"[prob10dens] 派发标注 {len(flagged)} 只: {', '.join(flagged)}")
+    # [0914 用户拍板闸位 B] ⑦趋势闸在终选: 带史/occ5 用原始带, occ5≥3 后滤当日
+    # MA10↑ — 刚拐头票当天即可出 (B 独有 301220); A 带前闸判词
+    # diag/density_gate_pos_ab_0913_*.json.
+    if TREND_MA10_GATE and len(picks):
+        rising = trend_rising(cl)
+        if rising is None:
+            print("[prob10dens] 面板行不足, MA10 趋势闸跳过 (fail-open)")
+        else:
+            n0 = len(picks)
+            picks = picks[picks["symbol"].map(rising).fillna(True)]
+            print(f"[prob10dens] MA10↑ 趋势闸 (终选): {n0} → {len(picks)}")
+    # [0913] 上榜史先于空判落盘: 空夜不记史 → occ5 窗冻结在旧模型带 → 换模
+    # (0913 main 首切 cls) 后新带 occ5 恒 0 → 永久空清单死锁. 榜 = 原始带成员
+    # (⑦终选闸口径 — 闸在终选不动带史; 闸位 A/B 判词见
+    # diag/density_gate_pos_ab_0913_*.json), 空夜也记, 窗口才能滚动.
+    save_history(hist, prob10_membership(cand, day_ts))
     if picks.empty:
         print(f"[prob10dens] {date} 密度/回撤闸后无票, 跳过 (fail-safe)")
         return 0
-    save_history(hist, prob10_membership(cand, day_ts))
 
     picks = picks.merge(day_px[["symbol", "pctChg"]], on="symbol", how="left")
 
