@@ -7,7 +7,8 @@
   — 随机基准 = 全市场净≥5% 赢率 13.5%, 两板 ≈3.5~4 倍随机):
   ①带成员 = 每板 (main; dual=GEM+STAR) 按 legacy 概率头 prob_up_10d 降序 前20
     (原 TOP10 榜 → TOP20 带; 密度累计宇宙同步换成带, 11-20 名滞留也攒天数)
-  ②回撤闸 = 收盘距 10 日高点回撤 ≥ -10% (信号夜可知)
+  ②回撤 [0913 撤删改标]: 原硬闸 pull ≥ -10% 已撤 (PULL_FLOOR=-1.0 等效关闭);
+    pull < -0.10 (PULL_FLAG_MAX) 标 pull_flag=回撤 列标注不删票 (同 ⑥ 派发标注模式)
   ③密度 = occ5≥3, occ5 对应研究带内 OCC5=rolling(5) 含当日: 今日在带 +
     近4个上榜历日在带数
   ④免额 (09-06 拍板 "去额"; 2×2 终审: 额闸在 prob 池头部近似装饰 — 撤之
@@ -59,7 +60,8 @@ from scripts._pctfmt import fmt_pct_columns
 
 MODULE = "prob10dens"
 TOP_N = 20  # 带成员: 每板 prob 前20 (09-06 拍板, 原 top10 榜)
-PULL_FLOOR = -0.10  # 回撤闸: 距10日高点回撤下限
+PULL_FLOOR = -1.0  # [0913 用户令撤回撤闸] -1.0 等效关闭; 原档 -0.10, 恢复改回
+PULL_FLAG_MAX = -0.10  # [0913 撤删改标] 原闸档降为标注线: pull 低于此值标"回撤"不删
 OCC_WIN = 5  # 密度窗: 近 5 个上榜日
 OCC_MIN = 3  # 密度阈: 带内在榜 ≥3 天 (免额, 09-06 拍板)
 HIST_PATH = os.path.join(DATA_DIR, "prob10_density_history.parquet")
@@ -78,6 +80,7 @@ _COLS = [
     "parallel_pred10",
     "occ5",
     "pull",
+    "pull_flag",
     "amt",
     "belief_down",
     "chip_wr5",
@@ -265,6 +268,9 @@ def density_picks(
     if "chip_wr5" not in ok.columns:  # chip 缺 (fail-open) 也保稳定 schema
         ok["chip_wr5"] = np.nan
         ok["chip_flag"] = ""
+    ok["pull_flag"] = np.where(  # [0913 撤删改标] 原回撤闸降为标注 (同 chip_flag 模式)
+        ok["pull"].fillna(-1) < PULL_FLAG_MAX, "回撤", ""
+    )
     ok = ok.rename(columns={"prob": "legacy_prob", "pred10": "legacy_pred10"})
     if par is not None and len(par):
         p = par[["symbol", "pred_prob_10d", "pred_mag_10d"]].copy()
@@ -417,10 +423,13 @@ def main() -> int:
         flagged = picks.loc[picks["chip_flag"] == "派发", "symbol"].tolist()
         if flagged:
             print(f"[prob10dens] 派发标注 {len(flagged)} 只: {', '.join(flagged)}")
+    # [0913] 上榜史先于空判落盘: 空夜不记史 → occ5 窗冻结在旧模型带 → 换模
+    # (0913 main 首切 cls) 后新带 occ5 恒 0 → 永久空清单死锁. 榜 = prob 带成员,
+    # 与闸过否无关, 空夜也记, 窗口才能滚动.
+    save_history(hist, prob10_membership(cand, day_ts))
     if picks.empty:
         print(f"[prob10dens] {date} 密度/回撤闸后无票, 跳过 (fail-safe)")
         return 0
-    save_history(hist, prob10_membership(cand, day_ts))
 
     picks = picks.merge(day_px[["symbol", "pctChg"]], on="symbol", how="left")
 
