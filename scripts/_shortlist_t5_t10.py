@@ -64,8 +64,10 @@ from app.pipeline_parallel.scoring import pool_score
 from config.settings import (
     DATA_DIR,
     DATA_OTHERS_DIR,
+    PANEL_V3_PATH,
     PARALLEL_CHIP_GATE,
     PARALLEL_PROB_RECAL,
+    PARALLEL_TREND_GATE,
     REGIME_GATE,
     SHORTLIST_HYSTERESIS,
     SHORTLIST_SCORE,
@@ -1158,6 +1160,89 @@ def board_rank_key_values(board: str, frame: pd.DataFrame) -> tuple[str, pd.Seri
     return "mag", frame[CAND_RANK_KEY]
 
 
+def apply_trend_gate(res: pd.DataFrame, sel_date: pd.Timestamp) -> pd.DataFrame:
+    """[0914 用户终令 + 赢家统计后按板拍板] 趋势闸, 先滤后截.
+
+    生产 mode 按板分档: main=ma10_up (风格令原样, MA10 末两日上升), dual=off
+    (撤 MA10 只留 crash — dual 闸双视界全亏且大跌率不降反升, 见 settings
+    注释)。全局字符串 mode = 两板同档 (整体回退口)。
+      ma5gt10_up5 = MA5>MA10 且 近5日净涨>0 (已测旋钮)
+      ma5_gt_10   = 仅 MA5>MA10 (仍放行冲高回落票: 603798 近5日 −10.2% 过闸)
+    语义同 LEGACY (0913): V3 面板 close_hfq 45 天窗, min_periods=1; 面板缺行个股
+    NaN 比较判 False=杀 (同 LEGACY), 面板整体异常跳过 (fail-open)。
+    crash_max_1d = 评分日单日跌幅守卫 (300808 型 −18.3% 见顶崩盘, 0914 用户点名)。
+    剔除后 rank_and_truncate 从存活池自然递补。
+    """
+    cfg = PARALLEL_TREND_GATE
+    if not cfg.get("enable", False) or res.empty:
+        return res
+    crash = cfg.get("crash_max_1d")
+    mode_cfg = cfg.get("mode", "ma10_up")
+    boards = res["board"].astype(str)
+    modes = (
+        {b: mode_cfg for b in boards.unique()}
+        if isinstance(mode_cfg, str)
+        else {b: mode_cfg.get(b, "off") for b in boards.unique()}
+    )
+    if all(m == "off" for m in modes.values()) and crash is None:
+        return res
+    try:
+        px = pd.read_parquet(
+            PANEL_V3_PATH,
+            columns=["symbol", "date", "close_hfq"],
+            filters=[
+                ("date", ">=", sel_date - pd.Timedelta(days=45)),
+                ("date", "<=", sel_date),
+            ],
+        )
+        px["symbol"] = px["symbol"].astype(str).str.zfill(6)
+        cl = px.pivot(index="date", columns="symbol", values="close_hfq").sort_index()
+
+        def _keep(mode: str) -> pd.Series:
+            keep = pd.Series(True, index=cl.columns)
+            if mode in ("ma5_gt_10", "ma5gt10_up5"):
+                ma5 = cl.rolling(5, min_periods=1).mean()
+                ma10 = cl.rolling(10, min_periods=1).mean()
+                keep &= ma5.iloc[-1] > ma10.iloc[-1]
+                if mode == "ma5gt10_up5":
+                    keep &= cl.iloc[-1] > cl.iloc[-6]  # 近5日净涨 > 0
+            elif mode == "ma10_up":
+                ma10 = cl.rolling(10, min_periods=1).mean()
+                keep &= ma10.iloc[-1] > ma10.iloc[-2]
+            if crash is not None:
+                ret1 = cl.iloc[-1] / cl.iloc[-2] - 1.0
+                keep &= ret1 > float(crash)
+            return keep
+
+        sym = res["symbol"].astype(str).str.zfill(6)
+        m = pd.Series(False, index=res.index)
+        killed = []
+        for b, mode in modes.items():
+            sel = boards == b
+            if not sel.any():
+                continue
+            mb = (
+                sym[sel]
+                .map(_keep(mode))
+                .astype("boolean")
+                .fillna(True)
+                .astype(bool)
+            )
+            m.loc[sel] = mb.values
+            n_kill = int((~mb).sum())
+            if n_kill:
+                killed.append(f"{b}:{n_kill}({mode})")
+        if killed:
+            print(
+                f"[trend] 趋势闸剔除 {'; '.join(killed)} (crash={crash}) → 递补",
+                flush=True,
+            )
+        return res[m]
+    except Exception as exc:
+        print(f"[trend] 趋势闸失效 (fail-open): {exc}", flush=True)
+        return res
+
+
 def rank_and_truncate(res: pd.DataFrame) -> pd.DataFrame:
     """2026-08-23 定案 (用户 top-10 档, feedback-need-top10): 入选 = 每板块 TOP-10.
 
@@ -1741,6 +1826,9 @@ def main() -> int:
     res = add_score(res)
     # 解禁硬过滤 (2026-08-26): 池内剔除 → TOP-10 递补满额; 滞留候选同走此池
     res = unlock_hard_filter(res, sel_date)
+    # 趋势闸 (0914 用户令 "起码基本MA10必须上升"): MA10↑ + 单日大跌守卫,
+    # 先滤后截 — rank_and_truncate 从存活池递补; 滞留候选也过闸 (full_res 后置)
+    res = apply_trend_gate(res, sel_date)
     full_res = res
     res = rank_and_truncate(res)
     # 迟滞滞留 (2026-08-26): 昨日上榜仍在带内 → 滞留行 (降换手, 不改新选)

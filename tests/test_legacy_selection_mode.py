@@ -4,7 +4,9 @@
 空操作 (B1≡A1 逐字节); 胜出来自撤闸 — 纯 prob10+回撤闸 13.8只/日 44.2%/+6.42pp
 全轴胜旧栈 (E7+pred键+wr5) 11.0只/日 33.2%/+3.77pp。wr5 在该臂毁值 (被切票赢率
 47% > 留守 42.8%) 一并摘除 (_deliver_legacy_list 同开关); 密度/PARALLEL 两线不动。
-语义锁: 排序 → 板内 top_n → 回撤闸 (真删不补齐, 不 refill)。
+语义锁: 排序 → 趋势闸 (MA10↑ 先滤后截, 补位) → 板内 top_n → 回撤闸 (真删不补齐)。
+[0913 趋势闸] 数据驱动定案 (tmp_t/_trend_gate_sweep_0913.py, 22 夜存档): MA10↑ 闸
+riser5 54.1% vs 无闸 53.6%, fail_trend 17.7%→10%; 5D/益盟做键与组合键全劣。
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ def sel_on(monkeypatch):
     monkeypatch.setitem(LEGACY_SELECTION, "enable", True)
     monkeypatch.setitem(LEGACY_SELECTION, "mode", "prob10_pull")
     monkeypatch.setitem(LEGACY_SELECTION, "pull_min", -0.10)
+    monkeypatch.setitem(LEGACY_SELECTION, "trend_gate", "ma10_up")
     monkeypatch.setitem(LEGACY_SELECTION, "board_top_n", 10)
 
 
@@ -39,14 +42,18 @@ def _panel_fp(tmp_path, frame):
 
 
 def _make_panel(
-    cut_symbol, end, syms=("600001", "600002", "600003", "300001", "688001")
+    cut_symbol, end, final_px=8.9, syms=("600001", "600002", "600003", "300001", "688001")
 ):
-    """12 个交易日面板: cut_symbol 末日暴跌 → pull=-20%; 其余恒价 → pull=0."""
+    """12 交易日斜坡面板 (5.0→10.5, MA10 恒升); cut_symbol 末日 = final_px:
+    8.9 → MA10 仍升 (6.5..10 均值 8.0 → 换入 8.9 后 8.09) 但 pull=−11%;
+    ≤5.0 → MA10 拐头向下 (趋势闸切)."""
     dates = pd.bdate_range(end=end, periods=12)
     rows = []
     for sym in syms:
         for i, d in enumerate(dates):
-            px = 8.0 if (sym == cut_symbol and i == len(dates) - 1) else 10.0
+            px = 5.0 + 0.5 * i
+            if sym == cut_symbol and i == len(dates) - 1:
+                px = final_px
             rows.append({"symbol": sym, "date": d, "close_hfq": px})
     return pd.DataFrame(rows)
 
@@ -68,10 +75,11 @@ def _candidates() -> pd.DataFrame:
 
 
 def test_select_pull_cuts_no_refill(tmp_path, monkeypatch, sel_on):
-    """排序 → 板内 top_n=2 → 回撤闸; 被切位不 refill.
+    """排序 → 趋势闸全过 → 板内 top_n=2 → 回撤闸; 被切位不 refill.
 
-    main prob 降序 = [600002(0.90), 600003(0.75), 600001(0.60)]; head(2) 截掉
-    600001 后回撤切 600002 → main 只剩 600003 (600001 不得补进).
+    main prob 降序 = [600002(0.90), 600003(0.75), 600001(0.60)]; 600002 末日 8.9
+    (MA10 仍升过趋势闸, pull=−11%) → head(2) 截掉 600001 后回撤切 600002 →
+    main 只剩 600003 (600001 不得补进).
     """
     from config.settings import LEGACY_SELECTION
 
@@ -82,6 +90,34 @@ def test_select_pull_cuts_no_refill(tmp_path, monkeypatch, sel_on):
     assert out["symbol"].tolist() == ["600003", "300001", "688001"]
     assert "600002" not in out["symbol"].tolist()  # 回撤闸真删
     assert "600001" not in out["symbol"].tolist()  # top_n 截断在闸前 → 不 refill
+
+
+def test_select_trend_gate_filters_and_refills(tmp_path, monkeypatch, sel_on):
+    """[0913 趋势闸] MA10↓ 最高 prob 票先滤 (600002 末日 5.0 拐头), 板内 top_n
+    截断时低位票补位 — 闸在截断前 = refill 语义 (与回撤闸真删相反)."""
+    fp = _panel_fp(
+        tmp_path, _make_panel("600002", pd.Timestamp("2026-06-20"), final_px=5.0)
+    )
+    monkeypatch.setattr(lg, "PANEL_V3_PATH", fp)
+    out = ListGenerator._select_prob10_pull(_candidates())
+    assert "600002" not in out["symbol"].tolist()  # 趋势闸切 (MA10↓)
+    assert out["symbol"].tolist() == ["600003", "600001", "300001", "688001"]
+    assert (out["pull_flag"] == "").all()  # 补位票无深回撤 → 无标注
+
+
+def test_select_trend_gate_off_restores_ungated(tmp_path, monkeypatch, sel_on):
+    """旋钮 trend_gate="off" → 趋势闸关: 同面板下 600002 过闸进 head(2),
+    再被回撤闸真删 → main 只剩 600003 (与闸开时的补位 [600003, 600001] 区分)."""
+    from config.settings import LEGACY_SELECTION
+
+    monkeypatch.setitem(LEGACY_SELECTION, "trend_gate", "off")
+    monkeypatch.setitem(LEGACY_SELECTION, "board_top_n", 2)
+    fp = _panel_fp(
+        tmp_path, _make_panel("600002", pd.Timestamp("2026-06-20"), final_px=5.0)
+    )
+    monkeypatch.setattr(lg, "PANEL_V3_PATH", fp)
+    out = ListGenerator._select_prob10_pull(_candidates())
+    assert out["symbol"].tolist() == ["600003", "300001", "688001"]
 
 
 def test_select_pull_failopen_without_panel(tmp_path, monkeypatch, sel_on):
@@ -97,8 +133,13 @@ def test_select_pull_failopen_without_panel(tmp_path, monkeypatch, sel_on):
     ]
 
 
-def test_select_pull_fallback_to_mag_key_when_prob_missing(sel_on):
-    """prob_up_10d 缺列 (旧 bundle) → 级联回退幅度键, 不炸."""
+def test_select_pull_fallback_to_mag_key_when_prob_missing(
+    tmp_path, monkeypatch, sel_on
+):
+    """prob_up_10d 缺列 (旧 bundle) → 级联回退幅度键, 不炸.
+
+    面板指到缺失路径 (fail-open): 真实面板 MA10 涨跌不定, 会让排序断言随机红."""
+    monkeypatch.setattr(lg, "PANEL_V3_PATH", tmp_path / "missing.parquet")
     cands = _candidates().drop(columns=["prob_up_10d"])
     out = ListGenerator._select_prob10_pull(cands)
     assert out["symbol"].tolist()[:3] == ["600001", "600002", "600003"]
