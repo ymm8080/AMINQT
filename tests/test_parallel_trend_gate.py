@@ -1,21 +1,100 @@
-"""PARALLEL 趋势闸接线测试 (2026-09-14 用户令 "起码基本MA10必须上升").
+"""PARALLEL 趋势闸接线测试.
 
-依据 (tmp_t/_trend_gate_parallel_sweep_0914.py, 21 夜 0806-0904, WORM
-diag/trend_gate_parallel_sweep_0914_*.json): 0913 夜清单 15/16 派发标注且
-MA10↑ 仅 1/16 (300808 且为单日 −18.3% 见顶崩盘票) → MA10↑ 闸 + 单日大跌
-守卫, rank_and_truncate 前先滤后截 (补位语义, 同 LEGACY 0913 趋势闸)。
-crash8 守卫 main 净5 +0.06pp 全变体最优; MA10↑ 风格代价披露见
-settings.PARALLEL_TREND_GATE 注释。
+生产档沿革 (每步都有回放证据, 详见 settings.PARALLEL_TREND_GATE 注释):
+  0914 早  main=ma10_up / dual=off  — 用户 "起码基本MA10必须上升" (风格令)
+  0914 续  main=ym_long / dual=ym_ml — 用户终令 "不接受左侧" (斜率: 益盟长/中线↑)
+  ★0915   + r60_max=−0.10 **水平闸** — 自我纠错: 用户主诉 "已经大跌的股" 是
+          **水平**不是斜率, ym 闸管不了 (34日高滚出窗口会让长线机械上升);
+          改前 09-14 清单 16 只里 13 只 r60<0 且榜首 −29.9%。
+          r60 = close_hfq 60日净涨 (真收益; 原始价口径被除权污染, 会夸大跌幅)。
+
+闸位 = rank_and_truncate 前先滤后截 (补位语义, 同 LEGACY 0913 趋势闸);
+crash_max_1d 单日跌幅守卫与 mode **并联** (mode=off 时仍生效)。
 """
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from scripts import _shortlist_t5_t10 as mod
 
 GATE_ON = {"enable": True, "mode": "ma10_up", "crash_max_1d": -0.08}
+
+
+def _seg(a: float, b: float, n: int) -> list[float]:
+    return np.linspace(a, b, n).tolist()
+
+
+def _make_panel_ym(paths=None):
+    """ym 闸夹具 (0914 续 用户终令 "不接受左侧"): 63 交易日, high=low=close
+    (raw34 只由收盘定), close_hfq=close。
+
+    坑 (探针 tmp_t/_ym_fixture_probe_0915.py 实证): raw34 = (close − 34日高)/
+    (34日高 − 34日低), 单调新高 → raw34 恒 0 → 长线恒 100 → 判"不升"被切。
+    故"右侧"必须是**未创新高但在爬坑**的形状:
+      left_side       峰后连跌           → 长线↓ (两档都杀)
+      right_side      峰后缓爬升         → 长线↑ 中线↑ (两档都留)
+      climb_then_drop 同右, 但末 1 日 −7.2% → 长线仍↑ (19日均慢) 中线↓ (span4 快)
+                      → 仅 ym_ml 杀 = 中线子句的存在依据 (且过 crash8, 不混因)
+    """
+    if paths is None:
+        paths = {
+            "600001": _seg(10, 20, 26) + _seg(19.55, 12.35, 17) + _seg(12.6, 16.6, 18),
+            "600002": _seg(10, 20, 21) + _seg(19.5, 10, 39),
+            "600003": _seg(10, 20, 26)
+            + _seg(19.55, 12.35, 17)
+            + _seg(12.6, 16.6, 26)
+            + [16.6 - 1.2],
+        }
+    rows = []
+    for sym, p in paths.items():
+        for d, px in zip(
+            pd.bdate_range(end=pd.Timestamp("2026-09-11"), periods=len(p)), p
+        ):
+            rows.append(
+                {
+                    "symbol": sym,
+                    "date": d,
+                    "close": px,
+                    "high": px,
+                    "low": px,
+                    "close_hfq": px,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def _make_panel_level():
+    """水平闸夹具 (0915 自我纠错): 80 交易日 (r60 需 61 行), high=low=close,
+    close_hfq=close。
+
+    600001 右侧+水平过关: 涨→浅回调→爬升, 末值仍高于 60 交易日前 → r60 +12.6%
+    600002 深跌后反弹: 涨到 18 → 崩到 7 → 弹到 9 → r60 −41.0%, **但长线↑**
+    (34日高 17.9 滚出窗口 + 19日均窗滚出极负值 → 斜率闸被骗) 且末 1 日 +1.1%
+    过 crash8 → **只有水平闸能切它** = r60_max 子句的存在依据。
+    """
+    paths = {
+        "600001": _seg(8, 12, 40) + _seg(11.9, 9.5, 15) + _seg(9.6, 11.2, 25),
+        "600002": _seg(10, 18, 30) + _seg(17.9, 7, 30) + _seg(7.1, 9.0, 20),
+    }
+    rows = []
+    for sym, p in paths.items():
+        for d, px in zip(
+            pd.bdate_range(end=pd.Timestamp("2026-09-11"), periods=len(p)), p
+        ):
+            rows.append(
+                {
+                    "symbol": sym,
+                    "date": d,
+                    "close": px,
+                    "high": px,
+                    "low": px,
+                    "close_hfq": px,
+                }
+            )
+    return pd.DataFrame(rows)
 
 
 def _panel_fp(tmp_path, frame):
@@ -229,6 +308,125 @@ def test_trend_gate_per_board_mode(tmp_path, monkeypatch):
     out = mod.apply_trend_gate(res, pd.Timestamp("2026-09-11"))
     assert set(out["symbol"]) == {"600001", "300001", "300002"}
     assert "600002" not in out["symbol"].tolist()
+
+
+def test_trend_gate_ym_long_cuts_left_side(tmp_path, monkeypatch):
+    """[0914 续 用户终令 "不接受左侧"] ym_long = 益盟长线↑: 峰后连跌的左侧票
+    (600002) 被杀, 未创新高但在爬坑的右侧票留守。"""
+    monkeypatch.setattr(
+        mod,
+        "PARALLEL_TREND_GATE",
+        {"enable": True, "mode": "ym_long", "crash_max_1d": -0.08},
+    )
+    monkeypatch.setattr(mod, "PANEL_V3_PATH", _panel_fp(tmp_path, _make_panel_ym()))
+    out = mod.apply_trend_gate(_res(), pd.Timestamp("2026-09-11"))
+    assert "600002" not in out["symbol"].tolist()
+    assert set(out["symbol"]) == {"600001", "600003"}
+
+
+def test_trend_gate_ym_ml_extra_clause_cuts_fading_mid(tmp_path, monkeypatch):
+    """ym_ml 比 ym_long 多一条中线↑: 长线仍升 (19日均) 但中线掉头 (span4) 的票
+    被杀 — 该票末 1 日仅 −7.2% 过 crash8, 故杀它的是中线子句而非崩盘守卫。
+    = 中线子句的存在依据, 也是 dual 取 ym_ml 档的接线验证。"""
+    monkeypatch.setattr(
+        mod,
+        "PARALLEL_TREND_GATE",
+        {"enable": True, "mode": "ym_ml", "crash_max_1d": -0.08},
+    )
+    monkeypatch.setattr(mod, "PANEL_V3_PATH", _panel_fp(tmp_path, _make_panel_ym()))
+    out = mod.apply_trend_gate(_res(), pd.Timestamp("2026-09-11"))
+    assert set(out["symbol"]) == {"600001"}
+
+
+def test_trend_gate_per_board_ym(tmp_path, monkeypatch):
+    """[0914 续 接线] 生产档分板 ym: main=ym_long / dual=ym_ml。同形状的两只票
+    (600003 main / 300003 dual, 长线↑中线↓) → main 留、dual 杀 = 分板 dict
+    对 ym 档同样生效。"""
+    monkeypatch.setattr(
+        mod,
+        "PARALLEL_TREND_GATE",
+        {
+            "enable": True,
+            "mode": {"main": "ym_long", "dual": "ym_ml"},
+            "crash_max_1d": -0.08,
+        },
+    )
+    climb = (
+        _seg(10, 20, 26) + _seg(19.55, 12.35, 17) + _seg(12.6, 16.6, 26) + [16.6 - 1.2]
+    )
+    panel = _make_panel_ym(
+        {
+            "600001": _seg(10, 20, 26) + _seg(19.55, 12.35, 17) + _seg(12.6, 16.6, 18),
+            "600003": climb,
+            "300003": climb,
+        }
+    )
+    monkeypatch.setattr(mod, "PANEL_V3_PATH", _panel_fp(tmp_path, panel))
+    res = pd.DataFrame(
+        {
+            "symbol": ["600001", "600003", "300003"],
+            "board": ["main", "main", "dual"],
+            "score": [0.9, 0.8, 0.7],
+        }
+    )
+    out = mod.apply_trend_gate(res, pd.Timestamp("2026-09-11"))
+    assert set(out["symbol"]) == {"600001", "600003"}
+
+
+def test_trend_gate_r60_level_cuts_deep_drawdown_bounce(tmp_path, monkeypatch):
+    """[0915 自我纠错] r60 水平闸 = 用户主诉 "已经大跌的股" 的直接闸键。
+
+    600002 深跌 41% 后反弹: **长线↑ 过 ym_long、末 1 日 +1.1% 过 crash8**, 两闸
+    都留它 (滚窗假升: 34日高 17.9 滚出 → top 下降 → raw34 机械上升), 只有 r60
+    水平闸切得掉 → 切它的是**水平子句**, 不是斜率也不是崩盘守卫。
+    """
+    monkeypatch.setattr(
+        mod,
+        "PARALLEL_TREND_GATE",
+        {
+            "enable": True,
+            "mode": "ym_long",
+            "crash_max_1d": -0.08,
+            "r60_max": -0.10,
+        },
+    )
+    monkeypatch.setattr(mod, "PANEL_V3_PATH", _panel_fp(tmp_path, _make_panel_level()))
+    res = pd.DataFrame(
+        {"symbol": ["600001", "600002"], "board": ["main", "main"], "score": [0.9, 0.8]}
+    )
+    out = mod.apply_trend_gate(res, pd.Timestamp("2026-09-11"))
+    assert out["symbol"].tolist() == ["600001"]
+
+
+def test_trend_gate_without_r60_level_keeps_deep_drawdown(tmp_path, monkeypatch):
+    """同面板去掉 r60_max → 600002 留守 = 上一测试的**存在依据** (它确实过了
+    ym_long 与 crash8, 否则这条断言不成立)。"""
+    monkeypatch.setattr(
+        mod,
+        "PARALLEL_TREND_GATE",
+        {"enable": True, "mode": "ym_long", "crash_max_1d": -0.08},
+    )
+    monkeypatch.setattr(mod, "PANEL_V3_PATH", _panel_fp(tmp_path, _make_panel_level()))
+    res = pd.DataFrame(
+        {"symbol": ["600001", "600002"], "board": ["main", "main"], "score": [0.9, 0.8]}
+    )
+    out = mod.apply_trend_gate(res, pd.Timestamp("2026-09-11"))
+    assert set(out["symbol"]) == {"600001", "600002"}
+
+
+def test_trend_gate_r60_failopen_on_short_history(tmp_path, monkeypatch):
+    """r60 需 61 交易日历史; 面板不足 → 跳过该子句 (fail-open) 而非整体失败
+    (mode=off 只读 close_hfq, 用 12 行短面板专测这条分支)。"""
+    monkeypatch.setattr(
+        mod,
+        "PARALLEL_TREND_GATE",
+        {"enable": True, "mode": "off", "crash_max_1d": None, "r60_max": -0.10},
+    )
+    monkeypatch.setattr(
+        mod, "PANEL_V3_PATH", _panel_fp(tmp_path, _make_panel_falling())
+    )
+    out = mod.apply_trend_gate(_res(), pd.Timestamp("2026-09-11"))
+    assert set(out["symbol"]) == {"600001", "600002", "600003"}
 
 
 def test_trend_gate_wired_before_rank_and_truncate():

@@ -1160,17 +1160,55 @@ def board_rank_key_values(board: str, frame: pd.DataFrame) -> tuple[str, pd.Seri
     return "mag", frame[CAND_RANK_KEY]
 
 
+def _ym_lines(px: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """益盟长/中线 (面板**原始价**, = 0914 回放口径; 见 settings 注释)。
+
+    raw34 = (close - 34日高) / (34日高 - 34日低) = 收盘在 34 日区间里的位置,
+    值域 [-1,0], 贴近 0 = 区间顶。长线 = raw34 的 19 日均 +100 (平滑趋势),
+    中线 = raw34 的 EWM(span=4) +100 (跟得快)。两线均升 = 右侧。
+    分母为 0 (34 日一字板/停牌) -> 位置记 0, 同回放 np.divide 的 out/where。
+    """
+    span = int(cfg.get("ym_span", 34))
+    c = px.pivot(index="date", columns="symbol", values="close").sort_index()
+    hi = px.pivot(index="date", columns="symbol", values="high").sort_index()
+    lo = px.pivot(index="date", columns="symbol", values="low").sort_index()
+    top = hi.rolling(span, min_periods=1).max()
+    bot = lo.rolling(span, min_periods=1).min()
+    den = top - bot
+    raw = pd.DataFrame(
+        np.divide(c - top, den, out=np.zeros_like(den.values), where=(den != 0).values),
+        index=c.index,
+        columns=c.columns,
+    )
+    long_line = (
+        raw.rolling(int(cfg.get("ym_long_span", 19)), min_periods=1).mean() + 100.0
+    )
+    mid_line = raw.ewm(span=int(cfg.get("ym_mid_span", 4)), adjust=False).mean() + 100.0
+    return long_line, mid_line
+
+
 def apply_trend_gate(res: pd.DataFrame, sel_date: pd.Timestamp) -> pd.DataFrame:
     """[0914 用户终令 + 赢家统计后按板拍板] 趋势闸, 先滤后截.
 
-    生产 mode 按板分档: main=ma10_up (风格令原样, MA10 末两日上升), dual=off
-    (撤 MA10 只留 crash — dual 闸双视界全亏且大跌率不降反升, 见 settings
-    注释)。全局字符串 mode = 两板同档 (整体回退口)。
+    生产 mode 按板分档: main=ym_long (益盟长线↑), dual=ym_ml (长线↑ 且 中线↑)
+    — 0914 续 用户终令 "不接受左侧" 后重拍 (数字见 settings 注释); 旧档 =
+    main=ma10_up / dual=off, 改 mode 即回退。全局字符串 mode = 两板同档。
+      ym_long     = 益盟长线末两日上升 (右侧; 用**面板原始价**, 非 close_hfq)
+      ym_ml       = 益盟长线↑ 且 中线↑
+      ma10_up     = MA10 末两日上升 (旧 main 风格令档)
       ma5gt10_up5 = MA5>MA10 且 近5日净涨>0 (已测旋钮)
       ma5_gt_10   = 仅 MA5>MA10 (仍放行冲高回落票: 603798 近5日 −10.2% 过闸)
-    语义同 LEGACY (0913): V3 面板 close_hfq 45 天窗, min_periods=1; 面板缺行个股
-    NaN 比较判 False=杀 (同 LEGACY), 面板整体异常跳过 (fail-open)。
-    crash_max_1d = 评分日单日跌幅守卫 (300808 型 −18.3% 见顶崩盘, 0914 用户点名)。
+    MA 族语义同 LEGACY (0913): V3 面板 close_hfq 45 天窗, min_periods=1; 面板缺行
+    个股 NaN 比较判 False=杀 (同 LEGACY), 面板整体异常跳过 (fail-open)。
+    ym 档窗宽改按 cfg["ym_lookback_days"] (34+19 需 ~52 交易日, 45 天会截断 raw34
+    的极值窗 → 静默偏置), 且只有 ym 档在用时才多读 close/high/low 三列。
+    水平闸 cfg["r60_max"] (0915 补): 60日净涨 > 阈值才留, 用 close_hfq (真收益)。
+    **斜率闸管不了 "已经大跌"** — raw34 的 34 日高滚出窗口时 top 下降会让长线机械
+    上升 (688010: 收盘几乎不动而 top 31.00→28.57, 长线 +0.0095), 19 日均窗滚出
+    极负值同样能假升 → 必须配水平闸, 否则深跌股照过。面板不足 61 行则跳过
+    (fail-open) 并打印告警。
+    crash_max_1d = 评分日单日跌幅守卫 (300808 型 −18.3% 见顶崩盘, 0914 用户点名),
+    与 mode **并联** (mode=off 时仍生效)。
     剔除后 rank_and_truncate 从存活池自然递补。
     """
     cfg = PARALLEL_TREND_GATE
@@ -1184,19 +1222,38 @@ def apply_trend_gate(res: pd.DataFrame, sel_date: pd.Timestamp) -> pd.DataFrame:
         if isinstance(mode_cfg, str)
         else {b: mode_cfg.get(b, "off") for b in boards.unique()}
     )
-    if all(m == "off" for m in modes.values()) and crash is None:
+    r60_max = cfg.get("r60_max")  # 60日净涨下限 = **水平**闸 (斜率闸管不了"已经大跌")
+    if all(m == "off" for m in modes.values()) and crash is None and r60_max is None:
         return res
+    ym_modes = ("ym_long", "ym_ml")
+    need_ym = any(m in ym_modes for m in modes.values())
+    hist_days = int(cfg.get("ym_lookback_days", 120)) if need_ym else 45
+    if r60_max is not None:
+        hist_days = max(hist_days, 120)  # 61 交易日 ≈ 90 自然日; 120 留余量
     try:
         px = pd.read_parquet(
             PANEL_V3_PATH,
-            columns=["symbol", "date", "close_hfq"],
+            columns=["symbol", "date", "close_hfq"]
+            + (["close", "high", "low"] if need_ym else []),
             filters=[
-                ("date", ">=", sel_date - pd.Timedelta(days=45)),
+                ("date", ">=", sel_date - pd.Timedelta(days=hist_days)),
                 ("date", "<=", sel_date),
             ],
         )
         px["symbol"] = px["symbol"].astype(str).str.zfill(6)
         cl = px.pivot(index="date", columns="symbol", values="close_hfq").sort_index()
+        ym_long = ym_mid = None
+        if need_ym:
+            ym_long, ym_mid = _ym_lines(px, cfg)
+        r60 = None
+        if r60_max is not None:
+            if len(cl) > 60:
+                r60 = cl.iloc[-1] / cl.iloc[-61] - 1.0
+            else:
+                print(
+                    f"[trend] 面板仅 {len(cl)} 行 (<61), r60 水平闸跳过 (fail-open)",
+                    flush=True,
+                )
 
         def _keep(mode: str) -> pd.Series:
             keep = pd.Series(True, index=cl.columns)
@@ -1209,6 +1266,14 @@ def apply_trend_gate(res: pd.DataFrame, sel_date: pd.Timestamp) -> pd.DataFrame:
             elif mode == "ma10_up":
                 ma10 = cl.rolling(10, min_periods=1).mean()
                 keep &= ma10.iloc[-1] > ma10.iloc[-2]
+            elif mode == "ym_long":
+                keep &= ym_long.iloc[-1] > ym_long.iloc[-2]
+            elif mode == "ym_ml":
+                keep &= (ym_long.iloc[-1] > ym_long.iloc[-2]) & (
+                    ym_mid.iloc[-1] > ym_mid.iloc[-2]
+                )
+            if r60 is not None:
+                keep &= r60 > float(r60_max)
             if crash is not None:
                 ret1 = cl.iloc[-1] / cl.iloc[-2] - 1.0
                 keep &= ret1 > float(crash)
@@ -1228,7 +1293,8 @@ def apply_trend_gate(res: pd.DataFrame, sel_date: pd.Timestamp) -> pd.DataFrame:
                 killed.append(f"{b}:{n_kill}({mode})")
         if killed:
             print(
-                f"[trend] 趋势闸剔除 {'; '.join(killed)} (crash={crash}) → 递补",
+                f"[trend] 趋势闸剔除 {'; '.join(killed)} "
+                f"(crash={crash}, r60_max={r60_max}) → 递补",
                 flush=True,
             )
         return res[m]

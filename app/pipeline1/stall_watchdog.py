@@ -10,6 +10,12 @@ free 内存不是死活判据, 进度静默才是).
 规则: 连续 timeout 秒无非 ram_guard 的 INFO+ 日志 → 判死, CRITICAL 记录 +
 硬退 rc=86 (泥潭里常规退出/清理也会卡死, 必须 os._exit), 由外层队列/手工
 按 rc 冷却重试. 默认阈值 45min = 1.8x 健康最大静默.
+
+★ 2026-09-14 补: 硬退前先清子进程树。`os._exit` 不带走子进程 —— 09-14 链上
+重训判死时, 它派生的 `_dual_pkg_finaltop_compare.py` 成孤儿, 该脚本在
+HEAVY_SENTINELS 里, 占着运行守卫不放; 紧随其后的 `legacy` 预测撞守卫 rc=3
+秒退、`deliver` 无清单 rc=1, 当天 LEGACY 交付整段缺失 (09-13 同型复发)。
+故 exit 前 `kill_process_children()` 递归终结子孙, 清理失败也照退。
 """
 
 from __future__ import annotations
@@ -44,10 +50,49 @@ class ProgressTracker(logging.Handler):
             return time.time() - self.last_ts
 
 
+def kill_process_children(timeout_s: float = 5.0) -> int:
+    """递归终结本进程的全部子孙, 返被清理的进程数 (失败返 0).
+
+    硬退前的清场, 防孤儿占运行守卫 (见模块 docstring 2026-09-14 条)。
+    """
+    try:
+        import psutil
+    except ImportError:  # 无 psutil 时降级: 照退, 只是可能留孤儿
+        logging.getLogger(__name__).warning(
+            "[stall-watchdog] psutil 不可用, 跳过子进程清理"
+        )
+        return 0
+    try:
+        kids = psutil.Process().children(recursive=True)
+    except Exception:  # noqa: BLE001 — 枚举失败不该挡住硬退
+        logging.getLogger(__name__).warning(
+            "[stall-watchdog] 子进程枚举失败, 跳过清理", exc_info=True
+        )
+        return 0
+    if not kids:
+        return 0
+    for k in kids:
+        try:
+            k.terminate()
+        except Exception:  # noqa: BLE001 — 已死/无权限都无所谓
+            pass
+    _gone, alive = psutil.wait_procs(kids, timeout=timeout_s)
+    for k in alive:
+        try:
+            k.kill()
+        except Exception:  # noqa: BLE001
+            pass
+    psutil.wait_procs(alive, timeout=2.0)
+    return len(kids)
+
+
 def start_stall_watchdog(
-    timeout_s: float, poll_s: float = 60.0, exit_fn=os._exit
+    timeout_s: float,
+    poll_s: float = 60.0,
+    exit_fn=os._exit,
+    kill_fn=kill_process_children,
 ) -> ProgressTracker:
-    """挂 root handler + 起 daemon 线程; 静默超阈值调 exit_fn(86) 后线程退出."""
+    """挂 root handler + 起 daemon 线程; 静默超阈值先清子进程树再调 exit_fn(86)."""
     tracker = ProgressTracker()
     logging.getLogger().addHandler(tracker)
     started_at = time.strftime("%H:%M:%S")
@@ -69,6 +114,17 @@ def start_stall_watchdog(
                 STALL_EXIT_CODE,
                 started_at,
             )
+            try:
+                n = kill_fn()
+            except Exception:  # noqa: BLE001 — 清场失败也必须硬退
+                logging.getLogger(__name__).warning(
+                    "[stall-watchdog] 子进程清理抛错 (忽略), 仍硬退", exc_info=True
+                )
+            else:
+                if n:
+                    logging.getLogger(__name__).critical(
+                        "[stall-watchdog] 已清理 %d 个子进程, 防孤儿占运行守卫", n
+                    )
             exit_fn(STALL_EXIT_CODE)
             return
 
