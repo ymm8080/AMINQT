@@ -12,6 +12,7 @@ import pytest
 from app.pipeline_parallel import backtest, indicators, screener, signals
 from app.pipeline_parallel.config import ADX_SCORE_WEIGHTS, ADX_SPEC, SLOW_BULL
 from app.pipeline_parallel.scoring import cross_rank, pool_score, select_topn
+from scripts._shortlist_t5_t10 import PV_CORR_WARMUP, _pv_warmup_ok
 
 _T = "0000000"  # 慢牛趋势样本符号 (漂移加速)
 _O = "3000002"  # 震荡样本符号 (有界正弦)
@@ -916,3 +917,136 @@ def test_slowbull_unpaused_empty_pool_no_file(tmp_path, monkeypatch):
     fn = runner_mod.write_slowbull_pool(pd.DataFrame(), board="dual", date="2026-08-26")
     assert fn == ""
     assert not (tmp_path / "slowbull_pool_dual_20260826__slow_bull_v1_0.csv").exists()
+
+
+# ── pv_corr_5 交付链补列 (2026-09-15) ──
+# 背景: SNIPER/FUSION 池含 pv_corr_5, 但它不在 _diag_stage 检查点里, 由 prepare_adx
+# 现算. 回测链跑 prepare_adx → 6 特征; 交付链只读检查点切片 → 少一列, pool_score
+# 自动跳过后权重重新归一 → **同一个 score 列名两端口径**. 交付链改为就地补该列.
+
+
+def _pv_sorted(**kw) -> pd.DataFrame:
+    df = _slow_panel(**kw)
+    return df.sort_values(["symbol", "date"]).reset_index(drop=True)
+
+
+def test_add_pv_corr_5_matches_prepare_adx():
+    """补列口径必须与 prepare_adx 逐位一致 —— 否则两端口径还是不同."""
+    df = _pv_sorted()
+    got = indicators.add_pv_corr_5(df.copy())["pv_corr_5"]
+    want = indicators.prepare_adx(df.copy())["pv_corr_5"]
+    assert got.notna().all()
+    pd.testing.assert_series_equal(got, want, check_names=False)
+
+
+def test_add_pv_corr_5_fills_nan_with_zero():
+    """头部无 5 日窗口 / 方差为 0 → 中性 0, 不是 NaN.
+
+    NaN 会让 pool_score 的 rank 变 NaN → 整只股票被 dropna 从当日截面剔除,
+    等于凭空缩小候选池 (回测链 fillna(0) 后每只股都有分).
+    """
+    df = _pv_sorted()
+    got = indicators.add_pv_corr_5(df.copy())["pv_corr_5"]
+    first = df["date"].min()
+    assert (got[df["date"] == first] == 0.0).all()
+
+
+def test_pv_corr_5_slice_with_warmup_matches_full_panel():
+    """交付切片的核心不变量: 多读 PV_CORR_WARMUP 天热身再裁掉, 值必须与整面板相同."""
+    df = _pv_sorted(n_dates=130)
+    dates = np.sort(df["date"].unique())
+    full = indicators.add_pv_corr_5(df.copy())
+    head = 60
+    cutoff, warm_from = dates[head], dates[head - PV_CORR_WARMUP]
+
+    sl = df[df["date"] >= warm_from].reset_index(drop=True)
+    sl = indicators.add_pv_corr_5(sl)
+    prior = set(df.loc[df["date"] < warm_from, "symbol"])
+    sl = sl[_pv_warmup_ok(sl, cutoff, prior)].reset_index(drop=True)
+    ref = full[full["date"] >= cutoff].reset_index(drop=True)
+
+    assert len(sl) == len(ref) and len(sl) > 0
+    pd.testing.assert_series_equal(
+        sl["pv_corr_5"], ref["pv_corr_5"], check_names=False
+    )
+    # 值真的有区分度 (否则上面相等是废话)
+    assert ref["pv_corr_5"].nunique() > 10
+
+
+def test_pv_warmup_drops_gapped_old_symbol_boundary_rows():
+    """停牌老股在热身段缺行 → 切口当天凑不满 5 行滚动窗 → 必须裁掉该行, 不能补 0.
+
+    不裁的话这一行会是 0, 而整面板同 (symbol,date) 是真值 —— 两端口径又分裂。
+    """
+    df = _pv_sorted(n_dates=130)
+    dates = np.sort(df["date"].unique())
+    head = 60
+    cutoff = dates[head]
+    # 老股 s1 在热身段整段停牌 (老 = 更早时候有行)
+    gap = set(dates[head - PV_CORR_WARMUP : head])
+    df = df[~((df["symbol"] == _T) & (df["date"].isin(gap)))]
+    warm_from = dates[head - PV_CORR_WARMUP]
+
+    full = indicators.add_pv_corr_5(_pv_sorted(n_dates=130))
+    sl = df[df["date"] >= warm_from].reset_index(drop=True)
+    sl = indicators.add_pv_corr_5(sl)
+    prior = set(df.loc[df["date"] < warm_from, "symbol"])
+    assert _T in prior  # 确实是"老股", 不是新股
+    got = sl[_pv_warmup_ok(sl, cutoff, prior)]
+
+    bad = (sl["symbol"] == _T) & (sl["date"] == cutoff)
+    assert bad.any()
+    assert len(got.index.intersection(sl.index[bad])) == 0  # 该行被裁
+    # 负控: 若保留它, 值确实是错的 (0 vs 真值), 证明这一裁是承重的
+    ref_v = full.loc[(full["symbol"] == _T) & (full["date"] == cutoff), "pv_corr_5"]
+    assert len(ref_v) == 1 and abs(float(ref_v.iloc[0])) > 1e-9
+    assert sl.loc[bad, "pv_corr_5"].eq(0.0).all()
+
+
+def test_pv_warmup_keeps_newly_listed_symbol():
+    """新股 (热身段之前根本没有行) 必须保留 —— 它的整段历史都在切片里, 口径本就一致.
+
+    一刀切按 pos < 5 丢行会让新股凭空从交付候选池消失 (少过滤多出票是用户偏好)。
+    """
+    df = _pv_sorted(n_dates=130)
+    dates = np.sort(df["date"].unique())
+    head = 60
+    cutoff, warm_from = dates[head], dates[head - PV_CORR_WARMUP]
+    # _T 变新股: 抹掉它在热身段之前的所有行
+    df = df[~((df["symbol"] == _T) & (df["date"] < warm_from))]
+
+    full = indicators.add_pv_corr_5(df.copy())  # 整面板也只见这段历史
+    sl = df[df["date"] >= warm_from].reset_index(drop=True)
+    sl = indicators.add_pv_corr_5(sl)
+    prior = set(df.loc[df["date"] < warm_from, "symbol"])
+    assert _T not in prior
+    got = sl[_pv_warmup_ok(sl, cutoff, prior)]
+    ref = full[full["date"] >= cutoff]
+
+    mine = got[got["symbol"] == _T]
+    assert len(mine) > 0  # 一行不丢
+    pd.testing.assert_series_equal(
+        mine.sort_values("date")["pv_corr_5"].reset_index(drop=True),
+        ref[ref["symbol"] == _T]
+        .sort_values("date")["pv_corr_5"]
+        .reset_index(drop=True),
+        check_names=False,
+    )
+
+
+def test_pv_corr_5_slice_without_warmup_diverges():
+    """负控: 不热身就必然对不上 —— 证明那 5 天热身是承重的, 不是装饰."""
+    df = _pv_sorted(n_dates=130)
+    dates = np.sort(df["date"].unique())
+    full = indicators.add_pv_corr_5(df.copy())
+    cutoff = dates[60]
+
+    sl = df[df["date"] >= cutoff].reset_index(drop=True)
+    sl = indicators.add_pv_corr_5(sl)
+    ref = full[full["date"] >= cutoff].reset_index(drop=True)
+
+    head = sl["date"] == cutoff
+    assert not np.allclose(sl.loc[head, "pv_corr_5"], ref.loc[head, "pv_corr_5"])
+    # 第 6 天起滚动窗已满, 自动对齐
+    tail = sl["date"] > dates[64]
+    assert np.allclose(sl.loc[tail, "pv_corr_5"], ref.loc[tail, "pv_corr_5"])
