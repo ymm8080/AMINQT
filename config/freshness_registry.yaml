@@ -57,12 +57,22 @@ entries:
     max_lag_days: 1
     critical: false
 
-  # fina 指标缓存目录: 防面板 fina 列冻结的根因 — 缓存断供后财报季 4950 股只换血 15 只
-  - name: fina_cache
-    kind: dir_watermark
-    path: data/supply_cache/alt_data/fina_indicator
-    pattern: '_(\d{8})\.parquet$'   # 文件名尾部日期取 max 为水位
-    max_lag_days: 5
+  # fina 面板↔缓存水位一致性: 防面板 fina 列冻结 (2026-08-14~09-02 事故: 缓存有
+  # 新公告却没进面板, 财报季 4950 股只换血 15 只, 09-02 才被人工发现).
+  # 判据 = 面板 announce_date 水位落后缓存 announce_date 水位 > max_lag_days 交易日.
+  # why 不用 dir_watermark 判该缓存: 文件名日期是"取数窗口", 而 fetch_fina_indicator
+  # 把全量拉取存进按窗口命名的文件 (Tushare start/end_date 过滤的是报告期 end_date
+  # 而非公告日, 见 data_supply.py 注释), 文件名与内容无关; 且非财报季该目录合法地
+  # 不再新增文件. 2026-09-15 实测: 面板与缓存 announce_date 同为 2026-08-31 (内容
+  # 完全同步), dir_watermark 却报 lag=9 违规 —— 季节性误报会让整份判词被无视.
+  # 阈值 2: 日更 07:15 消费的是前一日 07:45 的缓存, 正常落后 1 个刷新, 留 1 天余量.
+  - name: fina_cache_parity
+    kind: parity
+    path: D:/AMINQT/PARQUET/panel_full_enriched_v3.parquet
+    column: announce_date
+    reference_dir: data/supply_cache/alt_data/fina_indicator
+    reference_column: announce_date
+    max_lag_days: 2
     critical: false
 
   # 大宗交易缓存: 防 bt_ 特征族 (dim33 4 特征) 静默停更

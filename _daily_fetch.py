@@ -886,9 +886,14 @@ final = pq.read_table(PANEL, filters=[("date", "=", pd.Timestamp(TRADE_DATE))]).
 n_cols = len(final.columns)
 filled = sum(final.notna().sum() > 0)
 empty = n_cols - filled
-print(f"Filled: {filled}/{n_cols} ({filled/n_cols:.1%})")
+print(f"Non-null: {filled}/{n_cols} ({filled/n_cols:.1%}) columns")
 empty_cols = sorted([c for c in final.columns if final[c].notna().sum() == 0])
 if empty_cols:
     print(f"Empty ({len(empty_cols)}): {', '.join(empty_cols)}")
 else:
-    print("All columns have data!")
+    print("All columns non-null.")
+# 本行只测"有值", 不测"新鲜": ffill/缓存值/陈旧值一律非空, 会拿满分.
+# 2026-09-15 事故: 据本行答"数据完整" —— 结论的理由不成立, 因本行原理上无法
+# 证明其上游输入 (公告管线 → fina 缓存) 新鲜. 判"完整"请另读上游新鲜度判词
+# logs/freshness_<date>*.json (含 fina_cache_parity 消费端冻结探针), 勿以本行为准.
+print("NOTE: presence only — NOT a freshness claim. Check logs/freshness_*.json.")

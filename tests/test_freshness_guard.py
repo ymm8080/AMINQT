@@ -15,7 +15,10 @@ from app.pipeline1.freshness_guard import (
     FreshnessIO,
     check_columns_entry,
     check_file_entry,
+    check_parity_entry,
     check_watermark_entry,
+    dir_column_max,
+    dir_watermark,
     expected_trading_date,
     lag_trading_days,
     load_registry,
@@ -51,6 +54,15 @@ _WM_ENTRY = {
     "path": "cache_dir",
     "pattern": "_(\\d{8})\\.parquet$",
     "max_lag_days": 5,
+}
+_PARITY_ENTRY = {
+    "name": "t_parity",
+    "kind": "parity",
+    "path": "panel.parquet",
+    "column": "announce_date",
+    "reference_dir": "cache_dir",
+    "reference_column": "announce_date",
+    "max_lag_days": 2,
 }
 
 
@@ -297,10 +309,17 @@ class _FakeIO:
     相对路径键 (真实 IO 契约: 收到的就是解析后路径).
     """
 
-    def __init__(self, file_dates=None, watermarks=None, column_counts=None):
+    def __init__(
+        self,
+        file_dates=None,
+        watermarks=None,
+        column_counts=None,
+        dir_column_maxes=None,
+    ):
         self.file_dates = file_dates or {}
         self.watermarks = watermarks or {}
         self.column_counts = column_counts or {}
+        self.dir_column_maxes = dir_column_maxes or {}
 
     @staticmethod
     def _lookup(table, path):
@@ -315,6 +334,9 @@ class _FakeIO:
 
     def dir_watermark(self, path, pattern):
         return self._lookup(self.watermarks, path)
+
+    def dir_column_max(self, path, column):
+        return self._lookup(self.dir_column_maxes, path)
 
     def panel_column_daily_nonnull(
         self, path, columns, cal, tail_days, date_col="date"
@@ -366,6 +388,124 @@ def test_run_checks_watermark_and_columns_kinds():
     assert len(result.observations) == 2
     cols_obs = next(o for o in result.observations if o["name"] == "t_cols")
     assert cols_obs["observed"] == 2000
+
+
+# ── check_parity_entry: 面板↔缓存水位一致性 ─────────────────────────────────
+
+
+def test_check_parity_entry_healthy_when_panel_matches_cache():
+    """2026-09-15 实况: 面板与缓存 announce_date 同为 08-31 → 健康.
+
+    这正是旧 dir_watermark 条目误报的那一格 (它按缓存写入时点报 lag=9).
+    """
+    d = pd.Timestamp("2026-08-31").date()
+    assert check_parity_entry(_PARITY_ENTRY, d, d, WED, CAL) is None
+
+
+def test_check_parity_entry_healthy_when_panel_ahead():
+    """面板 > 缓存 (不可能由缓存产生) 不判违规."""
+    assert (
+        check_parity_entry(
+            _PARITY_ENTRY, pd.Timestamp("2026-09-01").date(), WED.date(), WED, CAL
+        )
+        is None
+    )
+
+
+def test_check_parity_entry_violates_when_panel_lags_cache():
+    """消费端冻结形态: 缓存已有新公告却未进面板 → 违规 (交易日 lag 口径)."""
+    v = check_parity_entry(
+        _PARITY_ENTRY, WED.date(), pd.Timestamp("2026-09-02").date(), WED, CAL
+    )
+    assert v is not None
+    assert v["name"] == "t_parity"
+    assert v["lag"] > _PARITY_ENTRY["max_lag_days"]
+    assert v["observed"] == WED.date().isoformat()
+    assert v["expected"] == "2026-09-02"
+
+
+def test_check_parity_entry_reproduces_0814_freeze_incident():
+    """回归: 2026-08-14~09-02 fina 冻结事故 (面板停 08-14, 缓存已到 09-02)."""
+    v = check_parity_entry(
+        _PARITY_ENTRY,
+        pd.Timestamp("2026-08-14").date(),
+        pd.Timestamp("2026-09-02").date(),
+        pd.Timestamp("2026-09-15"),
+        CAL,
+    )
+    assert v is not None
+    assert v["observed"] == "2026-08-14" and v["expected"] == "2026-09-02"
+
+
+def test_check_parity_entry_healthy_at_threshold():
+    """落后恰为阈值 (2 交易日) → 健康; 超过 → 违规."""
+    assert (
+        check_parity_entry(
+            _PARITY_ENTRY, WED.date(), pd.Timestamp("2026-08-28").date(), WED, CAL
+        )
+        is None
+    )
+    assert (
+        check_parity_entry(
+            _PARITY_ENTRY, WED.date(), pd.Timestamp("2026-08-31").date(), WED, CAL
+        )
+        is not None
+    )
+
+
+def test_check_parity_entry_read_failed_never_passes():
+    """任一端读失败 → 违规, 绝不静默放行."""
+    for panel, reference in ((None, WED.date()), (WED.date(), None), (None, None)):
+        v = check_parity_entry(_PARITY_ENTRY, panel, reference, WED, CAL)
+        assert v is not None and "read_failed" in v["detail"]
+
+
+def test_check_parity_entry_natural_fallback_weekend_buffer():
+    """cal 不可用 → 自然日回退, 阈值放宽 +2."""
+    assert (
+        check_parity_entry(
+            _PARITY_ENTRY, WED.date(), pd.Timestamp("2026-08-28").date(), WED, None
+        )
+        is None
+    )
+    assert (
+        check_parity_entry(
+            _PARITY_ENTRY, WED.date(), pd.Timestamp("2026-09-10").date(), WED, None
+        )
+        is not None
+    )
+
+
+def test_run_checks_parity_kind_dispatch():
+    """parity 走独立 IO 分支: 面板列走 file_max_date, 参照列走 dir_column_max."""
+    io = _FakeIO(
+        file_dates={"panel.parquet": pd.Timestamp("2026-08-31").date()},
+        dir_column_maxes={"cache_dir": pd.Timestamp("2026-08-31").date()},
+    )
+    result = run_checks([_PARITY_ENTRY], WED, CAL, io_impl=io)
+    assert result.violations == []
+    assert [o["name"] for o in result.observations] == ["t_parity"]
+
+    io_lag = _FakeIO(
+        file_dates={"panel.parquet": WED.date()},
+        dir_column_maxes={"cache_dir": pd.Timestamp("2026-09-02").date()},
+    )
+    result_lag = run_checks([_PARITY_ENTRY], WED, CAL, io_impl=io_lag)
+    assert [v["name"] for v in result_lag.violations] == ["t_parity"]
+
+
+def test_load_registry_parity_requires_reference_keys(tmp_path):
+    p = _write_yaml(
+        tmp_path,
+        "entries:\n"
+        "  - name: p\n"
+        "    kind: parity\n"
+        "    path: panel.parquet\n"
+        "    column: announce_date\n"
+        "    max_lag_days: 2\n",
+    )
+    with pytest.raises(ValueError, match="缺必备键"):
+        load_registry(p)
 
 
 # ── panel_column_daily_nonnull: tmp_path 迷你 parquet ──────────────────────
@@ -426,7 +566,27 @@ def test_dir_watermark_missing_dir_returns_none(tmp_path):
     assert dir_watermark(str(tmp_path / "nope"), r"_(\d{8})\.parquet$") is None
 
 
-# ── IO 接口束: FreshnessIO 三方法齐备 (防接口漂移) ─────────────────────────
+def test_dir_column_max_reads_content_not_filename(tmp_path):
+    """内容水位: 文件名日期与内容无关 (fetch 把全量拉取存进按窗口命名的文件)."""
+    for fn, dates in (
+        ("all__20220101_20260630.parquet", ["2026-06-30", "2026-08-31"]),
+        ("all__20260701_20260902.parquet", ["2026-08-14", "2026-08-20"]),
+    ):
+        pd.DataFrame(
+            {"announce_date": pd.to_datetime(dates), "roe": [1.0, 2.0]}
+        ).to_parquet(tmp_path / fn, index=False)
+    # 文件名最大日期是 20260902, 但内容最大是 2026-08-31 → 取内容
+    assert dir_column_max(str(tmp_path), "announce_date") == pd.Timestamp(
+        "2026-08-31"
+    ).date()
+    assert dir_watermark(str(tmp_path), r"_(\d{8})\.parquet$") == pd.Timestamp(
+        "2026-09-02"
+    ).date()  # 旧口径: 读文件名 → 正是误报的来源
+    assert dir_column_max(str(tmp_path / "nope"), "announce_date") is None
+    assert dir_column_max(str(tmp_path), "no_such_col") is None
+
+
+# ── IO 接口束: FreshnessIO 四方法齐备 (防接口漂移) ─────────────────────────
 
 
 def test_freshness_io_interface_shape():
@@ -434,6 +594,7 @@ def test_freshness_io_interface_shape():
         file_max_date=lambda p, c: None,
         panel_column_daily_nonnull=lambda p, c, cal, t, date_col="date": [],
         dir_watermark=lambda p, pat: None,
+        dir_column_max=lambda p, c: None,
     )
     result = run_checks([_FILE_ENTRY], WED, CAL, io_impl=io)
     # 全部读失败 → 全部违规, 绝不静默放行

@@ -164,10 +164,18 @@ def fetch_announcement_data(
 
             rows = len(df) if df is not None else 0
             elapsed = time.time() - t0
+            msg = f"{rows} rows in {elapsed:.1f}s"
+            if rows == 0 and src == "fina_indicator":
+                # 0 行 ≠ 源故障. fina_indicator 按报告期(0331/0630/0930/1231)发布,
+                # 本管线只取最近 2 天的公告窗. 财报季外(如 Q2 收官 08-31 后)该窗
+                # 天然为空, 是正确终态. 2026-09-15 曾把这条 empty 误读为"缓存停更"
+                # → 判"数据陈旧", 实则面板与缓存内容完全同步. 见 logs/freshness_*.json
+                # (fina_cache_parity 才是真判据).
+                msg += " (0 行属预期: 按报告期发布, 财报季外该公告窗为空 — 非源故障)"
             results[src] = {
                 "rows": rows,
                 "status": "ok" if rows > 0 else "empty",
-                "msg": f"{rows} rows in {elapsed:.1f}s",
+                "msg": msg,
             }
             dataframes[src] = df if df is not None else pd.DataFrame()
             logger.info(

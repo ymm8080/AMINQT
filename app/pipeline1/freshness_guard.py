@@ -38,10 +38,19 @@ _REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-_KINDS = ("file", "panel_columns", "dir_watermark")
+_KINDS = ("file", "panel_columns", "dir_watermark", "parity")
 # 各 kind 必备键 (缺一即注册表写错, 启动时报大声而非跑起来静默漏检)
 _REQUIRED_KEYS = {
     "file": ("name", "kind", "path", "date_col", "max_lag_days"),
+    "parity": (
+        "name",
+        "kind",
+        "path",
+        "column",
+        "reference_dir",
+        "reference_column",
+        "max_lag_days",
+    ),
     "panel_columns": (
         "name",
         "kind",
@@ -237,6 +246,61 @@ def check_watermark_entry(entry: dict, watermark_date, expected, cal) -> dict | 
     return check_file_entry(entry, watermark_date, expected, cal)
 
 
+def check_parity_entry(entry: dict, panel_max, reference_max, expected, cal) -> dict | None:
+    """parity 条目判定: 面板列水位 vs 上游缓存列水位 (两端都记事件日).
+
+    面板是消费端, 缓存是生产端. **面板落后缓存超过 max_lag_days 个交易日** = 缓存
+    已有新公告却没进面板, 即 2026-09-02 fina 冻结事故的形态. 面板 > 缓存不判违规
+    (不可能由缓存产生, 属别的问题).
+
+    why 不用 dir_watermark 判这个缓存: 缓存文件名里的日期是"取数窗口", 而
+    fetch_fina_indicator 把**全量**拉取结果存进按窗口命名的文件里 (Tushare 的
+    start_date/end_date 过滤的是报告期 end_date 而非公告日, 见 data_supply.py 注释),
+    文件名日期与内容毫无关系; 且非财报季该目录合法地不再新增文件 → 按"写入时点"
+    判会常年误报. 2026-09-15 实测: 面板与缓存 announce_date 同为 2026-08-31,
+    内容完全同步, dir_watermark 却报 lag=9 违规 —— 这种季节性误报会让守卫被无视,
+    正是它本该拦住的那类错误反而漏过.
+    """
+    threshold = int(entry["max_lag_days"])
+    if panel_max is None or reference_max is None:
+        return _violation(
+            entry,
+            panel_max,
+            reference_max if reference_max is not None else expected,
+            None,
+            threshold,
+            "read_failed (面板列或上游缓存列读失败, 绝不静默放行)",
+        )
+    obs = _as_date(panel_max)
+    ref = _as_date(reference_max)
+    if ref <= obs:  # 面板不落后 (含面板更新) → 健康
+        return None
+    lag = lag_trading_days(obs, ref, cal)
+    if lag is None:  # cal 不可用/覆盖外 → 自然日回退 (周末缓冲 +2)
+        lag = (ref - obs).days
+        if lag > threshold + 2:
+            return _violation(
+                entry,
+                obs,
+                ref,
+                lag,
+                threshold,
+                f"自然日落后 {lag} 天 (交易日历不可用, 阈值 {threshold}+2 周末缓冲)",
+            )
+        return None
+    if lag > threshold:
+        return _violation(
+            entry,
+            obs,
+            ref,
+            lag,
+            threshold,
+            f"面板列落后上游缓存 {lag} 个交易日 (阈值 {threshold}): "
+            f"缓存已有 {ref} 的公告未进面板 (消费端冻结形态)",
+        )
+    return None
+
+
 # ── panel_stale_gate: 链级 A1 闸复用的纯判定 ────────────────────────────────
 
 # 阈值常量 (2026-09-02 集中到判定处, 不再硬编码在链里):
@@ -351,6 +415,25 @@ def dir_watermark(path, pattern: str):
         return None
 
 
+def dir_column_max(path, column: str):
+    """目录内所有 parquet 的某一列取全局 max (内容水位, 与文件名无关).
+
+    无 parquet/列缺失/读失败 → None (判定层当违规). 逐文件复用 file_max_date
+    (只读一列), 缓存目录文件数少 (当前 13 个), 开销可忽略.
+    """
+    try:
+        best = None
+        for fn in os.listdir(str(path)):
+            if not fn.endswith(".parquet"):
+                continue
+            d = file_max_date(os.path.join(str(path), fn), column)
+            if d is not None and (best is None or d > best):
+                best = d
+        return best
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def load_trade_cal():
     """Tushare 交易日历 (仅开市日). 复用 data_supply 的缓存实现, 失败返回 None 不抛
     — 调用方 (expected_trading_date / panel_stale_gate) 自动回退自然日."""
@@ -376,6 +459,7 @@ class FreshnessIO:
     file_max_date: object
     panel_column_daily_nonnull: object
     dir_watermark: object
+    dir_column_max: object
 
 
 def _real_io() -> FreshnessIO:
@@ -383,6 +467,7 @@ def _real_io() -> FreshnessIO:
         file_max_date=file_max_date,
         panel_column_daily_nonnull=panel_column_daily_nonnull,
         dir_watermark=dir_watermark,
+        dir_column_max=dir_column_max,
     )
 
 
@@ -431,6 +516,19 @@ def run_checks(
         elif kind == "dir_watermark":
             observed = io.dir_watermark(_resolve_path(entry["path"]), entry["pattern"])
             violation = check_watermark_entry(entry, observed, expected, cal)
+            obs = {
+                "name": name,
+                "kind": kind,
+                "observed": _as_date(observed).isoformat() if observed else None,
+                "threshold": int(entry["max_lag_days"]),
+                "critical": bool(entry.get("critical", False)),
+            }
+        elif kind == "parity":
+            observed = io.file_max_date(_resolve_path(entry["path"]), entry["column"])
+            reference = io.dir_column_max(
+                _resolve_path(entry["reference_dir"]), entry["reference_column"]
+            )
+            violation = check_parity_entry(entry, observed, reference, expected, cal)
             obs = {
                 "name": name,
                 "kind": kind,
