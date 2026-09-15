@@ -41,8 +41,12 @@ data_supply:
   margin_page_sleep: 0.3             # 分页间限流 (秒)
   sector_index_max_workers: 4        # 申万行业指数并发数
   sector_index_fetch_timeout: 60     # 单个行业指数拉取超时 (秒)
-  fina_per_stock_max_workers: 4      # fina_indicator 逐股降级并发数 (免费token不支持全市场查询)
+  fina_per_stock_max_workers: 16     # fina_indicator 逐股降级并发数 (免费token不支持全市场查询)
   fina_per_stock_retries: 3          # 逐股拉取单股重试次数
+  # 逐股全池 ~5000 次调用. 服务端实测硬限 500 次/分钟(24 workers 撞墙丢 100/300 股),
+  # 故按**速率**节流而非只堆 worker; 450 留余量 → 全池约 11 分钟 (原 4 workers 约 38 分钟).
+  fina_rate_limit_per_min: 450       # 聚合调用速率上限 (次/分钟)
+  fina_rate_backoff: 6.0             # 撞限流后退避秒数 (须跨过服务端每分钟窗口)
   ak_call_retries: 3                 # akshare 调用重试次数
   ak_call_backoff: 2.0               # akshare 退避基数 (秒)
   ak_call_timeout: 30                # 单次 akshare 调用硬超时 (秒), 防挂起死等

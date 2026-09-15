@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -45,8 +46,41 @@ _MARGIN_PAGE_SIZE = int(_DS_CFG.get("margin_page_size", 3000))
 _MARGIN_PAGE_SLEEP = float(_DS_CFG.get("margin_page_sleep", 0.3))
 _SECTOR_INDEX_MAX_WORKERS = int(_DS_CFG.get("sector_index_max_workers", 4))
 _SECTOR_INDEX_FETCH_TIMEOUT = float(_DS_CFG.get("sector_index_fetch_timeout", 60))
-_FINA_MAX_WORKERS = int(_DS_CFG.get("fina_per_stock_max_workers", 4))
+_FINA_MAX_WORKERS = int(_DS_CFG.get("fina_per_stock_max_workers", 16))
 _FINA_PER_STOCK_RETRIES = int(_DS_CFG.get("fina_per_stock_retries", 3))
+# Tushare fina_indicator 实测硬限 = 500 次/分钟 (2026-09-15 探测: 24 workers 时
+# 撞墙丢 100/300 股). 留余量取 450; 逐股全池 ~5000 次 → 下限约 11 分钟.
+_FINA_RATE_PER_MIN = int(_DS_CFG.get("fina_rate_limit_per_min", 450))
+# 撞限流后的退避秒数: 需跨过服务端的"每分钟"计数窗口, 1s 不够
+_FINA_RATE_BACKOFF = float(_DS_CFG.get("fina_rate_backoff", 6.0))
+
+
+class _RateLimiter:
+    """跨线程令牌节流器 — 把聚合调用速率压在给定上限之下.
+
+    逐股并发拉取时, worker 数决定"最多同时在飞", 而服务端限流看的是**速率**;
+    两者不等价: 只加 worker 会撞墙并丢数据 (实测 24 workers → 100 只股失败).
+    本类按 per_minute 均匀放行, worker 数只影响能否吃满该速率.
+    """
+
+    def __init__(self, per_minute: int):
+        self._interval = 60.0 / max(1, per_minute)
+        self._lock = threading.Lock()
+        self._next_free = 0.0
+
+    def acquire(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            if self._next_free > now:
+                wait = self._next_free - now
+                self._next_free += self._interval
+            else:
+                wait = 0.0
+                self._next_free = now + self._interval
+        if wait > 0:
+            time.sleep(wait)
+
+
 _FETCH_TODAY_SOURCES = list(
     _DS_CFG.get(
         "fetch_today_sources",
@@ -1687,12 +1721,14 @@ class DataSupplyChain:
 
         frames: list[pd.DataFrame] = []
         errors: list[tuple[str, str]] = []
+        limiter = _RateLimiter(_FINA_RATE_PER_MIN)
 
         def _fetch_one(i: int) -> pd.DataFrame:
             sym = symbols[i]
             ts_code = f"{sym}.{'SZ' if sym.startswith(('0', '3', '1')) else 'SH'}"
             client = pro_clients[i % len(pro_clients)]
             for attempt in range(_FINA_PER_STOCK_RETRIES):
+                limiter.acquire()
                 try:
                     raw = _with_timeout(
                         lambda: client.fina_indicator(
@@ -1706,7 +1742,9 @@ class DataSupplyChain:
                     if attempt == _FINA_PER_STOCK_RETRIES - 1:
                         errors.append((ts_code, str(exc)[:120]))
                         return pd.DataFrame()
-                    time.sleep(1.0)
+                    # 撞限流时 1s 退避爬不出"每分钟"窗口, 需等过整个窗口
+                    time.sleep(_FINA_RATE_BACKOFF
+                               if "频率超限" in str(exc) else 1.0)
             return pd.DataFrame()
 
         with ThreadPoolExecutor(max_workers=_FINA_MAX_WORKERS) as exe:
