@@ -346,18 +346,135 @@ def test_today_list_delivered_matches_tag_glob(tmp_path, monkeypatch):
 #    ????; ???????, ?????????? ??????????????????????????
 
 
-def test_combined_delivered_matches_tag_glob_with_suffixes(tmp_path, monkeypatch):
-    monkeypatch.setattr(ma, "STOCK_LIST_DIR", tmp_path)
+def _combined_env(tmp_path, monkeypatch):
+    """隔出 STOCK_LIST_DIR/SHADOW_DIR/DATA_DIR 三个空目录 (判页要看源在不在盘上)."""
+    from scripts import _stocklist_combined as cmb
+
+    lists, shadow, data = (tmp_path / n for n in ("lists", "shadow", "data"))
+    for d in (lists, shadow, data):
+        d.mkdir()
+    monkeypatch.setattr(ma, "STOCK_LIST_DIR", lists)
+    monkeypatch.setattr(ma, "DATA_DIR", data)
+    monkeypatch.setattr(cmb, "SHADOW_DIR", shadow)
+    return lists, shadow, data
+
+
+def _csv(path, rows=1):
+    body = "symbol,prob_up_10d\n" + "".join(f"60000{i},0.9\n" for i in range(rows))
+    path.write_text(body, encoding="utf-8")
+
+
+def _xlsx(path, sheets):
+    import pandas as pd
+
+    with pd.ExcelWriter(path, engine="openpyxl") as xw:
+        for name in sheets:
+            pd.DataFrame({"symbol": ["600001"]}).to_excel(
+                xw, sheet_name=name, index=False
+            )
+
+
+def _hist(path, dates):
+    import pandas as pd
+
+    pd.DataFrame(
+        {
+            "date": [pd.Timestamp(d) for d in dates],
+            "board": ["main"] * len(dates),
+            "symbol": ["600001"] * len(dates),
+            "prob": [0.88] * len(dates),
+        }
+    ).to_parquet(path)
+
+
+def test_combined_delivered_needs_a_file_at_all(tmp_path, monkeypatch):
+    _combined_env(tmp_path, monkeypatch)
     assert ma._combined_delivered("20260908") is False
-    (tmp_path / "stocklist_combined_20260908.xlsx").write_text("x", encoding="utf-8")
-    assert ma._combined_delivered("20260908") is True
-    # WORM ???? (__v2) ??????
-    (tmp_path / "stocklist_combined_20260908.xlsx").unlink()
-    (tmp_path / "stocklist_combined_20260908__v2.xlsx").write_text(
-        "x", encoding="utf-8"
+    assert ma._page_gaps("20260908") is None  # 无表 = 状态未知, 不是"页齐"
+
+
+def test_combined_delivered_true_when_pages_complete(tmp_path, monkeypatch):
+    """源齐 + 页齐 → 已交付; WORM 变体 (__v2) 同样认."""
+    lists, _shadow, _data = _combined_env(tmp_path, monkeypatch)
+    _csv(lists / "legacy_stocklist_20260908__1200.csv")
+    _csv(lists / "parallel_shortlist_20260908__1200.csv")
+    _xlsx(
+        lists / "stocklist_combined_20260908.xlsx", ["多模块重叠", "LEGACY", "PARALLEL"]
     )
     assert ma._combined_delivered("20260908") is True
-    assert ma._combined_delivered("20260909") is False
+    (lists / "stocklist_combined_20260908.xlsx").unlink()
+    _xlsx(
+        lists / "stocklist_combined_20260908__v2.xlsx",
+        ["多模块重叠", "LEGACY", "PARALLEL"],
+    )
+    assert ma._combined_delivered("20260908") is True
+    assert ma._combined_delivered("20260909") is False  # 别的 tag 不受影响
+
+
+def test_combined_gap_when_source_page_missing(tmp_path, monkeypatch):
+    """[0915 修] 本测试锁死被修的那个 bug: 源在盘上、页却不在表里 = 未交付.
+
+    修前 _combined_delivered 只 glob 文件名, 这份缺 LEGACY 页的残表会被判"已交付"
+    → 补产闸永不触发 → 缺页永久拿不回来 (09-13/09-14 连发两次).
+    """
+    lists, _shadow, _data = _combined_env(tmp_path, monkeypatch)
+    _csv(lists / "legacy_stocklist_20260908__1200.csv")
+    _csv(lists / "parallel_shortlist_20260908__1200.csv")
+    _xlsx(lists / "stocklist_combined_20260908.xlsx", ["多模块重叠", "PARALLEL"])
+    assert ma._page_gaps("20260908") == ["LEGACY"]
+    assert ma._combined_delivered("20260908") is False
+
+
+def test_combined_empty_slowbull_is_not_a_gap(tmp_path, monkeypatch):
+    """SLOW_BULL 空池 = 宽度闸关闸的合法结果, 不算缺页 (09-14 breadth 0.334 < MA60).
+
+    它连"期望页"都不是: 表头-only 的 CSV 与宽池一样不构成缺页理由.
+    """
+    lists, shadow, _data = _combined_env(tmp_path, monkeypatch)
+    _csv(lists / "parallel_shortlist_20260908__1200.csv")
+    (shadow / "slowbull_list_2026-09-08__1200.csv").write_text(
+        "symbol,name\n", encoding="utf-8"
+    )  # 43 字节表头-only
+    _xlsx(lists / "stocklist_combined_20260908.xlsx", ["PARALLEL"])
+    assert ma._page_gaps("20260908") == []
+    assert ma._combined_delivered("20260908") is True
+
+
+def test_combined_density_gap_iff_step_never_ran(tmp_path, monkeypatch):
+    """密度页判据: candidates 在而上榜史没今天 = 步没跑过 → 缺页.
+
+    空夜 (步跑了但 0 票) 会记史 → 页本就不该有 → 不算缺页 (否则每晚误报).
+    """
+    import scripts._prob10_density_shadow as dens
+
+    lists, _shadow, data = _combined_env(tmp_path, monkeypatch)
+    _csv(lists / "parallel_shortlist_20260908__1200.csv")
+    (data / "lists").mkdir(exist_ok=True)
+    (data / "lists" / "candidates_20260908.parquet").write_bytes(b"")
+    hist = data / "hist.parquet"
+    monkeypatch.setattr(dens, "HIST_PATH", str(hist))
+    _xlsx(lists / "stocklist_combined_20260908.xlsx", ["PARALLEL"])
+
+    _hist(hist, ["2026-09-03", "2026-09-04", "2026-09-07"])  # 史止于昨 → 步没跑
+    assert ma._page_gaps("20260908") == ["密度"]
+    assert ma._combined_delivered("20260908") is False
+
+    _hist(hist, ["2026-09-04", "2026-09-07", "2026-09-08"])  # 史含今天 → 空夜, 合法
+    assert ma._page_gaps("20260908") == []
+    assert ma._combined_delivered("20260908") is True
+
+    # 史读不出 → 不据此补 (宁漏勿扰)
+    hist.unlink()
+    assert ma._page_gaps("20260908") == []
+
+
+def test_combined_unreadable_table_fails_loud(tmp_path, monkeypatch):
+    """表在但读不出页名 → 交付状态未知 → 按缺页补 (fail-loud, 不静默放行)."""
+    lists, _shadow, _data = _combined_env(tmp_path, monkeypatch)
+    _csv(lists / "parallel_shortlist_20260908__1200.csv")
+    (lists / "stocklist_combined_20260908.xlsx").write_text("not a workbook")
+    assert ma._page_gaps("20260908") == ["PARALLEL"]
+    assert ma._combined_delivered("20260908") is False
 
 
 def test_makeup_runs_only_tail_steps_when_combined_missing(tmp_path, monkeypatch):
@@ -387,6 +504,7 @@ def test_makeup_runs_only_tail_steps_when_combined_missing(tmp_path, monkeypatch
 def test_makeup_noop_when_combined_exists(tmp_path, monkeypatch):
     """?????? (????? __v2) ? ??????, ????? skip ???"""
     monkeypatch.setattr(ma, "STOCK_LIST_DIR", tmp_path)
+    monkeypatch.setattr(ma, "DATA_DIR", tmp_path)  # 判页要读 candidates/上榜史
     (tmp_path / "stocklist_combined_20260908__v2.xlsx").write_text(
         "x", encoding="utf-8"
     )
@@ -407,6 +525,43 @@ def test_makeup_failure_recorded_not_raised(tmp_path, monkeypatch):
     )
     assert state["status"] == "failed"
     assert state["failed_steps"] == ma._MAKEUP_STEPS
+
+
+def test_main_repairs_incomplete_combined_after_full_chain(tmp_path, monkeypatch):
+    """整链跑完也要核页完整性 (2026-09-15).
+
+    09-10 实证: 链跑到尾 (gate_audit ok), 但 [FAIL] stocklist_combined → 整夜无合并
+    表, 到次晨 07:39 才被手动补出. 早退点的补产闸 (skip/wait) 管不到"整链跑完但尾部
+    某步失败", 故链尾必须自己再核一次.
+    """
+    import app.pipeline1.freshness_guard as fg
+
+    monkeypatch.setattr(ma, "_prevent_sleep", lambda: None)
+    monkeypatch.setattr(ma, "LOG_DIR", str(tmp_path))
+    monkeypatch.setattr(ma, "plan_steps", lambda *a, **k: [])  # 空链 → 直奔链尾核查
+    monkeypatch.setattr(fg, "file_max_date", lambda *a, **k: _dt.date(2026, 9, 10))
+    monkeypatch.setattr(fg, "load_trade_cal", lambda *a, **k: None)
+    monkeypatch.setattr(fg, "panel_stale_gate", lambda *a, **k: (True, "ok"))
+    monkeypatch.setattr(
+        sys, "argv", ["run_daily_automation", "--tag", "20260910", "--force"]
+    )
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        ma, "_run_makeup_if_incomplete", lambda tag: (calls.append(tag), 1)[1]
+    )
+    assert ma.main() == 1
+    assert calls == ["20260910"]  # 链尾确实核了一次
+    state = json.loads(
+        (tmp_path / "daily_automation_20260910.state.json").read_text("utf-8")
+    )
+    assert "makeup" in state["failed_steps"]  # 补产失败要落到 state
+
+    # 页齐时链尾核查空转: 不落任何东西, 也不改变 rc
+    calls.clear()
+    monkeypatch.setattr(ma, "_run_makeup_if_incomplete", lambda tag: calls.append(tag))
+    assert ma.main() == 0
+    assert calls == ["20260910"]
 
 
 def test_startup_guard_verdicts(monkeypatch):

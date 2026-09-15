@@ -10,7 +10,8 @@
   ②回撤 [0913 撤删改标]: 原硬闸 pull ≥ -10% 已撤 (PULL_FLOOR=-1.0 等效关闭);
     pull < -0.10 (PULL_FLAG_MAX) 标 pull_flag=回撤 列标注不删票 (同 ⑥ 派发标注模式)
   ③密度 = occ5≥3, occ5 对应研究带内 OCC5=rolling(5) 含当日: 今日在带 +
-    近4个上榜历日在带数
+    近4个**交易日**在带数 (0915 修: 原先按"历史文件里最后 4 个日期"取窗,
+    重跑同一日会前移窗口+重复计数当日 → 结果不稳定; 改用交易日历)
   ④免额 (09-06 拍板 "去额"; 2×2 终审: 额闸在 prob 池头部近似装饰 — 撤之
     +0.1~0.2只/日流量, 赢率代价 1~1.7pp); amt 列保留仅展示, 不作闸
   ⑤撞指数码 000xxx 不剔 (09-05 用户澄清 "不是删除股票号"), 推送端隔离指数行
@@ -237,7 +238,8 @@ def density_picks(
     """带密度≥3+回撤闸+派发方向 → 当日影子清单 (纯函数, 可单测).
 
     cand: 当日 candidates 截面 (symbol/board/prob_up_10d/pred_ret_10d)
-    hist: 带上榜历史 (date/board/symbol/prob), 须不含当日 (当日成员由 cand 现算)
+    hist: 带上榜历史 (date/board/symbol/prob); 含不含当日均可 (occ5 窗按交易日历取
+          day_ts 之前 4 日, 当日在窗内被排除, 故重跑幂等 — 0915 修)
     close/amount: 透视表 (date × symbol), ≤ day_ts; amount 仅算 amt 展示列
     par: parallel 全池 raw 预测 (symbol/pred_mag_10d/pred_prob_10d);
          None/缺 → parallel 两列 NaN
@@ -263,11 +265,19 @@ def density_picks(
     m["pull"] = m["symbol"].map(pull)
     m["amt"] = m["symbol"].map(amt)
 
-    # occ5 研究口径 OCC5=rolling(5) 含当日: 1(今日在带) + 近4个上榜历日在带数;
-    # belief_down 对应研究 PM3=shift(3): 今日 prob − 3个上榜历日前 prob (未在带=NaN)
-    hdates = sorted(hist["date"].unique())
-    win4 = set(hdates[-(OCC_WIN - 1) :]) if hdates else set()
-    d3 = hdates[-3] if len(hdates) >= 3 else None
+    # occ5 研究口径 OCC5=rolling(5) 含当日: 1(今日在带) + 近4个**交易日**在带数;
+    # belief_down 对应研究 PM3=shift(3): 今日 prob − 3个**交易日**前 prob (未在带=NaN)
+    # [0915 修] 窗口按交易日历 (cl.index) 取 day_ts 之前最后 4 个交易日, **不**取
+    # "历史文件里最后 4 个日期"。后者有两个坑:
+    #   ① save_history 每次运行都追加当日 → 重跑同一日时 hist 已含当日, 该窗口整体
+    #      前移一格且当日被算进"近4日"(与 +1 今日在带 重复计数) → 同日两次跑出不同
+    #      清单 (09-14 实测: 首次 3 只 dual, 重跑 1 只 main, 两者互斥);
+    #   ② 先补较早日期时窗口里会含未来日期 → look-ahead (09-13 补跑窗口含 09-14)。
+    # 改按交易日历取窗后: 重跑幂等 (窗口与 hist 内容无关), 未来日期不可能入窗, 且
+    # 漏跑的夜 = 空洞 (该日无史 → 贡献 0), 不再把窗口静默往回伸一个交易日。
+    tdays = [d for d in cl.index if d < day_ts]
+    win4 = set(tdays[-(OCC_WIN - 1) :])
+    d3 = tdays[-3] if len(tdays) >= 3 else None
     occ, p3v = [], []
     for r in memb.itertuples():
         h = hist[(hist["board"] == r.board) & (hist["symbol"] == r.symbol)]

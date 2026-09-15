@@ -190,11 +190,67 @@ def test_belief_down_tag_three_days_back():
     hist = _hist()
     out = density_picks(_cand(), hist, close, amount, DAY)
     r1 = out[out.symbol == "600001"].iloc[0]
-    # 信念降 = 今日候选 prob (0.90) − 3 个上榜日前 hist prob (0.88)
-    d3 = sorted(hist["date"].unique())[-3]
+    # 信念降 = 今日候选 prob (0.90) − 3 个**交易日**前 hist prob (0.88)
+    # [0915 修] 基准日按交易日历 (panel 索引) 取, 不按 hist 里出现的日期 —— 后者
+    # 正是被修掉的那个假设 (hist 缺夜/含当日都会让"第 3 个"落到别的日子)
+    tdays = [d for d in close.index if d < DAY]
+    d3 = tdays[-3]
     p_3ago = float(hist[(hist.symbol == "600001") & (hist.date == d3)]["prob"].iloc[0])
     assert p_3ago == 0.88
     assert abs(r1["belief_down"] - (0.90 - p_3ago)) < 1e-9
+
+
+def test_rerun_and_backfill_are_idempotent():
+    """[0915 修] occ5 窗口必须按交易日历取, 与 hist 文件内容无关.
+
+    事故: 09-14 同日跑两遍拿到**互斥**结果 (首跑 3 只 dual, 重跑 1 只 main)。
+    机理 = 窗口取 "hist 里最后 4 个日期", 而 save_history 每次运行都追加当日 →
+    重跑时窗口整体前移一格且当日被重复计数。同一 bug 还带 look-ahead: 先补较晚
+    日期再补较早的, 较早那次窗口里含未来日期 (实测 09-13 补跑窗含 09-14)。
+
+    三种 hist 必须给出**逐位相同**的清单: ① 首次跑 (hist 止于昨) ② 重跑
+    (hist 已含当日) ③ 乱序补跑 (hist 含未来日期)。
+    """
+    syms = ["600001", "600002", "600003", "300005"]
+    close, amount = _panel(syms, [10.0] * 4, [2e8] * 4)
+    # 600001 在 5 个交易日全勤 (win4 满窗) → 窗口一挪 occ5 立刻变
+    base_dates = pd.to_datetime(
+        ["2026-08-26", "2026-08-27", "2026-08-28", "2026-08-31", "2026-09-01"]
+    )
+    rows = [(d, "main", "600001", 0.80 + 0.01 * i) for i, d in enumerate(base_dates)]
+    hist_first = pd.DataFrame(rows, columns=["date", "board", "symbol", "prob"])
+    # ② 重跑: save_history 已把当日 (DAY=09-04) 追加进去了
+    hist_rerun = pd.concat(
+        [
+            hist_first,
+            pd.DataFrame(
+                [(DAY, "main", "600001", 0.99)],
+                columns=["date", "board", "symbol", "prob"],
+            ),
+        ],
+        ignore_index=True,
+    )
+    # ③ 乱序补跑: hist 里混进未来日期 (09-08 > DAY)
+    hist_future = pd.concat(
+        [
+            hist_first,
+            pd.DataFrame(
+                [(pd.Timestamp("2026-09-08"), "main", "600001", 0.99)],
+                columns=["date", "board", "symbol", "prob"],
+            ),
+        ],
+        ignore_index=True,
+    )
+    out_first = density_picks(_cand(), hist_first, close, amount, DAY)
+    out_rerun = density_picks(_cand(), hist_rerun, close, amount, DAY)
+    out_future = density_picks(_cand(), hist_future, close, amount, DAY)
+    assert list(out_first["symbol"]) == ["600001"]  # 只有它有带史, 其余 occ5=1
+    pd.testing.assert_frame_equal(out_first, out_rerun)
+    pd.testing.assert_frame_equal(out_first, out_future)
+    r = out_first.iloc[0]
+    assert r["occ5"] == 5  # 1 (今日在带) + 4 (日历窗前 4 个交易日全勤)
+    # belief_down 基准日 = 日历第 3 个交易日 (08-28, prob 0.82), 不是 09-01/09-08
+    assert abs(r["belief_down"] - (0.90 - 0.82)) < 1e-9
 
 
 def test_constants_locked():

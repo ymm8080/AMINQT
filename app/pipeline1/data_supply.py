@@ -1743,8 +1743,7 @@ class DataSupplyChain:
                         errors.append((ts_code, str(exc)[:120]))
                         return pd.DataFrame()
                     # 撞限流时 1s 退避爬不出"每分钟"窗口, 需等过整个窗口
-                    time.sleep(_FINA_RATE_BACKOFF
-                               if "频率超限" in str(exc) else 1.0)
+                    time.sleep(_FINA_RATE_BACKOFF if "频率超限" in str(exc) else 1.0)
             return pd.DataFrame()
 
         with ThreadPoolExecutor(max_workers=_FINA_MAX_WORKERS) as exe:
