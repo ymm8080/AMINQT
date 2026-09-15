@@ -525,6 +525,43 @@ def test_makeup_failure_recorded_not_raised(tmp_path, monkeypatch):
     assert state["failed_steps"] == ma._MAKEUP_STEPS
 
 
+def test_main_repairs_incomplete_combined_after_full_chain(tmp_path, monkeypatch):
+    """整链跑完也要核页完整性 (2026-09-15).
+
+    09-10 实证: 链跑到尾 (gate_audit ok), 但 [FAIL] stocklist_combined → 整夜无合并
+    表, 到次晨 07:39 才被手动补出. 早退点的补产闸 (skip/wait) 管不到"整链跑完但尾部
+    某步失败", 故链尾必须自己再核一次.
+    """
+    import app.pipeline1.freshness_guard as fg
+
+    monkeypatch.setattr(ma, "_prevent_sleep", lambda: None)
+    monkeypatch.setattr(ma, "LOG_DIR", str(tmp_path))
+    monkeypatch.setattr(ma, "plan_steps", lambda *a, **k: [])  # 空链 → 直奔链尾核查
+    monkeypatch.setattr(fg, "file_max_date", lambda *a, **k: _dt.date(2026, 9, 10))
+    monkeypatch.setattr(fg, "load_trade_cal", lambda *a, **k: None)
+    monkeypatch.setattr(fg, "panel_stale_gate", lambda *a, **k: (True, "ok"))
+    monkeypatch.setattr(
+        sys, "argv", ["run_daily_automation", "--tag", "20260910", "--force"]
+    )
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        ma, "_run_makeup_if_incomplete", lambda tag: (calls.append(tag), 1)[1]
+    )
+    assert ma.main() == 1
+    assert calls == ["20260910"]  # 链尾确实核了一次
+    state = json.loads(
+        (tmp_path / "daily_automation_20260910.state.json").read_text("utf-8")
+    )
+    assert "makeup" in state["failed_steps"]  # 补产失败要落到 state
+
+    # 页齐时链尾核查空转: 不落任何东西, 也不改变 rc
+    calls.clear()
+    monkeypatch.setattr(ma, "_run_makeup_if_incomplete", lambda tag: calls.append(tag))
+    assert ma.main() == 0
+    assert calls == ["20260910"]
+
+
 def test_startup_guard_verdicts(monkeypatch):
     monkeypatch.setattr(ma, "_guard_log", lambda tag, msg: None)
     monkeypatch.setattr(ma, "_read_state", lambda tag: None)

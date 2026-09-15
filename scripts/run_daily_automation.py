@@ -811,8 +811,13 @@ def main() -> int:
                 f"???? --skip-* ???????",
                 flush=True,
             )
-        # ?? state ?? ? ??? (babysitter) ? ok/failed ???
-        _write_state(tag, _exit_status(failures), failed_steps=failures)
+    # 尾步失败也要同夜补 (2026-09-15): 上面两个早退点的补产闸只在 skip/wait 触发, 整链
+    # 跑完而尾部某步失败 (09-10: combined 崩 → 整夜无合并表, 次晨 07:39 才补) 就没人再核
+    # → 缺页留到明早. 页齐时 _run_makeup_if_incomplete 直接 None, 不落任何东西.
+    # state 仍放最后: babysitter 判 ok/failed 靠它, 补产必须写在其之前.
+    if _run_makeup_if_incomplete(tag) == 1:
+        failures.append("makeup")
+    _write_state(tag, _exit_status(failures), failed_steps=failures)
     return 1 if failures else 0
 
 
