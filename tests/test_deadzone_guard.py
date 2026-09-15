@@ -242,8 +242,20 @@ def test_load_parallel_history_rank_top10_excludes_legacy(tmp_path):
     assert h["symbol"].tolist() == [f"6010{k:02d}" for k in range(10)]
 
 
-def test_loaders_register_all_three_lines():
-    assert set(dz._LOADERS) == {"top10", "parallel", "prob10dens"}
+def test_load_genious_history_excludes_other_lines(tmp_path):
+    gen = tmp_path / "genious_stocklist_20260105__093000.csv"
+    pd.DataFrame({"排名": [2, 0, 1], "symbol": ["600003", "600001", "600002"]}).to_csv(
+        gen, index=False
+    )
+    legacy = tmp_path / "legacy_stocklist_20260105__M1.csv"
+    pd.DataFrame({"symbol": ["000001"]}).to_csv(legacy, index=False)
+    h = dz.load_genious_history(list_dir=tmp_path)
+    assert set(h["date"]) == {"20260105"}
+    assert h["symbol"].tolist() == ["600001", "600002", "600003"]
+
+
+def test_loaders_register_all_delivery_lines():
+    assert set(dz._LOADERS) == {"top10", "parallel", "prob10dens", "genious"}
 
 
 # ---------------------------------------------------------------- is_alarm
