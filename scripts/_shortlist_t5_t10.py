@@ -1200,6 +1200,11 @@ def apply_trend_gate(res: pd.DataFrame, sel_date: pd.Timestamp) -> pd.DataFrame:
     个股 NaN 比较判 False=杀 (同 LEGACY), 面板整体异常跳过 (fail-open)。
     ym 档窗宽改按 cfg["ym_lookback_days"] (34+19 需 ~52 交易日, 45 天会截断 raw34
     的极值窗 → 静默偏置), 且只有 ym 档在用时才多读 close/high/low 三列。
+    水平闸 cfg["r60_max"] (0915 补): 60日净涨 > 阈值才留, 用 close_hfq (真收益)。
+    **斜率闸管不了 "已经大跌"** — raw34 的 34 日高滚出窗口时 top 下降会让长线机械
+    上升 (688010: 收盘几乎不动而 top 31.00→28.57, 长线 +0.0095), 19 日均窗滚出
+    极负值同样能假升 → 必须配水平闸, 否则深跌股照过。面板不足 61 行则跳过
+    (fail-open) 并打印告警。
     crash_max_1d = 评分日单日跌幅守卫 (300808 型 −18.3% 见顶崩盘, 0914 用户点名),
     与 mode **并联** (mode=off 时仍生效)。
     剔除后 rank_and_truncate 从存活池自然递补。
@@ -1215,18 +1220,21 @@ def apply_trend_gate(res: pd.DataFrame, sel_date: pd.Timestamp) -> pd.DataFrame:
         if isinstance(mode_cfg, str)
         else {b: mode_cfg.get(b, "off") for b in boards.unique()}
     )
-    if all(m == "off" for m in modes.values()) and crash is None:
+    r60_max = cfg.get("r60_max")  # 60日净涨下限 = **水平**闸 (斜率闸管不了"已经大跌")
+    if all(m == "off" for m in modes.values()) and crash is None and r60_max is None:
         return res
     ym_modes = ("ym_long", "ym_ml")
     need_ym = any(m in ym_modes for m in modes.values())
-    ym_days = int(cfg.get("ym_lookback_days", 120)) if need_ym else 45
+    hist_days = int(cfg.get("ym_lookback_days", 120)) if need_ym else 45
+    if r60_max is not None:
+        hist_days = max(hist_days, 120)  # 61 交易日 ≈ 90 自然日; 120 留余量
     try:
         px = pd.read_parquet(
             PANEL_V3_PATH,
             columns=["symbol", "date", "close_hfq"]
             + (["close", "high", "low"] if need_ym else []),
             filters=[
-                ("date", ">=", sel_date - pd.Timedelta(days=ym_days)),
+                ("date", ">=", sel_date - pd.Timedelta(days=hist_days)),
                 ("date", "<=", sel_date),
             ],
         )
@@ -1235,6 +1243,15 @@ def apply_trend_gate(res: pd.DataFrame, sel_date: pd.Timestamp) -> pd.DataFrame:
         ym_long = ym_mid = None
         if need_ym:
             ym_long, ym_mid = _ym_lines(px, cfg)
+        r60 = None
+        if r60_max is not None:
+            if len(cl) > 60:
+                r60 = cl.iloc[-1] / cl.iloc[-61] - 1.0
+            else:
+                print(
+                    f"[trend] 面板仅 {len(cl)} 行 (<61), r60 水平闸跳过 (fail-open)",
+                    flush=True,
+                )
 
         def _keep(mode: str) -> pd.Series:
             keep = pd.Series(True, index=cl.columns)
@@ -1253,6 +1270,8 @@ def apply_trend_gate(res: pd.DataFrame, sel_date: pd.Timestamp) -> pd.DataFrame:
                 keep &= (ym_long.iloc[-1] > ym_long.iloc[-2]) & (
                     ym_mid.iloc[-1] > ym_mid.iloc[-2]
                 )
+            if r60 is not None:
+                keep &= r60 > float(r60_max)
             if crash is not None:
                 ret1 = cl.iloc[-1] / cl.iloc[-2] - 1.0
                 keep &= ret1 > float(crash)
@@ -1272,7 +1291,8 @@ def apply_trend_gate(res: pd.DataFrame, sel_date: pd.Timestamp) -> pd.DataFrame:
                 killed.append(f"{b}:{n_kill}({mode})")
         if killed:
             print(
-                f"[trend] 趋势闸剔除 {'; '.join(killed)} (crash={crash}) → 递补",
+                f"[trend] 趋势闸剔除 {'; '.join(killed)} "
+                f"(crash={crash}, r60_max={r60_max}) → 递补",
                 flush=True,
             )
         return res[m]
