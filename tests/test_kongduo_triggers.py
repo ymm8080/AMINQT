@@ -469,7 +469,10 @@ def test_build_delivery_splits_sheets_and_ranks(chip_stub):
     assert list(s2_full["排名"]) == [1, 2, 3, 4]
     assert set(s1["层"]) <= set(kt.SHEET1_LAYERS)
     assert set(s2["层"]) <= set(kt.SHEET2_LAYERS)
-    assert list(s1.columns)[:4] == ["排名", "symbol", "层", "触发器"]
+    # 闸必须在前列 (0914 用户令: 排第 19 列时横向滚动才看得见 → 提到第 3 列)
+    assert list(s1.columns)[:4] == ["排名", "symbol", "大涨闸", "层"]
+    assert list(s2.columns)[:3] == ["排名", "symbol", "大涨闸"]
+    assert list(s2_full.columns)[:3] == ["排名", "symbol", "大涨闸"]
     # 每个段位都要有执行档与研究口径, 不能出现 NaN
     assert s1["执行档"].notna().all() and s1["全样本口径"].notna().all()
     # S-L 形态标注只上 Sheet2, 且插在数值块末尾 (5日回撤 之后), 不打散前面几列

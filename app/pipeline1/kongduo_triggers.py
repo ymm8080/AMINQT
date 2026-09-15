@@ -142,6 +142,11 @@ def _col_lines() -> tuple[tuple[str, str], ...]:
     return (
         ("排名", "表内序号; 先按段位序 (CH3→CH2→CH1→CH2B), 段内按 r60 从深到浅"),
         ("symbol", "6 位股票代码 (已去掉 .SH/.SZ 后缀)"),
+        (
+            "大涨闸",
+            "过闸 | 被拦 — 大涨三条件闸 (低动量 + 右侧拐头 + 缩量) 的标注; "
+            '**不删任何一行**, 见下方"大涨闸说明"',
+        ),
         ("层", '冠军段位 — 四段互斥, 见上方"段位说明"'),
         (
             "触发器",
@@ -171,11 +176,6 @@ def _col_lines() -> tuple[tuple[str, str], ...]:
             '收盘 / 10日均线 − 1: 正 = 在均线上方, 越大越"追高/过热"; 负 = 均线下方',
         ),
         ("5日回撤", "近 5 日相对 20 日高点的最深回撤 (负值, 越负回撤越深)"),
-        (
-            "大涨闸",
-            "过闸 | 被拦 — 大涨三条件闸 (低动量 + 右侧拐头 + 缩量) 的标注; "
-            '**不删任何一行**, 见下方"大涨闸说明"',
-        ),
         ("全样本口径", "该段位全样本 (2023-01~2026-09) 胜率 / 5日均收益; 含选段偏差"),
     )
 
@@ -768,6 +768,8 @@ def trigger_name(df: pd.DataFrame) -> pd.Series:
 
 DISPLAY_COLUMNS = (
     "symbol",
+    # 闸放前列 (0914 用户: "闸放前列, 根本没看清") — 原先排在第 19 列, 要横向滚动才看得见。
+    "大涨闸",
     "层",
     "触发器",
     "类型",
@@ -897,9 +899,9 @@ def build_delivery(
         na_position="last",
     )
     return (
-        sheet(s1, ("大涨闸",)),
-        sheet(top, ("大涨闸",) + SHEET2_EXTRA_COLUMNS),
-        sheet(s3, ("大涨闸",) + SHEET2_EXTRA_COLUMNS),
+        sheet(s1),
+        sheet(top, SHEET2_EXTRA_COLUMNS),
+        sheet(s3, SHEET2_EXTRA_COLUMNS),
     )
 
 
