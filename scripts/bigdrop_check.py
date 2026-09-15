@@ -470,25 +470,26 @@ def build() -> dict:
 
     # 捕获阶梯的 OOS 实测 (存进 bundle, query/--capture 都不硬编码这些数字)。
     # 档是嵌套的: T2 含 T1, T3 含 T2, 所以召回按累计算。
+    # 变量名避开 m / hit —— 上面分别被 LGBM 模型和融合层的命中项占用。
     rk_oos = pd.Series(p_iso).groupby(dt).rank(pct=True).to_numpy()
     oos_n, dt_n, y_n = int(oos.sum()), int(ydt[oos].sum()), int(y[oos].sum())
     cum = np.zeros_like(oos)
     capture = []
     for nm, rmin, q in CAPTURE_TIERS:
-        hit = (score_all >= rmin) | (
+        widen = (score_all >= rmin) | (
             (p_iso >= MODEL_ALARM) if q is None else (rk_oos >= 1.0 - q)
         )
-        cum = cum | hit
-        m = np.asarray(oos & cum, bool)
+        cum = cum | widen
+        msk = np.asarray(oos & cum, bool)
         capture.append(
             dict(
                 name=nm,
-                daily=m.sum() / n_day_oos,
-                share=m.sum() / oos_n,
-                bigdrop_rate=float(y[m].mean()),
-                bigdrop_recall=float(y[m].sum() / y_n),
-                dt_rate=float(ydt[m].mean()),
-                dt_recall=float(ydt[m].sum() / dt_n),
+                daily=msk.sum() / n_day_oos,
+                share=msk.sum() / oos_n,
+                bigdrop_rate=float(y[msk].mean()),
+                bigdrop_recall=float(y[msk].sum() / y_n),
+                dt_rate=float(ydt[msk].mean()),
+                dt_recall=float(ydt[msk].sum() / dt_n),
             )
         )
     rest = np.asarray(oos & ~cum, bool)
@@ -858,7 +859,9 @@ def query(codes: list[str], b: dict) -> None:
         tname, tnum = capture_tier(
             int(sc[k]), mp, float(rk_day[k]), al.get("th", MODEL_ALARM)
         )
-        dtxt = f"   (模型当日前 {1 - float(rk_day[k]):.1%})"
+        # 直报分位而不是「当日前 X%」—— 后者是 1-rk, 高分位(危险)反而显示成小数字,
+        # 600519(分位 12%) 会印成「前 88.1%」读着像危险, 正好反了。
+        dtxt = f"   (模型概率分位 {float(rk_day[k]):.1%}, 越高越危险)"
         print(f"  捕获档位: {tname}{dtxt}")
         if cap and tnum > 1:
             t1 = cap[0]
@@ -1057,6 +1060,28 @@ def show_capture(b: dict) -> None:
         print(f"  {c['name']:<10}{int(cnt[k]):>7,}  ({cnt[k] / len(day):>6.2%})")
 
 
+def show_compare(b: dict) -> None:
+    """各口径的 OOS 概率质量 —— 全部读自 bundle, 不重训不重算。
+
+    这些数字在 --build 时算出并落盘 (oos_brier / oos_cal_err), 这里只复读, 方便
+    随时复核「为什么选了这个口径」而不用重跑一次建包。
+    """
+    bo = float(b["oos_base"])
+    print(
+        f"\n各口径 OOS 概率质量 [模型包 {b['tag']}]   基准 {bo:.3%}   "
+        f"常数预测 Brier {bo * (1 - bo):.5f}"
+    )
+    print(f"{'口径':<24}{'OOS Brier':>12}{'校准误差':>12}")
+    for n, br in b["oos_brier"].items():
+        mark = "   ← winner" if n == b.get("winner") else ""
+        print(f"{n:<24}{br:>12.5f}{b['oos_cal_err'][n]:>12.4f}{mark}")
+    print(
+        f"\n融合口径 OOS AUC {b['oos_auc']:.4f}"
+        f"   (切分 fit<{b['split']['fit_end']}, cal<{b['split']['cal_end']}, "
+        f"embargo {b['split']['embargo']})"
+    )
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
     if "--build" in args:
@@ -1065,6 +1090,8 @@ if __name__ == "__main__":
         show_rules(load_bundle())
     elif "--capture" in args:
         show_capture(load_bundle())
+    elif "--compare" in args:
+        show_compare(load_bundle())
     elif args and args[0].startswith("-"):
         print(__doc__)
     elif args:

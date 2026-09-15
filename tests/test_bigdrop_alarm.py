@@ -177,3 +177,37 @@ def test_capture_tier_never_returns_beyond_ladder():
     name, num = capture_tier(0, 0.0, 0.0)
     assert name == "T4 未标"
     assert num == len(CAPTURE_TIERS) + 1
+
+
+# ---- 从 bundle 复读的只读视图 (不读面板, 因此可以直接跑) ----
+
+_MIN_BUNDLE = {
+    "tag": "20260915",
+    "winner": "纯规则表",
+    "oos_base": 0.033954,
+    "oos_brier": {"纯规则表": 0.03015, "模型(isotonic校准)": 0.03080},
+    "oos_cal_err": {"纯规则表": 0.0149, "模型(isotonic校准)": 0.0193},
+    "oos_auc": 0.8554,
+    "split": {"fit_end": "20250701", "cal_end": "20260101", "embargo": 5},
+}
+
+
+def test_show_compare_marks_winner_and_prints_every_caliber(capsys):
+    """--compare 只读 bundle, 不得 KeyError; winner 必须被标出来。"""
+    from scripts.bigdrop_check import show_compare
+
+    show_compare(_MIN_BUNDLE)
+    out = capsys.readouterr().out
+    for n in _MIN_BUNDLE["oos_brier"]:
+        assert n in out
+    assert "← winner" in out
+    assert out.count("← winner") == 1  # 有且只有一个赢家
+    assert "0.8554" in out
+
+
+def test_show_capture_degrades_on_old_bundle(capsys):
+    """0915 之前的包没有 capture 块 —— 要给出提示而不是崩。"""
+    from scripts.bigdrop_check import show_capture
+
+    show_capture({"tag": "20260910"})
+    assert "没有 capture 块" in capsys.readouterr().out
