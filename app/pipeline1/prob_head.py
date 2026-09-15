@@ -64,8 +64,11 @@ RAW_COLS = {
 # 生产 board 命名兼容: list_generator 双创=GEM/STAR, 内部=dual (同 model_meta.BOARD_TO_TRACK)
 _BOARD_GROUP = {"main": "main", "dual": "dual", "GEM": "dual", "STAR": "dual"}
 
-# ③+④ (2026-08-22 定案, WORM 153820): lr 0.03 + n800 + early stop + 地板 50
-# (与并行概率头完全一致; ES 见 _fit_with_es, 地板防 dual 短验证窗塌缩)
+# ③+④ (2026-08-22 定案, WORM legacy_prob_quality_lab_20260822_153820): lr 0.03 +
+# n800 + early stop + 地板 50. 该判词只覆盖本头 (legacy 数据流; note 里的"双头"指
+# mfe/c2c 两种标签, 非两块板). 并行概率头仍是其 08-14 阶段1/2 配方
+# (lr0.05/n200/无 ES) — 两头**不一致**, 移植须先在并行数据流跑 A/B.
+# ES 见 _fit_with_es, 地板防 dual 短验证窗塌缩.
 LGB_PARAMS = dict(
     objective="binary",
     num_leaves=31,

@@ -114,8 +114,20 @@ def collect_lists(
             (f"legacy__{_module_of(legacy)}", _valid_codes(df["symbol"])[:top_n])
         )
 
+    # GENIOUS 链路狙击 (2026-09-14 用户令 "出了 GENIOUS 列表 AUTO PUSH TO THS"):
+    # 边车由 scripts/_genious_excel.py 落, 只有 Sheet1 冠军四段 (观察池不进自选股)。
+    # 该源无历史样本 ⇒ 死区闸 fail-open 照推 (见 _deadzone_guard)。
+    genious = _newest(f"genious_stocklist_{date}__*.csv", list_dir)
+    if genious is not None:
+        df = pd.read_csv(genious, dtype={"symbol": str})
+        if "排名" in df.columns:
+            df = df.dropna(subset=["排名"]).sort_values("排名")
+        lists.append(
+            (f"genious__{_module_of(genious)}", _valid_codes(df["symbol"])[:top_n])
+        )
+
     if not lists:
-        raise SystemExit(f"无清单: parallel/legacy_stocklist_{date}__*.csv")
+        raise SystemExit(f"无清单: parallel/legacy/genious_stocklist_{date}__*.csv")
     return lists
 
 
@@ -723,7 +735,7 @@ def main() -> int:
     # 死区停推闸 (2026-09-05 拍板 "那就一起停吧"; 晚间细化: legacy/parallel 各用
     # 各的纯样本赢率互不混合): legacy 单看 top10 线, parallel 单看 parallel 线,
     # 只停报警的单另一单照推; 清单 CSV 照出照存; gen-only/dry-run 人工演练不拦
-    dz_line = {"legacy": "top10", "parallel": "parallel"}
+    dz_line = {"legacy": "top10", "parallel": "parallel", "genious": "genious"}
     alarms = {
         module: _deadzone_guard.is_alarm(dz_line[module.split("__", 1)[0]], date)
         for module, codes in lists

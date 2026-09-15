@@ -209,28 +209,28 @@ def _settled_outcomes(
     return p[["date", "symbol", "di", "win"]], grid
 
 
+_SRC_PREFIX = {
+    "legacy": "legacy_stocklist",
+    "parallel": "parallel_shortlist",
+    "genious": "genious_stocklist",
+}
+
+
 def _collect_history(source: str, list_dir=STOCK_LIST_DIR) -> pd.DataFrame:
-    """collect_lists 口径下指定源 ("legacy"/"parallel") 单独成史的出票样本。
+    """collect_lists 口径下指定源单独成史的出票样本。
 
     2026-09-05 晚用户拍板: legacy/parallel 各用各自纯样本赢率, 不再混合。
     函数内导入 collect_lists 防循环 (_ths_watchlist_push 依赖本模块)。
     """
     from scripts._ths_watchlist_push import collect_lists
 
-    if source == "legacy":
-        fps = glob.glob(str(list_dir / "legacy_stocklist_????????__*.csv"))
-    else:
-        fps = glob.glob(str(list_dir / "parallel_shortlist_????????__*.csv"))
+    prefix = _SRC_PREFIX[source]
+    fps = glob.glob(str(list_dir / f"{prefix}_????????__*.csv"))
     dates = sorted(
         {
             m.group(1)
             for f in fps
-            if (
-                m := re.search(
-                    r"(?:legacy_stocklist|parallel_shortlist)_(\d{8})__",
-                    os.path.basename(f),
-                )
-            )
+            if (m := re.search(rf"{prefix}_(\d{{8}})__", os.path.basename(f)))
         }
     )
     rows: list[tuple[str, str]] = []
@@ -257,6 +257,11 @@ def load_parallel_history(list_dir=STOCK_LIST_DIR) -> pd.DataFrame:
     return _collect_history("parallel", list_dir)
 
 
+def load_genious_history(list_dir=STOCK_LIST_DIR) -> pd.DataFrame:
+    """GENIOUS 冠军四段出票史 (2026-09-14 首夜起, 此前无样本 → fail-open 照推)。"""
+    return _collect_history("genious", list_dir)
+
+
 def load_density_history(list_dir=STOCK_LIST_DIR) -> pd.DataFrame:
     """密度影子单出票史 = prob10dens_{date}__*.csv 交付全集 (09-03 首夜起)。"""
     rows: list[tuple[str, str]] = []
@@ -276,6 +281,7 @@ _LOADERS = {
     "top10": load_legacy_history,
     "parallel": load_parallel_history,
     "prob10dens": load_density_history,
+    "genious": load_genious_history,
 }
 
 
