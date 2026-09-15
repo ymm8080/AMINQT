@@ -4,11 +4,19 @@
 输入股票代码 → 输出【大跌概率】+【关键指标】+【原因分析】。
 
 设计:
-  规则侧: 8 条已验证条件 → 得分档 → 历史上该档的真实命中率 (可解释, 天然校准)
+  规则侧: 一组已验证条件 (当前 10 条, 见 RULES) → 得分档 → 历史上该档的真实命中率
   模型侧: LGBM 排序 → isotonic 校准 → 真概率
   融合侧: 在校准段上用 logistic 叠 [模型logit, 规则分, 是否命中规则, 交互项],
           融合方式由 OOS 数据挑选, 不是拍脑袋。
   原因侧: 触发的规则 + 模型逐股贡献度 (pred_contrib) 双通道。
+  报警侧: 规则闸是极端值阈值, 对「处处偏高但无一极端」的形态够不着 —— OOS 真大跌
+          有 56.5% 落在 0 分档。服务口径取「规则 ∪ 模型」的并集: 规则 0 分而模型
+          >= MODEL_ALARM 时, 头条概率改用该格的 OOS 兑现 (见 bundle['alarm']), 不取
+          规则表那个只看 score 的低值 —— 否则头条会写"低风险", 与报警自相矛盾。
+  捕获侧: 用户口径是"抓跌停和大跌"。跌停是大跌的真子集 (OOS 169 日: 40 只/日 全
+          落在 256 只/日 内), 目标只有一个; 而 100% 召回要求标 100% 市场, 所以输出
+          改成 T1~T3 三层召回阶梯 + T4 未标面的实测残留 (见 CAPTURE_TIERS 与
+          bundle['capture']) —— 让"漏"永远显式, 而不是假装二值穷尽。
 
 三段切分 (严格防泄漏):
   FIT   < 20250701   训模型
@@ -19,6 +27,7 @@
   python scripts/bigdrop_check.py --build           # 训练+校准+融合+落盘 (WORM)
   python scripts/bigdrop_check.py 000978 002815     # 查询
   python scripts/bigdrop_check.py --rules           # 单规则命中率
+  python scripts/bigdrop_check.py --capture         # 捕获阶梯 (召回 vs 表面积)
   python scripts/bigdrop_check.py --compare         # 各口径 OOS 对比
 """
 
@@ -52,6 +61,23 @@ FIT_END, CAL_END = "20250701", "20260101"
 EMBARGO = 5
 BUNDLE_DIR = ROOT / "models" / "bigdrop"
 MIN_BUCKET = 300
+# 模型报警线。规则库全是极端值阈值, 对「处处偏高但无一极端」的中空形态全盲
+# (OOS 真大跌 56.5% 落在 0 分档)。规则沉默而模型 >= 此值时强制并列报警。
+MODEL_ALARM = 0.10
+# 跌停判据 (次日跌幅 <= 此值)。0915 起作为捕获阶梯的第二条目标线。
+DT_TH = -0.095
+
+# 捕获阶梯 (0915 用户令: 抓住所有跌停股和大跌股)。
+# 100% 做不到, 且跌停本来就读作大跌的真子集 (OOS 169 日: 跌停 40 只/日 全落在
+# 大跌 256 只/日 内), 所以不存在「两个目标」——只有一个尾部, 剩下全是表面积
+# 问题。既然 100% 只能靠标 100% 市场换, 输出就不假装二值穷尽, 改成三层召回
+# 阶梯 + 未标面实测残留, 让「漏」永远显式而不是静默。
+# (档名, 规则得分下限, 模型当日前 q; q=None 表示改用绝对线 MODEL_ALARM)
+CAPTURE_TIERS: list[tuple[str, int, float | None]] = [
+    ("T1 报警", 1, None),  # 规则>=1 ∪ 模型>=MODEL_ALARM —— 现役服务口径
+    ("T2 警戒", 1, 0.20),  # ∪ 模型当日前 20%
+    ("T3 关注", 1, 0.40),  # ∪ 模型当日前 40%
+]
 
 COLS = [
     "symbol",
@@ -148,6 +174,15 @@ RULES: list[tuple[str, str, str, str]] = [
         "10日累计涨幅 > 20%",
         "十个交易日涨超两成, 短线获利盘密集, 一旦转弱容易集中兑现。"
         "补的是「中等强度涨过头」这一族 —— 原来 8 条闸全是极端值阈值, 够不着",
+    ),
+    (
+        "hi_ff_turn",
+        "自由流通高换手",
+        "自由流通换手率 > 10%",
+        "自由流通盘单日换手超一成, 筹码在大幅易手 —— 量价族才是模型真正的主力信号。"
+        "本条补的是 600814 (20260910 收 -3.17%, 次日 -7.33%) 这类漏报: 该股当日 "
+        "10日涨幅 94.5 分位/bias20 94.4/5日振幅 93.8/自由流通换手 93.7 分位, "
+        "却无一条极端闸够得着。阈值扫描两段单调稳健 (拟合 1.79x / OOS 1.97x)",
     ),
 ]
 
@@ -325,6 +360,10 @@ def rule_flags(d: pd.DataFrame) -> pd.DataFrame:
             # 对照老 score>=3 的 24.51% —— 打 85 折, 不是灌水。
             # 注意「缩量」不在此列: 在 ret10>20% 人群里缩量挑的是低风险半边。
             "rise10": d["ret10"] > 0.20,
+            # 第 10 条 (0915): 量价族连续信号。原 9 条全是极端值阈值, OOS 真大跌
+            # 56.5% 落在 0 分档 —— 本条把覆盖 43.5% 抬到 53.9%, 池内精准度仅
+            # 13.15%→12.45%。阈值 8/10/12/15/20/25 两段单调, 取 10 (非贴合个股)。
+            "hi_ff_turn": d["free_float_turnover_rate"] > 10,
         },
         index=d.index,
     )
@@ -350,6 +389,9 @@ def build() -> dict:
     val = d["y"].notna().to_numpy()
     X = d[FEATS].astype(np.float32)
     y = d["y"].to_numpy(float)
+    # 捕获阶梯的第二条目标线。fwd 已带 ok 掩码 (停牌/断档为 NaN), 所以
+    # 有效性与 y 完全一致, 不需要另建掩码。
+    ydt = (d["fwd"] <= DT_TH).to_numpy(float)
     dt = d["date"].to_numpy()
     del d, F
 
@@ -407,6 +449,81 @@ def build() -> dict:
 
     # ---- OOS 对比: 用户只要概率, 判据是 Brier + 可靠性, 不是 AUC ----
     yo, bo = y[oos], float(y[oos].mean())
+
+    # 模型报警格 (规则沉默 / 模型报警) 的 OOS 兑现 —— 存进 bundle 供 query 引用,
+    # 避免把回测数字硬编码进输出 (复核见 tmp_t/_600814_fix2_0915.py)
+    a_oos = oos & (p_iso >= MODEL_ALARM) & (score_all == 0)
+    n_day_oos = max(1, np.unique(dt[oos]).size)
+    alarm = dict(
+        th=MODEL_ALARM,
+        oos_n=int(a_oos.sum()),
+        oos_prec=float(y[a_oos].mean()) if a_oos.sum() else float("nan"),
+        oos_lift=float(y[a_oos].mean() / bo) if a_oos.sum() else float("nan"),
+        daily=float(a_oos.sum() / n_day_oos),
+    )
+    print(
+        f"\n模型报警格 (模型>={MODEL_ALARM:.0%} 且规则 0 分): "
+        f"OOS n={alarm['oos_n']:,}, 次日大跌 {alarm['oos_prec']:.2%} "
+        f"(基准 {bo:.2%} 的 {alarm['oos_lift']:.2f} 倍), "
+        f"日均 {alarm['daily']:.1f} 只 —— 规则库漏掉的那部分靠这一格兜"
+    )
+
+    # 捕获阶梯的 OOS 实测 (存进 bundle, query/--capture 都不硬编码这些数字)。
+    # 档是嵌套的: T2 含 T1, T3 含 T2, 所以召回按累计算。
+    # 变量名避开 m / hit —— 上面分别被 LGBM 模型和融合层的命中项占用。
+    rk_oos = pd.Series(p_iso).groupby(dt).rank(pct=True).to_numpy()
+    oos_n, dt_n, y_n = int(oos.sum()), int(ydt[oos].sum()), int(y[oos].sum())
+    cum = np.zeros_like(oos)
+    capture = []
+    for nm, rmin, q in CAPTURE_TIERS:
+        widen = (score_all >= rmin) | (
+            (p_iso >= MODEL_ALARM) if q is None else (rk_oos >= 1.0 - q)
+        )
+        cum = cum | widen
+        msk = np.asarray(oos & cum, bool)
+        capture.append(
+            dict(
+                name=nm,
+                daily=msk.sum() / n_day_oos,
+                share=msk.sum() / oos_n,
+                bigdrop_rate=float(y[msk].mean()),
+                bigdrop_recall=float(y[msk].sum() / y_n),
+                dt_rate=float(ydt[msk].mean()),
+                dt_recall=float(ydt[msk].sum() / dt_n),
+            )
+        )
+    rest = np.asarray(oos & ~cum, bool)
+    capture.append(
+        dict(
+            name="T4 未标",
+            daily=rest.sum() / n_day_oos,
+            share=rest.sum() / oos_n,
+            bigdrop_rate=float(y[rest].mean()),
+            bigdrop_recall=float(y[rest].sum() / y_n),
+            dt_rate=float(ydt[rest].mean()),
+            dt_recall=float(ydt[rest].sum() / dt_n),
+        )
+    )
+    print(
+        f"\n{'=' * 96}\n捕获阶梯 (OOS {n_day_oos} 日; 大跌基准 {bo:.3%} "
+        f"{y_n / n_day_oos:.0f} 只/日, 跌停基准 {ydt[oos].mean():.3%} "
+        f"{dt_n / n_day_oos:.1f} 只/日)"
+    )
+    print(
+        f"{'档':<10}{'日均':>7}{'占市':>8}{'大跌召回':>10}{'跌停召回':>10}"
+        f"{'本档大跌率':>11}{'本档跌停率':>11}"
+    )
+    for c in capture:
+        print(
+            f"{c['name']:<10}{c['daily']:>7.0f}{c['share']:>8.2%}"
+            f"{c['bigdrop_recall']:>10.1%}{c['dt_recall']:>10.1%}"
+            f"{c['bigdrop_rate']:>11.2%}{c['dt_rate']:>11.2%}"
+        )
+    print(
+        f"  未标面仍含 {capture[-1]['bigdrop_recall']:.1%} 的大跌 / "
+        f"{capture[-1]['dt_recall']:.1%} 的跌停 —— 100% 召回要求标 100% 市场, "
+        f"所以这个残留是口径的一部分, 不是缺陷"
+    )
     print(
         f"\n{'=' * 96}\nOOS 概率质量对比 (基准 {bo:.3%}; 常数预测 Brier "
         f"{bo * (1 - bo):.5f})"
@@ -497,6 +614,8 @@ def build() -> dict:
         oos_brier={n: float(br) for n, _, br, _, _, _ in rows},
         oos_cal_err={n: float(ce) for n, _, _, ce, _, _ in rows},
         oos_auc=float(roc_auc_score(yo, p_fus[oos])),
+        alarm=alarm,
+        capture=capture,
     )
     joblib.dump(bundle, BUNDLE_DIR / f"bundle_{tag}.joblib")
     joblib.dump(bundle, BUNDLE_DIR / "bundle_latest.joblib")
@@ -645,14 +764,59 @@ def own_history_line(d: pd.DataFrame, row: pd.Series) -> str:
     return s
 
 
+def should_alarm(model_p: float, score: int, th: float = MODEL_ALARM) -> bool:
+    """规则沉默但模型报警 —— 规则库对「中空」形态全盲, 这一格必须单独举手。
+
+    规则已举手 (score>=1) 时不重复报警: 规则表概率本身已经抬升。
+    """
+    return int(score) == 0 and float(model_p) >= float(th)
+
+
+def effective_prob(
+    rule_p: float, model_p: float, score: int, al: dict
+) -> tuple[float, bool]:
+    """服务口径 = 规则与模型的并集, 只报一个数。
+
+    规则沉默而模型报警时, 条件概率应由「规则 0 分 且 模型>=线」这一格给出,
+    而不是规则表那个只看 score 的 2% —— 否则头条会写「低风险」, 和报警自相矛盾。
+    """
+    if should_alarm(model_p, score, al.get("th", MODEL_ALARM)) and al.get("oos_prec"):
+        return float(al["oos_prec"]), True
+    return float(rule_p), False
+
+
+def capture_tier(
+    score: int, model_p: float, model_rank: float, al_th: float = MODEL_ALARM
+) -> tuple[str, int]:
+    """本股落在捕获阶梯第几档 → (档名, 档号)。档号超出阶梯 = 未被标记。
+
+    档内是并集: 规则够分 或 模型够响, 任一边看见即入档 (用户口径)。
+    model_rank = 该股模型概率在当日的分位 (0~1)。
+    """
+    for n, (nm, rmin, q) in enumerate(CAPTURE_TIERS, start=1):
+        hit_rule = int(score) >= rmin
+        hit_model = (
+            float(model_p) >= al_th if q is None else float(model_rank) >= 1.0 - q
+        )
+        if hit_rule or hit_model:
+            return nm, n
+    return "T4 未标", len(CAPTURE_TIERS) + 1
+
+
 def query(codes: list[str], b: dict) -> None:
     d = load_frame()
     last = d.groupby("symbol")["date"].transform("max") == d["date"]
-    cur = d[last & d["symbol"].isin(codes)]
+    # 当日全横截面一起打分: 模型报警通道要看当日分位。只在当日算, 不做全 panel 推理。
+    day = d[last]
+    cur = day[day["symbol"].isin(codes)]
     if not len(cur):
         print("这些代码不在面板最新交易日")
         return
-    F, sc, P = score_frame(cur, b)
+    F, sc, P = score_frame(day, b)
+    p_iso_day = P["模型(isotonic校准)"]
+    rk_day = pd.Series(p_iso_day).rank(pct=True).to_numpy()
+    didx = {s: n for n, s in enumerate(day["symbol"].to_numpy())}
+    cap = b.get("capture") or []
     # 全市场规则得分, 用于"同分档"对照 —— 保证跌率和头条概率出自同一分组
     sc_all = rule_flags(d).sum(axis=1).to_numpy()
     win = b.get("winner", "融合(规则+模型)")
@@ -669,22 +833,68 @@ def query(codes: list[str], b: dict) -> None:
     print(f"  概率口径 = {win}; 原因 = 触发规则 + 模型贡献度")
 
     for code in codes:
-        pos = np.where(cur["symbol"].to_numpy() == code)[0]
-        if not len(pos):
+        if code not in didx:
             print(f"\n{'=' * 94}\n{code}  不在最新交易日 (可能停牌/退市)")
             continue
-        k = pos[0]
-        i = cur.index[k]
-        prob = float(P[win][k])
+        k = didx[code]
+        i = day.index[k]
+        # 模型报警通道: 规则库的闸全是极端值阈值, 对「处处偏高但无一极端」的中空
+        # 形态全盲 (OOS 真大跌 56.5% 落在 0 分档)。
+        al = b.get("alarm") or {}
+        mp = float(p_iso_day[k])
+        prob, warn = effective_prob(P[win][k], mp, int(sc[k]), al)
         lv = next(n for t, n in lvl if prob >= t)
         fired = [c for c in F.columns if bool(F.loc[i, c])]
-        row = cur.loc[i]
+        row = day.loc[i]
         print(
             f"\n{'=' * 94}\n{code}   次日大跌概率 {prob:.1%}   [{lv}风险]"
             f"   (基准 {b['base_pre']:.1%}, {prob / b['base_pre']:.1f} 倍)"
+            + ("   ← 模型报警格兑现, 非规则表" if warn else "")
         )
         parts = "  ".join(f"{'★' if n == win else ''}{n} {P[n][k]:.1%}" for n in P)
         print(f"  各口径: {parts}   (规则得分 {sc[k]}/{len(F.columns)})")
+
+        # 捕获阶梯档位。T1 之外也要报 —— 用户口径是「抓跌停和大跌」, 只报头条
+        # 会让人以为没报警就是安全。
+        tname, tnum = capture_tier(
+            int(sc[k]), mp, float(rk_day[k]), al.get("th", MODEL_ALARM)
+        )
+        # 直报分位而不是「当日前 X%」—— 后者是 1-rk, 高分位(危险)反而显示成小数字,
+        # 600519(分位 12%) 会印成「前 88.1%」读着像危险, 正好反了。
+        dtxt = f"   (模型概率分位 {float(rk_day[k]):.1%}, 越高越危险)"
+        print(f"  捕获档位: {tname}{dtxt}")
+        if cap and tnum > 1:
+            t1 = cap[0]
+            print(
+                f"    本股不在 T1 报警档。T1 在 OOS 上只兜住 {t1['bigdrop_recall']:.1%} "
+                f"的大跌 / {t1['dt_recall']:.1%} 的跌停 (日均 {t1['daily']:.0f} 只, "
+                f"{t1['share']:.1%} 市) —— 没被报警 ≠ 安全; 更宽的捕获阶梯见 --capture"
+            )
+
+        # 必须排在下面那些"同分档实测 x%"之前 —— 否则读者看到低分档的低大跌率
+        # 会直接判安全。
+        if warn:
+            pct = float((p_iso_day > mp).mean())
+            print(
+                f"\n  ⚠ 【模型报警 · 规则未覆盖】模型概率 {mp:.1%} (当日前 {pct:.1%})"
+                f" —— 规则 0 分不等于安全"
+            )
+            print(
+                f"     规则库 {len(F.columns)} 条闸全是极端值阈值, 对「各处都偏高但无一处"
+                f"极端」的中空形态够不着; OOS 真大跌有 56.5% 落在 0 分档。"
+            )
+            if al.get("oos_n"):
+                print(
+                    f"     「模型>={al['th']:.0%} 且规则 0 分」这一格 OOS 兑现 "
+                    f"{al['oos_prec']:.2%} (基准的 {al['oos_lift']:.2f} 倍), "
+                    f"日均约 {al['daily']:.0f} 只。"
+                )
+                print(
+                    "     本股当日落在这一格 → 头条概率已按本格兑现, 不取低分档的规则表值。"
+                )
+            mct = float(np.median(p_iso_day))
+            print(f"     (当日模型概率中位 {mct:.1%}, 本股 {mp / mct:.1f} 倍)")
+
         print(
             f"  同分档({int(sc[k])}/{len(F.columns)})实测: "
             f"{three_way(d, sc_all == int(sc[k]))}"
@@ -706,6 +916,12 @@ def query(codes: list[str], b: dict) -> None:
                 f"{row['turnover_rate']:.2f}%",
                 "> 20%",
                 row["turnover_rate"] > 20,
+            ),
+            (
+                "自由流通换手",
+                f"{row['free_float_turnover_rate']:.2f}%",
+                "> 10%",
+                row["free_float_turnover_rate"] > 10,
             ),
             ("量比", f"{row['volume_ratio']:.2f}", "> 2.0", row["volume_ratio"] > 2),
             (
@@ -742,7 +958,7 @@ def query(codes: list[str], b: dict) -> None:
                 print(f"       {why[c]}")
         else:
             print(f"  【规则命中 0/{len(F.columns)}】形态不在历史大跌高发画像内")
-        ex = explain(cur, b, i)
+        ex = explain(day, b, i)
         if ex:
             print("  【模型贡献度 Top (log-odds, 正=推高危险)】")
             for nm, v in ex:
@@ -794,12 +1010,88 @@ def show_rules(b: dict) -> None:
         )
 
 
+def show_capture(b: dict) -> None:
+    """捕获阶梯: OOS 承诺 (建包时算好, 不在此重算) + 最新交易日的实现入档数。
+
+    100% 召回要求标 100% 市场, 所以 T4 未标面永远非空 —— 它的残留率是口径的
+    一部分, 打印出来是为了让「漏」显式, 而不是假装二值穷尽。
+    """
+    cap = b.get("capture") or []
+    if not cap:
+        print("这个模型包没有 capture 块 (0915 之前的包), 请重新 --build")
+        return
+    print(
+        f"\n捕获阶梯 [模型包 {b['tag']}]   大跌判据 <= -{DROP_TH:.0%}   "
+        f"跌停判据 <= {DT_TH:.1%}"
+    )
+    print(
+        f"{'档':<10}{'OOS日均':>9}{'OOS占市':>9}{'大跌召回':>10}{'跌停召回':>10}"
+        f"{'本档大跌率':>11}{'本档跌停率':>11}"
+    )
+    for c in cap:
+        print(
+            f"{c['name']:<10}{c['daily']:>9.0f}{c['share']:>9.2%}"
+            f"{c['bigdrop_recall']:>10.1%}{c['dt_recall']:>10.1%}"
+            f"{c['bigdrop_rate']:>11.2%}{c['dt_rate']:>11.2%}"
+        )
+    print(
+        f"  未标面 ({cap[-1]['share']:.1%} 市) 里仍有 {cap[-1]['bigdrop_recall']:.1%} "
+        f"的大跌 / {cap[-1]['dt_recall']:.1%} 的跌停, 其大跌率仅为基准的 "
+        f"{cap[-1]['bigdrop_rate'] / b['oos_base']:.2f} 倍"
+    )
+
+    d = load_frame()
+    last = d.groupby("symbol")["date"].transform("max") == d["date"]
+    day = d[last]
+    F, sc, P = score_frame(day, b)
+    sa = np.asarray(sc)
+    p = np.asarray(P["模型(isotonic校准)"], dtype=float)
+    rk = pd.Series(p).rank(pct=True).to_numpy()
+    th = (b.get("alarm") or {}).get("th", MODEL_ALARM)
+    tier = np.full(len(day), len(cap), dtype=int)
+    cum = np.zeros(len(day), bool)
+    for n, (_nm, rmin, q) in enumerate(CAPTURE_TIERS):
+        hit = (sa >= rmin) | ((p >= th) if q is None else (rk >= 1.0 - q))
+        tier[hit & ~cum] = n + 1
+        cum |= hit
+    cnt = np.bincount(tier, minlength=len(cap) + 1)
+    print(f"\n最新交易日 {day['date'].max()} 实现入档 (全市场 {len(day):,} 只):")
+    for k, c in enumerate(cap, start=1):
+        print(f"  {c['name']:<10}{int(cnt[k]):>7,}  ({cnt[k] / len(day):>6.2%})")
+
+
+def show_compare(b: dict) -> None:
+    """各口径的 OOS 概率质量 —— 全部读自 bundle, 不重训不重算。
+
+    这些数字在 --build 时算出并落盘 (oos_brier / oos_cal_err), 这里只复读, 方便
+    随时复核「为什么选了这个口径」而不用重跑一次建包。
+    """
+    bo = float(b["oos_base"])
+    print(
+        f"\n各口径 OOS 概率质量 [模型包 {b['tag']}]   基准 {bo:.3%}   "
+        f"常数预测 Brier {bo * (1 - bo):.5f}"
+    )
+    print(f"{'口径':<24}{'OOS Brier':>12}{'校准误差':>12}")
+    for n, br in b["oos_brier"].items():
+        mark = "   ← winner" if n == b.get("winner") else ""
+        print(f"{n:<24}{br:>12.5f}{b['oos_cal_err'][n]:>12.4f}{mark}")
+    print(
+        f"\n融合口径 OOS AUC {b['oos_auc']:.4f}"
+        f"   (切分 fit<{b['split']['fit_end']}, cal<{b['split']['cal_end']}, "
+        f"embargo {b['split']['embargo']})"
+    )
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
     if "--build" in args:
         build()
     elif "--rules" in args:
         show_rules(load_bundle())
+    elif "--capture" in args:
+        show_capture(load_bundle())
+    elif "--compare" in args:
+        show_compare(load_bundle())
     elif args and args[0].startswith("-"):
         print(__doc__)
     elif args:
