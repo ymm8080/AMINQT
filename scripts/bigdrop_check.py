@@ -142,6 +142,13 @@ RULES: list[tuple[str, str, str, str]] = [
         "60日涨幅 > 50%",
         "底部起来涨超五成, 随时可能进入兑现窗口",
     ),
+    (
+        "rise10",
+        "10日急涨",
+        "10日累计涨幅 > 20%",
+        "十个交易日涨超两成, 短线获利盘密集, 一旦转弱容易集中兑现。"
+        "补的是「中等强度涨过头」这一族 —— 原来 8 条闸全是极端值阈值, 够不着",
+    ),
 ]
 
 FEATS = [
@@ -313,6 +320,11 @@ def rule_flags(d: pd.DataFrame) -> pd.DataFrame:
             "vol_surge": d["volume_ratio"] > 2,
             "today_drop": d["pctChg"] <= -5,
             "big_rise": d["low60_gain"] > 0.50,
+            # 第 9 条 (0915): 中等强度涨过头。全样本覆盖 20.0% 的大跌,
+            # score==0 桶内 OOS 3.63%→9.58%; 新增告警的 OOS 大跌率 19.89%,
+            # 对照老 score>=3 的 24.51% —— 打 85 折, 不是灌水。
+            # 注意「缩量」不在此列: 在 ret10>20% 人群里缩量挑的是低风险半边。
+            "rise10": d["ret10"] > 0.20,
         },
         index=d.index,
     )
@@ -672,8 +684,11 @@ def query(codes: list[str], b: dict) -> None:
             f"   (基准 {b['base_pre']:.1%}, {prob / b['base_pre']:.1f} 倍)"
         )
         parts = "  ".join(f"{'★' if n == win else ''}{n} {P[n][k]:.1%}" for n in P)
-        print(f"  各口径: {parts}   (规则得分 {sc[k]}/8)")
-        print(f"  同分档({int(sc[k])}/8)实测: {three_way(d, sc_all == int(sc[k]))}")
+        print(f"  各口径: {parts}   (规则得分 {sc[k]}/{len(F.columns)})")
+        print(
+            f"  同分档({int(sc[k])}/{len(F.columns)})实测: "
+            f"{three_way(d, sc_all == int(sc[k]))}"
+        )
         print(f"  涨跌停桶实测: {three_way(d, bucket_mask(d, row).to_numpy())}")
         note = situation_note(row)
         if note:
@@ -693,6 +708,12 @@ def query(codes: list[str], b: dict) -> None:
                 row["turnover_rate"] > 20,
             ),
             ("量比", f"{row['volume_ratio']:.2f}", "> 2.0", row["volume_ratio"] > 2),
+            (
+                "10日涨幅",
+                f"{row['ret10']:+.1%}",
+                "> +20%",
+                row["ret10"] > 0.20,
+            ),
             (
                 "60日涨幅",
                 f"{row['low60_gain']:+.1%}",
@@ -715,12 +736,12 @@ def query(codes: list[str], b: dict) -> None:
 
         print("\n  原因分析:")
         if fired:
-            print(f"  【规则命中 {len(fired)}/8】")
+            print(f"  【规则命中 {len(fired)}/{len(F.columns)}】")
             for c in fired:
                 print(f"    · {name_map[c]}  [{thr_map[c]}]")
                 print(f"       {why[c]}")
         else:
-            print("  【规则命中 0/8】形态不在历史大跌高发画像内")
+            print(f"  【规则命中 0/{len(F.columns)}】形态不在历史大跌高发画像内")
         ex = explain(cur, b, i)
         if ex:
             print("  【模型贡献度 Top (log-odds, 正=推高危险)】")

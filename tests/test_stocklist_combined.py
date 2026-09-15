@@ -138,4 +138,6 @@ def test_next_path_prefers_canonical_then_fills_first_gap(tmp_path):
     (tmp_path / f"stocklist_combined_{DATE}__v2.xlsx").write_text("x", encoding="utf-8")
     assert sc._next_path(DATE, tmp_path).name == f"stocklist_combined_{DATE}__v3.xlsx"
     # 别日互不影响
-    assert sc._next_path("20260106", tmp_path).name == "stocklist_combined_20260106.xlsx"
+    assert (
+        sc._next_path("20260106", tmp_path).name == "stocklist_combined_20260106.xlsx"
+    )

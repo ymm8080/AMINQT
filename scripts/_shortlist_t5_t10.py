@@ -1180,7 +1180,9 @@ def _ym_lines(px: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
         index=c.index,
         columns=c.columns,
     )
-    long_line = raw.rolling(int(cfg.get("ym_long_span", 19)), min_periods=1).mean() + 100.0
+    long_line = (
+        raw.rolling(int(cfg.get("ym_long_span", 19)), min_periods=1).mean() + 100.0
+    )
     mid_line = raw.ewm(span=int(cfg.get("ym_mid_span", 4)), adjust=False).mean() + 100.0
     return long_line, mid_line
 

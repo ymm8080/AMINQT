@@ -50,7 +50,9 @@ def _make_panel_ym(paths=None):
         }
     rows = []
     for sym, p in paths.items():
-        for d, px in zip(pd.bdate_range(end=pd.Timestamp("2026-09-11"), periods=len(p)), p):
+        for d, px in zip(
+            pd.bdate_range(end=pd.Timestamp("2026-09-11"), periods=len(p)), p
+        ):
             rows.append(
                 {
                     "symbol": sym,
@@ -79,7 +81,9 @@ def _make_panel_level():
     }
     rows = []
     for sym, p in paths.items():
-        for d, px in zip(pd.bdate_range(end=pd.Timestamp("2026-09-11"), periods=len(p)), p):
+        for d, px in zip(
+            pd.bdate_range(end=pd.Timestamp("2026-09-11"), periods=len(p)), p
+        ):
             rows.append(
                 {
                     "symbol": sym,
@@ -386,9 +390,7 @@ def test_trend_gate_r60_level_cuts_deep_drawdown_bounce(tmp_path, monkeypatch):
             "r60_max": -0.10,
         },
     )
-    monkeypatch.setattr(
-        mod, "PANEL_V3_PATH", _panel_fp(tmp_path, _make_panel_level())
-    )
+    monkeypatch.setattr(mod, "PANEL_V3_PATH", _panel_fp(tmp_path, _make_panel_level()))
     res = pd.DataFrame(
         {"symbol": ["600001", "600002"], "board": ["main", "main"], "score": [0.9, 0.8]}
     )
@@ -404,9 +406,7 @@ def test_trend_gate_without_r60_level_keeps_deep_drawdown(tmp_path, monkeypatch)
         "PARALLEL_TREND_GATE",
         {"enable": True, "mode": "ym_long", "crash_max_1d": -0.08},
     )
-    monkeypatch.setattr(
-        mod, "PANEL_V3_PATH", _panel_fp(tmp_path, _make_panel_level())
-    )
+    monkeypatch.setattr(mod, "PANEL_V3_PATH", _panel_fp(tmp_path, _make_panel_level()))
     res = pd.DataFrame(
         {"symbol": ["600001", "600002"], "board": ["main", "main"], "score": [0.9, 0.8]}
     )
