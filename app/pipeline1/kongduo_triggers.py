@@ -123,7 +123,7 @@ def _pad(s: str, width: int) -> str:
 def _seg_lines() -> tuple[str, ...]:
     """冠军四段条件 (冠军表底图例与观察池图例共用); 阈值一律从 GENIOUS 取。"""
     c = GENIOUS
-    deep = f"{c['r60_deep']:.0%}"                      # -30%
+    deep = f"{c['r60_deep']:.0%}"  # -30%
     base = "0" if c["r120_base"] == 0 else f"{c['r120_base']:.0%}"
     return (
         f"  {CH3_T3_DEEP_QUIET} = T3状态点火 且 r60≤{deep} 且 量比≤{c['vr_quiet']}",
@@ -137,25 +137,25 @@ def _seg_lines() -> tuple[str, ...]:
 def _col_lines() -> tuple[tuple[str, str], ...]:
     """列说明 — 冠军四段与观察池的列完全相同, 只写一份, 免得两处漂移。"""
     c = GENIOUS
-    deep = f"{c['r60_deep']:.0%}"                       # -30%
+    deep = f"{c['r60_deep']:.0%}"  # -30%
     base = "0" if c["r120_base"] == 0 else f"{c['r120_base']:.0%}"
     return (
         ("排名", "表内序号; 先按段位序 (CH3→CH2→CH1→CH2B), 段内按 r60 从深到浅"),
         ("symbol", "6 位股票代码 (已去掉 .SH/.SZ 后缀)"),
-        ("层", "冠军段位 — 四段互斥, 见上方\"段位说明\""),
+        ("层", '冠军段位 — 四段互斥, 见上方"段位说明"'),
         (
             "触发器",
             "今日命中的触发器: T1洗盘日 / T2翻转日 / T3状态点火 / T2+T3(同日双触发)",
         ),
-        ("类型", "r60/r120 分桶标签 — 见下方\"类型说明\""),
+        ("类型", 'r60/r120 分桶标签 — 见下方"类型说明"'),
         ("当日涨幅", "今日涨跌幅 = 今收 / 昨收 − 1"),
         (
             "执行档",
             "T+1开盘进 | T+1仍涨确认→T+1收盘进 (20:30 已收盘, 只能 T+1 买)",
         ),
         ("r20", "最近 20 个交易日涨跌幅 (= 今收 / 20交易日前收 − 1)"),
-        ("r60", f"最近 60 个交易日涨跌幅 (中期位置; ≤{deep} 即本表的\"深跌\")"),
-        ("r120", f"最近 120 个交易日涨跌幅 (长期位置; ≤{base} 即\"半年没涨\")"),
+        ("r60", f'最近 60 个交易日涨跌幅 (中期位置; ≤{deep} 即本表的"深跌")'),
+        ("r120", f'最近 120 个交易日涨跌幅 (长期位置; ≤{base} 即"半年没涨")'),
         ("获利盘", "当日获利盘比例; 越高 = 上方套牢盘越少"),
         (
             "主力筹码比例",
@@ -168,13 +168,13 @@ def _col_lines() -> tuple[tuple[str, str], ...]:
         ("量比", "今量 / 前 5 日均量; <1 缩量, >1 放量"),
         (
             "乖离MA10",
-            "收盘 / 10日均线 − 1: 正 = 在均线上方, 越大越\"追高/过热\"; 负 = 均线下方",
+            '收盘 / 10日均线 − 1: 正 = 在均线上方, 越大越"追高/过热"; 负 = 均线下方',
         ),
         ("5日回撤", "近 5 日相对 20 日高点的最深回撤 (负值, 越负回撤越深)"),
         (
             "大涨闸",
             "过闸 | 被拦 — 大涨三条件闸 (低动量 + 右侧拐头 + 缩量) 的标注; "
-            "**不删任何一行**, 见下方\"大涨闸说明\"",
+            '**不删任何一行**, 见下方"大涨闸说明"',
         ),
         ("全样本口径", "该段位全样本 (2023-01~2026-09) 胜率 / 5日均收益; 含选段偏差"),
     )
@@ -183,7 +183,7 @@ def _col_lines() -> tuple[tuple[str, str], ...]:
 def _type_lines() -> tuple[tuple[str, str], ...]:
     """r60/r120 分桶标签 (A/C/B2/B1/B3/D1/D2) 说明。"""
     c = GENIOUS
-    deep = f"{c['r60_deep']:.0%}"                       # -30%
+    deep = f"{c['r60_deep']:.0%}"  # -30%
     base = "0" if c["r120_base"] == 0 else f"{c['r120_base']:.0%}"
     return (
         (
@@ -295,21 +295,25 @@ def sheet2_legend() -> tuple[str, ...]:
             for s, name in zip(bands, SHEET2_LAYERS)
         ),
         "  余票口径: T2余/T3余 = 命中 T2/T3 但已进冠军段的票不再进观察带。",
-        f"  四臂\"剔毒\"外闸: r60≤{c['band_r60_max']:.0%}、量比≤{c['band2_vr_outer_max']:g}"
+        f'  四臂"剔毒"外闸: r60≤{c["band_r60_max"]:.0%}、量比≤{c["band2_vr_outer_max"]:g}'
         f"(T3臂 {vr3_txt})、昨日乖离≤{c['band2_ext10p_max']:.2f}"
         f" — 无此闸温火臂会吞掉任何 r120≤0 的当日上涨票 (24.5 → 140 票/日)。",
         "",
         "★ 排序键 = 观察分 (不显示在列里; 表已按它从高到低排好, 重复名次见「火群全量」)",
         f"  = 同日截面 z 分求和  -({' + '.join(RANK_Z_COLUMNS)})",
-        "  含义: 带宽越窄 / 越贴 MA10 / 获利盘越低 / 跌得越深 → 分越高 = 越\"还没涨透\"; "
+        '  含义: 带宽越窄 / 越贴 MA10 / 获利盘越低 / 跌得越深 → 分越高 = 越"还没涨透"; '
         "已发挥完的自动沉底。",
         "  实测 (全 896 日): 首档 +0.65% vs 末档 -0.03%, IC +0.077 (t 8.7), 前后半样本同号。",
         "  期望≈50% 平水 — 这是**观察**排序, 不是全买清单 (排名键换成段位反而伤 IC, 同日截面 IC -0.025)。",
         "",
         "列说明 (按表内从左到右; 末两列 SL* 仅本表有)",
         *(_pad("  " + k, cw + 2) + "= " + v for k, v in cols[:-1]),
-        "  " + _pad("SL翻正年龄", cw) + "= 益盟 S-L 由负转正至今的交易日数 (0 = 今日刚翻正)",
-        "  " + _pad("SL洗盘天数", cw) + "= 这次翻正之前那段负值持续了多少交易日 (越长洗得越久)",
+        "  "
+        + _pad("SL翻正年龄", cw)
+        + "= 益盟 S-L 由负转正至今的交易日数 (0 = 今日刚翻正)",
+        "  "
+        + _pad("SL洗盘天数", cw)
+        + "= 这次翻正之前那段负值持续了多少交易日 (越长洗得越久)",
         "  两列只作标注: 实测 IC 仅 0.013 (t 1.5), 80.6% 与 T2 图标翻转重叠, 故不当排序键。",
         *(_pad("  " + k, cw + 2) + "= " + v for k, v in cols[-1:]),
         "",
@@ -424,9 +428,7 @@ def compute_main_chip_ratio(df: pd.DataFrame) -> pd.DataFrame:
         h = g["high"].to_numpy(float)
         low = g["low"].to_numpy(float)
         c = g["close"].to_numpy(float)
-        t = np.clip(
-            np.nan_to_num(g["turnover_rate"].to_numpy(float)) / 100.0, 0.0, 1.0
-        )
+        t = np.clip(np.nan_to_num(g["turnover_rate"].to_numpy(float)) / 100.0, 0.0, 1.0)
         red = np.full(len(g), np.nan)
         green = np.full(len(g), np.nan)
         dist = np.zeros(grid.size)
@@ -515,9 +517,11 @@ def _th_signal(df: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
     var1 = 100 + _pos_vec(df["high"], df["low"], df["close"], 21, 90, symbols) - 90
     inner6 = 100 - _pos_vec(df["high"], df["low"], df["close"], 6, 100, symbols)
     sig = inner6.groupby(symbols, sort=False).transform(
-        lambda x: (100 - x.rolling(34, min_periods=34).mean())
-        .rolling(6, min_periods=6)
-        .mean()
+        lambda x: (
+            (100 - x.rolling(34, min_periods=34).mean())
+            .rolling(6, min_periods=6)
+            .mean()
+        )
     )
     v_prev = var1.groupby(symbols, sort=False).shift(1)
     s_prev = sig.groupby(symbols, sort=False).shift(1)
@@ -549,21 +553,31 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # 20 日高低带宽 (压缩度): Sheet2 排序键之一, 窄=未启动
-    out["band20"] = _roll(out["high"], 20, "max", g) / _roll(out["low"], 20, "min", g) - 1
+    out["band20"] = (
+        _roll(out["high"], 20, "max", g) / _roll(out["low"], 20, "min", g) - 1
+    )
 
     # 益盟 S-L 标准化 = (短期线-长期线)/长期线, 短期线=RSV14+100, 长期线=MA(RSV34,19)+100。
     # 两者同加 100, 故 sign(SL) 等价于 RSV14 > MA(RSV34,19), 只取符号做状态机。
     # 仅作 Sheet2 **标注** (翻正年龄/洗盘天数), 不作排序主键: 全 897 日实测 IC 0.013 (t 1.5),
     # 且在翻正子集内会毁掉观察分单调性; 另有 80.6% 与 T2 图标翻转重叠 (点二列相关 0.274)。
-    sl_pos = (_rsv(out, 14) > _rsv(out, 34).groupby(g, sort=False).transform(
-        lambda x: x.rolling(19, min_periods=19).mean()
-    )).fillna(False).astype(bool)
+    sl_pos = (
+        (
+            _rsv(out, 14)
+            > _rsv(out, 34)
+            .groupby(g, sort=False)
+            .transform(lambda x: x.rolling(19, min_periods=19).mean())
+        )
+        .fillna(False)
+        .astype(bool)
+    )
     sl_prev = sl_pos.groupby(g, sort=False).shift(1, fill_value=False)
     sl_up = sl_pos & ~sl_prev
     sl_idx = out.groupby(g, sort=False).cumcount()
-    out["sl_flip_age"] = sl_idx - pd.Series(sl_idx, index=out.index).where(sl_up).groupby(
-        g, sort=False
-    ).ffill()
+    out["sl_flip_age"] = (
+        sl_idx
+        - pd.Series(sl_idx, index=out.index).where(sl_up).groupby(g, sort=False).ffill()
+    )
     # 该次翻正之前那段负段的天数: 负段内 = 与段首日差 +1, 再 ffill 到其后正段
     # (段首用 transform("min") 取, 不能用 cumcount — 分组里含段的那个正日会把长度 +1)
     sl_neg_idx = sl_idx.where(~sl_pos)
@@ -574,15 +588,22 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
 
     out["kong10"] = (
         out.groupby(g, sort=False)["kong"]
-        .transform(lambda x: x.rolling(GENIOUS["t2_kong_lookback"], min_periods=1).max().shift(1))
+        .transform(
+            lambda x: (
+                x.rolling(GENIOUS["t2_kong_lookback"], min_periods=1).max().shift(1)
+            )
+        )
         .fillna(False)
         .astype(bool)
     )
 
     s_idx = out.groupby(g, sort=False).cumcount()
-    last_kong = pd.Series(s_idx, index=out.index).where(out["kong"]).groupby(
-        g, sort=False
-    ).ffill()
+    last_kong = (
+        pd.Series(s_idx, index=out.index)
+        .where(out["kong"])
+        .groupby(g, sort=False)
+        .ffill()
+    )
     out["d_since_kong"] = s_idx - last_kong
 
     ma10 = close.groupby(g, sort=False).transform(
@@ -604,22 +625,32 @@ def compute_triggers(df: pd.DataFrame) -> pd.DataFrame:
     cfg = GENIOUS
     out = df.copy()
     out["T1"] = (
-        out["kong"]
-        & (out["r20"] > 0)
-        & (out["winner_ratio"] > cfg["wr_min"])
-        & (out["wr_rise60"] > cfg["wr_rise_min"])
-        & out["ma10up"]
-        & (out["ext10"] <= cfg["t1_ma10_dev_max"])
-    ).fillna(False).astype(bool)
+        (
+            out["kong"]
+            & (out["r20"] > 0)
+            & (out["winner_ratio"] > cfg["wr_min"])
+            & (out["wr_rise60"] > cfg["wr_rise_min"])
+            & out["ma10up"]
+            & (out["ext10"] <= cfg["t1_ma10_dev_max"])
+        )
+        .fillna(False)
+        .astype(bool)
+    )
     out["T2"] = (
-        out["kong10"] & out["duo"] & (out["pct"] > cfg["t2_gain_min"])
-    ).fillna(False).astype(bool)
+        (out["kong10"] & out["duo"] & (out["pct"] > cfg["t2_gain_min"]))
+        .fillna(False)
+        .astype(bool)
+    )
     out["T3"] = (
-        (out["gap"] > 0)
-        & (out["pb5"] <= cfg["t3_pb5_max"])
-        & (out["pct"] > cfg["t3_gain_min"])
-        & (out["ext10p"] <= cfg["t3_ma10_dev_max"])
-    ).fillna(False).astype(bool)
+        (
+            (out["gap"] > 0)
+            & (out["pb5"] <= cfg["t3_pb5_max"])
+            & (out["pct"] > cfg["t3_gain_min"])
+            & (out["ext10p"] <= cfg["t3_ma10_dev_max"])
+        )
+        .fillna(False)
+        .astype(bool)
+    )
     return out
 
 
@@ -672,8 +703,13 @@ def assign_layers(df: pd.DataFrame) -> pd.Series:
 
     take(t3 & (r60 <= cfg["r60_deep"]) & (vr <= cfg["vr_quiet"]), CH3_T3_DEEP_QUIET)
     take(t2 & (r60 <= cfg["r60_deep"]), CH2_T2_DEEP)
-    take(t1 & (r120 <= cfg["r120_base"]) & (df["r20"] > cfg["r20_min"]), CH1_T1_LONGBASE)
-    take(t2 & (df["ext10p"] < cfg["t2b_ext_prev_max"]) & (r120 <= cfg["r120_base"]), CH2B_T2_STEADY)
+    take(
+        t1 & (r120 <= cfg["r120_base"]) & (df["r20"] > cfg["r20_min"]), CH1_T1_LONGBASE
+    )
+    take(
+        t2 & (df["ext10p"] < cfg["t2b_ext_prev_max"]) & (r120 <= cfg["r120_base"]),
+        CH2B_T2_STEADY,
+    )
     # T1余 走 **T1宽** (剔 r120>+40% 与 r60<-5%): 不加这两个闸 8.4 → 10.4 票/日, 胜率掉 1.6pp
     take(
         t1 & (r120 <= cfg["t1_wide_r120_max"]) & (r60 >= cfg["t1_wide_r60_min"]),
@@ -697,12 +733,20 @@ def assign_layers(df: pd.DataFrame) -> pd.Series:
         band3 &= vr <= cfg["band3_vr_outer_max"]
     band3 &= r60 <= cfg["band_r60_max"]
     take(
-        t2_rest & band2 & quiet & (pct > cfg["band_t2_lo"]) & (pct <= cfg["band_t2_hi"]),
+        t2_rest
+        & band2
+        & quiet
+        & (pct > cfg["band_t2_lo"])
+        & (pct <= cfg["band_t2_hi"]),
         BAND_T2_WARM,
     )
     take(t2_rest & band2 & (pct > cfg["limit_up"]), BAND_T2_LIMIT)
     take(
-        t3_rest & band3 & quiet & (pct > cfg["band_t3_lo"]) & (pct <= cfg["band_t3_hi"]),
+        t3_rest
+        & band3
+        & quiet
+        & (pct > cfg["band_t3_lo"])
+        & (pct <= cfg["band_t3_hi"]),
         BAND_T3_WARM,
     )
     take(t3_rest & band3 & (pct > cfg["limit_up"]), BAND_T3_LIMIT)
@@ -814,7 +858,7 @@ def build_delivery(
     def sheet(sub: pd.DataFrame, extra: tuple = ()) -> pd.DataFrame:
         cols = list(DISPLAY_COLUMNS)
         if extra:
-            cols[cols.index("全样本口径"):cols.index("全样本口径")] = list(extra)
+            cols[cols.index("全样本口径") : cols.index("全样本口径")] = list(extra)
         out = sub[cols].copy()
         out.insert(0, "排名", range(1, len(out) + 1))
         return out.reset_index(drop=True)
@@ -838,7 +882,9 @@ def build_delivery(
             na_position="last",
         )
     else:
-        s2 = s2.sort_values(["观察分", "r60"], ascending=[False, True], na_position="last")
+        s2 = s2.sort_values(
+            ["观察分", "r60"], ascending=[False, True], na_position="last"
+        )
 
     top = s2.head(int(GENIOUS["sheet2_top_n"]))
 

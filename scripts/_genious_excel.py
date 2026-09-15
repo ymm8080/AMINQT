@@ -123,7 +123,9 @@ def _state_path(tag: str) -> Path:
 def _write_state(tag: str, status: str, **extra) -> None:
     payload = {"tag": tag, "status": status, "ts": datetime.datetime.now().isoformat()}
     payload.update(extra)
-    _state_path(tag).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    _state_path(tag).write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 # ── 新鲜度 ────────────────────────────────────────────────────────────────────
@@ -163,10 +165,14 @@ def _heal_rows(target: str) -> pd.DataFrame:
             cyq = None
         if cyq is not None and len(cyq):
             cyq = cyq[["ts_code", "winner_rate"]].copy()
-            cyq["symbol"] = cyq["ts_code"].astype(str).str.split(".").str[0].str.zfill(6)
+            cyq["symbol"] = (
+                cyq["ts_code"].astype(str).str.split(".").str[0].str.zfill(6)
+            )
             wr = cyq.set_index("symbol")["winner_rate"].astype(float) / 100.0
     if wr is None:
-        log.warning("[heal] %s winner_ratio 缺失 → T1 本日不触发 (T2/T3 不受影响)", target)
+        log.warning(
+            "[heal] %s winner_ratio 缺失 → T1 本日不触发 (T2/T3 不受影响)", target
+        )
     out["winner_ratio"] = out["symbol"].map(wr) if wr is not None else np.nan
     return out[list(kt.PANEL_COLUMNS)]
 
@@ -210,13 +216,20 @@ def _load_fresh_panel(target: str, no_fetch: bool, wait_min: int) -> pd.DataFram
     while True:
         lag = lag_trading_days(pmax, expect, cal)
         if pmax is not None and str(pmax) == str(expect) and (lag is None or lag == 0):
-            log.info("[fresh] 面板最新 %s = 目标 %s (cal_source=%s), 直接读", pmax, target, src)
+            log.info(
+                "[fresh] 面板最新 %s = 目标 %s (cal_source=%s), 直接读",
+                pmax,
+                target,
+                src,
+            )
             break
         if time.monotonic() >= deadline:
             break
         log.warning(
             "[fresh] 面板最新 %s 落后目标 %s, 等待 %ss (19:15 抓取可能未完成)",
-            pmax, target, WAIT_TICK_S,
+            pmax,
+            target,
+            WAIT_TICK_S,
         )
         time.sleep(WAIT_TICK_S)
         pmax = kt.panel_max_date(PANEL_V3_PATH)
@@ -230,8 +243,11 @@ def _load_fresh_panel(target: str, no_fetch: bool, wait_min: int) -> pd.DataFram
         raise RuntimeError(f"面板无 {target} 当日行且 --no-fetch: 不产文件")
     log.warning("[fresh] 面板无 %s 当日行 → 自拉当日截面 (只拼内存, 不写面板)", target)
     healed = _heal_rows_bounded(target)
-    log.info("[heal] 当日截面 %d 行, 其中 winner_ratio 非空 %d",
-             len(healed), int(healed["winner_ratio"].notna().sum()))
+    log.info(
+        "[heal] 当日截面 %d 行, 其中 winner_ratio 非空 %d",
+        len(healed),
+        int(healed["winner_ratio"].notna().sum()),
+    )
     return pd.concat([df, healed], ignore_index=True)
 
 
@@ -248,7 +264,9 @@ def _fmt_sheet(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def write_stocklist_csv(s1: pd.DataFrame, date: str, list_dir=STOCK_LIST_DIR) -> Path | None:
+def write_stocklist_csv(
+    s1: pd.DataFrame, date: str, list_dir=STOCK_LIST_DIR
+) -> Path | None:
     """冠军四段 → genious_stocklist_{date}__{HHMMSS}.csv (WORM), 给 THS 推送当第三源。
 
     Sheet2 观察池不落这张 CSV: 推送侧只认个股买入名单, 观察池进去会污染自选股。
@@ -311,7 +329,12 @@ def write_xlsx(
             raw.to_excel(xw, sheet_name=name, index=False, startrow=2)
             ws = xw.sheets[name]
             ws.cell(row=1, column=1, value=banner).font = Font(bold=True, size=9)
-            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max(len(raw.columns), 2))
+            ws.merge_cells(
+                start_row=1,
+                start_column=1,
+                end_row=1,
+                end_column=max(len(raw.columns), 2),
+            )
             for i, col in enumerate(raw.columns, start=1):
                 cell = ws.cell(row=3, column=i)
                 cell.fill = PatternFill("solid", fgColor="D9E1F2")
@@ -363,7 +386,9 @@ _CASES = (
 def verify() -> int:
     """全历史跑一遍, 对 续13 层表与案例命中逐项 PASS/FAIL。"""
     log.info("[verify] 读全量面板 ...")
-    df = kt.load_panel(PANEL_V3_PATH, datetime.date.today().strftime("%Y%m%d"), lookback_days=0)
+    df = kt.load_panel(
+        PANEL_V3_PATH, datetime.date.today().strftime("%Y%m%d"), lookback_days=0
+    )
     df = kt.compute_features(df)
     df = kt.compute_triggers(df)
     df["层"] = kt.assign_layers(df)
@@ -374,10 +399,16 @@ def verify() -> int:
     day_index = sorted(df["date"].unique())
     fired = df[df["层"] != ""]
     matured = fired[fired["f5"].notna()]
-    log.info("[verify] %d 交易日, 起火 %d 行 (成熟 %d)", all_days, len(fired), len(matured))
+    log.info(
+        "[verify] %d 交易日, 起火 %d 行 (成熟 %d)", all_days, len(fired), len(matured)
+    )
 
-    print(f"\n全量: {all_days} 交易日; 日频分母 = 全交易日 (同 续13 '互斥口径全896日均')")
-    print(f"  {'层':<18}{'火/日':>8}{'真赢/日':>9}{'大涨/日':>9}{'胜率':>8}{'中位':>6}{'零票天':>8}{'判定':>6}")
+    print(
+        f"\n全量: {all_days} 交易日; 日频分母 = 全交易日 (同 续13 '互斥口径全896日均')"
+    )
+    print(
+        f"  {'层':<18}{'火/日':>8}{'真赢/日':>9}{'大涨/日':>9}{'胜率':>8}{'中位':>6}{'零票天':>8}{'判定':>6}"
+    )
     results, fails = {}, []
     for name, e_fire, e_win, e_big, e_rate, e_med, e_zero in _EXPECT:
         sub = matured[matured["层"] == name]
@@ -398,7 +429,11 @@ def verify() -> int:
             and abs(got[5] - e_zero) <= 0.05
         )
         fails += [] if ok else [name]
-        results[name] = {"got": got, "expect": (e_fire, e_win, e_big, e_rate, e_med, e_zero), "ok": ok}
+        results[name] = {
+            "got": got,
+            "expect": (e_fire, e_win, e_big, e_rate, e_med, e_zero),
+            "ok": ok,
+        }
         print(
             f"  {name:<18}{got[0]:>8.1f}{got[1]:>9.2f}{got[2]:>9.2f}{got[3]:>8.1%}"
             f"{got[4]:>6.0f}{got[5]:>8.0%}{'  PASS' if ok else '  FAIL':>6}"
@@ -438,7 +473,11 @@ def verify() -> int:
         ok = want_trig in trig and (want_layer is None or got_layer == want_layer)
         fails += [] if ok else [f"{sym}@{date}"]
         case_res[f"{sym}@{date}"] = {
-            "got": got_layer, "want": want_layer, "trigger": trig, "want_trigger": want_trig, "ok": ok,
+            "got": got_layer,
+            "want": want_layer,
+            "trigger": trig,
+            "want_trigger": want_trig,
+            "ok": ok,
         }
         print(
             f"  {sym}@{date}  触发器={trig or '-'} (期望含 {want_trig})  层={got_layer}"
@@ -450,8 +489,16 @@ def verify() -> int:
     out = DIAG_DIR / f"genious_verify_{ts}.json"
     out.write_text(
         json.dumps(
-            {"ts": ts, "days": all_days, "layers": results, "cases": case_res, "fails": fails},
-            ensure_ascii=False, indent=2, default=str,
+            {
+                "ts": ts,
+                "days": all_days,
+                "layers": results,
+                "cases": case_res,
+                "fails": fails,
+            },
+            ensure_ascii=False,
+            indent=2,
+            default=str,
         ),
         encoding="utf-8",
     )
@@ -466,7 +513,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("date", nargs="?", default=None, help="YYYYMMDD (缺省=当日)")
     ap.add_argument("--verify", action="store_true", help="全历史复现研究层表 (验收闸)")
-    ap.add_argument("--no-fetch", action="store_true", help="面板缺当日行时不自拉, 直接失败")
+    ap.add_argument(
+        "--no-fetch", action="store_true", help="面板缺当日行时不自拉, 直接失败"
+    )
     ap.add_argument("--dry-run", action="store_true", help="只打印不落文件")
     ap.add_argument("--no-push", action="store_true", help="落边车但不推同花顺自选股")
     ap.add_argument("--wait-min", type=int, default=10, help="等面板更新的上限分钟")
@@ -508,7 +557,12 @@ def main() -> int:
     n_pass = int((s1["大涨闸"] == "过闸").sum())
     log.info(
         "[genious] %s 冠军四段 %d 票 (大涨闸过 %d), 观察池 %d/%d 票 (截断/全量); 层分布 %s",
-        target, len(s1), n_pass, len(s2), len(s2_full), counts,
+        target,
+        len(s1),
+        n_pass,
+        len(s2),
+        len(s2_full),
+        counts,
     )
 
     if args.dry_run:
@@ -516,8 +570,13 @@ def main() -> int:
             print(f"\n===== {name} ({len(sheet)}) =====")
             print(sheet.to_string(index=False) if len(sheet) else "(空)")
         _write_state(
-            tag, "dry_run", s1=len(s1), s1_pass=n_pass, s2=len(s2),
-            s2_full=len(s2_full), layers=counts,
+            tag,
+            "dry_run",
+            s1=len(s1),
+            s1_pass=n_pass,
+            s2=len(s2),
+            s2_full=len(s2_full),
+            layers=counts,
         )
         return 0
 
@@ -527,8 +586,14 @@ def main() -> int:
     if csv_fp is not None:
         log.info("[genious] 推送边车 %s", csv_fp)
     _write_state(
-        tag, "ok", file=str(fp), s1=len(s1), s1_pass=n_pass, s2=len(s2),
-        s2_full=len(s2_full), layers=counts,
+        tag,
+        "ok",
+        file=str(fp),
+        s1=len(s1),
+        s1_pass=n_pass,
+        s2=len(s2),
+        s2_full=len(s2_full),
+        layers=counts,
     )
     print(str(fp))
     if GENIOUS.get("push_to_ths") and csv_fp is not None and not args.no_push:
