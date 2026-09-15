@@ -102,8 +102,16 @@ def chain(tmp_path_factory):
 
 
 class TestEndToEndV35:
-    def test_full_workflow(self, chain):
+    def test_full_workflow(self, chain, monkeypatch):
         panel, pipe, feed = chain["panel"], chain["pipe"], chain["feed"]
+        # [0915] chain 是 module 夹具 (拿不到函数级 monkeypatch), 故在此钉 e7_pred:
+        # 生产默认 prob10_pull 绕过 E7 闸并去读**真实** PANEL_V3_PATH 的趋势/回撤闸,
+        # 合成候选 (600519/601318) 会被真票当日 MA10 决定去留 → 清单随行情飘红.
+        # 本测验的是全链路 schema/标记/回测, 与选择栈无关; prob10_pull 自身由
+        # test_legacy_selection_mode.py (合成面板) 覆盖.
+        from config.settings import LEGACY_SELECTION
+
+        monkeypatch.setitem(LEGACY_SELECTION, "mode", "e7_pred")
 
         # ── 1. Pipeline-1 选股: 清单 schema V1.2 ──
         r1 = pipe.run("20260720", panel=panel)

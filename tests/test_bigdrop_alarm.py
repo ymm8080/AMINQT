@@ -1,21 +1,27 @@
 """bigdrop 次日大跌模块单测 (2026-09-15).
 
 覆盖两处 0915 改动:
-  1. 第 10 条闸「自由流通换手 > 10%」—— 补 600814(20260910) 那类「处处偏高但
-     无一极端」的中空形态 (原 9 条闸全是极端值阈值, 对其全盲)。
+  1. 第 9 条闸「自由流通换手 > 10%」—— 补 600814(20260910) 那类「处处偏高但
+     无一极端」的中空形态 (加它时原有 9 条闸全是极端值阈值, 对其全盲; 0915 撤
+     连板高位后, 它排在 9 条闸的末位)。
   2. 模型报警通道 should_alarm —— 规则 0 分而模型报警时必须举手, 且不重复报警。
 """
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from scripts.bigdrop_check import (
+    BRANCH_DIRECTIONAL,
+    BRANCH_NONE,
+    BRANCH_VOLATILITY,
     CAPTURE_TIERS,
     MODEL_ALARM,
     capture_tier,
     effective_prob,
     rule_flags,
     should_alarm,
+    signal_kind,
 )
 
 # build() 写进 bundle 的报警格兑现 (20260915 包)
@@ -52,9 +58,9 @@ def _flags(**over):
     return rule_flags(pd.DataFrame([{**SAFE, **over}])).iloc[0]
 
 
-def test_rule_count_is_ten():
-    # 闸数变=得分档口径变, 必须是有意的
-    assert len(rule_flags(pd.DataFrame([SAFE])).columns) == 10
+def test_rule_count_is_nine():
+    # 闸数变=得分档口径变, 必须是有意的 (0915 撤连板高位: 10 -> 9)
+    assert len(rule_flags(pd.DataFrame([SAFE])).columns) == 9
 
 
 def test_ff_turn_threshold_boundary():
@@ -70,6 +76,41 @@ def test_ff_turn_nan_does_not_fire():
             0
         ]["hi_ff_turn"]
     )
+
+
+def test_score_frame_rejects_rule_count_mismatch(capsys):
+    """闸数与包不一致必须当场炸 —— 0915 撤闸事故的守卫。
+
+    rule_table 的键是**建包时**的得分刻度, 取用时拿当场新算的 sc 去索引: 10 闸的包
+    配 9 闸的代码, 高档会静默读错 (缺键还回退 base_pre), 融合头同理, 而全文件没有
+    任何断言。这里给一个 10 闸假包, 必须在碰 booster **之前** 退出 —— 所以包里故意
+    不放 booster。
+    """
+    from scripts.bigdrop_check import score_frame
+
+    d = pd.DataFrame([SAFE])
+    with pytest.raises(SystemExit) as ei:
+        score_frame(d, {"rules": [("x",)] * 10, "tag": "20260901"})
+    assert ei.value.code == 2
+    out = capsys.readouterr().out
+    assert "闸数不一致" in out
+    assert "包 10 闸" in out and "代码 9 闸" in out
+
+
+def test_score_frame_passes_guard_when_counts_match():
+    """正控: 闸数一致时守卫放行 —— 随后因缺 booster 才 KeyError, 证明确实越过了守卫。"""
+    from scripts.bigdrop_check import score_frame
+
+    with pytest.raises(KeyError):
+        score_frame(pd.DataFrame([SAFE]), {"rules": [("x",)] * 9, "tag": "20260915"})
+
+
+def test_score_frame_guard_skips_old_bundle_without_rules():
+    """旧包没有 rules 键 —— 按既有惯例优雅降级 (同 alarm/branches/capture), 不炸。"""
+    from scripts.bigdrop_check import score_frame
+
+    with pytest.raises(KeyError):
+        score_frame(pd.DataFrame([SAFE]), {"tag": "20260901"})
 
 
 def test_safe_row_scores_zero():
@@ -179,6 +220,48 @@ def test_capture_tier_never_returns_beyond_ladder():
     assert num == len(CAPTURE_TIERS) + 1
 
 
+# ---- 信号分支 (0915: 报警拆成"带方向"与"不带方向"两种读法) ----
+
+
+def test_signal_kind_model_branch_is_directional():
+    """模型过线即带方向 —— 哪怕规则也吵得很凶 (都喊格次日均 -0.26%)。"""
+    assert signal_kind(0, MODEL_ALARM) == (BRANCH_DIRECTIONAL, True)
+    assert signal_kind(3, 0.30) == (BRANCH_DIRECTIONAL, True)
+    assert signal_kind(0, 0.102) == (BRANCH_DIRECTIONAL, True)
+
+
+def test_signal_kind_rules_only_branch_claims_no_direction():
+    """规则喊而模型沉默 = 波动/跌停风险, 不得声称方向 (该格次日均 +0.06%)。"""
+    name, has_dir = signal_kind(1, 0.001)
+    assert name == BRANCH_VOLATILITY
+    assert not has_dir
+    assert signal_kind(4, 0.099)[0] == BRANCH_VOLATILITY
+
+
+def test_signal_kind_quiet_row():
+    assert signal_kind(0, 0.0) == (BRANCH_NONE, False)
+    assert signal_kind(0, MODEL_ALARM - 1e-6) == (BRANCH_NONE, False)
+    assert not signal_kind(0, 0.0)[1]
+
+
+def test_signal_kind_threshold_is_inclusive_like_should_alarm():
+    """与 should_alarm 同一条线, 不能一个 >= 一个 >。"""
+    for mp in (MODEL_ALARM, 0.30):
+        assert signal_kind(0, mp)[1] is should_alarm(mp, 0)
+    assert signal_kind(0, MODEL_ALARM - 1e-6)[1] is should_alarm(MODEL_ALARM - 1e-6, 0)
+
+
+def test_signal_kind_partitions_every_row():
+    """三分支互斥且穷尽; 带方向的充要条件就是走模型支。"""
+    seen = set()
+    for sc in range(0, 11):
+        for mp in (0.0, 0.05, 0.099, 0.10, 0.5):
+            name, has_dir = signal_kind(sc, mp)
+            seen.add(name)
+            assert has_dir == (mp >= MODEL_ALARM), f"score={sc} model_p={mp}"
+    assert seen == {BRANCH_DIRECTIONAL, BRANCH_VOLATILITY, BRANCH_NONE}
+
+
 # ---- 从 bundle 复读的只读视图 (不读面板, 因此可以直接跑) ----
 
 _MIN_BUNDLE = {
@@ -272,9 +355,18 @@ def test_build_runs_end_to_end(tmp_path, monkeypatch):
 
     b = bd.build()
 
-    for key in ("booster", "iso", "lr", "rules", "rule_table", "alarm", "capture"):
+    for key in (
+        "booster",
+        "iso",
+        "lr",
+        "rules",
+        "rule_table",
+        "alarm",
+        "capture",
+        "branches",
+    ):
         assert key in b, f"bundle 缺 {key}"
-    assert len(b["rules"]) == 10
+    assert len(b["rules"]) == 9
 
     # 遮蔽 bug 的直接断言: 存进去的必须是模型对象, 不是被覆盖的 ndarray
     assert not isinstance(b["booster"], np.ndarray)
@@ -284,6 +376,16 @@ def test_build_runs_end_to_end(tmp_path, monkeypatch):
     assert b["capture"][-1]["name"] == "T4 未标"
     rec = [c["bigdrop_recall"] for c in b["capture"][:-1]]
     assert rec == sorted(rec)
+
+    # 分支表: 三分支穷尽 OOS 面 (份额和 = 1), 且方向支的次日均收益必须存在
+    brs = b["branches"]
+    assert [x["name"] for x in brs] == [
+        BRANCH_DIRECTIONAL,
+        BRANCH_VOLATILITY,
+        BRANCH_NONE,
+    ]
+    assert abs(sum(x["share"] for x in brs) - 1.0) < 1e-9
+    assert all(np.isfinite(x["ret"]) for x in brs)
 
     # 落盘到 tmp_path, 绝不碰真 artifact (WORM)
     assert (tmp_path / "bundle_latest.joblib").exists()

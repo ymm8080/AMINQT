@@ -1104,8 +1104,18 @@ class TestListGenerator:
             ListGenerator.compute_momentum(0.05, 0.10, 0.08) == "medium"
         )  # 非加速非弱化
 
-    def test_holding_bonus(self):
-        """向后兼容: 无 holding_day 列时, is_in_yesterday_list=1 视为 day1 (weight=1.0)."""
+    def test_holding_bonus(self, monkeypatch):
+        """向后兼容: 无 holding_day 列时, is_in_yesterday_list=1 视为 day1 (weight=1.0).
+
+        [0915] 钉回 e7_pred 栈: 本测断言的是 **score** 序 (bonus 后 600000 居首、分差
+        0.2), 而生产默认 prob10_pull 压根不用 score 排序 —— 它按 prob_up_10d 降序且
+        跳过幅度键重排, 该断言在新栈下无意义。且 prob10_pull 的趋势闸读**真实**
+        PANEL_V3_PATH, 合成代码 (600000…) 会撞上真票的 MA10 → 结果随行情飘.
+        prob10_pull 自身由 test_legacy_selection_mode.py (合成面板) 覆盖.
+        """
+        from config.settings import LEGACY_SELECTION
+
+        monkeypatch.setitem(LEGACY_SELECTION, "mode", "e7_pred")
         cands = make_candidates(n=2, seed=3)
         # 排名键 10d (2026-08-09 弃 COMPOUND_W) → 10d 设平, 保证两票 base 分相等, 分差仅来自 bonus
         cands.loc[
@@ -1129,8 +1139,14 @@ class TestListGenerator:
             "score"
         ] == pytest.approx(0.2)
 
-    def test_holding_bonus_decay_b3(self):
-        """B3: Holding Bonus 按持仓天数衰减 day1=1.0/day2=0.5/day3=0.0."""
+    def test_holding_bonus_decay_b3(self, monkeypatch):
+        """B3: Holding Bonus 按持仓天数衰减 day1=1.0/day2=0.5/day3=0.0.
+
+        [0915] 同 test_holding_bonus: 断言按 score 取三票, 须钉 e7_pred 栈.
+        """
+        from config.settings import LEGACY_SELECTION
+
+        monkeypatch.setitem(LEGACY_SELECTION, "mode", "e7_pred")
         cands = make_candidates(n=3, seed=3)
         # 排名键 10d (2026-08-09 弃 COMPOUND_W) → 必须连 10d 一起设平 → 三票 base 分等,
         # 只让 holding bonus (0.2/0.1/0.0) 产生差异

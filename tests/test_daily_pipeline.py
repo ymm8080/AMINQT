@@ -145,6 +145,15 @@ def pipeline(tmp_path, monkeypatch):
     # 伪特征模型预测≈0: 关闭 E7 准入闸门 (闸门本身由 test_pipeline1_v38 覆盖)
     from app.pipeline1.list_generator import ListGenerator
 
+    # [0915] 钉 e7_pred: 生产默认 prob10_pull 会绕过 E7 闸, 转去读**真实**
+    # PANEL_V3_PATH 的趋势/回撤闸 —— 合成候选 (600519/601318) 于是被真票当日 MA10
+    # 决定去留, 清单随行情飘红 (20260720 读不到则 fail-open). 本夹具体测 schema/
+    # 持久化/昨日回填, 与选择栈无关; prob10_pull 自身由 test_legacy_selection_mode.py
+    # (合成面板) 覆盖.
+    from config.settings import LEGACY_SELECTION
+
+    monkeypatch.setitem(LEGACY_SELECTION, "mode", "e7_pred")
+
     pipe.lister = ListGenerator(entry_prob=0.0, entry_ret_mult=0.0)
     return pipe, panel
 

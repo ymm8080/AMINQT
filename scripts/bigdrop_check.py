@@ -4,7 +4,7 @@
 输入股票代码 → 输出【大跌概率】+【关键指标】+【原因分析】。
 
 设计:
-  规则侧: 一组已验证条件 (当前 10 条, 见 RULES) → 得分档 → 历史上该档的真实命中率
+  规则侧: 一组已验证条件 (当前 9 条, 见 RULES) → 得分档 → 历史上该档的真实命中率
   模型侧: LGBM 排序 → isotonic 校准 → 真概率
   融合侧: 在校准段上用 logistic 叠 [模型logit, 规则分, 是否命中规则, 交互项],
           融合方式由 OOS 数据挑选, 不是拍脑袋。
@@ -17,6 +17,11 @@
           落在 256 只/日 内), 目标只有一个; 而 100% 召回要求标 100% 市场, 所以输出
           改成 T1~T3 三层召回阶梯 + T4 未标面的实测残留 (见 CAPTURE_TIERS 与
           bundle['capture']) —— 让"漏"永远显式, 而不是假装二值穷尽。
+  分支侧: 并集口径的一整个布尔把两件事并在一起 —— 模型支带方向 (次日均 -0.26%),
+          规则支不带 (次日均 +0.06%), 而规则支占 T1 体量七成, 把并集稀释到 -0.04%。
+          于是"报警"被当成"要跌", 而好票 (次日涨>=3%) 在报警池里 1.7 倍富集。
+          0915 起拆成两条: 方向性只归模型支, 规则支照实说成波动/跌停风险
+          (见 signal_kind 与 bundle['branches'])。
 
 三段切分 (严格防泄漏):
   FIT   < 20250701   训模型
@@ -66,6 +71,14 @@ MIN_BUCKET = 300
 MODEL_ALARM = 0.10
 # 跌停判据 (次日跌幅 <= 此值)。0915 起作为捕获阶梯的第二条目标线。
 DT_TH = -0.095
+
+# 信号分支 (0915): 一个 T1 布尔此前兼任两职 —— 规则支只说"波动/跌停风险", 模型支才带方向。
+# 实测 (tmp_t/_bigdrop_falsealarm_0915.py, OOS 838,647 股票-日): 「仅规则喊」占 T1 体量
+# 70%, 次日均收益 +0.060% —— 零方向信息, 却把「都喊」格的 −0.257% 稀释成 T1 的 −0.036%。
+# 所以"次日要跌"的表述只给模型支, 否则就是拿波动当好票的看跌结论 (用户 0915 抱怨)。
+BRANCH_DIRECTIONAL = "看跌 (模型支)"
+BRANCH_VOLATILITY = "波动/跌停风险 (仅规则)"
+BRANCH_NONE = "未标记"
 
 # 捕获阶梯 (0915 用户令: 抓住所有跌停股和大跌股)。
 # 100% 做不到, 且跌停本来就读作大跌的真子集 (OOS 169 日: 跌停 40 只/日 全落在
@@ -144,12 +157,11 @@ RULES: list[tuple[str, str, str, str]] = [
         "盘中触及涨停但收盘未封住",
         "封板资金撤退, 追高盘被套, 次日容易低开续跌",
     ),
-    (
-        "conseq_zt",
-        "连板高位",
-        "连续涨停 >= 3 天",
-        "连板股情绪定价, 情绪一退潮就是连续跌停",
-    ),
+    # [0915 用户令撤] "连板高位" 曾在此: 单独看是真信号 (次日跌停 9.44% = 11.73x
+    # 市场基准, 全规则最高), 但在 T1 并集里撤它逐位无差别 —— 大跌召回 55.63%→55.62%,
+    # 跌停召回/误伤一位不动, 因 97% 的命中已被别的闸或模型覆盖。而它带**零方向**:
+    # 同一撮票次日好票率 57%、均收益 +3.20%。零边际 + 零方向 → 撤。
+    # conseq_zt 仍在 FEATS 里当模型输入 (信息不丢, 只撤硬编码闸)。
     (
         "vol_surge",
         "显著放量",
@@ -351,16 +363,18 @@ def rule_flags(d: pd.DataFrame) -> pd.DataFrame:
             "hi_bias60": d["bias_60"] > 0.50,
             "huge_turn": d["turnover_rate"] > 20,
             "zt_break": d["zt_break"] == 1,
-            "conseq_zt": d["conseq_zt"] >= 3,
+            # [0915 撤] 连板高位 (conseq_zt >= 3) 已撤, 理由见 RULES 同处注释:
+            # 边际 0.01pp 且零方向。该列仍是模型输入 (FEATS), 未删。
             "vol_surge": d["volume_ratio"] > 2,
             "today_drop": d["pctChg"] <= -5,
             "big_rise": d["low60_gain"] > 0.50,
-            # 第 9 条 (0915): 中等强度涨过头。全样本覆盖 20.0% 的大跌,
+            # rise10 (0915): 中等强度涨过头。全样本覆盖 20.0% 的大跌,
             # score==0 桶内 OOS 3.63%→9.58%; 新增告警的 OOS 大跌率 19.89%,
             # 对照老 score>=3 的 24.51% —— 打 85 折, 不是灌水。
             # 注意「缩量」不在此列: 在 ret10>20% 人群里缩量挑的是低风险半边。
             "rise10": d["ret10"] > 0.20,
-            # 第 10 条 (0915): 量价族连续信号。原 9 条全是极端值阈值, OOS 真大跌
+            # hi_ff_turn (0915): 量价族连续信号。加它时原有 9 条 (其中连板高位
+            # 已于同日稍后撤掉) 全是极端值阈值, OOS 真大跌
             # 56.5% 落在 0 分档 —— 本条把覆盖 43.5% 抬到 53.9%, 池内精准度仅
             # 13.15%→12.45%。阈值 8/10/12/15/20/25 两段单调, 取 10 (非贴合个股)。
             "hi_ff_turn": d["free_float_turnover_rate"] > 10,
@@ -393,6 +407,9 @@ def build() -> dict:
     # 有效性与 y 完全一致, 不需要另建掩码。
     ydt = (d["fwd"] <= DT_TH).to_numpy(float)
     dt = d["date"].to_numpy()
+    # 分支表要回答"规则支到底带不带方向", 而答案就是它的次日均收益本身 ——
+    # 拿在 del 之前, 否则下面只剩 y (已二值化, 看不出涨)。
+    fwd_all = d["fwd"].to_numpy(float)
     del d, F
 
     ds = np.sort(np.unique(dt))
@@ -524,6 +541,50 @@ def build() -> dict:
         f"{capture[-1]['dt_recall']:.1%} 的跌停 —— 100% 召回要求标 100% 市场, "
         f"所以这个残留是口径的一部分, 不是缺陷"
     )
+
+    # 信号分支 (0915): T1 那一个布尔把两件性质相反的事并在一起。规则支占它七成体量
+    # 却零方向 (次日均 +0.06%), 把并集均值稀释到 −0.04% —— 于是"报警"被读成"要跌",
+    # 而好票 (次日涨>=3%) 在报警池里 1.7 倍富集。方向性只归模型支。
+    # 判据 = 分支的次日均收益是否显著为负, 数字存 bundle, query 不硬编码。
+    branches = []
+    for bname, seg in (
+        (BRANCH_DIRECTIONAL, p_iso >= MODEL_ALARM),
+        (BRANCH_VOLATILITY, (score_all >= 1) & (p_iso < MODEL_ALARM)),
+        (BRANCH_NONE, (score_all == 0) & (p_iso < MODEL_ALARM)),
+    ):
+        sub = np.asarray(oos & seg, bool)
+        k = int(sub.sum())
+        branches.append(
+            dict(
+                name=bname,
+                daily=k / n_day_oos,
+                share=k / oos_n,
+                bigdrop_rate=float(y[sub].mean()) if k else float("nan"),
+                bigdrop_recall=float(y[sub].sum() / y_n),
+                dt_rate=float(ydt[sub].mean()) if k else float("nan"),
+                dt_recall=float(ydt[sub].sum() / dt_n),
+                ret=float(np.nanmean(fwd_all[sub])) if k else float("nan"),
+            )
+        )
+    print(
+        f"\n{'=' * 96}\n信号分支 (OOS {n_day_oos} 日; 方向性判据 = 次日均收益是否显著为负)"
+    )
+    print(
+        f"{'分支':<26}{'日均':>7}{'占市':>8}{'大跌率':>9}{'大跌召回':>10}"
+        f"{'跌停召回':>10}{'次日均收益':>12}"
+    )
+    for c in branches:
+        print(
+            f"{c['name']:<26}{c['daily']:>7.0f}{c['share']:>8.1%}"
+            f"{c['bigdrop_rate']:>9.2%}{c['bigdrop_recall']:>10.1%}"
+            f"{c['dt_recall']:>10.1%}{c['ret']:>+12.3%}"
+        )
+    dbr = branches[0]
+    print(
+        f"  → 只有「{BRANCH_DIRECTIONAL}」的次日均收益为负 ({dbr['ret']:+.3%}), 才叫看跌; "
+        f"「{BRANCH_VOLATILITY}」次日均 {branches[1]['ret']:+.3%} "
+        f"({branches[1]['share']:.0%} 的 T1 体量) 零方向, 只承诺跌停/波动风险"
+    )
     print(
         f"\n{'=' * 96}\nOOS 概率质量对比 (基准 {bo:.3%}; 常数预测 Brier "
         f"{bo * (1 - bo):.5f})"
@@ -616,6 +677,7 @@ def build() -> dict:
         oos_auc=float(roc_auc_score(yo, p_fus[oos])),
         alarm=alarm,
         capture=capture,
+        branches=branches,
     )
     joblib.dump(bundle, BUNDLE_DIR / f"bundle_{tag}.joblib")
     joblib.dump(bundle, BUNDLE_DIR / "bundle_latest.joblib")
@@ -643,6 +705,18 @@ def load_bundle() -> dict:
 def score_frame(d: pd.DataFrame, b: dict) -> tuple:
     """返回 (规则旗标, 得分, 各口径概率字典)。"""
     F = rule_flags(d)
+    # 闸数与包必须一致 (0915 撤闸事故的守卫)。rule_table 的键是**建包时**的
+    # np.unique(score), 取用时拿的却是这里当场算出的 sc —— 两边闸数不同就直接读错档,
+    # 且缺键会静默回退 base_pre; 融合头 b["lr"] 同样按旧得分刻度拟合 (它才是默认
+    # winner)。不匹配 = 数悄悄不对, 必须当场炸, 不能降级。
+    if "rules" in b and len(b["rules"]) != F.shape[1]:
+        print(
+            f"包与代码闸数不一致: 包 {len(b['rules'])} 闸 (tag={b.get('tag')}), "
+            f"代码 {F.shape[1]} 闸。\n"
+            f"  rule_table / 融合头的得分刻度在建包时就定死了, 直接跑会静默读错概率。\n"
+            f"  请重建: python scripts/bigdrop_check.py --build"
+        )
+        sys.exit(2)
     sc = F.sum(axis=1).to_numpy(int)
     # 注意: Booster.predict 对二分类默认 raw_score=False, 返回的**已经是概率**,
     # 不要再套 sigmoid (套了会把全市场压到 50%)。log-odds 只在 pred_contrib 里用。
@@ -785,6 +859,25 @@ def effective_prob(
     return float(rule_p), False
 
 
+def signal_kind(
+    score: int, model_p: float, th: float = MODEL_ALARM
+) -> tuple[str, bool]:
+    """本股落在哪个信号分支 → (分支名, 是否带方向)。
+
+    T1 并集此前是一个布尔, 但两半的性质并不一样 (OOS 实测):
+      模型支 次日均收益 −0.26%; 规则支 +0.06% —— 规则支零方向, 且占 T1 体量七成,
+      把并集的均值稀释到 −0.04%。若不分开, 就是把一整片强势股说成"次日要跌"。
+    所以方向性只给模型支; 规则支照实说成波动/跌停风险。
+
+    build() 的 branches 与此同源 (分支名共用 BRANCH_* 常量), 数字由 bundle 提供。
+    """
+    if float(model_p) >= float(th):
+        return BRANCH_DIRECTIONAL, True
+    if int(score) >= 1:
+        return BRANCH_VOLATILITY, False
+    return BRANCH_NONE, False
+
+
 def capture_tier(
     score: int, model_p: float, model_rank: float, al_th: float = MODEL_ALARM
 ) -> tuple[str, int]:
@@ -863,6 +956,22 @@ def query(codes: list[str], b: dict) -> None:
         # 600519(分位 12%) 会印成「前 88.1%」读着像危险, 正好反了。
         dtxt = f"   (模型概率分位 {float(rk_day[k]):.1%}, 越高越危险)"
         print(f"  捕获档位: {tname}{dtxt}")
+
+        # 信号性质: 把"报警"拆成带方向 / 不带方向两种读法。不拆的话, 规则支那七成
+        # 体量 (次日均 +0.06%) 会顶着"高风险"的帽子, 被当成看跌结论。
+        bname, has_dir = signal_kind(int(sc[k]), mp, al.get("th", MODEL_ALARM))
+        print(f"  信号性质: {bname}")
+        br = next((x for x in (b.get("branches") or []) if x["name"] == bname), None)
+        if br and not has_dir:
+            tail = (
+                "只说明波动/跌停风险, 不含方向 —— 别读成「明天要跌」"
+                if bname == BRANCH_VOLATILITY
+                else "本股无信号"
+            )
+            print(
+                f"    本分支 OOS: 占市 {br['share']:.1%}, 次日大跌 {br['bigdrop_rate']:.2%}, "
+                f"跌停召回 {br['dt_recall']:.1%}, 次日均收益 {br['ret']:+.3%} —— {tail}"
+            )
         if cap and tnum > 1:
             t1 = cap[0]
             print(
