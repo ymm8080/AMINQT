@@ -97,6 +97,9 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
+
+import pandas as pd
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = sys.executable
@@ -105,7 +108,7 @@ LOG_DIR = os.path.join(ROOT, "logs")
 # ????? sys.path[0]=scripts/, ? ROOT ? scripts.* ????????????
 sys.path.insert(0, ROOT)
 
-from config.settings import STOCK_LIST_DIR  # noqa: E402
+from config.settings import DATA_DIR, STOCK_LIST_DIR  # noqa: E402
 from scripts._run_guard import (  # noqa: E402
     CHAIN_SENTINELS,
     find_conflicts,
@@ -444,11 +447,67 @@ def _today_list_delivered(tag: str) -> bool:
 _MAKEUP_STEPS = ["prob10dens_push", "slowbull_shadow", "stocklist_combined"]
 
 
-def _combined_delivered(tag: str) -> bool:
-    """??????????? (? __v2 ?????) ? ?????????."""
-    return bool(
-        glob.glob(os.path.join(str(STOCK_LIST_DIR), f"stocklist_combined_{tag}*.xlsx"))
+def _density_never_ran(tag: str) -> bool:
+    """candidates 在盘上、上榜史里却没有今天 = 密度步压根没跑过 (空夜也记史, 0913 定)."""
+    if not os.path.exists(os.path.join(DATA_DIR, "lists", f"candidates_{tag}.parquet")):
+        return False
+    from scripts._prob10_density_shadow import HIST_PATH
+
+    try:
+        seen = set(pd.to_datetime(pd.read_parquet(HIST_PATH, columns=["date"])["date"]))
+    except (OSError, ValueError, KeyError):
+        return False  # 史读不出 → 无从判断, 不据此补 (宁漏勿扰)
+    return pd.Timestamp(tag) not in seen
+
+
+def _page_gaps(tag: str) -> list[str] | None:
+    """最新 combined xlsx 相对"此刻该有的页"缺了哪些页; 无表 → None.
+
+    为什么判页完整性而不是文件存在 (2026-09-15 "SHALL WE FIX?"): 只 glob 文件名
+    的话, 降级跑出的残表 (缺 LEGACY/密度 页) 会被当成已交付 —— 09-13/09-14 连发
+    两次, 补产闸全程未触发, 缺的页再也拿不回来.
+
+    "该有" = 其源此刻在盘上 (判"有没有", 不判"全不全"), 三条例外都有据:
+      · LEGACY/PARALLEL: 源 CSV 就是页内容, 存在且非空 → 页必在
+      · 密度: 源 CSV 存在且非空 → 页必在; 源不在但 candidates 在 **且上榜史里没有
+        今天** → 步没跑过 → 页该在
+      · SLOW_BULL: **不判** —— 宽度闸关闸 → 候选 0 只 → 43 字节表头是**合法结果
+        不是故障**, combined 按 df.empty 跳页是对的 (09-14 breadth 0.334 < MA60)
+    """
+    hits = glob.glob(
+        os.path.join(str(STOCK_LIST_DIR), f"stocklist_combined_{tag}*.xlsx")
     )
+    if not hits:
+        return None
+    from scripts._stocklist_combined import _SOURCES, SHADOW_DIR, _newest
+
+    dashdate = f"{tag[:4]}-{tag[4:6]}-{tag[6:]}"
+    expect = set()
+    for name, pat, which in _SOURCES:
+        if name == "SLOW_BULL":
+            continue
+        d = Path(str(STOCK_LIST_DIR)) if which == "list" else Path(SHADOW_DIR)
+        src = _newest(pat.format(date=tag, dashdate=dashdate), d)
+        if src is not None and not pd.read_csv(src, dtype=str).empty:
+            expect.add(name)
+        elif name == "密度" and _density_never_ran(tag):
+            expect.add(name)
+    if not expect:
+        return []
+    fp = max(hits, key=os.path.getmtime)
+    try:
+        with pd.ExcelFile(fp) as xf:  # 句柄须关: Windows 上占用会挡住后续删除/改名
+            have = set(xf.sheet_names)
+    except Exception as e:  # 读不出页名 = 交付状态未知 → 按缺页补 (fail-loud)
+        print(f"[makeup] {fp} 页名读取失败 ({e}) → 按缺页处理", flush=True)
+        return sorted(expect)
+    return sorted(expect - have)
+
+
+def _combined_delivered(tag: str) -> bool:
+    """今日合并表已交付 = 有表**且**页齐 (含 __v2 等变体; 判据见 _page_gaps)."""
+    gaps = _page_gaps(tag)
+    return gaps is not None and not gaps
 
 
 def _run_makeup_if_incomplete(tag: str) -> int | None:
