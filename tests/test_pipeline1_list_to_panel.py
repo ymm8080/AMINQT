@@ -70,6 +70,7 @@ def _make_schema_list(symbols=("600519", "300750", "601318")) -> pd.DataFrame:
             "pain_prob": np.round(rng.uniform(0.0, 0.5, n), 3),
             "announce_score": rng.uniform(-1.0, 1.0, n),
             "weight": np.round(rng.uniform(0.02, 0.10, n), 4),
+            "pull_flag": "",
             "schema_version": "1.4",
         }
     )

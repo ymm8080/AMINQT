@@ -260,6 +260,7 @@ def demo_list(seed: int = 42) -> pd.DataFrame:
             # V1.4 新增列 (多视界加权收益/概率)
             "compound_ret": np.round(rng.uniform(0.0, 0.06, n), 6),
             "compound_prob": np.round(rng.uniform(0.42, 0.62, n), 6),
+            "pull_flag": "",
             "schema_version": "1.4",
             "model_version": "",
         }
