@@ -7,6 +7,8 @@
 注: 原 wall-clock 时序测试在 CI 低配 runner 上偶发失败 (线程调度延迟 > 2.0s
 即误触发), 现改为直接测 ProgressTracker.silent_for() 状态 +
 exit_fn 调用, 去 wall-clock 依赖, 语义等价.
+
+★ 2026-09-14 补: 硬退前必须先清子进程树 (kill_fn), 顺序 kill → exit。
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import pytest
 from app.pipeline1.stall_watchdog import (
     STALL_EXIT_CODE,
     ProgressTracker,
+    kill_process_children,
     start_stall_watchdog,
 )
 
@@ -134,3 +137,40 @@ def test_progress_tracker_ignores_ram_guard():
     tracker.emit(record)
     # silent_for 仍保持原值 (未被重置)
     assert tracker.silent_for() >= 0.2
+
+
+def test_stall_watchdog_kills_children_before_exit():
+    """硬退前先清子进程树: 09-14 孤儿 `_dual_pkg_finaltop_compare.py` 占运行守卫,
+    把紧随其后的 legacy 预测打成 rc=3 → 当天 LEGACY 交付整段缺失。顺序必须是
+    先 kill 再 exit。"""
+    order: list[str] = []
+    tracker = start_stall_watchdog(
+        _TIMEOUT,
+        poll_s=_POLL,
+        exit_fn=lambda code: order.append(f"exit:{code}"),
+        kill_fn=lambda: order.append("kill") or 1,
+    )
+    with patch.object(tracker, "silent_for", return_value=_TIMEOUT + 1.0):
+        time.sleep(_POLL + 0.2)
+    assert order == ["kill", f"exit:{STALL_EXIT_CODE}"]
+
+
+def test_stall_watchdog_exits_even_if_kill_raises():
+    """清理抛错不能挡住硬退 — 泥潭里退不出去比留孤儿更糟。"""
+    calls: list[int] = []
+
+    def _boom():
+        raise RuntimeError("psutil 挂了")
+
+    tracker = start_stall_watchdog(
+        _TIMEOUT, poll_s=_POLL, exit_fn=calls.append, kill_fn=_boom
+    )
+    with patch.object(tracker, "silent_for", return_value=_TIMEOUT + 1.0):
+        time.sleep(_POLL + 0.2)
+    assert calls == [STALL_EXIT_CODE]
+
+
+def test_kill_process_children_smoke():
+    """真 psutil 路径跑得通且不抛错 (子进程有无都返回计数 int)。"""
+    n = kill_process_children(timeout_s=0.5)
+    assert isinstance(n, int) and n >= 0
