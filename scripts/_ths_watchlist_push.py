@@ -87,8 +87,9 @@ def _valid_codes(symbols) -> list[str]:
 def collect_lists(
     date: str, list_dir=STOCK_LIST_DIR, top_n: int = 10
 ) -> list[tuple[str, list[str]]]:
-    """当日双源各自 TOP10 → [("parallel__{模型名}", 代码), ...], 并行在前.
+    """当日各源 → [("parallel__{模型名}", 代码), ...], 并行在前.
 
+    parallel/legacy 各取 rank/序 前 top_n=10; genious 取边车全量 (不截断, 见下).
     标签 = 源名__模型批次串 (取自源 CSV 文件名). 每单内部过滤非法代码 + 逐码
     去重; 跨源重复股保留在两单 (2026-09-05 用户: "LEGACY AND PARALLEL 如果有
     重复, 不要去掉, 保留他们"); 撞指数码 000xxx 不剔 (推送端隔离, 见
@@ -117,14 +118,14 @@ def collect_lists(
     # GENIOUS 链路狙击 (2026-09-14 用户令 "出了 GENIOUS 列表 AUTO PUSH TO THS"):
     # 边车由 scripts/_genious_excel.py 落, 只有 Sheet1 冠军四段 (观察池不进自选股)。
     # 该源无历史样本 ⇒ 死区闸 fail-open 照推 (见 _deadzone_guard)。
+    # 不套 top_n: 边车本身就是"段位全留"的 Sheet1 冠军四段, 套截断会静默丢码
+    # (2026-09-15 用户令 "push all 冠军四段 iN SHEET1 TO THS, NOT JUST TOP10")。
     genious = _newest(f"genious_stocklist_{date}__*.csv", list_dir)
     if genious is not None:
         df = pd.read_csv(genious, dtype={"symbol": str})
         if "排名" in df.columns:
             df = df.dropna(subset=["排名"]).sort_values("排名")
-        lists.append(
-            (f"genious__{_module_of(genious)}", _valid_codes(df["symbol"])[:top_n])
-        )
+        lists.append((f"genious__{_module_of(genious)}", _valid_codes(df["symbol"])))
 
     if not lists:
         raise SystemExit(f"无清单: parallel/legacy/genious_stocklist_{date}__*.csv")
@@ -205,6 +206,28 @@ def _dlg_rows_from_img(img: np.ndarray) -> list[tuple[int, bool, bool]]:
     return rows
 
 
+def _map_dialog_rows(rows: list, row_codes: list) -> list | None:
+    """实测行 → (行, 期望代码) 映射; 两种版面都对不上则 None (fail-closed).
+
+    全长 = [.., c, None, ..]: 撞码股 (000001 平安银行/上证指数) 后面确实跟着
+    指数行, None 槽位即它. 短版 = [.., c, ..]: 该码**没有**指数孪生行.
+
+    为什么要有短版 (2026-09-15 实弹): `^000\\d{3}$` 一刀切假定所有 000xxx 都撞,
+    但 000572 (海马汽车) 识别只出一行 → 期望 4 行实得 3 行, 行数永远对不上,
+    该批 fail-closed 从不点加入, 000572 一次都没推成功过. 两版面靠实测行数区分:
+    撞码真出两行时行数=全长 (此时短版分支的行数不等价, 不会误判), 不撞时=短版.
+    短版下没有任何 None 槽位, 但红 tag 诊断行仍由调用方 fail-closed 拦.
+    纯股票批 (row_codes 无 None) 两版等价 → 第二分支不可达, 普通路径零改动.
+    """
+    full = list(row_codes)
+    short = [c for c in full if c is not None]
+    if len(rows) == len(full):
+        return list(zip(rows, full))
+    if len(short) != len(full) and len(rows) == len(short):
+        return list(zip(rows, short))
+    return None
+
+
 def _ensure_dialog_rows_checked(
     dlg, row_codes: list, log=print, max_rounds: int = 4
 ) -> dict | None:
@@ -259,23 +282,24 @@ def _ensure_dialog_rows_checked(
             )
             + f" (期望 {len(row_codes)} 行)"
         )
-        if len(rows) != len(row_codes):
+        mapping = _map_dialog_rows(rows, row_codes)
+        if mapping is None:
+            n_full = len(row_codes)
+            n_short = len([c for c in row_codes if c is not None])
             log(
-                f"[ths] 对话框行数 {len(rows)} != 期望 {len(row_codes)} "
-                f"(round {rnd + 1})"
+                f"[ths] 对话框行数 {len(rows)} != 期望 {n_full} (含指数行) "
+                f"/ {n_short} (无指数行) (round {rnd + 1})"
             )
-            _dump_fail(img, f"rowcount_{len(row_codes)}_got{len(rows)}")
+            _dump_fail(img, f"rowcount_{n_full}_got{len(rows)}")
             continue
-        for (yc, _ck, ix), rc in zip(rows, row_codes):
+        for (yc, _ck, ix), rc in mapping:
             if ix and rc is not None:
                 log(f"[ths] y{yc} 红 tag 落在股票槽位 ({rc}) — 诊断")
         # 指数行按位序识别 (None 槽位): 09-05 实弹 "中证" 标签深灰非红字,
         # 红字判据从未实检命中过指数行; 垫批死位 09-03 v8 + 09-05 retry9 两次
         # 复现. None 槽位行/红 tag 行已勾 → 无法取消, 点加入连指数入自选 → 拒
         index_checked = [
-            y0 + yc
-            for (yc, ck, ix), rc in zip(rows, row_codes)
-            if (rc is None or ix) and ck
+            y0 + yc for (yc, ck, ix), rc in mapping if (rc is None or ix) and ck
         ]
         if index_checked:
             log(f"[ths] 指数行已勾 {len(index_checked)} 行 (无法取消), 不点加入")
@@ -283,7 +307,7 @@ def _ensure_dialog_rows_checked(
             return None
         unchecked = [
             y0 + yc
-            for (yc, ck, ix), rc in zip(rows, row_codes)
+            for (yc, ck, ix), rc in mapping
             if rc is not None and not ix and not ck
         ]
         if not unchecked:
@@ -308,15 +332,16 @@ def _ensure_dialog_rows_checked(
             log(f"[ths] 点击行文字+Space y={ay} → " + ("仍未勾" if still else "已勾"))
     # 重查耗尽: 终检一次, 行数/位序可映射就交现状 (部分勾选也是净进展)
     img, rows = _grab()
-    if len(rows) != len(row_codes):
+    mapping = _map_dialog_rows(rows, row_codes)
+    if mapping is None:
         log(f"[ths] 终检行数 {len(rows)} != 期望 {len(row_codes)}")
         _dump_fail(img, f"final_rowcount_{len(row_codes)}_got{len(rows)}")
         return None
-    if any((rc is None or ix) and ck for (yc, ck, ix), rc in zip(rows, row_codes)):
+    if any((rc is None or ix) and ck for (yc, ck, ix), rc in mapping):
         log("[ths] 终检指数行已勾, 不点加入")
         _dump_fail(img, "final_idxchk")
         return None
-    out = {rc: bool(ck) for (yc, ck, ix), rc in zip(rows, row_codes) if rc is not None}
+    out = {rc: bool(ck) for (yc, ck, ix), rc in mapping if rc is not None}
     if not all(out.values()):
         log(
             f"[ths] 重查耗尽仍未勾 {sum(1 for g in out.values() if not g)} 只 "
@@ -494,14 +519,22 @@ def push_via_ths(txt_path, dry_run: bool = False) -> bool:
         print("[ths] txt 为空, 跳过")
         return True
 
-    ok, verdict = _push_once(txt_path, codes)
+    from scripts import _ths_ui as ui
+
+    try:
+        ok, verdict = _push_once(txt_path, codes)
+    except ui.ForegroundLostError as exc:
+        # 用户回座/别的窗抢前台 → 点击原语 fail-closed 抛错. 整轮必须中止
+        # (安全闸本意), 但结果单照写: 崩栈会让看板卡没数据, 调用方也分不清
+        # "本轮 blocked" 和 "脚本崩了" (2026-09-15 实弹)。
+        print(f"[ths] {exc} — 前台被抢, 整轮中止")
+        write_push_result(txt_path, codes, [], blocked=True)
+        return False
     if verdict != "dead_session":
         return ok
 
     import subprocess
     import time
-
-    from scripts import _ths_ui as ui
 
     print("[ths] 疑似掉登录 (加入无效果): 重启客户端单次重推")
     killed = 0
@@ -523,7 +556,12 @@ def push_via_ths(txt_path, dry_run: bool = False) -> bool:
         print(f"[ths] 重启后撞登录墙 ({exc}) — 需人工登录, 结果单已标 login_wall")
         return False
     time.sleep(40 + SWEEP_REST_S)  # settle + 重启点击的合成输入同样要衰减过闸
-    ok2, verdict2 = _push_once(txt_path, codes)
+    try:
+        ok2, verdict2 = _push_once(txt_path, codes)
+    except ui.ForegroundLostError as exc:
+        print(f"[ths] {exc} — 重启后仍被抢前台, 整轮中止")
+        write_push_result(txt_path, codes, [], blocked=True)
+        return False
     if verdict2 == "dead_session":
         print("[ths] 重启后仍加入无效果 — 留待人工, 不再重试")
     return ok2
@@ -583,11 +621,29 @@ def _push_once(txt_path, codes: list[str]) -> tuple[bool, str]:
         write_push_result(txt_path, codes, [], blocked=True)
         return False, ""
 
+    def missing_from_grid() -> list[str]:
+        """网格真值 → 还缺的码 (补推集合的唯一权威).
+
+        对话框勾选判读是抽签且会假阳性 (09-05 "已核验 9/6" 被云端实查推翻;
+        09-15 11:36 实弹判读称全落袋而网格实为 1/21). 拿它当补推集合, "其实没
+        入"的码会被永久剔出重试 — 10 轮全烧在对话框唯一还反对的那只上, 其余
+        19 只再没被重贴过. 读网格要复制识别框先关 (它压在自选股窗上). 读失败
+        退回全量重贴 (宁可白贴一遍, 不可漏).
+        """
+        dlg_old = ui.find_window("复制识别")
+        if dlg_old is not None:
+            ui.close_x(dlg_old)
+            time.sleep(0.5)
+        try:
+            grid = set(ui.read_all_codes(win, candidates=codes))
+        except Exception as exc:
+            print(f"[ths] 补推前网格核验未完成 ({exc}), 退回全量重贴")
+            return list(codes)
+        return [c for c in codes if c not in grid]
+
     landed: list[str] = []
+    pending = list(codes)
     for sweep in range(PUSH_SWEEPS):
-        pending = [c for c in codes if c not in landed]
-        if not pending:
-            break
         if sweep:
             # 轮间静默 (2026-09-08 自毒化修复): 上一轮自己的合成点击/剪贴板会让
             # 空闲闸把本轮误判成用户在场 → 旧码轮询一次即自灭. 先静默让合成输入
@@ -597,6 +653,11 @@ def _push_once(txt_path, codes: list[str]) -> tuple[bool, str]:
                 print(
                     f"[ths] 用户回座, 补推中止 (已落袋 {len(set(landed))}/{len(codes)})"
                 )
+                break
+            # 补推集合以网格真值定, 不用对话框勾选判读 (2026-09-15) — 见
+            # missing_from_grid 注释
+            pending = missing_from_grid()
+            if not pending:
                 break
             print(
                 f"[ths] 补推第 {sweep + 1}/{PUSH_SWEEPS} 轮, 缺 {len(pending)}: "
