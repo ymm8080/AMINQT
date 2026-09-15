@@ -576,12 +576,14 @@ def test_dir_column_max_reads_content_not_filename(tmp_path):
             {"announce_date": pd.to_datetime(dates), "roe": [1.0, 2.0]}
         ).to_parquet(tmp_path / fn, index=False)
     # 文件名最大日期是 20260902, 但内容最大是 2026-08-31 → 取内容
-    assert dir_column_max(str(tmp_path), "announce_date") == pd.Timestamp(
-        "2026-08-31"
-    ).date()
-    assert dir_watermark(str(tmp_path), r"_(\d{8})\.parquet$") == pd.Timestamp(
-        "2026-09-02"
-    ).date()  # 旧口径: 读文件名 → 正是误报的来源
+    assert (
+        dir_column_max(str(tmp_path), "announce_date")
+        == pd.Timestamp("2026-08-31").date()
+    )
+    assert (
+        dir_watermark(str(tmp_path), r"_(\d{8})\.parquet$")
+        == pd.Timestamp("2026-09-02").date()
+    )  # 旧口径: 读文件名 → 正是误报的来源
     assert dir_column_max(str(tmp_path / "nope"), "announce_date") is None
     assert dir_column_max(str(tmp_path), "no_such_col") is None
 

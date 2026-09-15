@@ -246,7 +246,9 @@ def check_watermark_entry(entry: dict, watermark_date, expected, cal) -> dict | 
     return check_file_entry(entry, watermark_date, expected, cal)
 
 
-def check_parity_entry(entry: dict, panel_max, reference_max, expected, cal) -> dict | None:
+def check_parity_entry(
+    entry: dict, panel_max, reference_max, expected, cal
+) -> dict | None:
     """parity 条目判定: 面板列水位 vs 上游缓存列水位 (两端都记事件日).
 
     面板是消费端, 缓存是生产端. **面板落后缓存超过 max_lag_days 个交易日** = 缓存

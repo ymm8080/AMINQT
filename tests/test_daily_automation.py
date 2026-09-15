@@ -369,7 +369,9 @@ def _xlsx(path, sheets):
 
     with pd.ExcelWriter(path, engine="openpyxl") as xw:
         for name in sheets:
-            pd.DataFrame({"symbol": ["600001"]}).to_excel(xw, sheet_name=name, index=False)
+            pd.DataFrame({"symbol": ["600001"]}).to_excel(
+                xw, sheet_name=name, index=False
+            )
 
 
 def _hist(path, dates):
