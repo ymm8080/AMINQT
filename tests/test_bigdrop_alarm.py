@@ -211,3 +211,80 @@ def test_show_capture_degrades_on_old_bundle(capsys):
 
     show_capture({"tag": "20260910"})
     assert "没有 capture 块" in capsys.readouterr().out
+
+
+# ---- build() 建包路径冒烟 (纯函数单测够不到的那一段) ----
+
+
+def _synthetic_panel(n_per_day: int = 800, seed: int = 7) -> "pd.DataFrame":
+    """造一个三段齐备的小面板, 只为让 build() 的真实路径跑起来。
+
+    规则列都用各自量纲造出厚尾 (冒烟只要求得分档铺得开, 不追求真实兑现率);
+    fwd 强制掺入 5% 的 <= -9.5%, 否则涨跌停那条基准线样本为 0 会除零。
+    """
+    from scripts.bigdrop_check import FEATS
+
+    rng = np.random.default_rng(seed)
+    dates = (
+        [f"2024010{d}" for d in range(2, 10)]  # FIT   < 20250701
+        + [f"2025070{d}" for d in range(1, 10)]  # CALIB 20250701~20251231
+        + [f"2026010{d}" for d in range(2, 10)]  # OOS   >= 20260101
+    )
+    frames = []
+    for dt in dates:
+        n = n_per_day
+        f: dict = {c: rng.normal(0.0, 1.0, n) for c in FEATS}
+        f["bias_20"] = rng.normal(0.10, 0.15, n)
+        f["bias_60"] = rng.normal(0.20, 0.30, n)
+        f["turnover_rate"] = rng.normal(8.0, 10.0, n)
+        f["free_float_turnover_rate"] = rng.normal(6.0, 5.0, n)
+        f["volume_ratio"] = rng.normal(1.2, 0.8, n)
+        f["pctChg"] = rng.normal(0.0, 3.0, n)
+        f["low60_gain"] = rng.normal(0.25, 0.25, n)
+        f["ret10"] = rng.normal(0.10, 0.10, n)
+        f["zt_break"] = (rng.random(n) < 0.06).astype(int)
+        f["conseq_zt"] = rng.integers(0, 5, n)
+
+        fwd = rng.normal(0.0, 0.04, n)
+        tail = rng.random(n) < 0.05
+        fwd[tail] = -rng.uniform(0.095, 0.14, int(tail.sum()))
+
+        f["date"] = dt
+        f["fwd"] = fwd
+        frames.append(pd.DataFrame(f))
+
+    d = pd.concat(frames, ignore_index=True)
+    d["y"] = (d["fwd"] <= -0.05).astype(float)
+    return d
+
+
+def test_build_runs_end_to_end(tmp_path, monkeypatch):
+    """build() 必须跑通并产出完整 bundle —— 纯函数单测覆盖不到的建包路径。
+
+    回归: 捕获阶梯循环曾用 `m` 承接样本掩码, 覆盖了上面的 LGBM 模型变量,
+    建包崩在 booster=m.booster_ 处, bundle 完全写不出来 —— 当时 19 条单测
+    全绿也照样没拦住, 因为它们只碰纯函数。
+    """
+    from scripts import bigdrop_check as bd
+
+    monkeypatch.setattr(bd, "load_frame", lambda: _synthetic_panel())
+    monkeypatch.setattr(bd, "BUNDLE_DIR", tmp_path)
+
+    b = bd.build()
+
+    for key in ("booster", "iso", "lr", "rules", "rule_table", "alarm", "capture"):
+        assert key in b, f"bundle 缺 {key}"
+    assert len(b["rules"]) == 10
+
+    # 遮蔽 bug 的直接断言: 存进去的必须是模型对象, 不是被覆盖的 ndarray
+    assert not isinstance(b["booster"], np.ndarray)
+    assert hasattr(b["booster"], "predict")
+
+    # 阶梯嵌套 => 召回随档位放宽单调不降
+    assert b["capture"][-1]["name"] == "T4 未标"
+    rec = [c["bigdrop_recall"] for c in b["capture"][:-1]]
+    assert rec == sorted(rec)
+
+    # 落盘到 tmp_path, 绝不碰真 artifact (WORM)
+    assert (tmp_path / "bundle_latest.joblib").exists()
+    assert list(tmp_path.glob("bundle_*.joblib"))
