@@ -1,12 +1,19 @@
-"""_legacy_late_babysitter.py — 链跑完后补跑今天漏掉的 LEGACY 预测 + 交付 (2026-09-14).
+"""_legacy_late_babysitter.py — 链跑完后补跑今天漏掉的 LEGACY 派生交付 (2026-09-14).
 
 背景 (09-14 事故): 链的 retrain 被 stall_watchdog 硬退 rc=86 时**没带走子进程** —
 横插出来的 `_dual_pkg_finaltop_compare.py` 成孤儿, 在哨兵表里, 占着运行守卫。紧随其后的
 `legacy` (预测) 撞守卫 rc=3 秒退 → 无 `data/lists/list_{tag}.parquet` → `deliver` rc=1。
-链把这两步判 FAIL 后继续往下走, **不会重试**, 于是今天的 LEGACY 交付整段缺失。
+链把这两步判 FAIL 后继续往下走, **不会重试**。
 
-本脚本等链进程退干净 + 守卫连续空档后, 顺序补跑这两步。以独立进程运行 (Start-Process /
-cmd /c), 会话退出不影响。发射后 rc=3 退避重试; 其他非零 rc 大声退出 (fail-fast)。
+一击带走的不止 LEGACY 本身 —— 判 FAIL 后链仍继续, 一路降级跳页:
+  · `prob10dens_push` → `candidates_{tag}.parquet` 是 LEGACY 管道产的 → 跳 (fail-safe)
+  · `final_stocklist` / `stocklist_combined` → LEGACY 页 + 密度页双双缺失
+即 LEGACY 一步死, 当天合并表少两页。
+
+本脚本等链进程退干净 + 守卫连续空档后, 顺序补跑这五步:
+  legacy(预测) → deliver → prob10dens → final_stocklist → stocklist_combined
+最前面两步失败即退出 (下游全部无源); 后三步互相不中止 (缺页会降级跳页), 末尾汇总报失败。
+以独立进程运行 (Start-Process / cmd /c), 会话退出不影响。发射后 rc=3 退避重试。
 
 启动:
   cmd /c "python -u scripts\\_legacy_late_babysitter.py --tag 20260914 --chain-pid 16816
@@ -122,14 +129,33 @@ def main() -> int:
 
     rc = run_step("legacy", [PY, "-u", "scripts/_gen_legacy_list.py", a.tag])
     if rc != 0:
-        log("legacy 预测失败 — 交付无源, 退出")
+        log("legacy 预测失败 — 下游全部无源, 退出")
         return rc
     if a.skip_deliver:
-        log("--skip-deliver: 只跑预测, 交付留给链外手动")
+        log("--skip-deliver: 只跑预测, 交付与下游留给链外手动")
         return 0
     rc = run_step("deliver", [PY, "-u", "scripts/_deliver_legacy_list.py", a.tag])
-    log(f"补跑结束 rc={rc}")
-    return rc
+    if rc != 0:
+        log("deliver 失败 — 下游无源, 退出")
+        return rc
+
+    # 下游三步: 缺一页只是降级跳页, 不互相中止, 末尾汇总。
+    # 密度步带 `--gen-only`: 只出清单/清单页, **不推同花顺自选股** —— 补跑不该替你
+    # 触发不可逆的自选股写入 (链今晚的 parallel 推已被死区闸拦, 密度该不该推由用户定)。
+    downstream = (
+        (
+            "prob10dens",
+            [PY, "-u", "scripts/_prob10_density_shadow.py", a.tag, "--gen-only"],
+        ),
+        ("final_stocklist", [PY, "-u", "scripts/_final_stocklist.py", a.tag]),
+        ("stocklist_combined", [PY, "-u", "scripts/_stocklist_combined.py", a.tag]),
+    )
+    failed = [n for n, argv in downstream if run_step(n, argv) != 0]
+    if failed:
+        log(f"补跑结束, 失败步 {failed} — 需看日志")
+        return 1
+    log("补跑五步全 ok")
+    return 0
 
 
 if __name__ == "__main__":
