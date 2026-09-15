@@ -109,3 +109,33 @@ def test_write_xlsx_roundtrip(tmp_path):
     leg = xl.parse("LEGACY", dtype=str)
     assert leg["symbol"].tolist() == ["600000", "600001"]
     assert leg["pred_ret_10d"].tolist() == ["10.0%", "8.0%"]  # 显示层原样
+
+
+def test_write_same_day_rerun_goes_to_variants_not_skip(tmp_path):
+    """同日重跑必须**真落文件** (用户 2026-09-15 "SHOULD NOT SKIP")。
+
+    旧行为 = 已存在就 print 跳过 + rc=0: 上游改了清单后重跑, 下游合成表仍是旧行
+    却报成功 —— 无声失真。现行为 = 退到 __v2/__v3, 规范名首份不动 (WORM)。
+    """
+    _legacy(tmp_path)
+    _parallel(tmp_path)
+    sheets = sc.build(DATE, list_dir=tmp_path, shadow_dir=tmp_path)
+    got = [sc.write(sheets, DATE, list_dir=tmp_path).name for _ in range(3)]
+    assert got == [
+        f"stocklist_combined_{DATE}.xlsx",
+        f"stocklist_combined_{DATE}__v2.xlsx",
+        f"stocklist_combined_{DATE}__v3.xlsx",
+    ]
+    assert all((tmp_path / n).exists() for n in got)  # 三份都在, 无一被覆盖
+
+
+def test_next_path_prefers_canonical_then_fills_first_gap(tmp_path):
+    canonical = tmp_path / f"stocklist_combined_{DATE}.xlsx"
+    assert sc._next_path(DATE, tmp_path) == canonical
+    canonical.write_text("x", encoding="utf-8")
+    assert sc._next_path(DATE, tmp_path).name == f"stocklist_combined_{DATE}__v2.xlsx"
+    # 跨过已存在的号取下一个空位 (不重用 __v2)
+    (tmp_path / f"stocklist_combined_{DATE}__v2.xlsx").write_text("x", encoding="utf-8")
+    assert sc._next_path(DATE, tmp_path).name == f"stocklist_combined_{DATE}__v3.xlsx"
+    # 别日互不影响
+    assert sc._next_path("20260106", tmp_path).name == "stocklist_combined_20260106.xlsx"

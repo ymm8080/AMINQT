@@ -11,7 +11,9 @@
 - SLOW_BULL: shadow 目录长持清单 (只入表不推送)
 
 缺源跳页 (密度/SLOW_BULL 常缺, 影子单当日未跑); LEGACY+PARALLEL 双缺才退出。
-输出: STOCK_LIST_DIR/stocklist_combined_{date}.xlsx — WORM: 已存在打印跳过 rc=0。
+输出: STOCK_LIST_DIR/stocklist_combined_{date}.xlsx — WORM: 同名已存在则退到
+__v2/__v3/... 变体 (绝不覆盖, 也不再跳过)。下游 `run_daily_automation._combined_delivered`
+本就按 `stocklist_combined_{tag}*.xlsx` glob 认变体, 故同日重跑必须真的落文件。
 链路: run_daily_automation "stocklist_combined" 步骤, 置 final_stocklist 后 (非关键)。
 """
 
@@ -55,6 +57,23 @@ def _newest(pattern: str, d: Path) -> Path | None:
     if not hits:
         return None
     return Path(max(hits, key=os.path.getmtime))
+
+
+def _next_path(date: str, list_dir=STOCK_LIST_DIR) -> Path:
+    """WORM 取号: 首选规范名; 已存在则依次 __v2/__v3/... 找第一个空位 (绝不覆盖)。
+
+    为什么要取号而不是跳过 (2026-09-15 用户 "SHOULD NOT SKIP"): 同日重跑若静默
+    skip, 拿到的是**旧内容**且 rc=0 —— 上游(如改了闸/校正了清单)重跑后下游合成表
+    仍是旧行, 无声失真。变体号在本仓已是既有约定 (09-07 手工版 __v3,
+    tests/test_daily_automation.py 的 __v2 用例, _combined_delivered 的 glob)。
+    """
+    d = Path(list_dir)
+    if not (d / f"stocklist_combined_{date}.xlsx").exists():
+        return d / f"stocklist_combined_{date}.xlsx"
+    n = 2
+    while (d / f"stocklist_combined_{date}__v{n}.xlsx").exists():
+        n += 1
+    return d / f"stocklist_combined_{date}__v{n}.xlsx"
 
 
 def build(date: str, list_dir=STOCK_LIST_DIR, shadow_dir=SHADOW_DIR):
@@ -144,7 +163,7 @@ def market_fade_sheet(fc_fn=None) -> tuple[str, pd.DataFrame] | None:
 
 
 def write(sheets, date: str, list_dir=STOCK_LIST_DIR) -> Path:
-    fp = Path(list_dir) / f"stocklist_combined_{date}.xlsx"
+    fp = _next_path(date, list_dir)
     with pd.ExcelWriter(fp, engine="openpyxl") as xw:
         for name, df in sheets:
             df.to_excel(xw, sheet_name=name, index=False)
@@ -170,15 +189,11 @@ def main() -> int:
         if fp is None:
             raise SystemExit("STOCK LIST 目录无任何 legacy 清单")
         date = re.search(r"legacy_stocklist_(\d{8})__", fp.name).group(1)
-    out = Path(STOCK_LIST_DIR) / f"stocklist_combined_{date}.xlsx"
-    if out.exists():
-        print(f"[combined] WORM: 已存在 {out.name}, 跳过")
-        return 0
     sheets = build(date)
     mk = market_fade_sheet()
     if mk:
         sheets.insert(1, mk)
-    write(sheets, date)
+    out = write(sheets, date)
     for name, df in sheets:
         print(f"[combined] sheet {name}: {len(df)} 行")
     print(f"[combined] {datetime.datetime.now():%H:%M} → {out.name}")
