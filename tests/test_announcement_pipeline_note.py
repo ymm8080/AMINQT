@@ -8,6 +8,7 @@
 同时回归一个真实踩过的坑: 给 msg 加分支时曾整块删掉 `results[src] = {...}`,
 导致结果字典为空 —— 报告只剩表头, 无异常无告警. 这里锁住"必须登记".
 """
+
 from __future__ import annotations
 
 import sys
@@ -43,9 +44,11 @@ class _FakeSupply:
 
 
 def _run(fina_df: pd.DataFrame):
-    with patch.object(ap, "DataSupplyChain", lambda: _FakeSupply(fina_df)), patch.object(
-        ap, "_fetch_anns_d", lambda *a, **k: pd.DataFrame()
-    ), patch.object(ap, "_fetch_forecast_increment", lambda *a, **k: pd.DataFrame()):
+    with (
+        patch.object(ap, "DataSupplyChain", lambda: _FakeSupply(fina_df)),
+        patch.object(ap, "_fetch_anns_d", lambda *a, **k: pd.DataFrame()),
+        patch.object(ap, "_fetch_forecast_increment", lambda *a, **k: pd.DataFrame()),
+    ):
         return ap.fetch_announcement_data("20260915", refresh=False)
 
 

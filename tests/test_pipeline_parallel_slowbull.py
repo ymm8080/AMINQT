@@ -966,9 +966,7 @@ def test_pv_corr_5_slice_with_warmup_matches_full_panel():
     ref = full[full["date"] >= cutoff].reset_index(drop=True)
 
     assert len(sl) == len(ref) and len(sl) > 0
-    pd.testing.assert_series_equal(
-        sl["pv_corr_5"], ref["pv_corr_5"], check_names=False
-    )
+    pd.testing.assert_series_equal(sl["pv_corr_5"], ref["pv_corr_5"], check_names=False)
     # 值真的有区分度 (否则上面相等是废话)
     assert ref["pv_corr_5"].nunique() > 10
 

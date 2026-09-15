@@ -172,8 +172,12 @@ def _pv_warmup_ok(t: pd.DataFrame, cutoff, prior_syms: set[str]) -> pd.Series:
 
 def _prior_symbols(fp: Path, before) -> set[str]:
     """热身段之前有行的股票 (只读 symbol/date 两列, 用于区分"停牌股"与"新上市股")."""
-    tbl = pq.read_table(str(fp), columns=["symbol", "date"], filters=[("date", "<", before)])
+    tbl = pq.read_table(
+        str(fp), columns=["symbol", "date"], filters=[("date", "<", before)]
+    )
     return set(tbl.column("symbol").to_pandas().astype(str).unique())
+
+
 # [2026-08-06] 预测稳定性 (诊断 _diag_pred_decomp: 校准器逐日漂移 + score 逐日抖动同量级):
 #  1) per-stock 斜率向横截面收缩 (empirical-Bayes partial pooling): λ=n/(n+SHRINK_KAPPA),
 #     保持个股质心 (intercept=ȳ−slope·x̄) → 面板逐日滚动重拟合时 Δslope 大幅降低.
@@ -466,9 +470,7 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
                 flush=True,
             )
         need = base_need + [
-            c
-            for c in set(pool_sn) | set(pool_fu)
-            if c in schema and c not in base_need
+            c for c in set(pool_sn) | set(pool_fu) if c in schema and c not in base_need
         ]
         dates = pd.to_datetime(
             pq.read_table(str(fp), columns=["date"]).to_pandas()["date"]
@@ -718,9 +720,11 @@ def _anchor_frame(board: str, window: int = ANCHOR_WINDOW) -> pd.DataFrame:
     pool_fu = effective_pool(FUSION, board)
     schema = set(pq.ParquetFile(str(fp)).schema_arrow.names)
     pool_cols = [c for c in set(pool_sn) | set(pool_fu) if c in schema]
-    cols = ["symbol", "date", "volume"] + pool_cols + [
-        f"label_pm_{h}_net" for h in HORIZONS
-    ]
+    cols = (
+        ["symbol", "date", "volume"]
+        + pool_cols
+        + [f"label_pm_{h}_net" for h in HORIZONS]
+    )
     t = pq.read_table(
         str(fp), columns=cols, filters=[("date", ">=", warm_from)]
     ).to_pandas()
@@ -729,7 +733,9 @@ def _anchor_frame(board: str, window: int = ANCHOR_WINDOW) -> pd.DataFrame:
     t["symbol"] = t["symbol"].astype(str)
     t = t.sort_values(["symbol", "date"]).reset_index(drop=True)
     t = indicators.add_pv_corr_5(t)
-    t = t[_pv_warmup_ok(t, cutoff, _prior_symbols(fp, warm_from))].reset_index(drop=True)
+    t = t[_pv_warmup_ok(t, cutoff, _prior_symbols(fp, warm_from))].reset_index(
+        drop=True
+    )
     sn = pool_score(t, pool_sn)
     fu = pool_score(t, pool_fu)
     t["score"] = np.maximum(sn.values, fu.values)
