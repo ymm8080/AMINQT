@@ -44,6 +44,32 @@ def _gema(s: pd.Series, key: pd.Series, n: int) -> pd.Series:
     return r.reset_index(level=0, drop=True)
 
 
+def add_pv_corr_5(work: pd.DataFrame) -> pd.DataFrame:
+    """只补 pv_corr_5 一列 (5 日量价相关系数), 口径与 prepare_adx 完全一致.
+
+    交付链 (_shortlist_t5_t10) 只读检查点的一段切片, 不跑整个 prepare_adx, 而
+    SNIPER/FUSION 两个池都含这个因子 —— 不补就会让**同一个 score 列名**在回测链
+    (6 特征) 与交付链 (5 特征, 缺列自动跳过后权重重新归一) 含义不同。
+    中性填充 0 (无数据不给信用) 也照搬 prepare_adx, 否则切片头部的 NaN 会让
+    pool_score 把整只股票排名成 NaN 而被 dropna 剔除。
+
+    输入须按 [symbol, date] 排好, 且含 volume + close_hfq(或 close)。
+    """
+    c = "close_hfq" if "close_hfq" in work.columns else "close"
+    key = work["symbol"]
+    ret = _gpct(work[c], key)
+    vp = _gpct(work["volume"], key)
+    xy = (ret * vp).replace([np.inf, -np.inf], np.nan)
+    mxy = _groll(xy, key, 5, "mean")
+    mx = _groll(ret, key, 5, "mean")
+    my = _groll(vp, key, 5, "mean")
+    varx = _groll(ret * ret, key, 5, "mean") - mx * mx
+    vary = _groll(vp * vp, key, 5, "mean") - my * my
+    corr = (mxy - mx * my) / np.sqrt(np.maximum(varx * vary, 0.0))
+    work["pv_corr_5"] = corr.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    return work
+
+
 def _limit_pct_col(df: pd.DataFrame) -> pd.Series:
     """每行跌停阈值: 创业板/科创 (30/68 前缀) 20%, 主板 10% (ST 不细分, 保守取板限)."""
     if "board" in df.columns:
@@ -156,16 +182,7 @@ def prepare_adx(work: pd.DataFrame, spec: dict | None = None) -> pd.DataFrame:
     mean20 = _groll(ret, key, spec["sharpe_lookback"], "mean")
     std20 = _groll(ret, key, spec["sharpe_lookback"], "std")
     work["sharpe_20"] = (mean20 / std20).replace([np.inf, -np.inf], np.nan)
-    work["_vol_pct"] = _gpct(work["_vol"], key)
-    x, y = ret, work["_vol_pct"]
-    xy = (x * y).replace([np.inf, -np.inf], np.nan)
-    mxy = _groll(xy, key, 5, "mean")
-    mx = _groll(x, key, 5, "mean")
-    my = _groll(y, key, 5, "mean")
-    varx = _groll(x * x, key, 5, "mean") - mx * mx
-    vary = _groll(y * y, key, 5, "mean") - my * my
-    corr = (mxy - mx * my) / np.sqrt(np.maximum(varx * vary, 0.0))
-    work["pv_corr_5"] = corr.replace([np.inf, -np.inf], np.nan)
+    work = add_pv_corr_5(work)
     work["ret60"] = _gpct(close, key, spec["rps_lookback"])
 
     # 截面因子: RPS = 全市场 60日涨幅分位 (文档 "vs 全市场")
@@ -179,7 +196,7 @@ def prepare_adx(work: pd.DataFrame, spec: dict | None = None) -> pd.DataFrame:
             work[col] = work[col].fillna(0.0)
 
     work = work.drop(
-        columns=["_c", "_h", "_l", "_vol", "_limit_pct", "_ret", "_vol_pct", "ret60"],
+        columns=["_c", "_h", "_l", "_vol", "_limit_pct", "_ret", "ret60"],
         errors="ignore",
     )
     gc.collect()

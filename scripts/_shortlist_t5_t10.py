@@ -56,7 +56,7 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from app.pipeline1.label_engine import COST, slippage_tier
 from app.pipeline1.risk_overlays import share_float_upcoming_scan
-from app.pipeline_parallel import prob_head
+from app.pipeline_parallel import indicators, prob_head
 from app.pipeline_parallel.calibration import calibrate_mag10d
 from app.pipeline_parallel.config import FUSION, HORIZONS, SNIPER, effective_pool
 from app.pipeline_parallel.rank_source import resolve_rank_key
@@ -148,6 +148,36 @@ ABS_TARGET = {"3d": 0.03, "5d": 0.04, "10d": 0.06}
 # 每股取自己最近 PER_STOCK_WINDOW 交易日 (score→mfe) 拟合, 不足 PER_STOCK_MIN_N 回退横截面.
 PER_STOCK_WINDOW = 130
 PER_STOCK_MIN_N = 30
+# [2026-09-15] 交付链读检查点切片, 而池特征 pv_corr_5 不在检查点里 (由 prepare_adx
+# 现算). 切片必须多读 5 天给 5 日滚动窗口热身, 否则切片头 5 天该列恒 0 (中性填充),
+# score 与回测链同列名不同值. 热身天数 = pv_corr_5 的滚动窗 (见 indicators.add_pv_corr_5).
+PV_CORR_WARMUP = 5
+
+
+def _pv_warmup_ok(t: pd.DataFrame, cutoff, prior_syms: set[str]) -> pd.Series:
+    """挑出"滚动窗在切片内已满"的行 —— 只有这些行与整面板口径逐位一致.
+
+    多读 PV_CORR_WARMUP 天热身只对"每天都有行"的股票成立; 停牌股在热身段里缺行, 到
+    cutoff 那天仍凑不满 5 行滚动窗 → 被中性填成 0, 而整面板有真值。这些"跨切口"的行
+    丢掉 (每股至多 PV_CORR_WARMUP-1 行), 不伪造值。
+
+    prior_syms = 在热身段之前就有行的股票集合。**新上市股不在其中**, 它的整段历史都
+    在切片里 → 切片口径 = 整面板口径 (都是不足 5 行 → 0), 必须保留, 否则新股会凭空
+    从交付候选池里消失。日期均匀的股票: 位置 >= 5 ⟺ 日期 >= cutoff, 一行不丢。
+    """
+    pos = t.groupby("symbol", sort=False).cumcount()
+    safe = (pos >= PV_CORR_WARMUP) | ~t["symbol"].isin(prior_syms)
+    return pd.Series((t["date"] >= cutoff).to_numpy() & safe.to_numpy(), index=t.index)
+
+
+def _prior_symbols(fp: Path, before) -> set[str]:
+    """热身段之前有行的股票 (只读 symbol/date 两列, 用于区分"停牌股"与"新上市股")."""
+    tbl = pq.read_table(
+        str(fp), columns=["symbol", "date"], filters=[("date", "<", before)]
+    )
+    return set(tbl.column("symbol").to_pandas().astype(str).unique())
+
+
 # [2026-08-06] 预测稳定性 (诊断 _diag_pred_decomp: 校准器逐日漂移 + score 逐日抖动同量级):
 #  1) per-stock 斜率向横截面收缩 (empirical-Bayes partial pooling): λ=n/(n+SHRINK_KAPPA),
 #     保持个股质心 (intercept=ȳ−slope·x̄) → 面板逐日滚动重拟合时 Δslope 大幅降低.
@@ -408,7 +438,8 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
     [2026-08-06 用户: 价格预测必须每股独立, 只用该股自己最近 6 个月历史]
     短名单 OOS 文件只含"每日被选股" → 每股仅零星几行, 无法做每股回归;
     面板 (每 stock × 每交易日) 才有逐股日频. 在此按生产口径重算:
-      - score = 与生产一致的 6 特征截面分位 (pv_corr_5 面板同样缺列, 自动跳过)
+      - score = 与生产一致的 6 特征截面分位 (pv_corr_5 不在检查点, 多读
+        PV_CORR_WARMUP 天后由 indicators.add_pv_corr_5 就地补, 再 _pv_warmup_ok 裁)
       - mfe   = _add_mfe 口径 (窗口最高价 / 买入价 - 1 - cost, 净)
     返回 {(board, key): DataFrame[symbol, date, score, mfe_3d..mfe_10d]}.
     """
@@ -419,6 +450,7 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
         "close_hfq",
         "high_hfq",
         "adv20",
+        "volume",
         "label_pm_3d_net",
         "label_pm_5d_net",
         "label_pm_10d_net",
@@ -438,7 +470,7 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
                 flush=True,
             )
         need = base_need + [
-            c for c in set(pool_sn) | set(pool_fu) if c != "pv_corr_5" and c in schema
+            c for c in set(pool_sn) | set(pool_fu) if c in schema and c not in base_need
         ]
         dates = pd.to_datetime(
             pq.read_table(str(fp), columns=["date"]).to_pandas()["date"]
@@ -446,14 +478,18 @@ def _panel_per_stock() -> dict[tuple[str, str], pd.DataFrame]:
         uniq = np.unique(dates.values)
         if len(uniq) < PER_STOCK_WINDOW + 12:
             continue
-        cutoff = uniq[-(PER_STOCK_WINDOW + 12)]
+        head = len(uniq) - (PER_STOCK_WINDOW + 12)
+        cutoff = uniq[head]
+        warm_from = uniq[max(0, head - PV_CORR_WARMUP)]
         t = pq.read_table(
-            str(fp), columns=need, filters=[("date", ">=", cutoff)]
+            str(fp), columns=need, filters=[("date", ">=", warm_from)]
         ).to_pandas()
         if t.empty:
             continue
         t["symbol"] = t["symbol"].astype(str)
         t = t.sort_values(["symbol", "date"]).reset_index(drop=True)
+        t = indicators.add_pv_corr_5(t)
+        t = t[_pv_warmup_ok(t, cutoff, _prior_symbols(fp, warm_from))]
         t = _add_mfe(t)
         fr_sn = t[["symbol", "date"]].copy()
         fr_sn["score"] = pool_score(t, pool_sn)
@@ -675,22 +711,31 @@ def _anchor_frame(board: str, window: int = ANCHOR_WINDOW) -> pd.DataFrame:
     uniq = np.unique(dates.values)
     if len(uniq) < window + 12:
         return pd.DataFrame()
-    cutoff = uniq[-(window + 12)]
+    head = len(uniq) - (window + 12)
+    cutoff = uniq[head]
+    warm_from = uniq[max(0, head - PV_CORR_WARMUP)]
     # 幅度头 per-board extras (8格 0912): 与 _panel_per_stock 同有效池 (score 跨日
     # 截面分位须与预测面板重叠日一致 → 锚的 top-N 即模型当日入选集)
     pool_sn = effective_pool(SNIPER, board)
     pool_fu = effective_pool(FUSION, board)
     schema = set(pq.ParquetFile(str(fp)).schema_arrow.names)
-    pool_cols = [
-        c for c in set(pool_sn) | set(pool_fu) if c != "pv_corr_5" and c in schema
-    ]
-    cols = ["symbol", "date"] + pool_cols + [f"label_pm_{h}_net" for h in HORIZONS]
+    pool_cols = [c for c in set(pool_sn) | set(pool_fu) if c in schema]
+    cols = (
+        ["symbol", "date", "volume"]
+        + pool_cols
+        + [f"label_pm_{h}_net" for h in HORIZONS]
+    )
     t = pq.read_table(
-        str(fp), columns=cols, filters=[("date", ">=", cutoff)]
+        str(fp), columns=cols, filters=[("date", ">=", warm_from)]
     ).to_pandas()
     if t.empty:
         return pd.DataFrame()
     t["symbol"] = t["symbol"].astype(str)
+    t = t.sort_values(["symbol", "date"]).reset_index(drop=True)
+    t = indicators.add_pv_corr_5(t)
+    t = t[_pv_warmup_ok(t, cutoff, _prior_symbols(fp, warm_from))].reset_index(
+        drop=True
+    )
     sn = pool_score(t, pool_sn)
     fu = pool_score(t, pool_fu)
     t["score"] = np.maximum(sn.values, fu.values)

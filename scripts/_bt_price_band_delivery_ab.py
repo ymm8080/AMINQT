@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 
 from app.pipeline_parallel import config as pc
+from app.pipeline_parallel import indicators as pc_indicators
 from app.pipeline_parallel.backtest import (
     _window_cutoff,
     board_of,
@@ -46,10 +47,9 @@ LABELS = [
     ("5d", "label_pm_5d_net"),
     ("10d", "label_pm_10d_net"),
 ]
-# 交付链所需列 (同 _panel_per_stock: 池特征缺 pv_corr_5 自动跳过; label 直读检查点)
-_POOL_COLS = sorted(
-    {c for c in set(pc.SNIPER.pool) | set(pc.FUSION.pool) if c != "pv_corr_5"}
-)
+# 交付链所需列 (同 _panel_per_stock: 池特征含 pv_corr_5, 检查点无此列 → 就地补;
+# label 直读检查点)
+_POOL_COLS = sorted({c for c in set(pc.SNIPER.pool) | set(pc.FUSION.pool)})
 
 
 def _load_work_delivery() -> pd.DataFrame:
@@ -74,6 +74,7 @@ def _load_work_delivery() -> pd.DataFrame:
     del slices
     gc.collect()
     work["symbol"] = work["symbol"].astype(str)
+    work = pc_indicators.add_pv_corr_5(work)
     work["board"] = work["symbol"].map(board_of)
     print(
         f"[load] {len(work):,}r | {work['date'].nunique()} 决策日 "
@@ -84,8 +85,8 @@ def _load_work_delivery() -> pd.DataFrame:
 
 
 _READ_COLS = (
-    ["symbol", "date", "close_hfq"]
-    + _POOL_COLS
+    ["symbol", "date", "close_hfq", "volume"]
+    + [c for c in _POOL_COLS if c != "pv_corr_5"]  # 该列检查点没有, 读后现算
     + [
         "label_pm_3d_net",
         "label_pm_5d_net",
