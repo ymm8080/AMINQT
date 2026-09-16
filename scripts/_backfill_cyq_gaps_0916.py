@@ -100,14 +100,14 @@ if len(miss):
 
 # ── 3. 构造写入映射 (idx → dict-of-col-vals) ──
 t_all = t_all.set_index(["date", "symbol"], drop=False)
-changes_A = 0
-changes_B = 0
+changes_a = 0
+changes_b = 0
 
-fill_A = {}
+fill_a = {}
 for sym, fdf in fetched.items():
     for d, row in fdf.iterrows():
         if (d, sym) in t_all.index:
-            fill_A[(d, sym)] = {c: row.get(c, np.nan) for c in CYQ_COLS}
+            fill_a[(d, sym)] = {c: row.get(c, np.nan) for c in CYQ_COLS}
 
 # ── 4. B 段: cost_bias 重算 (只对 NaN 处) ──
 cb_mask = (
@@ -135,16 +135,16 @@ for rg in range(pf.metadata.num_row_groups):
     )
 
     # A: base CYQ 填充
-    a_here = [i for i, key in enumerate(df_rg_idx) if key in fill_A]
+    a_here = [i for i, key in enumerate(df_rg_idx) if key in fill_a]
     for i in a_here:
         key = df_rg_idx[i]
-        vals = fill_A[key]
+        vals = fill_a[key]
         cur = df_rg.iloc[i]
         # 幂等守卫: 只补全 NaN 位置
         for c in CYQ_COLS:
             if pd.isna(df_rg.at[df_rg.index[i], c]) and pd.notna(vals[c]):
                 df_rg.at[df_rg.index[i], c] = vals[c]
-                changes_A += 1
+                changes_a += 1
         # A 段 cost_bias 重算
         c50 = df_rg.at[df_rg.index[i], "cost_50pct"]
         if (
@@ -155,7 +155,7 @@ for rg in range(pf.metadata.num_row_groups):
             nv = (df_rg.at[df_rg.index[i], "close_hfq"] - c50) / c50
             if pd.isna(df_rg.at[df_rg.index[i], "cost_bias"]):
                 df_rg.at[df_rg.index[i], "cost_bias"] = nv
-                changes_B += 1
+                changes_b += 1
         if examples_printed < 3:
             print(
                 f"    A-fill sample {key}: cost_50pct={c50}, cost_bias={df_rg.at[df_rg.index[i], 'cost_bias']}"
@@ -173,14 +173,14 @@ for rg in range(pf.metadata.num_row_groups):
         c50 = df_rg.loc[b_here_mask, "cost_50pct"]
         chb = df_rg.loc[b_here_mask, "close_hfq"]
         df_rg.loc[b_here_mask, "cost_bias"] = (chb - c50) / c50.replace(0, np.nan)
-        changes_B += n_before
+        changes_b += n_before
 
     writer.write_table(pa.Table.from_pandas(df_rg, schema=schema, preserve_index=False))
 
 writer.close()
 pf.close()
 
-print(f"\n[A] 补值 cell 数: {changes_A}; [B] cost_bias 补值: {changes_B}")
+print(f"\n[A] 补值 cell 数: {changes_a}; [B] cost_bias 补值: {changes_b}")
 
 # ── 6. 原子替换 + 备份 ──
 if os.path.exists(BACKUP):
