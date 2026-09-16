@@ -720,8 +720,14 @@ def _anchor_frame(board: str, window: int = ANCHOR_WINDOW) -> pd.DataFrame:
     pool_fu = effective_pool(FUSION, board)
     schema = set(pq.ParquetFile(str(fp)).schema_arrow.names)
     pool_cols = [c for c in set(pool_sn) | set(pool_fu) if c in schema]
+    # pv_corr_5 要价格列: add_pv_corr_5 取 close_hfq 优先、退 close。原先只投 volume,
+    # 两个价格列都没投影进来 → add_pv_corr_5 里 work[c] 抛 KeyError: 'close', 整条
+    # DELIVER_PARALLEL 挂掉 (价格列不在 pool_sn/pool_fu 里, 不会被 pool_cols 带上)。
+    # 与 _panel_per_stock 的 base_need 同源, 优先级照抄 add_pv_corr_5 自己那行。
+    px_cols = [c for c in ("close_hfq", "close") if c in schema][:1]
     cols = (
         ["symbol", "date", "volume"]
+        + px_cols
         + pool_cols
         + [f"label_pm_{h}_net" for h in HORIZONS]
     )

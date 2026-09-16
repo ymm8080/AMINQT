@@ -296,3 +296,24 @@ def test_recal_probs_disabled_and_empty_hist(monkeypatch):
     monkeypatch.setattr(mod, "_load_raw_history", lambda sel, m: pd.DataFrame())
     out2 = _recal_probs(res.copy(), pd.Timestamp("2026-08-29"), "fusion")
     assert out2.equals(res)
+
+
+# --------------------------------------------------------------- _anchor_frame
+def test_anchor_frame_reads_a_price_column():
+    """[0915 回归] _anchor_frame 的读列投影必须带价格列.
+
+    43af9b51 (#156) 给 _anchor_frame 加了 indicators.add_pv_corr_5(t), 但没把
+    close_hfq/close 加进该函数的读列 (原先只读 symbol/date/volume + 池因子列,
+    而价格列并不在池里) → add_pv_corr_5 里 work[c] 抛 KeyError: 'close', 整条
+    DELIVER_PARALLEL 三轮全挂 (rc=1), PARALLEL 短名单当日零产出 → 合并清单缺
+    PARALLEL 页. 函数级冒烟即可复现, 不必跑全链.
+    """
+    from config.settings import DATA_DIR
+
+    fp = DATA_DIR / "_diag_stage_main_3y.parquet"
+    if not fp.exists():
+        pytest.skip("_diag_stage_main_3y.parquet 不在本机")
+    fr = mod._anchor_frame("main")
+    assert not fr.empty
+    assert {"symbol", "date", "score"} <= set(fr.columns)
+    assert fr["score"].notna().any()
