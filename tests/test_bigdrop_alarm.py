@@ -184,34 +184,57 @@ def test_effective_prob_without_alarm_block_falls_back():
 
 
 def test_capture_tiers_are_nested_by_surface():
-    """档越靠后表面积越大 —— 否则阶梯毫无意义。"""
-    qs = [q for _, _, q in CAPTURE_TIERS]
-    assert qs[0] is None  # T1 用绝对报警线, 其余用当日分位
-    assert qs[1:] == sorted(qs[1:]), f"分位必须单调放宽, 实为 {qs}"
+    """档越靠后表面积越大 —— 否则阶梯毫无意义。
+
+    档是逐档累加的并集, 所以每一步只要「规则门槛放宽」或「模型分位超过此前最大值」
+    二者之一成立, 面子集就保持严格包含 (0915 T1 改判后, q 本身不再单调)。
+    """
+    r_floor = CAPTURE_TIERS[0][1]
+    q_ceil = CAPTURE_TIERS[0][2] or 0.0
+    for nm, rmin, q in CAPTURE_TIERS[1:]:
+        assert rmin < r_floor or (q is not None and q > q_ceil), (
+            f"{nm} 没有比上一档更宽, 阶梯断了: {CAPTURE_TIERS}"
+        )
+        r_floor, q_ceil = min(r_floor, rmin), max(q_ceil, q or 0.0)
+
+
+def test_capture_tier_t1_uses_day_rank_not_absolute_line():
+    """0915 起 T1 = 规则>=2 ∪ 模型当日前 22%。
+
+    绝对线 0.10 在非规则票里等价于「按 mp 降序补足到当日面」(逐日 Δ 恒 0), 本就是
+    面分配器而非阈值 —— 换成人造分位是同一件事的显式写法, 但**落档不再重合**:
+    低分位的 0.10 票会掉出 T1。回测见 scripts/bigdrop_check.py 的 CAPTURE_TIERS 注释。
+    """
+    assert CAPTURE_TIERS[0][1:] == (2, 0.22)
+    assert capture_tier(0, MODEL_ALARM, 0.85)[0] == "T1 报警"  # 分位够 → 入 T1
+    assert capture_tier(0, MODEL_ALARM, 0.50)[0] == "T4 未标"  # 恰在 0.10 线但分位不够
 
 
 def test_capture_tier_rule_hit_lands_in_t1():
-    # 规则够分即入 T1 报警档 (与模型无关)
+    # 规则 >= 2 即入 T1 报警档 (与模型无关); 规则 1 分退到 T2
     assert capture_tier(2, 0.001, 0.01)[0] == "T1 报警"
-    assert capture_tier(1, 0.001, 0.01)[1] == 1
-
-
-def test_capture_tier_model_alarm_lands_in_t1():
-    # 规则 0 分但模型过 T1 绝对线 —— 并集口径, 仍入 T1
-    assert capture_tier(0, MODEL_ALARM, 0.5)[0] == "T1 报警"
+    assert capture_tier(1, 0.001, 0.01) == ("T2 警戒", 2)
 
 
 def test_capture_tier_widens_by_day_rank():
-    """规则沉默时, 档位只由当日分位决定 —— T2/T3/未标逐级下降。"""
-    assert capture_tier(0, 0.05, 0.85)[0] == "T2 警戒"  # 前 15% → 落在前20%档
+    """规则沉默时档位只由当日分位决定 —— T1 前22% / T3 前40% / 未标逐级下降。
+
+    T2 的模型支 (前 20%) 被 T1 的前 22% 完全遮蔽, 规则 0 分时到不了 T2 ——
+    这是 T1 门槛下调后的既有事实, 不是 bug (T2 仍由规则==1 那批撑着)。
+    """
+    assert capture_tier(0, 0.05, 0.85)[0] == "T1 报警"  # 前 15% → 落在前22%档
     assert capture_tier(0, 0.05, 0.70)[0] == "T3 关注"  # 前 30% → 落在前40%档
+    assert capture_tier(1, 0.05, 0.50)[0] == "T2 警戒"  # 规则==1 才够得着 T2
     assert capture_tier(0, 0.01, 0.10)[0] == "T4 未标"
 
 
 def test_capture_tier_boundary_is_inclusive_at_tier_edge():
-    # 边界: 恰好前 20% 应当入 T2 (>=), 差一点点掉出
-    assert capture_tier(0, 0.0, 0.80)[0] == "T2 警戒"
-    assert capture_tier(0, 0.0, 0.7999)[0] == "T3 关注"
+    # 边界: 恰好前 22% 应当入 T1 (>=), 差一点点掉到 T3
+    assert capture_tier(0, 0.0, 0.78)[0] == "T1 报警"
+    assert capture_tier(0, 0.0, 0.7799)[0] == "T3 关注"
+    # T3 边界: 恰好前 40% 入 T3, 差一点点未标
+    assert capture_tier(0, 0.0, 0.60)[0] == "T3 关注"
+    assert capture_tier(0, 0.0, 0.5999)[0] == "T4 未标"
 
 
 def test_capture_tier_never_returns_beyond_ladder():
