@@ -93,7 +93,9 @@ def _mark_stamp() -> None:
     m = _latest_pipeline_mtime()
     if m is not None:
         STAMP_PATH.parent.mkdir(parents=True, exist_ok=True)
-        STAMP_PATH.write_text(f"{m:.6f}", encoding="utf-8")
+        # repr 精确往返; 别用 f"{m:.6f}" —— 它把第 7 位小数四舍五入, 舍入后 < m 时
+        # _deferred_needed() 会立刻误判"有新改动" → 空跑一次 2h 延迟重训 (实测 ~42%)。
+        STAMP_PATH.write_text(repr(m), encoding="utf-8")
 
 
 def main() -> int:
