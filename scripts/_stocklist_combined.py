@@ -175,9 +175,7 @@ def insert_bigdrop_column(sheets) -> int:
                 "BIGDROP SCAN",
                 df["symbol"].map(lambda s: scan_map.get(str(s).strip().zfill(6), "")),
             )
-        nf = sum(
-            1 for df in targets for v in df["BIGDROP 失效"] if v == BIGDROP_FAIL
-        )
+        nf = sum(1 for df in targets for v in df["BIGDROP 失效"] if v == BIGDROP_FAIL)
         print(
             f"[combined] BIGDROP SCAN 列: {len(targets)} 张表, {len(syms)} 只送扫, "
             f"失效标注 {nf}"

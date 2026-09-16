@@ -296,7 +296,9 @@ def _bigdrop_fail_labels(sc, p, th: float, in_universe: np.ndarray) -> np.ndarra
     池外票不标 (不在扫描清单里, 不算失效)。
     """
     out = np.full(len(sc), "", dtype=object)
-    fail = in_universe & (~np.isfinite(np.asarray(p, dtype=float)) & (np.asarray(sc) < 1))
+    fail = in_universe & (
+        ~np.isfinite(np.asarray(p, dtype=float)) & (np.asarray(sc) < 1)
+    )
     out[fail] = BIGDROP_FAIL
     return out
 
@@ -413,12 +415,12 @@ def _bigdrop_scan(symbols) -> dict[str, str] | None:
         and {
             str(s).zfill(6)
             for s, i in zip(day["symbol"], range(len(p)))
-            if str(s).strip().zfill(6) in requested and not np.isfinite(p[i]) and sc[i] < 1
+            if str(s).strip().zfill(6) in requested
+            and not np.isfinite(p[i])
+            and sc[i] < 1
         }
     )
-    fail_syms = set(fails) | {
-        s for s in nan_syms if s
-    }
+    fail_syms = set(fails) | {s for s in nan_syms if s}
     out_fail = {s: (BIGDROP_FAIL if s in fail_syms else "") for s in symbols}
     # 只在 out 里数: lab 是全市场截面 (5000+ 只), 数它就把"送扫的 51 只"报成全市场。
     # 值已带倍数尾巴, 故用 startswith 而非等值比较。
