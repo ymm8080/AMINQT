@@ -452,7 +452,9 @@ class TestOpenCodeProvider:
 
         monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
 
-        dsr.review_with_deepseek("diff", "key", "deepseek-v4.1-flash", "https://x", "opencode")
+        dsr.review_with_deepseek(
+            "diff", "key", "deepseek-v4.1-flash", "https://x", "opencode"
+        )
 
         headers = {k.lower(): v for k, v in captured["headers"].items()}
         assert headers["x-opencode-session"]
@@ -467,7 +469,9 @@ class TestOpenCodeProvider:
 
         monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
 
-        dsr.review_with_deepseek("diff", "key", "deepseek-v4.1-flash", "https://x", "opencode")
+        dsr.review_with_deepseek(
+            "diff", "key", "deepseek-v4.1-flash", "https://x", "opencode"
+        )
 
         assert "thinking" not in captured["data"]
         assert "response_format" not in captured["data"]
