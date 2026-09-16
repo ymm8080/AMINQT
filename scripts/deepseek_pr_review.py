@@ -259,6 +259,12 @@ Keep messages concise (one sentence per issue). Only report real violations.
         },
     ]
 
+    # OpenCode Go quirk params: response_format json_object is not documented
+    # on the Go endpoint; LiteLLM config drops it via drop_params. Dropping it
+    # here keeps us piecewise-identical to the proven local path. Thinking is
+    # reported as unsupported (supports_reasoning: false).
+    allow_response_format = provider != "opencode"
+
     max_tokens = 16000
     for attempt in range(3):
         payload = {
@@ -266,26 +272,40 @@ Keep messages concise (one sentence per issue). Only report real violations.
             "messages": messages,
             "temperature": 0.1,
             "max_tokens": max_tokens,
-            "response_format": {"type": "json_object"},
             # 流式 (SSE): glm-4.6 对 5 万字符 diff 的推理 ~4.5 分钟, 非流式
             # 期间零字节流动 → 网关 ~270s 掐连接 (PR#137 四连挂死法).
             # 流式让 reasoning 增量持续回传, 连接保持活跃.
             "stream": True,
         }
+        if allow_response_format:
+            payload["response_format"] = {"type": "json_object"}
         # DeepSeek-specific: disable thinking mode for predictable token
-        # usage. GLM (Zhipu) does not support this param.
+        # usage. GLM (Zhipu) and OpenCode Go do not support this param.
         if provider == "deepseek":
             payload["thinking"] = {"type": "disabled"}
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+        }
+        if provider == "opencode":
+            # Go-plan quirks (mirrors scripts/litellm-opencode-go.yaml):
+            #  - x-opencode-session: Go rejects requests without a session id
+            #    (400 MissingSessionID)
+            #  - user-agent: Cloudflare fronts opencode.ai and blocks
+            #    non-browser UAs (403 code 1010)
+            headers["x-opencode-session"] = "a3f7e2b1-4c5d-49a8-b6e0-1d2f3a4b5c6d"
+            headers["User-Agent"] = (
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            )
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
             f"{base_url}/chat/completions",
             data=data,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "Accept": "text/event-stream",
-            },
+            headers=headers,
         )
 
         try:

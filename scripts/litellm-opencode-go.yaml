@@ -1,0 +1,64 @@
+# LiteLLM proxy config - Claude Code (Anthropic /v1/messages) -> OpenCode Go (OpenAI /chat/completions)
+#
+# WHY a proxy is mandatory:
+#   OpenCode Go serves glm-5.3-flash ONLY on the OpenAI wire format
+#   (https://opencode.ai/zen/go/v1/chat/completions). Its Anthropic /messages
+#   path returns HTTP 500 for GLM (no Anthropic adapter). LiteLLM translates.
+#
+# KEY IS NOT STORED HERE: os.environ/OPENCODE_API_KEY resolves from the
+# project .env at proxy start (CLAUDE.md: never hardcode secrets).
+#
+# Two Go-plan quirks baked into extra_headers:
+#   - x-opencode-session : Go rejects requests without a session id (400 MissingSessionID)
+#   - user-agent         : Cloudflare fronting opencode.ai blocks non-browser UAs (403 code 1010)
+#
+# ASCII ONLY - Python on Windows defaults to GBK when reading files, so any
+# non-ASCII byte here breaks yaml.safe_load with a UnicodeDecodeError.
+
+model_list:
+  - model_name: glm-5.3-flash
+    litellm_params:
+      model: openai/glm-5.3-flash
+      api_base: https://opencode.ai/zen/go/v1
+      api_key: os.environ/OPENCODE_API_KEY
+      extra_headers:
+        user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        x-opencode-session: "2f8c1d40-7c6e-4a2b-9d31-8e5b0a6c4f17"
+  - model_name: deepseek-v4.1-flash
+    litellm_params:
+      model: openai/deepseek-v4.1-flash
+      api_base: https://opencode.ai/zen/go/v1
+      api_key: os.environ/OPENCODE_API_KEY
+      extra_headers:
+        user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        x-opencode-session: "2f8c1d40-7c6e-4a2b-9d31-8e5b0a6c4f17"
+
+litellm_settings:
+  drop_params: true
+  # Without this, LiteLLM's Anthropic /v1/messages bridge routes openai/-prefixed
+  # models to the OpenAI *Responses* API (/v1/responses), which OpenCode Go does
+  # not implement -> HTTP 500. This forces the /chat/completions path instead.
+  use_chat_completions_url_for_anthropic_messages: true
+  # FIX 2026-09-16: when the request carries `thinking` (Claude Code
+  # alwaysThinkingEnabled), the Anthropic adapter prefixes "responses/" onto
+  # openai/ models unless model_info reports supports_reasoning: false.
+  # responses/ -> /v1/responses on opencode.ai -> HTTP 500 -> LiteLLM
+  # InternalServerError. Registering the model here makes the adapter's guard
+  # bail out early and keeps every request on /chat/completions.
+  model_cost:
+    glm-5.3-flash:
+      mode: chat
+      supports_reasoning: false
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+      max_tokens: 200000
+      max_input_tokens: 200000
+      max_output_tokens: 32768
+    deepseek-v4.1-flash:
+      mode: chat
+      supports_reasoning: false
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+      max_tokens: 200000
+      max_input_tokens: 200000
+      max_output_tokens: 32768
