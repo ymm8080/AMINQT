@@ -341,9 +341,7 @@ def load_or_bootstrap_history(day_ts: pd.Timestamp) -> pd.DataFrame:
         if d >= day_ts:
             continue
         try:
-            c = pd.read_parquet(
-                fp, columns=["symbol", "board", "prob_up_10d", "date"]
-            )
+            c = pd.read_parquet(fp, columns=["symbol", "board", "prob_up_10d", "date"])
             # [0915 修] 同 main(): 会话日以数据内 date 列为准 (墙钟日命名陷阱)
             u = sorted(pd.to_datetime(c["date"].unique()))
             if len(u):
@@ -441,7 +439,9 @@ def main() -> int:
     if "date" in cand.columns:
         du = sorted(pd.to_datetime(cand["date"].unique()))
         if len(du) != 1:
-            print(f"[prob10dens] candidates 含多日 {[str(x.date()) for x in du]}, 取最早")
+            print(
+                f"[prob10dens] candidates 含多日 {[str(x.date()) for x in du]}, 取最早"
+            )
         sess = pd.Timestamp(du[0])
         if sess != day_ts:
             print(
