@@ -283,6 +283,24 @@ def _bigdrop_labels(sc, p, th: float) -> np.ndarray:
     return out
 
 
+BIGDROP_FAIL = "BIGDROP失效"
+
+
+def _bigdrop_fail_labels(sc, p, th: float, in_universe: np.ndarray) -> np.ndarray:
+    """BIGDROP 模块**失效**指标 (2026-09-16 用户令: 记录模块对每票的失败信号)。
+
+    语义 (三值, 只标"模块不可信/未运行"这类**真失效**, 不与风险类别混写):
+      空       = 模块正常覆盖此票 (有特征·有模型读数)
+      BIGDROP失效 = (a) 票在池内但当天**无特征行** (停牌/次新/未入板 → 模块无从评分)
+                    (b) 评分值 NaN (特征缺列/包缺键回退)
+    池外票不标 (不在扫描清单里, 不算失效)。
+    """
+    out = np.full(len(sc), "", dtype=object)
+    fail = in_universe & (~np.isfinite(np.asarray(p, dtype=float)) & (np.asarray(sc) < 1))
+    out[fail] = BIGDROP_FAIL
+    return out
+
+
 def _bigdrop_cells(labels, p, base: float) -> list[str]:
     """标注 → 单元格文本 (如 `大跌风险 3.6x`)。
 
@@ -385,19 +403,37 @@ def _bigdrop_scan(symbols) -> dict[str, str] | None:
     out = {
         str(s).strip().zfill(6): hit.get(str(s).strip().zfill(6), "") for s in symbols
     }
+    # 失效指标 (2026-09-16 用户令): 送扫池里当天没有评分行/评分为 NaN 的票 →
+    # BIGDROP失效。in_pool = 该票确实在送扫清单 + 不在全市场截面 (无特征行)。
+    day_syms = set(day["symbol"].astype(str).str.zfill(6))
+    requested = {str(s).strip().zfill(6) for s in symbols}
+    fails = sorted(s for s in requested & (set(out) - day_syms))  # 送扫但截面没有
+    nan_syms = sorted(
+        requested & (day_syms)
+        and {
+            str(s).zfill(6)
+            for s, i in zip(day["symbol"], range(len(p)))
+            if str(s).strip().zfill(6) in requested and not np.isfinite(p[i]) and sc[i] < 1
+        }
+    )
+    fail_syms = set(fails) | {
+        s for s in nan_syms if s
+    }
+    out_fail = {s: (BIGDROP_FAIL if s in fail_syms else "") for s in symbols}
     # 只在 out 里数: lab 是全市场截面 (5000+ 只), 数它就把"送扫的 51 只"报成全市场。
     # 值已带倍数尾巴, 故用 startswith 而非等值比较。
     log.info(
-        "[genious] BIGDROP SCAN [包 %s]: %d 只送扫, %s %d, %s %d (基准 %.2f%%)",
+        "[genious] BIGDROP SCAN [包 %s]: %d 只送扫, %s %d, %s %d, 失效 %d (基准 %.2f%%)",
         b.get("tag"),
         len(out),
         BIGDROP_HIGH,
         sum(1 for v in out.values() if v.startswith(BIGDROP_HIGH)),
         BIGDROP_VOL,
         sum(1 for v in out.values() if v.startswith(BIGDROP_VOL)),
+        len(fail_syms),
         base * 100,
     )
-    return out
+    return out, out_fail
 
 
 def write_stocklist_csv(
@@ -705,11 +741,19 @@ def main() -> int:
     # 后面新增的旁路列照此办理。
     scan = _bigdrop_scan(pd.concat([s1["symbol"], s2["symbol"], s2_full["symbol"]]))
     if scan is not None:
+        scan_map, fail_map = scan
         for sh in (s1, s2, s2_full):
+            # 失效指示列放**最前**首位 (用户 0915/0916 双令: 旁路列 insert(0) 最前,
+            # 新增列照此办理; 失效排在风险列前, 先见"模块能不能信"再看"什么风险"。
+            sh.insert(
+                0,
+                "BIGDROP 失效",
+                sh["symbol"].map(lambda s: fail_map.get(str(s).strip().zfill(6), "")),
+            )
             sh.insert(
                 0,
                 "BIGDROP SCAN",
-                sh["symbol"].map(lambda s: scan.get(str(s).strip().zfill(6), "")),
+                sh["symbol"].map(lambda s: scan_map.get(str(s).strip().zfill(6), "")),
             )
     counts = pd.concat([s1["层"], s2_full["层"]]).value_counts().to_dict()
     n_pass = int((s1["大涨闸"] == "过闸").sum())

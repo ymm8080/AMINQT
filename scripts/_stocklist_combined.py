@@ -10,6 +10,9 @@
 - LEGACY / PARALLEL / 密度: 当日清单 CSV 全列原样 (dtype=str, 百分比显示层保留)
 - SLOW_BULL: shadow 目录长持清单 (只入表不推送)
 
+每张带 symbol 的表**最前列**insert 一列 BIGDROP SCAN (2026-09-16 用户令: 大跌
+扫描结果记在既有表里, 不另开页; 见 insert_bigdrop_column)。
+
 缺源跳页 (密度/SLOW_BULL 常缺, 影子单当日未跑); LEGACY+PARALLEL 双缺才退出。
 输出: STOCK_LIST_DIR/stocklist_combined_{date}.xlsx — WORM: 同名已存在则退到
 __v2/__v3/... 变体 (绝不覆盖, 也不再跳过)。下游 `run_daily_automation._combined_delivered`
@@ -127,68 +130,64 @@ def build(date: str, list_dir=STOCK_LIST_DIR, shadow_dir=SHADOW_DIR):
     return [("多模块重叠", pd.DataFrame(multi, columns=OVERLAP_COLS))] + sheets
 
 
-def bigdrop_sheet(symbols) -> tuple[str, pd.DataFrame] | None:
-    """BIGDROP 页 (2026-09-16 用户令: combined 就绪后 bigdrop 必跑 + 标大跌指标)。
+def insert_bigdrop_column(sheets) -> int:
+    """BIGDROP SCAN 标注列 (2026-09-16 用户令 2: **不要独立页**, 记进既有表)。
 
-    当日合并清单全池送 bigdrop 次日大跌模块 → 【BIGDROP SCAN】页:
-    大跌风险 N.Nx = 模型支 (唯一带看跌方向), 波动风险 N.Nx = 仅规则支,
-    空 = 两边没举手; 语义与 _genious_excel 的 BIGDROP SCAN 列一致。
+    当日合并清单全 workbook 的 symbol 并集送 bigdrop 次日大跌模块 → 每张带 symbol
+    的表 insert(0) 一列【BIGDROP SCAN】。三态语义与 _genious_excel 同名列逐字一致:
+      大跌风险 N.Nx = 模型支 (唯一带看跌方向), 波动风险 N.Nx = 仅规则支 (零方向),
+      空            = 两边没举手。
+
+    送扫范围 = **所有**表的 symbol 并集 (含 SLOW_BULL)。只送一部分的话, 没送到的票
+    在列里显示成空 —— 与"两边没举手"长得一模一样, 而那是两个完全不同的意思。
+
+    列序: insert(0) 放最前 (用户 0915 令 —— 旁路列追加到末尾会被列宽/横向滚动吞掉)。
 
     模块运行 (建包新鲜度闸) 复用 _genious_excel._bigdrop_module_run (同源跳过 /
-    非同源重建 / 失败回退旧包); 扫描失败跳页, 不拦其余产出 (旁路页, 同 FADE)。
+    非同源重建 / 失败回退旧包); 扫描拿到 None (缺包/失败) 就整列不加, 不拦其余产出
+    (旁路标注, 同 genious 的契约)。返回实际加了列的表数。
     """
     try:
-        from scripts import bigdrop_check as bc
         from scripts._genious_excel import (
-            BIGDROP_HIGH,
-            BIGDROP_VOL,
+            BIGDROP_FAIL,
             _bigdrop_module_run,
             _bigdrop_scan,
         )
 
-        syms = sorted({str(s).strip().zfill(6) for s in symbols})
-        if not syms:
-            return None
+        targets = [df for _, df in sheets if "symbol" in df.columns]
+        if not targets:
+            return 0
+        syms = sorted({str(s).strip().zfill(6) for df in targets for s in df["symbol"]})
         _bigdrop_module_run()
         scan = _bigdrop_scan(syms)
         if scan is None:
-            return None
-        df = pd.DataFrame(
-            {"symbol": syms, "BIGDROP SCAN": [scan.get(s, "") for s in syms]}
+            return 0
+        scan_map, fail_map = scan
+        for df in targets:
+            # 失效指标列 (用户 0916 令) 放首位: 先见"模块对这票可不可信",再看风险档
+            df.insert(
+                0,
+                "BIGDROP 失效",
+                df["symbol"].map(lambda s: fail_map.get(str(s).strip().zfill(6), "")),
+            )
+            df.insert(
+                0,
+                "BIGDROP SCAN",
+                df["symbol"].map(lambda s: scan_map.get(str(s).strip().zfill(6), "")),
+            )
+        nf = sum(
+            1 for df in targets for v in df["BIGDROP 失效"] if v == BIGDROP_FAIL
         )
-
-        pmax = df["BIGDROP SCAN"].str.len().max()
-        if not pmax:
-            print("[combined] BIGDROP: 当日全池无任何标注, 跳页")
-            return None
-
-        def _sort_key(v: str) -> tuple[int, float]:
-            v = str(v)
-            if not v:
-                return (2, 0.0)
-            mult = 0.0
-            try:
-                mult = float(v.rsplit(" ", 1)[-1].rstrip("x"))
-            except (ValueError, IndexError):
-                pass
-            return (0 if v.startswith(BIGDROP_HIGH) else 1, -mult)
-
-        keys = df["BIGDROP SCAN"].map(_sort_key)
-        order = sorted(range(len(df)), key=lambda i: keys.iloc[i])
-        df = df.iloc[order].reset_index(drop=True)
-        b = bc.load_bundle()
-        nf = int(df["BIGDROP SCAN"].str.startswith(BIGDROP_HIGH).sum())
-        nv = int(df["BIGDROP SCAN"].str.startswith(BIGDROP_VOL).sum())
         print(
-            f"[combined] BIGDROP 页: {len(df)} 只送扫, {BIGDROP_HIGH} {nf}, "
-            f"{BIGDROP_VOL} {nv} (OOS 基准 {float(b['oos_base']) * 100:.2f}%)"
+            f"[combined] BIGDROP SCAN 列: {len(targets)} 张表, {len(syms)} 只送扫, "
+            f"失效标注 {nf}"
         )
-        return ("BIGDROP", df)
+        return len(targets)
     except SystemExit:
         raise
-    except BaseException as exc:  # noqa: BLE001 — 旁路页, 任何失败跳页不拦产出
-        print(f"[combined] BIGDROP 页失败, 跳页: {exc}")
-        return None
+    except BaseException as exc:  # noqa: BLE001 — 旁路标注, 失败不加列不拦产出
+        print(f"[combined] BIGDROP SCAN 列失败, 不加列: {exc}")
+        return 0
 
 
 def market_fade_sheet(fc_fn=None) -> tuple[str, pd.DataFrame] | None:
@@ -257,16 +256,9 @@ def main() -> int:
     mk = market_fade_sheet()
     if mk:
         sheets.insert(1, mk)
-    # BIGDROP 页 (2026-09-16 用户令): combined 就绪后 bigdrop 必跑, 全池标注。
-    # 池 = LEGACY ∪ PARALLEL ∪ 密度 (单位 symbol, 去重在 bigdrop_sheet 内做)。
-    pool: list[str] = []
-    for name, df in sheets:
-        if name in ("LEGACY", "PARALLEL", "密度") and "symbol" in df.columns:
-            pool += df["symbol"].tolist()
-    bd = bigdrop_sheet(pool)
-    if bd:
-        # 页序: 多模块重叠(0) → 市场FADE(1 若在) → BIGDROP
-        sheets.insert(1 + (1 if mk else 0), bd)
+    # BIGDROP SCAN 列 (2026-09-16 用户令): combined 就绪后 bigdrop 必跑, 全 workbook
+    # 的票标大跌/波动风险 —— 记进既有表的列, 不另开页。
+    insert_bigdrop_column(sheets)
     out = write(sheets, date)
     for name, df in sheets:
         print(f"[combined] sheet {name}: {len(df)} 行")

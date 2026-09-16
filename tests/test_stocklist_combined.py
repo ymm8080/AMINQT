@@ -143,90 +143,101 @@ def test_next_path_prefers_canonical_then_fills_first_gap(tmp_path):
     )
 
 
-# ── bigdrop_sheet (2026-09-16 用户令: combined 就绪后 bigdrop 必跑) ──
+# ── insert_bigdrop_column (2026-09-16 用户令: 不另开页, 记进既有表的列) ──
 
 
-def test_bigdrop_sheet_failopen_on_missing_bundle(tmp_path, monkeypatch, capsys):
-    """包缺失 → 扫描 None → 跳页返回 None, 不抛 (旁路页契约)."""
-    import scripts.bigdrop_check as bc
-
-    fake_dir = tmp_path / "bigdrop"
-    fake_dir.mkdir()
-    monkeypatch.setattr(bc, "BUNDLE_DIR", fake_dir)
-    out = sc.bigdrop_sheet(["600000"])
-    assert out is None
-    assert out is None  # 跳页契约: 返回 None 不抛, 上游 log 已大声 (caplog 可断)
-
-
-def test_bigdrop_sheet_dedupes_and_marks_directional(monkeypatch):
-    """全池去重 + (大跌风险, 波动风险, 空) 三态语义 + 排序: 方向支在前、倍数大在前."""
-    fake_scan = {
-        "600000": "大跌风险 3.2x",
-        "601000": "大跌风险 1.5x",
-        "002001": "波动风险 2.0x",
-        "002002": "",
-    }
+def _patch_bigdrop(monkeypatch, scan):
+    """模块运行恒成功 + 扫描结果注入 (不动源文件, 不起真模型)。"""
     monkeypatch.setattr("scripts._genious_excel._bigdrop_module_run", lambda: True)
-    monkeypatch.setattr(
-        "scripts._genious_excel._bigdrop_scan", lambda syms: dict(fake_scan)
-    )
-
-    import scripts.bigdrop_check as bc
-
-    monkeypatch.setattr(
-        bc,
-        "load_bundle",
-        lambda: {"oos_base": 0.03},
-    )
-    out = sc.bigdrop_sheet(["600000", "600000", "002001", "002002", "999999"])
-    assert out is not None
-    name, df = out
-    assert name == "BIGDROP"
-    # 送 5 去重 4 (600000 重复); 999999 无标注 → 空, 排最末 (合法: 全池只有 4 行? 不 —
-    # 空也在列里, 垫底), 方向支先于波动支先于空
-    assert df["symbol"].duplicated().sum() == 0
-    assert df["symbol"].iloc[0] == "600000"  # 大跌风险 3.2x (倍数大在前)
-    assert df["symbol"].iloc[1] == "002001"  # 波动风险
-    assert df["symbol"].iloc[-1] == "999999"  # 空垫底
-    cats = df["BIGDROP SCAN"].str[:4]
-    assert cats.iloc[0] == "大跌风险"
+    monkeypatch.setattr("scripts._genious_excel._bigdrop_scan", scan)
 
 
-def test_bigdrop_sheet_all_unmarked_skips_page(monkeypatch):
-    """当日全池无任何标注 → 跳页 (合法空不是故障)."""
-    monkeypatch.setattr("scripts._genious_excel._bigdrop_module_run", lambda: True)
-    monkeypatch.setattr(
-        "scripts._genious_excel._bigdrop_scan", lambda syms: {s: "" for s in syms}
-    )
-    import scripts.bigdrop_check as bc
+def test_insert_bigdrop_column_is_first_column_and_zfills(monkeypatch):
+    """列必须**最前** (用户 0915 令: 追加到末尾会被列宽/横向滚动吞掉);
 
-    monkeypatch.setattr(bc, "load_bundle", lambda: {"oos_base": 0.03})
-    assert sc.bigdrop_sheet(["600000"]) is None
+    送扫集 = 去重 + zfill(6) + 排序; 行序原样不动 (标注列不重排交付表)。
+    """
+    df = pd.DataFrame({"symbol": ["600000", "1"], "x": ["a", "b"]})
+    seen = {}
+
+    def fake_scan(syms):
+        seen["syms"] = syms
+        m = {"600000": "大跌风险 3.2x", "000001": "波动风险 2.0x"}
+        return m, {"600000": "", "000001": ""}
+
+    _patch_bigdrop(monkeypatch, fake_scan)
+
+    assert sc.insert_bigdrop_column([("LEGACY", df)]) == 1
+    assert seen["syms"] == ["000001", "600000"]
+    assert df.columns[0] == "BIGDROP SCAN"
+    assert list(df.columns[:2]) == ["BIGDROP SCAN", "BIGDROP 失效"]
+    assert df["BIGDROP 失效"].tolist() == ["", ""]  # 两票都有评分, 无失效
+    assert df["BIGDROP SCAN"].tolist() == ["大跌风险 3.2x", "波动风险 2.0x"]
+    assert df["symbol"].tolist() == ["600000", "1"]  # 行序原样
 
 
-def test_bigdrop_page_integration(tmp_path, monkeypatch):
-    """端到端: build 出的池送 bigdrop → 页序 (重叠, FADE?, BIGDROP, ...)."""
-    sc._SOURCES_DEFAULT = None  # 哨兵: 防误改全局 (测试全局常量污染陷阱)
-    # 走 monkeypatch 的 bigdrop, 不动源文件
-    _legacy(tmp_path)
-    monkeypatch.setattr(
-        "scripts._stocklist_combined.STOCK_LIST_DIR",
-        tmp_path,
-    )
-    monkeypatch.setattr("scripts._genious_excel._bigdrop_module_run", lambda: True)
-    monkeypatch.setattr(
-        "scripts._genious_excel._bigdrop_scan",
-        lambda syms: {s: "大跌风险 2.0x" for s in syms},
-    )
-    import scripts.bigdrop_check as bc
+def test_insert_bigdrop_column_covers_every_symbol_sheet(monkeypatch):
+    """送扫 = **所有**表的并集 (含 SLOW_BULL); 没 symbol 的表不加列也不进送扫。
 
-    monkeypatch.setattr(bc, "load_bundle", lambda: {"oos_base": 0.03})
-    sheets = sc.build(DATE, list_dir=tmp_path)
-    pool = [
-        s
-        for n, d in sheets
-        if n in ("LEGACY", "PARALLEL", "密度")
-        for s in d.get("symbol", [])
+    只送一部分的话, 没送到的票显示成空 —— 与"两边没举手"长得一模一样。
+    """
+    sheets = [
+        ("LEGACY", pd.DataFrame({"symbol": ["600000"]})),
+        ("SLOW_BULL", pd.DataFrame({"symbol": ["300001"]})),
+        ("市场FADE预测", pd.DataFrame({"指标": ["P(冲高)"], "值": ["50%"]})),
     ]
-    bd = sc.bigdrop_sheet(pool)
-    assert bd is not None and bd[0] == "BIGDROP"
+    seen = {}
+
+    def fake_scan(syms):
+        seen["syms"] = syms
+        m = dict.fromkeys(syms, "")
+        return m, dict.fromkeys(syms, "")
+
+    _patch_bigdrop(monkeypatch, fake_scan)
+
+    assert sc.insert_bigdrop_column(sheets) == 2  # FADE 无 symbol, 不计数
+    assert seen["syms"] == ["300001", "600000"]  # SLOW_BULL 也在送扫范围
+    assert "BIGDROP SCAN" in sheets[0][1].columns
+    assert "BIGDROP SCAN" in sheets[1][1].columns
+    assert "BIGDROP SCAN" not in sheets[2][1].columns
+
+
+def test_insert_bigdrop_column_failopen_omits_column(monkeypatch):
+    """扫描拿不到 (缺包/失败) → 整列不加, 返回 0, 不抛 (旁路标注契约)。"""
+    df = pd.DataFrame({"symbol": ["600000"]})
+    _patch_bigdrop(monkeypatch, lambda syms: None)
+
+    assert sc.insert_bigdrop_column([("LEGACY", df)]) == 0
+    assert "BIGDROP SCAN" not in df.columns
+
+
+def test_insert_bigdrop_column_no_targets(monkeypatch):
+    """一张带 symbol 的表都没有 → 不扫不抛。"""
+    _patch_bigdrop(monkeypatch, lambda syms: pytest.fail("不该被调用"))
+
+    sheets = [("市场FADE预测", pd.DataFrame({"指标": ["x"]}))]
+    assert sc.insert_bigdrop_column(sheets) == 0
+
+
+def test_write_xlsx_bigdrop_column_first_every_sheet(tmp_path, monkeypatch):
+    """端到端: 落盘的 xlsx 里每张有 symbol 的表第一列都是 BIGDROP SCAN。"""
+    _legacy(tmp_path)
+    _parallel(tmp_path)
+    _patch_bigdrop(
+        monkeypatch,
+        lambda syms: (
+            {s: "大跌风险 2.0x" if s == "600000" else "" for s in syms},
+            dict.fromkeys(syms, ""),
+        ),
+    )
+
+    sheets = sc.build(DATE, list_dir=tmp_path, shadow_dir=tmp_path / "nope")
+    sc.insert_bigdrop_column(sheets)
+    xl = pd.ExcelFile(sc.write(sheets, DATE, list_dir=tmp_path))
+
+    for name in ("多模块重叠", "LEGACY", "PARALLEL"):
+        assert xl.parse(name, dtype=str).columns[0] == "BIGDROP SCAN", name
+    leg = xl.parse("LEGACY", dtype=str)
+    assert leg["symbol"].tolist() == ["600000", "600001"]  # 原列原样还在
+    assert leg["BIGDROP SCAN"].fillna("").tolist() == ["大跌风险 2.0x", ""]
+    assert leg["BIGDROP 失效"].fillna("").tolist() == ["", ""]  # 失效列也在且全空
