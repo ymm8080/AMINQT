@@ -440,6 +440,52 @@ class TestTransientNetworkRetry:
         assert "401" in result["summary"]
 
 
+class TestOpenCodeProvider:
+    """OpenCode Go (DeepSeek V4.1 Flash) provider quirks."""
+
+    def test_opencode_sends_session_and_browser_ua(self, monkeypatch):
+        captured = {}
+
+        def fake_urlopen(req, timeout=None):
+            captured["headers"] = dict(req.header_items())
+            return FakeHTTPResponse(_api_response('{"issues": [], "summary": "ok"}'))
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        dsr.review_with_deepseek("diff", "key", "deepseek-v4.1-flash", "https://x", "opencode")
+
+        headers = {k.lower(): v for k, v in captured["headers"].items()}
+        assert headers["x-opencode-session"]
+        assert "mozilla" in headers["user-agent"].lower()
+
+    def test_opencode_no_thinking_no_response_format(self, monkeypatch):
+        captured = {}
+
+        def fake_urlopen(req, timeout=None):
+            captured["data"] = json.loads(req.data.decode())
+            return FakeHTTPResponse(_api_response('{"issues": [], "summary": "ok"}'))
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        dsr.review_with_deepseek("diff", "key", "deepseek-v4.1-flash", "https://x", "opencode")
+
+        assert "thinking" not in captured["data"]
+        assert "response_format" not in captured["data"]
+
+    def test_deepseek_still_has_response_format(self, monkeypatch):
+        captured = {}
+
+        def fake_urlopen(req, timeout=None):
+            captured["data"] = json.loads(req.data.decode())
+            return FakeHTTPResponse(_api_response('{"issues": [], "summary": "ok"}'))
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        dsr.review_with_deepseek("diff", "key", "m", "https://x", "deepseek")
+
+        assert captured["data"]["response_format"] == {"type": "json_object"}
+
+
 class TestSSEStreaming:
     """流式 SSE 消费: 请求必须带 stream=True (治网关 ~270s 掐零流量长连接),
     content/reasoning 从 delta 增量累积."""
