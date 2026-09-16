@@ -516,3 +516,71 @@ def test_trend_gate_final_stage_b_wired_in_main(tmp_path, monkeypatch, capsys):
         tmp_path / "prob10dens_20260913__prob10dens.csv", dtype={"symbol": str}
     )
     assert list(picks["symbol"]) == ["600011"]  # 清单只剩升势票
+
+
+def test_session_taken_from_data_not_filename(tmp_path, monkeypatch, capsys):
+    """[0915 回归] 会话日取 candidates 内 date 列, 不取文件名/argv.
+
+    病根: daily_pipeline 补跑时拿**墙钟日**命名 candidates_{D}.parquet, 数据却是最近
+    一个交易日 —— 实见 20260823→08-21, 20260830→08-28, 20260913→09-11 (清一色
+    "周日名/周五数据")。密度史上榜按文件名记日期 → 真 09-11 的带被记到周日 09-13
+    名下; 而 occ5 的 win4 取自面板交易日历 (不含周日) → 该行**永远取不到**, 同时
+    09-11 那一格永远贡献 0, occ5 恒够不到 3 → 清单自 09-10 起永久空。
+    函数级冒烟即可复现, 不必跑全链 (生产实录见 tmp_t/_density_occ_diag_0915.py)。
+    """
+    import scripts._prob10_density_shadow as mod
+
+    cand = pd.DataFrame(
+        {
+            "symbol": ["600021", "600022"],
+            "board": ["main"] * 2,
+            "prob_up_10d": [0.9, 0.8],
+            "pred_ret_10d": [0.10, 0.09],
+            "date": [pd.Timestamp("2026-09-11")] * 2,  # 数据日 = 周五
+        }
+    )
+    lists_dir = tmp_path / "lists"
+    lists_dir.mkdir()
+    cand.to_parquet(lists_dir / "candidates_20260913.parquet")  # 文件名 = 周日
+
+    hist_fp = tmp_path / "hist.parquet"
+    pd.DataFrame(
+        {
+            "date": [pd.Timestamp("2026-09-10")] * 2,
+            "board": ["main"] * 2,
+            "symbol": ["600021", "600022"],
+            "prob": [0.9, 0.8],
+        }
+    ).to_parquet(hist_fp)
+
+    idx = pd.date_range("2026-08-28", periods=12, freq="B")  # 末交易日 09-11
+    panel = pd.DataFrame(
+        {
+            "symbol": ["600021"] * 12 + ["600022"] * 12,
+            "date": list(idx) * 2,
+            "close_hfq": list(10.0 + 0.5 * np.arange(12)) * 2,
+            "amount": [2e8] * 24,
+            "pctChg": [0.5] * 24,
+        }
+    )
+    panel_fp = tmp_path / "panel.parquet"
+    panel.to_parquet(panel_fp)
+
+    monkeypatch.setattr(mod, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(mod, "HIST_PATH", str(hist_fp))
+    monkeypatch.setattr(mod, "STOCK_LIST_DIR", tmp_path)
+    monkeypatch.setattr(mod, "PANEL_V3_PATH", str(panel_fp))
+    monkeypatch.setattr(mod, "CYQ_PATH", str(tmp_path / "no_cyq.parquet"))
+    monkeypatch.setattr(
+        sys, "argv", ["_prob10_density_shadow.py", "20260913", "--gen-only"]
+    )
+
+    assert mod.main() == 0
+    assert "会话日对齐" in capsys.readouterr().out
+
+    saved = pd.read_parquet(hist_fp)
+    # 非交易日 09-13 一行都不许落 (落了就是永不可读的死行)
+    assert pd.Timestamp("2026-09-13") not in set(pd.to_datetime(saved["date"]))
+    # 真会话 09-11 必须落盘, 否则 occ5 窗永远缺一格
+    got = set(pd.to_datetime(saved[saved["symbol"] == "600021"]["date"]))
+    assert pd.Timestamp("2026-09-11") in got

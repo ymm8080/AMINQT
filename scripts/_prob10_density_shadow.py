@@ -36,12 +36,17 @@
   pctChg 只加 %; 见 fmt_pct_display, 纯显示层不影响机器读。
 
 上榜历史: data/prob10_density_history.parquet (date/board/symbol/prob)。
+  **date 必须是交易日** (0915 修): 该键直接与 occ5 的 win4 (取自面板交易日历) 对表,
+  记成非交易日 = 永久取不到的死行。会话日一律取 candidates 内的 date 列, 不信文件名
+  —— daily_pipeline 补跑时会拿墙钟日命名 (实见 20260823/20260830/20260913 三个
+  "周日名/周五数据"文件), 照文件名记会把真周五的带全部记死。见 main() 内注释。
   引导: data/_diag_rankkey_scored_{board}_e125.parquet (125d 连续全池打分, 与
   研究同源) 补 candidates 未覆盖日期, data/lists/candidates_*.parquet 补其后的
   日期 (旧 vintage 缺 prob_up_10d 列跳过); 每夜追当日成员, 重跑同日先删后追
   (幂等)。2026-09-06 口径替换时已按 TOP20 带整文件重建 (e125+candidates)。
-  注: 打分文件止于 08-17, 08-18..08-29 无 candidates 文件为空洞 — 密度窗会伸到
-  08-17, candidates 积累 ≥5 日后自然收敛到纯交易日历窗。
+  注: 打分文件止于 08-17, 08-18..08-29 无 candidates 文件为空洞 (0915 修后不再把
+  窗口往回伸, 空洞就是空洞 — 该日贡献 0), candidates 积累 ≥5 日后自然收敛到纯
+  交易日历窗。
 
 生成 (STOCK_LIST_DIR, WORM):
   prob10dens_{date}__prob10dens.csv      交付文档
@@ -336,10 +341,19 @@ def load_or_bootstrap_history(day_ts: pd.Timestamp) -> pd.DataFrame:
         if d >= day_ts:
             continue
         try:
-            c = pd.read_parquet(fp, columns=["symbol", "board", "prob_up_10d"])
+            c = pd.read_parquet(
+                fp, columns=["symbol", "board", "prob_up_10d", "date"]
+            )
+            # [0915 修] 同 main(): 会话日以数据内 date 列为准 (墙钟日命名陷阱)
+            u = sorted(pd.to_datetime(c["date"].unique()))
+            if len(u):
+                d = pd.Timestamp(u[0])
         except ValueError:
-            print(f"[warn] 引导跳过 (缺 prob_up_10d): {os.path.basename(fp)}")
-            continue
+            try:
+                c = pd.read_parquet(fp, columns=["symbol", "board", "prob_up_10d"])
+            except ValueError:
+                print(f"[warn] 引导跳过 (缺 prob_up_10d): {os.path.basename(fp)}")
+                continue
         cand_dates.add(d)
         frames.append(_membership_core(c.assign(date=d), "prob_up_10d"))
     for board in ("main", "dual"):
@@ -405,12 +419,37 @@ def main() -> int:
     if not os.path.exists(cand_fp):
         print(f"[prob10dens] 无当日 {os.path.basename(cand_fp)}, 跳过 (fail-safe)")
         return 0
-    cand = pd.read_parquet(
-        cand_fp, columns=["symbol", "board", "prob_up_10d", "pred_ret_10d"]
-    )
+    try:
+        cand = pd.read_parquet(
+            cand_fp,
+            columns=["symbol", "board", "prob_up_10d", "pred_ret_10d", "date"],
+        )
+    except ValueError:  # 老 vintage 无 date 列
+        cand = pd.read_parquet(
+            cand_fp, columns=["symbol", "board", "prob_up_10d", "pred_ret_10d"]
+        )
     if cand.empty:
         print(f"[prob10dens] {date} candidates 空, 跳过")
         return 0
+    # [0915 修] 会话日以**数据内 date 列**为准, 不以文件名/argv 为准。
+    # 病根: 补跑时 daily_pipeline 拿墙钟日命名 candidates_{D}.parquet, 数据却是最近一个
+    # 交易日 —— 实见 20260823→08-21, 20260830→08-28, 20260913→09-11 (清一色"周日名/
+    # 周五数据")。密度史原先按文件名记 → 真 09-11 的带被记到周日 09-13 名下, 而 occ5
+    # 的 win4 取自面板交易日历 (不含周日) → 该行**永远取不到**, 同时 09-11 那一格永远
+    # 贡献 0, occ5 恒够不到 3 → 清单自 09-10 起永久空。见 tmp_t/_density_occ_diag_0915.py
+    # 的逐日漏斗 (09-14 窗 09-08/09/10/11, 09-15 窗 09-09/10/11/14 各缺一格)。
+    if "date" in cand.columns:
+        du = sorted(pd.to_datetime(cand["date"].unique()))
+        if len(du) != 1:
+            print(f"[prob10dens] candidates 含多日 {[str(x.date()) for x in du]}, 取最早")
+        sess = pd.Timestamp(du[0])
+        if sess != day_ts:
+            print(
+                f"[prob10dens] 会话日对齐: 文件标 {day_ts.date()} 但数据为 {sess.date()}"
+                f" → 以数据为准 (补跑墙钟日陷阱)"
+            )
+            day_ts = sess
+            date = sess.strftime("%Y%m%d")
 
     close = pd.read_parquet(
         PANEL_V3_PATH,
