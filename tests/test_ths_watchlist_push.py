@@ -29,6 +29,12 @@ def _write_legacy(path, symbols):
     pd.DataFrame([{"symbol": s} for s in symbols]).to_csv(path, index=False)
 
 
+def _write_genious(path, symbols):
+    pd.DataFrame(
+        [{"排名": r, "symbol": s} for r, s in enumerate(symbols, start=1)]
+    ).to_csv(path, index=False)
+
+
 def test_collect_lists_shortlist_top10_by_rank(tmp_path):
     rank_symbols = [f"6000{i:02d}" for i in range(1, 21)]  # rank 1..20
     _write_shortlist(tmp_path / "parallel_shortlist_20260901__M1.csv", rank_symbols)
@@ -126,6 +132,36 @@ def test_collect_lists_keeps_index_colliding_000xxx(tmp_path):
     ]
 
 
+def test_collect_lists_genious_not_truncated_to_top_n(tmp_path):
+    """genious 边车 = Sheet1 冠军四段全量, 不套 top_n=10 截断.
+
+    2026-09-15 用户令 "push all 冠军四段 iN SHEET1 TO THS, NOT JUST TOP10":
+    边车 21 只必须原样全进单 (套截断会静默丢 11 只); parallel/legacy 仍各自 top10.
+    """
+    symbols = [f"6000{i:02d}" for i in range(1, 22)]  # rank 1..21
+    _write_genious(tmp_path / "genious_stocklist_20260901__083146.csv", symbols)
+    _write_shortlist(tmp_path / "parallel_shortlist_20260901__M1.csv", symbols)
+    lists = mod.collect_lists("20260901", tmp_path)
+    assert lists == [
+        ("parallel__M1", symbols[:10]),  # 仍截断
+        ("genious__083146", symbols),  # 全量 21 只
+    ]
+    assert len(lists[1][1]) == 21
+
+
+def test_collect_lists_genious_sorted_by_rank(tmp_path):
+    """边车按 排名 列排序后再成单 (文件行序 ≠ 名次序 时以 排名 为准)."""
+    pd.DataFrame(
+        [
+            {"排名": 3, "symbol": "600003"},
+            {"排名": 1, "symbol": "600001"},
+            {"排名": 2, "symbol": "600002"},
+        ]
+    ).to_csv(tmp_path / "genious_stocklist_20260901__083146.csv", index=False)
+    lists = mod.collect_lists("20260901", tmp_path)
+    assert lists == [("genious__083146", ["600001", "600002", "600003"])]
+
+
 def test_collect_lists_no_delivered_raises(tmp_path):
     with pytest.raises(SystemExit):
         mod.collect_lists("20260901", tmp_path)
@@ -142,6 +178,26 @@ def test_txt_format_and_worm_naming(tmp_path):
 def test_flush_str_cannot_form_code_rows():
     """冲刷串必须无法被识别器解析成代码行 (旧 "ths-push" 被识别成两只美股, 09-03)."""
     assert not any(c.isalnum() for c in mod.FLUSH_STR)
+
+
+def test_push_via_ths_writes_blocked_on_foreground_lost(tmp_path, monkeypatch):
+    """用户回座抢前台 → 点击原语抛 ForegroundLostError: 整轮中止 (安全闸本意),
+    但结果单必须照写 blocked — 崩栈会让看板卡没数据、调用方分不清 blocked 与崩溃
+    (2026-09-15 实弹: explorer 抢前台, 21 码单崩在 batch 5, 结果单停在上一轮)."""
+    from scripts import _ths_ui as ui
+
+    txt = tmp_path / "ths_watchlist_20260901__10__genious__083146.txt"
+    txt.write_text("600001\n600002\n", encoding="utf-8")
+
+    def _boom(*_a, **_k):
+        raise ui.ForegroundLostError("点击窗相对 (357,9) 前台 pid=9300 不属于 hexin*")
+
+    monkeypatch.setattr(mod, "_push_once", _boom)
+    assert mod.push_via_ths(txt) is False
+
+    res = mod._result_path(txt).read_text(encoding="utf-8-sig")
+    assert res.splitlines()[0] == "symbol,status"
+    assert res.splitlines()[1:] == ["600001,blocked", "600002,blocked"]
 
 
 def _dlg_img(rows):
@@ -338,6 +394,63 @@ def test_row_codes_pure_and_padded():
         None,
         "600002",
     ]
+
+
+def test_map_dialog_rows_pure_batch_unchanged():
+    """纯批两版等价: 映射就是逐行对应, 短版分支不可达 (普通路径零改动)."""
+    rows = [(20, True, False), (60, False, False)]
+    assert mod._map_dialog_rows(rows, ["600001", "600002"]) == [
+        ((20, True, False), "600001"),
+        ((60, False, False), "600002"),
+    ]
+
+
+def test_map_dialog_rows_full_layout_index_slot():
+    """撞码股真出指数行 → 行数=全长, 指数行吃掉 None 槽位."""
+    rows = [
+        (20, True, False),
+        (60, True, False),
+        (100, False, False),
+        (140, True, False),
+    ]
+    row_codes = ["600001", "000985", None, "600002"]
+    mapping = mod._map_dialog_rows(rows, row_codes)
+    assert [rc for _r, rc in mapping] == row_codes
+    assert mapping[2][0][0] == 100  # 指数行 = 第 3 行
+
+
+def test_map_dialog_rows_short_layout_no_index_row():
+    """09-15 实弹: 000572 (海马汽车) 不撞指数, 识别只出 3 行.
+
+    旧口径按 ^000\\d{3}$ 一刀切期待 4 行 → 行数永远对不上, 该批 fail-closed
+    从不点加入, 000572 一次都没推成功过.
+    """
+    rows = [(20, True, False), (60, True, False), (100, False, False)]
+    row_codes = ["600001", "000572", None, "600002"]
+    mapping = mod._map_dialog_rows(rows, row_codes)
+    assert [(r, rc) for r, rc in mapping] == [
+        ((20, True, False), "600001"),
+        ((60, True, False), "000572"),
+        ((100, False, False), "600002"),
+    ]
+
+
+def test_map_dialog_rows_mismatch_fail_closed():
+    """两版都对不上 → None (调用方不点加入). 短版不会兜住任意行数."""
+    row_codes = ["600001", "000572", None, "600002"]
+    assert mod._map_dialog_rows([(20, True, False)], row_codes) is None
+    assert mod._map_dialog_rows([], row_codes) is None
+    # 杂行混入多出一行 → 同样拒 (全长 4 / 短版 3 都不是 5)
+    assert mod._map_dialog_rows([(1, True, False)] * 5, row_codes) is None
+
+
+def test_map_dialog_rows_short_not_reached_without_collide():
+    """row_codes 无 None 时 short==full, 第二分支恒不触发 → 纯批不会被短版放宽."""
+    rows = [(20, True, False), (60, True, False)]
+    assert mod._map_dialog_rows(rows, ["600001", "600002"]) is not None
+    assert (
+        mod._map_dialog_rows(rows + [(100, True, False)], ["600001", "600002"]) is None
+    )
 
 
 def test_build_chunks_plain_no_collide():
