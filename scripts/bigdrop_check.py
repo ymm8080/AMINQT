@@ -38,6 +38,7 @@
 
 from __future__ import annotations
 
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -420,6 +421,10 @@ def build() -> dict:
     # 分支表要回答"规则支到底带不带方向", 而答案就是它的次日均收益本身 ——
     # 拿在 del 之前, 否则下面只剩 y (已二值化, 看不出涨)。
     fwd_all = d["fwd"].to_numpy(float)
+    # 建包用的**数据日** —— 新鲜度判据取它, 不取墙钟 tag: tag 是建包那天的日历日,
+    # 早于当日抓取建包会得到 tag=今天而数据只到昨天 (同名覆盖), 拿 tag 当新鲜度
+    # 会把它误判成新的 —— 同 0915 密度页日期键事故。
+    data_date = str(d["date"].max())
     del d, F
 
     ds = np.sort(np.unique(dt))
@@ -668,8 +673,18 @@ def build() -> dict:
 
     tag = datetime.now().strftime("%Y%m%d")
     BUNDLE_DIR.mkdir(parents=True, exist_ok=True)
+    dest = BUNDLE_DIR / f"bundle_{tag}.joblib"
+    if dest.exists():
+        # WORM: 同 tag 重跑会静默覆盖旧包。tag 是墙钟日, "当日早先建过一次包" 时
+        # 重跑正是这个形状 (面板同日补齐后重建) —— 先留档再写。
+        bak = BUNDLE_DIR / (
+            f"bundle_{tag}_pre_rebuild_{datetime.now().strftime('%H%M%S')}.joblib.bak"
+        )
+        shutil.copy2(dest, bak)
+        print(f"-> 同 tag 旧包已留档 {bak.name}")
     bundle = dict(
         tag=tag,
+        data_date=data_date,
         drop_th=DROP_TH,
         feats=FEATS,
         rules=RULES,
@@ -689,9 +704,9 @@ def build() -> dict:
         capture=capture,
         branches=branches,
     )
-    joblib.dump(bundle, BUNDLE_DIR / f"bundle_{tag}.joblib")
+    joblib.dump(bundle, dest)
     joblib.dump(bundle, BUNDLE_DIR / "bundle_latest.joblib")
-    print(f"\n-> {BUNDLE_DIR}\\bundle_{tag}.joblib")
+    print(f"\n-> {BUNDLE_DIR}\\bundle_{tag}.joblib  (data_date={data_date})")
 
     # 特征重要度留档
     imp = pd.Series(m.feature_importances_, index=FEATS).sort_values(ascending=False)
@@ -709,6 +724,16 @@ def load_bundle() -> dict:
         print("没有模型包, 先跑: python scripts/bigdrop_check.py --build")
         sys.exit(2)
     return joblib.load(p)
+
+
+def bundle_is_stale(b: dict, data_date: str) -> bool:
+    """包是否与 `data_date` (面板最新数据日, YYYYMMDD) 不同源 → 该重建。
+
+    判据是**数据日**不是墙钟 `tag`: tag 是建包那天的日历日, 早于当日抓取建包会
+    得到 tag=今天而数据只到昨天, 拿 tag 判新鲜会把它当新的 (同 0915 密度页
+    日期键事故)。**缺 data_date 的旧包一律视为陈旧** —— 无法证明同源就不假定同源。
+    """
+    return str(b.get("data_date") or "") != str(data_date)
 
 
 # ---------------------------------------------------------------- 查询

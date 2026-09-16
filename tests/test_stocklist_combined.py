@@ -141,3 +141,92 @@ def test_next_path_prefers_canonical_then_fills_first_gap(tmp_path):
     assert (
         sc._next_path("20260106", tmp_path).name == "stocklist_combined_20260106.xlsx"
     )
+
+
+# ── bigdrop_sheet (2026-09-16 用户令: combined 就绪后 bigdrop 必跑) ──
+
+
+def test_bigdrop_sheet_failopen_on_missing_bundle(tmp_path, monkeypatch, capsys):
+    """包缺失 → 扫描 None → 跳页返回 None, 不抛 (旁路页契约)."""
+    import scripts.bigdrop_check as bc
+
+    fake_dir = tmp_path / "bigdrop"
+    fake_dir.mkdir()
+    monkeypatch.setattr(bc, "BUNDLE_DIR", fake_dir)
+    out = sc.bigdrop_sheet(["600000"])
+    assert out is None
+    assert out is None  # 跳页契约: 返回 None 不抛, 上游 log 已大声 (caplog 可断)
+
+
+def test_bigdrop_sheet_dedupes_and_marks_directional(monkeypatch):
+    """全池去重 + (大跌风险, 波动风险, 空) 三态语义 + 排序: 方向支在前、倍数大在前."""
+    fake_scan = {
+        "600000": "大跌风险 3.2x",
+        "601000": "大跌风险 1.5x",
+        "002001": "波动风险 2.0x",
+        "002002": "",
+    }
+    monkeypatch.setattr("scripts._genious_excel._bigdrop_module_run", lambda: True)
+    monkeypatch.setattr(
+        "scripts._genious_excel._bigdrop_scan", lambda syms: dict(fake_scan)
+    )
+
+    import scripts.bigdrop_check as bc
+
+    monkeypatch.setattr(
+        bc,
+        "load_bundle",
+        lambda: {"oos_base": 0.03},
+    )
+    out = sc.bigdrop_sheet(["600000", "600000", "002001", "002002", "999999"])
+    assert out is not None
+    name, df = out
+    assert name == "BIGDROP"
+    # 送 5 去重 4 (600000 重复); 999999 无标注 → 空, 排最末 (合法: 全池只有 4 行? 不 —
+    # 空也在列里, 垫底), 方向支先于波动支先于空
+    assert df["symbol"].duplicated().sum() == 0
+    assert df["symbol"].iloc[0] == "600000"  # 大跌风险 3.2x (倍数大在前)
+    assert df["symbol"].iloc[1] == "002001"  # 波动风险
+    assert df["symbol"].iloc[-1] == "999999"  # 空垫底
+    cats = df["BIGDROP SCAN"].str[:4]
+    assert cats.iloc[0] == "大跌风险"
+
+
+def test_bigdrop_sheet_all_unmarked_skips_page(monkeypatch):
+    """当日全池无任何标注 → 跳页 (合法空不是故障)."""
+    monkeypatch.setattr("scripts._genious_excel._bigdrop_module_run", lambda: True)
+    monkeypatch.setattr(
+        "scripts._genious_excel._bigdrop_scan", lambda syms: {s: "" for s in syms}
+    )
+    import scripts.bigdrop_check as bc
+
+    monkeypatch.setattr(bc, "load_bundle", lambda: {"oos_base": 0.03})
+    assert sc.bigdrop_sheet(["600000"]) is None
+
+
+def test_bigdrop_page_integration(tmp_path, monkeypatch):
+    """端到端: build 出的池送 bigdrop → 页序 (重叠, FADE?, BIGDROP, ...)."""
+    sc._SOURCES_DEFAULT = None  # 哨兵: 防误改全局 (测试全局常量污染陷阱)
+    # 走 monkeypatch 的 bigdrop, 不动源文件
+    _legacy(tmp_path)
+    monkeypatch.setattr(
+        "scripts._stocklist_combined.STOCK_LIST_DIR",
+        tmp_path,
+    )
+    monkeypatch.setattr("scripts._genious_excel._bigdrop_module_run", lambda: True)
+    monkeypatch.setattr(
+        "scripts._genious_excel._bigdrop_scan",
+        lambda syms: {s: "大跌风险 2.0x" for s in syms},
+    )
+    import scripts.bigdrop_check as bc
+
+    monkeypatch.setattr(bc, "load_bundle", lambda: {"oos_base": 0.03})
+    sheets = sc.build(DATE, list_dir=tmp_path)
+    pool = [
+        s
+        for n, d in sheets
+        if n in ("LEGACY", "PARALLEL", "密度")
+        for s in d.get("symbol", [])
+    ]
+    bd = sc.bigdrop_sheet(pool)
+    assert bd is not None and bd[0] == "BIGDROP"

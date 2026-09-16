@@ -29,6 +29,7 @@ from app.pipeline1.feature_registry import FeatureRegistry
 from app.pipeline1.feature_selector import BRUTE_FAMILIES, BruteForceGenerator
 from app.pipeline1.label_engine import LabelEngine
 from app.pipeline1.train_runner import MASK_RECENT_DAYS, prepare_board_frame
+from config.settings import PANEL_V3_PATH as _PANEL_V3
 from config.settings import data_others_path
 
 logging.basicConfig(
@@ -38,7 +39,11 @@ logger = logging.getLogger("build_features")
 
 REGISTRY_DIR = "data/factor_registry"
 REGISTRY_JSON_DIR = str(data_others_path("data/factor_registry"))
-PANEL_PATH = "data/panel_full_enriched_v3.parquet"
+# 0916 修 rc=2: 曾用相对路径 "data/panel_full_enriched_v3.parquet", 面板实体在
+# D:\AMINQT\PARQUET\  → 从 train_predict_main 的 CWD 启动时 FileNotFoundError
+# (exit 2), build_features 秒挂且 state 只存 "exited with code 2" 看不出原因。
+# 板载主要路径一律走 config (相对路径仍然可用, 作为 env PANEL_PATH 的回退失效保护)。
+PANEL_PATH = _PANEL_V3
 os.makedirs(REGISTRY_DIR, exist_ok=True)
 os.makedirs(REGISTRY_JSON_DIR, exist_ok=True)
 
