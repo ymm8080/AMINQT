@@ -12,6 +12,7 @@ PIPELINE IS MODIFY, RUN RETRAIN AND PREDICT 2 HOURS LATER").
 
 import argparse
 import datetime as _dt
+import logging
 import os
 import subprocess
 import sys
@@ -32,6 +33,8 @@ TASK_NAME = "AMINQT-Delayed-Retrain-Predict"
 PY = sys.executable
 
 TRAIN_CMD = [PY, "-u", "scripts/train_predict_main.py"]
+
+log = logging.getLogger("delayed_retrain")
 
 
 def _latest_pipeline_mtime() -> float | None:
@@ -60,9 +63,13 @@ def _run_schtasks(args: list[str]) -> subprocess.CompletedProcess:
 
 def _schedule_delayed_run(delay_hours: float = 2.0) -> bool:
     """schtasks ONETIME +delay. 幂等: 已挂同名任务 → 返回 False (不重挂)."""
-    q = _run_schtasks(["schtasks", "/query", "/tn", TASK_NAME])
+    try:
+        q = _run_schtasks(["schtasks", "/query", "/tn", TASK_NAME])
+    except (FileNotFoundError, OSError) as e:
+        log.error("[delay] schtasks /query 调用失败: %s", e)
+        return False
     if q.returncode == 0 and TASK_NAME in (q.stdout or ""):
-        print(f"[delay] {TASK_NAME} 已挂, 不重挂")
+        log.info("[delay] %s 已挂, 不重挂", TASK_NAME)
         return False
     run_at = (_dt.datetime.now() + _dt.timedelta(hours=delay_hours)).strftime(
         "%Y-%m-%dT%H:%M:%S"
@@ -82,20 +89,29 @@ def _schedule_delayed_run(delay_hours: float = 2.0) -> bool:
         run_at[:10],
         "/f",
     ]
-    r = _run_schtasks(cmd)
+    try:
+        r = _run_schtasks(cmd)
+    except (FileNotFoundError, OSError) as e:
+        log.error("[delay] schtasks /create 调用失败: %s", e)
+        return False
     out = (r.stdout or "").strip()
     err = (r.stderr or "").strip()
-    print(f"[delay] 挂 {TASK_NAME} @{run_at}: rc={r.returncode} {out} {err}")
+    log.info(
+        "[delay] 挂 %s @%s: rc=%d %s %s", TASK_NAME, run_at, r.returncode, out, err
+    )
     return r.returncode == 0
 
 
 def _mark_stamp() -> None:
     m = _latest_pipeline_mtime()
     if m is not None:
-        STAMP_PATH.parent.mkdir(parents=True, exist_ok=True)
-        # repr 精确往返; 别用 f"{m:.6f}" —— 它把第 7 位小数四舍五入, 舍入后 < m 时
-        # _deferred_needed() 会立刻误判"有新改动" → 空跑一次 2h 延迟重训 (实测 ~42%)。
-        STAMP_PATH.write_text(repr(m), encoding="utf-8")
+        try:
+            STAMP_PATH.parent.mkdir(parents=True, exist_ok=True)
+            # repr 精确往返; 别用 f"{m:.6f}" —— 它把第 7 位小数四舍五入, 舍入后 < m 时
+            # _deferred_needed() 会立刻误判"有新改动" → 空跑一次 2h 延迟重训 (实测 ~42%)。
+            STAMP_PATH.write_text(repr(m), encoding="utf-8")
+        except OSError as e:
+            log.error("[delay] 写 stamp 失败: %s", e)
 
 
 def main() -> int:
@@ -107,13 +123,17 @@ def main() -> int:
     args = ap.parse_args()
     if not args.run_now:
         if not _deferred_needed():
-            print("[delay] 管线无新改动, 不挂延迟任务")
+            log.info("[delay] 管线无新改动, 不挂延迟任务")
             return 0
         if _schedule_delayed_run(args.delay_hours):
             _mark_stamp()
             return 0
         return 1
-    rc = subprocess.call(TRAIN_CMD, cwd=ROOT)
+    try:
+        rc = subprocess.call(TRAIN_CMD, cwd=ROOT)
+    except (FileNotFoundError, OSError) as e:
+        log.error("[delay] 训练脚本调用失败: %s", e)
+        return 1
     if rc == 0:
         _mark_stamp()
     return rc

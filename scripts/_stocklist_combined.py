@@ -149,42 +149,35 @@ def insert_bigdrop_column(sheets) -> int:
     """
     try:
         from scripts._genious_excel import (
-            BIGDROP_FAIL,
             _bigdrop_module_run,
             _bigdrop_scan,
+            _norm_sym,
         )
 
         targets = [df for _, df in sheets if "symbol" in df.columns]
         if not targets:
             return 0
-        syms = sorted({str(s).strip().zfill(6) for df in targets for s in df["symbol"]})
+        syms = sorted({_norm_sym(s) for df in targets for s in df["symbol"]})
         _bigdrop_module_run()
         scan = _bigdrop_scan(syms)
         if scan is None:
             return 0
-        scan_map, fail_map = scan
         for df in targets:
-            # 失效指标列 (用户 0916 令) 放首位: 先见"模块对这票可不可信",再看风险档
-            df.insert(
-                0,
-                "BIGDROP 失效",
-                df["symbol"].map(lambda s: fail_map.get(str(s).strip().zfill(6), "")),
-            )
             df.insert(
                 0,
                 "BIGDROP SCAN",
-                df["symbol"].map(lambda s: scan_map.get(str(s).strip().zfill(6), "")),
+                df["symbol"].map(lambda s: scan.get(_norm_sym(s), "")),
             )
-        nf = sum(1 for df in targets for v in df["BIGDROP 失效"] if v == BIGDROP_FAIL)
-        print(
-            f"[combined] BIGDROP SCAN 列: {len(targets)} 张表, {len(syms)} 只送扫, "
-            f"失效标注 {nf}"
+        log.info(
+            "[combined] BIGDROP SCAN 列: %d 张表, %d 只送扫",
+            len(targets),
+            len(syms),
         )
         return len(targets)
     except SystemExit:
         raise
     except BaseException as exc:  # noqa: BLE001 — 旁路标注, 失败不加列不拦产出
-        print(f"[combined] BIGDROP SCAN 列失败, 不加列: {exc}")
+        log.error("[combined] BIGDROP SCAN 列失败, 不加列: %s", exc)
         return 0
 
 

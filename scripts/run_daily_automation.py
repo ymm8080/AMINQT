@@ -509,7 +509,12 @@ def _page_gaps(tag: str) -> list[str] | None:
     # BIGDROP 只对 0917+ 产出判缺 (接线日 2026-09-16): 旧表无此页是合法历史,
     # 倒算会让补产闸永远追着旧文件跑; makeup 重建后新表BIGDROP页恒在 → 已把
     # bd_expect 与 expect 一起判, 此处对新表把 BIGDROP 缺失计入。
-    if bd_expect and "BIGDROP" not in have and tag >= "20260917":
+    # 铁律 #6: 日期比较用 datetime 对象, 严禁字符串直接比较.
+    if (
+        bd_expect
+        and "BIGDROP" not in have
+        and _dt.datetime.strptime(tag, "%Y%m%d").date() >= _dt.date(2026, 9, 17)
+    ):
         gaps.append("BIGDROP")
     return sorted(set(gaps))
 
