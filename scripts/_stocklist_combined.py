@@ -23,6 +23,7 @@ __v2/__v3/... 变体 (绝不覆盖, 也不再跳过)。下游 `run_daily_automat
 import argparse
 import datetime
 import glob
+import logging
 import os
 import re
 import sys
@@ -33,6 +34,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config.settings import DATA_OTHERS_DIR, STOCK_LIST_DIR  # noqa: E402
+
+log = logging.getLogger(__name__)
 
 SHADOW_DIR = DATA_OTHERS_DIR / "shadow"
 
