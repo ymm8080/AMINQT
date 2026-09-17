@@ -162,18 +162,35 @@ def test_insert_bigdrop_column_is_first_column_and_zfills(monkeypatch):
 
     def fake_scan(syms):
         seen["syms"] = syms
-        m = {"600000": "大跌风险 3.2x", "000001": "波动风险 2.0x"}
-        return m, {"600000": "", "000001": ""}
+        return {"600000": "大跌风险 3.2x", "000001": "波动风险"}
 
     _patch_bigdrop(monkeypatch, fake_scan)
 
     assert sc.insert_bigdrop_column([("LEGACY", df)]) == 1
     assert seen["syms"] == ["000001", "600000"]
     assert df.columns[0] == "BIGDROP SCAN"
-    assert list(df.columns[:2]) == ["BIGDROP SCAN", "BIGDROP 失效"]
-    assert df["BIGDROP 失效"].tolist() == ["", ""]  # 两票都有评分, 无失效
-    assert df["BIGDROP SCAN"].tolist() == ["大跌风险 3.2x", "波动风险 2.0x"]
+    assert df["BIGDROP SCAN"].tolist() == ["大跌风险 3.2x", "波动风险"]
     assert df["symbol"].tolist() == ["600000", "1"]  # 行序原样
+
+
+def test_insert_bigdrop_column_matches_suffixed_symbol(monkeypatch):
+    """清单侧带 `.BJ` 的票必须**查得到**自己的读数 (去后缀后再查表)。
+
+    不归一时它查空 → 显示成"两边没举手", 而真值是有标注的 —— 静默丢分, 且丢得
+    看不出来。实测 legacy/parallel 的历史清单里确有此形态。
+    """
+    df = pd.DataFrame({"symbol": ["920367.BJ", "600000"], "x": ["a", "b"]})
+    seen = {}
+
+    def fake_scan(syms):
+        seen["syms"] = syms
+        return {"920367": "波动风险", "600000": "无风险"}
+
+    _patch_bigdrop(monkeypatch, fake_scan)
+
+    assert sc.insert_bigdrop_column([("LEGACY", df)]) == 1
+    assert seen["syms"] == ["600000", "920367"]  # 送扫也是归一后的键
+    assert df["BIGDROP SCAN"].tolist() == ["波动风险", "无风险"]
 
 
 def test_insert_bigdrop_column_covers_every_symbol_sheet(monkeypatch):
@@ -190,8 +207,7 @@ def test_insert_bigdrop_column_covers_every_symbol_sheet(monkeypatch):
 
     def fake_scan(syms):
         seen["syms"] = syms
-        m = dict.fromkeys(syms, "")
-        return m, dict.fromkeys(syms, "")
+        return dict.fromkeys(syms, "无风险")
 
     _patch_bigdrop(monkeypatch, fake_scan)
 
@@ -211,6 +227,20 @@ def test_insert_bigdrop_column_failopen_omits_column(monkeypatch):
     assert "BIGDROP SCAN" not in df.columns
 
 
+def test_insert_bigdrop_column_leaves_no_blank_for_scored_stocks(monkeypatch):
+    """送扫的票**不留空** (用户 0916 令: 无风险要有标志, 所有 STOCK 都该有标志)。
+
+    空只剩一个意思 —— 测试里 scan 故意漏掉 300002, 那一格才允许空。
+    """
+    df = pd.DataFrame({"symbol": ["600000", "600001", "300002"]})
+    _patch_bigdrop(
+        monkeypatch, lambda syms: {"600000": "大跌风险 3.0x", "600001": "无风险"}
+    )
+
+    assert sc.insert_bigdrop_column([("LEGACY", df)]) == 1
+    assert df["BIGDROP SCAN"].tolist() == ["大跌风险 3.0x", "无风险", ""]
+
+
 def test_insert_bigdrop_column_no_targets(monkeypatch):
     """一张带 symbol 的表都没有 → 不扫不抛。"""
     _patch_bigdrop(monkeypatch, lambda syms: pytest.fail("不该被调用"))
@@ -225,10 +255,7 @@ def test_write_xlsx_bigdrop_column_first_every_sheet(tmp_path, monkeypatch):
     _parallel(tmp_path)
     _patch_bigdrop(
         monkeypatch,
-        lambda syms: (
-            {s: "大跌风险 2.0x" if s == "600000" else "" for s in syms},
-            dict.fromkeys(syms, ""),
-        ),
+        lambda syms: {s: "大跌风险 2.0x" if s == "600000" else "无风险" for s in syms},
     )
 
     sheets = sc.build(DATE, list_dir=tmp_path, shadow_dir=tmp_path / "nope")
@@ -239,5 +266,4 @@ def test_write_xlsx_bigdrop_column_first_every_sheet(tmp_path, monkeypatch):
         assert xl.parse(name, dtype=str).columns[0] == "BIGDROP SCAN", name
     leg = xl.parse("LEGACY", dtype=str)
     assert leg["symbol"].tolist() == ["600000", "600001"]  # 原列原样还在
-    assert leg["BIGDROP SCAN"].fillna("").tolist() == ["大跌风险 2.0x", ""]
-    assert leg["BIGDROP 失效"].fillna("").tolist() == ["", ""]  # 失效列也在且全空
+    assert leg["BIGDROP SCAN"].fillna("").tolist() == ["大跌风险 2.0x", "无风险"]

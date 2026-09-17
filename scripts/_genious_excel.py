@@ -290,32 +290,19 @@ def _bigdrop_labels(sc, p, th: float) -> np.ndarray:
     return out
 
 
-BIGDROP_FAIL = "BIGDROP失效"
-
-
-def _bigdrop_fail_labels(sc, p, th: float, in_universe: np.ndarray) -> np.ndarray:
-    """BIGDROP 模块**失效**指标 (2026-09-16 用户令: 记录模块对每票的失败信号)。
-
-    语义 (三值, 只标"模块不可信/未运行"这类**真失效**, 不与风险类别混写):
-      空       = 模块正常覆盖此票 (有特征·有模型读数)
-      BIGDROP失效 = (a) 票在池内但当天**无特征行** (停牌/次新/未入板 → 模块无从评分)
-                    (b) 评分值 NaN (特征缺列/包缺键回退)
-    池外票不标 (不在扫描清单里, 不算失效)。
-    """
-    out = np.full(len(sc), "", dtype=object)
-    fail = in_universe & (
-        ~np.isfinite(np.asarray(p, dtype=float)) & (np.asarray(sc) < 1)
-    )
-    out[fail] = BIGDROP_FAIL
-    return out
-
-
 def _bigdrop_cells(labels, p, base: float) -> list[str]:
-    """标注 → 单元格文本 (如 `大跌风险 3.6x`)。
+    """标注 → 单元格文本。**只有方向支 (大跌风险) 带倍数**, 另两态原样出。
 
     倍数 = 该股模型概率 ÷ OOS 市场基准大跌率, 即"次日大跌概率是市场的几倍"。用**逐股**
-    概率而非分支常数, 是为了让高危档内部还能分出轻重 (实测 2.1x~4.9x)。空标注不出倍数 ——
-    没举手就不摆一个数字出来当信号。
+    概率而非分支常数, 是为了让高危档内部还能分出轻重 (实测 2.1x~9.4x)。
+
+    波动风险 不带倍数 —— 不是省事, 是那个数在该分支上**恒为"比市场安全"**: 该分支按
+    定义就是 p < th(0.10), 而 base=5.128%, 故倍数上限 = th/base = **1.95x**, 实测中位
+    0.31x、87% 落在 1x 以下。挂一个"风险"标签却显示 0.3x, 读起来就是"风险只有市场的
+    三成"= 比平均安全 —— 标签与数字自相矛盾 (用户 0916 报"0.2/0.3 不正常"即此)。
+    该分支本就零方向, 摆一个方向性数字只会误导, 故只出标签。
+
+    无风险 同样不带倍数; 它本身已是一个完整读数。
     """
     return [
         f"{x} {safe_divide(y, base):.1f}x" if x == BIGDROP_HIGH else x

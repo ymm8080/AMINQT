@@ -21,10 +21,12 @@ import pytest  # noqa: E402
 from scripts import bigdrop_check as bc  # noqa: E402
 from scripts._genious_excel import (  # noqa: E402
     BIGDROP_HIGH,
+    BIGDROP_NONE,
     BIGDROP_VOL,
     _bigdrop_cells,
     _bigdrop_labels,
     _bigdrop_module_run,
+    _norm_sym,
 )
 
 TH = 0.10
@@ -42,9 +44,24 @@ def test_rule_branch_is_volatility_not_high_risk():
     assert lab[0] == BIGDROP_VOL
 
 
-def test_silent_is_blank():
+def test_silent_is_no_risk_not_blank():
+    """都没举手 → **无风险**, 不是空 (用户 0916 令: 所有 STOCK 都应该有标志)。
+
+    空值看着像"没数据"; 模块对每只票都给了读数, 空会把"算过且安全"与"根本没算"
+    混成同一个样子。三态全出后, 列里再出现空就只剩"没评上分"一个意思。
+    """
     lab = _bigdrop_labels(np.array([0]), np.array([0.001]), TH)
-    assert lab[0] == ""
+    assert lab[0] == BIGDROP_NONE
+    assert lab[0] != ""
+
+
+def test_no_state_is_ever_blank():
+    """任何输入组合都不产生空 —— 这一列是完整判读, 不允许留白。"""
+    sc = np.array([0, 1, 5, 0, 3, 0])
+    p = np.array([0.0, 0.0, 0.9, 0.05, 0.01, TH])
+    lab = _bigdrop_labels(sc, p, TH)
+    assert all(x != "" for x in lab)
+    assert set(lab) <= {BIGDROP_HIGH, BIGDROP_VOL, BIGDROP_NONE}
 
 
 def test_model_wins_over_rule_when_both_fire():
@@ -55,13 +72,13 @@ def test_model_wins_over_rule_when_both_fire():
 
 def test_threshold_boundary_is_inclusive():
     assert _bigdrop_labels(np.array([0]), np.array([TH]), TH)[0] == BIGDROP_HIGH
-    assert _bigdrop_labels(np.array([0]), np.array([TH - 1e-9]), TH)[0] == ""
+    assert _bigdrop_labels(np.array([0]), np.array([TH - 1e-9]), TH)[0] == BIGDROP_NONE
 
 
 def test_rule_boundary_one_point_fires():
     """规则分 1 即入波动档 (服务口径 score>=1), 0 分不入。"""
     assert _bigdrop_labels(np.array([1]), np.array([0.0]), TH)[0] == BIGDROP_VOL
-    assert _bigdrop_labels(np.array([0]), np.array([0.0]), TH)[0] == ""
+    assert _bigdrop_labels(np.array([0]), np.array([0.0]), TH)[0] == BIGDROP_NONE
 
 
 def test_labels_align_positionally():
@@ -69,7 +86,7 @@ def test_labels_align_positionally():
     sc = np.array([0, 3, 0, 2])
     p = np.array([0.99, 0.01, 0.001, 0.50])
     lab = _bigdrop_labels(sc, p, TH)
-    assert list(lab) == [BIGDROP_HIGH, BIGDROP_VOL, "", BIGDROP_HIGH]
+    assert list(lab) == [BIGDROP_HIGH, BIGDROP_VOL, BIGDROP_NONE, BIGDROP_HIGH]
 
 
 def test_cells_carry_per_stock_multiple():
@@ -79,11 +96,38 @@ def test_cells_carry_per_stock_multiple():
     assert cells == [f"{BIGDROP_HIGH} 5.0x", f"{BIGDROP_HIGH} 2.5x"]
 
 
-def test_blank_label_gets_no_multiple():
-    """没举手就不摆数字 —— 空标注不能长出倍数尾巴。"""
-    lab = np.array(["", BIGDROP_VOL], dtype=object)
-    cells = _bigdrop_cells(lab, np.array([0.90, 0.10]), BASE)
-    assert cells == ["", f"{BIGDROP_VOL} 2.0x"]
+def test_only_directional_branch_carries_multiple():
+    """倍数只挂方向支。波动风险 的模型概率**按定义**低于报警线, 倍数恒 <1.95x,
+
+    挂上去就等于在"风险"标签旁边写"比市场安全" —— 标签与数字自相矛盾 (用户 0916
+    报的 "0.2/0.3x 不正常" 正是这个)。
+    """
+    lab = np.array([BIGDROP_HIGH, BIGDROP_VOL, BIGDROP_NONE], dtype=object)
+    cells = _bigdrop_cells(lab, np.array([0.25, 0.10, 0.90]), BASE)
+    assert cells == [f"{BIGDROP_HIGH} 5.0x", BIGDROP_VOL, BIGDROP_NONE]
+
+
+def test_vol_branch_multiple_would_be_below_alarm_ratio():
+    """构造性上界: 波动风险 的 p < th ⇒ 倍数 < th/base。数字被拿掉的理由是数学, 不是口味。"""
+    th, base = 0.10, 0.05
+    assert th / base == 2.0
+    lab = _bigdrop_labels(np.array([1]), np.array([th - 1e-9]), th)
+    assert lab[0] == BIGDROP_VOL
+    assert _bigdrop_cells(lab, np.array([th - 1e-9]), base) == [BIGDROP_VOL]
+
+
+def test_norm_sym_strips_exchange_suffix_and_zfills():
+    """清单侧北交所票带 `.BJ`, 面板键是裸 6 位 —— 不归一则查表静默落空。
+
+    落空的票显示成空, 与真判读长得一样, 但它的分**是算过的**, 被 key 格式丢掉了
+    (实测 920367.BJ → 空 / 920367 → 波动风险)。三态落地后, 列里留空只剩
+    "没评上分"一个意思 —— 更不能让 key 格式制造假空。
+    """
+    assert _norm_sym("920075.BJ") == "920075"
+    assert _norm_sym("920075") == "920075"
+    assert _norm_sym(" 1 ") == "000001"
+    assert _norm_sym("600000.SH") == "600000"
+    assert _norm_sym(1) == "000001"
 
 
 def test_cells_align_positionally():
@@ -93,8 +137,8 @@ def test_cells_align_positionally():
     cells = _bigdrop_cells(_bigdrop_labels(sc, p, TH), p, BASE)
     assert cells == [
         f"{BIGDROP_HIGH} 19.8x",
-        f"{BIGDROP_VOL} 0.2x",
-        "",
+        BIGDROP_VOL,
+        BIGDROP_NONE,
         f"{BIGDROP_HIGH} 10.0x",
     ]
 
