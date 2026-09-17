@@ -48,7 +48,7 @@ def test_schedule_query_short_circuit(fake_pipeline, monkeypatch, capsys):
         ),
     )
     assert dly._schedule_delayed_run(0.01) is False  # 已挂 → 不重挂
-    out = capsys.readouterr().out + capsys.readouterr().out
+    out = capsys.readouterr().out
     assert "Task" in out or "TASK" in out or "已挂" in out
 
 

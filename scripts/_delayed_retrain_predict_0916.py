@@ -69,7 +69,7 @@ def _schedule_delayed_run(delay_hours: float = 2.0) -> bool:
         log.error("[delay] schtasks /query 调用失败: %s", e)
         return False
     if q.returncode == 0 and TASK_NAME in (q.stdout or ""):
-        log.info("[delay] %s 已挂, 不重挂", TASK_NAME)
+        print(f"[delay] {TASK_NAME} 已挂, 不重挂")
         return False
     run_at = (_dt.datetime.now() + _dt.timedelta(hours=delay_hours)).strftime(
         "%Y-%m-%dT%H:%M:%S"
