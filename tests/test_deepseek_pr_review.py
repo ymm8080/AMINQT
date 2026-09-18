@@ -663,3 +663,69 @@ class TestExtractJson:
 
     def test_none_input_returns_none(self):
         assert dsr._extract_json(None) is None
+
+    # ── PR#161 挂死法: 响应体**开头正常**、畸形在后面 ⇒ strict 模式整条拒收。
+    # 模型多行 message 里的裸换行/制表符正是这一类 (意图合法, strict JSON 不认控制字符)。
+
+    def test_raw_newline_in_message_parses(self):
+        raw = (
+            '{"issues": [{"file": "a.py", "line": "1", "severity": "warning",'
+            ' "message": "line one\nline two"}], "summary": "ok"}'
+        )
+        assert dsr._extract_json(raw) == {
+            "issues": [
+                {
+                    "file": "a.py",
+                    "line": "1",
+                    "severity": "warning",
+                    "message": "line one\nline two",
+                }
+            ],
+            "summary": "ok",
+        }
+
+    def test_raw_tab_in_message_parses(self):
+        assert dsr._extract_json('{"issues": [], "summary": "a\tb"}') == {
+            "issues": [],
+            "summary": "a\tb",
+        }
+
+
+class TestUnparseableRetry:
+    """畸形响应不该一击即溃: 端点非确定 (同 diff 两次调用给出不同行号/措辞),
+    重发一次极少复现同一处畸形 —— 比直接给 PR 挂一条 'Review failed' 划算。"""
+
+    def test_unparseable_then_success(self, monkeypatch):
+        calls = [0]
+
+        def fake_urlopen(req, timeout=None):
+            calls[0] += 1
+            if calls[0] == 1:
+                return FakeHTTPResponse(_api_response("not json at all"))
+            return FakeHTTPResponse(
+                _api_response('{"issues": [], "summary": "Reviewed 1 file, ok."}')
+            )
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(dsr.time, "sleep", lambda s: None)
+
+        result = dsr.review_with_deepseek("diff", "key", "m", "https://x")
+
+        assert calls[0] == 2
+        assert "error" not in result
+        assert result["summary"] == "Reviewed 1 file, ok."
+
+    def test_unparseable_3_times_returns_error(self, monkeypatch):
+        calls = [0]
+
+        def fake_urlopen(req, timeout=None):
+            calls[0] += 1
+            return FakeHTTPResponse(_api_response("not json at all"))
+
+        monkeypatch.setattr(dsr.urllib.request, "urlopen", fake_urlopen)
+
+        result = dsr.review_with_deepseek("diff", "key", "m", "https://x")
+
+        assert calls[0] == 3  # 重试有界, 不是无底洞
+        assert result["error"] is True
+        assert "Could not parse" in result["summary"]

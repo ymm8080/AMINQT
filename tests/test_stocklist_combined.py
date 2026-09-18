@@ -141,3 +141,130 @@ def test_next_path_prefers_canonical_then_fills_first_gap(tmp_path):
     assert (
         sc._next_path("20260106", tmp_path).name == "stocklist_combined_20260106.xlsx"
     )
+
+
+# ── insert_bigdrop_column (2026-09-16 用户令: 不另开页, 记进既有表的列) ──
+
+
+def _patch_bigdrop(monkeypatch, scan):
+    """模块运行恒成功 + 扫描结果注入 (不动源文件, 不起真模型)。"""
+    monkeypatch.setattr("scripts._genious_excel._bigdrop_module_run", lambda: True)
+    monkeypatch.setattr("scripts._genious_excel._bigdrop_scan", scan)
+
+
+def test_insert_bigdrop_column_is_first_column_and_zfills(monkeypatch):
+    """列必须**最前** (用户 0915 令: 追加到末尾会被列宽/横向滚动吞掉);
+
+    送扫集 = 去重 + zfill(6) + 排序; 行序原样不动 (标注列不重排交付表)。
+    """
+    df = pd.DataFrame({"symbol": ["600000", "1"], "x": ["a", "b"]})
+    seen = {}
+
+    def fake_scan(syms):
+        seen["syms"] = syms
+        return {"600000": "大跌风险 3.2x", "000001": "波动风险"}
+
+    _patch_bigdrop(monkeypatch, fake_scan)
+
+    assert sc.insert_bigdrop_column([("LEGACY", df)]) == 1
+    assert seen["syms"] == ["000001", "600000"]
+    assert df.columns[0] == "BIGDROP SCAN"
+    assert df["BIGDROP SCAN"].tolist() == ["大跌风险 3.2x", "波动风险"]
+    assert df["symbol"].tolist() == ["600000", "1"]  # 行序原样
+
+
+def test_insert_bigdrop_column_matches_suffixed_symbol(monkeypatch):
+    """清单侧带 `.BJ` 的票必须**查得到**自己的读数 (去后缀后再查表)。
+
+    不归一时它查空 → 显示成"两边没举手", 而真值是有标注的 —— 静默丢分, 且丢得
+    看不出来。实测 legacy/parallel 的历史清单里确有此形态。
+    """
+    df = pd.DataFrame({"symbol": ["920367.BJ", "600000"], "x": ["a", "b"]})
+    seen = {}
+
+    def fake_scan(syms):
+        seen["syms"] = syms
+        return {"920367": "波动风险", "600000": "无风险"}
+
+    _patch_bigdrop(monkeypatch, fake_scan)
+
+    assert sc.insert_bigdrop_column([("LEGACY", df)]) == 1
+    assert seen["syms"] == ["600000", "920367"]  # 送扫也是归一后的键
+    assert df["BIGDROP SCAN"].tolist() == ["波动风险", "无风险"]
+
+
+def test_insert_bigdrop_column_covers_every_symbol_sheet(monkeypatch):
+    """送扫 = **所有**表的并集 (含 SLOW_BULL); 没 symbol 的表不加列也不进送扫。
+
+    只送一部分的话, 没送到的票显示成空 —— 与"两边没举手"长得一模一样。
+    """
+    sheets = [
+        ("LEGACY", pd.DataFrame({"symbol": ["600000"]})),
+        ("SLOW_BULL", pd.DataFrame({"symbol": ["300001"]})),
+        ("市场FADE预测", pd.DataFrame({"指标": ["P(冲高)"], "值": ["50%"]})),
+    ]
+    seen = {}
+
+    def fake_scan(syms):
+        seen["syms"] = syms
+        return dict.fromkeys(syms, "无风险")
+
+    _patch_bigdrop(monkeypatch, fake_scan)
+
+    assert sc.insert_bigdrop_column(sheets) == 2  # FADE 无 symbol, 不计数
+    assert seen["syms"] == ["300001", "600000"]  # SLOW_BULL 也在送扫范围
+    assert "BIGDROP SCAN" in sheets[0][1].columns
+    assert "BIGDROP SCAN" in sheets[1][1].columns
+    assert "BIGDROP SCAN" not in sheets[2][1].columns
+
+
+def test_insert_bigdrop_column_failopen_omits_column(monkeypatch):
+    """扫描拿不到 (缺包/失败) → 整列不加, 返回 0, 不抛 (旁路标注契约)。"""
+    df = pd.DataFrame({"symbol": ["600000"]})
+    _patch_bigdrop(monkeypatch, lambda syms: None)
+
+    assert sc.insert_bigdrop_column([("LEGACY", df)]) == 0
+    assert "BIGDROP SCAN" not in df.columns
+
+
+def test_insert_bigdrop_column_leaves_no_blank_for_scored_stocks(monkeypatch):
+    """送扫的票**不留空** (用户 0916 令: 无风险要有标志, 所有 STOCK 都该有标志)。
+
+    scan 故意漏掉 300002 (模拟不在面板): 它标 未评分, **不是空** —— 空格与"查过且
+    无风险"在表上同形, 会把没测的票静默读成安全。
+    """
+    df = pd.DataFrame({"symbol": ["600000", "600001", "300002"]})
+    _patch_bigdrop(
+        monkeypatch, lambda syms: {"600000": "大跌风险 3.0x", "600001": "无风险"}
+    )
+
+    assert sc.insert_bigdrop_column([("LEGACY", df)]) == 1
+    assert df["BIGDROP SCAN"].tolist() == ["大跌风险 3.0x", "无风险", "未评分"]
+
+
+def test_insert_bigdrop_column_no_targets(monkeypatch):
+    """一张带 symbol 的表都没有 → 不扫不抛。"""
+    _patch_bigdrop(monkeypatch, lambda syms: pytest.fail("不该被调用"))
+
+    sheets = [("市场FADE预测", pd.DataFrame({"指标": ["x"]}))]
+    assert sc.insert_bigdrop_column(sheets) == 0
+
+
+def test_write_xlsx_bigdrop_column_first_every_sheet(tmp_path, monkeypatch):
+    """端到端: 落盘的 xlsx 里每张有 symbol 的表第一列都是 BIGDROP SCAN。"""
+    _legacy(tmp_path)
+    _parallel(tmp_path)
+    _patch_bigdrop(
+        monkeypatch,
+        lambda syms: {s: "大跌风险 2.0x" if s == "600000" else "无风险" for s in syms},
+    )
+
+    sheets = sc.build(DATE, list_dir=tmp_path, shadow_dir=tmp_path / "nope")
+    sc.insert_bigdrop_column(sheets)
+    xl = pd.ExcelFile(sc.write(sheets, DATE, list_dir=tmp_path))
+
+    for name in ("多模块重叠", "LEGACY", "PARALLEL"):
+        assert xl.parse(name, dtype=str).columns[0] == "BIGDROP SCAN", name
+    leg = xl.parse("LEGACY", dtype=str)
+    assert leg["symbol"].tolist() == ["600000", "600001"]  # 原列原样还在
+    assert leg["BIGDROP SCAN"].fillna("").tolist() == ["大跌风险 2.0x", "无风险"]

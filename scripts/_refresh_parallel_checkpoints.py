@@ -30,7 +30,7 @@ import psutil
 
 from app.pipeline1.cleaning_pipeline import CleaningPipeline, load_panel_v3
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
-from config.settings import LHB_V2_SPEC, PANEL_V3_PATH
+from config.settings import LHB_V2_SPEC, PANEL_V3_PATH, STALE_CHECKPOINT_KEEP
 from scripts._reclassify_all_features import (
     DUAL_CHECKPOINT,
     MAIN_CHECKPOINT,
@@ -206,18 +206,41 @@ def _assert_checkpoints_fresh(panel_max) -> bool:
     return True
 
 
+def _prune_stale(keep: int) -> None:
+    """只留最近 keep 份 .stale_<ts>, 更早的删除 (keep<0 = 不清理)。"""
+    if keep < 0:
+        return
+    for ck in (MAIN_CHECKPOINT, DUAL_CHECKPOINT):
+        d, base = os.path.split(ck)
+        prefix = f"{base}.stale_"
+        try:
+            cands = sorted(f for f in os.listdir(d or ".") if f.startswith(prefix))
+        except OSError as e:  # noqa: BLE001 — 清理失败不该拖垮重建
+            print(f"[prune] 列目录失败 {d}: {e}", flush=True)
+            continue
+        for f in cands[:-keep] if keep else cands:
+            fp = os.path.join(d, f)
+            try:
+                sz = os.path.getsize(fp)
+                os.remove(fp)
+                print(f"[prune] 删除 {f} ({sz / 1e9:.2f}GB)", flush=True)
+            except OSError as e:  # noqa: BLE001
+                print(f"[prune] 删除失败 {f}: {e}", flush=True)
+
+
 def _main_locked(force: bool) -> int:
     if _skip_if_unchanged(force):
         return 0
 
     ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
 
-    # 1. 旧检查点改名为 .stale_<ts> (保留可回溯)
+    # 1. 旧检查点改名为 .stale_<ts> (保留可回溯), 随后只留最近 STALE_CHECKPOINT_KEEP 份
     for ck in (MAIN_CHECKPOINT, DUAL_CHECKPOINT):
         if os.path.exists(ck):
             bak = f"{ck}.stale_{ts}"
             os.rename(ck, bak)
             print(f"[stale] {ck} -> {bak}", flush=True)
+    _prune_stale(STALE_CHECKPOINT_KEEP)
 
     # 2. 读 V3 面板 → 逐板块 run_train(board=...) → 重建两检查点 (内存分期)
     print("读取 V3 面板 ...", flush=True)

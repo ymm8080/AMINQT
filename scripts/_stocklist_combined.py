@@ -10,6 +10,9 @@
 - LEGACY / PARALLEL / 密度: 当日清单 CSV 全列原样 (dtype=str, 百分比显示层保留)
 - SLOW_BULL: shadow 目录长持清单 (只入表不推送)
 
+每张带 symbol 的表**最前列**insert 一列 BIGDROP SCAN (2026-09-16 用户令: 大跌
+扫描结果记在既有表里, 不另开页; 见 insert_bigdrop_column)。
+
 缺源跳页 (密度/SLOW_BULL 常缺, 影子单当日未跑); LEGACY+PARALLEL 双缺才退出。
 输出: STOCK_LIST_DIR/stocklist_combined_{date}.xlsx — WORM: 同名已存在则退到
 __v2/__v3/... 变体 (绝不覆盖, 也不再跳过)。下游 `run_daily_automation._combined_delivered`
@@ -20,6 +23,7 @@ __v2/__v3/... 变体 (绝不覆盖, 也不再跳过)。下游 `run_daily_automat
 import argparse
 import datetime
 import glob
+import logging
 import os
 import re
 import sys
@@ -30,6 +34,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config.settings import DATA_OTHERS_DIR, STOCK_LIST_DIR  # noqa: E402
+
+log = logging.getLogger(__name__)
 
 SHADOW_DIR = DATA_OTHERS_DIR / "shadow"
 
@@ -127,6 +133,58 @@ def build(date: str, list_dir=STOCK_LIST_DIR, shadow_dir=SHADOW_DIR):
     return [("多模块重叠", pd.DataFrame(multi, columns=OVERLAP_COLS))] + sheets
 
 
+def insert_bigdrop_column(sheets) -> int:
+    """BIGDROP SCAN 标注列 (2026-09-16 用户令 2: **不要独立页**, 记进既有表)。
+
+    当日合并清单全 workbook 的 symbol 并集送 bigdrop 次日大跌模块 → 每张带 symbol
+    的表 insert(0) 一列【BIGDROP SCAN】。三态语义与 _genious_excel 同名列逐字一致:
+      大跌风险 N.Nx = 模型支 (唯一带看跌方向), 波动风险 N.Nx = 仅规则支 (零方向),
+      空            = 两边没举手。
+
+    送扫范围 = **所有**表的 symbol 并集 (含 SLOW_BULL)。只送一部分的话, 没送到的票
+    在列里显示成空 —— 与"两边没举手"长得一模一样, 而那是两个完全不同的意思。
+
+    列序: insert(0) 放最前 (用户 0915 令 —— 旁路列追加到末尾会被列宽/横向滚动吞掉)。
+
+    模块运行 (建包新鲜度闸) 复用 _genious_excel._bigdrop_module_run (同源跳过 /
+    非同源重建 / 失败回退旧包); 扫描拿到 None (缺包/失败) 就整列不加, 不拦其余产出
+    (旁路标注, 同 genious 的契约)。返回实际加了列的表数。
+    """
+    try:
+        from scripts._genious_excel import (
+            BIGDROP_UNSCORED,
+            _bigdrop_module_run,
+            _bigdrop_scan,
+            _norm_sym,
+        )
+
+        targets = [df for _, df in sheets if "symbol" in df.columns]
+        if not targets:
+            return 0
+        syms = sorted({_norm_sym(s) for df in targets for s in df["symbol"]})
+        _bigdrop_module_run()
+        scan = _bigdrop_scan(syms)
+        if scan is None:
+            return 0
+        for df in targets:
+            df.insert(
+                0,
+                "BIGDROP SCAN",
+                df["symbol"].map(lambda s: scan.get(_norm_sym(s), BIGDROP_UNSCORED)),
+            )
+        log.info(
+            "[combined] BIGDROP SCAN 列: %d 张表, %d 只送扫",
+            len(targets),
+            len(syms),
+        )
+        return len(targets)
+    except SystemExit:
+        raise
+    except BaseException as exc:  # noqa: BLE001 — 旁路标注, 失败不加列不拦产出
+        log.error("[combined] BIGDROP SCAN 列失败, 不加列: %s", exc)
+        return 0
+
+
 def market_fade_sheet(fc_fn=None) -> tuple[str, pd.DataFrame] | None:
     """市场FADE预测页 (2026-09-09 用户: "市场冲高回落概率预测值写进COMBINED")."""
     if fc_fn is None:
@@ -193,6 +251,9 @@ def main() -> int:
     mk = market_fade_sheet()
     if mk:
         sheets.insert(1, mk)
+    # BIGDROP SCAN 列 (2026-09-16 用户令): combined 就绪后 bigdrop 必跑, 全 workbook
+    # 的票标大跌/波动风险 —— 记进既有表的列, 不另开页。
+    insert_bigdrop_column(sheets)
     out = write(sheets, date)
     for name, df in sheets:
         print(f"[combined] sheet {name}: {len(df)} 行")

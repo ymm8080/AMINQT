@@ -492,6 +492,10 @@ def _page_gaps(tag: str) -> list[str] | None:
             expect.add(name)
         elif name == "密度" and _density_never_ran(tag):
             expect.add(name)
+    # BIGDROP 页 (2026-09-16 用户令): 任一清单源在盘 → 合并池非空 → 页该在。
+    # 但它是旁路页 (建包/扫描失败按设计跳页), 故只在**新表**上判 (见下), 旧表
+    # (0916 接线前产出) 不倒算缺页, 避免触发无止境补产。
+    bd_expect = bool(expect)
     if not expect:
         return []
     fp = max(hits, key=os.path.getmtime)
@@ -501,7 +505,18 @@ def _page_gaps(tag: str) -> list[str] | None:
     except Exception as e:  # 读不出页名 = 交付状态未知 → 按缺页补 (fail-loud)
         print(f"[makeup] {fp} 页名读取失败 ({e}) → 按缺页处理", flush=True)
         return sorted(expect)
-    return sorted(expect - have)
+    gaps = sorted(expect - have)
+    # BIGDROP 只对 0917+ 产出判缺 (接线日 2026-09-16): 旧表无此页是合法历史,
+    # 倒算会让补产闸永远追着旧文件跑; makeup 重建后新表BIGDROP页恒在 → 已把
+    # bd_expect 与 expect 一起判, 此处对新表把 BIGDROP 缺失计入。
+    # 铁律 #6: 日期比较用 datetime 对象, 严禁字符串直接比较.
+    if (
+        bd_expect
+        and "BIGDROP" not in have
+        and _dt.datetime.strptime(tag, "%Y%m%d").date() >= _dt.date(2026, 9, 17)
+    ):
+        gaps.append("BIGDROP")
+    return sorted(set(gaps))
 
 
 def _combined_delivered(tag: str) -> bool:

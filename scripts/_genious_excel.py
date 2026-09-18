@@ -42,6 +42,7 @@ from openpyxl.styles import Font, PatternFill
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.intraday.v51.safe_div import safe_divide  # noqa: E402
 from app.pipeline1 import kongduo_triggers as kt  # noqa: E402
 from app.pipeline1.freshness_guard import (  # noqa: E402
     expected_trading_date,
@@ -263,6 +264,168 @@ def _fmt_sheet(df: pd.DataFrame) -> pd.DataFrame:
     """
     out = df.copy()
     out["乖离MA10"] = df["乖离MA10"] - 1  # ext10 1.05 → 显示 +5.0%
+    return out
+
+
+BIGDROP_HIGH = "大跌风险"
+BIGDROP_VOL = "波动风险"
+BIGDROP_NONE = "无风险"
+BIGDROP_UNSCORED = "未评分"
+
+
+def _norm_sym(s) -> str:
+    """清单侧代码 → 面板键: 去交易所后缀 + 补零到 6 位 (920075.BJ → 920075)。"""
+    return str(s).strip().split(".")[0].zfill(6)
+
+
+def _bigdrop_labels(sc, p, th: float) -> np.ndarray:
+    """(规则分, 模型概率) → 标注。**模型支优先于规则支**, 先写规则再被模型覆盖。
+
+    顺序反了 (或把两边并成一个布尔) 就会把零方向的规则支标成 大跌风险 —— 规则支
+    占报警面七成体量、次日均收益 +0.047%, 标成"高风险"会被读成"次日要跌", 正是
+    bigdrop 0915 拆分分支要修掉的误读。这个守卫不为覆盖率, 为语义。
+    """
+    out = np.full(len(sc), BIGDROP_NONE, dtype=object)
+    out[np.asarray(sc) >= 1] = BIGDROP_VOL
+    out[np.asarray(p) >= th] = BIGDROP_HIGH
+    return out
+
+
+def _bigdrop_cells(labels, p, base: float) -> list[str]:
+    """标注 → 单元格文本。**只有方向支 (大跌风险) 带倍数**, 另两态原样出。
+
+    倍数 = 该股模型概率 ÷ OOS 市场基准大跌率, 即"次日大跌概率是市场的几倍"。用**逐股**
+    概率而非分支常数, 是为了让高危档内部还能分出轻重 (实测 2.1x~9.4x)。
+
+    波动风险 不带倍数 —— 不是省事, 是那个数在该分支上**恒为"比市场安全"**: 该分支按
+    定义就是 p < th(0.10), 而 base=5.128%, 故倍数上限 = th/base = **1.95x**, 实测中位
+    0.31x、87% 落在 1x 以下。挂一个"风险"标签却显示 0.3x, 读起来就是"风险只有市场的
+    三成"= 比平均安全 —— 标签与数字自相矛盾 (用户 0916 报"0.2/0.3 不正常"即此)。
+    该分支本就零方向, 摆一个方向性数字只会误导, 故只出标签。
+
+    无风险 同样不带倍数; 它本身已是一个完整读数。
+    """
+    return [
+        f"{x} {safe_divide(y, base):.1f}x" if x == BIGDROP_HIGH else x
+        for x, y in zip(labels, p)
+    ]
+
+
+def _bigdrop_module_run() -> bool:
+    """bigdrop **模块运行** (建包) —— 交付链里与 genious 顺序执行的第二步。
+
+    此前 GENIOUS 只**读** bigdrop 的包, 没有任何入口跑它的建包, 盘上的包会一直停在
+    上次手工 --build 那天。实测不是无害的 (tmp_t/_bigdrop_stale_delta_0916.py,
+    0915 包 vs 0916 重建, 同一日截面 5,257 行): 标注类别变 11 行 (9 只 大跌风险
+    → 波动风险)、倍数变 375 行, alarm/capture/branches 的 OOS 兑现整体漂移
+    (报警格精度 8.96% → 7.65%)。所以顺序步骤是"重跑模块", 不是"读一个越来越旧的包"。
+
+    **非致命**: 建包失败只记 ERROR 并回退盘上旧包 —— bigdrop 是旁路标注, 不许掀翻
+    交付链 (同 _bigdrop_scan 契约)。包已同源时零成本跳过 (只读面板的 date 一列)。
+    """
+    try:
+        from scripts import bigdrop_check as bc
+
+        if not (bc.BUNDLE_DIR / "bundle_latest.joblib").exists():
+            log.error("[genious] bigdrop 包缺失, 本次不跑模块也不产 BIGDROP SCAN 列")
+            return False
+        pmax = kt.panel_max_date(PANEL_V3_PATH)
+        if pmax is None:
+            log.error("[genious] 面板 date 列读失败 → 判不了包新鲜度, 跳过模块运行")
+            return False
+        data_date = pmax.strftime("%Y%m%d")
+        b = bc.load_bundle()
+        if not bc.bundle_is_stale(b, data_date):
+            log.info(
+                "[genious] bigdrop 包已同源 (tag=%s data_date=%s), 跳过建包",
+                b.get("tag"),
+                data_date,
+            )
+            return True
+        log.info(
+            "[genious] bigdrop 模块运行: 包 tag=%s data_date=%s vs 面板 %s → 重建",
+            b.get("tag"),
+            b.get("data_date"),
+            data_date,
+        )
+        t0 = time.monotonic()
+        nb = bc.build()
+        log.info(
+            "[genious] bigdrop 模块运行完成 %.1fs → tag=%s data_date=%s (OOS 基准 %.3f%%)",
+            time.monotonic() - t0,
+            nb.get("tag"),
+            nb.get("data_date"),
+            float(nb["oos_base"]) * 100,
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001 — 旁路步骤, 失败回退旧包, 不许掀翻交付链
+        log.error("[genious] bigdrop 模块运行失败, 回退盘上旧包: %s", exc)
+        return False
+
+
+def _bigdrop_scan(symbols) -> dict[str, str] | None:
+    """把当日清单送 bigdrop 次日大跌模块过一遍 → 【BIGDROP SCAN】标注列。
+
+    分档沿用 bigdrop_check 的**分支**口径 (0915 拆分), 不压成一个布尔:
+      大跌风险 N.Nx = 模型支 (模型概率 >= 报警线) —— 唯一带看跌方向的一支
+      波动风险 N.Nx = 仅规则支 (规则分>=1 而模型未达线) —— 零方向 (次日均 +0.047%)
+      空            = 两边都没举手 (不出倍数)
+    倍数是**逐股**读数 (见 _bigdrop_cells), 不是分支常数 —— 高危档内部靠它分轻重。
+    压成单一 大跌风险 正是该模块 0915 重建要修掉的误读: 规则支占报警面七成却
+    没有方向信息, 标成"高风险"会被读成"次日要跌"。
+
+    依赖缺失不拖累交付: bigdrop 是**旁路标注**, 拿不到就 log 大声并返回 None
+    (普通列照出, 名单一只不少)。load_bundle() 在缺包时 sys.exit, 那是 BaseException
+    不是 Exception, 故先查文件存在性再进去。
+    """
+    try:
+        from scripts import bigdrop_check as bc
+
+        b = bc.load_bundle()
+        d = bc.load_frame()
+        day = d[d.groupby("symbol")["date"].transform("max") == d["date"]].reset_index(
+            drop=True
+        )
+        _F, sc, P = bc.score_frame(day, b)
+        p = np.asarray(P["模型(isotonic校准)"], dtype=float)
+        th = float((b.get("alarm") or {}).get("th", bc.MODEL_ALARM))
+    except (Exception, SystemExit) as exc:  # noqa: BLE001 — 标注旁路, 不许掀翻交付链
+        # load_bundle 在缺包时 sys.exit (SystemExit 是 BaseException, 需显式捕获);
+        # 文件不存在或扫描异常均回退 None, 不拖累交付。
+        log.error("[genious] bigdrop 扫描失败, 本次不产 BIGDROP SCAN 列: %s", exc)
+        return None
+
+    lab = _bigdrop_labels(sc, p, th)
+    base = float(b["oos_base"])
+    cells = _bigdrop_cells(lab, p, base)
+    hit = dict(zip(day["symbol"].map(_norm_sym), cells))
+    # 不在面板的票给 未评分 而不是 "" —— 空格与"查过且没问题"在表上长得一样,
+    # 而含义相反 (未测 vs 测过无风险)。留空等于把没测的票静默读成安全。
+    out = {_norm_sym(s): hit.get(_norm_sym(s), BIGDROP_UNSCORED) for s in symbols}
+    unscored = [s for s, v in out.items() if v == BIGDROP_UNSCORED]
+    # 只在 out 里数: lab 是全市场截面 (5000+ 只), 数它就把"送扫的 51 只"报成全市场。
+    # 值已带倍数尾巴, 故用 startswith 而非等值比较。
+    log.info(
+        "[genious] BIGDROP SCAN [包 %s]: %d 只送扫, %s %d, %s %d, %s %d, %s %d (基准 %.2f%%)",
+        b.get("tag"),
+        len(out),
+        BIGDROP_HIGH,
+        sum(1 for v in out.values() if v.startswith(BIGDROP_HIGH)),
+        BIGDROP_VOL,
+        sum(1 for v in out.values() if v.startswith(BIGDROP_VOL)),
+        BIGDROP_NONE,
+        sum(1 for v in out.values() if v == BIGDROP_NONE),
+        BIGDROP_UNSCORED,
+        len(unscored),
+        base * 100,
+    )
+    if unscored:
+        log.warning(
+            "[genious] %d 只送扫票不在面板, 没评上分 (列内标 %s): %s",
+            len(unscored),
+            BIGDROP_UNSCORED,
+            unscored[:20],
+        )
     return out
 
 
@@ -552,9 +715,33 @@ def main() -> int:
         _write_state(tag, "failed", reason="freshness")
         return 2
 
+    # bigdrop 模块运行 (用户 0916 令: 交付链 = genious 运行 + bigdrop 运行, 顺序执行)。
+    # 放在新鲜度闸之后 —— 建包用的面板必须含交付当日行, 否则包一落地就是旧的。
+    # --dry-run 的契约是"只打印不落文件", 而建包要写 models/bigdrop → 跳过建包,
+    # 仍用盘上现有包出标注列 (读是干净的, 写才违约)。
+    if args.dry_run:
+        log.info("[genious] --dry-run: 跳过 bigdrop 模块运行 (不落包), 用盘上现有包")
+    else:
+        _bigdrop_module_run()
+
     df = kt.compute_features(df)
     df = kt.compute_triggers(df)
     s1, s2, s2_full = kt.build_delivery(df, target)
+    # 旁路标注列 (用户 0915 令): 清单过一遍 bigdrop 次日大跌模块。三张表都加,
+    # 语义见 _bigdrop_scan —— 三态 (大跌风险/波动风险/无风险) + 未评分。
+    # 查表一律走 _norm_sym: 直接 str(s).zfill(6) 会漏掉北交所的 `.BJ` 后缀, 那只票
+    # 就静默变空 —— 与"没评上分"撞脸, 而分其实算过。
+    # 缺省值同 _bigdrop_scan: 拿不到读数标 未评分, **不留空** (空格与"查过且无风险"同形)。
+    # 附加列一律 insert(0) **放最前** (用户 0915 令) —— 追加到末尾会被列宽/横向滚动吞掉,
+    # 后面新增的旁路列照此办理。
+    scan = _bigdrop_scan(pd.concat([s1["symbol"], s2["symbol"], s2_full["symbol"]]))
+    if scan is not None:
+        for sh in (s1, s2, s2_full):
+            sh.insert(
+                0,
+                "BIGDROP SCAN",
+                sh["symbol"].map(lambda s: scan.get(_norm_sym(s), BIGDROP_UNSCORED)),
+            )
     counts = pd.concat([s1["层"], s2_full["层"]]).value_counts().to_dict()
     n_pass = int((s1["大涨闸"] == "过闸").sum())
     log.info(

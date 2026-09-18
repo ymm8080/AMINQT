@@ -232,6 +232,14 @@ MAX_ACCOUNT_DRAWDOWN_PCT = 3.0  # 账户回撤 > 3% → 返回空列表
 # 计算 stock_basic.list_date → trade_date 的交易日计数 (searchsorted 向量化).
 INGEST_MIN_LIST_DAYS = 150
 
+# ── 收盘时刻闸 (缺省取数日, 2026-09-18) ────────────────────────
+# _daily_fetch.py 不传日期参数时 (计划任务路径), 取数日 = 最近一个**已收盘**的
+# 开市日. 若"今天"是开市日但当前小时 < 本值, 说明当天还没收盘 → 退到上一开市日.
+# 病根: 原缺省用 datetime.now() 墙钟日, 而 StartWhenAvailable 恰在凌晨补跑
+# (09-17 电量休眠事故场景) → 周一凌晨会把尚未发生的"周一"行写进面板, 此后
+# panel_max_date 谎报最新日, 全链新鲜度判据被污染. A 股 15:00 收盘, 留到 16:00.
+MARKET_CLOSE_HOUR = 16
+
 # ── KIMI LHB v2.0 spec 参数 (龙虎榜稀疏特征: 半衰期/情境权重/记忆下限) ──
 # 见 REFERENCE/.../FEATURE/kimi LHB_v2.0_设计文档.md §3.1/§3.3/§4
 LHB_V2_SPEC = {
@@ -646,6 +654,13 @@ PARALLEL_TREND_GATE = {
     #   r60 用 close_hfq (真收益, 除权不污染); ym 仍用原始价 — 各有各的回放口径。
     "r60_max": -0.10,
 }
+
+# ── parallel 检查点备份保留数 (2026-09-18) ──
+# _refresh_parallel_checkpoints.py 每次重建都把旧检查点改名为 .stale_<ts> 保留
+# 可回溯, 但过去从不回收: 每个备份 main 2.9GB / dual 1.8GB, 每天一对 ~4.8GB,
+# 8 天累积 38GB 直到 D: 归零 → 9/17 抓数写面板时 Errno 28 崩, 整条交付链哑火。
+# 保留最近 N 份供短期回滚, 更早的自动删除。设 -1 表示不清理 (旧行为, 不推荐)。
+STALE_CHECKPOINT_KEEP = 2
 
 # ── 链路狙击交付层 (2026-09-14 用户令: 产 GENIOUS Excel, 交易日 20:30 自动跑) ──
 # 纯规则层, 不吃任何模型产物 (只要面板 OHLCV + winner_ratio)。三触发器 T1洗盘日 /
