@@ -1,6 +1,7 @@
 """延迟重训+预测触发器 (scripts/_delayed_retrain_predict_0916.py): 闸判断真
 ("管线有新改动 → 挂任务"), 幂等 (已挂不重挂), --run-now 分支直接 spawn."""
 
+import logging
 import os
 import subprocess
 
@@ -39,17 +40,27 @@ def test_no_stamp_at_all_defers_once(fake_pipeline):
     assert dly._deferred_needed() is True
 
 
-def test_schedule_query_short_circuit(fake_pipeline, monkeypatch, capsys):
-    monkeypatch.setattr(
-        dly,
-        "_run_schtasks",
-        lambda args: subprocess.CompletedProcess(
-            args, 0, stdout=dly.TASK_NAME, stderr=""
-        ),
-    )
-    assert dly._schedule_delayed_run(0.01) is False  # 已挂 → 不重挂
-    out = capsys.readouterr().out
-    assert "Task" in out or "TASK" in out or "已挂" in out
+def test_schedule_query_short_circuit(fake_pipeline, monkeypatch):
+    """已挂同名任务 → 返回 False 且不重挂; 验证 log.info 确实被调用。"""
+    records: list[logging.LogRecord] = []
+    handler = logging.Handler()
+    handler.emit = records.append  # type: ignore[assignment]
+    dly.log.addHandler(handler)
+    prev_level = dly.log.level
+    dly.log.setLevel(logging.INFO)
+    try:
+        monkeypatch.setattr(
+            dly,
+            "_run_schtasks",
+            lambda args: subprocess.CompletedProcess(
+                args, 0, stdout=dly.TASK_NAME, stderr=""
+            ),
+        )
+        assert dly._schedule_delayed_run(0.01) is False  # 已挂 → 不重挂
+        assert any("已挂" in r.getMessage() for r in records)
+    finally:
+        dly.log.removeHandler(handler)
+        dly.log.setLevel(prev_level)
 
 
 def test_schedule_creates_task(fake_pipeline, monkeypatch):

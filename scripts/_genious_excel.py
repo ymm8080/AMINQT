@@ -381,9 +381,6 @@ def _bigdrop_scan(symbols) -> dict[str, str] | None:
     try:
         from scripts import bigdrop_check as bc
 
-        if not (bc.BUNDLE_DIR / "bundle_latest.joblib").exists():
-            log.error("[genious] bigdrop 包缺失, 本次不产 BIGDROP SCAN 列")
-            return None
         b = bc.load_bundle()
         d = bc.load_frame()
         day = d[d.groupby("symbol")["date"].transform("max") == d["date"]].reset_index(
@@ -392,7 +389,9 @@ def _bigdrop_scan(symbols) -> dict[str, str] | None:
         _F, sc, P = bc.score_frame(day, b)
         p = np.asarray(P["模型(isotonic校准)"], dtype=float)
         th = float((b.get("alarm") or {}).get("th", bc.MODEL_ALARM))
-    except Exception as exc:  # noqa: BLE001 — 标注旁路, 不许掀翻交付链
+    except (Exception, SystemExit) as exc:  # noqa: BLE001 — 标注旁路, 不许掀翻交付链
+        # load_bundle 在缺包时 sys.exit (SystemExit 是 BaseException, 需显式捕获);
+        # 文件不存在或扫描异常均回退 None, 不拖累交付。
         log.error("[genious] bigdrop 扫描失败, 本次不产 BIGDROP SCAN 列: %s", exc)
         return None
 
