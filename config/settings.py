@@ -647,6 +647,13 @@ PARALLEL_TREND_GATE = {
     "r60_max": -0.10,
 }
 
+# ── parallel 检查点备份保留数 (2026-09-18) ──
+# _refresh_parallel_checkpoints.py 每次重建都把旧检查点改名为 .stale_<ts> 保留
+# 可回溯, 但过去从不回收: 每个备份 main 2.9GB / dual 1.8GB, 每天一对 ~4.8GB,
+# 8 天累积 38GB 直到 D: 归零 → 9/17 抓数写面板时 Errno 28 崩, 整条交付链哑火。
+# 保留最近 N 份供短期回滚, 更早的自动删除。设 -1 表示不清理 (旧行为, 不推荐)。
+STALE_CHECKPOINT_KEEP = 2
+
 # ── 链路狙击交付层 (2026-09-14 用户令: 产 GENIOUS Excel, 交易日 20:30 自动跑) ──
 # 纯规则层, 不吃任何模型产物 (只要面板 OHLCV + winner_ratio)。三触发器 T1洗盘日 /
 # T2翻转日 / T3状态点火, 见 app/pipeline1/kongduo_triggers.py。
