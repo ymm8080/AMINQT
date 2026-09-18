@@ -230,7 +230,8 @@ def test_insert_bigdrop_column_failopen_omits_column(monkeypatch):
 def test_insert_bigdrop_column_leaves_no_blank_for_scored_stocks(monkeypatch):
     """送扫的票**不留空** (用户 0916 令: 无风险要有标志, 所有 STOCK 都该有标志)。
 
-    空只剩一个意思 —— 测试里 scan 故意漏掉 300002, 那一格才允许空。
+    scan 故意漏掉 300002 (模拟不在面板): 它标 未评分, **不是空** —— 空格与"查过且
+    无风险"在表上同形, 会把没测的票静默读成安全。
     """
     df = pd.DataFrame({"symbol": ["600000", "600001", "300002"]})
     _patch_bigdrop(
@@ -238,7 +239,7 @@ def test_insert_bigdrop_column_leaves_no_blank_for_scored_stocks(monkeypatch):
     )
 
     assert sc.insert_bigdrop_column([("LEGACY", df)]) == 1
-    assert df["BIGDROP SCAN"].tolist() == ["大跌风险 3.0x", "无风险", ""]
+    assert df["BIGDROP SCAN"].tolist() == ["大跌风险 3.0x", "无风险", "未评分"]
 
 
 def test_insert_bigdrop_column_no_targets(monkeypatch):

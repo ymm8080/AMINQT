@@ -270,6 +270,7 @@ def _fmt_sheet(df: pd.DataFrame) -> pd.DataFrame:
 BIGDROP_HIGH = "大跌风险"
 BIGDROP_VOL = "波动风险"
 BIGDROP_NONE = "无风险"
+BIGDROP_UNSCORED = "未评分"
 
 
 def _norm_sym(s) -> str:
@@ -399,12 +400,14 @@ def _bigdrop_scan(symbols) -> dict[str, str] | None:
     base = float(b["oos_base"])
     cells = _bigdrop_cells(lab, p, base)
     hit = dict(zip(day["symbol"].map(_norm_sym), cells))
-    out = {_norm_sym(s): hit.get(_norm_sym(s), "") for s in symbols}
-    unscored = [s for s, v in out.items() if v == ""]
+    # 不在面板的票给 未评分 而不是 "" —— 空格与"查过且没问题"在表上长得一样,
+    # 而含义相反 (未测 vs 测过无风险)。留空等于把没测的票静默读成安全。
+    out = {_norm_sym(s): hit.get(_norm_sym(s), BIGDROP_UNSCORED) for s in symbols}
+    unscored = [s for s, v in out.items() if v == BIGDROP_UNSCORED]
     # 只在 out 里数: lab 是全市场截面 (5000+ 只), 数它就把"送扫的 51 只"报成全市场。
     # 值已带倍数尾巴, 故用 startswith 而非等值比较。
     log.info(
-        "[genious] BIGDROP SCAN [包 %s]: %d 只送扫, %s %d, %s %d, %s %d (基准 %.2f%%)",
+        "[genious] BIGDROP SCAN [包 %s]: %d 只送扫, %s %d, %s %d, %s %d, %s %d (基准 %.2f%%)",
         b.get("tag"),
         len(out),
         BIGDROP_HIGH,
@@ -413,12 +416,15 @@ def _bigdrop_scan(symbols) -> dict[str, str] | None:
         sum(1 for v in out.values() if v.startswith(BIGDROP_VOL)),
         BIGDROP_NONE,
         sum(1 for v in out.values() if v == BIGDROP_NONE),
+        BIGDROP_UNSCORED,
+        len(unscored),
         base * 100,
     )
     if unscored:
         log.warning(
-            "[genious] %d 只送扫票不在面板, 没评上分 (列内留空): %s",
+            "[genious] %d 只送扫票不在面板, 没评上分 (列内标 %s): %s",
             len(unscored),
+            BIGDROP_UNSCORED,
             unscored[:20],
         )
     return out
@@ -723,9 +729,10 @@ def main() -> int:
     df = kt.compute_triggers(df)
     s1, s2, s2_full = kt.build_delivery(df, target)
     # 旁路标注列 (用户 0915 令): 清单过一遍 bigdrop 次日大跌模块。三张表都加,
-    # 语义见 _bigdrop_scan —— 三态 (大跌风险/波动风险/无风险), 只有模型支带倍数。
+    # 语义见 _bigdrop_scan —— 三态 (大跌风险/波动风险/无风险) + 未评分。
     # 查表一律走 _norm_sym: 直接 str(s).zfill(6) 会漏掉北交所的 `.BJ` 后缀, 那只票
     # 就静默变空 —— 与"没评上分"撞脸, 而分其实算过。
+    # 缺省值同 _bigdrop_scan: 拿不到读数标 未评分, **不留空** (空格与"查过且无风险"同形)。
     # 附加列一律 insert(0) **放最前** (用户 0915 令) —— 追加到末尾会被列宽/横向滚动吞掉,
     # 后面新增的旁路列照此办理。
     scan = _bigdrop_scan(pd.concat([s1["symbol"], s2["symbol"], s2_full["symbol"]]))
@@ -734,7 +741,7 @@ def main() -> int:
             sh.insert(
                 0,
                 "BIGDROP SCAN",
-                sh["symbol"].map(lambda s: scan.get(_norm_sym(s), "")),
+                sh["symbol"].map(lambda s: scan.get(_norm_sym(s), BIGDROP_UNSCORED)),
             )
     counts = pd.concat([s1["层"], s2_full["层"]]).value_counts().to_dict()
     n_pass = int((s1["大涨闸"] == "过闸").sum())

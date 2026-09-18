@@ -22,6 +22,7 @@ from scripts import bigdrop_check as bc  # noqa: E402
 from scripts._genious_excel import (  # noqa: E402
     BIGDROP_HIGH,
     BIGDROP_NONE,
+    BIGDROP_UNSCORED,
     BIGDROP_VOL,
     _bigdrop_cells,
     _bigdrop_labels,
@@ -119,15 +120,59 @@ def test_vol_branch_multiple_would_be_below_alarm_ratio():
 def test_norm_sym_strips_exchange_suffix_and_zfills():
     """清单侧北交所票带 `.BJ`, 面板键是裸 6 位 —— 不归一则查表静默落空。
 
-    落空的票显示成空, 与真判读长得一样, 但它的分**是算过的**, 被 key 格式丢掉了
-    (实测 920367.BJ → 空 / 920367 → 波动风险)。三态落地后, 列里留空只剩
-    "没评上分"一个意思 —— 更不能让 key 格式制造假空。
+    落空的票会被标成未评分(或此前显示成空), 与真判读长得一样, 但它的分**是算过的**,
+    被 key 格式丢掉了 (实测 920367.BJ → 空 / 920367 → 波动风险)。不能让 key 格式
+    制造假"没评上分"。
     """
     assert _norm_sym("920075.BJ") == "920075"
     assert _norm_sym("920075") == "920075"
     assert _norm_sym(" 1 ") == "000001"
     assert _norm_sym("600000.SH") == "600000"
     assert _norm_sym(1) == "000001"
+
+
+def test_unscored_marker_is_distinct_from_no_risk():
+    """未评分 必须与 无风险 不同 —— 否则"没测"会被静默读成"测过没问题"。
+
+    空字符串做不到这件事: 在表上与"查过且安全"完全同形, 读表的人无从分辨。用户
+    0916 要的"每只票都有标志"不能靠把没测的票也刷成 无风险 来凑数, 那是假安全。
+    """
+    assert BIGDROP_UNSCORED != BIGDROP_NONE
+    assert BIGDROP_UNSCORED != ""
+    assert BIGDROP_UNSCORED not in {BIGDROP_HIGH, BIGDROP_VOL, BIGDROP_NONE}
+
+
+def test_scan_marks_panel_missing_symbols_unscored(monkeypatch):
+    """不在面板的票 → 未评分, **不是空**; 在面板的票照常出三态。
+
+    这是**唯一**能产生非三态单元格的路径 (三态由 _bigdrop_labels 保证), 而它此前
+    表现为空字符串 —— 与"查过且无风险"在表上同形。这个测试盯的就是那个盲点。
+    """
+    import pandas as pd
+
+    from scripts import _genious_excel as ge
+
+    day = pd.DataFrame(
+        {"symbol": ["600000", "000001"], "date": pd.to_datetime(["2026-09-16"] * 2)}
+    )
+    fake_b = {"alarm": {"th": TH}, "oos_base": BASE, "tag": "t"}
+    monkeypatch.setattr(bc, "load_bundle", lambda *a, **k: fake_b)
+    monkeypatch.setattr(bc, "load_frame", lambda *a, **k: day)
+    monkeypatch.setattr(
+        bc,
+        "score_frame",
+        lambda d, b: (
+            None,
+            np.array([0, 3]),
+            {"模型(isotonic校准)": np.array([0.99, 0.01])},
+        ),
+    )
+
+    out = ge._bigdrop_scan(["600000", "000001", "999999"])
+    assert out["600000"].startswith(BIGDROP_HIGH)
+    assert out["000001"] == BIGDROP_VOL
+    assert out["999999"] == BIGDROP_UNSCORED
+    assert "" not in out.values()
 
 
 def test_cells_align_positionally():

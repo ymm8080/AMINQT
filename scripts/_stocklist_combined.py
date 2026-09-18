@@ -152,6 +152,7 @@ def insert_bigdrop_column(sheets) -> int:
     """
     try:
         from scripts._genious_excel import (
+            BIGDROP_UNSCORED,
             _bigdrop_module_run,
             _bigdrop_scan,
             _norm_sym,
@@ -169,7 +170,7 @@ def insert_bigdrop_column(sheets) -> int:
             df.insert(
                 0,
                 "BIGDROP SCAN",
-                df["symbol"].map(lambda s: scan.get(_norm_sym(s), "")),
+                df["symbol"].map(lambda s: scan.get(_norm_sym(s), BIGDROP_UNSCORED)),
             )
         log.info(
             "[combined] BIGDROP SCAN 列: %d 张表, %d 只送扫",
