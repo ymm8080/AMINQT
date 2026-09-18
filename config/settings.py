@@ -232,6 +232,14 @@ MAX_ACCOUNT_DRAWDOWN_PCT = 3.0  # 账户回撤 > 3% → 返回空列表
 # 计算 stock_basic.list_date → trade_date 的交易日计数 (searchsorted 向量化).
 INGEST_MIN_LIST_DAYS = 150
 
+# ── 收盘时刻闸 (缺省取数日, 2026-09-18) ────────────────────────
+# _daily_fetch.py 不传日期参数时 (计划任务路径), 取数日 = 最近一个**已收盘**的
+# 开市日. 若"今天"是开市日但当前小时 < 本值, 说明当天还没收盘 → 退到上一开市日.
+# 病根: 原缺省用 datetime.now() 墙钟日, 而 StartWhenAvailable 恰在凌晨补跑
+# (09-17 电量休眠事故场景) → 周一凌晨会把尚未发生的"周一"行写进面板, 此后
+# panel_max_date 谎报最新日, 全链新鲜度判据被污染. A 股 15:00 收盘, 留到 16:00.
+MARKET_CLOSE_HOUR = 16
+
 # ── KIMI LHB v2.0 spec 参数 (龙虎榜稀疏特征: 半衰期/情境权重/记忆下限) ──
 # 见 REFERENCE/.../FEATURE/kimi LHB_v2.0_设计文档.md §3.1/§3.3/§4
 LHB_V2_SPEC = {
