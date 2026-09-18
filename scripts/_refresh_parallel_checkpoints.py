@@ -218,7 +218,7 @@ def _prune_stale(keep: int) -> None:
         except OSError as e:  # noqa: BLE001 — 清理失败不该拖垮重建
             print(f"[prune] 列目录失败 {d}: {e}", flush=True)
             continue
-        for f in (cands[:-keep] if keep else cands):
+        for f in cands[:-keep] if keep else cands:
             fp = os.path.join(d, f)
             try:
                 sz = os.path.getsize(fp)
