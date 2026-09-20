@@ -19,6 +19,7 @@ parallel pipeline (app/pipeline_parallel) 的 load_panel 读取两个 3y 检查�
 import gc
 import hashlib
 import json
+import logging
 import os
 import sys
 import time
@@ -36,6 +37,12 @@ from scripts._reclassify_all_features import (
     MAIN_CHECKPOINT,
     build_board_slice,
 )
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+log = logging.getLogger(__name__)
 
 # 决定检查点内容的源文件 → 任一变化指纹必变 → 全量重建 (绝不静默跳过).
 # 检查点内容 = 特征 + 标签 (fe.build + LabelEngine 计算). 指纹覆盖:
@@ -216,16 +223,16 @@ def _prune_stale(keep: int) -> None:
         try:
             cands = sorted(f for f in os.listdir(d or ".") if f.startswith(prefix))
         except OSError as e:  # noqa: BLE001 — 清理失败不该拖垮重建
-            print(f"[prune] 列目录失败 {d}: {e}", flush=True)
+            log.error("[prune] 列目录失败 %s: %s", d, e)
             continue
         for f in cands[:-keep] if keep else cands:
             fp = os.path.join(d, f)
             try:
                 sz = os.path.getsize(fp)
                 os.remove(fp)
-                print(f"[prune] 删除 {f} ({sz / 1e9:.2f}GB)", flush=True)
+                log.info("[prune] 删除 %s (%.2fGB)", f, sz / 1e9)
             except OSError as e:  # noqa: BLE001
-                print(f"[prune] 删除失败 {f}: {e}", flush=True)
+                log.error("[prune] 删除失败 %s: %s", f, e)
 
 
 def _main_locked(force: bool) -> int:

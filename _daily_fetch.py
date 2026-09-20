@@ -47,6 +47,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+log = logging.getLogger(__name__)
 
 import numpy as np
 import pandas as pd
@@ -106,12 +107,14 @@ def _default_trade_date(now=None) -> str:
         prev = exp - timedelta(days=1)
         while prev.weekday() >= 5:
             prev -= timedelta(days=1)
-        print(
-            f"[date] 今日 {exp:%Y%m%d} 未到收盘时 ({MARKET_CLOSE_HOUR:02d}:00), "
-            f"取数日退到 {prev:%Y%m%d}"
+        log.info(
+            "[date] 今日 %s 未到收盘时 (%02d:00), 取数日退到 %s",
+            exp.strftime("%Y%m%d"),
+            MARKET_CLOSE_HOUR,
+            prev.strftime("%Y%m%d"),
         )
         exp, src = prev, src + "+preclose"
-    print(f"[date] 缺省取数日 {exp:%Y%m%d} (cal_source={src})")
+    log.info("[date] 缺省取数日 %s (cal_source=%s)", exp.strftime("%Y%m%d"), src)
     return exp.strftime("%Y%m%d")
 
 
