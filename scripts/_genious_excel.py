@@ -1,9 +1,8 @@
 """GENIOUS — 链路狙击交付层 Excel (2026-09-14 用户令: 交易日 20:30 自动跑).
 
-Sheet1 = 冠军四段 (CH3 T3深跌缩量 / CH2 T2深跌 / CH1 T1长基 / CH2B T2稳健)
-Sheet2 = 观察池 (T1余 + 带双指纹四臂)
-**不截断** — 任何逐日 cap 都删洪峰日的钱 (0914 续12 取证级判死), 层序+层内 r60
-深→浅 即排名。层定义与阈值见 app/pipeline1/kongduo_triggers.py 与 settings.GENIOUS。
+Sheet1 = 冠军表 (CH3 T3深跌缩量 / CH2 T2深跌 / CH2B T2稳健过闸)
+0919 用户令: 观察池与全量表**删除** — 只出冠军单表。层序+层内 r60 深→浅
+即排名。层定义与阈值见 app/pipeline1/kongduo_triggers.py 与 settings.GENIOUS。
 
 口径: 名单 = **当日 (trade date) 起火的票**, 20:30 已收盘故"fire日收盘进"实际落到
 T+1, 故每行带执行档 (温火/质量层=T+1开盘进; 涨停/深跌层=T+1仍涨确认→T+1收盘进)。
@@ -62,25 +61,11 @@ WAIT_TICK_S = 60
 HEAL_TIMEOUT_S = 180  # 自拉硬超时; 超时=大声失败, 不留挂死实例 (见 _heal_rows_bounded)
 
 BANNER1 = (
-    "GENIOUS 冠军四段 — 段位全留, 【大涨闸】列 (表内第 3 列) 标出其中哪几只是 低动量+右侧拐头+缩量。"
-    "末250日口径: 冠军四段 19.2票·日 里只有 1.3票·日 过闸 (93%被拦), "
-    "过闸后 未来10日均值 +9.00% 胜81.3%, ≥10% 命中 53.0% = 2.05x, ≥20% 命中 12.7% = 1.94x; "
+    "GENIOUS 冠军二段 — 段位全留, 【涨闸】列 (表内第 3 列) 标出其中哪几只是 右侧拐头+缩量。"
+    "OOS f10+5%止损口径: 过闸全取 胜率58%/期望+5.2%/大涨15.6% (低动量子集胜率76%); "
     "所以**只标注、不删票** — 过闸那几只是窄名单, 其余仍按层序读。"
-    "「全样本口径」列含选段偏差(**80% 勿信**)。扣0.7%往返费后火群整体≈0, 钱在层头部, "
+    "「当月样本口径」列 = 该层**当月实绩** (滚动重算, 月后补全); 扣0.7%往返费后火群整体≈0, 钱在层头部, "
     "请按层序自上而下读。执行档: 温火/质量层=T+1开盘进; 涨停/深跌层=T+1仍涨确认→T+1收盘进"
-)
-BANNER2 = (
-    f"GENIOUS 观察池 — 已按【观察分】从最好到最差排序, 取前 {GENIOUS['sheet2_top_n']} 名 "
-    "(全部名次见「火群全量」表)。观察分 = 带宽窄 + 未偏离MA10 + 获利盘低 + 深跌 → "
-    "越靠前越'还没涨透'; 已发挥完的票自动沉底。全 896 日实测: 前半档 +0.65% vs 末档 -0.03%, "
-    "IC 0.077 (t 8.7), 前后半样本同号。期望≈50% 平水, 非全买清单。"
-    "【大涨闸】列 (表内第 3 列) 仅为标注, 不删除任何一行"
-)
-BANNER3 = (
-    "GENIOUS 火群·全量 — 冠军四段 + 观察池**全部**触发票, 一票不丢。"
-    "【大涨闸】列 (表内第 3 列): 过闸 = 三条件全中 (十日涨幅≤0 且 近5日涨幅>0 且 量比≤1); "
-    "被拦 = 未全中 (**排在最前**, 供回看)。**该列只标注不筛表** — 三张表都是全量, 别把它当筛选器。"
-    "被拦者按层序排列, 深跌层 (CH2/CH3) 天然被拦比例最高 — 这是形态特征, 非数据错误"
 )
 
 # 列 → Excel number_format (写的是**实数**, 显示带符号百分号; 文本会被 Excel 按字典序排坏)
@@ -246,6 +231,17 @@ def _load_fresh_panel(target: str, no_fetch: bool, wait_min: int) -> pd.DataFram
         raise RuntimeError(f"面板无 {target} 当日行且 --no-fetch: 不产文件")
     log.warning("[fresh] 面板无 %s 当日行 → 自拉当日截面 (只拼内存, 不写面板)", target)
     healed = _heal_rows_bounded(target)
+    # 次新口径说明 (2026-09-18 用户令「为 GENIOUS 单独放宽」的落地判定):
+    # **本模块不设 min_list_days 闸, 也不改**。原因有三, 全部实测:
+    #   1) 缺行只发生在历史追跑 (fetch_daily 早于次日面板重建时点); 常规 20:30 当日链
+    #      面板已含全部次新 (/_daily_fetch.py::_build_new_base_panel 不适用 ingest gate,
+    #      实测 9/17 面板中「上市交易日 <150」的票数 = 0)。
+    #   2) 自愈路径 fetch_daily → _tushare_fetch_daily 内部带 ingest gate, 会**原样复现**
+    #      同一条剔除规则 —— 单靠放宽 GENIOUS 侧的闸, 这些行根本不会出现在 healed 里。
+    #   3) T1 的 wr_rise60 需 61 bar、r120 需 121 bar, 次新股上这两个量结构性地是 NaN
+    #      (实测 301583@20260915/16/17: 48/49/50 bar, r60 与 wr_rise60 均不可算) ——
+    #      即便准入, T1/T2/T3 也全为 False。放宽只会放大未验证样本占比。
+    # 故 301583 这一类的缺行属**数据年缺口**, 不在交付层闸的职责内。
     log.info(
         "[heal] 当日截面 %d 行, 其中 winner_ratio 非空 %d",
         len(healed),
@@ -263,7 +259,8 @@ def _fmt_sheet(df: pd.DataFrame) -> pd.DataFrame:
     写成 '+2.08%' 这类字符串时 Excel 按字典序排 (所有 '+…' 排在 '-…' 前), 排序即错。
     """
     out = df.copy()
-    out["乖离MA10"] = df["乖离MA10"] - 1  # ext10 1.05 → 显示 +5.0%
+    if "乖离MA10" in out.columns:
+        out["乖离MA10"] = out["乖离MA10"] - 1  # ext10 1.05 → 显示 +5.0%
     return out
 
 
@@ -474,12 +471,12 @@ def _spawn_ths_push(date: str) -> None:
 
 def write_xlsx(
     sheet1: pd.DataFrame,
-    sheet2: pd.DataFrame,
-    sheet2_full: pd.DataFrame,
     date: str,
     list_dir=STOCK_LIST_DIR,
 ) -> Path:
-    """WORM: GENIOUS_{date}.xlsx; 已存在 → GENIOUS_{date}__{HHMMSS}.xlsx (绝不覆盖)。"""
+    """WORM: GENIOUS_{date}.xlsx; 已存在 → GENIOUS_{date}__{HHMMSS}.xlsx (绝不覆盖)。
+
+    0919 用户令: 观察池与全量表都删 — 只出冠军单表。"""
     fp = Path(list_dir) / f"{GENIOUS['filename_prefix']}_{date}.xlsx"
     if fp.exists():
         stamp = datetime.datetime.now().strftime("%H%M%S")
@@ -487,8 +484,6 @@ def write_xlsx(
     with pd.ExcelWriter(fp, engine="openpyxl") as xw:
         for name, df, banner, legend in (
             ("冠军四段", sheet1, BANNER1, kt.sheet1_legend()),
-            ("观察池", sheet2, BANNER2, kt.sheet2_legend()),
-            ("火群全量", sheet2_full, BANNER3, kt.sheet2_legend()),
         ):
             raw = df if len(df) else pd.DataFrame(columns=list(df.columns))
             raw.to_excel(xw, sheet_name=name, index=False, startrow=2)
@@ -525,17 +520,26 @@ def write_xlsx(
 # ── 验收闸: 全历史复现研究层表 ────────────────────────────────────────────────
 
 
+# 大涨口径 (2026-09-18 用户令): 前瞻收益 > +8% 即大涨, **对所有股一视同仁, 不按板分档**。
+# 旧值 0.098 是"次日涨停"口径 (10% 板), 加入 20% 板后不再成立 —— 且用户明确大涨是
+# 幅度口径而非涨停口径。大跌对称为 < -5%。温火上沿固定 5%, 同样不随 20% 板放宽。
+BIG_RISE_TH = 0.08
+BIG_DROP_TH = -0.05
+
+
 # (层名, 火/日, 真赢/日, 大涨/日, 胜率, 中位火/日, 零票天%) — 0914 续13 互斥口径
+# 2026-09-18 刷新: 宇宙加入科创板 (68) + 涨停阈值改按板分档 (见 kt.UNIVERSE_PREFIXES
+# 与 kt._limit_up_threshold)。旧值是在 主板+创业板 上量的, 直接沿用则 verify 必然 FAIL。
 _EXPECT = (
-    (kt.CH3_T3_DEEP_QUIET, 3.0, 2.40, 1.49, 0.802, 0, 0.76),
-    (kt.CH2_T2_DEEP, 3.1, 1.86, 0.67, 0.598, 0, 0.58),
-    (kt.CH1_T1_LONGBASE, 1.7, 1.06, 0.15, 0.633, 0, 0.68),
-    (kt.CH2B_T2_STEADY, 7.2, 3.87, 0.85, 0.536, 1, 0.48),
-    (kt.T1_REST, 8.4, 4.41, 0.51, 0.523, 3, 0.26),
-    (kt.BAND_T2_WARM, 24.5, 12.38, 1.72, 0.505, 6, 0.21),
-    (kt.BAND_T2_LIMIT, 1.1, 0.52, 0.14, 0.492, 0, 0.61),
-    (kt.BAND_T3_WARM, 7.8, 3.92, 0.92, 0.502, 1, 0.37),
-    (kt.BAND_T3_LIMIT, 6.4, 3.05, 0.95, 0.473, 3, 0.27),
+    (kt.CH3_T3_DEEP_QUIET, 3.7, 2.94, 2.02, 0.786, 0, 0.73),
+    (kt.CH2_T2_DEEP, 3.8, 2.27, 1.00, 0.593, 0, 0.54),
+    (kt.CH1_T1_LONGBASE, 1.9, 1.18, 0.25, 0.606, 0, 0.66),
+    (kt.CH2B_T2_STEADY, 8.3, 4.35, 1.36, 0.527, 1, 0.46),
+    (kt.T1_REST, 9.5, 4.92, 0.88, 0.516, 3, 0.25),
+    (kt.BAND_T2_WARM, 27.5, 13.64, 2.75, 0.497, 7, 0.21),
+    (kt.BAND_T2_LIMIT, 1.0, 0.48, 0.17, 0.500, 0, 0.62),
+    (kt.BAND_T3_WARM, 9.6, 4.84, 1.56, 0.505, 2, 0.35),
+    (kt.BAND_T3_LIMIT, 5.0, 2.34, 0.90, 0.471, 2, 0.30),
 )
 
 # 用户 0911 时间线案例: (symbol, 日期, 期望层或 None, 期望触发器子串)
@@ -581,7 +585,7 @@ def verify() -> int:
         got = (
             len(sub) / all_days,
             (sub["f5"] > 0).sum() / all_days,
-            (sub["f5"] > 0.098).sum() / all_days,
+            (sub["f5"] > BIG_RISE_TH).sum() / all_days,
             (sub["f5"] > 0).mean() if len(sub) else float("nan"),
             float(per.median()),
             1 - per.gt(0).mean(),
@@ -605,27 +609,27 @@ def verify() -> int:
             f"   期望 {e_fire:.1f}/{e_win:.2f}/{e_big:.2f}/{e_rate:.1%}/{e_med:.0f}/{e_zero:.0%}"
         )
 
-    # 全榜总闸 (续13 独立的第三个数字, 用来交叉验证分层总和): 63.3火/33.5真赢/7.4大涨/52.9%
+    # 全榜总闸 (交叉验证分层总和; 2026-09-18 随宇宙扩容刷新: 63.3→70.3 火/日)
     per_all = matured.groupby("date").size().reindex(day_index, fill_value=0)
     board = (
         len(matured) / all_days,
         (matured["f5"] > 0).sum() / all_days,
-        (matured["f5"] > 0.098).sum() / all_days,
+        (matured["f5"] > BIG_RISE_TH).sum() / all_days,
         (matured["f5"] > 0).mean(),
         float(per_all.median()),
     )
     board_ok = (
-        abs(board[0] - 63.3) <= 0.5
-        and abs(board[1] - 33.5) <= 0.5
-        and abs(board[2] - 7.4) <= 0.3
-        and abs(board[3] - 0.529) <= 0.01
+        abs(board[0] - 70.3) <= 0.5
+        and abs(board[1] - 37.0) <= 0.5
+        and abs(board[2] - 10.9) <= 0.5
+        and abs(board[3] - 0.526) <= 0.01
     )
     if not board_ok:
         fails.append("全榜总数")
     print(
         f"\n  {'全榜 (冠军+余+带)':<18}{board[0]:>8.1f}{board[1]:>9.2f}{board[2]:>9.2f}"
         f"{board[3]:>8.1%}{board[4]:>6.0f}{'':>8}{'PASS' if board_ok else 'FAIL':>6}"
-        f"   期望 63.3/33.5/7.4/52.9%"
+        f"   期望 70.3/37.0/10.9/52.6%"
     )
     results["_全榜"] = {"got": board, "ok": board_ok}
 
@@ -726,7 +730,7 @@ def main() -> int:
 
     df = kt.compute_features(df)
     df = kt.compute_triggers(df)
-    s1, s2, s2_full = kt.build_delivery(df, target)
+    s1, _ = kt.build_delivery(df, target)
     # 旁路标注列 (用户 0915 令): 清单过一遍 bigdrop 次日大跌模块。三张表都加,
     # 语义见 _bigdrop_scan —— 三态 (大跌风险/波动风险/无风险) + 未评分。
     # 查表一律走 _norm_sym: 直接 str(s).zfill(6) 会漏掉北交所的 `.BJ` 后缀, 那只票
@@ -734,28 +738,25 @@ def main() -> int:
     # 缺省值同 _bigdrop_scan: 拿不到读数标 未评分, **不留空** (空格与"查过且无风险"同形)。
     # 附加列一律 insert(0) **放最前** (用户 0915 令) —— 追加到末尾会被列宽/横向滚动吞掉,
     # 后面新增的旁路列照此办理。
-    scan = _bigdrop_scan(pd.concat([s1["symbol"], s2["symbol"], s2_full["symbol"]]))
+    scan = _bigdrop_scan(s1["symbol"])
     if scan is not None:
-        for sh in (s1, s2, s2_full):
-            sh.insert(
-                0,
-                "BIGDROP SCAN",
-                sh["symbol"].map(lambda s: scan.get(_norm_sym(s), BIGDROP_UNSCORED)),
-            )
-    counts = pd.concat([s1["层"], s2_full["层"]]).value_counts().to_dict()
-    n_pass = int((s1["大涨闸"] == "过闸").sum())
+        s1.insert(
+            0,
+            "BIGDROP SCAN",
+            s1["symbol"].map(lambda s: scan.get(_norm_sym(s), BIGDROP_UNSCORED)),
+        )
+    counts = s1["层"].value_counts().to_dict()
+    n_pass = int((s1["涨闸"] == "过闸").sum())
     log.info(
-        "[genious] %s 冠军四段 %d 票 (大涨闸过 %d), 观察池 %d/%d 票 (截断/全量); 层分布 %s",
+        "[genious] %s 冠军表 %d 票 (涨闸过 %d); 层分布 %s",
         target,
         len(s1),
         n_pass,
-        len(s2),
-        len(s2_full),
         counts,
     )
 
     if args.dry_run:
-        for name, sheet in (("冠军四段", s1), ("观察池", s2), ("火群全量", s2_full)):
+        for name, sheet in (("冠军四段", s1),):
             print(f"\n===== {name} ({len(sheet)}) =====")
             print(sheet.to_string(index=False) if len(sheet) else "(空)")
         _write_state(
@@ -763,13 +764,11 @@ def main() -> int:
             "dry_run",
             s1=len(s1),
             s1_pass=n_pass,
-            s2=len(s2),
-            s2_full=len(s2_full),
             layers=counts,
         )
         return 0
 
-    fp = write_xlsx(_fmt_sheet(s1), _fmt_sheet(s2), _fmt_sheet(s2_full), target)
+    fp = write_xlsx(_fmt_sheet(s1), target)
     log.info("[genious] 写出 %s", fp)
     csv_fp = write_stocklist_csv(s1, target)
     if csv_fp is not None:
@@ -780,8 +779,6 @@ def main() -> int:
         file=str(fp),
         s1=len(s1),
         s1_pass=n_pass,
-        s2=len(s2),
-        s2_full=len(s2_full),
         layers=counts,
     )
     print(str(fp))

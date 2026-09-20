@@ -1527,7 +1527,7 @@ def fmt_merged(m: pd.DataFrame) -> list[str]:
             ex = (
                 "n/a"
                 if pd.isna(r[f"pred_mag_{h}"])
-                else f"{r[f'pred_mag_{h}']:+.1%}({r[f'pred_prob_{h}']:.0%})"
+                else f"{r[f'pred_mag_{h}']:+.2%}({r[f'pred_prob_{h}']:.2%})"
             )
             cols.append(f"{ex:>18}")
         t5 = "Y" if bool(r["in_t5"]) else ""
@@ -1604,6 +1604,10 @@ def write_docx(
 ) -> None:
     if Document is None:
         return
+    # stall_flag 列对外显示名 = 滞涨标记 (0919 用户令); 内部键不变, 写出前改名
+    res = res.rename(columns={"stall_flag": "滞涨标记"})
+    if merged is not None:
+        merged = merged.rename(columns={"stall_flag": "滞涨标记"})
     doc = Document()
     title = f"STOCK LIST {sel_date:%Y%m%d}"
     if module:
@@ -1617,41 +1621,35 @@ def write_docx(
             "每视界(T+2/3/5/10) 预期涨幅(MFE)=最新score经OOS每股独立线性校准的今后表现, 每股唯一; 达到概率=逐股自然概率 P(该股达到固定绝对目标), 每股唯一真值"
         )
         mcols = [
-            "rank",
             "symbol",
             "board",
             "module",
-            "score",
-            "score_w",
             "in_t5",
             "过门",
-            "stall_flag",
+            "滞涨标记",
         ] + [f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")]
         t = doc.add_table(rows=1, cols=len(mcols))
         for j, c in enumerate(mcols):
             t.rows[0].cells[j].text = c
         for _, r in merged.iterrows():
             cells = t.add_row().cells
-            cells[0].text = str(r["rank"])
-            cells[1].text = str(r["symbol"])
-            cells[2].text = BOARD_LABEL.get(r["board"], r["board"])
-            cells[3].text = str(r["systems"])
-            cells[4].text = f"{float(r['score']):.4f}"
-            cells[5].text = f"{float(r['score_w']):.4f}"
-            cells[6].text = "Y" if bool(r["in_t5"]) else ""
-            cells[7].text = str(r["过门"])
-            cells[8].text = str(r.get("stall_flag", ""))
-            j = 9
+            cells[0].text = str(r["symbol"])
+            cells[1].text = BOARD_LABEL.get(r["board"], r["board"])
+            cells[2].text = str(r["systems"])
+            cells[3].text = "Y" if bool(r["in_t5"]) else ""
+            cells[4].text = str(r["过门"])
+            cells[5].text = str(r.get("滞涨标记", ""))
+            j = 6
             for h in HORIZON_ORDER:
                 cells[j].text = (
                     "n/a"
                     if pd.isna(r[f"pred_mag_{h}"])
-                    else f"{float(r[f'pred_mag_{h}']):+.1%}"
+                    else f"{float(r[f'pred_mag_{h}']):+.2%}"
                 )
                 cells[j + 1].text = (
                     "n/a"
                     if pd.isna(r[f"pred_prob_{h}"])
-                    else f"{float(r[f'pred_prob_{h}']):.0%}"
+                    else f"{float(r[f'pred_prob_{h}']):.2%}"
                 )
                 j += 2
     for line in summary:
@@ -1667,17 +1665,14 @@ def write_docx(
         run.bold = True
     cols = (
         [
-            "rank",
             "symbol",
             "module",
             "co_occur",
-            "score",
-            "score_w",
             "过门",
-            "stall_flag",
+            "滞涨标记",
         ]
         + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
-        + ["pred_excess_10d", "chip_wr5", "chip_flag"]
+        + ["chip_wr5", "chip_flag"]
     )
     for board in ("main", "dual"):
         b = res[res["board"] == board]
@@ -1697,35 +1692,28 @@ def write_docx(
                 t.rows[0].cells[j].text = c
             for _i, (_, r) in enumerate(g.iterrows()):
                 cells = t.add_row().cells
-                cells[0].text = str(r["rank"])
-                cells[1].text = str(r["symbol"])
-                cells[2].text = str(r["systems"])
-                cells[3].text = "★" if bool(r["co_occur"]) else ""
-                cells[4].text = f"{float(r['score']):.4f}"
-                cells[5].text = f"{float(r['score_w']):.4f}"
-                cells[6].text = str(r["过门"])
-                cells[7].text = str(r.get("stall_flag", ""))
+                cells[0].text = str(r["symbol"])
+                cells[1].text = str(r["systems"])
+                cells[2].text = "★" if bool(r["co_occur"]) else ""
+                cells[3].text = str(r["过门"])
+                cells[4].text = str(r.get("滞涨标记", ""))
                 for j, h in enumerate(HORIZONS):
-                    cells[8 + 2 * j].text = (
+                    cells[5 + 2 * j].text = (
                         "n/a"
                         if pd.isna(r[f"pred_mag_{h}"])
-                        else f"{float(r[f'pred_mag_{h}']):+.1%}"
+                        else f"{float(r[f'pred_mag_{h}']):+.2%}"
                     )
-                    cells[9 + 2 * j].text = (
+                    cells[6 + 2 * j].text = (
                         "n/a"
                         if pd.isna(r[f"pred_prob_{h}"])
-                        else f"{float(r[f'pred_prob_{h}']):.0%}"
+                        else f"{float(r[f'pred_prob_{h}']):.2%}"
                     )
-                ex = r.get("pred_excess_10d")
-                cells[8 + 2 * len(HORIZONS)].text = (
-                    "n/a" if ex is None or pd.isna(ex) else f"{float(ex):+.1%}"
-                )
                 wr5 = r.get("chip_wr5")
-                cells[8 + 2 * len(HORIZONS) + 1].text = (
-                    "n/a" if wr5 is None or pd.isna(wr5) else f"{float(wr5):+.1%}"
+                cells[5 + 2 * len(HORIZONS)].text = (
+                    "n/a" if wr5 is None or pd.isna(wr5) else f"{float(wr5):+.2%}"
                 )
                 fl = r.get("chip_flag")
-                cells[8 + 2 * len(HORIZONS) + 2].text = (
+                cells[6 + 2 * len(HORIZONS)].text = (
                     "" if fl is None or pd.isna(fl) else str(fl)
                 )
     doc.save(str(path))
@@ -1741,10 +1729,14 @@ def write_xlsx(
 ) -> None:
     if Workbook is None:
         return
+    # stall_flag 列对外显示名 = 滞涨标记 (0919 用户令); 内部键不变, 写出前改名
+    res = res.rename(columns={"stall_flag": "滞涨标记"})
+    if merged is not None:
+        merged = merged.rename(columns={"stall_flag": "滞涨标记"})
     wb = Workbook()
     hdr_fill = PatternFill("solid", fgColor="D9E1F2")
     bold = Font(bold=True)
-    pct = "0.0%"
+    pct = "0.00%"
 
     def _sheet(ws, df, cols, pct_cols=()):
         ws.append(cols)
@@ -1779,13 +1771,11 @@ def write_xlsx(
             "date",
             "board",
             "cut",
-            "rank",
             "symbol",
             "module",
             "co_occur",
-            "score",
             "过门",
-            "stall_flag",
+            "滞涨标记",
         ]
         + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
         + [
@@ -1798,21 +1788,18 @@ def write_xlsx(
     ]
     if merged is not None and not merged.empty:
         mcols = [
-            "rank",
             "symbol",
             "board",
             "module",
-            "score",
-            "score_w",
             "in_t5",
             "过门",
-            "stall_flag",
+            "滞涨标记",
         ] + [f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")]
         m = merged.copy().rename(columns={"systems": "module"})
         # [2026-08-20] merged 帧无滞涨标记 (stall_marker 只作用于 res) → 补空列,
-        # 与 docx 侧 r.get("stall_flag", "") 同容错语义, 防 KeyError 断掉 xlsx 落盘
-        if "stall_flag" not in m.columns:
-            m["stall_flag"] = ""
+        # 防 KeyError 断掉 xlsx 落盘
+        if "滞涨标记" not in m.columns:
+            m["滞涨标记"] = ""
         _sheet(
             wb.create_sheet("合并排名"),
             m[mcols],
