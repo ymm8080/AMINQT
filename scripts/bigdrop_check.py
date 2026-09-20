@@ -729,7 +729,7 @@ def build() -> dict:
 def load_bundle() -> dict:
     p = BUNDLE_DIR / "bundle_latest.joblib"
     if not p.exists():
-        print("没有模型包, 先跑: python scripts/bigdrop_check.py --build")
+        log.error("没有模型包, 先跑: python scripts/bigdrop_check.py --build")
         sys.exit(2)
     return joblib.load(p)
 
@@ -740,8 +740,14 @@ def bundle_is_stale(b: dict, data_date: str) -> bool:
     判据是**数据日**不是墙钟 `tag`: tag 是建包那天的日历日, 早于当日抓取建包会
     得到 tag=今天而数据只到昨天, 拿 tag 判新鲜会把它当新的 (同 0915 密度页
     日期键事故)。**缺 data_date 的旧包一律视为陈旧** —— 无法证明同源就不假定同源。
+    铁律 #6: 日期必须解析为 datetime 对象比较, 不容字符串直接比。
     """
-    return str(b.get("data_date") or "") != str(data_date)
+    try:
+        bundle_dt = datetime.strptime(str(b.get("data_date") or ""), "%Y%m%d")
+        cur_dt = datetime.strptime(str(data_date), "%Y%m%d")
+    except (ValueError, TypeError):
+        return True  # 解析失败 = 无法证明同源 → 判陈旧
+    return bundle_dt != cur_dt
 
 
 # ---------------------------------------------------------------- 查询
