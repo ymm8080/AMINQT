@@ -148,7 +148,12 @@ def test_insert_gate_column_first_column_and_per_day_scan(monkeypatch):
 
     monkeypatch.setattr(kt, "load_panel", spy)
 
-    assert sc.insert_gate_column([("LEGACY", sheets[0][1]), ("密度", sheets[1][1])], "20260919") == 2
+    assert (
+        sc.insert_gate_column(
+            [("LEGACY", sheets[0][1]), ("密度", sheets[1][1])], "20260919"
+        )
+        == 2
+    )
     assert seen["day"] == "20260919"
     assert sheets[0][1].columns[0] == "涨闸"
     assert sheets[0][1]["涨闸"].tolist() == ["过闸", "没过闸"]
@@ -190,7 +195,9 @@ def test_insert_gate_column_scope_limited_to_legacy_and_density(monkeypatch):
     """
     _patch_gate(
         monkeypatch,
-        pd.DataFrame({"date": ["20260919", "20260919"], "symbol": ["600000", "300001"]}),
+        pd.DataFrame(
+            {"date": ["20260919", "20260919"], "symbol": ["600000", "300001"]}
+        ),
         [True, False],
     )
     # 送扫集 = LEGACY+密度 两页的并集; PARALLEL/SLOW_BULL/重叠页的票不加列也不送扫

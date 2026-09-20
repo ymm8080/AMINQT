@@ -113,7 +113,16 @@ BAND_T3_LIMIT = "带T3涨停"
 # f10 口径 +4.3%/+4.6%, 胜率55%/52%)。CH1/CH2B 降级进 Sheet2 观察池 (段位列仍可辨),
 # 票也全量落 Sheet3 (build_delivery 一票不丢)。
 SHEET1_LAYERS = (CH3_T3_DEEP_QUIET, CH2_T2_DEEP)
-SHEET2_LAYERS = (CH1_T1_LONGBASE, CH2B_T2_STEADY, CH4_TREND_QUIET, T1_REST, BAND_T2_WARM, BAND_T2_LIMIT, BAND_T3_WARM, BAND_T3_LIMIT)
+SHEET2_LAYERS = (
+    CH1_T1_LONGBASE,
+    CH2B_T2_STEADY,
+    CH4_TREND_QUIET,
+    T1_REST,
+    BAND_T2_WARM,
+    BAND_T2_LIMIT,
+    BAND_T3_WARM,
+    BAND_T3_LIMIT,
+)
 ALL_LAYERS = SHEET1_LAYERS + SHEET2_LAYERS
 
 EXEC_NEXT_OPEN = "T+1开盘进"
@@ -178,9 +187,7 @@ def load_layer_research(trade_date: str | None = None) -> dict[str, str]:
             continue
         win, exp = v.get("win"), v.get("exp")
         out[name] = (
-            f"{win:.1%} / {exp:+.2%}"
-            if win is not None and exp is not None
-            else ""
+            f"{win:.1%} / {exp:+.2%}" if win is not None and exp is not None else ""
         )
     return out
 
@@ -239,7 +246,10 @@ def _col_lines() -> tuple[tuple[str, str], ...]:
             "执行档",
             "T+1开盘进 | T+1仍涨确认→T+1收盘进 (20:30 已收盘, 只能 T+1 买)",
         ),
-        ("当月样本口径", "该段位**当月实绩** (滚动重算) 胜率 / 5日均收益; 源 .cache/kongduo_layer_monthly_<月>.json"),
+        (
+            "当月样本口径",
+            "该段位**当月实绩** (滚动重算) 胜率 / 5日均收益; 源 .cache/kongduo_layer_monthly_<月>.json",
+        ),
         ("r20", "最近 20 个交易日涨跌幅 (= 今收 / 20交易日前收 − 1)"),
         ("r60", f'最近 60 个交易日涨跌幅 (中期位置; ≤{deep} 即本表的"深跌")'),
         ("r120", f'最近 120 个交易日涨跌幅 (长期位置; ≤{base} 即"半年没涨")'),
@@ -883,7 +893,7 @@ DISPLAY_COLUMNS = (
     "触发器",
     "当月样本口径",
     "当日涨幅",
-    "执行档"
+    "执行档",
 )
 
 
