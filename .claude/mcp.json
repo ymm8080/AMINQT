@@ -11,11 +11,11 @@
       "command": "python",
       "args": ["-m", "services.deepseek_sub_agent"],
       "env": {
-        "DEEPSEEK_API_KEY": "${DEEPSEEK_API_KEY}",
-        "DEEPSEEK_MODEL": "deepseek-v4-flash",
-        "DEEPSEEK_BASE_URL": "https://api.deepseek.com",
-        "DEEPSEEK_MAX_TOKENS": "8192",
-        "DEEPSEEK_TIMEOUT_SEC": "60"
+        "DEEPSEEK_API_KEY": "${OPENCODE_API_KEY}",
+        "DEEPSEEK_MODEL": "glm-5.3-flash",
+        "DEEPSEEK_BASE_URL": "https://opencode.ai/zen/go/v1",
+        "DEEPSEEK_MAX_TOKENS": "32768",
+        "DEEPSEEK_TIMEOUT_SEC": "120"
       }
     }
   }

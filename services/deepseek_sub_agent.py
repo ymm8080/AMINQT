@@ -44,6 +44,10 @@ MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 MAX_TOKENS = int(os.getenv("DEEPSEEK_MAX_TOKENS", "8192"))
 TIMEOUT_SEC = int(os.getenv("DEEPSEEK_TIMEOUT_SEC", "60"))
+# OpenCode Go (via Cloudflare) rejects requests without a session id / default UA.
+OPENCODE_SESSION = os.getenv("OPENCODE_SESSION", "a3f7e2b1-4c5d-49a8-b6e0-1d2f3a4b5c6d")
+# OpenCode Go does not accept response_format (mirrors scripts/deepseek_pr_review.py).
+SUPPORTS_RESPONSE_FORMAT = os.getenv("DEEPSEEK_SUPPORTS_RESPONSE_FORMAT", "0") == "1"
 
 server = Server("deepseek-sub-agent")
 
@@ -73,7 +77,7 @@ def _call_deepseek(
         "temperature": temperature,
         "max_tokens": MAX_TOKENS,
     }
-    if response_format:
+    if response_format and SUPPORTS_RESPONSE_FORMAT:
         payload["response_format"] = response_format
     if disable_thinking:
         payload["thinking"] = {"type": "disabled"}
@@ -86,14 +90,26 @@ def _call_deepseek(
                 headers={
                     "Authorization": f"Bearer {API_KEY}",
                     "Content-Type": "application/json",
+                    "x-opencode-session": OPENCODE_SESSION,
+                    "User-Agent": "curl/8.4.0",
                 },
             )
             resp.raise_for_status()
             result = resp.json()
-            content = result["choices"][0]["message"].get("content") or ""
+            msg = result["choices"][0]["message"]
+            content = msg.get("content")
+            if not content:
+                # Reasoning models return content=null when the token budget was
+                # consumed by reasoning_content. Fail loudly instead of returning "".
+                fr = result["choices"][0].get("finish_reason")
+                think = msg.get("reasoning_content") or ""
+                raise RuntimeError(
+                    f"empty content (finish_reason={fr}, reasoning_chars={len(think)}, "
+                    f"max_tokens={MAX_TOKENS}) — raise DEEPSEEK_MAX_TOKENS if truncated"
+                )
             return content
     except Exception as e:
-        logger.error("DeepSeek API error: %s", e)
+        logger.error("LLM API error: %s", e)
         return f"Error: {e}"
 
 
