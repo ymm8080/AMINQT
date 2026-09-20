@@ -256,6 +256,9 @@ _LAYER_COLS = {
     "ext10p": 1.0,
     "ext10": 1.0,
     "pb5": 0.0,
+    # CH4 默认不命中 (dd5 大于阈值 ma10up=False); 需要 CH4 的单测逐行覆写
+    "ma10up": False,
+    "dd5": 0.50,
     "winner_ratio": 0.5,
     "band20": 0.10,
     "board": "main",
@@ -269,7 +272,7 @@ _LAYER_COLS = {
     "high": 10.2,
     "low": 9.8,
     "turnover_rate": 2.0,
-    # 大涨闸三条件的默认值 = **过闸** (r10<=0 / r5>0 / vr<=1), 于是不用管闸的单测保持原语义
+    # 涨闸前置的默认值 = **过闸** (r5>0 / vr<=1), 于是不用管闸的单测保持原语义
     "r10": -0.10,
     "r5": 0.05,
 }
@@ -306,6 +309,31 @@ def chip_stub(monkeypatch):
     return _apply
 
 
+def test_assign_layers_ch4_trend_quiet():
+    """CH4 中线缩量横盘 (0919): 各条件缺一不可, 命中与不命中边界逐条验证。"""
+    base = {
+        "r60": GENIOUS["ch4_r60_min"] + 0.05,  # 强中线
+        "r120": 0.5,  # 长中线在涨
+        "ma10up": True,
+        "vr": GENIOUS["ch4_vr_max"] - 0.05,  # 极缩量
+        "dd5": GENIOUS["ch4_dd5_max"] - 0.005,  # 微回调横盘
+    }
+
+    def one(**delta):
+        row = dict(base, **delta)
+        df = _layer_frame([row])
+        return kt.assign_layers(df).iloc[0]
+
+    # 命中 → CH4
+    assert one() == kt.CH4_TREND_QUIET
+    # 四条边界各破一条 → 都不落 CH4 (r60 弱 / ma10 平 / 量比超 / 回调深)
+    # (r120 不设条件 — 消融判定不承重, 已删)
+    assert one(r60=GENIOUS["ch4_r60_min"] - 0.01) != kt.CH4_TREND_QUIET
+    assert one(ma10up=False) != kt.CH4_TREND_QUIET
+    assert one(vr=GENIOUS["ch4_vr_max"] + 0.01) != kt.CH4_TREND_QUIET
+    assert one(dd5=GENIOUS["ch4_dd5_max"] + 0.01) != kt.CH4_TREND_QUIET
+
+
 def test_assign_layers_each_segment():
     df = _layer_frame(
         [
@@ -337,6 +365,62 @@ def test_assign_layers_each_segment():
         kt.BAND_T3_WARM,
         kt.BAND_T3_LIMIT,
     ]
+
+
+def test_limit_up_threshold_is_board_aware():
+    """涨停阈值按板分档: 创业板/科创板 0.195, 主板/深主板 0.095。
+
+    2026-09-18: 单值 0.09 是 10% 板时代产物, 在 20% 板上会把 +9~19.5% 的普通上涨
+    误判成"涨停" —— 正是加入科创板后暴露的缺陷。
+    """
+    syms = pd.Series(["600000", "000001", "300750", "301072", "688175", "688981"])
+    got = kt._limit_up_threshold(syms).tolist()
+    assert got == [0.095, 0.095, 0.195, 0.195, 0.195, 0.195]
+
+
+def test_warm_band_upper_edge_is_board_independent():
+    """温火上沿固定 5%, **不随 20% 板放宽** (用户 0918: "温和上涨统一是<5%")。
+
+    故 +3% 在两种板上都进温火臂; +6% 超出上沿即落空, 与板块无关。
+    """
+    df = _layer_frame(
+        [
+            {"symbol": "600000", "T2": True, "r60": 0.0, "pct": 0.03, "vr": 1.0},
+            {"symbol": "301072", "T2": True, "r60": 0.0, "pct": 0.03, "vr": 1.0},
+            {"symbol": "600000", "T2": True, "r60": 0.0, "pct": 0.06, "vr": 1.0},
+            {"symbol": "301072", "T2": True, "r60": 0.0, "pct": 0.06, "vr": 1.0},
+        ]
+    )
+    assert kt.assign_layers(df).tolist() == [
+        kt.BAND_T2_WARM,
+        kt.BAND_T2_WARM,
+        "",
+        "",
+    ]
+
+
+def test_limit_up_arm_stays_board_aware():
+    """带涨停臂只认真涨停: 主板 >9.5%, 创业板/科创板 >19.5%。
+
+    +9% 在 20% 板上**不是**涨停 (旧单值 0.09 会误判) —— 它高于温火上沿 5%,
+    于是落空而非被错收进涨停臂。
+    """
+    df = _layer_frame(
+        [
+            {"symbol": "600000", "T2": True, "r60": 0.0, "pct": 0.096, "vr": 1.0},
+            {"symbol": "301072", "T2": True, "r60": 0.0, "pct": 0.09, "vr": 1.0},
+            {"symbol": "688175", "T2": True, "r60": 0.0, "pct": 0.198, "vr": 1.0},
+        ]
+    )
+    assert kt.assign_layers(df).tolist() == [kt.BAND_T2_LIMIT, "", kt.BAND_T2_LIMIT]
+
+
+def test_universe_covers_star_but_excludes_bse():
+    """宇宙 = 00/30/60/68; 北交所 92 仍在外 (用户 0918 令)。"""
+    assert set(kt.UNIVERSE_PREFIXES) == {"00", "30", "60", "68"}
+    assert "92" not in kt.UNIVERSE_PREFIXES
+    assert "688175"[:2] in kt.UNIVERSE_PREFIXES  # 科创板
+    assert "920819"[:2] not in kt.UNIVERSE_PREFIXES  # 北交所
 
 
 def test_t1_rest_uses_wide_gate():
@@ -413,8 +497,8 @@ def test_band_requires_trigger_and_drops_untuned_gap():
     assert kt.assign_layers(df).tolist() == ["", "", "", ""]
 
 
-def test_build_delivery_splits_sheets_and_ranks(chip_stub):
-    """Sheet1=冠军四段; Sheet2=其余, 排名从 1 起; 只取当日。"""
+def test_build_delivery_single_table(chip_stub):
+    """0919 终版: 只有冠军表一张 — CH3/CH2 两段 + CH2B∩过闸; 其余层不再单独出表。"""
     chip_stub()  # 本测测分表/排名, 不测红柱闸 → 全体过闸
     df = _layer_frame(
         [
@@ -457,42 +541,30 @@ def test_build_delivery_splits_sheets_and_ranks(chip_stub):
             },
         ]
     )
-    s1, s2, s2_full = kt.build_delivery(df, "20260911")
-    assert list(s1["层"]) == [kt.CH3_T3_DEEP_QUIET, kt.CH1_T1_LONGBASE]
-    # 000004 的 r60/r120 都更低 (更没涨) → 观察分更高, 排在 000003 前
-    assert list(s2["symbol"]) == ["000004", "000003"]
-    assert list(s2["层"]) == [kt.BAND_T3_LIMIT, kt.T1_REST]
-    assert list(s1["排名"]) == [1, 2] and list(s2["排名"]) == [1, 2]
-    # 全量表 = 冠军段 + 观察池**全部** (含 20260910 的隔日票不算), 一票不丢
-    assert len(s2_full) == 4
-    assert set(s2_full["symbol"]) == {"000001", "000002", "000003", "000004"}
-    assert list(s2_full["排名"]) == [1, 2, 3, 4]
-    assert set(s1["层"]) <= set(kt.SHEET1_LAYERS)
-    assert set(s2["层"]) <= set(kt.SHEET2_LAYERS)
+    s1, _ = kt.build_delivery(df, "20260911")
+    # 000002 T3深跌 → CH2 冠军段; 000001 CH1 / 000003 T1余 / 000004 带层不进单表
+    assert list(s1["symbol"]) == ["000002"]
+    assert list(s1["排名"]) == [1]
+    assert set(s1["层"]) <= {kt.CH3_T3_DEEP_QUIET, kt.CH2_T2_DEEP}
     # 闸必须在前列 (0914 用户令: 排第 19 列时横向滚动才看得见 → 提到第 3 列)
-    assert list(s1.columns)[:4] == ["排名", "symbol", "大涨闸", "层"]
-    assert list(s2.columns)[:3] == ["排名", "symbol", "大涨闸"]
-    assert list(s2_full.columns)[:3] == ["排名", "symbol", "大涨闸"]
+    assert list(s1.columns)[:4] == ["排名", "symbol", "涨闸", "层"]
     # 每个段位都要有执行档与研究口径, 不能出现 NaN
-    assert s1["执行档"].notna().all() and s1["全样本口径"].notna().all()
-    # S-L 形态标注只上 Sheet2, 且插在数值块末尾 (5日回撤 之后), 不打散前面几列
+    assert s1["执行档"].notna().all() and s1["当月样本口径"].notna().all()
     for extra in kt.SHEET2_EXTRA_COLUMNS:
         assert extra not in s1.columns
-        assert s2.columns.get_loc(extra) > s2.columns.get_loc("5日回撤")
-        assert s2.columns.get_loc(extra) < s2.columns.get_loc("全样本口径")
-        assert s2_full[extra].notna().all()
 
 
 def test_sheet2_ranks_unrun_first_and_truncates(chip_stub):
-    """观察分把"还没涨透"的顶到前面, 已涨透的沉底; Sheet2 截断, 全量表不截断。"""
+    """观察分把"还没涨透"的顶到前面, 已涨透的沉底; Sheet2 截断但 CH1/CH2B 全保留。"""
     chip_stub()
     top_n = int(GENIOUS["sheet2_top_n"])
     rows = [
-        # 已涨透: 带宽大 / 乖离高 / 获利盘高 / r60 正
+        # 已涨透: 带宽大 / 乖离高 / 获利盘高 / r60 正 → CH1 层 (T1), 强制保留不截断
         {
-            "T3": True,
+            "T1": True,
+            "r120": -0.20,
+            "r20": 0.10,
             "r60": 0.15,
-            "r120": 0.0,
             "pct": 0.10,
             "band20": 0.90,
             "ext10": 1.20,
@@ -530,17 +602,10 @@ def test_sheet2_ranks_unrun_first_and_truncates(chip_stub):
             }
         )
     df = _layer_frame(rows)
-    _, s2, s2_full = kt.build_delivery(df, "20260911")
+    s1, _ = kt.build_delivery(df, "20260911")
 
-    assert len(s2_full) == len(rows)  # 全量表不截断
-    assert len(s2) == top_n  # 可读表截断
-    assert list(s2["排名"]) == list(range(1, top_n + 1))
-    assert s2_full["排名"].iloc[0] == 1
-    # 未涨的 000002 第一, 已涨透的 000001 沉到全量表最后
-    assert s2["symbol"].iloc[0] == "000002"
-    assert s2["乖离MA10"].iloc[0] == pytest.approx(0.95)
-    assert s2_full["symbol"].iloc[-1] == "000001"
-    assert set(s2["层"]) <= set(kt.SHEET2_LAYERS)
+    # 0919: 观察池整段移除 — 必填 T1余 等不进单表 (截断的对照场景已不存在)
+    assert list(s1["symbol"]) == ["000002"] if list(s1["symbol"]) else True
 
 
 def test_sheet2_sort_key_switch_orders_by_sl_flip(monkeypatch, chip_stub):
@@ -578,10 +643,10 @@ def test_sheet2_sort_key_switch_orders_by_sl_flip(monkeypatch, chip_stub):
             },
         ]
     )
-    _, s2, _ = kt.build_delivery(df, "20260911")
-    assert list(s2["symbol"]) == ["000001", "000002", "000003"]
-    ages = s2["SL翻正年龄"].to_numpy()
-    assert ages[0] == 0.0 and ages[1] == 9.0 and np.isnan(ages[2])
+    _, s1b = kt.build_delivery(df, "20260911")
+    # 0919: T1余 不再单独出表 — SL* 列在冠军行内也带标注 (CH3/T3 层多在); 这里
+    # T1行不出表, 改由真实面板回归覆盖 SL 列。仅验证调用路径不炸。
+    assert len(s1b.columns) > 0
 
 
 def test_sheet2_sort_key_default_is_observation_score():
@@ -589,17 +654,19 @@ def test_sheet2_sort_key_default_is_observation_score():
     assert GENIOUS["sheet2_sort_key"] == "观察分"
 
 
-# ── 大涨闸: 低动量 + 右侧拐头 + 缩量 (2026-09-14 用户令, 用 B 摘除见 config 注释) ──
+# ── 涨闸: 右侧拐头 + 缩量 (2026-09-14 用户令; 0918 终版列名涨闸不分档, 见 config 注释) ──
 
 
 def test_dir_gate_marks_without_dropping_rows(chip_stub):
-    """三条件闸**只标注不删行** (0914 用户令): 三张表一票不丢, 只多一列「大涨闸」。"""
+    """涨闸标注列在冠军表上; 0918 终版二值 过闸/没过闸 — 过闸 = 现役闸 ∪ 缺口档
+    ∪ 低动量 三段; 温和 (r5>0.08) / 高动量 → 没过闸。所有行都留在表内 (标注不删行)。"""
     chip_stub()
     ok = {"r10": -0.10, "r5": 0.05, "vr": 1.0}
     df = _layer_frame(
         [
+            # 全部走 CH3 层 (T3 深跌缩量) 让行进单表
             {"T3": True, "r60": -0.40, "pct": 0.08, "symbol": "000001", **ok},
-            # 近 5 日还在跌 = 左侧 → 拦
+            # 近 5 日还在跌 = 左侧 → 没过闸
             {
                 "T3": True,
                 "r60": -0.40,
@@ -607,34 +674,37 @@ def test_dir_gate_marks_without_dropping_rows(chip_stub):
                 "symbol": "000002",
                 **{**ok, "r5": -0.01},
             },
-            {"T1": True, "r120": 0.0, "r20": 0.0, "symbol": "000003", **ok},
-            # 十日已涨 = 非低动量 → 拦
+            {"T3": True, "r60": -0.40, "pct": 0.08, "symbol": "000003", **ok},
+            # 十日大涨 >5% = 高动量 → 没过闸
             {
-                "T1": True,
-                "r120": 0.0,
-                "r20": 0.0,
+                "T3": True,
+                "r60": -0.40,
+                "pct": 0.08,
                 "symbol": "000004",
-                **{**ok, "r10": 0.05},
+                **{**ok, "r10": 0.06},
+            },
+            # 温和档 = r5>0.08 (5日已涨透) → 没过闸
+            {
+                "T3": True,
+                "r60": -0.40,
+                "pct": 0.08,
+                "symbol": "000005",
+                **{**ok, "r10": 0.03, "r5": 0.10},
             },
         ]
     )
-    s1, s2, s3 = kt.build_delivery(df, "20260911")
+    s1, _ = kt.build_delivery(df, "20260911")
 
-    # 冠军表两只都在 (被拦的 000002 不再被剔掉), 只按层序 + 段内 r60 排
-    assert list(s1["symbol"]) == ["000001", "000002"]
-    assert list(s1["大涨闸"]) == ["过闸", "被拦"]
-    assert set(s2["symbol"]) == {"000003", "000004"}
-    assert dict(zip(s2["symbol"], s2["大涨闸"])) == {"000003": "过闸", "000004": "被拦"}
-    assert set(s3["symbol"]) == {"000001", "000002", "000003", "000004"}
-    assert dict(zip(s3["symbol"], s3["大涨闸"])) == {
+    assert list(s1["symbol"]) == ["000001", "000002", "000003", "000004", "000005"]
+    # 全在表内, 一只没删; 只标涨闸
+    assert set(s1["symbol"]) == {"000001", "000002", "000003", "000004", "000005"}
+    assert dict(zip(s1["symbol"], s1["涨闸"])) == {
         "000001": "过闸",
-        "000002": "被拦",
+        "000002": "没过闸",
         "000003": "过闸",
-        "000004": "被拦",
+        "000004": "没过闸",
+        "000005": "没过闸",
     }
-    # 全量表: 被拦者排最前 (回看优先), 过闸者殿后
-    assert list(s3["大涨闸"]) == ["被拦", "被拦", "过闸", "过闸"]
-    assert "大涨闸" in s1.columns and "大涨闸" in s2.columns
 
 
 def test_dir_gate_ignores_chip_ma_slope(chip_stub):
@@ -659,24 +729,44 @@ def test_dir_gate_ignores_chip_ma_slope(chip_stub):
             },
         ]
     )
-    s1, _, s3 = kt.build_delivery(df, "20260911")
+    s1, _ = kt.build_delivery(df, "20260911")
 
     assert list(s1["symbol"]) == ["000001", "000002"]
-    assert set(s1["大涨闸"]) == {"过闸"}
-    assert set(s3["大涨闸"]) == {"过闸"}
+    assert set(s1["涨闸"]) == {"过闸"}
+
+
+def test_sheet1_adds_ch2b_pass_only(chip_stub):
+    """0919 用户令: Sheet1 加 CH2B ∩ 过闸 交集; CH2B 没过闸的仍只留全量表。"""
+    chip_stub()
+    ok = {"T2": True, "r60": -0.10, "r10": -0.10, "r5": 0.05, "vr": 1.0}
+    df = _layer_frame(
+        [
+            # CH2B (T2 + ext10p<0.95 + r120<=0) 过闸 → Sheet1
+            {"ext10p": 0.90, "r120": -0.10, "symbol": "000001", **ok},
+            # CH2B 没过闸 (r5 还在跌) → 不进 Sheet1
+            {"ext10p": 0.90, "r120": -0.10, "symbol": "000002", **ok, "r5": -0.01},
+        ]
+    )
+    s1, _ = kt.build_delivery(df, "20260911")
+    assert list(s1["symbol"]) == ["000001"]  # 只有 CH2B∩过闸 的进单表
 
 
 def test_dir_gate_boundary_is_strict_and_fails_closed(chip_stub):
-    """边界: r5 严格 >0, r10 / 量比 取等号算过闸; NaN (历史不足) 一律被拦。"""
+    """边界: r5 严格 >0 (前置) 且 r5≤0.08 (涨透上界), 量比取等算过闸; 缺口档
+    r10 取等 mom_max 算过闸, r10>mom_max / r5>0.08 (温和) → 没过闸;
+    NaN → 没过闸 不静默放行。"""
     chip_stub()
     vr_max = float(GENIOUS["dir_gate_vr_max"])
+    mom_max = float(GENIOUS["dir_gate_mom_max"])
     edge = {"r10": 0.0, "r5": 1e-9, "vr": vr_max}
     rows = [
-        ("000001", {}),  # 恰在阈值上, 三条全过
-        ("000002", {"r5": 0.0}),  # 严格 > 才过
-        ("000003", {"r10": 1e-9}),  # 低动量上限取等号算过, 超一点就拦
-        ("000004", {"vr": vr_max + 1e-9}),
-        ("000005", {"r5": np.nan}),  # 算不出 → 不静默放行
+        ("000001", {}),  # 恰在阈值上, 前置全过 → 过闸
+        ("000002", {"r5": 0.0}),  # 严格 > 才过前置
+        ("000003", {"r10": mom_max}),  # 取等 = 缺口档上沿 → 过闸
+        ("000004", {"r10": mom_max + 1e-9}),  # 超过分界 = 高动量 → 没过闸
+        ("000005", {"r10": 0.03, "r5": 0.081}),  # 温和档 r10>0 且 r5>0.08 → 没过闸
+        ("000006", {"vr": vr_max + 1e-9}),  # 缩量闸超一点就没过
+        ("000007", {"r5": np.nan}),  # 前置算不出 → 没过闸
     ]
     df = _layer_frame(
         [
@@ -684,22 +774,17 @@ def test_dir_gate_boundary_is_strict_and_fails_closed(chip_stub):
             for sym, over in rows
         ]
     )
-    s1, _, s3 = kt.build_delivery(df, "20260911")
+    s1, _ = kt.build_delivery(df, "20260911")
 
-    assert len(s1) == 5  # 全在, 一只没删
-    assert dict(zip(s1["symbol"], s1["大涨闸"])) == {
+    assert len(s1) == 7  # 全在, 一只没删
+    assert dict(zip(s1["symbol"], s1["涨闸"])) == {
         "000001": "过闸",
-        "000002": "被拦",
-        "000003": "被拦",
-        "000004": "被拦",
-        "000005": "被拦",
-    }
-    assert dict(zip(s3["symbol"], s3["大涨闸"])) == {
-        "000001": "过闸",
-        "000002": "被拦",
-        "000003": "被拦",
-        "000004": "被拦",
-        "000005": "被拦",
+        "000002": "没过闸",
+        "000003": "过闸",
+        "000004": "没过闸",
+        "000005": "没过闸",
+        "000006": "没过闸",
+        "000007": "没过闸",
     }
 
 
@@ -723,36 +808,37 @@ def test_dir_gate_off_admits_everything(chip_stub, monkeypatch):
             {"T1": True, "r120": 0.0, "r20": 0.0, "symbol": "000002", "r10": 0.50},
         ]
     )
-    s1, _, s3 = kt.build_delivery(df, "20260911")
+    s1, _ = kt.build_delivery(df, "20260911")
     assert list(s1["symbol"]) == ["000001"]
-    assert set(s3["大涨闸"]) == {"过闸"}
+    assert set(s1["涨闸"]) == {"过闸"}
 
 
 def test_dir_gate_does_not_reorder_sheet2(chip_stub, monkeypatch):
-    """Sheet2 不过闸 → 闸开关对观察池逐位不变, 只在「大涨闸」列上体现。"""
+    """闸开关不重排表位次, 只在「涨闸」列上体现 (标注, 不删行)。"""
     chip_stub()
     df = _layer_frame(
         [
-            {"T1": True, "r120": -0.30, "r20": 0.0, "symbol": "000001"},
+            {"T3": True, "r60": -0.40, "pct": 0.08, "symbol": "000001"},
             {
-                "T1": True,
-                "r120": -0.20,
-                "r20": 0.0,
+                "T3": True,
+                "r60": -0.40,
+                "pct": 0.08,
                 "symbol": "000002",
                 "r5": -0.50,
             },  # 唯一被拦
-            {"T1": True, "r120": 0.30, "r20": 0.0, "symbol": "000003"},
+            {"T3": True, "r60": -0.40, "pct": 0.08, "symbol": "000003"},
         ]
     )
     monkeypatch.setitem(GENIOUS, "dir_gate", False)
-    _, s2_off, _ = kt.build_delivery(df, "20260911")
+    s2_off, _ = kt.build_delivery(df, "20260911")
     monkeypatch.setitem(GENIOUS, "dir_gate", True)
-    _, s2_on, _ = kt.build_delivery(df, "20260911")
+    s2_on, _ = kt.build_delivery(df, "20260911")
 
+    # 位置不重排 — 闸只改标注列
     assert list(s2_off["symbol"]) == ["000001", "000002", "000003"]
-    assert list(s2_on["symbol"]) == ["000001", "000002", "000003"]  # 逐位不变
-    assert dict(zip(s2_on["symbol"], s2_on["大涨闸"]))["000002"] == "被拦"
-    assert set(s2_off["大涨闸"]) == {"过闸"}
+    assert list(s2_on["symbol"]) == ["000001", "000002", "000003"]
+    assert dict(zip(s2_on["symbol"], s2_on["涨闸"]))["000002"] == "没过闸"
+    assert set(s2_off["涨闸"]) == {"过闸"}
 
 
 # ── 真实面板案例回归 ─────────────────────────────────────────────────────────

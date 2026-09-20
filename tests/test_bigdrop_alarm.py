@@ -78,23 +78,29 @@ def test_ff_turn_nan_does_not_fire():
     )
 
 
-def test_score_frame_rejects_rule_count_mismatch(capsys):
-    """闸数与包不一致必须当场炸 —— 0915 撤闸事故的守卫。
+def test_score_frame_rejects_rule_count_mismatch():
+    """闸数与包不一致必须当场炸 —— 0915 撤闸事故的守卫。"""
+    import logging
 
-    rule_table 的键是**建包时**的得分刻度, 取用时拿当场新算的 sc 去索引: 10 闸的包
-    配 9 闸的代码, 高档会静默读错 (缺键还回退 base_pre), 融合头同理, 而全文件没有
-    任何断言。这里给一个 10 闸假包, 必须在碰 booster **之前** 退出 —— 所以包里故意
-    不放 booster。
-    """
-    from scripts.bigdrop_check import score_frame
+    from scripts.bigdrop_check import log, score_frame
 
-    d = pd.DataFrame([SAFE])
-    with pytest.raises(SystemExit) as ei:
-        score_frame(d, {"rules": [("x",)] * 10, "tag": "20260901"})
-    assert ei.value.code == 2
-    out = capsys.readouterr().out
-    assert "闸数不一致" in out
-    assert "包 10 闸" in out and "代码 9 闸" in out
+    records: list[logging.LogRecord] = []
+    handler = logging.Handler()
+    handler.emit = records.append  # type: ignore[assignment]
+    log.addHandler(handler)
+    prev_level = log.level
+    log.setLevel(logging.ERROR)
+    try:
+        d = pd.DataFrame([SAFE])
+        with pytest.raises(SystemExit) as ei:
+            score_frame(d, {"rules": [("x",)] * 10, "tag": "20260901"})
+        assert ei.value.code == 2
+        merged = "\n".join(r.getMessage() for r in records)
+        assert "闸数不一致" in merged
+        assert "包 10 闸" in merged and "代码 9 闸" in merged
+    finally:
+        log.removeHandler(handler)
+        log.setLevel(prev_level)
 
 
 def test_score_frame_passes_guard_when_counts_match():

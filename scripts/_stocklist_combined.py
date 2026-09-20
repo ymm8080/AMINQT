@@ -5,10 +5,11 @@
 
 - 多模块重叠: 被 ≥2 模块同时选中的票, 各模块自有 10d 口径
   (LEGACY=pred_ret_10d/prob_up_10d, PARALLEL=pred_mag_10d/pred_prob_10d)
-- 市场FADE预测 (2026-09-09 用户指令): 明日上证冲高回落概率
-  (_fade_market_forecast.forecast, 失败跳页 fail-open 不拦产出)
 - LEGACY / PARALLEL / 密度: 当日清单 CSV 全列原样 (dtype=str, 百分比显示层保留)
 - SLOW_BULL: shadow 目录长持清单 (只入表不推送)
+
+每张带 symbol 的表**最前列**insert 一列 BIGDROP SCAN (2026-09-16 用户令: 大跌
+扫描结果记在既有表里, 不另开页; 见 insert_bigdrop_column)。
 
 缺源跳页 (密度/SLOW_BULL 常缺, 影子单当日未跑); LEGACY+PARALLEL 双缺才退出。
 输出: STOCK_LIST_DIR/stocklist_combined_{date}.xlsx — WORM: 同名已存在则退到
@@ -20,6 +21,7 @@ __v2/__v3/... 变体 (绝不覆盖, 也不再跳过)。下游 `run_daily_automat
 import argparse
 import datetime
 import glob
+import logging
 import os
 import re
 import sys
@@ -29,7 +31,10 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from config.settings import DATA_OTHERS_DIR, STOCK_LIST_DIR  # noqa: E402
+from config.settings import DATA_OTHERS_DIR, PANEL_V3_PATH, STOCK_LIST_DIR  # noqa: E402
+from scripts._genious_excel import _norm_sym  # noqa: E402
+
+log = logging.getLogger(__name__)
 
 SHADOW_DIR = DATA_OTHERS_DIR / "shadow"
 
@@ -127,39 +132,123 @@ def build(date: str, list_dir=STOCK_LIST_DIR, shadow_dir=SHADOW_DIR):
     return [("多模块重叠", pd.DataFrame(multi, columns=OVERLAP_COLS))] + sheets
 
 
-def market_fade_sheet(fc_fn=None) -> tuple[str, pd.DataFrame] | None:
-    """市场FADE预测页 (2026-09-09 用户: "市场冲高回落概率预测值写进COMBINED")."""
-    if fc_fn is None:
-        try:
-            from _fade_market_forecast import forecast as fc_fn
-        except Exception as e:
-            print(f"[combined] 市场FADE预测不可用, 跳页: {e}")
-            return None
+def insert_bigdrop_column(sheets) -> int:
+    """BIGDROP SCAN 标注列 (2026-09-16 用户令 2: **不要独立页**, 记进既有表)。
+
+    当日合并清单全 workbook 的 symbol 并集送 bigdrop 次日大跌模块 → 每张带 symbol
+    的表 insert(0) 一列【BIGDROP SCAN】。三态语义与 _genious_excel 同名列逐字一致:
+      大跌风险 N.Nx = 模型支 (唯一带看跌方向), 波动风险 N.Nx = 仅规则支 (零方向),
+      空            = 两边没举手。
+
+    送扫范围 = **所有**表的 symbol 并集 (含 SLOW_BULL)。只送一部分的话, 没送到的票
+    在列里显示成空 —— 与"两边没举手"长得一模一样, 而那是两个完全不同的意思。
+
+    列序: insert(0) 放最前 (用户 0915 令 —— 旁路列追加到末尾会被列宽/横向滚动吞掉)。
+
+    模块运行 (建包新鲜度闸) 复用 _genious_excel._bigdrop_module_run (同源跳过 /
+    非同源重建 / 失败回退旧包); 扫描拿到 None (缺包/失败) 就整列不加, 不拦其余产出
+    (旁路标注, 同 genious 的契约)。返回实际加了列的表数。
+    """
     try:
-        fc = fc_fn()
-    except Exception as e:
-        print(f"[combined] 市场FADE预测失败, 跳页: {e}")
-        return None
-    rows = [
-        ("预测交易日", fc["next_date"]),
-        (
-            "状态基准 (上证收盘)",
-            f"{fc['state_date']}  {fc['close']:.2f} ({fc['ret'] * 100:+.2f}%)",
-        ),
-        ("行情带 (距MA20)", f"{fc['regime']} ({fc['above_ma20'] * 100:+.2f}%)"),
-        ("近5日涨幅 r5", f"{fc['r5'] * 100:+.2f}%"),
-        ("量比 (vs 20日均量)", f"{fc['vratio']:.2f}"),
-        ("P(冲高)", f"{fc['p_surge'] * 100:.0f}%"),
-        ("P(回落|冲高)", f"{fc['p_fade_given_surge'] * 100:.0f}%"),
-        ("P(回落日) 预测", f"{fc['p_fade_day'] * 100:.0f}%"),
-        ("P(回落日) 无条件基准", f"{fc['base_fade'] * 100:.1f}%"),
-        ("判读", f"{fc['verdict']}; 回落日次日不偏空 (+0.05% vs +0.03%)"),
-        (
-            "口径",
-            f"上证2005-今条件频率 状态=前收盘 n={fc['n_regime']}日; 回落日=g≥0.4%且吐回≥60%",
-        ),
+        from scripts._genious_excel import (
+            BIGDROP_UNSCORED,
+            _bigdrop_module_run,
+            _bigdrop_scan,
+            _norm_sym,
+        )
+
+        targets = [df for _, df in sheets if "symbol" in df.columns]
+        if not targets:
+            return 0
+        syms = sorted({_norm_sym(s) for df in targets for s in df["symbol"]})
+        _bigdrop_module_run()
+        scan = _bigdrop_scan(syms)
+        if scan is None:
+            return 0
+        for df in targets:
+            df.insert(
+                0,
+                "BIGDROP SCAN",
+                df["symbol"].map(lambda s: scan.get(_norm_sym(s), BIGDROP_UNSCORED)),
+            )
+        log.info(
+            "[combined] BIGDROP SCAN 列: %d 张表, %d 只送扫",
+            len(targets),
+            len(syms),
+        )
+        return len(targets)
+    except SystemExit:
+        raise
+    except BaseException as exc:  # noqa: BLE001 — 旁路标注, 失败不加列不拦产出
+        log.error("[combined] BIGDROP SCAN 列失败, 不加列: %s", exc)
+        return 0
+
+
+def insert_gate_column(sheets, date_key: str) -> int:
+    """「涨闸」标注列 (0919 用户令: ACD 涨闸接 LEGACY / 密度 侧, PARALLEL/SLOW_BULL 不接 —
+    PARALLEL 跨板无正贡献, SLOW_BULL 已暂停)。
+
+    读面板尾部窗口 (r5/r10/vr 需 ~15 交易日历史), 用 kongduo_triggers._gate_passed
+    按**当日**截面逐票判闸, 与 GENIOUS 表「涨闸」列口径逐字一致 (同一个函数, 含 NaN
+    判 False 语义)。三态:
+      过闸    = 三条件全过
+      没过闸  = 有条件不过
+      未评分  = 该票当日不在面板 (停牌/缺行), 不留空
+    只标注不删票 (0914 用户令); 列 insert(0) 放最前 (用户 0915 令)。
+    失败 (面板读不到等) → 整列不加, 不拦产出 (旁路标注契约, 同 insert_bigdrop_column)。
+
+    判闸用 trade_date = LEGACY 源清单文件名里的日期, 不是墙钟日 — 补跑历史日时
+    闸值必须能对回; 交货日 = 当日。
+    """
+
+    def _gate_scan(symbols_by_day: dict[str, set[str]]) -> dict[str, str] | None:
+        try:
+            from app.pipeline1 import kongduo_triggers as kt
+
+            days = sorted(symbols_by_day)
+            lookback = len(days) + 20
+            frames = []
+            for day in days:
+                frames.append(kt.load_panel(PANEL_V3_PATH, day, lookback_days=lookback))
+            df = pd.concat(frames, ignore_index=True)
+            df = kt.compute_features(df)
+            passed = kt._gate_passed(df)
+            out: dict[str, str] = {}
+            for day in days:
+                hit = df["date"] == day
+                day_passed = passed[hit]
+                day_out = pd.Series("没过闸", index=day_passed.index, dtype=object)
+                day_out[day_passed] = "过闸"
+                part = dict(zip(df["symbol"][hit].astype(str).str.zfill(6), day_out))
+                for sym in symbols_by_day[day]:
+                    out[sym] = part.get(sym, "未评分")
+            n_pass = sum(1 for v in out.values() if v == "过闸")
+            log.info("[combined] 涨闸标注: %d 只, 过闸 %d", len(out), n_pass)
+            return out
+        except BaseException as exc:  # noqa: BLE001 — 旁路标注, 失败不加列不拦产出
+            log.error("[combined] 涨闸标注失败, 不加列: %s", exc)
+            return None
+
+    targets = [
+        (name, df)
+        for name, df in sheets
+        if "symbol" in df.columns and name in ("LEGACY", "密度")
     ]
-    return ("市场FADE预测", pd.DataFrame(rows, columns=["指标", "值"]))
+    if not targets:
+        return 0
+    syms = sorted({_norm_sym(s) for _, df in targets for s in df["symbol"]})
+    scan = _gate_scan({date_key: set(syms)})
+    if scan is None:
+        return 0
+    n = 0
+    for _, df in targets:
+        df.insert(
+            0,
+            "涨闸",
+            df["symbol"].map(lambda s: scan.get(_norm_sym(s), "未评分")),
+        )
+        n += 1
+    return n
 
 
 def write(sheets, date: str, list_dir=STOCK_LIST_DIR) -> Path:
@@ -190,9 +279,13 @@ def main() -> int:
             raise SystemExit("STOCK LIST 目录无任何 legacy 清单")
         date = re.search(r"legacy_stocklist_(\d{8})__", fp.name).group(1)
     sheets = build(date)
-    mk = market_fade_sheet()
-    if mk:
-        sheets.insert(1, mk)
+    # 市场FADE预测页已删 (2026-09-20 用户令); _fade_market_forecast 模块保留未动。
+    # BIGDROP SCAN 列 (2026-09-16 用户令): combined 就绪后 bigdrop 必跑, 全 workbook
+    # 的票标大跌/波动风险 —— 记进既有表的列, 不另开页。
+    insert_bigdrop_column(sheets)
+    # 「涨闸」标注列 (0919 用户令): LEGACY/密度页用 GENIOUS 同口径 ACD 闸标注;
+    # PARALLEL/SLOW_BULL 接闸无效 (终审定案) 不加列, 见 insert_gate_column。
+    insert_gate_column(sheets, date)
     out = write(sheets, date)
     for name, df in sheets:
         print(f"[combined] sheet {name}: {len(df)} 行")

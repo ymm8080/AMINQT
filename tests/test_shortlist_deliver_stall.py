@@ -74,23 +74,20 @@ def test_xlsx_merged_without_stall_flag_writes_empty(tmp_path):
     wb = load_workbook(out)
     ws = wb["合并排名"]
     hdr = [c.value for c in ws[1]]
-    assert "stall_flag" in hdr
+    assert "滞涨标记" in hdr
     assert (
         hdr
         == [
-            "rank",
             "symbol",
             "board",
             "module",
-            "score",
-            "score_w",
             "in_t5",
             "过门",
-            "stall_flag",
+            "滞涨标记",
         ]
         + PRED_COLS
     )
-    j = hdr.index("stall_flag") + 1  # openpyxl 1-based
+    j = hdr.index("滞涨标记") + 1  # openpyxl 1-based
     assert ws.cell(row=2, column=j).value in ("", None)
 
 
@@ -103,7 +100,7 @@ def test_xlsx_merged_with_stall_flag_writes_real_value(tmp_path):
 
     ws = load_workbook(out)["合并排名"]
     hdr = [c.value for c in ws[1]]
-    j = hdr.index("stall_flag") + 1
+    j = hdr.index("滞涨标记") + 1
     assert ws.cell(row=2, column=j).value == "洗盘待爆发"
 
 
@@ -121,18 +118,16 @@ def test_xlsx_res_stall_flag_writes_real_value(tmp_path):
             "date",
             "board",
             "cut",
-            "rank",
             "symbol",
             "module",
             "co_occur",
-            "score",
             "过门",
-            "stall_flag",
+            "滞涨标记",
         ]
         + PRED_COLS
         + ["chip_wr5", "chip_flag"]  # 09-09 bbb294d4 派发标注列 (bbb294d4 漏更测试)
     )
-    j = hdr.index("stall_flag") + 1
+    j = hdr.index("滞涨标记") + 1
     assert ws.cell(row=2, column=j).value == "洗盘待爆发"
 
 
@@ -151,25 +146,22 @@ def test_docx_merged_without_stall_flag_tolerated(tmp_path):
     assert (
         hdr
         == [
-            "rank",
             "symbol",
             "board",
             "module",
-            "score",
-            "score_w",
             "in_t5",
             "过门",
-            "stall_flag",
+            "滞涨标记",
         ]
         + PRED_COLS
     )
     assert len(hdr) == len(t_merged.rows[1].cells)  # 单元格索引与 mcols 长度一致
-    assert t_merged.rows[1].cells[8].text == ""
+    assert t_merged.rows[1].cells[5].text == ""
     t_board = doc.tables[1]  # 分板 sheet
     hdr_b = [c.text for c in t_board.rows[0].cells]
-    assert hdr_b[7] == "stall_flag"
+    assert hdr_b[4] == "滞涨标记"
     assert len(hdr_b) == len(t_board.rows[1].cells)
-    assert t_board.rows[1].cells[7].text == ""
+    assert t_board.rows[1].cells[4].text == ""
 
 
 def test_docx_stall_flag_real_value_written(tmp_path):
@@ -188,8 +180,8 @@ def test_docx_stall_flag_real_value_written(tmp_path):
 
     doc = Document(out)
     t_merged = doc.tables[0]
-    assert t_merged.rows[1].cells[8].text == "洗盘待爆发"
-    assert t_merged.rows[1].cells[9].text == "+5.0%"  # pred_mag_3d 紧随其后
+    assert t_merged.rows[1].cells[5].text == "洗盘待爆发"
+    assert t_merged.rows[1].cells[6].text == "+5.00%"  # pred_mag_3d 紧随其后
     t_board = doc.tables[1]
-    assert t_board.rows[1].cells[7].text == "洗盘待爆发"
-    assert t_board.rows[1].cells[8].text == "+5.0%"  # pred_mag_3d 紧随其后
+    assert t_board.rows[1].cells[4].text == "洗盘待爆发"
+    assert t_board.rows[1].cells[5].text == "+5.00%"  # pred_mag_3d 紧随其后

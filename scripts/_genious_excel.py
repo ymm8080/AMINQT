@@ -1,9 +1,8 @@
 """GENIOUS — 链路狙击交付层 Excel (2026-09-14 用户令: 交易日 20:30 自动跑).
 
-Sheet1 = 冠军四段 (CH3 T3深跌缩量 / CH2 T2深跌 / CH1 T1长基 / CH2B T2稳健)
-Sheet2 = 观察池 (T1余 + 带双指纹四臂)
-**不截断** — 任何逐日 cap 都删洪峰日的钱 (0914 续12 取证级判死), 层序+层内 r60
-深→浅 即排名。层定义与阈值见 app/pipeline1/kongduo_triggers.py 与 settings.GENIOUS。
+Sheet1 = 冠军表 (CH3 T3深跌缩量 / CH2 T2深跌 / CH2B T2稳健过闸)
+0919 用户令: 观察池与全量表**删除** — 只出冠军单表。层序+层内 r60 深→浅
+即排名。层定义与阈值见 app/pipeline1/kongduo_triggers.py 与 settings.GENIOUS。
 
 口径: 名单 = **当日 (trade date) 起火的票**, 20:30 已收盘故"fire日收盘进"实际落到
 T+1, 故每行带执行档 (温火/质量层=T+1开盘进; 涨停/深跌层=T+1仍涨确认→T+1收盘进)。
@@ -42,6 +41,7 @@ from openpyxl.styles import Font, PatternFill
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.intraday.v51.safe_div import safe_divide  # noqa: E402
 from app.pipeline1 import kongduo_triggers as kt  # noqa: E402
 from app.pipeline1.freshness_guard import (  # noqa: E402
     expected_trading_date,
@@ -61,25 +61,11 @@ WAIT_TICK_S = 60
 HEAL_TIMEOUT_S = 180  # 自拉硬超时; 超时=大声失败, 不留挂死实例 (见 _heal_rows_bounded)
 
 BANNER1 = (
-    "GENIOUS 冠军四段 — 段位全留, 【大涨闸】列 (表内第 3 列) 标出其中哪几只是 低动量+右侧拐头+缩量。"
-    "末250日口径: 冠军四段 19.2票·日 里只有 1.3票·日 过闸 (93%被拦), "
-    "过闸后 未来10日均值 +9.00% 胜81.3%, ≥10% 命中 53.0% = 2.05x, ≥20% 命中 12.7% = 1.94x; "
+    "GENIOUS 冠军二段 — 段位全留, 【涨闸】列 (表内第 3 列) 标出其中哪几只是 右侧拐头+缩量。"
+    "OOS f10+5%止损口径: 过闸全取 胜率58%/期望+5.2%/大涨15.6% (低动量子集胜率76%); "
     "所以**只标注、不删票** — 过闸那几只是窄名单, 其余仍按层序读。"
-    "「全样本口径」列含选段偏差(**80% 勿信**)。扣0.7%往返费后火群整体≈0, 钱在层头部, "
+    "「当月样本口径」列 = 该层**当月实绩** (滚动重算, 月后补全); 扣0.7%往返费后火群整体≈0, 钱在层头部, "
     "请按层序自上而下读。执行档: 温火/质量层=T+1开盘进; 涨停/深跌层=T+1仍涨确认→T+1收盘进"
-)
-BANNER2 = (
-    f"GENIOUS 观察池 — 已按【观察分】从最好到最差排序, 取前 {GENIOUS['sheet2_top_n']} 名 "
-    "(全部名次见「火群全量」表)。观察分 = 带宽窄 + 未偏离MA10 + 获利盘低 + 深跌 → "
-    "越靠前越'还没涨透'; 已发挥完的票自动沉底。全 896 日实测: 前半档 +0.65% vs 末档 -0.03%, "
-    "IC 0.077 (t 8.7), 前后半样本同号。期望≈50% 平水, 非全买清单。"
-    "【大涨闸】列 (表内第 3 列) 仅为标注, 不删除任何一行"
-)
-BANNER3 = (
-    "GENIOUS 火群·全量 — 冠军四段 + 观察池**全部**触发票, 一票不丢。"
-    "【大涨闸】列 (表内第 3 列): 过闸 = 三条件全中 (十日涨幅≤0 且 近5日涨幅>0 且 量比≤1); "
-    "被拦 = 未全中 (**排在最前**, 供回看)。**该列只标注不筛表** — 三张表都是全量, 别把它当筛选器。"
-    "被拦者按层序排列, 深跌层 (CH2/CH3) 天然被拦比例最高 — 这是形态特征, 非数据错误"
 )
 
 # 列 → Excel number_format (写的是**实数**, 显示带符号百分号; 文本会被 Excel 按字典序排坏)
@@ -245,6 +231,17 @@ def _load_fresh_panel(target: str, no_fetch: bool, wait_min: int) -> pd.DataFram
         raise RuntimeError(f"面板无 {target} 当日行且 --no-fetch: 不产文件")
     log.warning("[fresh] 面板无 %s 当日行 → 自拉当日截面 (只拼内存, 不写面板)", target)
     healed = _heal_rows_bounded(target)
+    # 次新口径说明 (2026-09-18 用户令「为 GENIOUS 单独放宽」的落地判定):
+    # **本模块不设 min_list_days 闸, 也不改**。原因有三, 全部实测:
+    #   1) 缺行只发生在历史追跑 (fetch_daily 早于次日面板重建时点); 常规 20:30 当日链
+    #      面板已含全部次新 (/_daily_fetch.py::_build_new_base_panel 不适用 ingest gate,
+    #      实测 9/17 面板中「上市交易日 <150」的票数 = 0)。
+    #   2) 自愈路径 fetch_daily → _tushare_fetch_daily 内部带 ingest gate, 会**原样复现**
+    #      同一条剔除规则 —— 单靠放宽 GENIOUS 侧的闸, 这些行根本不会出现在 healed 里。
+    #   3) T1 的 wr_rise60 需 61 bar、r120 需 121 bar, 次新股上这两个量结构性地是 NaN
+    #      (实测 301583@20260915/16/17: 48/49/50 bar, r60 与 wr_rise60 均不可算) ——
+    #      即便准入, T1/T2/T3 也全为 False。放宽只会放大未验证样本占比。
+    # 故 301583 这一类的缺行属**数据年缺口**, 不在交付层闸的职责内。
     log.info(
         "[heal] 当日截面 %d 行, 其中 winner_ratio 非空 %d",
         len(healed),
@@ -262,7 +259,170 @@ def _fmt_sheet(df: pd.DataFrame) -> pd.DataFrame:
     写成 '+2.08%' 这类字符串时 Excel 按字典序排 (所有 '+…' 排在 '-…' 前), 排序即错。
     """
     out = df.copy()
-    out["乖离MA10"] = df["乖离MA10"] - 1  # ext10 1.05 → 显示 +5.0%
+    if "乖离MA10" in out.columns:
+        out["乖离MA10"] = out["乖离MA10"] - 1  # ext10 1.05 → 显示 +5.0%
+    return out
+
+
+BIGDROP_HIGH = "大跌风险"
+BIGDROP_VOL = "波动风险"
+BIGDROP_NONE = "无风险"
+BIGDROP_UNSCORED = "未评分"
+
+
+def _norm_sym(s) -> str:
+    """清单侧代码 → 面板键: 去交易所后缀 + 补零到 6 位 (920075.BJ → 920075)。"""
+    return str(s).strip().split(".")[0].zfill(6)
+
+
+def _bigdrop_labels(sc, p, th: float) -> np.ndarray:
+    """(规则分, 模型概率) → 标注。**模型支优先于规则支**, 先写规则再被模型覆盖。
+
+    顺序反了 (或把两边并成一个布尔) 就会把零方向的规则支标成 大跌风险 —— 规则支
+    占报警面七成体量、次日均收益 +0.047%, 标成"高风险"会被读成"次日要跌", 正是
+    bigdrop 0915 拆分分支要修掉的误读。这个守卫不为覆盖率, 为语义。
+    """
+    out = np.full(len(sc), BIGDROP_NONE, dtype=object)
+    out[np.asarray(sc) >= 1] = BIGDROP_VOL
+    out[np.asarray(p) >= th] = BIGDROP_HIGH
+    return out
+
+
+def _bigdrop_cells(labels, p, base: float) -> list[str]:
+    """标注 → 单元格文本。**只有方向支 (大跌风险) 带倍数**, 另两态原样出。
+
+    倍数 = 该股模型概率 ÷ OOS 市场基准大跌率, 即"次日大跌概率是市场的几倍"。用**逐股**
+    概率而非分支常数, 是为了让高危档内部还能分出轻重 (实测 2.1x~9.4x)。
+
+    波动风险 不带倍数 —— 不是省事, 是那个数在该分支上**恒为"比市场安全"**: 该分支按
+    定义就是 p < th(0.10), 而 base=5.128%, 故倍数上限 = th/base = **1.95x**, 实测中位
+    0.31x、87% 落在 1x 以下。挂一个"风险"标签却显示 0.3x, 读起来就是"风险只有市场的
+    三成"= 比平均安全 —— 标签与数字自相矛盾 (用户 0916 报"0.2/0.3 不正常"即此)。
+    该分支本就零方向, 摆一个方向性数字只会误导, 故只出标签。
+
+    无风险 同样不带倍数; 它本身已是一个完整读数。
+    """
+    return [
+        f"{x} {safe_divide(y, base):.1f}x" if x == BIGDROP_HIGH else x
+        for x, y in zip(labels, p)
+    ]
+
+
+def _bigdrop_module_run() -> bool:
+    """bigdrop **模块运行** (建包) —— 交付链里与 genious 顺序执行的第二步。
+
+    此前 GENIOUS 只**读** bigdrop 的包, 没有任何入口跑它的建包, 盘上的包会一直停在
+    上次手工 --build 那天。实测不是无害的 (tmp_t/_bigdrop_stale_delta_0916.py,
+    0915 包 vs 0916 重建, 同一日截面 5,257 行): 标注类别变 11 行 (9 只 大跌风险
+    → 波动风险)、倍数变 375 行, alarm/capture/branches 的 OOS 兑现整体漂移
+    (报警格精度 8.96% → 7.65%)。所以顺序步骤是"重跑模块", 不是"读一个越来越旧的包"。
+
+    **非致命**: 建包失败只记 ERROR 并回退盘上旧包 —— bigdrop 是旁路标注, 不许掀翻
+    交付链 (同 _bigdrop_scan 契约)。包已同源时零成本跳过 (只读面板的 date 一列)。
+    """
+    try:
+        from scripts import bigdrop_check as bc
+
+        if not (bc.BUNDLE_DIR / "bundle_latest.joblib").exists():
+            log.error("[genious] bigdrop 包缺失, 本次不跑模块也不产 BIGDROP SCAN 列")
+            return False
+        pmax = kt.panel_max_date(PANEL_V3_PATH)
+        if pmax is None:
+            log.error("[genious] 面板 date 列读失败 → 判不了包新鲜度, 跳过模块运行")
+            return False
+        data_date = pmax.strftime("%Y%m%d")
+        b = bc.load_bundle()
+        if not bc.bundle_is_stale(b, data_date):
+            log.info(
+                "[genious] bigdrop 包已同源 (tag=%s data_date=%s), 跳过建包",
+                b.get("tag"),
+                data_date,
+            )
+            return True
+        log.info(
+            "[genious] bigdrop 模块运行: 包 tag=%s data_date=%s vs 面板 %s → 重建",
+            b.get("tag"),
+            b.get("data_date"),
+            data_date,
+        )
+        t0 = time.monotonic()
+        nb = bc.build()
+        log.info(
+            "[genious] bigdrop 模块运行完成 %.1fs → tag=%s data_date=%s (OOS 基准 %.3f%%)",
+            time.monotonic() - t0,
+            nb.get("tag"),
+            nb.get("data_date"),
+            float(nb["oos_base"]) * 100,
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001 — 旁路步骤, 失败回退旧包, 不许掀翻交付链
+        log.error("[genious] bigdrop 模块运行失败, 回退盘上旧包: %s", exc)
+        return False
+
+
+def _bigdrop_scan(symbols) -> dict[str, str] | None:
+    """把当日清单送 bigdrop 次日大跌模块过一遍 → 【BIGDROP SCAN】标注列。
+
+    分档沿用 bigdrop_check 的**分支**口径 (0915 拆分), 不压成一个布尔:
+      大跌风险 N.Nx = 模型支 (模型概率 >= 报警线) —— 唯一带看跌方向的一支
+      波动风险 N.Nx = 仅规则支 (规则分>=1 而模型未达线) —— 零方向 (次日均 +0.047%)
+      空            = 两边都没举手 (不出倍数)
+    倍数是**逐股**读数 (见 _bigdrop_cells), 不是分支常数 —— 高危档内部靠它分轻重。
+    压成单一 大跌风险 正是该模块 0915 重建要修掉的误读: 规则支占报警面七成却
+    没有方向信息, 标成"高风险"会被读成"次日要跌"。
+
+    依赖缺失不拖累交付: bigdrop 是**旁路标注**, 拿不到就 log 大声并返回 None
+    (普通列照出, 名单一只不少)。load_bundle() 在缺包时 sys.exit, 那是 BaseException
+    不是 Exception, 故先查文件存在性再进去。
+    """
+    try:
+        from scripts import bigdrop_check as bc
+
+        b = bc.load_bundle()
+        d = bc.load_frame()
+        day = d[d.groupby("symbol")["date"].transform("max") == d["date"]].reset_index(
+            drop=True
+        )
+        _F, sc, P = bc.score_frame(day, b)
+        p = np.asarray(P["模型(isotonic校准)"], dtype=float)
+        th = float((b.get("alarm") or {}).get("th", bc.MODEL_ALARM))
+    except (Exception, SystemExit) as exc:  # noqa: BLE001 — 标注旁路, 不许掀翻交付链
+        # load_bundle 在缺包时 sys.exit (SystemExit 是 BaseException, 需显式捕获);
+        # 文件不存在或扫描异常均回退 None, 不拖累交付。
+        log.error("[genious] bigdrop 扫描失败, 本次不产 BIGDROP SCAN 列: %s", exc)
+        return None
+
+    lab = _bigdrop_labels(sc, p, th)
+    base = float(b["oos_base"])
+    cells = _bigdrop_cells(lab, p, base)
+    hit = dict(zip(day["symbol"].map(_norm_sym), cells))
+    # 不在面板的票给 未评分 而不是 "" —— 空格与"查过且没问题"在表上长得一样,
+    # 而含义相反 (未测 vs 测过无风险)。留空等于把没测的票静默读成安全。
+    out = {_norm_sym(s): hit.get(_norm_sym(s), BIGDROP_UNSCORED) for s in symbols}
+    unscored = [s for s, v in out.items() if v == BIGDROP_UNSCORED]
+    # 只在 out 里数: lab 是全市场截面 (5000+ 只), 数它就把"送扫的 51 只"报成全市场。
+    # 值已带倍数尾巴, 故用 startswith 而非等值比较。
+    log.info(
+        "[genious] BIGDROP SCAN [包 %s]: %d 只送扫, %s %d, %s %d, %s %d, %s %d (基准 %.2f%%)",
+        b.get("tag"),
+        len(out),
+        BIGDROP_HIGH,
+        sum(1 for v in out.values() if v.startswith(BIGDROP_HIGH)),
+        BIGDROP_VOL,
+        sum(1 for v in out.values() if v.startswith(BIGDROP_VOL)),
+        BIGDROP_NONE,
+        sum(1 for v in out.values() if v == BIGDROP_NONE),
+        BIGDROP_UNSCORED,
+        len(unscored),
+        base * 100,
+    )
+    if unscored:
+        log.warning(
+            "[genious] %d 只送扫票不在面板, 没评上分 (列内标 %s): %s",
+            len(unscored),
+            BIGDROP_UNSCORED,
+            unscored[:20],
+        )
     return out
 
 
@@ -311,12 +471,12 @@ def _spawn_ths_push(date: str) -> None:
 
 def write_xlsx(
     sheet1: pd.DataFrame,
-    sheet2: pd.DataFrame,
-    sheet2_full: pd.DataFrame,
     date: str,
     list_dir=STOCK_LIST_DIR,
 ) -> Path:
-    """WORM: GENIOUS_{date}.xlsx; 已存在 → GENIOUS_{date}__{HHMMSS}.xlsx (绝不覆盖)。"""
+    """WORM: GENIOUS_{date}.xlsx; 已存在 → GENIOUS_{date}__{HHMMSS}.xlsx (绝不覆盖)。
+
+    0919 用户令: 观察池与全量表都删 — 只出冠军单表。"""
     fp = Path(list_dir) / f"{GENIOUS['filename_prefix']}_{date}.xlsx"
     if fp.exists():
         stamp = datetime.datetime.now().strftime("%H%M%S")
@@ -324,8 +484,6 @@ def write_xlsx(
     with pd.ExcelWriter(fp, engine="openpyxl") as xw:
         for name, df, banner, legend in (
             ("冠军四段", sheet1, BANNER1, kt.sheet1_legend()),
-            ("观察池", sheet2, BANNER2, kt.sheet2_legend()),
-            ("火群全量", sheet2_full, BANNER3, kt.sheet2_legend()),
         ):
             raw = df if len(df) else pd.DataFrame(columns=list(df.columns))
             raw.to_excel(xw, sheet_name=name, index=False, startrow=2)
@@ -362,17 +520,26 @@ def write_xlsx(
 # ── 验收闸: 全历史复现研究层表 ────────────────────────────────────────────────
 
 
+# 大涨口径 (2026-09-18 用户令): 前瞻收益 > +8% 即大涨, **对所有股一视同仁, 不按板分档**。
+# 旧值 0.098 是"次日涨停"口径 (10% 板), 加入 20% 板后不再成立 —— 且用户明确大涨是
+# 幅度口径而非涨停口径。大跌对称为 < -5%。温火上沿固定 5%, 同样不随 20% 板放宽。
+BIG_RISE_TH = 0.08
+BIG_DROP_TH = -0.05
+
+
 # (层名, 火/日, 真赢/日, 大涨/日, 胜率, 中位火/日, 零票天%) — 0914 续13 互斥口径
+# 2026-09-18 刷新: 宇宙加入科创板 (68) + 涨停阈值改按板分档 (见 kt.UNIVERSE_PREFIXES
+# 与 kt._limit_up_threshold)。旧值是在 主板+创业板 上量的, 直接沿用则 verify 必然 FAIL。
 _EXPECT = (
-    (kt.CH3_T3_DEEP_QUIET, 3.0, 2.40, 1.49, 0.802, 0, 0.76),
-    (kt.CH2_T2_DEEP, 3.1, 1.86, 0.67, 0.598, 0, 0.58),
-    (kt.CH1_T1_LONGBASE, 1.7, 1.06, 0.15, 0.633, 0, 0.68),
-    (kt.CH2B_T2_STEADY, 7.2, 3.87, 0.85, 0.536, 1, 0.48),
-    (kt.T1_REST, 8.4, 4.41, 0.51, 0.523, 3, 0.26),
-    (kt.BAND_T2_WARM, 24.5, 12.38, 1.72, 0.505, 6, 0.21),
-    (kt.BAND_T2_LIMIT, 1.1, 0.52, 0.14, 0.492, 0, 0.61),
-    (kt.BAND_T3_WARM, 7.8, 3.92, 0.92, 0.502, 1, 0.37),
-    (kt.BAND_T3_LIMIT, 6.4, 3.05, 0.95, 0.473, 3, 0.27),
+    (kt.CH3_T3_DEEP_QUIET, 3.7, 2.94, 2.02, 0.786, 0, 0.73),
+    (kt.CH2_T2_DEEP, 3.8, 2.27, 1.00, 0.593, 0, 0.54),
+    (kt.CH1_T1_LONGBASE, 1.9, 1.18, 0.25, 0.606, 0, 0.66),
+    (kt.CH2B_T2_STEADY, 8.3, 4.35, 1.36, 0.527, 1, 0.46),
+    (kt.T1_REST, 9.5, 4.92, 0.88, 0.516, 3, 0.25),
+    (kt.BAND_T2_WARM, 27.5, 13.64, 2.75, 0.497, 7, 0.21),
+    (kt.BAND_T2_LIMIT, 1.0, 0.48, 0.17, 0.500, 0, 0.62),
+    (kt.BAND_T3_WARM, 9.6, 4.84, 1.56, 0.505, 2, 0.35),
+    (kt.BAND_T3_LIMIT, 5.0, 2.34, 0.90, 0.471, 2, 0.30),
 )
 
 # 用户 0911 时间线案例: (symbol, 日期, 期望层或 None, 期望触发器子串)
@@ -418,7 +585,7 @@ def verify() -> int:
         got = (
             len(sub) / all_days,
             (sub["f5"] > 0).sum() / all_days,
-            (sub["f5"] > 0.098).sum() / all_days,
+            (sub["f5"] > BIG_RISE_TH).sum() / all_days,
             (sub["f5"] > 0).mean() if len(sub) else float("nan"),
             float(per.median()),
             1 - per.gt(0).mean(),
@@ -442,27 +609,27 @@ def verify() -> int:
             f"   期望 {e_fire:.1f}/{e_win:.2f}/{e_big:.2f}/{e_rate:.1%}/{e_med:.0f}/{e_zero:.0%}"
         )
 
-    # 全榜总闸 (续13 独立的第三个数字, 用来交叉验证分层总和): 63.3火/33.5真赢/7.4大涨/52.9%
+    # 全榜总闸 (交叉验证分层总和; 2026-09-18 随宇宙扩容刷新: 63.3→70.3 火/日)
     per_all = matured.groupby("date").size().reindex(day_index, fill_value=0)
     board = (
         len(matured) / all_days,
         (matured["f5"] > 0).sum() / all_days,
-        (matured["f5"] > 0.098).sum() / all_days,
+        (matured["f5"] > BIG_RISE_TH).sum() / all_days,
         (matured["f5"] > 0).mean(),
         float(per_all.median()),
     )
     board_ok = (
-        abs(board[0] - 63.3) <= 0.5
-        and abs(board[1] - 33.5) <= 0.5
-        and abs(board[2] - 7.4) <= 0.3
-        and abs(board[3] - 0.529) <= 0.01
+        abs(board[0] - 70.3) <= 0.5
+        and abs(board[1] - 37.0) <= 0.5
+        and abs(board[2] - 10.9) <= 0.5
+        and abs(board[3] - 0.526) <= 0.01
     )
     if not board_ok:
         fails.append("全榜总数")
     print(
         f"\n  {'全榜 (冠军+余+带)':<18}{board[0]:>8.1f}{board[1]:>9.2f}{board[2]:>9.2f}"
         f"{board[3]:>8.1%}{board[4]:>6.0f}{'':>8}{'PASS' if board_ok else 'FAIL':>6}"
-        f"   期望 63.3/33.5/7.4/52.9%"
+        f"   期望 70.3/37.0/10.9/52.6%"
     )
     results["_全榜"] = {"got": board, "ok": board_ok}
 
@@ -552,23 +719,44 @@ def main() -> int:
         _write_state(tag, "failed", reason="freshness")
         return 2
 
+    # bigdrop 模块运行 (用户 0916 令: 交付链 = genious 运行 + bigdrop 运行, 顺序执行)。
+    # 放在新鲜度闸之后 —— 建包用的面板必须含交付当日行, 否则包一落地就是旧的。
+    # --dry-run 的契约是"只打印不落文件", 而建包要写 models/bigdrop → 跳过建包,
+    # 仍用盘上现有包出标注列 (读是干净的, 写才违约)。
+    if args.dry_run:
+        log.info("[genious] --dry-run: 跳过 bigdrop 模块运行 (不落包), 用盘上现有包")
+    else:
+        _bigdrop_module_run()
+
     df = kt.compute_features(df)
     df = kt.compute_triggers(df)
-    s1, s2, s2_full = kt.build_delivery(df, target)
-    counts = pd.concat([s1["层"], s2_full["层"]]).value_counts().to_dict()
-    n_pass = int((s1["大涨闸"] == "过闸").sum())
+    s1, _ = kt.build_delivery(df, target)
+    # 旁路标注列 (用户 0915 令): 清单过一遍 bigdrop 次日大跌模块。三张表都加,
+    # 语义见 _bigdrop_scan —— 三态 (大跌风险/波动风险/无风险) + 未评分。
+    # 查表一律走 _norm_sym: 直接 str(s).zfill(6) 会漏掉北交所的 `.BJ` 后缀, 那只票
+    # 就静默变空 —— 与"没评上分"撞脸, 而分其实算过。
+    # 缺省值同 _bigdrop_scan: 拿不到读数标 未评分, **不留空** (空格与"查过且无风险"同形)。
+    # 附加列一律 insert(0) **放最前** (用户 0915 令) —— 追加到末尾会被列宽/横向滚动吞掉,
+    # 后面新增的旁路列照此办理。
+    scan = _bigdrop_scan(s1["symbol"])
+    if scan is not None:
+        s1.insert(
+            0,
+            "BIGDROP SCAN",
+            s1["symbol"].map(lambda s: scan.get(_norm_sym(s), BIGDROP_UNSCORED)),
+        )
+    counts = s1["层"].value_counts().to_dict()
+    n_pass = int((s1["涨闸"] == "过闸").sum())
     log.info(
-        "[genious] %s 冠军四段 %d 票 (大涨闸过 %d), 观察池 %d/%d 票 (截断/全量); 层分布 %s",
+        "[genious] %s 冠军表 %d 票 (涨闸过 %d); 层分布 %s",
         target,
         len(s1),
         n_pass,
-        len(s2),
-        len(s2_full),
         counts,
     )
 
     if args.dry_run:
-        for name, sheet in (("冠军四段", s1), ("观察池", s2), ("火群全量", s2_full)):
+        for name, sheet in (("冠军四段", s1),):
             print(f"\n===== {name} ({len(sheet)}) =====")
             print(sheet.to_string(index=False) if len(sheet) else "(空)")
         _write_state(
@@ -576,13 +764,11 @@ def main() -> int:
             "dry_run",
             s1=len(s1),
             s1_pass=n_pass,
-            s2=len(s2),
-            s2_full=len(s2_full),
             layers=counts,
         )
         return 0
 
-    fp = write_xlsx(_fmt_sheet(s1), _fmt_sheet(s2), _fmt_sheet(s2_full), target)
+    fp = write_xlsx(_fmt_sheet(s1), target)
     log.info("[genious] 写出 %s", fp)
     csv_fp = write_stocklist_csv(s1, target)
     if csv_fp is not None:
@@ -593,8 +779,6 @@ def main() -> int:
         file=str(fp),
         s1=len(s1),
         s1_pass=n_pass,
-        s2=len(s2),
-        s2_full=len(s2_full),
         layers=counts,
     )
     print(str(fp))

@@ -134,7 +134,16 @@ def _sanitize_header(value: str) -> str:
 
 
 def _extract_json(text: str) -> dict | None:
-    """Try multiple strategies to extract JSON from LLM response text."""
+    """Try multiple strategies to extract JSON from LLM response text.
+
+    Parses with ``strict=False`` throughout: LLM output routinely embeds raw
+    newlines/tabs inside string values (e.g. a multi-line `message`), which
+    strict JSON rejects as control characters. PR#161 的评审就死在这里 ——
+    响应体看着合法 (开头 500 字符完全正常), 畸形在更后面, 而 strict 模式整条拒收。
+
+    失败时把 json 的报错连同出错位置附近的原文片段打进日志。此前只记前 500 字符,
+    而畸形几乎总在后面 ⇒ 下次复现仍是不可诊断的。**"响亮地失败"要求打得准**。
+    """
     if text is None:
         return None
     text = text.strip()
@@ -147,11 +156,13 @@ def _extract_json(text: str) -> dict | None:
     # Strip thinking/reasoning tags (some models wrap output)
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
+    last_exc: json.JSONDecodeError | None = None
+
     # Direct parse
     try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
+        return json.loads(text, strict=False)
+    except json.JSONDecodeError as e:
+        last_exc = e
 
     # Find first { and last } -- extract JSON object
     start = text.find("{")
@@ -159,18 +170,25 @@ def _extract_json(text: str) -> dict | None:
     if start != -1 and end != -1 and end > start:
         fragment = text[start : end + 1]
         try:
-            return json.loads(fragment)
-        except json.JSONDecodeError:
-            pass
+            return json.loads(fragment, strict=False)
+        except json.JSONDecodeError as e:
+            last_exc = e
 
-        # Try fixing common issues: trailing commas, unescaped newlines
+        # Try fixing common issues: trailing commas
         cleaned = re.sub(r",\s*}", "}", fragment)
         cleaned = re.sub(r",\s*]", "]", cleaned)
         try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            pass
+            return json.loads(cleaned, strict=False)
+        except json.JSONDecodeError as e:
+            last_exc = e
 
+    if last_exc is not None:
+        pos = getattr(last_exc, "pos", 0) or 0
+        logger.warning(
+            "JSON decode failed: %s | near: %r",
+            last_exc,
+            text[max(0, pos - 120) : pos + 120],
+        )
     return None
 
 
@@ -395,6 +413,14 @@ Keep messages concise (one sentence per issue). Only report real violations.
                         ),
                         "error": True,
                     }
+                # 非截断的解析失败: 模型偶发吐出色法畸形 JSON。端点**非确定**
+                # (PR#161 同 diff 两次调用给出不同行号/措辞), 故重发一次极少复现
+                # 同一处畸形 —— 比直接给 PR 挂一条 "Review failed" 划算。
+                if attempt < 2:
+                    logger.warning(
+                        "Unparseable response (attempt %d/3) — retrying", attempt + 1
+                    )
+                    continue
                 return {
                     "issues": [],
                     "summary": "Could not parse review response.",

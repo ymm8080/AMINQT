@@ -31,7 +31,7 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # 无人值守脚本: 输出必须落盘, 严禁依赖控制台流.
 # 20260910事故: 计划任务启动后原会话消亡, stderr管道无读者 → data_supply的
@@ -47,6 +47,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+log = logging.getLogger(__name__)
 
 import numpy as np
 import pandas as pd
@@ -56,7 +57,7 @@ import tushare as ts
 from dotenv import load_dotenv
 
 from app.pipeline1.ingest_scan import apply_ingest_scan, build_universe
-from config.settings import INGEST_MIN_LIST_DAYS
+from config.settings import INGEST_MIN_LIST_DAYS, MARKET_CLOSE_HOUR
 
 load_dotenv()
 
@@ -78,7 +79,46 @@ from app.pipeline1.sw_sector_fetch import (  # noqa: E402
 )
 
 _POS_ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
-TRADE_DATE = _POS_ARGS[0] if _POS_ARGS else datetime.now().strftime("%Y%m%d")
+
+
+def _default_trade_date(now=None) -> str:
+    """缺省取数日 = 最近一个**已收盘**的开市日, 不是墙钟日.
+
+    2026-09-18 补: 计划任务动作里不传日期, 所以缺省值就是无人值守路径的唯一
+    日期来源. 原先用 datetime.now() 取墙钟日, 而 StartWhenAvailable 恰恰在
+    "机器睡着错过触发" 时于凌晨补跑 (09-17 事故即此场景) —— 那时墙钟日已翻页.
+    落在周六凌晨 = Tushare 空值 fail-fast (安全); 落在**周一凌晨** = 周一是
+    交易日 → 拿到周一数据 → 把"周一"这行写进面板, 而它要等周一收盘后才真实
+    存在 → 此后 panel_max_date 谎报最新日, 整条链的新鲜度判据全被污染.
+
+    ★ 这里不能用 freshness_guard.expected_trading_date: 那个函数的语义是
+    "面板此刻*应该*有的最新数据日", 周一 00:30 返回周一 —— 对告警是对的,
+    对**取数**是错的 (那时周一还没开盘). 取数要的是"此刻*拿得到*什么",
+    所以必须再加一道"已过收盘"闸.
+    """
+    from app.pipeline1.freshness_guard import expected_trading_date, load_trade_cal
+
+    now = now or datetime.now()
+    exp, src = expected_trading_date(now.date(), load_trade_cal())
+    if exp == now.date() and now.hour < MARKET_CLOSE_HOUR:
+        # 今天开市但尚未收盘 → 退到上一个开市日 (exp 必 > 周一, 无下溢风险)
+        # 注: 本模块是 `from datetime import datetime`, 此处的 datetime 是**类**,
+        # 取 timedelta 须用模块级 import (否则 AttributeError, 2026-09-18 实撞).
+        prev = exp - timedelta(days=1)
+        while prev.weekday() >= 5:
+            prev -= timedelta(days=1)
+        log.info(
+            "[date] 今日 %s 未到收盘时 (%02d:00), 取数日退到 %s",
+            exp.strftime("%Y%m%d"),
+            MARKET_CLOSE_HOUR,
+            prev.strftime("%Y%m%d"),
+        )
+        exp, src = prev, src + "+preclose"
+    log.info("[date] 缺省取数日 %s (cal_source=%s)", exp.strftime("%Y%m%d"), src)
+    return exp.strftime("%Y%m%d")
+
+
+TRADE_DATE = _POS_ARGS[0] if _POS_ARGS else _default_trade_date()
 FORCE_NO_CYQ = "--force" in sys.argv
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
 

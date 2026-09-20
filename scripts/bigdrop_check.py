@@ -38,11 +38,15 @@
 
 from __future__ import annotations
 
+import logging
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 import pandas as pd
 import pyarrow.parquet as pq
 
@@ -420,6 +424,12 @@ def build() -> dict:
     # 分支表要回答"规则支到底带不带方向", 而答案就是它的次日均收益本身 ——
     # 拿在 del 之前, 否则下面只剩 y (已二值化, 看不出涨)。
     fwd_all = d["fwd"].to_numpy(float)
+    # 建包用的**数据日** —— 新鲜度判据取它, 不取墙钟 tag: tag 是建包那天的日历日,
+    # 早于当日抓取建包会得到 tag=今天而数据只到昨天 (同名覆盖), 拿 tag 当新鲜度
+    # 会把它误判成新的 —— 同 0915 密度页日期键事故。
+    # 归一化到 YYYYMMDD —— bundle_is_stale 用同格式比较, 不解析 datetime 字符串
+    # (str(max) 会产出 'YYYY-MM-DD HH:MM:SS', 与 'YYYYYMMDD' 永不相等 → 永远判陈旧)。
+    data_date = pd.Timestamp(d["date"].max()).strftime("%Y%m%d")
     del d, F
 
     ds = np.sort(np.unique(dt))
@@ -668,8 +678,21 @@ def build() -> dict:
 
     tag = datetime.now().strftime("%Y%m%d")
     BUNDLE_DIR.mkdir(parents=True, exist_ok=True)
+    dest = BUNDLE_DIR / f"bundle_{tag}.joblib"
+    if dest.exists():
+        # WORM: 同 tag 重跑会静默覆盖旧包。tag 是墙钟日, "当日早先建过一次包" 时
+        # 重跑正是这个形状 (面板同日补齐后重建) —— 先留档再写。
+        bak = BUNDLE_DIR / (
+            f"bundle_{tag}_pre_rebuild_{datetime.now().strftime('%H%M%S')}.joblib.bak"
+        )
+        try:
+            shutil.copy2(dest, bak)
+            log.info("同 tag 旧包已留档 %s", bak.name)
+        except OSError as e:
+            log.error("留档失败 (%s → %s): %s", dest.name, bak.name, e)
     bundle = dict(
         tag=tag,
+        data_date=data_date,
         drop_th=DROP_TH,
         feats=FEATS,
         rules=RULES,
@@ -689,15 +712,15 @@ def build() -> dict:
         capture=capture,
         branches=branches,
     )
-    joblib.dump(bundle, BUNDLE_DIR / f"bundle_{tag}.joblib")
+    joblib.dump(bundle, dest)
     joblib.dump(bundle, BUNDLE_DIR / "bundle_latest.joblib")
-    print(f"\n-> {BUNDLE_DIR}\\bundle_{tag}.joblib")
+    log.info("%s\\bundle_%s.joblib  (data_date=%s)", BUNDLE_DIR, tag, data_date)
 
     # 特征重要度留档
     imp = pd.Series(m.feature_importances_, index=FEATS).sort_values(ascending=False)
-    print(
-        "\n特征重要度 Top12: "
-        + ", ".join(f"{PRETTY.get(k, k)}({v})" for k, v in imp.head(12).items())
+    log.info(
+        "特征重要度 Top12: %s",
+        ", ".join(f"{PRETTY.get(k, k)}({v})" for k, v in imp.head(12).items()),
     )
     imp.to_csv(BUNDLE_DIR / f"importance_{tag}.csv", encoding="utf-8-sig")
     return bundle
@@ -706,9 +729,25 @@ def build() -> dict:
 def load_bundle() -> dict:
     p = BUNDLE_DIR / "bundle_latest.joblib"
     if not p.exists():
-        print("没有模型包, 先跑: python scripts/bigdrop_check.py --build")
+        log.error("没有模型包, 先跑: python scripts/bigdrop_check.py --build")
         sys.exit(2)
     return joblib.load(p)
+
+
+def bundle_is_stale(b: dict, data_date: str) -> bool:
+    """包是否与 `data_date` (面板最新数据日, YYYYMMDD) 不同源 → 该重建。
+
+    判据是**数据日**不是墙钟 `tag`: tag 是建包那天的日历日, 早于当日抓取建包会
+    得到 tag=今天而数据只到昨天, 拿 tag 判新鲜会把它当新的 (同 0915 密度页
+    日期键事故)。**缺 data_date 的旧包一律视为陈旧** —— 无法证明同源就不假定同源。
+    铁律 #6: 日期必须解析为 datetime 对象比较, 不容字符串直接比。
+    """
+    try:
+        bundle_dt = datetime.strptime(str(b.get("data_date") or ""), "%Y%m%d")
+        cur_dt = datetime.strptime(str(data_date), "%Y%m%d")
+    except (ValueError, TypeError):
+        return True  # 解析失败 = 无法证明同源 → 判陈旧
+    return bundle_dt != cur_dt
 
 
 # ---------------------------------------------------------------- 查询
@@ -720,11 +759,13 @@ def score_frame(d: pd.DataFrame, b: dict) -> tuple:
     # 且缺键会静默回退 base_pre; 融合头 b["lr"] 同样按旧得分刻度拟合 (它才是默认
     # winner)。不匹配 = 数悄悄不对, 必须当场炸, 不能降级。
     if "rules" in b and len(b["rules"]) != F.shape[1]:
-        print(
-            f"包与代码闸数不一致: 包 {len(b['rules'])} 闸 (tag={b.get('tag')}), "
-            f"代码 {F.shape[1]} 闸。\n"
-            f"  rule_table / 融合头的得分刻度在建包时就定死了, 直接跑会静默读错概率。\n"
-            f"  请重建: python scripts/bigdrop_check.py --build"
+        log.error(
+            "包与代码闸数不一致: 包 %d 闸 (tag=%s), 代码 %d 闸。\n"
+            "  rule_table / 融合头的得分刻度在建包时就定死了, 直接跑会静默读错概率。\n"
+            "  请重建: python scripts/bigdrop_check.py --build",
+            len(b["rules"]),
+            b.get("tag"),
+            F.shape[1],
         )
         sys.exit(2)
     sc = F.sum(axis=1).to_numpy(int)
