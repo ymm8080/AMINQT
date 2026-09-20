@@ -45,7 +45,8 @@ BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 MAX_TOKENS = int(os.getenv("DEEPSEEK_MAX_TOKENS", "8192"))
 TIMEOUT_SEC = int(os.getenv("DEEPSEEK_TIMEOUT_SEC", "60"))
 # OpenCode Go (via Cloudflare) rejects requests without a session id / default UA.
-OPENCODE_SESSION = os.getenv("OPENCODE_SESSION", "a3f7e2b1-4c5d-49a8-b6e0-1d2f3a4b5c6d")
+# 实盘应设 OPENCODE_SESSION 环境变量; 不硬编码 fallback UUID (会话隔离 + 安全)。
+OPENCODE_SESSION = os.getenv("OPENCODE_SESSION")
 # OpenCode Go does not accept response_format (mirrors scripts/deepseek_pr_review.py).
 SUPPORTS_RESPONSE_FORMAT = os.getenv("DEEPSEEK_SUPPORTS_RESPONSE_FORMAT", "0") == "1"
 
@@ -82,17 +83,20 @@ def _call_deepseek(
     if disable_thinking:
         payload["thinking"] = {"type": "disabled"}
 
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json",
+        "User-Agent": "curl/8.4.0",
+    }
+    if OPENCODE_SESSION:
+        headers["x-opencode-session"] = OPENCODE_SESSION
+
     try:
         with httpx.Client(timeout=TIMEOUT_SEC) as client:
             resp = client.post(
                 f"{BASE_URL}/chat/completions",
                 json=payload,
-                headers={
-                    "Authorization": f"Bearer {API_KEY}",
-                    "Content-Type": "application/json",
-                    "x-opencode-session": OPENCODE_SESSION,
-                    "User-Agent": "curl/8.4.0",
-                },
+                headers=headers,
             )
             resp.raise_for_status()
             result = resp.json()

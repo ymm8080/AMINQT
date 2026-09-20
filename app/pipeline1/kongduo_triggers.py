@@ -176,7 +176,8 @@ def load_layer_research(trade_date: str | None = None) -> dict[str, str]:
         return dict(LAYER_RESEARCH_FALLBACK)
     try:
         d = _json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, _json.JSONDecodeError, KeyError, TypeError):
+        # 只捕读文件/解析失败; 其他异常冒泡 (符合铁律: try-except 但不过度吞异常)
         return dict(LAYER_RESEARCH_FALLBACK)
     raw = d.get("data_by_layer", {})
     out = {}
@@ -713,8 +714,9 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
     out["ext10p"] = out["ext10"].groupby(g, sort=False).shift(1)
 
     # CH4 中线缩量横盘 的回调深度: 当日收盘距 5 日高点的回撤 (<ch4_dd5_max 即"横着缩")
-    out["dd5"] = _roll(out["high"], 5, "max", g)
-    out["dd5"] = (out["dd5"] - close) / out["dd5"]
+    # 5日高点 max 做分母; 停牌日 high=0 → 除零防护 (对齐 _pos_vec np.where 口径)
+    dd5_denom = _roll(out["high"], 5, "max", g)
+    out["dd5"] = (dd5_denom - close) / np.where(dd5_denom <= 0, np.nan, dd5_denom)
 
     vol = out["volume"].replace(0, np.nan)
     out["vr"] = vol / vol.groupby(g, sort=False).transform(
