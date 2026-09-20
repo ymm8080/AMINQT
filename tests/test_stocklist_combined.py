@@ -65,39 +65,6 @@ def test_build_no_core_sources_raises(tmp_path):
         sc.build(DATE, list_dir=tmp_path, shadow_dir=tmp_path)
 
 
-def test_market_fade_sheet_formats():
-    fc = {
-        "next_date": "2026-09-10",
-        "state_date": "20260909",
-        "close": 3951.51,
-        "ret": 0.0028,
-        "regime": "线上(0~+2%)",
-        "above_ma20": 0.0038,
-        "r5": 0.0026,
-        "vratio": 1.01,
-        "p_surge": 0.539,
-        "p_fade_given_surge": 0.337,
-        "p_fade_day": 0.182,
-        "base_fade": 0.219,
-        "verdict": "≈常态",
-        "n_regime": 1409,
-    }
-    name, df = sc.market_fade_sheet(fc_fn=lambda: fc)
-    assert name == "市场FADE预测"
-    assert len(df) == 11
-    got = dict(zip(df["指标"], df["值"]))
-    assert got["P(回落日) 预测"] == "18%"
-    assert got["预测交易日"] == "2026-09-10"
-    assert "线上(0~+2%)" in got["行情带 (距MA20)"]
-
-
-def test_market_fade_sheet_failopen():
-    def boom():
-        raise RuntimeError("refetch fail")
-
-    assert sc.market_fade_sheet(fc_fn=boom) is None
-
-
 def test_write_xlsx_roundtrip(tmp_path):
     _legacy(tmp_path)
     _parallel(tmp_path)
@@ -141,6 +108,118 @@ def test_next_path_prefers_canonical_then_fills_first_gap(tmp_path):
     assert (
         sc._next_path("20260106", tmp_path).name == "stocklist_combined_20260106.xlsx"
     )
+
+
+# ── insert_gate_column (0919 用户令: ACD 涨闸接 LEGACY/密度, 不接 PARALLEL/SLOW_BULL) ──
+
+
+def _patch_gate(monkeypatch, df, passed):
+    import pandas as _pd
+
+    from app.pipeline1 import kongduo_triggers as kt
+
+    monkeypatch.setattr(kt, "load_panel", lambda *a, **k: df.copy())
+    monkeypatch.setattr(kt, "compute_features", lambda d: d)
+    monkeypatch.setattr(kt, "_gate_passed", lambda d: _pd.Series(passed, index=d.index))
+
+
+def test_insert_gate_column_first_column_and_per_day_scan(monkeypatch):
+    import pandas as pd
+
+    from app.pipeline1 import kongduo_triggers as kt
+
+    df = pd.DataFrame({"date": ["20260919"] * 3, "symbol": ["600000", "1", "920367"]})
+    _patch_gate(
+        monkeypatch,
+        df,
+        [True, False, True],
+    )
+
+    sheets = [("LEGACY", pd.DataFrame({"symbol": ["600000", "1"]}))] + [
+        ("密度", pd.DataFrame({"symbol": ["920367.BJ"]}))
+    ]
+    seen = {}
+
+    orig_load = kt.load_panel
+
+    def spy(path, day, **k):
+        seen["day"] = day
+        return orig_load(path, day, **k)
+
+    monkeypatch.setattr(kt, "load_panel", spy)
+
+    assert (
+        sc.insert_gate_column(
+            [("LEGACY", sheets[0][1]), ("密度", sheets[1][1])], "20260919"
+        )
+        == 2
+    )
+    assert seen["day"] == "20260919"
+    assert sheets[0][1].columns[0] == "涨闸"
+    assert sheets[0][1]["涨闸"].tolist() == ["过闸", "没过闸"]
+    assert sheets[1][1]["涨闸"].tolist() == ["过闸"]  # .BJ 后缀归一后命中
+
+
+def test_insert_gate_column_panel_missing_symbol_is_unscored(monkeypatch):
+    import pandas as pd
+
+    _patch_gate(
+        monkeypatch,
+        pd.DataFrame(
+            {"date": ["20260919", "20260919"], "symbol": ["600000", "600001"]}
+        ),
+        [True, False],
+    )
+    df = pd.DataFrame({"symbol": ["600000", "300999"]})
+    assert sc.insert_gate_column([("LEGACY", df)], "20260919") == 1
+    assert df["涨闸"].tolist() == ["过闸", "未评分"]
+
+
+def test_insert_gate_column_failopen(monkeypatch):
+    import pandas as pd
+
+    from app.pipeline1 import kongduo_triggers as kt
+
+    def boom(*a, **k):
+        raise RuntimeError("panel down")
+
+    monkeypatch.setattr(kt, "load_panel", boom)
+    df = pd.DataFrame({"symbol": ["600000"]})
+    assert sc.insert_gate_column([("LEGACY", df)], "20260919") == 0
+    assert "涨闸" not in df.columns
+
+
+def test_insert_gate_column_scope_limited_to_legacy_and_density(monkeypatch):
+    """PARALLEL/SLOW_BULL/重叠页/FADE 一律不加闸列 (0919 终审: PARALLEL 跨板无正
+    贡献, SLOW_BULL 暂停; 重叠页 = 多模块列义混读)。送扫集也只取两页的并集。
+    """
+    _patch_gate(
+        monkeypatch,
+        pd.DataFrame(
+            {"date": ["20260919", "20260919"], "symbol": ["600000", "300001"]}
+        ),
+        [True, False],
+    )
+    # 送扫集 = LEGACY+密度 两页的并集; PARALLEL/SLOW_BULL/重叠页的票不加列也不送扫
+    sheets = [
+        ("LEGACY", pd.DataFrame({"symbol": ["600000"]})),
+        ("PARALLEL", pd.DataFrame({"symbol": ["601000"]})),
+        ("SLOW_BULL", pd.DataFrame({"symbol": ["300001"]})),
+        ("多模块重叠", pd.DataFrame({"symbol": ["600000"]})),
+        ("市场FADE预测", pd.DataFrame({"指标": ["x"]})),
+    ]
+    assert sc.insert_gate_column(sheets, "20260919") == 1
+    assert "涨闸" in sheets[0][1].columns
+    assert sheets[0][1]["涨闸"].tolist() == ["过闸"]
+    for i in (1, 2, 3, 4):
+        assert "涨闸" not in sheets[i][1].columns
+
+
+def test_insert_gate_column_no_targets(monkeypatch):
+    sheets = [("市场FADE预测", pd.DataFrame({"指标": ["x"]}))]
+    assert sc.insert_gate_column(sheets, "20260919") == 0
+    _patch_gate(monkeypatch, pd.DataFrame({"symbol": ["600000"]}), [True])
+    assert sc.insert_gate_column(sheets, "20260919") == 0
 
 
 # ── insert_bigdrop_column (2026-09-16 用户令: 不另开页, 记进既有表的列) ──
