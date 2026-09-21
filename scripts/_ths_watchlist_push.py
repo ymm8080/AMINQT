@@ -391,9 +391,7 @@ def _oracle_codes() -> set[str] | None:
             return None
         data = json.loads(Path(files[-1]).read_text(encoding="utf-8"))
         return {
-            c
-            for c in (str(it.get("C", "")).strip() for it in data)
-            if CODE_RE.match(c)
+            c for c in (str(it.get("C", "")).strip() for it in data) if CODE_RE.match(c)
         }
     except Exception:
         return None
