@@ -8,6 +8,7 @@
 - ths_txt_path / write_ths_txt: 每行一个 6 位代码, WORM 命名含日期+module
 """
 
+import json
 import os
 import sys
 
@@ -516,6 +517,9 @@ def _patch_push_verify(monkeypatch, verify, idle=True, dialog=True):
         NativeWindowHandle=0,
         BoundingRectangle=types.SimpleNamespace(left=0, top=0, right=500, bottom=200),
     )
+    # 文件真值缺省关闭 → 走像素回退路线 (0921 前旧行为的测试不变);
+    # oracle 专属行为另有专门测试注入
+    monkeypatch.setattr(wmod, "_oracle_codes", lambda: None)
     monkeypatch.setattr(ui, "ensure_idle", lambda what="": idle)
     monkeypatch.setattr(ui, "ensure_watchlist_window", lambda: types.SimpleNamespace())
     # 掉登录自愈 (09-08) 会 taskkill hexin 真进程 — 测试必须中和: 空集=无可杀,
@@ -713,6 +717,130 @@ def test_push_grid_verdict_uses_candidate_constrained_read(
     txt, ok = _run_push(tmp_path, ["600001", "600002"])
     assert seen["candidates"] == ["600001", "600002"]
     assert ok is True
+    assert _ledger(txt) == {"600001": "landed", "600002": "landed"}
+
+
+# ---------------- 文件真值判据 SelfStockInfo.json (09-15 定案 + 0921 复证) ----------------
+
+
+def test_oracle_codes_parses_latest_account_json(tmp_path, monkeypatch):
+    """SelfStockInfo.json 解析: 多账号目录取 mtime 最新; 非法码剔除;
+    无文件/畸形 JSON → None (调用方退回像素路线)."""
+    import time as _t
+
+    from scripts import _ths_watchlist_push as wmod
+
+    root = tmp_path / "ths"
+    a1 = root / "acct_old"
+    a2 = root / "acct_new"
+    a1.mkdir(parents=True)
+    a2.mkdir(parents=True)
+    (a1 / "SelfStockInfo.json").write_text(
+        json.dumps([{"C": "600001", "M": 1, "P": 10.0, "T": "20260901"}]),
+        encoding="utf-8",
+    )
+    _t.sleep(0.05)
+    (a2 / "SelfStockInfo.json").write_text(
+        json.dumps(
+            [
+                {"C": "000572", "M": 0, "P": 5.5, "T": "20260921"},
+                {"C": "688433", "M": 1, "P": 33.0, "T": "20260921"},
+                {"C": "not-a-code", "M": 1, "P": 1.0, "T": "20260921"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(wmod, "THS_HEXIN_PATH", root / "hexin.exe")
+    assert wmod._oracle_codes() == {"000572", "688433"}
+    # 无账号目录 → None
+    (tmp_path / "empty").mkdir()
+    monkeypatch.setattr(wmod, "THS_HEXIN_PATH", tmp_path / "empty" / "hexin.exe")
+    assert wmod._oracle_codes() is None
+    # 畸形 JSON → None (fail-safe, 不抛)
+    monkeypatch.setattr(wmod, "THS_HEXIN_PATH", root / "hexin.exe")
+    (a1 / "SelfStockInfo.json").unlink()
+    (a2 / "SelfStockInfo.json").write_text("{broken", encoding="utf-8")
+    assert wmod._oracle_codes() is None
+
+
+def test_oracle_truth_skips_repaste_rounds(monkeypatch, tmp_path):
+    """0921 空转重贴根因修复: 文件真值说全在 → 第 1 轮推完即收工, 不再空等
+    SWEEP_REST_S 也不咨询会假缺席的像素读 (实弹曾对 34/34 全在报"缺 31")."""
+    from scripts import _ths_ui as ui
+    from scripts import _ths_watchlist_push as wmod
+
+    state = {"verify": 0, "pixel": 0}
+
+    def verify(dlg, row_codes):
+        state["verify"] += 1
+        return {c: True for c in row_codes if c is not None}
+
+    _patch_push_verify(monkeypatch, verify)
+    monkeypatch.setattr(wmod, "_oracle_codes", lambda: {"600001", "600002"})
+
+    def _fake_read(win, log=print, candidates=None):
+        state["pixel"] += 1
+        return []
+
+    monkeypatch.setattr(ui, "read_all_codes", _fake_read)
+    txt, ok = _run_push(tmp_path, ["600001", "600002"])
+    assert ok is True
+    assert state["verify"] == 1  # 仅第 1 轮 1 批, 无补推轮
+    assert state["pixel"] == 0  # 像素读全程不被咨询
+    assert _ledger(txt) == {"600001": "landed", "600002": "landed"}
+
+
+def test_oracle_missing_drives_targeted_repaste(monkeypatch, tmp_path):
+    """补推集合 = 文件真值缺谁贴谁 (不再像素全量重扫); 缺口补上后立即收工."""
+    from scripts import _ths_ui as ui
+    from scripts import _ths_watchlist_push as wmod
+
+    state = {"n": 0}
+    pasted = []
+
+    def verify(dlg, row_codes):
+        state["n"] += 1
+        round2 = state["n"] > 3
+        res = {c: (c == "600001") or round2 for c in row_codes if c is not None}
+        pasted.append(sorted(res))
+        return res
+
+    def oracle():
+        landed = {"600001"}
+        if state["n"] > 3:  # 补推轮批已点加入
+            landed.add("600002")
+        return landed
+
+    _patch_push_verify(monkeypatch, verify)
+    monkeypatch.setattr(wmod, "_oracle_codes", oracle)
+    monkeypatch.setattr(
+        ui, "read_all_codes", lambda win, log=print, candidates=None: []
+    )
+    txt, ok = _run_push(tmp_path, ["600001", "600002"])
+    assert ok is True
+    assert state["n"] == 4  # 轮1 ×3 + 补推轮 ×1
+    assert pasted == [["600001", "600002"], ["600002"], ["600002"], ["600002"]]
+    assert _ledger(txt) == {"600001": "landed", "600002": "landed"}
+
+
+def test_oracle_verdict_overrules_pixel_false_absence(monkeypatch, tmp_path, capsys):
+    """终判 = 文件真值: 像素读返回空 (假缺席) 不再制造假 manual/疑似掉登录."""
+    from scripts import _ths_ui as ui
+    from scripts import _ths_watchlist_push as wmod
+
+    def verify(dlg, row_codes):
+        return {c: True for c in row_codes if c is not None}
+
+    _patch_push_verify(monkeypatch, verify)
+    monkeypatch.setattr(wmod, "_oracle_codes", lambda: {"600001", "600002"})
+    monkeypatch.setattr(
+        ui, "read_all_codes", lambda win, log=print, candidates=None: []
+    )
+    txt, ok = _run_push(tmp_path, ["600001", "600002"])
+    assert ok is True
+    out = capsys.readouterr().out
+    assert "判据=SelfStockInfo.json" in out
+    assert "未入自选" not in out
     assert _ledger(txt) == {"600001": "landed", "600002": "landed"}
 
 

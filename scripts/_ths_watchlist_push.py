@@ -22,6 +22,7 @@ TXT 需要模型名和日期).
 用法: python scripts/_ths_watchlist_push.py [YYYYMMDD] [--gen-only] [--dry-run]
 """
 
+import json
 import os
 import re
 import sys
@@ -371,6 +372,33 @@ def _build_chunks(codes: list[str]) -> list[list[str]]:
     return chunks
 
 
+def _oracle_codes() -> set[str] | None:
+    """SelfStockInfo.json 文件真值 → 当前在自选的代码集 (09-15/0921 实弹定案).
+
+    像素读网格两种匹配模式都大面积**假缺席** (同一次实弹: 真值 21/21 vs 像素
+    6~15/21; 0921 又对 34/34 全在报"缺 31") — 拿它当补推集合/终判 = 空转重贴
+    已入码 + 假 manual 结果单. 文件 = THS 安装根下账号目录里的 SelfStockInfo.json
+    (形状 [{"C":代码,"M":市场,"P":价,"T":加自选日期},...]), 自选股变动即落盘;
+    纯文件读: 不动 UI, 不需要前台, 不受空闲闸限制. 多账号目录取 mtime 最新;
+    读不到/解析失败 → None (调用方退回像素路线, 宁可保守).
+    """
+    try:
+        files = sorted(
+            _glob.glob(str(THS_HEXIN_PATH.parent / "*" / "SelfStockInfo.json")),
+            key=os.path.getmtime,
+        )
+        if not files:
+            return None
+        data = json.loads(Path(files[-1]).read_text(encoding="utf-8"))
+        return {
+            c
+            for c in (str(it.get("C", "")).strip() for it in data)
+            if CODE_RE.match(c)
+        }
+    except Exception:
+        return None
+
+
 def _row_codes(chunk: list[str]) -> list[str | None]:
     """批内代码 → 期望行序 (核验映射用): 撞码股其后紧跟指数行槽位 None.
 
@@ -622,14 +650,17 @@ def _push_once(txt_path, codes: list[str]) -> tuple[bool, str]:
         return False, ""
 
     def missing_from_grid() -> list[str]:
-        """网格真值 → 还缺的码 (补推集合的唯一权威).
+        """还缺的码 (补推集合的唯一权威) = SelfStockInfo.json 文件真值.
 
-        对话框勾选判读是抽签且会假阳性 (09-05 "已核验 9/6" 被云端实查推翻;
-        09-15 11:36 实弹判读称全落袋而网格实为 1/21). 拿它当补推集合, "其实没
-        入"的码会被永久剔出重试 — 10 轮全烧在对话框唯一还反对的那只上, 其余
-        19 只再没被重贴过. 读网格要复制识别框先关 (它压在自选股窗上). 读失败
-        退回全量重贴 (宁可白贴一遍, 不可漏).
+        判据链定案 (09-15 破案 + 0921 复证): 像素网格读大面积假缺席 (34/34 全在
+        报"缺 31"), 对话框勾选判读会假阳性 — 文件真值是唯一可靠判据. 文件读不动
+        UI ⇒ 补推轮头先查它, 全在即收工 (不空等 SWEEP_REST_S 也不占空闲闸).
+        文件读不到 (未登录/目录变动) → 退回像素网格读 (旧路线): 读网格要复制
+        识别框先关 (它压在自选股窗上); 再读失败 → 全量重贴 (宁可白贴, 不可漏).
         """
+        oracle = _oracle_codes()
+        if oracle is not None:
+            return [c for c in codes if c not in oracle]
         dlg_old = ui.find_window("复制识别")
         if dlg_old is not None:
             ui.close_x(dlg_old)
@@ -645,6 +676,12 @@ def _push_once(txt_path, codes: list[str]) -> tuple[bool, str]:
     pending = list(codes)
     for sweep in range(PUSH_SWEEPS):
         if sweep:
+            # 补推集合以文件真值定 (09-15 定案 + 0921 复证), 不用像素网格读/对话框
+            # 勾选判读 — 见 missing_from_grid 注释. 文件读不动 UI: 缺码判据先行,
+            # 全在立即收工 (0921 实弹: 第 2-4 轮全在空转重贴 31 只已入码)
+            pending = missing_from_grid()
+            if not pending:
+                break
             # 轮间静默 (2026-09-08 自毒化修复): 上一轮自己的合成点击/剪贴板会让
             # 空闲闸把本轮误判成用户在场 → 旧码轮询一次即自灭. 先静默让合成输入
             # 衰减过 IDLE_MIN_S 再查闸 — 用户真回座照常立即中止
@@ -653,11 +690,6 @@ def _push_once(txt_path, codes: list[str]) -> tuple[bool, str]:
                 print(
                     f"[ths] 用户回座, 补推中止 (已落袋 {len(set(landed))}/{len(codes)})"
                 )
-                break
-            # 补推集合以网格真值定, 不用对话框勾选判读 (2026-09-15) — 见
-            # missing_from_grid 注释
-            pending = missing_from_grid()
-            if not pending:
                 break
             print(
                 f"[ths] 补推第 {sweep + 1}/{PUSH_SWEEPS} 轮, 缺 {len(pending)}: "
@@ -734,28 +766,34 @@ def _push_once(txt_path, codes: list[str]) -> tuple[bool, str]:
     if dlg is not None:
         ui.close_x(dlg)
     time.sleep(0.5)
-    # 判词 = PC 网格真值 (09-05 午前二次破案: 对话框像素+槽位映射的 "已核验
-    # 9/6" 被用户云端实查推翻; 活会话=加入即网格可见, 死会话=加入 no-op 网格
-    # 不变 → 网格读把假成功根治成真落袋或当场报警; 云端真值仍只有网页).
-    # 判词只需在今晚推的码里挑 → candidates 约束匹配 (09-05 接产线: 自由 OCR
-    # 8/0 形歧义冤枉过 3 只真落袋股, 688433 读成 600433 等)
+    # 判词 = SelfStockInfo.json 文件真值 (09-15 定案 + 0921 复证: 像素网格读大面积
+    # 假缺席, 34/34 全在报缺 31 → 假 manual/疑似掉登录全是读数假象). 文件读不到 →
+    # 退回 PC 网格像素读 (09-05 午前二次破案: 对话框判读 "已核验 9/6" 被云端实查
+    # 推翻; 活会话=加入即网格可见, 死会话=加入 no-op 网格不变; candidates 约束匹配
+    # 治自由 OCR 8/0 形歧义). 云端真值仍只有网页.
     landed_grid: list[str] = []
-    try:
-        grid_codes = ui.read_all_codes(win, candidates=codes)
-        landed_grid = [c for c in codes if c in set(grid_codes)]
-    except Exception as exc:
-        print(f"[ths] 网格真值核验未完成: {exc}")
+    oracle = _oracle_codes()
+    verdict_src = "SelfStockInfo.json"
+    if oracle is not None:
+        landed_grid = [c for c in codes if c in oracle]
+    else:
+        verdict_src = "像素网格"
+        try:
+            grid_codes = ui.read_all_codes(win, candidates=codes)
+            landed_grid = [c for c in codes if c in set(grid_codes)]
+        except Exception as exc:
+            print(f"[ths] 网格真值核验未完成: {exc}")
     dlg_landed = [c for c in dict.fromkeys(landed) if c not in landed_grid]
     missing = [c for c in codes if c not in landed_grid]
     ok = not missing
     if ok:
         print(
-            f"[ths] 已核验加入自选股 ({len(landed_grid)}/{len(codes)} 只), "
-            "云同步稍后到手机"
+            f"[ths] 已核验加入自选股 ({len(landed_grid)}/{len(codes)} 只, "
+            f"判据={verdict_src}), 云同步稍后到手机"
         )
     else:
         print(
-            f"[ths] 网格核验在位 {len(landed_grid)}/{len(codes)}"
+            f"[ths] 真值核验在位 {len(landed_grid)}/{len(codes)} (判据={verdict_src})"
             + (f": {' '.join(landed_grid)}" if landed_grid else "")
         )
         hint = (
