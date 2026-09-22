@@ -178,3 +178,46 @@ def test_build_universe_empty_stock_basic_returns_empty():
     universe, kept = build_universe(pd.DataFrame(), panel, "20260817")
     assert universe == set()
     assert kept == 0
+
+
+# ── 北交所剔除 (2026-09-22) ──
+
+
+def test_bj_dropped_with_stock_info():
+    # BJ 票 (920/43/83/87 前缀, 含 .BJ 后缀与裸码两种形态) 老股也剔
+    info = _stock_info(
+        {
+            "920367": ("北交所老股", "20230101"),
+            "430047": ("老三板转来", "20140101"),
+            "600519": ("贵州茅台", "20010827"),
+        }
+    )
+    out, dropped = apply_ingest_scan(
+        _frame(["920367.BJ", "430047", "835185.BJ", "871981", "600519"]),
+        info,
+        TRADE_DATE,
+        150,
+        _CAL,
+    )
+    assert dropped == 4
+    assert list(out["symbol"]) == ["600519"]
+
+
+def test_bj_dropped_without_stock_info():
+    # stock_info 空 → ST/次新扫描跳过, 但北交所剔除不依赖 stock_info
+    info = pd.DataFrame(columns=["name", "list_date"])
+    out, dropped = apply_ingest_scan(
+        _frame(["920367.BJ", "600519"]), info, TRADE_DATE, 150, _CAL
+    )
+    assert dropped == 1
+    assert list(out["symbol"]) == ["600519"]
+
+
+def test_build_universe_excludes_bj():
+    basic = pd.DataFrame(
+        {"symbol": ["600001", "920367.BJ", "430047"]},
+        index=["600001", "920367.BJ", "430047"],
+    )
+    panel = _panel_dates([("600001", "2026-08-14")])
+    universe, _ = build_universe(basic, panel, "20260817")
+    assert universe == {"600001"}
