@@ -782,7 +782,11 @@ def main() -> int:
             "[genious] 面板缺 %s 当日行 (自愈路径滞后?), 横盘提示/涨停提示 全空", target
         )
     s1 = s1.drop(
-        columns=[c for c in ("近10日涨幅", "昨日涨幅", "近20日入选次数", "board") if c in s1.columns]
+        columns=[
+            c
+            for c in ("近10日涨幅", "昨日涨幅", "近20日入选次数", "board")
+            if c in s1.columns
+        ]
     )
     _front = [c for c in ("横盘提示", "涨停提示") if c in s1.columns]
     s1 = s1[_front + [c for c in s1.columns if c not in _front]]

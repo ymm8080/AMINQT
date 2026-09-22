@@ -295,9 +295,7 @@ def main():
         doc.add_paragraph(
             f"交易日 {trade_date} · module {module} · {_sort_desc()} · {len(df)} 只"
         )
-        n_stall = (
-            int((df["横盘提示"] != "").sum()) if "横盘提示" in df.columns else 0
-        )
+        n_stall = int((df["横盘提示"] != "").sum()) if "横盘提示" in df.columns else 0
         if n_stall:
             doc.add_paragraph(
                 f"⚠ 横盘提示 {n_stall} 只 (近10日涨幅<2% 且 市场温度低=冷静市, 见 横盘提示 列)",

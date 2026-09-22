@@ -14,7 +14,10 @@ from config.settings import EXCLUDE_BJ_CODE_PREFIXES
 def bj_mask(symbols: pd.Series) -> pd.Series:
     """北交所代码掩码 (92/43/83/87 前缀, 容忍 .BJ 后缀)."""
     return (
-        symbols.astype(str).str.split(".").str[0].str.startswith(EXCLUDE_BJ_CODE_PREFIXES)
+        symbols.astype(str)
+        .str.split(".")
+        .str[0]
+        .str.startswith(EXCLUDE_BJ_CODE_PREFIXES)
     )
 
 

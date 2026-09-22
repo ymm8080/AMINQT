@@ -79,7 +79,9 @@ PULL_FLAG_MAX = -0.10  # [0913 撤删改标] 原闸档降为标注线: pull 低�
 OCC_WIN = 5  # 密度窗: 近 5 个上榜日
 OCC_MIN = 3  # 密度阈: 带内在榜 ≥3 天 (免额, 09-06 拍板)
 HIST_PATH = os.path.join(DATA_DIR, "prob10_density_history.parquet")
-CHIP_WR_LEVEL_SPLIT = 0.5  # 水位切分: 获利盘过半=深获利 (0922; 清单票分布中位0.534, 切分天然均衡)
+CHIP_WR_LEVEL_SPLIT = (
+    0.5  # 水位切分: 获利盘过半=深获利 (0922; 清单票分布中位0.534, 切分天然均衡)
+)
 CHIP_FLAG_LOW = "低获利，涨"  # 水位 < 0.5: 浅获利, 0922 回测前向更强
 CHIP_FLAG_HIGH = "高获利，跌"  # 水位 >= 0.5: 深获利, 更弱
 CYQ_PATH = os.path.join(DATA_DIR, "cyq_panel.parquet")
@@ -176,9 +178,7 @@ def load_chip_features(day_ts: pd.Timestamp) -> pd.DataFrame | None:
     wr = cq.pivot(index="date", columns="symbol", values="winner_ratio").sort_index()
     if len(wr.index) < 6:
         return None
-    return pd.DataFrame(
-        {"symbol": wr.columns.astype(str), "wr": wr.iloc[-1].values}
-    )
+    return pd.DataFrame({"symbol": wr.columns.astype(str), "wr": wr.iloc[-1].values})
 
 
 def chip_level_label(wr) -> np.ndarray:
@@ -507,7 +507,9 @@ def main() -> int:
     if chip is not None and len(picks) and "chip_flag" in picks.columns:
         n_low = int((picks["chip_flag"] == CHIP_FLAG_LOW).sum())
         n_high = int((picks["chip_flag"] == CHIP_FLAG_HIGH).sum())
-        print(f"[prob10dens] 筹码水位标注: {CHIP_FLAG_LOW} {n_low} 只 / {CHIP_FLAG_HIGH} {n_high} 只")
+        print(
+            f"[prob10dens] 筹码水位标注: {CHIP_FLAG_LOW} {n_low} 只 / {CHIP_FLAG_HIGH} {n_high} 只"
+        )
     # [0914 用户拍板闸位 B] ⑦趋势闸在终选: 带史/occ5 用原始带, occ5≥3 后滤当日
     # MA10↑ — 刚拐头票当天即可出 (B 独有 301220); A 带前闸判词
     # diag/density_gate_pos_ab_0913_*.json.

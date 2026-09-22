@@ -16,7 +16,12 @@ from scripts._stall_marker import _history_counts
 def test_csv_includes_stall_columns(tmp_path):
     s1 = pd.DataFrame(
         [
-            {"排名": 1, "symbol": "300911", "横盘提示": "近10日未涨·冷静市", "涨停提示": ""},
+            {
+                "排名": 1,
+                "symbol": "300911",
+                "横盘提示": "近10日未涨·冷静市",
+                "涨停提示": "",
+            },
             {"排名": 2, "symbol": "600001", "横盘提示": "", "涨停提示": "涨停次日不追"},
         ]
     )

@@ -134,13 +134,9 @@ def stall_marker(
     if base_rate is None:
         out["参与建议"] = ""
     elif base_rate < cfg["base_rate_max"]:
-        out["参与建议"] = (
-            f"市场温度 {base_rate:.0%}（偏低·对模型有利）: 正常参与"
-        )
+        out["参与建议"] = f"市场温度 {base_rate:.0%}（偏低·对模型有利）: 正常参与"
     else:
-        out["参与建议"] = (
-            f"市场温度 {base_rate:.0%}（偏高·追高拥挤）: 建议轻仓/降参与"
-        )
+        out["参与建议"] = f"市场温度 {base_rate:.0%}（偏高·追高拥挤）: 建议轻仓/降参与"
     hist_dir = str(STOCK_LIST_DIR) if hist_dir is None else str(hist_dir)
     counts = _history_counts(hist_dir, trade_date, hist_prefix, cfg["window_days"])
     out["近20日入选次数"] = out["symbol"].astype(str).map(counts).fillna(0)

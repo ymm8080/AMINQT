@@ -182,6 +182,7 @@ def test_build_universe_empty_stock_basic_returns_empty():
 
 # ── 北交所剔除 (2026-09-22) ──
 
+
 def test_bj_dropped_with_stock_info():
     # BJ 票 (920/43/83/87 前缀, 含 .BJ 后缀与裸码两种形态) 老股也剔
     info = _stock_info(
@@ -193,7 +194,10 @@ def test_bj_dropped_with_stock_info():
     )
     out, dropped = apply_ingest_scan(
         _frame(["920367.BJ", "430047", "835185.BJ", "871981", "600519"]),
-        info, TRADE_DATE, 150, _CAL,
+        info,
+        TRADE_DATE,
+        150,
+        _CAL,
     )
     assert dropped == 4
     assert list(out["symbol"]) == ["600519"]
