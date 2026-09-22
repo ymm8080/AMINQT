@@ -166,8 +166,8 @@ def write_md(
             f"交易日 {trade_date} · module {module} · {_sort_desc()} · {len(sub)} 只\n\n"
         )
         # 参与度提示 (2026-08-19): 高基线日模型整体负期望 → 建议降参与
-        if "advice" in df.columns and df["advice"].iloc[0]:
-            fh.write(df["advice"].iloc[0] + "\n\n")
+        if "参与建议" in df.columns and df["参与建议"].iloc[0]:
+            fh.write(df["参与建议"].iloc[0] + "\n\n")
         # 冲高回落提示 (2026-09-09): 昨日已冲高回落的票 — 易再回落, 勿追高
         if "fade_flag" in df.columns and (df["fade_flag"] != "").any():
             syms_f = df.loc[df["fade_flag"] != "", "symbol"].astype(str).tolist()
@@ -175,12 +175,13 @@ def write_md(
                 f"⚠ 昨日冲高回落 {len(syms_f)} 只 ({', '.join(syms_f)}): "
                 f"易再冲高回落, 勿追高\n\n"
             )
-        # 筹码派发提示 (2026-09-09 用户: 派发不删, 清单标注): 获利盘5日回落
-        if "chip_flag" in df.columns and (df["chip_flag"] != "").any():
-            syms_c = df.loc[df["chip_flag"] != "", "symbol"].astype(str).tolist()
+        # 筹码水位标注 (0922 用户令 "低获利，涨 & 高获利，跌"): 唯一有信息的筹码轴
+        # — 每票都有标注故不列名单, 只写读法; 空 = 无筹码数据
+        if "chip_flag" in df.columns:
             fh.write(
-                f"⚠ 筹码派发 {len(syms_c)} 只 ({', '.join(syms_c)}): "
-                f"获利盘5日回落 (chip_wr5<0), 慎追\n\n"
+                "ℹ 筹码标注 (chip_flag 列): 低获利，涨 = 获利盘水位<50% (浅获利, "
+                "0922 清单回测前向更强); 高获利，跌 = ≥50% (深获利, 更弱); "
+                "空 = 无筹码数据。chip_wr = 获利盘水位\n\n"
             )
         # 被整体退回的板块: 仍出清单, 醒目标注未接受原因 (不静默跳过)
         for b, r in (rejected or {}).items():
@@ -226,11 +227,11 @@ def main():
     df = pd.read_parquet(src)
     if "symbol" in df.columns:
         df["symbol"] = df["symbol"].astype(str)
-    # 筹码派发标注 (2026-09-09 用户拍板 "派发不删, 清单标注"; 09-05~09-09 曾为
-    # 删除闸, 09-07 prob10_pull 臂曾摘除): 获利盘5日回落 → chip_flag=派发 列,
-    # 不删票 — 标注为信息列, 两种 LEGACY_SELECTION 模式都带
+    # 筹码水位标注 (0922 用户令): chip_wr<0.5 → chip_flag="低获利，涨" / ≥0.5 →
+    # "高获利，跌" (原 wr5<0 派发标注判死改水位轴); 不删票 — 标注为信息列,
+    # 两种 LEGACY_SELECTION 模式都带
     df = apply_chip_gate(df, pd.Timestamp(trade_date))
-    # 滞涨标记 (2026-08-19 用户方案): 入选 + 近10日滞涨<2% + 近20日入选≥3 → 洗盘待爆发
+    # 横盘提示 (0922 中文口径): 近10日涨幅<2% 且 冷静市 → "近10日未涨·冷静市"
     df = stall_marker(df, trade_date, "legacy_stocklist_")
     module = resolve_module(df, trade_date)
     # 量价删查线 (2026-09-08 用户拍板): 清单内 amt_agree10 最高档真删不补齐
@@ -295,22 +296,22 @@ def main():
             f"交易日 {trade_date} · module {module} · {_sort_desc()} · {len(df)} 只"
         )
         n_stall = (
-            int((df["stall_flag"] != "").sum()) if "stall_flag" in df.columns else 0
+            int((df["横盘提示"] != "").sum()) if "横盘提示" in df.columns else 0
         )
         if n_stall:
             doc.add_paragraph(
-                f"⚠ 洗盘待爆发 {n_stall} 只 (入选+近10日滞涨<2%+近20日入选≥3, 见 stall_flag 列)",
+                f"⚠ 横盘提示 {n_stall} 只 (近10日涨幅<2% 且 市场温度低=冷静市, 见 横盘提示 列)",
             )
         n_fade = int((df["fade_flag"] != "").sum()) if "fade_flag" in df.columns else 0
         if n_fade:
             doc.add_paragraph(
                 f"⚠ 昨日冲高回落 {n_fade} 只 (见 fade_flag 列): 易再冲高回落, 勿追高",
             )
-        n_chip = int((df["chip_flag"] != "").sum()) if "chip_flag" in df.columns else 0
-        if n_chip:
+        if "chip_flag" in df.columns:
             doc.add_paragraph(
-                f"⚠ 筹码派发 {n_chip} 只 (见 chip_flag/chip_wr5 列): "
-                "获利盘5日回落, 慎追",
+                "ℹ 筹码标注 (chip_flag 列): 低获利，涨 = 获利盘水位<50% (浅获利, "
+                "0922 清单回测前向更强); 高获利，跌 = ≥50% (深获利, 更弱); "
+                "空 = 无筹码数据",
             )
         n_risk = (
             int((df["fade_risk"] == "高").sum()) if "fade_risk" in df.columns else 0

@@ -4,7 +4,8 @@
 
 .DESCRIPTION
     Runs after the 19:15 fetch + 19:45 announcement pipelines so today's V3 panel
-    data is in place (2026-08-12 用户改档: 抓取 19:15 / 公告 19:45 / 自动化 20:15 北京).
+    data is in place (2026-08-12 用户改档: 抓取 19:15 / 公告 19:45; 2026-09-21 用户改档:
+    GENIOUS 20:30 先行, 自动化挪 23:30 北京 — 夜间空闲利于 THS 推送补跑).
     Orchestrates (scripts/run_daily_automation.py):
       [refresh]  parallel 3y checkpoints rebuild
       [retrain]  legacy main+dual weekly full retrain (Fridays only, OOS gate)
@@ -29,7 +30,7 @@ function New-AmqTaskXml {
     param(
         [string]$Description,
         [string]$ScriptPath,
-        [string]$TriggerTime = "20:15:00"
+        [string]$TriggerTime = "23:30:00"
     )
 
     $arguments = '"{0}"' -f $ScriptPath
@@ -89,7 +90,7 @@ function Register-AmqTask {
         [string]$Name,
         [string]$ScriptPath,
         [string]$Description,
-        [string]$TriggerTime = "20:15:00"
+        [string]$TriggerTime = "23:30:00"
     )
 
     Unregister-ScheduledTask -TaskName $Name -Confirm:$false -ErrorAction SilentlyContinue
@@ -107,12 +108,12 @@ function Register-AmqTask {
     }
 }
 
-# --- Four-module automation: 20:15 daily, after 19:15 fetch + 19:45 announcement ---
+# --- Four-module automation: 23:30 daily, after 19:15 fetch + 19:45 announcement + 20:30 GENIOUS ---
 Register-AmqTask `
     -Name "AMINQT-DailyAutomation-2330" `
     -ScriptPath "$projectRoot\scripts\run_daily_automation.py" `
-    -Description "AMINQT four-module daily automation at 20:15 Asia/Shanghai — legacy main/dual weekly retrain (Fri) + parallel sniper/fusion regenerate + legacy stock list generation and delivery. Requires 19:15 fetch and 19:45 announcement to have run." `
-    -TriggerTime "20:15:00"
+    -Description "AMINQT four-module daily automation at 23:30 Asia/Shanghai — legacy main/dual weekly retrain (Fri) + parallel sniper/fusion regenerate + legacy stock list generation + combined xlsx (LEGACY/PARALLEL/SLOW_BULL/density) + THS makeup pushes. Requires 19:15 fetch and 19:45 announcement to have run." `
+    -TriggerTime "23:30:00"
 
 # --- Summary ---
 Write-Host ""

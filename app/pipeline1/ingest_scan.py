@@ -1,4 +1,4 @@
-"""V3 入库扫描 (ingest gate): 剔 ST/*ST 股 和 上市不足 N 天的新股.
+"""V3 入库扫描 (ingest gate): 剔 ST/*ST 股、上市不足 N 天的新股、北交所 (2026-09-22).
 
 _daily_fetch.py 在追加当日行前调用 apply_ingest_scan, 使 ST 股与次新股
 不进入 V3 面板 — universe 在入口处收敛, 而非靠面板列 (is_st/list_days)
@@ -8,6 +8,14 @@ _daily_fetch.py 在追加当日行前调用 apply_ingest_scan, 使 ST 股与次�
 import pandas as pd
 
 from app.core.universe_manager import name_is_st
+from config.settings import EXCLUDE_BJ_CODE_PREFIXES
+
+
+def bj_mask(symbols: pd.Series) -> pd.Series:
+    """北交所代码掩码 (92/43/83/87 前缀, 容忍 .BJ 后缀)."""
+    return (
+        symbols.astype(str).str.split(".").str[0].str.startswith(EXCLUDE_BJ_CODE_PREFIXES)
+    )
 
 
 def build_universe(stock_basic, panel_dates, trade_date):
@@ -27,7 +35,11 @@ def build_universe(stock_basic, panel_dates, trade_date):
         (universe, kept) — kept = 仅因替换历史日并入、不在 stock_basic 中的
         symbol 数 (退市/暂停上市行保护).
     """
-    universe = set(stock_basic.index)
+    universe = {
+        s
+        for s in stock_basic.index
+        if not str(s).split(".")[0].startswith(EXCLUDE_BJ_CODE_PREFIXES)
+    }
     max_date = panel_dates["date"].max()
     kept = 0
     if pd.Timestamp(trade_date) <= max_date:
@@ -57,8 +69,12 @@ def apply_ingest_scan(df, stock_info, trade_date, min_list_days, trade_cal):
     Returns:
         (filtered_df, dropped_count)
     """
+    # 北交所剔除先于 ST/次新扫描 (2026-09-22): 与 stock_info/日历可用性无关.
+    n0 = len(df)
+    df = df[~bj_mask(df["symbol"])]
+    bj_dropped = n0 - len(df)
     if stock_info is None or len(stock_info) == 0:
-        return df, 0
+        return df, bj_dropped
     if trade_cal is None or len(trade_cal) == 0:
         raise ValueError(
             "trade_cal required when stock_info is non-empty (trading-day age)"
@@ -75,4 +91,4 @@ def apply_ingest_scan(df, stock_info, trade_date, min_list_days, trade_cal):
     right = dts.searchsorted(pd.Timestamp(trade_date), side="right")
     list_days = right - left
     keep = (~is_st) & (list_days >= min_list_days)
-    return df[keep], int((~keep).sum())
+    return df[keep], bj_dropped + int((~keep).sum())
