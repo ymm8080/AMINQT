@@ -224,6 +224,19 @@ def load_panel() -> pd.DataFrame:
     )
     del slices
     gc.collect()
+    # 打分域北交所剔除 (2026-09-22): BJ 08-14 随宇宙解冻入板, 模型零 BJ 训练
+    # 样本 → 分数=无验证外推 (fusion top-10 一度 9/10 为 BJ). 此白名单兜底任何
+    # 上游漏网; 历史行已在面板/检查点侧清除 (tmp_t/_0922_purge_bj_rows.py).
+    _n0 = len(work)
+    _ok = ~work["symbol"].astype(str).str.split(".").str[0].str.startswith(
+        ("92", "43", "83", "87")
+    )
+    if int((~_ok).sum()):
+        logger.warning(
+            f"打分域剔除北交所行 {int((~_ok).sum()):,} / {_n0:,} "
+            f"({work.loc[~_ok, 'symbol'].nunique()} 只) — 沪深白名单兜底"
+        )
+    work = work.loc[_ok]
     work, gate = tradability_gate(work)
     work["board"] = work["symbol"].map(board_of)
     # ADX 慢牛: 一次性加指标/打分因子列 + 买卖信号列 + 硬门槛掩码 (全窗口 PIT)
