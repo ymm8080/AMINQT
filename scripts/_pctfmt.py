@@ -19,7 +19,8 @@ import numpy as np
 import pandas as pd
 
 # parallel_shortlist_*.csv: 预测幅度/概率/超额/实现收益/市场基线 (0..1 比例)
-# 不格式化: score/norm_*/rank_blend/sel_20d 等复合分与内部秩, 列位语义不是比例
+# 不格式化: score/rank_blend/sel_20d 等复合分与内部秩, 列位语义不是比例
+# (norm_g/norm_p 中间列 0922 用户令起不落交付)
 PCT_COLS_PARALLEL = (
     "pred_mag_3d",
     "pred_prob_3d",
@@ -37,7 +38,10 @@ PCT_COLS_PARALLEL = (
     "ret_10d",
     "ret_1d",
     "market_base_rate",
-    "chip_wr5",
+    "近10日涨幅",
+    "昨日涨幅",
+    "市场温度",
+    "chip_wr",
 )
 
 # legacy_stocklist_*.csv: 当日涨跌(day_change 为比例, 与 Tushare pctChg 不同)、
@@ -64,7 +68,10 @@ PCT_COLS_LEGACY = (
     "ret_10d",
     "ret_1d",
     "market_base_rate",
-    "chip_wr5",
+    "近10日涨幅",
+    "昨日涨幅",
+    "市场温度",
+    "chip_wr",
 )
 
 _NA_STR = {"", "nan", "none", "nat", "null"}

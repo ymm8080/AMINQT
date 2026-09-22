@@ -54,6 +54,12 @@ from config.settings import (  # noqa: E402
     PROJECT_ROOT,
     STOCK_LIST_DIR,
 )
+from scripts._prob10_density_shadow import (  # noqa: E402
+    CHIP_FLAG_HIGH,
+    CHIP_FLAG_LOW,
+    apply_chip_gate,
+)
+from scripts._stall_marker import stall_marker  # noqa: E402
 
 LOG_DIR = Path(PROJECT_ROOT) / "logs"
 DIAG_DIR = Path(PROJECT_ROOT) / "diag"
@@ -61,9 +67,11 @@ WAIT_TICK_S = 60
 HEAL_TIMEOUT_S = 180  # 自拉硬超时; 超时=大声失败, 不留挂死实例 (见 _heal_rows_bounded)
 
 BANNER1 = (
-    "GENIOUS 冠军二段 — 段位全留, 【涨闸】列 (表内第 3 列) 标出其中哪几只是 右侧拐头+缩量。"
+    "GENIOUS 冠军二段 — 段位全留, 【涨闸】列标出其中哪几只是 右侧拐头+缩量。"
     "OOS f10+5%止损口径: 过闸全取 胜率58%/期望+5.2%/大涨15.6% (低动量子集胜率76%); "
     "所以**只标注、不删票** — 过闸那几只是窄名单, 其余仍按层序读。"
+    "【横盘提示】= 近10日未涨+冷静市 (0922 消融: 日闸真边, 横盘是条件性红利); "
+    "【市场温度】<73% = 冷静市 (对模型有利), ≥73% 建议轻仓 (表尾 参与建议 列)。"
     "「当月样本口径」列 = 该层**当月实绩** (滚动重算, 月后补全); 扣0.7%往返费后火群整体≈0, 钱在层头部, "
     "请按层序自上而下读。执行档: 温火/质量层=T+1开盘进; 涨停/深跌层=T+1仍涨确认→T+1收盘进"
 )
@@ -439,7 +447,10 @@ def write_stocklist_csv(
         return None
     stamp = datetime.datetime.now().strftime("%H%M%S")
     fp = Path(list_dir) / f"genious_stocklist_{date}__{stamp}.csv"
-    s1[["排名", "symbol"]].to_csv(fp, index=False)
+    # 0922 用户令: 边车也带记录 — 横盘提示/涨停提示 追加在 symbol 后 (推送侧按列名
+    # 读 symbol, 加列不影响; 按 _norm_sym 归一的清单键在第一列不动)
+    cols = ["排名", "symbol"] + [c for c in ("横盘提示", "涨停提示") if c in s1.columns]
+    s1[cols].to_csv(fp, index=False)
     return fp
 
 
@@ -745,6 +756,47 @@ def main() -> int:
             "BIGDROP SCAN",
             s1["symbol"].map(lambda s: scan.get(_norm_sym(s), BIGDROP_UNSCORED)),
         )
+    # 筹码水位标注 (0922 用户令, 第四线同源): chip_wr<0.5 低获利，涨 / ≥0.5 高获利，跌。
+    # 冠军表 0919 精简后不含获利盘数值列, 故走与密度/LEGACY/PARALLEL 同一条
+    # apply_chip_gate (load_chip_features 读 cyq_panel) — 四线同源同切分, 勿在此
+    # 另写阈值; cyq 缺 → fail-open 只不加列, 名单一只不少 (同 BIGDROP 旁路契约)。
+    chipped = apply_chip_gate(s1, pd.Timestamp(target))
+    if "chip_flag" in chipped.columns:
+        flags = chipped["chip_flag"].to_numpy()
+        s1.insert(1 if "BIGDROP SCAN" in s1.columns else 0, "筹码标注", flags)
+        log.info(
+            "[genious] 筹码水位标注: %s %d / %s %d / 空 %d",
+            CHIP_FLAG_LOW,
+            int((flags == CHIP_FLAG_LOW).sum()),
+            CHIP_FLAG_HIGH,
+            int((flags == CHIP_FLAG_HIGH).sum()),
+            int((flags == "").sum()),
+        )
+    # 横盘提示 (0922 用户令: 最终 STOCKLIST 必须带记录, 光日志无用): 近10日涨幅<2%
+    # 且 冷静市 → "近10日未涨·冷静市". 股票级附加列 insert(0) 放最前 (同 BIGDROP SCAN
+    # 惯例); 日级 市场温度/参与建议 每行同值 → 垫表尾; 中间量 (涨幅/入选次数/board)
+    # 不进表。genious 史自 0918 起, "近20日入选次数" 已不参与判定纯参考。
+    s1 = stall_marker(s1, target, "genious_stocklist_")
+    if len(s1) and "近10日涨幅" in s1.columns and s1["近10日涨幅"].isna().all():
+        log.warning(
+            "[genious] 面板缺 %s 当日行 (自愈路径滞后?), 横盘提示/涨停提示 全空", target
+        )
+    s1 = s1.drop(
+        columns=[
+            c
+            for c in ("近10日涨幅", "昨日涨幅", "近20日入选次数", "board")
+            if c in s1.columns
+        ]
+    )
+    _front = [c for c in ("横盘提示", "涨停提示") if c in s1.columns]
+    s1 = s1[_front + [c for c in s1.columns if c not in _front]]
+    n_stall = int((s1["横盘提示"] != "").sum()) if len(s1) else 0
+    _adv = s1["参与建议"].iloc[0] if len(s1) and "参与建议" in s1.columns else ""
+    _temp = s1["市场温度"].iloc[0] if len(s1) and "市场温度" in s1.columns else None
+    if _temp is not None and pd.isna(_temp):
+        _temp = None
+    log.info("[genious] 横盘提示 %d 只; %s", n_stall, _adv)
+
     counts = s1["层"].value_counts().to_dict()
     n_pass = int((s1["涨闸"] == "过闸").sum())
     log.info(
@@ -765,6 +817,8 @@ def main() -> int:
             s1=len(s1),
             s1_pass=n_pass,
             layers=counts,
+            n_stall=n_stall,
+            market_temp=_temp,
         )
         return 0
 
@@ -780,6 +834,8 @@ def main() -> int:
         s1=len(s1),
         s1_pass=n_pass,
         layers=counts,
+        n_stall=n_stall,
+        market_temp=_temp,
     )
     print(str(fp))
     if GENIOUS.get("push_to_ths") and csv_fp is not None and not args.no_push:

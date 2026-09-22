@@ -1160,7 +1160,8 @@ def add_score(df: pd.DataFrame) -> pd.DataFrame:
     out["score_w"] = sum(
         hw[h] * (gw * out[f"norm_g_{h}"] + pw * out[f"norm_p_{h}"]) for h in HORIZONS
     )
-    return out
+    # norm_g/norm_p 是 score_w 的中间量, 不落交付 (0922 用户令 "norm也删掉")
+    return out.drop(columns=[f"norm_{k}_{h}" for h in HORIZONS for k in ("g", "p")])
 
 
 def unlock_hard_filter(res: pd.DataFrame, ref_date) -> pd.DataFrame:
@@ -1588,6 +1589,10 @@ def build_summary(res: pd.DataFrame, stats: dict, sel_date: pd.Timestamp) -> lis
         "(旧 P(MFE>0) 85-99% 已废, 2026-08-05 用户定案)."
     )
     lines.append(
+        "筹码标注 (chip_flag): 低获利，涨 = 获利盘水位<50% (浅获利, 0922 全池回测前向更强) / "
+        "高获利，跌 = ≥50% (深获利, 更弱) / 空 = 无筹码数据 (不删票); chip_wr = 获利盘水位 (0~1)."
+    )
+    lines.append(
         "建议: 优先 score_w 高者 (预期涨幅×概率加权); 系统级期望/胜率见 SUMMARY 段."
     )
     return lines
@@ -1604,10 +1609,6 @@ def write_docx(
 ) -> None:
     if Document is None:
         return
-    # stall_flag 列对外显示名 = 滞涨标记 (0919 用户令); 内部键不变, 写出前改名
-    res = res.rename(columns={"stall_flag": "滞涨标记"})
-    if merged is not None:
-        merged = merged.rename(columns={"stall_flag": "滞涨标记"})
     doc = Document()
     title = f"STOCK LIST {sel_date:%Y%m%d}"
     if module:
@@ -1626,7 +1627,7 @@ def write_docx(
             "module",
             "in_t5",
             "过门",
-            "滞涨标记",
+            "横盘提示",
         ] + [f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")]
         t = doc.add_table(rows=1, cols=len(mcols))
         for j, c in enumerate(mcols):
@@ -1638,7 +1639,7 @@ def write_docx(
             cells[2].text = str(r["systems"])
             cells[3].text = "Y" if bool(r["in_t5"]) else ""
             cells[4].text = str(r["过门"])
-            cells[5].text = str(r.get("滞涨标记", ""))
+            cells[5].text = str(r.get("横盘提示", ""))
             j = 6
             for h in HORIZON_ORDER:
                 cells[j].text = (
@@ -1669,10 +1670,10 @@ def write_docx(
             "module",
             "co_occur",
             "过门",
-            "滞涨标记",
+            "横盘提示",
         ]
         + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
-        + ["chip_wr5", "chip_flag"]
+        + ["chip_wr", "chip_flag"]
     )
     for board in ("main", "dual"):
         b = res[res["board"] == board]
@@ -1687,6 +1688,10 @@ def write_docx(
                 f"{cut} · 按 10d 预期幅度降序(全局质量排名, 非板块内排名) · 仅正预期涨幅股 · "
                 f"预期涨幅(MFE)=最新score经OOS每股独立线性校准的今后表现, 每股唯一; 达到概率=逐股自然概率 P(该股达到固定绝对目标)"
             )
+            doc.add_paragraph(
+                "筹码标注 (chip_flag): 低获利，涨 = 获利盘水位<50% (浅获利, 回测前向更强) / "
+                "高获利，跌 = ≥50% (深获利, 更弱) / 空 = 无筹码数据; chip_wr = 获利盘水位 (0~1)"
+            )
             t = doc.add_table(rows=1, cols=len(cols))
             for j, c in enumerate(cols):
                 t.rows[0].cells[j].text = c
@@ -1696,7 +1701,7 @@ def write_docx(
                 cells[1].text = str(r["systems"])
                 cells[2].text = "★" if bool(r["co_occur"]) else ""
                 cells[3].text = str(r["过门"])
-                cells[4].text = str(r.get("滞涨标记", ""))
+                cells[4].text = str(r.get("横盘提示", ""))
                 for j, h in enumerate(HORIZONS):
                     cells[5 + 2 * j].text = (
                         "n/a"
@@ -1708,9 +1713,9 @@ def write_docx(
                         if pd.isna(r[f"pred_prob_{h}"])
                         else f"{float(r[f'pred_prob_{h}']):.2%}"
                     )
-                wr5 = r.get("chip_wr5")
+                wrl = r.get("chip_wr")
                 cells[5 + 2 * len(HORIZONS)].text = (
-                    "n/a" if wr5 is None or pd.isna(wr5) else f"{float(wr5):+.2%}"
+                    "n/a" if wrl is None or pd.isna(wrl) else f"{float(wrl):.2%}"
                 )
                 fl = r.get("chip_flag")
                 cells[6 + 2 * len(HORIZONS)].text = (
@@ -1729,10 +1734,6 @@ def write_xlsx(
 ) -> None:
     if Workbook is None:
         return
-    # stall_flag 列对外显示名 = 滞涨标记 (0919 用户令); 内部键不变, 写出前改名
-    res = res.rename(columns={"stall_flag": "滞涨标记"})
-    if merged is not None:
-        merged = merged.rename(columns={"stall_flag": "滞涨标记"})
     wb = Workbook()
     hdr_fill = PatternFill("solid", fgColor="D9E1F2")
     bold = Font(bold=True)
@@ -1775,16 +1776,16 @@ def write_xlsx(
             "module",
             "co_occur",
             "过门",
-            "滞涨标记",
+            "横盘提示",
         ]
         + [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")]
         + [
-            "chip_wr5",
+            "chip_wr",
             "chip_flag",
         ]
     )
     pct_cols = [f"{k}_{h}" for h in HORIZONS for k in ("pred_mag", "pred_prob")] + [
-        "chip_wr5"
+        "chip_wr",
     ]
     if merged is not None and not merged.empty:
         mcols = [
@@ -1793,13 +1794,13 @@ def write_xlsx(
             "module",
             "in_t5",
             "过门",
-            "滞涨标记",
+            "横盘提示",
         ] + [f"{k}_{h}" for h in HORIZON_ORDER for k in ("pred_mag", "pred_prob")]
         m = merged.copy().rename(columns={"systems": "module"})
-        # [2026-08-20] merged 帧无滞涨标记 (stall_marker 只作用于 res) → 补空列,
+        # [2026-08-20] merged 帧无横盘提示 (stall_marker 只作用于 res) → 补空列,
         # 防 KeyError 断掉 xlsx 落盘
-        if "滞涨标记" not in m.columns:
-            m["滞涨标记"] = ""
+        if "横盘提示" not in m.columns:
+            m["横盘提示"] = ""
         _sheet(
             wb.create_sheet("合并排名"),
             m[mcols],
@@ -1931,8 +1932,8 @@ def main() -> int:
     res = rank_and_truncate(res)
     # 迟滞滞留 (2026-08-26): 昨日上榜仍在带内 → 滞留行 (降换手, 不改新选)
     res = hysteresis_keep(res, full_res, str(sel_date.date()).replace("-", ""))
-    # 筹码派发标注 (09-05 删 → 09-07 撤闸 → 09-09 用户拍板三线统一改标注):
-    # 获利盘5日回落 → chip_flag=派发 列, 不删票
+    # 筹码水位标注 (09-05 删 → 09-09 改标注 → 0922 用户令改获利盘水位轴):
+    # chip_wr<0.5 → chip_flag="低获利，涨" / ≥0.5 → "高获利，跌" 列, 不删票
     if PARALLEL_CHIP_GATE.get("enable", False):
         res = apply_chip_gate(res, sel_date, flush=True)
     # 报告幅度锚定 (2026-08-14): 排名键 cal_n=21 保留, 报告 pred_ret_{h}/pred_mag_10d
@@ -1974,23 +1975,23 @@ def main() -> int:
 
     suffix = _module_suffix(module)
     stamp = str(sel_date.date()).replace("-", "")
-    # 滞涨标记 (2026-08-19 用户方案): 入选 + 近10日滞涨<2% + 近20日入选≥3 → 洗盘待爆发
+    # 横盘提示 (0922 中文口径): 近10日涨幅<2% 且 冷静市 → "近10日未涨·冷静市"
     res = stall_marker(res, stamp, "parallel_shortlist_")
-    n_stall = int((res["stall_flag"] != "").sum())
+    n_stall = int((res["横盘提示"] != "").sum())
     if n_stall:
         print(
-            f"[stall] 洗盘待爆发 {n_stall} 只: "
-            f"{', '.join(res.loc[res['stall_flag'] != '', 'symbol'].astype(str))}",
+            f"[stall] 横盘提示 {n_stall} 只: "
+            f"{', '.join(res.loc[res['横盘提示'] != '', 'symbol'].astype(str))}",
             flush=True,
         )
     # 参与度提示 (2026-08-19): 高基线日模型整体负期望 → 建议降参与
-    if not res.empty and "advice" in res.columns and res["advice"].iloc[0]:
-        summary = summary[:1] + [res["advice"].iloc[0]] + summary[1:]
-    n_lim = int((res["limit_flag"] != "").sum()) if "limit_flag" in res.columns else 0
+    if not res.empty and "参与建议" in res.columns and res["参与建议"].iloc[0]:
+        summary = summary[:1] + [res["参与建议"].iloc[0]] + summary[1:]
+    n_lim = int((res["涨停提示"] != "").sum()) if "涨停提示" in res.columns else 0
     if n_lim:
         print(
             f"[limit] 涨停次日不追 {n_lim} 只: "
-            f"{', '.join(res.loc[res['limit_flag'] != '', 'symbol'].astype(str))}",
+            f"{', '.join(res.loc[res['涨停提示'] != '', 'symbol'].astype(str))}",
             flush=True,
         )
     # 概率展示层再校准 (2026-08-29): 板内常数乘法压回实得命中率, 排序/闸不动 (fail-open)

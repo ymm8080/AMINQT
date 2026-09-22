@@ -104,8 +104,8 @@ def write_md(df: pd.DataFrame, path: str, rejected: dict[str, str]) -> None:
         "pred_q50_3d",
         "pred_q50_5d",
         "pain_prob",
-        "stall_flag",
-        "limit_flag",
+        "横盘提示",
+        "涨停提示",
         "model_version",
     ]
     cols = [c for c in cols if c in df.columns]
@@ -123,8 +123,8 @@ def write_md(df: pd.DataFrame, path: str, rejected: dict[str, str]) -> None:
             f"E7 闸3 = 3d/5d 中位数均正 · 排序 = pred_ret_10d 降序 "
             f"(生产 _rank_by_magnitude 口径) · {len(df)} 只\n\n"
         )
-        if "advice" in df.columns and len(df) and df["advice"].iloc[0]:
-            fh.write(df["advice"].iloc[0] + "\n\n")
+        if "参与建议" in df.columns and len(df) and df["参与建议"].iloc[0]:
+            fh.write(df["参与建议"].iloc[0] + "\n\n")
         for b, r in rejected.items():
             fh.write(f"⚠ {b} 未接受 (被退回): {r} — 当日未出股\n\n")
         fh.write(sub.to_markdown(index=False))
@@ -144,10 +144,10 @@ def write_docx(df: pd.DataFrame, path: str, rejected: dict[str, str]) -> bool:
         f"交易日 {TRADE_STR} · module {MODULE} (08-20 重训, 训练含 8/19 标签非 PIT) · "
         f"E7 闸3 = 3d/5d 中位数均正 · 排序 = pred_ret_10d 降序 · {len(df)} 只"
     )
-    n_stall = int((df["stall_flag"] != "").sum()) if "stall_flag" in df.columns else 0
+    n_stall = int((df["横盘提示"] != "").sum()) if "横盘提示" in df.columns else 0
     if n_stall:
         doc.add_paragraph(
-            f"⚠ 洗盘待爆发 {n_stall} 只 (入选+近10日滞涨<2%+近20日入选≥3, 见 stall_flag 列)",
+            f"⚠ 横盘提示 {n_stall} 只 (近10日涨幅<2% 且 冷静市, 见 横盘提示 列)",
         )
     for b, r in rejected.items():
         p = doc.add_paragraph()
@@ -166,7 +166,7 @@ def write_docx(df: pd.DataFrame, path: str, rejected: dict[str, str]) -> bool:
         "pred_q50_3d",
         "pred_q50_5d",
         "pain_prob",
-        "stall_flag",
+        "横盘提示",
         "model_version",
     ]
     cols = [c for c in cols if c in df.columns]
@@ -320,16 +320,16 @@ def main() -> int:
     gc.collect()
     marked = stall_marker(final, TRADE_STR, "legacy_stocklist_", panel_path=tmp_pq)
     tmp_pq.unlink(missing_ok=True)
-    n_stall = int((marked["stall_flag"] != "").sum())
-    n_lim = int((marked["limit_flag"] != "").sum())
+    n_stall = int((marked["横盘提示"] != "").sum())
+    n_lim = int((marked["涨停提示"] != "").sum())
     log(
         f"[7] stall_marker: stall={n_stall} 只, limit={n_lim} 只, "
-        f"market_base_rate={marked['market_base_rate'].iloc[0] if len(marked) else None}"
+        f"市场温度={marked['市场温度'].iloc[0] if len(marked) else None}"
     )
     report["n_stall"] = n_stall
     report["n_limit"] = n_lim
     report["market_base_rate"] = (
-        float(marked["market_base_rate"].iloc[0]) if len(marked) else None
+        float(marked["市场温度"].iloc[0]) if len(marked) else None
     )
 
     # ---------- 8. 交付 (WORM) ----------

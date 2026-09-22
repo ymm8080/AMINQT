@@ -2,8 +2,9 @@
 
 口径锁死 (2026-09-06 用户拍板 "把密度王替换成 L3 TOP20这条线", 勿静默改):
   名单 = 每板 prob 降序前20带 + 回撤闸 (-10%) + 带内密度 occ5≥3
-  + 派发标注 (09-09 用户拍板 "派发不删, 清单标注": 获利盘5日回落 wr5<0 →
-    chip_flag=派发 列, 不删票; 数据缺 fail-open);
+  + 筹码水位标注 (0922 用户令 "SET VALUE TO 低获利，涨 & 高获利，跌":
+    获利盘水位 chip_wr<0.5 → chip_flag="低获利，涨" / ≥0.5 → "高获利，跌",
+    不删票; 数据缺 fail-open; 原 wr5<0 派发标注同日判死改水位轴);
   免额 (额不作闸, amt 仅展示列) — 09-06 拍板 "去额";
   belief_down = prob − 3个上榜日前 prob (标签列, 非闸)。
 """
@@ -15,7 +16,9 @@ import pandas as pd
 
 from scripts._prob10_density_shadow import (
     _COLS,
-    CHIP_WR5_MAX,
+    CHIP_FLAG_HIGH,
+    CHIP_FLAG_LOW,
+    CHIP_WR_LEVEL_SPLIT,
     OCC_MIN,
     OCC_WIN,
     PULL_FLAG_MAX,
@@ -23,6 +26,7 @@ from scripts._prob10_density_shadow import (
     TOP_N,
     TREND_MA10_GATE,
     apply_wr5_gate,
+    chip_level_label,
     density_picks,
     load_chip_features,
     prob10_membership,
@@ -257,12 +261,14 @@ def test_constants_locked():
     # 0913 用户令撤回撤闸: PULL_FLOOR −0.10→−1.0 等效关闭, 原闸档降为标注线
     assert (TOP_N, PULL_FLOOR, OCC_WIN, OCC_MIN) == (20, -1.0, 5, 3)
     assert PULL_FLAG_MAX == -0.10  # 0913 撤删改标: 标注线=原闸档
-    assert CHIP_WR5_MAX == 0.0  # wr5<0 即标派发 (09-09 标注口径; 原 cost5 组合条件废除)
+    # 0922 水位切分: 获利盘过半=深获利 (清单票分布中位 0.534, 切分天然均衡)
+    assert CHIP_WR_LEVEL_SPLIT == 0.5
+    assert CHIP_FLAG_LOW == "低获利，涨" and CHIP_FLAG_HIGH == "高获利，跌"
     assert TREND_MA10_GATE is True  # 0914 用户拍板闸位 B: occ5 后终选滤当日 MA10↑
     assert "amt" in _COLS  # 免额后 amt 保留为展示列 (不作闸)
-    assert {"chip_wr5", "chip_flag", "pull_flag"} <= set(
+    assert {"chip_wr", "chip_flag", "pull_flag"} <= set(
         _COLS
-    )  # 09-09 派发 + 0913 回撤标注列交付
+    )  # 0922 水位/标注 (wr5 列同日退役) + 0913 回撤列交付
 
 
 def test_trend_rising_pure():
@@ -278,83 +284,111 @@ def test_trend_rising_pure():
     assert trend_rising(ramp.iloc[:1]) is None  # 行不足 fail-open
 
 
-def _chip(**over):
-    """派发标注夹具: 默认全股健康 (获利盘5日升); over 按 symbol 覆盖 wr5."""
+def _chip(wr=None):
+    """水位标注夹具: 默认水位 NaN (cyq 缺); wr 按 symbol 覆盖."""
     syms = ["600001", "600002", "600003", "300005"]
-    rows = [(s, over.get(s, 0.05)) for s in syms]
-    return pd.DataFrame(rows, columns=["symbol", "wr5"])
+    wl = wr or {}
+    return pd.DataFrame({"symbol": syms, "wr": [wl.get(s, np.nan) for s in syms]})
+
+
+def test_chip_level_label_split_direction_and_nan():
+    """chip_level_label 纯判定 (四线同源切分): <0.5 低获利，涨 / ≥0.5 高获利，跌 /
+    NaN 空。GENIOUS 也走此函数, 边界锁死防两表口径漂移。"""
+    out = chip_level_label(pd.Series([0.23, 0.49, 0.50, 0.91, np.nan]))
+    assert list(out) == [
+        CHIP_FLAG_LOW,
+        CHIP_FLAG_LOW,
+        CHIP_FLAG_HIGH,
+        CHIP_FLAG_HIGH,
+        "",
+    ]
 
 
 def test_chip_gate_marks_distribution_direction():
-    """派发标注 (09-09 用户拍板 "派发不删, 清单标注"): 获利盘5日回落 wr5<0 →
-    chip_flag=派发, 不删票. 特征值 = 002098 0903 实测."""
+    """水位标注 (0922 用户令): chip_wr≥0.5 → 高获利，跌, 不删票. 0.91 = 000001
+    冒烟实测水位."""
     syms = ["600001", "600002", "600003", "300005"]
     close, amount = _panel(syms, [10.0] * 4, [2e8] * 4)
-    chip = _chip(**{"600001": -0.058})
+    chip = _chip(wr={"600001": 0.91})
     out = density_picks(_cand(), _hist(), close, amount, DAY, chip=chip)
     assert list(out["symbol"]) == [
         "600001",
         "600003",
         "300005",
     ]  # 600002 occ5=1 被密度剔
-    assert out.loc[out.symbol == "600001", "chip_flag"].iloc[0] == "派发"
-    assert out.loc[out.symbol == "600003", "chip_flag"].iloc[0] == ""
+    assert out.loc[out.symbol == "600001", "chip_flag"].iloc[0] == CHIP_FLAG_HIGH
+    assert out.loc[out.symbol == "600003", "chip_flag"].iloc[0] == ""  # 水位缺不标
 
 
-def test_chip_gate_marks_wr5_dip_without_cost_rise():
-    """000980形 (获利盘暴降而成本没上移, 0904 wr5=-0.230): 标注口径下单条件即标
-    — 本测试锁死该行为 (不因改标注丢信号)."""
+def test_chip_gate_marks_low_level_as_rise():
+    """chip_wr<0.5 → 低获利，涨 (浅获利, 0922 回测前向更强)."""
     syms = ["600001", "600002", "600003", "300005"]
     close, amount = _panel(syms, [10.0] * 4, [2e8] * 4)
-    chip = _chip(**{"600001": -0.230})
+    chip = _chip(wr={"600001": 0.23})
     out = density_picks(_cand(), _hist(), close, amount, DAY, chip=chip)
     assert "600001" in list(out["symbol"])  # 不删
-    assert out.loc[out.symbol == "600001", "chip_flag"].iloc[0] == "派发"
-    assert abs(out.loc[out.symbol == "600001", "chip_wr5"].iloc[0] + 0.230) < 1e-12
+    assert out.loc[out.symbol == "600001", "chip_flag"].iloc[0] == CHIP_FLAG_LOW
 
 
 def test_chip_gate_failopen_none_and_nan():
-    """fail-open: chip=None (cyq 数据缺) → 无标注列; 个股特征 NaN → 保留不标."""
+    """fail-open: chip=None (cyq 数据缺) → 无标注列; 个股水位 NaN → 保留不标."""
     syms = ["600001", "600002", "600003", "300005"]
     close, amount = _panel(syms, [10.0] * 4, [2e8] * 4)
     out0 = density_picks(_cand(), _hist(), close, amount, DAY)
     out1 = density_picks(_cand(), _hist(), close, amount, DAY, chip=None)
     assert list(out0["symbol"]) == list(out1["symbol"])
-    chip = _chip(**{"600003": np.nan})
+    chip = _chip(wr={"600003": np.nan})
     out2 = density_picks(_cand(), _hist(), close, amount, DAY, chip=chip)
     assert "600003" in list(out2["symbol"])
     assert out2.loc[out2.symbol == "600003", "chip_flag"].iloc[0] == ""
 
 
-def test_chip_gate_single_sided_direction_kept():
-    """获利盘5日在升 (wr5>0, 高位接盘回放反向) / 边界恰好取等 wr5=0
-    (严格不等号, 不标) / chip 空 DataFrame (cyq 空) → 全保留无标."""
+def test_chip_gate_missing_wr_column_kept_all_blank():
+    """旧 fixture 形态 (chip 无 wr 列, cyq 水位缺) / chip 空 DataFrame →
+    列在但全空, 票全保留 (水位缺不许影响名单)."""
     syms = ["600001", "600002", "600003", "300005"]
     close, amount = _panel(syms, [10.0] * 4, [2e8] * 4)
-    chip = _chip(**{"600003": 0.05, "300005": 0.0})
+    chip = _chip(wr={})
     out = density_picks(_cand(), _hist(), close, amount, DAY, chip=chip)
     assert list(out["symbol"]) == ["600001", "600003", "300005"]  # 600002 occ5=1 非闸剔
-    assert (out["chip_flag"] == "").all()  # wr5=0 严格不等号 → 不标
+    assert (out["chip_flag"] == "").all()
     out2 = density_picks(_cand(), _hist(), close, amount, DAY, chip=chip.iloc[:0])
     assert list(out2["symbol"]) == ["600001", "600003", "300005"]
     assert (out2["chip_flag"] == "").all()  # cyq 空 → 列在但全空
 
 
 def test_apply_wr5_gate_marks_and_keeps_all_rows():
-    """通用标注 (三线共享): 返回 (标注后 df, 被标清单); 行数不变."""
+    """通用标注 (三线共享): 返回 (标注后 df, 有标注清单); 行数不变."""
     df = pd.DataFrame({"symbol": ["1", "2", "3", "4"]})
-    chip = pd.DataFrame({"symbol": ["000001", "000003"], "wr5": [-0.10, -0.02]})
+    chip = pd.DataFrame({"symbol": ["000001", "000003"], "wr": [0.91, 0.49]})
     out, flagged = apply_wr5_gate(df, chip)
     assert flagged == ["000001", "000003"]
     assert list(out["symbol"]) == ["1", "2", "3", "4"]  # 不删: 4 行还是 4 行
-    assert out.loc[out.symbol == "1", "chip_flag"].iloc[0] == "派发"
-    assert out.loc[out.symbol == "4", "chip_flag"].iloc[0] == ""  # 缺特征不标
+    assert out.loc[out.symbol == "1", "chip_flag"].iloc[0] == CHIP_FLAG_HIGH
+    assert out.loc[out.symbol == "3", "chip_flag"].iloc[0] == CHIP_FLAG_LOW
+    assert out.loc[out.symbol == "4", "chip_flag"].iloc[0] == ""  # 缺水位不标
     out2, flagged2 = apply_wr5_gate(df, None)
     assert flagged2 == [] and len(out2) == 4 and "chip_flag" not in out2.columns
 
 
+def test_apply_wr5_gate_level_column():
+    """0922 获利盘水位列: chip 带 wr → chip_wr 落值 + 按水位标 flag; 不带 →
+    NaN 不炸 (旧 fixture 兼容)。"""
+    df = pd.DataFrame({"symbol": ["1", "2"]})
+    chip = pd.DataFrame({"symbol": ["000001", "000002"], "wr": [0.91, 0.23]})
+    out, flagged = apply_wr5_gate(df, chip)
+    assert abs(out.loc[out.symbol == "1", "chip_wr"].iloc[0] - 0.91) < 1e-12
+    assert abs(out.loc[out.symbol == "2", "chip_wr"].iloc[0] - 0.23) < 1e-12
+    assert out.loc[out.symbol == "1", "chip_flag"].iloc[0] == CHIP_FLAG_HIGH
+    assert out.loc[out.symbol == "2", "chip_flag"].iloc[0] == CHIP_FLAG_LOW
+    assert flagged == ["000001", "000002"]
+    chip_old = pd.DataFrame({"symbol": ["000001"]})  # 无 wr 列
+    out2, flagged2 = apply_wr5_gate(df, chip_old)
+    assert out2["chip_wr"].isna().all() and flagged2 == []
+
+
 def test_load_chip_features_values_nan_and_failopen(tmp_path, monkeypatch):
-    """装载器: wr5 计算正确; 个股缺行 → NaN; 文件缺失 → None; <6 行 → None."""
+    """装载器: wr 取最新日; 个股缺行 → NaN; 文件缺失 → None; <6 行 → None."""
     import scripts._prob10_density_shadow as mod
 
     dates = pd.bdate_range("2026-08-24", periods=8)
@@ -363,16 +397,16 @@ def test_load_chip_features_values_nan_and_failopen(tmp_path, monkeypatch):
         rows.append((d, "600001", 0.60 + 0.02 * i))
         rows.append((d, "600002", 0.50))
     for d in dates[:3]:
-        rows.append((d, "600003", 0.55))  # 近 5 日缺行 → NaN
+        rows.append((d, "600003", 0.55))  # 近期缺行 → NaN
     fp = tmp_path / "cyq_panel.parquet"
     pd.DataFrame(rows, columns=["date", "symbol", "winner_ratio"]).to_parquet(fp)
     monkeypatch.setattr(mod, "CYQ_PATH", str(fp))
     out = load_chip_features(pd.Timestamp("2026-09-04"))
     r1 = out[out.symbol == "600001"].iloc[0]
-    assert abs(r1["wr5"] - 0.10) < 1e-12  # 0.74 − 0.64
-    assert "cost5" not in out.columns  # 09-05 升级: 仅 wr5
+    assert abs(r1["wr"] - 0.74) < 1e-12  # 0922 水位列 = T 日获利盘 (最新行)
+    assert "wr5" not in out.columns  # 0922 午后用户令: wr5 列退役
     r3 = out[out.symbol == "600003"].iloc[0]
-    assert pd.isna(r3["wr5"])
+    assert pd.isna(r3["wr"])
     monkeypatch.setattr(mod, "CYQ_PATH", str(tmp_path / "nope.parquet"))
     assert load_chip_features(pd.Timestamp("2026-09-04")) is None
 

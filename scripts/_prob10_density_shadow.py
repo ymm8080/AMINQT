@@ -1,4 +1,4 @@
-"""概率头密度版影子单: prob前20带+带内密度≥3+回撤闸+派发闸 → 同花顺自选股
+"""概率头密度版影子单: prob前20带+带内密度≥3+回撤闸+筹码水位标注 → 同花顺自选股
 (2026-09-06 用户拍板把原 TOP10+额1亿 口径整线替换为 L3×TOP20免额; 线名/文件/
 夜链位置/死区线名不变).
 
@@ -16,10 +16,12 @@
     +0.1~0.2只/日流量, 赢率代价 1~1.7pp); amt 列保留仅展示, 不作闸
   ⑤撞指数码 000xxx 不剔 (09-05 用户澄清 "不是删除股票号"), 推送端隔离指数行
     — 见 _ths_watchlist_push._build_chunks
-  ⑥筹码派发标注 (09-05 三线统一删 → 09-09 用户推翻改标注 "派发不删, 清单标注"):
-    获利盘5日回落 (wr5<0) → chip_flag=派发 列标注, 不删票; cyq 数据缺/个股特征缺
-    → 不标 (fail-open)。同标注接 LEGACY 交付 (_deliver_legacy_list) 与 PARALLEL
-    短名单 (_shortlist_t5_t10)。
+  ⑥筹码水位标注 (09-05 三线统一删 → 09-09 用户推翻改标注 → 0922 改获利盘水位轴):
+    获利盘水位 chip_wr<0.5 → chip_flag="低获利，涨" / ≥0.5 → "高获利，跌" (0922
+    用户令定值; 水位是唯一有信息的筹码轴, 原 wr5<0 派发标注判死, 数值列 chip_wr5
+    同日随用户令从交付清单退役), 不删票; cyq 数据缺/个股水位缺 → 不标 (fail-open)。
+    同标注接 LEGACY 交付 (_deliver_legacy_list)、PARALLEL 短名单 (_shortlist_t5_t10)
+    与 GENIOUS 冠军表 (_genious_excel, 走同一 apply_chip_gate 四线同源)。
   ⑦趋势闸 [0913 用户令 "DENSITY 接闸后票" → 0914 用户拍板闸位选 B]: MA10↑ 闸
     在终选 — 带史/occ5 按原始 TOP20 带 (跌票也记史攒 occ5), occ5≥3 后终选滤
     当日 MA10↑ (刚拐头票当天即可出, B 独有 301220 案例; 数据面 A 带前闸微胜,
@@ -77,9 +79,11 @@ PULL_FLAG_MAX = -0.10  # [0913 撤删改标] 原闸档降为标注线: pull 低�
 OCC_WIN = 5  # 密度窗: 近 5 个上榜日
 OCC_MIN = 3  # 密度阈: 带内在榜 ≥3 天 (免额, 09-06 拍板)
 HIST_PATH = os.path.join(DATA_DIR, "prob10_density_history.parquet")
-CHIP_WR5_MAX = (
-    0.0  # 派发闸: 获利盘5日变化须低于此值 (负=回落; 09-05 三线统一 wr5<0 即剔)
+CHIP_WR_LEVEL_SPLIT = (
+    0.5  # 水位切分: 获利盘过半=深获利 (0922; 清单票分布中位0.534, 切分天然均衡)
 )
+CHIP_FLAG_LOW = "低获利，涨"  # 水位 < 0.5: 浅获利, 0922 回测前向更强
+CHIP_FLAG_HIGH = "高获利，跌"  # 水位 >= 0.5: 深获利, 更弱
 CYQ_PATH = os.path.join(DATA_DIR, "cyq_panel.parquet")
 TREND_MA10_GATE = True  # [0914 用户拍板闸位 B] 终选闸: occ5 后滤当日 MA10↑; False 关
 
@@ -108,7 +112,7 @@ _COLS = [
     "pull_flag",
     "amt",
     "belief_down",
-    "chip_wr5",
+    "chip_wr",
     "chip_flag",
 ]
 
@@ -148,12 +152,14 @@ def prob10_membership(cand: pd.DataFrame, day_ts: pd.Timestamp) -> pd.DataFrame:
 
 
 def load_chip_features(day_ts: pd.Timestamp) -> pd.DataFrame | None:
-    """筹码派发特征 wr5 (入选日收盘可知, 无前视); 数据缺 → None (fail-open).
+    """筹码特征 wr (入选日收盘可知, 无前视); 数据缺 → None (fail-open).
 
-    wr5 = 获利盘 − 5 个交易日前获利盘 (负=回落=派发方向)。
-    T = cyq 最新一日 ≤ day_ts (cyq 止于 T-1 时特征滞后一日, 方向不变), T-5 取其
-    前第 5 行; 个股缺行 → NaN (闸内比较恒 False → 不拦)。文件缺失/空/不足 6 行
-    → None, 派发闸整体不启用。
+    wr = 当日获利盘水位 (0922 清单回测: 唯一有信息的筹码轴 — 低=浅获利前向更强,
+    高=深获利更弱; Δ族 wr5 判死, 数值列同日随用户令从交付清单退役, 见
+    tmp_t/_0922_chip_levels_list_test)。
+    T = cyq 最新一日 ≤ day_ts (cyq 止于 T-1 时特征滞后一日, 方向不变); 个股缺行
+    → NaN (标注恒空)。文件缺失/空/不足 6 行 → None, 水位标注整体不启用 (6 行
+    下限是 wr5 时代的历史口径, 保留使标注触发面零变化)。
     """
     if not os.path.exists(CYQ_PATH):
         return None
@@ -172,46 +178,55 @@ def load_chip_features(day_ts: pd.Timestamp) -> pd.DataFrame | None:
     wr = cq.pivot(index="date", columns="symbol", values="winner_ratio").sort_index()
     if len(wr.index) < 6:
         return None
-    i = len(wr.index) - 1
-    return pd.DataFrame(
-        {
-            "symbol": wr.columns.astype(str),
-            "wr5": wr.iloc[i].values - wr.iloc[i - 5].values,
-        }
+    return pd.DataFrame({"symbol": wr.columns.astype(str), "wr": wr.iloc[-1].values})
+
+
+def chip_level_label(wr) -> np.ndarray:
+    """获利盘水位 → 方向标注 (0922 用户令 "SET VALUE TO 低获利，涨 & 高获利，跌")。
+
+    <0.5 低获利，涨 (浅获利, 回测前向更强) / ≥0.5 高获利，跌 (深获利, 更弱) /
+    NaN 空 (无筹码数据)。四线交付 (密度/LEGACY/PARALLEL/GENIOUS) 同源共用,
+    勿在任一线另写切分。
+    """
+    w = pd.Series(wr).astype(float).reset_index(drop=True)
+    return np.where(
+        w.isna(),
+        "",
+        np.where(w < CHIP_WR_LEVEL_SPLIT, CHIP_FLAG_LOW, CHIP_FLAG_HIGH),
     )
 
 
 def apply_wr5_gate(
     df: pd.DataFrame, chip: pd.DataFrame | None
 ) -> tuple[pd.DataFrame, list[str]]:
-    """派发标注 (2026-09-09 用户拍板 "派发不删, 清单标注"): wr5<0 → chip_flag=派发.
+    """筹码水位标注 (0922 用户令): chip_wr<0.5 → "低获利，涨" / ≥0.5 → "高获利，跌".
 
-    09-05~09-09 曾为删除闸 (wr5<0 真删不补齐); 09-09 用户推翻 — 单日 wr5 噪声大,
-    删票丢强名, 改为清单标注让人裁。加列 chip_wr5 (获利盘5日变化, 数值) +
-    chip_flag ("派发"/""); 不删任何行。
-    chip None/空 或 df 空 → 原样返回 (fail-open); 个股 wr5 NaN → 不标。
-    返回 (标注后 df 副本, 被标 symbol 列表)。
+    沿革: 09-05 三线统一删 (wr5<0 删除闸) → 09-09 用户推翻改标注 "派发不删,
+    清单标注" (wr5<0 → 派发) → 0922 清单回测 wr5 判死、水位轴 (chip_wr) 是唯一
+    有信息的筹码族 → 用户令改水位标注。加列 chip_wr (水位) + chip_flag
+    (wr5 数值列同日随用户令从交付清单退役); 不删任何行。
+    chip None/空 或 df 空 → 原样返回 (fail-open); 个股 wr 缺 (旧 fixture 无 wr
+    列 / cyq 缺行) → chip_wr NaN → flag 空。
+    返回 (标注后 df 副本, 有标注的 symbol 列表)。
     生产接线: 密度影子单 (density_picks) / LEGACY 交付 (_deliver_legacy_list) /
-    PARALLEL 短名单 (_shortlist_t5_t10)。
+    PARALLEL 短名单 (_shortlist_t5_t10) / GENIOUS 冠军表 (_genious_excel, 经
+    apply_chip_gate 同入口)。
     """
     if chip is None or not len(chip) or df.empty:
         return df, []
     ch = chip.drop_duplicates("symbol", keep="last").set_index("symbol")
     d = df.copy()
     sym = d["symbol"].astype(str).str.zfill(6)
-    wr = sym.map(ch["wr5"])
-    flagged = wr < CHIP_WR5_MAX  # NaN < x → False → 不标
-    d["chip_wr5"] = wr
-    d["chip_flag"] = np.where(flagged, "派发", "")
-    if not flagged.any():
-        return d, []
-    return d, sorted(sym[flagged].unique())
+    lvl = sym.map(ch["wr"]) if "wr" in ch.columns else np.nan
+    d["chip_wr"] = lvl
+    d["chip_flag"] = chip_level_label(d["chip_wr"])
+    return d, sorted(sym[d["chip_flag"] != ""].unique())
 
 
 def apply_chip_gate(
     df: pd.DataFrame, day_ts: pd.Timestamp, flush: bool = False
 ) -> pd.DataFrame:
-    """派发标注接线入口 (三线共享): load_chip_features → apply_wr5_gate → 标注日志.
+    """筹码水位标注接线入口 (三线共享): load_chip_features → apply_wr5_gate → 标注日志.
 
     cyq 数据缺 → 原样返回 (fail-open)。LEGACY 交付 (_deliver_legacy_list) 与
     PARALLEL 短名单 (_shortlist_t5_t10) 调用; 密度影子单走 density_picks 内联
@@ -219,13 +234,15 @@ def apply_chip_gate(
     """
     chip = load_chip_features(day_ts)
     if chip is None:
-        print("[chipgate] 筹码数据缺失, 派发标注未启用 (fail-open)", flush=flush)
+        print("[chipgate] 筹码数据缺失, 水位标注未启用 (fail-open)", flush=flush)
         return df
-    out, cut = apply_wr5_gate(df, chip)
-    if cut:
+    out, _ = apply_wr5_gate(df, chip)
+    if "chip_flag" in out.columns and (out["chip_flag"] != "").any():
+        n_low = int((out["chip_flag"] == CHIP_FLAG_LOW).sum())
+        n_high = int((out["chip_flag"] == CHIP_FLAG_HIGH).sum())
         print(
-            f"[chipgate] 派发标注 {len(cut)} 只 (获利盘5日回落, chip_flag=派发): "
-            f"{', '.join(cut)}",
+            f"[chipgate] 筹码水位标注: {CHIP_FLAG_LOW} {n_low} 只 / "
+            f"{CHIP_FLAG_HIGH} {n_high} 只",
             flush=flush,
         )
     return out
@@ -248,8 +265,8 @@ def density_picks(
     close/amount: 透视表 (date × symbol), ≤ day_ts; amount 仅算 amt 展示列
     par: parallel 全池 raw 预测 (symbol/pred_mag_10d/pred_prob_10d);
          None/缺 → parallel 两列 NaN
-    chip: 筹码派发特征 (symbol/wr5, load_chip_features 产出); None →
-          不加派发标注列; 个股特征 NaN → 不标 (fail-open)
+    chip: 筹码特征 (symbol/wr, load_chip_features 产出); None →
+          不加水位标注列; 个股水位 NaN → 不标 (fail-open)
     """
     memb = prob10_membership(cand, day_ts)
     c = cand.copy()
@@ -299,8 +316,8 @@ def density_picks(
         (m["pull"].fillna(-1) >= PULL_FLOOR) & (m["occ5"] >= OCC_MIN)
     ].copy()  # 免额 (09-06 拍板): 额不作闸, amt 仅展示列
     ok, _ = apply_wr5_gate(ok, chip)
-    if "chip_wr5" not in ok.columns:  # chip 缺 (fail-open) 也保稳定 schema
-        ok["chip_wr5"] = np.nan
+    if "chip_wr" not in ok.columns:  # chip 缺 (fail-open) 也保稳定 schema
+        ok["chip_wr"] = np.nan
         ok["chip_flag"] = ""
     ok["pull_flag"] = np.where(  # [0913 撤删改标] 原回撤闸降为标注 (同 chip_flag 模式)
         ok["pull"].fillna(-1) < PULL_FLAG_MAX, "回撤", ""
@@ -391,7 +408,7 @@ def fmt_pct_display(df: pd.DataFrame) -> pd.DataFrame:
             "parallel_pred10",
             "pull",
             "belief_down",
-            "chip_wr5",
+            "chip_wr",
             "pctChg",
         ),
         already_pct_cols=("pctChg",),
@@ -485,12 +502,14 @@ def main() -> int:
         )
     chip = load_chip_features(day_ts)
     if chip is None:
-        print("[prob10dens] 筹码数据缺失, 派发标注未启用 (fail-open)")
+        print("[prob10dens] 筹码数据缺失, 水位标注未启用 (fail-open)")
     picks = density_picks(cand, hist, cl, am, day_ts, par=par, chip=chip)
-    if chip is not None and len(picks):
-        flagged = picks.loc[picks["chip_flag"] == "派发", "symbol"].tolist()
-        if flagged:
-            print(f"[prob10dens] 派发标注 {len(flagged)} 只: {', '.join(flagged)}")
+    if chip is not None and len(picks) and "chip_flag" in picks.columns:
+        n_low = int((picks["chip_flag"] == CHIP_FLAG_LOW).sum())
+        n_high = int((picks["chip_flag"] == CHIP_FLAG_HIGH).sum())
+        print(
+            f"[prob10dens] 筹码水位标注: {CHIP_FLAG_LOW} {n_low} 只 / {CHIP_FLAG_HIGH} {n_high} 只"
+        )
     # [0914 用户拍板闸位 B] ⑦趋势闸在终选: 带史/occ5 用原始带, occ5≥3 后滤当日
     # MA10↑ — 刚拐头票当天即可出 (B 独有 301220); A 带前闸判词
     # diag/density_gate_pos_ab_0913_*.json.

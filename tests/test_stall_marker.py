@@ -1,8 +1,9 @@
-"""Tests for scripts/_stall_marker 滞涨标记 (2026-08-19 用户方案: legacy+parallel 双交付).
+"""Tests for scripts/_stall_marker 横盘提示 (legacy+parallel+genious 三交付).
 
-入选 = 今日交付清单股; 滞涨 = 近 10 日涨幅 < STALL_MARKER.ret_10d;
-高频 = 近 20 个交付交易日入选 ≥ 3 次; 市场 = 当日 base_rate < base_rate_max
-(低基线日, _diag_stall_regime 定案) → stall_flag = "洗盘待爆发".
+0922 中文口径: 横盘 = 近 10 日涨幅 < STALL_MARKER.ret_10d; 冷静市 = 当日
+base_rate < base_rate_max (决定性条件) → 横盘提示 = "近10日未涨·冷静市".
+频次条件 (近20日入选≥3) 已消融判死砍掉 — 低频/无历史仍标记, 次数列仅参考.
+涨停提示 = 昨日 (T-1) 涨幅 ≥ 板块涨停阈值 → "涨停次日不追".
 """
 
 import pandas as pd
@@ -49,7 +50,7 @@ def _picks(symbols):
 
 
 def test_stall_flagged(tmp_path):
-    # 低基线日 (high=close×1.01 → base_rate≈0) + 滞涨 + 高频 → 标记
+    # 低基线日 (high=close×1.01 → base_rate≈0) + 横盘 → 标记
     panel = _panel(tmp_path, {"300911": [10.0] * 38 + [10.1]})  # 近 10 日 +1%
     _hist(
         tmp_path,
@@ -62,9 +63,9 @@ def test_stall_flagged(tmp_path):
         hist_dir=str(tmp_path),
         panel_path=panel,
     )
-    assert out.loc[0, "stall_flag"] == "洗盘待爆发"
-    assert out.loc[0, "sel_20d"] == 3
-    assert out.loc[0, "market_base_rate"] < 0.732
+    assert out.loc[0, "横盘提示"] == "近10日未涨·冷静市"
+    assert out.loc[0, "近20日入选次数"] == 3
+    assert out.loc[0, "市场温度"] < 0.732
 
 
 def test_high_base_rate_not_flagged(tmp_path):
@@ -81,8 +82,8 @@ def test_high_base_rate_not_flagged(tmp_path):
         hist_dir=str(tmp_path),
         panel_path=panel,
     )
-    assert out.loc[0, "stall_flag"] == ""
-    assert out.loc[0, "market_base_rate"] > 0.732
+    assert out.loc[0, "横盘提示"] == ""
+    assert out.loc[0, "市场温度"] > 0.732
 
 
 def test_risen_not_flagged(tmp_path):
@@ -98,11 +99,12 @@ def test_risen_not_flagged(tmp_path):
         hist_dir=str(tmp_path),
         panel_path=panel,
     )
-    assert out.loc[0, "stall_flag"] == ""
-    assert out.loc[0, "ret_10d"] >= 0.02
+    assert out.loc[0, "横盘提示"] == ""
+    assert out.loc[0, "近10日涨幅"] >= 0.02
 
 
-def test_low_frequency_not_flagged(tmp_path):
+def test_low_frequency_still_flagged(tmp_path):
+    # 0922 频次条件已砍: 仅 2 次历史入选, 横盘+冷静市 → 仍标记 (次数列只作参考)
     panel = _panel(tmp_path, {"300911": [10.0] * 38 + [10.1]})
     _hist(tmp_path, {"20260203": ["300911"], "20260204": ["300911"]})  # 仅 2 次
     out = stall_marker(
@@ -112,11 +114,12 @@ def test_low_frequency_not_flagged(tmp_path):
         hist_dir=str(tmp_path),
         panel_path=panel,
     )
-    assert out.loc[0, "stall_flag"] == ""
-    assert out.loc[0, "sel_20d"] == 2
+    assert out.loc[0, "横盘提示"] == "近10日未涨·冷静市"
+    assert out.loc[0, "近20日入选次数"] == 2
 
 
-def test_no_history_not_flagged(tmp_path):
+def test_no_history_still_flagged(tmp_path):
+    # 0922 频次条件已砍: 无历史入选 → 仍标记
     panel = _panel(tmp_path, {"300911": [10.0] * 38 + [10.1]})
     out = stall_marker(
         _picks(["300911"]),
@@ -125,12 +128,12 @@ def test_no_history_not_flagged(tmp_path):
         hist_dir=str(tmp_path),
         panel_path=panel,
     )
-    assert out.loc[0, "stall_flag"] == ""
-    assert out.loc[0, "sel_20d"] == 0
+    assert out.loc[0, "横盘提示"] == "近10日未涨·冷静市"
+    assert out.loc[0, "近20日入选次数"] == 0
 
 
 def test_panel_missing_row_not_flagged(tmp_path):
-    # 面板只有 300911, 清单含另一只 → ret_10d NaN → 不标
+    # 面板只有 300911, 清单含另一只 → 近10日涨幅 NaN → 不标
     panel = _panel(tmp_path, {"300911": [10.0] * 38 + [10.1]})
     _hist(
         tmp_path,
@@ -143,8 +146,8 @@ def test_panel_missing_row_not_flagged(tmp_path):
         hist_dir=str(tmp_path),
         panel_path=panel,
     )
-    assert out.loc[0, "stall_flag"] == ""
-    assert pd.isna(out.loc[0, "ret_10d"])
+    assert out.loc[0, "横盘提示"] == ""
+    assert pd.isna(out.loc[0, "近10日涨幅"])
 
 
 def test_parallel_prefix_isolated(tmp_path):
@@ -169,7 +172,7 @@ def test_history_window_limit(tmp_path):
 
 
 def test_advice_high_base_rate(tmp_path):
-    # 高基线日 (base_rate>0.732) → 参与度提示: 建议降低参与度
+    # 高基线日 (base_rate>0.732) → 参与建议: 建议轻仓/降参与
     panel = _panel(tmp_path, {"300911": [10.0] * 38 + [10.1]}, high_factor=1.05)
     out = stall_marker(
         _picks(["300911"]),
@@ -178,8 +181,8 @@ def test_advice_high_base_rate(tmp_path):
         hist_dir=str(tmp_path),
         panel_path=panel,
     )
-    assert out.loc[0, "advice"] != ""
-    assert "降低参与度" in out.loc[0, "advice"]
+    assert out.loc[0, "参与建议"] != ""
+    assert "轻仓" in out.loc[0, "参与建议"]
 
 
 def test_advice_low_base_rate(tmp_path):
@@ -192,8 +195,8 @@ def test_advice_low_base_rate(tmp_path):
         hist_dir=str(tmp_path),
         panel_path=panel,
     )
-    assert out.loc[0, "advice"] != ""
-    assert "正常参与" in out.loc[0, "advice"]
+    assert out.loc[0, "参与建议"] != ""
+    assert "正常参与" in out.loc[0, "参与建议"]
 
 
 def test_limit_up_flagged(tmp_path):
@@ -206,8 +209,8 @@ def test_limit_up_flagged(tmp_path):
         hist_dir=str(tmp_path),
         panel_path=panel,
     )
-    assert out.loc[0, "limit_flag"] == "涨停次日不追"
-    assert out.loc[0, "ret_1d"] > 0.195
+    assert out.loc[0, "涨停提示"] == "涨停次日不追"
+    assert out.loc[0, "昨日涨幅"] > 0.195
 
 
 def test_limit_up_main_threshold(tmp_path):
@@ -224,12 +227,12 @@ def test_limit_up_main_threshold(tmp_path):
         hist_dir=str(tmp_path),
         panel_path=panel,
     )
-    assert out.loc[out["symbol"] == "600001", "limit_flag"].iloc[0] == "涨停次日不追"
-    assert out.loc[out["symbol"] == "600002", "limit_flag"].iloc[0] == ""
+    assert out.loc[out["symbol"] == "600001", "涨停提示"].iloc[0] == "涨停次日不追"
+    assert out.loc[out["symbol"] == "600002", "涨停提示"].iloc[0] == ""
 
 
 def test_limit_up_absent_flag_empty(tmp_path):
-    # 昨日无涨停 → limit_flag 空
+    # 昨日无涨停 → 涨停提示 空
     panel = _panel(tmp_path, {"300911": [10.0] * 38 + [10.1]})
     out = stall_marker(
         _picks(["300911"]),
@@ -238,7 +241,7 @@ def test_limit_up_absent_flag_empty(tmp_path):
         hist_dir=str(tmp_path),
         panel_path=panel,
     )
-    assert out.loc[0, "limit_flag"] == ""
+    assert out.loc[0, "涨停提示"] == ""
 
 
 def test_limit_up_lowercase_board_threshold(tmp_path):
@@ -254,7 +257,7 @@ def test_limit_up_lowercase_board_threshold(tmp_path):
         hist_dir=str(tmp_path),
         panel_path=panel,
     )
-    assert out.loc[0, "limit_flag"] == ""  # 10.5% < 双创 19.5% 阈值
+    assert out.loc[0, "涨停提示"] == ""  # 10.5% < 双创 19.5% 阈值
 
 
 def test_limit_up_lowercase_gem_flagged(tmp_path):
@@ -267,4 +270,4 @@ def test_limit_up_lowercase_gem_flagged(tmp_path):
         hist_dir=str(tmp_path),
         panel_path=panel,
     )
-    assert out.loc[0, "limit_flag"] == "涨停次日不追"
+    assert out.loc[0, "涨停提示"] == "涨停次日不追"
