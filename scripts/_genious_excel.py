@@ -54,6 +54,10 @@ from config.settings import (  # noqa: E402
     PROJECT_ROOT,
     STOCK_LIST_DIR,
 )
+from scripts._open_buy_marker import (  # noqa: E402
+    apply_open_buy_kill,
+    open_buy_marker,
+)
 from scripts._prob10_density_shadow import (  # noqa: E402
     CHIP_FLAG_HIGH,
     CHIP_FLAG_LOW,
@@ -73,7 +77,9 @@ BANNER1 = (
     "【横盘提示】= 近10日未涨+冷静市 (0922 消融: 日闸真边, 横盘是条件性红利); "
     "【市场温度】<73% = 冷静市 (对模型有利), ≥73% 建议轻仓 (表尾 参与建议 列)。"
     "「当月样本口径」列 = 该层**当月实绩** (滚动重算, 月后补全); 扣0.7%往返费后火群整体≈0, 钱在层头部, "
-    "请按层序自上而下读。执行档: 温火/质量层=T+1开盘进; 涨停/深跌层=T+1仍涨确认→T+1收盘进"
+    "请按层序自上而下读。执行档: 温火/质量层=T+1开盘进; 涨停/深跌层=T+1仍涨确认→T+1收盘进。"
+    "【明日开盘=勿买】= T日大涨≥7%或热股深获利, 次日高开低走概率≈3倍; "
+    "命中且未过涨闸已从本表剔除, 余下命中勿开盘追 (等回落或尾盘确认)。"
 )
 
 # 列 → Excel number_format (写的是**实数**, 显示带符号百分号; 文本会被 Excel 按字典序排坏)
@@ -788,8 +794,20 @@ def main() -> int:
             if c in s1.columns
         ]
     )
-    _front = [c for c in ("横盘提示", "涨停提示") if c in s1.columns]
+    # 明日开盘勿买 (0922 用户令: 只要结论一列): T日大涨≥7% 或 热股深获利 →
+    # T+1 勿开盘追 (trap≈3x); 删票闸 (0922 A/B 定案): 命中且未过涨闸 → 从表剔除
+    # (o2c +0.31%→+1.01%, 胜率 42→58%), 过闸豁免; 剩余命中只标注勿开盘追
+    s1 = open_buy_marker(s1, target)
+    s1 = apply_open_buy_kill(s1, target, line="genious")
+    _front = [c for c in ("明日开盘", "横盘提示", "涨停提示") if c in s1.columns]
     s1 = s1[_front + [c for c in s1.columns if c not in _front]]
+    n_open = int((s1["明日开盘"] != "").sum()) if len(s1) and "明日开盘" in s1.columns else 0
+    if n_open:
+        log.info(
+            "[genious] 明日开盘勿买 %d 只: %s",
+            n_open,
+            ", ".join(s1.loc[s1["明日开盘"] != "", "symbol"].astype(str)),
+        )
     n_stall = int((s1["横盘提示"] != "").sum()) if len(s1) else 0
     _adv = s1["参与建议"].iloc[0] if len(s1) and "参与建议" in s1.columns else ""
     _temp = s1["市场温度"].iloc[0] if len(s1) and "市场温度" in s1.columns else None

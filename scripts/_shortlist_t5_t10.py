@@ -75,6 +75,7 @@ from config.settings import (
 )
 from scripts._amt_agree_gate import apply_amt_agree_kill
 from scripts._fade_gate import apply_fade_gate
+from scripts._open_buy_marker import open_buy_marker
 from scripts._pctfmt import PCT_COLS_PARALLEL, fmt_pct_columns
 from scripts._prob10_density_shadow import apply_chip_gate
 from scripts._stall_marker import stall_marker
@@ -1982,6 +1983,15 @@ def main() -> int:
         print(
             f"[stall] 横盘提示 {n_stall} 只: "
             f"{', '.join(res.loc[res['横盘提示'] != '', 'symbol'].astype(str))}",
+            flush=True,
+        )
+    # 明日开盘勿买 (0922 用户令): T日大涨≥7% 或 热股深获利 → T+1 勿开盘追
+    res = open_buy_marker(res, stamp)
+    n_open = int((res["明日开盘"] != "").sum()) if "明日开盘" in res.columns else 0
+    if n_open:
+        print(
+            f"[openbuy] 明日开盘勿买 {n_open} 只: "
+            f"{', '.join(res.loc[res['明日开盘'] != '', 'symbol'].astype(str))}",
             flush=True,
         )
     # 参与度提示 (2026-08-19): 高基线日模型整体负期望 → 建议降参与

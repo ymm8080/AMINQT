@@ -549,6 +549,31 @@ STALL_MARKER = {
     },
 }
 
+# ── 明日开盘勿买标注 (2026-09-22 用户: "只要告诉我这股第二天开盘不要买") ──
+# 三臂研究 (tmp_t/_0922_gkdzA/B/C_*, 校准 tmp_t/_0922_gkdzD_rule_calibration):
+# trap = T+1 gap≥1% 且 walk≤−1%。规则 (并集, T 日收盘 PIT):
+#   1) T 日涨幅 ≥ pct_rise (含涨停) — A臂梯度王: 大涨[7,9.8) 条件低走 50.4%;
+#   2) amplitude_5d 当日截面分位 ≥ amp_rank 且 winner_ratio ≥ winner_min
+#      (热股签名 × 深获利盘, B臂 top 特征簇)。
+# 实证: 全期 trap 10.4% (2.9x 基率 3.55%), 2026H2 11.3% (3.2x); 清单域
+# trap|flag 17~44% vs 未标 1~9%。语义 = 执行时点纪律: 勿开盘追, 等回落或尾盘确认。
+# 删票闸 (0922 精确性回测 tmp_t/_0922_openbuy_btA/B/C/D 定案): 清单域 trap|flag
+# 20.9% vs 未标 5.1% (4.1x), 标了开盘买 o2c −0.47% vs +0.38% → legacy/genious
+# 采纳删票 (legacy o2c +0.24→+0.45%, genious +0.31→+1.01% 胜率 42→58%);
+# parallel 删了更差 (被删 +0.30% vs 递补 −0.02%) → 只标注。过涨闸豁免
+# (用户令 "过了涨闸就不要删了"; 结构性近乎互斥, 3.5y 仅 1~2 只)。清单不截断
+# → 删票即天然递补。
+OPEN_BUY_RISK = {
+    "pct_rise": 7.0,  # T 日涨幅阈值 (pctChg, 百分数单位)
+    "amp_rank": 0.8,  # amplitude_5d 当日全市场截面分位阈值
+    "winner_min": 0.8,  # 获利盘水位下限 (深获利)
+    "col": "明日开盘",
+    "flag_text": "勿买·防高开低走",
+    # 删票闸分线开关 (0922 A/B): True = flagged 且未过涨闸 → 从清单删除
+    "kill": {"legacy": True, "parallel": False, "genious": True},
+    "gate_col": "涨闸",  # 涨闸列名 (值 过闸=豁免删票); 无该列时用 _gate_exempt 复算
+}
+
 # ── 短名单迟滞滞留 (2026-08-26 用户定案 "清单加迟滞降换手") ──
 # 昨日上榜股今日跌出 TOP-10 但仍在板内前 band_factor×10 名 → 滞留 (keep_flag="滞留",
 # 排序沉底). 只降清单换手 (预测小幅回落即被换出 → 名单天天变), 不改新选股.
