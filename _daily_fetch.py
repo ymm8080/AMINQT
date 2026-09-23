@@ -121,6 +121,12 @@ def _default_trade_date(now=None) -> str:
 TRADE_DATE = _POS_ARGS[0] if _POS_ARGS else _default_trade_date()
 FORCE_NO_CYQ = "--force" in sys.argv
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
+# moneyflow 9列正式资产 (3年回填 4.6M 行, 单位万元): 供净买正族/mf_main_net 消费.
+MF_CACHE_PATH = r"D:/AMINQT/PARQUET/moneyflow_daily.parquet"
+# LHB 席位明细 raw 缓存 (top_inst 10 列, 逐日增量追加) + 由其派生的 labeled 表
+# (首板点名页 6 个 LHB 标注列读 labeled). 见 _refresh_lhb_seat_cache.
+LHB_SEAT_CACHE_PATH = r"D:/AMINQT/PARQUET/lhb_seat_detail.parquet"
+LHB_SEAT_LABELED_PATH = r"D:/AMINQT/PARQUET/lhb_seat_detail_labeled.parquet"
 
 _token = os.getenv("TUSHARE_TOKEN") or ts.get_token()
 if not _token:
@@ -162,6 +168,115 @@ def fetch_stock_basic_cached() -> pd.DataFrame:
             _stock_basic_cache = _stock_basic_cache.set_index("symbol")
     return _stock_basic_cache
 
+def _refresh_moneyflow_cache(trade_date):
+    """当日 Tushare moneyflow 明细 → 9列正式资产 raw 缓存 (每日刷新, 不落面板).
+
+    幂等覆盖: 先删缓存里该交易日行再追加, 历史日重跑不产生重复.
+    骨架守卫: 四金额列全缺/全 NaN 时拒写 (权限降级会返回骨架 df, 写进去等于
+    用空列污染 3 年资产), 保持昨日原状. 空响应 (len==0) 根本不落文件.
+    派生列算式与回填脚本 _0923_netbuy_fetch.py 一致.
+    """
+    df = safe_fetch(pro.moneyflow, "moneyflow", trade_date=trade_date)
+    if not len(df):
+        print("    moneyflow raw cache: 0 rows (空响应, 不落文件)")
+        return
+    amt4 = ["buy_lg_amount", "sell_lg_amount", "buy_elg_amount", "sell_elg_amount"]
+    if not all(c in df.columns for c in amt4) or df[amt4].isna().all().all():
+        print("    moneyflow raw cache: 金额列全缺/全 NaN (骨架响应) -> 拒写, 缓存保持原状")
+        return
+    day = df.copy()
+    day["trade_date"] = day["trade_date"].astype(str)
+    day["mf_main_net"] = (
+        (day["buy_lg_amount"] - day["sell_lg_amount"]).fillna(0)
+        + (day["buy_elg_amount"] - day["sell_elg_amount"]).fillna(0)
+    )
+    day["mf_inst_net"] = (day["buy_elg_amount"] - day["sell_elg_amount"]).fillna(0)
+    keep = [
+        "trade_date", "ts_code",
+        "buy_lg_amount", "sell_lg_amount", "buy_elg_amount", "sell_elg_amount",
+        "net_mf_amount", "mf_main_net", "mf_inst_net",
+    ]
+    old = pd.read_parquet(MF_CACHE_PATH) if os.path.exists(MF_CACHE_PATH) else pd.DataFrame()
+    if len(old):
+        # 幂等: 剔除该交易日旧行 (历史日重跑/cache 含当日陈旧值时不会被追加成重复)
+        old = old[old["trade_date"].astype(str) != str(trade_date)]
+    merged = pd.concat([old, day], ignore_index=True)
+    merged = merged.drop_duplicates(subset=["trade_date", "ts_code"], keep="last")
+    merged = merged.sort_values(["trade_date", "ts_code"]).reset_index(drop=True)
+    # 投影到保留列: 老缓存/新响应可能带多余列 (buy_sm/sell_sm 等), 防 schema 漂移
+    merged = merged[[c for c in keep if c in merged.columns]]
+    os.makedirs(os.path.dirname(MF_CACHE_PATH), exist_ok=True)
+    _tmp = MF_CACHE_PATH + ".tmp"
+    merged.to_parquet(_tmp, index=False)
+    os.replace(_tmp, MF_CACHE_PATH)  # 原子替换, 避免崩溃写坏 3 年资产
+    print(f"    moneyflow raw cache: +{len(day)} rows -> {len(merged)} total")
+
+def _refresh_lhb_seat_cache(trade_date, top_inst_df):
+    """当日 Tushare top_inst 席位明细 → raw 缓存追加 + 全量重建 labeled 派生表.
+
+    幂等覆盖: 先删缓存里该交易日行再追加, 历史日重跑不产生重复.
+    骨架守卫: 缺关键列/关键列全 NaN 时拒写 (权限降级返回骨架 df, 写进去等于用空列
+    污染 3 年资产), 保持原文件不动. 空响应 (len==0) 根本不落文件.
+    raw 追加后按 (trade_date,ts_code,exalter,side) 去重; 投影到 10 列防 Tushare 新增列
+    导致 schema 漂移.
+
+    为什么每天从 raw 全量重建 labeled: labeled 是从 raw 派生的产物 (category 由全量
+    席位统计得出), 高频游资阈值是「普通营业部」席位的历史 P90 分位 —— 增量打标签会
+    让新旧行用不同阈值, 与原始口径不一致. 故每次追加后重算全量, 保证口径唯一.
+    """
+    if not len(top_inst_df):
+        print("    lhb seat raw cache: 0 rows (空响应, 不落文件)")
+        return
+    from app.pipeline1.lhb_seat_taxonomy import SEAT_RAW_COLS, label_seat_frame
+
+    # 骨架守卫: 必须 SEAT_RAW_COLS 全 10 列. 只查其中 5 列时, side/reason/buy_rate 缺失会
+    # 静默写成 NaN —— 同股同席位不同 side 的两行 (买榜/卖榜) 会被去重键折叠成一行, 丢数据不报错.
+    _missing = [c for c in SEAT_RAW_COLS if c not in top_inst_df.columns]
+    if _missing or top_inst_df["exalter"].isna().all():
+        print(
+            f"    lhb seat raw cache: 缺列 {_missing} / exalter 全 NaN (骨架响应)"
+            " -> 拒写, 缓存保持原状"
+        )
+        return
+
+    day = top_inst_df.copy()
+    day["trade_date"] = day["trade_date"].astype(str)
+    day = day[[c for c in SEAT_RAW_COLS if c in day.columns]]
+    old = pd.read_parquet(LHB_SEAT_CACHE_PATH) if os.path.exists(LHB_SEAT_CACHE_PATH) else pd.DataFrame()
+    if len(old):
+        # 幂等: 剔除该交易日旧行 (历史日重跑/缓存含当日陈旧值时不会被追加成重复)
+        old = old[old["trade_date"].astype(str) != str(trade_date)]
+    merged = pd.concat([old, day], ignore_index=True)
+    # 去重键含 reason: 同一股同一 side 同一席位可因不同上榜原因各出一行, 漏掉 reason
+    # 会把它们静默折叠成一行 (丢数据不报错). 幂等本身由上面"先剔当日旧行"保证.
+    # 席位名先去空白再入键: 同一席位同日同 side 仅空白不同会双双保留, 该席位买卖额被
+    # 重复计入 (现网 raw 里有 1 对 — 600683.SH 2023-05-26).
+    merged["_exalter_key"] = merged["exalter"].astype(str).str.replace(r"\s+", "", regex=True)
+    _key = [
+        c
+        for c in ("trade_date", "ts_code", "_exalter_key", "side", "reason")
+        if c in merged.columns
+    ]
+    merged = merged.drop_duplicates(subset=_key, keep="last").drop(columns=["_exalter_key"])
+    merged = merged.sort_values(["trade_date", "ts_code", "exalter"]).reset_index(drop=True)
+    merged = merged[[c for c in SEAT_RAW_COLS if c in merged.columns]]
+
+    # 先在内存里重建 labeled, 再落盘: label_seat_frame 抛错时 raw 不得先行落盘 —— 否则
+    # raw 已含当日而 labeled 仍是旧的, 两表静默分裂 (页面 6 列照空且无人报错).
+    labeled, _master = label_seat_frame(merged)
+
+    os.makedirs(os.path.dirname(LHB_SEAT_CACHE_PATH), exist_ok=True)
+    _tmp = LHB_SEAT_CACHE_PATH + ".tmp"
+    merged.to_parquet(_tmp, index=False)
+    os.replace(_tmp, LHB_SEAT_CACHE_PATH)  # 原子替换
+    print(f"    lhb seat raw cache: +{len(day)} rows -> {len(merged)} total")
+
+    # 全量重建 labeled 派生表 (口径见 docstring), 同样原子替换
+    _tmp2 = LHB_SEAT_LABELED_PATH + ".tmp"
+    labeled.to_parquet(_tmp2, index=False)
+    os.replace(_tmp2, LHB_SEAT_LABELED_PATH)
+    print(f"    lhb seat labeled: rebuilt {len(labeled)} rows")
+
 # ── 0. Get valid stock universe (stock_basic 全市场重建, 不再冻结面板快照) ──
 print("[0] Getting stock universe...")
 yesterday = pq.read_table(PANEL, columns=["symbol", "date"]).to_pandas()
@@ -199,6 +314,13 @@ if not len(margin):
             break
 lhb   = safe_fetch(pro.top_list, "LHB", trade_date=TRADE_DATE)
 bt    = safe_fetch(pro.block_trade, "block_trade", trade_date=TRADE_DATE)
+
+# ── moneyflow: 当日主力资金明细 → 9列正式资产 raw 缓存 (净买正族/mf_* 读它, 需每日刷新) ──
+# 放在 OHLCV FATAL 闸之前: 即使后续步骤中止, moneyflow 缓存也已刷新.
+try:
+    _refresh_moneyflow_cache(TRADE_DATE)
+except Exception as e:
+    print(f"    moneyflow raw cache: FAILED ({e})")
 
 if not len(ohlcv):
     print("FATAL: No OHLCV data")
@@ -405,6 +527,13 @@ if len(lhb):
             print(f"    top_inst seat agg: FAILED ({e})")
     else:
         print("    top_inst seat agg: 无数据, 席位列留空 (上榜股为 NaN)")
+
+    # LHB 席位明细 raw 缓存 + labeled 派生表 (首板点名页 6 标注列读它, 需每日刷新).
+    # 复用上面已拉好的 _topinst, 不再发 Tushare 请求. 失败绝不挂链 (同 moneyflow).
+    try:
+        _refresh_lhb_seat_cache(TRADE_DATE, _topinst)
+    except Exception as e:
+        print(f"    lhb seat cache: FAILED ({e})")
 
 # ── 4. Compute derived columns ──
 print("\n[4] Computing derived columns...")

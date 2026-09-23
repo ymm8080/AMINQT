@@ -83,6 +83,27 @@ entries:
     max_lag_days: 5
     critical: false
 
+  # moneyflow 9列正式资产: 防主力资金族 (mf_main_net/mf_inst_net) 静默停更 —
+  # 日更 _daily_fetch.py 的 _refresh_moneyflow_cache 未刷缓存时整族冻结, 且该族
+  # 不在面板内 (无 panel_columns 探针可查), 只能靠本文件水位兜底告警.
+  - name: moneyflow_cache
+    kind: file
+    path: D:/AMINQT/PARQUET/moneyflow_daily.parquet
+    date_col: trade_date
+    max_lag_days: 2
+    critical: false
+
+  # LHB 席位明细派生表: 首板点名页 6 个 LHB 标注列 (scripts/_firstboard_pages.py::
+  # _lhb_annotations) 读它, 窗口 D-20..D0 以面板日为锚. 日更 _daily_fetch.py 的
+  # _refresh_lhb_seat_cache 未刷 (raw 追加 + 全量重建 labeled) 时窗口滑出 → 标注列
+  # 静默全空 (页面照出, 无告警). 判据 = labeled 的 trade_date 水位, 交易日 lag<=2.
+  - name: lhb_seat_labeled
+    kind: file
+    path: D:/AMINQT/PARQUET/lhb_seat_detail_labeled.parquet
+    date_col: trade_date
+    max_lag_days: 2
+    critical: false
+
   # 解禁缓存: 防解禁硬过滤风控失效 (risk_overlays 同口径读 ann_date, PIT-safe)
   - name: share_float_cache
     kind: file

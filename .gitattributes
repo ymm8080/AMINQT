@@ -1,1 +1,2 @@
 graphify-out/graph.json merge=graphify
+models/firstboard/*.txt -text

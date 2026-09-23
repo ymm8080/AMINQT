@@ -117,7 +117,7 @@ def collect_lists(
         )
 
     # GENIOUS 链路狙击 (2026-09-14 用户令 "出了 GENIOUS 列表 AUTO PUSH TO THS"):
-    # 边车由 scripts/_genious_excel.py 落, 只有 Sheet1 冠军四段 (观察池不进自选股)。
+    # 边车由 scripts/_genious_excel.py 落, 只含 Sheet1 冠军四段 (首板点名/板前哨 两页不进自选股)。
     # 该源无历史样本 ⇒ 死区闸 fail-open 照推 (见 _deadzone_guard)。
     # 不套 top_n: 边车本身就是"段位全留"的 Sheet1 冠军四段, 套截断会静默丢码
     # (2026-09-15 用户令 "push all 冠军四段 iN SHEET1 TO THS, NOT JUST TOP10")。

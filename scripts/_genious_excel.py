@@ -1,8 +1,8 @@
 """GENIOUS — 链路狙击交付层 Excel (2026-09-14 用户令: 交易日 20:30 自动跑).
 
-Sheet1 = 冠军表 (CH3 T3深跌缩量 / CH2 T2深跌 / CH2B T2稳健过闸)
-0919 用户令: 观察池与全量表**删除** — 只出冠军单表。层序+层内 r60 深→浅
-即排名。层定义与阈值见 app/pipeline1/kongduo_triggers.py 与 settings.GENIOUS。
+Sheet1 = 冠军表 (CH3 T3深跌缩量 / CH2 T2深跌 / CH2B T2稳健过闸); 0922 起追加
+首板点名/板前哨 两页 (旁路, 见 _firstboard_pages)。0919 用户令已删观察池与全量表。
+层序+层内 r60 深→浅即排名。层定义与阈值见 app/pipeline1/kongduo_triggers.py 与 settings.GENIOUS。
 
 口径: 名单 = **当日 (trade date) 起火的票**, 20:30 已收盘故"fire日收盘进"实际落到
 T+1, 故每行带执行档 (温火/质量层=T+1开盘进; 涨停/深跌层=T+1仍涨确认→T+1收盘进)。
@@ -73,13 +73,62 @@ HEAL_TIMEOUT_S = 180  # 自拉硬超时; 超时=大声失败, 不留挂死实例
 BANNER1 = (
     "GENIOUS 冠军二段 — 段位全留, 【涨闸】列标出其中哪几只是 右侧拐头+缩量。"
     "OOS f10+5%止损口径: 过闸全取 胜率58%/期望+5.2%/大涨15.6% (低动量子集胜率76%); "
-    "所以**只标注、不删票** — 过闸那几只是窄名单, 其余仍按层序读。"
+    "所以**涨闸只标注、不删票** — 过闸那几只是窄名单, 其余仍按层序读。"
     "【横盘提示】= 近10日未涨+冷静市 (0922 消融: 日闸真边, 横盘是条件性红利); "
     "【市场温度】<73% = 冷静市 (对模型有利), ≥73% 建议轻仓 (表尾 参与建议 列)。"
     "「当月样本口径」列 = 该层**当月实绩** (滚动重算, 月后补全); 扣0.7%往返费后火群整体≈0, 钱在层头部, "
     "请按层序自上而下读。执行档: 温火/质量层=T+1开盘进; 涨停/深跌层=T+1仍涨确认→T+1收盘进。"
     "【明日开盘=勿买】= T日大涨≥7%或热股深获利, 次日高开低走概率≈3倍; "
     "命中且未过涨闸已从本表剔除, 余下命中勿开盘追 (等回落或尾盘确认)。"
+)
+
+FB_BANNER = (
+    "首板点名页 v2 — 当日全部首板(主板, 前10日无板)全量清单按【T+3板概率】降序 (0923 排序校准路); "
+    "★冠军格 = 板前获利盘≥0.65 ∩ 一字板 (TE 5日续板率 68.2% / 次日封板 61.4%, 但 45% 次日再一字根本买不到)。"
+    "⚠ 观察页勿当买入清单: 次日开盘买入口径 TE 笔均 −2.40% (Top-3), 冠军格可成交子集 −4.17% "
+    "(开得出货让你买的恰是弱冠军 = 反向选择)。模型 = F18+B5 情绪生态 (promo=修正版真昨日晋级率, W22), "
+    "TE: k3@1 39.8% / AUC_k3 0.572 / k2@1 45.8% / AUC次封 0.591。"
+    "概率读法 (T+3/T+5 校准): 模型分为下界读数, 顶部实测率更高 — p_k3≥0.4 档 TE 实测 T+3 板率 ~54%。"
+)
+
+FB_LEGEND = (
+    "列说明: 排名=按T+3板概率降序(全量清单, 超80行截断但★行豁免保留); ★=冠军格(板前获利盘≥0.65∩一字); 代码=6位裸代码, 名称=股票简称(取不到留空)",
+    "T+3板概率 = P(D0+1..D0+3 内再涨停)(主排序键); T+5板概率 = P(D0+1..D0+5 内再涨停)",
+    "校准档位 = 该行 T+3板概率分桶的 TE 实测板率: ≥0.4→~54% / 0.3-0.4→~28% / 0.2-0.3→~21% / <0.2→~18% (0923 rank_calib)",
+    "一字 = 最低价贴涨停价(全天未开板) = 『买不到』提示非否决; 次日一字风险 = 一字∩T+3板概率≥0.4 → 次日大概率仍一字买不到 (仅提示)",
+    "板前获利盘 wr1 = 昨日获利盘(D0 前信息); 板块涨停数 = 当日同板块(申万二级)涨停家数(含自身)",
+    "昨日晋级率 = 昨日板中今日续板占比(≤D 信息, 修正版); 市场涨停数 = 主板当日涨停家数",
+    "末 6 列 = 龙虎榜席位级标注 (0923 W14 终判: 零模型增量 ⇒ 纯标注, 绝不进 FEATS/训练/闸); 窗口 = D-20..D0 共 21 个交易日",
+    "LHB上榜日数/LHB净买亿/游资席位数 = 窗内该股上榜天数 / 席位净买合计(亿元) / 『高频游资』类营业部席位数; 机构在场 = 窗内出现过『机构专用』席位",
+    "D0游资席位/D0净买亿 = 仅当日(D0)的游资席位数与净买; 该股窗口内有明细但 D0 当日未上榜/无席位明细 → 记 0 (对空明细求和=0, 勿读成『无买入』); 该股整个窗口(D-20..D0)都无席位明细 (从未上榜/缓存缺失) → 留空; 席位明细来自独立日更缓存, 该缓存滞后时末 6 列会整体偏空",
+    "★ 读数=事件胜率非交易胜率(可成交子集笔均−4.2%) — 勿按胜率下单",
+)
+
+PB_BANNER = (
+    "板前哨页(滚动命中日志) — 近20个交易日内命中过深睡签名(10~40日前放量脉冲∧其后无板守住90%∧获利盘升≥10pp"
+    "∧横盘±6%∧5日缩量∧近10日无板)的股, 每股多行: 每行=一次命中日, 击中日期=该行日期, "
+    "获利盘/换手等列=命中当天画像。显示=今日有点火旗(T1/T2/T1+T2)的股, 其余只在后台表 preboard_watch_hits_*.csv (全量)。"
+    "次数10日/次数20日=过去10/20个交易日命中总数, 仅上下文勿筛选(回测: 点火前命中数不预测, 次数≥2纯度更低)。"
+    "排序 = 通道优先(置顶) → 点火旗(T1+T2>T1>T2) → 击中日期(新→旧) → 次数10日(多→少)。"
+    "⚠ 深睡签名整体是反信号组 (5日首板率 2.4% vs 全池基线 5.2%) — 本页只提供可见性, 不是买入清单。"
+    "回测: 点火后各天数次日进 TE 全负(−0.7~−1.6%), 点火旗=去看提示非买入依据; "
+    "页内点火桶胜率为页内最强但绝对低于全主板基线。"
+    "【通道优先】= 获利盘≥0.65 ∩ 20日内LHB净买+机构双旗 (TE 通道率 20.9%, 领先仅2~3天, 华瓷即此类); "
+    "通道优先在深睡页≈恒空(结构性: 深睡∩wr≥0.65∩LHB双净买≈空集), 为空属正常。"
+)
+
+PB_LEGEND = (
+    "列说明: 通道优先=获利盘≥0.65∩20日内LHB净买+机构双旗(置顶); 点火旗=T1首次≥2%/T2涨2~7%",
+    "每股多行: 每行=一次命中日; 击中日期=该行日期(文本); 获利盘/20日获利盘Δ/换手列=命中当天画像",
+    "通道优先/点火旗/当日涨幅=今日口径(当日停牌缺行→空/NaN); 次数10日/次数20日=过去10/20个交易日命中总数",
+    "显示=今日有点火旗(T1/T2/T1+T2)的股, 其余只在后台表 preboard_watch_hits_*.csv (全量)",
+    "获利盘=命中日收盘获利盘; 20日获利盘Δ=近20日获利盘升幅(签名腿之一, ≥10pp)",
+    "5日均换手=近5日换手均值(%); 5日/20日换手比=缩量腿(签名腿之一, ≤0.75)",
+    "★ 用法: 通道优先行 + 点火旗 = '开始动了' → 人工看盘确认, 勿程序化追买",
+    "",
+    "【通道优先·白话】= 获利盘≥0.65 且 近20天上过龙虎榜, 且当天净买与机构席位净买都为正",
+    "这类票未来7天出首板概率约21% (普通票约8%), 但只领先2~3天; 没上过龙虎榜的票 (如华瓷) 永远不会标",
+    "它是排序提示, 不是买入信号",
 )
 
 # 列 → Excel number_format (写的是**实数**, 显示带符号百分号; 文本会被 Excel 按字典序排坏)
@@ -97,11 +146,26 @@ _NUMFMT = {
     "量比": "0.00",
     "集中度Δ10": "0.00",
     "控盘MA10斜率": "0.00",
-    "SL翻正年龄": "0",
-    "SL洗盘天数": "0",
+    # 首板点名页 (0922; 0923 v2: T+3/T+5 双概率+校准档位) / 板前哨页 (0922)
+    "排名": "0",
+    "T+3板概率": "0.0%",
+    "T+5板概率": "0.0%",
+    "板前获利盘": "0.0%",
+    "板块涨停数": "0",
+    "昨日晋级率": "0.0%",
+    "市场涨停数": "0",
+    "20日获利盘Δ": "0.0%",
+    "5日均换手": "0.00",
+    "5日/20日换手比": "0.00",
+    "次数10日": "0",
+    "次数20日": "0",
 }
 
 log = logging.getLogger("genious")
+
+# main() 按 --dry-run 置位: 该模式下状态文件一律不落 (契约 = 只打印不落任何文件,
+# 含 running/failed/skipped 等失败路径)。见 _write_state。
+_DRY_RUN = False
 
 
 def _setup_logging(tag: str) -> None:
@@ -123,6 +187,11 @@ def _state_path(tag: str) -> Path:
 
 
 def _write_state(tag: str, status: str, **extra) -> None:
+    if _DRY_RUN:
+        # --dry-run 不落任何文件: 生产状态文件 (logs/genious_{tag}.state.json) 不得被
+        # 创建/改写 —— 看门狗/新鲜度判据把它当真, 一次演练会吃掉当天真实状态。
+        log.info("[genious] --dry-run: 抑制状态写入 (status=%s)", status)
+        return
     payload = {"tag": tag, "status": status, "ts": datetime.datetime.now().isoformat()}
     payload.update(extra)
     _state_path(tag).write_text(
@@ -445,7 +514,7 @@ def write_stocklist_csv(
 ) -> Path | None:
     """冠军四段 → genious_stocklist_{date}__{HHMMSS}.csv (WORM), 给 THS 推送当第三源。
 
-    Sheet2 观察池不落这张 CSV: 推送侧只认个股买入名单, 观察池进去会污染自选股。
+    只落冠军四段 (首板点名/板前哨 两页不落): 推送侧只认个股买入名单, 其余页进去会污染自选股。
     空榜不落文件 (推送侧缺源即跳过, 不推空单)。
     """
     if not len(s1):
@@ -486,22 +555,50 @@ def _spawn_ths_push(date: str) -> None:
         log.warning("[genious] 启动推送失败: %s", exc)
 
 
+def _build_firstboard_sheets(target: str, dry_run: bool = False):
+    """首板点名页 + 板前哨页 (数据层在 scripts/_firstboard_pages.py)。
+
+    面板 max ≠ 交付日 → (None, None): 这两页点的是"当日首板/当日深睡状态",
+    日期错一天整页语义全错, 宁缺勿错; 冠军四段不受影响 (kt 路径有自己的新鲜度闸)。
+    dry_run=True → 不发 record_csv, 板前哨后台 CSV 不落盘 (--dry-run 契约=只打印不落文件)。
+    """
+    from scripts import _firstboard_pages as fbp
+
+    pdf = fbp.load_mainboard()
+    d0 = pdf["date"].max()
+    if d0 is None or d0.strftime("%Y%m%d") != target:
+        log.error(
+            "[genious] 面板最新 %s ≠ 交付日 %s → 首板两页本次不出 (勿点昨天的板)",
+            d0,
+            target,
+        )
+        return None, None
+    # 板前哨后台全量表 (含次数0/1与当日停牌缺行): record_csv 契约见 _firstboard_pages.serve_preboard
+    pb_csv = (
+        None if dry_run else Path(STOCK_LIST_DIR) / f"preboard_watch_hits_{target}.csv"
+    )
+    return fbp.serve_firstboard(pdf), fbp.serve_preboard(pdf, record_csv=pb_csv)
+
+
 def write_xlsx(
     sheet1: pd.DataFrame,
     date: str,
     list_dir=STOCK_LIST_DIR,
+    extra_sheets: list | None = None,
 ) -> Path:
     """WORM: GENIOUS_{date}.xlsx; 已存在 → GENIOUS_{date}__{HHMMSS}.xlsx (绝不覆盖)。
 
-    0919 用户令: 观察池与全量表都删 — 只出冠军单表。"""
+    0919 用户令: 观察池与全量表都删 — 只出冠军单表; 0922 起追加 首板点名/板前哨 两页
+    (extra_sheets = [(name, df, banner, legend), ...], 旁路页, 允许为空)。"""
     fp = Path(list_dir) / f"{GENIOUS['filename_prefix']}_{date}.xlsx"
     if fp.exists():
         stamp = datetime.datetime.now().strftime("%H%M%S")
         fp = Path(list_dir) / f"{GENIOUS['filename_prefix']}_{date}__{stamp}.xlsx"
+    sheets = [("冠军四段", sheet1, BANNER1, kt.sheet1_legend())] + [
+        tuple(x) for x in (extra_sheets or [])
+    ]
     with pd.ExcelWriter(fp, engine="openpyxl") as xw:
-        for name, df, banner, legend in (
-            ("冠军四段", sheet1, BANNER1, kt.sheet1_legend()),
-        ):
+        for name, df, banner, legend in sheets:
             raw = df if len(df) else pd.DataFrame(columns=list(df.columns))
             raw.to_excel(xw, sheet_name=name, index=False, startrow=2)
             ws = xw.sheets[name]
@@ -626,7 +723,8 @@ def verify() -> int:
             f"   期望 {e_fire:.1f}/{e_win:.2f}/{e_big:.2f}/{e_rate:.1%}/{e_med:.0f}/{e_zero:.0%}"
         )
 
-    # 全榜总闸 (交叉验证分层总和; 2026-09-18 随宇宙扩容刷新: 63.3→70.3 火/日)
+    # 全榜总闸 (交叉验证分层总和; 2026-09-18 宇宙扩容 63.3→70.3; 2026-09-23 随
+    # 0922 删票闸/BJ剔除+行情漂移刷新: 70.3→72.6 火/日)
     per_all = matured.groupby("date").size().reindex(day_index, fill_value=0)
     board = (
         len(matured) / all_days,
@@ -636,17 +734,17 @@ def verify() -> int:
         float(per_all.median()),
     )
     board_ok = (
-        abs(board[0] - 70.3) <= 0.5
-        and abs(board[1] - 37.0) <= 0.5
-        and abs(board[2] - 10.9) <= 0.5
-        and abs(board[3] - 0.526) <= 0.01
+        abs(board[0] - 72.6) <= 0.5
+        and abs(board[1] - 38.3) <= 0.5
+        and abs(board[2] - 11.7) <= 0.5
+        and abs(board[3] - 0.528) <= 0.01
     )
     if not board_ok:
         fails.append("全榜总数")
     print(
         f"\n  {'全榜 (冠军+余+带)':<18}{board[0]:>8.1f}{board[1]:>9.2f}{board[2]:>9.2f}"
         f"{board[3]:>8.1%}{board[4]:>6.0f}{'':>8}{'PASS' if board_ok else 'FAIL':>6}"
-        f"   期望 70.3/37.0/10.9/52.6%"
+        f"   期望 72.6/38.3/11.7/52.8%"
     )
     results["_全榜"] = {"got": board, "ok": board_ok}
 
@@ -707,6 +805,9 @@ def main() -> int:
     ap.add_argument("--wait-min", type=int, default=10, help="等面板更新的上限分钟")
     args = ap.parse_args()
 
+    global _DRY_RUN
+    _DRY_RUN = args.dry_run
+
     today = datetime.date.today().strftime("%Y%m%d")
     tag = args.date or today
     _setup_logging(tag)
@@ -747,7 +848,7 @@ def main() -> int:
 
     df = kt.compute_features(df)
     df = kt.compute_triggers(df)
-    s1, _ = kt.build_delivery(df, target)
+    s1 = kt.build_delivery(df, target)
     # 旁路标注列 (用户 0915 令): 清单过一遍 bigdrop 次日大跌模块。三张表都加,
     # 语义见 _bigdrop_scan —— 三态 (大跌风险/波动风险/无风险) + 未评分。
     # 查表一律走 _norm_sym: 直接 str(s).zfill(6) 会漏掉北交所的 `.BJ` 后缀, 那只票
@@ -763,9 +864,10 @@ def main() -> int:
             s1["symbol"].map(lambda s: scan.get(_norm_sym(s), BIGDROP_UNSCORED)),
         )
     # 筹码水位标注 (0922 用户令, 第四线同源): chip_wr<0.5 低获利，涨 / ≥0.5 高获利，跌。
-    # 冠军表 0919 精简后不含获利盘数值列, 故走与密度/LEGACY/PARALLEL 同一条
-    # apply_chip_gate (load_chip_features 读 cyq_panel) — 四线同源同切分, 勿在此
-    # 另写阈值; cyq 缺 → fail-open 只不加列, 名单一只不少 (同 BIGDROP 旁路契约)。
+    # 走与密度/LEGACY/PARALLEL 同一条 apply_chip_gate (load_chip_features 读 cyq_panel)
+    # — 四线同源同切分, 勿在此另写阈值; cyq 缺 → fail-open 只不加列, 名单一只不少
+    # (同 BIGDROP 旁路契约)。表内「获利盘」列 (0923 加回) 只是同轴的数值展示,
+    # 切分口径仍以 apply_chip_gate 为准, 不要改成读表内该列。
     chipped = apply_chip_gate(s1, pd.Timestamp(target))
     if "chip_flag" in chipped.columns:
         flags = chipped["chip_flag"].to_numpy()
@@ -799,9 +901,14 @@ def main() -> int:
     # (o2c +0.31%→+1.01%, 胜率 42→58%), 过闸豁免; 剩余命中只标注勿开盘追
     s1 = open_buy_marker(s1, target)
     s1 = apply_open_buy_kill(s1, target, line="genious")
+    if len(s1) and "排名" in s1.columns:
+        # 删票闸挖空名次 (如 3→8) → 复编号; 行序本就是段位序/r60 序, 只改编号不改序
+        s1["排名"] = range(1, len(s1) + 1)
     _front = [c for c in ("明日开盘", "横盘提示", "涨停提示") if c in s1.columns]
     s1 = s1[_front + [c for c in s1.columns if c not in _front]]
-    n_open = int((s1["明日开盘"] != "").sum()) if len(s1) and "明日开盘" in s1.columns else 0
+    n_open = (
+        int((s1["明日开盘"] != "").sum()) if len(s1) and "明日开盘" in s1.columns else 0
+    )
     if n_open:
         log.info(
             "[genious] 明日开盘勿买 %d 只: %s",
@@ -825,8 +932,25 @@ def main() -> int:
         counts,
     )
 
+    # 首板点名页 + 板前哨页 (0922 用户令): 当日全部首板点名 + 深睡监视名单。
+    # 旁路契约同 BIGDROP: 构建失败只丢这两页, 冠军四段照常交付。
+    extra_sheets: list = []
+    try:
+        fb_df, pb_df = _build_firstboard_sheets(target, dry_run=args.dry_run)
+        if fb_df is not None:
+            extra_sheets.append(("首板点名", fb_df, FB_BANNER, FB_LEGEND))
+        if pb_df is not None:
+            extra_sheets.append(("板前哨", pb_df, PB_BANNER, PB_LEGEND))
+        log.info(
+            "[genious] 首板点名 %d 行 / 板前哨 %d 行",
+            len(fb_df) if fb_df is not None else 0,
+            len(pb_df) if pb_df is not None else 0,
+        )
+    except Exception as exc:  # noqa: BLE001 — 旁路页, 不许掀翻交付链
+        log.error("[genious] 首板两页构建失败, 本次只交付冠军四段: %s", exc)
+
     if args.dry_run:
-        for name, sheet in (("冠军四段", s1),):
+        for name, sheet in [("冠军四段", s1)] + [(t[0], t[1]) for t in extra_sheets]:
             print(f"\n===== {name} ({len(sheet)}) =====")
             print(sheet.to_string(index=False) if len(sheet) else "(空)")
         _write_state(
@@ -840,7 +964,7 @@ def main() -> int:
         )
         return 0
 
-    fp = write_xlsx(_fmt_sheet(s1), target)
+    fp = write_xlsx(_fmt_sheet(s1), target, extra_sheets=extra_sheets)
     log.info("[genious] 写出 %s", fp)
     csv_fp = write_stocklist_csv(s1, target)
     if csv_fp is not None:
