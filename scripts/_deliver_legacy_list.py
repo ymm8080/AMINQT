@@ -21,6 +21,7 @@ import pandas as pd
 from config.settings import FADE_GATE, LEGACY_SELECTION, STOCK_LIST_DIR
 from scripts._amt_agree_gate import apply_amt_agree_kill
 from scripts._fade_gate import apply_fade_gate
+from scripts._open_buy_marker import apply_open_buy_kill, open_buy_marker
 from scripts._pctfmt import PCT_COLS_LEGACY, fmt_pct_columns
 from scripts._prob10_density_shadow import apply_chip_gate
 from scripts._stall_marker import stall_marker
@@ -150,6 +151,7 @@ def write_md(
     module: str,
     rejected: dict[str, str] | None = None,
     gate_sections: list[tuple[str, pd.DataFrame]] | None = None,
+    openbuy_killed: list[str] | None = None,
 ) -> None:
     cols = [c for c in _HEAD_COLS if c in df.columns]
     cols = [c for c in cols if c in df.columns]
@@ -182,6 +184,19 @@ def write_md(
                 "ℹ 筹码标注 (chip_flag 列): 低获利，涨 = 获利盘水位<50% (浅获利, "
                 "0922 清单回测前向更强); 高获利，跌 = ≥50% (深获利, 更弱); "
                 "空 = 无筹码数据。chip_wr = 获利盘水位\n\n"
+            )
+        # 明日开盘勿买 (0922 用户令): trap 高危票列名单 — 用户只看这一句
+        if "明日开盘" in df.columns and (df["明日开盘"] != "").any():
+            syms_o = df.loc[df["明日开盘"] != "", "symbol"].astype(str).tolist()
+            fh.write(
+                f"⚠ 明日开盘勿买 {len(syms_o)} 只 ({', '.join(syms_o)}): "
+                "T日大涨≥7% 或 热股深获利, 次日高开低走概率≈3倍 — "
+                "勿开盘追, 等回落或尾盘确认再进\n\n"
+            )
+        if openbuy_killed:
+            fh.write(
+                f"🗑 已剔除 {len(openbuy_killed)} 只 "
+                f"(勿买·防高开低走·未过涨闸): {', '.join(openbuy_killed)}\n\n"
             )
         # 被整体退回的板块: 仍出清单, 醒目标注未接受原因 (不静默跳过)
         for b, r in (rejected or {}).items():
@@ -233,6 +248,12 @@ def main():
     df = apply_chip_gate(df, pd.Timestamp(trade_date))
     # 横盘提示 (0922 中文口径): 近10日涨幅<2% 且 冷静市 → "近10日未涨·冷静市"
     df = stall_marker(df, trade_date, "legacy_stocklist_")
+    # 明日开盘勿买 (0922 用户令): T日大涨≥7% 或 热股深获利 → T+1 勿开盘追
+    df = open_buy_marker(df, trade_date)
+    # 删票闸 (0922 A/B 定案): flagged 且未过涨闸 → 删 (清单不截断, 后排自然递补)
+    _syms_before = set(df["symbol"].astype(str))
+    df = apply_open_buy_kill(df, trade_date, line="legacy")
+    openbuy_killed = sorted(_syms_before - set(df["symbol"].astype(str)))
     module = resolve_module(df, trade_date)
     # 量价删查线 (2026-09-08 用户拍板): 清单内 amt_agree10 最高档真删不补齐
     df = apply_amt_agree_kill(df, pd.Timestamp(trade_date), module, line="legacy")
@@ -273,7 +294,7 @@ def main():
     md_path = os.path.join(
         str(STOCK_LIST_DIR), f"legacy_stocklist_{trade_date}__{module}.md"
     )
-    write_md(df, md_path, module, rejected, gate_sections)
+    write_md(df, md_path, module, rejected, gate_sections, openbuy_killed)
     print(f"[md] {md_path}")
 
     for b, r in rejected.items():
@@ -299,6 +320,17 @@ def main():
         if n_stall:
             doc.add_paragraph(
                 f"⚠ 横盘提示 {n_stall} 只 (近10日涨幅<2% 且 市场温度低=冷静市, 见 横盘提示 列)",
+            )
+        n_open = int((df["明日开盘"] != "").sum()) if "明日开盘" in df.columns else 0
+        if n_open:
+            doc.add_paragraph(
+                f"⚠ 明日开盘勿买 {n_open} 只 (见 明日开盘 列): T日大涨≥7% 或 热股深获利, "
+                "次日高开低走概率≈3倍, 勿开盘追 — 等回落或尾盘确认再进",
+            )
+        if openbuy_killed:
+            doc.add_paragraph(
+                f"🗑 已剔除 {len(openbuy_killed)} 只 (勿买·防高开低走·未过涨闸): "
+                f"{', '.join(openbuy_killed)}",
             )
         n_fade = int((df["fade_flag"] != "").sum()) if "fade_flag" in df.columns else 0
         if n_fade:
