@@ -886,7 +886,9 @@ def main() -> int:
     s1 = apply_open_buy_kill(s1, target, line="genious")
     _front = [c for c in ("明日开盘", "横盘提示", "涨停提示") if c in s1.columns]
     s1 = s1[_front + [c for c in s1.columns if c not in _front]]
-    n_open = int((s1["明日开盘"] != "").sum()) if len(s1) and "明日开盘" in s1.columns else 0
+    n_open = (
+        int((s1["明日开盘"] != "").sum()) if len(s1) and "明日开盘" in s1.columns else 0
+    )
     if n_open:
         log.info(
             "[genious] 明日开盘勿买 %d 只: %s",
