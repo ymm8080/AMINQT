@@ -92,12 +92,15 @@ FB_BANNER = (
 )
 
 FB_LEGEND = (
-    "列说明: 排名=按T+3板概率降序(全量清单, 超80行截断但★行豁免保留); ★=冠军格(板前获利盘≥0.65∩一字); 代码=6位裸代码",
+    "列说明: 排名=按T+3板概率降序(全量清单, 超80行截断但★行豁免保留); ★=冠军格(板前获利盘≥0.65∩一字); 代码=6位裸代码, 名称=股票简称(取不到留空)",
     "T+3板概率 = P(D0+1..D0+3 内再涨停)(主排序键); T+5板概率 = P(D0+1..D0+5 内再涨停)",
     "校准档位 = 该行 T+3板概率分桶的 TE 实测板率: ≥0.4→~54% / 0.3-0.4→~28% / 0.2-0.3→~21% / <0.2→~18% (0923 rank_calib)",
     "一字 = 最低价贴涨停价(全天未开板) = 『买不到』提示非否决; 次日一字风险 = 一字∩T+3板概率≥0.4 → 次日大概率仍一字买不到 (仅提示)",
     "板前获利盘 wr1 = 昨日获利盘(D0 前信息); 板块涨停数 = 当日同板块(申万二级)涨停家数(含自身)",
     "昨日晋级率 = 昨日板中今日续板占比(≤D 信息, 修正版); 市场涨停数 = 主板当日涨停家数",
+    "末 6 列 = 龙虎榜席位级标注 (0923 W14 终判: 零模型增量 ⇒ 纯标注, 绝不进 FEATS/训练/闸); 窗口 = D-20..D0 共 21 个交易日",
+    "LHB上榜日数/LHB净买亿/游资席位数 = 窗内该股上榜天数 / 席位净买合计(亿元) / 『高频游资』类营业部席位数; 机构在场 = 窗内出现过『机构专用』席位",
+    "D0游资席位/D0净买亿 = 仅当日(D0)的游资席位数与净买; 该股窗口内有明细但 D0 当日未上榜/无席位明细 → 记 0 (对空明细求和=0, 勿读成『无买入』); 该股整个窗口(D-20..D0)都无席位明细 (从未上榜/缓存缺失) → 留空; 席位明细来自独立日更缓存, 该缓存滞后时末 6 列会整体偏空",
     "★ 读数=事件胜率非交易胜率(可成交子集笔均−4.2%) — 勿按胜率下单",
 )
 
@@ -160,6 +163,10 @@ _NUMFMT = {
 
 log = logging.getLogger("genious")
 
+# main() 按 --dry-run 置位: 该模式下状态文件一律不落 (契约 = 只打印不落任何文件,
+# 含 running/failed/skipped 等失败路径)。见 _write_state。
+_DRY_RUN = False
+
 
 def _setup_logging(tag: str) -> None:
     LOG_DIR.mkdir(exist_ok=True)
@@ -180,6 +187,11 @@ def _state_path(tag: str) -> Path:
 
 
 def _write_state(tag: str, status: str, **extra) -> None:
+    if _DRY_RUN:
+        # --dry-run 不落任何文件: 生产状态文件 (logs/genious_{tag}.state.json) 不得被
+        # 创建/改写 —— 看门狗/新鲜度判据把它当真, 一次演练会吃掉当天真实状态。
+        log.info("[genious] --dry-run: 抑制状态写入 (status=%s)", status)
+        return
     payload = {"tag": tag, "status": status, "ts": datetime.datetime.now().isoformat()}
     payload.update(extra)
     _state_path(tag).write_text(
@@ -543,11 +555,12 @@ def _spawn_ths_push(date: str) -> None:
         log.warning("[genious] 启动推送失败: %s", exc)
 
 
-def _build_firstboard_sheets(target: str):
+def _build_firstboard_sheets(target: str, dry_run: bool = False):
     """首板点名页 + 板前哨页 (数据层在 scripts/_firstboard_pages.py)。
 
     面板 max ≠ 交付日 → (None, None): 这两页点的是"当日首板/当日深睡状态",
     日期错一天整页语义全错, 宁缺勿错; 冠军四段不受影响 (kt 路径有自己的新鲜度闸)。
+    dry_run=True → 不发 record_csv, 板前哨后台 CSV 不落盘 (--dry-run 契约=只打印不落文件)。
     """
     from scripts import _firstboard_pages as fbp
 
@@ -561,7 +574,11 @@ def _build_firstboard_sheets(target: str):
         )
         return None, None
     # 板前哨后台全量表 (含次数0/1与当日停牌缺行): record_csv 契约见 _firstboard_pages.serve_preboard
-    pb_csv = Path(STOCK_LIST_DIR) / f"preboard_watch_hits_{target}.csv"
+    pb_csv = (
+        None
+        if dry_run
+        else Path(STOCK_LIST_DIR) / f"preboard_watch_hits_{target}.csv"
+    )
     return fbp.serve_firstboard(pdf), fbp.serve_preboard(pdf, record_csv=pb_csv)
 
 
@@ -790,6 +807,9 @@ def main() -> int:
     ap.add_argument("--wait-min", type=int, default=10, help="等面板更新的上限分钟")
     args = ap.parse_args()
 
+    global _DRY_RUN
+    _DRY_RUN = args.dry_run
+
     today = datetime.date.today().strftime("%Y%m%d")
     tag = args.date or today
     _setup_logging(tag)
@@ -883,6 +903,9 @@ def main() -> int:
     # (o2c +0.31%→+1.01%, 胜率 42→58%), 过闸豁免; 剩余命中只标注勿开盘追
     s1 = open_buy_marker(s1, target)
     s1 = apply_open_buy_kill(s1, target, line="genious")
+    if len(s1) and "排名" in s1.columns:
+        # 删票闸挖空名次 (如 3→8) → 复编号; 行序本就是段位序/r60 序, 只改编号不改序
+        s1["排名"] = range(1, len(s1) + 1)
     _front = [c for c in ("明日开盘", "横盘提示", "涨停提示") if c in s1.columns]
     s1 = s1[_front + [c for c in s1.columns if c not in _front]]
     n_open = (
@@ -915,7 +938,7 @@ def main() -> int:
     # 旁路契约同 BIGDROP: 构建失败只丢这两页, 冠军四段照常交付。
     extra_sheets: list = []
     try:
-        fb_df, pb_df = _build_firstboard_sheets(target)
+        fb_df, pb_df = _build_firstboard_sheets(target, dry_run=args.dry_run)
         if fb_df is not None:
             extra_sheets.append(("首板点名", fb_df, FB_BANNER, FB_LEGEND))
         if pb_df is not None:

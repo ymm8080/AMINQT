@@ -653,6 +653,50 @@ def test_sheet1_adds_ch2b_pass_only(chip_stub):
     assert list(s1["symbol"]) == ["000001"]  # 只有 CH2B∩过闸 的进单表
 
 
+def test_sheet1_legend_covers_every_emittable_segment(chip_stub):
+    """图例必须定义冠军表**真会出现的每一个**段位, 且不列不会出现的段位。
+
+    历史缺陷: sheet1_legend 用 zip(_seg_lines(), SHEET1_LAYERS) —— 0918/0919 裁段后
+    SHEET1_LAYERS 只剩 2 个, zip 静默截断, 交付的 xlsx 里 CH2B / CH4 行一个定义
+    都没有 (表头却仍写"四段互斥, 优先级 CH3 > CH2 > CH1 > CH2B")。
+    本测用 build_delivery 真跑四个段位, 断言集合与图例逐段对齐。
+    """
+    chip_stub()
+    df = _layer_frame(
+        [
+            {"symbol": "000001", "T3": True, "r60": -0.40, "pct": 0.08, "vr": 1.0},  # CH3
+            {"symbol": "000002", "T2": True, "r60": -0.35, "pct": 0.03, "vr": 1.0},  # CH2
+            {
+                "symbol": "000003",
+                "T2": True,
+                "r60": -0.10,
+                "pct": 0.03,
+                "ext10p": 0.90,
+                "r120": -0.10,
+            },  # CH2B ∩ 过闸
+            {
+                "symbol": "000004",
+                "r60": GENIOUS["ch4_r60_min"] + 0.05,
+                "r120": 0.5,
+                "ma10up": True,
+                "vr": GENIOUS["ch4_vr_max"] - 0.05,
+                "dd5": GENIOUS["ch4_dd5_max"] - 0.005,
+            },  # CH4
+        ]
+    )
+    s1 = kt.build_delivery(df, "20260911")
+    # 四段都真的进冠军表 (与 SHEET1_SEGMENTS 一致)
+    assert set(s1["层"]) == set(kt.SHEET1_SEGMENTS)
+
+    legend = "\n".join(kt.sheet1_legend())
+    for seg in s1["层"].unique():
+        assert f"{seg} =" in legend, f"图例缺段位定义: {seg}"
+    # 表里出不来的段位不得写进图例 (免得用户去表里找不存在的段位)
+    assert kt.CH1_T1_LONGBASE not in legend
+    # 表头措辞与真实四段 + 优先级一致
+    assert "CH3 > CH2 > CH2B > CH4" in legend
+
+
 def test_dir_gate_boundary_is_strict_and_fails_closed(chip_stub):
     """边界: r5 严格 >0 (前置) 且 r5≤0.08 (涨透上界), 量比取等算过闸; 缺口档
     r10 取等 mom_max 算过闸, r10>mom_max / r5>0.08 (温和) → 没过闸;

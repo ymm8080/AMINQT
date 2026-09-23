@@ -125,6 +125,13 @@ SHEET2_LAYERS = (
 )
 ALL_LAYERS = SHEET1_LAYERS + SHEET2_LAYERS
 
+# 冠军表**实际会出现**的段位 = build_delivery 的行集合: SHEET1_LAYERS 两段 (深跌)
+# ∪ CH2B∩过闸 ∪ CH4 全量 (0919 用户令追加的两格, 见 build_delivery)。
+# 图例按本常量定义段位, **不按 SHEET1_LAYERS** —— 后者只是"深跌两段"的排序键,
+# 早先 zip(_seg_lines(), SHEET1_LAYERS) 在这里被裁到 2 段后静默截断,
+# 交付的 xlsx 里 CH2B / CH4 行一个定义都没有 (表头却仍写"四段互斥")。
+SHEET1_SEGMENTS = (CH3_T3_DEEP_QUIET, CH2_T2_DEEP, CH2B_T2_STEADY, CH4_TREND_QUIET)
+
 EXEC_NEXT_OPEN = "T+1开盘进"
 EXEC_CONFIRM = "T+1仍涨确认→T+1收盘进"
 
@@ -207,20 +214,35 @@ def _pad(s: str, width: int) -> str:
     return s + " " * max(width - _w(s), 1)
 
 
-def _seg_lines() -> tuple[str, ...]:
-    """冠军表段位条件 (底部图例); 阈值一律从 GENIOUS 取。"""
+def _seg_lines() -> tuple[tuple[str, str], ...]:
+    """冠军表段位条件 (底部图例); 阈值一律从 GENIOUS 取。
+
+    返回 (段位名, 说明行) —— **每行自带段位名**, 不与另一条列表按位置 zip
+    (历史缺陷: zip(_seg_lines(), SHEET1_LAYERS) 在 SHEET1_LAYERS 被 0918/0919
+    裁到 2 段后静默截断, 交付的 xlsx 里 CH2B/CH4 行一个定义都没有)。
+
+    只列**冠军表真会出现的段位** (SHEET1_SEGMENTS), 顺序即表内优先级。
+    CH1 不出冠军表 (build_delivery 用 SHEET1_LAYERS 过滤掉了), 故不列 ——
+    列了就是让用户去表里找不存在的段位。
+    """
     c = GENIOUS
     deep = f"{c['r60_deep']:.0%}"  # -30%
     base = "0" if c["r120_base"] == 0 else f"{c['r120_base']:.0%}"
-    return (
-        f"  {CH3_T3_DEEP_QUIET} = T3状态点火 且 r60≤{deep} 且 量比≤{c['vr_quiet']}",
-        f"  {CH2_T2_DEEP} = T2翻转日 且 r60≤{deep}",
-        f"  {CH1_T1_LONGBASE} = T1洗盘日 且 r120≤{base} 且 r20>+{c['r20_min']:.0%}",
-        f"  {CH2B_T2_STEADY} = T2翻转日 且 昨日乖离MA10≤{c['t2b_ext_prev_max']:.2f}"
-        f" 且 r120≤{base}",
-        f"  {CH4_TREND_QUIET} = r60>+{c['ch4_r60_min']:.0%} 且 MA10上行"
-        f" 且 量比≤{c['ch4_vr_max']} 且 距5日高点<{c['ch4_dd5_max']:.0%} (缩量回调横盘)",
-    )
+    lines = {
+        CH3_T3_DEEP_QUIET: (
+            f"  {CH3_T3_DEEP_QUIET} = T3状态点火 且 r60≤{deep} 且 量比≤{c['vr_quiet']}"
+        ),
+        CH2_T2_DEEP: f"  {CH2_T2_DEEP} = T2翻转日 且 r60≤{deep}",
+        CH2B_T2_STEADY: (
+            f"  {CH2B_T2_STEADY} = T2翻转日 且 昨日乖离MA10≤{c['t2b_ext_prev_max']:.2f}"
+            f" 且 r120≤{base} (没过闸者不在本表)"
+        ),
+        CH4_TREND_QUIET: (
+            f"  {CH4_TREND_QUIET} = r60>+{c['ch4_r60_min']:.0%} 且 MA10上行"
+            f" 且 量比≤{c['ch4_vr_max']} 且 距5日高点<{c['ch4_dd5_max']:.0%} (缩量回调横盘)"
+        ),
+    }
+    return tuple((name, lines[name]) for name in SHEET1_SEGMENTS)
 
 
 def _col_lines() -> tuple[tuple[str, str], ...]:
@@ -233,8 +255,9 @@ def _col_lines() -> tuple[tuple[str, str], ...]:
     return (
         (
             "旁路标注列",
-            "排在表最左: 明日开盘 / 横盘提示 / 涨停提示 / 市场温度 / 参与建议 — "
-            "含义见第 1 行横幅 (不删任何一行, 只作标注)",
+            "排在表最左: 明日开盘 / 横盘提示 / 涨停提示 — "
+            "含义见第 1 行横幅 (不删任何一行, 只作标注); "
+            "市场温度/参与建议 是日级每行同值, 垫在表尾",
         ),
         (
             "BIGDROP SCAN",
@@ -247,7 +270,7 @@ def _col_lines() -> tuple[tuple[str, str], ...]:
             "获利盘水位方向标注: 低获利，涨 = 获利盘水位<50% (浅获利, 0922 全池回测前向更强) / "
             "高获利，跌 = ≥50% (深获利, 更弱) / 空 = 无筹码数据 (cyq 缺, 不删票); 四线同源切分 0.5",
         ),
-        ("排名", "表内序号; 先按段位序 (CH3→CH2→CH1→CH2B), 段内按 r60 从深到浅"),
+        ("排名", "表内序号; 先按段位序 (CH3→CH2→CH2B→CH4), 段内按 r60 从深到浅"),
         ("symbol", "6 位股票代码 (已去掉 .SH/.SZ 后缀)"),
         (
             "涨闸",
@@ -333,21 +356,19 @@ def _tail_lines() -> tuple[str, ...]:
 
 def sheet1_legend() -> tuple[str, ...]:
     """冠军四段表底部图例 (0914 用户令: 段位中文含义 + r20 口径写进表里)。"""
-    cond, cols, types = _seg_lines(), _col_lines(), _type_lines()
-    w = max(_w(s) for s in cond)
+    segs, cols, types = _seg_lines(), _col_lines(), _type_lines()
+    w = max(_w(s) for _, s in segs)
     cw = max(_w(k) for k, _ in cols)
     tw = max(_w(k) for k, _ in types)
     return (
-        "段位说明 (四段互斥, 优先级 CH3 > CH2 > CH1 > CH2B)",
-        *(
-            _pad(s, w) + f"[当月 {LAYER_RESEARCH[name]}]"
-            for s, name in zip(cond, SHEET1_LAYERS)
-        ),
+        "段位说明 (四段互斥, 优先级 CH3 > CH2 > CH2B > CH4)",
+        *(_pad(s, w) + f"[当月 {LAYER_RESEARCH[name]}]" for name, s in segs),
         "",
         "列说明 (按表内从左到右; 表最左是旁路标注列, 核心列从「排名」起)",
         *(_pad("  " + k, cw + 2) + "= " + v for k, v in cols),
         "",
-        "类型说明 (r60/r120 分桶; 重叠时优先级 A > C > B2 > B1 > B3 > D1 > D2)",
+        "类型说明 (r60/r120 分桶参考; 表内不单列「类型」列 — 仅供定义上/下方段位阈值; "
+        "重叠时优先级 A > C > B2 > B1 > B3 > D1 > D2)",
         *(_pad("  " + k, tw + 2) + "= " + v for k, v in types),
         "",
         *_gate_lines(),
@@ -433,6 +454,11 @@ def compute_main_chip_ratio(df: pd.DataFrame) -> pd.DataFrame:
 
       `主力筹码比例` = A04 红柱 = WINNER(典型价 × 0.96) × 100  — **成本低于今价 4% 以上**的筹码占比。
                        实测与面板 `winner_ratio`(获利盘) 秩相关 ~0.98 ⇒ 它是**获利盘口径**, 不是控盘。
+                       ★ 研究读数 (末 250 日 OOS; 原始记录只有 T+10 一档, 未做 T+3/T+5):
+                       对未来 10 日 IC −0.059 (t −5.9), 五分位向下 (最低桶 +0.15% → 最高桶 −0.02%);
+                       深跌层 (r60≤−30%) 天然上方套牢重 ⇒ 红柱必然偏小, 属形态使然。
+                       ⇒ **当警戒读数用, 别当买入信号**。此列 0919 起已不出表, 原图例文字删掉,
+                       读数迁到此处留存 (勿当"已作废").
       `绿顶筹码`     = A02 绿柱顶 = WINNER(典型价 × 1.04) × 100 — 含 ±4% 带上沿, 即"上方套牢"的补集。
       `主力筹码控盘` = A08 黄柱 = A02 − A03 = 成本落在**典型价 ±4% 带内**的筹码占比。
 
@@ -870,13 +896,8 @@ def build_delivery(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     day["层"] = assign_layers(day)
     day = day[day["层"] != ""]
     day["触发器"] = trigger_name(day)
-    day["类型"] = classify_type(day)
     day["当日涨幅"] = day["pct"]
     day["获利盘"] = day["winner_ratio"]
-    day["换手率"] = day["turnover_rate"] / 100.0
-    day["量比"] = day["vr"]
-    day["乖离MA10"] = day["ext10"]
-    day["5日回撤"] = day["pb5"]
     day["执行档"] = day["层"].map(LAYER_EXEC)
     day["当月样本口径"] = day["层"].map(load_layer_research(trade_date))
 
