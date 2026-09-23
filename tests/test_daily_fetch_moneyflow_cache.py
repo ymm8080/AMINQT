@@ -25,7 +25,8 @@ def _load_moneyflow_fn(cache_path):
     src = (REPO / "_daily_fetch.py").read_text(encoding="utf-8-sig")
     tree = ast.parse(src)
     keep = [
-        n for n in tree.body
+        n
+        for n in tree.body
         if isinstance(n, ast.FunctionDef) and n.name == "_refresh_moneyflow_cache"
     ]
     assert keep, "_refresh_moneyflow_cache must exist in _daily_fetch.py"
@@ -133,7 +134,13 @@ class TestRefreshMoneyflowCache:
         got, _ = self._run(tmp_path, _day_frame())
         assert not {"buy_sm_amount", "sell_sm_amount"} & set(got.columns)
         assert list(got.columns) == [
-            "trade_date", "ts_code",
-            "buy_lg_amount", "sell_lg_amount", "buy_elg_amount", "sell_elg_amount",
-            "net_mf_amount", "mf_main_net", "mf_inst_net",
+            "trade_date",
+            "ts_code",
+            "buy_lg_amount",
+            "sell_lg_amount",
+            "buy_elg_amount",
+            "sell_elg_amount",
+            "net_mf_amount",
+            "mf_main_net",
+            "mf_inst_net",
         ]
