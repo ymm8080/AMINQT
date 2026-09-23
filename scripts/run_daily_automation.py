@@ -133,7 +133,9 @@ _STEP_TIMEOUT_S = {
     "parallel": 4 * 3600,
     # prob_head ?????? = 2 ? ? len(half_lives) ? bundle ?? (09-03 ? 6 ?)
     "prob_head": 3 * 3600,
-    "legacy_prob_head": 1 * 3600,
+    # 0923: the 21-trading-day refit came due (bundle stale since 20260823) and
+    # overran the old 1h cap -> rc=124 on 0921 and 0922; never exercised before.
+    "legacy_prob_head": 3 * 3600,
     "legacy": 3 * 3600,
     "deliver": 30 * 60,
     # canary ?????????? 5400s, ?????? 3h; 4h ????
