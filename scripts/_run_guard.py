@@ -82,6 +82,7 @@ HEAVY_SENTINELS = (
     "_missfeat_topn_addendum_0913.py",
     "_rankkey_freshwf_check_0913.py",
     "_main_cls_ncurve_0913.py",
+    "_0923M_ab_candidates.py",
 )
 ORCHESTRATOR_SENTINEL = "run_daily_automation.py"
 # 链级守卫额外把另一条链实例视为冲突; 脚本级不含 (见模块 docstring).
