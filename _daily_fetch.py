@@ -121,6 +121,8 @@ def _default_trade_date(now=None) -> str:
 TRADE_DATE = _POS_ARGS[0] if _POS_ARGS else _default_trade_date()
 FORCE_NO_CYQ = "--force" in sys.argv
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
+# moneyflow 9列正式资产 (3年回填 4.6M 行, 单位万元): 供净买正族/mf_main_net 消费.
+MF_CACHE_PATH = r"D:/AMINQT/PARQUET/moneyflow_daily.parquet"
 
 _token = os.getenv("TUSHARE_TOKEN") or ts.get_token()
 if not _token:
@@ -162,6 +164,49 @@ def fetch_stock_basic_cached() -> pd.DataFrame:
             _stock_basic_cache = _stock_basic_cache.set_index("symbol")
     return _stock_basic_cache
 
+def _refresh_moneyflow_cache(trade_date):
+    """当日 Tushare moneyflow 明细 → 9列正式资产 raw 缓存 (每日刷新, 不落面板).
+
+    幂等覆盖: 先删缓存里该交易日行再追加, 历史日重跑不产生重复.
+    骨架守卫: 四金额列全缺/全 NaN 时拒写 (权限降级会返回骨架 df, 写进去等于
+    用空列污染 3 年资产), 保持昨日原状. 空响应 (len==0) 根本不落文件.
+    派生列算式与回填脚本 _0923_netbuy_fetch.py 一致.
+    """
+    df = safe_fetch(pro.moneyflow, "moneyflow", trade_date=trade_date)
+    if not len(df):
+        print("    moneyflow raw cache: 0 rows (空响应, 不落文件)")
+        return
+    amt4 = ["buy_lg_amount", "sell_lg_amount", "buy_elg_amount", "sell_elg_amount"]
+    if not all(c in df.columns for c in amt4) or df[amt4].isna().all().all():
+        print("    moneyflow raw cache: 金额列全缺/全 NaN (骨架响应) -> 拒写, 缓存保持原状")
+        return
+    day = df.copy()
+    day["trade_date"] = day["trade_date"].astype(str)
+    day["mf_main_net"] = (
+        (day["buy_lg_amount"] - day["sell_lg_amount"]).fillna(0)
+        + (day["buy_elg_amount"] - day["sell_elg_amount"]).fillna(0)
+    )
+    day["mf_inst_net"] = (day["buy_elg_amount"] - day["sell_elg_amount"]).fillna(0)
+    keep = [
+        "trade_date", "ts_code",
+        "buy_lg_amount", "sell_lg_amount", "buy_elg_amount", "sell_elg_amount",
+        "net_mf_amount", "mf_main_net", "mf_inst_net",
+    ]
+    old = pd.read_parquet(MF_CACHE_PATH) if os.path.exists(MF_CACHE_PATH) else pd.DataFrame()
+    if len(old):
+        # 幂等: 剔除该交易日旧行 (历史日重跑/cache 含当日陈旧值时不会被追加成重复)
+        old = old[old["trade_date"].astype(str) != str(trade_date)]
+    merged = pd.concat([old, day], ignore_index=True)
+    merged = merged.drop_duplicates(subset=["trade_date", "ts_code"], keep="last")
+    merged = merged.sort_values(["trade_date", "ts_code"]).reset_index(drop=True)
+    # 投影到保留列: 老缓存/新响应可能带多余列 (buy_sm/sell_sm 等), 防 schema 漂移
+    merged = merged[[c for c in keep if c in merged.columns]]
+    os.makedirs(os.path.dirname(MF_CACHE_PATH), exist_ok=True)
+    _tmp = MF_CACHE_PATH + ".tmp"
+    merged.to_parquet(_tmp, index=False)
+    os.replace(_tmp, MF_CACHE_PATH)  # 原子替换, 避免崩溃写坏 3 年资产
+    print(f"    moneyflow raw cache: +{len(day)} rows -> {len(merged)} total")
+
 # ── 0. Get valid stock universe (stock_basic 全市场重建, 不再冻结面板快照) ──
 print("[0] Getting stock universe...")
 yesterday = pq.read_table(PANEL, columns=["symbol", "date"]).to_pandas()
@@ -199,6 +244,13 @@ if not len(margin):
             break
 lhb   = safe_fetch(pro.top_list, "LHB", trade_date=TRADE_DATE)
 bt    = safe_fetch(pro.block_trade, "block_trade", trade_date=TRADE_DATE)
+
+# ── moneyflow: 当日主力资金明细 → 9列正式资产 raw 缓存 (净买正族/mf_* 读它, 需每日刷新) ──
+# 放在 OHLCV FATAL 闸之前: 即使后续步骤中止, moneyflow 缓存也已刷新.
+try:
+    _refresh_moneyflow_cache(TRADE_DATE)
+except Exception as e:
+    print(f"    moneyflow raw cache: FAILED ({e})")
 
 if not len(ohlcv):
     print("FATAL: No OHLCV data")
