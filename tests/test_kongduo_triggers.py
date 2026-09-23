@@ -664,8 +664,20 @@ def test_sheet1_legend_covers_every_emittable_segment(chip_stub):
     chip_stub()
     df = _layer_frame(
         [
-            {"symbol": "000001", "T3": True, "r60": -0.40, "pct": 0.08, "vr": 1.0},  # CH3
-            {"symbol": "000002", "T2": True, "r60": -0.35, "pct": 0.03, "vr": 1.0},  # CH2
+            {
+                "symbol": "000001",
+                "T3": True,
+                "r60": -0.40,
+                "pct": 0.08,
+                "vr": 1.0,
+            },  # CH3
+            {
+                "symbol": "000002",
+                "T2": True,
+                "r60": -0.35,
+                "pct": 0.03,
+                "vr": 1.0,
+            },  # CH2
             {
                 "symbol": "000003",
                 "T2": True,

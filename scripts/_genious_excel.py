@@ -575,9 +575,7 @@ def _build_firstboard_sheets(target: str, dry_run: bool = False):
         return None, None
     # 板前哨后台全量表 (含次数0/1与当日停牌缺行): record_csv 契约见 _firstboard_pages.serve_preboard
     pb_csv = (
-        None
-        if dry_run
-        else Path(STOCK_LIST_DIR) / f"preboard_watch_hits_{target}.csv"
+        None if dry_run else Path(STOCK_LIST_DIR) / f"preboard_watch_hits_{target}.csv"
     )
     return fbp.serve_firstboard(pdf), fbp.serve_preboard(pdf, record_csv=pb_csv)
 
