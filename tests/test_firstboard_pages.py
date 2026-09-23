@@ -35,10 +35,21 @@ def mk_panel(rows: dict[str, dict[str, list]]) -> pd.DataFrame:
     n = len(DATES)
     frames = []
     defaults = dict(
-        open=10.0, high=10.5, low=9.5, close=10.0, pre_close=10.0, pctChg=0.0,
-        turnover_rate=1.0, volume_ratio=1.0, amount=1e8, circ_mv=30.0,
-        free_float_turnover_rate=5.0, winner_ratio=0.30, sw_l2_name="X1",
-        lhb_net_buy=0.0, lhb_inst_buy=0.0,
+        open=10.0,
+        high=10.5,
+        low=9.5,
+        close=10.0,
+        pre_close=10.0,
+        pctChg=0.0,
+        turnover_rate=1.0,
+        volume_ratio=1.0,
+        amount=1e8,
+        circ_mv=30.0,
+        free_float_turnover_rate=5.0,
+        winner_ratio=0.30,
+        sw_l2_name="X1",
+        lhb_net_buy=0.0,
+        lhb_inst_buy=0.0,
     )
     for sym, ov in rows.items():
         d = {"symbol": sym, "date": DATES}
@@ -72,7 +83,10 @@ class TestEventFeatures:
         assert len(b) == 1 and b.iloc[0]["date"] == DATES[60]
 
     def test_wr1_is_t_minus_1_winner_ratio(self):
-        ov = {"pctChg": [0.0] * len(DATES), "winner_ratio": [0.30 + i * 0.001 for i in range(len(DATES))]}
+        ov = {
+            "pctChg": [0.0] * len(DATES),
+            "winner_ratio": [0.30 + i * 0.001 for i in range(len(DATES))],
+        }
         df = mk_panel({"600003": ov})
         _set(df, "600003", 70, pctChg=10.0)
         ev = fbp.build_event_features(df)
@@ -87,7 +101,14 @@ class TestEventFeatures:
         row = ev.iloc[0]
         assert bool(row["yizi"]) and bool(row["champion"])
         # 对照: 低获利盘 → 非冠军
-        df2 = mk_panel({"600005": {"pctChg": [0.0] * len(DATES), "winner_ratio": [0.40] * len(DATES)}})
+        df2 = mk_panel(
+            {
+                "600005": {
+                    "pctChg": [0.0] * len(DATES),
+                    "winner_ratio": [0.40] * len(DATES),
+                }
+            }
+        )
         _set(df2, "600005", 70, pctChg=10.0, low=11.0, open=11.0, high=11.0, close=11.0)
         ev2 = fbp.build_event_features(df2)
         assert bool(ev2.iloc[0]["yizi"]) and not bool(ev2.iloc[0]["champion"])
@@ -95,7 +116,9 @@ class TestEventFeatures:
     def test_label_nan_at_tail(self):
         ov = {"pctChg": [0.0] * len(DATES)}
         df = mk_panel({"600006": ov})
-        _set(df, "600006", len(DATES) - 2, pctChg=10.0)  # 剩1行: k2 需5日→NaN, next 需1日→0.0
+        _set(
+            df, "600006", len(DATES) - 2, pctChg=10.0
+        )  # 剩1行: k2 需5日→NaN, next 需1日→0.0
         ev = fbp.build_event_features(df)
         assert ev.iloc[0]["k2"] != ev.iloc[0]["k2"]  # NaN
         assert ev.iloc[0]["k3"] != ev.iloc[0]["k3"]  # k3 需3日 → 同样 NaN
@@ -103,8 +126,12 @@ class TestEventFeatures:
 
     def test_k3_label_window3(self):
         # 0923: k3 = D0+1..D0+3 内任一板 (同 k2 式窗口 3) — 板在 D0+4 只算 k2 不算 k3
-        df = mk_panel({"600007": {"pctChg": [0.0] * len(DATES)},
-                       "600008": {"pctChg": [0.0] * len(DATES)}})
+        df = mk_panel(
+            {
+                "600007": {"pctChg": [0.0] * len(DATES)},
+                "600008": {"pctChg": [0.0] * len(DATES)},
+            }
+        )
         _set(df, "600007", 70, pctChg=10.0)
         _set(df, "600007", 73, pctChg=10.0)  # D0+3 再板 → k3=1
         _set(df, "600008", 70, pctChg=10.0)
@@ -120,10 +147,21 @@ class TestPromoNoLookahead:
     def _tiny(self, y_boards_d2: float):
         dates = pd.bdate_range("2026-03-02", periods=3)
         rows = []
-        for sym, boards in (("600101", (1.0, 1.0, 0.0)), ("600102", (1.0, 0.0, y_boards_d2))):
+        for sym, boards in (
+            ("600101", (1.0, 1.0, 0.0)),
+            ("600102", (1.0, 0.0, y_boards_d2)),
+        ):
             for i, dt in enumerate(dates):
-                rows.append(dict(symbol=sym, date=dt, pctChg=10.0 if boards[i] else 0.0,
-                                 pre_close=10.0, high=11.0, close=10.5))
+                rows.append(
+                    dict(
+                        symbol=sym,
+                        date=dt,
+                        pctChg=10.0 if boards[i] else 0.0,
+                        pre_close=10.0,
+                        high=11.0,
+                        close=10.5,
+                    )
+                )
         df = pd.DataFrame(rows)
         df["date"] = pd.to_datetime(df["date"])
         return df.sort_values(["symbol", "date"]).reset_index(drop=True)
@@ -231,13 +269,17 @@ class TestPreboardRolling:
     def test_multirow_and_fire_only_display(self):
         ova = self._pb_sym(85)
         ova["pctChg"][-1] = 3.0  # 今日点火 → v4 唯一显示条件
-        df = mk_panel({"600501": ova, "600502": self._pb_sym(89), "600504": self._pb_sym(88)})
+        df = mk_panel(
+            {"600501": ova, "600502": self._pb_sym(89), "600504": self._pb_sym(88)}
+        )
         page = fbp.serve_preboard(df)
         # 股A 今日点火 → 全部命中日各一行; 两次数列=近10/20交易日命中总数 (逐行同值)
         a = page[page["代码"] == "600501"]
         assert len(a) == 5
         assert (a["次数10日"] == 5).all() and (a["次数20日"] == 5).all()
-        assert set(a["击中日期"]) == {DATES[i].strftime("%Y-%m-%d") for i in range(85, 90)}
+        assert set(a["击中日期"]) == {
+            DATES[i].strftime("%Y-%m-%d") for i in range(85, 90)
+        }
         # v4: 无点火 → 整组不显示 (次数1 股B / 次数≥2 股D 都进不了 Excel)
         assert set(page["代码"]) == {"600501"}
 
@@ -245,12 +287,16 @@ class TestPreboardRolling:
         ov = self._pb_sym(89)
         ov["pctChg"][-1] = 3.0  # T1: 今日≥2 且前5日无≥2; T2: 涨2~7 → T1+T2
         ov["winner_ratio"][-1] = 0.70  # 通道优先腿1: 今日获利盘≥0.65
-        ov["lhb_net_buy"] = [0.0] * 85 + [1.0] * 5  # 通道优先腿2: 20日内LHB净买+机构双旗
+        ov["lhb_net_buy"] = [0.0] * 85 + [
+            1.0
+        ] * 5  # 通道优先腿2: 20日内LHB净买+机构双旗
         ov["lhb_inst_buy"] = [0.0] * 85 + [1.0] * 5
         page = fbp.serve_preboard(mk_panel({"600503": ov}))
         assert len(page) == 1
         r = page.iloc[0]
-        assert r["代码"] == "600503" and r["点火旗"] == "T1+T2" and r["通道优先"] == "优先"
+        assert (
+            r["代码"] == "600503" and r["点火旗"] == "T1+T2" and r["通道优先"] == "优先"
+        )
         assert r["次数10日"] == 1 and r["次数20日"] == 1
 
     def test_sort_fire_then_date_then_count(self):
@@ -267,9 +313,14 @@ class TestPreboardRolling:
         got = list(zip(page["代码"], page["击中日期"]))
         # 点火等级高在前 (T1+T2 > T2); 同等级内 击中日期新在前; 同日期 次数10日大在前 (A=5 > C=1)
         assert got == [
-            ("600501", d(89)), ("600503", d(89)),
-            ("600501", d(88)), ("600501", d(87)), ("600501", d(86)), ("600501", d(85)),
-            ("600504", d(89)), ("600504", d(88)),
+            ("600501", d(89)),
+            ("600503", d(89)),
+            ("600501", d(88)),
+            ("600501", d(87)),
+            ("600501", d(86)),
+            ("600501", d(85)),
+            ("600504", d(89)),
+            ("600504", d(88)),
         ]
 
     def test_record_csv_full_and_worm(self, tmp_path):
@@ -277,16 +328,27 @@ class TestPreboardRolling:
         p = tmp_path / "preboard_watch_hits_test.csv"
         fbp.serve_preboard(df, record_csv=p)
         assert p.exists()
-        rec = pd.read_csv(p, encoding="utf-8-sig", keep_default_na=False, dtype={"代码": str})
+        rec = pd.read_csv(
+            p, encoding="utf-8-sig", keep_default_na=False, dtype={"代码": str}
+        )
         assert rec.columns.tolist() == [
-            "代码", "首次击中", "最近击中", "次数10日", "次数20日",
-            "今日点火旗", "今日涨幅", "今日获利盘", "通道优先",
+            "代码",
+            "首次击中",
+            "最近击中",
+            "次数10日",
+            "次数20日",
+            "今日点火旗",
+            "今日涨幅",
+            "今日获利盘",
+            "通道优先",
         ]
         # 后台表全量: 含被显示过滤掉的股B
         assert sorted(rec["代码"]) == ["600501", "600502"]
         ra = rec[rec["代码"] == "600501"].iloc[0]
         assert (ra["首次击中"], ra["最近击中"]) == (
-            DATES[85].strftime("%Y-%m-%d"), DATES[89].strftime("%Y-%m-%d"))
+            DATES[85].strftime("%Y-%m-%d"),
+            DATES[89].strftime("%Y-%m-%d"),
+        )
         assert ra["次数10日"] == 5 and ra["次数20日"] == 5
         rb = rec[rec["代码"] == "600502"].iloc[0]
         assert rb["次数10日"] == 1 and rb["今日点火旗"] == ""
@@ -302,7 +364,9 @@ class TestPreboardRolling:
         ova = self._pb_sym(85)
         ova["pctChg"][-1] = 3.0  # 股A 今日点火 (保留今日行)
         df = mk_panel({"600501": ova, "600502": self._pb_sym(85)})
-        df = df[~((df["symbol"] == "600502") & (df["date"] == DATES[-1]))].reset_index(drop=True)
+        df = df[~((df["symbol"] == "600502") & (df["date"] == DATES[-1]))].reset_index(
+            drop=True
+        )
         page = fbp.serve_preboard(df)
         # 股A 点火 → 5 个命中日各一行
         a = page[page["代码"] == "600501"]
@@ -326,14 +390,27 @@ def trained(tmp_path_factory):
             pct[-12:-1] = 0.0
             pct[-1] = 10.0
         for i, dt in enumerate(dates):
-            rows.append(dict(
-                symbol=f"6004{k:02d}", date=dt, open=10.0, high=10.5, low=9.5,
-                close=10.0, pre_close=10.0, pctChg=float(pct[i]),
-                turnover_rate=1 + rng.random(), volume_ratio=1 + rng.random(),
-                amount=1e8, circ_mv=30.0, free_float_turnover_rate=5.0,
-                winner_ratio=float(np.clip(wr[i], 0, 1)), sw_l2_name="X1",
-                lhb_net_buy=0.0, lhb_inst_buy=0.0,
-            ))
+            rows.append(
+                dict(
+                    symbol=f"6004{k:02d}",
+                    date=dt,
+                    open=10.0,
+                    high=10.5,
+                    low=9.5,
+                    close=10.0,
+                    pre_close=10.0,
+                    pctChg=float(pct[i]),
+                    turnover_rate=1 + rng.random(),
+                    volume_ratio=1 + rng.random(),
+                    amount=1e8,
+                    circ_mv=30.0,
+                    free_float_turnover_rate=5.0,
+                    winner_ratio=float(np.clip(wr[i], 0, 1)),
+                    sw_l2_name="X1",
+                    lhb_net_buy=0.0,
+                    lhb_inst_buy=0.0,
+                )
+            )
     df = pd.DataFrame(rows).sort_values(["symbol", "date"]).reset_index(drop=True)
     df["date"] = pd.to_datetime(df["date"])
     pq_path = tmp_path_factory.mktemp("fbp") / "synthetic_panel.parquet"
@@ -350,6 +427,7 @@ class TestModelRoundtrip:
         assert (out / "booster_k3.txt").exists()
         assert (out / "booster_next.txt").exists()
         import json
+
         m = json.loads((out / "meta.json").read_text(encoding="utf-8"))
         assert m["features"] == fbp.FEATS and len(m["sw_l2_categories"]) >= 1
         # 0923: k3 头验收线登记进 meta (真实验收断言在 --train 于真面板上执行)
@@ -359,6 +437,7 @@ class TestModelRoundtrip:
         # 训练即 reload 复现: k3 指标算出并原样登记进 meta (防落盘口径分裂)
         out, _, res = trained
         import json
+
         m = json.loads((out / "meta.json").read_text(encoding="utf-8"))
         assert m["te_top1_k3"] == pytest.approx(round(res["k3@1"], 1), abs=1e-9)
         if res["auc_k3"] == res["auc_k3"]:  # NaN (合成TE单类) 跳过
@@ -374,15 +453,29 @@ class TestModelRoundtrip:
         assert fbp._EXPECT_TE["tol_k3_auc"] == 0.005
         # 0923 刷新 k2 两线: 旧线 46.1/42.0 建于 0922 V3 面板重建(BJ剔除)前 = 旧基线;
         # 当前帧生产 booster 实读 45.78/41.77 → 45.8/41.8 (auc_next 线不动)
-        assert (fbp._EXPECT_TE["k2@1"], fbp._EXPECT_TE["k2@3"], fbp._EXPECT_TE["auc_next"]) == (
-            45.8, 41.8, 0.5911)
+        assert (
+            fbp._EXPECT_TE["k2@1"],
+            fbp._EXPECT_TE["k2@3"],
+            fbp._EXPECT_TE["auc_next"],
+        ) == (45.8, 41.8, 0.5911)
 
     def test_serve_roundtrip_probs_in_range(self, trained, monkeypatch):
         out, df, _ = trained
         monkeypatch.setattr(fbp, "_NAME_CACHE", {})  # 测试不触网
         page = fbp.serve_firstboard(df, models_dir=out)
-        assert {"排名", "冠军格", "代码", "名称", "T+3板概率", "T+5板概率", "校准档位",
-                "一字", "次日一字风险", "板块涨停数", "市场涨停数"} <= set(page.columns)
+        assert {
+            "排名",
+            "冠军格",
+            "代码",
+            "名称",
+            "T+3板概率",
+            "T+5板概率",
+            "校准档位",
+            "一字",
+            "次日一字风险",
+            "板块涨停数",
+            "市场涨停数",
+        } <= set(page.columns)
         got = page["T+3板概率"].dropna()
         assert len(got) and got.between(0, 1).all()
         got5 = page["T+5板概率"].dropna()
@@ -393,8 +486,17 @@ class TestModelRoundtrip:
         _, df, _ = trained
         page = fbp.serve_preboard(df)
         assert page.columns.tolist() == [
-            "通道优先", "点火旗", "击中日期", "次数10日", "次数20日", "代码", "当日涨幅",
-            "获利盘", "20日获利盘Δ", "5日均换手", "5日/20日换手比",
+            "通道优先",
+            "点火旗",
+            "击中日期",
+            "次数10日",
+            "次数20日",
+            "代码",
+            "当日涨幅",
+            "获利盘",
+            "20日获利盘Δ",
+            "5日均换手",
+            "5日/20日换手比",
         ]
         if len(page):  # 击中日期为文本日期, 两次数列为整数
             assert page["击中日期"].map(lambda v: isinstance(v, str)).all()
@@ -407,10 +509,14 @@ class TestCalibTier:
         p = pd.Series([0.50, 0.40, 0.399, 0.30, 0.299, 0.20, 0.199, np.nan])
         t = fbp._calib_tier(p)
         assert t.tolist() == [
-            "≥0.4→实测~54%", "≥0.4→实测~54%",
-            "0.3-0.4→实测~28%", "0.3-0.4→实测~28%",
-            "0.2-0.3→实测~21%", "0.2-0.3→实测~21%",
-            "<0.2→实测~18%", "",
+            "≥0.4→实测~54%",
+            "≥0.4→实测~54%",
+            "0.3-0.4→实测~28%",
+            "0.3-0.4→实测~28%",
+            "0.2-0.3→实测~21%",
+            "0.2-0.3→实测~21%",
+            "<0.2→实测~18%",
+            "",
         ]
 
 
@@ -419,13 +525,19 @@ def _today_events_df(n=6, champion_sym=None):
     rows = {}
     for k in range(n):
         sym = f"6006{k:02d}"
-        ov = {"pctChg": [0.0] * len(DATES),
-              "winner_ratio": [0.30 + 0.05 * k] * len(DATES)}
+        ov = {
+            "pctChg": [0.0] * len(DATES),
+            "winner_ratio": [0.30 + 0.05 * k] * len(DATES),
+        }
         ov["pctChg"][-1] = 10.0
         if sym == champion_sym:  # 一字 + 高获利盘 → 冠军格
             ov["winner_ratio"] = [0.70] * len(DATES)
-            for col, v0, v1 in (("open", 10.0, 11.0), ("high", 10.5, 11.0),
-                                ("low", 9.5, 11.0), ("close", 10.0, 11.0)):
+            for col, v0, v1 in (
+                ("open", 10.0, 11.0),
+                ("high", 10.5, 11.0),
+                ("low", 9.5, 11.0),
+                ("close", 10.0, 11.0),
+            ):
                 ov[col] = [v0] * (len(DATES) - 1) + [v1]
         rows[sym] = ov
     return mk_panel(rows)
@@ -438,9 +550,25 @@ class TestServeFirstboardV2:
         out, _, _ = trained
         monkeypatch.setattr(fbp, "_NAME_CACHE", {"600600": "甲股"})
         page = fbp.serve_firstboard(_today_events_df(6), models_dir=out)
-        assert page.columns.tolist() == [
-            "排名", "代码", "名称", "T+3板概率", "T+5板概率", "校准档位", "冠军格",
-            "一字", "次日一字风险", "板前获利盘", "板块涨停数", "昨日晋级率", "市场涨停数"] + fbp.LHB_ANNOT_COLS
+        assert (
+            page.columns.tolist()
+            == [
+                "排名",
+                "代码",
+                "名称",
+                "T+3板概率",
+                "T+5板概率",
+                "校准档位",
+                "冠军格",
+                "一字",
+                "次日一字风险",
+                "板前获利盘",
+                "板块涨停数",
+                "昨日晋级率",
+                "市场涨停数",
+            ]
+            + fbp.LHB_ANNOT_COLS
+        )
         assert len(page) == 6  # 全量清单, 不 Top-N 截断
         p3 = page["T+3板概率"]
         assert p3.notna().all()
@@ -452,7 +580,12 @@ class TestServeFirstboardV2:
         out, _, _ = trained
         monkeypatch.setattr(fbp, "_NAME_CACHE", {})
         page = fbp.serve_firstboard(_today_events_df(6), models_dir=out)
-        allowed = {"≥0.4→实测~54%", "0.3-0.4→实测~28%", "0.2-0.3→实测~21%", "<0.2→实测~18%"}
+        allowed = {
+            "≥0.4→实测~54%",
+            "0.3-0.4→实测~28%",
+            "0.2-0.3→实测~21%",
+            "<0.2→实测~18%",
+        }
         assert set(page["校准档位"]) <= allowed
         for tier, p in zip(page["校准档位"], page["T+3板概率"]):
             assert tier == fbp._calib_tier(pd.Series([p])).iloc[0]
@@ -460,8 +593,9 @@ class TestServeFirstboardV2:
     def test_champion_kept_when_truncated(self, trained, monkeypatch):
         out, _, _ = trained
         monkeypatch.setattr(fbp, "_NAME_CACHE", {})
-        page = fbp.serve_firstboard(_today_events_df(8, champion_sym="600607"),
-                                    models_dir=out, max_rows=5)
+        page = fbp.serve_firstboard(
+            _today_events_df(8, champion_sym="600607"), models_dir=out, max_rows=5
+        )
         # 截 5 行, 冠军格★行豁免保留 (W19 并集规则)
         assert 5 <= len(page) <= 6
         assert (page["冠军格"] == "★").any()
@@ -470,13 +604,15 @@ class TestServeFirstboardV2:
     def test_yizi_is_hint_not_veto_and_risk_consistency(self, trained, monkeypatch):
         out, _, _ = trained
         monkeypatch.setattr(fbp, "_NAME_CACHE", {})
-        page = fbp.serve_firstboard(_today_events_df(6, champion_sym="600600"),
-                                    models_dir=out)
+        page = fbp.serve_firstboard(
+            _today_events_df(6, champion_sym="600600"), models_dir=out
+        )
         yz = page[page["一字"] == "一字"]
         assert len(yz) == 1  # 一字行仍在清单 = 提示非否决
         # 次日一字风险 = 一字 ∩ T+3板概率≥阈值 (仅提示, 页内自洽)
-        exp = np.where((page["一字"] == "一字")
-                       & (page["T+3板概率"] >= fbp.K3_RISK_TH), "风险", "")
+        exp = np.where(
+            (page["一字"] == "一字") & (page["T+3板概率"] >= fbp.K3_RISK_TH), "风险", ""
+        )
         assert (page["次日一字风险"].to_numpy() == exp).all()
         assert set(page["次日一字风险"]) <= {"", "风险"}
 
@@ -487,15 +623,19 @@ class TestLhbSeatAnnotations:
     @staticmethod
     def _daily(rows):
         return pd.DataFrame(
-            rows, columns=["symbol", "date", "n_rows", "net_sum", "hotseat_n", "inst_any"])
+            rows,
+            columns=["symbol", "date", "n_rows", "net_sum", "hotseat_n", "inst_any"],
+        )
 
     def test_agg_seat_daily_categories(self):
-        st = pd.DataFrame({
-            "ts_code": ["000610.SZ", "000610.SZ", "600001.SH", "300001.SZ"],
-            "trade_date": ["20260105"] * 4,
-            "net_buy": [100_000_000.0, -50_000_000.0, 30_000_000.0, 10.0],
-            "category": ["高频游资", "机构专用", "拉萨散户团", "高频游资"],
-        })
+        st = pd.DataFrame(
+            {
+                "ts_code": ["000610.SZ", "000610.SZ", "600001.SH", "300001.SZ"],
+                "trade_date": ["20260105"] * 4,
+                "net_buy": [100_000_000.0, -50_000_000.0, 30_000_000.0, 10.0],
+                "category": ["高频游资", "机构专用", "拉萨散户团", "高频游资"],
+            }
+        )
         d = fbp._agg_seat_daily(st)
         a = d[d["symbol"] == "000610"].iloc[0]
         assert a["net_sum"] == pytest.approx(0.5)  # (1-0.5)亿
@@ -506,11 +646,17 @@ class TestLhbSeatAnnotations:
 
     def test_page_annotations_and_blank_rows(self, trained, monkeypatch):
         out, _, _ = trained
-        monkeypatch.setattr(fbp, "_LHB_DAILY_CACHE", self._daily([
-            ("600600", DATES[-1], 3.0, 2.5, 4.0, 1.0),   # D0 当日
-            ("600600", DATES[-3], 2.0, -1.0, 1.0, 0.0),  # 窗内前史
-            ("600601", DATES[-1], 1.0, 0.8, 0.0, 0.0),
-        ]))
+        monkeypatch.setattr(
+            fbp,
+            "_LHB_DAILY_CACHE",
+            self._daily(
+                [
+                    ("600600", DATES[-1], 3.0, 2.5, 4.0, 1.0),  # D0 当日
+                    ("600600", DATES[-3], 2.0, -1.0, 1.0, 0.0),  # 窗内前史
+                    ("600601", DATES[-1], 1.0, 0.8, 0.0, 0.0),
+                ]
+            ),
+        )
         monkeypatch.setattr(fbp, "_NAME_CACHE", {})
         page = fbp.serve_firstboard(_today_events_df(3), models_dir=out)
         r0 = page[page["代码"] == "600600"].iloc[0]
@@ -529,11 +675,17 @@ class TestLhbSeatAnnotations:
     def test_window_is_d20_to_d0(self, trained, monkeypatch):
         # 窗=D-20..D0 (21 交易日): 第-22日(窗外)不计, 第-21日(=D-20)计入
         out, _, _ = trained
-        monkeypatch.setattr(fbp, "_LHB_DAILY_CACHE", self._daily([
-            ("600600", DATES[-22], 1.0, 5.0, 1.0, 1.0),
-            ("600600", DATES[-21], 1.0, 1.0, 1.0, 0.0),
-            ("600600", DATES[-1], 1.0, 1.0, 1.0, 0.0),
-        ]))
+        monkeypatch.setattr(
+            fbp,
+            "_LHB_DAILY_CACHE",
+            self._daily(
+                [
+                    ("600600", DATES[-22], 1.0, 5.0, 1.0, 1.0),
+                    ("600600", DATES[-21], 1.0, 1.0, 1.0, 0.0),
+                    ("600600", DATES[-1], 1.0, 1.0, 1.0, 0.0),
+                ]
+            ),
+        )
         monkeypatch.setattr(fbp, "_NAME_CACHE", {})
         page = fbp.serve_firstboard(_today_events_df(1), models_dir=out)
         r = page.iloc[0]
@@ -541,12 +693,20 @@ class TestLhbSeatAnnotations:
         assert r["LHB净买亿(20日)"] == pytest.approx(2.0)  # 窗外 5 亿不计
 
     def test_historical_d0_window(self, monkeypatch):
-        monkeypatch.setattr(fbp, "_LHB_DAILY_CACHE", self._daily([
-            ("600600", DATES[-10], 1.0, 1.0, 2.0, 1.0),  # 指定 d0
-            ("600600", DATES[-30], 1.0, 5.0, 5.0, 0.0),  # D-20 → 窗内第1日
-            ("600600", DATES[-31], 1.0, 9.0, 9.0, 0.0),  # D-21 → 窗外
-        ]))
-        ann = fbp._lhb_annotations(pd.DataFrame({"date": DATES}), ["600600"], d0=DATES[-10])
+        monkeypatch.setattr(
+            fbp,
+            "_LHB_DAILY_CACHE",
+            self._daily(
+                [
+                    ("600600", DATES[-10], 1.0, 1.0, 2.0, 1.0),  # 指定 d0
+                    ("600600", DATES[-30], 1.0, 5.0, 5.0, 0.0),  # D-20 → 窗内第1日
+                    ("600600", DATES[-31], 1.0, 9.0, 9.0, 0.0),  # D-21 → 窗外
+                ]
+            ),
+        )
+        ann = fbp._lhb_annotations(
+            pd.DataFrame({"date": DATES}), ["600600"], d0=DATES[-10]
+        )
         a = ann["600600"]
         assert a["pre_days"] == 2.0 and a["pre_net"] == 6.0 and a["pre_hot"] == 7.0
         assert a["d0_net"] == 1.0 and a["d0_hot"] == 2.0 and a["pre_inst"] == 1.0
@@ -571,34 +731,50 @@ class TestGeniousMultiSheet:
         s1 = pd.DataFrame({"排名": [1], "symbol": ["600001"]})
         extra = pd.DataFrame({"代码": ["600002"], "续板概率5日": [0.42]})
         fp = genious.write_xlsx(
-            s1, "20990101", list_dir=str(tmp_path),
+            s1,
+            "20990101",
+            list_dir=str(tmp_path),
             extra_sheets=[("首板点名", extra, genious.FB_BANNER, genious.FB_LEGEND)],
         )
         import openpyxl
+
         wb = openpyxl.load_workbook(fp)
         assert wb.sheetnames == ["冠军四段", "首板点名"]
         assert wb["首板点名"]["A1"].value == genious.FB_BANNER
 
     def test_preboard_sheet_footnote_below_table(self, tmp_path):
         genious = importlib.import_module("scripts._genious_excel")
-        pb = pd.DataFrame({
-            "通道优先": ["优先", ""], "点火旗": ["T1+T2", ""],
-            "击中日期": ["2026-09-18", "2026-09-15"], "次数10日": [1, 5], "次数20日": [2, 5],
-            "代码": ["600503", "600501"], "当日涨幅": [0.03, np.nan],
-            "获利盘": [0.70, 0.42], "20日获利盘Δ": [0.12, 0.12],
-            "5日均换手": [0.4, 0.4], "5日/20日换手比": [0.5, 0.5],
-        })
+        pb = pd.DataFrame(
+            {
+                "通道优先": ["优先", ""],
+                "点火旗": ["T1+T2", ""],
+                "击中日期": ["2026-09-18", "2026-09-15"],
+                "次数10日": [1, 5],
+                "次数20日": [2, 5],
+                "代码": ["600503", "600501"],
+                "当日涨幅": [0.03, np.nan],
+                "获利盘": [0.70, 0.42],
+                "20日获利盘Δ": [0.12, 0.12],
+                "5日均换手": [0.4, 0.4],
+                "5日/20日换手比": [0.5, 0.5],
+            }
+        )
         s1 = pd.DataFrame({"排名": [1], "symbol": ["600001"]})
         fp = genious.write_xlsx(
-            s1, "20990101", list_dir=str(tmp_path),
+            s1,
+            "20990101",
+            list_dir=str(tmp_path),
             extra_sheets=[("板前哨", pb, genious.PB_BANNER, genious.PB_LEGEND)],
         )
         import openpyxl
+
         wb = openpyxl.load_workbook(fp)
         assert "板前哨" in wb.sheetnames
         ws = wb["板前哨"]
         # 表格数据止于 row 3+len; 脚注=PB_LEGEND 写在其下方 A 列
-        foot = [ws.cell(row=r, column=1).value
-                for r in range(4 + len(pb) + 1, ws.max_row + 1)]
+        foot = [
+            ws.cell(row=r, column=1).value
+            for r in range(4 + len(pb) + 1, ws.max_row + 1)
+        ]
         assert any(isinstance(v, str) and "通道优先" in v for v in foot)
         assert any(isinstance(v, str) and "通道优先·白话" in v for v in foot)

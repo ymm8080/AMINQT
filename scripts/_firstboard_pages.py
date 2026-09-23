@@ -40,36 +40,85 @@ TR_END = "2024-12-31"
 VA_END = "2025-12-31"
 
 PANEL_COLS = [
-    "date", "symbol", "open", "high", "low", "close", "pre_close", "pctChg",
-    "turnover_rate", "volume_ratio", "amount", "circ_mv", "free_float_turnover_rate",
-    "winner_ratio", "sw_l2_name", "lhb_net_buy", "lhb_inst_buy",
+    "date",
+    "symbol",
+    "open",
+    "high",
+    "low",
+    "close",
+    "pre_close",
+    "pctChg",
+    "turnover_rate",
+    "volume_ratio",
+    "amount",
+    "circ_mv",
+    "free_float_turnover_rate",
+    "winner_ratio",
+    "sw_l2_name",
+    "lhb_net_buy",
+    "lhb_inst_buy",
 ]
 
-F18 = ["wr1", "gap", "ret60", "cmv", "ftr", "amount", "turn_d0", "vr_d0", "vr_prev",
-       "pct_prev", "intraday", "amplitude", "seal_hard", "close_ret", "amt_rank_pct",
-       "ind_boards", "streak_prev"]
+F18 = [
+    "wr1",
+    "gap",
+    "ret60",
+    "cmv",
+    "ftr",
+    "amount",
+    "turn_d0",
+    "vr_d0",
+    "vr_prev",
+    "pct_prev",
+    "intraday",
+    "amplitude",
+    "seal_hard",
+    "close_ret",
+    "amt_rank_pct",
+    "ind_boards",
+    "streak_prev",
+]
 ECO4 = ["mkt_boards_n", "mkt_chain_n", "mkt_max_streak", "zha_rate"]
 # 0922 W22: promo 用修正版(next_map 真昨日晋级率); 原漏版被否决出生产.
 FEATS = F18 + ECO4 + ["promo_yd"]
 
-PARAMS = dict(objective="binary", n_estimators=400, num_leaves=31, learning_rate=0.05,
-              min_child_samples=50, random_state=42, verbose=-1)
+PARAMS = dict(
+    objective="binary",
+    n_estimators=400,
+    num_leaves=31,
+    learning_rate=0.05,
+    min_child_samples=50,
+    random_state=42,
+    verbose=-1,
+)
 
 # TE 复现验收线 (W22 修正版实测; 训练后 reload 断言, 漂移即 fail, 禁静默换模型)
 # k3 头验收线 = 0923 rank_calib 实测 (tmp_t/_0923_rank_calib.out), 容差按用户令 ±0.5 / ±0.005
 # 0923 刷新 k2 两线: 46.1/42.0 建于 0922 V3 面板重建(BJ剔除)前 = 旧基线; 当前帧生产 booster
 # 实读 k2@1=45.78 / k2@3=41.77 → 刷新为 45.8/41.8 (auc_next/k3 线原样不动)
-_EXPECT_TE = {"k2@1": 45.8, "k2@3": 41.8, "auc_next": 0.5911,
-              "k3@1": 39.8, "auc_k3": 0.5716,
-              "tol_hits": 0.6, "tol_auc": 0.004, "tol_k3_hits": 0.5, "tol_k3_auc": 0.005}
+_EXPECT_TE = {
+    "k2@1": 45.8,
+    "k2@3": 41.8,
+    "auc_next": 0.5911,
+    "k3@1": 39.8,
+    "auc_k3": 0.5716,
+    "tol_hits": 0.6,
+    "tol_auc": 0.004,
+    "tol_k3_hits": 0.5,
+    "tol_k3_auc": 0.005,
+}
 
 # 点名页 v2: 全量清单截断上限 (冠军格★行截断豁免, W19 并集规则保留)
 FB_MAX_ROWS = 80
 # 次日一字风险旗: 一字 ∩ p_k3≥此值 → 次日大概率仍一字买不到 (0923: ≥0.4 档实测 T+3 板率 ~54%)
 K3_RISK_TH = 0.40
 # 校准档位文案 (0923 rank_calib TE n=5608 分桶实测率; 模型分为下界读数, 顶部实测率更高)
-_CALIB_TIERS = [(0.40, "≥0.4→实测~54%"), (0.30, "0.3-0.4→实测~28%"),
-                (0.20, "0.2-0.3→实测~21%"), (0.00, "<0.2→实测~18%")]
+_CALIB_TIERS = [
+    (0.40, "≥0.4→实测~54%"),
+    (0.30, "0.3-0.4→实测~28%"),
+    (0.20, "0.2-0.3→实测~21%"),
+    (0.00, "<0.2→实测~18%"),
+]
 
 # 板前哨 次数窗口: 近 N 个交易日 sig=True 天数 (v4 起只作上下文列, 不再作显示门槛)
 COUNT_WIN = 10
@@ -77,18 +126,32 @@ COUNT_WIN = 10
 # 0923 LHB 席位级标注列 (W14 A/B 终判: pre20 聚合增量=平, D0 结构=负 → 按规则降级为纯标注列;
 # 绝不进 FEATS/训练/闸)。tmp_t/_0923_w13_top_inst_labeled.parquet 的稳定只读副本:
 LHB_SEAT_PARQUET = Path("D:/AMINQT/PARQUET/lhb_seat_detail_labeled.parquet")
-LHB_PRE_WIN = 21  # pre20 窗 = D-20..D0 (rolling 21 交易日含 D0; LHB 收盘后发布, T+1 视角无前视)
-LHB_ANNOT_COLS = ["LHB上榜日数(20日)", "LHB净买亿(20日)", "游资席位数(20日)",
-                  "机构在场(20日)", "D0游资席位", "D0净买亿"]
+LHB_PRE_WIN = (
+    21  # pre20 窗 = D-20..D0 (rolling 21 交易日含 D0; LHB 收盘后发布, T+1 视角无前视)
+)
+LHB_ANNOT_COLS = [
+    "LHB上榜日数(20日)",
+    "LHB净买亿(20日)",
+    "游资席位数(20日)",
+    "机构在场(20日)",
+    "D0游资席位",
+    "D0净买亿",
+]
 
 
-def load_mainboard(panel_path=PANEL_V3_PATH, tail_dates: int | None = 450) -> pd.DataFrame:
+def load_mainboard(
+    panel_path=PANEL_V3_PATH, tail_dates: int | None = 450
+) -> pd.DataFrame:
     """读主板日线 (列子集). tail_dates=None → 全史 (训练用); 否则只留最后 N 个交易日 (服务用)."""
     df = pq.read_table(str(panel_path), columns=PANEL_COLS).to_pandas()
     df["symbol"] = df["symbol"].astype(str)
     df = df[df["symbol"].str[:2].isin(["00", "60"])]
     df["date"] = pd.to_datetime(df["date"])
-    df = df.drop_duplicates(["symbol", "date"]).sort_values(["symbol", "date"]).reset_index(drop=True)
+    df = (
+        df.drop_duplicates(["symbol", "date"])
+        .sort_values(["symbol", "date"])
+        .reset_index(drop=True)
+    )
     if tail_dates is not None:
         keep = sorted(df["date"].unique())[-tail_dates:]
         df = df[df["date"].isin(keep)].reset_index(drop=True)
@@ -107,9 +170,19 @@ def _ecology(df: pd.DataFrame) -> pd.DataFrame:
     zha = (df["high"] >= limit - 0.005) & ~board
 
     per_d = df.groupby("date")
-    eco = pd.DataFrame({"mkt_boards_n": per_d["pctChg"].apply(lambda s: int((s >= 9.5).sum()))})
-    eco["mkt_chain_n"] = df[board & (df["_bstreak"] >= 2)].groupby("date").size().reindex(eco.index).fillna(0)
-    eco["mkt_max_streak"] = df[board].groupby("date")["_bstreak"].max().reindex(eco.index).fillna(0)
+    eco = pd.DataFrame(
+        {"mkt_boards_n": per_d["pctChg"].apply(lambda s: int((s >= 9.5).sum()))}
+    )
+    eco["mkt_chain_n"] = (
+        df[board & (df["_bstreak"] >= 2)]
+        .groupby("date")
+        .size()
+        .reindex(eco.index)
+        .fillna(0)
+    )
+    eco["mkt_max_streak"] = (
+        df[board].groupby("date")["_bstreak"].max().reindex(eco.index).fillna(0)
+    )
     zha_n = df[zha].groupby("date").size().reindex(eco.index).fillna(0)
     eco["zha_rate"] = zha_n / (zha_n + eco["mkt_boards_n"]).clip(lower=1)
 
@@ -123,23 +196,42 @@ def _ecology(df: pd.DataFrame) -> pd.DataFrame:
     nprev = bd_next.groupby("date").size()
     both = promo.groupby("date")["boarded_yd"].sum()
     eco["promo_yd"] = ((both / nprev).reindex(eco.index)).fillna(0)
-    return eco.drop(columns=["_bstreak"], errors="ignore").reset_index()[[
-        "date", "mkt_boards_n", "mkt_chain_n", "mkt_max_streak", "zha_rate", "promo_yd"]]
+    return eco.drop(columns=["_bstreak"], errors="ignore").reset_index()[
+        [
+            "date",
+            "mkt_boards_n",
+            "mkt_chain_n",
+            "mkt_max_streak",
+            "zha_rate",
+            "promo_yd",
+        ]
+    ]
 
 
 def build_event_features(df: pd.DataFrame) -> pd.DataFrame:
     """全部首板事件的特征+标签 (训练/服务共用同一实现, 防两源分裂).
     标签 k2/next_board 在历史尾部不足窗口时为 NaN (服务日自然如此)."""
-    board = (df["pctChg"] >= 9.5)
+    board = df["pctChg"] >= 9.5
     g = df.groupby("symbol", sort=False)
-    d = pd.DataFrame({
-        "symbol": df["symbol"], "date": df["date"], "board": board,
-        "open": df["open"], "high": df["high"], "low": df["low"],
-        "close": df["close"], "pre_close": df["pre_close"], "pctChg": df["pctChg"],
-        "amount": df["amount"], "circ_mv": df["circ_mv"],
-        "ftr": df["free_float_turnover_rate"], "turn_d0": df["turnover_rate"],
-        "vr_d0": df["volume_ratio"], "sw_l2_name": df["sw_l2_name"],
-    })
+    d = pd.DataFrame(
+        {
+            "symbol": df["symbol"],
+            "date": df["date"],
+            "board": board,
+            "open": df["open"],
+            "high": df["high"],
+            "low": df["low"],
+            "close": df["close"],
+            "pre_close": df["pre_close"],
+            "pctChg": df["pctChg"],
+            "amount": df["amount"],
+            "circ_mv": df["circ_mv"],
+            "ftr": df["free_float_turnover_rate"],
+            "turn_d0": df["turnover_rate"],
+            "vr_d0": df["volume_ratio"],
+            "sw_l2_name": df["sw_l2_name"],
+        }
+    )
     d["wr1"] = g["winner_ratio"].shift(1)
     d["ret60"] = g["close"].shift(1) / g["close"].shift(61) - 1.0
     d["vr_prev"] = g["volume_ratio"].shift(1)
@@ -154,7 +246,9 @@ def build_event_features(df: pd.DataFrame) -> pd.DataFrame:
     d["_limit"] = limit
     seal_gap = (d["high"] - d["close"]) / d["pre_close"]
     d["seal_hard"] = ((seal_gap <= 0.002) & (d["pctChg"] >= 9.8)).astype(float)
-    d.loc[d["gap"].isna() | d["pre_close"].isna() | d["high"].isna(), "seal_hard"] = np.nan
+    d.loc[d["gap"].isna() | d["pre_close"].isna() | d["high"].isna(), "seal_hard"] = (
+        np.nan
+    )
     d["cmv"] = d["circ_mv"]
     d["intraday"] = (d["close"] - d["open"]) / d["pre_close"]
     d["amplitude"] = (d["high"] - d["low"]) / d["pre_close"]
@@ -162,8 +256,11 @@ def build_event_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # 事件: 首板 且 前10日无板 (rolling(10).max().shift(1), 与研究 chain1 同口径)
     d["_prior10"] = (
-        d["board"].astype(float).groupby(df["symbol"], sort=False)
-        .transform(lambda x: x.rolling(10, min_periods=1).max().shift(1)).fillna(0)
+        d["board"]
+        .astype(float)
+        .groupby(df["symbol"], sort=False)
+        .transform(lambda x: x.rolling(10, min_periods=1).max().shift(1))
+        .fillna(0)
     )
     ev = d[d["board"] & (d["_prior10"] == 0)].copy()
 
@@ -175,7 +272,9 @@ def build_event_features(df: pd.DataFrame) -> pd.DataFrame:
     for i in range(1, 6):
         k2_any |= g["pctChg"].shift(-i).reindex(ev.index) >= 9.5
     ev["k2"] = np.where(rows_after >= 5, k2_any.astype(float), np.nan)
-    k3_any = pd.Series(False, index=ev.index)  # 0923: T+3 头标签 (D0+1..D0+3 内任一板, 同 k2 式窗口3)
+    k3_any = pd.Series(
+        False, index=ev.index
+    )  # 0923: T+3 头标签 (D0+1..D0+3 内任一板, 同 k2 式窗口3)
     for i in range(1, 4):
         k3_any |= g["pctChg"].shift(-i).reindex(ev.index) >= 9.5
     ev["k3"] = np.where(rows_after >= 3, k3_any.astype(float), np.nan)
@@ -189,28 +288,45 @@ def build_event_features(df: pd.DataFrame) -> pd.DataFrame:
     bothf = ((net > 0) & (inst > 0)).astype(float)
 
     def _pre20(v):
-        return (v.groupby(df["symbol"], sort=False)
-                .transform(lambda x: x.shift(1).rolling(20, min_periods=1).max()).fillna(0) > 0).astype(float)
+        return (
+            v.groupby(df["symbol"], sort=False)
+            .transform(lambda x: x.shift(1).rolling(20, min_periods=1).max())
+            .fillna(0)
+            > 0
+        ).astype(float)
 
     ev["lhb_pre20_net"] = _pre20(pos).reindex(ev.index)
     ev["lhb_pre20_both"] = _pre20(bothf).reindex(ev.index)
 
-    ev["yizi"] = (ev["low"] >= ev["_limit"] - 0.005)
+    ev["yizi"] = ev["low"] >= ev["_limit"] - 0.005
     ev["champion"] = (ev["wr1"] >= 0.65) & ev["yizi"]
     ev["sw_l2"] = ev["sw_l2_name"].fillna("NA")
 
     eco = _ecology(df)
     ev = ev.merge(eco, on="date", how="left")
-    ind = df[board].assign(sw_l2_name=df["sw_l2_name"].fillna("NA")).groupby(
-        ["date", "sw_l2_name"]).size().rename("ind_boards").reset_index()
-    ev = ev.merge(ind, left_on=["date", "sw_l2"], right_on=["date", "sw_l2_name"],
-                  how="left", suffixes=("", "_ind"))
+    ind = (
+        df[board]
+        .assign(sw_l2_name=df["sw_l2_name"].fillna("NA"))
+        .groupby(["date", "sw_l2_name"])
+        .size()
+        .rename("ind_boards")
+        .reset_index()
+    )
+    ev = ev.merge(
+        ind,
+        left_on=["date", "sw_l2"],
+        right_on=["date", "sw_l2_name"],
+        how="left",
+        suffixes=("", "_ind"),
+    )
     ev["ind_boards"] = ev["ind_boards"].fillna(0)
     ev["amt_rank_pct"] = ev.groupby("date")["amount"].rank(pct=True)
     return ev.reset_index(drop=True)
 
 
-def train_and_save(out_dir=MODELS_DIR, panel_path=PANEL_V3_PATH, expect=_EXPECT_TE) -> dict:
+def train_and_save(
+    out_dir=MODELS_DIR, panel_path=PANEL_V3_PATH, expect=_EXPECT_TE
+) -> dict:
     """训练双头 (TR≤2024 / VA2025 早停), 落盘 booster + meta, reload 后断言 TE 复现.
     expect=None 跳过复现断言 (合成数据测试用)."""
     import lightgbm as lgb
@@ -219,8 +335,13 @@ def train_and_save(out_dir=MODELS_DIR, panel_path=PANEL_V3_PATH, expect=_EXPECT_
     df = load_mainboard(panel_path, tail_dates=None)
     ev = build_event_features(df)
     need6 = ["wr1", "ret60", "gap", "seal_hard", "cmv", "ftr"]
-    A = ev[ev["hist_ok"] & ev["mature10"] & ev["k2"].notna() & ev["next_board"].notna()
-           & ev[need6].notna().all(axis=1)].copy()
+    A = ev[
+        ev["hist_ok"]
+        & ev["mature10"]
+        & ev["k2"].notna()
+        & ev["next_board"].notna()
+        & ev[need6].notna().all(axis=1)
+    ].copy()
     A["tr"] = A["date"] <= pd.Timestamp(TR_END)
     A["va"] = (A["date"] > pd.Timestamp(TR_END)) & (A["date"] <= pd.Timestamp(VA_END))
     A["te"] = A["date"] > pd.Timestamp(VA_END)
@@ -236,23 +357,42 @@ def train_and_save(out_dir=MODELS_DIR, panel_path=PANEL_V3_PATH, expect=_EXPECT_
     # → 改原生 lgb.train 绕 shim (显式 categorical_feature), 与旧版生产 booster 逐项 Δ0.0000
     # (tmp_t/_0923_ths_ab_train.py 已验证). 参数等价映射: n_estimators→num_boost_round /
     # random_state→seed / verbose→verbosity / eval_metric="logloss"→metric="binary_logloss".
-    native_params = dict(objective=PARAMS["objective"], num_leaves=PARAMS["num_leaves"],
-                         learning_rate=PARAMS["learning_rate"],
-                         min_child_samples=PARAMS["min_child_samples"],
-                         seed=PARAMS["random_state"], metric="binary_logloss",
-                         verbosity=PARAMS["verbose"])
+    native_params = dict(
+        objective=PARAMS["objective"],
+        num_leaves=PARAMS["num_leaves"],
+        learning_rate=PARAMS["learning_rate"],
+        min_child_samples=PARAMS["min_child_samples"],
+        seed=PARAMS["random_state"],
+        metric="binary_logloss",
+        verbosity=PARAMS["verbose"],
+    )
     models = {}
-    for tgt, fname in (("k2", "booster_k2.txt"), ("k3", "booster_k3.txt"),
-                       ("next_board", "booster_next.txt")):
+    for tgt, fname in (
+        ("k2", "booster_k2.txt"),
+        ("k3", "booster_k3.txt"),
+        ("next_board", "booster_next.txt"),
+    ):
         y = A[tgt]
         fit = (A["tr"] | A["va"]) & y.notna()
         m_tr = (fit & A["tr"]).to_numpy()
         m_va = (fit & A["va"]).to_numpy()
-        dtr = lgb.Dataset(X[m_tr], y[m_tr], categorical_feature=["sw_l2"], free_raw_data=False)
-        dva = lgb.Dataset(X[m_va], y[m_va], reference=dtr, categorical_feature=["sw_l2"],
-                          free_raw_data=False)
-        mdl = lgb.train(native_params, dtr, num_boost_round=PARAMS["n_estimators"],
-                        valid_sets=[dva], callbacks=[lgb.early_stopping(50, verbose=False)])
+        dtr = lgb.Dataset(
+            X[m_tr], y[m_tr], categorical_feature=["sw_l2"], free_raw_data=False
+        )
+        dva = lgb.Dataset(
+            X[m_va],
+            y[m_va],
+            reference=dtr,
+            categorical_feature=["sw_l2"],
+            free_raw_data=False,
+        )
+        mdl = lgb.train(
+            native_params,
+            dtr,
+            num_boost_round=PARAMS["n_estimators"],
+            valid_sets=[dva],
+            callbacks=[lgb.early_stopping(50, verbose=False)],
+        )
         mdl.save_model(str(out_dir / fname))
         models[tgt] = lgb.Booster(model_file=str(out_dir / fname))
 
@@ -277,36 +417,64 @@ def train_and_save(out_dir=MODELS_DIR, panel_path=PANEL_V3_PATH, expect=_EXPECT_
     k2_3 = 100 * hit3 / tot1
     k3_1 = 100 * k3_hit1 / max(ev_te["date"].nunique(), 1)
     auc_next = roc_auc_score(ev_te["next_board"], p_nb)
-    auc_k3 = roc_auc_score(ev_te["k3"], p_k3) if ev_te["k3"].nunique() > 1 else float("nan")
-    meta = {"features": FEATS, "sw_l2_categories": cats, "train_end": VA_END,
-            "params": {k: v for k, v in PARAMS.items() if k != "verbose"},
-            "te_top1_k3": round(k3_1, 1), "te_auc_k3": round(auc_k3, 4)}
-    (out_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"[firstboard] TE 复现: k2@1={k2_1:.1f} k2@3={k2_3:.1f} auc_next={auc_next:.4f} "
-          f"k3@1={k3_1:.1f} auc_k3={auc_k3:.4f} n={len(ev_te)}")
+    auc_k3 = (
+        roc_auc_score(ev_te["k3"], p_k3) if ev_te["k3"].nunique() > 1 else float("nan")
+    )
+    meta = {
+        "features": FEATS,
+        "sw_l2_categories": cats,
+        "train_end": VA_END,
+        "params": {k: v for k, v in PARAMS.items() if k != "verbose"},
+        "te_top1_k3": round(k3_1, 1),
+        "te_auc_k3": round(auc_k3, 4),
+    }
+    (out_dir / "meta.json").write_text(
+        json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
+    print(
+        f"[firstboard] TE 复现: k2@1={k2_1:.1f} k2@3={k2_3:.1f} auc_next={auc_next:.4f} "
+        f"k3@1={k3_1:.1f} auc_k3={auc_k3:.4f} n={len(ev_te)}"
+    )
     if expect is not None:
-        drift = (abs(k2_1 - expect["k2@1"]) > expect["tol_hits"]
-                 or abs(k2_3 - expect["k2@3"]) > expect["tol_hits"]
-                 or abs(auc_next - expect["auc_next"]) > expect["tol_auc"]
-                 or abs(k3_1 - expect["k3@1"]) > expect["tol_k3_hits"]
-                 or (not np.isnan(auc_k3) and abs(auc_k3 - expect["auc_k3"]) > expect["tol_k3_auc"]))
+        drift = (
+            abs(k2_1 - expect["k2@1"]) > expect["tol_hits"]
+            or abs(k2_3 - expect["k2@3"]) > expect["tol_hits"]
+            or abs(auc_next - expect["auc_next"]) > expect["tol_auc"]
+            or abs(k3_1 - expect["k3@1"]) > expect["tol_k3_hits"]
+            or (
+                not np.isnan(auc_k3)
+                and abs(auc_k3 - expect["auc_k3"]) > expect["tol_k3_auc"]
+            )
+        )
         if drift:
             raise RuntimeError(
                 f"TE 复现漂移: k2@1={k2_1:.1f}(期望{expect['k2@1']}) "
                 f"k2@3={k2_3:.1f}(期望{expect['k2@3']}) auc_next={auc_next:.4f}"
                 f"(期望{expect['auc_next']}) k3@1={k3_1:.1f}(期望{expect['k3@1']}) "
-                f"auc_k3={auc_k3:.4f}(期望{expect['auc_k3']}) — 训练口径与验收线分裂, 禁上线")
-    return {"n_train": int((A["tr"] | A["va"]).sum()), "n_te": int(A["te"].sum()),
-            "k2@1": k2_1, "k2@3": k2_3, "auc_next": auc_next, "k3@1": k3_1, "auc_k3": auc_k3}
+                f"auc_k3={auc_k3:.4f}(期望{expect['auc_k3']}) — 训练口径与验收线分裂, 禁上线"
+            )
+    return {
+        "n_train": int((A["tr"] | A["va"]).sum()),
+        "n_te": int(A["te"].sum()),
+        "k2@1": k2_1,
+        "k2@3": k2_3,
+        "auc_next": auc_next,
+        "k3@1": k3_1,
+        "auc_k3": auc_k3,
+    }
 
 
 def load_models(models_dir=MODELS_DIR):
     import lightgbm as lgb
+
     models_dir = Path(models_dir)
     meta = json.loads((models_dir / "meta.json").read_text(encoding="utf-8"))
-    return (lgb.Booster(model_file=str(models_dir / "booster_k2.txt")),
-            lgb.Booster(model_file=str(models_dir / "booster_k3.txt")),
-            lgb.Booster(model_file=str(models_dir / "booster_next.txt")), meta)
+    return (
+        lgb.Booster(model_file=str(models_dir / "booster_k2.txt")),
+        lgb.Booster(model_file=str(models_dir / "booster_k3.txt")),
+        lgb.Booster(model_file=str(models_dir / "booster_next.txt")),
+        meta,
+    )
 
 
 def _predict(ev: pd.DataFrame, boosters, meta) -> pd.DataFrame:
@@ -315,7 +483,9 @@ def _predict(ev: pd.DataFrame, boosters, meta) -> pd.DataFrame:
     X["sw_l2"] = pd.Categorical(ev["sw_l2"], categories=meta["sw_l2_categories"])
     X = X[feats + ["sw_l2"]]
     ev = ev.copy()
-    ok = X.notna().all(axis=1).to_numpy()  # 含未见过的 sw_l2 (Categorical 落 NaN → 跳过)
+    ok = (
+        X.notna().all(axis=1).to_numpy()
+    )  # 含未见过的 sw_l2 (Categorical 落 NaN → 跳过)
     ev["p_k2"] = np.nan
     ev["p_k3"] = np.nan
     ev["p_next"] = np.nan
@@ -328,9 +498,11 @@ def _predict(ev: pd.DataFrame, boosters, meta) -> pd.DataFrame:
 
 def _calib_tier(p_k3: pd.Series) -> pd.Series:
     """p_k3 → 校准档位文案 (_CALIB_TIERS 分桶; NaN → 空)."""
-    tier = np.select([p_k3 >= lo for lo, _ in _CALIB_TIERS[:-1]],
-                     [lab for _, lab in _CALIB_TIERS[:-1]],
-                     default=_CALIB_TIERS[-1][1])
+    tier = np.select(
+        [p_k3 >= lo for lo, _ in _CALIB_TIERS[:-1]],
+        [lab for _, lab in _CALIB_TIERS[:-1]],
+        default=_CALIB_TIERS[-1][1],
+    )
     return pd.Series(np.where(p_k3.notna(), tier, ""), index=p_k3.index)
 
 
@@ -344,6 +516,7 @@ def _symbol_names() -> dict:
     if _NAME_CACHE is None:
         try:
             import tushare as ts
+
             pro = ts.pro_api(ts.get_token())
             sb = pro.stock_basic(fields="symbol,name")
             _NAME_CACHE = dict(zip(sb["symbol"].astype(str), sb["name"].astype(str)))
@@ -360,17 +533,22 @@ def _agg_seat_daily(st: pd.DataFrame) -> pd.DataFrame:
 
     net_sum 已除 1e8 (元→亿); hotseat_n = 高频游资行数(席×榜面); inst_any = 机构专用在场;
     主板过滤 00/60 与 load_mainboard 一致."""
-    s = pd.DataFrame({
-        "symbol": st["ts_code"].astype(str).str[:6],
-        "date": pd.to_datetime(st["trade_date"].astype(str), format="%Y%m%d"),
-        "net_buy": pd.to_numeric(st["net_buy"], errors="coerce").fillna(0.0),
-        "hotseat": (st["category"].astype(str) == "高频游资").astype(float),
-        "inst": (st["category"].astype(str) == "机构专用").astype(float),
-    })
+    s = pd.DataFrame(
+        {
+            "symbol": st["ts_code"].astype(str).str[:6],
+            "date": pd.to_datetime(st["trade_date"].astype(str), format="%Y%m%d"),
+            "net_buy": pd.to_numeric(st["net_buy"], errors="coerce").fillna(0.0),
+            "hotseat": (st["category"].astype(str) == "高频游资").astype(float),
+            "inst": (st["category"].astype(str) == "机构专用").astype(float),
+        }
+    )
     s = s[s["symbol"].str[:2].isin(["00", "60"])]
     daily = s.groupby(["symbol", "date"], as_index=False).agg(
-        n_rows=("net_buy", "size"), net_sum=("net_buy", "sum"),
-        hotseat_n=("hotseat", "sum"), inst_any=("inst", "max"))
+        n_rows=("net_buy", "size"),
+        net_sum=("net_buy", "sum"),
+        hotseat_n=("hotseat", "sum"),
+        inst_any=("inst", "max"),
+    )
     daily["net_sum"] /= 1e8
     return daily
 
@@ -380,7 +558,8 @@ def _lhb_daily() -> pd.DataFrame:
     if _LHB_DAILY_CACHE is None:
         try:
             _LHB_DAILY_CACHE = _agg_seat_daily(
-                pq.read_table(str(LHB_SEAT_PARQUET)).to_pandas())
+                pq.read_table(str(LHB_SEAT_PARQUET)).to_pandas()
+            )
         except Exception:
             _LHB_DAILY_CACHE = pd.DataFrame()  # 缺数据 → 空表, 标注列留空勿阻页
     return _LHB_DAILY_CACHE
@@ -397,8 +576,11 @@ def _lhb_annotations(df: pd.DataFrame, symbols, d0=None) -> dict[str, dict[str, 
     cal = pd.DatetimeIndex(sorted(df["date"].unique()))
     d0 = cal[-1] if d0 is None else pd.Timestamp(d0)
     loc = cal.get_loc(d0)
-    win = set(cal[max(0, loc - LHB_PRE_WIN + 1): loc + 1])
-    w = daily[daily["date"].isin(win) & daily["symbol"].isin(set(pd.Index(symbols).astype(str)))]
+    win = set(cal[max(0, loc - LHB_PRE_WIN + 1) : loc + 1])
+    w = daily[
+        daily["date"].isin(win)
+        & daily["symbol"].isin(set(pd.Index(symbols).astype(str)))
+    ]
     out: dict[str, dict[str, float]] = {}
     for sym, grp in w.groupby("symbol"):
         d0row = grp[grp["date"] == d0]
@@ -413,8 +595,9 @@ def _lhb_annotations(df: pd.DataFrame, symbols, d0=None) -> dict[str, dict[str, 
     return out
 
 
-def serve_firstboard(df: pd.DataFrame | None = None, models_dir=MODELS_DIR,
-                     max_rows: int = FB_MAX_ROWS) -> pd.DataFrame:
+def serve_firstboard(
+    df: pd.DataFrame | None = None, models_dir=MODELS_DIR, max_rows: int = FB_MAX_ROWS
+) -> pd.DataFrame:
     """当日首板点名页 v2 (0923 用户令): 全量当日事件按 T+3板概率(p_k3)降序 (中文列).
 
     不再 Top-N 截断 — 超 max_rows 截 max_rows 行, 冠军格★行截断豁免 (W19 并集规则保留);
@@ -430,27 +613,35 @@ def serve_firstboard(df: pd.DataFrame | None = None, models_dir=MODELS_DIR,
         today = _predict(today, (b_k2, b_k3, b_next), meta)
     except FileNotFoundError:
         today = today.assign(p_k2=np.nan, p_k3=np.nan, p_next=np.nan)
-    today = today.sort_values("p_k3", ascending=False, na_position="last").reset_index(drop=True)
+    today = today.sort_values("p_k3", ascending=False, na_position="last").reset_index(
+        drop=True
+    )
     if len(today) > max_rows:  # 截断但冠军格★行保证入选 (W19 并集规则)
-        keep = list(range(max_rows)) + [i for i in today.index[today["champion"]] if i >= max_rows]
+        keep = list(range(max_rows)) + [
+            i for i in today.index[today["champion"]] if i >= max_rows
+        ]
         today = today.loc[keep].reset_index(drop=True)
     names = _symbol_names() if len(today) else {}
     rank = today["p_k3"].notna().cumsum().where(today["p_k3"].notna(), np.nan)
-    page = pd.DataFrame({
-        "排名": rank,
-        "代码": today["symbol"],
-        "名称": today["symbol"].map(names).fillna(""),
-        "T+3板概率": today["p_k3"],
-        "T+5板概率": today["p_k2"],
-        "校准档位": _calib_tier(today["p_k3"]),
-        "冠军格": np.where(today["champion"], "★", ""),
-        "一字": np.where(today["yizi"], "一字", ""),
-        "次日一字风险": np.where(today["yizi"] & (today["p_k3"] >= K3_RISK_TH), "风险", ""),
-        "板前获利盘": today["wr1"],
-        "板块涨停数": today["ind_boards"],
-        "昨日晋级率": today["promo_yd"],
-        "市场涨停数": today["mkt_boards_n"],
-    })
+    page = pd.DataFrame(
+        {
+            "排名": rank,
+            "代码": today["symbol"],
+            "名称": today["symbol"].map(names).fillna(""),
+            "T+3板概率": today["p_k3"],
+            "T+5板概率": today["p_k2"],
+            "校准档位": _calib_tier(today["p_k3"]),
+            "冠军格": np.where(today["champion"], "★", ""),
+            "一字": np.where(today["yizi"], "一字", ""),
+            "次日一字风险": np.where(
+                today["yizi"] & (today["p_k3"] >= K3_RISK_TH), "风险", ""
+            ),
+            "板前获利盘": today["wr1"],
+            "板块涨停数": today["ind_boards"],
+            "昨日晋级率": today["promo_yd"],
+            "市场涨停数": today["mkt_boards_n"],
+        }
+    )
     # 0923 LHB 席位级标注列 (纯标注, 页尾追加; 构建失败只丢标注不丢页 — 同名称列契约)
     try:
         ann = _lhb_annotations(df, today["symbol"], d0)
@@ -485,7 +676,8 @@ def build_sig(df: pd.DataFrame) -> pd.DataFrame:
 
     def groll(s, win, minp, how="mean"):
         return s.groupby(sym, observed=True).transform(
-            lambda x: getattr(x.rolling(win, min_periods=minp), how)())
+            lambda x: getattr(x.rolling(win, min_periods=minp), how)()
+        )
 
     cum = bigup.groupby(sym, observed=True).cumsum()
     close = df["close"]
@@ -501,24 +693,48 @@ def build_sig(df: pd.DataFrame) -> pd.DataFrame:
     t5 = groll(df["turnover_rate"], 5, 5, "mean")
     t20 = groll(df["turnover_rate"], 20, 20, "mean")
     S = ((t5 <= 1.2) & (t5 <= 0.75 * t20)).fillna(False)
-    nb10 = (groll(bigup, 10, 10, "sum").shift(0).groupby(sym, observed=True).shift(1).fillna(0) == 0)
+    nb10 = (
+        groll(bigup, 10, 10, "sum")
+        .shift(0)
+        .groupby(sym, observed=True)
+        .shift(1)
+        .fillna(0)
+        == 0
+    )
     sig = (P & C & S & nb10 & ~board).fillna(False)
 
     ge2 = df["pctChg"] >= 2
-    prev5_ge2 = (gshift(ge2.astype("float64"), 1)
-                 .groupby(sym, observed=True).transform(lambda x: x.rolling(5, min_periods=1).max())
-                 .fillna(0) > 0)
+    prev5_ge2 = (
+        gshift(ge2.astype("float64"), 1)
+        .groupby(sym, observed=True)
+        .transform(lambda x: x.rolling(5, min_periods=1).max())
+        .fillna(0)
+        > 0
+    )
     fire_t1 = ge2 & ~prev5_ge2
     fire_t2 = df["pctChg"].between(2, 7)
 
     net = pd.to_numeric(df["lhb_net_buy"], errors="coerce")
     inst = pd.to_numeric(df["lhb_inst_buy"], errors="coerce")
     bothf = ((net > 0) & (inst > 0)).astype(float)
-    lhb20both = (bothf.groupby(sym, observed=True)
-                 .transform(lambda x: x.shift(1).rolling(20, min_periods=1).max()).fillna(0) > 0)
+    lhb20both = (
+        bothf.groupby(sym, observed=True)
+        .transform(lambda x: x.shift(1).rolling(20, min_periods=1).max())
+        .fillna(0)
+        > 0
+    )
 
-    out = df[["symbol", "date", "pctChg", "close", "winner_ratio", "volume_ratio",
-              "turnover_rate"]].copy()
+    out = df[
+        [
+            "symbol",
+            "date",
+            "pctChg",
+            "close",
+            "winner_ratio",
+            "volume_ratio",
+            "turnover_rate",
+        ]
+    ].copy()
     out["sig"] = sig
     out["fire_t1"] = fire_t1
     out["fire_t2"] = fire_t2
@@ -529,7 +745,9 @@ def build_sig(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def serve_preboard(df: pd.DataFrame | None = None, record_csv: Path | None = None) -> pd.DataFrame:
+def serve_preboard(
+    df: pd.DataFrame | None = None, record_csv: Path | None = None
+) -> pd.DataFrame:
     """滚动20日板前哨监视名单 — 历史命中日志 (近20日每个 sig 日一行, 每股可多行; 中文列).
 
     次数10日/次数20日 = 近 COUNT_WIN/20 日 sig=True 天数 (上下文列, 不参与筛选);
@@ -549,42 +767,55 @@ def serve_preboard(df: pd.DataFrame | None = None, record_csv: Path | None = Non
 
     # 每股一行汇总 (后台表数据层)
     if hw.empty:
-        summary = pd.DataFrame({
-            "symbol": pd.Series(dtype=object),
-            "首次击中": pd.Series(dtype="datetime64[ns]"),
-            "最近击中": pd.Series(dtype="datetime64[ns]"),
-            "次数10日": pd.Series(dtype=int),
-            "次数20日": pd.Series(dtype=int),
-        })
+        summary = pd.DataFrame(
+            {
+                "symbol": pd.Series(dtype=object),
+                "首次击中": pd.Series(dtype="datetime64[ns]"),
+                "最近击中": pd.Series(dtype="datetime64[ns]"),
+                "次数10日": pd.Series(dtype=int),
+                "次数20日": pd.Series(dtype=int),
+            }
+        )
     else:
-        summary = pd.concat([
-            hw.groupby("symbol")["date"].agg(首次击中="min", 最近击中="max"),
-            hw[hw["date"].isin(cw)].groupby("symbol").size().rename("次数10日"),
-            hw.groupby("symbol").size().rename("次数20日"),
-        ], axis=1).reset_index()
+        summary = pd.concat(
+            [
+                hw.groupby("symbol")["date"].agg(首次击中="min", 最近击中="max"),
+                hw[hw["date"].isin(cw)].groupby("symbol").size().rename("次数10日"),
+                hw.groupby("symbol").size().rename("次数20日"),
+            ],
+            axis=1,
+        ).reset_index()
         summary["次数10日"] = summary["次数10日"].fillna(0).astype(int)
         summary["次数20日"] = summary["次数20日"].fillna(0).astype(int)
     summary = summary.join(
         today[["pctChg", "winner_ratio", "fire_t1", "fire_t2", "lhb20_both"]].rename(
-            columns={"pctChg": "今日涨幅", "winner_ratio": "今日获利盘"}), on="symbol")
+            columns={"pctChg": "今日涨幅", "winner_ratio": "今日获利盘"}
+        ),
+        on="symbol",
+    )
     f1 = summary["fire_t1"].fillna(False).astype(bool)
     f2 = summary["fire_t2"].fillna(False).astype(bool)
-    summary["今日点火旗"] = np.where(f1 & f2, "T1+T2", np.where(f1, "T1", np.where(f2, "T2", "")))
-    summary["_pass"] = ((summary["今日获利盘"] >= 0.65)
-                        & summary["lhb20_both"].fillna(False).astype(bool))
+    summary["今日点火旗"] = np.where(
+        f1 & f2, "T1+T2", np.where(f1, "T1", np.where(f2, "T2", ""))
+    )
+    summary["_pass"] = (summary["今日获利盘"] >= 0.65) & summary["lhb20_both"].fillna(
+        False
+    ).astype(bool)
 
     if record_csv is not None:
-        rec = pd.DataFrame({
-            "代码": summary["symbol"],
-            "首次击中": summary["首次击中"].dt.strftime("%Y-%m-%d"),
-            "最近击中": summary["最近击中"].dt.strftime("%Y-%m-%d"),
-            "次数10日": summary["次数10日"],
-            "次数20日": summary["次数20日"],
-            "今日点火旗": summary["今日点火旗"],
-            "今日涨幅": summary["今日涨幅"] / 100.0,
-            "今日获利盘": summary["今日获利盘"],
-            "通道优先": np.where(summary["_pass"], "优先", ""),
-        })
+        rec = pd.DataFrame(
+            {
+                "代码": summary["symbol"],
+                "首次击中": summary["首次击中"].dt.strftime("%Y-%m-%d"),
+                "最近击中": summary["最近击中"].dt.strftime("%Y-%m-%d"),
+                "次数10日": summary["次数10日"],
+                "次数20日": summary["次数20日"],
+                "今日点火旗": summary["今日点火旗"],
+                "今日涨幅": summary["今日涨幅"] / 100.0,
+                "今日获利盘": summary["今日获利盘"],
+                "通道优先": np.where(summary["_pass"], "优先", ""),
+            }
+        )
         p = Path(record_csv)
         if p.exists():  # WORM: 同日重跑不覆盖, 文件名插时间戳
             p = p.with_name(f"{p.stem}__{datetime.now().strftime('%H%M%S')}{p.suffix}")
@@ -599,31 +830,46 @@ def serve_preboard(df: pd.DataFrame | None = None, record_csv: Path | None = Non
     page["次数20日"] = page["symbol"].map(sumi["次数20日"])
     page = page.join(
         today[["pctChg", "winner_ratio", "fire_t1", "fire_t2", "lhb20_both"]].rename(
-            columns={"pctChg": "_pct_t", "winner_ratio": "_wr_t", "fire_t1": "_f1_t",
-                     "fire_t2": "_f2_t", "lhb20_both": "_lhb_t"}), on="symbol")
+            columns={
+                "pctChg": "_pct_t",
+                "winner_ratio": "_wr_t",
+                "fire_t1": "_f1_t",
+                "fire_t2": "_f2_t",
+                "lhb20_both": "_lhb_t",
+            }
+        ),
+        on="symbol",
+    )
     pf1 = page["_f1_t"].fillna(False).astype(bool)
     pf2 = page["_f2_t"].fillna(False).astype(bool)
-    page["点火旗"] = np.where(pf1 & pf2, "T1+T2", np.where(pf1, "T1", np.where(pf2, "T2", "")))
+    page["点火旗"] = np.where(
+        pf1 & pf2, "T1+T2", np.where(pf1, "T1", np.where(pf2, "T2", ""))
+    )
     page["_pass"] = (page["_wr_t"] >= 0.65) & page["_lhb_t"].fillna(False).astype(bool)
     page["_fr"] = page["点火旗"].map({"T1+T2": 3, "T1": 2, "T2": 1, "": 0}).fillna(0)
-    page = page.sort_values(["_fr", "date", "次数10日"], ascending=False).reset_index(drop=True)
-    return pd.DataFrame({
-        "通道优先": np.where(page["_pass"], "优先", ""),
-        "点火旗": page["点火旗"].to_numpy(),
-        "击中日期": page["date"].dt.strftime("%Y-%m-%d").to_numpy(),
-        "次数10日": page["次数10日"].to_numpy(),
-        "次数20日": page["次数20日"].to_numpy(),
-        "代码": page["symbol"].to_numpy(),
-        "当日涨幅": page["_pct_t"].to_numpy() / 100.0,
-        "获利盘": page["winner_ratio"].to_numpy(),
-        "20日获利盘Δ": page["wr20"].to_numpy(),
-        "5日均换手": page["t5"].to_numpy(),
-        "5日/20日换手比": page["t5t20"].to_numpy(),
-    })
+    page = page.sort_values(["_fr", "date", "次数10日"], ascending=False).reset_index(
+        drop=True
+    )
+    return pd.DataFrame(
+        {
+            "通道优先": np.where(page["_pass"], "优先", ""),
+            "点火旗": page["点火旗"].to_numpy(),
+            "击中日期": page["date"].dt.strftime("%Y-%m-%d").to_numpy(),
+            "次数10日": page["次数10日"].to_numpy(),
+            "次数20日": page["次数20日"].to_numpy(),
+            "代码": page["symbol"].to_numpy(),
+            "当日涨幅": page["_pct_t"].to_numpy() / 100.0,
+            "获利盘": page["winner_ratio"].to_numpy(),
+            "20日获利盘Δ": page["wr20"].to_numpy(),
+            "5日均换手": page["t5"].to_numpy(),
+            "5日/20日换手比": page["t5t20"].to_numpy(),
+        }
+    )
 
 
 def main() -> int:
     import argparse
+
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--train", action="store_true", help="训练+落盘+TE复现校验")
     args = ap.parse_args()
