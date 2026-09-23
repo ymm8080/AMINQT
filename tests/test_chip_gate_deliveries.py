@@ -91,8 +91,8 @@ def test_delivery_scripts_wire_shared_gate():
 
 def test_genious_wires_shared_level_split():
     """GENIOUS 冠军表 (第四线) 走共享 apply_chip_gate — 勿另写切分: 四线口径必须
-    一致, 表内切分漂移 = 同一只票在不同清单标相反方向。冠军表 0919 精简后不含
-    获利盘数值列, 故标注列只插 筹码标注 一列文本 (旁路契约同 BIGDROP SCAN)。"""
+    一致, 表内切分漂移 = 同一只票在不同清单标相反方向。表内「获利盘」列 (0923 加回)
+    只是数值展示, 切分不读它; 标注列只插 筹码标注 一列文本 (旁路契约同 BIGDROP SCAN)。"""
     import inspect
 
     gx = importlib.import_module("scripts._genious_excel")

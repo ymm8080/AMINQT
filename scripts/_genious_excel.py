@@ -1,8 +1,8 @@
 """GENIOUS — 链路狙击交付层 Excel (2026-09-14 用户令: 交易日 20:30 自动跑).
 
-Sheet1 = 冠军表 (CH3 T3深跌缩量 / CH2 T2深跌 / CH2B T2稳健过闸)
-0919 用户令: 观察池与全量表**删除** — 只出冠军单表。层序+层内 r60 深→浅
-即排名。层定义与阈值见 app/pipeline1/kongduo_triggers.py 与 settings.GENIOUS。
+Sheet1 = 冠军表 (CH3 T3深跌缩量 / CH2 T2深跌 / CH2B T2稳健过闸); 0922 起追加
+首板点名/板前哨 两页 (旁路, 见 _firstboard_pages)。0919 用户令已删观察池与全量表。
+层序+层内 r60 深→浅即排名。层定义与阈值见 app/pipeline1/kongduo_triggers.py 与 settings.GENIOUS。
 
 口径: 名单 = **当日 (trade date) 起火的票**, 20:30 已收盘故"fire日收盘进"实际落到
 T+1, 故每行带执行档 (温火/质量层=T+1开盘进; 涨停/深跌层=T+1仍涨确认→T+1收盘进)。
@@ -106,7 +106,7 @@ PB_BANNER = (
     "∧横盘±6%∧5日缩量∧近10日无板)的股, 每股多行: 每行=一次命中日, 击中日期=该行日期, "
     "获利盘/换手等列=命中当天画像。显示=今日有点火旗(T1/T2/T1+T2)的股, 其余只在后台表 preboard_watch_hits_*.csv (全量)。"
     "次数10日/次数20日=过去10/20个交易日命中总数, 仅上下文勿筛选(回测: 点火前命中数不预测, 次数≥2纯度更低)。"
-    "排序 = 点火旗(T1+T2>T1>T2) → 击中日期(新→旧) → 次数10日(多→少)。"
+    "排序 = 通道优先(置顶) → 点火旗(T1+T2>T1>T2) → 击中日期(新→旧) → 次数10日(多→少)。"
     "⚠ 深睡签名整体是反信号组 (5日首板率 2.4% vs 全池基线 5.2%) — 本页只提供可见性, 不是买入清单。"
     "回测: 点火后各天数次日进 TE 全负(−0.7~−1.6%), 点火旗=去看提示非买入依据; "
     "页内点火桶胜率为页内最强但绝对低于全主板基线。"
@@ -143,8 +143,6 @@ _NUMFMT = {
     "量比": "0.00",
     "集中度Δ10": "0.00",
     "控盘MA10斜率": "0.00",
-    "SL翻正年龄": "0",
-    "SL洗盘天数": "0",
     # 首板点名页 (0922; 0923 v2: T+3/T+5 双概率+校准档位) / 板前哨页 (0922)
     "排名": "0",
     "T+3板概率": "0.0%",
@@ -504,7 +502,7 @@ def write_stocklist_csv(
 ) -> Path | None:
     """冠军四段 → genious_stocklist_{date}__{HHMMSS}.csv (WORM), 给 THS 推送当第三源。
 
-    Sheet2 观察池不落这张 CSV: 推送侧只认个股买入名单, 观察池进去会污染自选股。
+    只落冠军四段 (首板点名/板前哨 两页不落): 推送侧只认个股买入名单, 其余页进去会污染自选股。
     空榜不落文件 (推送侧缺源即跳过, 不推空单)。
     """
     if not len(s1):
@@ -832,7 +830,7 @@ def main() -> int:
 
     df = kt.compute_features(df)
     df = kt.compute_triggers(df)
-    s1, _ = kt.build_delivery(df, target)
+    s1 = kt.build_delivery(df, target)
     # 旁路标注列 (用户 0915 令): 清单过一遍 bigdrop 次日大跌模块。三张表都加,
     # 语义见 _bigdrop_scan —— 三态 (大跌风险/波动风险/无风险) + 未评分。
     # 查表一律走 _norm_sym: 直接 str(s).zfill(6) 会漏掉北交所的 `.BJ` 后缀, 那只票
@@ -848,9 +846,10 @@ def main() -> int:
             s1["symbol"].map(lambda s: scan.get(_norm_sym(s), BIGDROP_UNSCORED)),
         )
     # 筹码水位标注 (0922 用户令, 第四线同源): chip_wr<0.5 低获利，涨 / ≥0.5 高获利，跌。
-    # 冠军表 0919 精简后不含获利盘数值列, 故走与密度/LEGACY/PARALLEL 同一条
-    # apply_chip_gate (load_chip_features 读 cyq_panel) — 四线同源同切分, 勿在此
-    # 另写阈值; cyq 缺 → fail-open 只不加列, 名单一只不少 (同 BIGDROP 旁路契约)。
+    # 走与密度/LEGACY/PARALLEL 同一条 apply_chip_gate (load_chip_features 读 cyq_panel)
+    # — 四线同源同切分, 勿在此另写阈值; cyq 缺 → fail-open 只不加列, 名单一只不少
+    # (同 BIGDROP 旁路契约)。表内「获利盘」列 (0923 加回) 只是同轴的数值展示,
+    # 切分口径仍以 apply_chip_gate 为准, 不要改成读表内该列。
     chipped = apply_chip_gate(s1, pd.Timestamp(target))
     if "chip_flag" in chipped.columns:
         flags = chipped["chip_flag"].to_numpy()

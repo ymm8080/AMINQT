@@ -110,8 +110,8 @@ BAND_T3_WARM = "带T3温火"
 BAND_T3_LIMIT = "带T3涨停"
 
 # 0918 用户令: 冠军表裁到两段 (CH1长基期望-2.34%/CH2B稳健+0.91% 不及市值基线; CH2/CH3 OOS
-# f10 口径 +4.3%/+4.6%, 胜率55%/52%)。CH1/CH2B 降级进 Sheet2 观察池 (段位列仍可辨),
-# 票也全量落 Sheet3 (build_delivery 一票不丢)。
+# f10 口径 +4.3%/+4.6%, 胜率55%/52%)。0919 用户令: 观察池/全量表两张独立表已删除,
+# build_delivery 只出冠军表。下列其余段位仅用于冠军表内的层序与图例, 不再单独出表。
 SHEET1_LAYERS = (CH3_T3_DEEP_QUIET, CH2_T2_DEEP)
 SHEET2_LAYERS = (
     CH1_T1_LONGBASE,
@@ -208,7 +208,7 @@ def _pad(s: str, width: int) -> str:
 
 
 def _seg_lines() -> tuple[str, ...]:
-    """冠军四段条件 (冠军表底图例与观察池图例共用); 阈值一律从 GENIOUS 取。"""
+    """冠军表段位条件 (底部图例); 阈值一律从 GENIOUS 取。"""
     c = GENIOUS
     deep = f"{c['r60_deep']:.0%}"  # -30%
     base = "0" if c["r120_base"] == 0 else f"{c['r120_base']:.0%}"
@@ -224,11 +224,29 @@ def _seg_lines() -> tuple[str, ...]:
 
 
 def _col_lines() -> tuple[tuple[str, str], ...]:
-    """列说明 — 冠军四段与观察池的列完全相同, 只写一份, 免得两处漂移。"""
-    c = GENIOUS
-    deep = f"{c['r60_deep']:.0%}"  # -30%
-    base = "0" if c["r120_base"] == 0 else f"{c['r120_base']:.0%}"
+    """冠军表列说明 — **只列表内真有的列**, 按表内从左到右。
+
+    0919 用户令删掉观察池/全量表后, 类型/r20/r60/r120/主力筹码比例/换手率/量比/
+    乖离MA10/5日回撤 已不在本表 (r60/r120 的定义见上方「段位说明」与「类型说明」,
+    数据口径见表尾); 继续在列说明里列它们 = 让用户去表里找不存在的列。
+    """
     return (
+        (
+            "旁路标注列",
+            "排在表最左: 明日开盘 / 横盘提示 / 涨停提示 / 市场温度 / 参与建议 — "
+            "含义见第 1 行横幅 (不删任何一行, 只作标注)",
+        ),
+        (
+            "BIGDROP SCAN",
+            "次日大跌模块旁路标注 (0915 分档): 大跌风险 N.Nx = 模型支达报警线 "
+            "(唯一带看跌方向) / 波动风险 N.Nx = 仅规则支 (零方向, 别读成「要跌」) / "
+            "未评分 = 拿不到读数。空 ≠ 安全，倍数是逐股读数",
+        ),
+        (
+            "筹码标注",
+            "获利盘水位方向标注: 低获利，涨 = 获利盘水位<50% (浅获利, 0922 全池回测前向更强) / "
+            "高获利，跌 = ≥50% (深获利, 更弱) / 空 = 无筹码数据 (cyq 缺, 不删票); 四线同源切分 0.5",
+        ),
         ("排名", "表内序号; 先按段位序 (CH3→CH2→CH1→CH2B), 段内按 r60 从深到浅"),
         ("symbol", "6 位股票代码 (已去掉 .SH/.SZ 后缀)"),
         (
@@ -241,38 +259,21 @@ def _col_lines() -> tuple[tuple[str, str], ...]:
             "触发器",
             "今日命中的触发器: T1洗盘日 / T2翻转日 / T3状态点火 / T2+T3(同日双触发)",
         ),
-        ("类型", 'r60/r120 分桶标签 — 见下方"类型说明"'),
-        ("当日涨幅", "今日涨跌幅 = 今收 / 昨收 − 1"),
-        (
-            "执行档",
-            "T+1开盘进 | T+1仍涨确认→T+1收盘进 (20:30 已收盘, 只能 T+1 买)",
-        ),
         (
             "当月样本口径",
             "该段位**当月实绩** (滚动重算) 胜率 / 5日均收益; 源 .cache/kongduo_layer_monthly_<月>.json",
         ),
-        ("r20", "最近 20 个交易日涨跌幅 (= 今收 / 20交易日前收 − 1)"),
-        ("r60", f'最近 60 个交易日涨跌幅 (中期位置; ≤{deep} 即本表的"深跌")'),
-        ("r120", f'最近 120 个交易日涨跌幅 (长期位置; ≤{base} 即"半年没涨")'),
+        ("当日涨幅", "今日涨跌幅 = 今收 / 昨收 − 1"),
         (
-            "筹码标注",
-            "获利盘水位方向标注: 低获利，涨 = 获利盘水位<50% (浅获利, 0922 全池回测前向更强) / "
-            "高获利，跌 = ≥50% (深获利, 更弱) / 空 = 无筹码数据 (cyq 缺, 不删票); 四线同源切分 0.5",
+            "获利盘",
+            "获利盘水位 (0~1) = 现价下方获利筹码占比 (Tushare cyq winner_rate), "
+            "与「筹码标注」同一根轴的数值版: <0.5 浅获利 (前向更强) / ≥0.5 深获利; "
+            "空 = 无筹码数据 (cyq 缺, 不删票)",
         ),
         (
-            "主力筹码比例",
-            "益盟「主力筹码红柱」= 成本低于「典型价×0.96」的筹码占比 (%, 0~100); "
-            "越高 = 筹码越聚在当前价下方 (主力控盘越实)。**当警戒读数用, 别当买入信号** —"
-            "末 250 日 OOS 对未来10日 IC −0.059 (t −5.9), 五分位向下 (最低桶 +0.15% → "
-            "最高桶 −0.02%); 深跌层 (r60≤−30%) 天然上方套牢重 ⇒ 红柱必然偏小, 属形态使然",
+            "执行档",
+            "T+1开盘进 | T+1仍涨确认→T+1收盘进 (20:30 已收盘, 只能 T+1 买)",
         ),
-        ("换手率", "今日成交量 / 流通股本 (Tushare daily_basic 口径)"),
-        ("量比", "今量 / 前 5 日均量; <1 缩量, >1 放量"),
-        (
-            "乖离MA10",
-            '收盘 / 10日均线 − 1: 正 = 在均线上方, 越大越"追高/过热"; 负 = 均线下方',
-        ),
-        ("5日回撤", "近 5 日相对 20 日高点的最深回撤 (负值, 越负回撤越深)"),
     )
 
 
@@ -302,30 +303,12 @@ def _type_lines() -> tuple[tuple[str, str], ...]:
         ),
         (TYPE_B3, f"{TYPE_R60_FLAT:.0%} ≤ r60 ≤ +{TYPE_R60_D1:.0%} — 浅跌/平"),
         (TYPE_D1, f"+{TYPE_R60_D1:.0%} < r60 ≤ +{TYPE_R60_D2:.0%} — 已涨"),
-        (TYPE_D2, f"r60 > +{TYPE_R60_D2:.0%} — 大涨 (已发挥完, 多在观察池)"),
-    )
-
-
-def _band_lines() -> tuple[str, ...]:
-    """观察池五臂条件 (T1余 + 带双指纹四臂)。"""
-    c = GENIOUS
-    base = "0" if c["r120_base"] == 0 else f"{c['r120_base']:.0%}"
-    return (
-        f"  {T1_REST} = T1洗盘日 且 r120≤{c['t1_wide_r120_max']:.0%}"
-        f" 且 r60≥{c['t1_wide_r60_min']:.0%} (T1宽, 未进冠军段)",
-        f"  {BAND_T2_WARM} = T2余 且 r120≤{base}"
-        f" 且 {c['band_t2_lo']:.0%}<涨幅≤{c['band_t2_hi']:.0%} 且 量比≤{c['band_vr_max']:g}",
-        f"  {BAND_T2_LIMIT} = T2余 且 r120≤{base} 且 涨幅>{_LIMIT_UP_MAIN - _LIMIT_UP_TOL:.1%}"
-        f"(创业板/科创板 >{_LIMIT_UP_GROWTH - _LIMIT_UP_TOL:.1%})",
-        f"  {BAND_T3_WARM} = T3余 且 r120≤{base}"
-        f" 且 {c['band_t3_lo']:.0%}<涨幅≤{c['band_t3_hi']:.0%} 且 量比≤{c['band_vr_max']:g}",
-        f"  {BAND_T3_LIMIT} = T3余 且 r120≤{base} 且 涨幅>{_LIMIT_UP_MAIN - _LIMIT_UP_TOL:.1%}"
-        f"(创业板/科创板 >{_LIMIT_UP_GROWTH - _LIMIT_UP_TOL:.1%})",
+        (TYPE_D2, f"r60 > +{TYPE_R60_D2:.0%} — 大涨 (已发挥完)"),
     )
 
 
 def _gate_lines() -> tuple[str, ...]:
-    """涨闸说明 (三张表底部)。数=引擎真实口径末250日实测。"""
+    """涨闸说明 (冠军表底部)。数=引擎真实口径末250日实测。"""
     c = GENIOUS
     if not c["dir_gate"]:
         return ("涨闸: 已关闭 (dir_gate=False) — 全部标「过闸」。",)
@@ -361,56 +344,8 @@ def sheet1_legend() -> tuple[str, ...]:
             for s, name in zip(cond, SHEET1_LAYERS)
         ),
         "",
-        "列说明 (按表内从左到右)",
+        "列说明 (按表内从左到右; 表最左是旁路标注列, 核心列从「排名」起)",
         *(_pad("  " + k, cw + 2) + "= " + v for k, v in cols),
-        "",
-        "类型说明 (r60/r120 分桶; 重叠时优先级 A > C > B2 > B1 > B3 > D1 > D2)",
-        *(_pad("  " + k, tw + 2) + "= " + v for k, v in types),
-        "",
-        *_tail_lines(),
-    )
-
-
-def sheet2_legend() -> tuple[str, ...]:
-    """观察池表底部图例 (0914 用户令: 观察池也要有 footer)。
-
-    与冠军表图例同源 (_col_lines / _type_lines / _tail_lines), 只在层说明与排序键两处不同。
-    """
-    c = GENIOUS
-    bands, cols, types = _band_lines(), _col_lines(), _type_lines()
-    bw = max(_w(s) for s in bands)
-    cw = max(_w(k) for k, _ in cols)
-    tw = max(_w(k) for k, _ in types)
-    vr3 = c["band3_vr_outer_max"]
-    vr3_txt = "不限" if vr3 is None else f"{vr3:g}"
-    return (
-        "层说明 (五臂互斥; 冠军四段之外的余票, 与冠军表零重叠)",
-        *(
-            _pad(s, bw) + f"[当月 {LAYER_RESEARCH[name]}]"
-            for s, name in zip(bands, SHEET2_LAYERS)
-        ),
-        "  余票口径: T2余/T3余 = 命中 T2/T3 但已进冠军段的票不再进观察带。",
-        f'  四臂"剔毒"外闸: r60≤{c["band_r60_max"]:.0%}、量比≤{c["band2_vr_outer_max"]:g}'
-        f"(T3臂 {vr3_txt})、昨日乖离≤{c['band2_ext10p_max']:.2f}"
-        f" — 无此闸温火臂会吞掉任何 r120≤0 的当日上涨票 (24.5 → 140 票/日)。",
-        "",
-        "★ 排序键 = 观察分 (不显示在列里; 表已按它从高到低排好, 重复名次见「火群全量」)",
-        f"  = 同日截面 z 分求和  -({' + '.join(RANK_Z_COLUMNS)})",
-        '  含义: 带宽越窄 / 越贴 MA10 / 获利盘越低 / 跌得越深 → 分越高 = 越"还没涨透"; '
-        "已发挥完的自动沉底。",
-        "  实测 (全 896 日): 首档 +0.65% vs 末档 -0.03%, IC +0.077 (t 8.7), 前后半样本同号。",
-        "  期望≈50% 平水 — 这是**观察**排序, 不是全买清单 (排名键换成段位反而伤 IC, 同日截面 IC -0.025)。",
-        "",
-        "列说明 (按表内从左到右; 末两列 SL* 仅本表有)",
-        *(_pad("  " + k, cw + 2) + "= " + v for k, v in cols[:-1]),
-        "  "
-        + _pad("SL翻正年龄", cw)
-        + "= 益盟 S-L 由负转正至今的交易日数 (0 = 今日刚翻正)",
-        "  "
-        + _pad("SL洗盘天数", cw)
-        + "= 这次翻正之前那段负值持续了多少交易日 (越长洗得越久)",
-        "  两列只作标注: 实测 IC 仅 0.013 (t 1.5), 80.6% 与 T2 图标翻转重叠, 故不当排序键。",
-        *(_pad("  " + k, cw + 2) + "= " + v for k, v in cols[-1:]),
         "",
         "类型说明 (r60/r120 分桶; 重叠时优先级 A > C > B2 > B1 > B3 > D1 > D2)",
         *(_pad("  " + k, tw + 2) + "= " + v for k, v in types),
@@ -647,15 +582,15 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
         lambda x: x.rolling(5, min_periods=5).min().shift(1)
     )
 
-    # 20 日高低带宽 (压缩度): Sheet2 排序键之一, 窄=未启动
+    # 20 日高低带宽 (压缩度): 特征列, 窄=未启动
     out["band20"] = (
         _roll(out["high"], 20, "max", g) / _roll(out["low"], 20, "min", g) - 1
     )
 
     # 益盟 S-L 标准化 = (短期线-长期线)/长期线, 短期线=RSV14+100, 长期线=MA(RSV34,19)+100。
     # 两者同加 100, 故 sign(SL) 等价于 RSV14 > MA(RSV34,19), 只取符号做状态机。
-    # 仅作 Sheet2 **标注** (翻正年龄/洗盘天数), 不作排序主键: 全 897 日实测 IC 0.013 (t 1.5),
-    # 且在翻正子集内会毁掉观察分单调性; 另有 80.6% 与 T2 图标翻转重叠 (点二列相关 0.274)。
+    # 仅作特征列 (翻正年龄/洗盘天数), 已无展示列 (观察池删除); 全 897 日实测 IC 0.013 (t 1.5),
+    # 另有 80.6% 与 T2 图标翻转重叠 (点二列相关 0.274)。
     sl_pos = (
         (
             _rsv(out, 14)
@@ -700,7 +635,7 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
         .ffill()
     )
     out["d_since_kong"] = s_idx - last_kong
-    # 看多交叉后的年龄 (与 d_since_kong 对称)。作 Sheet2 标注列, 并供 T3 分支
+    # 看多交叉后的年龄 (与 d_since_kong 对称)。作特征列, 并供 T3 分支
     # 判定"点火是否发生在看多交叉之后" —— 交叉之前 T3 只是普通放量上涨。
     last_duo = (
         pd.Series(s_idx, index=out.index)
@@ -899,23 +834,9 @@ DISPLAY_COLUMNS = (
     "触发器",
     "当月样本口径",
     "当日涨幅",
+    "获利盘",
     "执行档",
 )
-
-
-def _zscore(s: pd.Series) -> pd.Series:
-    """日内截面 z。std 为 0/NaN → 全 0 (纯中性), 不给排序注入假信号。"""
-    sd = s.std(ddof=0)
-    if not np.isfinite(sd) or sd == 0:
-        return pd.Series(0.0, index=s.index)
-    return (s - s.mean()) / sd
-
-
-RANK_Z_COLUMNS = ("band20", "ext10", "winner_ratio", "r60", "r120")
-
-# Sheet2 附加观察列 (插在 5日回撤 之后, 即数值块末尾): 把"正→负→正"形态显式写进表里,
-# 用户在 Excel 里可自行按它排序; 默认排序键仍是观察分 (实测更强)。
-SHEET2_EXTRA_COLUMNS = ("SL翻正年龄", "SL洗盘天数")
 
 
 def _gate_passed(day: pd.DataFrame) -> pd.Series:
@@ -929,29 +850,19 @@ def _gate_passed(day: pd.DataFrame) -> pd.Series:
     return pre.fillna(False) & in_tier.fillna(False)
 
 
-def build_delivery(
-    df: pd.DataFrame, trade_date: str
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """取 trade_date 当日分层结果, 返回 (Sheet1 冠军表, duplicate)。
+def build_delivery(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    """取 trade_date 当日分层结果, 返回冠军表单张表。
 
-    0919 用户令: 原观察池独立表删除 — Sheet2/Sheet3 都由全量表承接。
-    0919 用户令追加: 加 CH4 中线缩量横盘层 — 全量进冠军表, 与现役四段域零重叠
-    (r60>+25% 强势区 vs 深跌区), 闸照常标注记账 (这格与涨闸几乎互斥, ∩仅14票/年)。
+    0919 用户令: 观察池/全量表两张独立表删除, build_delivery 只出冠军表。冠军表 =
+    默认两段 (CH3 深跌缩量 / CH2 深跌) + CH2B ∩ 过闸 交集 + CH4 中线缩量横盘全量
+    (0919 追加, 与四段域零重叠, 这格与涨闸几乎互斥 ∩仅14票/年)。
 
     **涨闸** (GENIOUS['dir_gate']) — 0918 终版不分档: 前置 = r5 > 0 (右侧拐头, 不做左侧) &
     vr <= dir_gate_vr_max (缩量), 二值标注 过闸/没过闸。**只标注, 不筛表** (0914 用户令:
-    "只在现在的 STOCKLIST 上加上 A+C+D 的标记") —— 三张表一只票都不删, 只多一列「涨闸」;
-    Sheet3 另把没过闸者排最前便于复核。NaN (历史不足) 判没过闸, 不静默放行。
+    "只在现在的 STOCKLIST 上加上 A+C+D 的标记") —— 一只票都不删, 只多一列「涨闸」。
+    NaN (历史不足) 判没过闸, 不静默放行。
     (r10 低动量条件与筹码MA10斜率均已摘除 — r10 档位标注 0918 实测对选择无实际帮助;
     斜率 0914 实测每加一次 ≥20% lift 都掉。两条件旧行为分别保留在 OOS 判词里备用。)
-
-    Sheet2 主键 = **观察分** 高→低 = 日内截面 z 的 -(band20 + ext10 + winner_ratio + r60 + r120),
-    即"带宽窄 / 未偏离MA10 / 获利盘低 / 深跌" 越足越靠前。全 896 日实测 IC +0.077 (t 8.7),
-    五分位单调 (桶1 +0.65% → 桶5 -0.03%), 前半/后半 0.079/0.076。已涨透的票自动沉底 —
-    这就是"滤掉已经发挥完"的机制, 不需要额外的硬闸。
-
-    层序**不作主键**: 层内 IC 实测为负 (-0.025), 按层质量排序反而有害; r60 深→浅只作同分兜底。
-    Sheet2 截断到 GENIOUS['sheet2_top_n'] 供阅读, 不截断的全量留在第三张表 (洪峰日的钱不丢)。
     """
     # 主力筹码比例是逐股递归量, 必须在切当日之前对整窗算 (当日值依赖全部历史迁移)
     df = compute_chip_trend(compute_main_chip_ratio(df))
@@ -968,8 +879,6 @@ def build_delivery(
     day["5日回撤"] = day["pb5"]
     day["执行档"] = day["层"].map(LAYER_EXEC)
     day["当月样本口径"] = day["层"].map(load_layer_research(trade_date))
-    day["SL翻正年龄"] = day["sl_flip_age"]
-    day["SL洗盘天数"] = day["sl_wash_days"]
 
     # 0918 用户令终版: 列名「涨闸」, 二值 过闸/没过闸, **不分档标注**。过闸 = 三段
     # 之一 (原现役闸 ∪ 缺口档 ∪ 低动量, 三档胜率都 >70%); 温和 (r10≤0.05&r5>8%, 59%)
@@ -986,11 +895,8 @@ def build_delivery(
     order = {name: i for i, name in enumerate(ALL_LAYERS)}
     day["_layer_rank"] = day["层"].map(order)
 
-    def sheet(sub: pd.DataFrame, extra: tuple = ()) -> pd.DataFrame:
-        cols = list(DISPLAY_COLUMNS)
-        if extra:
-            cols[len(DISPLAY_COLUMNS) : len(DISPLAY_COLUMNS)] = list(extra)
-        out = sub[cols].copy()
+    def sheet(sub: pd.DataFrame) -> pd.DataFrame:
+        out = sub[list(DISPLAY_COLUMNS)].copy()
         out.insert(0, "排名", range(1, len(out) + 1))
         return out.reset_index(drop=True)
 
@@ -1011,10 +917,7 @@ def build_delivery(
     )
     s1 = pd.concat([s1, _s1_extra, _s1_ch4], ignore_index=False)
 
-    return (
-        sheet(s1),
-        sheet(s1, SHEET2_EXTRA_COLUMNS),
-    )
+    return sheet(s1)
 
 
 def panel_max_date(path) -> datetime.date | None:

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import sys
 import time
 from pathlib import Path
@@ -323,6 +324,28 @@ class TestPreboardRolling:
             ("600504", d(88)),
         ]
 
+    def test_channel_priority_sorts_first(self):
+        """通道优先行必须置顶 (页首列; PB_LEGEND『通道优先=…(置顶)』『它是排序提示』)。
+
+        构造: 优先股B 点火仅 T2 (等级最低) 且命中集合与A同 ⇒ 旧键 (_fr 优先) 下 B 五行
+        必排到 A 五行之后; 修复后 (_pass 优先) B 五行置顶。本测试在修复前必失败。
+        """
+        ova = self._pb_sym(85)
+        ova["pctChg"][-1] = 3.0  # T1+T2 (最高等级), 非优先
+        ovb = self._pb_sym(85)
+        ovb["pctChg"][-2] = 2.5  # 前5日已≥2 → T1 关
+        ovb["pctChg"][-1] = 3.0  # 涨2~7 → 仅 T2 (最低等级)
+        ovb["winner_ratio"][-1] = 0.70  # 通道优先腿1: 今日获利盘≥0.65
+        ovb["lhb_net_buy"] = [0.0] * 85 + [1.0] * 5  # 腿2: 20日内LHB净买+机构双旗
+        ovb["lhb_inst_buy"] = [0.0] * 85 + [1.0] * 5
+        page = fbp.serve_preboard(mk_panel({"600501": ova, "600503": ovb}))
+        flags = page["通道优先"].tolist()
+        assert flags.count("优先") == 5
+        # 全部优先行连续置顶, 非优先行全部在后
+        assert flags == ["优先"] * flags.count("优先") + [""] * flags.count("")
+        assert set(page.loc[page["通道优先"] == "优先", "代码"]) == {"600503"}
+        assert page["点火旗"].iloc[0] == "T2"  # 置顶的恰是最低点火等级(优先)股
+
     def test_record_csv_full_and_worm(self, tmp_path):
         df = mk_panel({"600501": self._pb_sym(85), "600502": self._pb_sym(89)})
         p = tmp_path / "preboard_watch_hits_test.csv"
@@ -615,6 +638,21 @@ class TestServeFirstboardV2:
         )
         assert (page["次日一字风险"].to_numpy() == exp).all()
         assert set(page["次日一字风险"]) <= {"", "风险"}
+
+
+class TestServeFirstboardMissingModels:
+    """模型文件缺失 = 静默失败 (p_k3 全 NaN → 排名/校准档位空, 页失效) ⇒ 必须发声。"""
+
+    def test_missing_models_logs_error(self, tmp_path, caplog, monkeypatch):
+        # 本测试要求真 ERROR 记录, 不是『只是不抛异常』
+        monkeypatch.setattr(fbp, "_NAME_CACHE", {})
+        caplog.set_level(logging.ERROR, logger=fbp.log.name)
+        page = fbp.serve_firstboard(_today_events_df(2), models_dir=tmp_path)
+        errs = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert errs, "首板模型缺失必须发 ERROR 日志 (否则页面看似正常却零信息)"
+        msg = " ".join(r.getMessage() for r in errs)
+        assert "排名" in msg and "校准档位" in msg and str(tmp_path) in msg
+        assert page["T+3板概率"].isna().all()  # 确认确实走了缺模型分支
 
 
 class TestLhbSeatAnnotations:

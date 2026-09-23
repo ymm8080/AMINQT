@@ -514,6 +514,7 @@ def test_build_delivery_single_table(chip_stub):
                 "r60": -0.40,
                 "vr": 1.0,
                 "pct": 0.08,
+                "winner_ratio": 0.62,
                 "date": "20260911",
                 "symbol": "000002",
             },
@@ -541,117 +542,18 @@ def test_build_delivery_single_table(chip_stub):
             },
         ]
     )
-    s1, _ = kt.build_delivery(df, "20260911")
+    s1 = kt.build_delivery(df, "20260911")
     # 000002 T3深跌 → CH2 冠军段; 000001 CH1 / 000003 T1余 / 000004 带层不进单表
     assert list(s1["symbol"]) == ["000002"]
     assert list(s1["排名"]) == [1]
     assert set(s1["层"]) <= {kt.CH3_T3_DEEP_QUIET, kt.CH2_T2_DEEP}
     # 闸必须在前列 (0914 用户令: 排第 19 列时横向滚动才看得见 → 提到第 3 列)
     assert list(s1.columns)[:4] == ["排名", "symbol", "涨闸", "层"]
+    # 0923 用户令: 冠军四段加回「获利盘」数值列 (= winner_ratio 水位, 原样透传)
+    assert "获利盘" in s1.columns
+    assert abs(s1["获利盘"].iloc[0] - 0.62) < 1e-12
     # 每个段位都要有执行档与研究口径, 不能出现 NaN
     assert s1["执行档"].notna().all() and s1["当月样本口径"].notna().all()
-    for extra in kt.SHEET2_EXTRA_COLUMNS:
-        assert extra not in s1.columns
-
-
-def test_sheet2_ranks_unrun_first_and_truncates(chip_stub):
-    """观察分把"还没涨透"的顶到前面, 已涨透的沉底; Sheet2 截断但 CH1/CH2B 全保留。"""
-    chip_stub()
-    top_n = int(GENIOUS["sheet2_top_n"])
-    rows = [
-        # 已涨透: 带宽大 / 乖离高 / 获利盘高 / r60 正 → CH1 层 (T1), 强制保留不截断
-        {
-            "T1": True,
-            "r120": -0.20,
-            "r20": 0.10,
-            "r60": 0.15,
-            "pct": 0.10,
-            "band20": 0.90,
-            "ext10": 1.20,
-            "winner_ratio": 0.95,
-            "date": "20260911",
-            "symbol": "000001",
-        },
-        # 未启动: 带宽窄 / 未偏离 / 获利盘低 / 跌得比填充行深 (但不到 CH3 的 r60<=-30)
-        {
-            "T3": True,
-            "r60": -0.20,
-            "r120": -0.20,
-            "pct": 0.10,
-            "band20": 0.05,
-            "ext10": 0.95,
-            "winner_ratio": 0.10,
-            "date": "20260911",
-            "symbol": "000002",
-        },
-    ]
-    # 填充到超过 top_n (T1余: r120<=0.40 且 r60>=-0.05)
-    for i in range(top_n + 3 - len(rows)):
-        rows.append(
-            {
-                "T1": True,
-                "r60": 0.0,
-                "r120": 0.0,
-                "r20": 0.0,
-                "pct": 0.0,
-                "band20": 0.10 + 0.001 * i,
-                "ext10": 1.0,
-                "winner_ratio": 0.5,
-                "date": "20260911",
-                "symbol": f"9{i:05d}",
-            }
-        )
-    df = _layer_frame(rows)
-    s1, _ = kt.build_delivery(df, "20260911")
-
-    # 0919: 观察池整段移除 — 必填 T1余 等不进单表 (截断的对照场景已不存在)
-    assert list(s1["symbol"]) == ["000002"] if list(s1["symbol"]) else True
-
-
-def test_sheet2_sort_key_switch_orders_by_sl_flip(monkeypatch, chip_stub):
-    """ "SL翻正" 备用模式: 刚翻正 + 洗得久 → 前; 从未翻正的沉底。"""
-    chip_stub()
-    monkeypatch.setitem(GENIOUS, "sheet2_sort_key", "SL翻正")
-    df = _layer_frame(
-        [
-            {
-                "T1": True,
-                "r120": 0.0,
-                "r20": 0.0,
-                "sl_flip_age": 0.0,
-                "sl_wash_days": 30.0,
-                "date": "20260911",
-                "symbol": "000001",
-            },
-            {
-                "T1": True,
-                "r120": 0.0,
-                "r20": 0.0,
-                "sl_flip_age": 9.0,
-                "sl_wash_days": 5.0,
-                "date": "20260911",
-                "symbol": "000002",
-            },
-            {
-                "T1": True,
-                "r120": 0.0,
-                "r20": 0.0,
-                "sl_flip_age": np.nan,
-                "sl_wash_days": np.nan,
-                "date": "20260911",
-                "symbol": "000003",
-            },
-        ]
-    )
-    _, s1b = kt.build_delivery(df, "20260911")
-    # 0919: T1余 不再单独出表 — SL* 列在冠军行内也带标注 (CH3/T3 层多在); 这里
-    # T1行不出表, 改由真实面板回归覆盖 SL 列。仅验证调用路径不炸。
-    assert len(s1b.columns) > 0
-
-
-def test_sheet2_sort_key_default_is_observation_score():
-    """默认排序键必须是观察分 (全 897 日实测最优); 形态模式只是备用。"""
-    assert GENIOUS["sheet2_sort_key"] == "观察分"
 
 
 # ── 涨闸: 右侧拐头 + 缩量 (2026-09-14 用户令; 0918 终版列名涨闸不分档, 见 config 注释) ──
@@ -693,7 +595,7 @@ def test_dir_gate_marks_without_dropping_rows(chip_stub):
             },
         ]
     )
-    s1, _ = kt.build_delivery(df, "20260911")
+    s1 = kt.build_delivery(df, "20260911")
 
     assert list(s1["symbol"]) == ["000001", "000002", "000003", "000004", "000005"]
     # 全在表内, 一只没删; 只标涨闸
@@ -729,7 +631,7 @@ def test_dir_gate_ignores_chip_ma_slope(chip_stub):
             },
         ]
     )
-    s1, _ = kt.build_delivery(df, "20260911")
+    s1 = kt.build_delivery(df, "20260911")
 
     assert list(s1["symbol"]) == ["000001", "000002"]
     assert set(s1["涨闸"]) == {"过闸"}
@@ -747,7 +649,7 @@ def test_sheet1_adds_ch2b_pass_only(chip_stub):
             {"ext10p": 0.90, "r120": -0.10, "symbol": "000002", **ok, "r5": -0.01},
         ]
     )
-    s1, _ = kt.build_delivery(df, "20260911")
+    s1 = kt.build_delivery(df, "20260911")
     assert list(s1["symbol"]) == ["000001"]  # 只有 CH2B∩过闸 的进单表
 
 
@@ -774,7 +676,7 @@ def test_dir_gate_boundary_is_strict_and_fails_closed(chip_stub):
             for sym, over in rows
         ]
     )
-    s1, _ = kt.build_delivery(df, "20260911")
+    s1 = kt.build_delivery(df, "20260911")
 
     assert len(s1) == 7  # 全在, 一只没删
     assert dict(zip(s1["symbol"], s1["涨闸"])) == {
@@ -804,16 +706,16 @@ def test_dir_gate_off_admits_everything(chip_stub, monkeypatch):
                 "r5": -0.20,
                 "vr": 1.2,
             },
-            # T1余 属观察池 (不筛), 用来验证闸关时它也标「过闸」
+            # T1余 不筛, 用来验证闸关时它也标「过闸」
             {"T1": True, "r120": 0.0, "r20": 0.0, "symbol": "000002", "r10": 0.50},
         ]
     )
-    s1, _ = kt.build_delivery(df, "20260911")
+    s1 = kt.build_delivery(df, "20260911")
     assert list(s1["symbol"]) == ["000001"]
     assert set(s1["涨闸"]) == {"过闸"}
 
 
-def test_dir_gate_does_not_reorder_sheet2(chip_stub, monkeypatch):
+def test_dir_gate_does_not_reorder_sheet1(chip_stub, monkeypatch):
     """闸开关不重排表位次, 只在「涨闸」列上体现 (标注, 不删行)。"""
     chip_stub()
     df = _layer_frame(
@@ -830,15 +732,15 @@ def test_dir_gate_does_not_reorder_sheet2(chip_stub, monkeypatch):
         ]
     )
     monkeypatch.setitem(GENIOUS, "dir_gate", False)
-    s2_off, _ = kt.build_delivery(df, "20260911")
+    s1_off = kt.build_delivery(df, "20260911")
     monkeypatch.setitem(GENIOUS, "dir_gate", True)
-    s2_on, _ = kt.build_delivery(df, "20260911")
+    s1_on = kt.build_delivery(df, "20260911")
 
     # 位置不重排 — 闸只改标注列
-    assert list(s2_off["symbol"]) == ["000001", "000002", "000003"]
-    assert list(s2_on["symbol"]) == ["000001", "000002", "000003"]
-    assert dict(zip(s2_on["symbol"], s2_on["涨闸"]))["000002"] == "没过闸"
-    assert set(s2_off["涨闸"]) == {"过闸"}
+    assert list(s1_off["symbol"]) == ["000001", "000002", "000003"]
+    assert list(s1_on["symbol"]) == ["000001", "000002", "000003"]
+    assert dict(zip(s1_on["symbol"], s1_on["涨闸"]))["000002"] == "没过闸"
+    assert set(s1_off["涨闸"]) == {"过闸"}
 
 
 # ── 真实面板案例回归 ─────────────────────────────────────────────────────────
@@ -894,7 +796,7 @@ def test_real_panel_no_ohlcv_corruption(real_day):
 
 
 def test_sl_flip_state_machine_matches_independent_derivation(real_day):
-    """SL翻正年龄 / SL洗盘天数 必须与独立重算逐行一致。
+    """sl_flip_age / sl_wash_days (SL翻正年龄 / SL洗盘天数) 必须与独立重算逐行一致。
 
     这里刻意**不**调 kt._rsv / kt._roll, 用裸 pandas 重走一遍 正/负 段:
     验证的是意图 (翻正=负段结束那天; 洗盘天数=翻正前那段负段的长度), 不是复述实现。

@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +35,8 @@ import pyarrow.parquet as pq
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config.settings import PANEL_V3_PATH, PROJECT_ROOT, STOCK_LIST_DIR  # noqa: E402
+
+log = logging.getLogger(__name__)
 
 MODELS_DIR = Path(PROJECT_ROOT) / "models" / "firstboard"
 TR_END = "2024-12-31"
@@ -280,23 +283,6 @@ def build_event_features(df: pd.DataFrame) -> pd.DataFrame:
     ev["k3"] = np.where(rows_after >= 3, k3_any.astype(float), np.nan)
     ev["mature10"] = rows_after >= 10  # 与研究 chain2 的 k3_ok 同口径 (10 前瞻日)
     ev["hist_ok"] = g.cumcount().reindex(ev.index) >= 61
-
-    # LHB 板前20旗 (shift(1) 后 rolling max — 严格板前)
-    net = pd.to_numeric(df["lhb_net_buy"], errors="coerce")
-    inst = pd.to_numeric(df["lhb_inst_buy"], errors="coerce")
-    pos = (net > 0).astype(float)
-    bothf = ((net > 0) & (inst > 0)).astype(float)
-
-    def _pre20(v):
-        return (
-            v.groupby(df["symbol"], sort=False)
-            .transform(lambda x: x.shift(1).rolling(20, min_periods=1).max())
-            .fillna(0)
-            > 0
-        ).astype(float)
-
-    ev["lhb_pre20_net"] = _pre20(pos).reindex(ev.index)
-    ev["lhb_pre20_both"] = _pre20(bothf).reindex(ev.index)
 
     ev["yizi"] = ev["low"] >= ev["_limit"] - 0.005
     ev["champion"] = (ev["wr1"] >= 0.65) & ev["yizi"]
@@ -612,6 +598,10 @@ def serve_firstboard(
         b_k2, b_k3, b_next, meta = load_models(models_dir)
         today = _predict(today, (b_k2, b_k3, b_next), meta)
     except FileNotFoundError:
+        log.error(
+            "首板模型缺失 (%s): p_k3 全 NaN → 排名/校准档位 将为空, 本页无效 (页面看似正常)",
+            models_dir,
+        )
         today = today.assign(p_k2=np.nan, p_k3=np.nan, p_next=np.nan)
     today = today.sort_values("p_k3", ascending=False, na_position="last").reset_index(
         drop=True
@@ -847,9 +837,9 @@ def serve_preboard(
     )
     page["_pass"] = (page["_wr_t"] >= 0.65) & page["_lhb_t"].fillna(False).astype(bool)
     page["_fr"] = page["点火旗"].map({"T1+T2": 3, "T1": 2, "T2": 1, "": 0}).fillna(0)
-    page = page.sort_values(["_fr", "date", "次数10日"], ascending=False).reset_index(
-        drop=True
-    )
+    page = page.sort_values(
+        ["_pass", "_fr", "date", "次数10日"], ascending=False
+    ).reset_index(drop=True)
     return pd.DataFrame(
         {
             "通道优先": np.where(page["_pass"], "优先", ""),
