@@ -193,7 +193,9 @@ class TestRefreshLhbSeatCache:
             preexisting.to_parquet(cache, index=False)
         ns = _load_refresh_fn(cache, labeled)
         ns["_refresh_lhb_seat_cache"]("20260923", day_df)
-        return pd.read_parquet(cache), (pd.read_parquet(labeled) if labeled.exists() else None)
+        return pd.read_parquet(cache), (
+            pd.read_parquet(labeled) if labeled.exists() else None
+        )
 
     def test_idempotent_same_day(self, tmp_path):
         got, lab = self._run(tmp_path, _top_inst_day())
@@ -206,10 +208,14 @@ class TestRefreshLhbSeatCache:
         ns["_refresh_lhb_seat_cache"]("20260923", _top_inst_day())
         got2 = pd.read_parquet(cache)
         assert len(got2) == 2
-        assert not got2.duplicated(subset=["trade_date", "ts_code", "exalter", "side"]).any()
+        assert not got2.duplicated(
+            subset=["trade_date", "ts_code", "exalter", "side"]
+        ).any()
 
     def test_appends_new_day_keeps_old(self, tmp_path):
-        got, _ = self._run(tmp_path, _top_inst_day("20260923"), preexisting=_top_inst_day("20260922"))
+        got, _ = self._run(
+            tmp_path, _top_inst_day("20260923"), preexisting=_top_inst_day("20260922")
+        )
         assert len(got) == 4
         assert set(got["trade_date"]) == {"20260922", "20260923"}
 
