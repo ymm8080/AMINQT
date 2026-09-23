@@ -557,10 +557,29 @@ def _lhb_annotations(df: pd.DataFrame, symbols, d0=None) -> dict[str, dict[str, 
     返回 symbol → {pre_days, pre_net, pre_hot, pre_inst, d0_hot, d0_net};
     无 LHB 数据的 symbol 不在 dict → 页面留空 (观察清单, 绝不删行/过滤)."""
     daily = _lhb_daily()
-    if daily.empty or len(symbols) == 0:
+    if len(symbols) == 0:
         return {}
     cal = pd.DatetimeIndex(sorted(df["date"].unique()))
     d0 = cal[-1] if d0 is None else pd.Timestamp(d0)
+    if daily.empty:
+        # _lhb_daily 读失败时静默返回空表 (设计: 不阻页), 若在此静默早退则 6 列整体空
+        # 而全链无声 —— 与"陈旧"同属静默降级, 必须补一声. 页仍必须照出.
+        log.warning(
+            "LHB 席位缓存不可用 (读失败或空表): %s → 6 个标注列全空; 跑 _daily_fetch.py 重建",
+            LHB_SEAT_PARQUET,
+        )
+        return {}
+    # 新鲜度告警 (不抛异常, 页必须照出): 席位缓存最新日 < 面板最新日 → D-20..D0 窗滑出
+    # 缓存覆盖范围, 标注列先部分后全空 (静默降级). 提示跑 _daily_fetch.py 刷新.
+    seat_max = daily["date"].max()
+    if pd.notna(seat_max) and seat_max < d0:
+        log.warning(
+            "LHB 席位缓存陈旧: 最新 %s < 面板日 %s (差 %d 个交易日), 标注列将全空; "
+            "跑 _daily_fetch.py 刷新 lhb_seat_detail*.parquet",
+            seat_max.date(),
+            d0.date(),
+            int(len(cal[cal > seat_max])),
+        )
     loc = cal.get_loc(d0)
     win = set(cal[max(0, loc - LHB_PRE_WIN + 1) : loc + 1])
     w = daily[
