@@ -25,7 +25,6 @@ from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import (
-    CallToolRequest,
     CallToolResult,
     ListToolsRequest,
     ListToolsResult,
@@ -236,9 +235,11 @@ async def handle_list_tools(request: ListToolsRequest) -> ListToolsResult:
 
 
 @server.call_tool()
-async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
-    name = request.params.name
-    args = request.params.arguments or {}
+async def handle_call_tool(name: str, arguments: dict) -> CallToolResult:
+    # mcp 1.23.3 的低层契约: 装饰器内部 await func(tool_name, arguments)
+    # (site-packages/mcp/server/lowlevel/server.py, call_tool 分支)。
+    # 旧式单参数 (request) 签名会让每次 tools/call 抛 TypeError 并被吞成 isError 结果。
+    args = arguments or {}
 
     try:
         if name == "deepseek_ask":

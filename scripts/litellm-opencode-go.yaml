@@ -15,6 +15,15 @@
 # ASCII ONLY - Python on Windows defaults to GBK when reading files, so any
 # non-ASCII byte here breaks yaml.safe_load with a UnicodeDecodeError.
 
+# VERIFICATION STATUS 2026-09-28 - the non-flash `glm-5.3` and `kimi-k3`
+# entries below are REGISTERED but NOT yet proven to exist upstream. A probe
+# of all 4 model_names returned HTTP 429 GoUsageLimitError with ZERO 404s
+# (metadata.limitName=monthly, workspace wrk_01M1BSN5HKDX008F4EVMNHQNKV). The
+# 429 fires BEFORE model validation, so it masks any 404 - the OpenCode Go
+# monthly quota is exhausted and this probe cannot settle the question.
+# Do NOT delete these entries on this evidence. Re-probe after quota reset;
+# a 200 or a 404 will then be decisive. See also ~/.claude/commands/switch-model.md
+
 model_list:
   - model_name: glm-5.3-flash
     litellm_params:

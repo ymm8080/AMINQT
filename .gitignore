@@ -78,6 +78,8 @@ logs/
 # Secrets / env
 .env
 config/.env
+# 本地 settings 备份含真 token: 全局 ignore 只匹配精确名 settings.local.json, 不覆盖 .bak*
+.claude/settings.local.json.bak*
 
 # iFinD / xtquant local installs
 iFinDPy/
