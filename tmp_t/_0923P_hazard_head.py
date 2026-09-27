@@ -202,7 +202,8 @@ def build_features(M: pd.DataFrame):
 
     F = pd.DataFrame(index=M.index)
     F["volr"] = v1 / v0
-    F["volr5"] = v1 / M["vol5pre"].to_numpy()
+    v5pre = M["vol5pre"].to_numpy()
+    F["volr5"] = np.where(v5pre > 0, v1 / np.where(v5pre > 0, v5pre, np.nan), np.nan)
     F["dd_high"] = (c1 - h0) / h0
     F["ret_c0"] = c1 / c0 - 1
     F["cpos"] = np.where(rng1 > 0, (c1 - l1) / np.where(rng1 > 0, rng1, np.nan), np.nan)

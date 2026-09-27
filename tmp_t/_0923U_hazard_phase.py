@@ -144,10 +144,12 @@ def main() -> int:
         for arm in ("D0-only", "D0+D1"):
             dec = preds[arm]
             log.info("-" * 100)
+            # 走 split_stats (先滤未成熟标签), 与分档行同口径; 勿用原始 te_ret[dec].mean()
+            # (未成熟标签是 NaN ⇒ 全 TE 头部收益会打成 nan)
+            s0 = split_stats(te_ret, y_te, dec, H.COST_ROUND_TRIP)
             log.info("[%s][%s] 全 TE: n=%d 板率=%.1f%% Δ(A-B)=%+.2fpp | 头部 n=%d 收益=%+.2f%% (净%+.2f%%)",
-                     hname, arm, len(y_te), 100 * y_te.mean(),
-                     *[100 * x for x in (split_stats(te_ret, y_te, dec, 0)["delta_pp"],)],
-                     int(dec.sum()), 100 * te_ret[dec].mean(), 100 * (te_ret[dec].mean() - H.COST_ROUND_TRIP))
+                     hname, arm, s0["n"], 100 * s0["a_rate"], s0["delta_pp"],
+                     s0["head_n"], 100 * s0["head_ret"], 100 * s0["head_ret_net"])
             rows = {}
             for t, nm in ((0, "低动量"), (1, "中动量"), (2, "高动量")):
                 sel = tier_te == t
