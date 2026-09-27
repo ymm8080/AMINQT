@@ -449,7 +449,7 @@ def _pick_diversification(sub: pd.DataFrame, slc: pd.DataFrame) -> dict:
         .pivot_table(index="date", columns="symbol", values="close_hfq", aggfunc="last")
         .sort_index()
     )
-    rets = px.pct_change()
+    rets = px.pct_change(fill_method=None)
     all_dates = rets.index
     vals = []
     for d, g in slc.groupby("date"):

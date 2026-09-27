@@ -816,3 +816,96 @@ class TestGeniousMultiSheet:
         ]
         assert any(isinstance(v, str) and "通道优先" in v for v in foot)
         assert any(isinstance(v, str) and "通道优先·白话" in v for v in foot)
+
+
+class TestEnsembleServe:
+    """0924 P0: meta["ensemble"] 多档兼容 — v1 单文件路径零行为变化."""
+
+    def test_load_models_contract(self, trained, tmp_path):
+        import json
+        import shutil
+
+        out, _, _ = trained
+        b1, m1 = fbp.load_models(out)
+        assert [len(x) for x in b1] == [1, 1, 1]  # v1 meta → 每头 1 档
+        v2 = tmp_path / "firstboard_v2"
+        v2.mkdir()
+        for f in ("booster_k2.txt", "booster_k3.txt", "booster_next.txt"):
+            shutil.copy(out / f, v2 / f)
+        m = json.loads((out / "meta.json").read_text(encoding="utf-8"))
+        m["ensemble"] = {
+            "k2": ["booster_k2.txt", "booster_k2.txt"],
+            "k3": ["booster_k3.txt", "booster_k3.txt"],
+            "next_board": ["booster_next.txt", "booster_next.txt"],
+        }
+        (v2 / "meta.json").write_text(
+            json.dumps(m, ensure_ascii=False), encoding="utf-8"
+        )
+        b2, m2 = fbp.load_models(v2)
+        assert [len(x) for x in b2] == [2, 2, 2]  # v2 meta → 档位数 = ensemble 块
+        assert m2["ensemble"]["k3"] == ["booster_k3.txt", "booster_k3.txt"]
+
+    def test_v2_mean_of_identical_equals_v1(self, trained, tmp_path, monkeypatch):
+        import json
+        import shutil
+
+        out, df, _ = trained
+        v2 = tmp_path / "firstboard_v2"
+        v2.mkdir()
+        for f in ("booster_k2.txt", "booster_k3.txt", "booster_next.txt"):
+            shutil.copy(out / f, v2 / f)
+        m = json.loads((out / "meta.json").read_text(encoding="utf-8"))
+        m["ensemble"] = {
+            "k2": ["booster_k2.txt", "booster_k2.txt"],
+            "k3": ["booster_k3.txt", "booster_k3.txt"],
+            "next_board": ["booster_next.txt", "booster_next.txt"],
+        }
+        (v2 / "meta.json").write_text(
+            json.dumps(m, ensure_ascii=False), encoding="utf-8"
+        )
+        monkeypatch.setattr(fbp, "_NAME_CACHE", {})  # 测试不触网
+        p1 = fbp.serve_firstboard(df, models_dir=out)["T+3板概率"].dropna()
+        p2 = fbp.serve_firstboard(df, models_dir=v2)["T+3板概率"].dropna()
+        assert len(p2) and len(p1) == len(p2)
+        assert np.allclose(p1.to_numpy(), p2.to_numpy(), atol=1e-12)
+
+
+class TestStaleWatchdog:
+    """0924 P0: 停训哨兵 model_stale_trading_days (对不齐=None, 面板内=交易日差)."""
+
+    def _meta_dir(self, tmp_path, train_end):
+        import json
+
+        d = tmp_path / f"fb_{train_end}"
+        d.mkdir(exist_ok=True)
+        (d / "meta.json").write_text(
+            json.dumps({"features": [], "train_end": train_end}), encoding="utf-8"
+        )
+        return d
+
+    def test_aligned_fresh_and_stale_and_misaligned(self, tmp_path):
+        import json  # noqa: F401
+
+        df = pd.DataFrame({"date": pd.to_datetime(["2026-09-01", "2026-09-22"])})
+        assert (
+            fbp.model_stale_trading_days(self._meta_dir(tmp_path, "2026-09-22"), df)
+            == 0
+        )
+        assert (
+            fbp.model_stale_trading_days(self._meta_dir(tmp_path, "2026-09-01"), df)
+            == 1
+        )
+        # 不在面板日历 (旧停训病理: 生产 train_end=2025-12-31 vs 2026 面板) → None
+        assert (
+            fbp.model_stale_trading_days(self._meta_dir(tmp_path, "2025-12-31"), df)
+            is None
+        )
+
+    def test_missing_meta_or_df_is_none(self, tmp_path):
+        df = pd.DataFrame({"date": pd.to_datetime(["2026-09-22"])})
+        assert fbp.model_stale_trading_days(tmp_path, df) is None  # 无 meta.json
+        assert fbp.model_stale_trading_days(tmp_path, None) is None  # 无面板
+
+    def test_production_stale_threshold_constant(self):
+        # 镜像 config.PROB_GATE["max_stale_days"] (42 交易日) — 勿漂移
+        assert fbp.FB_MAX_STALE_DAYS == 42

@@ -14,6 +14,10 @@
 点名页 LHB 席位标注列 (0923): W14 A/B 终判席位特征无模型增量 (pre20=平 / D0=负) → 按规则降级为
   纯标注列 (LHB上榜日数/净买亿/游资席位/机构在场 20日窗 + D0 当日两列); 绝不进 FEATS/训练/闸,
   无数据留空绝不删行; 数据 = PARQUET 根稳定副本 lhb_seat_detail_labeled.parquet (只读).
+0924 P0 复活 (scripts/_firstboard_retrain.py): load_models/_predict 支持 ensB3 多档集成
+  (meta["ensemble"] 块, prob_head.ensemble_predict 均值语义; v1 无此键 → 单文件路径零行为变化)
+  + 停训看门狗 (FB_MAX_STALE_DAYS=42 交易日, train_end 落后面板 → serve log.error, fail-open
+  页照出 — 病理: 生产三头停 2025-12-31 ~180 交易日无人知); --models-dir 可指向 v2 staging.
 
 用法:
     python scripts/_firstboard_pages.py --train   # 训练+落盘+TE复现校验(建包时跑一次)
@@ -113,6 +117,9 @@ _EXPECT_TE = {
 
 # 点名页 v2: 全量清单截断上限 (冠军格★行截断豁免, W19 并集规则保留)
 FB_MAX_ROWS = 80
+# 0924 P0 停训看门狗阈值 (交易日): meta.train_end 落后面板超此值 → serve 大声告警
+# (镜像 config.PROB_GATE["max_stale_days"]=42; 病理见 _stale_guard docstring)
+FB_MAX_STALE_DAYS = 42
 # 次日一字风险旗: 一字 ∩ p_k3≥此值 → 次日大概率仍一字买不到 (0923: ≥0.4 档实测 T+3 板率 ~54%)
 K3_RISK_TH = 0.40
 # 校准档位文案 (0923 rank_calib TE n=5608 分桶实测率; 模型分为下界读数, 顶部实测率更高)
@@ -451,19 +458,38 @@ def train_and_save(
 
 
 def load_models(models_dir=MODELS_DIR):
+    """三头 booster + meta (0924 P0: ensB3 集成兼容, 向后零行为变化).
+
+    v1 meta (无 "ensemble" 键): 单文件三头, 每头 1 档 — 与旧版逐字节同行为;
+    v2 meta (models/firstboard_v2, scripts/_firstboard_retrain.py 产物):
+    meta["ensemble"] = {k2/k3/next_board: [booster 文件名...]}, 每头多档.
+    返回 (boosters, meta): boosters = [k2 档列表, k3 档列表, next 档列表]."""
     import lightgbm as lgb
 
     models_dir = Path(models_dir)
     meta = json.loads((models_dir / "meta.json").read_text(encoding="utf-8"))
+    ens = meta.get("ensemble")
+    if ens:
+        return (
+            [
+                [lgb.Booster(model_file=str(models_dir / f)) for f in ens[h]]
+                for h in ("k2", "k3", "next_board")
+            ],
+            meta,
+        )
     return (
-        lgb.Booster(model_file=str(models_dir / "booster_k2.txt")),
-        lgb.Booster(model_file=str(models_dir / "booster_k3.txt")),
-        lgb.Booster(model_file=str(models_dir / "booster_next.txt")),
+        [
+            [lgb.Booster(model_file=str(models_dir / "booster_k2.txt"))],
+            [lgb.Booster(model_file=str(models_dir / "booster_k3.txt"))],
+            [lgb.Booster(model_file=str(models_dir / "booster_next.txt"))],
+        ],
         meta,
     )
 
 
 def _predict(ev: pd.DataFrame, boosters, meta) -> pd.DataFrame:
+    """三头概率; boosters = 每头档位列表 (v1=1 档, v2 ensB3=多档) → 算术均值
+    (app.pipeline_parallel.prob_head.ensemble_predict 语义, 0924 移植)."""
     feats = meta["features"]
     X = ev[feats].apply(pd.to_numeric, errors="coerce")
     X["sw_l2"] = pd.Categorical(ev["sw_l2"], categories=meta["sw_l2_categories"])
@@ -476,10 +502,54 @@ def _predict(ev: pd.DataFrame, boosters, meta) -> pd.DataFrame:
     ev["p_k3"] = np.nan
     ev["p_next"] = np.nan
     if ok.any():
-        ev.loc[ok, "p_k2"] = boosters[0].predict(X[ok])
-        ev.loc[ok, "p_k3"] = boosters[1].predict(X[ok])
-        ev.loc[ok, "p_next"] = boosters[2].predict(X[ok])
+        Xok = X[ok]
+        for col, members in zip(("p_k2", "p_k3", "p_next"), boosters):
+            ev.loc[ok, col] = np.mean([m.predict(Xok) for m in members], axis=0)
     return ev
+
+
+def model_stale_trading_days(models_dir=MODELS_DIR, df: pd.DataFrame | None = None):
+    """停训哨兵 (0924 P0): meta.train_end 落后面板最新日多少个交易日.
+
+    缺 meta / train_end 不在面板日历 → None (对不齐 = 可疑, 调用方大声告警);
+    与 app.pipeline_parallel.prob_head.bundle_age_trading_days 同语义
+    (PROB_GATE max_stale_days 闸的 firstboard 版)."""
+    if df is None:
+        return None
+    try:
+        meta = json.loads((Path(models_dir) / "meta.json").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    tt = pd.Timestamp(meta.get("train_end"))
+    if pd.isna(tt):
+        return None
+    cal = pd.DatetimeIndex(sorted(df["date"].unique()))
+    if tt.to_datetime64() not in cal:
+        return None
+    return int((cal > tt).sum())
+
+
+def _stale_guard(models_dir, df: pd.DataFrame) -> None:
+    """停训看门狗 (0924 P0): 停训 > FB_MAX_STALE_DAYS 交易日 → log.error 大声告警.
+
+    fail-open — 页照出 (观察页勿杀清单); 病理 = 0924 前生产三头停在 2025-12-31
+    ~180 交易日无人知, 此哨兵堵死复发路径. 缺 meta 已由 load_models 的
+    FileNotFoundError 路径告警, 勿重复."""
+    age = model_stale_trading_days(models_dir, df)
+    if age is None:
+        log.error(
+            "[firstboard] ⚠ 模型 train_end 与面板日历对不齐 (meta.json 可疑): "
+            "核对 %s — 概率读数新鲜度无法判定",
+            models_dir,
+        )
+        return
+    if age > FB_MAX_STALE_DAYS:
+        log.error(
+            "[firstboard] ⚠ 停训哨兵: 模型停训 %d 交易日 (> %d), 概率列基于陈旧情绪"
+            "生态 — 跑 python scripts/_firstboard_retrain.py 复活 (P0, 0924)",
+            age,
+            FB_MAX_STALE_DAYS,
+        )
 
 
 def _calib_tier(p_k3: pd.Series) -> pd.Series:
@@ -614,8 +684,9 @@ def serve_firstboard(
     ev = build_event_features(df)
     today = ev[ev["date"] == d0].copy()
     try:
-        b_k2, b_k3, b_next, meta = load_models(models_dir)
-        today = _predict(today, (b_k2, b_k3, b_next), meta)
+        boosters, meta = load_models(models_dir)
+        today = _predict(today, boosters, meta)
+        _stale_guard(models_dir, df)  # 0924 P0 停训哨兵 (fail-open, 只告警)
     except FileNotFoundError:
         log.error(
             "首板模型缺失 (%s): p_k3 全 NaN → 排名/校准档位 将为空, 本页无效 (页面看似正常)",
@@ -881,13 +952,18 @@ def main() -> int:
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--train", action="store_true", help="训练+落盘+TE复现校验")
+    ap.add_argument(
+        "--models-dir",
+        default=None,
+        help="服务用模型目录 (默认生产 models/firstboard; 试 v2: models/firstboard_v2)",
+    )
     args = ap.parse_args()
     if args.train:
         res = train_and_save()
         print(json.dumps(res, ensure_ascii=False))
         return 0
     df = load_mainboard()
-    fb = serve_firstboard(df)
+    fb = serve_firstboard(df, models_dir=args.models_dir or MODELS_DIR)
     d0 = df["date"].max()
     record_csv = Path(STOCK_LIST_DIR) / f"preboard_watch_hits_{d0:%Y%m%d}.csv"
     pb = serve_preboard(df, record_csv=record_csv)

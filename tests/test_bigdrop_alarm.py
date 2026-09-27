@@ -59,8 +59,9 @@ def _flags(**over):
 
 
 def test_rule_count_is_nine():
-    # 闸数变=得分档口径变, 必须是有意的 (0915 撤连板高位: 10 -> 9)
-    assert len(rule_flags(pd.DataFrame([SAFE])).columns) == 9
+    # 闸数变=得分档口径变, 必须是有意的 (0915 撤连板高位: 10 -> 9;
+    # 0927 撤 hi_bias20/hi_bias60/huge_turn: 9 -> 6)
+    assert len(rule_flags(pd.DataFrame([SAFE])).columns) == 6
 
 
 def test_ff_turn_threshold_boundary():
@@ -97,7 +98,7 @@ def test_score_frame_rejects_rule_count_mismatch():
         assert ei.value.code == 2
         merged = "\n".join(r.getMessage() for r in records)
         assert "闸数不一致" in merged
-        assert "包 10 闸" in merged and "代码 9 闸" in merged
+        assert "包 10 闸" in merged and "代码 6 闸" in merged
     finally:
         log.removeHandler(handler)
         log.setLevel(prev_level)
@@ -108,7 +109,7 @@ def test_score_frame_passes_guard_when_counts_match():
     from scripts.bigdrop_check import score_frame
 
     with pytest.raises(KeyError):
-        score_frame(pd.DataFrame([SAFE]), {"rules": [("x",)] * 9, "tag": "20260915"})
+        score_frame(pd.DataFrame([SAFE]), {"rules": [("x",)] * 6, "tag": "20260915"})
 
 
 def test_score_frame_guard_skips_old_bundle_without_rules():
@@ -124,16 +125,16 @@ def test_safe_row_scores_zero():
 
 
 def test_600814_profile_now_trips_exactly_one_rule():
-    """0910 该股原 9 条闸全够不着 —— 新闸必须是唯一命中的那条。"""
+    """0910 该股原闸全够不着 —— 新闸必须是唯一命中的那条。
+    (0927 撤 hi_bias20/hi_bias60/huge_turn 后剩 6 闸, 本测断言的"其余全静默"不变。)
+    """
     f = _flags(**_S600814)
     assert bool(f["hi_ff_turn"])
     assert int(f.sum()) == 1
     assert not bool(
         f[
             [
-                "hi_bias20",
-                "hi_bias60",
-                "huge_turn",
+                "zt_break",
                 "vol_surge",
                 "today_drop",
                 "big_rise",
@@ -395,7 +396,7 @@ def test_build_runs_end_to_end(tmp_path, monkeypatch):
         "branches",
     ):
         assert key in b, f"bundle 缺 {key}"
-    assert len(b["rules"]) == 9
+    assert len(b["rules"]) == 6  # 0927 撤 hi_bias20/hi_bias60/huge_turn
 
     # 遮蔽 bug 的直接断言: 存进去的必须是模型对象, 不是被覆盖的 ndarray
     assert not isinstance(b["booster"], np.ndarray)

@@ -13,7 +13,9 @@
   同一 bundle、同一 (date,symbol) 可成交集合、同一 60d OOS 窗口 → 仅特征值不同.
   指标: validate_oos weighted_IC + 子窗口稳定段 + top-N 实得收益 (验收同款 machinery).
 
-护栏: 只读 bundle (不改 current_meta / 不 pin 模型); 评估窗口严格在 bundle 训练截止后;
+护栏: 只读 bundle (不改 current_meta / 不 pin 模型); 评估窗由 BUNDLE_CUTOFF 强制收窄到
+      训练截止之后 (assert_clean_window, 无法洁净则拒绝出数 —— 原实现直取末 EVAL_DAYS 日,
+      与 dual_20260811b/12 训练窗重叠约 33 天, 是样本内);
       标签 t+3/5/10 前向; 帧间 del + gc.collect() 防 OOM; 结果 WORM.
 
 用法: python scripts/_bt_feature_serve_a_vs_b.py
@@ -38,11 +40,17 @@ from app.pipeline1.dual_track_trainer import DualTrackTrainer
 from app.pipeline1.feature_engine_v35 import FeatureEngineV35
 from app.pipeline1.feature_registry import FeatureRegistry
 from app.pipeline1.label_engine import MASK_RECENT_DAYS, LabelEngine
+from app.pipeline1.model_meta import assert_clean_window, parse_tag_date
 from app.pipeline1.train_runner import prepare_board_frame
 from config.settings import BACKTEST_RESULT_DIR, data_others_path
 
 MODEL_DIR = "models/pipeline1"
 BUNDLES = ("dual_20260811b.pkl", "dual_20260812.pkl")
+# 训练截止 = 文件名 tag (取较晚者更严); 评估窗必须严格晚于它, 否则回放数字是样本内.
+BUNDLE_CUTOFF = max(
+    (d for d in (parse_tag_date(f[len("dual_") : -len(".pkl")]) for f in BUNDLES) if d),
+    default=None,
+)
 WARMUP_DAYS = 330  # 270 特征暖机 + 60 评估
 EVAL_DAYS = 60
 N_SUB = 3
@@ -158,6 +166,24 @@ def main() -> int:
 
     b_dates = sorted(dfB["date"].unique())
     eval_start = b_dates[-EVAL_DAYS]
+    # ★ 污染窗口闸: 评估窗必须严格晚于 bundle 训练截止, 否则回放数字是样本内。
+    assert BUNDLE_CUTOFF is not None, f"bundle 文件名无法解析训练截止: {BUNDLES}"
+    clean_dates = [d for d in b_dates if pd.Timestamp(d) > pd.Timestamp(BUNDLE_CUTOFF)]
+    if not clean_dates:
+        print(
+            f"[guard] ✗ bundle 训练截止 {BUNDLE_CUTOFF:%Y-%m-%d} 之后无交易日 → 无法评估",
+            flush=True,
+        )
+        return 1
+    if pd.Timestamp(eval_start) <= pd.Timestamp(BUNDLE_CUTOFF):
+        print(
+            f"[guard] 评估窗起点 {pd.Timestamp(eval_start):%Y-%m-%d} <= 训练截止 "
+            f"{BUNDLE_CUTOFF:%Y-%m-%d} → 收窄至 {pd.Timestamp(clean_dates[0]):%Y-%m-%d} "
+            f"({len(clean_dates)}d, 原 {EVAL_DAYS}d)",
+            flush=True,
+        )
+        eval_start = clean_dates[0]
+    assert_clean_window(clean_dates, BUNDLE_CUTOFF, label="dual bundle")
     keep_B = dfB[["date", "symbol"]][dfB["date"] >= eval_start].drop_duplicates()
     n_B = len(keep_B)
     print(

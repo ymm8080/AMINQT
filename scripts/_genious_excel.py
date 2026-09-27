@@ -556,11 +556,13 @@ def _spawn_ths_push(date: str) -> None:
 
 
 def _build_firstboard_sheets(target: str, dry_run: bool = False):
-    """首板点名页 + 板前哨页 (数据层在 scripts/_firstboard_pages.py)。
+    """首板点名页 + 板前哨页 + 点名页 banner (数据层在 scripts/_firstboard_pages.py)。
 
-    面板 max ≠ 交付日 → (None, None): 这两页点的是"当日首板/当日深睡状态",
+    面板 max ≠ 交付日 → (None, None, FB_BANNER): 这两页点的是"当日首板/当日深睡状态",
     日期错一天整页语义全错, 宁缺勿错; 冠军四段不受影响 (kt 路径有自己的新鲜度闸)。
     dry_run=True → 不发 record_csv, 板前哨后台 CSV 不落盘 (--dry-run 契约=只打印不落文件)。
+    0924 P0: banner 追加停训哨兵尾注 (train_end 落后面板 > FB_MAX_STALE_DAYS 交易日 →
+    点名页 A1 可见告警, 只标注不动行为 — 同"涨闸只标注"文化)。
     """
     from scripts import _firstboard_pages as fbp
 
@@ -572,12 +574,19 @@ def _build_firstboard_sheets(target: str, dry_run: bool = False):
             d0,
             target,
         )
-        return None, None
+        return None, None, FB_BANNER
     # 板前哨后台全量表 (含次数0/1与当日停牌缺行): record_csv 契约见 _firstboard_pages.serve_preboard
     pb_csv = (
         None if dry_run else Path(STOCK_LIST_DIR) / f"preboard_watch_hits_{target}.csv"
     )
-    return fbp.serve_firstboard(pdf), fbp.serve_preboard(pdf, record_csv=pb_csv)
+    banner = FB_BANNER
+    age = fbp.model_stale_trading_days(fbp.MODELS_DIR, pdf)
+    if age is not None and age > fbp.FB_MAX_STALE_DAYS:
+        banner += (
+            f" ⚠停训哨兵(0924): 首板模型停训 {age} 个交易日 (> {fbp.FB_MAX_STALE_DAYS}),"
+            " 概率列基于陈旧生态 — 跑 scripts/_firstboard_retrain.py 复活."
+        )
+    return fbp.serve_firstboard(pdf), fbp.serve_preboard(pdf, record_csv=pb_csv), banner
 
 
 def write_xlsx(
@@ -934,11 +943,13 @@ def main() -> int:
 
     # 首板点名页 + 板前哨页 (0922 用户令): 当日全部首板点名 + 深睡监视名单。
     # 旁路契约同 BIGDROP: 构建失败只丢这两页, 冠军四段照常交付。
+    # 0924 P0: _build_firstboard_sheets 三元返回 (fb, pb, banner) — banner 带
+    # 停训哨兵动态尾注 (只标注不动行为)。
     extra_sheets: list = []
     try:
-        fb_df, pb_df = _build_firstboard_sheets(target, dry_run=args.dry_run)
+        fb_df, pb_df, fb_banner = _build_firstboard_sheets(target, dry_run=args.dry_run)
         if fb_df is not None:
-            extra_sheets.append(("首板点名", fb_df, FB_BANNER, FB_LEGEND))
+            extra_sheets.append(("首板点名", fb_df, fb_banner, FB_LEGEND))
         if pb_df is not None:
             extra_sheets.append(("板前哨", pb_df, PB_BANNER, PB_LEGEND))
         log.info(
