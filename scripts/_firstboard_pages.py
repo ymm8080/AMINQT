@@ -318,12 +318,31 @@ def build_event_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def train_and_save(
-    out_dir=MODELS_DIR, panel_path=PANEL_V3_PATH, expect=_EXPECT_TE
+    out_dir=MODELS_DIR, panel_path=PANEL_V3_PATH, expect=_EXPECT_TE, force=False
 ) -> dict:
     """训练双头 (TR≤2024 / VA2025 早停), 落盘 booster + meta, reload 后断言 TE 复现.
-    expect=None 跳过复现断言 (合成数据测试用)."""
+    expect=None 跳过复现断言 (合成数据测试用).
+
+    [0928 护栏] 本路径只产 v1 单档窄窗模型: train_end 恒为 VA_END(2025-12-31),
+    无 ensemble 键, 落盘文件名 booster_k2/k3/next.txt。而 load_models 在 meta 无
+    ensemble 键时会退回读这三个同名文件 ⇒ 在生产目录上跑本路径, 会把 ensB3 扩窗模型
+    静默换成「停训期窄窗」模型 (P0 被无声推翻, 全程不报错)。故目标目录已是 ensB3 时
+    拒绝落盘, 需显式 force=True。"""
     import lightgbm as lgb
     from sklearn.metrics import roc_auc_score
+
+    meta_p = Path(out_dir) / "meta.json"
+    if meta_p.exists() and not force:
+        try:
+            old = json.loads(meta_p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            old = {}
+        if isinstance(old, dict) and old.get("ensemble"):
+            raise RuntimeError(
+                f"{meta_p} 已是 ensB3 多档模型 (train_end={old.get('train_end')}); "
+                "本 --train 路径只产 v1 单档窄窗模型, 会静默推翻 P0。复训请用 "
+                "scripts/_firstboard_retrain.py; 确要覆盖请加 --force。"
+            )
 
     df = load_mainboard(panel_path, tail_dates=None)
     ev = build_event_features(df)
@@ -953,13 +972,18 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--train", action="store_true", help="训练+落盘+TE复现校验")
     ap.add_argument(
+        "--force",
+        action="store_true",
+        help="允许 --train 覆盖已存在的 ensB3 多档生产模型 (默认拒绝, 见 train_and_save 护栏)",
+    )
+    ap.add_argument(
         "--models-dir",
         default=None,
         help="服务用模型目录 (默认生产 models/firstboard; 试 v2: models/firstboard_v2)",
     )
     args = ap.parse_args()
     if args.train:
-        res = train_and_save()
+        res = train_and_save(force=args.force)
         print(json.dumps(res, ensure_ascii=False))
         return 0
     df = load_mainboard()

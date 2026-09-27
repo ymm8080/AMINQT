@@ -845,6 +845,79 @@ class TestEnsembleServe:
         assert [len(x) for x in b2] == [2, 2, 2]  # v2 meta → 档位数 = ensemble 块
         assert m2["ensemble"]["k3"] == ["booster_k3.txt", "booster_k3.txt"]
 
+    def test_train_refuses_to_clobber_ensb3(self, tmp_path):
+        """[0928 护栏] --train 只产 v1 窄窗单档模型; 在 ensB3 生产目录上跑会静默推翻 P0
+        (meta 丢 ensemble 键 → load_models 退回读同名 v1 文件, 全程不报错)。"""
+        import json
+
+        out = tmp_path / "firstboard"
+        out.mkdir()
+        (out / "meta.json").write_text(
+            json.dumps(
+                {
+                    "features": fbp.FEATS,
+                    "sw_l2_categories": ["X1"],
+                    "train_end": "2026-09-09",
+                    "te_top1_k3": 43.7,
+                    "te_auc_k3": 0.5822,
+                    "ensemble": {
+                        "k2": ["booster_k2_hl15.txt"],
+                        "k3": ["booster_k3_hl15.txt"],
+                        "next_board": ["booster_next_board_hl15.txt"],
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        # 护栏在读面板之前触发: 面板路径不存在也不该是失败原因
+        with pytest.raises(RuntimeError, match="ensB3"):
+            fbp.train_and_save(
+                out_dir=out,
+                panel_path=str(tmp_path / "does_not_exist.parquet"),
+                expect=None,
+            )
+
+    def test_train_guard_not_triggered_for_v1_or_force(self, tmp_path):
+        """护栏只拦 ensB3: v1 meta (无 ensemble 键) 放行; ensB3 + force=True 亦放行。"""
+        import json
+
+        base = {
+            "features": fbp.FEATS,
+            "sw_l2_categories": ["X1"],
+            "train_end": "2025-12-31",
+            "te_top1_k3": 1.0,
+            "te_auc_k3": 0.5,
+        }
+        panel_missing = str(tmp_path / "does_not_exist.parquet")
+        for name, extra, force in (
+            ("v1", {}, False),
+            (
+                "ensb3_forced",
+                {
+                    "ensemble": {
+                        "k2": ["booster_k2_hl15.txt"],
+                        "k3": ["booster_k3_hl15.txt"],
+                        "next_board": ["booster_next_board_hl15.txt"],
+                    }
+                },
+                True,
+            ),
+        ):
+            d = tmp_path / name
+            d.mkdir()
+            (d / "meta.json").write_text(
+                json.dumps({**base, **extra}, ensure_ascii=False), encoding="utf-8"
+            )
+            with pytest.raises(Exception) as ei:
+                fbp.train_and_save(
+                    out_dir=d, panel_path=panel_missing, expect=None, force=force
+                )
+            # 放行 = 不因护栏而失败 (面板读不到是预期的下一步失败)
+            assert "ensB3" not in str(ei.value), (
+                f"{name}: 护栏误触发 — {ei.value}"
+            )
+
     def test_v2_mean_of_identical_equals_v1(self, trained, tmp_path, monkeypatch):
         import json
         import shutil
