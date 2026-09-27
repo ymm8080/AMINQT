@@ -1,8 +1,11 @@
 """诊断: 平滑 (输出级 EMA) 是否伤及 T+3 决策质量 (2026-08-06).
 
-自包含版: 依赖的 app/pipeline1/pred_smoothing.py 源码已丢失 (未接生产, 仅实验),
-故平滑直接用内嵌 ema_series (与生产 EMA 同公式: w_k=α(1-α)^k, 归一化, gap-robust)
-对整个 30 日窗口逐股重放, 不依赖丢失模块.
+自包含版: 平滑直接用内嵌 ema_series (与生产 EMA 同公式: w_k=α(1-α)^k, 归一化,
+gap-robust) 对整个 30 日窗口逐股重放, 不读 WORM 底稿.
+
+[0928 更正] 原文称 "app/pipeline1/pred_smoothing.py 源码已丢失 (未接生产, 仅实验)"
+—— 两处均不成立: 该模块在库, 且已由 app/pipeline1/daily_pipeline.py:189 接生产
+(persist_raw_preds / smooth_preds). 勿据此判断该模块为死代码.
 
 核心问题: 用户定案 T+3 是选股决策唯一视界, "不能承受 T+3 质量变差".
 上一轮 _diag_smoothing_backtest.py 显示 shortlist 范围 3d IC 平滑后 0.043→−0.023,
