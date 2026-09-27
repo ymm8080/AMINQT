@@ -16,7 +16,9 @@ import argparse
 import gc
 import logging
 import os
+import shutil
 import sys
+from pathlib import Path
 
 import pandas as pd
 
@@ -38,6 +40,28 @@ from app.pipeline_parallel.config import (
 from config.settings import STOCK_LIST_DIR
 
 logger = logging.getLogger(__name__)
+
+
+def _place_stocklist(
+    run_dir: Path, board: str, shortlist_date: str | None = None
+) -> None:
+    """将短名单同步复制到 STOCK_LIST_DIR (DAILY OPERATION 目录).
+
+    命名: parallel_shortlist_<board>_<YYYYMMDD>.csv
+    同名文件覆盖 (每日最新), 供用户/交易脚本直接取用.
+    """
+    src = run_dir / f"shortlist_{board}.csv"
+    if not src.exists():
+        logger.warning("[place] shortlist 源文件不存在: %s", src)
+        return
+    if shortlist_date is None:
+        stamp = str(pd.Timestamp.now().date()).replace("-", "")
+    else:
+        stamp = str(pd.Timestamp(shortlist_date).date()).replace("-", "")
+    os.makedirs(str(STOCK_LIST_DIR), exist_ok=True)
+    dst = STOCK_LIST_DIR / f"parallel_shortlist_{board}_{stamp}.csv"
+    shutil.copy2(str(src), str(dst))
+    logger.info("[place] 短名单 → %s", dst.name)
 
 
 def write_slowbull_pool(work: pd.DataFrame, board: str, date=None) -> str:
@@ -149,6 +173,8 @@ def main() -> int:
         )
         if fn:
             files.append(fn)
+            # 同步放置到 DAILY OPERATION/STOCK LIST (同名文件 + 板级拆分)
+            _place_stocklist(run_dir, board=b, shortlist_date=args.shortlist_date)
         fn = write_slowbull_pool(work, board=b, date=args.shortlist_date)
         if fn:
             files.append(fn)
