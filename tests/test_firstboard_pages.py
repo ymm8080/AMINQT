@@ -532,13 +532,13 @@ class TestCalibTier:
         p = pd.Series([0.50, 0.40, 0.399, 0.30, 0.299, 0.20, 0.199, np.nan])
         t = fbp._calib_tier(p)
         assert t.tolist() == [
-            "≥0.4→实测~54%",
-            "≥0.4→实测~54%",
-            "0.3-0.4→实测~28%",
-            "0.3-0.4→实测~28%",
-            "0.2-0.3→实测~21%",
-            "0.2-0.3→实测~21%",
-            "<0.2→实测~18%",
+            "≥0.4",
+            "≥0.4",
+            "0.3-0.4",
+            "0.3-0.4",
+            "0.2-0.3",
+            "0.2-0.3",
+            "<0.2",
             "",
         ]
 
@@ -603,12 +603,7 @@ class TestServeFirstboardV2:
         out, _, _ = trained
         monkeypatch.setattr(fbp, "_NAME_CACHE", {})
         page = fbp.serve_firstboard(_today_events_df(6), models_dir=out)
-        allowed = {
-            "≥0.4→实测~54%",
-            "0.3-0.4→实测~28%",
-            "0.2-0.3→实测~21%",
-            "<0.2→实测~18%",
-        }
+        allowed = {"≥0.4", "0.3-0.4", "0.2-0.3", "<0.2"}
         assert set(page["校准档位"]) <= allowed
         for tier, p in zip(page["校准档位"], page["T+3板概率"]):
             assert tier == fbp._calib_tier(pd.Series([p])).iloc[0]
