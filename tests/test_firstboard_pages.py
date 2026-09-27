@@ -909,9 +909,7 @@ class TestEnsembleServe:
                     out_dir=d, panel_path=panel_missing, expect=None, force=force
                 )
             # 放行 = 不因护栏而失败 (面板读不到是预期的下一步失败)
-            assert "ensB3" not in str(ei.value), (
-                f"{name}: 护栏误触发 — {ei.value}"
-            )
+            assert "ensB3" not in str(ei.value), f"{name}: 护栏误触发 — {ei.value}"
 
     def test_v2_mean_of_identical_equals_v1(self, trained, tmp_path, monkeypatch):
         import json
