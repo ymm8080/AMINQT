@@ -15,6 +15,11 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+def _is_error(result):
+    """兼容 MCP 1.x (isError) 与 2.x (is_error) 的属性名差异."""
+    return result.isError if hasattr(result, "isError") else result.is_error
+
+
 def test_list_tools_returns_six_tools():
     """list_tools handler 必须返回恰好 6 个注册工具."""
     result = _run(mcp_sub.handle_list_tools_standalone())
@@ -33,7 +38,7 @@ def test_list_tools_returns_six_tools():
 def test_call_tool_unknown_returns_error():
     """未知工具名必须返回 isError=True, 且提示 Unknown tool."""
     result = _run(mcp_sub.handle_call_tool_standalone("__no_such_tool__", {}))
-    assert result.isError is True
+    assert _is_error(result) is True
     assert "Unknown tool" in result.content[0].text
 
 
@@ -50,7 +55,7 @@ def test_call_tool_ask_receives_arguments(monkeypatch):
         mcp_sub.handle_call_tool_standalone("deepseek_ask", {"prompt": "ping"})
     )
 
-    assert result.isError is False
+    assert _is_error(result) is False
     assert result.content[0].text == "OK"
     assert captured["messages"] == [{"role": "user", "content": "ping"}]
 
@@ -67,7 +72,7 @@ def test_call_tool_ask_uses_default_args(monkeypatch):
     monkeypatch.setattr(mcp_sub, "_call_deepseek", fake_call)
     result = _run(mcp_sub.handle_call_tool_standalone("deepseek_ask", {"prompt": "q"}))
 
-    assert result.isError is False
+    assert _is_error(result) is False
     assert captured["temperature"] == 0.3
     assert captured["system"] is None
 
@@ -81,7 +86,7 @@ def test_call_tool_handles_exception(monkeypatch):
     monkeypatch.setattr(mcp_sub, "_call_deepseek", fake_call)
     result = _run(mcp_sub.handle_call_tool_standalone("deepseek_ask", {"prompt": "q"}))
 
-    assert result.isError is True
+    assert _is_error(result) is True
     assert "boom" in result.content[0].text
 
 
