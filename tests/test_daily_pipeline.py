@@ -183,12 +183,26 @@ class TestDailyPipeline:
         carried = pipe._load_yesterday("20260721")
         assert set(carried["symbol"]) == yesterday_symbols
 
-    def test_supply_failure_triggers_guard(self, tmp_path):
+    def test_supply_failure_triggers_guard(self, tmp_path, monkeypatch):
         """数据供应链失败 → 三档降级 (第1档: 沿用昨日/告警)."""
 
         class FailSupply(DataSupplyChain):
             def append_today_to_panel(self, panel, trade_date=None, sources=None):
                 raise DataSupplyError("network down")
+
+        # 隔离真实面板: _assemble_panel 在到达失败点之前先读 PANEL_V3_PATH (4M 行)
+        # 再跑 enrich_cyq —— 本机 15.8GB 内存下那次 concat 换页 >15min 不返回,
+        # 注入的供应链失败永远到不了 (CI 无该 parquet, 故只在开发机挂)。迷你面板
+        # + 直通 enrich_cyq, 让失败点立刻到达。
+        import app.pipeline1.daily_pipeline as dp
+        from app.pipeline1 import panel_builder
+
+        tiny = tmp_path / "tiny_panel.parquet"
+        pd.DataFrame(
+            {"date": pd.to_datetime(["2026-07-17"]), "symbol": ["600519"]}
+        ).to_parquet(tiny, index=False)
+        monkeypatch.setattr(dp, "PANEL_V3_PATH", str(tiny))
+        monkeypatch.setattr(panel_builder, "enrich_cyq", lambda p, **kw: p)
 
         pipe = DailySelectionPipeline(
             supply=FailSupply(cache_dir=str(tmp_path / "c")),

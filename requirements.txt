@@ -34,7 +34,9 @@ psutil>=5.9
 python-docx
 
 # ── MCP (Claude Code Sub-Agent) ───────────────────────────────
-mcp>=1.0.0
+# 1.23.0+ 提供 @server.list_tools() / @server.call_tool() 装饰器;
+# 旧版 (< 1.x) 通过 server.request_handlers[...] 派发。代码已做双路径兼容。
+mcp>=1.23.0
 
 # ── Test ──────────────────────────────────────────────────────
 pytest>=7.4

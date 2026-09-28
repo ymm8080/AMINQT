@@ -25,9 +25,11 @@ from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import (
+    CallToolRequest,
     CallToolResult,
     ListToolsRequest,
     ListToolsResult,
+    ServerResult,
     TextContent,
     Tool,
 )
@@ -229,16 +231,25 @@ TOOLS: list[Tool] = [
 
 
 # ── Request Handlers ──────────────────────────────────────────
-@server.list_tools()
-async def handle_list_tools(request: ListToolsRequest) -> ListToolsResult:
+async def handle_list_tools_standalone() -> ListToolsResult:
+    """List-tools handler — standalone form for SDK-level dispatch.
+
+    Old MCP SDKs (< 1.x) lack the ``@server.list_tools()`` decorator sugar;
+    they read handlers from ``server.request_handlers[ListToolsRequest]``.
+    The function below is the canonical handler body used by both paths.
+    """
     return ListToolsResult(tools=TOOLS)
 
 
-@server.call_tool()
-async def handle_call_tool(name: str, arguments: dict) -> CallToolResult:
-    # mcp 1.23.3 的低层契约: 装饰器内部 await func(tool_name, arguments)
-    # (site-packages/mcp/server/lowlevel/server.py, call_tool 分支)。
-    # 旧式单参数 (request) 签名会让每次 tools/call 抛 TypeError 并被吞成 isError 结果。
+async def handle_call_tool_standalone(name: str, arguments: dict) -> CallToolResult:
+    """Call-tool handler — standalone form for SDK-level dispatch.
+
+    MCP 1.23.3 低层装饰器内部执行 ``await func(tool_name, arguments)``
+    (site-packages/mcp/server/lowlevel/server.py, call_tool 分支)。
+    旧版 SDK (< 1.x) 通过 ``server.request_handlers[CallToolRequest]``
+    派发，handler 签名为 ``(CallToolRequest) -> CallToolResult``。
+    此处实现了兼容两版的底层 body；外层 wrapper 按注入请求对象。
+    """
     args = arguments or {}
 
     try:
@@ -367,6 +378,37 @@ Output JSON: {"root_cause": "...", "severity": "critical|warning|info", "fix": "
             isError=True,
             content=[TextContent(type="text", text=f"Error: {e}")],
         )
+
+
+# ── Version-compat handler registration ──────────────────────────────
+# MCP SDK 演进路径:
+#   - >= 1.23.x : 提供 ``@server.list_tools()`` / ``@server.call_tool()`` 装饰器
+#   - < 1.x     : 通过 ``server.request_handlers[...]`` 字典注入 handler
+# 检测装饰器是否存在，自动选择注册方式。旧版 handler 签名需把
+# (name, arguments) 从 CallToolRequest 对象里解出来再转调 standalone body。
+if hasattr(server, "list_tools"):
+    # ── Modern path: decorator sugar (mcp >= 1.23.x) ──
+    @server.list_tools()
+    async def handle_list_tools() -> ListToolsResult:
+        return await handle_list_tools_standalone()
+
+    @server.call_tool()
+    async def handle_call_tool(name: str, arguments: dict) -> CallToolResult:
+        return await handle_call_tool_standalone(name, arguments)
+else:
+    # ── Legacy path: request_handlers dict (mcp < 1.x) ──
+    async def _legacy_list_tools(req: ListToolsRequest) -> ServerResult:
+        result = await handle_list_tools_standalone()
+        return ServerResult(result=result)
+
+    async def _legacy_call_tool(req: CallToolRequest) -> ServerResult:
+        # CallToolRequest 在旧版 SDK 上有 .name 与 .arguments
+        args = req.arguments or {}
+        result = await handle_call_tool_standalone(req.name, args)
+        return ServerResult(result=result)
+
+    server.request_handlers[ListToolsRequest] = _legacy_list_tools
+    server.request_handlers[CallToolRequest] = _legacy_call_tool
 
 
 # ── Entrypoint ────────────────────────────────────────────────
