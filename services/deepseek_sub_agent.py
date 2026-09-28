@@ -17,6 +17,7 @@ DEEPSEEK_MODEL    : (default: deepseek-v4-flash) model name
 DEEPSEEK_BASE_URL : (default: https://api.deepseek.com) API base URL
 """
 
+import inspect
 import logging
 import os
 from typing import Any
@@ -25,11 +26,8 @@ from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import (
-    CallToolRequest,
     CallToolResult,
-    ListToolsRequest,
     ListToolsResult,
-    ServerResult,
     TextContent,
     Tool,
 )
@@ -51,7 +49,19 @@ OPENCODE_SESSION = os.getenv("OPENCODE_SESSION")
 # OpenCode Go does not accept response_format (mirrors scripts/deepseek_pr_review.py).
 SUPPORTS_RESPONSE_FORMAT = os.getenv("DEEPSEEK_SUPPORTS_RESPONSE_FORMAT", "0") == "1"
 
-server = Server("deepseek-sub-agent")
+# ── MCP SDK version detection ───────────────────────────────────
+# Three registration paths:
+#   - MCP 1.x (≈1.23.x): @server.list_tools() / @server.call_tool() decorator sugar
+#   - MCP 2.x (≥2.0.0): Server(name, on_list_tools=fn, on_call_tool=fn) constructor;
+#     handlers take (ctx, params) signature
+#   - MCP < 1.x: server.request_handlers[...] = handler (legacy, rare)
+# The detection uses hasattr / __init__ signature introspection and chooses the
+# appropriate path at import time.
+_MCP_SDK_USE_DECORATOR = hasattr(Server, "list_tools")
+_MCP_SDK_USE_CONSTRUCTOR = (
+    "on_list_tools" in inspect.signature(Server.__init__).parameters
+)
+# _MCP_SDK_USE_REQUEST_HANDLERS is the fallback if neither of the above is true.
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -381,13 +391,33 @@ Output JSON: {"root_cause": "...", "severity": "critical|warning|info", "fix": "
 
 
 # ── Version-compat handler registration ──────────────────────────────
-# MCP SDK 演进路径:
-#   - >= 1.23.x : 提供 ``@server.list_tools()`` / ``@server.call_tool()`` 装饰器
-#   - < 1.x     : 通过 ``server.request_handlers[...]`` 字典注入 handler
-# 检测装饰器是否存在，自动选择注册方式。旧版 handler 签名需把
-# (name, arguments) 从 CallToolRequest 对象里解出来再转调 standalone body。
-if hasattr(server, "list_tools"):
-    # ── Modern path: decorator sugar (mcp >= 1.23.x) ──
+# MCP SDK 演进路径 (三代共存):
+#   - MCP 2.x (≥2.0.0): Server(name, on_list_tools=fn, on_call_tool=fn);
+#     handler 签名为 (ctx, params), params 有 .name / .arguments。
+#   - MCP 1.x (≈1.23.x): @server.list_tools() / @server.call_tool() 装饰器,
+#     handler 签名为 (name, arguments)。
+#   - MCP < 1.x: server.request_handlers[...] = handler (罕见旧版)。
+if _MCP_SDK_USE_CONSTRUCTOR:
+    # ── MCP 2.x path: constructor-based handler injection ──
+    # ctx 参数在 2.x 中传入 ServerRequestContext, 当前 handler 不依赖 ctx 故忽略。
+    async def _mcp2_list_tools(ctx, params):
+        return await handle_list_tools_standalone()
+
+    async def _mcp2_call_tool(ctx, params):
+        # params 是 CallToolRequestParams, 有 .name 和 .arguments
+        args = params.arguments or {}
+        return await handle_call_tool_standalone(params.name, args)
+
+    server = Server(
+        "deepseek-sub-agent",
+        on_list_tools=_mcp2_list_tools,
+        on_call_tool=_mcp2_call_tool,
+    )
+elif _MCP_SDK_USE_DECORATOR:
+    # ── MCP 1.x path: decorator sugar (mcp ≈1.23.x) ──
+    # 先建空 server, 再用装饰器注册 handler。
+    server = Server("deepseek-sub-agent")
+
     @server.list_tools()
     async def handle_list_tools() -> ListToolsResult:
         return await handle_list_tools_standalone()
@@ -396,13 +426,17 @@ if hasattr(server, "list_tools"):
     async def handle_call_tool(name: str, arguments: dict) -> CallToolResult:
         return await handle_call_tool_standalone(name, arguments)
 else:
-    # ── Legacy path: request_handlers dict (mcp < 1.x) ──
-    async def _legacy_list_tools(req: ListToolsRequest) -> ServerResult:
+    # ── MCP < 1.x path: request_handlers dict (罕见旧版) ──
+    server = Server("deepseek-sub-agent")
+
+    # 延迟导入，仅旧版路径需要
+    from mcp.types import CallToolRequest, ListToolsRequest, ServerResult
+
+    async def _legacy_list_tools(req) -> ServerResult:
         result = await handle_list_tools_standalone()
         return ServerResult(result=result)
 
-    async def _legacy_call_tool(req: CallToolRequest) -> ServerResult:
-        # CallToolRequest 在旧版 SDK 上有 .name 与 .arguments
+    async def _legacy_call_tool(req) -> ServerResult:
         args = req.arguments or {}
         result = await handle_call_tool_standalone(req.name, args)
         return ServerResult(result=result)
