@@ -7,7 +7,8 @@
   模型训练截止 2025-12-31 落盘 models/firstboard/ (booster + meta.json),
   **观察页勿当买入清单** — 次日开盘买入口径 TE 笔均 −2.40%/笔 (W11),
   冠军格可成交子集 −4.17%/笔 (W20, 反向选择: 买得到的是弱冠军).
-板前哨页 (v4 0923 用户令): 滚动20日监视名单 — 历史命中日志 (近20日每个深睡签名日一行, 每股可多行),
+板前哨页 (v4 0923 用户令 + 0928 去重): 滚动20日监视名单 — 近20日命中过深睡签名的股, **每股一行**
+  (取最近击中日; 全部命中日与首次/最近击中只落后台表 preboard_watch_hits_*.csv),
   仅 今日点火旗≠'' 的股才进 Excel (其余只落后台表 preboard_watch_hits_*.csv, 全量);
   次数10日/次数20日 = 过去10/20个交易日命中总数, 仅上下文列勿筛选 (回测: 点火前命中数不预测);
   反信号组只作可见性, 点火旗/通道优先=今日口径, 勿作买入触发 (回测: 点火后各天数次日进 TE 全负 −0.7~−1.6%).
@@ -850,7 +851,7 @@ def build_sig(df: pd.DataFrame) -> pd.DataFrame:
 def serve_preboard(
     df: pd.DataFrame | None = None, record_csv: Path | None = None
 ) -> pd.DataFrame:
-    """滚动20日板前哨监视名单 — 历史命中日志 (近20日每个 sig 日一行, 每股可多行; 中文列).
+    """滚动20日板前哨监视名单 — 历史命中日志 (0928 用户令: 每股一行, 取最近击中日; 中文列).
 
     次数10日/次数20日 = 近 COUNT_WIN/20 日 sig=True 天数 (上下文列, 不参与筛选);
     v4 (0923 用户令): Excel 只留 今日点火旗≠'' 股的全部命中行 (次数完全退出筛选, 其余整组只在后台表);
@@ -952,6 +953,8 @@ def serve_preboard(
     page = page.sort_values(
         ["_pass", "_fr", "date", "次数10日"], ascending=False
     ).reset_index(drop=True)
+    # 0928 用户令: 每股只留一行 (去重). 排序后同股首行=最近击中日, 其余命中日只存后台表
+    page = page.drop_duplicates("symbol", keep="first").reset_index(drop=True)
     return pd.DataFrame(
         {
             "通道优先": np.where(page["_pass"], "优先", ""),

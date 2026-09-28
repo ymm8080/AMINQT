@@ -2,7 +2,7 @@
 """首板点名页 + 板前哨页 数据层测试 (scripts/_firstboard_pages.py, 0922)。
 
 覆盖: 事件口径(首板=板且前10日无板) / wr1=t-1 / 冠军格 / promo 修正版无前视 /
-深睡签名各腿 / 点火旗 T1 / 板前哨滚动20日命中日志(多行+显示过滤+排序+WORM后台表+
+深睡签名各腿 / 点火旗 T1 / 板前哨滚动20日命中日志(每股一行去重+显示过滤+排序+WORM后台表+
 停牌缺今日行) / 模型训练-落盘-服务 roundtrip / GENIOUS 多页写出+页底脚注。
 """
 
@@ -246,7 +246,7 @@ class TestFireFlags:
 
 
 class TestPreboardRolling:
-    """serve_preboard 滚动20日命中日志语义 (v4 0923: 显示=仅今日点火旗股, 次数退出筛选)。
+    """serve_preboard 滚动20日命中日志语义 (v4 0923: 显示=仅今日点火旗股, 次数退出筛选; 0928: 每股去重一行)。
 
     构造法: wr 台阶 0.30→0.42 (CHIP 腿 wr20=0.12≥0.10 在台阶日起 20 日内成立);
     turn 前段 2.0 后段 0.4 (SQUEEZE 腿 t5=0.4≤0.75×t20 在 85 日后成立);
@@ -267,20 +267,19 @@ class TestPreboardRolling:
         ov["volume_ratio"][50] = 2.0
         return ov
 
-    def test_multirow_and_fire_only_display(self):
+    def test_dedup_one_row_per_stock_and_fire_only_display(self):
         ova = self._pb_sym(85)
         ova["pctChg"][-1] = 3.0  # 今日点火 → v4 唯一显示条件
         df = mk_panel(
             {"600501": ova, "600502": self._pb_sym(89), "600504": self._pb_sym(88)}
         )
         page = fbp.serve_preboard(df)
-        # 股A 今日点火 → 全部命中日各一行; 两次数列=近10/20交易日命中总数 (逐行同值)
+        # 0928 去重: 股A 命中5日 → Excel 只留一行 (最近击中日 89); 两次数列=近10/20交易日命中总数
         a = page[page["代码"] == "600501"]
-        assert len(a) == 5
-        assert (a["次数10日"] == 5).all() and (a["次数20日"] == 5).all()
-        assert set(a["击中日期"]) == {
-            DATES[i].strftime("%Y-%m-%d") for i in range(85, 90)
-        }
+        assert len(a) == 1
+        assert a.iloc[0]["击中日期"] == DATES[89].strftime("%Y-%m-%d")
+        assert a.iloc[0]["次数10日"] == 5 and a.iloc[0]["次数20日"] == 5
+        assert page["代码"].is_unique  # 全页无重复股
         # v4: 无点火 → 整组不显示 (次数1 股B / 次数≥2 股D 都进不了 Excel)
         assert set(page["代码"]) == {"600501"}
 
@@ -312,16 +311,11 @@ class TestPreboardRolling:
         page = fbp.serve_preboard(df)
         d = lambda i: DATES[i].strftime("%Y-%m-%d")  # noqa: E731
         got = list(zip(page["代码"], page["击中日期"]))
-        # 点火等级高在前 (T1+T2 > T2); 同等级内 击中日期新在前; 同日期 次数10日大在前 (A=5 > C=1)
+        # 每股一行(0928 去重, 取最近击中日): 点火等级高在前 (T1+T2 > T2); 同等级内 最近击中日期新在前
         assert got == [
             ("600501", d(89)),
             ("600503", d(89)),
-            ("600501", d(88)),
-            ("600501", d(87)),
-            ("600501", d(86)),
-            ("600501", d(85)),
             ("600504", d(89)),
-            ("600504", d(88)),
         ]
 
     def test_channel_priority_sorts_first(self):
@@ -340,7 +334,7 @@ class TestPreboardRolling:
         ovb["lhb_inst_buy"] = [0.0] * 85 + [1.0] * 5
         page = fbp.serve_preboard(mk_panel({"600501": ova, "600503": ovb}))
         flags = page["通道优先"].tolist()
-        assert flags.count("优先") == 5
+        assert flags.count("优先") == 1  # 0928 去重: 每股一行, B 只剩最近击中日
         # 全部优先行连续置顶, 非优先行全部在后
         assert flags == ["优先"] * flags.count("优先") + [""] * flags.count("")
         assert set(page.loc[page["通道优先"] == "优先", "代码"]) == {"600503"}
@@ -391,9 +385,9 @@ class TestPreboardRolling:
             drop=True
         )
         page = fbp.serve_preboard(df)
-        # 股A 点火 → 5 个命中日各一行
+        # 股A 点火 → 一行 (0928 去重, 最近击中日)
         a = page[page["代码"] == "600501"]
-        assert len(a) == 5 and (a["点火旗"] == "T1+T2").all()
+        assert len(a) == 1 and a.iloc[0]["点火旗"] == "T1+T2"
         # 股B 缺今日行(停牌) → 点火旗必空 → v4 整组不显示 (次数10日=4 也救不回)
         assert set(page["代码"]) == {"600501"}
 
