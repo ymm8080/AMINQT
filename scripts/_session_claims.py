@@ -23,9 +23,11 @@ import re
 import time
 from pathlib import Path
 
-COORD = Path(
-    os.environ.get("CLAUDE_PROJECT_DIR") or Path(__file__).resolve().parent.parent
-) / ".claude" / "coordination"
+COORD = (
+    Path(os.environ.get("CLAUDE_PROJECT_DIR") or Path(__file__).resolve().parent.parent)
+    / ".claude"
+    / "coordination"
+)
 SESSIONS = COORD / "sessions"
 CLAIMS = COORD / "claims"
 ITEMS = COORD / "items.json"
@@ -39,10 +41,24 @@ SESSION_GC_S = 24 * 3600
 # (用户天天 grep 脚本名), 一律放行 — 这正是 A/B 里"读不拦"的那一档.
 RUNNERS = frozenset(
     {
-        "python", "python.exe", "python3", "python3.exe", "py", "py.exe",
-        "pytest", "pytest.exe", "uv", "poetry",
-        "powershell", "powershell.exe", "pwsh", "pwsh.exe",
-        "cmd", "cmd.exe", "start-process", "invoke-expression",
+        "python",
+        "python.exe",
+        "python3",
+        "python3.exe",
+        "py",
+        "py.exe",
+        "pytest",
+        "pytest.exe",
+        "uv",
+        "poetry",
+        "powershell",
+        "powershell.exe",
+        "pwsh",
+        "pwsh.exe",
+        "cmd",
+        "cmd.exe",
+        "start-process",
+        "invoke-expression",
     }
 )
 _SEG_SPLIT = re.compile(r"&&|\|\||[;|]")
@@ -171,7 +187,9 @@ def read_claim(item_id: str) -> dict | None:
     return _read_json(_claim_path(item_id))
 
 
-def claim(item_id: str, session_id: str, *, note: str = "", steal: bool = False) -> dict:
+def claim(
+    item_id: str, session_id: str, *, note: str = "", steal: bool = False
+) -> dict:
     """认领 item. 已被别人持有且其会话存活 -> ClaimHeldError.
 
     首发用 O_CREAT|O_EXCL 拿原子性 (两个人同时抢只会有一个人成功); 续期与抢占走
@@ -191,10 +209,14 @@ def claim(item_id: str, session_id: str, *, note: str = "", steal: bool = False)
     except FileExistsError:
         prev = _read_json(path) or {}
         holder = prev.get("session_id")
-        if holder == session_id or steal or not is_alive(
-            _read_json(_session_path(holder or ""))
+        if (
+            holder == session_id
+            or steal
+            or not is_alive(_read_json(_session_path(holder or "")))
         ):
-            payload["claimed_at"] = prev.get("claimed_at") if holder == session_id else _now()
+            payload["claimed_at"] = (
+                prev.get("claimed_at") if holder == session_id else _now()
+            )
             _write_json(path, payload)
             return payload
         raise ClaimHeldError(item_id, prev) from None
@@ -259,9 +281,7 @@ def _runners_in(command: str) -> list[str]:
     return found
 
 
-def deny_reason(
-    tool_name: str, tool_input: dict, session_id: str
-) -> str | None:
+def deny_reason(tool_name: str, tool_input: dict, session_id: str) -> str | None:
     """两档: 只拦"起进程跑该 item"与"写该 item 的产物"; 读一律放行.
 
     返回给用户看的拒绝理由, 或 None=放行.

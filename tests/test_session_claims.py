@@ -184,7 +184,9 @@ def test_runner_command_on_unrelated_item_is_allowed(coord):
 def test_write_to_matching_path_is_denied(coord):
     sc.touch("s1")
     sc.claim(ITEM, "s1")
-    reason = sc.deny_reason("Write", {"file_path": "tmp_t/_firstboard_retrain.py"}, "s2")
+    reason = sc.deny_reason(
+        "Write", {"file_path": "tmp_t/_firstboard_retrain.py"}, "s2"
+    )
     assert reason is not None
 
 
@@ -192,20 +194,30 @@ def test_read_tools_are_never_denied(coord):
     """复核别人的结果是常态 — Read/Grep 不在 matcher 里, 这里再钉一次."""
     sc.touch("s1")
     sc.claim(ITEM, "s1")
-    assert sc.deny_reason("Read", {"file_path": "tmp_t/_firstboard_retrain.py"}, "s2") is None
+    assert (
+        sc.deny_reason("Read", {"file_path": "tmp_t/_firstboard_retrain.py"}, "s2")
+        is None
+    )
 
 
 def test_holder_is_not_denied_on_own_item(coord):
     sc.touch("s1")
     sc.claim(ITEM, "s1")
     assert (
-        sc.deny_reason("Bash", {"command": "python scripts/_firstboard_retrain.py"}, "s1")
+        sc.deny_reason(
+            "Bash", {"command": "python scripts/_firstboard_retrain.py"}, "s1"
+        )
         is None
     )
 
 
 def test_no_claim_means_no_deny(coord):
-    assert sc.deny_reason("Bash", {"command": "python scripts/_firstboard_retrain.py"}, "s2") is None
+    assert (
+        sc.deny_reason(
+            "Bash", {"command": "python scripts/_firstboard_retrain.py"}, "s2"
+        )
+        is None
+    )
 
 
 # ── 横幅 ────────────────────────────────────────────────────────────────────
