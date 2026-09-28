@@ -101,6 +101,11 @@ data/predictions.db
 data/**/*.joblib
 .claude/settings.json
 
+# 跨会话协调运行时数据 (items.json 是人工维护的定义, 保留入库)
+.claude/coordination/sessions/
+.claude/coordination/claims/
+.claude/coordination/hook_errors.log
+
 # THS wencai credentials / session (never commit)
 tmp_t/_ths_cookies*.json
 tmp_t/_ths_creds*.json
