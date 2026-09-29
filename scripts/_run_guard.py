@@ -88,8 +88,15 @@ HEAVY_SENTINELS = (
     "_0923P_hazard_head.py",
 )
 ORCHESTRATOR_SENTINEL = "run_daily_automation.py"
+# PARALLEL-only 链 (2026-09-28, AMINQT-ParallelAutomation-2330) 与主链互斥: 两条链都
+# 跑 refresh/parallel 重活, 并发 = 双建 OOM (同 08-24 事故). 只在链级注册 — 脚本级
+# 不注册, 否则该链自己的子步骤会被父进程拦下 (同 ORCHESTRATOR_SENTINEL 的理由).
+PARALLEL_ORCHESTRATOR_SENTINEL = "run_parallel_automation.py"
 # 链级守卫额外把另一条链实例视为冲突; 脚本级不含 (见模块 docstring).
-CHAIN_SENTINELS = HEAVY_SENTINELS + (ORCHESTRATOR_SENTINEL,)
+CHAIN_SENTINELS = HEAVY_SENTINELS + (
+    ORCHESTRATOR_SENTINEL,
+    PARALLEL_ORCHESTRATOR_SENTINEL,
+)
 
 
 def find_conflicts(

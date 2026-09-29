@@ -78,6 +78,9 @@ def test_chain_sentinels_include_orchestrator_script_level_not():
     """链级要识别另一条链实例; 脚本级不含 orchestrator (防被自己的父链误杀)."""
     assert rg.ORCHESTRATOR_SENTINEL in CHAIN_SENTINELS
     assert rg.ORCHESTRATOR_SENTINEL not in HEAVY_SENTINELS
+    # PARALLEL-only 链 (2026-09-28) 同等待遇: 链级互斥, 脚本级不注册.
+    assert rg.PARALLEL_ORCHESTRATOR_SENTINEL in CHAIN_SENTINELS
+    assert rg.PARALLEL_ORCHESTRATOR_SENTINEL not in HEAVY_SENTINELS
     assert CHAIN_SENTINELS[: len(HEAVY_SENTINELS)] == HEAVY_SENTINELS
 
 

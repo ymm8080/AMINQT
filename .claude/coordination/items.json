@@ -1,0 +1,12 @@
+{
+  "firstboard-retrain-unscheduled-open-task": {
+    "title": "首板点名重训无调度 (接夜链, 等用户拍板)",
+    "aliases": [
+      "_firstboard_retrain",
+      "首板重训",
+      "首板点名重训",
+      "停训哨兵"
+    ],
+    "source": "memory/firstboard-retrain-unscheduled-open-task.md"
+  }
+}

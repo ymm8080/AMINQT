@@ -78,6 +78,8 @@ logs/
 # Secrets / env
 .env
 config/.env
+# 本地 settings 备份含真 token: 全局 ignore 只匹配精确名 settings.local.json, 不覆盖 .bak*
+.claude/settings.local.json.bak*
 
 # iFinD / xtquant local installs
 iFinDPy/
@@ -98,6 +100,11 @@ web/node_modules/
 data/predictions.db
 data/**/*.joblib
 .claude/settings.json
+
+# 跨会话协调运行时数据 (items.json 是人工维护的定义, 保留入库)
+.claude/coordination/sessions/
+.claude/coordination/claims/
+.claude/coordination/hook_errors.log
 
 # THS wencai credentials / session (never commit)
 tmp_t/_ths_cookies*.json

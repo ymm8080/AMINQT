@@ -2,7 +2,7 @@
 """首板点名页 + 板前哨页 数据层测试 (scripts/_firstboard_pages.py, 0922)。
 
 覆盖: 事件口径(首板=板且前10日无板) / wr1=t-1 / 冠军格 / promo 修正版无前视 /
-深睡签名各腿 / 点火旗 T1 / 板前哨滚动20日命中日志(多行+显示过滤+排序+WORM后台表+
+深睡签名各腿 / 点火旗 T1 / 板前哨滚动20日命中日志(每股一行去重+显示过滤+排序+WORM后台表+
 停牌缺今日行) / 模型训练-落盘-服务 roundtrip / GENIOUS 多页写出+页底脚注。
 """
 
@@ -246,7 +246,7 @@ class TestFireFlags:
 
 
 class TestPreboardRolling:
-    """serve_preboard 滚动20日命中日志语义 (v4 0923: 显示=仅今日点火旗股, 次数退出筛选)。
+    """serve_preboard 滚动20日命中日志语义 (v4 0923: 显示=仅今日点火旗股, 次数退出筛选; 0928: 每股去重一行)。
 
     构造法: wr 台阶 0.30→0.42 (CHIP 腿 wr20=0.12≥0.10 在台阶日起 20 日内成立);
     turn 前段 2.0 后段 0.4 (SQUEEZE 腿 t5=0.4≤0.75×t20 在 85 日后成立);
@@ -267,20 +267,19 @@ class TestPreboardRolling:
         ov["volume_ratio"][50] = 2.0
         return ov
 
-    def test_multirow_and_fire_only_display(self):
+    def test_dedup_one_row_per_stock_and_fire_only_display(self):
         ova = self._pb_sym(85)
         ova["pctChg"][-1] = 3.0  # 今日点火 → v4 唯一显示条件
         df = mk_panel(
             {"600501": ova, "600502": self._pb_sym(89), "600504": self._pb_sym(88)}
         )
         page = fbp.serve_preboard(df)
-        # 股A 今日点火 → 全部命中日各一行; 两次数列=近10/20交易日命中总数 (逐行同值)
+        # 0928 去重: 股A 命中5日 → Excel 只留一行 (最近击中日 89); 两次数列=近10/20交易日命中总数
         a = page[page["代码"] == "600501"]
-        assert len(a) == 5
-        assert (a["次数10日"] == 5).all() and (a["次数20日"] == 5).all()
-        assert set(a["击中日期"]) == {
-            DATES[i].strftime("%Y-%m-%d") for i in range(85, 90)
-        }
+        assert len(a) == 1
+        assert a.iloc[0]["击中日期"] == DATES[89].strftime("%Y-%m-%d")
+        assert a.iloc[0]["次数10日"] == 5 and a.iloc[0]["次数20日"] == 5
+        assert page["代码"].is_unique  # 全页无重复股
         # v4: 无点火 → 整组不显示 (次数1 股B / 次数≥2 股D 都进不了 Excel)
         assert set(page["代码"]) == {"600501"}
 
@@ -312,16 +311,11 @@ class TestPreboardRolling:
         page = fbp.serve_preboard(df)
         d = lambda i: DATES[i].strftime("%Y-%m-%d")  # noqa: E731
         got = list(zip(page["代码"], page["击中日期"]))
-        # 点火等级高在前 (T1+T2 > T2); 同等级内 击中日期新在前; 同日期 次数10日大在前 (A=5 > C=1)
+        # 每股一行(0928 去重, 取最近击中日): 点火等级高在前 (T1+T2 > T2); 同等级内 最近击中日期新在前
         assert got == [
             ("600501", d(89)),
             ("600503", d(89)),
-            ("600501", d(88)),
-            ("600501", d(87)),
-            ("600501", d(86)),
-            ("600501", d(85)),
             ("600504", d(89)),
-            ("600504", d(88)),
         ]
 
     def test_channel_priority_sorts_first(self):
@@ -340,7 +334,7 @@ class TestPreboardRolling:
         ovb["lhb_inst_buy"] = [0.0] * 85 + [1.0] * 5
         page = fbp.serve_preboard(mk_panel({"600501": ova, "600503": ovb}))
         flags = page["通道优先"].tolist()
-        assert flags.count("优先") == 5
+        assert flags.count("优先") == 1  # 0928 去重: 每股一行, B 只剩最近击中日
         # 全部优先行连续置顶, 非优先行全部在后
         assert flags == ["优先"] * flags.count("优先") + [""] * flags.count("")
         assert set(page.loc[page["通道优先"] == "优先", "代码"]) == {"600503"}
@@ -391,9 +385,9 @@ class TestPreboardRolling:
             drop=True
         )
         page = fbp.serve_preboard(df)
-        # 股A 点火 → 5 个命中日各一行
+        # 股A 点火 → 一行 (0928 去重, 最近击中日)
         a = page[page["代码"] == "600501"]
-        assert len(a) == 5 and (a["点火旗"] == "T1+T2").all()
+        assert len(a) == 1 and a.iloc[0]["点火旗"] == "T1+T2"
         # 股B 缺今日行(停牌) → 点火旗必空 → v4 整组不显示 (次数10日=4 也救不回)
         assert set(page["代码"]) == {"600501"}
 
@@ -532,13 +526,13 @@ class TestCalibTier:
         p = pd.Series([0.50, 0.40, 0.399, 0.30, 0.299, 0.20, 0.199, np.nan])
         t = fbp._calib_tier(p)
         assert t.tolist() == [
-            "≥0.4→实测~54%",
-            "≥0.4→实测~54%",
-            "0.3-0.4→实测~28%",
-            "0.3-0.4→实测~28%",
-            "0.2-0.3→实测~21%",
-            "0.2-0.3→实测~21%",
-            "<0.2→实测~18%",
+            "≥0.4",
+            "≥0.4",
+            "0.3-0.4",
+            "0.3-0.4",
+            "0.2-0.3",
+            "0.2-0.3",
+            "<0.2",
             "",
         ]
 
@@ -603,12 +597,7 @@ class TestServeFirstboardV2:
         out, _, _ = trained
         monkeypatch.setattr(fbp, "_NAME_CACHE", {})
         page = fbp.serve_firstboard(_today_events_df(6), models_dir=out)
-        allowed = {
-            "≥0.4→实测~54%",
-            "0.3-0.4→实测~28%",
-            "0.2-0.3→实测~21%",
-            "<0.2→实测~18%",
-        }
+        allowed = {"≥0.4", "0.3-0.4", "0.2-0.3", "<0.2"}
         assert set(page["校准档位"]) <= allowed
         for tier, p in zip(page["校准档位"], page["T+3板概率"]):
             assert tier == fbp._calib_tier(pd.Series([p])).iloc[0]
@@ -844,6 +833,77 @@ class TestEnsembleServe:
         b2, m2 = fbp.load_models(v2)
         assert [len(x) for x in b2] == [2, 2, 2]  # v2 meta → 档位数 = ensemble 块
         assert m2["ensemble"]["k3"] == ["booster_k3.txt", "booster_k3.txt"]
+
+    def test_train_refuses_to_clobber_ensb3(self, tmp_path):
+        """[0928 护栏] --train 只产 v1 窄窗单档模型; 在 ensB3 生产目录上跑会静默推翻 P0
+        (meta 丢 ensemble 键 → load_models 退回读同名 v1 文件, 全程不报错)。"""
+        import json
+
+        out = tmp_path / "firstboard"
+        out.mkdir()
+        (out / "meta.json").write_text(
+            json.dumps(
+                {
+                    "features": fbp.FEATS,
+                    "sw_l2_categories": ["X1"],
+                    "train_end": "2026-09-09",
+                    "te_top1_k3": 43.7,
+                    "te_auc_k3": 0.5822,
+                    "ensemble": {
+                        "k2": ["booster_k2_hl15.txt"],
+                        "k3": ["booster_k3_hl15.txt"],
+                        "next_board": ["booster_next_board_hl15.txt"],
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        # 护栏在读面板之前触发: 面板路径不存在也不该是失败原因
+        with pytest.raises(RuntimeError, match="ensB3"):
+            fbp.train_and_save(
+                out_dir=out,
+                panel_path=str(tmp_path / "does_not_exist.parquet"),
+                expect=None,
+            )
+
+    def test_train_guard_not_triggered_for_v1_or_force(self, tmp_path):
+        """护栏只拦 ensB3: v1 meta (无 ensemble 键) 放行; ensB3 + force=True 亦放行。"""
+        import json
+
+        base = {
+            "features": fbp.FEATS,
+            "sw_l2_categories": ["X1"],
+            "train_end": "2025-12-31",
+            "te_top1_k3": 1.0,
+            "te_auc_k3": 0.5,
+        }
+        panel_missing = str(tmp_path / "does_not_exist.parquet")
+        for name, extra, force in (
+            ("v1", {}, False),
+            (
+                "ensb3_forced",
+                {
+                    "ensemble": {
+                        "k2": ["booster_k2_hl15.txt"],
+                        "k3": ["booster_k3_hl15.txt"],
+                        "next_board": ["booster_next_board_hl15.txt"],
+                    }
+                },
+                True,
+            ),
+        ):
+            d = tmp_path / name
+            d.mkdir()
+            (d / "meta.json").write_text(
+                json.dumps({**base, **extra}, ensure_ascii=False), encoding="utf-8"
+            )
+            with pytest.raises(Exception) as ei:
+                fbp.train_and_save(
+                    out_dir=d, panel_path=panel_missing, expect=None, force=force
+                )
+            # 放行 = 不因护栏而失败 (面板读不到是预期的下一步失败)
+            assert "ensB3" not in str(ei.value), f"{name}: 护栏误触发 — {ei.value}"
 
     def test_v2_mean_of_identical_equals_v1(self, trained, tmp_path, monkeypatch):
         import json

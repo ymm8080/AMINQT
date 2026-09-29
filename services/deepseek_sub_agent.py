@@ -17,6 +17,7 @@ DEEPSEEK_MODEL    : (default: deepseek-v4-flash) model name
 DEEPSEEK_BASE_URL : (default: https://api.deepseek.com) API base URL
 """
 
+import inspect
 import logging
 import os
 from typing import Any
@@ -25,9 +26,7 @@ from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import (
-    CallToolRequest,
     CallToolResult,
-    ListToolsRequest,
     ListToolsResult,
     TextContent,
     Tool,
@@ -50,7 +49,19 @@ OPENCODE_SESSION = os.getenv("OPENCODE_SESSION")
 # OpenCode Go does not accept response_format (mirrors scripts/deepseek_pr_review.py).
 SUPPORTS_RESPONSE_FORMAT = os.getenv("DEEPSEEK_SUPPORTS_RESPONSE_FORMAT", "0") == "1"
 
-server = Server("deepseek-sub-agent")
+# ── MCP SDK version detection ───────────────────────────────────
+# Three registration paths:
+#   - MCP 1.x (≈1.23.x): @server.list_tools() / @server.call_tool() decorator sugar
+#   - MCP 2.x (≥2.0.0): Server(name, on_list_tools=fn, on_call_tool=fn) constructor;
+#     handlers take (ctx, params) signature
+#   - MCP < 1.x: server.request_handlers[...] = handler (legacy, rare)
+# The detection uses hasattr / __init__ signature introspection and chooses the
+# appropriate path at import time.
+_MCP_SDK_USE_DECORATOR = hasattr(Server, "list_tools")
+_MCP_SDK_USE_CONSTRUCTOR = (
+    "on_list_tools" in inspect.signature(Server.__init__).parameters
+)
+# _MCP_SDK_USE_REQUEST_HANDLERS is the fallback if neither of the above is true.
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -230,15 +241,26 @@ TOOLS: list[Tool] = [
 
 
 # ── Request Handlers ──────────────────────────────────────────
-@server.list_tools()
-async def handle_list_tools(request: ListToolsRequest) -> ListToolsResult:
+async def handle_list_tools_standalone() -> ListToolsResult:
+    """List-tools handler — standalone form for SDK-level dispatch.
+
+    Old MCP SDKs (< 1.x) lack the ``@server.list_tools()`` decorator sugar;
+    they read handlers from ``server.request_handlers[ListToolsRequest]``.
+    The function below is the canonical handler body used by both paths.
+    """
     return ListToolsResult(tools=TOOLS)
 
 
-@server.call_tool()
-async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
-    name = request.params.name
-    args = request.params.arguments or {}
+async def handle_call_tool_standalone(name: str, arguments: dict) -> CallToolResult:
+    """Call-tool handler — standalone form for SDK-level dispatch.
+
+    MCP 1.23.3 低层装饰器内部执行 ``await func(tool_name, arguments)``
+    (site-packages/mcp/server/lowlevel/server.py, call_tool 分支)。
+    旧版 SDK (< 1.x) 通过 ``server.request_handlers[CallToolRequest]``
+    派发，handler 签名为 ``(CallToolRequest) -> CallToolResult``。
+    此处实现了兼容两版的底层 body；外层 wrapper 按注入请求对象。
+    """
+    args = arguments or {}
 
     try:
         if name == "deepseek_ask":
@@ -366,6 +388,61 @@ Output JSON: {"root_cause": "...", "severity": "critical|warning|info", "fix": "
             isError=True,
             content=[TextContent(type="text", text=f"Error: {e}")],
         )
+
+
+# ── Version-compat handler registration ──────────────────────────────
+# MCP SDK 演进路径 (三代共存):
+#   - MCP 2.x (≥2.0.0): Server(name, on_list_tools=fn, on_call_tool=fn);
+#     handler 签名为 (ctx, params), params 有 .name / .arguments。
+#   - MCP 1.x (≈1.23.x): @server.list_tools() / @server.call_tool() 装饰器,
+#     handler 签名为 (name, arguments)。
+#   - MCP < 1.x: server.request_handlers[...] = handler (罕见旧版)。
+if _MCP_SDK_USE_CONSTRUCTOR:
+    # ── MCP 2.x path: constructor-based handler injection ──
+    # ctx 参数在 2.x 中传入 ServerRequestContext, 当前 handler 不依赖 ctx 故忽略。
+    async def _mcp2_list_tools(ctx, params):
+        return await handle_list_tools_standalone()
+
+    async def _mcp2_call_tool(ctx, params):
+        # params 是 CallToolRequestParams, 有 .name 和 .arguments
+        args = params.arguments or {}
+        return await handle_call_tool_standalone(params.name, args)
+
+    server = Server(
+        "deepseek-sub-agent",
+        on_list_tools=_mcp2_list_tools,
+        on_call_tool=_mcp2_call_tool,
+    )
+elif _MCP_SDK_USE_DECORATOR:
+    # ── MCP 1.x path: decorator sugar (mcp ≈1.23.x) ──
+    # 先建空 server, 再用装饰器注册 handler。
+    server = Server("deepseek-sub-agent")
+
+    @server.list_tools()
+    async def handle_list_tools() -> ListToolsResult:
+        return await handle_list_tools_standalone()
+
+    @server.call_tool()
+    async def handle_call_tool(name: str, arguments: dict) -> CallToolResult:
+        return await handle_call_tool_standalone(name, arguments)
+else:
+    # ── MCP < 1.x path: request_handlers dict (罕见旧版) ──
+    server = Server("deepseek-sub-agent")
+
+    # 延迟导入，仅旧版路径需要
+    from mcp.types import CallToolRequest, ListToolsRequest, ServerResult
+
+    async def _legacy_list_tools(req) -> ServerResult:
+        result = await handle_list_tools_standalone()
+        return ServerResult(result=result)
+
+    async def _legacy_call_tool(req) -> ServerResult:
+        args = req.arguments or {}
+        result = await handle_call_tool_standalone(req.name, args)
+        return ServerResult(result=result)
+
+    server.request_handlers[ListToolsRequest] = _legacy_list_tools
+    server.request_handlers[CallToolRequest] = _legacy_call_tool
 
 
 # ── Entrypoint ────────────────────────────────────────────────

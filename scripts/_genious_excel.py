@@ -82,6 +82,13 @@ BANNER1 = (
     "命中且未过涨闸已从本表剔除, 余下命中勿开盘追 (等回落或尾盘确认)。"
 )
 
+EMPTY_NOTE = (
+    " ⚠ 本日冠军四段为空 (0 票) — 属正常输出, 非链路故障: 该表是 0918/0919 刻意裁窄的"
+    "段位集合, 基线约 26% 交易日为空 (20250820..20260924 实测 70/268 日, 最长连续 9 日"
+    " 20251106–20251119)。空表不等于失败, 勿据此放宽层定义; 链路健康看 "
+    "logs/genious_{date}.log 与 .state.json 的 status。"
+)
+
 FB_BANNER = (
     "首板点名页 v2 — 当日全部首板(主板, 前10日无板)全量清单按【T+3板概率】降序 (0923 排序校准路); "
     "★冠军格 = 板前获利盘≥0.65 ∩ 一字板 (TE 5日续板率 68.2% / 次日封板 61.4%, 但 45% 次日再一字根本买不到)。"
@@ -106,10 +113,11 @@ FB_LEGEND = (
 
 PB_BANNER = (
     "板前哨页(滚动命中日志) — 近20个交易日内命中过深睡签名(10~40日前放量脉冲∧其后无板守住90%∧获利盘升≥10pp"
-    "∧横盘±6%∧5日缩量∧近10日无板)的股, 每股多行: 每行=一次命中日, 击中日期=该行日期, "
-    "获利盘/换手等列=命中当天画像。显示=今日有点火旗(T1/T2/T1+T2)的股, 其余只在后台表 preboard_watch_hits_*.csv (全量)。"
+    "∧横盘±6%∧5日缩量∧近10日无板)的股, 每股一行(0928 去重), 取最近击中日: 击中日期=该股最近命中日, "
+    "获利盘/换手等列=该命中日画像; 全部命中日与首次/最近击中见后台表 preboard_watch_hits_*.csv。"
+    "显示=今日有点火旗(T1/T2/T1+T2)的股, 其余只在后台表 preboard_watch_hits_*.csv (全量)。"
     "次数10日/次数20日=过去10/20个交易日命中总数, 仅上下文勿筛选(回测: 点火前命中数不预测, 次数≥2纯度更低)。"
-    "排序 = 通道优先(置顶) → 点火旗(T1+T2>T1>T2) → 击中日期(新→旧) → 次数10日(多→少)。"
+    "排序 = 通道优先(置顶) → 点火旗(T1+T2>T1>T2) → 最近击中日期(新→旧) → 次数10日(多→少)。"
     "⚠ 深睡签名整体是反信号组 (5日首板率 2.4% vs 全池基线 5.2%) — 本页只提供可见性, 不是买入清单。"
     "回测: 点火后各天数次日进 TE 全负(−0.7~−1.6%), 点火旗=去看提示非买入依据; "
     "页内点火桶胜率为页内最强但绝对低于全主板基线。"
@@ -119,7 +127,8 @@ PB_BANNER = (
 
 PB_LEGEND = (
     "列说明: 通道优先=获利盘≥0.65∩20日内LHB净买+机构双旗(置顶); 点火旗=T1首次≥2%/T2涨2~7%",
-    "每股多行: 每行=一次命中日; 击中日期=该行日期(文本); 获利盘/20日获利盘Δ/换手列=命中当天画像",
+    "每股一行(0928 去重): 取最近击中日; 击中日期=该股最近命中日(文本); 获利盘/20日获利盘Δ/换手列=该命中日画像;",
+    "全部命中日与首次/最近击中见后台表 preboard_watch_hits_*.csv (全量, 每股一行汇总)",
     "通道优先/点火旗/当日涨幅=今日口径(当日停牌缺行→空/NaN); 次数10日/次数20日=过去10/20个交易日命中总数",
     "显示=今日有点火旗(T1/T2/T1+T2)的股, 其余只在后台表 preboard_watch_hits_*.csv (全量)",
     "获利盘=命中日收盘获利盘; 20日获利盘Δ=近20日获利盘升幅(签名腿之一, ≥10pp)",
@@ -603,7 +612,10 @@ def write_xlsx(
     if fp.exists():
         stamp = datetime.datetime.now().strftime("%H%M%S")
         fp = Path(list_dir) / f"{GENIOUS['filename_prefix']}_{date}__{stamp}.xlsx"
-    sheets = [("冠军四段", sheet1, BANNER1, kt.sheet1_legend())] + [
+    # 空表不许裸奔: 只留表头时读者分不清"今日无票"与"链路坏了" ⇒ 在 A1 banner 里
+    # 显式说明 (同 PB_BANNER "为空属正常" 的标注文化, 只标注不动行为)。
+    banner1 = BANNER1 + (EMPTY_NOTE if not len(sheet1) else "")
+    sheets = [("冠军四段", sheet1, banner1, kt.sheet1_legend())] + [
         tuple(x) for x in (extra_sheets or [])
     ]
     with pd.ExcelWriter(fp, engine="openpyxl") as xw:
@@ -933,12 +945,16 @@ def main() -> int:
 
     counts = s1["层"].value_counts().to_dict()
     n_pass = int((s1["涨闸"] == "过闸").sum())
-    log.info(
-        "[genious] %s 冠军表 %d 票 (涨闸过 %d); 层分布 %s",
+    # 空表 26% 日发生 ⇒ 不能标 ERROR (天天误报), 但也不该只 INFO: 升 WARNING 让
+    # 日志侧可判, 并同时落 state.empty (见下)。参照 write_stocklist_csv 的空榜告警。
+    _log_champ = log.warning if not len(s1) else log.info
+    _log_champ(
+        "[genious] %s 冠军表 %d 票 (涨闸过 %d); 层分布 %s%s",
         target,
         len(s1),
         n_pass,
         counts,
+        " — 空属正常, 非链路故障" if not len(s1) else "",
     )
 
     # 首板点名页 + 板前哨页 (0922 用户令): 当日全部首板点名 + 深睡监视名单。
@@ -969,6 +985,7 @@ def main() -> int:
             "dry_run",
             s1=len(s1),
             s1_pass=n_pass,
+            empty=not len(s1),
             layers=counts,
             n_stall=n_stall,
             market_temp=_temp,
@@ -980,12 +997,15 @@ def main() -> int:
     csv_fp = write_stocklist_csv(s1, target)
     if csv_fp is not None:
         log.info("[genious] 推送边车 %s", csv_fp)
+    # status 仍是 "ok" + rc=0: 空表 26% 日发生, 标失败会天天误报。空表这件事靠
+    # empty=True 显式暴露 (state) + WARNING (日志) + A1 banner (交付物), 不靠改终态。
     _write_state(
         tag,
         "ok",
         file=str(fp),
         s1=len(s1),
         s1_pass=n_pass,
+        empty=not len(s1),
         layers=counts,
         n_stall=n_stall,
         market_temp=_temp,
