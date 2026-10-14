@@ -120,6 +120,23 @@ def expected_trading_date(today, cal) -> tuple[datetime.date, str]:
     return d, "natural_fallback"
 
 
+def missing_trade_dates(panel_max, through, cal) -> list:
+    """面板缺的交易日 = (panel_max, through) 开区间内的开市日, 升序.
+
+    through 本身不算: 主流程随后就会拉它 (含幂等 replace). 场景 = 2026-10 国庆
+    停机事故: 机器关机 8 天, 缺省取数日只解析单日 → 中间的 1008/1009/1012
+    永久缺行. cal None/空 (日历不可得) → 返回 [] (fail-open: 宁可漏补也不盲补).
+    """
+    if cal is None or len(cal) == 0:
+        return []
+    panel_max = pd.Timestamp(panel_max)
+    through = pd.Timestamp(through)
+    if pd.isna(panel_max) or panel_max >= through:
+        return []
+    cal_idx = pd.DatetimeIndex(cal)
+    return list(cal_idx[(cal_idx > panel_max) & (cal_idx < through)])
+
+
 def lag_trading_days(observed, expected, cal) -> int | None:
     """observed → expected 的交易日距离 (expected 更新为正).
 

@@ -118,6 +118,36 @@ def _default_trade_date(now=None) -> str:
     return exp.strftime("%Y%m%d")
 
 
+def _heal_panel_gap(trade_date: str, panel_path: str) -> None:
+    """面板落后于取数日时, 先按序逐日补拉中间缺的交易日.
+
+    2026-10-14 国庆停机事故: 机器 10/03–10/13 关机, 缺省日期逻辑只解析单日,
+    1008/1009/1012 三个交易日永久缺行且无人值守链无法自愈. 子进程带显式日期
+    复用本脚本 → 子进程不再触发自愈, 无递归. 任一日失败即硬退 (宁可停链,
+    不在有洞的面板上继续建派生列). 显式传日期的调用 (手工回填/驱动脚本) 不自愈.
+    """
+    import subprocess
+
+    from app.pipeline1.freshness_guard import load_trade_cal, missing_trade_dates
+
+    t = pq.read_table(panel_path, columns=["date"])
+    panel_max = pd.to_datetime(t["date"].to_pandas()).max()
+    missing = missing_trade_dates(panel_max, pd.Timestamp(trade_date), load_trade_cal())
+    if not missing:
+        return
+    print(
+        f"[heal] panel max {panel_max:%Y%m%d} 落后于取数日 {trade_date}, "
+        f"补拉 {len(missing)} 个交易日: {[d.strftime('%Y%m%d') for d in missing]}"
+    )
+    for d in missing:
+        ds = d.strftime("%Y%m%d")
+        print(f"[heal] _daily_fetch {ds} ...")
+        rc = subprocess.run([sys.executable, os.path.abspath(__file__), ds]).returncode
+        if rc != 0:
+            print(f"FATAL: heal fetch {ds} rc={rc}, 中止后续补拉与当日主流程")
+            sys.exit(rc)
+
+
 TRADE_DATE = _POS_ARGS[0] if _POS_ARGS else _default_trade_date()
 FORCE_NO_CYQ = "--force" in sys.argv
 PANEL = os.getenv("PANEL_PATH", r"D:\AMINQT\PARQUET\panel_full_enriched_v3.parquet")
@@ -127,6 +157,11 @@ MF_CACHE_PATH = r"D:/AMINQT/PARQUET/moneyflow_daily.parquet"
 # (首板点名页 6 个 LHB 标注列读 labeled). 见 _refresh_lhb_seat_cache.
 LHB_SEAT_CACHE_PATH = r"D:/AMINQT/PARQUET/lhb_seat_detail.parquet"
 LHB_SEAT_LABELED_PATH = r"D:/AMINQT/PARQUET/lhb_seat_detail_labeled.parquet"
+
+# 缺日自愈只在缺省日期路径上跑 (无人值守 = 计划任务不传日期); 显式传日期的
+# 调用方 (手工回填/驱动脚本) 自己编排顺序, 不被隐式补拉改变语义.
+if not _POS_ARGS:
+    _heal_panel_gap(TRADE_DATE, PANEL)
 
 _token = os.getenv("TUSHARE_TOKEN") or ts.get_token()
 if not _token:
