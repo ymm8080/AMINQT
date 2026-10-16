@@ -60,11 +60,14 @@ from scripts.run_daily_automation import (  # noqa: E402
 LOG_DIR = os.path.join(ROOT, "logs")
 
 # 执行顺序 (用户令 2026-09-28: "全 PARALLEL 链 + 推 THS").
+# stocklist_combined 2026-10-16 回接: 原住 DailyAutomation-2330 (0928 停用后
+# combined 断供至 20260922), 按用户令 "接新步骤须接PARALLEL链" 挂到清单交付后.
 STEP_ORDER = [
     "refresh",
     "parallel",
     "prob_head",
     "deliver_parallel",
+    "stocklist_combined",
     "drift_parallel",
     "ths_push",
     "ths_flush_guard",
@@ -76,9 +79,13 @@ STEP_ORDER = [
 _DEPENDS_LOCAL = {
     **_DEPENDS,
     "drift_parallel": "parallel",
+    "stocklist_combined": "deliver_parallel",
     "ths_push": "deliver_parallel",
     "ths_flush_guard": "ths_push",
 }
+
+# combined 在 RDA 里属 _MAKEUP_STEPS (非关键, 缺源跳页): 失败不判整链失败
+_NON_CRITICAL_STEPS = {"stocklist_combined"}
 
 # 冲突等待: 23:30 撞上手动重活时, 主链是等 2h 再判; 新链照做 -- 直接 skipped
 # 等于当晚没有 PARALLEL 预测也没有 THS 推送 (2026-09-28 审查指出).
@@ -277,7 +284,9 @@ def main() -> int:
                 fh,
                 f"[{_stamp()} {'ok' if rc == 0 else 'FAIL'}] {step} rc={rc} ({dt:.0f}s)",
             )
-            if rc != 0:
+            if rc != 0 and step in _NON_CRITICAL_STEPS:
+                _emit(fh, f"[{_stamp()} note] {step} 非关键失败, 不判链失败")
+            elif rc != 0:
                 failures.append(step)
 
         _emit(fh, f"[done] 失败步骤={failures or '无'}")
