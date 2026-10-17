@@ -92,10 +92,15 @@ ORCHESTRATOR_SENTINEL = "run_daily_automation.py"
 # 跑 refresh/parallel 重活, 并发 = 双建 OOM (同 08-24 事故). 只在链级注册 — 脚本级
 # 不注册, 否则该链自己的子步骤会被父进程拦下 (同 ORCHESTRATOR_SENTINEL 的理由).
 PARALLEL_ORCHESTRATOR_SENTINEL = "run_parallel_automation.py"
+# LEGACY-only 链 (2026-10-17, AMINQT-LegacyAutomation-2130) 同理链级注册: 21:30 开跑,
+# 周五含 retrain 要跑到 ~02:00, 23:30 的 PARALLEL 链靠它感知"LEGACY 还在跑"而等待
+# (LEGACY 的轻量步 cyq/deliver 不在 HEAVY_SENTINELS 里, 只靠链级哨兵兜全链).
+LEGACY_ORCHESTRATOR_SENTINEL = "run_legacy_automation.py"
 # 链级守卫额外把另一条链实例视为冲突; 脚本级不含 (见模块 docstring).
 CHAIN_SENTINELS = HEAVY_SENTINELS + (
     ORCHESTRATOR_SENTINEL,
     PARALLEL_ORCHESTRATOR_SENTINEL,
+    LEGACY_ORCHESTRATOR_SENTINEL,
 )
 
 
