@@ -115,7 +115,8 @@ PB_BANNER = (
     "板前哨页(滚动命中日志) — 近20个交易日内命中过深睡签名(10~40日前放量脉冲∧其后无板守住90%∧获利盘升≥10pp"
     "∧横盘±6%∧5日缩量∧近10日无板)的股, 每股一行(0928 去重), 取最近击中日: 击中日期=该股最近命中日, "
     "获利盘/换手等列=该命中日画像; 全部命中日与首次/最近击中见后台表 preboard_watch_hits_*.csv。"
-    "显示=今日有点火旗(T1/T2/T1+T2)的股, 其余只在后台表 preboard_watch_hits_*.csv (全量)。"
+    "显示=今日点火旗股 ∪ 次数10日>0 股 (2026-10-21 用户令: 10日内被击中的股必须留在页上, 不因当日无点火消失); "
+    "次数10日=0 且无点火者只在后台表 preboard_watch_hits_*.csv (全量)。"
     "次数10日/次数20日=过去10/20个交易日命中总数, 仅上下文勿筛选(回测: 点火前命中数不预测, 次数≥2纯度更低)。"
     "排序 = 通道优先(置顶) → 点火旗(T1+T2>T1>T2) → 最近击中日期(新→旧) → 次数10日(多→少)。"
     "⚠ 深睡签名整体是反信号组 (5日首板率 2.4% vs 全池基线 5.2%) — 本页只提供可见性, 不是买入清单。"
@@ -130,7 +131,7 @@ PB_LEGEND = (
     "每股一行(0928 去重): 取最近击中日; 击中日期=该股最近命中日(文本); 获利盘/20日获利盘Δ/换手列=该命中日画像;",
     "全部命中日与首次/最近击中见后台表 preboard_watch_hits_*.csv (全量, 每股一行汇总)",
     "通道优先/点火旗/当日涨幅=今日口径(当日停牌缺行→空/NaN); 次数10日/次数20日=过去10/20个交易日命中总数",
-    "显示=今日有点火旗(T1/T2/T1+T2)的股, 其余只在后台表 preboard_watch_hits_*.csv (全量)",
+    "显示=今日点火旗股 ∪ 次数10日>0 股 (滚动10日命中名单, 2026-10-21 用户令); 其余只在后台表 preboard_watch_hits_*.csv (全量)",
     "获利盘=命中日收盘获利盘; 20日获利盘Δ=近20日获利盘升幅(签名腿之一, ≥10pp)",
     "5日均换手=近5日换手均值(%); 5日/20日换手比=缩量腿(签名腿之一, ≤0.75)",
     "★ 用法: 通道优先行 + 点火旗 = '开始动了' → 人工看盘确认, 勿程序化追买",
@@ -231,12 +232,15 @@ def _heal_rows(target: str) -> pd.DataFrame:
         syms = bad["symbol"].astype(str).head(20).tolist()
         raise RuntimeError(f"自拉 {target} OHLCV 校验失败 {len(bad)} 行: {syms}")
 
-    out = snap[["symbol", "date", "board", "high", "low", "close", "volume"]].copy()
+    out = snap[
+        ["symbol", "date", "board", "open", "high", "low", "close", "volume",
+         "turnover_rate"]
+    ].copy()
     out["symbol"] = out["symbol"].astype(str).str.zfill(6)
     out["date"] = target
 
     pro = DataSupplyChain()._tushare_pro()
-    wr = None
+    wr = c50 = c95 = None
     if pro is not None:
         try:
             cyq = pro.cyq_perf(trade_date=target)
@@ -244,16 +248,24 @@ def _heal_rows(target: str) -> pd.DataFrame:
             log.warning("[heal] cyq_perf 拉取失败: %s", e)
             cyq = None
         if cyq is not None and len(cyq):
-            cyq = cyq[["ts_code", "winner_rate"]].copy()
+            cyq = cyq[
+                ["ts_code", "winner_rate", "cost_50pct", "cost_95pct"]
+            ].copy()
             cyq["symbol"] = (
                 cyq["ts_code"].astype(str).str.split(".").str[0].str.zfill(6)
             )
             wr = cyq.set_index("symbol")["winner_rate"].astype(float) / 100.0
+            c50 = cyq.set_index("symbol")["cost_50pct"].astype(float)
+            c95 = cyq.set_index("symbol")["cost_95pct"].astype(float)
     if wr is None:
         log.warning(
-            "[heal] %s winner_ratio 缺失 → T1 本日不触发 (T2/T3 不受影响)", target
+            "[heal] %s winner_ratio/cost_50pct/cost_95pct 缺失 → "
+            "T1 本日不触发 (T2/T3 不受影响)",
+            target,
         )
     out["winner_ratio"] = out["symbol"].map(wr) if wr is not None else np.nan
+    out["cost_50pct"] = out["symbol"].map(c50) if c50 is not None else np.nan
+    out["cost_95pct"] = out["symbol"].map(c95) if c95 is not None else np.nan
     return out[list(kt.PANEL_COLUMNS)]
 
 
@@ -521,7 +533,9 @@ def _bigdrop_scan(symbols) -> dict[str, str] | None:
 def write_stocklist_csv(
     s1: pd.DataFrame, date: str, list_dir=STOCK_LIST_DIR
 ) -> Path | None:
-    """冠军四段 → genious_stocklist_{date}__{HHMMSS}.csv (WORM), 给 THS 推送当第三源。
+    """冠军四段 → genious_stocklist_{date}__{HHMMSS}.csv (WORM), 交付工件 (研究/看板消费).
+
+    2026-10-21 用户令: THS 推送源改读 GENIOUS xlsx「板前哨」页 — 本边车不再是推送输入。
 
     只落冠军四段 (首板点名/板前哨 两页不落): 推送侧只认个股买入名单, 其余页进去会污染自选股。
     空榜不落文件 (推送侧缺源即跳过, 不推空单)。
@@ -1011,7 +1025,10 @@ def main() -> int:
         market_temp=_temp,
     )
     print(str(fp))
-    if GENIOUS.get("push_to_ths") and csv_fp is not None and not args.no_push:
+    # 推送源 = 交付层 xlsx 的板前哨页 (2026-10-21 用户令, 见 _ths_watchlist_push):
+    # 冠军四段空榜 (约 26% 交易日) 不再阻断推送 — 只要 xlsx 交付就 spawn;
+    # 板前哨也无合格行时推送侧自行空转退出 (板前哨清单为空, 不推送)。
+    if GENIOUS.get("push_to_ths") and not args.no_push:
         _spawn_ths_push(target)
     return 0
 

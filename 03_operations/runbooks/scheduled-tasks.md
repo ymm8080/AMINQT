@@ -1,7 +1,7 @@
 # 定时任务 (Scheduled Tasks / Cron Jobs)
 
 > **位置**: `03_operations/runbooks/scheduled-tasks.md`
-> **最后更新**: 2026-07-16
+> **最后更新**: 2026-10-27
 
 ## Windows 任务计划程序
 
@@ -10,6 +10,13 @@
 | AMINQT-Data-Download | 每日 17:00 | `python scripts/download_data.py` | 收盘后下载最新日K数据 |
 | AMINQT-Backup | 每日 02:00 | `python scripts/backup.py` | 模型权重+数据备份 |
 | AMINQT-Backup-Cleanup | 每日 02:45 | `powershell Get-ChildItem logs/backup -Filter *.tar.gz \| Where-Object {$_.CreationTime -lt (Get-Date).AddDays(-30)} \| Remove-Item` | 清理30天以上备份 |
+| AMINQT-Genious-2030 | 周一~五 20:30 (+08:00) | `python scripts/_genious_excel.py` | GENIOUS Excel 交付 (冠军四段+观察池); 注册: `scripts/setup_genious_task.ps1`; 状态: `logs/genious_{date}.state.json` |
+| AMINQT-Genious-Watchdog-2110 | 周一~五 21:10 (+08:00) | `python scripts/_genious_backfill_missing.py` | 缺文件看门狗: 扫近 5 交易日缺 `GENIOUS_{date}.xlsx` 则顺序补跑 (--no-push); 让路存活 GENIOUS/夜链; 心跳 `logs/genious_watchdog.log`; 注册: `scripts/setup_genious_watchdog_task.ps1`。堵 2026-10-22/10-26 两次漏交付 |
+| AMINQT-LegacyAutomation-2130 | 每日 21:30 (+08:00) | `python scripts/run_legacy_automation.py` | LEGACY 夜链 (~2.5h, 周五 retrain); 注册: `scripts/setup_legacy_automation.ps1` |
+| AMINQT-ParallelAutomation-2330 | 每日 23:30 (+08:00) | `python scripts/run_parallel_automation.py` | PARALLEL 夜链 (~2.5h, 含 prob10dens/stocklist_combined/ths_push); 注册: `scripts/setup_parallel_automation.ps1` |
+
+三条夜链守卫互斥 (`scripts/_run_guard.py` 哨兵扫描), **严禁同时手工启动两条链** — 2026-10-23
+双链互等死锁事故。GENIOUS 及其看门狗不在哨兵表内, 但看门狗自带让路闸。
 
 ### 设置方式
 ```powershell
