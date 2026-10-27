@@ -8,6 +8,12 @@ GENIOUS (20:30, 实测 ~10min) 早于 LEGACY (21:30); 开机补跑时也能补�
 规则:
 - 窗口 = 最近 --lookback 个交易日, 含今日 (20:30 主任务当晚失败时由本任务自愈);
   存活 _genious_excel.py 进程 → 整轮让路 (WORM 重跑只会产出 __HHMMSS 副本)。
+- 文件在但缺页 (冠军四段/首板点名/板前哨 三页不全) 也算欠交付 — 2026-10-26 事故:
+  19:15 抓取 OOM 半途死, 面板停在 10-23, 20:30 GENIOUS 按闸只出了冠军页。
+- 面板落后于交付日时先跑 _daily_fetch.py (无参 = 缺日自愈 + 抓最新已收盘日),
+  再补跑 GENIOUS — 否则重跑永远只出冠军页。每轮最多自愈一次面板。
+  首板两页仅当 面板最新 == 交付日 才可产 (勿点昨天的板): 窗口已过的缺页
+  无法回补, 只 ERROR 留痕 (面板已越过, 重跑也无济于事)。
 - 任一夜链哨兵 (HEAVY/三条链) 存活 → 让路 (2026-10-23 双链互等死锁的教训)。
 - 交易日历不可得 → fail-open 退出: 宁可不补, 不盲补节假日。
 - 每次运行必留心跳日志 (含无事可做); 单轮最多补 --max-runs 个, 余量顺延下轮。
@@ -38,8 +44,11 @@ from scripts._run_guard import CHAIN_SENTINELS, find_conflicts  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GENIOUS_SCRIPT = Path(__file__).resolve().parent / "_genious_excel.py"
+DAILY_FETCH_SCRIPT = PROJECT_ROOT / "_daily_fetch.py"
 LOG_PATH = PROJECT_ROOT / "logs" / "genious_watchdog.log"
 RUN_TIMEOUT_S = 40 * 60  # 正常 ~10min; bigdrop 重建 ~5min, 留 4 倍余量后杀
+FETCH_TIMEOUT_S = 30 * 60  # 正常 ~8min (全源拉取+面板重写)
+EXPECTED_SHEETS = ("冠军四段", "首板点名", "板前哨")  # 缺任一页 = 欠交付
 
 log = logging.getLogger("genious-watchdog")
 
@@ -76,6 +85,63 @@ def _delivered(tag: str) -> bool:
     return any(STOCK_LIST_DIR.glob(f"GENIOUS_{tag}*.xlsx"))
 
 
+def _latest_delivery(tag: str) -> Path | None:
+    files = sorted(
+        STOCK_LIST_DIR.glob(f"GENIOUS_{tag}*.xlsx"),
+        key=lambda p: p.stat().st_mtime,
+    )
+    return files[-1] if files else None
+
+
+def _incomplete(tag: str) -> bool:
+    """文件在但三页不全 (2026-10-26: 抓取 OOM → 面板缺当日 → GENIOUS 只出冠军页)."""
+    f = _latest_delivery(tag)
+    if f is None:
+        return False
+    try:
+        import openpyxl
+
+        wb = openpyxl.load_workbook(f, read_only=True)
+        try:
+            sheets = set(wb.sheetnames)
+        finally:
+            wb.close()
+    except Exception as e:  # noqa: BLE001 — 读不开按不完整处理, 宁可重跑
+        log.warning("读 %s sheet 失败 (%s), 按不完整处理", f.name, e)
+        return True
+    return not set(EXPECTED_SHEETS) <= sheets
+
+
+def _panel_max():
+    from app.pipeline1 import kongduo_triggers as kt
+    from config.settings import PANEL_V3_PATH
+
+    return kt.panel_max_date(PANEL_V3_PATH)
+
+
+def _heal_panel() -> bool:
+    """面板落后时无参跑 _daily_fetch.py: 缺日逐日自愈 + 追加最新已收盘日."""
+    try:
+        r = subprocess.run(
+            [sys.executable, str(DAILY_FETCH_SCRIPT)],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=FETCH_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        log.error("面板自愈超时 (> %ss) — 仍尝试补跑 GENIOUS", FETCH_TIMEOUT_S)
+        return False
+    if r.returncode != 0:
+        log.error(
+            "面板自愈失败 rc=%s — 仍尝试补跑 (冠军页可救, 首板两页仍会缺)",
+            r.returncode,
+        )
+        return False
+    return True
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--lookback", type=int, default=5, help="回看交易日数 (含今日)")
@@ -104,19 +170,44 @@ def main() -> int:
 
     window = _window_tags(args.lookback, cal)
     missing = [t for t in window if not _delivered(t)]
+    incomplete = [t for t in window if _delivered(t) and _incomplete(t)]
     log.info(
-        "窗口 %s..%s (%d 个交易日), 缺 %d: %s",
+        "窗口 %s..%s (%d 个交易日), 缺 %d: %s; 缺页 %d: %s",
         window[0] if window else "-",
         window[-1] if window else "-",
         len(window),
         len(missing),
         missing or "无",
+        len(incomplete),
+        incomplete or "无",
     )
-    if args.dry_run or not missing:
+    if args.dry_run or not (missing or incomplete):
         return 0
 
+    pmax = _panel_max()
+    rerun: list[str] = []
+    for t in dict.fromkeys(missing + incomplete):
+        if t in missing or (pmax is not None and str(pmax) == t):
+            rerun.append(t)
+        else:
+            # 首板两页仅当 面板最新 == 交付日 才可产; 面板已越过 → 重跑也只出冠军页
+            log.error(
+                "交付 %s 缺页, 但面板最新 %s 已越过交付日 — 首板两页无法回补",
+                t,
+                pmax,
+            )
+    if len(rerun) > args.max_runs:
+        log.warning(
+            "待补 %d > max-runs %d, 余 %s 顺延下轮",
+            len(rerun), args.max_runs, rerun[args.max_runs:],
+        )
+        rerun = rerun[: args.max_runs]
+
+    if rerun and pmax is not None and any(t > str(pmax) for t in rerun):
+        _heal_panel()
+
     failed: list[str] = []
-    for tag in missing[: args.max_runs]:
+    for tag in rerun:
         log.info("补跑 %s 开始 (--no-push)", tag)
         try:
             r = subprocess.run(
@@ -149,9 +240,6 @@ def main() -> int:
                 status,
                 "" if r is None else f" stderr_tail={r.stderr[-500:]!r}",
             )
-    if len(missing) > args.max_runs:
-        log.warning("缺 %d > max-runs %d, 余 %s 顺延下轮",
-                    len(missing), args.max_runs, missing[args.max_runs:])
 
     return 1 if failed else 0
 

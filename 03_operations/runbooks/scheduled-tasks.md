@@ -11,7 +11,7 @@
 | AMINQT-Backup | 每日 02:00 | `python scripts/backup.py` | 模型权重+数据备份 |
 | AMINQT-Backup-Cleanup | 每日 02:45 | `powershell Get-ChildItem logs/backup -Filter *.tar.gz \| Where-Object {$_.CreationTime -lt (Get-Date).AddDays(-30)} \| Remove-Item` | 清理30天以上备份 |
 | AMINQT-Genious-2030 | 周一~五 20:30 (+08:00) | `python scripts/_genious_excel.py` | GENIOUS Excel 交付 (冠军四段+观察池); 注册: `scripts/setup_genious_task.ps1`; 状态: `logs/genious_{date}.state.json` |
-| AMINQT-Genious-Watchdog-2110 | 周一~五 21:10 (+08:00) | `python scripts/_genious_backfill_missing.py` | 缺文件看门狗: 扫近 5 交易日缺 `GENIOUS_{date}.xlsx` 则顺序补跑 (--no-push); 让路存活 GENIOUS/夜链; 心跳 `logs/genious_watchdog.log`; 注册: `scripts/setup_genious_watchdog_task.ps1`。堵 2026-10-22/10-26 两次漏交付 |
+| AMINQT-Genious-Watchdog-2110 | 周一~五 21:10 (+08:00) | `python scripts/_genious_backfill_missing.py` | 缺文件/缺页看门狗: 扫近 5 交易日, 缺 `GENIOUS_{date}.xlsx` 或三页不全 (冠军四段/首板点名/板前哨) 则补跑 (--no-push); 面板落后交付日先无参自愈 `_daily_fetch.py` 再补 (10-26 抓取 OOM 半途死 → 面板缺当日 → 只出冠军页的场景); 让路存活 GENIOUS/夜链; 心跳 `logs/genious_watchdog.log`; 注册: `scripts/setup_genious_watchdog_task.ps1`。堵 2026-10-22/10-26 漏交付 |
 | AMINQT-LegacyAutomation-2130 | 每日 21:30 (+08:00) | `python scripts/run_legacy_automation.py` | LEGACY 夜链 (~2.5h, 周五 retrain); 注册: `scripts/setup_legacy_automation.ps1` |
 | AMINQT-ParallelAutomation-2330 | 每日 23:30 (+08:00) | `python scripts/run_parallel_automation.py` | PARALLEL 夜链 (~2.5h, 含 prob10dens/stocklist_combined/ths_push); 注册: `scripts/setup_parallel_automation.ps1` |
 

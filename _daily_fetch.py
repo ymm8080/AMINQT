@@ -1057,17 +1057,23 @@ for field in schema:
 print("\n[8] Appending to panel...")
 today_table = pa.Table.from_pandas(df, schema=schema, preserve_index=False)
 
+# 2026-10-26/27 两次 OOM 均死在 rg.to_pandas(): 1M 行 × ~200 列转 pandas,
+# object 列内存放大数倍, 单行组峰值数 GB → commit 耗尽. 行过滤不需要 pandas,
+# 直接 Arrow 层做等值剔除, 峰值 ≈ 2 个行组.
+import pyarrow.compute as pc
+
 pf = pq.ParquetFile(PANEL)
 tmp_path = PANEL + ".tmp"
 writer = pq.ParquetWriter(tmp_path, schema=schema)
 
+_today_scalar = pa.scalar(pd.Timestamp(TRADE_DATE), type=schema.field("date").type)
+
 for rg_idx in range(pf.metadata.num_row_groups):
     rg = pf.read_row_group(rg_idx)
-    rg_df = rg.to_pandas()
     # Remove today's old rows (idempotent: re-run after crash rebuilds cleanly)
-    rg_df = rg_df[rg_df["date"] != pd.Timestamp(TRADE_DATE)]
-    if len(rg_df):
-        writer.write_table(pa.Table.from_pandas(rg_df, schema=schema, preserve_index=False))
+    keep = rg.filter(pc.invert(pc.equal(rg.column("date"), _today_scalar)))
+    if keep.num_rows:
+        writer.write_table(keep)
 
 writer.write_table(today_table)
 writer.close()
