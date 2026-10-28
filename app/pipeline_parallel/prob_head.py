@@ -154,15 +154,10 @@ def synthesize_prob_extras(df: pd.DataFrame, board: str) -> pd.DataFrame:
     return df
 
 
-def _fit_cls_model(
-    board: str, t: pd.DataFrame, half_life: int | None
-) -> tuple[LGBMClassifier, list[str]]:
-    """拟合单档概率头 LGBM → (model, feat_cols). train_bundle 与 purged 影子重评
-    (scripts/_train_parallel_prob_head._shadow_prob) 共用的唯一拟合口径.
-
-    t 需含全部特征列 + mfe_3d + label_pain; 行过滤: mfe_3d 非 NaN 且 label_pain
-    非 NaN (mfe 尾段 NaN 不可训练). half_life = 时间衰减样本加权半衰期 (自然日);
-    None → 不加权. 训练样本 < 5000 → raise.
+def _prep_fit_inputs(board: str, t: pd.DataFrame) -> tuple:
+    """拟合输入一次性构建 -> (X, y, feat_cols, date). 只与帧 t 有关, 与 half_life
+    无关 -> 同帧多档半衰期共用 (逐档差别仅在 sample_weight, 见 _fit_cls_model).
+    百万行 x 数百列的 .loc + to_numpy 是概率头拟合的主要开销.
     """
     cols = feature_cols(t)
     y = (t["mfe_3d"] >= PROB_GATE["abs_target"]).astype(float)
@@ -170,11 +165,30 @@ def _fit_cls_model(
     x = t.loc[ok, cols].to_numpy(dtype="float32")
     if len(x) < 5000:
         raise ValueError(f"[{board}] 训练样本不足 ({len(x)})")
+    return x, y.loc[ok].to_numpy(), cols, t.loc[ok, "date"]
+
+
+def _fit_cls_model(
+    board: str,
+    t: pd.DataFrame,
+    half_life: int | None,
+    prep: tuple | None = None,
+) -> tuple[LGBMClassifier, list[str]]:
+    """拟合单档概率头 LGBM → (model, feat_cols). train_bundle 与 purged 影子重评
+    (scripts/_train_parallel_prob_head._shadow_prob) 共用的唯一拟合口径.
+
+    t 需含全部特征列 + mfe_3d + label_pain; 行过滤: mfe_3d 非 NaN 且 label_pain
+    非 NaN (mfe 尾段 NaN 不可训练). half_life = 时间衰减样本加权半衰期 (自然日);
+    None → 不加权. 训练样本 < 5000 → raise.
+    prep = _prep_fit_inputs(board, t) 的返回值; 同一帧多档调用时传入可免去重复构建,
+    数值与就地构建逐字节相同 (喂给 fit 的 X/y 与 sample_weight 均不变).
+    """
+    x, yv, cols, dates = prep if prep is not None else _prep_fit_inputs(board, t)
     model = LGBMClassifier(**LGB_PARAMS)
     fit_kwargs: dict = {}
     if half_life is not None:
-        fit_kwargs["sample_weight"] = decay_sample_weights(t.loc[ok, "date"], half_life)
-    model.fit(x, y.loc[ok].to_numpy(), **fit_kwargs)
+        fit_kwargs["sample_weight"] = decay_sample_weights(dates, half_life)
+    model.fit(x, yv, **fit_kwargs)
     return model, cols
 
 

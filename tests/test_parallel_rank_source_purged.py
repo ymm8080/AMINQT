@@ -84,7 +84,7 @@ class _MemModel:
 def _fit_stub_factory(full: pd.DataFrame, leaky: bool, captures: list):
     """leaky=False → 只背 train 行 (诚实影子); True → 闭包背全史 (模拟 in-sample)."""
 
-    def stub(board, train, hl):
+    def stub(board, train, hl, prep=None):
         src = full if leaky else train
         qmap = dict(zip(src["uid"].tolist(), (_prob_of(s) for s in src["symbol"])))
         captures.append(
@@ -116,6 +116,11 @@ def _patch_happy(monkeypatch, tmp_dir, t: pd.DataFrame, leaky: bool, captures: l
     monkeypatch.setattr(ledger_mod, "LEDGER_PATH", tmp_dir / "head_choice_ledger.csv")
     monkeypatch.setattr(
         prob_head, "_fit_cls_model", _fit_stub_factory(t, leaky, captures)
+    )
+    monkeypatch.setattr(
+        prob_head,
+        "_prep_fit_inputs",
+        lambda board, t: (None, None, list(FEATS), None),
     )
 
 
@@ -177,7 +182,7 @@ def test_shadow_fit_raise_fails_open(tmp_path, monkeypatch, capsys):
     t = _synth()
     _patch_happy(monkeypatch, tmp_path, t, leaky=False, captures=[])
 
-    def boom(board, train, hl):
+    def boom(board, train, hl, prep=None):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(prob_head, "_fit_cls_model", boom)

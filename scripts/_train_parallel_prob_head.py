@@ -91,13 +91,14 @@ def _shadow_prob(
     if train.empty:
         raise ValueError(f"[{board}] purged 影子训练集为空 (cutoff={cut})")
     shadow: list[dict] = []
+    prep = prob_head._prep_fit_inputs(board, train)
     for hl in PROB_GATE["half_lives"]:
         print(
             f"[{board}] purged 影子拟合 hl={hl} "
             f"(train<={pd.Timestamp(cut):%Y-%m-%d}, {len(train):,} 行)",
             flush=True,
         )
-        model, cols = prob_head._fit_cls_model(board, train, hl)
+        model, cols = prob_head._fit_cls_model(board, train, hl, prep)
         shadow.append({"feat_cols": cols, "model": model})
     return prob_head.ensemble_predict(shadow, eval_rows).to_numpy()
 
