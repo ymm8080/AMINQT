@@ -814,8 +814,16 @@ if any(c in panel_cols for c in derived_cyq):
     if "cost_bias" in panel_cols and {"close_hfq", "cost_50pct"} <= set(df.columns):
         df["cost_bias"] = (df["close_hfq"] - df["cost_50pct"]) / df["cost_50pct"].replace(0, np.nan)
     if "conc_trend_20d" in panel_cols and "pct_90_con" in df.columns and "pct_90_con" in hist.columns:
-        h90 = hist[hist["date"] < pd.Timestamp(TRADE_DATE)]
-        prev20 = h90.groupby("symbol")["pct_90_con"].shift(19).groupby(h90["symbol"]).last()
+        # 2026-10-28 内存修复: 整框布尔过滤会逐块拷贝全部列 (4.12M 行, 峰值 ~2GB,
+        # 10-27/10-28 连两晚 19:15 OOM 即此) — 下游只需 symbol/pct_90_con 两列,
+        # 先裁列再过滤 (峰值 ~300MB); 行序不变, shift/last 结果逐位一致.
+        h90 = hist.loc[hist["date"] < pd.Timestamp(TRADE_DATE), ["symbol", "pct_90_con"]]
+        prev20 = (
+            h90.groupby("symbol")["pct_90_con"]
+            .shift(19)
+            .groupby(h90["symbol"])
+            .last()
+        )
         df["conc_trend_20d"] = df["pct_90_con"] / df["symbol"].map(prev20).replace(0, np.nan)
     if "conc_90_industry_rank" in panel_cols and "pct_90_con" in df.columns and "industry" in df.columns:
         df["conc_90_industry_rank"] = (

@@ -341,6 +341,69 @@ def _heal_rows_bounded(target: str) -> pd.DataFrame:
     return box["df"]
 
 
+# ── 首板两页面板补跑 (2026-10-28 用户令: 两页不许因 19:15 抓取失败静默消失) ─────
+
+# 19:15 实跑 5-10 分钟; 有界防挂死 (同 _heal_rows_bounded 精神)
+_FB_PANEL_REPAIR_TIMEOUT_S = 900
+_PANEL_REPAIR_DONE = False  # 每进程至多补跑一次 (连跑无益, 抓取失败通常要等数据源)
+
+
+def _repair_panel_via_fetch(target: str) -> bool:
+    """面板滞后 → 子进程补跑根目录 _daily_fetch.py (与 AMINQT-MarketData-22h 同链路).
+
+    冠军表的内存自愈 (_heal_rows) 只有 PANEL_COLUMNS 11 列, 而首板点名/板前哨页的
+    数据层 load_mainboard 要 PANEL_COLS 17 列 (pctChg/pre_close/volume_ratio/lhb_*/
+    sw_l2_name 等) — 内存拼薄快照会出半错页, 正解是把面板真补齐。子进程隔离: 跑完
+    内存即还, 不与交付链争峰值。Returns True = 面板已含 target 当日行 (调用方重载
+    load_mainboard 即可出页); False = 修复失败, 调用方维持「宁缺勿错」跳过。
+    """
+    global _PANEL_REPAIR_DONE
+    if _PANEL_REPAIR_DONE:
+        return False
+    _PANEL_REPAIR_DONE = True
+    script = Path(PROJECT_ROOT) / "_daily_fetch.py"
+    if not script.exists():
+        log.error("[genious] 找不到 %s, 面板补跑不可用", script)
+        return False
+    log.warning(
+        "[genious] 面板滞后 → 子进程补跑 _daily_fetch (目标 %s, 超时 %ss) — 首板两页等待中",
+        target,
+        _FB_PANEL_REPAIR_TIMEOUT_S,
+    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script)],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=_FB_PANEL_REPAIR_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        log.error(
+            "[genious] 面板补跑超 %ss 未归 → 放弃 (两页本次不出)",
+            _FB_PANEL_REPAIR_TIMEOUT_S,
+        )
+        return False
+    except Exception as exc:  # noqa: BLE001 — 补跑失败不掀翻交付链
+        log.error("[genious] 面板补跑异常: %s", exc)
+        return False
+    if proc.returncode != 0:
+        log.error(
+            "[genious] 面板补跑 rc=%s, 尾部输出: %s",
+            proc.returncode,
+            (proc.stdout or "")[-500:],
+        )
+    pmax = kt.panel_max_date(PANEL_V3_PATH)
+    ok = pmax is not None and pmax.strftime("%Y%m%d") == target
+    log.info(
+        "[genious] 面板补跑完成 rc=%s, 面板最新 %s (目标 %s)",
+        proc.returncode,
+        pmax,
+        target,
+    )
+    return ok
+
+
 def _load_fresh_panel(target: str, no_fetch: bool, wait_min: int) -> pd.DataFrame:
     """要求面板含 target 当日行; 不足则等待 → 自愈; 都不行抛错。"""
     cal = load_trade_cal()
@@ -633,8 +696,10 @@ def _spawn_ths_push(date: str) -> None:
 def _build_firstboard_sheets(target: str, dry_run: bool = False):
     """首板点名页 + 板前哨页 + 点名页 banner (数据层在 scripts/_firstboard_pages.py)。
 
-    面板 max ≠ 交付日 → (None, None, FB_BANNER): 这两页点的是"当日首板/当日深睡状态",
-    日期错一天整页语义全错, 宁缺勿错; 冠军四段不受影响 (kt 路径有自己的新鲜度闸)。
+    面板 max ≠ 交付日 → 先做一次有界修复 (内存闸 ≥3.5GB + 子进程补跑 _daily_fetch,
+    dry-run 不补), 补齐即重载面板照常出两页; 仍不齐 → (None, None, FB_BANNER):
+    这两页点的是"当日首板/当日深睡状态", 日期错一天整页语义全错, 宁缺勿错;
+    冠军四段不受影响 (kt 路径有自己的新鲜度闸+内存自愈)。
     dry_run=True → 不发 record_csv, 板前哨后台 CSV 不落盘 (--dry-run 契约=只打印不落文件)。
     0924 P0: banner 追加停训哨兵尾注 (train_end 落后面板 > FB_MAX_STALE_DAYS 交易日 →
     点名页 A1 可见告警, 只标注不动行为 — 同"涨闸只标注"文化)。
@@ -643,6 +708,18 @@ def _build_firstboard_sheets(target: str, dry_run: bool = False):
 
     pdf = fbp.load_mainboard()
     d0 = pdf["date"].max()
+    if d0 is None or d0.strftime("%Y%m%d") != target:
+        # 2026-10-28 用户令: 两页不许因 19:15 抓取失败静默消失 — 先试有界修复
+        if not _DRY_RUN and _avail_commit_gb() >= BIGDROP_REBUILD_MIN_AVAIL_GB:
+            if _repair_panel_via_fetch(target):
+                pdf = fbp.load_mainboard()
+                d0 = pdf["date"].max()
+        else:
+            log.warning(
+                "[genious] 面板滞后且 (dry-run=%s 或可用内存 <%.1fGB) → 不补跑面板",
+                _DRY_RUN,
+                BIGDROP_REBUILD_MIN_AVAIL_GB,
+            )
     if d0 is None or d0.strftime("%Y%m%d") != target:
         log.error(
             "[genious] 面板最新 %s ≠ 交付日 %s → 首板两页本次不出 (勿点昨天的板)",
