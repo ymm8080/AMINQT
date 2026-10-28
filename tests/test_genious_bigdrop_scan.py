@@ -232,6 +232,8 @@ class _Ctx:
             "scripts._genious_excel.kt.panel_max_date",
             lambda path: datetime.date(2026, 9, 16) if pmax else None,
         )
+        # 内存探针钉高: 模块运行契约测试与机器余量无关, 低内存跳过闸单独有专测
+        monkeypatch.setattr("scripts._genious_excel._avail_commit_gb", lambda: 99.0)
 
 
 def test_module_run_rebuilds_when_stale(monkeypatch, tmp_path):
@@ -269,3 +271,15 @@ def test_module_run_gives_up_when_panel_date_unreadable(monkeypatch, tmp_path):
     ctx = _Ctx(monkeypatch, tmp_path, {"tag": "20260915"}, pmax=None)
     assert _bigdrop_module_run() is False
     assert ctx.calls == []
+
+
+def test_module_run_skips_rebuild_when_commit_memory_low(monkeypatch, tmp_path):
+    """可用提交内存不足 → 不硬建, 用盘上旧包 (10-27 事故回归).
+
+    交付夜 19:15 抓取链未退场时硬建只会连环 OOM: build 抓到异常后下游未防护段
+    也跟着炸, 进程静默死。低内存时跳过重建 = 旁路标注容许滞后, 交付链照常。
+    """
+    ctx = _Ctx(monkeypatch, tmp_path, {"tag": "20260915", "data_date": "20260915"})
+    monkeypatch.setattr("scripts._genious_excel._avail_commit_gb", lambda: 0.5)
+    assert _bigdrop_module_run() is False
+    assert ctx.calls == [], "低内存时严禁触发建包"
