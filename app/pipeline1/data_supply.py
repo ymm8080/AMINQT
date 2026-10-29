@@ -389,9 +389,10 @@ class DataSupplyChain:
             info = stock_info.set_index("ts_code")
             df["board"] = df["ts_code"].map(info["market"])
             df["industry"] = df["ts_code"].map(info["industry"])
-            scan_info = stock_info.rename(columns={"ts_code": "symbol"})[
-                ["symbol", "name", "list_date"]
-            ].set_index("symbol")
+            # 不能 rename ts_code→symbol: stock_basic 自带 symbol 列, 重名后
+            # set_index("symbol") 会拿到 MultiIndex, map 全 NaN → ingest gate
+            # 误判全部次新而清空截面 (2026-10-26 GENIOUS 自愈 0 行根因)。
+            scan_info = stock_info[["symbol", "name", "list_date"]].set_index("symbol")
             try:
                 cal = self._get_trade_cal_cached(pro)
                 df, _ = apply_ingest_scan(

@@ -306,7 +306,11 @@ PRETTY = {
 
 # ---------------------------------------------------------------- 数据
 def load_frame() -> pd.DataFrame:
-    d = pq.read_table(str(PANEL_V3_PATH), columns=COLS).to_pandas()
+    # split_blocks/self_destruct: 列块不合并 —— 免掉 to_pandas 期 (35, N)=1.07GiB
+    # 单笔 dtype 块分配; 自毁式转换, arrow 表随转随放 (此临时表无人复用)。
+    d = pq.read_table(str(PANEL_V3_PATH), columns=COLS).to_pandas(
+        split_blocks=True, self_destruct=True
+    )
     d["symbol"] = (
         d["symbol"]
         .astype(str)
@@ -314,7 +318,10 @@ def load_frame() -> pd.DataFrame:
         .str.zfill(6)
     )
     d["date"] = pd.to_datetime(d["date"]).dt.strftime("%Y%m%d")
-    d = d.sort_values(["symbol", "date"], kind="mergesort").reset_index(drop=True)
+    # ignore_index=True 取代 .reset_index(drop=True): 同样新 RangeIndex, 但免掉
+    # reset 的整框深拷贝 (10-28 事故第三尖峰: copy consolidate 32 列 float64 成
+    # (32, 4.13M)=1008MiB 单笔分配), 行序/数值/索引逐位不变。
+    d = d.sort_values(["symbol", "date"], kind="mergesort", ignore_index=True)
     g = d.groupby("symbol", sort=False)
 
     # 标签
@@ -369,7 +376,13 @@ def load_frame() -> pd.DataFrame:
     lu = d.groupby("date")["is_limit_up"].sum()
     ld = d.groupby("date")["is_limit_dn"].sum()
     mkt["mkt_zt_ratio"] = lu / (lu + ld).clip(lower=1)
-    return d.merge(mkt.reset_index(), on="date", how="left")
+    # 列式 map 替代整框 merge (10-28 事故第二尖峰, --build traceback 实锤:
+    # merge 整框重排 consolidate 成 (49, 4.13M)=1.51GiB 单笔分配)。mkt 按 date
+    # groupby → 每日期恰一行, how="left" 下 map 与 merge 逐行等值 (缺日期同样
+    # NaN, 行序不变), 只新增两列各 ~33MB, 数值与列序不变。
+    d["mkt_ret"] = d["date"].map(mkt["mkt_ret"])
+    d["mkt_zt_ratio"] = d["date"].map(mkt["mkt_zt_ratio"])
+    return d
 
 
 def rule_flags(d: pd.DataFrame) -> pd.DataFrame:
@@ -417,7 +430,12 @@ def build() -> dict:
     score_all = F.sum(axis=1).to_numpy(int)
 
     val = d["y"].notna().to_numpy()
-    X = d[FEATS].astype(np.float32)
+    # 列式 float32 拼装: d[FEATS] 会先复制一份 (N, 32) float64 (4.12M 行实测
+    # 1007 MiB, 10-27 交付夜提交内存耗尽 OOM), astype 再来一份 float32。
+    # 逐列 to_numpy(float32) 峰值只剩最终 X (528 MiB), 数值与 astype 逐位一致。
+    X = np.empty((len(d), len(FEATS)), dtype=np.float32)
+    for _j, _c in enumerate(FEATS):
+        X[:, _j] = d[_c].to_numpy(dtype=np.float32)
     y = d["y"].to_numpy(float)
     # 捕获阶梯的第二条目标线。fwd 已带 ok 掩码 (停牌/断档为 NaN), 所以
     # 有效性与 y 完全一致, 不需要另建掩码。

@@ -70,6 +70,42 @@ DIAG_DIR = Path(PROJECT_ROOT) / "diag"
 WAIT_TICK_S = 60
 HEAL_TIMEOUT_S = 180  # 自拉硬超时; 超时=大声失败, 不留挂死实例 (见 _heal_rows_bounded)
 
+HEAL_TIMEOUT_S = 180  # 自拉硬超时; 超时=大声失败, 不留挂死实例 (见 _heal_rows_bounded)
+
+# bigdrop 重建 (全面板 ~4.12M 行 × 32 特征) 峰值 ~3 GB。10-27 事故: 19:15 抓取链未
+# 退场时可用提交内存不足, 重建分配 (32, 4123286) float64 失败; 异常虽被旁路契约接住,
+# 但下游未防护段连环 OOM, 进程静默死, state 卡 running。与其硬建半路炸, 不如先探水:
+# 可用提交内存低于阈值就跳过重建, 用盘上旧包 (旁路标注容许滞后, 契约同建包失败回退)。
+BIGDROP_REBUILD_MIN_AVAIL_GB = 3.5
+
+
+def _avail_commit_gb() -> float:
+    """系统当前可用提交内存 (物理+页面文件), GB。读失败返回 +inf (fail-open 不拦链路)。"""
+    try:
+        import ctypes
+
+        class _MSEx(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        ms = _MSEx()
+        ms.dwLength = ctypes.sizeof(_MSEx)
+        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(ms)):
+            return float("inf")
+        return ms.ullAvailPageFile / 2**30
+    except Exception:  # noqa: BLE001 — 探针失败(含非 Windows)视作内存充足, 只做旁路不拦链路
+        return float("inf")
+
+
 BANNER1 = (
     "GENIOUS 冠军二段 — 段位全留, 【涨闸】列标出其中哪几只是 右侧拐头+缩量。"
     "OOS f10+5%止损口径: 过闸全取 胜率58%/期望+5.2%/大涨15.6% (低动量子集胜率76%); "
@@ -115,7 +151,8 @@ PB_BANNER = (
     "板前哨页(滚动命中日志) — 近20个交易日内命中过深睡签名(10~40日前放量脉冲∧其后无板守住90%∧获利盘升≥10pp"
     "∧横盘±6%∧5日缩量∧近10日无板)的股, 每股一行(0928 去重), 取最近击中日: 击中日期=该股最近命中日, "
     "获利盘/换手等列=该命中日画像; 全部命中日与首次/最近击中见后台表 preboard_watch_hits_*.csv。"
-    "显示=今日有点火旗(T1/T2/T1+T2)的股, 其余只在后台表 preboard_watch_hits_*.csv (全量)。"
+    "显示=今日点火旗股 ∪ 次数10日>0 股 (2026-10-21 用户令: 10日内被击中的股必须留在页上, 不因当日无点火消失); "
+    "次数10日=0 且无点火者只在后台表 preboard_watch_hits_*.csv (全量)。"
     "次数10日/次数20日=过去10/20个交易日命中总数, 仅上下文勿筛选(回测: 点火前命中数不预测, 次数≥2纯度更低)。"
     "排序 = 通道优先(置顶) → 点火旗(T1+T2>T1>T2) → 最近击中日期(新→旧) → 次数10日(多→少)。"
     "⚠ 深睡签名整体是反信号组 (5日首板率 2.4% vs 全池基线 5.2%) — 本页只提供可见性, 不是买入清单。"
@@ -130,7 +167,7 @@ PB_LEGEND = (
     "每股一行(0928 去重): 取最近击中日; 击中日期=该股最近命中日(文本); 获利盘/20日获利盘Δ/换手列=该命中日画像;",
     "全部命中日与首次/最近击中见后台表 preboard_watch_hits_*.csv (全量, 每股一行汇总)",
     "通道优先/点火旗/当日涨幅=今日口径(当日停牌缺行→空/NaN); 次数10日/次数20日=过去10/20个交易日命中总数",
-    "显示=今日有点火旗(T1/T2/T1+T2)的股, 其余只在后台表 preboard_watch_hits_*.csv (全量)",
+    "显示=今日点火旗股 ∪ 次数10日>0 股 (滚动10日命中名单, 2026-10-21 用户令); 其余只在后台表 preboard_watch_hits_*.csv (全量)",
     "获利盘=命中日收盘获利盘; 20日获利盘Δ=近20日获利盘升幅(签名腿之一, ≥10pp)",
     "5日均换手=近5日换手均值(%); 5日/20日换手比=缩量腿(签名腿之一, ≤0.75)",
     "★ 用法: 通道优先行 + 点火旗 = '开始动了' → 人工看盘确认, 勿程序化追买",
@@ -231,12 +268,24 @@ def _heal_rows(target: str) -> pd.DataFrame:
         syms = bad["symbol"].astype(str).head(20).tolist()
         raise RuntimeError(f"自拉 {target} OHLCV 校验失败 {len(bad)} 行: {syms}")
 
-    out = snap[["symbol", "date", "board", "high", "low", "close", "volume"]].copy()
+    out = snap[
+        [
+            "symbol",
+            "date",
+            "board",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "turnover_rate",
+        ]
+    ].copy()
     out["symbol"] = out["symbol"].astype(str).str.zfill(6)
     out["date"] = target
 
     pro = DataSupplyChain()._tushare_pro()
-    wr = None
+    wr = c50 = c95 = None
     if pro is not None:
         try:
             cyq = pro.cyq_perf(trade_date=target)
@@ -244,16 +293,22 @@ def _heal_rows(target: str) -> pd.DataFrame:
             log.warning("[heal] cyq_perf 拉取失败: %s", e)
             cyq = None
         if cyq is not None and len(cyq):
-            cyq = cyq[["ts_code", "winner_rate"]].copy()
+            cyq = cyq[["ts_code", "winner_rate", "cost_50pct", "cost_95pct"]].copy()
             cyq["symbol"] = (
                 cyq["ts_code"].astype(str).str.split(".").str[0].str.zfill(6)
             )
             wr = cyq.set_index("symbol")["winner_rate"].astype(float) / 100.0
+            c50 = cyq.set_index("symbol")["cost_50pct"].astype(float)
+            c95 = cyq.set_index("symbol")["cost_95pct"].astype(float)
     if wr is None:
         log.warning(
-            "[heal] %s winner_ratio 缺失 → T1 本日不触发 (T2/T3 不受影响)", target
+            "[heal] %s winner_ratio/cost_50pct/cost_95pct 缺失 → "
+            "T1 本日不触发 (T2/T3 不受影响)",
+            target,
         )
     out["winner_ratio"] = out["symbol"].map(wr) if wr is not None else np.nan
+    out["cost_50pct"] = out["symbol"].map(c50) if c50 is not None else np.nan
+    out["cost_95pct"] = out["symbol"].map(c95) if c95 is not None else np.nan
     return out[list(kt.PANEL_COLUMNS)]
 
 
@@ -437,6 +492,15 @@ def _bigdrop_module_run() -> bool:
             b.get("data_date"),
             data_date,
         )
+        avail_gb = _avail_commit_gb()
+        if avail_gb < BIGDROP_REBUILD_MIN_AVAIL_GB:
+            log.warning(
+                "[genious] 可用提交内存 %.2f GB < %.1f GB → 跳过 bigdrop 重建, 用盘上旧包 "
+                "(旁路标注容许滞后; 抓取链未退场时硬建只会连环 OOM, 10-27 事故)",
+                avail_gb,
+                BIGDROP_REBUILD_MIN_AVAIL_GB,
+            )
+            return False
         t0 = time.monotonic()
         nb = bc.build()
         log.info(
@@ -521,7 +585,9 @@ def _bigdrop_scan(symbols) -> dict[str, str] | None:
 def write_stocklist_csv(
     s1: pd.DataFrame, date: str, list_dir=STOCK_LIST_DIR
 ) -> Path | None:
-    """冠军四段 → genious_stocklist_{date}__{HHMMSS}.csv (WORM), 给 THS 推送当第三源。
+    """冠军四段 → genious_stocklist_{date}__{HHMMSS}.csv (WORM), 交付工件 (研究/看板消费).
+
+    2026-10-21 用户令: THS 推送源改读 GENIOUS xlsx「板前哨」页 — 本边车不再是推送输入。
 
     只落冠军四段 (首板点名/板前哨 两页不落): 推送侧只认个股买入名单, 其余页进去会污染自选股。
     空榜不落文件 (推送侧缺源即跳过, 不推空单)。
@@ -858,131 +924,174 @@ def main() -> int:
         _write_state(tag, "failed", reason="freshness")
         return 2
 
-    # bigdrop 模块运行 (用户 0916 令: 交付链 = genious 运行 + bigdrop 运行, 顺序执行)。
-    # 放在新鲜度闸之后 —— 建包用的面板必须含交付当日行, 否则包一落地就是旧的。
-    # --dry-run 的契约是"只打印不落文件", 而建包要写 models/bigdrop → 跳过建包,
-    # 仍用盘上现有包出标注列 (读是干净的, 写才违约)。
-    if args.dry_run:
-        log.info("[genious] --dry-run: 跳过 bigdrop 模块运行 (不落包), 用盘上现有包")
-    else:
-        _bigdrop_module_run()
-
-    df = kt.compute_features(df)
-    df = kt.compute_triggers(df)
-    s1 = kt.build_delivery(df, target)
-    # 旁路标注列 (用户 0915 令): 清单过一遍 bigdrop 次日大跌模块。三张表都加,
-    # 语义见 _bigdrop_scan —— 三态 (大跌风险/波动风险/无风险) + 未评分。
-    # 查表一律走 _norm_sym: 直接 str(s).zfill(6) 会漏掉北交所的 `.BJ` 后缀, 那只票
-    # 就静默变空 —— 与"没评上分"撞脸, 而分其实算过。
-    # 缺省值同 _bigdrop_scan: 拿不到读数标 未评分, **不留空** (空格与"查过且无风险"同形)。
-    # 附加列一律 insert(0) **放最前** (用户 0915 令) —— 追加到末尾会被列宽/横向滚动吞掉,
-    # 后面新增的旁路列照此办理。
-    scan = _bigdrop_scan(s1["symbol"])
-    if scan is not None:
-        s1.insert(
-            0,
-            "BIGDROP SCAN",
-            s1["symbol"].map(lambda s: scan.get(_norm_sym(s), BIGDROP_UNSCORED)),
-        )
-    # 筹码水位标注 (0922 用户令, 第四线同源): chip_wr<0.5 低获利，涨 / ≥0.5 高获利，跌。
-    # 走与密度/LEGACY/PARALLEL 同一条 apply_chip_gate (load_chip_features 读 cyq_panel)
-    # — 四线同源同切分, 勿在此另写阈值; cyq 缺 → fail-open 只不加列, 名单一只不少
-    # (同 BIGDROP 旁路契约)。表内「获利盘」列 (0923 加回) 只是同轴的数值展示,
-    # 切分口径仍以 apply_chip_gate 为准, 不要改成读表内该列。
-    chipped = apply_chip_gate(s1, pd.Timestamp(target))
-    if "chip_flag" in chipped.columns:
-        flags = chipped["chip_flag"].to_numpy()
-        s1.insert(1 if "BIGDROP SCAN" in s1.columns else 0, "筹码标注", flags)
-        log.info(
-            "[genious] 筹码水位标注: %s %d / %s %d / 空 %d",
-            CHIP_FLAG_LOW,
-            int((flags == CHIP_FLAG_LOW).sum()),
-            CHIP_FLAG_HIGH,
-            int((flags == CHIP_FLAG_HIGH).sum()),
-            int((flags == "").sum()),
-        )
-    # 横盘提示 (0922 用户令: 最终 STOCKLIST 必须带记录, 光日志无用): 近10日涨幅<2%
-    # 且 冷静市 → "近10日未涨·冷静市". 股票级附加列 insert(0) 放最前 (同 BIGDROP SCAN
-    # 惯例); 日级 市场温度/参与建议 每行同值 → 垫表尾; 中间量 (涨幅/入选次数/board)
-    # 不进表。genious 史自 0918 起, "近20日入选次数" 已不参与判定纯参考。
-    s1 = stall_marker(s1, target, "genious_stocklist_")
-    if len(s1) and "近10日涨幅" in s1.columns and s1["近10日涨幅"].isna().all():
-        log.warning(
-            "[genious] 面板缺 %s 当日行 (自愈路径滞后?), 横盘提示/涨停提示 全空", target
-        )
-    s1 = s1.drop(
-        columns=[
-            c
-            for c in ("近10日涨幅", "昨日涨幅", "近20日入选次数", "board")
-            if c in s1.columns
-        ]
-    )
-    # 明日开盘勿买 (0922 用户令: 只要结论一列): T日大涨≥7% 或 热股深获利 →
-    # T+1 勿开盘追 (trap≈3x); 删票闸 (0922 A/B 定案): 命中且未过涨闸 → 从表剔除
-    # (o2c +0.31%→+1.01%, 胜率 42→58%), 过闸豁免; 剩余命中只标注勿开盘追
-    s1 = open_buy_marker(s1, target)
-    s1 = apply_open_buy_kill(s1, target, line="genious")
-    if len(s1) and "排名" in s1.columns:
-        # 删票闸挖空名次 (如 3→8) → 复编号; 行序本就是段位序/r60 序, 只改编号不改序
-        s1["排名"] = range(1, len(s1) + 1)
-    _front = [c for c in ("明日开盘", "横盘提示", "涨停提示") if c in s1.columns]
-    s1 = s1[_front + [c for c in s1.columns if c not in _front]]
-    n_open = (
-        int((s1["明日开盘"] != "").sum()) if len(s1) and "明日开盘" in s1.columns else 0
-    )
-    if n_open:
-        log.info(
-            "[genious] 明日开盘勿买 %d 只: %s",
-            n_open,
-            ", ".join(s1.loc[s1["明日开盘"] != "", "symbol"].astype(str)),
-        )
-    n_stall = int((s1["横盘提示"] != "").sum()) if len(s1) else 0
-    _adv = s1["参与建议"].iloc[0] if len(s1) and "参与建议" in s1.columns else ""
-    _temp = s1["市场温度"].iloc[0] if len(s1) and "市场温度" in s1.columns else None
-    if _temp is not None and pd.isna(_temp):
-        _temp = None
-    log.info("[genious] 横盘提示 %d 只; %s", n_stall, _adv)
-
-    counts = s1["层"].value_counts().to_dict()
-    n_pass = int((s1["涨闸"] == "过闸").sum())
-    # 空表 26% 日发生 ⇒ 不能标 ERROR (天天误报), 但也不该只 INFO: 升 WARNING 让
-    # 日志侧可判, 并同时落 state.empty (见下)。参照 write_stocklist_csv 的空榜告警。
-    _log_champ = log.warning if not len(s1) else log.info
-    _log_champ(
-        "[genious] %s 冠军表 %d 票 (涨闸过 %d); 层分布 %s%s",
-        target,
-        len(s1),
-        n_pass,
-        counts,
-        " — 空属正常, 非链路故障" if not len(s1) else "",
-    )
-
-    # 首板点名页 + 板前哨页 (0922 用户令): 当日全部首板点名 + 深睡监视名单。
-    # 旁路契约同 BIGDROP: 构建失败只丢这两页, 冠军四段照常交付。
-    # 0924 P0: _build_firstboard_sheets 三元返回 (fb, pb, banner) — banner 带
-    # 停训哨兵动态尾注 (只标注不动行为)。
-    extra_sheets: list = []
     try:
-        fb_df, pb_df, fb_banner = _build_firstboard_sheets(target, dry_run=args.dry_run)
-        if fb_df is not None:
-            extra_sheets.append(("首板点名", fb_df, fb_banner, FB_LEGEND))
-        if pb_df is not None:
-            extra_sheets.append(("板前哨", pb_df, PB_BANNER, PB_LEGEND))
-        log.info(
-            "[genious] 首板点名 %d 行 / 板前哨 %d 行",
-            len(fb_df) if fb_df is not None else 0,
-            len(pb_df) if pb_df is not None else 0,
-        )
-    except Exception as exc:  # noqa: BLE001 — 旁路页, 不许掀翻交付链
-        log.error("[genious] 首板两页构建失败, 本次只交付冠军四段: %s", exc)
+        # bigdrop 模块运行 (用户 0916 令: 交付链 = genious 运行 + bigdrop 运行, 顺序执行)。
+        # 放在新鲜度闸之后 —— 建包用的面板必须含交付当日行, 否则包一落地就是旧的。
+        # --dry-run 的契约是"只打印不落文件", 而建包要写 models/bigdrop → 跳过建包,
+        # 仍用盘上现有包出标注列 (读是干净的, 写才违约)。
+        if args.dry_run:
+            log.info(
+                "[genious] --dry-run: 跳过 bigdrop 模块运行 (不落包), 用盘上现有包"
+            )
+        else:
+            _bigdrop_module_run()
 
-    if args.dry_run:
-        for name, sheet in [("冠军四段", s1)] + [(t[0], t[1]) for t in extra_sheets]:
-            print(f"\n===== {name} ({len(sheet)}) =====")
-            print(sheet.to_string(index=False) if len(sheet) else "(空)")
+        df = kt.compute_features(df)
+        df = kt.compute_triggers(df)
+        s1 = kt.build_delivery(df, target)
+        # 旁路标注列 (用户 0915 令): 清单过一遍 bigdrop 次日大跌模块。三张表都加,
+        # 语义见 _bigdrop_scan —— 三态 (大跌风险/波动风险/无风险) + 未评分。
+        # 查表一律走 _norm_sym: 直接 str(s).zfill(6) 会漏掉北交所的 `.BJ` 后缀, 那只票
+        # 就静默变空 —— 与"没评上分"撞脸, 而分其实算过。
+        # 缺省值同 _bigdrop_scan: 拿不到读数标 未评分, **不留空** (空格与"查过且无风险"同形)。
+        # 附加列一律 insert(0) **放最前** (用户 0915 令) —— 追加到末尾会被列宽/横向滚动吞掉,
+        # 后面新增的旁路列照此办理。
+        scan = _bigdrop_scan(s1["symbol"])
+        if scan is not None:
+            s1.insert(
+                0,
+                "BIGDROP SCAN",
+                s1["symbol"].map(lambda s: scan.get(_norm_sym(s), BIGDROP_UNSCORED)),
+            )
+        # 筹码水位标注 (0922 用户令, 第四线同源): chip_wr<0.5 低获利，涨 / ≥0.5 高获利，跌。
+        # 走与密度/LEGACY/PARALLEL 同一条 apply_chip_gate (load_chip_features 读 cyq_panel)
+        # — 四线同源同切分, 勿在此另写阈值; cyq 缺 → fail-open 只不加列, 名单一只不少
+        # (同 BIGDROP 旁路契约)。表内「获利盘」列 (0923 加回) 只是同轴的数值展示,
+        # 切分口径仍以 apply_chip_gate 为准, 不要改成读表内该列。
+        chipped = apply_chip_gate(s1, pd.Timestamp(target))
+        if "chip_flag" in chipped.columns:
+            flags = chipped["chip_flag"].to_numpy()
+            s1.insert(1 if "BIGDROP SCAN" in s1.columns else 0, "筹码标注", flags)
+            log.info(
+                "[genious] 筹码水位标注: %s %d / %s %d / 空 %d",
+                CHIP_FLAG_LOW,
+                int((flags == CHIP_FLAG_LOW).sum()),
+                CHIP_FLAG_HIGH,
+                int((flags == CHIP_FLAG_HIGH).sum()),
+                int((flags == "").sum()),
+            )
+        # 横盘提示 (0922 用户令: 最终 STOCKLIST 必须带记录, 光日志无用): 近10日涨幅<2%
+        # 且 冷静市 → "近10日未涨·冷静市". 股票级附加列 insert(0) 放最前 (同 BIGDROP SCAN
+        # 惯例); 日级 市场温度/参与建议 每行同值 → 垫表尾; 中间量 (涨幅/入选次数/board)
+        # 不进表。genious 史自 0918 起, "近20日入选次数" 已不参与判定纯参考。
+        try:
+            s1 = stall_marker(s1, target, "genious_stocklist_")
+        except Exception as exc:  # noqa: BLE001 — 旁路标注契约: 不许掀翻交付链 (10-28 OOM 实测)
+            log.error("[genious] 横盘/涨停提示标注失败, 空列降级交付: %s", exc)
+            s1["横盘提示"] = ""
+            s1["涨停提示"] = ""
+        if len(s1) and "近10日涨幅" in s1.columns and s1["近10日涨幅"].isna().all():
+            log.warning(
+                "[genious] 面板缺 %s 当日行 (自愈路径滞后?), 横盘提示/涨停提示 全空",
+                target,
+            )
+        s1 = s1.drop(
+            columns=[
+                c
+                for c in ("近10日涨幅", "昨日涨幅", "近20日入选次数", "board")
+                if c in s1.columns
+            ]
+        )
+        # 明日开盘勿买 (0922 用户令: 只要结论一列): T日大涨≥7% 或 热股深获利 →
+        # T+1 勿开盘追 (trap≈3x); 删票闸 (0922 A/B 定案): 命中且未过涨闸 → 从表剔除
+        # (o2c +0.31%→+1.01%, 胜率 42→58%), 过闸豁免; 剩余命中只标注勿开盘追
+        try:
+            s1 = open_buy_marker(s1, target)
+            s1 = apply_open_buy_kill(s1, target, line="genious")
+        except Exception as exc:  # noqa: BLE001 — 标注+删票闸降级: 多留行不少留行, ERROR 留痕
+            log.error(
+                "[genious] 明日开盘勿买标注/删票闸失败, 未筛降级交付 (勿全仓, 逐票自筛): %s",
+                exc,
+            )
+            if "明日开盘" not in s1.columns:
+                s1["明日开盘"] = ""
+        if len(s1) and "排名" in s1.columns:
+            # 删票闸挖空名次 (如 3→8) → 复编号; 行序本就是段位序/r60 序, 只改编号不改序
+            s1["排名"] = range(1, len(s1) + 1)
+        _front = [c for c in ("明日开盘", "横盘提示", "涨停提示") if c in s1.columns]
+        s1 = s1[_front + [c for c in s1.columns if c not in _front]]
+        n_open = (
+            int((s1["明日开盘"] != "").sum())
+            if len(s1) and "明日开盘" in s1.columns
+            else 0
+        )
+        if n_open:
+            log.info(
+                "[genious] 明日开盘勿买 %d 只: %s",
+                n_open,
+                ", ".join(s1.loc[s1["明日开盘"] != "", "symbol"].astype(str)),
+            )
+        n_stall = int((s1["横盘提示"] != "").sum()) if len(s1) else 0
+        _adv = s1["参与建议"].iloc[0] if len(s1) and "参与建议" in s1.columns else ""
+        _temp = s1["市场温度"].iloc[0] if len(s1) and "市场温度" in s1.columns else None
+        if _temp is not None and pd.isna(_temp):
+            _temp = None
+        log.info("[genious] 横盘提示 %d 只; %s", n_stall, _adv)
+
+        counts = s1["层"].value_counts().to_dict()
+        n_pass = int((s1["涨闸"] == "过闸").sum())
+        # 空表 26% 日发生 ⇒ 不能标 ERROR (天天误报), 但也不该只 INFO: 升 WARNING 让
+        # 日志侧可判, 并同时落 state.empty (见下)。参照 write_stocklist_csv 的空榜告警。
+        _log_champ = log.warning if not len(s1) else log.info
+        _log_champ(
+            "[genious] %s 冠军表 %d 票 (涨闸过 %d); 层分布 %s%s",
+            target,
+            len(s1),
+            n_pass,
+            counts,
+            " — 空属正常, 非链路故障" if not len(s1) else "",
+        )
+
+        # 首板点名页 + 板前哨页 (0922 用户令): 当日全部首板点名 + 深睡监视名单。
+        # 旁路契约同 BIGDROP: 构建失败只丢这两页, 冠军四段照常交付。
+        # 0924 P0: _build_firstboard_sheets 三元返回 (fb, pb, banner) — banner 带
+        # 停训哨兵动态尾注 (只标注不动行为)。
+        extra_sheets: list = []
+        try:
+            fb_df, pb_df, fb_banner = _build_firstboard_sheets(
+                target, dry_run=args.dry_run
+            )
+            if fb_df is not None:
+                extra_sheets.append(("首板点名", fb_df, fb_banner, FB_LEGEND))
+            if pb_df is not None:
+                extra_sheets.append(("板前哨", pb_df, PB_BANNER, PB_LEGEND))
+            log.info(
+                "[genious] 首板点名 %d 行 / 板前哨 %d 行",
+                len(fb_df) if fb_df is not None else 0,
+                len(pb_df) if pb_df is not None else 0,
+            )
+        except Exception as exc:  # noqa: BLE001 — 旁路页, 不许掀翻交付链
+            log.error("[genious] 首板两页构建失败, 本次只交付冠军四段: %s", exc)
+
+        if args.dry_run:
+            for name, sheet in [("冠军四段", s1)] + [
+                (t[0], t[1]) for t in extra_sheets
+            ]:
+                print(f"\n===== {name} ({len(sheet)}) =====")
+                print(sheet.to_string(index=False) if len(sheet) else "(空)")
+            _write_state(
+                tag,
+                "dry_run",
+                s1=len(s1),
+                s1_pass=n_pass,
+                empty=not len(s1),
+                layers=counts,
+                n_stall=n_stall,
+                market_temp=_temp,
+            )
+            return 0
+
+        fp = write_xlsx(_fmt_sheet(s1), target, extra_sheets=extra_sheets)
+        log.info("[genious] 写出 %s", fp)
+        csv_fp = write_stocklist_csv(s1, target)
+        if csv_fp is not None:
+            log.info("[genious] 推送边车 %s", csv_fp)
+        # status 仍是 "ok" + rc=0: 空表 26% 日发生, 标失败会天天误报。空表这件事靠
+        # empty=True 显式暴露 (state) + WARNING (日志) + A1 banner (交付物), 不靠改终态。
         _write_state(
             tag,
-            "dry_run",
+            "ok",
+            file=str(fp),
             s1=len(s1),
             s1_pass=n_pass,
             empty=not len(s1),
@@ -990,28 +1099,16 @@ def main() -> int:
             n_stall=n_stall,
             market_temp=_temp,
         )
-        return 0
-
-    fp = write_xlsx(_fmt_sheet(s1), target, extra_sheets=extra_sheets)
-    log.info("[genious] 写出 %s", fp)
-    csv_fp = write_stocklist_csv(s1, target)
-    if csv_fp is not None:
-        log.info("[genious] 推送边车 %s", csv_fp)
-    # status 仍是 "ok" + rc=0: 空表 26% 日发生, 标失败会天天误报。空表这件事靠
-    # empty=True 显式暴露 (state) + WARNING (日志) + A1 banner (交付物), 不靠改终态。
-    _write_state(
-        tag,
-        "ok",
-        file=str(fp),
-        s1=len(s1),
-        s1_pass=n_pass,
-        empty=not len(s1),
-        layers=counts,
-        n_stall=n_stall,
-        market_temp=_temp,
-    )
-    print(str(fp))
-    if GENIOUS.get("push_to_ths") and csv_fp is not None and not args.no_push:
+        print(str(fp))
+    except Exception as exc:  # noqa: BLE001 — 交付链失败必须落显式终态, 不留 running 假死
+        # 10-27 事故: MemoryError 在未防护的中段连环炸, 进程静默死, 次日才被发现。
+        log.exception("[genious] 交付链失败: %s", exc)
+        _write_state(tag, "failed", reason="delivery", error=str(exc)[:200])
+        return 3
+    # 推送源 = 交付层 xlsx 的板前哨页 (2026-10-21 用户令, 见 _ths_watchlist_push):
+    # 冠军四段空榜 (约 26% 交易日) 不再阻断推送 — 只要 xlsx 交付就 spawn;
+    # 板前哨也无合格行时推送侧自行空转退出 (板前哨清单为空, 不推送)。
+    if GENIOUS.get("push_to_ths") and not args.no_push:
         _spawn_ths_push(target)
     return 0
 
