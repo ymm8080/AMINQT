@@ -1,4 +1,4 @@
-﻿"""Daily fetch script — append one day's data to V3 panel from Tushare.
+"""Daily fetch script — append one day's data to V3 panel from Tushare.
 NEVER loads full panel into memory. Uses pyarrow streaming read/write.
 
 Usage: python _daily_fetch.py [YYYYMMDD]  (default: today)
@@ -130,21 +130,38 @@ def _heal_panel_gap(trade_date: str, panel_path: str) -> None:
 
     from app.pipeline1.freshness_guard import load_trade_cal, missing_trade_dates
 
-    t = pq.read_table(panel_path, columns=["date"])
-    panel_max = pd.to_datetime(t["date"].to_pandas()).max()
+    try:
+        t = pq.read_table(panel_path, columns=["date"])
+        panel_max = pd.to_datetime(t["date"].to_pandas()).max()
+    except Exception as e:
+        log.warning(
+            "[heal] 面板文件读取失败 %s (%s), 跳过自愈 (fail-open)",
+            panel_path, e,
+        )
+        return
     missing = missing_trade_dates(panel_max, pd.Timestamp(trade_date), load_trade_cal())
     if not missing:
         return
-    print(
-        f"[heal] panel max {panel_max:%Y%m%d} 落后于取数日 {trade_date}, "
-        f"补拉 {len(missing)} 个交易日: {[d.strftime('%Y%m%d') for d in missing]}"
+    log.info(
+        "[heal] panel max %s 落后于取数日 %s, 补拉 %d 个交易日: %s",
+        panel_max.strftime("%Y%m%d"),
+        trade_date,
+        len(missing),
+        [d.strftime("%Y%m%d") for d in missing],
     )
     for d in missing:
         ds = d.strftime("%Y%m%d")
-        print(f"[heal] _daily_fetch {ds} ...")
-        rc = subprocess.run([sys.executable, os.path.abspath(__file__), ds]).returncode
+        log.info("[heal] _daily_fetch %s ...", ds)
+        try:
+            rc = subprocess.run(
+                [sys.executable, os.path.abspath(__file__), ds],
+                timeout=7200,
+            ).returncode
+        except Exception as e:
+            log.error("FATAL: heal fetch %s 启动失败 (%s), 中止后续补拉与当日主流程", ds, e)
+            sys.exit(1)
         if rc != 0:
-            print(f"FATAL: heal fetch {ds} rc={rc}, 中止后续补拉与当日主流程")
+            log.error("FATAL: heal fetch %s rc=%s, 中止后续补拉与当日主流程", ds, rc)
             sys.exit(rc)
 
 

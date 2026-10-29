@@ -120,7 +120,9 @@ def expected_trading_date(today, cal) -> tuple[datetime.date, str]:
     return d, "natural_fallback"
 
 
-def missing_trade_dates(panel_max, through, cal) -> list:
+def missing_trade_dates(
+    panel_max, through, cal
+) -> list[pd.Timestamp]:
     """面板缺的交易日 = (panel_max, through) 开区间内的开市日, 升序.
 
     through 本身不算: 主流程随后就会拉它 (含幂等 replace). 场景 = 2026-10 国庆
