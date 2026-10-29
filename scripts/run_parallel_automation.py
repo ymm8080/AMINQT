@@ -109,7 +109,12 @@ _DEPENDS_LOCAL = {
 
 # 非关键 = 失败不判整链失败: slowbull/影子混合/漂移监控是只读旁路, final_stocklist
 # 是核验报告。密度 (prob10dens_push) 与 combined 是用户点名要的交付物, 升格关键。
-_NON_CRITICAL_STEPS = {"slowbull_shadow", "shadow_xmodule", "final_stocklist", "drift_parallel"}
+_NON_CRITICAL_STEPS = {
+    "slowbull_shadow",
+    "shadow_xmodule",
+    "final_stocklist",
+    "drift_parallel",
+}
 
 # 冲突等待: 23:30 撞上重活最多等 4h 再判 -- 直接 skipped 等于当晚没有 PARALLEL 预测
 # 也没有 THS 推送 (2026-09-28 审查指出); 2026-10-17 从 2h 放宽到 4h: LEGACY 链

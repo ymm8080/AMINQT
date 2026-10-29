@@ -210,7 +210,10 @@ def _panel_stale_gate(tag: str, fh) -> int | None:
 
     pmax = freshness_guard.file_max_date(str(PANEL_V3_PATH), "date")
     if pmax is None:
-        _emit(fh, "[FATAL] V3 面板不可读 (file_max_date=None), 链终止. (看 D:/AMINQT/PARQUET)")
+        _emit(
+            fh,
+            "[FATAL] V3 面板不可读 (file_max_date=None), 链终止. (看 D:/AMINQT/PARQUET)",
+        )
         _write_state(tag, "failed", reason="panel_unreadable")
         return 2
     allow, reason = freshness_guard.panel_stale_gate(

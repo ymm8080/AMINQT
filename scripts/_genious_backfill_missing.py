@@ -199,7 +199,9 @@ def main() -> int:
     if len(rerun) > args.max_runs:
         log.warning(
             "待补 %d > max-runs %d, 余 %s 顺延下轮",
-            len(rerun), args.max_runs, rerun[args.max_runs:],
+            len(rerun),
+            args.max_runs,
+            rerun[args.max_runs :],
         )
         rerun = rerun[: args.max_runs]
 
