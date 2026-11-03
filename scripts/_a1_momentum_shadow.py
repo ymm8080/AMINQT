@@ -28,7 +28,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-from config.settings import PANEL_V3_PATH, STOCK_LIST_DIR
+from config.settings import GENIOUS, PANEL_V3_PATH, STOCK_LIST_DIR
 
 ARM_TOP_N = 10
 MODULE = "a1diff"
@@ -107,6 +107,14 @@ def main() -> int:
 
     csv_path = STOCK_LIST_DIR / f"a1diff_{date}__{MODULE}.csv"
     picks.to_csv(csv_path, index=False, encoding="utf-8-sig")
+    # 2026-11-03 用户令全面停推: 清单照出, 不写 txt 不加自选 (A1Tri-1400 夜task 无害通过).
+    if not GENIOUS.get("push_to_ths"):
+        print(
+            "[no-push] push_to_ths=False (2026-11-03 用户令 停推):"
+            f" 清单照出 {csv_path.name}, 不写 txt 不加自选"
+        )
+        print(picks.to_string(index=False))
+        return 0
     txt_path = STOCK_LIST_DIR / f"ths_watchlist_{date}__{MODULE}.txt"
     with open(txt_path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(picks["symbol"]) + "\n")

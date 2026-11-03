@@ -39,13 +39,11 @@ THU, FRI = _dt.date(2026, 8, 13), _dt.date(2026, 8, 14)
 
 _HEAD = ["cyq", "sw_history", "freshness", "canary"]
 _PREDICT_CHAIN = ["legacy_prob_head", "legacy", "deliver"]
-# ths_push 在 tail 首位: parallel 块之外恒执行 (09-05 拆分: 双源各自成单, 单侧缺失只推另一侧)
+# ths_push/ths_flush_guard 已下链 (2026-11-03 用户令全面停推 THS, push_to_ths=False)
 # gate_audit 收尾 (09-09 7ba31e58 周自进化链并入): 周日 review→gate_audit→旗标才 retrain
 _TAIL = [
-    "ths_push",
     "prob10dens_push",
     "slowbull_shadow",
-    "ths_flush_guard",
     "final_stocklist",
     "stocklist_combined",
     "drift",
@@ -116,11 +114,12 @@ def test_plan_steps_retrain_precedes_predict_chain():
             )
 
 
-def test_plan_steps_final_stocklist_after_flush_guard():
-    """终版清单 (2026-09-06 用户) 恒紧跟 ths_flush_guard — flush 删除文档先落盘,
-    终表 blocked/flush 才可信; 非关键步骤 (三源均缺才退出, 不拦链)."""
+def test_plan_steps_final_stocklist_after_shadows():
+    """终版清单 (2026-09-06 用户) 恒在影子单之后 (原紧跟 ths_flush_guard,
+    2026-11-03 停推下链后紧跟 slowbull_shadow); 非关键步骤 (三源均缺才退出,
+    不拦链)."""
     for steps in (plan_steps(THU), plan_steps(FRI)):
-        assert steps.index("final_stocklist") == steps.index("ths_flush_guard") + 1
+        assert steps.index("final_stocklist") == steps.index("slowbull_shadow") + 1
     assert "final_stocklist" not in _CRITICAL
 
 
@@ -206,16 +205,17 @@ def test_plan_steps_canary_always_runs_before_retrain():
     assert _STEP_TIMEOUT_S["canary"] >= 3 * 3600  # 双板最坏 3h 合法耗时, 兜卡死不误杀
 
 
-def test_plan_steps_ths_push_always_runs():
-    """同花顺推送恒执行 (非关键): 任何 skip 组合下都在, 且不早于 legacy 交付."""
+def test_plan_steps_ths_push_stopped():
+    """THS 推送 2026-11-03 用户令全面停推: 任何 skip 组合下都不在计划里
+    (步骤注册保留供手工跑, 运行时被 push_to_ths=False 总闸拦下)."""
     for steps in (
         plan_steps(THU),
         plan_steps(FRI),
         plan_steps(THU, skip_parallel=True),
         plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True),
     ):
-        assert "ths_push" in steps
-        assert steps.index("ths_push") > steps.index("deliver")
+        assert "ths_push" not in steps
+        assert "ths_flush_guard" not in steps
 
 
 def test_plan_steps_a1_push_stopped_but_registered():
@@ -232,8 +232,9 @@ def test_plan_steps_a1_push_stopped_but_registered():
     assert _STEP_TIMEOUT_S["a1_push"] >= 15 * 60
 
 
-def test_plan_steps_prob10dens_follows_ths_push():
-    """概率头密度版影子单 (2026-09-05): 恒在 ths_push 之后并推, 非关键步骤."""
+def test_plan_steps_prob10dens_follows_deliver():
+    """概率头密度版影子单 (2026-09-05; 原"紧跟 ths_push", 2026-11-03 停推后恒在
+    交付之后): 非关键步骤."""
     for steps in (
         plan_steps(THU),
         plan_steps(FRI),
@@ -241,7 +242,7 @@ def test_plan_steps_prob10dens_follows_ths_push():
         plan_steps(THU, skip_checkpoints=True, skip_retrain=True, skip_parallel=True),
     ):
         assert "prob10dens_push" in steps
-        assert steps.index("prob10dens_push") == steps.index("ths_push") + 1
+        assert steps.index("prob10dens_push") > steps.index("deliver")
     assert "prob10dens_push" not in _CRITICAL
     assert _STEPS["prob10dens_push"] == [
         "scripts/_prob10_density_shadow.py",

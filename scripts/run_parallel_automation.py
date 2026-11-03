@@ -8,8 +8,6 @@
   [prob_head]        scripts/_train_parallel_prob_head.py       概率头 (21 交易日到期才重拟)
   [deliver_parallel] scripts/_shortlist_t5_t10.py <tag>         清单落 STOCK_LIST_DIR
   [drift_parallel]   scripts/_monitor_parallel_drift.py         dual 漂移监控 (只读)
-  [ths_push]         scripts/_ths_watchlist_push.py <tag>       THS 自选股推送 (UI 驱动)
-  [ths_flush_guard]  scripts/_ths_flush_guard.py <tag>          推送结果校验 (不带 --apply)
 
 2026-10-17 起链尾接跨模块步骤 (用户令: LEGACY/PARALLEL/GENIOUS/密度四模块次日
 08:00 前全交付; LEGACY 侧由新链 run_legacy_automation.py 21:30 槽恢复, 本链守卫
@@ -26,8 +24,9 @@
 全部复用 scripts/run_daily_automation.py 的既有实现; 本文件只决定"跑哪几步 + 记哪个
 state/log", 不复制那套机制.
 
-注意: ths_push 是单进程推三个源 (parallel / legacy / genious), 无法只推 parallel —
-按用户 2026-09-28 决定一并推.
+注意: ths_push/ths_flush_guard 已下链 (2026-11-03 用户令全面停推 THS 自选股,
+push_to_ths=False; 手工跑 _ths_watchlist_push.py 也会被总闸幂等拦下) —
+各自动化入口不再有任何推送步骤.
 
 产物 (与主线分开命名, 避免 state 互相覆盖):
   logs/parallel_automation_<tag>.log         步骤 stdout/stderr (WORM, 追加)
@@ -70,7 +69,8 @@ from scripts.run_daily_automation import (  # noqa: E402
 
 LOG_DIR = os.path.join(ROOT, "logs")
 
-# 执行顺序 (用户令 2026-09-28: "全 PARALLEL 链 + 推 THS").
+# 执行顺序 (用户令 2026-09-28: "全 PARALLEL 链 + 推 THS"; 2026-11-03 用户令:
+# THS 推送步骤全面下链).
 # stocklist_combined 2026-10-16 回接: 原住 DailyAutomation-2330 (0928 停用后
 # combined 断供至 20260922), 按用户令 "接新步骤须接PARALLEL链" 挂到清单交付后.
 # 2026-10-17 链尾接密度/slowbull/影子/核验 (用户令四模块 08:00 前全交付):
@@ -86,15 +86,13 @@ STEP_ORDER = [
     "stocklist_combined",
     "drift_parallel",
     "shadow_xmodule",
-    "ths_push",
-    "ths_flush_guard",
     "final_stocklist",
 ]
 
 # 主线 _DEPENDS 只写了 refresh→parallel→{prob_head, deliver_parallel}; 补充--
-# 清单没出就别推 THS (推的是旧数据), parallel 没成就别跑漂移监控 (比的是旧 run_dir),
-# 没推成就不用校验推送; 密度/slowbull/影子都在 parallel 清单之后; combined 的硬依赖
-# 是 LEGACY+PARALLEL 双清单 (缺密度/SLOW_BULL 只是跳页, 不拦表), 核验在推送之后.
+# parallel 没成就别跑漂移监控 (比的是旧 run_dir); 密度/slowbull/影子都在 parallel
+# 清单之后; combined 的硬依赖是 LEGACY+PARALLEL 双清单 (缺密度/SLOW_BULL 只是跳页,
+# 不拦表)。2026-11-03 用户令停推 THS: ths_push/ths_flush_guard 下链, 核验只挂交付.
 _DEPENDS_LOCAL = {
     **_DEPENDS,
     "drift_parallel": "parallel",
@@ -102,14 +100,17 @@ _DEPENDS_LOCAL = {
     "slowbull_shadow": "deliver_parallel",
     "stocklist_combined": "deliver_parallel",
     "shadow_xmodule": "deliver_parallel",
-    "ths_push": "deliver_parallel",
-    "ths_flush_guard": "ths_push",
-    "final_stocklist": "ths_flush_guard",
+    "final_stocklist": "deliver_parallel",
 }
 
 # 非关键 = 失败不判整链失败: slowbull/影子混合/漂移监控是只读旁路, final_stocklist
 # 是核验报告。密度 (prob10dens_push) 与 combined 是用户点名要的交付物, 升格关键。
-_NON_CRITICAL_STEPS = {"slowbull_shadow", "shadow_xmodule", "final_stocklist", "drift_parallel"}
+_NON_CRITICAL_STEPS = {
+    "slowbull_shadow",
+    "shadow_xmodule",
+    "final_stocklist",
+    "drift_parallel",
+}
 
 # 冲突等待: 23:30 撞上重活最多等 4h 再判 -- 直接 skipped 等于当晚没有 PARALLEL 预测
 # 也没有 THS 推送 (2026-09-28 审查指出); 2026-10-17 从 2h 放宽到 4h: LEGACY 链

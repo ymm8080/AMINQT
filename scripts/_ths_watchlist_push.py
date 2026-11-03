@@ -1,4 +1,14 @@
-"""同花顺自选股推送: 当日 TOP10 → 同花顺可导入 txt → UI 自动化导入 PC 客户端.
+"""同花顺自选股推送: 当日单 → 同花顺可导入 txt → UI 自动化导入 PC 客户端.
+
+唯一源口径 (2026-10-21 用户令 "stop pushing CURRENT pipeline stocks, instead push
+only daily genious file TAB 板前哨, PUSH ITEMS WHICH HAS NON-ZERO IN both columns
+called 次数10日, 次数20日"): parallel/legacy/冠军边车三源全部停推; 推送单只来自
+当日 GENIOUS_{date}*.xlsx 交付层 (同日重跑 __HHMMSS 取 mtime 最新) 的「板前哨」页,
+且只取 次数10日 与 次数20日 **均非零** 的行 (NaN 视同 0 — 页尾图例行次要列全空,
+天然排除); 页序即推送序, 不套 top_n (页已每股一行 0928 去重)。撞指数码 000xxx
+仍保留在清单 (09-05 用户澄清), 推送端 _build_chunks 隔离指数行不变; 单内逐码
+去重与非法码过滤照旧。生成: ths_watchlist_{date}__{HH}__genious__preboard.txt,
+标签固定 genious__preboard。以下为历史口径 (2026-09-05 ~ 2026-10-20, 已停用):
 
 TOP10 口径 (2026-09-05 用户拍板 "MAKE SEPARATE LIST NOT COMBINED ONE"): 双源
 各自独立成单各推各的, 不再并集 — parallel 短名单 rank 前 10 一单, legacy 清单
@@ -35,10 +45,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 import glob as _glob
 
-from config.settings import STOCK_LIST_DIR
+from config.settings import GENIOUS, STOCK_LIST_DIR
 from scripts import _deadzone_guard
 from scripts._ths_ui import THS_HEXIN_PATH  # 单一来源; 本模块再导出兼容旧引用
 
+# 唯一推送源 (2026-10-21 用户令): GENIOUS 交付层「板前哨」页; 次数双列均非零才推
+PB_SHEET = "板前哨"
+PB_COUNT_COLS = ("次数10日", "次数20日")
 CODE_RE = re.compile(r"^\d{6}$")
 # 深A 000xxx 股票与上证/中证指数撞码 (000985 大庆华科=中证全指, 09-03 实证):
 # 复制识别必出股票+指数两行, 前后缀消歧无效。09-05 用户澄清: 代码不剔 (留在
@@ -85,52 +98,61 @@ def _valid_codes(symbols) -> list[str]:
     return out
 
 
-def collect_lists(
-    date: str, list_dir=STOCK_LIST_DIR, top_n: int = 10
-) -> list[tuple[str, list[str]]]:
-    """当日各源 → [("parallel__{模型名}", 代码), ...], 并行在前.
+def collect_lists(date: str, list_dir=STOCK_LIST_DIR) -> list[tuple[str, list[str]]]:
+    """当日推送单 = GENIOUS 交付层「板前哨」页 次数双非零 行 (2026-10-21 用户令).
 
-    parallel/legacy 各取 rank/序 前 top_n=10; genious 取边车全量 (不截断, 见下).
-    标签 = 源名__模型批次串 (取自源 CSV 文件名). 每单内部过滤非法代码 + 逐码
-    去重; 跨源重复股保留在两单 (2026-09-05 用户: "LEGACY AND PARALLEL 如果有
-    重复, 不要去掉, 保留他们"); 撞指数码 000xxx 不剔 (推送端隔离, 见
-    _build_chunks). 单侧缺失只返回另一侧.
+    "stop pushing CURRENT pipeline stocks, instead push only daily genious file
+    TAB 板前哨, PUSH ITEMS WHICH HAS NON-ZERO IN both columns called 次数10日,
+    次数20日": parallel/legacy/冠军边车三源全部停推, 唯一源 = 当日
+    GENIOUS_{date}*.xlsx (同日重跑 __HHMMSS 取 mtime 最新) 的 板前哨 页。
+    页本身已每股一行 (0928 去重) 且只含今日点火旗股 (0923 v4), 页序即推送序,
+    不套 top_n。读数/过滤共用 preboard_codes (死区闸 genious 线出票史同源)。
+    """
+    xlsx = _newest(f"{GENIOUS['filename_prefix']}_{date}*.xlsx", list_dir)
+    if xlsx is None:
+        raise SystemExit(
+            f"无 GENIOUS 交付层: {GENIOUS['filename_prefix']}_{date}*.xlsx"
+        )
+    return [("genious__preboard", preboard_codes(xlsx))]
+
+
+def preboard_codes(xlsx) -> list[str]:
+    """单只 GENIOUS 交付层 xlsx → 板前哨页 次数10日/次数20日 均非零 的代码序.
+
+    2026-10-21 用户令的唯一推送口径; 死区闸 genious 线出票史共用本函数
+    (推送什么, 死区闸就量什么)。页缺失 (旁路页构建失败日) 或缺列 →
+    SystemExit 大声失败, 不静默推空单。
     """
     import pandas as pd
 
-    lists: list[tuple[str, list[str]]] = []
-
-    parallel = _newest(f"parallel_shortlist_{date}__*.csv", list_dir)
-    if parallel is not None:
-        df = pd.read_csv(parallel, dtype={"symbol": str})
-        if "rank" in df.columns:
-            df = df.dropna(subset=["rank"]).sort_values("rank")
-        lists.append(
-            (f"parallel__{_module_of(parallel)}", _valid_codes(df["symbol"])[:top_n])
+    try:
+        df = pd.read_excel(
+            xlsx,
+            sheet_name=PB_SHEET,
+            header=2,
+            converters={"代码": str},  # 000xxx 前导零: 真实文件文本存储, 禁数值推断
         )
+    except ValueError as exc:
+        raise SystemExit(
+            f"{os.path.basename(xlsx)} 读「{PB_SHEET}」页失败 (页缺失?): {exc}"
+        ) from exc
+    missing = [c for c in ("代码", *PB_COUNT_COLS) if c not in df.columns]
+    if missing:
+        raise SystemExit(f"{os.path.basename(xlsx)} 板前哨页缺列: {missing}")
+    counts = df[list(PB_COUNT_COLS)].apply(pd.to_numeric, errors="coerce").fillna(0)
+    keep = (counts[PB_COUNT_COLS[0]] != 0) & (counts[PB_COUNT_COLS[1]] != 0)
 
-    legacy = _newest(f"legacy_stocklist_{date}__*.csv", list_dir)
-    if legacy is not None:
-        df = pd.read_csv(legacy, dtype={"symbol": str})
-        lists.append(
-            (f"legacy__{_module_of(legacy)}", _valid_codes(df["symbol"])[:top_n])
-        )
+    def _cell_code(v):
+        # Excel 数值单元格经 pandas 读回是 float64 (页尾图例行 NaN 混列所致),
+        # 600001.0 直接 str() 会变 "600001.0" 被 CODE_RE 全剔 → 整单空转。
+        # 数值整数转整串; NaN → None; 文本原样 strip ("603829.0" 伪影仍被过滤)。
+        if pd.isna(v):
+            return None
+        if isinstance(v, float) and float(v).is_integer():
+            return str(int(v))
+        return str(v).strip()
 
-    # GENIOUS 链路狙击 (2026-09-14 用户令 "出了 GENIOUS 列表 AUTO PUSH TO THS"):
-    # 边车由 scripts/_genious_excel.py 落, 只含 Sheet1 冠军四段 (首板点名/板前哨 两页不进自选股)。
-    # 该源无历史样本 ⇒ 死区闸 fail-open 照推 (见 _deadzone_guard)。
-    # 不套 top_n: 边车本身就是"段位全留"的 Sheet1 冠军四段, 套截断会静默丢码
-    # (2026-09-15 用户令 "push all 冠军四段 iN SHEET1 TO THS, NOT JUST TOP10")。
-    genious = _newest(f"genious_stocklist_{date}__*.csv", list_dir)
-    if genious is not None:
-        df = pd.read_csv(genious, dtype={"symbol": str})
-        if "排名" in df.columns:
-            df = df.dropna(subset=["排名"]).sort_values("排名")
-        lists.append((f"genious__{_module_of(genious)}", _valid_codes(df["symbol"])))
-
-    if not lists:
-        raise SystemExit(f"无清单: parallel/legacy/genious_stocklist_{date}__*.csv")
-    return lists
+    return _valid_codes(df.loc[keep, "代码"].map(_cell_code))
 
 
 def ths_txt_path(date: str, module: str, list_dir=STOCK_LIST_DIR):
@@ -504,6 +526,14 @@ def read_push_results(date: str | None = None, list_dir=STOCK_LIST_DIR):
 
 
 def push_via_ths(txt_path, dry_run: bool = False) -> bool:
+    # 2026-11-03 用户令全面停推: 总闸 False 时任何调用方 (链步骤/影子单/手工)
+    # 一律不进 UI 不导自选; 返回 True = 按已处理论, 调用方链不判失败.
+    if not GENIOUS.get("push_to_ths"):
+        print(
+            "[no-push] push_to_ths=False (2026-11-03 用户令 停推):"
+            f" 跳过 UI 导入 {getattr(txt_path, 'name', txt_path)}"
+        )
+        return True
     """UI 自动化: 激活同花顺客户端, 经 工具→复制识别 对话框把代码批量加入自选股.
 
     实测流程 (2026-09-01, hexin 9.60.20; 09-03 勾选语义修正):
@@ -818,16 +848,24 @@ def main() -> int:
     dry_run = "--dry-run" in sys.argv
     date = args[0] if args else None
     if date is None:
-        newest = _newest("legacy_stocklist_*__*.csv", STOCK_LIST_DIR)
+        prefix = GENIOUS["filename_prefix"]
+        newest = _newest(f"{prefix}_*.xlsx", STOCK_LIST_DIR)
         if newest is None:
-            raise SystemExit("STOCK LIST 目录无任何 legacy 清单")
-        date = re.search(r"legacy_stocklist_(\d{8})__", os.path.basename(newest)).group(
-            1
+            raise SystemExit(f"STOCK LIST 目录无任何 GENIOUS 交付层 ({prefix}_*.xlsx)")
+        date = re.search(rf"{prefix}_(\d{{8}})", os.path.basename(newest)).group(1)
+
+    # 2026-11-03 用户令全面停推: 总闸 False → 不读清单不写 txt 不动客户端,
+    # 幂等 rc=0 (链步骤/看门狗补跑/手工调用都无害通过).
+    if not GENIOUS.get("push_to_ths"):
+        print(
+            "[no-push] push_to_ths=False (2026-11-03 用户令 停推):"
+            " 不写 txt 不加自选, 交付层 xlsx 照常"
         )
+        return 0
 
     lists = collect_lists(date)
     if all(not codes for _, codes in lists):
-        print(f"[warn] {date} 双源清单均为空, 不推送")
+        print(f"[warn] {date} 板前哨清单为空 (双次数非零行 0), 不推送")
         return 0
     # 死区停推闸 (2026-09-05 拍板 "那就一起停吧"; 晚间细化: legacy/parallel 各用
     # 各的纯样本赢率互不混合): legacy 单看 top10 线, parallel 单看 parallel 线,

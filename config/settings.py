@@ -798,11 +798,12 @@ GENIOUS = {
     "ch4_r60_min": 0.25,
     "ch4_vr_max": 0.5,
     "ch4_dd5_max": 0.01,
-    # ── 同花顺自选股推送 (2026-09-14 用户令: "出了 GENIOUS 列表 AUTO PUSH TO THS") ──
-    # 出 Excel 后落一张 genious_stocklist_{date}__{HHMMSS}.csv 边车 (WORM), 再交给
-    # scripts/_ths_watchlist_push.py 当第三个源推。推 Sheet1 冠军四段前 push_top_n 名
-    # (与 parallel/legacy 的 TOP10 口径一致); Sheet2 观察池**不推** — 那是观察名单不是买入名单。
-    "push_to_ths": True,
+    # ── 同花顺自选股推送 (2026-09-14 用户令: "出了 GENIOUS 列表 AUTO PUSH TO THS";
+    # 2026-10-21 用户令收窄唯一源: 停推 parallel/legacy/冠军边车, 只推交付层 xlsx
+    # 「板前哨」页 次数10日/次数20日 均非零行 — push_top_n 已不参与任何推送;
+    # 2026-11-03 用户令全面停推: False → 所有推送入口不写 txt 不进自选,
+    # 交付层 xlsx/边车 CSV 照常出) ──
+    "push_to_ths": False,
     "push_top_n": 10,
 }
 

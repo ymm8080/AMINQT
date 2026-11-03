@@ -81,11 +81,12 @@ def test_legacy_chain_registered_as_sentinel():
 
 
 def test_parallel_chain_cross_module_tail_order():
-    """密度/slowbull 必须在 combined 之前; combined 在 THS 推送之前。"""
+    """密度/slowbull 必须在 combined 之前; THS 推送步骤已下链 (2026-11-03 停推)。"""
     order = _PARALLEL_STEP_ORDER
     assert order.index("prob10dens_push") < order.index("stocklist_combined")
     assert order.index("slowbull_shadow") < order.index("stocklist_combined")
-    assert order.index("stocklist_combined") < order.index("ths_push")
+    assert "ths_push" not in order
+    assert "ths_flush_guard" not in order
     assert order.index("final_stocklist") == len(order) - 1
     for step in order:
         assert step in _STEPS, f"{step} 不在 _STEPS"

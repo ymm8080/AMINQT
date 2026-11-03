@@ -68,7 +68,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-from config.settings import DATA_DIR, PANEL_V3_PATH, STOCK_LIST_DIR
+from config.settings import DATA_DIR, GENIOUS, PANEL_V3_PATH, STOCK_LIST_DIR
 from scripts import _deadzone_guard
 from scripts._pctfmt import fmt_pct_columns
 
@@ -578,6 +578,23 @@ def main() -> int:
             picks["symbol"].tolist(),
             [],
             note="no_push_user_hold",
+        )
+        print(picks.to_string(index=False))
+        return 0
+    # 2026-11-03 用户令全面停推 (常驻, 非一次性旗标): push_to_ths=False →
+    # 清单照出, 不写 txt 不加自选 (与上方一次性旗标/死区停推同一语义).
+    if not GENIOUS.get("push_to_ths"):
+        print(
+            "[no-push] push_to_ths=False (2026-11-03 用户令 停推):"
+            " 清单照出, 不写 txt 不加自选"
+        )
+        from scripts._ths_watchlist_push import write_push_result
+
+        write_push_result(
+            STOCK_LIST_DIR / f"ths_watchlist_{date}__{MODULE}.txt",
+            picks["symbol"].tolist(),
+            [],
+            note="push_disabled",
         )
         print(picks.to_string(index=False))
         return 0

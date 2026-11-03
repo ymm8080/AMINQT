@@ -1,10 +1,11 @@
-"""同花顺自选股推送单测: 当日 TOP10 → 导入 txt (2026-09-05 用户口径: 双源分开成单).
+"""同花顺自选股推送单测: 当日单 → 导入 txt (2026-10-21 用户口径: 唯一源板前哨).
 
-- collect_lists: parallel 短名单 rank 前 10 与 legacy 清单序前 10 各自独立成单,
-  标签 = 源名__模型批次串 (09-05 用户: LEGACY 文件就叫 LEGACY + TXT 需要模型名
-  和日期), 并行在前, 两单互不掺和 (不并集); 各单内部逐码去重, 跨源重复股保留
-  (09-05 用户); 单侧缺失只返回另一侧
-- REJECTED / gateinfo / preds_raw 等旁支文件不混入
+- collect_lists: 唯一源 = 当日 GENIOUS_{date}*.xlsx「板前哨」页 (2026-10-21 用户令
+  "stop pushing CURRENT pipeline stocks"), 且只取 次数10日 与 次数20日 **均非零** 的行
+  (NaN 视同 0 — 页尾图例行天然排除); 页序即推送序, 不套 top_n; 单内逐码去重,
+  非法码过滤, 撞指数码 000xxx 保留 (推送端 _build_chunks 隔离)
+- parallel/legacy/冠军边车 CSV 与旁支文件 (REJECTED/gateinfo/preds_raw/他日 GENIOUS)
+  不混入
 - ths_txt_path / write_ths_txt: 每行一个 6 位代码, WORM 命名含日期+module
 """
 
@@ -20,152 +21,157 @@ from scripts import _ths_watchlist_push as mod
 _IS_WIN = sys.platform == "win32"
 
 
-def _write_shortlist(path, rank_symbols):
-    pd.DataFrame(
-        [{"symbol": s, "rank": r} for r, s in enumerate(rank_symbols, start=1)]
-    ).to_csv(path, index=False)
+@pytest.fixture(autouse=True)
+def _push_enabled(monkeypatch):
+    """总闸 2026-11-03 起默认 False (用户令全面停推): 本文件用例全部针对推送开启时
+    的行为, 统一开闸; 停推行为由 test_push_disabled_by_master_switch 自行覆盖."""
+    monkeypatch.setattr(mod, "GENIOUS", {**mod.GENIOUS, "push_to_ths": True})
 
 
-def _write_legacy(path, symbols):
-    pd.DataFrame([{"symbol": s} for s in symbols]).to_csv(path, index=False)
-
-
-def _write_genious(path, symbols):
-    pd.DataFrame(
-        [{"排名": r, "symbol": s} for r, s in enumerate(symbols, start=1)]
-    ).to_csv(path, index=False)
-
-
-def test_collect_lists_shortlist_top10_by_rank(tmp_path):
-    rank_symbols = [f"6000{i:02d}" for i in range(1, 21)]  # rank 1..20
-    _write_shortlist(tmp_path / "parallel_shortlist_20260901__M1.csv", rank_symbols)
-    lists = mod.collect_lists("20260901", tmp_path)
-    assert lists == [("parallel__M1", rank_symbols[:10])]
-
-
-def test_collect_lists_two_sources_independent_no_cross_dedup(tmp_path):
-    """双源分开成单 (2026-09-05): 各取各的 top10, 重叠码两单都保留 (推送是加自选,
-    同码二次导入无害); 先 parallel 后 legacy."""
-    _write_shortlist(
-        tmp_path / "parallel_shortlist_20260901__M1.csv", ["600001", "600002", "600003"]
-    )
-    _write_legacy(
-        tmp_path / "legacy_stocklist_20260901__M2.csv", ["600003", "603829", "002968"]
-    )
-    lists = mod.collect_lists("20260901", tmp_path)
-    assert lists == [
-        ("parallel__M1", ["600001", "600002", "600003"]),
-        ("legacy__M2", ["600003", "603829", "002968"]),
+def _write_genious_xlsx(path, pb_rows):
+    """造一个 mimic 真实交付层的 GENIOUS xlsx: 板前哨页 banner(row1) + 表头(row3)
+    + 数据(row4起) + 页尾图例 (只写 A 列=通道优先列) — collect_lists 读法
+    (header=2) 下的布局契约见 scripts/_genious_excel.py write_xlsx."""
+    cols = [
+        "通道优先",
+        "点火旗",
+        "击中日期",
+        "次数10日",
+        "次数20日",
+        "代码",
+        "当日涨幅",
+        "获利盘",
     ]
+    df = pd.DataFrame(pb_rows, columns=cols)
+    with pd.ExcelWriter(path, engine="openpyxl") as xw:
+        df.to_excel(xw, sheet_name="板前哨", index=False, startrow=2)
+        ws = xw.sheets["板前哨"]
+        ws.cell(row=1, column=1, value="板前哨页(滚动命中日志) — banner")
+        for j, line in enumerate(
+            [
+                "列说明: 次数10日/次数20日=过去10/20个交易日命中总数",
+                "★ 读数=事件胜率非交易胜率",
+            ]
+        ):
+            ws.cell(row=4 + len(df) + 1 + j, column=1, value=line)
 
 
-def test_collect_lists_within_list_dedup_cross_source_kept(tmp_path):
-    """各单内部去重; 跨源重复股两单都保留 (2026-09-05 用户拍板)."""
-    _write_shortlist(
-        tmp_path / "parallel_shortlist_20260901__M1.csv",
-        ["600001", "600001", "600002"],
+def _pb_row(code, n10, n20, **extra):
+    row = {"代码": code, "次数10日": n10, "次数20日": n20}
+    row.update(extra)
+    return row
+
+
+def test_collect_lists_preboard_requires_both_counts_nonzero(tmp_path):
+    """2026-10-21 用户令: 只推 次数10日 与 次数20日 均非零的行; 任一为零/NaN 不推."""
+    _write_genious_xlsx(
+        tmp_path / "GENIOUS_20261021.xlsx",
+        [
+            _pb_row("600001", 3, 5),  # 双非零 → 推
+            _pb_row("600002", 0, 5),  # 次数10日=0 → 不推
+            _pb_row("600003", 2, 0),  # 次数20日=0 → 不推
+            _pb_row("600004", 1, None),  # NaN 视同 0 → 不推
+            _pb_row("600005", None, 1),  # NaN 视同 0 → 不推
+        ],
     )
-    _write_legacy(
-        tmp_path / "legacy_stocklist_20260901__M2.csv",
-        ["600002", "603829", "603829"],
-    )
-    lists = mod.collect_lists("20260901", tmp_path)
-    assert lists == [
-        ("parallel__M1", ["600001", "600002"]),
-        ("legacy__M2", ["600002", "603829"]),
-    ]
+    lists = mod.collect_lists("20261021", tmp_path)
+    assert lists == [("genious__preboard", ["600001"])]
 
 
-def test_collect_lists_fallback_legacy_only(tmp_path):
-    _write_legacy(
-        tmp_path / "legacy_stocklist_20260901__M1.csv",
-        ["002968", "603829", "603326", "600706", "001217"],
+def test_collect_lists_drops_banner_legend_and_blank_rows(tmp_path):
+    """页尾图例行 (只 A 列有字) 与数据后空行不得混入 — 次数列 NaN 天然排除."""
+    _write_genious_xlsx(
+        tmp_path / "GENIOUS_20261021.xlsx",
+        [_pb_row("600001", 1, 1), _pb_row("600002", 2, 2)],
     )
-    lists = mod.collect_lists("20260901", tmp_path)
-    assert lists == [("legacy__M1", ["002968", "603829", "603326", "600706", "001217"])]
+    lists = mod.collect_lists("20261021", tmp_path)
+    assert lists == [("genious__preboard", ["600001", "600002"])]
+
+
+def test_collect_lists_page_order_kept_dedup_and_000xxx_kept(tmp_path):
+    """页序即推送序 (通道优先→点火旗→击中日期已在页内排好); 单内去重保序;
+    撞指数码 000xxx 保留 (推送端 _build_chunks 隔离指数行, 09-05 用户澄清)."""
+    _write_genious_xlsx(
+        tmp_path / "GENIOUS_20261021.xlsx",
+        [
+            _pb_row("000985", 1, 1, 通道优先="优先"),
+            _pb_row("600001", 2, 3),
+            _pb_row("600001", 2, 3),  # 重复行 → 去重
+            _pb_row("600002", 1, 1),
+        ],
+    )
+    lists = mod.collect_lists("20261021", tmp_path)
+    assert lists == [("genious__preboard", ["000985", "600001", "600002"])]
+
+
+def test_collect_lists_no_topn_truncation(tmp_path):
+    """板前哨行不套 top_n 截断 — 2026-09-15 "push all" 令在新源上的延续
+    (套截断会静默丢码)."""
+    rows = [_pb_row(f"6000{i:02d}", 1, 1) for i in range(1, 22)]  # 21 行全合格
+    _write_genious_xlsx(tmp_path / "GENIOUS_20261021.xlsx", rows)
+    lists = mod.collect_lists("20261021", tmp_path)
+    assert lists == [("genious__preboard", [f"6000{i:02d}" for i in range(1, 22)])]
+
+
+def test_collect_lists_ignores_pipeline_csv_and_other_dates(tmp_path):
+    """parallel/legacy/冠军边车 CSV 全部停推 (2026-10-21 用户令); 他日 GENIOUS
+    与旁支文件不混入."""
+    pd.DataFrame([{"symbol": "999999", "rank": 1}]).to_csv(
+        tmp_path / "parallel_shortlist_20261021__M1.csv", index=False
+    )
+    pd.DataFrame([{"symbol": "999998"}]).to_csv(
+        tmp_path / "legacy_stocklist_20261021__M1.csv", index=False
+    )
+    pd.DataFrame([{"排名": 1, "symbol": "999997"}]).to_csv(
+        tmp_path / "genious_stocklist_20261021__203000.csv", index=False
+    )
+    _write_genious_xlsx(tmp_path / "GENIOUS_20261020.xlsx", [_pb_row("666666", 1, 1)])
+    _write_genious_xlsx(tmp_path / "GENIOUS_20261021.xlsx", [_pb_row("600001", 1, 1)])
+    lists = mod.collect_lists("20261021", tmp_path)
+    assert lists == [("genious__preboard", ["600001"])]
+
+
+def test_collect_lists_rerun_timestamped_newest_wins(tmp_path):
+    """同日重跑 GENIOUS_{date}__{HHMMSS}.xlsx (WORM) 取 mtime 最新一份."""
+    _write_genious_xlsx(tmp_path / "GENIOUS_20261021.xlsx", [_pb_row("600001", 1, 1)])
+    later = tmp_path / "GENIOUS_20261021__210000.xlsx"
+    _write_genious_xlsx(later, [_pb_row("600002", 1, 1)])
+    os.utime(tmp_path / "GENIOUS_20261021.xlsx", (1000, 1000))
+    os.utime(later, (2000, 2000))
+    lists = mod.collect_lists("20261021", tmp_path)
+    assert lists == [("genious__preboard", ["600002"])]
 
 
 def test_collect_lists_filters_bad_codes(tmp_path):
-    # parallel 侧去重; legacy 侧不去重只过滤
-    _write_shortlist(
-        tmp_path / "parallel_shortlist_20260901__M1.csv",
-        ["002968", "nan", "2968", "600abc", "603829.0", "002968", "603829"],
-    )
-    _write_legacy(
-        tmp_path / "legacy_stocklist_20260901__M2.csv",
-        ["002968", "nan", "2968", "600abc", "603829.0", "002968", "603829"],
-    )
-    lists = mod.collect_lists("20260901", tmp_path)
-    # "603829.0" 不满足 ^\d{6}$ → 过滤; 两单各自单内去重
-    assert lists == [
-        ("parallel__M1", ["002968", "603829"]),
-        ("legacy__M2", ["002968", "603829"]),
-    ]
-
-
-def test_collect_lists_ignores_sidecar_files(tmp_path):
-    _write_shortlist(tmp_path / "parallel_shortlist_20260901__M1.csv", ["002968"])
-    _write_legacy(tmp_path / "legacy_stocklist_20260901__M1.csv", ["603829"])
-    # 旁支文件: REJECTED / gateinfo / preds_raw / 其他日期 — 均不得混入
-    _write_legacy(tmp_path / "legacy_gateinfo_20260901__M1.csv", ["999999"])
-    _write_legacy(tmp_path / "parallel_preds_raw_20260901__M1.csv", ["888888"])
-    _write_shortlist(tmp_path / "parallel_shortlist_20260831__M0.csv", ["666666"])
-    lists = mod.collect_lists("20260901", tmp_path)
-    # 同批次串两源也各带各的源名 → 文件名永不撞
-    assert lists == [
-        ("parallel__M1", ["002968"]),
-        ("legacy__M1", ["603829"]),
-    ]
-
-
-def test_collect_lists_keeps_index_colliding_000xxx(tmp_path):
-    """撞指数码 000xxx 保留在清单 (2026-09-05 用户澄清 "不是删除股票号");
-    推送端隔离指数行 (见 _build_chunks), 清单侧不剔不补位."""
-    rank_symbols = ["600001", "000985", "600002", "600003", "600004", "600005"]
-    _write_shortlist(tmp_path / "parallel_shortlist_20260901__M1.csv", rank_symbols)
-    _write_legacy(
-        tmp_path / "legacy_stocklist_20260901__M2.csv", ["000001", "603829", "000123"]
-    )
-    lists = mod.collect_lists("20260901", tmp_path)
-    assert lists == [
-        ("parallel__M1", rank_symbols),
-        ("legacy__M2", ["000001", "603829", "000123"]),
-    ]
-
-
-def test_collect_lists_genious_not_truncated_to_top_n(tmp_path):
-    """genious 边车 = Sheet1 冠军四段全量, 不套 top_n=10 截断.
-
-    2026-09-15 用户令 "push all 冠军四段 iN SHEET1 TO THS, NOT JUST TOP10":
-    边车 21 只必须原样全进单 (套截断会静默丢 11 只); parallel/legacy 仍各自 top10.
-    """
-    symbols = [f"6000{i:02d}" for i in range(1, 22)]  # rank 1..21
-    _write_genious(tmp_path / "genious_stocklist_20260901__083146.csv", symbols)
-    _write_shortlist(tmp_path / "parallel_shortlist_20260901__M1.csv", symbols)
-    lists = mod.collect_lists("20260901", tmp_path)
-    assert lists == [
-        ("parallel__M1", symbols[:10]),  # 仍截断
-        ("genious__083146", symbols),  # 全量 21 只
-    ]
-    assert len(lists[1][1]) == 21
-
-
-def test_collect_lists_genious_sorted_by_rank(tmp_path):
-    """边车按 排名 列排序后再成单 (文件行序 ≠ 名次序 时以 排名 为准)."""
-    pd.DataFrame(
+    """代码列非法码过滤 (6 位数字以外全剔, 含 float 伪影), 合格码单内逐码去重."""
+    _write_genious_xlsx(
+        tmp_path / "GENIOUS_20261021.xlsx",
         [
-            {"排名": 3, "symbol": "600003"},
-            {"排名": 1, "symbol": "600001"},
-            {"排名": 2, "symbol": "600002"},
-        ]
-    ).to_csv(tmp_path / "genious_stocklist_20260901__083146.csv", index=False)
-    lists = mod.collect_lists("20260901", tmp_path)
-    assert lists == [("genious__083146", ["600001", "600002", "600003"])]
+            _pb_row("600001", 1, 1),
+            _pb_row(None, 1, 1),  # 空码
+            _pb_row("2968", 1, 1),  # 位数不足
+            _pb_row("600abc", 1, 1),  # 非数字
+            _pb_row("603829.0", 1, 1),  # float 伪影
+            _pb_row("600001", 1, 1),  # 重复
+        ],
+    )
+    lists = mod.collect_lists("20261021", tmp_path)
+    assert lists == [("genious__preboard", ["600001"])]
 
 
-def test_collect_lists_no_delivered_raises(tmp_path):
+def test_collect_lists_no_genious_raises(tmp_path):
     with pytest.raises(SystemExit):
-        mod.collect_lists("20260901", tmp_path)
+        mod.collect_lists("20261021", tmp_path)
+
+
+def test_collect_lists_missing_preboard_sheet_fails_loud(tmp_path):
+    """交付层缺「板前哨」页 (旁路页构建失败日) → 大声失败, 不静默推空单."""
+    with pd.ExcelWriter(tmp_path / "GENIOUS_20261021.xlsx", engine="openpyxl") as xw:
+        pd.DataFrame(columns=["排名", "symbol"]).to_excel(
+            xw, sheet_name="冠军四段", index=False, startrow=2
+        )
+    with pytest.raises(SystemExit):
+        mod.collect_lists("20261021", tmp_path)
 
 
 def test_txt_format_and_worm_naming(tmp_path):
@@ -179,6 +185,20 @@ def test_txt_format_and_worm_naming(tmp_path):
 def test_flush_str_cannot_form_code_rows():
     """冲刷串必须无法被识别器解析成代码行 (旧 "ths-push" 被识别成两只美股, 09-03)."""
     assert not any(c.isalnum() for c in mod.FLUSH_STR)
+
+
+def test_push_disabled_by_master_switch(monkeypatch, capsys):
+    """2026-11-03 用户令全面停推: push_to_ths=False → main() 不读清单不写 txt
+    不动客户端, 幂等 rc=0; 推送路径完全不可达."""
+    monkeypatch.setattr(mod, "GENIOUS", {**mod.GENIOUS, "push_to_ths": False})
+    monkeypatch.setattr(
+        mod,
+        "push_via_ths",
+        lambda *a, **k: pytest.fail("总闸关闭时不得触碰 UI 推送"),
+    )
+    monkeypatch.setattr(sys, "argv", ["prog", "20260901"])
+    assert mod.main() == 0
+    assert "[no-push]" in capsys.readouterr().out
 
 
 def test_push_via_ths_writes_blocked_on_foreground_lost(tmp_path, monkeypatch):
