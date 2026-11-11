@@ -1,7 +1,7 @@
 # 定时任务 (Scheduled Tasks / Cron Jobs)
 
 > **位置**: `03_operations/runbooks/scheduled-tasks.md`
-> **最后更新**: 2026-10-27
+> **最后更新**: 2026-11-11
 
 ## Windows 任务计划程序
 
@@ -14,9 +14,12 @@
 | AMINQT-Genious-Watchdog-2110 | 周一~五 21:10 (+08:00) | `python scripts/_genious_backfill_missing.py` | 缺文件/缺页看门狗: 扫近 5 交易日, 缺 `GENIOUS_{date}.xlsx` 或三页不全 (冠军四段/首板点名/板前哨) 则补跑 (--no-push); 面板落后交付日先无参自愈 `_daily_fetch.py` 再补 (10-26 抓取 OOM 半途死 → 面板缺当日 → 只出冠军页的场景); 让路存活 GENIOUS/夜链; 心跳 `logs/genious_watchdog.log`; 注册: `scripts/setup_genious_watchdog_task.ps1`。堵 2026-10-22/10-26 漏交付 |
 | AMINQT-LegacyAutomation-2130 | 每日 21:30 (+08:00) | `python scripts/run_legacy_automation.py` | LEGACY 夜链 (~2.5h, 周五 retrain); 注册: `scripts/setup_legacy_automation.ps1` |
 | AMINQT-ParallelAutomation-2330 | 每日 23:30 (+08:00) | `python scripts/run_parallel_automation.py` | PARALLEL 夜链 (~2.5h, 含 prob10dens/stocklist_combined/ths_push); 注册: `scripts/setup_parallel_automation.ps1` |
+| AMINQT-Combined-Watchdog-0830 | 周一~五 08:30 (+08:00) | `python scripts/_stocklist_combined_backfill.py` | stocklist_combined 缺文件看门狗: 扫近 5 交易日, 有 LEGACY 清单且缺 combined 则补产 (缺源跳页口径); 夜链整链未跑/中途死也兜底; 让路存活夜链/combined; 注册: `scripts/setup_combined_watchdog_task.ps1`; 心跳 `logs/combined_watchdog.log`。堵 2026-10-30 起 refresh OOM 连锁断供 (10-29 最后一次, 11-11 解耦+看门狗双修) |
 
 三条夜链守卫互斥 (`scripts/_run_guard.py` 哨兵扫描), **严禁同时手工启动两条链** — 2026-10-23
 双链互等死锁事故。GENIOUS 及其看门狗不在哨兵表内, 但看门狗自带让路闸。
+**stocklist_combined 每日必产 (2026-11-11 用户令 "fix to have daily creation")**: combined 在 PARALLEL 链内已解耦 deliver_parallel (LEGACY 源独立健康, PARALLEL/密度/SLOW_BULL 缺源本来就跳页) — parallel 侧 refresh OOM 等失败不再拖垮 combined;
+夜链整链未跑/中途死由 AMINQT-Combined-Watchdog-0830 次晨扫近 5 交易日补缺。
 
 ### 设置方式
 ```powershell

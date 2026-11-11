@@ -91,14 +91,17 @@ STEP_ORDER = [
 
 # 主线 _DEPENDS 只写了 refresh→parallel→{prob_head, deliver_parallel}; 补充--
 # parallel 没成就别跑漂移监控 (比的是旧 run_dir); 密度/slowbull/影子都在 parallel
-# 清单之后; combined 的硬依赖是 LEGACY+PARALLEL 双清单 (缺密度/SLOW_BULL 只是跳页,
-# 不拦表)。2026-11-03 用户令停推 THS: ths_push/ths_flush_guard 下链, 核验只挂交付.
+# 清单之后。2026-11-03 用户令停推 THS: ths_push/ths_flush_guard 下链, 核验只挂交付.
+# combined 解耦 deliver_parallel (2026-11-11 用户令 "fix to have daily creation"):
+# 它的硬依赖是 LEGACY 清单 (LEGACY 链独立健康), PARALLEL/密度/SLOW_BULL 缺源本来就
+# 跳页 — 10-30 起 refresh OOM (1.67 GiB 分配失败) 连锁跳过 combined, 断供 12 天
+# (10-29 最后一次); 解耦后 parallel 侧任何失败都不再拖垮 combined. 兜底:
+# scripts/_stocklist_combined_backfill.py (AMINQT-Combined-Watchdog-0830).
 _DEPENDS_LOCAL = {
     **_DEPENDS,
     "drift_parallel": "parallel",
     "prob10dens_push": "deliver_parallel",
     "slowbull_shadow": "deliver_parallel",
-    "stocklist_combined": "deliver_parallel",
     "shadow_xmodule": "deliver_parallel",
     "final_stocklist": "deliver_parallel",
 }
