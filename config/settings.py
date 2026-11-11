@@ -804,6 +804,11 @@ GENIOUS = {
     # 2026-11-03 用户令全面停推: False → 所有推送入口不写 txt 不进自选,
     # 交付层 xlsx/边车 CSV 照常出) ──
     "push_to_ths": False,
+    # 2026-11-11 用户令 "make sure there is auto push to ths for genious file
+    # 冠军四段 ON DAILY BASIS": champ4 单独旗标 — genious__champ4 推送单 (交付层
+    # xlsx「冠军四段」页全票) 在总闸 False 时仍放行; 板前哨/影子单等其余源仍停.
+    # 回退: 置 False → 恢复 2026-11-03 全面停推口径.
+    "push_champ4_to_ths": True,
     "push_top_n": 10,
 }
 

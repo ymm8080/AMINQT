@@ -667,13 +667,15 @@ def write_stocklist_csv(
     return fp
 
 
-def _spawn_ths_push(date: str) -> None:
+def _spawn_ths_push(date: str, champ4: bool = False) -> None:
     """分离子进程跑同花顺推送 — 不与交付链同生共死。
 
     推送是 UI 自动化 (空闲闸 + 多轮补推 + 轮间静默), 单次可跑十几分钟, 且用户
     在场时按设计 fail-closed 退出; 挂在交付链上会把 GENIOUS 的 ok 终态拖住。
     """
-    script = Path(__file__).with_name("_ths_watchlist_push.py")
+    script = Path(__file__).with_name(
+        "_ths_champ4_push.py" if champ4 else "_ths_watchlist_push.py"
+    )
     if not script.exists():
         log.warning("[genious] 找不到推送脚本 %s, 只落边车不推", script)
         return
@@ -1187,6 +1189,11 @@ def main() -> int:
     # 板前哨也无合格行时推送侧自行空转退出 (板前哨清单为空, 不推送)。
     if GENIOUS.get("push_to_ths") and not args.no_push:
         _spawn_ths_push(target)
+    # 2026-11-11 用户令: 冠军四段每日推送 — 独立旗标 push_champ4_to_ths, 不受
+    # 11-03 停推总闸影响; 用户在场 UI fail-closed 时由次晨 AMINQT-Champ4-Push-0745
+    # 幂等重推 (全 landed 结果单即跳过).
+    if GENIOUS.get("push_champ4_to_ths") and not args.no_push:
+        _spawn_ths_push(target, champ4=True)
     return 0
 
 

@@ -525,13 +525,28 @@ def read_push_results(date: str | None = None, list_dir=STOCK_LIST_DIR):
     return pd.concat(frames, ignore_index=True)
 
 
+def _push_allowed(txt_path) -> bool:
+    """推送闸 (纯函数, 单测友好): 总闸 push_to_ths=False 时仅 champ4 单独旗标放行.
+
+    2026-11-03 用户令全面停推 (总闸); 2026-11-11 用户令 "auto push to ths for
+    genious file 冠军四段 ON DAILY BASIS" → genious__champ4 推送单由
+    GENIOUS["push_champ4_to_ths"] 单独放行, 其余源 (板前哨/影子单) 仍全停.
+    """
+    if GENIOUS.get("push_to_ths"):
+        return True
+    name = getattr(txt_path, "name", str(txt_path))
+    return "__genious__champ4" in name and bool(GENIOUS.get("push_champ4_to_ths"))
+
+
 def push_via_ths(txt_path, dry_run: bool = False) -> bool:
     # 2026-11-03 用户令全面停推: 总闸 False 时任何调用方 (链步骤/影子单/手工)
     # 一律不进 UI 不导自选; 返回 True = 按已处理论, 调用方链不判失败.
-    if not GENIOUS.get("push_to_ths"):
+    # 2026-11-11 用户令: genious__champ4 由 push_champ4_to_ths 单独放行 (见
+    # _push_allowed) — 其余源仍停.
+    if not _push_allowed(txt_path):
         print(
-            "[no-push] push_to_ths=False (2026-11-03 用户令 停推):"
-            f" 跳过 UI 导入 {getattr(txt_path, 'name', txt_path)}"
+            "[no-push] push_to_ths=False (2026-11-03 用户令 停推; champ4 见"
+            f" push_champ4_to_ths): 跳过 UI 导入 {getattr(txt_path, 'name', txt_path)}"
         )
         return True
     """UI 自动化: 激活同花顺客户端, 经 工具→复制识别 对话框把代码批量加入自选股.
